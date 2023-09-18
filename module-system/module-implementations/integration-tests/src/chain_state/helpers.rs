@@ -1,6 +1,6 @@
 use sov_chain_state::{ChainState, ChainStateConfig};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
-use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeSlotHook, SlotHooks, TxHooks};
+use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::macros::DefaultRuntime;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{
@@ -80,7 +80,7 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da> {
     }
 }
 
-impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeSlotHook<Da> for TestRuntime<C, Da> {
+impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for TestRuntime<C, Da> {
     type Context = C;
 
     fn finalize_slot_hook(

@@ -7,7 +7,7 @@ mod tx_verifier;
 pub use app_template::AppTemplate;
 pub use batch::Batch;
 use sov_modules_api::capabilities::BlobSelector;
-use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeSlotHook, SlotHooks, TxHooks};
+use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::{
     BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, Spec, Zkvm,
 };
@@ -24,7 +24,7 @@ pub trait Runtime<C: Context, Da: DaSpec>:
     + Genesis<Context = C>
     + TxHooks<Context = C>
     + SlotHooks<Da, Context = C>
-    + FinalizeSlotHook<Da, Context = C>
+    + FinalizeHook<Da, Context = C>
     + ApplyBlobHooks<
         Da::BlobTransaction,
         Context = C,

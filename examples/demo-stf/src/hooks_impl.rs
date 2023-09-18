@@ -1,4 +1,4 @@
-use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeSlotHook, SlotHooks, TxHooks};
+use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Context, Spec};
 use sov_modules_stf_template::SequencerOutcome;
@@ -103,7 +103,7 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
     }
 }
 
-impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeSlotHook<Da> for Runtime<C, Da> {
+impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for Runtime<C, Da> {
     type Context = C;
 
     fn finalize_slot_hook(

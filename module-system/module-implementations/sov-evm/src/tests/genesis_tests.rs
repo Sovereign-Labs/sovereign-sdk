@@ -8,7 +8,7 @@ use sov_modules_api::Module;
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 use crate::evm::primitive_types::{Block, SealedBlock};
-// use crate::evm::db;
+use crate::evm::{AccountInfo, DbAccount};
 use crate::{evm::EvmChainConfig, AccountData, Evm, EvmConfig};
 type C = DefaultContext;
 
@@ -38,6 +38,10 @@ pub(crate) const GENESIS_HASH: H256 = H256(hex!(
     "3441c3084e43183a53aabbbe3e94512bb3db4aca826af8f23b38f0613811571d"
 ));
 
+pub(crate) const SEALED_GENESIS_HASH: H256 = H256(hex!(
+    "d57423e4375c45bc114cd137146aab671dbd3f6304f05b31bdd416301b4a99f0"
+));
+
 pub(crate) const GENESIS_STATE_ROOT: H256 = H256(hex!(
     "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
 ));
@@ -48,10 +52,30 @@ lazy_static! {
 
 #[test]
 fn genesis_data() {
-    get_evm(&TEST_CONFIG);
+    let (evm, mut working_set) = get_evm(&TEST_CONFIG);
 
-    // TODO: assert on account being the same - easier after unifying stored types!
-    // let db_account = evm.accounts.get(&address, working_set).unwrap();
+    let account = &TEST_CONFIG.data[0];
+
+    let db_account = evm
+        .accounts
+        .get(&account.address, &mut working_set)
+        .unwrap();
+
+    let evm_db = evm.get_db(&mut working_set);
+
+    assert_eq!(
+        db_account,
+        DbAccount::new_with_info(
+            evm_db.accounts.prefix(),
+            TEST_CONFIG.data[0].address,
+            AccountInfo {
+                balance: account.balance,
+                code_hash: account.code_hash,
+                code: account.code.clone(),
+                nonce: account.nonce,
+            }
+        ),
+    );
 }
 
 #[test]
@@ -79,6 +103,16 @@ fn genesis_cfg_missing_specs() {
         spec: vec![(5, SpecId::BERLIN)].into_iter().collect(),
         ..Default::default()
     });
+}
+
+#[test]
+fn genesis_empty_spec_defaults_to_latest() {
+    let mut config = TEST_CONFIG.clone();
+    config.spec.clear();
+    let (evm, mut working_set) = get_evm(&config);
+
+    let cfg = evm.cfg.get(&mut working_set).unwrap();
+    assert_eq!(cfg.spec, vec![(0, SpecId::LATEST)]);
 }
 
 #[test]
