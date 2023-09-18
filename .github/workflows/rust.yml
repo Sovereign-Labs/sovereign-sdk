@@ -248,9 +248,6 @@ jobs:
           cache-provider: "buildjet"
           shared-key: cargo-doc
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
-          workspaces: |
-            .
-            examples/demo-prover
       # The docs' artifact tends to become quite large with all the
       # dependencies, so we don't include them.
       - run: cargo doc --no-deps --all-features
