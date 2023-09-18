@@ -136,16 +136,16 @@ impl TestClient {
             .unwrap()
     }
 
-
     async fn eth_chain_id(&self) -> u64 {
-        let chain_id: ethereum_types::U64 = self.http_client
+        let chain_id: ethereum_types::U64 = self
+            .http_client
             .request("eth_chainId", rpc_params![])
             .await
             .unwrap();
 
         chain_id.as_u64()
     }
-    
+
     async fn execute(self) -> Result<(), Box<dyn std::error::Error>> {
         let contract_address = {
             let deploy_contract_req = self.deploy_contract().await?;
