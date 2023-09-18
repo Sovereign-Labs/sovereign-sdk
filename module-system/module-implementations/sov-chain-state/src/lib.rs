@@ -112,7 +112,7 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
 
     /// The current time, as reported by the DA layer
     #[state]
-    time: sov_state::StateValue<Time>,
+    time: sov_modules_api::StateValue<Time>,
 
     /// A record of all previous state transitions which are available to the VM.
     /// Currently, this includes *all* historical state transitions, but that may change in the future.
