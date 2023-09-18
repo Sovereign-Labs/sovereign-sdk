@@ -293,7 +293,7 @@ where
     fn genesis(
         &self,
         config: &Self::Config,
-        working_set: &mut WorkingSet<<<Self as Genesis>::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<Self::Context>,
     ) -> Result<(), Error> {
         <Self as Module>::genesis(self, config, working_set)
     }
@@ -315,7 +315,7 @@ pub trait Module: Default {
     fn genesis(
         &self,
         _config: &Self::Config,
-        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        _working_set: &mut WorkingSet<Self::Context>,
     ) -> Result<(), Error> {
         Ok(())
     }
@@ -326,7 +326,7 @@ pub trait Module: Default {
         &self,
         _message: Self::CallMessage,
         _context: &Self::Context,
-        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        _working_set: &mut WorkingSet<Self::Context>,
     ) -> Result<CallResponse, Error> {
         unreachable!()
     }

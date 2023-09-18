@@ -25,7 +25,7 @@ impl<C: Context> SequencerRegistry<C> {
     pub fn sequencer_address(
         &self,
         da_address: DaAddress,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<SequencerAddressResponse<C>> {
         Ok(SequencerAddressResponse {
             address: self.allowed_sequencers.get(&da_address, working_set),

@@ -28,7 +28,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         &self,
         user_address: C::Address,
         token_address: C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<BalanceResponse> {
         Ok(BalanceResponse {
             amount: self.get_balance_of(user_address, token_address, working_set),
@@ -40,7 +40,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
     pub fn supply_of(
         &self,
         token_address: C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<TotalSupplyResponse> {
         Ok(TotalSupplyResponse {
             amount: self

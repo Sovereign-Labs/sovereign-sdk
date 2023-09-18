@@ -26,8 +26,8 @@ pub const INIT_HEIGHT: u64 = 0;
 /// `storage` must be the underlying storage defined on the working set for this method to work.
 pub(crate) fn commit_get_new_working_set(
     storage: &ProverStorage<DefaultStorageSpec>,
-    working_set: WorkingSet<<C as Spec>::Storage>,
-) -> WorkingSet<<C as Spec>::Storage> {
+    working_set: WorkingSet<C>,
+) -> WorkingSet<C> {
     let (reads_writes, witness) = working_set.checkpoint().freeze();
 
     storage
@@ -72,7 +72,7 @@ pub(crate) fn create_bank_config_with_token(
 /// Creates a bank config with a token, and a prover incentives module.
 /// Returns the prover incentives module and the attester and challenger's addresses.
 pub(crate) fn setup(
-    working_set: &mut WorkingSet<<C as Spec>::Storage>,
+    working_set: &mut WorkingSet<C>,
 ) -> (
     AttesterIncentives<C, MockZkvm, MockDaSpec, MockValidityCondChecker<MockValidityCond>>,
     Address,
@@ -143,11 +143,11 @@ pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidit
     module: &AttesterIncentives<C, MockZkvm, MockDaSpec, Checker>,
     storage: &ProverStorage<DefaultStorageSpec>,
     attester_address: <C as Spec>::Address,
-    mut working_set: WorkingSet<<C as Spec>::Storage>,
+    mut working_set: WorkingSet<C>,
 ) -> (
     // Vector of the successive state roots with associated bonding proofs
     Vec<ExecutionSimulationVars>,
-    WorkingSet<<C as Spec>::Storage>,
+    WorkingSet<C>,
 ) {
     let mut ret_exec_vars = Vec::<ExecutionSimulationVars>::new();
 

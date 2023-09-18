@@ -10,6 +10,7 @@ mod test {
     use sov_state::storage::{Storage, StorageKey, StorageValue};
     use sov_state::{DefaultStorageSpec, ProverStorage};
 
+    use crate::default_context::DefaultContext;
     use crate::{StateReaderAndWriter, WorkingSet};
 
     #[derive(Clone)]
@@ -47,7 +48,8 @@ mod test {
         {
             for test in tests.clone() {
                 let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
-                let mut storage = WorkingSet::new(prover_storage.clone());
+                let mut storage: WorkingSet<DefaultContext> =
+                    WorkingSet::new(prover_storage.clone());
                 assert_eq!(prover_storage.db().get_next_version(), test.version);
 
                 storage.set(&test.key, test.value.clone());
@@ -88,7 +90,7 @@ mod test {
         {
             let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
             assert!(prover_storage.is_empty());
-            let mut storage = WorkingSet::new(prover_storage.clone());
+            let mut storage: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
             storage.set(&key, value.clone());
             let (cache, witness) = storage.checkpoint().freeze();
             prover_storage

@@ -16,7 +16,7 @@ mod query;
 pub use call::CallMessage;
 #[cfg(feature = "native")]
 pub use query::*;
-use sov_modules_api::{CallResponse, Error, ModuleInfo, Spec, StateMap, StateValue, WorkingSet};
+use sov_modules_api::{CallResponse, Error, ModuleInfo, StateMap, StateValue, WorkingSet};
 
 /// A type alias for DA addresses.
 ///
@@ -108,11 +108,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for SequencerRegistry<
 
     type CallMessage = CallMessage;
 
-    fn genesis(
-        &self,
-        config: &Self::Config,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<(), Error> {
+    fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         Ok(self.init_module(config, working_set)?)
     }
 
@@ -120,7 +116,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for SequencerRegistry<
         &self,
         message: Self::CallMessage,
         context: &Self::Context,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse, Error> {
         Ok(match message {
             CallMessage::Register { da_address } => {
@@ -133,10 +129,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for SequencerRegistry<
 
 impl<C: sov_modules_api::Context> SequencerRegistry<C> {
     /// Returns the configured amount of [`Coins`](sov_bank::Coins) to lock.
-    pub fn get_coins_to_lock(
-        &self,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Option<sov_bank::Coins<C>> {
+    pub fn get_coins_to_lock(&self, working_set: &mut WorkingSet<C>) -> Option<sov_bank::Coins<C>> {
         self.coins_to_lock.get(working_set)
     }
 
@@ -144,7 +137,7 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
         &self,
         da_address: DaAddress,
         rollup_address: &C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
         if self
             .allowed_sequencers
@@ -168,10 +161,7 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
     ///
     /// Read about [`SequencerConfig::is_preferred_sequencer`] to learn about
     /// preferred sequencers.
-    pub fn get_preferred_sequencer(
-        &self,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Option<DaAddress> {
+    pub fn get_preferred_sequencer(&self, working_set: &mut WorkingSet<C>) -> Option<DaAddress> {
         self.preferred_sequencer.get(working_set)
     }
 
@@ -179,7 +169,7 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
     pub fn is_sender_allowed<T: sov_modules_api::BasicAddress>(
         &self,
         sender: &T,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> bool {
         // Clone to satisfy StateMap API
         // TODO: can be fixed after https://github.com/Sovereign-Labs/sovereign-sdk/issues/427
