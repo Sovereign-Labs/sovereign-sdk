@@ -1,15 +1,17 @@
 use core::result::Result::Ok;
 use std::fmt::Debug;
 
+use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_bank::{Amount, Coins};
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::optimistic::Attestation;
-use sov_modules_api::{CallResponse, DaSpec, Spec, StateTransition, ValidityConditionChecker};
-use sov_state::storage::StorageProof;
-use sov_state::{Storage, WorkingSet};
+use sov_modules_api::{
+    CallResponse, DaSpec, Spec, StateTransition, ValidityConditionChecker, WorkingSet,
+};
+use sov_state::storage::{Storage, StorageKey, StorageProof, StorageValue};
 use thiserror::Error;
 
 use crate::{AttesterIncentives, UnbondingInfo};
@@ -175,6 +177,28 @@ where
         self.reward_token_supply_address
             .get(working_set)
             .expect("The reward token supply address should be set at genesis")
+    }
+
+    /// Verifies the provided proof, returning its underlying storage value, if present.
+    pub fn verify_proof(
+        &self,
+        state_root: [u8; 32],
+        proof: StorageProof<<C::Storage as Storage>::Proof>,
+        expected_key: &C::Address,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<Option<StorageValue>, anyhow::Error> {
+        let storage = working_set.backing();
+        let (storage_key, storage_value) = storage.open_proof(state_root, proof)?;
+        let prefix = self.bonded_attesters.prefix();
+        let codec = self.bonded_attesters.codec();
+
+        // We have to check that the storage key is the same as the external key
+        ensure!(
+            storage_key == StorageKey::new(prefix, expected_key, codec),
+            "The storage key from the proof doesn't match the expected storage key."
+        );
+
+        Ok(storage_value)
     }
 
     /// A helper function that simply slashes an attester and returns a reward value
@@ -457,13 +481,12 @@ where
         };
 
         // This proof checks that the attester was bonded at the given transition num
-        let bond_opt = working_set
-            .backing()
+        let bond_opt = self
             .verify_proof(
                 bonding_root,
                 attestation.proof_of_bond.proof.clone(),
                 context.sender(),
-                &self.bonded_attesters,
+                working_set,
             )
             .map_err(|_err| AttesterIncentiveErrors::InvalidBondingProof)?;
 

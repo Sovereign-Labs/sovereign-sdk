@@ -1,8 +1,7 @@
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
-use sov_state::{AccessoryWorkingSet, WorkingSet};
 
 use crate::transaction::Transaction;
-use crate::{Context, Spec};
+use crate::{AccessoryWorkingSet, Context, Spec, WorkingSet};
 
 /// Hooks that execute within the `StateTransitionFunction::apply_blob` function for each processed transaction.
 pub trait TxHooks {

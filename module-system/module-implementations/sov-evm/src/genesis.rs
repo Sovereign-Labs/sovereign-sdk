@@ -2,7 +2,7 @@ use anyhow::Result;
 use reth_primitives::constants::{EMPTY_RECEIPTS, EMPTY_TRANSACTIONS};
 use reth_primitives::{Bloom, Bytes, EMPTY_OMMER_ROOT, H256, KECCAK_EMPTY, U256};
 use revm::primitives::SpecId;
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 
 use crate::evm::db_init::InitEvmDb;
 use crate::evm::primitive_types::Block;

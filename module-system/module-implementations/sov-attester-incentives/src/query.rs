@@ -1,8 +1,7 @@
 //! Defines the query methods for the attester incentives module
 use serde::{Deserialize, Serialize};
-use sov_modules_api::{Spec, ValidityConditionChecker};
-use sov_state::storage::{NativeStorage, StorageProof};
-use sov_state::{Storage, WorkingSet};
+use sov_modules_api::{Spec, ValidityConditionChecker, WorkingSet};
+use sov_state::storage::{NativeStorage, Storage, StorageKey, StorageProof};
 
 use super::AttesterIncentives;
 use crate::call::Role;
@@ -57,11 +56,10 @@ where
     where
         C::Storage: NativeStorage,
     {
-        working_set.backing().get_with_proof_from_state_map(
-            &address,
-            &self.bonded_attesters,
-            witness,
-        )
+        let prefix = self.bonded_attesters.prefix();
+        let codec = self.bonded_attesters.codec();
+        let storage = working_set.backing();
+        storage.get_with_proof(StorageKey::new(prefix, &address, codec), witness)
     }
 
     /// TODO: Make the unbonding amount queryable:

@@ -17,10 +17,9 @@ use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use query::*;
 use serde::{Deserialize, Serialize};
-use sov_modules_api::{DaSpec, Error, ModuleInfo, ValidityConditionChecker};
+use sov_modules_api::{DaSpec, Error, ModuleInfo, ValidityConditionChecker, WorkingSet};
 use sov_rollup_interface::da::Time;
 use sov_state::codec::BcsCodec;
-use sov_state::WorkingSet;
 
 /// Type alias that contains the height of a given transition
 pub type TransitionHeight = u64;
@@ -109,11 +108,11 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
 
     /// The current block height
     #[state]
-    slot_height: sov_state::StateValue<TransitionHeight>,
+    slot_height: sov_modules_api::StateValue<TransitionHeight>,
 
     /// The current time, as reported by the DA layer
     #[state]
-    time: sov_state::StateValue<Time>,
+    time: sov_modules_api::StateValue<Time>,
 
     /// A record of all previous state transitions which are available to the VM.
     /// Currently, this includes *all* historical state transitions, but that may change in the future.
@@ -121,20 +120,21 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
     /// is stored during transition i+1. This is mainly due to the fact that this structure depends on the
     /// rollup's root hash which is only stored once the transition has completed.
     #[state]
-    historical_transitions: sov_state::StateMap<TransitionHeight, StateTransitionId<Da>, BcsCodec>,
+    historical_transitions:
+        sov_modules_api::StateMap<TransitionHeight, StateTransitionId<Da>, BcsCodec>,
 
     /// The transition that is currently processed
     #[state]
-    in_progress_transition: sov_state::StateValue<TransitionInProgress<Da>, BcsCodec>,
+    in_progress_transition: sov_modules_api::StateValue<TransitionInProgress<Da>, BcsCodec>,
 
     /// The genesis root hash.
     /// Set after the first transaction of the rollup is executed, using the `begin_slot` hook.
     #[state]
-    genesis_hash: sov_state::StateValue<[u8; 32]>,
+    genesis_hash: sov_modules_api::StateValue<[u8; 32]>,
 
     /// The height of genesis
     #[state]
-    genesis_height: sov_state::StateValue<TransitionHeight>,
+    genesis_height: sov_modules_api::StateValue<TransitionHeight>,
 }
 
 /// Initial configuration of the chain state

@@ -6,7 +6,8 @@ use std::fmt::Formatter;
 use std::num::ParseIntError;
 
 use anyhow::{bail, Context, Result};
-use sov_state::{Prefix, WorkingSet};
+use sov_modules_api::WorkingSet;
+use sov_state::Prefix;
 #[cfg(feature = "native")]
 use thiserror::Error;
 
@@ -103,7 +104,7 @@ pub(crate) struct Token<C: sov_modules_api::Context> {
     /// Total supply of the coins.
     pub(crate) total_supply: u64,
     /// Mapping from user address to user balance.
-    pub(crate) balances: sov_state::StateMap<C::Address, Amount>,
+    pub(crate) balances: sov_modules_api::StateMap<C::Address, Amount>,
 
     /// Vector containing the authorized minters
     /// Empty vector indicates that the token supply is frozen
@@ -243,7 +244,7 @@ impl<C: sov_modules_api::Context> Token<C> {
     ) -> Result<(C::Address, Self)> {
         let token_address = super::get_token_address::<C>(token_name, sender, salt);
         let token_prefix = prefix_from_address_with_parent::<C>(parent_prefix, &token_address);
-        let balances = sov_state::StateMap::new(token_prefix);
+        let balances = sov_modules_api::StateMap::new(token_prefix);
 
         let mut total_supply: Option<u64> = Some(0);
         for (address, balance) in address_and_balances.iter() {

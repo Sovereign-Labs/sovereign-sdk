@@ -1,8 +1,7 @@
 use jsonrpsee::core::RpcResult;
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::macros::{expose_rpc, rpc_gen};
-use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo};
-use sov_state::{StateValue, WorkingSet};
+use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, StateValue, WorkingSet};
 
 #[derive(ModuleInfo)]
 pub struct QueryModule<C: Context> {
