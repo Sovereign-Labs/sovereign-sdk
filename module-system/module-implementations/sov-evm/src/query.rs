@@ -221,10 +221,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         let block_number = U256::from(
             self.blocks
-                .last(&mut working_set.accessory_state())
-                .expect("Head block must be set")
-                .header
-                .number,
+                .len(&mut working_set.accessory_state())
+                .saturating_sub(1),
         );
         Ok(block_number)
     }
