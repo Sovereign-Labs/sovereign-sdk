@@ -3,7 +3,7 @@ use serde_json;
 use super::{StateCodec, StateKeyCodec};
 use crate::codec::StateValueCodec;
 
-/// A [`StateValueCodec`] that uses [`serde_json`] for all values.
+/// A [`StateCodec`] that uses [`serde_json`] for all keys and values.
 #[derive(Debug, Default, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct JsonCodec;
 
@@ -12,7 +12,7 @@ where
     K: serde::Serialize,
 {
     fn encode_key(&self, key: &K) -> Vec<u8> {
-        serde_json::to_vec(key).expect("Failed to serialize value")
+        serde_json::to_vec(key).expect("Failed to serialize key")
     }
 }
 

@@ -15,6 +15,8 @@ use crate::tree_db::TreeReadLogger;
 use crate::witness::Witness;
 use crate::{MerkleProofSpec, Storage};
 
+/// A [`Storage`] implementation to be used by the prover in a native execution
+/// environment (outside of the zkVM).
 pub struct ProverStorage<S: MerkleProofSpec> {
     db: StateDB,
     native_db: NativeDB,
@@ -32,6 +34,8 @@ impl<S: MerkleProofSpec> Clone for ProverStorage<S> {
 }
 
 impl<S: MerkleProofSpec> ProverStorage<S> {
+    /// Creates a new [`ProverStorage`] instance at the specified path, opening
+    /// or creating the necessary RocksDB database(s) at the specified path.
     pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
         let state_db = StateDB::with_path(&path)?;
         let native_db = NativeDB::with_path(&path)?;
@@ -217,6 +221,7 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
     }
 }
 
+/// Deletes the storage at the specified path.
 pub fn delete_storage(path: impl AsRef<Path>) {
     fs::remove_dir_all(&path)
         .or_else(|_| fs::remove_file(&path))
@@ -229,6 +234,15 @@ mod test {
 
     use super::*;
     use crate::{DefaultStorageSpec, StateReaderAndWriter, WorkingSet};
+
+    #[test]
+    fn delete_storage_works() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path();
+        assert!(path.exists());
+        delete_storage(path);
+        assert!(!path.exists());
+    }
 
     #[derive(Clone)]
     struct TestCase {
