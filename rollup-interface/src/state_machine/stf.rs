@@ -7,8 +7,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::da::BlobReaderTrait;
-use crate::services::da::SlotData;
+use crate::da::DaSpec;
 use crate::zk::{ValidityCondition, Zkvm};
 
 #[cfg(any(test, feature = "fuzzing"))]
@@ -94,9 +93,9 @@ pub struct SlotResult<S, B, T, W> {
 ///  - block: DA layer block
 ///  - batch: Set of transactions grouped together, or block on L2
 ///  - blob: Non serialised batch or anything else that can be posted on DA layer, like attestation or proof.
-pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
+pub trait StateTransitionFunction<Vm: Zkvm, Da: DaSpec> {
     /// Root hash of state merkle tree
-    type StateRoot;
+    type StateRoot: Serialize + DeserializeOwned + Clone;
     /// The initial state of the rollup.
     type InitialState;
 
@@ -108,7 +107,7 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
 
     /// Witness is a data that is produced during actual batch execution
     /// or validated together with proof during verification
-    type Witness: Default + Serialize;
+    type Witness: Default + Serialize + DeserializeOwned;
 
     /// The validity condition that must be verified outside of the Vm
     type Condition: ValidityCondition;
@@ -130,10 +129,11 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     /// which is why we use a generic here instead of an associated type.
     ///
     /// Commits state changes to the database
-    fn apply_slot<'a, I, Data>(
+    fn apply_slot<'a, I>(
         &mut self,
         witness: Self::Witness,
-        slot_data: &Data,
+        slot_header: &Da::BlockHeader,
+        validity_condition: &Da::ValidityCondition,
         blobs: I,
     ) -> SlotResult<
         Self::StateRoot,
@@ -142,8 +142,7 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
         Self::Witness,
     >
     where
-        I: IntoIterator<Item = &'a mut B>,
-        Data: SlotData<Cond = Self::Condition>;
+        I: IntoIterator<Item = &'a mut Da::BlobTransaction>;
 
     /// Gets the state root from the associated state. If not available (because the chain has not been initialized yet),
     /// return None.

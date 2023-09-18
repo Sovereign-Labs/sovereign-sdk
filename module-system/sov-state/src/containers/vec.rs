@@ -6,6 +6,7 @@ use thiserror::Error;
 use crate::codec::{BorshCodec, StateCodec, StateKeyCodec, StateValueCodec};
 use crate::{Prefix, StateMap, StateValue, Storage, WorkingSet};
 
+/// A growable array of values stored as JMT-backed state.
 #[derive(
     Debug,
     Clone,
@@ -25,8 +26,10 @@ pub struct StateVec<V, Codec = BorshCodec> {
 /// Error type for `StateVec` get method.
 #[derive(Debug, Error)]
 pub enum Error {
+    /// Operation failed because the index was out of bounds.
     #[error("Index out of bounds for index: {0}")]
     IndexOutOfBounds(usize),
+    /// Value not found.
     #[error("Value not found for prefix: {0} and index: {1}")]
     MissingValue(Prefix, usize),
 }
@@ -141,6 +144,7 @@ where
         Some(elem)
     }
 
+    /// Removes all values from this [`StateVec`].
     pub fn clear<S: Storage>(&self, working_set: &mut WorkingSet<S>) {
         let len = self.len_value.remove(working_set).unwrap_or_default();
 
@@ -182,18 +186,16 @@ where
         }
     }
 
+    /// Returns the last value in the [`StateVec`], or [`None`] if
+    /// empty.
     pub fn last<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
         let len = self.len(working_set);
-
-        if len == 0usize {
-            None
-        } else {
-            self.elems.get(&(len - 1), working_set)
-        }
+        let i = len.checked_sub(1)?;
+        self.elems.get(&i, working_set)
     }
 }
 
-/// An [`Iterator`] over a [`StateVec`]
+/// An [`Iterator`] over a [`StateVec`].
 ///
 /// See [`StateVec::iter`] for more details.
 pub struct StateVecIter<'a, 'ws, V, Codec, S>
@@ -266,6 +268,23 @@ where
     }
 }
 
+impl<'a, 'ws, V, Codec, S> DoubleEndedIterator for StateVecIter<'a, 'ws, V, Codec, S>
+where
+    Codec: StateCodec + Clone,
+    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
+    Codec::KeyCodec: StateKeyCodec<usize>,
+    S: Storage,
+{
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.len == 0 {
+            return None;
+        }
+
+        self.len -= 1;
+        self.state_vec.get(self.len, self.ws)
+    }
+}
+
 #[cfg(all(test, feature = "native"))]
 mod test {
     use std::fmt::Debug;
@@ -276,10 +295,12 @@ mod test {
     enum TestCaseAction<T> {
         Push(T),
         Pop(T),
+        Last(T),
         Set(usize, T),
         SetAll(Vec<T>),
         CheckLen(usize),
         CheckContents(Vec<T>),
+        CheckContentsReverse(Vec<T>),
         CheckGet(usize, Option<T>),
         Clear,
     }
@@ -313,6 +334,8 @@ mod test {
             TestCaseAction::CheckGet(0, None),
             TestCaseAction::SetAll(vec![1, 2, 3]),
             TestCaseAction::CheckContents(vec![1, 2, 3]),
+            TestCaseAction::CheckContentsReverse(vec![3, 2, 1]),
+            TestCaseAction::Last(3),
         ]
     }
 
@@ -367,6 +390,14 @@ mod test {
             }
             TestCaseAction::Clear => {
                 state_vec.clear(ws);
+            }
+            TestCaseAction::Last(expected) => {
+                let actual = state_vec.last(ws);
+                assert_eq!(actual, Some(expected));
+            }
+            TestCaseAction::CheckContentsReverse(expected) => {
+                let contents: Vec<T> = state_vec.iter(ws).rev().collect();
+                assert_eq!(expected, contents);
             }
         }
     }

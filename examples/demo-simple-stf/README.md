@@ -161,7 +161,7 @@ You can find more details in the `stf_test.rs` file.
 
 The following test checks the rollup logic. In the test, we call `init_chain, begin_slot, and end_slot` for completeness, even though these methods do nothing.
 
-```rust 
+```rust
 use demo_simple_stf::{ApplySlotResult, CheckHashPreimageStf};
 use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockBlock, MockValidityCond, MockZkvm};
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -177,9 +177,9 @@ fn test_stf() {
     let data = MockBlock::default();
     let mut blobs = [test_blob];
 
-    StateTransitionFunction::<MockZkvm, MockBlob>::init_chain(stf, ());
+    StateTransitionFunction::<MockZkvm, MockDaSpec>::init_chain(stf, ());
 
-    let result = StateTransitionFunction::<MockZkvm, MockBlob>::apply_slot(
+    let result = StateTransitionFunction::<MockZkvm, MockDaSpec>::apply_slot(
         stf,
         (),
         &data,

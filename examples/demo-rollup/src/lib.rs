@@ -7,8 +7,6 @@ mod rollup;
 use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runtime::GenesisConfig;
-#[cfg(feature = "experimental")]
-pub use rollup::read_tx_signer_priv_key;
 pub use rollup::{
     new_rollup_with_celestia_da, new_rollup_with_mock_da, new_rollup_with_mock_da_from_config,
     Rollup,
@@ -40,20 +38,32 @@ pub fn initialize_ledger(path: impl AsRef<std::path::Path>) -> LedgerDB {
 /// ```
 pub fn get_genesis_config<Da: DaSpec>(
     sequencer_da_address: <<Da as DaSpec>::BlobTransaction as BlobReaderTrait>::Address,
+    #[cfg(feature = "experimental")] eth_accounts: Vec<reth_primitives::Address>,
 ) -> GenesisConfig<DefaultContext, Da> {
-    let data = std::fs::read_to_string("../test-data/keys/token_deployer_private_key.json")
-        .expect("Unable to read file to string");
-    let key_and_address: PrivateKeyAndAddress<DefaultContext> = serde_json::from_str(&data)
-        .unwrap_or_else(|_| panic!("Unable to convert data {} to PrivateKeyAndAddress", &data));
+    let token_deployer_data =
+        std::fs::read_to_string("../test-data/keys/token_deployer_private_key.json")
+            .expect("Unable to read file to string");
+
+    let token_deployer: PrivateKeyAndAddress<DefaultContext> =
+        serde_json::from_str(&token_deployer_data).unwrap_or_else(|_| {
+            panic!(
+                "Unable to convert data {} to PrivateKeyAndAddress",
+                &token_deployer_data
+            )
+        });
+
     assert!(
-        key_and_address.is_matching_to_default(),
+        token_deployer.is_matching_to_default(),
         "Inconsistent key data"
     );
 
+    // TODO: #840
     create_demo_genesis_config(
         100000000,
-        key_and_address.address,
+        token_deployer.address,
         sequencer_da_address.as_ref().to_vec(),
-        &key_and_address.private_key,
+        &token_deployer.private_key,
+        #[cfg(feature = "experimental")]
+        eth_accounts,
     )
 }

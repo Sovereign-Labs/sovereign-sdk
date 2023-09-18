@@ -1,6 +1,6 @@
 use sov_chain_state::{ChainState, ChainStateConfig};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
-use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
+use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::macros::DefaultRuntime;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{
@@ -8,6 +8,7 @@ use sov_modules_api::{
 };
 use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
 use sov_rollup_interface::mocks::MockZkvm;
+use sov_state::AccessoryWorkingSet;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
@@ -64,16 +65,28 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da> {
 
     fn begin_slot_hook(
         &self,
-        slot_data: &impl sov_modules_api::SlotData<Cond = Da::ValidityCondition>,
+        slot_header: &Da::BlockHeader,
+        validity_condition: &Da::ValidityCondition,
         working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
     ) {
-        self.chain_state.begin_slot_hook(slot_data, working_set)
+        self.chain_state
+            .begin_slot_hook(slot_header, validity_condition, working_set)
     }
 
     fn end_slot_hook(
         &self,
-        _root_hash: [u8; 32],
         _working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
+    ) {
+    }
+}
+
+impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for TestRuntime<C, Da> {
+    type Context = C;
+
+    fn finalize_slot_hook(
+        &self,
+        _root_hash: [u8; 32],
+        _accesorry_working_set: &mut AccessoryWorkingSet<<Self::Context as Spec>::Storage>,
     ) {
     }
 }
@@ -105,6 +118,7 @@ pub(crate) fn create_demo_genesis_config<C: Context, Da: DaSpec>(
     let value_setter_config = ValueSetterConfig { admin };
     let chain_state_config = ChainStateConfig {
         initial_slot_height: 0,
+        current_time: Default::default(),
     };
     GenesisConfig::new(value_setter_config, chain_state_config)
 }
@@ -112,6 +126,8 @@ pub(crate) fn create_demo_genesis_config<C: Context, Da: DaSpec>(
 /// Clones the [`AppTemplate`]'s [`Storage`] and extract the underlying [`WorkingSet`]
 pub(crate) fn get_working_set<C: Context, Da: DaSpec>(
     app_template: &AppTemplate<C, Da, MockZkvm, TestRuntime<C, Da>>,
-) -> sov_state::WorkingSet<<C as Spec>::Storage> {
+) -> sov_state::WorkingSet<<C as Spec>::Storage>
+where
+{
     sov_state::WorkingSet::new(app_template.current_storage.clone())
 }

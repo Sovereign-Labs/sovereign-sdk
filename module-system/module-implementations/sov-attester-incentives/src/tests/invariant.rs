@@ -53,7 +53,7 @@ fn test_transition_invariant() {
         let init_height_usize = usize::try_from(INIT_HEIGHT).unwrap();
         let attestation = Attestation {
             initial_state_root: exec_vars[init_height_usize].state_root,
-            da_block_hash: [(init_height_usize + 1).try_into().unwrap(); 32],
+            da_block_hash: [(init_height_usize + 1).try_into().unwrap(); 32].into(),
             post_state_root: exec_vars[init_height_usize + 1].state_root,
             proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
                 claimed_transition_num: INIT_HEIGHT + 1,
@@ -62,7 +62,7 @@ fn test_transition_invariant() {
         };
 
         let err = module
-            .process_attestation(&context, attestation, &mut working_set)
+            .process_attestation(&context, attestation.into(), &mut working_set)
             .unwrap_err();
 
         assert_eq!(
@@ -90,7 +90,7 @@ fn test_transition_invariant() {
     for i in 0..usize::try_from(DEFAULT_ROLLUP_FINALITY + 1).unwrap() {
         let old_attestation = Attestation {
             initial_state_root: exec_vars[new_height - 1].state_root,
-            da_block_hash: [(new_height).try_into().unwrap(); 32],
+            da_block_hash: [(new_height).try_into().unwrap(); 32].into(),
             post_state_root: exec_vars[new_height].state_root,
             proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
                 claimed_transition_num: new_height.try_into().unwrap(),
@@ -100,7 +100,7 @@ fn test_transition_invariant() {
 
         let new_attestation = Attestation {
             initial_state_root: exec_vars[new_height + i - 1].state_root,
-            da_block_hash: [(new_height + i).try_into().unwrap(); 32],
+            da_block_hash: [(new_height + i).try_into().unwrap(); 32].into(),
             post_state_root: exec_vars[new_height + i].state_root,
             proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
                 claimed_transition_num: (new_height + i).try_into().unwrap(),
@@ -136,11 +136,11 @@ fn test_transition_invariant() {
         );
 
         module
-            .process_attestation(&context, old_attestation, &mut working_set)
+            .process_attestation(&context, old_attestation.into(), &mut working_set)
             .expect("Should succeed");
 
         module
-            .process_attestation(&context, new_attestation, &mut working_set)
+            .process_attestation(&context, new_attestation.into(), &mut working_set)
             .expect("Should succeed");
     }
 
@@ -149,7 +149,7 @@ fn test_transition_invariant() {
     // Now the transition invariant is no longer respected: the transition number is below the minimum height or above the max height
     let old_attestation = Attestation {
         initial_state_root: exec_vars[new_height].state_root,
-        da_block_hash: [(new_height + finality_usize + 1).try_into().unwrap(); 32],
+        da_block_hash: [(new_height + finality_usize + 1).try_into().unwrap(); 32].into(),
         post_state_root: exec_vars[new_height + 1].state_root,
         proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
             claimed_transition_num: new_height.try_into().unwrap(),
@@ -177,7 +177,7 @@ fn test_transition_invariant() {
     );
 
     let err = module
-        .process_attestation(&context, old_attestation, &mut working_set)
+        .process_attestation(&context, old_attestation.into(), &mut working_set)
         .unwrap_err();
 
     assert_eq!(
@@ -189,7 +189,7 @@ fn test_transition_invariant() {
     // Now we do the same, except that the proof of bond refers to a transition above the transition to prove
     let attestation = Attestation {
         initial_state_root: exec_vars[new_height + finality_usize].state_root,
-        da_block_hash: [(new_height + finality_usize + 1).try_into().unwrap(); 32],
+        da_block_hash: [(new_height + finality_usize + 1).try_into().unwrap(); 32].into(),
         post_state_root: exec_vars[new_height + finality_usize + 1].state_root,
         proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
             claimed_transition_num: (new_height + finality_usize + 2).try_into().unwrap(),
@@ -207,7 +207,7 @@ fn test_transition_invariant() {
     );
 
     let err = module
-        .process_attestation(&context, attestation, &mut working_set)
+        .process_attestation(&context, attestation.into(), &mut working_set)
         .unwrap_err();
 
     assert_eq!(

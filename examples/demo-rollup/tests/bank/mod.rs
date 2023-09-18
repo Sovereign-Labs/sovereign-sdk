@@ -8,6 +8,7 @@ use jsonrpsee::rpc_params;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{PrivateKey, Spec};
+use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::mocks::MockDaSpec;
 use sov_sequencer::utils::SimpleClient;
 
@@ -53,7 +54,7 @@ async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow
     // Wait until the rollup has processed the next slot
     let _ = slot_processed_subscription.next().await;
 
-    let balance_response = sov_bank::query::BankRpcClient::<DefaultContext>::balance_of(
+    let balance_response = sov_bank::BankRpcClient::<DefaultContext>::balance_of(
         client.http(),
         user_address,
         token_address,
@@ -67,14 +68,20 @@ async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow
 async fn bank_tx_tests() -> Result<(), anyhow::Error> {
     let (port_tx, port_rx) = tokio::sync::oneshot::channel();
 
+    // Use a dummy `elf` file, since the prover doesn't currently use it in native execution
+    let prover = Risc0Host::new(&[]);
+
     let rollup_task = tokio::spawn(async {
-        start_rollup(port_tx).await;
+        start_rollup(port_tx, Some(prover)).await;
     });
 
     // Wait for rollup task to start:
     let port = port_rx.await.unwrap();
 
-    send_test_create_token_tx(port).await?;
-    rollup_task.abort();
+    // If the rollup throws an error, return it and stop trying to send the transaction
+    tokio::select! {
+        err = rollup_task => err?,
+        res = send_test_create_token_tx(port) => res?,
+    };
     Ok(())
 }

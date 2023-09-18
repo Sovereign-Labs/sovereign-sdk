@@ -12,10 +12,10 @@ readme = "README.md"
 resolver = "2"
 
 [dev-dependencies]
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1", features = ["mocks"] }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1", features = ["native"] }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.2", features = ["mocks"] }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.2", features = ["native"] }
 tempfile = { workspace = true }
-sov-prover-incentives = { version = "*", features = ["native"], path = "." }
+sov-prover-incentives = { features = ["native"], path = "." }
 
 [dependencies]
 anyhow = { workspace = true }
@@ -25,9 +25,9 @@ schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 
-sov-bank = { path = "../sov-bank", version = "0.1" }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-state = { path = "../../sov-state", version = "0.1" }
+sov-bank = { path = "../sov-bank", version = "0.2" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
+sov-state = { path = "../../sov-state", version = "0.2" }
 
 
 [features]

@@ -5,7 +5,7 @@ use revm::primitives::SpecId;
 use sov_state::WorkingSet;
 
 use crate::evm::db_init::InitEvmDb;
-use crate::evm::transaction::Block;
+use crate::evm::primitive_types::Block;
 use crate::evm::{AccountInfo, EvmChainConfig};
 use crate::Evm;
 
@@ -57,13 +57,12 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         self.cfg.set(&chain_cfg, working_set);
 
-        let genesis_block_number = 0u64;
-
         let header = reth_primitives::Header {
             parent_hash: H256::default(),
             ommers_hash: EMPTY_OMMER_ROOT,
             beneficiary: config.coinbase,
-            state_root: KECCAK_EMPTY, // TODO: Can we get state from working set now?
+            // This will be set in finalize_slot_hook or in the next begin_slot_hook
+            state_root: KECCAK_EMPTY,
             transactions_root: EMPTY_TRANSACTIONS,
             receipts_root: EMPTY_RECEIPTS,
             withdrawals_root: None,
@@ -79,20 +78,14 @@ impl<C: sov_modules_api::Context> Evm<C> {
             extra_data: Bytes::default(),
         };
 
-        let header = header.seal_slow();
-
-        let mut accessory_state = working_set.accessory_state();
-
-        self.block_hashes
-            .set(&header.hash, &genesis_block_number, &mut accessory_state);
-
         let block = Block {
             header,
             transactions: 0u64..0u64,
         };
 
-        self.blocks.push(&block, &mut accessory_state);
         self.head.set(&block, working_set);
+        self.pending_head
+            .set(&block, &mut working_set.accessory_state());
 
         Ok(())
     }

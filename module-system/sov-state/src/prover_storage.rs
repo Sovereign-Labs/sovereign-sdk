@@ -15,6 +15,8 @@ use crate::tree_db::TreeReadLogger;
 use crate::witness::Witness;
 use crate::{MerkleProofSpec, Storage};
 
+/// A [`Storage`] implementation to be used by the prover in a native execution
+/// environment (outside of the zkVM).
 pub struct ProverStorage<S: MerkleProofSpec> {
     db: StateDB,
     native_db: NativeDB,
@@ -32,6 +34,8 @@ impl<S: MerkleProofSpec> Clone for ProverStorage<S> {
 }
 
 impl<S: MerkleProofSpec> ProverStorage<S> {
+    /// Creates a new [`ProverStorage`] instance at the specified path, opening
+    /// or creating the necessary RocksDB database(s) at the specified path.
     pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
         let state_db = StateDB::with_path(&path)?;
         let native_db = NativeDB::with_path(&path)?;
@@ -96,8 +100,6 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         witness: &Self::Witness,
     ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error> {
         let latest_version = self.db.get_next_version() - 1;
-        witness.add_hint(latest_version);
-
         let read_logger = TreeReadLogger::with_db_and_witness(self.db.clone(), witness);
         let untracked_jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&self.db);
 
@@ -116,6 +118,11 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
                 .write_node_batch(&tree_update.node_batch)
                 .expect("db write must succeed");
         }
+        let prev_root = untracked_jmt
+            .get_root_hash(latest_version)
+            .expect("Previous root hash was just populated");
+        witness.add_hint(prev_root.0);
+        witness.add_hint(latest_version);
 
         // For each value that's been read from the tree, read it from the logged JMT to populate hints
         for (key, read_value) in state_accesses.ordered_reads {
@@ -214,6 +221,7 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
     }
 }
 
+/// Deletes the storage at the specified path.
 pub fn delete_storage(path: impl AsRef<Path>) {
     fs::remove_dir_all(&path)
         .or_else(|_| fs::remove_file(&path))
@@ -226,6 +234,15 @@ mod test {
 
     use super::*;
     use crate::{DefaultStorageSpec, StateReaderAndWriter, WorkingSet};
+
+    #[test]
+    fn delete_storage_works() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path();
+        assert!(path.exists());
+        delete_storage(path);
+        assert!(!path.exists());
+    }
 
     #[derive(Clone)]
     struct TestCase {

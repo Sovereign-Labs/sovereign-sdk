@@ -4,8 +4,9 @@
 mod capabilities;
 #[cfg(feature = "native")]
 mod query;
+
 #[cfg(feature = "native")]
-pub use query::{BlobStorageRpcImpl, BlobStorageRpcServer, Response};
+pub use query::*;
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::{Module, ModuleInfo};
 use sov_state::{StateMap, WorkingSet};

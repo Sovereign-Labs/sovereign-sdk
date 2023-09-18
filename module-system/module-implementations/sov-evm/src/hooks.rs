@@ -1,7 +1,7 @@
 use reth_primitives::{Bloom, Bytes, U256};
-use sov_state::WorkingSet;
+use sov_state::{AccessoryWorkingSet, WorkingSet};
 
-use crate::evm::transaction::{Block, BlockEnv};
+use crate::evm::primitive_types::{Block, BlockEnv};
 use crate::experimental::PendingTransaction;
 use crate::Evm;
 
@@ -15,20 +15,17 @@ impl<C: sov_modules_api::Context> Evm<C> {
             .head
             .get(working_set)
             .expect("Head block should always be set");
+
+        // parent_block.header.state_root = root_hash.into();
+        // self.head.set(&parent_block, working_set);
+
         let cfg = self.cfg.get(working_set).unwrap_or_default();
         let new_pending_block = BlockEnv {
             number: parent_block.header.number + 1,
             coinbase: cfg.coinbase,
             timestamp: parent_block.header.timestamp + cfg.block_timestamp_delta,
             prevrandao: da_root_hash.into(),
-            basefee: reth_primitives::basefee::calculate_next_block_base_fee(
-                parent_block.header.gas_used,
-                cfg.block_gas_limit,
-                parent_block
-                    .header
-                    .base_fee_per_gas
-                    .unwrap_or(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE),
-            ),
+            basefee: parent_block.header.next_block_base_fee().unwrap(),
             gas_limit: cfg.block_gas_limit,
         };
         self.pending_block.set(&new_pending_block, working_set);
@@ -37,42 +34,31 @@ impl<C: sov_modules_api::Context> Evm<C> {
         // self.pending_transactions.clear(working_set); ?
     }
 
-    pub fn end_slot_hook(&self, root_hash: [u8; 32], working_set: &mut WorkingSet<C::Storage>) {
+    pub fn end_slot_hook(&self, _root_hash: [u8; 32], working_set: &mut WorkingSet<C::Storage>) {
         let pending_block = self
             .pending_block
             .get(working_set)
-            .expect("Pending block should always be sets");
+            .expect("Pending block should always be set");
 
         let parent_block = self
             .head
             .get(working_set)
-            .expect("Head block should always be set");
+            .expect("Head block should always be set")
+            .seal();
+
+        let expected_block_number = parent_block.header.number + 1;
+        assert_eq!(
+            pending_block.number, expected_block_number,
+            "Pending head must be set to block {}, but found block {}",
+            expected_block_number, pending_block.number
+        );
 
         let pending_transactions: Vec<PendingTransaction> =
             self.pending_transactions.iter(working_set).collect();
 
         self.pending_transactions.clear(working_set);
 
-        let mut accessory_state = working_set.accessory_state();
-        let start_tx_index = self.transactions.len(&mut accessory_state) as u64;
-        let mut tx_index = start_tx_index;
-
-        for PendingTransaction {
-            transaction,
-            receipt,
-        } in &pending_transactions
-        {
-            self.transactions.push(transaction, &mut accessory_state);
-            self.receipts.push(receipt, &mut accessory_state);
-
-            self.transaction_hashes.set(
-                &transaction.signed_transaction.hash,
-                &tx_index,
-                &mut accessory_state,
-            );
-
-            tx_index += 1
-        }
+        let start_tx_index = parent_block.transactions.end;
 
         let gas_used = pending_transactions
             .last()
@@ -94,7 +80,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
             number: pending_block.number,
             ommers_hash: reth_primitives::constants::EMPTY_OMMER_ROOT,
             beneficiary: parent_block.header.beneficiary,
-            state_root: root_hash.into(),
+            // This will be set in finalize_slot_hook or in the next begin_slot_hook
+            state_root: reth_primitives::constants::KECCAK_EMPTY,
             transactions_root: reth_primitives::proofs::calculate_transaction_root(
                 transactions.as_slice(),
             ),
@@ -113,12 +100,69 @@ impl<C: sov_modules_api::Context> Evm<C> {
         };
 
         let block = Block {
-            header: header.seal_slow(),
-            transactions: start_tx_index..tx_index - 1,
+            header,
+            transactions: start_tx_index..start_tx_index + pending_transactions.len() as u64,
         };
 
-        self.blocks.push(&block, &mut accessory_state);
-        self.head.set(&block, working_set); // ?
-        self.pending_transactions.clear(working_set); // ?
+        self.head.set(&block, working_set);
+
+        let mut accessory_state = working_set.accessory_state();
+        self.pending_head.set(&block, &mut accessory_state);
+
+        let mut tx_index = start_tx_index;
+        for PendingTransaction {
+            transaction,
+            receipt,
+        } in &pending_transactions
+        {
+            self.transactions.push(transaction, &mut accessory_state);
+            self.receipts.push(receipt, &mut accessory_state);
+
+            self.transaction_hashes.set(
+                &transaction.signed_transaction.hash,
+                &tx_index,
+                &mut accessory_state,
+            );
+
+            tx_index += 1
+        }
+
+        self.pending_transactions.clear(working_set);
+    }
+
+    pub fn finalize_slot_hook(
+        &self,
+        root_hash: [u8; 32],
+        accesorry_working_set: &mut AccessoryWorkingSet<C::Storage>,
+    ) {
+        let expected_block_number = self.blocks.len(accesorry_working_set) as u64;
+
+        let mut block = self
+            .pending_head
+            .get(accesorry_working_set)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Pending head must be set to block {}, but was empty",
+                    expected_block_number
+                )
+            });
+
+        assert_eq!(
+            block.header.number, expected_block_number,
+            "Pending head must be set to block {}, but found block {}",
+            expected_block_number, block.header.number
+        );
+
+        block.header.state_root = root_hash.into();
+
+        let sealed_block = block.seal();
+
+        self.blocks.push(&sealed_block, accesorry_working_set);
+        self.block_hashes.set(
+            &sealed_block.header.hash,
+            &sealed_block.header.number,
+            accesorry_working_set,
+        );
+        self.pending_head.delete(accesorry_working_set);
     }
 }

@@ -7,9 +7,9 @@ mod tx_verifier;
 pub use app_template::AppTemplate;
 pub use batch::Batch;
 use sov_modules_api::capabilities::BlobSelector;
-use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
+use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::{
-    BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, SlotData, Spec, Zkvm,
+    BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, Spec, Zkvm,
 };
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
 use sov_state::{StateCheckpoint, Storage};
@@ -24,6 +24,7 @@ pub trait Runtime<C: Context, Da: DaSpec>:
     + Genesis<Context = C>
     + TxHooks<Context = C>
     + SlotHooks<Da, Context = C>
+    + FinalizeHook<Da, Context = C>
     + ApplyBlobHooks<
         Da::BlobTransaction,
         Context = C,
@@ -81,30 +82,40 @@ where
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn begin_slot(
         &mut self,
-        slot_data: &impl SlotData<Cond = Da::ValidityCondition>,
-        witness: <Self as StateTransitionFunction<Vm, Da::BlobTransaction>>::Witness,
+        slot_header: &Da::BlockHeader,
+        validity_condition: &Da::ValidityCondition,
+        witness: <Self as StateTransitionFunction<Vm, Da>>::Witness,
     ) {
         let state_checkpoint = StateCheckpoint::with_witness(self.current_storage.clone(), witness);
         let mut working_set = state_checkpoint.to_revertable();
 
-        self.runtime.begin_slot_hook(slot_data, &mut working_set);
+        self.runtime
+            .begin_slot_hook(slot_header, validity_condition, &mut working_set);
 
         self.checkpoint = Some(working_set.checkpoint());
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn end_slot(&mut self) -> (jmt::RootHash, <<C as Spec>::Storage as Storage>::Witness) {
-        let mut checkpoint = self.checkpoint.take().unwrap();
-        let (cache_log, witness) = checkpoint.freeze();
+        let checkpoint = self.checkpoint.take().unwrap();
 
+        // Run end end_slot_hook
         let mut working_set = checkpoint.to_revertable();
+        self.runtime.end_slot_hook(&mut working_set);
+        // Save checkpoint
+        let mut checkpoint = working_set.checkpoint();
+
+        let (cache_log, witness) = checkpoint.freeze();
 
         let (root_hash, authenticated_node_batch) = self
             .current_storage
             .compute_state_update(cache_log, &witness)
             .expect("jellyfish merkle tree update must succeed");
 
-        self.runtime.end_slot_hook(root_hash, &mut working_set);
+        let mut working_set = checkpoint.to_revertable();
+
+        self.runtime
+            .finalize_slot_hook(root_hash, &mut working_set.accessory_state());
 
         let accessory_log = working_set.checkpoint().freeze_non_provable();
 
@@ -115,7 +126,7 @@ where
     }
 }
 
-impl<C, RT, Vm, Da> StateTransitionFunction<Vm, Da::BlobTransaction> for AppTemplate<C, Da, Vm, RT>
+impl<C, RT, Vm, Da> StateTransitionFunction<Vm, Da> for AppTemplate<C, Da, Vm, RT>
 where
     C: Context,
     Da: DaSpec,
@@ -143,21 +154,29 @@ where
 
         let mut checkpoint = working_set.checkpoint();
         let (log, witness) = checkpoint.freeze();
-        let accessory_log = checkpoint.freeze_non_provable();
 
         let (genesis_hash, node_batch) = self
             .current_storage
             .compute_state_update(log, &witness)
             .expect("Storage update must succeed");
 
+        let mut working_set = checkpoint.to_revertable();
+
+        self.runtime
+            .finalize_slot_hook(genesis_hash, &mut working_set.accessory_state());
+
+        let accessory_log = working_set.checkpoint().freeze_non_provable();
+
         self.current_storage.commit(&node_batch, &accessory_log);
+
         jmt::RootHash(genesis_hash)
     }
 
-    fn apply_slot<'a, I, Data>(
+    fn apply_slot<'a, I>(
         &mut self,
         witness: Self::Witness,
-        slot_data: &Data,
+        slot_header: &Da::BlockHeader,
+        validity_condition: &Da::ValidityCondition,
         blobs: I,
     ) -> SlotResult<
         Self::StateRoot,
@@ -167,9 +186,8 @@ where
     >
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
-        Data: SlotData<Cond = Self::Condition>,
     {
-        self.begin_slot(slot_data, witness);
+        self.begin_slot(slot_header, validity_condition, witness);
 
         // Initialize batch workspace
         let mut batch_workspace = self

@@ -1,15 +1,17 @@
 use bytes::Bytes;
 use reth_primitives::{
-    Bytes as RethBytes, TransactionSigned, TransactionSignedEcRecovered, TransactionSignedNoHash,
+    AccessList, Bytes as RethBytes, TransactionSigned, TransactionSignedEcRecovered,
+    TransactionSignedNoHash,
 };
-use reth_rpc::eth::error::EthApiError;
 use reth_rpc_types::CallRequest;
 use revm::primitives::{
-    AccountInfo as ReVmAccountInfo, BlockEnv as ReVmBlockEnv, CreateScheme, TransactTo, TxEnv, U256,
+    AccountInfo as ReVmAccountInfo, BlockEnv as ReVmBlockEnv, Bytecode, CreateScheme, TransactTo,
+    TxEnv, U256,
 };
-use thiserror::Error;
 
-use super::transaction::{BlockEnv, RlpEvmTransaction, TransactionSignedAndRecovered};
+use super::primitive_types::{
+    BlockEnv, RawEvmTxConversionError, RlpEvmTransaction, TransactionSignedAndRecovered,
+};
 use super::AccountInfo;
 
 impl From<AccountInfo> for ReVmAccountInfo {
@@ -65,27 +67,6 @@ pub(crate) fn create_tx_env(tx: &TransactionSignedEcRecovered) -> TxEnv {
         nonce: Some(tx.nonce()),
         // TODO handle access list
         access_list: vec![],
-    }
-}
-
-#[derive(Error, Debug)]
-pub enum RawEvmTxConversionError {
-    #[error("Empty raw transaction data")]
-    EmptyRawTransactionData,
-    #[error("Failed to decode signed transaction")]
-    FailedToDecodeSignedTransaction,
-}
-
-impl From<RawEvmTxConversionError> for EthApiError {
-    fn from(e: RawEvmTxConversionError) -> Self {
-        match e {
-            RawEvmTxConversionError::EmptyRawTransactionData => {
-                EthApiError::EmptyRawTransactionData
-            }
-            RawEvmTxConversionError::FailedToDecodeSignedTransaction => {
-                EthApiError::FailedToDecodeSignedTransaction
-            }
-        }
     }
 }
 
@@ -149,7 +130,9 @@ pub fn prepare_call_env(request: CallRequest) -> TxEnv {
             .unwrap_or_default(),
         chain_id: request.chain_id.map(|c| c.as_u64()),
         nonce: request.nonce.map(|n| TryInto::<u64>::try_into(n).unwrap()),
-        // TODO handle access list
-        access_list: Default::default(),
+        access_list: request
+            .access_list
+            .map(AccessList::flattened)
+            .unwrap_or_default(),
     }
 }

@@ -8,7 +8,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Address, AddressBech32, EncodeCall, PrivateKey, PublicKey, Spec};
-use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::mocks::{
     MockAddress, MockBlob, MockBlock, MockBlockHeader, MockHash, MockValidityCond,
 };
@@ -92,7 +92,7 @@ impl Default for RngDaService {
 }
 
 /// A simple DaSpec for a random number generator.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq, Debug, Clone, Default)]
 pub struct RngDaSpec;
 
 impl DaSpec for RngDaSpec {
@@ -109,6 +109,7 @@ impl DaSpec for RngDaSpec {
 #[async_trait]
 impl DaService for RngDaService {
     type Spec = RngDaSpec;
+    type Verifier = RngDaVerifier;
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
 
@@ -118,11 +119,11 @@ impl DaService for RngDaService {
         barray[..num_bytes.len()].copy_from_slice(&num_bytes);
 
         let block = MockBlock {
-            curr_hash: barray,
             header: MockBlockHeader {
-                prev_hash: MockHash([0u8; 32]),
+                hash: barray.into(),
+                prev_hash: [0u8; 32].into(),
+                height,
             },
-            height,
             validity_cond: MockValidityCond { is_valid: true },
             blobs: Default::default(),
         };
@@ -145,12 +146,12 @@ impl DaService for RngDaService {
                 .expect("TXNS_PER_BLOCK var should be a +ve number");
         }
 
-        let data = if block.height == 0 {
+        let data = if block.header.height == 0 {
             // creating the token
             generate_create(0)
         } else {
             // generating the transfer transactions
-            generate_transfers(num_txns, (block.height - 1) * (num_txns as u64))
+            generate_transfers(num_txns, (block.header.height - 1) * (num_txns as u64))
         };
 
         let address = MockAddress::from(SEQUENCER_DA_ADDRESS);
@@ -172,5 +173,26 @@ impl DaService for RngDaService {
 
     async fn send_transaction(&self, _blob: &[u8]) -> Result<(), Self::Error> {
         unimplemented!()
+    }
+}
+
+pub struct RngDaVerifier;
+impl DaVerifier for RngDaVerifier {
+    type Spec = RngDaSpec;
+
+    type Error = anyhow::Error;
+
+    fn new(_params: <Self::Spec as DaSpec>::ChainParams) -> Self {
+        Self
+    }
+
+    fn verify_relevant_tx_list(
+        &self,
+        _block_header: &<Self::Spec as DaSpec>::BlockHeader,
+        _txs: &[<Self::Spec as DaSpec>::BlobTransaction],
+        _inclusion_proof: <Self::Spec as DaSpec>::InclusionMultiProof,
+        _completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
+    ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error> {
+        Ok(MockValidityCond { is_valid: true })
     }
 }

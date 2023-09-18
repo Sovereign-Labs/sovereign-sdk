@@ -5,15 +5,15 @@ use std::cmp::min;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Buf;
-use digest::Digest;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::zk::ValidityCondition;
 use crate::BasicAddress;
 
 /// A specification for the types used by a DA layer.
-pub trait DaSpec: 'static {
+pub trait DaSpec: 'static + Debug + PartialEq + Eq {
     /// The hash of a DA layer block
     type SlotHash: BlockHashTrait;
 
@@ -61,7 +61,7 @@ pub trait DaVerifier {
     fn new(params: <Self::Spec as DaSpec>::ChainParams) -> Self;
 
     /// Verify a claimed set of transactions against a block header.
-    fn verify_relevant_tx_list<H: Digest>(
+    fn verify_relevant_tx_list(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],
@@ -179,15 +179,87 @@ pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static 
 }
 
 /// Trait with collection of trait bounds for a block hash.
-pub trait BlockHashTrait: Serialize + DeserializeOwned + PartialEq + Debug + Send + Sync {}
+pub trait BlockHashTrait:
+    Serialize + DeserializeOwned + PartialEq + Debug + Send + Sync + Clone + Eq + Into<[u8; 32]>
+{
+}
 
 /// A block header, typically used in the context of an underlying DA blockchain.
-pub trait BlockHeaderTrait: PartialEq + Debug + Clone {
+pub trait BlockHeaderTrait: PartialEq + Debug + Clone + Serialize + DeserializeOwned {
     /// Each block header must have a unique canonical hash.
     type Hash: Clone;
+
     /// Each block header must contain the hash of the previous block.
     fn prev_hash(&self) -> Self::Hash;
 
     /// Hash the type to get the digest.
     fn hash(&self) -> Self::Hash;
+
+    /// The current header height
+    fn height(&self) -> u64;
+
+    /// The timestamp of the block
+    fn time(&self) -> Time;
+}
+
+#[derive(
+    Serialize, Deserialize, Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Default,
+)]
+/// A timestamp, represented as seconds since the unix epoch.
+pub struct Time {
+    /// The number of seconds since the unix epoch
+    secs: i64,
+    nanos: u32,
+}
+
+#[derive(Debug, Error)]
+#[error("Only intervals less than one second may be represented as nanoseconds")]
+/// An error that occurs when trying to create a `NanoSeconds` representing more than one second
+pub struct ErrTooManyNanos;
+
+/// A number of nanoseconds
+pub struct NanoSeconds(u32);
+
+impl NanoSeconds {
+    /// Try to turn a u32 into a `NanoSeconds`. Only values less than one second are valid.
+    pub fn new(nanos: u32) -> Result<Self, ErrTooManyNanos> {
+        if nanos < NANOS_PER_SECOND {
+            Ok(NanoSeconds(nanos))
+        } else {
+            Err(ErrTooManyNanos)
+        }
+    }
+}
+
+const NANOS_PER_SECOND: u32 = 1_000_000_000;
+
+impl Time {
+    /// The time since the unix epoch
+    pub const fn new(secs: i64, nanos: NanoSeconds) -> Self {
+        Time {
+            secs,
+            nanos: nanos.0,
+        }
+    }
+
+    /// Create a time from the specified number of whole seconds.
+    pub const fn from_secs(secs: i64) -> Self {
+        Time { secs, nanos: 0 }
+    }
+
+    /// Returns the number of whole seconds since the epoch
+    ///
+    /// The returned value does not include the fractional (nanosecond) part of the duration,
+    /// which can be obtained using `subsec_nanos`.
+    pub fn secs(&self) -> i64 {
+        self.secs
+    }
+
+    /// Returns the fractional part of this [`Time`], in nanoseconds.
+    ///
+    /// This method does not return the length of the time when represented by nanoseconds.
+    /// The returned number always represents a fractional portion of a second (i.e., it is less than one billion).
+    pub fn subsec_nanos(&self) -> u32 {
+        self.nanos
+    }
 }

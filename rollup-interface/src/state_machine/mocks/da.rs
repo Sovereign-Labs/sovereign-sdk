@@ -2,14 +2,18 @@ use std::fmt::Display;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use sha2::Digest;
 
-use crate::da::{BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec};
+use crate::da::{
+    BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec, DaVerifier, Time,
+};
 use crate::mocks::MockValidityCond;
 use crate::services::da::{DaService, SlotData};
 use crate::{BasicAddress, RollupAddress};
+
+const JAN_1_2023: i64 = 1672531200;
 
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
 #[derive(
@@ -134,12 +138,34 @@ impl MockBlob {
 }
 
 /// A mock hash digest.
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    BorshDeserialize,
+    BorshSerialize,
+)]
 pub struct MockHash(pub [u8; 32]);
 
 impl AsRef<[u8]> for MockHash {
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl From<[u8; 32]> for MockHash {
+    fn from(value: [u8; 32]) -> Self {
+        Self(value)
+    }
+}
+
+impl From<MockHash> for [u8; 32] {
+    fn from(value: MockHash) -> Self {
+        value.0
     }
 }
 
@@ -150,6 +176,20 @@ impl BlockHashTrait for MockHash {}
 pub struct MockBlockHeader {
     /// The hash of the previous block.
     pub prev_hash: MockHash,
+    /// The hash of this block.
+    pub hash: MockHash,
+    /// The height of this block
+    pub height: u64,
+}
+
+impl Default for MockBlockHeader {
+    fn default() -> Self {
+        Self {
+            prev_hash: MockHash([0u8; 32]),
+            hash: MockHash([1u8; 32]),
+            height: 0,
+        }
+    }
 }
 
 impl BlockHeaderTrait for MockBlockHeader {
@@ -160,19 +200,23 @@ impl BlockHeaderTrait for MockBlockHeader {
     }
 
     fn hash(&self) -> Self::Hash {
-        MockHash(sha2::Sha256::digest(self.prev_hash.0).into())
+        self.hash
+    }
+
+    fn height(&self) -> u64 {
+        self.height
+    }
+
+    fn time(&self) -> crate::da::Time {
+        Time::from_secs(JAN_1_2023 + (self.height as i64) * 15)
     }
 }
 
 /// A mock block type used for testing.
 #[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone)]
 pub struct MockBlock {
-    /// The hash of this block.
-    pub curr_hash: [u8; 32],
     /// The header of this block.
     pub header: MockBlockHeader,
-    /// The height of this block
-    pub height: u64,
     /// Validity condition
     pub validity_cond: MockValidityCond,
     /// Blobs
@@ -182,11 +226,11 @@ pub struct MockBlock {
 impl Default for MockBlock {
     fn default() -> Self {
         Self {
-            curr_hash: [0; 32],
             header: MockBlockHeader {
-                prev_hash: MockHash([0; 32]),
+                prev_hash: [0; 32].into(),
+                hash: [1; 32].into(),
+                height: 0,
             },
-            height: 0,
             validity_cond: Default::default(),
             blobs: Default::default(),
         }
@@ -198,7 +242,7 @@ impl SlotData for MockBlock {
     type Cond = MockValidityCond;
 
     fn hash(&self) -> [u8; 32] {
-        self.curr_hash
+        self.header.hash.0
     }
 
     fn header(&self) -> &Self::BlockHeader {
@@ -211,7 +255,7 @@ impl SlotData for MockBlock {
 }
 
 /// A [`DaSpec`] suitable for testing.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq)]
 pub struct MockDaSpec;
 
 impl DaSpec for MockDaSpec {
@@ -250,6 +294,7 @@ impl MockDaService {
 
 #[async_trait]
 impl DaService for MockDaService {
+    type Verifier = MockDaVerifier;
     type Spec = MockDaSpec;
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
@@ -286,7 +331,7 @@ impl DaService for MockDaService {
         <Self::Spec as DaSpec>::InclusionMultiProof,
         <Self::Spec as DaSpec>::CompletenessProof,
     ) {
-        todo!()
+        ([0u8; 32], ())
     }
 
     async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
@@ -298,3 +343,27 @@ impl DaService for MockDaService {
 /// The configuration for mock da
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct MockDaConfig {}
+
+#[derive(Clone, Default)]
+/// DaVerifier used in tests.
+pub struct MockDaVerifier {}
+
+impl DaVerifier for MockDaVerifier {
+    type Spec = MockDaSpec;
+
+    type Error = anyhow::Error;
+
+    fn new(_params: <Self::Spec as DaSpec>::ChainParams) -> Self {
+        Self {}
+    }
+
+    fn verify_relevant_tx_list(
+        &self,
+        _block_header: &<Self::Spec as DaSpec>::BlockHeader,
+        _txs: &[<Self::Spec as DaSpec>::BlobTransaction],
+        _inclusion_proof: <Self::Spec as DaSpec>::InclusionMultiProof,
+        _completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
+    ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error> {
+        Ok(MockValidityCond { is_valid: true })
+    }
+}

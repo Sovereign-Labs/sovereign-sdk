@@ -9,7 +9,7 @@ use tracing::info;
 
 use crate::call::get_cfg_env;
 use crate::evm::db::EvmDb;
-use crate::evm::transaction::{Block, Receipt, TransactionSignedAndRecovered};
+use crate::evm::primitive_types::{Receipt, SealedBlock, TransactionSignedAndRecovered};
 use crate::evm::{executor, prepare_call_env};
 use crate::Evm;
 
@@ -99,12 +99,17 @@ impl<C: sov_modules_api::Context> Evm<C> {
             let tx = self
                 .transactions
                 .get(number as usize, &mut accessory_state)
-                .expect("Transaction with known hash must be set");
+                .unwrap_or_else(|| panic!("Transaction with known hash {} and number {} must be set in all {} transaction",                
+                hash,
+                number,
+                self.transactions.len(&mut accessory_state)));
 
             let block = self
                 .blocks
                 .get(tx.block_number as usize, &mut accessory_state)
-                .expect("Block number for known transaction must be set");
+                .unwrap_or_else(|| panic!("Block with number {} for known transaction {} must be set",
+                    tx.block_number,
+                    tx.signed_transaction.hash));
 
             reth_rpc_types::Transaction::from_recovered_with_block_context(
                 tx.into(),
@@ -173,10 +178,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
     #[rpc_method(name = "call")]
     pub fn get_call(
         &self,
-        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/501
         request: reth_rpc_types::CallRequest,
         _block_number: Option<reth_primitives::BlockId>,
-        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/501
         _state_overrides: Option<reth_rpc_types::state::StateOverride>,
         _block_overrides: Option<Box<reth_rpc_types::BlockOverrides>>,
         working_set: &mut WorkingSet<C::Storage>,
@@ -200,17 +203,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
-    #[rpc_method(name = "sendTransaction")]
-    pub fn send_transaction(
-        &self,
-        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/501
-        _request: reth_rpc_types::TransactionRequest,
-        _working_set: &mut WorkingSet<C::Storage>,
-    ) -> RpcResult<reth_primitives::U256> {
-        unimplemented!("eth_sendTransaction not implemented")
-    }
-
-    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "blockNumber")]
     pub fn block_number(
         &self,
@@ -218,11 +210,28 @@ impl<C: sov_modules_api::Context> Evm<C> {
     ) -> RpcResult<reth_primitives::U256> {
         unimplemented!("eth_blockNumber not implemented")
     }
+
+    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
+    #[rpc_method(name = "estimateGas")]
+    pub fn eth_estimate_gas(
+        &self,
+        _data: reth_rpc_types::CallRequest,
+        _block_number: Option<reth_primitives::BlockId>,
+        _working_set: &mut WorkingSet<C::Storage>,
+    ) -> RpcResult<reth_primitives::U256> {
+        unimplemented!("eth_sendTransaction not implemented")
+    }
+
+    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
+    #[rpc_method(name = "gasPrice")]
+    pub fn gas_price(&self) -> RpcResult<reth_primitives::U256> {
+        unimplemented!("eth_sendTransaction not implemented")
+    }
 }
 
 // modified from: https://github.com/paradigmxyz/reth/blob/cc576bc8690a3e16e6e5bf1cbbbfdd029e85e3d4/crates/rpc/rpc/src/eth/api/transactions.rs#L849
 pub(crate) fn build_rpc_receipt(
-    block: Block,
+    block: SealedBlock,
     tx: TransactionSignedAndRecovered,
     tx_number: u64,
     receipt: Receipt,

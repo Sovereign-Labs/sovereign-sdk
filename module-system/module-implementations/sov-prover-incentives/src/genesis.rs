@@ -18,12 +18,8 @@ impl<C: sov_modules_api::Context, Vm: sov_modules_api::Zkvm> ProverIncentives<C,
         );
 
         self.minimum_bond.set(&config.minimum_bond, working_set);
-        self.commitment_of_allowed_verifier_method.set(
-            &crate::StoredCodeCommitment {
-                commitment: config.commitment_of_allowed_verifier_method.clone(),
-            },
-            working_set,
-        );
+        self.commitment_of_allowed_verifier_method
+            .set(&config.commitment_of_allowed_verifier_method, working_set);
         self.bonding_token_address
             .set(&config.bonding_token_address, working_set);
 

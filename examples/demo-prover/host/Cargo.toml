@@ -1,6 +1,6 @@
 [package]
 name = "sov-demo-prover-host"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 publish = false
 resolver = "2"
@@ -33,7 +33,6 @@ methods = { path = "../methods" }
 
 
 [dev-dependencies]
-sov-demo-rollup = { path = "../../demo-rollup" }
 tempfile = { workspace = true }
 once_cell = "1.7.2"
 parking_lot = "0.11.1"

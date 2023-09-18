@@ -45,7 +45,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["Sovereign Labs <info@sovereign.xyz>"]
@@ -87,14 +87,20 @@ tracing = "0.1.37"
 bech32 = "0.9.1"
 derive_more = "0.99.11"
 clap = { version = "4.2.7", features = ["derive"] }
-toml = "0.7.3"
+toml = "0.8.0"
 jsonrpsee = { version = "0.18.2", features = ["jsonrpsee-types"] }
 schemars = { version = "0.8.12", features = ["derive"] }
 tempfile = "3.5"
 tokio = { version = "1", features = ["full"] }
-
+lazy_static = "1.4.0"
+risc0-zkvm = { version = "0.18", default-features = false }
+risc0-zkvm-platform = { version = "0.18" }
+risc0-zkp = "0.18"
+risc0-circuit-rv32im = "0.18"
+risc0-build = "0.18"
 
 # EVM dependencies
+ethereum-types = "0.14.1"
 ethers = "=2.0.8"
 ethers-core = "=2.0.8"
 ethers-contract = "=2.0.8"
@@ -104,7 +110,6 @@ ethers-middleware = "=2.0.8"
 
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7" }
 reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7" }
-reth-rpc = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7" }
 reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7" }
 
 revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }

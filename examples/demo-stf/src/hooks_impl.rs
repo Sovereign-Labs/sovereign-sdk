@@ -1,10 +1,12 @@
-use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
+use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Context, Spec};
 use sov_modules_stf_template::SequencerOutcome;
+#[cfg(feature = "experimental")]
+use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_sequencer_registry::SequencerRegistry;
-use sov_state::WorkingSet;
+use sov_state::{AccessoryWorkingSet, WorkingSet};
 use tracing::info;
 
 use crate::runtime::Runtime;
@@ -79,23 +81,40 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
 
     fn begin_slot_hook(
         &self,
-        #[allow(unused_variables)] slot_data: &impl sov_rollup_interface::services::da::SlotData,
+        #[allow(unused_variables)] slot_header: &Da::BlockHeader,
+        #[allow(unused_variables)] validity_condition: &Da::ValidityCondition,
         #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
             <Self::Context as Spec>::Storage,
         >,
     ) {
         #[cfg(feature = "experimental")]
-        self.evm.begin_slot_hook(slot_data.hash(), working_set);
+        self.evm
+            .begin_slot_hook(slot_header.hash().into(), working_set);
     }
 
     fn end_slot_hook(
         &self,
-        #[allow(unused_variables)] root_hash: [u8; 32],
         #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
             <Self::Context as Spec>::Storage,
         >,
     ) {
         #[cfg(feature = "experimental")]
-        self.evm.end_slot_hook(root_hash, working_set);
+        self.evm.end_slot_hook(working_set);
+    }
+}
+
+impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for Runtime<C, Da> {
+    type Context = C;
+
+    fn finalize_slot_hook(
+        &self,
+        #[allow(unused_variables)] root_hash: [u8; 32],
+        #[allow(unused_variables)] accesorry_working_set: &mut AccessoryWorkingSet<
+            <Self::Context as Spec>::Storage,
+        >,
+    ) {
+        #[cfg(feature = "experimental")]
+        self.evm
+            .finalize_slot_hook(root_hash, accesorry_working_set);
     }
 }

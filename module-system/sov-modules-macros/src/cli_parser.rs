@@ -49,11 +49,13 @@ impl CliParserMacro {
             if let syn::Type::Path(type_path) = &field.ty {
                 let module_path = type_path.path.clone();
                 let field_name = field.ident.clone();
-                let doc_str = format!("Generates a transaction for the `{}` module", &field_name);
+                let doc_str = format!("A subcommand for the `{}` module", &field_name);
+                let doc_contents = format!("A clap argument for the `{}` module", &field_name);
 
                 module_json_parser_arms.push(quote! {
                     #[doc = #doc_str]
                     #field_name {
+                        #[doc = #doc_contents]
                         #[clap(flatten)]
                         contents: __Inner
                     }
@@ -62,6 +64,7 @@ impl CliParserMacro {
                 module_message_arms.push(quote! {
                     #[doc = #doc_str]
                     #field_name {
+                        #[doc = #doc_contents]
                         contents: __Inner
                     }
                 });
@@ -104,9 +107,7 @@ impl CliParserMacro {
         let where_clause_with_deserialize_bounds = match where_clause {
             Some(where_clause) => {
                 let mut result = where_clause.clone();
-                result
-                    .predicates
-                    .extend(deserialize_constraints.into_iter());
+                result.predicates.extend(deserialize_constraints);
                 result
             }
             None => syn::parse_quote! {

@@ -8,7 +8,12 @@ pub mod genesis;
 pub mod hooks;
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
-pub mod query;
+mod query;
+#[cfg(feature = "native")]
+#[cfg(feature = "experimental")]
+pub use query::*;
+#[cfg(feature = "experimental")]
+pub mod signer;
 #[cfg(feature = "smart_contracts")]
 pub mod smart_contracts;
 #[cfg(feature = "experimental")]
@@ -30,9 +35,10 @@ mod experimental {
     use sov_state::WorkingSet;
 
     use super::evm::db::EvmDb;
-    use super::evm::transaction::BlockEnv;
     use super::evm::{DbAccount, EvmChainConfig};
-    use crate::evm::transaction::{Block, Receipt, TransactionSignedAndRecovered};
+    use crate::evm::primitive_types::{
+        Block, BlockEnv, Receipt, SealedBlock, TransactionSignedAndRecovered,
+    };
     #[derive(Clone, Debug)]
     pub struct AccountData {
         pub address: Address,
@@ -114,7 +120,10 @@ mod experimental {
         pub(crate) head: sov_state::StateValue<Block, BcsCodec>,
 
         #[state]
-        pub(crate) blocks: sov_state::AccessoryStateVec<Block, BcsCodec>,
+        pub(crate) pending_head: sov_state::AccessoryStateValue<Block, BcsCodec>,
+
+        #[state]
+        pub(crate) blocks: sov_state::AccessoryStateVec<SealedBlock, BcsCodec>,
 
         #[state]
         pub(crate) block_hashes: sov_state::AccessoryStateMap<reth_primitives::H256, u64, BcsCodec>,
@@ -126,6 +135,9 @@ mod experimental {
         #[state]
         pub(crate) transaction_hashes:
             sov_state::AccessoryStateMap<reth_primitives::H256, u64, BcsCodec>,
+
+        #[state]
+        pub(crate) receipts: sov_state::AccessoryStateVec<Receipt, BcsCodec>,
 
         #[state]
         pub(crate) receipts: sov_state::AccessoryStateVec<Receipt, BcsCodec>,
