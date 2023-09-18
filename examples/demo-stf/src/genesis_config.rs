@@ -1,4 +1,5 @@
-use sov_chain_state::ChainStateConfig;
+use sov_chain_state::{genesis, ChainStateConfig};
+use sov_cli::wallet_state::PrivateKeyAndAddress;
 #[cfg(feature = "experimental")]
 use sov_evm::{AccountData, EvmConfig, SpecId};
 pub use sov_modules_api::default_context::DefaultContext;
@@ -17,11 +18,52 @@ pub const LOCKED_AMOUNT: u64 = 50;
 pub const DEMO_SEQ_PUB_KEY_STR: &str = "seq_pub_key";
 pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
 
-pub fn create_demo_genesis_config<C: Context, Da: DaSpec>(
+pub struct DemoConfiguration<C: Context, Da: DaSpec> {
+    pub genesis: GenesisConfig<C, Da>,
+    pub priv_key: PrivateKeyAndAddress<C>,
+}
+
+pub fn create_demo_config_data<C: Context, Da: DaSpec>(
+    initial_sequencer_balance: u64,
+    sequencer_da_address: Vec<u8>,
+    #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
+) -> DemoConfiguration<C, Da> {
+    let token_deployer_data =
+        std::fs::read_to_string("../test-data/keys/token_deployer_private_key.json")
+            .expect("Unable to read file to string");
+
+    let token_deployer: PrivateKeyAndAddress<C> = serde_json::from_str(&token_deployer_data)
+        .unwrap_or_else(|_| {
+            panic!(
+                "Unable to convert data {} to PrivateKeyAndAddress",
+                &token_deployer_data
+            )
+        });
+
+    assert!(
+        token_deployer.is_matching_to_default(),
+        "Inconsistent key data"
+    );
+
+    let genesis = create_demo_genesis_config2(
+        initial_sequencer_balance,
+        token_deployer.address.clone(),
+        sequencer_da_address,
+        &token_deployer.private_key,
+        #[cfg(feature = "experimental")]
+        evm_genesis_addresses,
+    );
+    DemoConfiguration {
+        genesis,
+        priv_key: token_deployer,
+    }
+}
+
+fn create_demo_genesis_config2<C: Context, Da: DaSpec>(
     initial_sequencer_balance: u64,
     sequencer_address: C::Address,
     sequencer_da_address: Vec<u8>,
-    value_setter_admin_private_key: &DefaultPrivateKey,
+    value_setter_admin_private_key: &C::PrivateKey,
     #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
 ) -> GenesisConfig<C, Da> {
     let token_config: sov_bank::TokenConfig<C> = sov_bank::TokenConfig {
@@ -97,13 +139,10 @@ fn get_evm_config(genesis_addresses: Vec<reth_primitives::Address>) -> EvmConfig
 
 pub fn create_demo_config<Da: DaSpec>(
     initial_sequencer_balance: u64,
-    value_setter_admin_private_key: &DefaultPrivateKey,
-) -> GenesisConfig<DefaultContext, Da> {
-    create_demo_genesis_config::<DefaultContext, Da>(
+) -> DemoConfiguration<DefaultContext, Da> {
+    create_demo_config_data::<DefaultContext, Da>(
         initial_sequencer_balance,
-        generate_address::<DefaultContext>(DEMO_SEQ_PUB_KEY_STR),
         DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
-        value_setter_admin_private_key,
         #[cfg(feature = "experimental")]
         Vec::default(),
     )

@@ -20,15 +20,14 @@ pub mod test {
     fn test_demo_values_in_db() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
-        let value_setter_admin_private_key = DefaultPrivateKey::generate();
 
-        let config = create_demo_config(LOCKED_AMOUNT + 1, &value_setter_admin_private_key);
+        let config = create_demo_config(LOCKED_AMOUNT + 1);
         {
             let mut demo = create_new_demo(path);
 
-            demo.init_chain(config);
+            demo.init_chain(config.genesis);
 
-            let txs = simulate_da(value_setter_admin_private_key);
+            let txs = simulate_da(config.priv_key.private_key);
             let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
 
             let mut blobs = [blob];
@@ -79,13 +78,11 @@ pub mod test {
         let path = tempdir.path();
         let mut demo = create_new_demo(path);
 
-        let value_setter_admin_private_key = DefaultPrivateKey::generate();
+        let config = create_demo_config(LOCKED_AMOUNT + 1);
 
-        let config = create_demo_config(LOCKED_AMOUNT + 1, &value_setter_admin_private_key);
+        demo.init_chain(config.genesis);
 
-        demo.init_chain(config);
-
-        let txs = simulate_da(value_setter_admin_private_key);
+        let txs = simulate_da(config.priv_key.private_key);
 
         let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
@@ -131,7 +128,7 @@ pub mod test {
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
 
-        let config = create_demo_config(LOCKED_AMOUNT + 1, &value_setter_admin_private_key);
+        let config = create_demo_config(LOCKED_AMOUNT + 1).genesis;
         {
             let mut demo = create_new_demo(path);
             demo.init_chain(config);
@@ -181,16 +178,14 @@ pub mod test {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
 
-        let value_setter_admin_private_key = DefaultPrivateKey::generate();
-
-        let mut config = create_demo_config(LOCKED_AMOUNT + 1, &value_setter_admin_private_key);
-        config.sequencer_registry.is_preferred_sequencer = false;
+        let mut config = create_demo_config(LOCKED_AMOUNT + 1);
+        config.genesis.sequencer_registry.is_preferred_sequencer = false;
 
         let mut demo = create_new_demo(path);
-        demo.init_chain(config);
+        demo.init_chain(config.genesis);
 
         let some_sequencer: [u8; 32] = [121; 32];
-        let txs = simulate_da(value_setter_admin_private_key);
+        let txs = simulate_da(config.priv_key.private_key);
         let blob = new_test_blob_from_batch(Batch { txs }, &some_sequencer, [0; 32]);
         let mut blobs = [blob];
         let data = MockBlock::default();

@@ -5,7 +5,7 @@ pub mod register_rpc;
 mod rollup;
 
 use const_rollup_config::ROLLUP_NAMESPACE_RAW;
-use demo_stf::genesis_config::create_demo_genesis_config;
+use demo_stf::genesis_config::create_demo_config_data;
 use demo_stf::runtime::GenesisConfig;
 pub use rollup::{
     new_rollup_with_celestia_da, new_rollup_with_mock_da, new_rollup_with_mock_da_from_config,
@@ -58,12 +58,11 @@ pub fn get_genesis_config<Da: DaSpec>(
     );
 
     // TODO: #840
-    create_demo_genesis_config(
+    create_demo_config_data(
         100000000,
-        token_deployer.address,
         sequencer_da_address.as_ref().to_vec(),
-        &token_deployer.private_key,
         #[cfg(feature = "experimental")]
         eth_accounts,
     )
+    .genesis
 }

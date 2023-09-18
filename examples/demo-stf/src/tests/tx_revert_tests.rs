@@ -27,16 +27,15 @@ const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
 fn test_tx_revert() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
-    let admin_private_key = DefaultPrivateKey::generate();
 
-    let config = create_demo_config(SEQUENCER_BALANCE, &admin_private_key);
-    let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address;
+    let config = create_demo_config(SEQUENCER_BALANCE);
+    let sequencer_rollup_address = config.genesis.sequencer_registry.seq_rollup_address;
 
     {
         let mut demo = create_new_demo(path);
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        demo.init_chain(config);
+        demo.init_chain(config.genesis);
 
         let txs = simulate_da_with_revert_msg();
         let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
@@ -98,15 +97,14 @@ fn test_tx_revert() {
 fn test_nonce_incremented_on_revert() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
-    let admin_private_key = DefaultPrivateKey::generate();
 
-    let config = create_demo_config(SEQUENCER_BALANCE, &admin_private_key);
+    let config = create_demo_config(SEQUENCER_BALANCE);
 
     {
         let mut demo = create_new_demo(path);
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        demo.init_chain(config);
+        demo.init_chain(config.genesis);
 
         let txs = simulate_da_with_revert_msg();
         let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
@@ -165,15 +163,14 @@ fn test_nonce_incremented_on_revert() {
 fn test_tx_bad_sig() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
-    let admin_private_key = DefaultPrivateKey::generate();
 
-    let config = create_demo_config(SEQUENCER_BALANCE, &admin_private_key);
+    let config = create_demo_config(SEQUENCER_BALANCE);
 
     {
         let mut demo = create_new_demo(path);
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        demo.init_chain(config);
+        demo.init_chain(config.genesis);
 
         let txs = simulate_da_with_bad_sig();
 
@@ -210,15 +207,14 @@ fn test_tx_bad_sig() {
 fn test_tx_bad_nonce() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
-    let admin_private_key = DefaultPrivateKey::generate();
 
-    let config = create_demo_config(SEQUENCER_BALANCE, &admin_private_key);
+    let config = create_demo_config(SEQUENCER_BALANCE);
 
     {
         let mut demo = create_new_demo(path);
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        demo.init_chain(config);
+        demo.init_chain(config.genesis);
 
         let txs = simulate_da_with_bad_nonce();
 
@@ -255,13 +251,11 @@ fn test_tx_bad_serialization() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
 
-    let value_setter_admin_private_key = DefaultPrivateKey::generate();
-
-    let config = create_demo_config(SEQUENCER_BALANCE, &value_setter_admin_private_key);
-    let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address;
+    let config = create_demo_config(SEQUENCER_BALANCE);
+    let sequencer_rollup_address = config.genesis.sequencer_registry.seq_rollup_address;
     let sequencer_balance_before = {
         let mut demo = create_new_demo(path);
-        demo.init_chain(config);
+        demo.init_chain(config.genesis);
 
         let mut working_set = WorkingSet::new(demo.current_storage);
         let coins = demo
