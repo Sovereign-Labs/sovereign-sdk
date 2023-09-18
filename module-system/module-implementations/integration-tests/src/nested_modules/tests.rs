@@ -40,12 +40,12 @@ fn nested_module_call_test() {
     }
 }
 
-fn execute_module_logic<C: Context>(working_set: &mut WorkingSet<C::Storage>) {
+fn execute_module_logic<C: Context>(working_set: &mut WorkingSet<C>) {
     let module = &mut module_c::ModuleC::<C>::default();
     module.execute("some_key", "some_value", working_set);
 }
 
-fn test_state_update<C: Context>(working_set: &mut WorkingSet<C::Storage>) {
+fn test_state_update<C: Context>(working_set: &mut WorkingSet<C>) {
     let module = <module_c::ModuleC<C> as Default>::default();
 
     let expected_value = "some_value".to_owned();

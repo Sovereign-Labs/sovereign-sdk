@@ -26,7 +26,7 @@ where
         &self,
         address: C::Address,
         role: Role,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> BondAmountResponse {
         match role {
             Role::Attester => BondAmountResponse {
@@ -51,7 +51,7 @@ where
         &self,
         address: C::Address,
         witness: &<<C as Spec>::Storage as Storage>::Witness,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> StorageProof<<C::Storage as Storage>::Proof>
     where
         C::Storage: NativeStorage,
@@ -67,7 +67,7 @@ where
         &self,
         _address: C::Address,
         _witness: &<<C as Spec>::Storage as Storage>::Witness,
-        _working_set: &mut WorkingSet<C::Storage>,
+        _working_set: &mut WorkingSet<C>,
     ) -> u64 {
         todo!("Make the unbonding amount queryable: https://github.com/Sovereign-Labs/sovereign-sdk/issues/675")
     }

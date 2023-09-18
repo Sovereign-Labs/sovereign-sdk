@@ -20,7 +20,7 @@ impl<C: Context> Module for QueryModule<C> {
     fn genesis(
         &self,
         config: &Self::Config,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<(), Error> {
         self.data.set(config, working_set);
         Ok(())
@@ -30,7 +30,7 @@ impl<C: Context> Module for QueryModule<C> {
         &self,
         msg: Self::CallMessage,
         _context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse, Error> {
         self.data.set(&msg, working_set);
         Ok(CallResponse::default())
@@ -47,7 +47,7 @@ impl<C: Context> QueryModule<C> {
     #[rpc_method(name = "queryValue")]
     pub fn query_value(
         &self,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<QueryResponse> {
         Ok(QueryResponse {
             value: self.data.get(working_set),

@@ -123,7 +123,7 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// };
 ///
 /// impl<C: Context> MyModule<C> {
-///     fn my_method(&self, working_set: &mut WorkingSet<C::Storage>, param: u32) -> RpcResult<u32> {
+///     fn my_method(&self, working_set: &mut WorkingSet<C>, param: u32) -> RpcResult<u32> {
 ///         Ok(1)
 ///     }  
 /// }

@@ -43,11 +43,7 @@ impl<C: Context> Module for NonFungibleToken<C> {
 
     type CallMessage = CallMessage<C>;
 
-    fn genesis(
-        &self,
-        config: &Self::Config,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<(), Error> {
+    fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         Ok(self.init_module(config, working_set)?)
     }
 
@@ -55,7 +51,7 @@ impl<C: Context> Module for NonFungibleToken<C> {
         &self,
         msg: Self::CallMessage,
         context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse, Error> {
         let call_result = match msg {
             CallMessage::Mint { id } => self.mint(id, context, working_set),

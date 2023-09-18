@@ -11,7 +11,7 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da>
     #[rpc_method(name = "getSlotHeight")]
     pub fn get_slot_height_rpc(
         &self,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<TransitionHeight> {
         Ok(self.get_slot_height(working_set))
     }
