@@ -6,8 +6,8 @@ use sov_bank::{
     TotalSupplyResponse,
 };
 use sov_modules_api::utils::generate_address;
-use sov_modules_api::{Address, Context, Error, Module};
-use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
+use sov_modules_api::{Address, Context, Error, Module, WorkingSet};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
 pub type Storage = ProverStorage<DefaultStorageSpec>;
 

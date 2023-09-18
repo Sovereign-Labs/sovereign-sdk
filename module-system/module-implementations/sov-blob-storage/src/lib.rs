@@ -8,8 +8,7 @@ mod query;
 #[cfg(feature = "native")]
 pub use query::*;
 use sov_chain_state::TransitionHeight;
-use sov_modules_api::{Module, ModuleInfo};
-use sov_state::{StateMap, WorkingSet};
+use sov_modules_api::{Module, ModuleInfo, StateMap, WorkingSet};
 
 /// For how many slots deferred blobs are stored before being executed
 const DEFERRED_SLOTS_COUNT: u64 = 1;

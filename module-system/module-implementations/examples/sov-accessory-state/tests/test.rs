@@ -2,8 +2,8 @@
 
 use sov_accessory_state::{AccessorySetter, CallMessage};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Context, Module};
-use sov_state::{ProverStorage, Storage, WorkingSet};
+use sov_modules_api::{Address, Context, Module, WorkingSet};
+use sov_state::{ProverStorage, Storage};
 
 #[test]
 fn test_value_setter() {

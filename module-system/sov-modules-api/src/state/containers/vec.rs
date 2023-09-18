@@ -1,10 +1,11 @@
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
 
+use sov_state::codec::{BorshCodec, StateCodec, StateKeyCodec, StateValueCodec};
+use sov_state::{Prefix, Storage};
 use thiserror::Error;
 
-use crate::codec::{BorshCodec, StateCodec, StateKeyCodec, StateValueCodec};
-use crate::{Prefix, StateMap, StateValue, Storage, WorkingSet};
+use crate::state::{StateMap, StateValue, WorkingSet};
 
 /// A growable array of values stored as JMT-backed state.
 #[derive(
@@ -272,8 +273,9 @@ where
 mod test {
     use std::fmt::Debug;
 
+    use sov_state::{DefaultStorageSpec, ProverStorage};
+
     use super::*;
-    use crate::{DefaultStorageSpec, ProverStorage};
 
     enum TestCaseAction<T> {
         Push(T),

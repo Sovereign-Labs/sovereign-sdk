@@ -4,7 +4,7 @@ use reth_primitives::contract::create_address;
 use reth_primitives::TransactionKind::{Call, Create};
 use reth_primitives::{TransactionSignedEcRecovered, U128, U256};
 use sov_modules_api::macros::rpc_gen;
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 use tracing::info;
 
 use crate::call::get_cfg_env;

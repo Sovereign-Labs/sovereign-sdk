@@ -4,12 +4,12 @@ use reth_primitives::hex_literal::hex;
 use reth_primitives::{Address, Bloom, Bytes, Header, SealedHeader, EMPTY_OMMER_ROOT, H256};
 use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::Module;
-use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
+use sov_modules_api::{Module, WorkingSet};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
 use crate::evm::primitive_types::{Block, SealedBlock};
-use crate::evm::{AccountInfo, DbAccount};
-use crate::{evm::EvmChainConfig, AccountData, Evm, EvmConfig};
+use crate::evm::{AccountInfo, DbAccount, EvmChainConfig};
+use crate::{AccountData, Evm, EvmConfig};
 type C = DefaultContext;
 
 lazy_static! {

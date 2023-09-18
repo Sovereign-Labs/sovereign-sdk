@@ -10,8 +10,7 @@ use rand::{RngCore, SeedableRng};
 use sov_accounts::{AccountConfig, Accounts, CallMessage, UPDATE_ACCOUNT_MSG};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::{Context, Module, PrivateKey, Spec};
-use sov_state::WorkingSet;
+use sov_modules_api::{Context, Module, PrivateKey, Spec, WorkingSet};
 
 type C = DefaultContext;
 

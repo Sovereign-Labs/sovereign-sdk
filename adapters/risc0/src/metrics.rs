@@ -1,9 +1,9 @@
-use anyhow::Context;
-use risc0_zkvm::Bytes;
 use std::collections::HashMap;
 
+use anyhow::Context;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
+use risc0_zkvm::Bytes;
 
 pub static GLOBAL_HASHMAP: Lazy<Mutex<HashMap<String, (u64, u64)>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));

@@ -1,6 +1,5 @@
 use anyhow::{ensure, Result};
-use sov_modules_api::{CallResponse, Context, Signature};
-use sov_state::WorkingSet;
+use sov_modules_api::{CallResponse, Context, Signature, WorkingSet};
 
 use crate::Accounts;
 

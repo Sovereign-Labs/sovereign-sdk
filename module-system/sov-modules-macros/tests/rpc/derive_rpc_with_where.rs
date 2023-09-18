@@ -3,8 +3,8 @@ use std::hash::Hasher;
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::{Context, ModuleInfo};
-use sov_state::{WorkingSet, ZkStorage};
+use sov_modules_api::{Context, ModuleInfo, WorkingSet};
+use sov_state::ZkStorage;
 
 #[derive(ModuleInfo)]
 pub struct TestStruct<C: ::sov_modules_api::Context, D>
@@ -20,7 +20,7 @@ where
     #[address]
     pub(crate) address: C::Address,
     #[state]
-    pub(crate) data: ::sov_state::StateValue<D>,
+    pub(crate) data: ::sov_modules_api::StateValue<D>,
 }
 
 #[rpc_gen(client, server, namespace = "test")]
@@ -67,8 +67,8 @@ struct RpcStorage<C: Context> {
 impl TestStructRpcImpl<ZkDefaultContext, u32> for RpcStorage<ZkDefaultContext> {
     fn get_working_set(
         &self,
-    ) -> ::sov_state::WorkingSet<<ZkDefaultContext as ::sov_modules_api::Spec>::Storage> {
-        ::sov_state::WorkingSet::new(self.storage.clone())
+    ) -> ::sov_modules_api::WorkingSet<<ZkDefaultContext as ::sov_modules_api::Spec>::Storage> {
+        ::sov_modules_api::WorkingSet::new(self.storage.clone())
     }
 }
 

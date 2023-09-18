@@ -1,9 +1,8 @@
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::digest::Digest;
-use sov_modules_api::{Address, Module, Spec};
+use sov_modules_api::{Address, Module, Spec, WorkingSet};
 use sov_sequencer_registry::{SequencerConfig, SequencerRegistry};
-use sov_state::WorkingSet;
 
 pub type C = DefaultContext;
 
