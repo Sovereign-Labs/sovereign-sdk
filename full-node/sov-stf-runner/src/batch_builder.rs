@@ -261,10 +261,23 @@ mod tests {
             let tmpdir = tempfile::tempdir().unwrap();
             let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
 
-            for _ in 0..=MAX_TX_POOL_SIZE {
+            for _ in 0..MAX_TX_POOL_SIZE {
                 let tx = generate_random_valid_tx();
                 batch_builder.accept_tx(tx).unwrap();
             }
+
+            let tx = generate_random_valid_tx();
+            let accept_result = batch_builder.accept_tx(tx);
+
+            assert!(accept_result.is_err());
+            assert_eq!("Mempool is full", accept_result.unwrap_err().to_string());
+        }
+
+        #[test]
+        fn zero_sized_mempool_cant_accept_tx() {
+            let tmpdir = tempfile::tempdir().unwrap();
+            let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
+            batch_builder.mempool_max_txs_count = 0;
 
             let tx = generate_random_valid_tx();
             let accept_result = batch_builder.accept_tx(tx);
