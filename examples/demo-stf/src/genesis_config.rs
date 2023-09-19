@@ -28,11 +28,11 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
     sequencer_da_address: Vec<u8>,
     #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
 ) -> GenesisConfig<C, Da> {
+    // This will be read from a file: #872
     let initial_sequencer_balance = 100000000;
-
     let token_deployer: PrivateKeyAndAddress<C> = read_private_key();
 
-    create_demo_genesis_config2(
+    create_demo_genesis_config(
         initial_sequencer_balance,
         token_deployer.address.clone(),
         sequencer_da_address,
@@ -42,13 +42,14 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
     )
 }
 
-fn create_demo_genesis_config2<C: Context, Da: DaSpec>(
+fn create_demo_genesis_config<C: Context, Da: DaSpec>(
     initial_sequencer_balance: u64,
     sequencer_address: C::Address,
     sequencer_da_address: Vec<u8>,
     value_setter_admin_private_key: &C::PrivateKey,
     #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
 ) -> GenesisConfig<C, Da> {
+    // This will be read from a file: #872
     let token_config: sov_bank::TokenConfig<C> = sov_bank::TokenConfig {
         token_name: DEMO_TOKEN_NAME.to_owned(),
         address_and_balances: vec![(sequencer_address.clone(), initial_sequencer_balance)],
@@ -56,15 +57,18 @@ fn create_demo_genesis_config2<C: Context, Da: DaSpec>(
         salt: 0,
     };
 
+    // This will be read from a file: #872
     let bank_config = sov_bank::BankConfig {
         tokens: vec![token_config],
     };
 
+    // This will be read from a file: #872
     let token_address = sov_bank::get_genesis_token_address::<C>(
         &bank_config.tokens[0].token_name,
         bank_config.tokens[0].salt,
     );
 
+    // This will be read from a file: #872
     let sequencer_registry_config = sov_sequencer_registry::SequencerConfig {
         seq_rollup_address: sequencer_address,
         seq_da_address: sequencer_da_address,
@@ -75,10 +79,12 @@ fn create_demo_genesis_config2<C: Context, Da: DaSpec>(
         is_preferred_sequencer: true,
     };
 
+    // This will be read from a file: #872
     let value_setter_config = ValueSetterConfig {
         admin: value_setter_admin_private_key.pub_key().to_address(),
     };
 
+    // This will be read from a file: #872
     let chain_state_config = ChainStateConfig {
         // TODO: Put actual value
         initial_slot_height: 0,
@@ -121,6 +127,7 @@ fn get_evm_config(genesis_addresses: Vec<reth_primitives::Address>) -> EvmConfig
 }
 
 pub fn read_private_key<C: Context>() -> PrivateKeyAndAddress<C> {
+    // TODO fix the hardcoded path: #872
     let token_deployer_data =
         std::fs::read_to_string("../test-data/keys/token_deployer_private_key.json")
             .expect("Unable to read file to string");
