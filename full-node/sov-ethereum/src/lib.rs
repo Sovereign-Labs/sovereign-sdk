@@ -27,6 +27,7 @@ pub mod experimental {
     use sov_rollup_interface::services::da::DaService;
 
     use super::batch_builder::EthBatchBuilder;
+    #[cfg(feature = "local")]
     use super::DevSigner;
 
     const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
@@ -34,7 +35,7 @@ pub mod experimental {
     pub struct EthRpcConfig {
         pub min_blob_size: Option<usize>,
         pub sov_tx_signer_priv_key: DefaultPrivateKey,
-        //TODO #839
+        #[cfg(feature = "local")]
         pub eth_signer: DevSigner,
     }
 
@@ -174,6 +175,7 @@ pub mod experimental {
             },
         )?;
 
+        #[cfg(feature = "local")]
         rpc.register_async_method("eth_accounts", |_parameters, ethereum| async move {
             Ok::<_, ErrorObjectOwned>(ethereum.eth_rpc_config.eth_signer.signers())
         })?;
