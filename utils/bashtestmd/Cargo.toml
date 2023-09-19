@@ -8,6 +8,7 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
 resolver = "2"
+publish = false
 autotests = false
 
 [dependencies]
