@@ -72,7 +72,7 @@ ethers = { workspace = true }
 revm = { workspace = true }
 
 [features]
-default = []
+default = ["native"] # Deviate from convention by making the "native" feature active by default. This aligns with how this package is meant to be used (as a binary first, library second).
 experimental = ["sov-ethereum/experimental", "reth-primitives", "secp256k1", "demo-stf/experimental"]
 native = ["anyhow", "jsonrpsee", "serde", "serde_json", "tracing", "tokio", "tracing-subscriber",
 	"demo-stf/native", "sov-modules-stf-template/native", "sov-risc0-adapter/native", "sov-modules-api/native",
