@@ -10,12 +10,12 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::{ProverStorage, WorkingSet};
 
 use super::{create_demo_config, create_new_demo};
-use crate::genesis_config::DEMO_SEQUENCER_DA_ADDRESS;
 use crate::runtime::Runtime;
 use crate::tests::da_simulation::{
     simulate_da_with_bad_nonce, simulate_da_with_bad_serialization, simulate_da_with_bad_sig,
     simulate_da_with_revert_msg,
 };
+use crate::tests::DEMO_SEQUENCER_DA_ADDRESS;
 
 // Assume there was proper address and we converted it to bytes already.
 const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];

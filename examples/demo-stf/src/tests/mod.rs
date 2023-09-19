@@ -6,7 +6,7 @@ use sov_rollup_interface::mocks::MockDaSpec;
 use sov_state::ProverStorage;
 
 use crate::{
-    genesis_config::{get_genesis_config, DemoConfiguration, DEMO_SEQUENCER_DA_ADDRESS},
+    genesis_config::{get_genesis_config, DemoConfiguration},
     runtime::Runtime,
 };
 
@@ -15,6 +15,8 @@ mod stf_tests;
 mod tx_revert_tests;
 pub(crate) type C = DefaultContext;
 pub(crate) type Da = MockDaSpec;
+
+pub(crate) const DEMO_SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
 
 pub(crate) fn create_new_demo(
     path: impl AsRef<Path>,

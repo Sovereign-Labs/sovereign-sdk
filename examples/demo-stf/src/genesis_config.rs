@@ -11,9 +11,7 @@ use sov_value_setter::ValueSetterConfig;
 /// Creates config for a rollup with some default settings, the config is used in demos and tests.
 use crate::runtime::GenesisConfig;
 
-pub const DEMO_SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
 pub const LOCKED_AMOUNT: u64 = 50;
-pub const DEMO_SEQ_PUB_KEY_STR: &str = "seq_pub_key";
 pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
 
 pub struct DemoConfiguration<C: Context, Da: DaSpec> {
