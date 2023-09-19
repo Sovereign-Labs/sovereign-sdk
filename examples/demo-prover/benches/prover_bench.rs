@@ -164,8 +164,6 @@ async fn main() -> Result<(), anyhow::Error> {
     )
     .await;
 
-    let sequencer_private_key = DefaultPrivateKey::generate();
-
     let mut app: App<Risc0Host, CelestiaSpec> = App::new(rollup_config.storage.clone());
 
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
