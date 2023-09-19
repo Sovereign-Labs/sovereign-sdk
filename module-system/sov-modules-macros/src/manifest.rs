@@ -144,7 +144,8 @@ impl Manifest {
                 _ => Err(self.err(
                     &field.ident,
                     format!(
-                        "the contents of the section must be string, integer, float, or boolean"
+                        "the contents of the section `{}` must be string, integer, float, or boolean",
+                        section
                     ),
                 )),
             })
