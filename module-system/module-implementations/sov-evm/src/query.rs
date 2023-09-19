@@ -76,23 +76,18 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let header = reth_rpc_types::Header::from_primitive_with_hash(block.header.clone());
 
         // Collect transactions with ids from db
-        let transactions_with_ids = block
-            .transactions
-            .clone()
-            .map(|id| {
-                let tx = self
-                    .transactions
-                    .get(id as usize, &mut working_set.accessory_state())
-                    .expect("Transaction must be set");
-                (id, tx)
-            })
-            .collect::<Vec<_>>();
+        let transactions_with_ids = block.transactions.clone().map(|id| {
+            let tx = self
+                .transactions
+                .get(id as usize, &mut working_set.accessory_state())
+                .expect("Transaction must be set");
+            (id, tx)
+        });
 
         // Build rpc transactions response
         let transactions = match details {
             Some(true) => reth_rpc_types::BlockTransactions::Full(
                 transactions_with_ids
-                    .iter()
                     .map(|(id, tx)| {
                         reth_rpc_types::Transaction::from_recovered_with_block_context(
                             tx.clone().into(),
@@ -106,7 +101,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
             ),
             _ => reth_rpc_types::BlockTransactions::Hashes({
                 transactions_with_ids
-                    .iter()
                     .map(|(_, tx)| tx.signed_transaction.hash)
                     .collect::<Vec<_>>()
             }),
