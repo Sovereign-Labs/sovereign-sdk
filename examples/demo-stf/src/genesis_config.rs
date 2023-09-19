@@ -147,6 +147,7 @@ fn get_evm_config(genesis_addresses: Vec<reth_primitives::Address>) -> EvmConfig
     }
 }
 
+/*
 pub fn create_demo_config<Da: DaSpec>() -> DemoConfiguration<DefaultContext, Da> {
     get_genesis_config::<DefaultContext, Da>(
         DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
@@ -154,3 +155,4 @@ pub fn create_demo_config<Da: DaSpec>() -> DemoConfiguration<DefaultContext, Da>
         Vec::default(),
     )
 }
+*/

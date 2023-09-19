@@ -9,8 +9,8 @@ use sov_rollup_interface::mocks::{MockBlock, MockDaSpec};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::{ProverStorage, WorkingSet};
 
-use super::create_new_demo;
-use crate::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS};
+use super::{create_demo_config, create_new_demo};
+use crate::genesis_config::DEMO_SEQUENCER_DA_ADDRESS;
 use crate::runtime::Runtime;
 use crate::tests::da_simulation::{
     simulate_da_with_bad_nonce, simulate_da_with_bad_serialization, simulate_da_with_bad_sig,
