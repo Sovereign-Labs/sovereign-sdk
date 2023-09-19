@@ -21,7 +21,18 @@ pub struct DemoConfiguration<C: Context, Da: DaSpec> {
     pub priv_key: PrivateKeyAndAddress<C>,
 }
 
-pub fn create_demo_config_data<C: Context, Da: DaSpec>(
+/// Configure our rollup with a centralized sequencer using the SEQUENCER_DA_ADDRESS
+/// address constant. Since the centralize sequencer's address is consensus critical,
+/// it has to be hardcoded as a constant, rather than read from the config at runtime.
+///
+/// If you want to customize the rollup to accept transactions from your own celestia
+/// address, simply change the value of the SEQUENCER_DA_ADDRESS to your own address.
+/// For example:
+/// ```rust,no_run
+/// const SEQUENCER_DA_ADDRESS: &str = "celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208";
+/// ```
+
+pub fn get_genesis_config<C: Context, Da: DaSpec>(
     sequencer_da_address: Vec<u8>,
     #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
 ) -> DemoConfiguration<C, Da> {
@@ -137,7 +148,7 @@ fn get_evm_config(genesis_addresses: Vec<reth_primitives::Address>) -> EvmConfig
 }
 
 pub fn create_demo_config<Da: DaSpec>() -> DemoConfiguration<DefaultContext, Da> {
-    create_demo_config_data::<DefaultContext, Da>(
+    get_genesis_config::<DefaultContext, Da>(
         DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
         #[cfg(feature = "experimental")]
         Vec::default(),

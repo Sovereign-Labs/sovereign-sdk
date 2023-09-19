@@ -4,7 +4,7 @@ use std::str::FromStr;
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::App;
-use demo_stf::genesis_config::create_demo_config_data;
+use demo_stf::genesis_config::get_genesis_config;
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use sov_celestia_adapter::types::NamespaceId;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
@@ -63,7 +63,7 @@ async fn main() -> Result<(), anyhow::Error> {
     if is_storage_empty {
         let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
         let genesis_config =
-            create_demo_config_data(100000000, sequencer_da_address.as_ref().to_vec()).genesis;
+            get_genesis_config(sequencer_da_address.as_ref().to_vec()).genesis;
         info!("Starting from empty storage, initialization chain");
         app.stf.init_chain(genesis_config);
     }

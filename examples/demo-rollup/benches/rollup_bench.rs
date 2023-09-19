@@ -7,7 +7,7 @@ use std::time::Duration;
 use anyhow::Context;
 use criterion::{criterion_group, criterion_main, Criterion};
 use demo_stf::app::App;
-use demo_stf::genesis_config::create_demo_config_data;
+use demo_stf::genesis_config::get_genesis_config;
 use rng_xfers::{RngDaService, RngDaSpec, SEQUENCER_DA_ADDRESS};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_risc0_adapter::host::Risc0Verifier;
@@ -44,8 +44,7 @@ fn rollup_bench(_bench: &mut Criterion) {
 
     let mut demo = demo_runner.stf;
     let sequencer_da_address = MockAddress::from(SEQUENCER_DA_ADDRESS);
-    let demo_genesis_config = create_demo_config_data(
-        100000000,
+    let demo_genesis_config = get_genesis_config(
         sequencer_da_address.as_ref().to_vec(),
         #[cfg(feature = "experimental")]
         Default::default(),

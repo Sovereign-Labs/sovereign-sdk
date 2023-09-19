@@ -6,6 +6,7 @@ use const_rollup_config::SEQUENCER_DA_ADDRESS;
 #[cfg(feature = "experimental")]
 use demo_stf::app::DefaultPrivateKey;
 use demo_stf::app::{create_zk_app_template, App, DefaultContext};
+use demo_stf::genesis_config::get_genesis_config;
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig, Runtime};
 #[cfg(feature = "experimental")]
 use secp256k1::SecretKey;
@@ -32,7 +33,7 @@ use tracing::debug;
 #[cfg(feature = "experimental")]
 use crate::register_rpc::register_ethereum;
 use crate::register_rpc::{register_ledger, register_sequencer};
-use crate::{get_genesis_config, initialize_ledger, ROLLUP_NAMESPACE};
+use crate::{initialize_ledger, ROLLUP_NAMESPACE};
 
 #[cfg(feature = "experimental")]
 const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.json";
@@ -96,8 +97,8 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
 
     #[cfg(feature = "experimental")]
     let eth_signer = read_eth_tx_signers();
-    let genesis_config = get_genesis_config(
-        sequencer_da_address,
+    let genesis_config = demo_stf::genesis_config::get_genesis_config(
+        sequencer_da_address.as_ref().to_vec(),
         #[cfg(feature = "experimental")]
         eth_signer.signers(),
     );
@@ -118,7 +119,7 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
         da_service,
         ledger_db,
         runner_config: rollup_config.runner,
-        genesis_config,
+        genesis_config: genesis_config.genesis,
         #[cfg(feature = "experimental")]
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),
@@ -155,7 +156,7 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost>(
     let eth_signer = read_eth_tx_signers();
     let app = App::new(rollup_config.storage);
     let genesis_config = get_genesis_config(
-        sequencer_da_address,
+        sequencer_da_address.as_ref().to_vec(),
         #[cfg(feature = "experimental")]
         eth_signer.signers(),
     );
@@ -171,7 +172,7 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost>(
         da_service,
         ledger_db,
         runner_config: rollup_config.runner,
-        genesis_config,
+        genesis_config: genesis_config.genesis,
         #[cfg(feature = "experimental")]
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),

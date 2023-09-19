@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use demo_stf::app::App;
-use demo_stf::genesis_config::create_demo_config_data;
+use demo_stf::genesis_config::get_genesis_config;
 use prometheus::{Histogram, HistogramOpts, Registry};
 use rng_xfers::{RngDaService, RngDaSpec, SEQUENCER_DA_ADDRESS};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
@@ -101,8 +101,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let mut demo = demo_runner.stf;
     let sequencer_da_address = MockAddress::from(SEQUENCER_DA_ADDRESS);
-    let demo_genesis_config = create_demo_config_data(
-        100000000,
+    let demo_genesis_config = get_genesis_config(
         sequencer_da_address.as_ref().to_vec(),
         #[cfg(feature = "experimental")]
         Default::default(),
