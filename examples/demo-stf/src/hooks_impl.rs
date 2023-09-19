@@ -1,12 +1,11 @@
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Context, Spec};
+use sov_modules_api::{AccessoryWorkingSet, Context, Spec, WorkingSet};
 use sov_modules_stf_template::SequencerOutcome;
 #[cfg(feature = "experimental")]
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_sequencer_registry::SequencerRegistry;
-use sov_state::{AccessoryWorkingSet, WorkingSet};
 use tracing::info;
 
 use crate::runtime::Runtime;
@@ -17,7 +16,7 @@ impl<C: Context, Da: DaSpec> TxHooks for Runtime<C, Da> {
     fn pre_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<<Self::Context as Spec>::Address> {
         self.accounts.pre_dispatch_tx_hook(tx, working_set)
     }
@@ -25,7 +24,7 @@ impl<C: Context, Da: DaSpec> TxHooks for Runtime<C, Da> {
     fn post_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
         self.accounts.post_dispatch_tx_hook(tx, working_set)
     }
@@ -39,7 +38,7 @@ impl<C: Context, Da: DaSpec> ApplyBlobHooks<Da::BlobTransaction> for Runtime<C, 
     fn begin_blob_hook(
         &self,
         blob: &mut Da::BlobTransaction,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
         self.sequencer_registry.begin_blob_hook(blob, working_set)
     }
@@ -47,7 +46,7 @@ impl<C: Context, Da: DaSpec> ApplyBlobHooks<Da::BlobTransaction> for Runtime<C, 
     fn end_blob_hook(
         &self,
         result: Self::BlobResult,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
         match result {
             SequencerOutcome::Rewarded(_reward) => {
@@ -83,9 +82,7 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
         &self,
         #[allow(unused_variables)] slot_header: &Da::BlockHeader,
         #[allow(unused_variables)] validity_condition: &Da::ValidityCondition,
-        #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
-            <Self::Context as Spec>::Storage,
-        >,
+        #[allow(unused_variables)] working_set: &mut sov_modules_api::WorkingSet<C>,
     ) {
         #[cfg(feature = "experimental")]
         self.evm
@@ -94,9 +91,7 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
 
     fn end_slot_hook(
         &self,
-        #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
-            <Self::Context as Spec>::Storage,
-        >,
+        #[allow(unused_variables)] working_set: &mut sov_modules_api::WorkingSet<C>,
     ) {
         #[cfg(feature = "experimental")]
         self.evm.end_slot_hook(working_set);
@@ -109,9 +104,7 @@ impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for Runtime<C, Da
     fn finalize_slot_hook(
         &self,
         #[allow(unused_variables)] root_hash: [u8; 32],
-        #[allow(unused_variables)] accesorry_working_set: &mut AccessoryWorkingSet<
-            <Self::Context as Spec>::Storage,
-        >,
+        #[allow(unused_variables)] accesorry_working_set: &mut AccessoryWorkingSet<C>,
     ) {
         #[cfg(feature = "experimental")]
         self.evm

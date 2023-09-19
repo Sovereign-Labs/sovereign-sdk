@@ -8,9 +8,8 @@
 //! [See here for docs](https://github.com/Sovereign-Labs/sovereign-sdk/blob/nightly/examples/demo-stf/README.md)
 
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
-use sov_state::WorkingSet;
 
-use crate::{Context, Spec};
+use crate::{Context, WorkingSet};
 
 /// Container type for mixing borrowed and owned blobs.
 pub enum BlobRefOrOwned<'a, B: BlobReaderTrait> {
@@ -54,7 +53,7 @@ pub trait BlobSelector<Da: DaSpec> {
     fn get_blobs_for_this_slot<'a, I>(
         &self,
         current_blobs: I,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<Self::Context>,
     ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, Da::BlobTransaction>>>
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>;

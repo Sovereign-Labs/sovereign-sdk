@@ -2,12 +2,12 @@ use sov_accounts::Response;
 use sov_data_generators::bank_data::{get_default_private_key, get_default_token_address};
 use sov_data_generators::{has_tx_events, new_test_blob_from_batch};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::PrivateKey;
+use sov_modules_api::{PrivateKey, WorkingSet};
 use sov_modules_stf_template::{Batch, SequencerOutcome, SlashingReason, TxEffect};
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::mocks::{MockBlock, MockDaSpec};
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_state::{ProverStorage, WorkingSet};
+use sov_state::ProverStorage;
 
 use super::{create_new_app_template_for_tests, get_genesis_config_for_tests};
 use crate::runtime::Runtime;
@@ -96,7 +96,6 @@ fn test_nonce_incremented_on_revert() {
     let path = tempdir.path();
 
     let config = get_genesis_config_for_tests();
-
     {
         let mut demo = create_new_app_template_for_tests(path);
         // TODO: Maybe complete with actual block data

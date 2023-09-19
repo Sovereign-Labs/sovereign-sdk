@@ -3,26 +3,29 @@ use std::fmt::Debug;
 
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 use sov_rollup_interface::stf::Event;
+use sov_state::codec::{EncodeKeyLike, StateCodec, StateValueCodec};
+use sov_state::storage::{Storage, StorageKey, StorageValue};
+use sov_state::{OrderedReadsAndWrites, Prefix, StorageInternalCache};
 
-use crate::codec::{EncodeKeyLike, StateCodec, StateValueCodec};
-use crate::internal_cache::{OrderedReadsAndWrites, StorageInternalCache};
-use crate::storage::{StorageKey, StorageValue};
-use crate::{Prefix, Storage};
+use crate::{Context, Spec};
 
 /// A working set accumulates reads and writes on top of the underlying DB,
 /// automating witness creation.
-pub struct Delta<S: Storage> {
-    inner: S,
-    witness: S::Witness,
+pub struct Delta<C: Context> {
+    inner: <C as Spec>::Storage,
+    witness: <<C as Spec>::Storage as Storage>::Witness,
     cache: StorageInternalCache,
 }
 
-impl<S: Storage> Delta<S> {
-    fn new(inner: S) -> Self {
+impl<C: Context> Delta<C> {
+    fn new(inner: <C as Spec>::Storage) -> Self {
         Self::with_witness(inner, Default::default())
     }
 
-    fn with_witness(inner: S, witness: S::Witness) -> Self {
+    fn with_witness(
+        inner: <C as Spec>::Storage,
+        witness: <<C as Spec>::Storage as Storage>::Witness,
+    ) -> Self {
         Self {
             inner,
             witness,
@@ -30,7 +33,12 @@ impl<S: Storage> Delta<S> {
         }
     }
 
-    fn freeze(&mut self) -> (OrderedReadsAndWrites, S::Witness) {
+    fn freeze(
+        &mut self,
+    ) -> (
+        OrderedReadsAndWrites,
+        <<C as Spec>::Storage as Storage>::Witness,
+    ) {
         let cache = std::mem::take(&mut self.cache);
         let witness = std::mem::take(&mut self.witness);
 
@@ -38,13 +46,13 @@ impl<S: Storage> Delta<S> {
     }
 }
 
-impl<S: Storage> Debug for Delta<S> {
+impl<C: Context> Debug for Delta<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Delta").finish()
     }
 }
 
-impl<S: Storage> StateReaderAndWriter for Delta<S> {
+impl<C: Context> StateReaderAndWriter for Delta<C> {
     fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
         self.cache.get_or_fetch(key, &self.inner, &self.witness)
     }
@@ -65,15 +73,15 @@ type RevertableWrites = HashMap<CacheKey, Option<CacheValue>>;
 /// A [`StateCheckpoint`] can be obtained from a [`WorkingSet`] in two ways:
 ///  1. With [`WorkingSet::checkpoint`].
 ///  2. With [`WorkingSet::revert`].
-pub struct StateCheckpoint<S: Storage> {
-    delta: Delta<S>,
-    accessory_delta: AccessoryDelta<S>,
+pub struct StateCheckpoint<C: Context> {
+    delta: Delta<C>,
+    accessory_delta: AccessoryDelta<C>,
 }
 
-impl<S: Storage> StateCheckpoint<S> {
+impl<C: Context> StateCheckpoint<C> {
     /// Creates a new [`StateCheckpoint`] instance without any changes, backed
     /// by the given [`Storage`].
-    pub fn new(inner: S) -> Self {
+    pub fn new(inner: <C as Spec>::Storage) -> Self {
         Self {
             delta: Delta::new(inner.clone()),
             accessory_delta: AccessoryDelta::new(inner),
@@ -87,7 +95,10 @@ impl<S: Storage> StateCheckpoint<S> {
 
     /// Creates a new [`StateCheckpoint`] instance without any changes, backed
     /// by the given [`Storage`] and witness.
-    pub fn with_witness(inner: S, witness: S::Witness) -> Self {
+    pub fn with_witness(
+        inner: <C as Spec>::Storage,
+        witness: <<C as Spec>::Storage as Storage>::Witness,
+    ) -> Self {
         Self {
             delta: Delta::with_witness(inner.clone(), witness),
             accessory_delta: AccessoryDelta::new(inner),
@@ -95,7 +106,7 @@ impl<S: Storage> StateCheckpoint<S> {
     }
 
     /// Transforms this [`StateCheckpoint`] back into a [`WorkingSet`].
-    pub fn to_revertable(self) -> WorkingSet<S> {
+    pub fn to_revertable(self) -> WorkingSet<C> {
         WorkingSet {
             delta: RevertableWriter::new(self.delta),
             accessory_delta: RevertableWriter::new(self.accessory_delta),
@@ -108,7 +119,12 @@ impl<S: Storage> StateCheckpoint<S> {
     /// You can then use these to call [`Storage::validate_and_commit`] or some
     /// of the other related [`Storage`] methods. Note that this data is moved
     /// **out** of the [`StateCheckpoint`] i.e. it can't be extracted twice.
-    pub fn freeze(&mut self) -> (OrderedReadsAndWrites, S::Witness) {
+    pub fn freeze(
+        &mut self,
+    ) -> (
+        OrderedReadsAndWrites,
+        <<C as Spec>::Storage as Storage>::Witness,
+    ) {
         self.delta.freeze()
     }
 
@@ -123,16 +139,16 @@ impl<S: Storage> StateCheckpoint<S> {
     }
 }
 
-struct AccessoryDelta<S: Storage> {
+struct AccessoryDelta<C: Context> {
     // This inner storage is never accessed inside the zkVM because reads are
     // not allowed, so it can result as dead code.
     #[allow(dead_code)]
-    storage: S,
+    storage: <C as Spec>::Storage,
     writes: RevertableWrites,
 }
 
-impl<S: Storage> AccessoryDelta<S> {
-    fn new(storage: S) -> Self {
+impl<C: Context> AccessoryDelta<C> {
+    fn new(storage: <C as Spec>::Storage) -> Self {
         Self {
             storage,
             writes: Default::default(),
@@ -151,7 +167,7 @@ impl<S: Storage> AccessoryDelta<S> {
     }
 }
 
-impl<S: Storage> StateReaderAndWriter for AccessoryDelta<S> {
+impl<C: Context> StateReaderAndWriter for AccessoryDelta<C> {
     fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
         let cache_key = key.to_cache_key();
         if let Some(value) = self.writes.get(&cache_key) {
@@ -174,13 +190,13 @@ impl<S: Storage> StateReaderAndWriter for AccessoryDelta<S> {
 /// There are two ways to convert it into a StateCheckpoint:
 /// 1. By using the checkpoint() method, where all the changes are added to the underlying StateCheckpoint.
 /// 2. By using the revert method, where the most recent changes are reverted and the previous `StateCheckpoint` is returned.
-pub struct WorkingSet<S: Storage> {
-    delta: RevertableWriter<Delta<S>>,
-    accessory_delta: RevertableWriter<AccessoryDelta<S>>,
+pub struct WorkingSet<C: Context> {
+    delta: RevertableWriter<Delta<C>>,
+    accessory_delta: RevertableWriter<AccessoryDelta<C>>,
     events: Vec<Event>,
 }
 
-impl<S: Storage> StateReaderAndWriter for WorkingSet<S> {
+impl<C: Context> StateReaderAndWriter for WorkingSet<C> {
     fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
         self.delta.get(key)
     }
@@ -196,11 +212,11 @@ impl<S: Storage> StateReaderAndWriter for WorkingSet<S> {
 
 /// A wrapper over [`WorkingSet`] that only allows access to the accessory
 /// state (non-JMT state).
-pub struct AccessoryWorkingSet<'a, S: Storage> {
-    ws: &'a mut WorkingSet<S>,
+pub struct AccessoryWorkingSet<'a, C: Context> {
+    ws: &'a mut WorkingSet<C>,
 }
 
-impl<'a, S: Storage> StateReaderAndWriter for AccessoryWorkingSet<'a, S> {
+impl<'a, C: Context> StateReaderAndWriter for AccessoryWorkingSet<'a, C> {
     fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
         if !cfg!(feature = "native") {
             None
@@ -278,12 +294,12 @@ impl<T: StateReaderAndWriter> StateReaderAndWriter for RevertableWriter<T> {
     }
 }
 
-impl<S: Storage> WorkingSet<S> {
+impl<C: Context> WorkingSet<C> {
     /// Creates a new [`WorkingSet`] instance backed by the given [`Storage`].
     ///
     /// The witness value is set to [`Default::default`]. Use
     /// [`WorkingSet::with_witness`] to set a custom witness value.
-    pub fn new(inner: S) -> Self {
+    pub fn new(inner: <C as Spec>::Storage) -> Self {
         StateCheckpoint::new(inner).to_revertable()
     }
 
@@ -291,20 +307,23 @@ impl<S: Storage> WorkingSet<S> {
     ///
     /// You can use this method when calling getters and setters on accessory
     /// state containers, like [`AccessoryStateMap`](crate::AccessoryStateMap).
-    pub fn accessory_state(&mut self) -> AccessoryWorkingSet<S> {
+    pub fn accessory_state(&mut self) -> AccessoryWorkingSet<C> {
         AccessoryWorkingSet { ws: self }
     }
 
     /// Creates a new [`WorkingSet`] instance backed by the given [`Storage`]
     /// and a custom witness value.
-    pub fn with_witness(inner: S, witness: S::Witness) -> Self {
+    pub fn with_witness(
+        inner: <C as Spec>::Storage,
+        witness: <<C as Spec>::Storage as Storage>::Witness,
+    ) -> Self {
         StateCheckpoint::with_witness(inner, witness).to_revertable()
     }
 
     /// Turns this [`WorkingSet`] into a [`StateCheckpoint`], in preparation for
     /// committing the changes to the underlying [`Storage`] via
     /// [`StateCheckpoint::freeze`].
-    pub fn checkpoint(self) -> StateCheckpoint<S> {
+    pub fn checkpoint(self) -> StateCheckpoint<C> {
         StateCheckpoint {
             delta: self.delta.commit(),
             accessory_delta: self.accessory_delta.commit(),
@@ -313,7 +332,7 @@ impl<S: Storage> WorkingSet<S> {
 
     /// Reverts the most recent changes to this [`WorkingSet`], returning a pristine
     /// [`StateCheckpoint`] instance.
-    pub fn revert(self) -> StateCheckpoint<S> {
+    pub fn revert(self) -> StateCheckpoint<C> {
         StateCheckpoint {
             delta: self.delta.revert(),
             accessory_delta: self.accessory_delta.revert(),
@@ -338,7 +357,7 @@ impl<S: Storage> WorkingSet<S> {
 
     /// Returns an immutable reference to the [`Storage`] instance backing this
     /// working set.
-    pub fn backing(&self) -> &S {
+    pub fn backing(&self) -> &<C as Spec>::Storage {
         &self.delta.inner.inner
     }
 }

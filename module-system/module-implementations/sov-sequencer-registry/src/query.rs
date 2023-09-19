@@ -1,8 +1,7 @@
 //! Defines rpc queries exposed by the sequencer registry module, along with the relevant types
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::Context;
-use sov_state::WorkingSet;
+use sov_modules_api::{Context, WorkingSet};
 
 use crate::{DaAddress, SequencerRegistry};
 
@@ -26,7 +25,7 @@ impl<C: Context> SequencerRegistry<C> {
     pub fn sequencer_address(
         &self,
         da_address: DaAddress,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<SequencerAddressResponse<C>> {
         Ok(SequencerAddressResponse {
             address: self.allowed_sequencers.get(&da_address, working_set),

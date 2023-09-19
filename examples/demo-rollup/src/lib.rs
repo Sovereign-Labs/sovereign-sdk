@@ -7,7 +7,7 @@ mod rollup;
 use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 pub use rollup::{
     new_rollup_with_celestia_da, new_rollup_with_mock_da, new_rollup_with_mock_da_from_config,
-    Rollup,
+    DemoProverConfig, Rollup,
 };
 use sov_celestia_adapter::types::NamespaceId;
 use sov_db::ledger_db::LedgerDB;

@@ -1,7 +1,7 @@
 use sov_modules_api::hooks::{FinalizeHook, SlotHooks};
-use sov_modules_api::{Context, Spec};
+use sov_modules_api::{AccessoryWorkingSet, Context, WorkingSet};
 use sov_rollup_interface::da::BlockHeaderTrait;
-use sov_state::{AccessoryWorkingSet, Storage, WorkingSet};
+use sov_state::Storage;
 
 use super::ChainState;
 use crate::{StateTransitionId, TransitionInProgress};
@@ -13,7 +13,7 @@ impl<C: Context, Da: sov_modules_api::DaSpec> SlotHooks<Da> for ChainState<C, Da
         &self,
         slot_header: &Da::BlockHeader,
         validity_condition: &Da::ValidityCondition,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) {
         if self.genesis_hash.get(working_set).is_none() {
             // The genesis hash is not set, hence this is the
@@ -63,7 +63,7 @@ impl<C: Context, Da: sov_modules_api::DaSpec> SlotHooks<Da> for ChainState<C, Da
         );
     }
 
-    fn end_slot_hook(&self, _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>) {}
+    fn end_slot_hook(&self, _working_set: &mut WorkingSet<C>) {}
 }
 
 impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for ChainState<C, Da> {
@@ -72,7 +72,7 @@ impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for ChainState<C,
     fn finalize_slot_hook(
         &self,
         _root_hash: [u8; 32],
-        _accesorry_working_set: &mut AccessoryWorkingSet<<Self::Context as Spec>::Storage>,
+        _accesorry_working_set: &mut AccessoryWorkingSet<C>,
     ) {
     }
 }

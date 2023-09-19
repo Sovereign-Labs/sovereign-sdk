@@ -1,18 +1,17 @@
 use std::fmt::Display;
 use std::sync::Arc;
 
-use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
 use hex;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 
-use crate::codec::{EncodeKeyLike, StateKeyCodec, StateValueCodec};
+use crate::codec::{EncodeKeyLike, StateValueCodec};
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::utils::AlignedVec;
 use crate::witness::Witness;
-use crate::{Prefix, StateMap};
+use crate::Prefix;
 
 /// The key type suitable for use in [`Storage::get`] and other getter methods of
 /// [`Storage`]. Cheaply-clonable.
@@ -235,38 +234,14 @@ pub trait Storage: Clone {
         proof: StorageProof<Self::Proof>,
     ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error>;
 
-    /// Verifies the key-value pair returned by [`Storage::open_proof`] against
-    /// a [`StateMap`] entry.
-    fn verify_proof<K, V, Codec>(
-        &self,
-        state_root: [u8; 32],
-        proof: StorageProof<Self::Proof>,
-        expected_key: &K,
-        storage_map: &StateMap<K, V, Codec>,
-    ) -> Result<Option<StorageValue>, anyhow::Error>
-    where
-        Codec: StateKeyCodec<K>,
-    {
-        let (storage_key, storage_value) = self.open_proof(state_root, proof)?;
-
-        // We have to check that the storage key is the same as the external key
-        ensure!(
-            storage_key == StorageKey::new(storage_map.prefix(), expected_key, storage_map.codec()),
-            "The storage key from the proof doesn't match the expected storage key."
-        );
-
-        Ok(storage_value)
-    }
-
     /// Indicates if storage is empty or not.
     /// Useful during initialization.
     fn is_empty(&self) -> bool;
 }
 
 // Used only in tests.
-#[cfg(test)]
-impl From<&'static str> for StorageKey {
-    fn from(key: &'static str) -> Self {
+impl From<&str> for StorageKey {
+    fn from(key: &str) -> Self {
         Self {
             key: Arc::new(key.as_bytes().to_vec()),
         }
@@ -274,9 +249,8 @@ impl From<&'static str> for StorageKey {
 }
 
 // Used only in tests.
-#[cfg(test)]
-impl From<&'static str> for StorageValue {
-    fn from(value: &'static str) -> Self {
+impl From<&str> for StorageValue {
+    fn from(value: &str) -> Self {
         Self {
             value: Arc::new(value.as_bytes().to_vec()),
         }
@@ -287,25 +261,7 @@ impl From<&'static str> for StorageValue {
 /// (outside of the zkVM).
 pub trait NativeStorage: Storage {
     /// Returns the value corresponding to the key or None if key is absent and a proof to
-    /// get the value. Panics if [`get_with_proof_from_state_map`](NativeStorage::get_with_proof_from_state_map)
-    /// returns [`None`] in place of the proof.
+    /// get the value.
     fn get_with_proof(&self, key: StorageKey, witness: &Self::Witness)
         -> StorageProof<Self::Proof>;
-
-    /// Same as [`get_with_proof`](NativeStorage::get_with_proof) but uses a
-    /// [`StateMap`] entry as a key.
-    fn get_with_proof_from_state_map<Q, K, V, Codec>(
-        &self,
-        key: &Q,
-        state_map: &StateMap<K, V, Codec>,
-        witness: &Self::Witness,
-    ) -> StorageProof<Self::Proof>
-    where
-        Codec: EncodeKeyLike<Q, K>,
-    {
-        self.get_with_proof(
-            StorageKey::new(state_map.prefix(), key, state_map.codec()),
-            witness,
-        )
-    }
 }

@@ -3,10 +3,6 @@
 #![deny(missing_docs)]
 
 pub mod codec;
-mod internal_cache;
-
-mod containers;
-pub use containers::*;
 
 #[cfg(feature = "native")]
 mod prover_storage;
@@ -14,16 +10,18 @@ mod prover_storage;
 #[cfg(feature = "native")]
 mod tree_db;
 
-mod scratchpad;
+mod internal_cache;
 
 /// Trait and type definitions related to the [`Storage`] trait.
 pub mod storage;
-
 mod utils;
 mod witness;
-
 mod zk_storage;
 
+pub use internal_cache::{OrderedReadsAndWrites, StorageInternalCache};
+#[cfg(feature = "native")]
+pub use prover_storage::ProverStorage;
+pub use storage::Storage;
 pub use zk_storage::ZkStorage;
 
 pub mod config;
@@ -31,22 +29,17 @@ pub mod config;
 use std::fmt::Display;
 use std::str;
 
-#[cfg(feature = "native")]
-pub use prover_storage::{delete_storage, ProverStorage};
-pub use scratchpad::*;
 pub use sov_first_read_last_write_cache::cache::CacheLog;
 use sov_rollup_interface::digest::Digest;
-pub use storage::Storage;
 pub use utils::AlignedVec;
 
 pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 
 /// A prefix prepended to each key before insertion and retrieval from the storage.
 ///
-/// When interfacing with state containers like [`StateMap`] or [`StateVec`],
-/// you will usually use the same [`WorkingSet`] instance to access them, as
-/// required by the module API. This also means that you might get key
-/// collisions, so it becomes necessary to prepend a prefix to each key.
+/// When interacing with state containers, you will usually use the same working set instance to
+/// access them, as required by the module API. This also means that you might get key collisions,
+/// so it becomes necessary to prepend a prefix to each key.
 #[derive(
     borsh::BorshDeserialize,
     borsh::BorshSerialize,

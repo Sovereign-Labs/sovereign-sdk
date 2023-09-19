@@ -26,7 +26,9 @@ use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage::Storage;
 use sov_stf_runner::verifier::StateTransitionVerifier;
-use sov_stf_runner::{from_toml_path, RollupConfig, RunnerConfig, StateTransitionRunner};
+use sov_stf_runner::{
+    from_toml_path, ProofGenConfig, Prover, RollupConfig, RunnerConfig, StateTransitionRunner,
+};
 use tokio::sync::oneshot;
 use tracing::debug;
 
@@ -37,6 +39,8 @@ use crate::{initialize_ledger, ROLLUP_NAMESPACE};
 
 #[cfg(feature = "experimental")]
 const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.json";
+
+type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>;
 
 /// Dependencies needed to run the rollup.
 pub struct Rollup<Vm: ZkvmHost, Da: DaService + Clone> {
@@ -53,9 +57,34 @@ pub struct Rollup<Vm: ZkvmHost, Da: DaService + Clone> {
     #[cfg(feature = "experimental")]
     /// Configuration for the Ethereum RPC.
     pub eth_rpc_config: EthRpcConfig,
-    /// Verifier for the rollup.
+    /// Prover for the rollup.
     #[allow(clippy::type_complexity)]
-    pub verifier: Option<(Vm, AppVerifier<Da::Verifier, Vm::Guest>)>,
+    pub prover: Option<Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm>>,
+}
+
+pub fn configure_prover<Vm: ZkvmHost, Da: DaService>(
+    vm: Vm,
+    cfg: DemoProverConfig,
+    da_verifier: Da::Verifier,
+) -> Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm> {
+    let config = match cfg {
+        DemoProverConfig::Simulate => {
+            ProofGenConfig::Simulate(AppVerifier::new(create_zk_app_template(), da_verifier))
+        }
+        DemoProverConfig::Execute => ProofGenConfig::Execute,
+        DemoProverConfig::Prove => ProofGenConfig::Prover,
+    };
+    Prover { vm, config }
+}
+
+/// The possible configurations of the demo prover
+pub enum DemoProverConfig {
+    /// Run the rollup verification logic inside the current process
+    Simulate,
+    /// Run the rollup verifier in a zkvm executor
+    Execute,
+    /// Run the rollup verifier and create a SNARK of execution
+    Prove,
 }
 
 /// A verifier for the demo rollup
@@ -73,7 +102,7 @@ pub type AppVerifier<DA, Zk> = StateTransitionVerifier<
 /// Creates celestia based rollup.
 pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
     rollup_config_path: &str,
-    prover: Option<Vm>,
+    prover: Option<(Vm, DemoProverConfig)>,
 ) -> Result<Rollup<Vm, CelestiaService>, anyhow::Error> {
     debug!(
         "Starting demo celestia rollup with config {}",
@@ -102,15 +131,13 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
         #[cfg(feature = "experimental")]
         eth_signer.signers(),
     );
-    let verifier = prover.map(|p| {
-        (
-            p,
-            AppVerifier::new(
-                create_zk_app_template(),
-                CelestiaVerifier {
-                    rollup_namespace: ROLLUP_NAMESPACE,
-                },
-            ),
+    let prover = prover.map(|(vm, config)| {
+        configure_prover(
+            vm,
+            config,
+            CelestiaVerifier {
+                rollup_namespace: ROLLUP_NAMESPACE,
+            },
         )
     });
 
@@ -126,14 +153,14 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
             eth_signer,
         },
-        verifier,
+        prover,
     })
 }
 
 /// Creates MockDa based rollup.
 pub fn new_rollup_with_mock_da<Vm: ZkvmHost>(
     rollup_config_path: &str,
-    prover: Option<Vm>,
+    prover: Option<(Vm, DemoProverConfig)>,
 ) -> Result<Rollup<Vm, MockDaService>, anyhow::Error> {
     debug!("Starting mock rollup with config {}", rollup_config_path);
 
@@ -146,7 +173,7 @@ pub fn new_rollup_with_mock_da<Vm: ZkvmHost>(
 /// Creates MockDa based rollup.
 pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost>(
     rollup_config: RollupConfig<MockDaConfig>,
-    prover: Option<Vm>,
+    prover: Option<(Vm, DemoProverConfig)>,
 ) -> Result<Rollup<Vm, MockDaService>, anyhow::Error> {
     let ledger_db = initialize_ledger(&rollup_config.storage.path);
     let sequencer_da_address = MockAddress::from([0u8; 32]);
@@ -161,12 +188,7 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost>(
         eth_signer.signers(),
     );
 
-    let verifier = prover.map(|p| {
-        (
-            p,
-            AppVerifier::new(create_zk_app_template(), Default::default()),
-        )
-    });
+    let prover = prover.map(|(vm, config)| configure_prover(vm, config, Default::default()));
     Ok(Rollup {
         app,
         da_service,
@@ -179,8 +201,7 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost>(
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
             eth_signer,
         },
-        // TODO: add verifier
-        verifier,
+        prover,
     })
 }
 
@@ -236,11 +257,11 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
             self.app.stf,
             storage.is_empty(),
             self.genesis_config,
-            self.verifier,
+            self.prover,
         )?;
 
         runner.start_rpc_server(methods, channel).await;
-        runner.run().await?;
+        runner.run_in_process().await?;
 
         Ok(())
     }

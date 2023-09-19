@@ -1,7 +1,6 @@
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::Context;
-use sov_state::WorkingSet;
+use sov_modules_api::{Context, WorkingSet};
 
 use crate::NonFungibleToken;
 
@@ -19,7 +18,7 @@ impl<C: Context> NonFungibleToken<C> {
     pub fn get_owner(
         &self,
         token_id: u64,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<OwnerResponse<C>> {
         Ok(OwnerResponse {
             owner: self.owners.get(&token_id, working_set),

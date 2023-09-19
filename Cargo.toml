@@ -9,6 +9,7 @@ members = [
     "examples/demo-simple-stf",
     "examples/demo-rollup",
     "examples/demo-nft-module",
+    "examples/demo-prover",
 
     "full-node/db/sov-db",
     "full-node/sov-sequencer",
@@ -39,9 +40,6 @@ members = [
     "module-system/module-implementations/examples/sov-vec-setter",
     "module-system/module-implementations/examples/sov-accessory-state",
     "module-system/module-implementations/integration-tests",
-]
-exclude = [
-    "examples/demo-prover",
 ]
 
 [workspace.package]

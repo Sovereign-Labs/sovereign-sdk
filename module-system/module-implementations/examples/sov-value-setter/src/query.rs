@@ -1,7 +1,7 @@
 //! Defines rpc queries exposed by the module
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 
 use super::ValueSetter;
 
@@ -16,7 +16,7 @@ pub struct Response {
 impl<C: sov_modules_api::Context> ValueSetter<C> {
     /// Queries the state of the module.
     #[rpc_method(name = "queryValue")]
-    pub fn query_value(&self, working_set: &mut WorkingSet<C::Storage>) -> RpcResult<Response> {
+    pub fn query_value(&self, working_set: &mut WorkingSet<C>) -> RpcResult<Response> {
         Ok(Response {
             value: self.value.get(working_set),
         })

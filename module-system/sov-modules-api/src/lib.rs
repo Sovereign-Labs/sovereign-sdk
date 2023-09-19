@@ -19,11 +19,14 @@ pub use reexport_macros::*;
 mod prefix;
 mod response;
 mod serde_address;
+mod state;
 #[cfg(test)]
 mod tests;
 pub mod transaction;
 #[cfg(feature = "native")]
 pub mod utils;
+
+pub use state::*;
 
 #[cfg(feature = "macros")]
 extern crate sov_modules_macros;
@@ -54,7 +57,7 @@ pub use sov_rollup_interface::zk::{
     StateTransition, ValidityCondition, ValidityConditionChecker, Zkvm,
 };
 pub use sov_rollup_interface::{digest, BasicAddress, RollupAddress};
-use sov_state::{Storage, Witness, WorkingSet};
+use sov_state::{Storage, Witness};
 use thiserror::Error;
 
 pub use crate::bech32::AddressBech32;
@@ -290,7 +293,7 @@ where
     fn genesis(
         &self,
         config: &Self::Config,
-        working_set: &mut WorkingSet<<<Self as Genesis>::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<Self::Context>,
     ) -> Result<(), Error> {
         <Self as Module>::genesis(self, config, working_set)
     }
@@ -312,7 +315,7 @@ pub trait Module: Default {
     fn genesis(
         &self,
         _config: &Self::Config,
-        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        _working_set: &mut WorkingSet<Self::Context>,
     ) -> Result<(), Error> {
         Ok(())
     }
@@ -323,7 +326,7 @@ pub trait Module: Default {
         &self,
         _message: Self::CallMessage,
         _context: &Self::Context,
-        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        _working_set: &mut WorkingSet<Self::Context>,
     ) -> Result<CallResponse, Error> {
         unreachable!()
     }

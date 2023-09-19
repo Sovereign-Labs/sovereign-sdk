@@ -20,12 +20,12 @@ mod rpc;
 
 const LEDGER_DB_PATH_SUFFIX: &str = "ledger";
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 /// A database which stores the ledger history (slots, transactions, events, etc).
 /// Ledger data is first ingested into an in-memory map before being fed to the state-transition function.
 /// Once the state-transition function has been executed and finalzied, the results are committed to the final db
 pub struct LedgerDB {
-    /// The RocksDB which stores the committed ledger. Uses an optimized layout which
+    /// The database which stores the committed ledger. Uses an optimized layout which
     /// requires transactions to be executed before being committed.
     db: Arc<DB>,
     next_item_numbers: Arc<Mutex<ItemNumbers>>,
@@ -35,6 +35,7 @@ pub struct LedgerDB {
 /// A SlotNumber, BatchNumber, TxNumber, and EventNumber which are grouped together, typically representing
 /// the respective heights at the start or end of slot processing.
 #[derive(Default, Clone, Debug)]
+#[cfg_attr(feature = "arbitrary", derive(proptest_derive::Arbitrary))]
 pub struct ItemNumbers {
     /// The slot number
     pub slot_number: u64,
@@ -309,6 +310,94 @@ impl LedgerDB {
             Some(Ok((version, _))) => Ok(Some(version.into())),
             Some(Err(e)) => Err(e),
             _ => Ok(None),
+        }
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+pub mod arbitrary {
+    //! Arbitrary definitions for the [`LedgerDB`].
+
+    use core::ops::{Deref, DerefMut};
+
+    use proptest::strategy::LazyJust;
+    use tempfile::TempDir;
+
+    use super::*;
+
+    /// Arbitrary instance of [`LedgerDB`].
+    ///
+    /// This is a db wrapper bound to its temporary path that will be deleted once the type is
+    /// dropped.
+    #[derive(Debug)]
+    pub struct ArbitraryLedgerDB {
+        /// The underlying RocksDB instance.
+        pub db: LedgerDB,
+        /// The temporary directory used to create the [`LedgerDB`].
+        pub path: TempDir,
+    }
+
+    /// A fallible, arbitrary instance of [`LedgerDB`].
+    ///
+    /// This type is suitable for operations that are expected to be infallible. The internal
+    /// implementation of the db requires I/O to create the temporary dir, making it fallible.
+    #[derive(Debug)]
+    pub struct FallibleArbitraryLedgerDB {
+        /// The result of the new db instance.
+        pub result: anyhow::Result<ArbitraryLedgerDB>,
+    }
+
+    impl Deref for ArbitraryLedgerDB {
+        type Target = LedgerDB;
+
+        fn deref(&self) -> &Self::Target {
+            &self.db
+        }
+    }
+
+    impl DerefMut for ArbitraryLedgerDB {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.db
+        }
+    }
+
+    impl<'a> ::arbitrary::Arbitrary<'a> for ArbitraryLedgerDB {
+        fn arbitrary(_u: &mut ::arbitrary::Unstructured<'a>) -> ::arbitrary::Result<Self> {
+            let path = TempDir::new().map_err(|_| ::arbitrary::Error::NotEnoughData)?;
+            let db = LedgerDB::with_path(&path).map_err(|_| ::arbitrary::Error::IncorrectFormat)?;
+            Ok(Self { db, path })
+        }
+    }
+
+    impl proptest::arbitrary::Arbitrary for FallibleArbitraryLedgerDB {
+        type Parameters = ();
+        type Strategy = LazyJust<Self, fn() -> FallibleArbitraryLedgerDB>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            fn gen() -> FallibleArbitraryLedgerDB {
+                FallibleArbitraryLedgerDB {
+                    result: TempDir::new()
+                        .map_err(|e| {
+                            anyhow::anyhow!(format!("failed to generate path for LedgerDB: {e}"))
+                        })
+                        .and_then(|path| {
+                            let db = LedgerDB::with_path(&path)?;
+                            Ok(ArbitraryLedgerDB { db, path })
+                        }),
+                }
+            }
+            LazyJust::new(gen)
+        }
+    }
+
+    impl<'a> ::arbitrary::Arbitrary<'a> for ItemNumbers {
+        fn arbitrary(u: &mut ::arbitrary::Unstructured<'a>) -> ::arbitrary::Result<Self> {
+            Ok(ItemNumbers {
+                slot_number: u.arbitrary()?,
+                batch_number: u.arbitrary()?,
+                tx_number: u.arbitrary()?,
+                event_number: u.arbitrary()?,
+            })
         }
     }
 }

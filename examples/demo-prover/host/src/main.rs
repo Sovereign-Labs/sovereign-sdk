@@ -62,8 +62,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // If storage is empty, we're starting from scratch, so we need to initialize
     if is_storage_empty {
         let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
-        let genesis_config =
-            get_genesis_config(sequencer_da_address.as_ref().to_vec()).genesis;
+        let genesis_config = get_genesis_config(sequencer_da_address.as_ref().to_vec()).genesis;
         info!("Starting from empty storage, initialization chain");
         app.stf.init_chain(genesis_config);
     }

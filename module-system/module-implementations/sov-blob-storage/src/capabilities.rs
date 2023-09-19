@@ -1,7 +1,6 @@
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
-use sov_modules_api::{BlobReaderTrait, Context, DaSpec, Spec};
-use sov_state::WorkingSet;
+use sov_modules_api::{BlobReaderTrait, Context, DaSpec, WorkingSet};
 use tracing::info;
 
 use crate::BlobStorage;
@@ -12,7 +11,7 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
     fn get_blobs_for_this_slot<'a, I>(
         &self,
         current_blobs: I,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, Da::BlobTransaction>>>
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
