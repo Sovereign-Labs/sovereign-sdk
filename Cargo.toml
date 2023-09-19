@@ -18,6 +18,7 @@ members = [
 
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
+    "utils/bashtestmd",
 
     "module-system/sov-cli",
     "module-system/sov-modules-stf-template",

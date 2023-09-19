@@ -293,6 +293,21 @@ jobs:
         # Exit status 0 means no changes were made, so the table of contents is
         # up to date.
         run: git diff --exit-code
+  check-demo-rollup-bash-commands:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: rui314/setup-mold@v1
+      - name: Install Rust
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-provider: "buildjet"
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
+      - name: Compile README.md to Bash
+        run: cargo run --bin bashtestmd -- --input examples/demo-rollup/README.md --output demo-rollup-readme.sh --tag test-ci
+      - run: cat demo-rollup-readme.sh
+      - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
   validate-packages-to-publish-yml:
     runs-on: ubuntu-latest
     steps:
