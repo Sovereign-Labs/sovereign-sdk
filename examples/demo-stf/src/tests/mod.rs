@@ -16,9 +16,9 @@ mod tx_revert_tests;
 pub(crate) type C = DefaultContext;
 pub(crate) type Da = MockDaSpec;
 
-pub(crate) const DEMO_SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
+pub(crate) const TEST_SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
 
-pub(crate) fn create_new_demo(
+pub(crate) fn create_new_app_template_for_tests(
     path: impl AsRef<Path>,
 ) -> AppTemplate<
     DefaultContext,
@@ -31,9 +31,9 @@ pub(crate) fn create_new_demo(
     AppTemplate::new(storage, runtime)
 }
 
-pub(crate) fn create_demo_config<Da: DaSpec>() -> DemoConfiguration<DefaultContext, Da> {
+pub(crate) fn get_genesis_config_for_tests<Da: DaSpec>() -> DemoConfiguration<DefaultContext, Da> {
     get_genesis_config::<DefaultContext, Da>(
-        DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
+        TEST_SEQUENCER_DA_ADDRESS.to_vec(),
         #[cfg(feature = "experimental")]
         Vec::default(),
     )

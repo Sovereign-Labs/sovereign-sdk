@@ -29,7 +29,6 @@ pub struct DemoConfiguration<C: Context, Da: DaSpec> {
 /// ```rust,no_run
 /// const SEQUENCER_DA_ADDRESS: &str = "celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208";
 /// ```
-
 pub fn get_genesis_config<C: Context, Da: DaSpec>(
     sequencer_da_address: Vec<u8>,
     #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
@@ -144,13 +143,3 @@ fn get_evm_config(genesis_addresses: Vec<reth_primitives::Address>) -> EvmConfig
         ..Default::default()
     }
 }
-
-/*
-pub fn create_demo_config<Da: DaSpec>() -> DemoConfiguration<DefaultContext, Da> {
-    get_genesis_config::<DefaultContext, Da>(
-        DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
-        #[cfg(feature = "experimental")]
-        Vec::default(),
-    )
-}
-*/
