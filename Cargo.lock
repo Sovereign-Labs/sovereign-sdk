@@ -7073,7 +7073,6 @@ dependencies = [
  "jsonrpsee",
  "rand 0.8.5",
  "serde",
- "serde_json",
  "sov-accounts",
  "sov-bank",
  "sov-celestia-adapter",
@@ -7088,7 +7087,6 @@ dependencies = [
  "tokio",
  "toml 0.8.0",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
