@@ -43,7 +43,7 @@ where
 {
     /// Transaction can only be declined only mempool is full
     fn accept_tx(&mut self, tx: Vec<u8>) -> anyhow::Result<()> {
-        if self.mempool.len() > self.mempool_max_txs_count {
+        if self.mempool.len() >= self.mempool_max_txs_count {
             bail!("Mempool is full")
         }
         self.mempool.push_back(tx);
