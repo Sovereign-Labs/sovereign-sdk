@@ -157,7 +157,7 @@ impl TestClient {
 
         count.as_u64()
     }
-  
+
     async fn eth_get_block_by_number(&self, block_number: Option<String>) -> Block<TxHash> {
         self.http_client
             .request("eth_getBlockByNumber", rpc_params![block_number, false])
