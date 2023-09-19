@@ -71,14 +71,15 @@ jobs:
       - uses: rui314/setup-mold@v1
       - name: Install Rust
         run: rustup show
+      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
+        run: cargo install cargo-risczero
+      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
+        run: cargo risczero install
       - uses: Swatinem/rust-cache@v2
         with:
           cache-provider: "buildjet"
           shared-key: cargo-check
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
-          workspaces: |
-            .
-            examples/demo-prover
       - name: Run lint
         run: |
           if ! make lint ; then
@@ -94,6 +95,8 @@ jobs:
     needs: check
     runs-on: buildjet-4vcpu-ubuntu-2204
     timeout-minutes: 60
+    env:
+      CI_SKIP_GUEST_BUILD: "1"
     steps:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
@@ -106,15 +109,14 @@ jobs:
           cache-provider: "buildjet"
           shared-key: cargo-check
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
-          workspaces: |
-            .
-            examples/demo-prover
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
       - name: cargo hack
         run: make check-features
   test:
     runs-on: buildjet-4vcpu-ubuntu-2204
     timeout-minutes: 60
+    env:
+      CI_SKIP_GUEST_BUILD: "1"
     steps:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
@@ -127,9 +129,6 @@ jobs:
           cache-provider: "buildjet"
           shared-key: cargo-build
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
-          workspaces: |
-            .
-            examples/demo-prover
       - run: cargo nextest run --workspace --all-features
       # `cargo-nextest` does not support doctests (yet?), so we have to run them
       # separately.
@@ -150,9 +149,6 @@ jobs:
           cache-provider: "buildjet"
           shared-key: cargo-build
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
-          workspaces: |
-            .
-            examples/demo-prover
       - name: start celestia local
         working-directory: ./examples/demo-rollup
         run: make start
@@ -196,44 +192,11 @@ jobs:
           done
           echo "demo-rollup took too long to process transaction; exiting"
           exit 1
-  # TODO: Temporary before migration to RiscZero 0.15:
-  #   https://github.com/Sovereign-Labs/sovereign-sdk/issues/338.
-  # After that demo-prover should be integrated into workspace.
-  # Note that `demo-prover` has (at the time of writing) a different `dev`
-  # profile from the rest of the codebase, so caches can't be shared.
-  check-demo-prover:
-    name: check demo prover
-    runs-on: buildjet-4vcpu-ubuntu-2204
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v3
-      - uses: rui314/setup-mold@v1
-      - name: Install Rust
-        run: rustup show
-      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
-        run: cargo install cargo-risczero
-      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
-        run: cargo risczero install
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-provider: "buildjet"
-          save-if: ${{ github.ref == 'refs/heads/nightly' }}
-          workspaces: |
-            .
-            examples/demo-prover
-      - name: Run cargo check
-        working-directory: examples/demo-prover
-        run: cargo check
-      - name: Run cargo fmt check
-        run: |
-          cd examples/demo-prover;
-          if ! cargo fmt --check ; then
-            echo "Formatting errors detected, please run 'cargo fmt' to fix it";
-            exit 1
-          fi
   coverage:
     runs-on: buildjet-8vcpu-ubuntu-2204
     timeout-minutes: 90
+    env:
+      CI_SKIP_GUEST_BUILD: "1"
     steps:
       - uses: actions/checkout@v3
         with:
@@ -249,9 +212,6 @@ jobs:
         with:
           cache-provider: "buildjet"
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
-          workspaces: |
-            .
-            examples/demo-prover
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
@@ -274,6 +234,7 @@ jobs:
     timeout-minutes: 90
     env:
       RUSTDOCFLAGS: "-D warnings"
+      CI_SKIP_GUEST_BUILD: "1"
     steps:
       - uses: actions/checkout@v3
         # Not sure installing `mold` is actually needed, but it's what the
@@ -287,9 +248,6 @@ jobs:
           cache-provider: "buildjet"
           shared-key: cargo-doc
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
-          workspaces: |
-            .
-            examples/demo-prover
       # The docs' artifact tends to become quite large with all the
       # dependencies, so we don't include them.
       - run: cargo doc --no-deps --all-features
