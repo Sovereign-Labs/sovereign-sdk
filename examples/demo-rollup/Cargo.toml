@@ -90,6 +90,10 @@ name = "rollup_coarse_measure"
 harness = false
 required-features = ["bench"]
 
+[[bench]]
+name = "rng_xfers"
+required-features = ["bench"]
+
 [[bin]]
 name = "sov-cli"
 path = "src/sov-cli/main.rs"
