@@ -2733,6 +2733,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "protobuf-src"
+version = "1.1.0+21.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7ac8852baeb3cc6fb83b93646fb93c0ffe5d14bf138c945ceb4b9948ee0e3c1"
+dependencies = [
+ "autotools",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3069,6 +3078,7 @@ dependencies = [
  "num-traits",
  "prost 0.12.0",
  "prost-build 0.12.0",
+ "protobuf-src",
  "rand",
  "rayon",
  "risc0-binfmt",
@@ -3931,7 +3941,6 @@ dependencies = [
 name = "sov-zk-cycle-utils"
 version = "0.2.0"
 dependencies = [
- "bytes",
  "risc0-zkvm",
  "risc0-zkvm-platform",
 ]

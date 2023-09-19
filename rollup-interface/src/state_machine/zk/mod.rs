@@ -23,8 +23,18 @@ pub trait ZkvmHost: Zkvm {
     /// Give the guest a piece of advice non-deterministically
     fn add_hint<T: Serialize>(&self, item: T);
 
-    /// Simulate running the guest using the provided hints
+    /// Simulate running the guest using the provided hints.
+    ///
+    /// Provides a simulated version of the guest which can be
+    /// accessed in the current process.
     fn simulate_with_hints(&mut self) -> Self::Guest;
+
+    /// Run the guest in the true zk environment using the provided hints.
+    ///
+    /// This runs the guest binary compiled for the ZKVM target, optionally
+    /// creating a SNARK of correct execution. Running the true guest binary comes
+    /// with some mild performance overhead and is not as easy to debug as [`simulate_with_hints`](ZkvmHost::simulate_with_hints).
+    fn run(&mut self, with_proof: bool) -> Result<(), anyhow::Error>;
 }
 
 /// A Zk proof system capable of proving and verifying arbitrary Rust code

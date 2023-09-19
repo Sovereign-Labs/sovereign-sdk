@@ -11,25 +11,28 @@ pub mod test {
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::ProverStorage;
 
-    use crate::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
+    use crate::genesis_config::read_private_key;
     use crate::runtime::Runtime;
     use crate::tests::da_simulation::simulate_da;
-    use crate::tests::{create_new_demo, C};
+    use crate::tests::{
+        create_new_app_template_for_tests, get_genesis_config_for_tests, C,
+        TEST_SEQUENCER_DA_ADDRESS,
+    };
 
     #[test]
     fn test_demo_values_in_db() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
-        let value_setter_admin_private_key = DefaultPrivateKey::generate();
 
-        let config = create_demo_config(LOCKED_AMOUNT + 1, &value_setter_admin_private_key);
+        let config = get_genesis_config_for_tests();
         {
-            let mut demo = create_new_demo(path);
+            let mut demo = create_new_app_template_for_tests(path);
 
             demo.init_chain(config);
 
-            let txs = simulate_da(value_setter_admin_private_key);
-            let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
+            let priv_key = read_private_key::<DefaultContext>().private_key;
+            let txs = simulate_da(priv_key);
+            let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
 
             let mut blobs = [blob];
 
@@ -77,17 +80,16 @@ pub mod test {
     fn test_demo_values_in_cache() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
-        let mut demo = create_new_demo(path);
+        let mut demo = create_new_app_template_for_tests(path);
 
-        let value_setter_admin_private_key = DefaultPrivateKey::generate();
-
-        let config = create_demo_config(LOCKED_AMOUNT + 1, &value_setter_admin_private_key);
+        let config = get_genesis_config_for_tests();
 
         demo.init_chain(config);
 
-        let txs = simulate_da(value_setter_admin_private_key);
+        let private_key = read_private_key::<DefaultContext>().private_key;
+        let txs = simulate_da(private_key);
 
-        let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
+        let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
         let data = MockBlock::default();
 
@@ -131,13 +133,13 @@ pub mod test {
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
 
-        let config = create_demo_config(LOCKED_AMOUNT + 1, &value_setter_admin_private_key);
+        let config = get_genesis_config_for_tests();
         {
-            let mut demo = create_new_demo(path);
+            let mut demo = create_new_app_template_for_tests(path);
             demo.init_chain(config);
 
             let txs = simulate_da(value_setter_admin_private_key);
-            let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
+            let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
             let mut blobs = [blob];
             let data = MockBlock::default();
 
@@ -181,16 +183,16 @@ pub mod test {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
 
-        let value_setter_admin_private_key = DefaultPrivateKey::generate();
-
-        let mut config = create_demo_config(LOCKED_AMOUNT + 1, &value_setter_admin_private_key);
+        let mut config = get_genesis_config_for_tests();
         config.sequencer_registry.is_preferred_sequencer = false;
 
-        let mut demo = create_new_demo(path);
+        let mut demo = create_new_app_template_for_tests(path);
         demo.init_chain(config);
 
         let some_sequencer: [u8; 32] = [121; 32];
-        let txs = simulate_da(value_setter_admin_private_key);
+
+        let private_key = read_private_key::<DefaultContext>().private_key;
+        let txs = simulate_da(private_key);
         let blob = new_test_blob_from_batch(Batch { txs }, &some_sequencer, [0; 32]);
         let mut blobs = [blob];
         let data = MockBlock::default();

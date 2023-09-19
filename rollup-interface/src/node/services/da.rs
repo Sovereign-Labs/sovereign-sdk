@@ -87,7 +87,7 @@ pub trait DaService: Send + Sync + 'static {
 
 /// `SlotData` is the subset of a DA layer block which is stored in the rollup's database.
 /// At the very least, the rollup needs access to the hashes and headers of all DA layer blocks, but rollups
-/// may choose to partial (or full) block data as well.
+/// may choose to store partial (or full) block data as well.
 pub trait SlotData:
     Serialize + DeserializeOwned + PartialEq + core::fmt::Debug + Clone + Send + Sync
 {

@@ -5,7 +5,7 @@ use ethereum_types::H160;
 use ethers_core::abi::Address;
 use ethers_core::k256::ecdsa::SigningKey;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
-use ethers_core::types::Eip1559TransactionRequest;
+use ethers_core::types::{Block, Eip1559TransactionRequest, Transaction, TxHash};
 use ethers_middleware::SignerMiddleware;
 use ethers_providers::{Http, Middleware, PendingTransaction, Provider};
 use ethers_signers::{LocalWallet, Signer, Wallet};
@@ -88,8 +88,9 @@ impl TestClient {
         &self,
         contract_address: H160,
         set_arg: u32,
-        nonce: u64,
     ) -> PendingTransaction<'_, Http> {
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+
         let req = Eip1559TransactionRequest::new()
             .from(self.from_addr)
             .to(contract_address)
@@ -111,8 +112,9 @@ impl TestClient {
     async fn query_contract(
         &self,
         contract_address: H160,
-        nonce: u64,
     ) -> Result<ethereum_types::U256, Box<dyn std::error::Error>> {
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+
         let req = Eip1559TransactionRequest::new()
             .from(self.from_addr)
             .to(contract_address)
@@ -146,7 +148,38 @@ impl TestClient {
         chain_id.as_u64()
     }
 
+    async fn eth_get_transaction_count(&self, address: Address) -> u64 {
+        let count: ethereum_types::U64 = self
+            .http_client
+            .request("eth_getTransactionCount", rpc_params![address, "latest"])
+            .await
+            .unwrap();
+
+        count.as_u64()
+    }
+
+    async fn eth_get_block_by_number(&self, block_number: Option<String>) -> Block<TxHash> {
+        self.http_client
+            .request("eth_getBlockByNumber", rpc_params![block_number, false])
+            .await
+            .unwrap()
+    }
+
+    async fn eth_get_block_by_number_with_detail(
+        &self,
+        block_number: Option<String>,
+    ) -> Block<Transaction> {
+        self.http_client
+            .request("eth_getBlockByNumber", rpc_params![block_number, true])
+            .await
+            .unwrap()
+    }
+
     async fn execute(self) -> Result<(), Box<dyn std::error::Error>> {
+        // Nonce should be 0 in genesis
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+        assert_eq!(0, nonce);
+
         let contract_address = {
             let deploy_contract_req = self.deploy_contract().await?;
             self.send_publish_batch_request().await;
@@ -158,25 +191,41 @@ impl TestClient {
                 .unwrap()
         };
 
+        // Nonce should be 1 after the deploy
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+        assert_eq!(1, nonce);
+
+        // Check that the first block has published
+        // It should have a single transaction, deploying the contract
+        let first_block = self.eth_get_block_by_number(Some("1".to_owned())).await;
+        assert_eq!(first_block.number.unwrap().as_u64(), 1);
+        assert_eq!(first_block.transactions.len(), 1);
+
         let set_arg = 923;
-        {
-            let set_value_req = self.set_value(contract_address, set_arg, 1).await;
+        let tx_hash = {
+            let set_value_req = self.set_value(contract_address, set_arg).await;
             self.send_publish_batch_request().await;
-            set_value_req.await.unwrap();
-        }
+            set_value_req.await.unwrap().unwrap().transaction_hash
+        };
 
         {
-            let get_arg = self.query_contract(contract_address, 2).await?;
+            let get_arg = self.query_contract(contract_address).await?;
             assert_eq!(set_arg, get_arg.as_u32());
         }
 
+        // Check that the second block has published
+        // None should return the latest block
+        // It should have a single transaction, setting the value
+        let latest_block = self.eth_get_block_by_number_with_detail(None).await;
+        assert_eq!(latest_block.number.unwrap().as_u64(), 2);
+        assert_eq!(latest_block.transactions.len(), 1);
+        assert_eq!(latest_block.transactions[0].hash, tx_hash);
+
         // Create a blob with multiple transactions.
         let mut requests = Vec::default();
-        let mut nonce = 2;
         for value in 100..103 {
-            let set_value_req = self.set_value(contract_address, value, nonce).await;
+            let set_value_req = self.set_value(contract_address, value).await;
             requests.push(set_value_req);
-            nonce += 1
         }
 
         self.send_publish_batch_request().await;
@@ -186,7 +235,7 @@ impl TestClient {
         }
 
         {
-            let get_arg = self.query_contract(contract_address, nonce).await?;
+            let get_arg = self.query_contract(contract_address).await?;
             assert_eq!(102, get_arg.as_u32());
         }
 
@@ -212,6 +261,17 @@ async fn send_tx_test_to_eth(rpc_address: SocketAddr) -> Result<(), Box<dyn std:
 
     let eth_chain_id = test_client.eth_chain_id().await;
     assert_eq!(chain_id, eth_chain_id);
+
+    // No block exists yet
+    let latest_block = test_client
+        .eth_get_block_by_number(Some("latest".to_owned()))
+        .await;
+    let earliest_block = test_client
+        .eth_get_block_by_number(Some("earliest".to_owned()))
+        .await;
+
+    assert_eq!(latest_block, earliest_block);
+    assert_eq!(latest_block.number.unwrap().as_u64(), 0);
 
     test_client.execute().await
 }

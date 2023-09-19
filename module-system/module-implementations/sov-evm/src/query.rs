@@ -15,6 +15,35 @@ use crate::Evm;
 
 #[rpc_gen(client, server, namespace = "eth")]
 impl<C: sov_modules_api::Context> Evm<C> {
+    fn get_sealed_block_by_number(
+        &self,
+        block_number: Option<String>,
+        working_set: &mut WorkingSet<C>,
+    ) -> SealedBlock {
+        // safe, finalized, and pending are not supported
+        match block_number {
+            Some(ref block_number) if block_number == "earliest" => self
+                .blocks
+                .get(0, &mut working_set.accessory_state())
+                .expect("Genesis block must be set"),
+            Some(ref block_number) if block_number == "latest" => self
+                .blocks
+                .last(&mut working_set.accessory_state())
+                .expect("Head block must be set"),
+            Some(ref block_number) => {
+                let block_number =
+                    usize::from_str_radix(block_number, 16).expect("Block number must be hex");
+                self.blocks
+                    .get(block_number, &mut working_set.accessory_state())
+                    .expect("Block must be set")
+            }
+            None => self
+                .blocks
+                .last(&mut working_set.accessory_state())
+                .expect("Head block must be set"),
+        }
+    }
+
     #[rpc_method(name = "chainId")]
     pub fn chain_id(
         &self,
@@ -32,47 +61,89 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(Some(chain_id))
     }
 
-    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "getBlockByNumber")]
     pub fn get_block_by_number(
         &self,
-        _block_number: Option<String>,
-        _details: Option<bool>,
-        _working_set: &mut WorkingSet<C>,
+        block_number: Option<String>,
+        details: Option<bool>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<Option<reth_rpc_types::RichBlock>> {
         info!("evm module: eth_getBlockByNumber");
 
-        let header = reth_rpc_types::Header {
-            hash: Default::default(),
-            parent_hash: Default::default(),
-            uncles_hash: Default::default(),
-            miner: Default::default(),
-            state_root: Default::default(),
-            transactions_root: Default::default(),
-            receipts_root: Default::default(),
-            logs_bloom: Default::default(),
-            difficulty: Default::default(),
-            number: Default::default(),
-            gas_limit: Default::default(),
-            gas_used: Default::default(),
-            timestamp: Default::default(),
-            extra_data: Default::default(),
-            mix_hash: Default::default(),
-            nonce: Default::default(),
-            base_fee_per_gas: Some(reth_primitives::U256::from(100)),
-            withdrawals_root: Default::default(),
+        let block = self.get_sealed_block_by_number(block_number, working_set);
+
+        // Build rpc header response
+        let header = reth_rpc_types::Header::from_primitive_with_hash(block.header.clone());
+
+        // Collect transactions with ids from db
+        let transactions_with_ids = block
+            .transactions
+            .clone()
+            .map(|id| {
+                let tx = self
+                    .transactions
+                    .get(id as usize, &mut working_set.accessory_state())
+                    .expect("Transaction must be set");
+                (id, tx)
+            })
+            .collect::<Vec<_>>();
+
+        // Build rpc transactions response
+        let transactions = match details {
+            Some(true) => reth_rpc_types::BlockTransactions::Full(
+                transactions_with_ids
+                    .iter()
+                    .map(|(id, tx)| {
+                        reth_rpc_types::Transaction::from_recovered_with_block_context(
+                            tx.clone().into(),
+                            block.header.hash,
+                            block.header.number,
+                            block.header.base_fee_per_gas,
+                            U256::from(id - block.transactions.start),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            _ => reth_rpc_types::BlockTransactions::Hashes({
+                transactions_with_ids
+                    .iter()
+                    .map(|(_, tx)| tx.signed_transaction.hash)
+                    .collect::<Vec<_>>()
+            }),
         };
 
+        // Build rpc block response
         let block = reth_rpc_types::Block {
             header,
             total_difficulty: Default::default(),
             uncles: Default::default(),
-            transactions: reth_rpc_types::BlockTransactions::Hashes(Default::default()),
+            transactions,
             size: Default::default(),
             withdrawals: Default::default(),
         };
 
         Ok(Some(block.into()))
+    }
+
+    #[rpc_method(name = "getTransactionCount")]
+    pub fn get_transaction_count(
+        &self,
+        address: reth_primitives::Address,
+        _block_number: Option<String>,
+        working_set: &mut WorkingSet<C>,
+    ) -> RpcResult<reth_primitives::U64> {
+        info!("evm module: eth_getTransactionCount");
+
+        // TODO: Implement block_number once we have archival state #882
+        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/882
+
+        let nonce = self
+            .accounts
+            .get(&address, working_set)
+            .map(|account| account.info.nonce)
+            .unwrap_or_default();
+
+        Ok(nonce.into())
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502

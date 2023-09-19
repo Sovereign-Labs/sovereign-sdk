@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::{App, DefaultPrivateKey};
-use demo_stf::genesis_config::create_demo_genesis_config;
+use demo_stf::app::App;
+use demo_stf::genesis_config::get_genesis_config;
 use log4rs::config::{Appender, Config, Root};
 use methods::ROLLUP_ELF;
 use regex::Regex;
@@ -17,7 +17,7 @@ use sov_celestia_adapter::types::{FilteredCelestiaBlock, NamespaceId};
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::{CelestiaSpec, RollupParams};
 use sov_celestia_adapter::CelestiaService;
-use sov_modules_api::PrivateKey;
+use sov_modules_api::SlotData;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -106,10 +106,7 @@ fn print_cycle_averages(metric_map: HashMap<String, (u64, u64)>) {
         .map(|(k, (sum, count))| {
             (
                 k.clone(),
-                (
-                    ((*sum as f64) / (*count as f64)).round() as u64,
-                    count.clone(),
-                ),
+                (((*sum as f64) / (*count as f64)).round() as u64, *count),
             )
         })
         .collect();
@@ -139,7 +136,7 @@ fn chain_stats(num_blocks: usize, num_blocks_with_txns: usize, num_txns: usize, 
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    if let Some(rollup_trace) = env::var("ROLLUP_TRACE").ok() {
+    if let Ok(rollup_trace) = env::var("ROLLUP_TRACE") {
         if let Err(e) = log4rs::init_config(get_config(&rollup_trace)) {
             eprintln!("Error initializing logger: {:?}", e);
         }
@@ -167,17 +164,14 @@ async fn main() -> Result<(), anyhow::Error> {
     )
     .await;
 
-    let sequencer_private_key = DefaultPrivateKey::generate();
-
     let mut app: App<Risc0Host, CelestiaSpec> = App::new(rollup_config.storage.clone());
 
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
 
-    let genesis_config = create_demo_genesis_config(
-        100000000,
-        sequencer_private_key.default_address(),
+    let genesis_config = get_genesis_config(
         sequencer_da_address.as_ref().to_vec(),
-        &sequencer_private_key,
+        #[cfg(feature = "experimental")]
+        Default::default(),
     );
     println!("Starting from empty storage, initialization chain");
     app.stf.init_chain(genesis_config);
@@ -211,7 +205,7 @@ async fn main() -> Result<(), anyhow::Error> {
         let _header_hash = hex::encode(filtered_block.header.header.hash());
         host.add_hint(&filtered_block.header);
         let (mut blob_txs, inclusion_proof, completeness_proof) = da_service
-            .extract_relevant_txs_with_proof(&filtered_block)
+            .extract_relevant_txs_with_proof(filtered_block)
             .await;
 
         host.add_hint(&inclusion_proof);
@@ -222,7 +216,12 @@ async fn main() -> Result<(), anyhow::Error> {
             num_blobs += blob_txs.len();
         }
 
-        let result = demo.apply_slot(Default::default(), filtered_block, &mut blob_txs);
+        let result = demo.apply_slot(
+            Default::default(),
+            &filtered_block.header,
+            &filtered_block.validity_condition(),
+            &mut blob_txs,
+        );
         for r in result.batch_receipts {
             let num_tx = r.tx_receipts.len();
             num_total_transactions += num_tx;
