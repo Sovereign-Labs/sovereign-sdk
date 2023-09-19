@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::{App, DefaultPrivateKey};
+use demo_stf::app::App;
 use demo_stf::genesis_config::get_genesis_config;
 use log4rs::config::{Appender, Config, Root};
 use methods::ROLLUP_ELF;
@@ -17,7 +17,7 @@ use sov_celestia_adapter::types::{FilteredCelestiaBlock, NamespaceId};
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::{CelestiaSpec, RollupParams};
 use sov_celestia_adapter::CelestiaService;
-use sov_modules_api::{PrivateKey, SlotData};
+use sov_modules_api::SlotData;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
