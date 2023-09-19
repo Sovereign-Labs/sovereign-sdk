@@ -59,7 +59,6 @@ pub fn get_genesis_config<Da: DaSpec>(
 
     // TODO: #840
     create_demo_config_data(
-        100000000,
         sequencer_da_address.as_ref().to_vec(),
         #[cfg(feature = "experimental")]
         eth_accounts,

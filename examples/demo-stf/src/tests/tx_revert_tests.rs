@@ -17,8 +17,6 @@ use crate::tests::da_simulation::{
     simulate_da_with_revert_msg,
 };
 
-const SEQUENCER_BALANCE_DELTA: u64 = 1;
-const SEQUENCER_BALANCE: u64 = LOCKED_AMOUNT + SEQUENCER_BALANCE_DELTA;
 // Assume there was proper address and we converted it to bytes already.
 const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
 
@@ -27,7 +25,7 @@ fn test_tx_revert() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
 
-    let config = create_demo_config(SEQUENCER_BALANCE);
+    let config = create_demo_config();
     let sequencer_rollup_address = config.genesis.sequencer_registry.seq_rollup_address;
 
     {
@@ -97,7 +95,7 @@ fn test_nonce_incremented_on_revert() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
 
-    let config = create_demo_config(SEQUENCER_BALANCE);
+    let config = create_demo_config();
 
     {
         let mut demo = create_new_demo(path);
@@ -163,7 +161,7 @@ fn test_tx_bad_sig() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
 
-    let config = create_demo_config(SEQUENCER_BALANCE);
+    let config = create_demo_config();
 
     {
         let mut demo = create_new_demo(path);
@@ -207,7 +205,7 @@ fn test_tx_bad_nonce() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
 
-    let config = create_demo_config(SEQUENCER_BALANCE);
+    let config = create_demo_config();
 
     {
         let mut demo = create_new_demo(path);
@@ -250,7 +248,7 @@ fn test_tx_bad_serialization() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
 
-    let config = create_demo_config(SEQUENCER_BALANCE);
+    let config = create_demo_config();
     let sequencer_rollup_address = config.genesis.sequencer_registry.seq_rollup_address;
     let sequencer_balance_before = {
         let mut demo = create_new_demo(path);

@@ -11,7 +11,7 @@ pub mod test {
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::{ProverStorage, WorkingSet};
 
-    use crate::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
+    use crate::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS};
     use crate::runtime::Runtime;
     use crate::tests::da_simulation::simulate_da;
     use crate::tests::{create_new_demo, C};
@@ -21,7 +21,7 @@ pub mod test {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
 
-        let config = create_demo_config(LOCKED_AMOUNT + 1);
+        let config = create_demo_config();
         {
             let mut demo = create_new_demo(path);
 
@@ -78,7 +78,7 @@ pub mod test {
         let path = tempdir.path();
         let mut demo = create_new_demo(path);
 
-        let config = create_demo_config(LOCKED_AMOUNT + 1);
+        let config = create_demo_config();
 
         demo.init_chain(config.genesis);
 
@@ -128,7 +128,7 @@ pub mod test {
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
 
-        let config = create_demo_config(LOCKED_AMOUNT + 1).genesis;
+        let config = create_demo_config().genesis;
         {
             let mut demo = create_new_demo(path);
             demo.init_chain(config);
@@ -178,7 +178,7 @@ pub mod test {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
 
-        let mut config = create_demo_config(LOCKED_AMOUNT + 1);
+        let mut config = create_demo_config();
         config.genesis.sequencer_registry.is_preferred_sequencer = false;
 
         let mut demo = create_new_demo(path);

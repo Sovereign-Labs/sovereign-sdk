@@ -22,10 +22,11 @@ pub struct DemoConfiguration<C: Context, Da: DaSpec> {
 }
 
 pub fn create_demo_config_data<C: Context, Da: DaSpec>(
-    initial_sequencer_balance: u64,
     sequencer_da_address: Vec<u8>,
     #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
 ) -> DemoConfiguration<C, Da> {
+    let initial_sequencer_balance = 100000000;
+
     let token_deployer_data =
         std::fs::read_to_string("../test-data/keys/token_deployer_private_key.json")
             .expect("Unable to read file to string");
@@ -135,11 +136,8 @@ fn get_evm_config(genesis_addresses: Vec<reth_primitives::Address>) -> EvmConfig
     }
 }
 
-pub fn create_demo_config<Da: DaSpec>(
-    initial_sequencer_balance: u64,
-) -> DemoConfiguration<DefaultContext, Da> {
+pub fn create_demo_config<Da: DaSpec>() -> DemoConfiguration<DefaultContext, Da> {
     create_demo_config_data::<DefaultContext, Da>(
-        initial_sequencer_balance,
         DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
         #[cfg(feature = "experimental")]
         Vec::default(),
