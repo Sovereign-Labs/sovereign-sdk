@@ -119,7 +119,7 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
         da_service,
         ledger_db,
         runner_config: rollup_config.runner,
-        genesis_config: genesis_config.genesis,
+        genesis_config,
         #[cfg(feature = "experimental")]
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),
@@ -172,7 +172,7 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost>(
         da_service,
         ledger_db,
         runner_config: rollup_config.runner,
-        genesis_config: genesis_config.genesis,
+        genesis_config,
         #[cfg(feature = "experimental")]
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),

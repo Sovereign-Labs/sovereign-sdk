@@ -14,11 +14,6 @@ use crate::runtime::GenesisConfig;
 pub const LOCKED_AMOUNT: u64 = 50;
 pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
 
-pub struct DemoConfiguration<C: Context, Da: DaSpec> {
-    pub genesis: GenesisConfig<C, Da>,
-    pub priv_key: PrivateKeyAndAddress<C>,
-}
-
 /// Configure our rollup with a centralized sequencer using the SEQUENCER_DA_ADDRESS
 /// address constant. Since the centralize sequencer's address is consensus critical,
 /// it has to be hardcoded as a constant, rather than read from the config at runtime.
@@ -32,38 +27,19 @@ pub struct DemoConfiguration<C: Context, Da: DaSpec> {
 pub fn get_genesis_config<C: Context, Da: DaSpec>(
     sequencer_da_address: Vec<u8>,
     #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
-) -> DemoConfiguration<C, Da> {
+) -> GenesisConfig<C, Da> {
     let initial_sequencer_balance = 100000000;
 
-    let token_deployer_data =
-        std::fs::read_to_string("../test-data/keys/token_deployer_private_key.json")
-            .expect("Unable to read file to string");
+    let token_deployer: PrivateKeyAndAddress<C> = read_private_key();
 
-    let token_deployer: PrivateKeyAndAddress<C> = serde_json::from_str(&token_deployer_data)
-        .unwrap_or_else(|_| {
-            panic!(
-                "Unable to convert data {} to PrivateKeyAndAddress",
-                &token_deployer_data
-            )
-        });
-
-    assert!(
-        token_deployer.is_matching_to_default(),
-        "Inconsistent key data"
-    );
-
-    let genesis = create_demo_genesis_config2(
+    create_demo_genesis_config2(
         initial_sequencer_balance,
         token_deployer.address.clone(),
         sequencer_da_address,
         &token_deployer.private_key,
         #[cfg(feature = "experimental")]
         evm_genesis_addresses,
-    );
-    DemoConfiguration {
-        genesis,
-        priv_key: token_deployer,
-    }
+    )
 }
 
 fn create_demo_genesis_config2<C: Context, Da: DaSpec>(
@@ -142,4 +118,25 @@ fn get_evm_config(genesis_addresses: Vec<reth_primitives::Address>) -> EvmConfig
         spec: vec![(0, SpecId::LATEST)].into_iter().collect(),
         ..Default::default()
     }
+}
+
+pub fn read_private_key<C: Context>() -> PrivateKeyAndAddress<C> {
+    let token_deployer_data =
+        std::fs::read_to_string("../test-data/keys/token_deployer_private_key.json")
+            .expect("Unable to read file to string");
+
+    let token_deployer: PrivateKeyAndAddress<C> = serde_json::from_str(&token_deployer_data)
+        .unwrap_or_else(|_| {
+            panic!(
+                "Unable to convert data {} to PrivateKeyAndAddress",
+                &token_deployer_data
+            )
+        });
+
+    assert!(
+        token_deployer.is_matching_to_default(),
+        "Inconsistent key data"
+    );
+
+    token_deployer
 }

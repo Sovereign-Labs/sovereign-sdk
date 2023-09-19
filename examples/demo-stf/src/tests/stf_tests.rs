@@ -11,6 +11,7 @@ pub mod test {
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::{ProverStorage, WorkingSet};
 
+    use crate::genesis_config::read_private_key;
     use crate::runtime::Runtime;
     use crate::tests::da_simulation::simulate_da;
     use crate::tests::{
@@ -27,9 +28,10 @@ pub mod test {
         {
             let mut demo = create_new_app_template_for_tests(path);
 
-            demo.init_chain(config.genesis);
+            demo.init_chain(config);
 
-            let txs = simulate_da(config.priv_key.private_key);
+            let priv_key = read_private_key::<DefaultContext>().private_key;
+            let txs = simulate_da(priv_key);
             let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
 
             let mut blobs = [blob];
@@ -82,9 +84,10 @@ pub mod test {
 
         let config = get_genesis_config_for_tests();
 
-        demo.init_chain(config.genesis);
+        demo.init_chain(config);
 
-        let txs = simulate_da(config.priv_key.private_key);
+        let private_key = read_private_key::<DefaultContext>().private_key;
+        let txs = simulate_da(private_key);
 
         let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
@@ -130,7 +133,7 @@ pub mod test {
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
 
-        let config = get_genesis_config_for_tests().genesis;
+        let config = get_genesis_config_for_tests();
         {
             let mut demo = create_new_app_template_for_tests(path);
             demo.init_chain(config);
@@ -181,13 +184,15 @@ pub mod test {
         let path = tempdir.path();
 
         let mut config = get_genesis_config_for_tests();
-        config.genesis.sequencer_registry.is_preferred_sequencer = false;
+        config.sequencer_registry.is_preferred_sequencer = false;
 
         let mut demo = create_new_app_template_for_tests(path);
-        demo.init_chain(config.genesis);
+        demo.init_chain(config);
 
         let some_sequencer: [u8; 32] = [121; 32];
-        let txs = simulate_da(config.priv_key.private_key);
+
+        let private_key = read_private_key::<DefaultContext>().private_key;
+        let txs = simulate_da(private_key);
         let blob = new_test_blob_from_batch(Batch { txs }, &some_sequencer, [0; 32]);
         let mut blobs = [blob];
         let data = MockBlock::default();

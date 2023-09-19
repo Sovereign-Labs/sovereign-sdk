@@ -48,8 +48,7 @@ fn rollup_bench(_bench: &mut Criterion) {
         sequencer_da_address.as_ref().to_vec(),
         #[cfg(feature = "experimental")]
         Default::default(),
-    )
-    .genesis;
+    );
 
     demo.init_chain(demo_genesis_config);
 

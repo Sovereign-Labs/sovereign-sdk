@@ -26,13 +26,13 @@ fn test_tx_revert() {
     let path = tempdir.path();
 
     let config = get_genesis_config_for_tests();
-    let sequencer_rollup_address = config.genesis.sequencer_registry.seq_rollup_address;
+    let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address;
 
     {
         let mut demo = create_new_app_template_for_tests(path);
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        demo.init_chain(config.genesis);
+        demo.init_chain(config);
 
         let txs = simulate_da_with_revert_msg();
         let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
@@ -101,7 +101,7 @@ fn test_nonce_incremented_on_revert() {
         let mut demo = create_new_app_template_for_tests(path);
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        demo.init_chain(config.genesis);
+        demo.init_chain(config);
 
         let txs = simulate_da_with_revert_msg();
         let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
@@ -167,7 +167,7 @@ fn test_tx_bad_sig() {
         let mut demo = create_new_app_template_for_tests(path);
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        demo.init_chain(config.genesis);
+        demo.init_chain(config);
 
         let txs = simulate_da_with_bad_sig();
 
@@ -211,7 +211,7 @@ fn test_tx_bad_nonce() {
         let mut demo = create_new_app_template_for_tests(path);
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        demo.init_chain(config.genesis);
+        demo.init_chain(config);
 
         let txs = simulate_da_with_bad_nonce();
 
@@ -249,10 +249,10 @@ fn test_tx_bad_serialization() {
     let path = tempdir.path();
 
     let config = get_genesis_config_for_tests();
-    let sequencer_rollup_address = config.genesis.sequencer_registry.seq_rollup_address;
+    let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address;
     let sequencer_balance_before = {
         let mut demo = create_new_app_template_for_tests(path);
-        demo.init_chain(config.genesis);
+        demo.init_chain(config);
 
         let mut working_set = WorkingSet::new(demo.current_storage);
         let coins = demo

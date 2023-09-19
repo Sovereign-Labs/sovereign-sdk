@@ -6,8 +6,8 @@ use sov_rollup_interface::mocks::MockDaSpec;
 use sov_state::ProverStorage;
 
 use crate::{
-    genesis_config::{get_genesis_config, DemoConfiguration},
-    runtime::Runtime,
+    genesis_config::get_genesis_config,
+    runtime::{GenesisConfig, Runtime},
 };
 
 mod da_simulation;
@@ -31,7 +31,7 @@ pub(crate) fn create_new_app_template_for_tests(
     AppTemplate::new(storage, runtime)
 }
 
-pub(crate) fn get_genesis_config_for_tests<Da: DaSpec>() -> DemoConfiguration<DefaultContext, Da> {
+pub(crate) fn get_genesis_config_for_tests<Da: DaSpec>() -> GenesisConfig<DefaultContext, Da> {
     get_genesis_config::<DefaultContext, Da>(
         TEST_SEQUENCER_DA_ADDRESS.to_vec(),
         #[cfg(feature = "experimental")]
