@@ -2,10 +2,13 @@
 #![doc = include_str!("../README.md")]
 
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
 
-use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo};
-use sov_state::{AccessoryStateValue, StateValue, WorkingSet};
+#[cfg(feature = "native")]
+pub use query::*;
+use sov_modules_api::{
+    AccessoryStateValue, CallResponse, Context, Error, Module, ModuleInfo, StateValue, WorkingSet,
+};
 
 /// [`AccessorySetter`] is a module that stores data both *inside* the JMT and
 /// *outside* the JMT.
@@ -52,7 +55,7 @@ impl<C: Context> Module for AccessorySetter<C> {
         &self,
         msg: Self::CallMessage,
         _context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
             CallMessage::SetValueAccessory(new_value) => {

@@ -8,9 +8,8 @@ mod query;
 
 pub use call::CallMessage;
 #[cfg(feature = "native")]
-pub use query::{VecSetterRpcImpl, VecSetterRpcServer};
-use sov_modules_api::{Error, ModuleInfo};
-use sov_state::WorkingSet;
+pub use query::*;
+use sov_modules_api::{Error, ModuleInfo, WorkingSet};
 
 /// Initial configuration for sov-vec-setter module.
 pub struct VecSetterConfig<C: sov_modules_api::Context> {
@@ -31,11 +30,11 @@ pub struct VecSetter<C: sov_modules_api::Context> {
 
     /// Some vector kept in the state.
     #[state]
-    pub vector: sov_state::StateVec<u32>,
+    pub vector: sov_modules_api::StateVec<u32>,
 
     /// Holds the address of the admin user who is allowed to update the vector.
     #[state]
-    pub admin: sov_state::StateValue<C::Address>,
+    pub admin: sov_modules_api::StateValue<C::Address>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for VecSetter<C> {
@@ -45,11 +44,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for VecSetter<C> {
 
     type CallMessage = call::CallMessage;
 
-    fn genesis(
-        &self,
-        config: &Self::Config,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<(), Error> {
+    fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         // The initialization logic
         Ok(self.init_module(config, working_set)?)
     }
@@ -58,7 +53,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for VecSetter<C> {
         &self,
         msg: Self::CallMessage,
         context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
             call::CallMessage::PushValue(new_value) => {

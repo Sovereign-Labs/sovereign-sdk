@@ -21,9 +21,13 @@ sov-rollup-interface = { path = "../../../rollup-interface", version = "0.2", fe
 
 # External
 anyhow = { workspace = true }
+arbitrary = { workspace = true, optional = true }
 byteorder = { workspace = true }
 borsh = { workspace = true }
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
+tempfile = { workspace = true, optional = true }
 rocksdb = { workspace = true }
 bincode = { workspace = true }
 tokio = { workspace = true }
@@ -31,3 +35,12 @@ tokio = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+
+
+[features]
+arbitrary = [
+    "dep:arbitrary",
+    "dep:proptest",
+    "dep:proptest-derive",
+    "dep:tempfile"
+]

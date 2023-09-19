@@ -7,9 +7,8 @@ mod genesis;
 #[cfg(feature = "native")]
 mod query;
 #[cfg(feature = "native")]
-pub use query::{NonFungibleTokenRpcImpl, NonFungibleTokenRpcServer, OwnerResponse};
-use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo};
-use sov_state::WorkingSet;
+pub use query::*;
+use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, WorkingSet};
 
 #[derive(ModuleInfo, Clone)]
 /// Module for non-fungible tokens (NFT).
@@ -21,11 +20,11 @@ pub struct NonFungibleToken<C: Context> {
 
     #[state]
     /// Admin of the NonFungibleToken module.
-    admin: sov_state::StateValue<C::Address>,
+    admin: sov_modules_api::StateValue<C::Address>,
 
     #[state]
     /// Mapping of tokens to their owners
-    owners: sov_state::StateMap<u64, C::Address>,
+    owners: sov_modules_api::StateMap<u64, C::Address>,
 }
 
 /// Config for the NonFungibleToken module.
@@ -44,11 +43,7 @@ impl<C: Context> Module for NonFungibleToken<C> {
 
     type CallMessage = CallMessage<C>;
 
-    fn genesis(
-        &self,
-        config: &Self::Config,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<(), Error> {
+    fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         Ok(self.init_module(config, working_set)?)
     }
 
@@ -56,7 +51,7 @@ impl<C: Context> Module for NonFungibleToken<C> {
         &self,
         msg: Self::CallMessage,
         context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse, Error> {
         let call_result = match msg {
             CallMessage::Mint { id } => self.mint(id, context, working_set),

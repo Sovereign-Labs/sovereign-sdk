@@ -1,35 +1,26 @@
 #[cfg(feature = "native")]
-use sov_accounts::query::{AccountsRpcImpl, AccountsRpcServer};
+use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
-use sov_bank::query::{BankRpcImpl, BankRpcServer};
+use sov_bank::{BankRpcImpl, BankRpcServer};
 #[cfg(feature = "native")]
 use sov_blob_storage::{BlobStorageRpcImpl, BlobStorageRpcServer};
 #[cfg(feature = "native")]
 use sov_chain_state::{ChainStateRpcImpl, ChainStateRpcServer};
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
-use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
+use sov_evm::{EvmRpcImpl, EvmRpcServer};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
-use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec, Spec};
+use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec};
 use sov_rollup_interface::da::DaSpec;
 #[cfg(feature = "native")]
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 #[cfg(feature = "native")]
-use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
-
-#[cfg(feature = "native")]
-pub mod query {
-    pub use sov_accounts::query as accounts;
-    pub use sov_bank::query as bank;
-    pub use sov_chain_state::query as chain_state;
-    pub use sov_sequencer_registry::query as sequencer_registry;
-    pub use sov_value_setter::query as value_setter;
-}
+use sov_value_setter::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
 /// The Rollup entrypoint.
 ///
@@ -119,7 +110,7 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for Runtime<C, Da> {
     fn get_blobs_for_this_slot<'a, I>(
         &self,
         current_blobs: I,
-        working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut sov_modules_api::WorkingSet<C>,
     ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, Da::BlobTransaction>>>
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,

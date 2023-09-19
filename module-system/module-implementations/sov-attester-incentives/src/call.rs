@@ -1,15 +1,17 @@
 use core::result::Result::Ok;
 use std::fmt::Debug;
 
+use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_bank::{Amount, Coins};
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::optimistic::Attestation;
-use sov_modules_api::{CallResponse, DaSpec, Spec, StateTransition, ValidityConditionChecker};
-use sov_state::storage::StorageProof;
-use sov_state::{Storage, WorkingSet};
+use sov_modules_api::{
+    CallResponse, DaSpec, Spec, StateTransition, ValidityConditionChecker, WorkingSet,
+};
+use sov_state::storage::{Storage, StorageKey, StorageProof, StorageValue};
 use thiserror::Error;
 
 use crate::{AttesterIncentives, UnbondingInfo};
@@ -168,22 +170,36 @@ where
     Checker: ValidityConditionChecker<Da::ValidityCondition>,
 {
     /// This returns the address of the reward token supply
-    pub fn get_reward_token_supply_address(
-        &self,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> C::Address {
+    pub fn get_reward_token_supply_address(&self, working_set: &mut WorkingSet<C>) -> C::Address {
         self.reward_token_supply_address
             .get(working_set)
             .expect("The reward token supply address should be set at genesis")
     }
 
-    /// A helper function that simply slashes an attester and returns a reward value
-    fn slash_user(
+    /// Verifies the provided proof, returning its underlying storage value, if present.
+    pub fn verify_proof(
         &self,
-        user: &C::Address,
-        role: Role,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> u64 {
+        state_root: [u8; 32],
+        proof: StorageProof<<C::Storage as Storage>::Proof>,
+        expected_key: &C::Address,
+        working_set: &mut WorkingSet<C>,
+    ) -> Result<Option<StorageValue>, anyhow::Error> {
+        let storage = working_set.backing();
+        let (storage_key, storage_value) = storage.open_proof(state_root, proof)?;
+        let prefix = self.bonded_attesters.prefix();
+        let codec = self.bonded_attesters.codec();
+
+        // We have to check that the storage key is the same as the external key
+        ensure!(
+            storage_key == StorageKey::new(prefix, expected_key, codec),
+            "The storage key from the proof doesn't match the expected storage key."
+        );
+
+        Ok(storage_value)
+    }
+
+    /// A helper function that simply slashes an attester and returns a reward value
+    fn slash_user(&self, user: &C::Address, role: Role, working_set: &mut WorkingSet<C>) -> u64 {
         let bonded_set = match role {
             Role::Attester => {
                 // We have to remove the attester from the unbonding set
@@ -211,7 +227,7 @@ where
         user: &C::Address,
         role: Role,
         reason: SlashingReason,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> AttesterIncentiveErrors {
         self.slash_user(user, role, working_set);
         AttesterIncentiveErrors::UserSlashed(reason)
@@ -223,7 +239,7 @@ where
         attester: &C::Address,
         height: TransitionHeight,
         reason: SlashingReason,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> AttesterIncentiveErrors {
         let reward = self.slash_user(attester, Role::Attester, working_set);
 
@@ -242,7 +258,7 @@ where
         &self,
         context: &C,
         amount: u64,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse, AttesterIncentiveErrors> {
         let reward_address = self
             .reward_token_supply_address
@@ -277,7 +293,7 @@ where
         bond_amount: u64,
         user_address: &C::Address,
         role: Role,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse, AttesterIncentiveErrors> {
         // If the user is an attester, we have to check that he's not trying to unbond
         if role == Role::Attester
@@ -327,7 +343,7 @@ where
     pub(crate) fn unbond_challenger(
         &self,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<CallResponse> {
         // Get the user's old balance.
         if let Some(old_balance) = self.bonded_challengers.get(context.sender(), working_set) {
@@ -352,7 +368,7 @@ where
     pub(crate) fn begin_unbond_attester(
         &self,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<CallResponse, AttesterIncentiveErrors> {
         // First get the bonded attester
         if let Some(bond) = self.bonded_attesters.get(context.sender(), working_set) {
@@ -381,7 +397,7 @@ where
     pub(crate) fn end_unbond_attester(
         &self,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<CallResponse, AttesterIncentiveErrors> {
         // We have to ensure that the attester is unbonding, and that the unbonding transaction
         // occurred at least `finality_period` blocks ago to let the attester unbond
@@ -432,7 +448,7 @@ where
         &self,
         context: &C,
         attestation: &Attestation<Da, StorageProof<<C::Storage as Storage>::Proof>>,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<(), AttesterIncentiveErrors> {
         let bonding_root = {
             // If we cannot get the transition before the current one, it means that we are trying
@@ -457,13 +473,12 @@ where
         };
 
         // This proof checks that the attester was bonded at the given transition num
-        let bond_opt = working_set
-            .backing()
+        let bond_opt = self
             .verify_proof(
                 bonding_root,
                 attestation.proof_of_bond.proof.clone(),
                 context.sender(),
-                &self.bonded_attesters,
+                working_set,
             )
             .map_err(|_err| AttesterIncentiveErrors::InvalidBondingProof)?;
 
@@ -489,7 +504,7 @@ where
         claimed_transition_height: TransitionHeight,
         attester: &C::Address,
         attestation: &Attestation<Da, StorageProof<<C::Storage as Storage>::Proof>>,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<CallResponse, AttesterIncentiveErrors> {
         if let Some(curr_tx) = self
             .chain_state
@@ -524,7 +539,7 @@ where
         claimed_transition_height: TransitionHeight,
         attester: &C::Address,
         attestation: &Attestation<Da, StorageProof<<C::Storage as Storage>::Proof>>,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<CallResponse, AttesterIncentiveErrors> {
         // Normal state
         if let Some(transition) = self
@@ -589,7 +604,7 @@ where
         &self,
         context: &C,
         attestation: WrappedAttestation<Da, StorageProof<<C::Storage as Storage>::Proof>>,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<CallResponse, AttesterIncentiveErrors> {
         let attestation = attestation.inner;
         // We first need to check that the attester is still in the bonding set
@@ -688,7 +703,7 @@ where
         public_outputs: StateTransition<Da, C::Address>,
         height: &TransitionHeight,
         condition_checker: &mut impl ValidityConditionChecker<Da::ValidityCondition>,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<(), SlashingReason> {
         let transition = self
             .chain_state
@@ -734,7 +749,7 @@ where
         context: &C,
         proof: &[u8],
         transition_num: &TransitionHeight,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<CallResponse, AttesterIncentiveErrors> {
         // Get the challenger's old balance.
         // Revert if they aren't bonded

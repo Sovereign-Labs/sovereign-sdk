@@ -60,10 +60,10 @@ pub struct NonFungibleToken<C: sov_modules_api::Context> {
     address: C::Address,
 
     #[state]
-    admin: sov_state::StateValue<C::Address>,
+    admin: sov_modules_api::StateValue<C::Address>,
 
     #[state]
-    owners: sov_state::StateMap<u64, C::Address>,
+    owners: sov_modules_api::StateMap<u64, C::Address>,
 
     // If the module needs to refer to another module
     // #[module]
@@ -182,7 +182,7 @@ impl<C: sov_modules_api::Context> Module for NonFungibleToken<C> {
     fn genesis(
         &self,
         _config: &Self::Config,
-        _working_set: &mut WorkingSet<C::Storage>,
+        _working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<(), Error> {
         Ok(())
     }
@@ -191,7 +191,7 @@ impl<C: sov_modules_api::Context> Module for NonFungibleToken<C> {
         &self,
         _msg: Self::CallMessage,
         _context: &Self::Context,
-        _working_set: &mut WorkingSet<C::Storage>,
+        _working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<sov_modules_api::CallResponse, Error> {
         Ok(sov_modules_api::CallResponse::default())
     }
@@ -208,7 +208,7 @@ Since it modifies state, `genesis` also takes a working set as an argument.
 `Genesis` is called only once, during the rollup deployment.
 
 ```rust, ignore
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 
 // in lib.rs
 impl<C: sov_modules_api::Context> sov_modules_api::Module for NonFungibleToken<C> {
@@ -219,7 +219,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for NonFungibleToken<C
     fn genesis(
         &self,
         config: &Self::Config,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<(), Error> {
         Ok(self.init_module(config, working_set)?)
     }
@@ -230,7 +230,7 @@ impl<C: sov_modules_api::Context> NonFungibleToken<C> {
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::Module>::Config,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
         self.admin.set(&config.admin, working_set);
         for (id, owner) in config.owners.iter() {
@@ -249,14 +249,14 @@ impl<C: sov_modules_api::Context> NonFungibleToken<C> {
 First, we need to implement actual logic of handling different cases. Let's add `mint`, `transfer` and `burn` methods:
 
 ```rust, ignore
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 
 impl<C: sov_modules_api::Context> NonFungibleToken<C> {
     pub(crate) fn mint(
         &self,
         id: u64,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<sov_modules_api::CallResponse> {
         if self.owners.get(&id, working_set).is_some() {
             bail!("Token with id {} already exists", id);
@@ -273,7 +273,7 @@ impl<C: sov_modules_api::Context> NonFungibleToken<C> {
         id: u64,
         to: C::Address,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<sov_modules_api::CallResponse> {
         let token_owner = match self.owners.get(&id, working_set) {
             None => {
@@ -296,7 +296,7 @@ impl<C: sov_modules_api::Context> NonFungibleToken<C> {
         &self,
         id: u64,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<sov_modules_api::CallResponse> {
         let token_owner = match self.owners.get(&id, working_set) {
             None => {
@@ -326,7 +326,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for NonFungibleToken<C
         &self,
         msg: Self::CallMessage,
         context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         let call_result = match msg {
             CallMessage::Mint { id } => self.mint(id, context, working_set),
@@ -346,8 +346,7 @@ This method is only available to other modules: it is not currently exposed via 
 ```rust, ignore
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::Context;
-use sov_state::WorkingSet;
+use sov_modules_api::{Context, WorkingSet};
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 /// Response for `getOwner` method
@@ -362,7 +361,7 @@ impl<C: sov_modules_api::Context> NonFungibleToken<C> {
     pub fn get_owner(
         &self,
         token_id: u64,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<OwnerResponse<C>> {
         Ok(OwnerResponse {
             owner: self.owners.get(&token_id, working_set),
@@ -388,9 +387,9 @@ Here is some boilerplate for NFT module integration tests:
 ```rust
 use demo_nft_module::{CallMessage, NonFungibleToken, NonFungibleTokenConfig, OwnerResponse};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Context, Module};
+use sov_modules_api::{Address, Context, Module, WorkingSet};
 use sov_rollup_interface::stf::Event;
-use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
 pub type C = DefaultContext;
 pub type Storage = ProverStorage<DefaultStorageSpec>;

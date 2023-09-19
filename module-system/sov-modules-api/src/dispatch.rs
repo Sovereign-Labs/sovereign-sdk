@@ -1,6 +1,4 @@
-use sov_state::WorkingSet;
-
-use crate::{CallResponse, Context, Error, Module, Spec};
+use crate::{CallResponse, Context, Error, Module, Spec, WorkingSet};
 
 /// Methods from this trait should be called only once during the rollup deployment.
 pub trait Genesis {
@@ -13,7 +11,7 @@ pub trait Genesis {
     fn genesis(
         &self,
         config: &Self::Config,
-        working_set: &mut WorkingSet<<<Self as Genesis>::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<Self::Context>,
     ) -> Result<(), Error>;
 }
 
@@ -29,7 +27,7 @@ pub trait DispatchCall {
     fn dispatch_call(
         &self,
         message: Self::Decodable,
-        working_set: &mut WorkingSet<<<Self as DispatchCall>::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<Self::Context>,
         context: &Self::Context,
     ) -> Result<CallResponse, Error>;
 

@@ -3,9 +3,9 @@ use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::{expose_rpc, rpc_gen, DefaultRuntime};
 use sov_modules_api::{
     Address, CallResponse, Context, DispatchCall, EncodeCall, Error, Genesis, MessageCodec, Module,
-    ModuleInfo,
+    ModuleInfo, StateValue, WorkingSet,
 };
-use sov_state::{StateValue, WorkingSet, ZkStorage};
+use sov_state::ZkStorage;
 
 pub trait TestSpec {
     type Data: Data;
@@ -49,7 +49,7 @@ pub mod my_module {
         fn genesis(
             &self,
             config: &Self::Config,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<C>,
         ) -> Result<(), Error> {
             self.data.set(config, working_set);
             Ok(())
@@ -59,7 +59,7 @@ pub mod my_module {
             &self,
             msg: Self::CallMessage,
             _context: &Self::Context,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<C>,
         ) -> Result<CallResponse, Error> {
             self.data.set(&msg, working_set);
             Ok(CallResponse::default())
@@ -84,7 +84,7 @@ pub mod my_module {
             #[rpc_method(name = "queryValue")]
             pub fn query_value(
                 &self,
-                working_set: &mut WorkingSet<C::Storage>,
+                working_set: &mut WorkingSet<C>,
             ) -> RpcResult<QueryResponse> {
                 let value = self.data.get(working_set).map(|d| format!("{:?}", d));
                 Ok(QueryResponse { value })

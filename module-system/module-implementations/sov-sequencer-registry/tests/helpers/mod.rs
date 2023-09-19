@@ -1,9 +1,8 @@
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::digest::Digest;
-use sov_modules_api::{Address, Module, Spec};
+use sov_modules_api::{Address, Module, Spec, WorkingSet};
 use sov_sequencer_registry::{SequencerConfig, SequencerRegistry};
-use sov_state::WorkingSet;
 
 pub type C = DefaultContext;
 
@@ -28,7 +27,7 @@ pub struct TestSequencer {
 }
 
 impl TestSequencer {
-    pub fn genesis(&mut self, working_set: &mut WorkingSet<<C as Spec>::Storage>) {
+    pub fn genesis(&mut self, working_set: &mut WorkingSet<C>) {
         self.bank.genesis(&self.bank_config, working_set).unwrap();
 
         self.registry
@@ -39,8 +38,8 @@ impl TestSequencer {
     #[allow(dead_code)]
     pub fn query_balance_via_bank(
         &mut self,
-        working_set: &mut WorkingSet<<C as Spec>::Storage>,
-    ) -> RpcResult<sov_bank::query::BalanceResponse> {
+        working_set: &mut WorkingSet<C>,
+    ) -> RpcResult<sov_bank::BalanceResponse> {
         self.bank.balance_of(
             self.sequencer_config.seq_rollup_address,
             self.sequencer_config.coins_to_lock.token_address,
@@ -52,8 +51,8 @@ impl TestSequencer {
     pub fn query_balance(
         &mut self,
         user_address: <DefaultContext as Spec>::Address,
-        working_set: &mut WorkingSet<<C as Spec>::Storage>,
-    ) -> RpcResult<sov_bank::query::BalanceResponse> {
+        working_set: &mut WorkingSet<C>,
+    ) -> RpcResult<sov_bank::BalanceResponse> {
         self.bank.balance_of(
             user_address,
             self.sequencer_config.coins_to_lock.token_address,

@@ -51,7 +51,7 @@ accessible to other modules, but cannot be directly invoked by other users. A go
 
 ```rust
 impl<C: Context> Bank<C> {
-    pub fn transfer_from(&self, from: &C::Address, to: &C::Address, coins: Coins, working_set: &mut WorkingSet<C::Storage>) {
+    pub fn transfer_from(&self, from: &C::Address, to: &C::Address, coins: Coins, working_set: &mut WorkingSet<C>) {
         // Implementation elided...
     }
 }
@@ -75,7 +75,7 @@ tells the `call` function which inner method of the module to invoke. So a typic
 ```rust
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
 	// Several definitions elided here ...
-    fn call(&self, msg: Self::CallMessage, context: &Self::Context, working_set: &mut WorkingSet<C::Storage>) {
+    fn call(&self, msg: Self::CallMessage, context: &Self::Context, working_set: &mut WorkingSet<C>) {
         match msg {
             CallMessage::CreateToken {
                 token_name,
@@ -101,7 +101,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         &self,
         user_address: C::Address,
         token_address: C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<BalanceResponse> {
         Ok(BalanceResponse {
             amount: self.get_balance_of(user_address, token_address, working_set),

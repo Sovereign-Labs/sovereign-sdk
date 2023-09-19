@@ -2,7 +2,7 @@
 
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 
 use super::AccessorySetter;
 
@@ -18,10 +18,7 @@ impl<C: sov_modules_api::Context> AccessorySetter<C> {
     /// Returns the latest value set in the accessory state via
     /// [`CallMessage::SetValueAccessory`](crate::CallMessage::SetValueAccessory).
     #[rpc_method(name = "value")]
-    pub fn query_value(
-        &self,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> RpcResult<ValueResponse> {
+    pub fn query_value(&self, working_set: &mut WorkingSet<C>) -> RpcResult<ValueResponse> {
         Ok(ValueResponse {
             value: self.accessory_value.get(&mut working_set.accessory_state()),
         })

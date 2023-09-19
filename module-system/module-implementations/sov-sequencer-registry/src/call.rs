@@ -1,8 +1,7 @@
 use anyhow::{bail, Result};
 #[cfg(feature = "native")]
 use sov_modules_api::macros::CliWalletArg;
-use sov_modules_api::CallResponse;
-use sov_state::WorkingSet;
+use sov_modules_api::{CallResponse, WorkingSet};
 
 use crate::{DaAddress, SequencerRegistry};
 
@@ -34,7 +33,7 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
         &self,
         da_address: Vec<u8>,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         let sequencer = context.sender();
         self.register_sequencer(da_address, sequencer, working_set)?;
@@ -45,7 +44,7 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
         &self,
         da_address: Vec<u8>,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         let locker = &self.address;
         let coins = self.coins_to_lock.get_or_err(working_set)?;
@@ -67,7 +66,7 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
         Ok(CallResponse::default())
     }
 
-    pub(crate) fn delete(&self, da_address: Vec<u8>, working_set: &mut WorkingSet<C::Storage>) {
+    pub(crate) fn delete(&self, da_address: Vec<u8>, working_set: &mut WorkingSet<C>) {
         self.allowed_sequencers.delete(&da_address, working_set);
 
         if let Some(preferred_sequencer) = self.preferred_sequencer.get(working_set) {

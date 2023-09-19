@@ -1,7 +1,7 @@
 use sov_bank::{get_token_address, Bank, CallMessage};
 use sov_modules_api::utils::generate_address;
-use sov_modules_api::{Context, Module};
-use sov_state::{ProverStorage, WorkingSet};
+use sov_modules_api::{Context, Module, WorkingSet};
+use sov_state::ProverStorage;
 
 mod helpers;
 

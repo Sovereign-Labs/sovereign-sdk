@@ -16,9 +16,8 @@ pub use sov_modules_macros::MessageCodec;
 /// ```
 /// use std::marker::PhantomData;
 ///
-/// use sov_modules_api::{Context, Module, ModuleInfo, ModuleCallJsonSchema};
+/// use sov_modules_api::{Context, Module, ModuleInfo, ModuleCallJsonSchema, StateMap};
 /// use sov_modules_api::default_context::ZkDefaultContext;
-/// use sov_state::StateMap;
 /// use sov_bank::CallMessage;
 ///
 /// #[derive(ModuleInfo, ModuleCallJsonSchema)]
@@ -58,8 +57,7 @@ pub use sov_modules_macros::ModuleCallJsonSchema;
 /// ## Example
 ///
 /// ```
-/// use sov_modules_api::{Context, ModuleInfo};
-/// use sov_state::StateMap;
+/// use sov_modules_api::{Context, ModuleInfo, StateMap};
 ///
 /// #[derive(ModuleInfo)]
 /// struct TestModule<C: Context> {

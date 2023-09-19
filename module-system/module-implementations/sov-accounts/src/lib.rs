@@ -5,13 +5,14 @@ mod hooks;
 mod call;
 mod genesis;
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
+#[cfg(feature = "native")]
+pub use query::*;
 #[cfg(test)]
 mod tests;
 
 pub use call::{CallMessage, UPDATE_ACCOUNT_MSG};
-use sov_modules_api::{Context, Error, ModuleInfo};
-use sov_state::WorkingSet;
+use sov_modules_api::{Context, Error, ModuleInfo, WorkingSet};
 
 /// Initial configuration for sov-accounts module.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,11 +48,11 @@ pub struct Accounts<C: Context> {
 
     /// Mapping from an account address to a corresponding public key.
     #[state]
-    pub(crate) public_keys: sov_state::StateMap<C::Address, C::PublicKey>,
+    pub(crate) public_keys: sov_modules_api::StateMap<C::Address, C::PublicKey>,
 
     /// Mapping from a public key to a corresponding account.
     #[state]
-    pub(crate) accounts: sov_state::StateMap<C::PublicKey, Account<C>>,
+    pub(crate) accounts: sov_modules_api::StateMap<C::PublicKey, Account<C>>,
 }
 
 impl<C: Context> sov_modules_api::Module for Accounts<C> {
@@ -61,11 +62,7 @@ impl<C: Context> sov_modules_api::Module for Accounts<C> {
 
     type CallMessage = call::CallMessage<C>;
 
-    fn genesis(
-        &self,
-        config: &Self::Config,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<(), Error> {
+    fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         Ok(self.init_module(config, working_set)?)
     }
 
@@ -73,7 +70,7 @@ impl<C: Context> sov_modules_api::Module for Accounts<C> {
         &self,
         msg: Self::CallMessage,
         context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
             call::CallMessage::UpdatePublicKey(new_pub_key, sig) => {
@@ -121,7 +118,7 @@ where
     /// Creates an arbitrary set of accounts and stores it under `working_set`.
     pub fn arbitrary_workset(
         u: &mut arbitrary::Unstructured<'a>,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> arbitrary::Result<Self> {
         use sov_modules_api::Module;
 

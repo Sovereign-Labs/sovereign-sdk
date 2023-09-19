@@ -1,8 +1,7 @@
 //! Defines rpc queries exposed by the accounts module, along with the relevant types
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::AddressBech32;
-use sov_state::WorkingSet;
+use sov_modules_api::{AddressBech32, WorkingSet};
 
 use crate::{Account, Accounts};
 
@@ -27,7 +26,7 @@ impl<C: sov_modules_api::Context> Accounts<C> {
     pub fn get_account(
         &self,
         pub_key: C::PublicKey,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<Response> {
         let response = match self.accounts.get(&pub_key, working_set) {
             Some(Account { addr, nonce }) => Response::AccountExists {

@@ -1,9 +1,9 @@
 use std::panic::catch_unwind;
 
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Context, ModuleInfo};
+use sov_modules_api::{Context, ModuleInfo, StateValue, WorkingSet};
 use sov_state::codec::{StateCodec, StateKeyCodec, StateValueCodec};
-use sov_state::{DefaultStorageSpec, ProverStorage, StateValue, WorkingSet};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
 #[derive(ModuleInfo)]
 struct TestModule<C>
@@ -61,7 +61,7 @@ fn main() {
     let module: TestModule<DefaultContext> = TestModule::default();
 
     catch_unwind(|| {
-        let mut working_set = WorkingSet::new(storage);
+        let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(storage);
         module.state_value.set(&0u32, &mut working_set);
     })
     .unwrap_err();

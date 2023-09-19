@@ -1,10 +1,11 @@
 use borsh::BorshSerialize;
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::WorkingSet;
 use sov_rollup_interface::mocks::{
     MockCodeCommitment, MockDaSpec, MockProof, MockValidityCond, MockValidityCondChecker,
 };
 use sov_rollup_interface::zk::StateTransition;
-use sov_state::{ProverStorage, WorkingSet};
+use sov_state::ProverStorage;
 
 use crate::call::{AttesterIncentiveErrors, SlashingReason};
 use crate::tests::helpers::{
@@ -143,7 +144,7 @@ fn invalid_proof_helper(
         MockDaSpec,
         MockValidityCondChecker<MockValidityCond>,
     >,
-    working_set: &mut WorkingSet<ProverStorage<sov_state::DefaultStorageSpec>>,
+    working_set: &mut WorkingSet<DefaultContext>,
 ) {
     // Let's bond the challenger and try to publish a false challenge
     module

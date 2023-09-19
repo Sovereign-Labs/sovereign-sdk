@@ -111,9 +111,8 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// This is exactly equivalent to hand-writing
 ///
 /// ```
-/// use sov_modules_api::{Context, ModuleInfo};
+/// use sov_modules_api::{Context, ModuleInfo, WorkingSet};
 /// use sov_modules_api::macros::rpc_gen;
-/// use sov_state::WorkingSet;
 /// use jsonrpsee::core::RpcResult;
 ///
 /// #[derive(ModuleInfo)]
@@ -124,7 +123,7 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// };
 ///
 /// impl<C: Context> MyModule<C> {
-///     fn my_method(&self, working_set: &mut WorkingSet<C::Storage>, param: u32) -> RpcResult<u32> {
+///     fn my_method(&self, working_set: &mut WorkingSet<C>, param: u32) -> RpcResult<u32> {
 ///         Ok(1)
 ///     }  
 /// }

@@ -2,8 +2,8 @@
 
 use sov_accessory_state::{AccessorySetter, CallMessage};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Context, Module};
-use sov_state::{ProverStorage, Storage, WorkingSet};
+use sov_modules_api::{Address, Context, Module, WorkingSet};
+use sov_state::{ProverStorage, Storage};
 
 #[test]
 fn test_value_setter() {
@@ -11,7 +11,7 @@ fn test_value_setter() {
     let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(storage.clone());
     let mut working_set_2 = WorkingSet::new(storage.clone());
-    let mut working_set_4 = WorkingSet::new(storage.clone());
+    let mut working_set_4: WorkingSet<DefaultContext> = WorkingSet::new(storage.clone());
 
     let admin = Address::from([1; 32]);
     let context = DefaultContext::new(admin);

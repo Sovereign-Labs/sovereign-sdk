@@ -5,9 +5,8 @@ use anyhow::bail;
 use borsh::BorshDeserialize;
 use sov_modules_api::digest::Digest;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Context, DispatchCall, PublicKey, Spec};
+use sov_modules_api::{Context, DispatchCall, PublicKey, Spec, WorkingSet};
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
-use sov_state::WorkingSet;
 use tracing::{info, warn};
 
 /// BatchBuilder that creates batches of transactions in the order they were submitted

@@ -1,4 +1,4 @@
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 
 use crate::{ChainState, StateTransitionId, TransitionHeight};
 
@@ -8,7 +8,7 @@ where
     Da: sov_modules_api::DaSpec,
 {
     /// Increment the current slot height
-    pub(crate) fn increment_slot_height(&self, working_set: &mut WorkingSet<C::Storage>) {
+    pub(crate) fn increment_slot_height(&self, working_set: &mut WorkingSet<C>) {
         let current_height = self
             .slot_height
             .get(working_set)
@@ -22,7 +22,7 @@ where
         &self,
         height: TransitionHeight,
         transition: StateTransitionId<Da>,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) {
         self.historical_transitions
             .set(&height, &transition, working_set);

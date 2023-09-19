@@ -1,6 +1,6 @@
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 
 use super::VecSetter;
 
@@ -25,7 +25,7 @@ impl<C: sov_modules_api::Context> VecSetter<C> {
     pub fn query_vec(
         &self,
         index: usize,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<QueryResponse> {
         Ok(QueryResponse {
             value: self.vector.get(index, working_set),
@@ -33,7 +33,7 @@ impl<C: sov_modules_api::Context> VecSetter<C> {
     }
     /// Queries the length of the vector
     #[rpc_method(name = "lenVec")]
-    pub fn len_vec(&self, working_set: &mut WorkingSet<C::Storage>) -> RpcResult<LenResponse> {
+    pub fn len_vec(&self, working_set: &mut WorkingSet<C>) -> RpcResult<LenResponse> {
         Ok(LenResponse {
             value: self.vector.len(working_set),
         })

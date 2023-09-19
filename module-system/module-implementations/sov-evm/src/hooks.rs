@@ -1,16 +1,12 @@
 use reth_primitives::{Bloom, Bytes, U256};
-use sov_state::{AccessoryWorkingSet, WorkingSet};
+use sov_modules_api::{AccessoryWorkingSet, WorkingSet};
 
 use crate::evm::primitive_types::{Block, BlockEnv};
 use crate::experimental::PendingTransaction;
 use crate::Evm;
 
 impl<C: sov_modules_api::Context> Evm<C> {
-    pub fn begin_slot_hook(
-        &self,
-        da_root_hash: [u8; 32],
-        working_set: &mut WorkingSet<C::Storage>,
-    ) {
+    pub fn begin_slot_hook(&self, da_root_hash: [u8; 32], working_set: &mut WorkingSet<C>) {
         let parent_block = self
             .head
             .get(working_set)
@@ -31,17 +27,24 @@ impl<C: sov_modules_api::Context> Evm<C> {
         self.pending_block.set(&new_pending_block, working_set);
     }
 
-    pub fn end_slot_hook(&self, working_set: &mut WorkingSet<C::Storage>) {
+    pub fn end_slot_hook(&self, working_set: &mut WorkingSet<C>) {
         let pending_block = self
             .pending_block
             .get(working_set)
-            .expect("Pending block should always be sets");
+            .expect("Pending block should always be set");
 
         let parent_block = self
             .head
             .get(working_set)
             .expect("Head block should always be set")
             .seal();
+
+        let expected_block_number = parent_block.header.number + 1;
+        assert_eq!(
+            pending_block.number, expected_block_number,
+            "Pending head must be set to block {}, but found block {}",
+            expected_block_number, pending_block.number
+        );
 
         let pending_transactions: Vec<PendingTransaction> =
             self.pending_transactions.iter(working_set).collect();
@@ -123,12 +126,25 @@ impl<C: sov_modules_api::Context> Evm<C> {
     pub fn finalize_slot_hook(
         &self,
         root_hash: [u8; 32],
-        accesorry_working_set: &mut AccessoryWorkingSet<C::Storage>,
+        accesorry_working_set: &mut AccessoryWorkingSet<C>,
     ) {
+        let expected_block_number = self.blocks.len(accesorry_working_set) as u64;
+
         let mut block = self
             .pending_head
             .get(accesorry_working_set)
-            .expect("Pending head must be set");
+            .unwrap_or_else(|| {
+                panic!(
+                    "Pending head must be set to block {}, but was empty",
+                    expected_block_number
+                )
+            });
+
+        assert_eq!(
+            block.header.number, expected_block_number,
+            "Pending head must be set to block {}, but found block {}",
+            expected_block_number, block.header.number
+        );
 
         block.header.state_root = root_hash.into();
 

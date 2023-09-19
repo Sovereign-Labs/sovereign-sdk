@@ -1,13 +1,14 @@
 mod helpers;
 
 use helpers::*;
-use sov_bank::query::TotalSupplyResponse;
 use sov_bank::{
     get_genesis_token_address, get_token_address, Bank, BankConfig, CallMessage, Coins,
+    TotalSupplyResponse,
 };
+use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address;
-use sov_modules_api::{Address, Context, Error, Module};
-use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
+use sov_modules_api::{Address, Context, Error, Module, WorkingSet};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
 pub type Storage = ProverStorage<DefaultStorageSpec>;
 
@@ -32,11 +33,11 @@ fn transfer_initial_token() {
 
     // Preparation
     let query_user_balance =
-        |user_address: Address, working_set: &mut WorkingSet<Storage>| -> Option<u64> {
+        |user_address: Address, working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
             bank.get_balance_of(user_address, token_address, working_set)
         };
 
-    let query_total_supply = |working_set: &mut WorkingSet<Storage>| -> Option<u64> {
+    let query_total_supply = |working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
         let total_supply: TotalSupplyResponse = bank.supply_of(token_address, working_set).unwrap();
         total_supply.amount
     };
@@ -272,11 +273,11 @@ fn transfer_deployed_token() {
 
     // Preparation
     let query_user_balance =
-        |user_address: Address, working_set: &mut WorkingSet<Storage>| -> Option<u64> {
+        |user_address: Address, working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
             bank.get_balance_of(user_address, token_address, working_set)
         };
 
-    let query_total_supply = |working_set: &mut WorkingSet<Storage>| -> Option<u64> {
+    let query_total_supply = |working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
         let total_supply: TotalSupplyResponse = bank.supply_of(token_address, working_set).unwrap();
         total_supply.amount
     };

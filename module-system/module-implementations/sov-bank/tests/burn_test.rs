@@ -1,10 +1,11 @@
 use helpers::{generate_address, C};
-use sov_bank::query::TotalSupplyResponse;
 use sov_bank::{
     get_genesis_token_address, get_token_address, Bank, BankConfig, CallMessage, Coins,
+    TotalSupplyResponse,
 };
-use sov_modules_api::{Address, Context, Error, Module};
-use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::{Address, Context, Error, Module, WorkingSet};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
 use crate::helpers::create_bank_config_with_token;
 
@@ -44,13 +45,13 @@ fn burn_deployed_tokens() {
     // No events at the moment. If there are, needs to be checked
     assert!(working_set.events().is_empty());
 
-    let query_total_supply = |working_set: &mut WorkingSet<Storage>| -> Option<u64> {
+    let query_total_supply = |working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
         let total_supply: TotalSupplyResponse = bank.supply_of(token_address, working_set).unwrap();
         total_supply.amount
     };
 
     let query_user_balance =
-        |user_address: Address, working_set: &mut WorkingSet<Storage>| -> Option<u64> {
+        |user_address: Address, working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
             bank.get_balance_of(user_address, token_address, working_set)
         };
 
@@ -195,7 +196,7 @@ fn burn_initial_tokens() {
     let sender_address = bank_config.tokens[0].address_and_balances[0].0;
 
     let query_user_balance =
-        |user_address: Address, working_set: &mut WorkingSet<Storage>| -> Option<u64> {
+        |user_address: Address, working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
             bank.get_balance_of(user_address, token_address, working_set)
         };
 
