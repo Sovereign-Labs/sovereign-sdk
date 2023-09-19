@@ -5,7 +5,8 @@ use revm::db::CacheDB;
 use revm::precompile::B160;
 use revm::primitives::{CfgEnv, ExecutionResult, Output, KECCAK_EMPTY, U256};
 use revm::{Database, DatabaseCommit};
-use sov_state::{ProverStorage, WorkingSet};
+use sov_modules_api::WorkingSet;
+use sov_state::ProverStorage;
 
 use super::db::EvmDb;
 use super::db_init::InitEvmDb;
@@ -30,7 +31,7 @@ pub(crate) fn output(result: ExecutionResult) -> bytes::Bytes {
 #[test]
 fn simple_contract_execution_sov_state() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set: WorkingSet<<C as sov_modules_api::Spec>::Storage> =
+    let mut working_set: WorkingSet<C> =
         WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
 
     let evm = Evm::<C>::default();

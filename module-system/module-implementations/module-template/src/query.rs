@@ -1,4 +1,4 @@
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 
 use super::ExampleModule;
 
@@ -9,7 +9,7 @@ pub struct Response {
 
 impl<C: sov_modules_api::Context> ExampleModule<C> {
     /// Queries the state of the module.
-    pub fn query_value(&self, working_set: &mut WorkingSet<C::Storage>) -> Response {
+    pub fn query_value(&self, working_set: &mut WorkingSet<C>) -> Response {
         Response {
             value: self.value.get(working_set),
         }

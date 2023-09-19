@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 
 use crate::token::Token;
 use crate::Bank;
@@ -14,7 +14,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::Module>::Config,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         let parent_prefix = self.tokens.prefix();
         for token_config in config.tokens.iter() {

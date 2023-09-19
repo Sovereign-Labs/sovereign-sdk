@@ -136,6 +136,16 @@ impl TestClient {
             .unwrap()
     }
 
+    async fn eth_chain_id(&self) -> u64 {
+        let chain_id: ethereum_types::U64 = self
+            .http_client
+            .request("eth_chainId", rpc_params![])
+            .await
+            .unwrap();
+
+        chain_id.as_u64()
+    }
+
     async fn execute(self) -> Result<(), Box<dyn std::error::Error>> {
         let contract_address = {
             let deploy_contract_req = self.deploy_contract().await?;
@@ -200,9 +210,13 @@ async fn send_tx_test_to_eth(rpc_address: SocketAddr) -> Result<(), Box<dyn std:
     let etc_accounts = test_client.eth_accounts().await;
     assert_eq!(vec![from_addr], etc_accounts);
 
+    let eth_chain_id = test_client.eth_chain_id().await;
+    assert_eq!(chain_id, eth_chain_id);
+
     test_client.execute().await
 }
 
+#[cfg(feature = "experimental")]
 #[tokio::test]
 async fn evm_tx_tests() -> Result<(), anyhow::Error> {
     let (port_tx, port_rx) = tokio::sync::oneshot::channel();

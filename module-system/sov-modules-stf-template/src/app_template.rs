@@ -1,9 +1,10 @@
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use sov_modules_api::{BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall};
+use sov_modules_api::{
+    BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, StateCheckpoint,
+};
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
-use sov_state::StateCheckpoint;
 use tracing::{debug, error};
 
 use crate::tx_verifier::{verify_txs_stateless, TransactionAndRawHash};
@@ -27,7 +28,7 @@ pub struct AppTemplate<C: Context, Da: DaSpec, Vm, RT: Runtime<C, Da>> {
     pub current_storage: C::Storage,
     /// The runtime includes all the modules that the rollup supports.
     pub runtime: RT,
-    pub(crate) checkpoint: Option<StateCheckpoint<C::Storage>>,
+    pub(crate) checkpoint: Option<StateCheckpoint<C>>,
     phantom_vm: PhantomData<Vm>,
     phantom_da: PhantomData<Da>,
 }

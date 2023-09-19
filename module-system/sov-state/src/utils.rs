@@ -1,5 +1,5 @@
-// AlignedVec keeps a vec whose length is guaranteed to be aligned to 4 bytes.
-// This makes certain operations cheaper in zk-context (concatenation)
+/// A [`Vec`] of bytes whose length is guaranteed to be aligned to 4 bytes.
+/// This makes certain operations cheaper in zk-context (namely, concatenation).
 // TODO: Currently the implementation defaults to `stc::vec::Vec` see:
 // https://github.com/Sovereign-Labs/sovereign-sdk/issues/47
 #[derive(
@@ -20,12 +20,13 @@ impl AlignedVec {
     /// The length of the chunks of the aligned vector.
     pub const ALIGNMENT: usize = 4;
 
-    // Creates a new AlignedVec whose length is aligned to [Self::ALIGNMENT] bytes.
+    /// Creates a new [`AlignedVec`] whose length is aligned to
+    /// [`AlignedVec::ALIGNMENT`] bytes.
     pub fn new(vector: Vec<u8>) -> Self {
         Self { inner: vector }
     }
 
-    // Extends self with the contents of the other AlignedVec.
+    /// Extends `self` with the contents of the other [`AlignedVec`].
     pub fn extend(&mut self, other: &Self) {
         // TODO check if the standard extend method does the right thing.
         // debug_assert_eq!(
@@ -36,14 +37,17 @@ impl AlignedVec {
         self.inner.extend(&other.inner);
     }
 
+    /// Consumes `self` and returns the underlying [`Vec`] of bytes.
     pub fn into_inner(self) -> Vec<u8> {
         self.inner
     }
 
+    /// Returns the length in bytes of the prefix.
     pub fn len(&self) -> usize {
         self.inner.len()
     }
 
+    /// Returns `true` if the prefix is empty, `false` otherwise.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0

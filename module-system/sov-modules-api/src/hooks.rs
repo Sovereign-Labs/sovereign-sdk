@@ -1,8 +1,7 @@
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
-use sov_state::{AccessoryWorkingSet, WorkingSet};
 
 use crate::transaction::Transaction;
-use crate::{Context, Spec};
+use crate::{AccessoryWorkingSet, Context, Spec, WorkingSet};
 
 /// Hooks that execute within the `StateTransitionFunction::apply_blob` function for each processed transaction.
 pub trait TxHooks {
@@ -15,7 +14,7 @@ pub trait TxHooks {
     fn pre_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<Self::Context>,
     ) -> anyhow::Result<<Self::Context as Spec>::Address>;
 
     /// Runs after the tx is dispatched to an appropriate module.
@@ -23,7 +22,7 @@ pub trait TxHooks {
     fn post_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<Self::Context>,
     ) -> anyhow::Result<()>;
 }
 
@@ -39,7 +38,7 @@ pub trait ApplyBlobHooks<B: BlobReaderTrait> {
     fn begin_blob_hook(
         &self,
         blob: &mut B,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<Self::Context>,
     ) -> anyhow::Result<()>;
 
     /// Executes at the end of apply_blob and rewards or slashed the sequencer
@@ -47,7 +46,7 @@ pub trait ApplyBlobHooks<B: BlobReaderTrait> {
     fn end_blob_hook(
         &self,
         result: Self::BlobResult,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<Self::Context>,
     ) -> anyhow::Result<()>;
 }
 
@@ -59,14 +58,18 @@ pub trait SlotHooks<Da: DaSpec> {
         &self,
         slot_header: &Da::BlockHeader,
         validity_condition: &Da::ValidityCondition,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<Self::Context>,
     );
 
-    fn end_slot_hook(&self, working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>);
+    fn end_slot_hook(&self, working_set: &mut WorkingSet<Self::Context>);
+}
+
+pub trait FinalizeHook<Da: DaSpec> {
+    type Context: Context;
 
     fn finalize_slot_hook(
         &self,
         root_hash: [u8; 32],
-        accesorry_working_set: &mut AccessoryWorkingSet<<Self::Context as Spec>::Storage>,
+        accesorry_working_set: &mut AccessoryWorkingSet<Self::Context>,
     );
 }

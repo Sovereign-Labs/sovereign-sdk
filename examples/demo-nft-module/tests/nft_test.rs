@@ -1,9 +1,9 @@
 use demo_nft_module::{CallMessage, NonFungibleToken, NonFungibleTokenConfig, OwnerResponse};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address as gen_addr_generic;
-use sov_modules_api::{Address, Context, Module};
+use sov_modules_api::{Address, Context, Module, WorkingSet};
 use sov_rollup_interface::stf::Event;
-use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
 pub type C = DefaultContext;
 pub type Storage = ProverStorage<DefaultStorageSpec>;
@@ -70,7 +70,8 @@ fn transfer() {
         owners: vec![(0, admin), (1, owner1), (2, owner2)],
     };
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set: WorkingSet<C> =
+        WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let nft = NonFungibleToken::default();
     nft.genesis(&config, &mut working_set).unwrap();
 
@@ -83,11 +84,10 @@ fn transfer() {
     let error_message = transfer_attempt.err().unwrap().to_string();
     assert_eq!("Only token owner can transfer token", error_message);
 
-    let query_token_owner =
-        |token_id: u64, working_set: &mut WorkingSet<Storage>| -> Option<Address> {
-            let query: OwnerResponse<C> = nft.get_owner(token_id, working_set).unwrap();
-            query.owner
-        };
+    let query_token_owner = |token_id: u64, working_set: &mut WorkingSet<C>| -> Option<Address> {
+        let query: OwnerResponse<C> = nft.get_owner(token_id, working_set).unwrap();
+        query.owner
+    };
 
     // Normal transfer
     let token1_owner = query_token_owner(1, &mut working_set);
@@ -126,7 +126,8 @@ fn burn() {
     };
 
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set: WorkingSet<C> =
+        WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let nft = NonFungibleToken::default();
     nft.genesis(&config, &mut working_set).unwrap();
 

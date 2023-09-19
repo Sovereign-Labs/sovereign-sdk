@@ -1,7 +1,6 @@
 use sov_modules_api::hooks::TxHooks;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Context, Spec};
-use sov_state::WorkingSet;
+use sov_modules_api::{Context, Spec, WorkingSet};
 
 use crate::Accounts;
 
@@ -11,7 +10,7 @@ impl<C: Context> TxHooks for Accounts<C> {
     fn pre_dispatch_tx_hook(
         &self,
         tx: &Transaction<C>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<<Self::Context as Spec>::Address> {
         let pub_key = tx.pub_key().clone();
 
@@ -32,7 +31,7 @@ impl<C: Context> TxHooks for Accounts<C> {
     fn post_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
         let mut account = self.accounts.get_or_err(tx.pub_key(), working_set)?;
         account.nonce += 1;

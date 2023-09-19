@@ -1,7 +1,7 @@
 use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_modules_api::ValidityConditionChecker;
-use sov_state::{Storage, WorkingSet};
+use sov_modules_api::{ValidityConditionChecker, WorkingSet};
+use sov_state::Storage;
 
 use crate::call::Role;
 use crate::AttesterIncentives;
@@ -18,7 +18,7 @@ where
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::Module>::Config,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         anyhow::ensure!(
             !config.initial_attesters.is_empty(),

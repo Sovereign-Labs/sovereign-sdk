@@ -8,8 +8,8 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::HttpClientBuilder;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use sov_accounts::query::AccountsRpcClient;
-use sov_bank::query::{BalanceResponse, BankRpcClient};
+use sov_accounts::AccountsRpcClient;
+use sov_bank::{BalanceResponse, BankRpcClient};
 use sov_modules_api::clap;
 use sov_modules_api::transaction::Transaction;
 
@@ -183,7 +183,7 @@ async fn get_nonce_for_account<C: sov_modules_api::Context + Send + Sync + Seria
     .context(
         "Unable to connect to provided rpc. You can change to a different rpc url with the `rpc set-url` subcommand ",
     )? {
-        sov_accounts::query::Response::AccountExists { addr: _, nonce } => nonce,
+        sov_accounts::Response::AccountExists { addr: _, nonce } => nonce,
         _ => 0,
     })
 }

@@ -1,14 +1,16 @@
 use lazy_static::lazy_static;
 use reth_primitives::hex_literal::hex;
 use reth_primitives::{
-    Address, Bloom, Bytes, Header, Signature, TransactionSigned, EMPTY_OMMER_ROOT, H256,
-    KECCAK_EMPTY, U256,
+    Address, Bloom, Bytes, Header, SealedHeader, Signature, TransactionSigned, EMPTY_OMMER_ROOT,
+    H256, KECCAK_EMPTY, U256,
 };
 
 use super::genesis_tests::{get_evm, TEST_CONFIG};
-use crate::evm::primitive_types::{Block, BlockEnv, Receipt, TransactionSignedAndRecovered};
+use crate::evm::primitive_types::{
+    Block, BlockEnv, Receipt, SealedBlock, TransactionSignedAndRecovered,
+};
 use crate::experimental::PendingTransaction;
-use crate::tests::genesis_tests::{BENEFICIARY, GENESIS_HASH};
+use crate::tests::genesis_tests::{BENEFICIARY, SEALED_GENESIS_HASH};
 
 lazy_static! {
     pub(crate) static ref DA_ROOT_HASH: H256 = H256::from([5u8; 32]);
@@ -59,7 +61,11 @@ fn end_slot_hook_sets_head() {
         head,
         Block {
             header: Header {
-                parent_hash: GENESIS_HASH,
+                // TODO: temp parent hash until: https://github.com/Sovereign-Labs/sovereign-sdk/issues/876
+                // parent_hash: GENESIS_HASH,
+                parent_hash: H256(hex!(
+                    "d57423e4375c45bc114cd137146aab671dbd3f6304f05b31bdd416301b4a99f0"
+                )),
                 ommers_hash: EMPTY_OMMER_ROOT,
                 beneficiary: TEST_CONFIG.coinbase,
                 state_root: KECCAK_EMPTY,
@@ -166,4 +172,73 @@ fn create_pending_transaction(hash: H256, index: u64) -> PendingTransaction {
             error: None,
         },
     }
+}
+
+#[test]
+fn finalize_hook_creates_final_block() {
+    let (evm, mut working_set) = get_evm(&TEST_CONFIG);
+    evm.begin_slot_hook(DA_ROOT_HASH.0, &mut working_set);
+    evm.pending_transactions.push(
+        &create_pending_transaction(H256::from([1u8; 32]), 1),
+        &mut working_set,
+    );
+    evm.pending_transactions.push(
+        &create_pending_transaction(H256::from([2u8; 32]), 2),
+        &mut working_set,
+    );
+    evm.end_slot_hook(&mut working_set);
+
+    let mut accessory_state = working_set.accessory_state();
+    let root_hash = [99u8; 32];
+    evm.finalize_slot_hook(root_hash, &mut accessory_state);
+
+    assert_eq!(evm.blocks.len(&mut accessory_state), 2);
+
+    let block = evm.blocks.get(1usize, &mut accessory_state).unwrap();
+
+    assert_eq!(
+        block,
+        SealedBlock {
+            header: SealedHeader {
+                header: Header {
+                    parent_hash: SEALED_GENESIS_HASH,
+                    ommers_hash: EMPTY_OMMER_ROOT,
+                    beneficiary: TEST_CONFIG.coinbase,
+                    state_root: H256::from(root_hash),
+                    transactions_root: H256(hex!(
+                        "30eb5f6050df7ea18ca34cf3503f4713119315a2d3c11f892c5c8920acf816f4"
+                    )),
+                    receipts_root: H256(hex!(
+                        "27036187b3f5e87d4306b396cf06c806da2cc9a0fef9b07c042e3b4304e01c64"
+                    )),
+                    withdrawals_root: None,
+                    logs_bloom: Bloom::default(),
+                    difficulty: U256::ZERO,
+                    number: 1,
+                    gas_limit: 30000000,
+                    gas_used: 200,
+                    timestamp: 52,
+                    mix_hash: H256(hex!(
+                        "0505050505050505050505050505050505050505050505050505050505050505"
+                    )),
+                    nonce: 0,
+                    base_fee_per_gas: Some(62),
+                    extra_data: Bytes::default()
+                },
+                hash: H256(hex!(
+                    "0da4e80c5cbd00d9538cb0215d069bfee5be5b59ae4da00244f9b8db429e6889"
+                )),
+            },
+            transactions: 0..2
+        }
+    );
+
+    assert_eq!(
+        evm.block_hashes
+            .get(&block.header.hash, &mut accessory_state)
+            .unwrap(),
+        1u64
+    );
+
+    assert_eq!(evm.pending_head.get(&mut accessory_state), None);
 }

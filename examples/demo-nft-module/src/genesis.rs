@@ -1,6 +1,5 @@
 use anyhow::{bail, Result};
-use sov_modules_api::Context;
-use sov_state::WorkingSet;
+use sov_modules_api::{Context, WorkingSet};
 
 use crate::NonFungibleToken;
 
@@ -8,7 +7,7 @@ impl<C: Context> NonFungibleToken<C> {
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::Module>::Config,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         self.admin.set(&config.admin, working_set);
         for (id, owner) in config.owners.iter() {

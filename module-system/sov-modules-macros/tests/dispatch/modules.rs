@@ -1,5 +1,4 @@
-use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo};
-use sov_state::{StateValue, WorkingSet};
+use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, StateValue, WorkingSet};
 
 pub mod first_test_module {
     use super::*;
@@ -14,7 +13,7 @@ pub mod first_test_module {
     }
 
     impl<C: Context> FirstTestStruct<C> {
-        pub fn get_state_value(&self, working_set: &mut WorkingSet<C::Storage>) -> u8 {
+        pub fn get_state_value(&self, working_set: &mut WorkingSet<C>) -> u8 {
             self.state_in_first_struct.get(working_set).unwrap()
         }
     }
@@ -27,7 +26,7 @@ pub mod first_test_module {
         fn genesis(
             &self,
             _config: &Self::Config,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<C>,
         ) -> Result<(), Error> {
             self.state_in_first_struct.set(&1, working_set);
             Ok(())
@@ -37,7 +36,7 @@ pub mod first_test_module {
             &self,
             msg: Self::CallMessage,
             _context: &Self::Context,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<C>,
         ) -> Result<CallResponse, Error> {
             self.state_in_first_struct.set(&msg, working_set);
             Ok(CallResponse::default())
@@ -58,7 +57,7 @@ pub mod second_test_module {
     }
 
     impl<C: Context> SecondTestStruct<C> {
-        pub fn get_state_value(&self, working_set: &mut WorkingSet<C::Storage>) -> u8 {
+        pub fn get_state_value(&self, working_set: &mut WorkingSet<C>) -> u8 {
             self.state_in_second_struct.get(working_set).unwrap()
         }
     }
@@ -71,7 +70,7 @@ pub mod second_test_module {
         fn genesis(
             &self,
             _config: &Self::Config,
-            working_set: &mut WorkingSet<Ctx::Storage>,
+            working_set: &mut WorkingSet<Ctx>,
         ) -> Result<(), Error> {
             self.state_in_second_struct.set(&2, working_set);
             Ok(())
@@ -81,7 +80,7 @@ pub mod second_test_module {
             &self,
             msg: Self::CallMessage,
             _context: &Self::Context,
-            working_set: &mut WorkingSet<Ctx::Storage>,
+            working_set: &mut WorkingSet<Ctx>,
         ) -> Result<CallResponse, Error> {
             self.state_in_second_struct.set(&msg, working_set);
             Ok(CallResponse::default())
@@ -111,7 +110,7 @@ pub mod third_test_module {
     impl<Ctx: Context, OtherGeneric: ModuleThreeStorable> ThirdTestStruct<Ctx, OtherGeneric> {
         pub fn get_state_value(
             &self,
-            working_set: &mut WorkingSet<Ctx::Storage>,
+            working_set: &mut WorkingSet<Ctx>,
         ) -> Option<OtherGeneric> {
             self.state_in_third_struct.get(working_set)
         }
@@ -127,7 +126,7 @@ pub mod third_test_module {
         fn genesis(
             &self,
             _config: &Self::Config,
-            working_set: &mut WorkingSet<Ctx::Storage>,
+            working_set: &mut WorkingSet<Ctx>,
         ) -> Result<(), Error> {
             self.state_in_third_struct
                 .set(&Default::default(), working_set);
@@ -138,7 +137,7 @@ pub mod third_test_module {
             &self,
             msg: Self::CallMessage,
             _context: &Self::Context,
-            working_set: &mut WorkingSet<Ctx::Storage>,
+            working_set: &mut WorkingSet<Ctx>,
         ) -> Result<CallResponse, Error> {
             self.state_in_third_struct.set(&msg, working_set);
             Ok(CallResponse::default())

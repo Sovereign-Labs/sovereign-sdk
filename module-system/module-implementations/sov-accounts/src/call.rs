@@ -1,6 +1,5 @@
 use anyhow::{ensure, Result};
-use sov_modules_api::{CallResponse, Context, Signature};
-use sov_state::WorkingSet;
+use sov_modules_api::{CallResponse, Context, Signature, WorkingSet};
 
 use crate::Accounts;
 
@@ -37,7 +36,7 @@ impl<C: Context> Accounts<C> {
         new_pub_key: C::PublicKey,
         signature: C::Signature,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         self.exit_if_account_exists(&new_pub_key, working_set)?;
 
@@ -63,7 +62,7 @@ impl<C: Context> Accounts<C> {
     fn exit_if_account_exists(
         &self,
         new_pub_key: &C::PublicKey,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         anyhow::ensure!(
             self.accounts.get(new_pub_key, working_set).is_none(),

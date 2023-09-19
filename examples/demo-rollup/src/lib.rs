@@ -9,7 +9,7 @@ use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runtime::GenesisConfig;
 pub use rollup::{
     new_rollup_with_celestia_da, new_rollup_with_mock_da, new_rollup_with_mock_da_from_config,
-    Rollup,
+    DemoProverConfig, Rollup,
 };
 use sov_celestia_adapter::types::NamespaceId;
 use sov_cli::wallet_state::PrivateKeyAndAddress;

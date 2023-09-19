@@ -1,8 +1,8 @@
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::{Context, ModuleInfo};
-use sov_state::{WorkingSet, ZkStorage};
+use sov_modules_api::{Context, ModuleInfo, WorkingSet};
+use sov_state::ZkStorage;
 
 #[derive(ModuleInfo)]
 pub struct TestStruct<C: ::sov_modules_api::Context> {
@@ -13,7 +13,7 @@ pub struct TestStruct<C: ::sov_modules_api::Context> {
 #[rpc_gen(client, server, namespace = "test")]
 impl<C: sov_modules_api::Context> TestStruct<C> {
     #[rpc_method(name = "firstMethod")]
-    pub fn first_method(&self, _working_set: &mut WorkingSet<C::Storage>) -> RpcResult<u32> {
+    pub fn first_method(&self, _working_set: &mut WorkingSet<C>) -> RpcResult<u32> {
         Ok(11)
     }
 
@@ -21,7 +21,7 @@ impl<C: sov_modules_api::Context> TestStruct<C> {
     pub fn second_method(
         &self,
         result: u32,
-        _working_set: &mut WorkingSet<C::Storage>,
+        _working_set: &mut WorkingSet<C>,
     ) -> RpcResult<u32> {
         Ok(result)
     }
@@ -34,7 +34,7 @@ impl<C: sov_modules_api::Context> TestStruct<C> {
     #[rpc_method(name = "fourthMethod")]
     pub fn fourth_method(
         &self,
-        _working_set: &mut WorkingSet<C::Storage>,
+        _working_set: &mut WorkingSet<C>,
         result: u32,
     ) -> RpcResult<u32> {
         Ok(result)
@@ -54,8 +54,8 @@ struct RpcStorage<C: Context> {
 impl TestStructRpcImpl<ZkDefaultContext> for RpcStorage<ZkDefaultContext> {
     fn get_working_set(
         &self,
-    ) -> ::sov_state::WorkingSet<<ZkDefaultContext as ::sov_modules_api::Spec>::Storage> {
-        ::sov_state::WorkingSet::new(self.storage.clone())
+    ) -> ::sov_modules_api::WorkingSet<ZkDefaultContext> {
+        ::sov_modules_api::WorkingSet::new(self.storage.clone())
     }
 }
 

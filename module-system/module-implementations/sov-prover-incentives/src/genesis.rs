@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 
 use crate::ProverIncentives;
 
@@ -10,7 +10,7 @@ impl<C: sov_modules_api::Context, Vm: sov_modules_api::Zkvm> ProverIncentives<C,
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::Module>::Config,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         anyhow::ensure!(
             !config.initial_provers.is_empty(),

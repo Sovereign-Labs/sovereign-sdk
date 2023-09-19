@@ -1,10 +1,12 @@
 use std::marker::PhantomData;
 
+use sov_state::codec::{BorshCodec, EncodeKeyLike, StateCodec, StateKeyCodec, StateValueCodec};
+use sov_state::storage::StorageKey;
+use sov_state::Prefix;
 use thiserror::Error;
 
-use crate::codec::{BorshCodec, EncodeKeyLike, StateCodec, StateKeyCodec, StateValueCodec};
-use crate::storage::StorageKey;
-use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
+use crate::state::{StateReaderAndWriter, WorkingSet};
+use crate::Context;
 
 /// A container that maps keys to values.
 ///
@@ -31,6 +33,7 @@ pub struct StateMap<K, V, Codec = BorshCodec> {
 /// Error type for the [`StateMap::get`] method.
 #[derive(Debug, Error)]
 pub enum StateMapError {
+    /// Value not found.
     #[error("Value not found for prefix: {0} and: storage key {1}")]
     MissingValue(Prefix, StorageKey),
 }
@@ -53,6 +56,7 @@ impl<K, V, Codec> StateMap<K, V, Codec> {
         }
     }
 
+    /// Returns a reference to the codec used by this [`StateMap`].
     pub fn codec(&self) -> &Codec {
         &self.codec
     }
@@ -73,10 +77,11 @@ where
     ///
     /// Much like [`StateMap::get`], the key may be any borrowed form of the
     /// map’s key type.
-    pub fn set<Q, S: Storage>(&self, key: &Q, value: &V, working_set: &mut WorkingSet<S>)
+    pub fn set<Q, C>(&self, key: &Q, value: &V, working_set: &mut WorkingSet<C>)
     where
         Codec::KeyCodec: EncodeKeyLike<Q, K>,
         Q: ?Sized,
+        C: Context,
     {
         working_set.set_value(self.prefix(), key, value, &self.codec)
     }
@@ -90,11 +95,11 @@ where
     /// using your chosen codec.
     ///
     /// ```
-    /// use sov_state::{StateMap, Storage, WorkingSet};
+    /// use sov_modules_api::{Context, StateMap, WorkingSet};
     ///
-    /// fn foo<S>(map: StateMap<Vec<u8>, u64>, key: &[u8], ws: &mut WorkingSet<S>) -> Option<u64>
+    /// fn foo<C>(map: StateMap<Vec<u8>, u64>, key: &[u8], ws: &mut WorkingSet<C>) -> Option<u64>
     /// where
-    ///     S: Storage,
+    ///     C: Context,
     /// {
     ///     // We perform the `get` with a slice, and not the `Vec`. it is so because `Vec` borrows
     ///     // `[T]`.
@@ -108,37 +113,39 @@ where
     /// maps:
     ///
     /// ```
-    /// use sov_state::{StateMap, Storage, WorkingSet};
+    /// use sov_modules_api::{Context, StateMap, WorkingSet};
     ///
-    /// fn foo<S>(map: StateMap<Vec<u8>, u64>, key: [u8; 32], ws: &mut WorkingSet<S>) -> Option<u64>
+    /// fn foo<C>(map: StateMap<Vec<u8>, u64>, key: [u8; 32], ws: &mut WorkingSet<C>) -> Option<u64>
     /// where
-    ///     S: Storage,
+    ///     C: Context,
     /// {
     ///     map.get(&key[..], ws)
     /// }
     /// ```
-    pub fn get<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>) -> Option<V>
+    pub fn get<Q, C>(&self, key: &Q, working_set: &mut WorkingSet<C>) -> Option<V>
     where
         Codec: StateCodec,
         Codec::KeyCodec: EncodeKeyLike<Q, K>,
         Codec::ValueCodec: StateValueCodec<V>,
         Q: ?Sized,
+        C: Context,
     {
         working_set.get_value(self.prefix(), key, &self.codec)
     }
 
     /// Returns the value corresponding to the key or [`StateMapError`] if key is absent in
     /// the map.
-    pub fn get_or_err<Q, S: Storage>(
+    pub fn get_or_err<Q, C>(
         &self,
         key: &Q,
-        working_set: &mut WorkingSet<S>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<V, StateMapError>
     where
         Codec: StateCodec,
         Codec::KeyCodec: EncodeKeyLike<Q, K>,
         Codec::ValueCodec: StateValueCodec<V>,
         Q: ?Sized,
+        C: Context,
     {
         self.get(key, working_set).ok_or_else(|| {
             StateMapError::MissingValue(
@@ -150,12 +157,13 @@ where
 
     /// Removes a key from the map, returning the corresponding value (or
     /// [`None`] if the key is absent).
-    pub fn remove<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>) -> Option<V>
+    pub fn remove<Q, C>(&self, key: &Q, working_set: &mut WorkingSet<C>) -> Option<V>
     where
         Codec: StateCodec,
         Codec::KeyCodec: EncodeKeyLike<Q, K>,
         Codec::ValueCodec: StateValueCodec<V>,
         Q: ?Sized,
+        C: Context,
     {
         working_set.remove_value(self.prefix(), key, &self.codec)
     }
@@ -164,16 +172,17 @@ where
     /// [`StateMapError`] if the key is absent).
     ///
     /// Use [`StateMap::remove`] if you want an [`Option`] instead of a [`Result`].
-    pub fn remove_or_err<Q, S: Storage>(
+    pub fn remove_or_err<Q, C>(
         &self,
         key: &Q,
-        working_set: &mut WorkingSet<S>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<V, StateMapError>
     where
         Codec: StateCodec,
         Codec::KeyCodec: EncodeKeyLike<Q, K>,
         Codec::ValueCodec: StateValueCodec<V>,
         Q: ?Sized,
+        C: Context,
     {
         self.remove(key, working_set).ok_or_else(|| {
             StateMapError::MissingValue(
@@ -187,11 +196,12 @@ where
     ///
     /// This is equivalent to [`StateMap::remove`], but doesn't deserialize and
     /// return the value beforing deletion.
-    pub fn delete<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>)
+    pub fn delete<Q, C>(&self, key: &Q, working_set: &mut WorkingSet<C>)
     where
         Codec: StateCodec,
         Codec::KeyCodec: EncodeKeyLike<Q, K>,
         Q: ?Sized,
+        C: Context,
     {
         working_set.delete_value(self.prefix(), key, &self.codec);
     }
@@ -206,12 +216,15 @@ where
     Codec::KeyCodec: StateKeyCodec<K>,
     Codec::ValueCodec: StateValueCodec<V>,
 {
-    pub fn arbitrary_workset<S>(
+    /// Returns an arbitrary [`StateMap`] instance.
+    ///
+    /// See the [`arbitrary`] crate for more information.
+    pub fn arbitrary_workset<C>(
         u: &mut arbitrary::Unstructured<'a>,
-        working_set: &mut WorkingSet<S>,
+        working_set: &mut WorkingSet<C>,
     ) -> arbitrary::Result<Self>
     where
-        S: Storage,
+        C: Context,
     {
         use arbitrary::Arbitrary;
 

@@ -3,9 +3,8 @@ use sov_modules_api::cli::JsonStringArg;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::macros::{CliWallet, CliWalletArg, DefaultRuntime};
 use sov_modules_api::{
-    CallResponse, Context, DispatchCall, Error, Genesis, MessageCodec, Module, ModuleInfo,
+    CallResponse, Context, DispatchCall, Error, Genesis, MessageCodec, Module, ModuleInfo, StateValue, WorkingSet
 };
-use sov_state::{StateValue, WorkingSet};
 
 pub mod first_test_module {
     use super::*;
@@ -41,7 +40,7 @@ pub mod first_test_module {
         fn genesis(
             &self,
             _config: &Self::Config,
-            _working_set: &mut WorkingSet<C::Storage>,
+            _working_set: &mut WorkingSet<C>,
         ) -> Result<(), Error> {
             Ok(())
         }
@@ -50,7 +49,7 @@ pub mod first_test_module {
             &self,
             _msg: Self::CallMessage,
             _context: &Self::Context,
-            _working_set: &mut WorkingSet<C::Storage>,
+            _working_set: &mut WorkingSet<C>,
         ) -> Result<CallResponse, Error> {
             Ok(CallResponse::default())
         }
@@ -91,7 +90,7 @@ pub mod second_test_module {
         fn genesis(
             &self,
             _config: &Self::Config,
-            _working_set: &mut WorkingSet<Ctx::Storage>,
+            _working_set: &mut WorkingSet<Ctx>,
         ) -> Result<(), Error> {
             Ok(())
         }
@@ -100,7 +99,7 @@ pub mod second_test_module {
             &self,
             _msg: Self::CallMessage,
             _context: &Self::Context,
-            _working_set: &mut WorkingSet<Ctx::Storage>,
+            _working_set: &mut WorkingSet<Ctx>,
         ) -> Result<CallResponse, Error> {
             Ok(CallResponse::default())
         }
