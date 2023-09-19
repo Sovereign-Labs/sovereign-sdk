@@ -5,8 +5,7 @@ use reth_primitives::{
 };
 use reth_rpc_types::CallRequest;
 use revm::primitives::{
-    AccountInfo as ReVmAccountInfo, BlockEnv as ReVmBlockEnv, Bytecode, CreateScheme, TransactTo,
-    TxEnv, U256,
+    AccountInfo as ReVmAccountInfo, BlockEnv as ReVmBlockEnv, CreateScheme, TransactTo, TxEnv, U256,
 };
 
 use super::primitive_types::{
@@ -19,7 +18,7 @@ impl From<AccountInfo> for ReVmAccountInfo {
         Self {
             nonce: info.nonce,
             balance: info.balance,
-            code: Some(Bytecode::new_raw(Bytes::from(info.code))),
+            code: None,
             code_hash: info.code_hash,
         }
     }
@@ -30,7 +29,6 @@ impl From<ReVmAccountInfo> for AccountInfo {
         Self {
             balance: info.balance,
             code_hash: info.code_hash,
-            code: info.code.unwrap_or_default().bytes().to_vec(),
             nonce: info.nonce,
         }
     }

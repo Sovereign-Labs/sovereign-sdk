@@ -1,4 +1,4 @@
-use reth_primitives::{Address, TransactionKind};
+use reth_primitives::{Address, Bytes, TransactionKind};
 use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
@@ -59,7 +59,7 @@ fn evm_test() {
             address: dev_signer.address(),
             balance: U256::from(1000000000),
             code_hash: KECCAK_EMPTY,
-            code: vec![],
+            code: Bytes::default(),
             nonce: 0,
         }],
         spec: vec![(0, SpecId::LATEST)].into_iter().collect(),

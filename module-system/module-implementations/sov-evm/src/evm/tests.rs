@@ -56,7 +56,6 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
         AccountInfo {
             balance: U256::from(1000000000),
             code_hash: KECCAK_EMPTY,
-            code: vec![],
             nonce: 1,
         },
     );
