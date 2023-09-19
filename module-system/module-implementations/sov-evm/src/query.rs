@@ -68,7 +68,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         &self,
         block_number: Option<String>,
         details: Option<bool>,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<Option<reth_rpc_types::RichBlock>> {
         info!("evm module: eth_getBlockByNumber");
 
