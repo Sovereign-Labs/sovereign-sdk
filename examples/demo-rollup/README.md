@@ -65,13 +65,13 @@ understand how to build your own state transition function, check out at the doc
 
 2. Switch to the `examples/demo-rollup` directory (which is where this `README.md` is located!).
 
-```shell
+```shell,test-ci
 $ cd examples/demo-rollup/
 ```
 
 3. Spin up a local Celestia instance as your DA layer. We've built a small Makefile to simplify that process:
 
-```sh
+```sh,test-ci
 $ make clean
 $ make start   # Make sure to run `make stop` when you're done with this demo!
 ```
@@ -79,7 +79,7 @@ $ make start   # Make sure to run `make stop` when you're done with this demo!
 If interested, you can check out what the Makefile does [here](#Makefile).  
  The above command will also modify some configuration files:
 
-```sh
+```sh,test-ci
 $ git status
 ..
 ..
@@ -90,7 +90,7 @@ $ git status
 
 Now run the demo-rollup full node, as shown below. You will see it consuming blocks from the Celestia node running inside Docker:
 
-```sh
+```sh,test-ci,bashtestmd:long-running,bashtestmd:wait-until=RPC
 # Make sure you're still in the examples/demo-rollup directory.
 $ cargo run
 2023-06-07T10:03:25.473920Z  INFO sov_celestia_adapter::da_service: Fetching header at height=1...
@@ -110,7 +110,7 @@ Leave it running while you proceed with the rest of the demo.
 
 After switching to a new terminal tab, let's submit our first transaction by creating a token:
 
-```sh
+```sh,test-ci
 $ make test-create-token
 ```
 
@@ -132,9 +132,9 @@ The `make test-create-token` command above was useful to test if everything is r
 
 You'll need the `sov-cli` binary in order to create transactions. Build it with these commands:
 
-```sh
+```bash,test-ci,bashtestmd:compare-output
 # Make sure you're still in `examples/demo-rollup`
-$ cargo run --bin sov-cli
+$ cargo run --bin sov-cli -- --help
 Usage: sov-cli <COMMAND>
 
 Commands:
@@ -238,17 +238,17 @@ Note: we're able to make a `Transfer` call here because we already created the t
 
 To generate transactions you can use the `transactions import from-file` subcommand, as shown below:
 
-```sh
+```bash,test-ci,bashtestmd:compare-output
 $ cargo run --bin sov-cli -- transactions import from-file -h
 Import a transaction from a JSON file at the provided path
 
 Usage: sov-cli transactions import from-file <COMMAND>
 
 Commands:
-  bank                Generates a transaction for the `bank` module
-  sequencer-registry  Generates a transaction for the `sequencer_registry` module
-  value-setter        Generates a transaction for the `value_setter` module
-  accounts            Generates a transaction for the `accounts` module
+  bank                A subcommand for the `bank` module
+  sequencer-registry  A subcommand for the `sequencer_registry` module
+  value-setter        A subcommand for the `value_setter` module
+  accounts            A subcommand for the `accounts` module
   help                Print this message or the help of the given subcommand(s)
 
 Options:
@@ -257,7 +257,7 @@ Options:
 
 Let's go ahead and import the transaction into the wallet
 
-```bash
+```bash,test-ci,bashtestmd:compare-output
 $ cargo run --bin sov-cli -- transactions import from-file bank --path ../test-data/requests/transfer.json
 Adding the following transaction to batch:
 {
@@ -280,7 +280,7 @@ This output indicates that the wallet has saved the transaction details for late
 You now have a batch with a single transaction in your wallet. If you want to submit any more transactions as part of this
 batch, you can import them now. Finally, let's submit your transaction to the rollup.
 
-```bash
+```bash,test-ci
 $ cargo run --bin sov-cli rpc submit-batch by-address sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94
 ```
 
@@ -288,7 +288,7 @@ This command will use your default private key.
 
 #### 4. Verify the Token Supply
 
-```bash
+```bash,test-ci,bashtestmd:compare-output
 $ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_supplyOf","params":["sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"],"id":1}' http://127.0.0.1:12345
 {"jsonrpc":"2.0","result":{"amount":1000},"id":1}
 ```
