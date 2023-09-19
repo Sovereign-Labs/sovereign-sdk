@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{App, DefaultPrivateKey};
-use demo_stf::genesis_config::create_demo_genesis_config;
+use demo_stf::genesis_config::get_genesis_config;
 use log4rs::config::{Appender, Config, Root};
 use methods::ROLLUP_ELF;
 use regex::Regex;
@@ -170,11 +170,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
 
-    let genesis_config = create_demo_genesis_config(
-        100000000,
-        sequencer_private_key.default_address(),
+    let genesis_config = get_genesis_config(
         sequencer_da_address.as_ref().to_vec(),
-        &sequencer_private_key,
         #[cfg(feature = "experimental")]
         Default::default(),
     );

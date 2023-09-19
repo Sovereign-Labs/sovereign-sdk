@@ -32,7 +32,7 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
     let initial_sequencer_balance = 100000000;
     let token_deployer: PrivateKeyAndAddress<C> = read_private_key();
 
-    create_demo_genesis_config(
+    create_genesis_config(
         initial_sequencer_balance,
         token_deployer.address.clone(),
         sequencer_da_address,
@@ -42,7 +42,7 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
     )
 }
 
-fn create_demo_genesis_config<C: Context, Da: DaSpec>(
+fn create_genesis_config<C: Context, Da: DaSpec>(
     initial_sequencer_balance: u64,
     sequencer_address: C::Address,
     sequencer_da_address: Vec<u8>,

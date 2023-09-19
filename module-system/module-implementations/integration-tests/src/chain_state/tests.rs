@@ -9,7 +9,9 @@ use sov_rollup_interface::mocks::{
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::{ProverStorage, Storage};
 
-use crate::chain_state::helpers::{create_demo_genesis_config, get_working_set, TestRuntime};
+use crate::chain_state::helpers::{
+    create_chain_state_genesis_config, get_working_set, TestRuntime,
+};
 
 type C = DefaultContext;
 
@@ -35,7 +37,7 @@ fn test_simple_value_setter_with_chain_state() {
     let admin_pub_key = value_setter_messages.messages[0].admin.default_address();
 
     // Genesis
-    let init_root_hash = app_template.init_chain(create_demo_genesis_config(admin_pub_key));
+    let init_root_hash = app_template.init_chain(create_chain_state_genesis_config(admin_pub_key));
 
     const MOCK_SEQUENCER_DA_ADDRESS: [u8; 32] = [1_u8; 32];
 
