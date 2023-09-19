@@ -88,8 +88,9 @@ impl TestClient {
         &self,
         contract_address: H160,
         set_arg: u32,
-        nonce: u64,
     ) -> PendingTransaction<'_, Http> {
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+
         let req = Eip1559TransactionRequest::new()
             .from(self.from_addr)
             .to(contract_address)
@@ -111,8 +112,9 @@ impl TestClient {
     async fn query_contract(
         &self,
         contract_address: H160,
-        nonce: u64,
     ) -> Result<ethereum_types::U256, Box<dyn std::error::Error>> {
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+
         let req = Eip1559TransactionRequest::new()
             .from(self.from_addr)
             .to(contract_address)
@@ -146,6 +148,16 @@ impl TestClient {
         chain_id.as_u64()
     }
 
+    async fn eth_get_transaction_count(&self, address: Address) -> u64 {
+        let count: ethereum_types::U64 = self
+            .http_client
+            .request("eth_getTransactionCount", rpc_params![address, "latest"])
+            .await
+            .unwrap();
+
+        count.as_u64()
+    }
+
     async fn eth_get_block_by_number(&self, block_number: Option<String>) -> Block<TxHash> {
         self.http_client
             .request("eth_getBlockByNumber", rpc_params![block_number, false])
@@ -164,6 +176,10 @@ impl TestClient {
     }
 
     async fn execute(self) -> Result<(), Box<dyn std::error::Error>> {
+        // Nonce should be 0 in genesis
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+        assert_eq!(0, nonce);
+
         let contract_address = {
             let deploy_contract_req = self.deploy_contract().await?;
             self.send_publish_batch_request().await;
@@ -175,6 +191,10 @@ impl TestClient {
                 .unwrap()
         };
 
+        // Nonce should be 1 after the deploy
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+        assert_eq!(1, nonce);
+
         // Check that the first block has published
         // It should have a single transaction, deploying the contract
         let first_block = self.eth_get_block_by_number(Some("1".to_owned())).await;
@@ -183,13 +203,13 @@ impl TestClient {
 
         let set_arg = 923;
         let tx_hash = {
-            let set_value_req = self.set_value(contract_address, set_arg, 1).await;
+            let set_value_req = self.set_value(contract_address, set_arg).await;
             self.send_publish_batch_request().await;
             set_value_req.await.unwrap().unwrap().transaction_hash
         };
 
         {
-            let get_arg = self.query_contract(contract_address, 2).await?;
+            let get_arg = self.query_contract(contract_address).await?;
             assert_eq!(set_arg, get_arg.as_u32());
         }
 
@@ -203,11 +223,9 @@ impl TestClient {
 
         // Create a blob with multiple transactions.
         let mut requests = Vec::default();
-        let mut nonce = 2;
         for value in 100..103 {
-            let set_value_req = self.set_value(contract_address, value, nonce).await;
+            let set_value_req = self.set_value(contract_address, value).await;
             requests.push(set_value_req);
-            nonce += 1
         }
 
         self.send_publish_batch_request().await;
@@ -217,7 +235,7 @@ impl TestClient {
         }
 
         {
-            let get_arg = self.query_contract(contract_address, nonce).await?;
+            let get_arg = self.query_contract(contract_address).await?;
             assert_eq!(102, get_arg.as_u32());
         }
 

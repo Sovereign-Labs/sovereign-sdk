@@ -125,6 +125,27 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(Some(block.into()))
     }
 
+    #[rpc_method(name = "getTransactionCount")]
+    pub fn get_transaction_count(
+        &self,
+        address: reth_primitives::Address,
+        _block_number: Option<String>,
+        working_set: &mut WorkingSet<C>,
+    ) -> RpcResult<reth_primitives::U64> {
+        info!("evm module: eth_getTransactionCount");
+
+        // TODO: Implement block_number once we have archival state #882
+        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/882
+
+        let nonce = self
+            .accounts
+            .get(&address, working_set)
+            .map(|account| account.info.nonce)
+            .unwrap_or_default();
+
+        Ok(nonce.into())
+    }
+
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "feeHistory")]
     pub fn fee_history(
