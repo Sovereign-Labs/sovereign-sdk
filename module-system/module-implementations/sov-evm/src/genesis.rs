@@ -23,10 +23,13 @@ impl<C: sov_modules_api::Context> Evm<C> {
                 AccountInfo {
                     balance: acc.balance,
                     code_hash: acc.code_hash,
-                    code: acc.code.clone(),
                     nonce: acc.nonce,
                 },
-            )
+            );
+
+            if acc.code.len() > 0 {
+                evm_db.insert_code(acc.code_hash, acc.code.clone());
+            }
         }
 
         let mut spec = config

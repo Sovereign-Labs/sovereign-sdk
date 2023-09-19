@@ -1,3 +1,5 @@
+#[cfg(feature = "experimental")]
+use reth_primitives::Bytes;
 use sov_chain_state::ChainStateConfig;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 #[cfg(feature = "experimental")]
@@ -112,7 +114,7 @@ fn get_evm_config(genesis_addresses: Vec<reth_primitives::Address>) -> EvmConfig
             address,
             balance: AccountData::balance(u64::MAX),
             code_hash: AccountData::empty_code(),
-            code: vec![],
+            code: Bytes::default(),
             nonce: 0,
         })
         .collect();
