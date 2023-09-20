@@ -26,7 +26,7 @@ impl ops::Deref for Manifest {
 
 impl Manifest {
     /// The file name of the manifest.
-    pub const MANIFEST_NAME: &str = "constants.toml";
+    pub const MANIFEST_NAME: &'static str = "constants.toml";
 
     /// Reads a `sovereign.toml` manifest file, recursing from the target directory that builds the
     /// current implementation.

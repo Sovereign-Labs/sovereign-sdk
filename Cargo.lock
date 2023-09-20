@@ -1527,7 +1527,6 @@ dependencies = [
  "demo-nft-module",
  "jsonrpsee",
  "serde",
- "sov-data-generators",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
@@ -1552,7 +1551,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap",
- "const-rollup-config",
  "demo-stf",
  "hex",
  "jsonrpsee",
@@ -6545,7 +6543,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap",
- "hex",
  "jsonrpsee",
  "schemars",
  "serde",
@@ -6623,14 +6620,11 @@ dependencies = [
  "jsonrpsee",
  "serde",
  "serde_json",
- "sov-bank",
  "sov-chain-state",
  "sov-data-generators",
  "sov-modules-api",
- "sov-modules-stf-template",
  "sov-rollup-interface",
  "sov-state",
- "sov-value-setter",
  "tempfile",
 ]
 
@@ -6651,7 +6645,6 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "tempfile",
- "tokio",
 ]
 
 [[package]]
@@ -6784,14 +6777,12 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
- "const-rollup-config",
  "demo-stf",
  "ethers",
  "jsonrpsee",
  "reth-primitives",
  "reth-rpc-types",
  "serde_json",
- "sov-celestia-adapter",
  "sov-evm",
  "sov-modules-api",
  "sov-rollup-interface",

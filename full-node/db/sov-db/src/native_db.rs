@@ -17,8 +17,8 @@ pub struct NativeDB {
 }
 
 impl NativeDB {
-    const DB_PATH_SUFFIX: &str = "native";
-    const DB_NAME: &str = "native-db";
+    const DB_PATH_SUFFIX: &'static str = "native";
+    const DB_NAME: &'static str = "native-db";
 
     /// Opens a [`NativeDB`] (backed by RocksDB) at the specified path.
     /// The returned instance will be at the path `{path}/native-db`.
