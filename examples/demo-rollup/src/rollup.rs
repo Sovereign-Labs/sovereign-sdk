@@ -1,7 +1,6 @@
 use std::net::SocketAddr;
 use std::str::FromStr;
 
-use crate::AppVerifier;
 use anyhow::Context;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 #[cfg(feature = "experimental")]
@@ -34,7 +33,7 @@ use tracing::debug;
 #[cfg(feature = "experimental")]
 use crate::register_rpc::register_ethereum;
 use crate::register_rpc::{register_ledger, register_sequencer};
-use crate::{initialize_ledger, ROLLUP_NAMESPACE};
+use crate::{initialize_ledger, AppVerifier, ROLLUP_NAMESPACE};
 
 #[cfg(feature = "experimental")]
 const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.json";
