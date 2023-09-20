@@ -108,7 +108,7 @@ where
 
 impl<C: Context, Da: DaSpec> Runtime<C, Da> for TestRuntime<C, Da> {}
 
-pub(crate) fn create_demo_genesis_config<C: Context, Da: DaSpec>(
+pub(crate) fn create_chain_state_genesis_config<C: Context, Da: DaSpec>(
     admin: <C as Spec>::Address,
 ) -> GenesisConfig<C, Da> {
     let value_setter_config = ValueSetterConfig { admin };

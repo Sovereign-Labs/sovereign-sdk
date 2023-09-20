@@ -76,23 +76,18 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let header = reth_rpc_types::Header::from_primitive_with_hash(block.header.clone());
 
         // Collect transactions with ids from db
-        let transactions_with_ids = block
-            .transactions
-            .clone()
-            .map(|id| {
-                let tx = self
-                    .transactions
-                    .get(id as usize, &mut working_set.accessory_state())
-                    .expect("Transaction must be set");
-                (id, tx)
-            })
-            .collect::<Vec<_>>();
+        let transactions_with_ids = block.transactions.clone().map(|id| {
+            let tx = self
+                .transactions
+                .get(id as usize, &mut working_set.accessory_state())
+                .expect("Transaction must be set");
+            (id, tx)
+        });
 
         // Build rpc transactions response
         let transactions = match details {
             Some(true) => reth_rpc_types::BlockTransactions::Full(
                 transactions_with_ids
-                    .iter()
                     .map(|(id, tx)| {
                         reth_rpc_types::Transaction::from_recovered_with_block_context(
                             tx.clone().into(),
@@ -106,7 +101,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
             ),
             _ => reth_rpc_types::BlockTransactions::Hashes({
                 transactions_with_ids
-                    .iter()
                     .map(|(_, tx)| tx.signed_transaction.hash)
                     .collect::<Vec<_>>()
             }),
@@ -123,6 +117,27 @@ impl<C: sov_modules_api::Context> Evm<C> {
         };
 
         Ok(Some(block.into()))
+    }
+
+    #[rpc_method(name = "getTransactionCount")]
+    pub fn get_transaction_count(
+        &self,
+        address: reth_primitives::Address,
+        _block_number: Option<String>,
+        working_set: &mut WorkingSet<C>,
+    ) -> RpcResult<reth_primitives::U64> {
+        info!("evm module: eth_getTransactionCount");
+
+        // TODO: Implement block_number once we have archival state #882
+        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/882
+
+        let nonce = self
+            .accounts
+            .get(&address, working_set)
+            .map(|account| account.info.nonce)
+            .unwrap_or_default();
+
+        Ok(nonce.into())
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502

@@ -22,9 +22,6 @@ use sov_state::codec::BcsCodec;
 pub(crate) struct AccountInfo {
     pub(crate) balance: U256,
     pub(crate) code_hash: H256,
-    // TODO: `code` can be a huge chunk of data. We can use `StateValue` and lazy load it only when needed.
-    // https://github.com/Sovereign-Labs/sovereign-sdk/issues/425
-    pub(crate) code: Vec<u8>,
     pub(crate) nonce: u64,
 }
 
