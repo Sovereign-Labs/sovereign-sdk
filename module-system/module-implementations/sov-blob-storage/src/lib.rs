@@ -29,7 +29,7 @@ pub struct BlobStorage<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec>
     pub(crate) blobs: StateMap<u64, Vec<Vec<u8>>>,
 
     #[module]
-    pub(crate) sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
+    pub(crate) sequencer_registry: sov_sequencer_registry::SequencerRegistry<C, Da>,
 
     #[module]
     chain_state: sov_chain_state::ChainState<C, Da>,
@@ -71,7 +71,7 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> BlobStorage<C, Da
     pub(crate) fn get_preferred_sequencer(
         &self,
         working_set: &mut WorkingSet<C>,
-    ) -> Option<Vec<u8>> {
+    ) -> Option<Da::Address> {
         self.sequencer_registry.get_preferred_sequencer(working_set)
     }
 

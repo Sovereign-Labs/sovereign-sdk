@@ -7712,7 +7712,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "borsh",
- "bytes",
  "clap 4.4.4",
  "const-rollup-config",
  "criterion",
@@ -7724,9 +7723,7 @@ dependencies = [
  "ethers-middleware",
  "ethers-providers",
  "ethers-signers",
- "futures",
  "hex",
- "jmt",
  "jsonrpsee 0.18.2",
  "prettytable-rs",
  "prometheus 0.11.0",
@@ -7742,6 +7739,7 @@ dependencies = [
  "sov-celestia-adapter",
  "sov-cli",
  "sov-db",
+ "sov-demo-rollup",
  "sov-ethereum",
  "sov-evm",
  "sov-modules-api",
@@ -8053,7 +8051,6 @@ dependencies = [
  "jsonrpsee 0.18.2",
  "rand 0.8.5",
  "serde",
- "serde_json",
  "sov-accounts",
  "sov-bank",
  "sov-celestia-adapter",
@@ -8068,7 +8065,6 @@ dependencies = [
  "tokio",
  "toml 0.8.0",
  "tracing",
- "tracing-subscriber 0.3.17",
 ]
 
 [[package]]

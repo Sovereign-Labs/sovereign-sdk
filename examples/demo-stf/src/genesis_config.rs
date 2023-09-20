@@ -28,7 +28,7 @@ pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
 /// const SEQUENCER_DA_ADDRESS: &str = "celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208";
 /// ```
 pub fn get_genesis_config<C: Context, Da: DaSpec>(
-    sequencer_da_address: Vec<u8>,
+    sequencer_da_address: Da::Address,
     #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
 ) -> GenesisConfig<C, Da> {
     // This will be read from a file: #872
@@ -48,7 +48,7 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
 fn create_genesis_config<C: Context, Da: DaSpec>(
     initial_sequencer_balance: u64,
     sequencer_address: C::Address,
-    sequencer_da_address: Vec<u8>,
+    sequencer_da_address: Da::Address,
     #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
 ) -> anyhow::Result<GenesisConfig<C, Da>> {
     // This will be read from a file: #872

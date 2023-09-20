@@ -17,7 +17,7 @@
           ],
           "properties": {
             "da_address": {
-              "description": "The DA address of the sequencer you're registering.",
+              "description": "The raw Da address of the sequencer you're registering.",
               "type": "array",
               "items": {
                 "type": "integer",
@@ -44,7 +44,7 @@
           ],
           "properties": {
             "da_address": {
-              "description": "The DA address of the sequencer you're removing.",
+              "description": "The raw Da address of the sequencer you're removing.",
               "type": "array",
               "items": {
                 "type": "integer",

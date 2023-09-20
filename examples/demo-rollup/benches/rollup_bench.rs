@@ -45,7 +45,7 @@ fn rollup_bench(_bench: &mut Criterion) {
     let mut demo = demo_runner.stf;
     let sequencer_da_address = MockAddress::from(SEQUENCER_DA_ADDRESS);
     let demo_genesis_config = get_genesis_config(
-        sequencer_da_address.as_ref().to_vec(),
+        sequencer_da_address,
         #[cfg(feature = "experimental")]
         Default::default(),
     );
