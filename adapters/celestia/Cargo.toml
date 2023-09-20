@@ -10,12 +10,20 @@ publish = false
 [dependencies]
 borsh = { workspace = true, features = ["bytes"] }
 bech32 = { workspace = true }
-prost = "0.11"
-prost-types = "0.11"
+prost = "0.12"
+prost-types = "0.12"
 # I keep this commented as a reminder to opportunity to optimze this crate for non native compilation
 #tendermint = { version = "0.32", default-features = false, features = ["std"] }
-tendermint = "0.32"
-tendermint-proto = "0.32"
+
+celestia-proto = { git = "https://github.com/eigerco/celestia-node-rs.git", branch = "main" }
+celestia-rpc = { git = "https://github.com/eigerco/celestia-node-rs.git", branch = "main", default-features = false }
+celestia-types = { git = "https://github.com/eigerco/celestia-node-rs.git", branch = "main" }
+tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "19dc3da" }
+tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "19dc3da" }
+nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "d821332", features = [
+  "serde",
+  "borsh",
+] }
 
 # Convenience
 async-trait = { workspace = true }
@@ -31,14 +39,12 @@ tokio = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", version = "0.2", optional = true }
-risc0-zkvm = { workspace = true, default-features = false, features = ["std"], optional = true }
+risc0-zkvm = { workspace = true, default-features = false, features = [
+  "std",
+], optional = true }
 risc0-zkvm-platform = { workspace = true, optional = true }
 
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
-nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "dd37588444fca72825d11fe4a46838f66525c49f", features = [
-	"serde",
-	"borsh",
-] }
 
 
 [dev-dependencies]
@@ -53,6 +59,12 @@ prost-build = { version = "0.12" }
 
 [features]
 default = []
-native = ["dep:tokio", "dep:jsonrpsee", "dep:serde_json", "tendermint/default", "sov-rollup-interface/native"]
+native = [
+  "dep:tokio",
+  "dep:jsonrpsee",
+  "dep:serde_json",
+  "tendermint/default",
+  "sov-rollup-interface/native",
+]
 bench = ["sov-zk-cycle-macros/bench", "risc0-zkvm", "risc0-zkvm-platform"]
 verifier = []

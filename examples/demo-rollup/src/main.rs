@@ -53,7 +53,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // Initializing logging
     tracing_subscriber::registry()
         .with(fmt::layer())
-        .with(EnvFilter::from_str("info,sov_sequencer=warn").unwrap())
+        .with(EnvFilter::from_str("debug,hyper=info").unwrap())
         .init();
 
     let args = Args::parse();

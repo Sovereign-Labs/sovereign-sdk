@@ -1,10 +1,9 @@
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
-use base64::engine::general_purpose::STANDARD as B64_ENGINE;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
-use nmt_rs::NamespacedHash;
+use celestia_types::DataAvailabilityHeader;
 use prost::bytes::Buf;
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -23,17 +22,15 @@ const NAMESPACED_HASH_LEN: usize = 48;
 
 pub const GENESIS_PLACEHOLDER_HASH: &[u8; 32] = &[255; 32];
 
-use crate::pfb::{BlobTx, MsgPayForBlobs, Tx};
+use celestia_proto::celestia::blob::v1::MsgPayForBlobs;
+use celestia_proto::cosmos::tx::v1beta1::Tx;
+use tendermint_proto::v0_34::types::IndexWrapper;
+
+// use crate::pfb::{BlobTx, MsgPayForBlobs, Tx};
 use crate::shares::{read_varint, BlobIterator, BlobRefIterator, NamespaceGroup};
 use crate::utils::BoxError;
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::{ChainValidityCondition, TmHash, PFB_NAMESPACE};
-
-#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
-pub struct MarshalledDataAvailabilityHeader {
-    pub row_roots: Vec<String>,
-    pub column_roots: Vec<String>,
-}
 
 /// A partially serialized tendermint header. Only fields which are actually inspected by
 /// Jupiter are included in their raw form. Other fields are pre-encoded as protobufs.
@@ -93,13 +90,9 @@ trait EncodeTm34 {
 
 impl From<TendermintHeader> for CompactHeader {
     fn from(value: TendermintHeader) -> Self {
-        let data_hash = if let Some(h) = value.data_hash {
-            match h {
-                Hash::Sha256(value) => Some(ProtobufHash(value)),
-                Hash::None => None,
-            }
-        } else {
-            None
+        let data_hash = match value.data_hash {
+            Hash::Sha256(value) => Some(ProtobufHash(value)),
+            Hash::None => None,
         };
         Self {
             version: Protobuf::<celestia_tm_version::version::Consensus>::encode_vec(
@@ -113,26 +106,14 @@ impl From<TendermintHeader> for CompactHeader {
                 &value.last_block_id.unwrap_or_default(),
             )
             .unwrap(),
-            last_commit_hash: value
-                .last_commit_hash
-                .unwrap_or_default()
-                .encode_vec()
-                .unwrap(),
+            last_commit_hash: value.last_commit_hash.encode_vec().unwrap(),
             data_hash,
             validators_hash: value.validators_hash.encode_vec().unwrap(),
             next_validators_hash: value.next_validators_hash.encode_vec().unwrap(),
             consensus_hash: value.consensus_hash.encode_vec().unwrap(),
             app_hash: value.app_hash.encode_vec().unwrap(),
-            last_results_hash: value
-                .last_results_hash
-                .unwrap_or_default()
-                .encode_vec()
-                .unwrap(),
-            evidence_hash: value
-                .evidence_hash
-                .unwrap_or_default()
-                .encode_vec()
-                .unwrap(),
+            last_results_hash: value.last_results_hash.encode_vec().unwrap(),
+            evidence_hash: value.evidence_hash.encode_vec().unwrap(),
             proposer_address: value.proposer_address.encode_vec().unwrap(),
         }
     }
@@ -180,58 +161,11 @@ impl CompactHeader {
         Hash::Sha256(simple_hash_from_byte_vectors::<Sha256>(&fields_bytes))
     }
 }
-
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
-pub struct DataAvailabilityHeader {
-    pub row_roots: Vec<NamespacedHash>,
-    pub column_roots: Vec<NamespacedHash>,
-}
-
-// Danger! This method panics if the provided bas64 is longer than a namespaced hash
-fn decode_to_ns_hash(b64: &str) -> Result<NamespacedHash, base64::DecodeSliceError> {
-    let mut out = [0u8; NAMESPACED_HASH_LEN];
-    B64_ENGINE.decode_slice(b64.as_bytes(), &mut out)?;
-    Ok(NamespacedHash(out))
-}
-
-impl TryFrom<MarshalledDataAvailabilityHeader> for DataAvailabilityHeader {
-    type Error = base64::DecodeSliceError;
-
-    fn try_from(value: MarshalledDataAvailabilityHeader) -> Result<Self, Self::Error> {
-        let mut row_roots = Vec::with_capacity(value.row_roots.len());
-        for root in value.row_roots {
-            row_roots.push(decode_to_ns_hash(&root)?);
-        }
-        let mut column_roots = Vec::with_capacity(value.column_roots.len());
-        for root in value.column_roots {
-            column_roots.push(decode_to_ns_hash(&root)?);
-        }
-        Ok(Self {
-            row_roots,
-            column_roots,
-        })
-    }
-}
-
-/// The response from the celestia `/header` endpoint. Must be converted to a
-/// [`CelestiaHeader`] before use.
-#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
-pub struct CelestiaHeaderResponse {
-    pub header: tendermint::block::Header,
-    pub dah: MarshalledDataAvailabilityHeader,
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct NamespacedSharesResponse {
-    pub shares: Option<Vec<String>>,
-    pub height: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)] // TODO:, BorshSerialize, BorshDeserialize)]
 pub struct CelestiaHeader {
     pub dah: DataAvailabilityHeader,
     pub header: CompactHeader,
-    #[borsh_skip]
+    // #[borsh_skip]
     #[serde(skip)]
     cached_prev_hash: Arc<Mutex<Option<TmHash>>>,
 }
@@ -368,8 +302,10 @@ pub fn parse_pfb_namespace(
     assert_eq!(group.shares()[0].namespace(), PFB_NAMESPACE);
     let mut pfbs = Vec::new();
     for blob in group.blobs() {
+        debug!(blob = ?blob, "blob!");
         let mut data = blob.data();
         while data.has_remaining() {
+            debug!("has remaining!");
             pfbs.push(next_pfb(&mut data)?)
         }
     }
@@ -389,9 +325,10 @@ pub struct TxPosition {
 
 pub(crate) fn pfb_from_iter(data: impl Buf, pfb_len: usize) -> Result<MsgPayForBlobs, BoxError> {
     debug!("Decoding blob tx");
-    let mut blob_tx = BlobTx::decode(data.take(pfb_len))?;
+    let mut blob_tx = IndexWrapper::decode(data.take(pfb_len))?;
+    debug!("Index wrapper: {:?}", blob_tx);
     debug!("Decoding cosmos sdk tx");
-    let cosmos_tx = Tx::decode(&mut blob_tx.tx)?;
+    let cosmos_tx = Tx::decode(&blob_tx.tx[..])?;
     let messages = cosmos_tx
         .body
         .ok_or(anyhow::format_err!("No body in cosmos tx"))?
@@ -400,7 +337,7 @@ pub(crate) fn pfb_from_iter(data: impl Buf, pfb_len: usize) -> Result<MsgPayForB
         return Err(anyhow::format_err!("Expected 1 message in cosmos tx"));
     }
     debug!("Decoding PFB from blob tx value");
-    Ok(MsgPayForBlobs::decode(&mut &messages[0].value[..])?)
+    Ok(MsgPayForBlobs::decode(&messages[0].value[..])?)
 }
 
 fn next_pfb(mut data: &mut BlobRefIterator) -> Result<(MsgPayForBlobs, TxPosition), BoxError> {
@@ -425,14 +362,15 @@ fn next_pfb(mut data: &mut BlobRefIterator) -> Result<(MsgPayForBlobs, TxPositio
 
 #[cfg(test)]
 mod tests {
-    use crate::{CelestiaHeaderResponse, CompactHeader};
+    use celestia_types::ExtendedHeader;
+
+    use crate::CompactHeader;
 
     const HEADER_RESPONSE_JSON: &[u8] = include_bytes!("./header_response.json");
 
     #[test]
     fn test_compact_header_serde() {
-        let original_header: CelestiaHeaderResponse =
-            serde_json::from_slice(HEADER_RESPONSE_JSON).unwrap();
+        let original_header: ExtendedHeader = serde_json::from_slice(HEADER_RESPONSE_JSON).unwrap();
 
         let header: CompactHeader = original_header.header.into();
 
@@ -443,8 +381,7 @@ mod tests {
 
     #[test]
     fn test_compact_header_hash() {
-        let original_header: CelestiaHeaderResponse =
-            serde_json::from_slice(HEADER_RESPONSE_JSON).unwrap();
+        let original_header: ExtendedHeader = serde_json::from_slice(HEADER_RESPONSE_JSON).unwrap();
 
         let tm_header = original_header.header.clone();
         let compact_header: CompactHeader = original_header.header.into();

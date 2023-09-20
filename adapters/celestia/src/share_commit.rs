@@ -1,3 +1,4 @@
+use celestia_types::nmt::NamespacedHashExt;
 use tendermint::crypto::default::Sha256;
 use tendermint::merkle::simple_hash_from_byte_vectors;
 
@@ -50,10 +51,10 @@ pub fn recreate_commitment(
         let mut tree = nmt_rs::CelestiaNmt::new();
         for share in set {
             let nid = share.namespace();
-            tree.push_leaf(share.as_serialized(), nid)
+            tree.push_leaf(share.as_serialized(), *nid)
                 .expect("Leaves are pushed in order");
         }
-        subtree_roots.push(tree.root());
+        subtree_roots.push(tree.root().to_array());
     }
     let h = simple_hash_from_byte_vectors::<Sha256>(&subtree_roots);
     Ok(h)
