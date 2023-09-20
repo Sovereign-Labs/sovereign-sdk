@@ -191,7 +191,6 @@ pub mod experimental {
         rpc.register_async_method("eth_sendTransaction", |parameters, ethereum| async move {
             let mut transaction_request: TransactionRequest = parameters.one().unwrap();
 
-            let working_set = WorkingSet::<C>::new(ethereum.storage.clone());
             let evm = Evm::<C>::default();
 
             // get from, return error if none
@@ -207,54 +206,57 @@ pub mod experimental {
                 ));
             }
 
-            if transaction_request.nonce.is_none() {
-                let nonce = evm
-                    .get_transaction_count(from, None, &mut working_set)
-                    .unwrap_or_default();
+            let raw_evm_tx = {
+                let working_set = WorkingSet::<C>::new(ethereum.storage.clone());
+                if transaction_request.nonce.is_none() {
+                    let nonce = evm
+                        .get_transaction_count(from, None, &mut working_set)
+                        .unwrap_or_default();
 
-                transaction_request.nonce = Some(reth_primitives::U256::from(nonce.as_u64()));
-            }
-
-            let chain_id = evm
-                .chain_id(&mut working_set)
-                .expect("Failed to get chain id")
-                .map(|id| id.as_u64())
-                .unwrap_or(1);
-
-            // TODO: implement gas logic after gas estimation is implemented
-            let transaction_request = match transaction_request.into_typed_request() {
-                Some(TypedTransactionRequest::Legacy(mut m)) => {
-                    m.chain_id = Some(chain_id);
-
-                    TypedTransactionRequest::Legacy(m)
+                    transaction_request.nonce = Some(reth_primitives::U256::from(nonce.as_u64()));
                 }
-                Some(TypedTransactionRequest::EIP2930(mut m)) => {
-                    m.chain_id = chain_id;
 
-                    TypedTransactionRequest::EIP2930(m)
+                let chain_id = evm
+                    .chain_id(&mut working_set)
+                    .expect("Failed to get chain id")
+                    .map(|id| id.as_u64())
+                    .unwrap_or(1);
+
+                // TODO: implement gas logic after gas estimation is implemented
+                let transaction_request = match transaction_request.into_typed_request() {
+                    Some(TypedTransactionRequest::Legacy(mut m)) => {
+                        m.chain_id = Some(chain_id);
+
+                        TypedTransactionRequest::Legacy(m)
+                    }
+                    Some(TypedTransactionRequest::EIP2930(mut m)) => {
+                        m.chain_id = chain_id;
+
+                        TypedTransactionRequest::EIP2930(m)
+                    }
+                    Some(TypedTransactionRequest::EIP1559(mut m)) => {
+                        m.chain_id = chain_id;
+
+                        TypedTransactionRequest::EIP1559(m)
+                    }
+                    None => {
+                        // to_jsonrpsee_error_object("Conflicting fee fields", ETH_RPC_ERROR)?;
+                        return Err(to_jsonrpsee_error_object(
+                            "Conflicting fee fields",
+                            ETH_RPC_ERROR,
+                        ));
+                    }
+                };
+
+                let signed_tx = ethereum
+                    .eth_rpc_config
+                    .eth_signer
+                    .sign_transaction(transaction_request.into_transaction(), from)
+                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+
+                RlpEvmTransaction {
+                    rlp: signed_tx.envelope_encoded().to_vec(),
                 }
-                Some(TypedTransactionRequest::EIP1559(mut m)) => {
-                    m.chain_id = chain_id;
-
-                    TypedTransactionRequest::EIP1559(m)
-                }
-                None => {
-                    // to_jsonrpsee_error_object("Conflicting fee fields", ETH_RPC_ERROR)?;
-                    return Err(to_jsonrpsee_error_object(
-                        "Conflicting fee fields",
-                        ETH_RPC_ERROR,
-                    ));
-                }
-            };
-
-            let signed_tx = ethereum
-                .eth_rpc_config
-                .eth_signer
-                .sign_transaction(transaction_request.into_transaction(), from)
-                .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
-
-            let raw_evm_tx = RlpEvmTransaction {
-                rlp: signed_tx.envelope_encoded().to_vec(),
             };
             let (tx_hash, raw_tx) = ethereum
                 .make_raw_tx(raw_evm_tx)
