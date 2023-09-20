@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use reth_primitives::{sign_message, Address, Transaction, TransactionSigned, H256};
 use secp256k1::{PublicKey, SecretKey};
+use std::collections::HashMap;
 
 /// Ethereum transaction signer.
 pub struct DevSigner {
