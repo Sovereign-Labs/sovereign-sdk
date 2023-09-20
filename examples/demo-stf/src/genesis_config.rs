@@ -5,7 +5,7 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 #[cfg(feature = "experimental")]
 use sov_evm::{AccountData, EvmConfig, SpecId};
 pub use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Context, PrivateKey, PublicKey};
+use sov_modules_api::Context;
 use sov_rollup_interface::da::DaSpec;
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
@@ -38,7 +38,6 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
         initial_sequencer_balance,
         token_deployer.address.clone(),
         sequencer_da_address,
-        &token_deployer.private_key,
         #[cfg(feature = "experimental")]
         evm_genesis_addresses,
     )
@@ -48,7 +47,6 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
     initial_sequencer_balance: u64,
     sequencer_address: C::Address,
     sequencer_da_address: Vec<u8>,
-    value_setter_admin_private_key: &C::PrivateKey,
     #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
 ) -> GenesisConfig<C, Da> {
     // This will be read from a file: #872
@@ -82,9 +80,11 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
     };
 
     // This will be read from a file: #872
-    let value_setter_config = ValueSetterConfig {
-        admin: value_setter_admin_private_key.pub_key().to_address(),
-    };
+    let value_setter_data = std::fs::read_to_string("../test-data/genesis/value_setter.json")
+        .expect("Unable to read file to string");
+
+    let value_setter_config: ValueSetterConfig<C> =
+        serde_json::from_str(&value_setter_data).unwrap();
 
     // This will be read from a file: #872
     let chain_state_config = ChainStateConfig {
