@@ -169,7 +169,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
 
     let genesis_config = get_genesis_config(
-        sequencer_da_address.as_ref().to_vec(),
+        sequencer_da_address,
         #[cfg(feature = "experimental")]
         Default::default(),
     );

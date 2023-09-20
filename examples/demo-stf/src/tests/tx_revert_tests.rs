@@ -5,7 +5,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{PrivateKey, WorkingSet};
 use sov_modules_stf_template::{Batch, SequencerOutcome, SlashingReason, TxEffect};
 use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::mocks::{MockBlock, MockDaSpec};
+use sov_rollup_interface::mocks::{MockAddress, MockBlock, MockDaSpec};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::ProverStorage;
 
@@ -83,7 +83,10 @@ fn test_tx_revert() {
 
         let resp = runtime
             .sequencer_registry
-            .sequencer_address(TEST_SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set)
+            .sequencer_address(
+                MockAddress::from(TEST_SEQUENCER_DA_ADDRESS),
+                &mut working_set,
+            )
             .unwrap();
         // Sequencer is not excluded from list of allowed!
         assert_eq!(Some(sequencer_rollup_address), resp.address);
@@ -314,7 +317,7 @@ fn test_tx_bad_serialization() {
 
         let allowed_sequencer = runtime
             .sequencer_registry
-            .sequencer_address(SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set)
+            .sequencer_address(MockAddress::from(SEQUENCER_DA_ADDRESS), &mut working_set)
             .unwrap();
         assert!(allowed_sequencer.address.is_none());
 
