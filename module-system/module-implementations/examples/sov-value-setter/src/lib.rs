@@ -15,6 +15,7 @@ pub use query::*;
 use sov_modules_api::{Error, ModuleInfo, WorkingSet};
 
 /// Initial configuration for sov-value-setter module.
+//#[derive(serde::Serialize, serde::Deserialize)]
 pub struct ValueSetterConfig<C: sov_modules_api::Context> {
     /// Admin of the module.
     pub admin: C::Address,

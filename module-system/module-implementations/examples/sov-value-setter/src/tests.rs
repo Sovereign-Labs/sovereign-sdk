@@ -5,6 +5,17 @@ use sov_state::{ProverStorage, ZkStorage};
 use super::ValueSetter;
 use crate::{call, query, ValueSetterConfig};
 
+/*
+#[test]
+fn test_config_serialization() {
+    let admin = Address::from([1; 32]);
+    let config = ValueSetterConfig { admin };
+
+    let config_str = serde_json::to_string(&config).unwrap();
+
+    println!("config_str {:?}", config_str);
+}
+*/
 #[test]
 fn test_value_setter() {
     let tmpdir = tempfile::tempdir().unwrap();
