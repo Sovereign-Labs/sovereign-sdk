@@ -12,5 +12,5 @@ pub fn get_collection_address<C: sov_modules_api::Context>(
     hasher.update(collection_name.as_bytes());
 
     let hash: [u8; 32] = hasher.finalize().into();
-    CollectionAddress(C::Address::from(hash))
+    CollectionAddress::new(&C::Address::from(hash))
 }

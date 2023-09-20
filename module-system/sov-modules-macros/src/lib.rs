@@ -17,11 +17,13 @@ mod dispatch;
 mod manifest;
 mod module_call_json_schema;
 mod module_info;
+mod new_types;
 #[cfg(feature = "native")]
 mod rpc;
 
 #[cfg(feature = "native")]
 use cli_parser::{derive_cli_wallet_arg, CliParserMacro};
+use new_types::address_type_helper;
 use default_runtime::DefaultRuntimeMacro;
 use dispatch::dispatch_call::DispatchCallMacro;
 use dispatch::genesis::GenesisMacro;
@@ -31,6 +33,7 @@ use proc_macro::TokenStream;
 #[cfg(feature = "native")]
 use rpc::ExposeRpcMacro;
 use syn::parse_macro_input;
+use syn::DeriveInput;
 
 #[proc_macro_derive(ModuleInfo, attributes(state, module, address))]
 pub fn module_info(input: TokenStream) -> TokenStream {
@@ -195,4 +198,10 @@ pub fn cli_parser(input: TokenStream) -> TokenStream {
 pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
     let input: syn::DeriveInput = parse_macro_input!(input);
     handle_macro_error(derive_cli_wallet_arg(input))
+}
+
+#[proc_macro_attribute]
+pub fn address_type(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
+    handle_macro_error(address_type_helper(input))
 }

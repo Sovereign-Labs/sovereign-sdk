@@ -1,22 +1,22 @@
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
 use sov_modules_api::Context;
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 
 use crate::utils::get_collection_address;
-use crate::{CollectionAddress, NftIdentifier, NonFungibleToken, TokenId, UserAddress};
+use crate::{CollectionAddress, NftIdentifier, NonFungibleToken, TokenId, CreatorAddress, OwnerAddress};
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(bound(
-    serialize = "UserAddress<C>: serde::Serialize",
-    deserialize = "UserAddress<C>: serde::Deserialize<'de>"
+    serialize = "CreatorAddress<C>: serde::Serialize",
+    deserialize = "CreatorAddress<C>: serde::Deserialize<'de>"
 ))]
 /// Response for `getCollection` method
 pub struct CollectionResponse<C: Context> {
     /// Collection name
     pub name: String,
     /// Creator Address
-    pub creator: UserAddress<C>,
+    pub creator: CreatorAddress<C>,
     /// frozen or not
     pub frozen: bool,
     /// supply
@@ -27,8 +27,8 @@ pub struct CollectionResponse<C: Context> {
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(bound(
-    serialize = "UserAddress<C>: serde::Serialize, CollectionAddress<C>: serde::Serialize",
-    deserialize = "UserAddress<C>: serde::Deserialize<'de>, CollectionAddress<C>: serde::Deserialize<'de>"
+    serialize = "OwnerAddress<C>: serde::Serialize, CollectionAddress<C>: serde::Serialize",
+    deserialize = "OwnerAddress<C>: serde::Deserialize<'de>, CollectionAddress<C>: serde::Deserialize<'de>"
 ))]
 /// Response for `getNft` method
 pub struct NftResponse<C: Context> {
@@ -39,7 +39,7 @@ pub struct NftResponse<C: Context> {
     /// frozen status (token_uri mutable or not)
     pub frozen: bool,
     /// Owner of the NFT
-    pub owner: UserAddress<C>,
+    pub owner: OwnerAddress<C>,
     /// Collection address that the NFT belongs to
     pub collection_address: CollectionAddress<C>,
 }
@@ -51,6 +51,7 @@ pub struct NftResponse<C: Context> {
 ))]
 /// Response for `getCollectionAddress` method
 pub struct CollectionAddressResponse<C: Context> {
+    /// Address of the collection
     pub collection_address: CollectionAddress<C>,
 }
 
@@ -69,18 +70,18 @@ impl<C: Context> NonFungibleToken<C> {
             .unwrap();
 
         Ok(CollectionResponse {
-            name: c.name.to_string(),
-            creator: c.creator.clone(),
-            frozen: c.frozen,
-            supply: c.supply,
-            collection_uri: c.collection_uri,
+            name: c.get_name().to_string(),
+            creator: c.get_creator().clone(),
+            frozen: c.is_frozen(),
+            supply: c.get_supply(),
+            collection_uri: c.get_collection_uri().to_string(),
         })
     }
     #[rpc_method(name = "getCollectionAddress")]
     /// Get the collection address
     pub fn get_collection_address(
         &self,
-        creator: UserAddress<C>,
+        creator: CreatorAddress<C>,
         collection_name: &str,
         _working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<CollectionAddressResponse<C>> {
@@ -100,11 +101,11 @@ impl<C: Context> NonFungibleToken<C> {
         let nft_id = NftIdentifier(token_id, collection_address);
         let n = self.nfts.get(&nft_id, working_set).unwrap();
         Ok(NftResponse {
-            token_id: n.token_id,
-            token_uri: n.token_uri,
-            frozen: n.frozen,
-            owner: n.owner,
-            collection_address: n.collection_address,
+            token_id: n.get_token_id(),
+            token_uri: n.get_token_uri().to_string(),
+            frozen: n.is_frozen(),
+            owner: n.get_owner().clone(),
+            collection_address: n.get_collection_address().clone(),
         })
     }
 }
