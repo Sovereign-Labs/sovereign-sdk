@@ -84,7 +84,9 @@ impl TestClient {
         Ok(receipt_req)
     }
 
-    async fn set_value_unsigned(&self, contract_address: H160, set_arg: u32, nonce: u64) -> TxHash {
+    async fn set_value_unsigned(&self, contract_address: H160, set_arg: u32) -> TxHash {
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+
         let req = Eip1559TransactionRequest::new()
             .from(self.from_addr)
             .to(contract_address)
@@ -268,14 +270,14 @@ impl TestClient {
         {
             let value = 103;
 
-            let tx_hash = self.set_value_raw(contract_address, value, nonce).await;
+            let tx_hash = self.set_value_unsigned(contract_address, value).await;
             self.send_publish_batch_request().await;
 
             let latest_block = self.eth_get_block_by_number(None).await;
             assert_eq!(latest_block.transactions.len(), 1);
             assert_eq!(latest_block.transactions[0], tx_hash);
 
-            let get_arg = self.query_contract(contract_address, nonce).await?;
+            let get_arg = self.query_contract(contract_address).await?;
             // FIXME: Transaction is not failing but the value is not set
             assert_eq!(value, get_arg.as_u32());
         }
