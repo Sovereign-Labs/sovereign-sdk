@@ -1,3 +1,4 @@
+// TODO remove once consumed
 #![allow(dead_code)]
 
 use std::path::PathBuf;
@@ -25,14 +26,14 @@ impl ops::Deref for Manifest {
 
 impl Manifest {
     /// The file name of the manifest.
-    pub const MANIFEST_NAME: &str = "sovereign.toml";
+    pub const MANIFEST_NAME: &str = "constants.toml";
 
     /// Reads a `sovereign.toml` manifest file, recursing from the target directory that builds the
     /// current implementation.
     ///
-    /// If the environment variable `SOVEREIGN_MANIFEST` is set, it will use that instead.
+    /// If the environment variable `CONSTANTS_MANIFEST` is set, it will use that instead.
     pub fn read() -> anyhow::Result<Self> {
-        let initial_path = match env::var("SOVEREIGN_MANIFEST") {
+        let initial_path = match env::var("CONSTANTS_MANIFEST") {
             Ok(p) => PathBuf::from(&p).canonicalize().map_err(|e| {
                 anyhow::anyhow!("failed access base dir for sovereign manifest file `{p}`: {e}",)
             }),
@@ -137,10 +138,10 @@ impl Manifest {
             .map(|(f, v)| match v {
                 // TODO this can be optimized to specific cases based on type and avoid
                 // `Into::into` (i.e. u32 as u64)
-                Value::String(v) => Ok(quote::quote!(#f: Into::into(#v))),
-                Value::Integer(v) => Ok(quote::quote!(#f: Into::into(#v))),
-                Value::Float(v) => Ok(quote::quote!(#f: Into::into(#v))),
-                Value::Boolean(v) => Ok(quote::quote!(#f: Into::into(#v))),
+                Value::String(v) => Ok(quote::quote!(#f: #v)),
+                Value::Integer(v) => Ok(quote::quote!(#f: #v)),
+                Value::Float(v) => Ok(quote::quote!(#f: #v)),
+                Value::Boolean(v) => Ok(quote::quote!(#f: #v)),
                 _ => Err(self.err(
                     &field.ident,
                     format!(
