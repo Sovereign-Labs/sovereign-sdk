@@ -5,7 +5,7 @@ mod call;
 pub use call::CallMessage;
 mod address;
 mod genesis;
-use address::*;
+pub use address::*;
 mod collection;
 use collection::*;
 mod nft;
@@ -14,9 +14,7 @@ use nft::*;
 mod query;
 #[cfg(feature = "native")]
 pub use query::*;
-use sov_modules_api::StateMap;
-use sov_modules_api::WorkingSet;
-use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo};
+use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, StateMap, WorkingSet};
 /// Utility functions.
 pub mod utils;
 

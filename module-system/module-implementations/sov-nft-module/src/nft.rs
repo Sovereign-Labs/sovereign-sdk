@@ -1,7 +1,8 @@
-use crate::collection::Collection;
-use crate::{CollectionAddress, OwnerAddress, UserAddress};
 use anyhow::{anyhow, bail};
 use sov_modules_api::{Context, StateMap, WorkingSet};
+
+use crate::collection::Collection;
+use crate::{CollectionAddress, OwnerAddress, UserAddress};
 
 /// tokenId for the NFT that's unique within the scope of the collection
 pub type TokenId = u64;

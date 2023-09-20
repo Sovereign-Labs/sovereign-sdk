@@ -1,6 +1,5 @@
 use anyhow::{bail, Result};
-use sov_modules_api::WorkingSet;
-use sov_modules_api::{CallResponse, Context};
+use sov_modules_api::{CallResponse, Context, WorkingSet};
 
 use crate::address::UserAddress;
 use crate::{

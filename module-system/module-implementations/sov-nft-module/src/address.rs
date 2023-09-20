@@ -1,6 +1,7 @@
+use std::fmt;
+
 use sov_modules_api::Context;
 use sov_modules_macros::address_type;
-use std::fmt;
 
 #[address_type]
 /// Address representing a simple user capable of owning an NFT

@@ -1,8 +1,9 @@
+use anyhow::anyhow;
+use sov_modules_api::{Context, StateMap, WorkingSet};
+
 use crate::address::CollectionAddress;
 use crate::utils::get_collection_address;
 use crate::CreatorAddress;
-use anyhow::anyhow;
-use sov_modules_api::{Context, StateMap, WorkingSet};
 
 #[cfg_attr(
     feature = "native",

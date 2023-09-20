@@ -18,6 +18,7 @@ pub fn address_type_helper(input: DeriveInput) -> Result<TokenStream, syn::Error
 
         #[cfg(not(feature = "native"))]
         #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Clone, Debug, PartialEq, Eq, Hash)]
+        #(#attrs)*
         pub struct #name<C: Context>(C::Address);
 
         impl<C: Context> #name<C> {
