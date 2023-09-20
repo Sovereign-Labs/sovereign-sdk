@@ -67,7 +67,7 @@ use sov_value_setter::{ValueSetterRpcImpl, ValueSetterRpcServer};
 )]
 pub struct Runtime<C: Context, Da: DaSpec> {
     pub bank: sov_bank::Bank<C>,
-    pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
+    pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C, Da>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub blob_storage: sov_blob_storage::BlobStorage<C, Da>,
     #[cfg_attr(feature = "native", cli_skip)]
@@ -86,7 +86,7 @@ pub struct Runtime<C: Context, Da: DaSpec> {
 )]
 pub struct Runtime<C: Context, Da: DaSpec> {
     pub bank: sov_bank::Bank<C>,
-    pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
+    pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C, Da>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub blob_storage: sov_blob_storage::BlobStorage<C, Da>,
     #[cfg_attr(feature = "native", cli_skip)]

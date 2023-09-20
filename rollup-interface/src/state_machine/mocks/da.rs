@@ -76,7 +76,7 @@ impl From<[u8; 32]> for MockAddress {
 
 impl Display for MockAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.addr)
+        write!(f, "{}", hex::encode(self.addr))
     }
 }
 
@@ -115,14 +115,14 @@ impl BlobReaderTrait for MockBlob {
         self.data.accumulator()
     }
 
+    fn total_len(&self) -> usize {
+        self.data.total_len()
+    }
+
     #[cfg(feature = "native")]
     fn advance(&mut self, num_bytes: usize) -> &[u8] {
         self.data.advance(num_bytes);
         self.verified_data()
-    }
-
-    fn total_len(&self) -> usize {
-        self.data.total_len()
     }
 }
 
@@ -294,8 +294,8 @@ impl MockDaService {
 
 #[async_trait]
 impl DaService for MockDaService {
-    type Verifier = MockDaVerifier;
     type Spec = MockDaSpec;
+    type Verifier = MockDaVerifier;
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
 
@@ -365,5 +365,18 @@ impl DaVerifier for MockDaVerifier {
         _completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
     ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error> {
         Ok(MockValidityCond { is_valid: true })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mock_address_string() {
+        let addr = MockAddress { addr: [3u8; 32] };
+        let s = addr.to_string();
+        let recovered_addr = s.parse::<MockAddress>().unwrap();
+        assert_eq!(addr, recovered_addr);
     }
 }

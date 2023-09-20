@@ -113,7 +113,7 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
     #[cfg(feature = "experimental")]
     let eth_signer = read_eth_tx_signers();
     let genesis_config = demo_stf::genesis_config::get_genesis_config(
-        sequencer_da_address.as_ref().to_vec(),
+        sequencer_da_address,
         #[cfg(feature = "experimental")]
         eth_signer.signers(),
     );
@@ -169,7 +169,7 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost>(
     let eth_signer = read_eth_tx_signers();
     let app = App::new(rollup_config.storage);
     let genesis_config = get_genesis_config(
-        sequencer_da_address.as_ref().to_vec(),
+        sequencer_da_address,
         #[cfg(feature = "experimental")]
         eth_signer.signers(),
     );
