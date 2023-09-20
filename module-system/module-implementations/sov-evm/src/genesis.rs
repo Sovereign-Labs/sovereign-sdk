@@ -13,7 +13,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::Module>::Config,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         let mut evm_db = self.get_db(working_set);
 
@@ -23,10 +23,13 @@ impl<C: sov_modules_api::Context> Evm<C> {
                 AccountInfo {
                     balance: acc.balance,
                     code_hash: acc.code_hash,
-                    code: acc.code.clone(),
                     nonce: acc.nonce,
                 },
-            )
+            );
+
+            if acc.code.len() > 0 {
+                evm_db.insert_code(acc.code_hash, acc.code.clone());
+            }
         }
 
         let mut spec = config

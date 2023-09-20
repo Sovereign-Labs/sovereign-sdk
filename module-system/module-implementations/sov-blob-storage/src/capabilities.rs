@@ -1,6 +1,6 @@
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
-use sov_modules_api::{BlobReaderTrait, Context, DaSpec, Spec, WorkingSet};
+use sov_modules_api::{BlobReaderTrait, Context, DaSpec, WorkingSet};
 use tracing::info;
 
 use crate::BlobStorage;
@@ -11,7 +11,7 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
     fn get_blobs_for_this_slot<'a, I>(
         &self,
         current_blobs: I,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, Da::BlobTransaction>>>
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
@@ -39,7 +39,7 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
         let mut to_defer: Vec<&mut Da::BlobTransaction> = Vec::new();
 
         for blob in current_blobs {
-            if blob.sender().as_ref() == &preferred_sequencer[..] {
+            if blob.sender() == preferred_sequencer {
                 priority_blobs.push(blob);
             } else {
                 to_defer.push(blob);

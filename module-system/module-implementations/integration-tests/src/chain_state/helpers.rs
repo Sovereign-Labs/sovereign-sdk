@@ -24,7 +24,7 @@ impl<C: Context, Da: DaSpec> TxHooks for TestRuntime<C, Da> {
     fn pre_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
-        _working_set: &mut sov_modules_api::WorkingSet<<Self::Context as Spec>::Storage>,
+        _working_set: &mut sov_modules_api::WorkingSet<C>,
     ) -> anyhow::Result<<Self::Context as Spec>::Address> {
         Ok(tx.pub_key().to_address())
     }
@@ -32,7 +32,7 @@ impl<C: Context, Da: DaSpec> TxHooks for TestRuntime<C, Da> {
     fn post_dispatch_tx_hook(
         &self,
         _tx: &Transaction<Self::Context>,
-        _working_set: &mut sov_modules_api::WorkingSet<<Self::Context as Spec>::Storage>,
+        _working_set: &mut sov_modules_api::WorkingSet<C>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -46,7 +46,7 @@ impl<C: Context, Da: DaSpec> ApplyBlobHooks<Da::BlobTransaction> for TestRuntime
     fn begin_blob_hook(
         &self,
         _blob: &mut Da::BlobTransaction,
-        _working_set: &mut sov_modules_api::WorkingSet<<Self::Context as Spec>::Storage>,
+        _working_set: &mut sov_modules_api::WorkingSet<C>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -54,7 +54,7 @@ impl<C: Context, Da: DaSpec> ApplyBlobHooks<Da::BlobTransaction> for TestRuntime
     fn end_blob_hook(
         &self,
         _result: Self::BlobResult,
-        _working_set: &mut sov_modules_api::WorkingSet<<Self::Context as Spec>::Storage>,
+        _working_set: &mut sov_modules_api::WorkingSet<C>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -67,17 +67,13 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da> {
         &self,
         slot_header: &Da::BlockHeader,
         validity_condition: &Da::ValidityCondition,
-        working_set: &mut sov_modules_api::WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut sov_modules_api::WorkingSet<C>,
     ) {
         self.chain_state
             .begin_slot_hook(slot_header, validity_condition, working_set)
     }
 
-    fn end_slot_hook(
-        &self,
-        _working_set: &mut sov_modules_api::WorkingSet<<Self::Context as Spec>::Storage>,
-    ) {
-    }
+    fn end_slot_hook(&self, _working_set: &mut sov_modules_api::WorkingSet<C>) {}
 }
 
 impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for TestRuntime<C, Da> {
@@ -86,7 +82,7 @@ impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for TestRuntime<C
     fn finalize_slot_hook(
         &self,
         _root_hash: [u8; 32],
-        _accesorry_working_set: &mut AccessoryWorkingSet<<Self::Context as Spec>::Storage>,
+        _accesorry_working_set: &mut AccessoryWorkingSet<C>,
     ) {
     }
 }
@@ -101,7 +97,7 @@ where
     fn get_blobs_for_this_slot<'a, I>(
         &self,
         current_blobs: I,
-        _working_set: &mut sov_modules_api::WorkingSet<<Self::Context as Spec>::Storage>,
+        _working_set: &mut sov_modules_api::WorkingSet<C>,
     ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, Da::BlobTransaction>>>
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
@@ -112,7 +108,7 @@ where
 
 impl<C: Context, Da: DaSpec> Runtime<C, Da> for TestRuntime<C, Da> {}
 
-pub(crate) fn create_demo_genesis_config<C: Context, Da: DaSpec>(
+pub(crate) fn create_chain_state_genesis_config<C: Context, Da: DaSpec>(
     admin: <C as Spec>::Address,
 ) -> GenesisConfig<C, Da> {
     let value_setter_config = ValueSetterConfig { admin };
@@ -126,7 +122,7 @@ pub(crate) fn create_demo_genesis_config<C: Context, Da: DaSpec>(
 /// Clones the [`AppTemplate`]'s [`Storage`] and extract the underlying [`WorkingSet`]
 pub(crate) fn get_working_set<C: Context, Da: DaSpec>(
     app_template: &AppTemplate<C, Da, MockZkvm, TestRuntime<C, Da>>,
-) -> sov_modules_api::WorkingSet<<C as Spec>::Storage>
+) -> sov_modules_api::WorkingSet<C>
 where
 {
     sov_modules_api::WorkingSet::new(app_template.current_storage.clone())

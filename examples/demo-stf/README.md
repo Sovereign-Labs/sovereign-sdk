@@ -115,7 +115,7 @@ impl<C: Context> TxHooks for Runtime<C> {
     fn pre_dispatch_tx_hook(
         &self,
         tx: Transaction<Self::Context>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<<Self::Context as Spec>::Address> {
         self.accounts.pre_dispatch_tx_hook(tx, working_set)
     }
@@ -123,7 +123,7 @@ impl<C: Context> TxHooks for Runtime<C> {
     fn post_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
         self.accounts.post_dispatch_tx_hook(tx, working_set)
     }
@@ -137,7 +137,7 @@ impl<C: Context> ApplyBlobHooks for Runtime<C> {
     fn lock_sequencer_bond(
         &self,
         sequencer: &[u8],
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
         self.sequencer.lock_sequencer_bond(sequencer, working_set)
     }
@@ -145,7 +145,7 @@ impl<C: Context> ApplyBlobHooks for Runtime<C> {
     fn reward_sequencer(
         &self,
         amount: u64,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
         self.sequencer.reward_sequencer(amount, working_set)
     }

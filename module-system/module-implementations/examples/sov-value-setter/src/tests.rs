@@ -6,6 +6,20 @@ use super::ValueSetter;
 use crate::{call, query, ValueSetterConfig};
 
 #[test]
+fn test_config_serialization() {
+    let admin = Address::from([1; 32]);
+    let config = ValueSetterConfig::<DefaultContext> { admin };
+
+    let data = r#"
+    {
+        "admin":"sov1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs259tk3"
+    }"#;
+
+    let parsed_config: ValueSetterConfig<DefaultContext> = serde_json::from_str(data).unwrap();
+    assert_eq!(parsed_config, config);
+}
+
+#[test]
 fn test_value_setter() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
@@ -32,7 +46,7 @@ fn test_value_setter() {
 fn test_value_setter_helper<C: Context>(
     context: C,
     config: &ValueSetterConfig<C>,
-    working_set: &mut WorkingSet<C::Storage>,
+    working_set: &mut WorkingSet<C>,
 ) {
     let module = ValueSetter::<C>::default();
     module.genesis(config, working_set).unwrap();
@@ -95,7 +109,7 @@ fn test_err_on_sender_is_not_admin() {
 fn test_err_on_sender_is_not_admin_helper<C: Context>(
     context: C,
     config: &ValueSetterConfig<C>,
-    working_set: &mut WorkingSet<C::Storage>,
+    working_set: &mut WorkingSet<C>,
 ) {
     let module = ValueSetter::<C>::default();
     module.genesis(config, working_set).unwrap();

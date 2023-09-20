@@ -15,6 +15,10 @@ pub use query::*;
 use sov_modules_api::{Error, ModuleInfo, WorkingSet};
 
 /// Initial configuration for sov-value-setter module.
+#[cfg_attr(
+    feature = "native",
+    derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)
+)]
 pub struct ValueSetterConfig<C: sov_modules_api::Context> {
     /// Admin of the module.
     pub admin: C::Address,
@@ -47,11 +51,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
 
     type CallMessage = call::CallMessage;
 
-    fn genesis(
-        &self,
-        config: &Self::Config,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<(), Error> {
+    fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         // The initialization logic
         Ok(self.init_module(config, working_set)?)
     }
@@ -60,7 +60,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
         &self,
         msg: Self::CallMessage,
         context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
             call::CallMessage::SetValue(new_value) => {

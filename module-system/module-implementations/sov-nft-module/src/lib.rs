@@ -5,7 +5,7 @@ mod call;
 pub use call::CallMessage;
 mod address;
 mod genesis;
-pub use address::*;
+use address::*;
 mod collection;
 use collection::*;
 mod nft;
@@ -52,7 +52,7 @@ impl<C: Context> Module for NonFungibleToken<C> {
     fn genesis(
         &self,
         _config: &Self::Config,
-        _working_set: &mut WorkingSet<C::Storage>,
+        _working_set: &mut WorkingSet<C>,
     ) -> Result<(), Error> {
         Ok(())
     }
@@ -61,7 +61,7 @@ impl<C: Context> Module for NonFungibleToken<C> {
         &self,
         msg: Self::CallMessage,
         context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse, Error> {
         let call_result = match msg {
             CallMessage::CreateCollection {

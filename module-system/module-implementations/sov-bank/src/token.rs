@@ -123,7 +123,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         from: &C::Address,
         to: &C::Address,
         amount: Amount,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         if from == to {
             return Ok(());
@@ -146,7 +146,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         &mut self,
         from: &C::Address,
         amount: Amount,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         let new_balance = self.check_balance(from, amount, working_set)?;
         self.balances.set(from, &new_balance, working_set);
@@ -175,7 +175,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         authorizer: &C::Address,
         mint_to_address: &C::Address,
         amount: Amount,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         if self.authorized_minters.is_empty() {
             bail!("Attempt to mint frozen token {}", self.name)
@@ -218,7 +218,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         &self,
         from: &C::Address,
         amount: Amount,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<Amount> {
         let balance = self.balances.get_or_err(from, working_set)?;
         let new_balance = match balance.checked_sub(amount) {
@@ -240,7 +240,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         sender: &[u8],
         salt: u64,
         parent_prefix: &Prefix,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<(C::Address, Self)> {
         let token_address = super::get_token_address::<C>(token_name, sender, salt);
         let token_prefix = prefix_from_address_with_parent::<C>(parent_prefix, &token_address);

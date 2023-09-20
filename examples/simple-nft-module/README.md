@@ -187,7 +187,7 @@ impl<C: sov_modules_api::Context> Module for NonFungibleToken<C> {
     fn genesis(
         &self,
         _config: &Self::Config,
-        _working_set: &mut WorkingSet<C::Storage>,
+        _working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<(), Error> {
         Ok(())
     }
@@ -196,7 +196,7 @@ impl<C: sov_modules_api::Context> Module for NonFungibleToken<C> {
         &self,
         _msg: Self::CallMessage,
         _context: &Self::Context,
-        _working_set: &mut WorkingSet<C::Storage>,
+        _working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<sov_modules_api::CallResponse, Error> {
         Ok(sov_modules_api::CallResponse::default())
     }
@@ -224,7 +224,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for NonFungibleToken<C
     fn genesis(
         &self,
         config: &Self::Config,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<(), Error> {
         Ok(self.init_module(config, working_set)?)
     }
@@ -235,7 +235,7 @@ impl<C: sov_modules_api::Context> NonFungibleToken<C> {
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::Module>::Config,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
         self.admin.set(&config.admin, working_set);
         for (id, owner) in config.owners.iter() {
@@ -261,7 +261,7 @@ impl<C: sov_modules_api::Context> NonFungibleToken<C> {
         &self,
         id: u64,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<sov_modules_api::CallResponse> {
         if self.owners.get(&id, working_set).is_some() {
             bail!("Token with id {} already exists", id);
@@ -278,7 +278,7 @@ impl<C: sov_modules_api::Context> NonFungibleToken<C> {
         id: u64,
         to: C::Address,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<sov_modules_api::CallResponse> {
         let token_owner = match self.owners.get(&id, working_set) {
             None => {
@@ -301,7 +301,7 @@ impl<C: sov_modules_api::Context> NonFungibleToken<C> {
         &self,
         id: u64,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<sov_modules_api::CallResponse> {
         let token_owner = match self.owners.get(&id, working_set) {
             None => {
@@ -331,7 +331,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for NonFungibleToken<C
         &self,
         msg: Self::CallMessage,
         context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         let call_result = match msg {
             CallMessage::Mint { id } => self.mint(id, context, working_set),
@@ -366,7 +366,7 @@ impl<C: sov_modules_api::Context> NonFungibleToken<C> {
     pub fn get_owner(
         &self,
         token_id: u64,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<OwnerResponse<C>> {
         Ok(OwnerResponse {
             owner: self.owners.get(&token_id, working_set),

@@ -21,17 +21,19 @@ install-dev-tools:  ## Installs all necessary cargo helpers
 	cargo install cargo-udeps
 	cargo install flaky-finder
 	cargo install cargo-nextest --locked
+	cargo install cargo-risczero
+	cargo risczero install
 
-lint:  ## cargo check and clippy
+lint:  ## cargo check and clippy. Skip clippy on guest code since it's not supported by risc0
 	## fmt first, because it's the cheapest
-	cargo fmt --all --check
+	cargo +nightly fmt --all --check
 	cargo check --all-targets --all-features
-	cargo clippy --all-targets --all-features
+	CI_SKIP_GUEST_BUILD=1 cargo clippy --all-targets --all-features
 
-lint-fix:  ## cargo fmt, fix and clippy
-	cargo fmt --all
+lint-fix:  ## cargo fmt, fix and clippy. Skip clippy on guest code since it's not supported by risc0
+	cargo +nightly fmt --all
 	cargo fix --allow-dirty
-	cargo clippy --fix --allow-dirty
+	CI_SKIP_GUEST_BUILD=1 cargo clippy --fix --allow-dirty
 
 check-features: ## Checks that project compiles with all combinations of features. default is not needed because we never check `cfg(default)`, we only use it as an alias.
 	cargo hack check --workspace --feature-powerset --exclude-features default

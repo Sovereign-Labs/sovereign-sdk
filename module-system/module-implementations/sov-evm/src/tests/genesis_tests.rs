@@ -5,7 +5,7 @@ use reth_primitives::{Address, Bloom, Bytes, Header, SealedHeader, EMPTY_OMMER_R
 use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Module, WorkingSet};
-use sov_state::{DefaultStorageSpec, ProverStorage};
+use sov_state::ProverStorage;
 
 use crate::evm::primitive_types::{Block, SealedBlock};
 use crate::evm::{AccountInfo, DbAccount, EvmChainConfig};
@@ -18,7 +18,7 @@ lazy_static! {
             address: Address::from([1u8; 20]),
             balance: U256::from(1000000000),
             code_hash: KECCAK_EMPTY,
-            code: vec![],
+            code: Bytes::default(),
             nonce: 0,
         }],
         spec: vec![(0, SpecId::BERLIN), (1, SpecId::LATEST)]
@@ -71,7 +71,6 @@ fn genesis_data() {
             AccountInfo {
                 balance: account.balance,
                 code_hash: account.code_hash,
-                code: account.code.clone(),
                 nonce: account.nonce,
             }
         ),
@@ -196,9 +195,7 @@ fn genesis_head() {
     );
 }
 
-pub(crate) fn get_evm(
-    config: &EvmConfig,
-) -> (Evm<C>, WorkingSet<ProverStorage<DefaultStorageSpec>>) {
+pub(crate) fn get_evm(config: &EvmConfig) -> (Evm<C>, WorkingSet<DefaultContext>) {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let evm = Evm::<C>::default();

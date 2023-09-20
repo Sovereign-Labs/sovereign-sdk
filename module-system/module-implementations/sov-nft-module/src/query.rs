@@ -64,7 +64,7 @@ impl<C: Context> NonFungibleToken<C> {
     pub fn get_collection(
         &self,
         collection_address: CollectionAddress<C>,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<CollectionResponse<C>> {
         let c = self
             .collections
@@ -85,7 +85,7 @@ impl<C: Context> NonFungibleToken<C> {
         &self,
         creator: CreatorAddress<C>,
         collection_name: &str,
-        _working_set: &mut WorkingSet<C::Storage>,
+        _working_set: &mut WorkingSet<C>,
     ) -> RpcResult<CollectionAddressResponse<C>> {
         let ca = get_collection_address::<C>(collection_name, creator.as_ref());
         Ok(CollectionAddressResponse {
@@ -98,7 +98,7 @@ impl<C: Context> NonFungibleToken<C> {
         &self,
         collection_address: CollectionAddress<C>,
         token_id: TokenId,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<NftResponse<C>> {
         let nft_id = NftIdentifier(token_id, collection_address);
         let n = self.nfts.get(&nft_id, working_set).unwrap();

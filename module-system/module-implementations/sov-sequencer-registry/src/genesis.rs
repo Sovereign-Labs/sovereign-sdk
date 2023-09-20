@@ -3,15 +3,15 @@ use sov_modules_api::WorkingSet;
 
 use crate::SequencerRegistry;
 
-impl<C: sov_modules_api::Context> SequencerRegistry<C> {
+impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> SequencerRegistry<C, Da> {
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::Module>::Config,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         self.coins_to_lock.set(&config.coins_to_lock, working_set);
         self.register_sequencer(
-            config.seq_da_address.clone(),
+            &config.seq_da_address,
             &config.seq_rollup_address,
             working_set,
         )?;

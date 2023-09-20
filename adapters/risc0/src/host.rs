@@ -69,6 +69,15 @@ impl<'a> ZkvmHost for Risc0Host<'a> {
     fn simulate_with_hints(&mut self) -> Self::Guest {
         Risc0Guest::with_hints(std::mem::take(&mut self.env.lock().unwrap()))
     }
+
+    fn run(&mut self, with_proof: bool) -> Result<(), anyhow::Error> {
+        if with_proof {
+            self.run()?;
+        } else {
+            self.run_without_proving()?;
+        }
+        Ok(())
+    }
 }
 
 impl<'host> Zkvm for Risc0Host<'host> {

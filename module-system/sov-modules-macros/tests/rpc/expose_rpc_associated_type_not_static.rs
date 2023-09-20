@@ -49,7 +49,7 @@ pub mod my_module {
         fn genesis(
             &self,
             config: &Self::Config,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<C>,
         ) -> Result<(), Error> {
             self.data.set(config, working_set);
             Ok(())
@@ -59,7 +59,7 @@ pub mod my_module {
             &self,
             msg: Self::CallMessage,
             _context: &Self::Context,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<C>,
         ) -> Result<CallResponse, Error> {
             self.data.set(&msg, working_set);
             Ok(CallResponse::default())
@@ -84,7 +84,7 @@ pub mod my_module {
             #[rpc_method(name = "queryValue")]
             pub fn query_value(
                 &self,
-                working_set: &mut WorkingSet<C::Storage>,
+                working_set: &mut WorkingSet<C>,
             ) -> RpcResult<QueryResponse> {
                 let value = self.data.get(working_set).map(|d| format!("{:?}", d));
                 Ok(QueryResponse { value })

@@ -79,7 +79,7 @@ impl<C: Context> NonFungibleToken<C> {
         collection_name: &str,
         collection_uri: &str,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         let (collection_address, collection) = Collection::new(
             collection_name,
@@ -98,7 +98,7 @@ impl<C: Context> NonFungibleToken<C> {
         collection_name: &str,
         collection_uri: &str,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         let (collection_address, collection_state) = Collection::get_owned_collection(
             collection_name,
@@ -125,7 +125,7 @@ impl<C: Context> NonFungibleToken<C> {
         &self,
         collection_name: &str,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         let (collection_address, collection_state) = Collection::get_owned_collection(
             collection_name,
@@ -157,7 +157,7 @@ impl<C: Context> NonFungibleToken<C> {
         mint_to_address: &UserAddress<C>,
         frozen: bool,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         let (collection_address, collection_state) = Collection::get_owned_collection(
             collection_name,
@@ -201,7 +201,7 @@ impl<C: Context> NonFungibleToken<C> {
         collection_address: &CollectionAddress<C>,
         to: &UserAddress<C>,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         let mut owned_nft =
             Nft::get_owned_nft(nft_id, collection_address, &self.nfts, context, working_set)?;
@@ -221,7 +221,7 @@ impl<C: Context> NonFungibleToken<C> {
         token_uri: Option<String>,
         frozen: Option<bool>,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         let (collection_address, mut mutable_nft) = Nft::get_mutable_nft(
             token_id,

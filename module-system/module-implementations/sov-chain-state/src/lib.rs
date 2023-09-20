@@ -147,36 +147,33 @@ pub struct ChainStateConfig {
 
 impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da> {
     /// Returns transition height in the current slot
-    pub fn get_slot_height(&self, working_set: &mut WorkingSet<C::Storage>) -> TransitionHeight {
+    pub fn get_slot_height(&self, working_set: &mut WorkingSet<C>) -> TransitionHeight {
         self.slot_height
             .get(working_set)
             .expect("Slot height should be set at initialization")
     }
 
     /// Returns the current time, as reported by the DA layer
-    pub fn get_time(&self, working_set: &mut WorkingSet<C::Storage>) -> Time {
+    pub fn get_time(&self, working_set: &mut WorkingSet<C>) -> Time {
         self.time
             .get(working_set)
             .expect("Time must be set at initialization")
     }
 
     /// Return the genesis hash of the module.
-    pub fn get_genesis_hash(&self, working_set: &mut WorkingSet<C::Storage>) -> Option<[u8; 32]> {
+    pub fn get_genesis_hash(&self, working_set: &mut WorkingSet<C>) -> Option<[u8; 32]> {
         self.genesis_hash.get(working_set)
     }
 
     /// Returns the genesis height of the module.
-    pub fn get_genesis_height(
-        &self,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Option<TransitionHeight> {
+    pub fn get_genesis_height(&self, working_set: &mut WorkingSet<C>) -> Option<TransitionHeight> {
         self.genesis_height.get(working_set)
     }
 
     /// Returns the transition in progress of the module.
     pub fn get_in_progress_transition(
         &self,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Option<TransitionInProgress<Da>> {
         self.in_progress_transition.get(working_set)
     }
@@ -185,7 +182,7 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da>
     pub fn get_historical_transitions(
         &self,
         transition_num: TransitionHeight,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Option<StateTransitionId<Da>> {
         self.historical_transitions
             .get(&transition_num, working_set)
@@ -201,11 +198,7 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> sov_modules_api::
 
     type CallMessage = sov_modules_api::NonInstantiable;
 
-    fn genesis(
-        &self,
-        config: &Self::Config,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<(), Error> {
+    fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         // The initialization logic
         Ok(self.init_module(config, working_set)?)
     }

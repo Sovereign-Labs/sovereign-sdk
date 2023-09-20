@@ -41,7 +41,7 @@ impl<C: Context> Collection<C> {
         collection_uri: &str,
         collections: &StateMap<CollectionAddress<C>, Collection<C>>,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<(CollectionAddress<C>, Collection<C>)> {
         let creator = context.sender();
         let ca = get_collection_address(collection_name, creator.as_ref());
@@ -70,7 +70,7 @@ impl<C: Context> Collection<C> {
         collection_name: &str,
         collections: &StateMap<CollectionAddress<C>, Collection<C>>,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<(CollectionAddress<C>, CollectionState<C>)> {
         let creator = context.sender();
         let ca = get_collection_address(collection_name, creator.as_ref());

@@ -68,7 +68,7 @@ impl<C: Context> Nft<C> {
         frozen: bool,
         collection_address: &CollectionAddress<C>,
         nfts: &StateMap<NftIdentifier<C>, Nft<C>>,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<Self> {
         if nfts
             .get(
@@ -97,7 +97,7 @@ impl<C: Context> Nft<C> {
         collection_address: &CollectionAddress<C>,
         nfts: &StateMap<NftIdentifier<C>, Nft<C>>,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<OwnedNft<C>> {
         let sender = context.sender();
 
@@ -129,7 +129,7 @@ impl<C: Context> Nft<C> {
         nfts: &StateMap<NftIdentifier<C>, Nft<C>>,
         collections: &StateMap<CollectionAddress<C>, Collection<C>>,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<(CollectionAddress<C>, MutableNft<C>)> {
         let (collection_address, _) =
             Collection::get_owned_collection(collection_name, collections, context, working_set)?;

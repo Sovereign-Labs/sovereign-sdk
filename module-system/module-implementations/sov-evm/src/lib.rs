@@ -28,7 +28,7 @@ pub use revm::primitives::SpecId;
 mod experimental {
     use std::collections::HashMap;
 
-    use reth_primitives::{Address, H256};
+    use reth_primitives::{Address, Bytes, H256};
     use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
     use sov_modules_api::{Error, ModuleInfo, WorkingSet};
     use sov_state::codec::BcsCodec;
@@ -43,7 +43,7 @@ mod experimental {
         pub address: Address,
         pub balance: U256,
         pub code_hash: H256,
-        pub code: Vec<u8>,
+        pub code: Bytes,
         pub nonce: u64,
     }
 
@@ -103,6 +103,10 @@ mod experimental {
         pub(crate) accounts: sov_modules_api::StateMap<Address, DbAccount, BcsCodec>,
 
         #[state]
+        pub(crate) code:
+            sov_modules_api::StateMap<reth_primitives::H256, reth_primitives::Bytes, BcsCodec>,
+
+        #[state]
         pub(crate) cfg: sov_modules_api::StateValue<EvmChainConfig, BcsCodec>,
 
         #[state]
@@ -134,13 +138,6 @@ mod experimental {
 
         #[state]
         pub(crate) receipts: sov_modules_api::AccessoryStateVec<Receipt, BcsCodec>,
-
-        #[state]
-        pub(crate) code: sov_modules_api::AccessoryStateMap<
-            reth_primitives::H256,
-            reth_primitives::Bytes,
-            BcsCodec,
-        >,
     }
 
     impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {
@@ -153,7 +150,7 @@ mod experimental {
         fn genesis(
             &self,
             config: &Self::Config,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<C>,
         ) -> Result<(), Error> {
             Ok(self.init_module(config, working_set)?)
         }
@@ -162,18 +159,15 @@ mod experimental {
             &self,
             msg: Self::CallMessage,
             context: &Self::Context,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<C>,
         ) -> Result<sov_modules_api::CallResponse, Error> {
             Ok(self.execute_call(msg.tx, context, working_set)?)
         }
     }
 
     impl<C: sov_modules_api::Context> Evm<C> {
-        pub(crate) fn get_db<'a>(
-            &self,
-            working_set: &'a mut WorkingSet<C::Storage>,
-        ) -> EvmDb<'a, C> {
-            EvmDb::new(self.accounts.clone(), working_set)
+        pub(crate) fn get_db<'a>(&self, working_set: &'a mut WorkingSet<C>) -> EvmDb<'a, C> {
+            EvmDb::new(self.accounts.clone(), self.code.clone(), working_set)
         }
     }
 }

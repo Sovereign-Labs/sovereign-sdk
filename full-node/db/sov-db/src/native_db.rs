@@ -9,7 +9,7 @@ use crate::schema::types::StateKey;
 
 /// A typed wrapper around RocksDB for storing native-only accessory state.
 /// Internally, this is roughly just an [`Arc<SchemaDB>`].
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NativeDB {
     /// The underlying RocksDB instance, wrapped in an [`Arc`] for convenience
     /// and [`DB`] for type safety.
@@ -17,8 +17,8 @@ pub struct NativeDB {
 }
 
 impl NativeDB {
-    const DB_PATH_SUFFIX: &str = "native";
-    const DB_NAME: &str = "native-db";
+    const DB_PATH_SUFFIX: &'static str = "native";
+    const DB_NAME: &'static str = "native-db";
 
     /// Opens a [`NativeDB`] (backed by RocksDB) at the specified path.
     /// The returned instance will be at the path `{path}/native-db`.
@@ -58,6 +58,83 @@ impl NativeDB {
             batch.put::<ModuleAccessoryState>(&key, &value)?;
         }
         self.db.write_schemas(batch)
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+pub mod arbitrary {
+    //! Arbitrary definitions for the [`NativeDB`].
+
+    use core::ops::{Deref, DerefMut};
+
+    use proptest::strategy::LazyJust;
+    use tempfile::TempDir;
+
+    use super::*;
+
+    /// Arbitrary instance of [`NativeDB`].
+    ///
+    /// This is a db wrapper bound to its temporary path that will be deleted once the type is
+    /// dropped.
+    #[derive(Debug)]
+    pub struct ArbitraryNativeDB {
+        /// The underlying RocksDB instance.
+        pub db: NativeDB,
+        /// The temporary directory used to create the [`NativeDB`].
+        pub path: TempDir,
+    }
+
+    /// A fallible, arbitrary instance of [`NativeDB`].
+    ///
+    /// This type is suitable for operations that are expected to be infallible. The internal
+    /// implementation of the db requires I/O to create the temporary dir, making it fallible.
+    #[derive(Debug)]
+    pub struct FallibleArbitraryNativeDB {
+        /// The result of the new db instance.
+        pub result: anyhow::Result<ArbitraryNativeDB>,
+    }
+
+    impl Deref for ArbitraryNativeDB {
+        type Target = NativeDB;
+
+        fn deref(&self) -> &Self::Target {
+            &self.db
+        }
+    }
+
+    impl DerefMut for ArbitraryNativeDB {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.db
+        }
+    }
+
+    impl<'a> ::arbitrary::Arbitrary<'a> for ArbitraryNativeDB {
+        fn arbitrary(_u: &mut ::arbitrary::Unstructured<'a>) -> ::arbitrary::Result<Self> {
+            let path = TempDir::new().map_err(|_| ::arbitrary::Error::NotEnoughData)?;
+            let db = NativeDB::with_path(&path).map_err(|_| ::arbitrary::Error::IncorrectFormat)?;
+            Ok(Self { db, path })
+        }
+    }
+
+    impl proptest::arbitrary::Arbitrary for FallibleArbitraryNativeDB {
+        type Parameters = ();
+        type Strategy = LazyJust<Self, fn() -> FallibleArbitraryNativeDB>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            fn gen() -> FallibleArbitraryNativeDB {
+                FallibleArbitraryNativeDB {
+                    result: TempDir::new()
+                        .map_err(|e| {
+                            anyhow::anyhow!(format!("failed to generate path for NativeDB: {e}"))
+                        })
+                        .and_then(|path| {
+                            let db = NativeDB::with_path(&path)?;
+                            Ok(ArbitraryNativeDB { db, path })
+                        }),
+                }
+            }
+            LazyJust::new(gen)
+        }
     }
 }
 
