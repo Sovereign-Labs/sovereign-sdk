@@ -70,7 +70,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
       - name: Install Rust
-        run: rustup show
+        run: rustup show && rustup install nightly && rustup component add rustfmt --toolchain nightly-x86_64-unknown-linux-gnu  # Nightly is needed for our configuration of cargo fmt
       - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
         run: cargo install cargo-risczero
       - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain

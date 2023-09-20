@@ -20,7 +20,6 @@ schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
-hex = { workspace = true }
 
 sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
 sov-state = { path = "../../sov-state", version = "0.2" }
