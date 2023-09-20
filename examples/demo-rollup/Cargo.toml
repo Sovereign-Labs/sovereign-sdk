@@ -12,6 +12,7 @@ default-run = "sov-demo-rollup"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+celestia-types = { git = "https://github.com/eigerco/celestia-node-rs.git", branch = "main" }
 # non-optional dependencies
 sov-celestia-adapter = { path = "../../adapters/celestia" }
 const-rollup-config = { path = "../const-rollup-config" }

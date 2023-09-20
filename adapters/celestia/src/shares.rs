@@ -3,7 +3,7 @@ use std::fmt::Display;
 use base64::engine::general_purpose::STANDARD as B64_ENGINE;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
-use nmt_rs::{NamespaceId, NAMESPACE_ID_LEN};
+use celestia_types::nmt::{Namespace, NS_SIZE};
 use prost::bytes::{Buf, BytesMut};
 use prost::encoding::decode_varint;
 use prost::DecodeError;
@@ -111,11 +111,11 @@ impl<'de> Deserialize<'de> for Share {
 }
 
 fn is_continuation_unchecked(share: &[u8]) -> bool {
-    share[8] & 0x01 == 0
+    share[NS_SIZE] & 0x01 == 0
 }
 
 fn enforce_version_zero(share: &[u8]) {
-    assert_eq!(share[8] & !0x01, 0)
+    assert_eq!(share[NS_SIZE] & !0x01, 0)
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -150,7 +150,7 @@ impl Share {
             Share::Continuation(_) => Err(ShareError::NotAStartShare),
             Share::Start(inner) => {
                 let mut inner = inner.clone();
-                inner.advance(9);
+                inner.advance(NS_SIZE + INFO_BYTE_LEN);
                 Ok(inner.get_u32() as u64)
             }
         }
@@ -184,7 +184,7 @@ impl Share {
         // FIXME: account for continuation vs. start shares
         match self {
             Share::Continuation(_) => {
-                let reserved_bytes_offset = NAMESPACE_ID_LEN + INFO_BYTE_LEN;
+                let reserved_bytes_offset = NS_SIZE + INFO_BYTE_LEN;
                 let mut raw = self.raw_inner();
                 raw.advance(reserved_bytes_offset);
                 let idx_of_next_start = raw.get_u32() as usize;
@@ -201,7 +201,7 @@ impl Share {
 
     fn get_data_offset(&self) -> usize {
         // All shares are prefixed with metadata including the namespace (8 bytes), and info byte (1 byte)
-        let mut offset = NAMESPACE_ID_LEN + INFO_BYTE_LEN;
+        let mut offset = NS_SIZE + INFO_BYTE_LEN;
         // Start shares are also prefixed with a sequence length
         if let Self::Start(_) = self {
             offset += SEQUENCE_LENGTH_BYTES;
@@ -226,10 +226,11 @@ impl Share {
     }
 
     /// Get the namespace associated with this share
-    pub fn namespace(&self) -> NamespaceId {
-        let mut out = [0u8; 8];
-        out.copy_from_slice(&self.raw_inner_ref()[..8]);
-        NamespaceId(out)
+    pub fn namespace(&self) -> Namespace {
+        let out: [_; NS_SIZE] = self.raw_inner_ref()[..NS_SIZE]
+            .try_into()
+            .expect("can't fail for correct size");
+        nmt_rs::NamespaceId(out).into()
     }
 
     pub fn is_valid_tx_start(&self, idx: usize) -> bool {
@@ -363,6 +364,7 @@ impl NamespaceGroup {
         }
     }
 }
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
 pub struct Blob(pub Vec<Share>);
 

@@ -6,19 +6,20 @@ pub mod register_rpc;
 #[cfg(feature = "native")]
 mod rollup;
 
+use celestia_types::nmt::Namespace;
 use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 #[cfg(feature = "native")]
 pub use rollup::{
     new_rollup_with_celestia_da, new_rollup_with_mock_da, new_rollup_with_mock_da_from_config,
     DemoProverConfig, Rollup,
 };
-use sov_celestia_adapter::types::NamespaceId;
 #[cfg(feature = "native")]
+use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_db::ledger_db::LedgerDB;
 
 /// The rollup stores its data in the namespace b"sov-test" on Celestia
 /// You can change this constant to point your rollup at a different namespace
-pub const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
+pub const ROLLUP_NAMESPACE: Namespace = Namespace::const_v0(ROLLUP_NAMESPACE_RAW);
 
 #[cfg(feature = "native")]
 /// Initializes a [`LedgerDB`] using the provided `path`.
