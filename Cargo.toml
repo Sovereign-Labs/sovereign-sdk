@@ -124,3 +124,14 @@ secp256k1 = { version = "0.27.0", default-features = false, features = [
     "rand-std",
     "recovery",
 ] }
+
+[patch.'https://github.com/eigerco/celestia-node-rs.git']
+# Uncomment to apply local changes
+celestia-proto = { path = "../celestia-node-rs/proto" }
+celestia-rpc = { path = "../celestia-node-rs/rpc" }
+celestia-types = { path = "../celestia-node-rs/types" }
+
+[patch.'https://github.com/eigerco/celestia-tendermint-rs.git']
+# Uncomment to apply local changes
+tendermint = { path = "../celestia-tendermint-rs/tendermint" }
+tendermint-proto = { path = "../celestia-tendermint-rs/proto" }

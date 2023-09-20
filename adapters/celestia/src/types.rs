@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 
 use anyhow::ensure;
-use base64::engine::general_purpose::STANDARD as B64_ENGINE;
-use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
-pub use nmt_rs::NamespaceId;
+use celestia_types::nmt::{NamespacedHash, NamespacedHashExt, Nmt};
+use celestia_types::{ExtendedDataSquare as RawExtendedDataSquare, NamespacedRow};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::services::da::SlotData;
@@ -12,34 +11,28 @@ use sov_rollup_interface::Bytes;
 use tendermint::crypto::default::Sha256;
 use tendermint::merkle;
 
-use crate::pfb::MsgPayForBlobs;
+use celestia_proto::celestia::blob::v1::MsgPayForBlobs;
+
+// use crate::pfb::MsgPayForBlobs;
 use crate::shares::{NamespaceGroup, Share};
 use crate::utils::BoxError;
 use crate::verifier::{ChainValidityCondition, PARITY_SHARES_NAMESPACE};
 use crate::{CelestiaHeader, TxPosition};
 
-#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
-pub struct RpcNamespacedShares {
-    #[serde(rename = "Proof")]
-    pub proof: JsonNamespaceProof,
-    #[serde(rename = "Shares")]
-    pub shares: Vec<Share>,
-}
-
-#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
-pub struct JsonNamespaceProof {
-    #[serde(rename = "Start")]
-    start: usize,
-    #[serde(rename = "End")]
-    end: usize,
-    #[serde(rename = "Nodes")]
-    nodes: Option<Vec<StringWrapper>>,
-}
-
-#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
 pub struct ExtendedDataSquare {
-    pub data_square: Vec<Share>,
-    pub codec: String,
+    data_square: Vec<Share>,
+}
+
+impl From<RawExtendedDataSquare> for ExtendedDataSquare {
+    fn from(value: RawExtendedDataSquare) -> Self {
+        Self {
+            data_square: value
+                .data_square
+                .into_iter()
+                .map(|share| Share::new(Bytes::from(share)))
+                .collect(),
+        }
+    }
 }
 
 impl ExtendedDataSquare {
@@ -67,7 +60,7 @@ impl ExtendedDataSquare {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)] // TODO: , BorshSerialize, BorshDeserialize)]
 pub struct FilteredCelestiaBlock {
     pub header: CelestiaHeader,
     pub rollup_data: NamespaceGroup,
@@ -139,7 +132,10 @@ impl CelestiaHeader {
     pub fn validate_dah(&self) -> Result<(), ValidationError> {
         let rows_iter = self.dah.row_roots.iter();
         let cols_iter = self.dah.column_roots.iter();
-        let byte_vecs: Vec<&NamespacedHash> = rows_iter.chain(cols_iter).collect();
+        let byte_vecs: Vec<_> = rows_iter
+            .chain(cols_iter)
+            .map(NamespacedHashExt::to_array)
+            .collect();
         let root = merkle::simple_hash_from_byte_vectors::<Sha256>(&byte_vecs);
         let data_hash = self
             .header
@@ -153,15 +149,15 @@ impl CelestiaHeader {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)] // TODO: , BorshSerialize, BorshDeserialize)]
 pub struct Row {
     pub shares: Vec<Share>,
     pub root: NamespacedHash,
 }
 
 impl Row {
-    pub fn merklized(&self) -> CelestiaNmt {
-        let mut nmt = CelestiaNmt::new();
+    pub fn merklized(&self) -> Nmt {
+        let mut nmt = Nmt::new();
         for (idx, share) in self.shares.iter().enumerate() {
             // Shares in the two left-hand quadrants are prefixed with their namespace, while parity
             // shares (in the right-hand) quadrants always have the PARITY_SHARES_NAMESPACE
@@ -170,52 +166,34 @@ impl Row {
             } else {
                 PARITY_SHARES_NAMESPACE
             };
-            nmt.push_leaf(share.as_serialized(), namespace)
+            nmt.push_leaf(share.as_ref(), namespace.into())
                 .expect("shares are pushed in order");
         }
-        assert_eq!(&nmt.root(), &self.root);
         nmt
     }
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
-pub struct StringWrapper {
-    #[serde(rename = "/")]
-    pub inner: String,
-}
+// pub trait NamespacedRowExt {
+//     fn merklized(&self) -> Nmt;
+// }
 
-#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
-pub struct RpcNamespacedSharesResponse(pub Option<Vec<RpcNamespacedShares>>);
-
-use nmt_rs::simple_merkle::proof::Proof;
-use nmt_rs::{
-    CelestiaNmt, NamespaceProof, NamespacedHash, NamespacedSha2Hasher, NAMESPACED_HASH_LEN,
-};
-
-impl From<JsonNamespaceProof> for NamespaceProof<NamespacedSha2Hasher> {
-    fn from(val: JsonNamespaceProof) -> Self {
-        NamespaceProof::PresenceProof {
-            proof: Proof {
-                siblings: val
-                    .nodes
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|v| ns_hash_from_b64(&v.inner))
-                    .collect(),
-                start_idx: val.start as u32,
-            },
-            ignore_max_ns: true,
-        }
-    }
-}
-
-fn ns_hash_from_b64(input: &str) -> NamespacedHash {
-    let mut output = [0u8; NAMESPACED_HASH_LEN];
-    B64_ENGINE
-        .decode_slice(input, &mut output[..])
-        .expect("must be valid b64");
-    NamespacedHash(output)
-}
+// impl NamespacedRowExt for NamespacedRow {
+//     fn merklized(&self) -> Nmt {
+//         let mut nmt = Nmt::new();
+//         for (idx, share) in self.shares.iter().enumerate() {
+//             // Shares in the two left-hand quadrants are prefixed with their namespace, while parity
+//             // shares (in the right-hand) quadrants always have the PARITY_SHARES_NAMESPACE
+//             let namespace = if idx < self.shares.len() / 2 {
+//                 share.namespace()
+//             } else {
+//                 PARITY_SHARES_NAMESPACE
+//             };
+//             nmt.push_leaf(share.as_ref(), namespace.into())
+//                 .expect("shares are pushed in order");
+//         }
+//         nmt
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

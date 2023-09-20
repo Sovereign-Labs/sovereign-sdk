@@ -2,27 +2,24 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use async_trait::async_trait;
-use base64::engine::general_purpose::STANDARD as B64_ENGINE;
-use base64::Engine;
-use jsonrpsee::core::client::ClientT;
-use jsonrpsee::core::params::ArrayParams;
+use celestia_rpc::prelude::*;
+use celestia_types::blob::{Blob as RawBlob, SubmitOptions};
+use celestia_types::nmt::{Namespace, NamespacedHash};
+use celestia_types::DataAvailabilityHeader;
 use jsonrpsee::http_client::{HeaderMap, HttpClient};
-use nmt_rs::NamespaceId;
 use sov_rollup_interface::da::CountedBufReader;
 use sov_rollup_interface::services::da::DaService;
-use tracing::{debug, info, span, Level};
+use sov_rollup_interface::Bytes;
+use tracing::{debug, info, instrument};
 
 use crate::share_commit::recreate_commitment;
 use crate::shares::{Blob, NamespaceGroup, Share};
-use crate::types::{ExtendedDataSquare, FilteredCelestiaBlock, Row, RpcNamespacedSharesResponse};
+use crate::types::{ExtendedDataSquare, FilteredCelestiaBlock, Row};
 use crate::utils::BoxError;
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::proofs::{CompletenessProof, CorrectnessProof};
 use crate::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams, PFB_NAMESPACE};
-use crate::{
-    parse_pfb_namespace, BlobWithSender, CelestiaHeader, CelestiaHeaderResponse,
-    DataAvailabilityHeader,
-};
+use crate::{parse_pfb_namespace, BlobWithSender, CelestiaHeader};
 
 // Approximate value, just to make it work.
 const GAS_PER_BYTE: usize = 120;
@@ -30,11 +27,11 @@ const GAS_PER_BYTE: usize = 120;
 #[derive(Debug, Clone)]
 pub struct CelestiaService {
     client: HttpClient,
-    rollup_namespace: NamespaceId,
+    rollup_namespace: Namespace,
 }
 
 impl CelestiaService {
-    pub fn with_client(client: HttpClient, nid: NamespaceId) -> Self {
+    pub fn with_client(client: HttpClient, nid: Namespace) -> Self {
         Self {
             client,
             rollup_namespace: nid,
@@ -44,42 +41,30 @@ impl CelestiaService {
 
 /// Fetch the rollup namespace shares and etx data. Returns a tuple `(rollup_shares, etx_shares)`
 async fn fetch_needed_shares_by_header(
-    rollup_namespace: NamespaceId,
+    rollup_namespace: Namespace,
     client: &HttpClient,
-    header: &serde_json::Value,
+    dah: &DataAvailabilityHeader,
 ) -> Result<(NamespaceGroup, NamespaceGroup), BoxError> {
-    let dah = header
-        .get("dah")
-        .ok_or(BoxError::msg("missing dah in block header"))?;
-    let rollup_namespace_str = B64_ENGINE.encode(rollup_namespace).into();
-    let rollup_shares_future = {
-        let params: Vec<&serde_json::Value> = vec![dah, &rollup_namespace_str];
-        client.request::<RpcNamespacedSharesResponse, _>("share.GetSharesByNamespace", params)
-    };
-
-    let etx_namespace_str = B64_ENGINE.encode(PFB_NAMESPACE).into();
-    let etx_shares_future = {
-        let params: Vec<&serde_json::Value> = vec![dah, &etx_namespace_str];
-        client.request::<RpcNamespacedSharesResponse, _>("share.GetSharesByNamespace", params)
-    };
+    let rollup_shares_future = client.share_get_shares_by_namespace(dah, rollup_namespace);
+    let etx_shares_future = client.share_get_shares_by_namespace(dah, PFB_NAMESPACE);
 
     let (rollup_shares_resp, etx_shares_resp) =
         tokio::join!(rollup_shares_future, etx_shares_future);
 
     let rollup_shares = NamespaceGroup::Sparse(
         rollup_shares_resp?
-            .0
-            .unwrap_or_default()
+            .rows
             .into_iter()
-            .flat_map(|resp| resp.shares)
+            .flat_map(|row| row.shares.into_iter())
+            .map(|share| Share::new(Bytes::copy_from_slice(&share.data)))
             .collect(),
     );
     let tx_data = NamespaceGroup::Compact(
         etx_shares_resp?
-            .0
-            .unwrap_or_default()
+            .rows
             .into_iter()
-            .flat_map(|resp| resp.shares)
+            .flat_map(|row| row.shares.into_iter())
+            .map(|share| Share::new(Bytes::copy_from_slice(&share.data)))
             .collect(),
     );
 
@@ -149,59 +134,52 @@ impl DaService for CelestiaService {
 
     type Error = BoxError;
 
+    #[instrument(level = "trace", skip(self))]
     async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let client = self.client.clone();
         let rollup_namespace = self.rollup_namespace;
 
-        let _span = span!(Level::TRACE, "fetching finalized block", height = height);
         // Fetch the header and relevant shares via RPC
         debug!("Fetching header at height={}...", height);
-        let header = client
-            .request::<serde_json::Value, _>("header.GetByHeight", vec![height])
-            .await?;
-        debug!(header_result = ?header);
+        let header = client.header_get_by_height(height).await?;
+        // debug!(header_result = ?header);
         debug!("Fetching shares...");
         let (rollup_shares, tx_data) =
-            fetch_needed_shares_by_header(rollup_namespace, &client, &header).await?;
+            fetch_needed_shares_by_header(rollup_namespace, &client, &header.dah).await?;
 
         debug!("Fetching EDS...");
         // Fetch entire extended data square
-        let data_square = client
-            .request::<ExtendedDataSquare, _>(
-                "share.GetEDS",
-                vec![header
-                    .get("dah")
-                    .ok_or(BoxError::msg("missing 'dah' in block header"))?],
-            )
-            .await?;
+        let data_square: ExtendedDataSquare = client.share_get_eds(&header.dah).await?.into();
 
-        let unmarshalled_header: CelestiaHeaderResponse = serde_json::from_value(header)?;
-        let dah: DataAvailabilityHeader = unmarshalled_header.dah.try_into()?;
         debug!("Parsing namespaces...");
         // Parse out all of the rows containing etxs
-        let etx_rows =
-            get_rows_containing_namespace(PFB_NAMESPACE, &dah, data_square.rows()?.into_iter())
-                .await?;
+        let etx_rows = get_rows_containing_namespace(
+            PFB_NAMESPACE,
+            &header.dah,
+            data_square.rows()?.into_iter(),
+        )?;
         // Parse out all of the rows containing rollup data
-        let rollup_rows =
-            get_rows_containing_namespace(rollup_namespace, &dah, data_square.rows()?.into_iter())
-                .await?;
+        let rollup_rows = get_rows_containing_namespace(
+            rollup_namespace,
+            &header.dah,
+            data_square.rows()?.into_iter(),
+        )?;
 
         debug!("Decoding pfb protobufs...");
         // Parse out the pfds and store them for later retrieval
         let pfds = parse_pfb_namespace(tx_data)?;
         let mut pfd_map = HashMap::new();
         for tx in pfds {
-            for (idx, nid) in tx.0.namespace_ids.iter().enumerate() {
-                if nid == &rollup_namespace.0[..] {
+            for (idx, nid) in tx.0.namespaces.iter().enumerate() {
+                if nid == rollup_namespace.as_bytes() {
                     // TODO: Retool this map to avoid cloning txs
-                    pfd_map.insert(tx.0.share_commitments[idx].clone(), tx.clone());
+                    pfd_map.insert(tx.0.share_commitments[idx].clone().into(), tx.clone());
                 }
             }
         }
 
         let filtered_block = FilteredCelestiaBlock {
-            header: CelestiaHeader::new(dah, unmarshalled_header.header.into()),
+            header: CelestiaHeader::new(header.dah, header.header.into()),
             rollup_data: rollup_shares,
             relevant_pfbs: pfd_map,
             rollup_rows,
@@ -223,6 +201,7 @@ impl DaService for CelestiaService {
         for blob_ref in block.rollup_data.blobs() {
             let commitment = recreate_commitment(block.square_size(), blob_ref.clone())
                 .expect("blob must be valid");
+            info!("Blob: {:?}", commitment);
             let sender = block
                 .relevant_pfbs
                 .get(&commitment[..])
@@ -260,33 +239,31 @@ impl DaService for CelestiaService {
     }
 
     async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
-        // https://node-rpc-docs.celestia.org/
-        let client = self.client.clone();
         debug!("Sending {} bytes of raw data to Celestia.", blob.len());
-        let fee: u64 = 2000;
-        let namespace = self.rollup_namespace.0.to_vec();
-        let blob = blob.to_vec();
+        // https://docs.celestia.org/learn/submit-data/#fees-and-gas-limits
+        let fee: u64 = 65000;
         // We factor extra share to be occupied for namespace, which is pessimistic
-        let gas_limit = get_gas_limit_for_bytes(blob.len());
+        let gas_limit = get_gas_limit_for_bytes(blob.len()) as u64;
 
-        let mut params = ArrayParams::new();
-        params.insert(namespace)?;
-        params.insert(blob)?;
-        params.insert(fee.to_string())?;
-        params.insert(gas_limit)?;
+        let blob = RawBlob::new(self.rollup_namespace, blob.to_vec())?;
+        info!("Submiting: {:?}", blob.commitment);
+
         // Note, we only deserialize what we can use, other fields might be left over
-        let response = client
-            .request::<CelestiaBasicResponse, _>("state.SubmitPayForBlob", params)
+        let height = self
+            .client
+            .blob_submit(
+                &[blob],
+                SubmitOptions {
+                    fee: Some(fee),
+                    gas_limit: Some(gas_limit),
+                },
+            )
             .await?;
-        if !response.is_success() {
-            anyhow::bail!("Error returned from Celestia node: {:?}", response);
-        }
-        debug!("Response after submitting blob: {:?}", response);
         info!(
-            "Blob has been submitted to Celestia. tx-hash={}",
-            response.tx_hash,
+            "Blob has been submitted to Celestia. block-height={}",
+            height,
         );
-        Ok::<(), BoxError>(())
+        Ok(())
     }
 }
 
@@ -312,15 +289,15 @@ impl CelestiaBasicResponse {
     }
 }
 
-async fn get_rows_containing_namespace(
-    nid: NamespaceId,
-    dah: &DataAvailabilityHeader,
-    data_square_rows: impl Iterator<Item = &[Share]>,
+fn get_rows_containing_namespace<'a>(
+    nid: Namespace,
+    dah: &'a DataAvailabilityHeader,
+    data_square_rows: impl Iterator<Item = &'a [Share]>,
 ) -> Result<Vec<Row>, BoxError> {
     let mut output = vec![];
 
     for (row, root) in data_square_rows.zip(dah.row_roots.iter()) {
-        if root.contains(nid) {
+        if root.contains(*nid) {
             output.push(Row {
                 shares: row.to_vec(),
                 root: root.clone(),
@@ -334,7 +311,7 @@ async fn get_rows_containing_namespace(
 mod tests {
     use std::time::Duration;
 
-    use nmt_rs::NamespaceId;
+    use celestia_types::nmt::Namespace;
     use serde_json::json;
     use sov_rollup_interface::services::da::DaService;
     use wiremock::matchers::{bearer_token, body_json, method, path};
@@ -400,7 +377,7 @@ mod tests {
         let da_service = CelestiaService::new(
             config.clone(),
             RollupParams {
-                namespace: NamespaceId(namespace),
+                namespace: Namespace::new_v0(&namespace).unwrap(),
             },
         )
         .await;

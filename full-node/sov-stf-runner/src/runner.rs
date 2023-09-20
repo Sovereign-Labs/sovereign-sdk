@@ -140,7 +140,7 @@ where
             }
             info!("Starting RPC server at {} ", &bound_address);
 
-            let _server_handle = server.start(methods).unwrap();
+            let _server_handle = server.start(methods);
             futures::future::pending::<()>().await;
         });
     }

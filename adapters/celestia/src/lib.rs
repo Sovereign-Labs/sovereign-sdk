@@ -4,7 +4,7 @@ pub use crate::celestia::*;
 
 #[cfg(feature = "native")]
 mod da_service;
-pub mod pfb;
+// pub mod pfb;
 pub mod share_commit;
 pub mod types;
 mod utils;
