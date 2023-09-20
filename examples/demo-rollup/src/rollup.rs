@@ -20,12 +20,10 @@ use sov_db::ledger_db::LedgerDB;
 use sov_ethereum::experimental::EthRpcConfig;
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_stf_template::AppTemplate;
-use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::mocks::{MockAddress, MockDaConfig, MockDaService};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage::Storage;
-use sov_stf_runner::verifier::StateTransitionVerifier;
 use sov_stf_runner::{
     from_toml_path, ProofGenConfig, Prover, RollupConfig, RunnerConfig, StateTransitionRunner,
 };
@@ -35,7 +33,7 @@ use tracing::debug;
 #[cfg(feature = "experimental")]
 use crate::register_rpc::register_ethereum;
 use crate::register_rpc::{register_ledger, register_sequencer};
-use crate::{initialize_ledger, ROLLUP_NAMESPACE};
+use crate::{initialize_ledger, AppVerifier, ROLLUP_NAMESPACE};
 
 #[cfg(feature = "experimental")]
 const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.json";
@@ -86,18 +84,6 @@ pub enum DemoProverConfig {
     /// Run the rollup verifier and create a SNARK of execution
     Prove,
 }
-
-/// A verifier for the demo rollup
-pub type AppVerifier<DA, Zk> = StateTransitionVerifier<
-    AppTemplate<
-        ZkDefaultContext,
-        <DA as DaVerifier>::Spec,
-        Zk,
-        Runtime<ZkDefaultContext, <DA as DaVerifier>::Spec>,
-    >,
-    DA,
-    Zk,
->;
 
 /// Creates celestia based rollup.
 pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
