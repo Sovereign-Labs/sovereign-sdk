@@ -84,6 +84,22 @@ impl TestClient {
         Ok(receipt_req)
     }
 
+    async fn set_value_unsigned(&self, contract_address: H160, set_arg: u32, nonce: u64) -> TxHash {
+        let req = Eip1559TransactionRequest::new()
+            .from(self.from_addr)
+            .to(contract_address)
+            .chain_id(self.chain_id)
+            .nonce(nonce)
+            .data(self.contract.set_call_data(set_arg))
+            .max_priority_fee_per_gas(10u64)
+            .max_fee_per_gas(MAX_FEE_PER_GAS)
+            .gas(900000u64);
+
+        let typed_transaction = TypedTransaction::Eip1559(req);
+
+        self.eth_send_transaction(typed_transaction).await
+    }
+
     async fn set_value(
         &self,
         contract_address: H160,
@@ -133,6 +149,14 @@ impl TestClient {
     async fn eth_accounts(&self) -> Vec<Address> {
         self.http_client
             .request("eth_accounts", rpc_params![])
+            .await
+            .unwrap()
+    }
+
+    #[cfg(feature = "local")]
+    async fn eth_send_transaction(&self, tx: TypedTransaction) -> TxHash {
+        self.http_client
+            .request("eth_sendTransaction", rpc_params![tx])
             .await
             .unwrap()
     }
@@ -222,6 +246,22 @@ impl TestClient {
             assert_eq!(102, get_arg.as_u32());
         }
 
+        #[cfg(feature = "local")]
+        {
+            let value = 103;
+
+            let tx_hash = self.set_value_raw(contract_address, value, nonce).await;
+            self.send_publish_batch_request().await;
+
+            let latest_block = self.eth_get_block_by_number(None).await;
+            assert_eq!(latest_block.transactions.len(), 1);
+            assert_eq!(latest_block.transactions[0], tx_hash);
+
+            let get_arg = self.query_contract(contract_address, nonce).await?;
+            // FIXME: Transaction is not failing but the value is not set
+            assert_eq!(value, get_arg.as_u32());
+        }
+
         Ok(())
     }
 }
@@ -239,7 +279,7 @@ async fn send_tx_test_to_eth(rpc_address: SocketAddr) -> Result<(), Box<dyn std:
 
     let test_client = TestClient::new(chain_id, key, from_addr, contract, rpc_address).await;
 
-    #[cfg(feature = "local")] 
+    #[cfg(feature = "local")]
     {
         let etc_accounts = test_client.eth_accounts().await;
         assert_eq!(vec![from_addr], etc_accounts);

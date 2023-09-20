@@ -13,12 +13,14 @@ pub mod experimental {
     use borsh::ser::BorshSerialize;
     use demo_stf::app::DefaultPrivateKey;
     use demo_stf::runtime::{DefaultContext, Runtime};
-    use ethers::types::{Bytes, H256};
+    use ethers::types::transaction::eip2718::TypedTransaction;
+    use ethers::types::{Bytes, H160, H256};
     use jsonrpsee::types::ErrorObjectOwned;
     use jsonrpsee::RpcModule;
     use reth_primitives::{
         Address as RethAddress, TransactionSignedNoHash as RethTransactionSignedNoHash,
     };
+    use reth_rpc_types::TypedTransactionRequest;
     use sov_evm::call::CallMessage;
     use sov_evm::evm::RlpEvmTransaction;
     use sov_modules_api::transaction::Transaction;
@@ -180,10 +182,41 @@ pub mod experimental {
             Ok::<_, ErrorObjectOwned>(ethereum.eth_rpc_config.eth_signer.signers())
         })?;
 
-        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
-        rpc.register_async_method("eth_sendTransaction", |parameters, _ethereum| async move {
-            let _data: reth_rpc_types::TransactionRequest = parameters.one().unwrap();
-            unimplemented!("eth_sendTransaction not implemented")
+        #[cfg(feature = "local")]
+        rpc.register_async_method("eth_sendTransaction", |parameters, ethereum| async move {
+            let typed_transaction: TypedTransaction = parameters.one().unwrap();
+
+            let signed_tx = ethereum
+                .eth_rpc_config
+                .eth_signer
+                .sign_ethers_transaction(typed_transaction)
+                .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+
+            let raw_evm_tx = RlpEvmTransaction {
+                rlp: signed_tx.to_vec(),
+            };
+
+            let (tx_hash, raw_tx) = ethereum
+                .make_raw_tx(raw_evm_tx)
+                .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+
+            let blob = ethereum
+                .batch_builder
+                .lock()
+                .unwrap()
+                .add_transactions_and_get_next_blob(
+                    ethereum.eth_rpc_config.min_blob_size,
+                    vec![raw_tx],
+                );
+
+            if !blob.is_empty() {
+                ethereum
+                    .submit_batch(blob)
+                    .await
+                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+            }
+
+            Ok::<_, ErrorObjectOwned>(tx_hash)
         })?;
 
         Ok(())
