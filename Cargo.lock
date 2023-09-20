@@ -7106,6 +7106,7 @@ dependencies = [
  "serde_json",
  "sov-modules-api",
  "sov-state",
+ "sov-value-setter",
  "tempfile",
  "thiserror",
 ]

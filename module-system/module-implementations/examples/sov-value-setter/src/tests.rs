@@ -5,17 +5,20 @@ use sov_state::{ProverStorage, ZkStorage};
 use super::ValueSetter;
 use crate::{call, query, ValueSetterConfig};
 
-/*
 #[test]
 fn test_config_serialization() {
     let admin = Address::from([1; 32]);
-    let config = ValueSetterConfig { admin };
+    let config = ValueSetterConfig::<DefaultContext> { admin };
 
-    let config_str = serde_json::to_string(&config).unwrap();
+    let data = r#"
+    {
+        "admin":"sov1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs259tk3"
+    }"#;
 
-    println!("config_str {:?}", config_str);
+    let parsed_config: ValueSetterConfig<DefaultContext> = serde_json::from_str(data).unwrap();
+    assert_eq!(parsed_config, config);
 }
-*/
+
 #[test]
 fn test_value_setter() {
     let tmpdir = tempfile::tempdir().unwrap();

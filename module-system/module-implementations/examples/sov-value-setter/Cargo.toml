@@ -12,7 +12,9 @@ readme = "README.md"
 resolver = "2"
 publish = false
 
+
 [dev-dependencies]
+sov-value-setter = { path = ".", features = ["native"] }
 tempfile = { workspace = true }
 
 [dependencies]
