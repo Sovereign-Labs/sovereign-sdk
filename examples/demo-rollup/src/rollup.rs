@@ -19,6 +19,7 @@ use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::experimental::EthRpcConfig;
 use sov_modules_api::default_context::ZkDefaultContext;
+use sov_modules_api::DaSpec;
 use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::mocks::{MockAddress, MockDaConfig, MockDaService};
@@ -240,14 +241,19 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
         channel: Option<oneshot::Sender<SocketAddr>>,
     ) -> Result<(), anyhow::Error> {
         let storage = self.app.get_storage();
-        let mut methods = get_rpc_methods::<DefaultContext, Da::Spec>(storage);
+        let mut methods = get_rpc_methods::<DefaultContext, Da::Spec>(storage.clone());
 
         // register rpc methods
         {
             register_ledger(self.ledger_db.clone(), &mut methods)?;
             register_sequencer(self.da_service.clone(), &mut self.app, &mut methods)?;
             #[cfg(feature = "experimental")]
-            register_ethereum(self.da_service.clone(), self.eth_rpc_config, &mut methods)?;
+            register_ethereum::<DefaultContext, Da>(
+                self.da_service.clone(),
+                self.eth_rpc_config,
+                storage,
+                &mut methods,
+            )?;
         }
 
         let storage = self.app.get_storage();

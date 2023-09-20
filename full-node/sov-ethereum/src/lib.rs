@@ -18,14 +18,15 @@ pub mod experimental {
     use jsonrpsee::types::ErrorObjectOwned;
     use jsonrpsee::RpcModule;
     use reth_primitives::{
-        Address as RethAddress, TransactionSignedNoHash as RethTransactionSignedNoHash,
+        Address as RethAddress, TransactionSignedNoHash as RethTransactionSignedNoHash, U256,
     };
-    use reth_rpc_types::TypedTransactionRequest;
+    use reth_rpc_types::{TransactionRequest, TypedTransactionRequest};
     use sov_evm::call::CallMessage;
     use sov_evm::evm::RlpEvmTransaction;
+    use sov_evm::Evm;
     use sov_modules_api::transaction::Transaction;
     use sov_modules_api::utils::to_jsonrpsee_error_object;
-    use sov_modules_api::EncodeCall;
+    use sov_modules_api::{EncodeCall, WorkingSet};
     use sov_rollup_interface::services::da::DaService;
 
     use super::batch_builder::EthBatchBuilder;
@@ -41,45 +42,50 @@ pub mod experimental {
         pub eth_signer: DevSigner,
     }
 
-    pub fn get_ethereum_rpc<Da: DaService>(
+    pub fn get_ethereum_rpc<C: sov_modules_api::Context, Da: DaService>(
         da_service: Da,
         eth_rpc_config: EthRpcConfig,
-    ) -> RpcModule<Ethereum<Da>> {
+        storage: C::Storage,
+    ) -> RpcModule<Ethereum<C, Da>> {
         let mut rpc = RpcModule::new(Ethereum::new(
             Default::default(),
             da_service,
             Arc::new(Mutex::new(EthBatchBuilder::default())),
             eth_rpc_config,
+            storage,
         ));
 
         register_rpc_methods(&mut rpc).expect("Failed to register sequencer RPC methods");
         rpc
     }
 
-    pub struct Ethereum<Da: DaService> {
+    pub struct Ethereum<C: sov_modules_api::Context, Da: DaService> {
         nonces: Mutex<HashMap<RethAddress, u64>>,
         da_service: Da,
         batch_builder: Arc<Mutex<EthBatchBuilder>>,
         eth_rpc_config: EthRpcConfig,
+        storage: C::Storage,
     }
 
-    impl<Da: DaService> Ethereum<Da> {
+    impl<C: sov_modules_api::Context, Da: DaService> Ethereum<C, Da> {
         fn new(
             nonces: Mutex<HashMap<RethAddress, u64>>,
             da_service: Da,
             batch_builder: Arc<Mutex<EthBatchBuilder>>,
             eth_rpc_config: EthRpcConfig,
+            storage: C::Storage,
         ) -> Self {
             Self {
                 nonces,
                 da_service,
                 batch_builder,
                 eth_rpc_config,
+                storage,
             }
         }
     }
 
-    impl<Da: DaService> Ethereum<Da> {
+    impl<C: sov_modules_api::Context, Da: DaService> Ethereum<C, Da> {
         fn make_raw_tx(
             &self,
             raw_tx: RlpEvmTransaction,
@@ -121,8 +127,8 @@ pub mod experimental {
         }
     }
 
-    fn register_rpc_methods<Da: DaService>(
-        rpc: &mut RpcModule<Ethereum<Da>>,
+    fn register_rpc_methods<C: sov_modules_api::Context, Da: DaService>(
+        rpc: &mut RpcModule<Ethereum<C, Da>>,
     ) -> Result<(), jsonrpsee::core::Error> {
         rpc.register_async_method("eth_publishBatch", |params, ethereum| async move {
             let mut params_iter = params.sequence();
@@ -184,22 +190,76 @@ pub mod experimental {
 
         #[cfg(feature = "local")]
         rpc.register_async_method("eth_sendTransaction", |parameters, ethereum| async move {
-            let typed_transaction: TypedTransaction = parameters.one().unwrap();
+            let mut transaction_request: TransactionRequest = parameters.one().unwrap();
+
+            let working_set = WorkingSet::<C>::new(ethereum.storage.clone());
+            let evm = Evm::<C>::default();
+
+            // get from, return error if none
+            let from = transaction_request
+                .from
+                .ok_or(to_jsonrpsee_error_object("No from address", ETH_RPC_ERROR))?;
+
+            // return error if not in signers
+            if !ethereum.eth_rpc_config.eth_signer.signers().contains(&from) {
+                return Err(to_jsonrpsee_error_object(
+                    "From address not in signers",
+                    ETH_RPC_ERROR,
+                ));
+            }
+
+            if transaction_request.nonce.is_none() {
+                let nonce = evm
+                    .get_transaction_count(from, None, &mut working_set)
+                    .unwrap_or_default();
+
+                transaction_request.nonce = Some(reth_primitives::U256::from(nonce.as_u64()));
+            }
+
+            let chain_id = evm
+                .chain_id(&mut working_set)
+                .expect("Failed to get chain id")
+                .map(|id| id.as_u64())
+                .unwrap_or(1);
+
+            // TODO: implement gas logic after gas estimation is implemented
+            let transaction_request = match transaction_request.into_typed_request() {
+                Some(TypedTransactionRequest::Legacy(mut m)) => {
+                    m.chain_id = Some(chain_id);
+
+                    TypedTransactionRequest::Legacy(m)
+                }
+                Some(TypedTransactionRequest::EIP2930(mut m)) => {
+                    m.chain_id = chain_id;
+
+                    TypedTransactionRequest::EIP2930(m)
+                }
+                Some(TypedTransactionRequest::EIP1559(mut m)) => {
+                    m.chain_id = chain_id;
+
+                    TypedTransactionRequest::EIP1559(m)
+                }
+                None => {
+                    // to_jsonrpsee_error_object("Conflicting fee fields", ETH_RPC_ERROR)?;
+                    return Err(to_jsonrpsee_error_object(
+                        "Conflicting fee fields",
+                        ETH_RPC_ERROR,
+                    ));
+                }
+            };
 
             let signed_tx = ethereum
                 .eth_rpc_config
                 .eth_signer
-                .sign_ethers_transaction(typed_transaction)
+                .sign_transaction(transaction_request.into_transaction(), from)
                 .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
             let raw_evm_tx = RlpEvmTransaction {
-                rlp: signed_tx.to_vec(),
+                rlp: signed_tx.envelope_encoded().to_vec(),
             };
-
             let (tx_hash, raw_tx) = ethereum
                 .make_raw_tx(raw_evm_tx)
                 .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
-
             let blob = ethereum
                 .batch_builder
                 .lock()
@@ -208,7 +268,6 @@ pub mod experimental {
                     ethereum.eth_rpc_config.min_blob_size,
                     vec![raw_tx],
                 );
-
             if !blob.is_empty() {
                 ethereum
                     .submit_batch(blob)

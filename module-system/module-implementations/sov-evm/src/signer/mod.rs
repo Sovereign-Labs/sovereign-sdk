@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use ethers_core::types::{transaction::eip2718::TypedTransaction, Bytes, Signature};
 use reth_primitives::{sign_message, Address, Transaction, TransactionSigned, H256};
+use reth_rpc_types::TypedTransactionRequest;
 use secp256k1::{PublicKey, SecretKey};
 
 /// Ethereum transaction signer.
@@ -56,25 +57,6 @@ impl DevSigner {
             transaction,
             signature,
         ))
-    }
-
-    pub fn sign_ethers_transaction(
-        &self,
-        transaction: TypedTransaction,
-    ) -> Result<Bytes, SignError> {
-        let from = reth_primitives::H160(transaction.from().ok_or(SignError::NoAccount)?.0);
-        let signer = self.signers.get(&from).ok_or(SignError::NoAccount)?;
-
-        let tx_signature_hash = transaction.sighash();
-        let signature = sign_message(H256::from_slice(signer.as_ref()), tx_signature_hash.into())
-            .map_err(|_| SignError::CouldNotSign)?;
-
-        let chain_id = transaction.chain_id().map(|id| id.as_u64()).unwrap_or(1);
-        Ok(transaction.rlp_signed(&Signature {
-            r: signature.r.into(),
-            s: signature.s.into(),
-            v: signature.v(Some(chain_id)).into(),
-        }))
     }
 
     pub fn signers(&self) -> Vec<Address> {
