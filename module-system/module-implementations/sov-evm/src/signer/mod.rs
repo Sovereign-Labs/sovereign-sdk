@@ -1,8 +1,5 @@
 use std::collections::HashMap;
-
-use ethers_core::types::{transaction::eip2718::TypedTransaction, Bytes, Signature};
 use reth_primitives::{sign_message, Address, Transaction, TransactionSigned, H256};
-use reth_rpc_types::TypedTransactionRequest;
 use secp256k1::{PublicKey, SecretKey};
 
 /// Ethereum transaction signer.

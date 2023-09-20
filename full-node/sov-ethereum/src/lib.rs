@@ -13,12 +13,11 @@ pub mod experimental {
     use borsh::ser::BorshSerialize;
     use demo_stf::app::DefaultPrivateKey;
     use demo_stf::runtime::{DefaultContext, Runtime};
-    use ethers::types::transaction::eip2718::TypedTransaction;
-    use ethers::types::{Bytes, H160, H256};
+    use ethers::types::{Bytes, H256};
     use jsonrpsee::types::ErrorObjectOwned;
     use jsonrpsee::RpcModule;
     use reth_primitives::{
-        Address as RethAddress, TransactionSignedNoHash as RethTransactionSignedNoHash, U256,
+        Address as RethAddress, TransactionSignedNoHash as RethTransactionSignedNoHash,
     };
     use reth_rpc_types::{TransactionRequest, TypedTransactionRequest};
     use sov_evm::call::CallMessage;

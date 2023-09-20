@@ -19,7 +19,6 @@ use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::experimental::EthRpcConfig;
 use sov_modules_api::default_context::ZkDefaultContext;
-use sov_modules_api::DaSpec;
 use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::mocks::{MockAddress, MockDaConfig, MockDaService};
