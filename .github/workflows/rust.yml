@@ -57,7 +57,7 @@ env:
 # Source: <https://stackoverflow.com/a/72408109/5148606>
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  # Except in `nightly` and `stable` branches! Any canceled job will cause the
+  # Except in `nightly` and `stable` branches! Any cancelled job will cause the
   # CI run to fail, and we want to keep a clean history for major branches.
   cancel-in-progress: ${{ (github.ref != 'refs/heads/nightly') && (github.ref != 'refs/heads/stable') }}
 
