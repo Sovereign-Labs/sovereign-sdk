@@ -1,3 +1,4 @@
+use anyhow::Context as AnyhowContext;
 #[cfg(feature = "experimental")]
 use reth_primitives::Bytes;
 use sov_chain_state::ChainStateConfig;
@@ -41,6 +42,7 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
         #[cfg(feature = "experimental")]
         evm_genesis_addresses,
     )
+    .expect("Unable to read genesis configuration")
 }
 
 fn create_genesis_config<C: Context, Da: DaSpec>(
@@ -48,7 +50,7 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
     sequencer_address: C::Address,
     sequencer_da_address: Vec<u8>,
     #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
-) -> GenesisConfig<C, Da> {
+) -> anyhow::Result<GenesisConfig<C, Da>> {
     // This will be read from a file: #872
     let token_config: sov_bank::TokenConfig<C> = sov_bank::TokenConfig {
         token_name: DEMO_TOKEN_NAME.to_owned(),
@@ -79,12 +81,13 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
         is_preferred_sequencer: true,
     };
 
-    // This will be read from a file: #872
-    let value_setter_data = std::fs::read_to_string("../test-data/genesis/value_setter.json")
-        .expect("Unable to read file to string");
+    // This path will be injected as a parameter: #872
+    let value_setter_genesis_path = "../test-data/genesis/value_setter.json";
+    let value_setter_data = std::fs::read_to_string(value_setter_genesis_path)
+        .with_context(|| format!("Failed to read genesis from {}", value_setter_genesis_path))?;
 
-    let value_setter_config: ValueSetterConfig<C> =
-        serde_json::from_str(&value_setter_data).unwrap();
+    let value_setter_config: ValueSetterConfig<C> = serde_json::from_str(&value_setter_data)
+        .with_context(|| format!("Failed to parse genesis from {}", value_setter_genesis_path))?;
 
     // This will be read from a file: #872
     let chain_state_config = ChainStateConfig {
@@ -93,7 +96,7 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
         current_time: Default::default(),
     };
 
-    GenesisConfig::new(
+    Ok(GenesisConfig::new(
         bank_config,
         sequencer_registry_config,
         (),
@@ -102,7 +105,7 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
         sov_accounts::AccountConfig { pub_keys: vec![] },
         #[cfg(feature = "experimental")]
         get_evm_config(evm_genesis_addresses),
-    )
+    ))
 }
 
 // TODO: #840
