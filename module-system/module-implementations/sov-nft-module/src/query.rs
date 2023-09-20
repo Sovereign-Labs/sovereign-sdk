@@ -4,7 +4,9 @@ use sov_modules_api::Context;
 use sov_modules_api::WorkingSet;
 
 use crate::utils::get_collection_address;
-use crate::{CollectionAddress, NftIdentifier, NonFungibleToken, TokenId, CreatorAddress, OwnerAddress};
+use crate::{
+    CollectionAddress, CreatorAddress, NftIdentifier, NonFungibleToken, OwnerAddress, TokenId,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(bound(

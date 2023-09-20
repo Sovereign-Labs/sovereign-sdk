@@ -1,9 +1,9 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::{Context, Module};
+use sov_modules_api::{Context, Module, WorkingSet};
 use sov_nft_module::utils::get_collection_address;
-use sov_nft_module::{CallMessage, NonFungibleToken, UserAddress};
-use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
+use sov_nft_module::{CallMessage, NonFungibleToken, OwnerAddress, UserAddress};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
 const PK1: [u8; 32] = [
     199, 23, 116, 41, 227, 173, 69, 178, 7, 24, 164, 151, 88, 149, 52, 187, 102, 167, 163, 248, 38,
@@ -56,12 +56,15 @@ fn mints_and_transfers() {
 
     assert_eq!(actual_collection.name, collection_name);
     assert_eq!(actual_collection.supply, 0);
-    assert_eq!(actual_collection.creator, UserAddress(creator_address));
+    assert_eq!(
+        actual_collection.creator.get_address().clone(),
+        creator_address
+    );
     assert!(!actual_collection.frozen);
 
     let token_id = 42;
     let token_uri = "http://foo.bar/test_collection/42";
-    let owner = UserAddress(private_key_1.default_address());
+    let owner = UserAddress::new(&private_key_1.default_address());
 
     let mint_nft_message = CallMessage::MintNft {
         collection_name: collection_name.to_string(),
@@ -85,7 +88,7 @@ fn mints_and_transfers() {
     assert_eq!(actual_nft.token_id, token_id);
     assert_eq!(actual_nft.collection_address, collection_address);
     assert_eq!(actual_nft.token_uri, token_uri.to_string());
-    assert_eq!(actual_nft.owner, owner);
+    assert_eq!(actual_nft.owner, OwnerAddress::new(owner.get_address()));
 
     // Mint NFT to non-existent collection
     let ne_collection_name = "NON_EXISTENT_COLLECTION";
@@ -224,13 +227,13 @@ fn mints_and_transfers() {
     // mint nft to frozen collection
     let new_token_id = 23;
     let new_token_uri = "http://foo.bar/test_collection/23";
-    let owner = UserAddress(private_key_1.default_address());
+    let owner: OwnerAddress<DefaultContext> = OwnerAddress::new(&private_key_1.default_address());
 
     let mint_nft_message = CallMessage::MintNft {
         collection_name: collection_name.to_string(),
         token_uri: new_token_uri.to_string(),
         token_id: new_token_id,
-        owner: owner.clone(),
+        owner: UserAddress::new(owner.get_address()),
         frozen: false,
     };
 
@@ -261,7 +264,7 @@ fn mints_and_transfers() {
     let transfer_nft_message = CallMessage::TransferNft {
         collection_address: collection_address.clone(),
         token_id,
-        to: UserAddress(target_address),
+        to: UserAddress::new(&target_address),
     };
 
     // calling with the old context first (which is the creator)
@@ -273,7 +276,7 @@ fn mints_and_transfers() {
                 let err_message = anyhow_err.to_string();
                 let expected_message = format!(
                     "user: {} does not own nft: {} from collection address: {} , owner is: {}",
-                    creator_address, token_id, &collection_address.0, &owner.0
+                    creator_address, token_id, collection_address, owner
                 );
                 assert_eq!(err_message, expected_message);
             }
@@ -284,11 +287,11 @@ fn mints_and_transfers() {
 
     // transfer NFT with non-existent token id
     let target_address = private_key_2.default_address();
-    let owner_context = DefaultContext::new(owner.0);
+    let owner_context = DefaultContext::new(*owner.get_address());
     let transfer_nft_message = CallMessage::TransferNft {
         collection_address: collection_address.clone(),
         token_id: 1000,
-        to: UserAddress(target_address),
+        to: UserAddress::new(&target_address),
     };
 
     let transfer_response = nft.call(transfer_nft_message, &owner_context, &mut working_set);
@@ -298,8 +301,7 @@ fn mints_and_transfers() {
                 let err_message = anyhow_err.to_string();
                 let expected_message = format!(
                     "Nft with token_id: {} in collection_address: {} does not exist",
-                    1000,
-                    collection_address.0.clone()
+                    1000, collection_address
                 );
                 assert_eq!(err_message, expected_message);
             }
@@ -310,11 +312,11 @@ fn mints_and_transfers() {
 
     // transfer NFT by owner
     let target_address = private_key_2.default_address();
-    let owner_context = DefaultContext::new(owner.0);
+    let owner_context = DefaultContext::new(*owner.get_address());
     let transfer_nft_message = CallMessage::TransferNft {
         collection_address: collection_address.clone(),
         token_id,
-        to: UserAddress(target_address),
+        to: UserAddress::new(&target_address),
     };
     let transfer_response = nft.call(transfer_nft_message, &owner_context, &mut working_set);
     assert!(transfer_response.is_ok());
@@ -327,7 +329,7 @@ fn mints_and_transfers() {
     assert_eq!(actual_nft.collection_address, collection_address);
     assert_eq!(actual_nft.token_uri, token_uri.to_string());
     // ensure that the owner is the new owner
-    assert_eq!(actual_nft.owner, UserAddress(target_address));
+    assert_eq!(actual_nft.owner, OwnerAddress::new(&target_address));
 
     let actual_collection = nft
         .get_collection(collection_address.clone(), &mut working_set)
@@ -356,7 +358,7 @@ fn mints_and_transfers() {
     // token uri should be updated
     assert_eq!(actual_nft.token_uri, new_token_uri.to_string());
     // ensure owner is unchanged (new based on previous test)
-    assert_eq!(actual_nft.owner, UserAddress(target_address));
+    assert_eq!(actual_nft.owner, OwnerAddress::new(&target_address));
     // ensure still unfrozen
     assert!(!actual_nft.frozen);
 
@@ -380,7 +382,7 @@ fn mints_and_transfers() {
     // token uri should be updated
     assert_eq!(actual_nft.token_uri, new_token_uri.to_string());
     // ensure owner is unchanged (new based on previous test)
-    assert_eq!(actual_nft.owner, UserAddress(target_address));
+    assert_eq!(actual_nft.owner, OwnerAddress::new(&target_address));
     // ensure frozen is true
     assert!(actual_nft.frozen);
 
@@ -400,8 +402,7 @@ fn mints_and_transfers() {
                 let err_message = anyhow_err.to_string();
                 let expected_message = format!(
                     "NFT with token id {} in collection address {} is frozen",
-                    token_id,
-                    collection_address.0.clone()
+                    token_id, collection_address
                 );
                 assert_eq!(err_message, expected_message);
             }
@@ -425,7 +426,7 @@ fn mints_and_transfers() {
     let transfer_nft_message = CallMessage::TransferNft {
         collection_address: collection_address.clone(),
         token_id,
-        to: UserAddress(target_address),
+        to: UserAddress::new(&target_address),
     };
     let transfer_response = nft.call(transfer_nft_message, &owner_context, &mut working_set);
     assert!(transfer_response.is_ok());
@@ -439,7 +440,7 @@ fn mints_and_transfers() {
     // token uri should be new_token_uri
     assert_eq!(actual_nft.token_uri, new_token_uri.to_string());
     // ensure that the owner is the new owner
-    assert_eq!(actual_nft.owner, UserAddress(target_address));
+    assert_eq!(actual_nft.owner, OwnerAddress::new(&target_address));
 
     let actual_collection = nft
         .get_collection(collection_address, &mut working_set)

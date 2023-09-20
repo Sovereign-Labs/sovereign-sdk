@@ -1,13 +1,13 @@
-use anyhow::anyhow;
-use sov_modules_api::{Context, WorkingSet,StateMap};
 use crate::address::CollectionAddress;
-use crate::{CreatorAddress};
 use crate::utils::get_collection_address;
+use crate::CreatorAddress;
+use anyhow::anyhow;
+use sov_modules_api::{Context, StateMap, WorkingSet};
 
 #[cfg_attr(
-feature = "native",
-derive(serde::Serialize),
-derive(serde::Deserialize)
+    feature = "native",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 /// Defines an nft collection
@@ -32,48 +32,54 @@ pub struct Collection<C: Context> {
 
 pub enum CollectionState<C: Context> {
     Frozen(Collection<C>),
-    Mutable(MutableCollection<C>)
+    Mutable(MutableCollection<C>),
 }
 
-impl <C: Context> Collection<C> {
-
-    pub fn new(collection_name: &str,
-               collection_uri: &str,
-               collections: &StateMap<CollectionAddress<C>, Collection<C>>,
-               context: &C,
-               working_set: &mut WorkingSet<C::Storage>)
-        -> anyhow::Result<(CollectionAddress<C>,Collection<C>)> {
+impl<C: Context> Collection<C> {
+    pub fn new(
+        collection_name: &str,
+        collection_uri: &str,
+        collections: &StateMap<CollectionAddress<C>, Collection<C>>,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> anyhow::Result<(CollectionAddress<C>, Collection<C>)> {
         let creator = context.sender();
         let ca = get_collection_address(collection_name, creator.as_ref());
         let c = collections.get(&ca, working_set);
-        if c.is_some(){
+        if c.is_some() {
             Err(anyhow!(
                 "Collection with name: {} already exists creator {}",
-                collection_name, creator
+                collection_name,
+                creator
             ))
         } else {
-            Ok((ca, Collection {
-                name: collection_name.to_string(),
-                creator: CreatorAddress::new(creator),
-                frozen: false,
-                supply: 0,
-                collection_uri: collection_uri.to_string(),
-            }))
+            Ok((
+                ca,
+                Collection {
+                    name: collection_name.to_string(),
+                    creator: CreatorAddress::new(creator),
+                    frozen: false,
+                    supply: 0,
+                    collection_uri: collection_uri.to_string(),
+                },
+            ))
         }
     }
 
-    pub fn get_owned_collection(collection_name: &str,
-                                collections: &StateMap<CollectionAddress<C>, Collection<C>>,
-                                context: &C,
-                                working_set: &mut WorkingSet<C::Storage>) -> anyhow::Result<(CollectionAddress<C>,CollectionState<C>)>  {
+    pub fn get_owned_collection(
+        collection_name: &str,
+        collections: &StateMap<CollectionAddress<C>, Collection<C>>,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> anyhow::Result<(CollectionAddress<C>, CollectionState<C>)> {
         let creator = context.sender();
         let ca = get_collection_address(collection_name, creator.as_ref());
         let c = collections.get(&ca, working_set);
         if let Some(collection) = c {
             if collection.is_frozen() {
-                Ok((ca,CollectionState::Frozen(collection)))
+                Ok((ca, CollectionState::Frozen(collection)))
             } else {
-                Ok((ca,CollectionState::Mutable(MutableCollection(collection))))
+                Ok((ca, CollectionState::Mutable(MutableCollection(collection))))
             }
         } else {
             Err(anyhow!(
@@ -91,12 +97,12 @@ impl <C: Context> Collection<C> {
         &self.creator
     }
     pub fn is_frozen(&self) -> bool {
-        self.frozen.clone()
+        self.frozen
     }
     pub fn get_supply(&self) -> u64 {
         self.supply
     }
-    pub fn get_collection_uri(&self) -> &str{
+    pub fn get_collection_uri(&self) -> &str {
         &self.collection_uri
     }
 }
@@ -112,7 +118,7 @@ pub struct MutableCollection<C: Context>(pub Collection<C>);
 /// Can increment supply. Cannot decrement
 /// Cannot modify creator address
 /// Cannto modify name
-impl <C: Context> MutableCollection<C> {
+impl<C: Context> MutableCollection<C> {
     pub fn freeze(&mut self) {
         self.0.frozen = true;
     }
@@ -122,6 +128,6 @@ impl <C: Context> MutableCollection<C> {
     }
 
     pub fn increment_supply(&mut self) {
-        self.0.supply+= 1;
+        self.0.supply += 1;
     }
 }

@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{DeriveInput,Attribute};
+use syn::{Attribute, DeriveInput};
 
 pub fn address_type_helper(input: DeriveInput) -> Result<TokenStream, syn::Error> {
     let name = &input.ident;
@@ -21,12 +21,12 @@ pub fn address_type_helper(input: DeriveInput) -> Result<TokenStream, syn::Error
         pub struct #name<C: Context>(C::Address);
 
         impl<C: Context> #name<C> {
-            // Public constructor
+            /// Public constructor
             pub fn new(address: &C::Address) -> Self {
                 #name(address.clone())
             }
 
-            // Public getter
+            /// Public getter
             pub fn get_address(&self) -> &C::Address {
                 &self.0
             }
