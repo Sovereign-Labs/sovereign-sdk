@@ -421,7 +421,6 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
- "const-rollup-config",
  "hex",
  "serde",
  "sov-accounts",
@@ -1991,7 +1990,6 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
- "hex",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",

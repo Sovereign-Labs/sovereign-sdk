@@ -274,10 +274,10 @@ where
 mod test {
     use std::fmt::Debug;
 
-    use crate::default_context::DefaultContext;
     use sov_state::{DefaultStorageSpec, ProverStorage};
 
     use super::*;
+    use crate::default_context::DefaultContext;
 
     enum TestCaseAction<T> {
         Push(T),
