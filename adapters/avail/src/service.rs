@@ -2,12 +2,10 @@ use core::time::Duration;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use avail_subxt::api;
 use avail_subxt::api::runtime_types::sp_core::bounded::bounded_vec::BoundedVec;
 use avail_subxt::primitives::AvailExtrinsicParams;
-use avail_subxt::AvailConfig;
+use avail_subxt::{api, AvailConfig};
 use reqwest::StatusCode;
-
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::services::da::DaService;
 use sp_core::crypto::Pair as PairTrait;

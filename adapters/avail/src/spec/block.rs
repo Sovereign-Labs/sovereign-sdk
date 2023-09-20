@@ -1,10 +1,10 @@
-use crate::verifier::ChainValidityCondition;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::services::da::SlotData;
 
 use super::header::AvailHeader;
 use super::transaction::AvailBlobTransaction;
+use crate::verifier::ChainValidityCondition;
 
 #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
 pub struct AvailBlock {

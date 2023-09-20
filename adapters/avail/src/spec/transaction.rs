@@ -6,7 +6,6 @@ use avail_subxt::{
 use bytes::Bytes;
 #[cfg(feature = "native")]
 use codec::Encode;
-
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
 
