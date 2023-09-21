@@ -3,9 +3,6 @@ pub mod sov_modules_api {
 
     use core::marker::PhantomData;
 
-    // We add `remainder_funds` to `WorkingSet` as a simple `u64`; the gas will already be converted
-    // to scalar value when charged from `WorkingSet`.
-
     pub trait GasUnit {
         //: serde::Serialize + serde::de::DeserializeOwned {
         fn value(&self, price: &Self) -> u64;
@@ -29,7 +26,7 @@ pub mod sov_modules_api {
         }
 
         pub fn charge_gas(&mut self, gas: &GU) -> Result<()> {
-            // TODO add check
+            // TODO add checks
             self.remaining_funds = self
                 .remaining_funds
                 .saturating_sub(gas.value(&self.gas_price));
