@@ -19,7 +19,7 @@ impl<C: Context, Da: sov_modules_api::DaSpec> SlotHooks<Da> for ChainState<C, Da
         if self.genesis_hash.get(working_set).is_none() {
             // The genesis hash is not set, hence this is the
             // first transition right after the genesis block
-            self.genesis_hash.set(&pre_state_root, working_set)
+            self.genesis_hash.set(pre_state_root, working_set)
         } else {
             let transition: StateTransitionId<
                 Da,

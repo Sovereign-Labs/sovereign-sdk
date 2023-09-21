@@ -5,7 +5,8 @@ use std::ops::DerefMut;
 use risc0_zkvm::guest::env;
 #[cfg(not(target_os = "zkvm"))]
 use risc0_zkvm::serde::{Deserializer, WordRead};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
 use crate::Risc0MethodId;

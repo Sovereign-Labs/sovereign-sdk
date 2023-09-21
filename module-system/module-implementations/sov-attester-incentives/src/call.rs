@@ -90,6 +90,7 @@ pub enum CallMessage<C: sov_modules_api::Context, Da: DaSpec> {
     UnbondChallenger,
     /// Processes an attestation.
     ProcessAttestation(
+        #[allow(clippy::type_complexity)]
         WrappedAttestation<
             Da,
             StorageProof<<<C as Spec>::Storage as Storage>::Proof>,
@@ -484,6 +485,7 @@ where
     /// The bonding proof is now a proof that an attester was bonded during the last `finality_period` range.
     /// The proof must refer to a valid state of the rollup. The initial root hash must represent a state between
     /// the bonding proof one and the current state.
+    #[allow(clippy::type_complexity)]
     fn check_bonding_proof(
         &self,
         context: &C,
@@ -543,6 +545,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::type_complexity)]
     fn check_transition(
         &self,
         claimed_transition_height: TransitionHeight,
@@ -582,6 +585,7 @@ where
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn check_initial_hash(
         &self,
         claimed_transition_height: TransitionHeight,
@@ -652,6 +656,7 @@ where
     }
 
     /// Try to process an attestation if the attester is bonded
+    #[allow(clippy::type_complexity)]
     pub(crate) fn process_attestation(
         &self,
         context: &C,

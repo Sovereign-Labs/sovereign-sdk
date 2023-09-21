@@ -2,7 +2,8 @@ use std::io::Write;
 
 use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 
 use crate::zk::{Matches, Zkvm};
 

@@ -93,7 +93,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
             .verify_update(
                 jmt::RootHash(prev_state_root),
                 jmt::RootHash(new_root),
-                &batch,
+                batch,
             )
             .expect("Updates must be valid");
 

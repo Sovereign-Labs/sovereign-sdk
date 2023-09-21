@@ -152,7 +152,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             .expect("JMT update must succeed");
 
         witness.add_hint(update_proof);
-        witness.add_hint(&new_root.0);
+        witness.add_hint(new_root.0);
 
         Ok((new_root, tree_update.node_batch))
     }

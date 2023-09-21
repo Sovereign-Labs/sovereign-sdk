@@ -16,10 +16,12 @@ mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use query::*;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use sov_modules_api::{DaSpec, Error, ModuleInfo, ValidityConditionChecker, WorkingSet};
 use sov_rollup_interface::da::Time;
-use sov_state::{codec::BcsCodec, Storage};
+use sov_state::codec::BcsCodec;
+use sov_state::Storage;
 
 /// Type alias that contains the height of a given transition
 pub type TransitionHeight = u64;
