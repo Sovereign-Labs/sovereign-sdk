@@ -68,8 +68,8 @@ ethers = { workspace = true }
 revm = { workspace = true }
 
 [features]
-default = []
-experimental = ["sov-ethereum/experimental", "reth-primitives", "secp256k1", "demo-stf/experimental"]
+default = ["experimental"]
+experimental = ["sov-ethereum/experimental", "reth-primitives", "secp256k1", "demo-stf/experimental", "local"]
 local = ["sov-ethereum/local"]
 
 [[bench]]

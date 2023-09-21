@@ -155,6 +155,8 @@ pub mod experimental {
         rpc.register_async_method(
             "eth_sendRawTransaction",
             |parameters, ethereum| async move {
+                println!("Calling: eth_sendRawTransaction");
+
                 let data: Bytes = parameters.one().unwrap();
 
                 let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
@@ -189,8 +191,11 @@ pub mod experimental {
 
         #[cfg(feature = "local")]
         rpc.register_async_method("eth_sendTransaction", |parameters, ethereum| async move {
+            println!("Calling: eth_sendTransaction");
+
             let mut transaction_request: TransactionRequest = parameters.one().unwrap();
 
+            println!("Print: transaction_request {:?}", transaction_request);
             let evm = Evm::<C>::default();
 
             // get from, return error if none
@@ -276,6 +281,7 @@ pub mod experimental {
                     .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
             }
 
+            println!("End: eth_sendTransaction");
             Ok::<_, ErrorObjectOwned>(tx_hash)
         })?;
 
