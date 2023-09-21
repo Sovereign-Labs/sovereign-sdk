@@ -275,18 +275,17 @@ impl TestClient {
         {
             let value = 103;
 
-            let receipt = self.set_value_unsigned(contract_address, value).await;
-            self.send_publish_batch_request().await;
+            let tx_hash = {
+                let set_value_req = self.set_value_unsigned(contract_address, value).await;
+                self.send_publish_batch_request().await;
+                set_value_req.await.unwrap().unwrap().transaction_hash
+            };
 
             let latest_block = self.eth_get_block_by_number(None).await;
             assert_eq!(latest_block.transactions.len(), 1);
-            let r = receipt.await.unwrap().unwrap();
-
-            println!("Receipt {:?}", r);
-            //assert_eq!(latest_block.transactions[0], tx_hash);
+            assert_eq!(latest_block.transactions[0], tx_hash);
 
             let get_arg = self.query_contract(contract_address).await?;
-            // FIXME: Transaction is not failing but the value is not set
             assert_eq!(value, get_arg.as_u32());
         }
 
