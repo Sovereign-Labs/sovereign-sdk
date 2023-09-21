@@ -97,8 +97,4 @@ impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, 
             witness: (),
         }
     }
-
-    // fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot> {
-    //     Ok(())
-    // }
 }

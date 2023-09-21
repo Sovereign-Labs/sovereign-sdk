@@ -144,10 +144,6 @@ pub trait StateTransitionFunction<Vm: Zkvm, Da: DaSpec> {
     >
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>;
-
-    // /// Gets the state root from the associated state. If not available (because the chain has not been initialized yet),
-    // /// return None.
-    // fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot>;
 }
 
 /// A key-value pair representing a change to the rollup state

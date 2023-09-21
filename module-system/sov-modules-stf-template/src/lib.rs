@@ -250,10 +250,4 @@ where
             witness,
         }
     }
-
-    // fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot> {
-    //     self.current_storage
-    //         .get_state_root(&Default::default())
-    //         .map(jmt::RootHash)
-    // }
 }
