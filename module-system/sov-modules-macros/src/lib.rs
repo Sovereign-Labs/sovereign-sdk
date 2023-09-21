@@ -199,6 +199,63 @@ pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
     handle_macro_error(derive_cli_wallet_arg(input))
 }
 
+/// Simple convenience macro for adding some common derive macros and
+/// impls specifically for a NewType wrapping an Address.
+/// The reason for having this is that we assumes NewTypes for address as a common use case
+///
+/// ## Example
+/// ```
+///use sov_modules_macros::address_type;
+///#[address_type]
+///pub struct UserAddress;
+/// ```
+///
+/// This is exactly equivalent to hand-writing
+///
+/// ```
+/// use std::fmt;
+/// use sov_modules_api::Context;
+///#[cfg(feature = "native")]
+///#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+///#[schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "UserAddress")]
+///#[serde(transparent)]
+///#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Clone, Debug, PartialEq, Eq, Hash)]
+///pub struct UserAddress<C: Context>(C::Address);
+///
+///#[cfg(not(feature = "native"))]
+///#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Clone, Debug, PartialEq, Eq, Hash)]
+///pub struct UserAddress<C: Context>(C::Address);
+///
+///impl<C: Context> UserAddress<C> {
+///    /// Public constructor
+///    pub fn new(address: &C::Address) -> Self {
+///        UserAddress(address.clone())
+///    }
+///
+///    /// Public getter
+///    pub fn get_address(&self) -> &C::Address {
+///        &self.0
+///    }
+///}
+///
+///impl<C: Context> fmt::Display for UserAddress<C>
+///where
+///    C::Address: fmt::Display,
+///{
+///    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+///        write!(f, "{}", self.0)
+///    }
+///}
+///
+///impl<C: Context> AsRef<[u8]> for UserAddress<C>
+///where
+///    C::Address: AsRef<[u8]>,
+///{
+///    fn as_ref(&self) -> &[u8] {
+///        self.0.as_ref()
+///    }
+///}
+/// ```
 #[proc_macro_attribute]
 pub fn address_type(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
