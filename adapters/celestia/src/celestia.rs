@@ -39,7 +39,7 @@ use crate::verifier::{ChainValidityCondition, TmHash, PFB_NAMESPACE};
 /// a tendermint::block::Header from being deserialized in most formats except JSON. However
 /// it also provides a significant efficiency benefit over the standard tendermint type, which
 /// performs a complete protobuf serialization every time `.hash()` is called.
-#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)] // TODO: , BorshDeserialize, BorshSerialize)]
 pub struct CompactHeader {
     /// Header version
     pub version: Vec<u8>,
@@ -190,7 +190,7 @@ impl CelestiaHeader {
     }
 }
 
-#[derive(PartialEq, Clone, Debug, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)] // TODO: , BorshDeserialize, BorshSerialize)]
 pub struct BlobWithSender {
     pub blob: CountedBufReader<BlobIterator>,
     pub sender: CelestiaAddress,
