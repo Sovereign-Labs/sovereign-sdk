@@ -47,6 +47,20 @@ pub struct OwnedNft<C: Context>(Nft<C>);
 pub struct MutableNft<C: Context>(Nft<C>);
 
 impl<C: Context> OwnedNft<C> {
+    pub fn new(nft: Nft<C>, context: &C) -> anyhow::Result<Self> {
+        let sender = OwnerAddress::new(context.sender());
+        if nft.owner == sender {
+            Ok(OwnedNft(nft))
+        } else {
+            Err(anyhow!("NFT not owned by sender")).with_context(|| {
+                format!(
+                    "user: {} does not own nft: {} from collection address: {} , owner is: {}",
+                    sender, nft.token_id, nft.collection_address, nft.owner
+                )
+            })
+        }
+    }
+
     pub fn inner(&self) -> &Nft<C> {
         &self.0
     }
@@ -107,8 +121,6 @@ impl<C: Context> Nft<C> {
         context: &C,
         working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<OwnedNft<C>> {
-        let sender = context.sender();
-
         let nft_identifier = NftIdentifier(token_id, collection_address.clone());
         let nft = nfts
             .get(&nft_identifier, working_set)
@@ -119,18 +131,7 @@ impl<C: Context> Nft<C> {
                     token_id, collection_address
                 )
             })?;
-
-        if nft.owner == OwnerAddress::new(sender) {
-            Ok(OwnedNft(nft))
-        } else {
-            Err(anyhow!(
-                "user: {} does not own nft: {} from collection address: {} , owner is: {}",
-                sender,
-                token_id,
-                collection_address,
-                nft.owner
-            ))
-        }
+        OwnedNft::new(nft, context)
     }
 
     pub fn get_mutable_nft(

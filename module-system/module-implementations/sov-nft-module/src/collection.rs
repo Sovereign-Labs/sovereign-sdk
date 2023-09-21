@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, Context as _};
 use sov_modules_api::{Context, StateMap, WorkingSet};
 
 use crate::address::CollectionAddress;
@@ -99,11 +99,12 @@ impl<C: Context> Collection<C> {
                 ))
             }
         } else {
-            Err(anyhow!(
-                "Collection with name: {} does not exist for creator {}",
-                collection_name,
-                creator
-            ))
+            Err(anyhow!("Collection not found")).with_context(|| {
+                format!(
+                    "Collection with name: {} does not exist for creator {}",
+                    collection_name, creator
+                )
+            })
         }
     }
 
