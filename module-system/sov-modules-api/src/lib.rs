@@ -15,7 +15,7 @@ pub mod hooks;
 mod reexport_macros;
 #[cfg(feature = "macros")]
 pub use reexport_macros::*;
-
+mod gas;
 mod prefix;
 mod response;
 mod serde_address;
