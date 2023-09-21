@@ -107,7 +107,7 @@ async fn main() -> Result<(), anyhow::Error> {
         Default::default(),
     );
 
-    demo.init_chain(demo_genesis_config);
+    let mut current_root = demo.init_chain(demo_genesis_config);
 
     // data generation
     let mut blobs = vec![];
@@ -135,11 +135,13 @@ async fn main() -> Result<(), anyhow::Error> {
     let filtered_block = &blocks[0usize];
     let mut data_to_commit = SlotCommit::new(filtered_block.clone());
     let apply_block_results = demo.apply_slot(
+        &current_root,
         Default::default(),
         &filtered_block.header,
         &filtered_block.validity_cond,
         &mut blobs[0usize],
     );
+    current_root = apply_block_results.state_root;
     data_to_commit.add_batch(apply_block_results.batch_receipts[0].clone());
 
     ledger_db.commit_slot(data_to_commit).unwrap();
@@ -155,11 +157,13 @@ async fn main() -> Result<(), anyhow::Error> {
         let now = Instant::now();
 
         let apply_block_results = demo.apply_slot(
+            &current_root,
             Default::default(),
             &filtered_block.header,
             &filtered_block.validity_cond,
             &mut blobs[height as usize],
         );
+        current_root = apply_block_results.state_root;
 
         apply_block_time += now.elapsed();
         h_apply_block.observe(now.elapsed().as_secs_f64());
