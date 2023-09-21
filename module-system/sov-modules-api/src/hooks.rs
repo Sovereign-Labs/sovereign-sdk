@@ -1,4 +1,5 @@
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
+use sov_state::Storage;
 
 use crate::transaction::Transaction;
 use crate::{AccessoryWorkingSet, Context, Spec, WorkingSet};
@@ -58,6 +59,7 @@ pub trait SlotHooks<Da: DaSpec> {
         &self,
         slot_header: &Da::BlockHeader,
         validity_condition: &Da::ValidityCondition,
+        pre_state_root: &<<Self::Context as Spec>::Storage as Storage>::Root,
         working_set: &mut WorkingSet<Self::Context>,
     );
 
@@ -69,7 +71,7 @@ pub trait FinalizeHook<Da: DaSpec> {
 
     fn finalize_slot_hook(
         &self,
-        root_hash: [u8; 32],
+        root_hash: &<<Self::Context as Spec>::Storage as Storage>::Root,
         accesorry_working_set: &mut AccessoryWorkingSet<Self::Context>,
     );
 }

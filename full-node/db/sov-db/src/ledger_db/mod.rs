@@ -312,6 +312,18 @@ impl LedgerDB {
             _ => Ok(None),
         }
     }
+
+    /// Get the most recent slot which commited, if any
+    pub fn get_head_slot(&self) -> anyhow::Result<Option<(SlotNumber, StoredSlot)>> {
+        let mut iter = self.db.iter::<SlotByNumber>()?;
+        iter.seek_to_last();
+
+        match iter.next() {
+            Some(Ok((slot_number, slot))) => Ok(Some((slot_number, slot))),
+            Some(Err(e)) => Err(e),
+            _ => Ok(None),
+        }
+    }
 }
 
 #[cfg(feature = "arbitrary")]

@@ -224,6 +224,10 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
         channel: Option<oneshot::Sender<SocketAddr>>,
     ) -> Result<(), anyhow::Error> {
         let storage = self.app.get_storage();
+        let last_slot_opt = self.ledger_db.get_head_slot()?;
+        let prev_root = last_slot_opt
+            .map(|(number, _)| storage.get_root_hash(number.0))
+            .transpose()?;
         let mut methods = get_rpc_methods::<DefaultContext, Da::Spec>(storage);
 
         // register rpc methods

@@ -75,28 +75,30 @@ where
     Root: Clone,
 {
     /// Creates a new `StateTransitionRunner`.
+    ///
+    /// If a previous state root is provided, uses that as the starting point
+    /// for execution. Otherwise, initializes the chain using the provided
+    /// genesis config.
     pub fn new(
         runner_config: RunnerConfig,
         da_service: Da,
         ledger_db: LedgerDB,
         mut app: ST,
-        should_init_chain: bool,
+        prev_state_root: Option<Root>,
         genesis_config: InitialState<ST, Vm, Da::Spec>,
         prover: Option<Prover<V, Da, Vm>>,
     ) -> Result<Self, anyhow::Error> {
         let rpc_config = runner_config.rpc_config;
 
-        let prev_state_root = {
+        let prev_state_root = if let Some(prev_state_root) = prev_state_root {
             // Check if the rollup has previously been initialized
-            if should_init_chain {
-                info!("No history detected. Initializing chain...");
-                let ret_hash = app.init_chain(genesis_config);
-                info!("Chain initialization is done.");
-                ret_hash
-            } else {
-                debug!("Chain is already initialized. Skipping initialization.");
-                app.get_current_state_root()?
-            }
+            debug!("Chain is already initialized. Skipping initialization.");
+            prev_state_root
+        } else {
+            info!("No history detected. Initializing chain...");
+            let genesis_root = app.init_chain(genesis_config);
+            info!("Chain initialization is done.");
+            genesis_root
         };
 
         let listen_address = SocketAddr::new(rpc_config.bind_host.parse()?, rpc_config.bind_port);
@@ -166,6 +168,7 @@ where
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
 
             let slot_result = self.app.apply_slot(
+                &self.state_root,
                 Default::default(),
                 filtered_block.header(),
                 &filtered_block.validity_condition(),

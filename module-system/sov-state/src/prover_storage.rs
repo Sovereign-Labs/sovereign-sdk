@@ -61,7 +61,8 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         }
     }
 
-    fn get_root_hash(&self, version: Version) -> Result<RootHash, anyhow::Error> {
+    /// Get the root hash of the tree at the requested version
+    pub fn get_root_hash(&self, version: Version) -> Result<RootHash, anyhow::Error> {
         let temp_merkle: JellyfishMerkleTree<'_, StateDB, S::Hasher> =
             JellyfishMerkleTree::new(&self.db);
         temp_merkle.get_root_hash(version)
@@ -73,6 +74,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     type RuntimeConfig = Config;
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
     type StateUpdate = NodeBatch;
+    type Root = jmt::RootHash;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Self::with_path(config.path.as_path())
@@ -92,16 +94,11 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             .map(Into::into)
     }
 
-    fn get_state_root(&self, _witness: &Self::Witness) -> anyhow::Result<[u8; 32]> {
-        self.get_root_hash(self.db.get_next_version() - 1)
-            .map(|root| root.0)
-    }
-
     fn compute_state_update(
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-    ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error> {
+    ) -> Result<(Self::Root, Self::StateUpdate), anyhow::Error> {
         let latest_version = self.db.get_next_version() - 1;
         let jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&self.db);
 
@@ -158,7 +155,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         witness.add_hint(update_proof);
         witness.add_hint(&new_root.0);
 
-        Ok((new_root.0, tree_update.node_batch))
+        Ok((new_root, tree_update.node_batch))
     }
 
     fn commit(&self, node_batch: &Self::StateUpdate, accessory_writes: &OrderedReadsAndWrites) {
@@ -186,17 +183,13 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
 
     fn open_proof(
         &self,
-        state_root: [u8; 32],
+        state_root: Self::Root,
         state_proof: StorageProof<Self::Proof>,
     ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error> {
         let StorageProof { key, value, proof } = state_proof;
         let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
 
-        proof.verify(
-            jmt::RootHash(state_root),
-            key_hash,
-            value.as_ref().map(|v| v.value()),
-        )?;
+        proof.verify(state_root, key_hash, value.as_ref().map(|v| v.value()))?;
         Ok((key, value))
     }
 }

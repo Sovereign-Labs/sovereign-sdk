@@ -160,6 +160,15 @@ pub trait Storage: Clone {
         + BorshSerialize
         + BorshDeserialize;
 
+    /// A cryptographic commitment to the contents of this storage
+    type Root: Serialize
+        + DeserializeOwned
+        + core::fmt::Debug
+        + Clone
+        + BorshSerialize
+        + BorshDeserialize
+        + Eq;
+
     /// State update that will be committed to the database.
     type StateUpdate;
 
@@ -181,15 +190,12 @@ pub trait Storage: Clone {
         None
     }
 
-    /// Returns the latest state root hash from the storage.
-    fn get_state_root(&self, witness: &Self::Witness) -> anyhow::Result<[u8; 32]>;
-
     /// Calculates new state root but does not commit any changes to the database.
     fn compute_state_update(
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-    ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error>;
+    ) -> Result<(Self::Root, Self::StateUpdate), anyhow::Error>;
 
     /// Commits state changes to the database.
     fn commit(&self, node_batch: &Self::StateUpdate, accessory_update: &OrderedReadsAndWrites);
@@ -202,7 +208,7 @@ pub trait Storage: Clone {
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-    ) -> Result<[u8; 32], anyhow::Error> {
+    ) -> Result<Self::Root, anyhow::Error> {
         Self::validate_and_commit_with_accessory_update(
             self,
             state_accesses,
@@ -219,7 +225,7 @@ pub trait Storage: Clone {
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
         accessory_update: &OrderedReadsAndWrites,
-    ) -> Result<[u8; 32], anyhow::Error> {
+    ) -> Result<Self::Root, anyhow::Error> {
         let (root_hash, node_batch) = self.compute_state_update(state_accesses, witness)?;
         self.commit(&node_batch, accessory_update);
 
@@ -230,7 +236,7 @@ pub trait Storage: Clone {
     /// It returns a result with the opened leaf (key, value) pair in case of success.
     fn open_proof(
         &self,
-        state_root: [u8; 32],
+        state_root: Self::Root,
         proof: StorageProof<Self::Proof>,
     ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error>;
 

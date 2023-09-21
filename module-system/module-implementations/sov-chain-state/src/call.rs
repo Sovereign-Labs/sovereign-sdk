@@ -1,4 +1,5 @@
 use sov_modules_api::WorkingSet;
+use sov_state::Storage;
 
 use crate::{ChainState, StateTransitionId, TransitionHeight};
 
@@ -21,7 +22,7 @@ where
     pub(crate) fn store_state_transition(
         &self,
         height: TransitionHeight,
-        transition: StateTransitionId<Da>,
+        transition: StateTransitionId<Da, <C::Storage as Storage>::Root>,
         working_set: &mut WorkingSet<C>,
     ) {
         self.historical_transitions

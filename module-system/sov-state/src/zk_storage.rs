@@ -41,6 +41,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     type RuntimeConfig = ();
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
     type StateUpdate = ();
+    type Root = jmt::RootHash;
 
     fn with_config(_config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Ok(Self::new())
@@ -50,16 +51,12 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         witness.get_hint()
     }
 
-    fn get_state_root(&self, witness: &Self::Witness) -> anyhow::Result<[u8; 32]> {
-        Ok(witness.get_hint())
-    }
-
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn compute_state_update(
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-    ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error> {
+    ) -> Result<(Self::Root, Self::StateUpdate), anyhow::Error> {
         let prev_state_root = witness.get_hint();
 
         // For each value that's been read from the tree, verify the provided smt proof
@@ -100,7 +97,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
             )
             .expect("Updates must be valid");
 
-        Ok((new_root, ()))
+        Ok((jmt::RootHash(new_root), ()))
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
@@ -112,17 +109,13 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
 
     fn open_proof(
         &self,
-        state_root: [u8; 32],
+        state_root: Self::Root,
         state_proof: StorageProof<Self::Proof>,
     ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error> {
         let StorageProof { key, value, proof } = state_proof;
         let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
 
-        proof.verify(
-            jmt::RootHash(state_root),
-            key_hash,
-            value.as_ref().map(|v| v.value()),
-        )?;
+        proof.verify(state_root, key_hash, value.as_ref().map(|v| v.value()))?;
         Ok((key, value))
     }
 }
