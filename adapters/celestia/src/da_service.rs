@@ -4,7 +4,7 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use celestia_rpc::prelude::*;
 use celestia_types::blob::{Blob as RawBlob, SubmitOptions};
-use celestia_types::nmt::{Namespace, NamespacedHash};
+use celestia_types::nmt::Namespace;
 use celestia_types::DataAvailabilityHeader;
 use jsonrpsee::http_client::{HeaderMap, HttpClient};
 use sov_rollup_interface::da::CountedBufReader;
@@ -269,24 +269,6 @@ impl DaService for CelestiaService {
 
 fn get_gas_limit_for_bytes(n: usize) -> usize {
     (n + 512) * GAS_PER_BYTE + 1060
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct CelestiaBasicResponse {
-    raw_log: String,
-    #[serde(rename = "code")]
-    error_code: Option<u64>,
-    #[serde(rename = "txhash")]
-    tx_hash: String,
-    gas_wanted: u64,
-    gas_used: u64,
-}
-
-impl CelestiaBasicResponse {
-    /// We assume that absence of `code` indicates that request was successful
-    pub fn is_success(&self) -> bool {
-        self.error_code.is_none()
-    }
 }
 
 fn get_rows_containing_namespace<'a>(

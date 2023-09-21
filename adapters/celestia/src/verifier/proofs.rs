@@ -1,4 +1,4 @@
-use borsh::{BorshDeserialize, BorshSerialize};
+// use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_types::nmt::{Namespace, NamespaceProof};
 use serde::{Deserialize, Serialize};
 

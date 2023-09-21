@@ -1,7 +1,6 @@
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
-use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_types::DataAvailabilityHeader;
 use prost::bytes::Buf;
@@ -17,8 +16,6 @@ use tendermint::Hash;
 pub use tendermint_proto::v0_34 as celestia_tm_version;
 use tendermint_proto::Protobuf;
 use tracing::debug;
-
-const NAMESPACED_HASH_LEN: usize = 48;
 
 pub const GENESIS_PLACEHOLDER_HASH: &[u8; 32] = &[255; 32];
 
@@ -161,6 +158,7 @@ impl CompactHeader {
         Hash::Sha256(simple_hash_from_byte_vectors::<Sha256>(&fields_bytes))
     }
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)] // TODO:, BorshSerialize, BorshDeserialize)]
 pub struct CelestiaHeader {
     pub dah: DataAvailabilityHeader,
@@ -325,7 +323,7 @@ pub struct TxPosition {
 
 pub(crate) fn pfb_from_iter(data: impl Buf, pfb_len: usize) -> Result<MsgPayForBlobs, BoxError> {
     debug!("Decoding blob tx");
-    let mut blob_tx = IndexWrapper::decode(data.take(pfb_len))?;
+    let blob_tx = IndexWrapper::decode(data.take(pfb_len))?;
     debug!("Index wrapper: {:?}", blob_tx);
     debug!("Decoding cosmos sdk tx");
     let cosmos_tx = Tx::decode(&blob_tx.tx[..])?;
@@ -349,7 +347,7 @@ fn next_pfb(mut data: &mut BlobRefIterator) -> Result<(MsgPayForBlobs, TxPositio
     );
 
     let current_share_idx = data.current_position().0;
-    let pfb = pfb_from_iter(&mut data, len as usize)?;
+    let pfb = pfb_from_iter(data, len as usize)?;
 
     Ok((
         pfb,
