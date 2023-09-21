@@ -207,7 +207,7 @@ impl DaService for DaProvider {
             .sign_and_submit_then_watch(&data_transfer, &self.signer, extrinsic_params)
             .await?;
 
-        println!("Transaction submitted: {:#?}", h.extrinsic_hash());
+        info!("Transaction submitted: {:#?}", h.extrinsic_hash());
 
         Ok(())
     }
