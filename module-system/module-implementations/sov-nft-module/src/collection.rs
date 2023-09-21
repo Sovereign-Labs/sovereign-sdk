@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use sov_modules_api::{Context, StateMap, WorkingSet};
 
 use crate::address::CollectionAddress;
@@ -36,6 +36,19 @@ pub enum CollectionState<C: Context> {
     Mutable(MutableCollection<C>),
 }
 
+impl<C: Context> CollectionState<C> {
+    pub fn get_mutable_or_bail(&self) -> anyhow::Result<MutableCollection<C>> {
+        match self {
+            CollectionState::Frozen(collection) => bail!(
+                "Collection with name: {} , creator: {} is frozen",
+                collection.get_name(),
+                collection.get_creator()
+            ),
+            CollectionState::Mutable(mut_collection) => Ok(mut_collection.clone()),
+        }
+    }
+}
+
 impl<C: Context> Collection<C> {
     pub fn new(
         collection_name: &str,
@@ -45,9 +58,9 @@ impl<C: Context> Collection<C> {
         working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<(CollectionAddress<C>, Collection<C>)> {
         let creator = context.sender();
-        let ca = get_collection_address(collection_name, creator.as_ref());
-        let c = collections.get(&ca, working_set);
-        if c.is_some() {
+        let collection_address = get_collection_address(collection_name, creator.as_ref());
+        let collection = collections.get(&collection_address, working_set);
+        if collection.is_some() {
             Err(anyhow!(
                 "Collection with name: {} already exists creator {}",
                 collection_name,
@@ -55,7 +68,7 @@ impl<C: Context> Collection<C> {
             ))
         } else {
             Ok((
-                ca,
+                collection_address,
                 Collection {
                     name: collection_name.to_string(),
                     creator: CreatorAddress::new(creator),
@@ -74,13 +87,16 @@ impl<C: Context> Collection<C> {
         working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<(CollectionAddress<C>, CollectionState<C>)> {
         let creator = context.sender();
-        let ca = get_collection_address(collection_name, creator.as_ref());
-        let c = collections.get(&ca, working_set);
-        if let Some(collection) = c {
+        let collection_address = get_collection_address(collection_name, creator.as_ref());
+        let collection = collections.get(&collection_address, working_set);
+        if let Some(collection) = collection {
             if collection.is_frozen() {
-                Ok((ca, CollectionState::Frozen(collection)))
+                Ok((collection_address, CollectionState::Frozen(collection)))
             } else {
-                Ok((ca, CollectionState::Mutable(MutableCollection(collection))))
+                Ok((
+                    collection_address,
+                    CollectionState::Mutable(MutableCollection(collection)),
+                ))
             }
         } else {
             Err(anyhow!(
@@ -110,8 +126,9 @@ impl<C: Context> Collection<C> {
 
 // We use a NewType instead of &mut on the Collection because we don't want all
 // the members of the struct to be mutable
+#[derive(Clone)]
 /// NewType representing a mutable (or unfrozen) collection
-pub struct MutableCollection<C: Context>(pub Collection<C>);
+pub struct MutableCollection<C: Context>(Collection<C>);
 
 /// Member Functions to allow controlled mutability for the Collection struct
 /// Can only freeze. Cannot unfreeze
@@ -120,6 +137,9 @@ pub struct MutableCollection<C: Context>(pub Collection<C>);
 /// Cannot modify creator address
 /// Cannto modify name
 impl<C: Context> MutableCollection<C> {
+    pub fn inner(&self) -> &Collection<C> {
+        &self.0
+    }
     pub fn freeze(&mut self) {
         self.0.frozen = true;
     }

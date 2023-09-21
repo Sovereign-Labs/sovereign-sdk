@@ -40,19 +40,26 @@ pub struct Nft<C: Context> {
 
 /// NewType representing an owned NFT
 /// An owned NFT is owned by the context sender and is transferable
-pub struct OwnedNft<C: Context>(pub Nft<C>);
+pub struct OwnedNft<C: Context>(Nft<C>);
 
 /// NewType representing a Mutable NFT
 /// A mutable NFT is modifiable by the creator, but only certain fields (frozen, token_uri)
-pub struct MutableNft<C: Context>(pub Nft<C>);
+pub struct MutableNft<C: Context>(Nft<C>);
 
 impl<C: Context> OwnedNft<C> {
+    pub fn inner(&self) -> &Nft<C> {
+        &self.0
+    }
     pub fn set_owner(&mut self, to: &UserAddress<C>) {
         self.0.owner = OwnerAddress::new(to.get_address())
     }
 }
 
 impl<C: Context> MutableNft<C> {
+    pub fn inner(&self) -> &Nft<C> {
+        &self.0
+    }
+
     pub fn freeze(&mut self) {
         self.0.frozen = true;
     }

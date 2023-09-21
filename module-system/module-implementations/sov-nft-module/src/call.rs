@@ -1,10 +1,8 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use sov_modules_api::{CallResponse, Context, WorkingSet};
 
 use crate::address::UserAddress;
-use crate::{
-    Collection, CollectionAddress, CollectionState, Nft, NftIdentifier, NonFungibleToken, TokenId,
-};
+use crate::{Collection, CollectionAddress, Nft, NftIdentifier, NonFungibleToken, TokenId};
 
 #[cfg_attr(
     feature = "native",
@@ -105,18 +103,10 @@ impl<C: Context> NonFungibleToken<C> {
             context,
             working_set,
         )?;
-        match collection_state {
-            CollectionState::Frozen(c) => bail!(
-                "Collection with name: {} , creator: {} is frozen",
-                c.get_name(),
-                c.get_creator()
-            ),
-            CollectionState::Mutable(mut mut_collection) => {
-                mut_collection.set_collection_uri(collection_uri);
-                self.collections
-                    .set(&collection_address, &mut_collection.0, working_set);
-            }
-        }
+        let mut collection = collection_state.get_mutable_or_bail()?;
+        collection.set_collection_uri(collection_uri);
+        self.collections
+            .set(&collection_address, collection.inner(), working_set);
         Ok(CallResponse::default())
     }
 
@@ -132,18 +122,10 @@ impl<C: Context> NonFungibleToken<C> {
             context,
             working_set,
         )?;
-        match collection_state {
-            CollectionState::Frozen(c) => bail!(
-                "Collection with name: {} , creator: {} is frozen",
-                c.get_name(),
-                c.get_creator()
-            ),
-            CollectionState::Mutable(mut collection) => {
-                collection.freeze();
-                self.collections
-                    .set(&collection_address, &collection.0, working_set);
-            }
-        }
+        let mut collection = collection_state.get_mutable_or_bail()?;
+        collection.freeze();
+        self.collections
+            .set(&collection_address, collection.inner(), working_set);
         Ok(CallResponse::default())
     }
 
@@ -164,34 +146,26 @@ impl<C: Context> NonFungibleToken<C> {
             context,
             working_set,
         )?;
-        match collection_state {
-            CollectionState::Frozen(c) => bail!(
-                "Collection with name: {} , creator: {} is frozen",
-                c.get_name(),
-                c.get_creator()
-            ),
-            CollectionState::Mutable(mut collection) => {
-                let new_nft = Nft::new(
-                    token_id,
-                    token_uri,
-                    mint_to_address,
-                    frozen,
-                    &collection_address,
-                    &self.nfts,
-                    working_set,
-                )?;
-                self.nfts.set(
-                    &NftIdentifier(token_id, collection_address.clone()),
-                    &new_nft,
-                    working_set,
-                );
-                collection.increment_supply();
-                self.collections
-                    .set(&collection_address, &collection.0, working_set);
+        let mut collection = collection_state.get_mutable_or_bail()?;
+        let new_nft = Nft::new(
+            token_id,
+            token_uri,
+            mint_to_address,
+            frozen,
+            &collection_address,
+            &self.nfts,
+            working_set,
+        )?;
+        self.nfts.set(
+            &NftIdentifier(token_id, collection_address.clone()),
+            &new_nft,
+            working_set,
+        );
+        collection.increment_supply();
+        self.collections
+            .set(&collection_address, collection.inner(), working_set);
 
-                Ok(CallResponse::default())
-            }
-        }
+        Ok(CallResponse::default())
     }
 
     pub(crate) fn transfer_nft(
@@ -207,7 +181,7 @@ impl<C: Context> NonFungibleToken<C> {
         owned_nft.set_owner(to);
         self.nfts.set(
             &NftIdentifier(nft_id, collection_address.clone()),
-            &owned_nft.0,
+            owned_nft.inner(),
             working_set,
         );
         Ok(CallResponse::default())
@@ -238,7 +212,7 @@ impl<C: Context> NonFungibleToken<C> {
         }
         self.nfts.set(
             &NftIdentifier(token_id, collection_address),
-            &mutable_nft.0,
+            mutable_nft.inner(),
             working_set,
         );
         Ok(CallResponse::default())
