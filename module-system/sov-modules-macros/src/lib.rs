@@ -206,6 +206,8 @@ pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
 /// ## Example
 /// ```
 ///use sov_modules_macros::address_type;
+///use std::fmt;
+///use sov_modules_api::Context;
 ///#[address_type]
 ///pub struct UserAddress;
 /// ```
