@@ -135,7 +135,9 @@ pub mod foo {
         }
 
         pub fn some_cool_function(&self, ws: &mut WorkingSet<C>) -> Result<()> {
+            //.. some code
             ws.charge_gas(&self.gas_config.complex_math_operation)?;
+            //.. more code
             Ok(())
         }
     }
