@@ -19,6 +19,7 @@ members = [
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
     "utils/bashtestmd",
+    "utils/block-explorer-backend",
 
     "module-system/sov-cli",
     "module-system/sov-modules-stf-template",

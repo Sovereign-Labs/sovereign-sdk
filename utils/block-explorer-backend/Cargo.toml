@@ -1,0 +1,23 @@
+[package]
+name = "block-explorer-backend"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+resolver = "2"
+publish = false
+autotests = false
+
+[dependencies]
+anyhow = "1"
+axum = { version = "0.6" }
+clap = { version = "4", features = ["derive"] }
+indoc = "2"
+sea-orm = { version = "0.12.0", features = ["sqlx-postgres", "runtime-tokio-native-tls", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }
+sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-native-tls"] }
+tokio = { version = "1", features = ["full"] }
