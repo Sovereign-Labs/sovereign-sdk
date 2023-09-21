@@ -1,5 +1,5 @@
 [package]
-name = "demo-nft-module"
+name = "simple-nft-module"
 version = { workspace = true }
 edition = { workspace = true }
 authors = { workspace = true }
@@ -22,7 +22,7 @@ jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface" }
 tempfile = { workspace = true }
-demo-nft-module = { version = "*", features = ["native"], path = "." }
+simple-nft-module = { version = "*", features = ["native"], path = "." }
 
 
 [features]

@@ -1,0 +1,34 @@
+[package]
+name = "sov-nft-module"
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+homepage = "sovereign.xyz"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+serde = { workspace = true, optional = true }
+schemars =  { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
+
+sov-modules-api = { path = "../../sov-modules-api" }
+sov-modules-macros = {path = "../../sov-modules-macros"}
+sov-state = { path = "../../sov-state" }
+
+[dev-dependencies]
+sov-rollup-interface = { path = "../../../rollup-interface" }
+sov-data-generators = { path = "../../utils/sov-data-generators" }
+tempfile = { workspace = true }
+sov-nft-module = { version = "*", features = ["native"], path = "." }
+
+[features]
+default = []
+serde = ["dep:serde"]
+native = ["serde", "serde_json", "jsonrpsee", "schemars", "sov-state/native", "sov-modules-api/native", ]
+test = ["native"]

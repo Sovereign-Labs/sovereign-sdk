@@ -308,6 +308,7 @@ dependencies = [
  "sov-chain-state",
  "sov-modules-api",
  "sov-modules-stf-template",
+ "sov-nft-module",
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
@@ -1405,6 +1406,17 @@ dependencies = [
  "sov-state",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "sov-nft-module"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-state",
 ]
 
 [[package]]
