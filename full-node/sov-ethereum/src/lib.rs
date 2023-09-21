@@ -7,6 +7,7 @@ pub use sov_evm::signer::DevSigner;
 
 #[cfg(feature = "experimental")]
 pub mod experimental {
+    use std::array::TryFromSliceError;
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
@@ -112,6 +113,27 @@ pub mod experimental {
             Ok((H256::from(tx_hash), tx.try_to_vec()?))
         }
 
+        async fn build_and_submit_batch(
+            &self,
+            txs: Vec<Vec<u8>>,
+            min_blob_size: Option<usize>,
+        ) -> Result<(), jsonrpsee::core::Error> {
+            let min_blob_size = min_blob_size.or(self.eth_rpc_config.min_blob_size);
+
+            let batch = self
+                .batch_builder
+                .lock()
+                .unwrap()
+                .add_transactions_and_get_next_blob(min_blob_size, txs);
+
+            if !batch.is_empty() {
+                self.submit_batch(batch)
+                    .await
+                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+            }
+            Ok(())
+        }
+
         async fn submit_batch(&self, raw_txs: Vec<Vec<u8>>) -> Result<(), jsonrpsee::core::Error> {
             let blob = raw_txs
                 .try_to_vec()
@@ -137,18 +159,11 @@ pub mod experimental {
                 txs.push(tx)
             }
 
-            let blob = ethereum
-                .batch_builder
-                .lock()
-                .unwrap()
-                .add_transactions_and_get_next_blob(Some(1), txs);
+            ethereum
+                .build_and_submit_batch(txs, Some(1))
+                .await
+                .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
-            if !blob.is_empty() {
-                ethereum
-                    .submit_batch(blob)
-                    .await
-                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
-            }
             Ok::<String, ErrorObjectOwned>("Submitted transaction".to_string())
         })?;
 
@@ -163,21 +178,11 @@ pub mod experimental {
                     .make_raw_tx(raw_evm_tx)
                     .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
-                let blob = ethereum
-                    .batch_builder
-                    .lock()
-                    .unwrap()
-                    .add_transactions_and_get_next_blob(
-                        ethereum.eth_rpc_config.min_blob_size,
-                        vec![raw_tx],
-                    );
+                ethereum
+                    .build_and_submit_batch(vec![raw_tx], None)
+                    .await
+                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
-                if !blob.is_empty() {
-                    ethereum
-                        .submit_batch(blob)
-                        .await
-                        .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
-                }
                 Ok::<_, ErrorObjectOwned>(tx_hash)
             },
         )?;
@@ -222,7 +227,8 @@ pub mod experimental {
                     .map(|id| id.as_u64())
                     .unwrap_or(1);
 
-                // TODO: implement gas logic after gas estimation is implemented
+                // TODO: implement gas logic after gas estimation (#906) is implemented
+                // https://github.com/Sovereign-Labs/sovereign-sdk/issues/906
                 let transaction_request = match transaction_request.into_typed_request() {
                     Some(TypedTransactionRequest::Legacy(mut m)) => {
                         m.chain_id = Some(chain_id);
@@ -247,10 +253,14 @@ pub mod experimental {
                     }
                 };
 
+                let transaction = try_into_transaction(transaction_request).map_err(|_| {
+                    to_jsonrpsee_error_object("Invalid types in transaction request", ETH_RPC_ERROR)
+                })?;
+
                 let signed_tx = ethereum
                     .eth_rpc_config
                     .eth_signer
-                    .sign_transaction(into_transaction(transaction_request), from)
+                    .sign_transaction(transaction, from)
                     .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
                 RlpEvmTransaction {
@@ -260,20 +270,11 @@ pub mod experimental {
             let (tx_hash, raw_tx) = ethereum
                 .make_raw_tx(raw_evm_tx)
                 .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
-            let blob = ethereum
-                .batch_builder
-                .lock()
-                .unwrap()
-                .add_transactions_and_get_next_blob(
-                    ethereum.eth_rpc_config.min_blob_size,
-                    vec![raw_tx],
-                );
-            if !blob.is_empty() {
-                ethereum
-                    .submit_batch(blob)
-                    .await
-                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
-            }
+
+            ethereum
+                .build_and_submit_batch(vec![raw_tx], None)
+                .await
+                .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
             Ok::<_, ErrorObjectOwned>(tx_hash)
         })?;
@@ -283,39 +284,33 @@ pub mod experimental {
 
     // Temporary solution until https://github.com/paradigmxyz/reth/issues/4704 is resolved
     // The problem is having wrong length nonce/gas_limt/value fields in the transaction request
-    fn into_transaction(request: TypedTransactionRequest) -> reth_primitives::Transaction {
-        match request {
+    fn try_into_transaction(
+        request: TypedTransactionRequest,
+    ) -> Result<reth_primitives::Transaction, TryFromSliceError> {
+        Ok(match request {
             TypedTransactionRequest::Legacy(tx) => {
                 reth_primitives::Transaction::Legacy(reth_primitives::TxLegacy {
                     chain_id: tx.chain_id,
-                    nonce: u64::from_be_bytes(
-                        tx.nonce.to_be_bytes::<32>()[24..].try_into().unwrap(),
-                    ),
+                    nonce: u64::from_be_bytes(tx.nonce.to_be_bytes::<32>()[24..].try_into()?),
                     gas_price: u128::from_be_bytes(tx.gas_price.to_be_bytes()),
                     gas_limit: u64::from_be_bytes(
-                        tx.gas_limit.to_be_bytes::<32>()[24..].try_into().unwrap(),
+                        tx.gas_limit.to_be_bytes::<32>()[24..].try_into()?,
                     ),
                     to: tx.kind.into(),
-                    value: u128::from_be_bytes(
-                        tx.value.to_be_bytes::<32>()[16..].try_into().unwrap(),
-                    ),
+                    value: u128::from_be_bytes(tx.value.to_be_bytes::<32>()[16..].try_into()?),
                     input: tx.input,
                 })
             }
             TypedTransactionRequest::EIP2930(tx) => {
                 reth_primitives::Transaction::Eip2930(reth_primitives::TxEip2930 {
                     chain_id: tx.chain_id,
-                    nonce: u64::from_be_bytes(
-                        tx.nonce.to_be_bytes::<32>()[24..].try_into().unwrap(),
-                    ),
+                    nonce: u64::from_be_bytes(tx.nonce.to_be_bytes::<32>()[24..].try_into()?),
                     gas_price: u128::from_be_bytes(tx.gas_price.to_be_bytes()),
                     gas_limit: u64::from_be_bytes(
-                        tx.gas_limit.to_be_bytes::<32>()[24..].try_into().unwrap(),
+                        tx.gas_limit.to_be_bytes::<32>()[24..].try_into()?,
                     ),
                     to: tx.kind.into(),
-                    value: u128::from_be_bytes(
-                        tx.value.to_be_bytes::<32>()[16..].try_into().unwrap(),
-                    ),
+                    value: u128::from_be_bytes(tx.value.to_be_bytes::<32>()[16..].try_into()?),
                     input: tx.input,
                     access_list: tx.access_list,
                 })
@@ -323,17 +318,13 @@ pub mod experimental {
             TypedTransactionRequest::EIP1559(tx) => {
                 reth_primitives::Transaction::Eip1559(reth_primitives::TxEip1559 {
                     chain_id: tx.chain_id,
-                    nonce: u64::from_be_bytes(
-                        tx.nonce.to_be_bytes::<32>()[24..].try_into().unwrap(),
-                    ),
+                    nonce: u64::from_be_bytes(tx.nonce.to_be_bytes::<32>()[24..].try_into()?),
                     max_fee_per_gas: u128::from_be_bytes(tx.max_fee_per_gas.to_be_bytes()),
                     gas_limit: u64::from_be_bytes(
-                        tx.gas_limit.to_be_bytes::<32>()[24..].try_into().unwrap(),
+                        tx.gas_limit.to_be_bytes::<32>()[24..].try_into()?,
                     ),
                     to: tx.kind.into(),
-                    value: u128::from_be_bytes(
-                        tx.value.to_be_bytes::<32>()[16..].try_into().unwrap(),
-                    ),
+                    value: u128::from_be_bytes(tx.value.to_be_bytes::<32>()[16..].try_into()?),
                     input: tx.input,
                     access_list: tx.access_list,
                     max_priority_fee_per_gas: u128::from_be_bytes(
@@ -341,6 +332,6 @@ pub mod experimental {
                     ),
                 })
             }
-        }
+        })
     }
 }
