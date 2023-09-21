@@ -23,7 +23,6 @@ use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::mocks::{MockAddress, MockDaConfig, MockDaService};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::ZkvmHost;
-use sov_state::storage::Storage;
 use sov_stf_runner::{
     from_toml_path, ProofGenConfig, Prover, RollupConfig, RunnerConfig, StateTransitionRunner,
 };
@@ -238,14 +237,12 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
             register_ethereum(self.da_service.clone(), self.eth_rpc_config, &mut methods)?;
         }
 
-        let storage = self.app.get_storage();
-
         let mut runner = StateTransitionRunner::new(
             self.runner_config,
             self.da_service,
             self.ledger_db,
             self.app.stf,
-            storage.is_empty(),
+            prev_root,
             self.genesis_config,
             self.prover,
         )?;

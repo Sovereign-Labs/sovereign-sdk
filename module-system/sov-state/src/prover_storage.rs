@@ -118,7 +118,6 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             .get_root_hash(latest_version)
             .expect("Previous root hash was just populated");
         witness.add_hint(prev_root.0);
-        witness.add_hint(latest_version);
 
         // For each value that's been read from the tree, read it from the logged JMT to populate hints
         for (key, read_value) in state_accesses.ordered_reads {

@@ -27,14 +27,14 @@ pub const INIT_HEIGHT: u64 = 0;
 pub(crate) fn commit_get_new_working_set(
     storage: &ProverStorage<DefaultStorageSpec>,
     working_set: WorkingSet<C>,
-) -> WorkingSet<C> {
+) -> (jmt::RootHash, WorkingSet<C>) {
     let (reads_writes, witness) = working_set.checkpoint().freeze();
 
-    storage
+    let prev_root = storage
         .validate_and_commit(reads_writes, &witness)
         .expect("Should be able to commit");
 
-    WorkingSet::new(storage.clone())
+    (prev_root, WorkingSet::new(storage.clone()))
 }
 
 pub(crate) fn create_bank_config_with_token(
@@ -132,7 +132,7 @@ pub(crate) fn setup(
 }
 
 pub(crate) struct ExecutionSimulationVars {
-    pub state_root: [u8; 32],
+    pub state_root: jmt::RootHash,
     pub state_proof: StorageProof<SparseMerkleProof<<C as Spec>::Hasher>>,
 }
 
@@ -153,10 +153,11 @@ pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidit
 
     for i in 0..rounds {
         // Commit the working set
-        working_set = commit_get_new_working_set(storage, working_set);
+        let (root_hash, w_set) = commit_get_new_working_set(storage, working_set);
+        working_set = w_set;
 
         ret_exec_vars.push(ExecutionSimulationVars {
-            state_root: storage.get_state_root(&Default::default()).unwrap(),
+            state_root: root_hash,
             state_proof: module.get_bond_proof(
                 attester_address,
                 &Default::default(),
@@ -177,6 +178,7 @@ pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidit
         module.chain_state.begin_slot_hook(
             &slot_data.header,
             &slot_data.validity_cond,
+            &root_hash,
             &mut working_set,
         );
     }

@@ -167,7 +167,9 @@ pub trait Storage: Clone {
         + Clone
         + BorshSerialize
         + BorshDeserialize
-        + Eq;
+        + Eq
+        + Into<[u8; 32]>; // Require a one-way conversion from the state root to a 32-byte array. This can always be
+                          // implemented by hashing the state root even if the root itself is not 32 bytes.
 
     /// State update that will be committed to the database.
     type StateUpdate;

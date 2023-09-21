@@ -9,6 +9,7 @@ use sov_modules_api::{
 };
 use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
 use sov_rollup_interface::mocks::MockZkvm;
+use sov_state::Storage;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
@@ -67,10 +68,15 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da> {
         &self,
         slot_header: &Da::BlockHeader,
         validity_condition: &Da::ValidityCondition,
+        pre_state_root: &<<Self::Context as Spec>::Storage as Storage>::Root,
         working_set: &mut sov_modules_api::WorkingSet<C>,
     ) {
-        self.chain_state
-            .begin_slot_hook(slot_header, validity_condition, working_set)
+        self.chain_state.begin_slot_hook(
+            slot_header,
+            validity_condition,
+            pre_state_root,
+            working_set,
+        )
     }
 
     fn end_slot_hook(&self, _working_set: &mut sov_modules_api::WorkingSet<C>) {}
@@ -81,7 +87,7 @@ impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for TestRuntime<C
 
     fn finalize_slot_hook(
         &self,
-        _root_hash: [u8; 32],
+        _root_hash: &<<Self::Context as Spec>::Storage as Storage>::Root,
         _accesorry_working_set: &mut AccessoryWorkingSet<C>,
     ) {
     }

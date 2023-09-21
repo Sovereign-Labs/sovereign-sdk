@@ -93,7 +93,7 @@ fn priority_sequencer_flow() {
         .unwrap();
 
     let (reads_writes, witness) = working_set.checkpoint().freeze();
-    storage.validate_and_commit(reads_writes, &witness).unwrap();
+    let current_root = storage.validate_and_commit(reads_writes, &witness).unwrap();
     let mut working_set = WorkingSet::new(storage);
 
     let register_message = sov_sequencer_registry::CallMessage::Register {
@@ -137,6 +137,7 @@ fn priority_sequencer_flow() {
     chain_state.begin_slot_hook(
         &slot_1_data.header,
         &slot_1_data.validity_cond,
+        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
@@ -174,6 +175,7 @@ fn priority_sequencer_flow() {
     chain_state.begin_slot_hook(
         &slot_2_data.header,
         &slot_2_data.validity_cond,
+        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let mut execute_in_slot_2 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
@@ -200,6 +202,7 @@ fn priority_sequencer_flow() {
     chain_state.begin_slot_hook(
         &slot_3_data.header,
         &slot_3_data.validity_cond,
+        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let mut execute_in_slot_3 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
@@ -225,6 +228,7 @@ fn priority_sequencer_flow() {
     chain_state.begin_slot_hook(
         &slot_4_data.header,
         &slot_4_data.validity_cond,
+        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let mut execute_in_slot_4 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
@@ -289,7 +293,7 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
         .unwrap();
 
     let (reads_writes, witness) = working_set.checkpoint().freeze();
-    storage.validate_and_commit(reads_writes, &witness).unwrap();
+    let current_root = storage.validate_and_commit(reads_writes, &witness).unwrap();
     let register_message = sov_sequencer_registry::CallMessage::Register {
         da_address: regular_sequencer_da.as_ref().to_vec(),
     };
@@ -321,6 +325,7 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
     chain_state.begin_slot_hook(
         &slot_1_data.header,
         &slot_1_data.validity_cond,
+        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
@@ -344,6 +349,7 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
     chain_state.begin_slot_hook(
         &slot_2_data.header,
         &slot_2_data.validity_cond,
+        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let mut execute_in_slot_2 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
@@ -405,7 +411,7 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
         .unwrap();
 
     let (reads_writes, witness) = working_set.checkpoint().freeze();
-    storage.validate_and_commit(reads_writes, &witness).unwrap();
+    let current_root = storage.validate_and_commit(reads_writes, &witness).unwrap();
     let mut working_set = WorkingSet::new(storage);
 
     let register_message = sov_sequencer_registry::CallMessage::Register {
@@ -437,6 +443,7 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
     chain_state.begin_slot_hook(
         &slot_1_data.header,
         &slot_1_data.validity_cond,
+        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
@@ -462,6 +469,7 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
     chain_state.begin_slot_hook(
         &slot_2_data.header,
         &slot_2_data.validity_cond,
+        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let execute_in_slot_2: Vec<BlobRefOrOwned<'_, B>> =
@@ -522,7 +530,7 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
         .unwrap();
 
     let (reads_writes, witness) = working_set.checkpoint().freeze();
-    storage.validate_and_commit(reads_writes, &witness).unwrap();
+    let current_root = storage.validate_and_commit(reads_writes, &witness).unwrap();
     let mut working_set = WorkingSet::new(storage);
 
     let register_message = sov_sequencer_registry::CallMessage::Register {
@@ -557,6 +565,7 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
     chain_state.begin_slot_hook(
         &slot_1_data.header,
         &slot_1_data.validity_cond,
+        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
@@ -597,6 +606,7 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
     chain_state.begin_slot_hook(
         &slot_2_data.header,
         &slot_2_data.validity_cond,
+        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let mut execute_in_slot_2 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
@@ -623,6 +633,7 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
     chain_state.begin_slot_hook(
         &slot_3_data.header,
         &slot_3_data.validity_cond,
+        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let execute_in_slot_3: Vec<BlobRefOrOwned<'_, B>> =

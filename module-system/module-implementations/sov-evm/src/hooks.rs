@@ -1,11 +1,15 @@
 use reth_primitives::{Bloom, Bytes, U256};
-use sov_modules_api::{AccessoryWorkingSet, WorkingSet};
+use sov_modules_api::{AccessoryWorkingSet, Spec, WorkingSet};
+use sov_state::Storage;
 
 use crate::evm::primitive_types::{Block, BlockEnv};
 use crate::experimental::PendingTransaction;
 use crate::Evm;
 
-impl<C: sov_modules_api::Context> Evm<C> {
+impl<C: sov_modules_api::Context> Evm<C>
+where
+    <C::Storage as Storage>::Root: Into<[u8; 32]>,
+{
     pub fn begin_slot_hook(&self, da_root_hash: [u8; 32], working_set: &mut WorkingSet<C>) {
         let parent_block = self
             .head
@@ -125,7 +129,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
     pub fn finalize_slot_hook(
         &self,
-        root_hash: [u8; 32],
+        root_hash: &<<C as Spec>::Storage as Storage>::Root,
         accesorry_working_set: &mut AccessoryWorkingSet<C>,
     ) {
         let expected_block_number = self.blocks.len(accesorry_working_set) as u64;
@@ -146,7 +150,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
             expected_block_number, block.header.number
         );
 
-        block.header.state_root = root_hash.into();
+        let root_hash_bytes: [u8; 32] = root_hash.clone().into();
+        block.header.state_root = root_hash_bytes.into();
 
         let sealed_block = block.seal();
 

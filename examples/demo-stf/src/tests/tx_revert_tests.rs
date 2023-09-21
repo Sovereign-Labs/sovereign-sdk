@@ -32,7 +32,7 @@ fn test_tx_revert() {
         let mut demo = create_new_app_template_for_tests(path);
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        demo.init_chain(config);
+        let genesis_root = demo.init_chain(config);
 
         let txs = simulate_da_with_revert_msg();
         let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
@@ -40,6 +40,7 @@ fn test_tx_revert() {
         let data = MockBlock::default();
 
         let apply_block_result = demo.apply_slot(
+            &genesis_root,
             Default::default(),
             &data.header,
             &data.validity_cond,
@@ -103,7 +104,7 @@ fn test_nonce_incremented_on_revert() {
         let mut demo = create_new_app_template_for_tests(path);
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        demo.init_chain(config);
+        let genesis_root = demo.init_chain(config);
 
         let txs = simulate_da_with_revert_msg();
         let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
@@ -111,6 +112,7 @@ fn test_nonce_incremented_on_revert() {
         let data = MockBlock::default();
 
         let apply_block_result = demo.apply_slot(
+            &genesis_root,
             Default::default(),
             &data.header,
             &data.validity_cond,
@@ -169,7 +171,7 @@ fn test_tx_bad_sig() {
         let mut demo = create_new_app_template_for_tests(path);
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        demo.init_chain(config);
+        let genesis_root = demo.init_chain(config);
 
         let txs = simulate_da_with_bad_sig();
 
@@ -179,6 +181,7 @@ fn test_tx_bad_sig() {
 
         let data = MockBlock::default();
         let apply_block_result = demo.apply_slot(
+            &genesis_root,
             Default::default(),
             &data.header,
             &data.validity_cond,
@@ -213,7 +216,7 @@ fn test_tx_bad_nonce() {
         let mut demo = create_new_app_template_for_tests(path);
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        demo.init_chain(config);
+        let genesis_root = demo.init_chain(config);
 
         let txs = simulate_da_with_bad_nonce();
 
@@ -222,6 +225,7 @@ fn test_tx_bad_nonce() {
 
         let data = MockBlock::default();
         let apply_block_result = demo.apply_slot(
+            &genesis_root,
             Default::default(),
             &data.header,
             &data.validity_cond,
@@ -252,9 +256,9 @@ fn test_tx_bad_serialization() {
 
     let config = get_genesis_config_for_tests();
     let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address;
-    let sequencer_balance_before = {
+    let (genesis_root, sequencer_balance_before) = {
         let mut demo = create_new_app_template_for_tests(path);
-        demo.init_chain(config);
+        let genesis_root = demo.init_chain(config);
 
         let mut working_set = WorkingSet::new(demo.current_storage);
         let coins = demo
@@ -263,14 +267,16 @@ fn test_tx_bad_serialization() {
             .get_coins_to_lock(&mut working_set)
             .unwrap();
 
-        demo.runtime
+        let balance = demo
+            .runtime
             .bank
             .get_balance_of(
                 sequencer_rollup_address,
                 coins.token_address,
                 &mut working_set,
             )
-            .unwrap()
+            .unwrap();
+        (genesis_root, balance)
     };
 
     {
@@ -286,6 +292,7 @@ fn test_tx_bad_serialization() {
 
         let data = MockBlock::default();
         let apply_block_result = demo.apply_slot(
+            &genesis_root,
             Default::default(),
             &data.header,
             &data.validity_cond,
