@@ -27,7 +27,7 @@ sha2 = { workspace = true }
 bech32 = { workspace = true }
 derive_more = { workspace = true }
 jmt = { workspace = true }
-serde_json = { workspace = true, optional = true }
+serde_json = { workspace = true }
 hex = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true, features = [] }
@@ -50,7 +50,7 @@ arbitrary = ["dep:arbitrary", "sov-state/arbitrary"]
 bench = ["sov-zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
 default = ["macros"]
 native = [
-	"serde_json",
+	
 	"rand",
 	"hex",
 	"schemars",
