@@ -207,7 +207,7 @@ pub mod experimental {
             }
 
             let raw_evm_tx = {
-                let working_set = WorkingSet::<C>::new(ethereum.storage.clone());
+                let mut working_set = WorkingSet::<C>::new(ethereum.storage.clone());
                 if transaction_request.nonce.is_none() {
                     let nonce = evm
                         .get_transaction_count(from, None, &mut working_set)
