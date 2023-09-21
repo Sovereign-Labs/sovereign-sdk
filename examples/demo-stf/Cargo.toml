@@ -22,7 +22,6 @@ tokio = { workspace = true, optional = true }
 hex = { workspace = true }
 tracing = { workspace = true }
 
-const-rollup-config = { path = "../const-rollup-config" }
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-cli = { path = "../../module-system/sov-cli", optional = true }
 sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry" }
@@ -69,4 +68,3 @@ native = [
     "tokio",
     "toml",
 ]
-verifier = []

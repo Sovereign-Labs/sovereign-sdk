@@ -1527,7 +1527,6 @@ dependencies = [
  "demo-nft-module",
  "jsonrpsee",
  "serde",
- "sov-data-generators",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
@@ -1552,7 +1551,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap",
- "const-rollup-config",
  "demo-stf",
  "hex",
  "jsonrpsee",
@@ -6545,7 +6543,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap",
- "hex",
  "jsonrpsee",
  "schemars",
  "serde",
@@ -6623,14 +6620,11 @@ dependencies = [
  "jsonrpsee",
  "serde",
  "serde_json",
- "sov-bank",
  "sov-chain-state",
  "sov-data-generators",
  "sov-modules-api",
- "sov-modules-stf-template",
  "sov-rollup-interface",
  "sov-state",
- "sov-value-setter",
  "tempfile",
 ]
 
@@ -6651,7 +6645,6 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "tempfile",
- "tokio",
 ]
 
 [[package]]
@@ -6732,7 +6725,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "borsh",
- "bytes",
  "clap",
  "const-rollup-config",
  "criterion",
@@ -6744,9 +6736,7 @@ dependencies = [
  "ethers-middleware",
  "ethers-providers",
  "ethers-signers",
- "futures",
  "hex",
- "jmt",
  "jsonrpsee",
  "prettytable-rs",
  "prometheus 0.11.0",
@@ -6762,6 +6752,7 @@ dependencies = [
  "sov-celestia-adapter",
  "sov-cli",
  "sov-db",
+ "sov-demo-rollup",
  "sov-ethereum",
  "sov-evm",
  "sov-modules-api",
@@ -6784,14 +6775,12 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
- "const-rollup-config",
  "demo-stf",
  "ethers",
  "jsonrpsee",
  "reth-primitives",
  "reth-rpc-types",
  "serde_json",
- "sov-celestia-adapter",
  "sov-evm",
  "sov-modules-api",
  "sov-rollup-interface",
@@ -7075,7 +7064,6 @@ dependencies = [
  "jsonrpsee",
  "rand 0.8.5",
  "serde",
- "serde_json",
  "sov-accounts",
  "sov-bank",
  "sov-celestia-adapter",
@@ -7090,7 +7078,6 @@ dependencies = [
  "tokio",
  "toml 0.8.0",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -7106,6 +7093,7 @@ dependencies = [
  "serde_json",
  "sov-modules-api",
  "sov-state",
+ "sov-value-setter",
  "tempfile",
  "thiserror",
 ]

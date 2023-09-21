@@ -1,14 +1,13 @@
 use std::path::Path;
 
-use sov_modules_api::{default_context::DefaultContext, DaSpec};
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::DaSpec;
 use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::mocks::MockDaSpec;
 use sov_state::ProverStorage;
 
-use crate::{
-    genesis_config::get_genesis_config,
-    runtime::{GenesisConfig, Runtime},
-};
+use crate::genesis_config::get_genesis_config;
+use crate::runtime::{GenesisConfig, Runtime};
 
 mod da_simulation;
 mod stf_tests;
@@ -33,7 +32,7 @@ pub(crate) fn create_new_app_template_for_tests(
 
 pub(crate) fn get_genesis_config_for_tests<Da: DaSpec>() -> GenesisConfig<DefaultContext, Da> {
     get_genesis_config::<DefaultContext, Da>(
-        TEST_SEQUENCER_DA_ADDRESS.to_vec(),
+        Da::Address::try_from(&TEST_SEQUENCER_DA_ADDRESS).unwrap(),
         #[cfg(feature = "experimental")]
         Vec::default(),
     )

@@ -64,7 +64,7 @@ fn priority_sequencer_flow() {
 
     let sequencer_registry_config = SequencerConfig {
         seq_rollup_address: preferred_sequencer_rollup,
-        seq_da_address: preferred_sequencer_da.as_ref().to_vec(),
+        seq_da_address: preferred_sequencer_da,
         coins_to_lock: sov_bank::Coins {
             amount: LOCKED_AMOUNT,
             token_address,
@@ -80,7 +80,7 @@ fn priority_sequencer_flow() {
     let valid_condition = MockValidityCond { is_valid: true };
 
     let bank = sov_bank::Bank::<C>::default();
-    let sequencer_registry = SequencerRegistry::<C>::default();
+    let sequencer_registry = SequencerRegistry::<C, Da>::default();
     let chain_state = ChainState::<C, Da>::default();
     let blob_storage = BlobStorage::<C, Da>::default();
 
@@ -260,7 +260,7 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
 
     let sequencer_registry_config = SequencerConfig {
         seq_rollup_address: preferred_sequencer_rollup,
-        seq_da_address: preferred_sequencer_da.as_ref().to_vec(),
+        seq_da_address: preferred_sequencer_da,
         coins_to_lock: sov_bank::Coins {
             amount: LOCKED_AMOUNT,
             token_address,
@@ -275,7 +275,7 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
     };
 
     let bank = sov_bank::Bank::<C>::default();
-    let sequencer_registry = SequencerRegistry::<C>::default();
+    let sequencer_registry = SequencerRegistry::<C, Da>::default();
     let chain_state = ChainState::<C, Da>::default();
     let blob_storage = BlobStorage::<C, Da>::default();
     let valid_condition = MockValidityCond { is_valid: true };
@@ -376,7 +376,7 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
 
     let sequencer_registry_config = SequencerConfig {
         seq_rollup_address: preferred_sequencer_rollup,
-        seq_da_address: preferred_sequencer_da.as_ref().to_vec(),
+        seq_da_address: preferred_sequencer_da,
         coins_to_lock: sov_bank::Coins {
             amount: LOCKED_AMOUNT,
             token_address,
@@ -391,7 +391,7 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
     };
 
     let bank = sov_bank::Bank::<C>::default();
-    let sequencer_registry = SequencerRegistry::<C>::default();
+    let sequencer_registry = SequencerRegistry::<C, Da>::default();
     let chain_state = ChainState::<C, Da>::default();
     let blob_storage = BlobStorage::<C, Da>::default();
     let valid_condition = MockValidityCond { is_valid: true };
@@ -494,7 +494,7 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
 
     let sequencer_registry_config = SequencerConfig {
         seq_rollup_address: preferred_sequencer_rollup,
-        seq_da_address: preferred_sequencer_da.as_ref().to_vec(),
+        seq_da_address: preferred_sequencer_da,
         coins_to_lock: sov_bank::Coins {
             amount: LOCKED_AMOUNT,
             token_address,
@@ -509,7 +509,7 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
     let valid_condition = MockValidityCond { is_valid: true };
 
     let bank = sov_bank::Bank::<C>::default();
-    let sequencer_registry = SequencerRegistry::<C>::default();
+    let sequencer_registry = SequencerRegistry::<C, Da>::default();
     let chain_state = ChainState::<C, Da>::default();
     let blob_storage = BlobStorage::<C, Da>::default();
 

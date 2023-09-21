@@ -1,3 +1,4 @@
+use anyhow::Context as AnyhowContext;
 #[cfg(feature = "experimental")]
 use reth_primitives::Bytes;
 use sov_chain_state::ChainStateConfig;
@@ -5,7 +6,7 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 #[cfg(feature = "experimental")]
 use sov_evm::{AccountData, EvmConfig, SpecId};
 pub use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Context, PrivateKey, PublicKey};
+use sov_modules_api::Context;
 use sov_rollup_interface::da::DaSpec;
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
@@ -27,7 +28,7 @@ pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
 /// const SEQUENCER_DA_ADDRESS: &str = "celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208";
 /// ```
 pub fn get_genesis_config<C: Context, Da: DaSpec>(
-    sequencer_da_address: Vec<u8>,
+    sequencer_da_address: Da::Address,
     #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
 ) -> GenesisConfig<C, Da> {
     // This will be read from a file: #872
@@ -38,19 +39,18 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
         initial_sequencer_balance,
         token_deployer.address.clone(),
         sequencer_da_address,
-        &token_deployer.private_key,
         #[cfg(feature = "experimental")]
         evm_genesis_addresses,
     )
+    .expect("Unable to read genesis configuration")
 }
 
 fn create_genesis_config<C: Context, Da: DaSpec>(
     initial_sequencer_balance: u64,
     sequencer_address: C::Address,
-    sequencer_da_address: Vec<u8>,
-    value_setter_admin_private_key: &C::PrivateKey,
+    sequencer_da_address: Da::Address,
     #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
-) -> GenesisConfig<C, Da> {
+) -> anyhow::Result<GenesisConfig<C, Da>> {
     // This will be read from a file: #872
     let token_config: sov_bank::TokenConfig<C> = sov_bank::TokenConfig {
         token_name: DEMO_TOKEN_NAME.to_owned(),
@@ -81,10 +81,13 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
         is_preferred_sequencer: true,
     };
 
-    // This will be read from a file: #872
-    let value_setter_config = ValueSetterConfig {
-        admin: value_setter_admin_private_key.pub_key().to_address(),
-    };
+    // This path will be injected as a parameter: #872
+    let value_setter_genesis_path = "../test-data/genesis/value_setter.json";
+    let value_setter_data = std::fs::read_to_string(value_setter_genesis_path)
+        .with_context(|| format!("Failed to read genesis from {}", value_setter_genesis_path))?;
+
+    let value_setter_config: ValueSetterConfig<C> = serde_json::from_str(&value_setter_data)
+        .with_context(|| format!("Failed to parse genesis from {}", value_setter_genesis_path))?;
 
     // This will be read from a file: #872
     let chain_state_config = ChainStateConfig {
@@ -93,7 +96,7 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
         current_time: Default::default(),
     };
 
-    GenesisConfig::new(
+    Ok(GenesisConfig::new(
         bank_config,
         sequencer_registry_config,
         (),
@@ -102,7 +105,7 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
         sov_accounts::AccountConfig { pub_keys: vec![] },
         #[cfg(feature = "experimental")]
         get_evm_config(evm_genesis_addresses),
-    )
+    ))
 }
 
 // TODO: #840
