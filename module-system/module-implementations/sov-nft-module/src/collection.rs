@@ -135,7 +135,7 @@ pub struct MutableCollection<C: Context>(Collection<C>);
 /// Can modify collection_uri
 /// Can increment supply. Cannot decrement
 /// Cannot modify creator address
-/// Cannto modify name
+/// Cannot modify name
 impl<C: Context> MutableCollection<C> {
     pub fn inner(&self) -> &Collection<C> {
         &self.0

@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, Context as _};
 use sov_modules_api::{Context, StateMap, WorkingSet};
 
 use crate::collection::Collection;
@@ -110,13 +110,15 @@ impl<C: Context> Nft<C> {
         let sender = context.sender();
 
         let nft_identifier = NftIdentifier(token_id, collection_address.clone());
-        let nft = nfts.get(&nft_identifier, working_set).ok_or_else(|| {
-            anyhow!(
-                "Nft with token_id: {} in collection_address: {} does not exist",
-                token_id,
-                collection_address
-            )
-        })?;
+        let nft = nfts
+            .get(&nft_identifier, working_set)
+            .ok_or_else(|| anyhow!("NFT not found"))
+            .with_context(|| {
+                format!(
+                    "Nft with token_id: {} in collection_address: {} does not exist",
+                    token_id, collection_address
+                )
+            })?;
 
         if nft.owner == OwnerAddress::new(sender) {
             Ok(OwnedNft(nft))
