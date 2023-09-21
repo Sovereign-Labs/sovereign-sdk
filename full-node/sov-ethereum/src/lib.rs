@@ -198,6 +198,7 @@ pub mod experimental {
             println!("Print: transaction_request {:?}", transaction_request);
             let evm = Evm::<C>::default();
 
+            println!("!!!!! 1");
             // get from, return error if none
             let from = transaction_request
                 .from
@@ -211,6 +212,7 @@ pub mod experimental {
                 ));
             }
 
+            println!("!!!!! 2");
             let raw_evm_tx = {
                 let mut working_set = WorkingSet::<C>::new(ethereum.storage.clone());
                 if transaction_request.nonce.is_none() {
@@ -227,6 +229,7 @@ pub mod experimental {
                     .map(|id| id.as_u64())
                     .unwrap_or(1);
 
+                println!("!!!!! 3");
                 // TODO: implement gas logic after gas estimation is implemented
                 let transaction_request = match transaction_request.into_typed_request() {
                     Some(TypedTransactionRequest::Legacy(mut m)) => {
@@ -241,6 +244,7 @@ pub mod experimental {
                     }
                     Some(TypedTransactionRequest::EIP1559(mut m)) => {
                         m.chain_id = chain_id;
+                        println!("EIP1559 nonce {:?}", m.nonce);
 
                         TypedTransactionRequest::EIP1559(m)
                     }
@@ -253,12 +257,19 @@ pub mod experimental {
                     }
                 };
 
+                println!("!!!!! 4");
+
+                let tx = into_transaction(transaction_request);
+
+                println!("!!!!! 4.5");
+
                 let signed_tx = ethereum
                     .eth_rpc_config
                     .eth_signer
-                    .sign_transaction(transaction_request.into_transaction(), from)
+                    .sign_transaction(tx, from)
                     .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
+                println!("!!!!! 5");
                 RlpEvmTransaction {
                     rlp: signed_tx.envelope_encoded().to_vec(),
                 }
@@ -286,5 +297,49 @@ pub mod experimental {
         })?;
 
         Ok(())
+    }
+
+    pub fn into_transaction(request: TypedTransactionRequest) -> reth_primitives::Transaction {
+        match request {
+            TypedTransactionRequest::Legacy(tx) => {
+                reth_primitives::Transaction::Legacy(reth_primitives::TxLegacy {
+                    chain_id: tx.chain_id,
+                    nonce: u64::from_be_bytes(tx.nonce.to_be_bytes()),
+                    gas_price: u128::from_be_bytes(tx.gas_price.to_be_bytes()),
+                    gas_limit: u64::from_be_bytes(tx.gas_limit.to_be_bytes()),
+                    to: tx.kind.into(),
+                    value: u128::from_be_bytes(tx.value.to_be_bytes()),
+                    input: tx.input,
+                })
+            }
+            TypedTransactionRequest::EIP2930(tx) => {
+                reth_primitives::Transaction::Eip2930(reth_primitives::TxEip2930 {
+                    chain_id: tx.chain_id,
+                    nonce: u64::from_be_bytes(tx.nonce.to_be_bytes()),
+                    gas_price: u128::from_be_bytes(tx.gas_price.to_be_bytes()),
+                    gas_limit: u64::from_be_bytes(tx.gas_limit.to_be_bytes()),
+                    to: tx.kind.into(),
+                    value: u128::from_be_bytes(tx.value.to_be_bytes()),
+                    input: tx.input,
+                    access_list: tx.access_list,
+                })
+            }
+            TypedTransactionRequest::EIP1559(tx) => {
+                reth_primitives::Transaction::Eip1559(reth_primitives::TxEip1559 {
+                    chain_id: tx.chain_id,
+
+                    nonce: u64::from_be_bytes(tx.nonce.to_be_bytes()),
+                    max_fee_per_gas: u128::from_be_bytes(tx.max_fee_per_gas.to_be_bytes()),
+                    gas_limit: u64::from_be_bytes(tx.gas_limit.to_be_bytes()),
+                    to: tx.kind.into(),
+                    value: u128::from_be_bytes(tx.value.to_be_bytes()),
+                    input: tx.input,
+                    access_list: tx.access_list,
+                    max_priority_fee_per_gas: u128::from_be_bytes(
+                        tx.max_priority_fee_per_gas.to_be_bytes(),
+                    ),
+                })
+            }
+        }
     }
 }
