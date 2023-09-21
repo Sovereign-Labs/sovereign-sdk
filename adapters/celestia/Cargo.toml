@@ -16,7 +16,7 @@ prost-types = "0.12"
 #tendermint = { version = "0.32", default-features = false, features = ["std"] }
 
 celestia-proto = { git = "https://github.com/eigerco/celestia-node-rs.git", branch = "main" }
-celestia-rpc = { git = "https://github.com/eigerco/celestia-node-rs.git", branch = "main", default-features = false }
+celestia-rpc = { git = "https://github.com/eigerco/celestia-node-rs.git", branch = "main", default-features = false, optional = true }
 celestia-types = { git = "https://github.com/eigerco/celestia-node-rs.git", branch = "main" }
 tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "19dc3da" }
 tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "19dc3da" }
@@ -63,6 +63,7 @@ native = [
   "dep:tokio",
   "dep:jsonrpsee",
   "dep:serde_json",
+  "dep:celestia-rpc",
   "tendermint/default",
   "sov-rollup-interface/native",
 ]
