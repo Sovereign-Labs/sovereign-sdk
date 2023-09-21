@@ -139,6 +139,7 @@ pub struct ChainValidityCondition {
     pub prev_hash: [u8; 32],
     pub block_hash: [u8; 32],
 }
+
 #[derive(Error, Debug)]
 pub enum ValidityConditionError {
     #[error("conditions for validity can only be combined if the blocks are consecutive")]

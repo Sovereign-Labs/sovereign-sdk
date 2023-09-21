@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
 use anyhow::ensure;
-use borsh::{BorshDeserialize, BorshSerialize};
+// use borsh::{BorshDeserialize, BorshSerialize};
+use celestia_proto::celestia::blob::v1::MsgPayForBlobs;
 use celestia_types::nmt::{NamespacedHash, NamespacedHashExt, Nmt};
-use celestia_types::{ExtendedDataSquare as RawExtendedDataSquare, NamespacedRow};
+use celestia_types::ExtendedDataSquare as RawExtendedDataSquare;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::services::da::SlotData;
@@ -11,9 +12,6 @@ use sov_rollup_interface::Bytes;
 use tendermint::crypto::default::Sha256;
 use tendermint::merkle;
 
-use celestia_proto::celestia::blob::v1::MsgPayForBlobs;
-
-// use crate::pfb::MsgPayForBlobs;
 use crate::shares::{NamespaceGroup, Share};
 use crate::utils::BoxError;
 use crate::verifier::{ChainValidityCondition, PARITY_SHARES_NAMESPACE};
@@ -172,28 +170,6 @@ impl Row {
         nmt
     }
 }
-
-// pub trait NamespacedRowExt {
-//     fn merklized(&self) -> Nmt;
-// }
-
-// impl NamespacedRowExt for NamespacedRow {
-//     fn merklized(&self) -> Nmt {
-//         let mut nmt = Nmt::new();
-//         for (idx, share) in self.shares.iter().enumerate() {
-//             // Shares in the two left-hand quadrants are prefixed with their namespace, while parity
-//             // shares (in the right-hand) quadrants always have the PARITY_SHARES_NAMESPACE
-//             let namespace = if idx < self.shares.len() / 2 {
-//                 share.namespace()
-//             } else {
-//                 PARITY_SHARES_NAMESPACE
-//             };
-//             nmt.push_leaf(share.as_ref(), namespace.into())
-//                 .expect("shares are pushed in order");
-//         }
-//         nmt
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
