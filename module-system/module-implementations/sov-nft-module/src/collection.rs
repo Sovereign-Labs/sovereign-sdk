@@ -108,18 +108,27 @@ impl<C: Context> Collection<C> {
         }
     }
 
+    // Allow dead code used to suppress warnings when native feature flag is not used
+    // 1. The getters are primarily used by rpc which is not native
+    // 2. The getters can still be used by other modules in the future
+
+    #[allow(dead_code)]
     pub fn get_name(&self) -> &str {
         &self.name
     }
+    #[allow(dead_code)]
     pub fn get_creator(&self) -> &CreatorAddress<C> {
         &self.creator
     }
+    #[allow(dead_code)]
     pub fn is_frozen(&self) -> bool {
         self.frozen
     }
+    #[allow(dead_code)]
     pub fn get_supply(&self) -> u64 {
         self.supply
     }
+    #[allow(dead_code)]
     pub fn get_collection_uri(&self) -> &str {
         &self.collection_uri
     }

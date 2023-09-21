@@ -165,22 +165,27 @@ impl<C: Context> Nft<C> {
         }
     }
 
+    // Allow dead code used to suppress warnings when native feature flag is not used
+    // 1. The getters are primarily used by rpc which is not native
+    // 2. The getters can still be used by other modules in the future
+
+    #[allow(dead_code)]
     pub fn get_token_id(&self) -> TokenId {
         self.token_id
     }
-
+    #[allow(dead_code)]
     pub fn get_collection_address(&self) -> &CollectionAddress<C> {
         &self.collection_address
     }
-
+    #[allow(dead_code)]
     pub fn is_frozen(&self) -> bool {
         self.frozen
     }
-
+    #[allow(dead_code)]
     pub fn get_token_uri(&self) -> &str {
         &self.token_uri
     }
-
+    #[allow(dead_code)]
     pub fn get_owner(&self) -> &OwnerAddress<C> {
         &self.owner
     }
