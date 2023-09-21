@@ -313,7 +313,7 @@ impl LedgerDB {
         }
     }
 
-    /// Get the most recent slot which commited, if any
+    /// Get the most recent committed slot, if any
     pub fn get_head_slot(&self) -> anyhow::Result<Option<(SlotNumber, StoredSlot)>> {
         let mut iter = self.db.iter::<SlotByNumber>()?;
         iter.seek_to_last();
