@@ -7,6 +7,7 @@ pub use sov_evm::signer::DevSigner;
 
 #[cfg(feature = "experimental")]
 pub mod experimental {
+    use std::array::TryFromSliceError;
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
@@ -252,7 +253,9 @@ pub mod experimental {
                     }
                 };
 
-                let transaction = into_transaction(transaction_request);
+                let transaction = into_transaction(transaction_request).map_err(|_| {
+                    to_jsonrpsee_error_object("Invalid types in transaction request", ETH_RPC_ERROR)
+                })?;
 
                 let signed_tx = ethereum
                     .eth_rpc_config
@@ -281,27 +284,29 @@ pub mod experimental {
 
     // Temporary solution until https://github.com/paradigmxyz/reth/issues/4704 is resolved
     // The problem is having wrong length nonce/gas_limt/value fields in the transaction request
-    fn into_transaction(request: TypedTransactionRequest) -> reth_primitives::Transaction {
-        match request {
+    fn into_transaction(
+        request: TypedTransactionRequest,
+    ) -> Result<reth_primitives::Transaction, TryFromSliceError> {
+        Ok(match request {
             TypedTransactionRequest::Legacy(tx) => {
                 reth_primitives::Transaction::Legacy(reth_primitives::TxLegacy {
                     chain_id: tx.chain_id,
-                    nonce: convert_array_to_u64(tx.nonce.to_be_bytes()),
+                    nonce: convert_u256_to_u64(tx.nonce)?,
                     gas_price: u128::from_be_bytes(tx.gas_price.to_be_bytes()),
-                    gas_limit: convert_array_to_u64(tx.gas_limit.to_be_bytes()),
+                    gas_limit: convert_u256_to_u64(tx.gas_limit)?,
                     to: tx.kind.into(),
-                    value: convert_array_to_u128(tx.value.to_be_bytes()),
+                    value: convert_u256_to_u128(tx.value)?,
                     input: tx.input,
                 })
             }
             TypedTransactionRequest::EIP2930(tx) => {
                 reth_primitives::Transaction::Eip2930(reth_primitives::TxEip2930 {
                     chain_id: tx.chain_id,
-                    nonce: convert_array_to_u64(tx.nonce.to_be_bytes()),
+                    nonce: convert_u256_to_u64(tx.nonce)?,
                     gas_price: u128::from_be_bytes(tx.gas_price.to_be_bytes()),
-                    gas_limit: convert_array_to_u64(tx.gas_limit.to_be_bytes()),
+                    gas_limit: convert_u256_to_u64(tx.gas_limit)?,
                     to: tx.kind.into(),
-                    value: convert_array_to_u128(tx.value.to_be_bytes()),
+                    value: convert_u256_to_u128(tx.value)?,
                     input: tx.input,
                     access_list: tx.access_list,
                 })
@@ -309,11 +314,11 @@ pub mod experimental {
             TypedTransactionRequest::EIP1559(tx) => {
                 reth_primitives::Transaction::Eip1559(reth_primitives::TxEip1559 {
                     chain_id: tx.chain_id,
-                    nonce: convert_array_to_u64(tx.nonce.to_be_bytes()),
+                    nonce: convert_u256_to_u64(tx.nonce)?,
                     max_fee_per_gas: u128::from_be_bytes(tx.max_fee_per_gas.to_be_bytes()),
-                    gas_limit: convert_array_to_u64(tx.gas_limit.to_be_bytes()),
+                    gas_limit: convert_u256_to_u64(tx.gas_limit)?,
                     to: tx.kind.into(),
-                    value: convert_array_to_u128(tx.value.to_be_bytes()),
+                    value: convert_u256_to_u128(tx.value)?,
                     input: tx.input,
                     access_list: tx.access_list,
                     max_priority_fee_per_gas: u128::from_be_bytes(
@@ -321,18 +326,18 @@ pub mod experimental {
                     ),
                 })
             }
-        }
+        })
     }
 
-    fn convert_array_to_u64(array: [u8; 32]) -> u64 {
-        let mut bytes = [0u8; 8];
-        bytes.copy_from_slice(&array[24..]);
-        u64::from_be_bytes(bytes)
+    fn convert_u256_to_u64(u256: reth_primitives::U256) -> Result<u64, TryFromSliceError> {
+        let bytes: [u8; 32] = u256.to_be_bytes();
+        let bytes: [u8; 8] = bytes[24..].try_into()?;
+        Ok(u64::from_be_bytes(bytes))
     }
 
-    fn convert_array_to_u128(array: [u8; 32]) -> u128 {
-        let mut bytes = [0u8; 16];
-        bytes.copy_from_slice(&array[16..]);
-        u128::from_be_bytes(bytes)
+    fn convert_u256_to_u128(u256: reth_primitives::U256) -> Result<u128, TryFromSliceError> {
+        let bytes: [u8; 32] = u256.to_be_bytes();
+        let bytes: [u8; 16] = bytes[16..].try_into()?;
+        Ok(u128::from_be_bytes(bytes))
     }
 }
