@@ -25,13 +25,18 @@ where
             coinbase: cfg.coinbase,
             timestamp: parent_block.header.timestamp + cfg.block_timestamp_delta,
             prevrandao: da_root_hash.into(),
-            basefee: parent_block.header.next_block_base_fee().unwrap(),
+            basefee: parent_block
+                .header
+                .next_block_base_fee(cfg.base_fee_params)
+                .unwrap(),
             gas_limit: cfg.block_gas_limit,
         };
         self.pending_block.set(&new_pending_block, working_set);
     }
 
     pub fn end_slot_hook(&self, working_set: &mut WorkingSet<C>) {
+        let cfg = self.cfg.get(working_set).unwrap_or_default();
+
         let pending_block = self
             .pending_block
             .get(working_set)
@@ -92,8 +97,15 @@ where
             gas_used,
             mix_hash: pending_block.prevrandao,
             nonce: 0,
-            base_fee_per_gas: parent_block.header.next_block_base_fee(),
+            base_fee_per_gas: parent_block.header.next_block_base_fee(cfg.base_fee_params),
             extra_data: Bytes::default(),
+            // EIP-4844 related fields
+            // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
+            blob_gas_used: None,
+            excess_blob_gas: None,
+            // EIP-4788 related field
+            // unrelated for rollups
+            parent_beacon_block_root: None,
         };
 
         let block = Block {
