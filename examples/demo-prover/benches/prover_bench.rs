@@ -193,7 +193,7 @@ async fn main() -> Result<(), anyhow::Error> {
         println!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
-            hex::encode(&prev_state_root.0)
+            hex::encode(prev_state_root.0)
         );
         let filtered_block = &bincoded_blocks[height as usize];
         let _header_hash = hex::encode(filtered_block.header.header.hash());
