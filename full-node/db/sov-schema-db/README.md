@@ -39,7 +39,7 @@ To actually store and retrieve data, all we need to do is to implement a Schema:
 pub struct AccountBalanceSchema;
 
 impl Schema for AccountBalanceSchema {
-	const COLUMN_FAMILY_NAME = "account_balances"
+	const COLUMN_FAMILY_NAME: &str = "account_balances";
 	type Key = Account;
 	type Value = u64;
 }
@@ -49,7 +49,7 @@ impl KeyCodec<AccountBalanceSchema> for Account {
 		bincode::to_vec(self)
 	}
 
-	fn decode_key(key: Vec<u8>) -> {
+	fn decode_key(key: Vec<u8>) -> Self {
 		// elided
 	}
 }
