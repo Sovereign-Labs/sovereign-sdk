@@ -1,4 +1,4 @@
-use reth_primitives::{Address, H256, U256};
+use reth_primitives::{Address, BaseFeeParams, H256, U256};
 use revm::primitives::specification::SpecId;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::StateMap;
@@ -82,6 +82,8 @@ pub struct EvmChainConfig {
 
     /// Delta to add to parent block timestamp
     pub block_timestamp_delta: u64,
+
+    pub base_fee_params: BaseFeeParams,
 }
 
 impl Default for EvmChainConfig {
@@ -89,10 +91,11 @@ impl Default for EvmChainConfig {
         EvmChainConfig {
             chain_id: 1,
             limit_contract_code_size: None,
-            spec: vec![(0, SpecId::LATEST)],
+            spec: vec![(0, SpecId::SHANGHAI)],
             coinbase: Address::zero(),
             block_gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
             block_timestamp_delta: 1,
+            base_fee_params: BaseFeeParams::ethereum(),
         }
     }
 }

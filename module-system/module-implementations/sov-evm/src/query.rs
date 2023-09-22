@@ -15,6 +15,20 @@ use crate::Evm;
 
 #[rpc_gen(client, server, namespace = "eth")]
 impl<C: sov_modules_api::Context> Evm<C> {
+    fn get_cfg_env_template(&self) -> revm::primitives::CfgEnv {
+        let mut cfg_env = revm::primitives::CfgEnv::default();
+        // Reth sets this to true and uses only timeout, but other clients use this as a part of DOS attacks protection, with 100mln gas limit
+        // https://github.com/paradigmxyz/reth/blob/62f39a5a151c5f4ddc9bf0851725923989df0412/crates/rpc/rpc/src/eth/revm_utils.rs#L215
+        cfg_env.disable_block_gas_limit = false;
+        cfg_env.disable_eip3607 = true;
+        cfg_env.disable_base_fee = true;
+        cfg_env.chain_id = 0;
+        cfg_env.spec_id = revm::primitives::SpecId::SHANGHAI;
+        cfg_env.perf_analyse_created_bytecodes = revm::primitives::AnalysisKind::Analyse;
+        cfg_env.limit_contract_code_size = None;
+        cfg_env
+    }
+
     fn get_sealed_block_by_number(
         &self,
         block_number: Option<String>,
@@ -89,7 +103,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
             Some(true) => reth_rpc_types::BlockTransactions::Full(
                 transactions_with_ids
                     .map(|(id, tx)| {
-                        reth_rpc_types::Transaction::from_recovered_with_block_context(
+                        reth_rpc_types_compat::from_recovered_with_block_context(
                             tx.clone().into(),
                             block.header.hash,
                             block.header.number,
@@ -183,7 +197,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
                     tx.block_number,
                     tx.signed_transaction.hash));
 
-            reth_rpc_types::Transaction::from_recovered_with_block_context(
+            reth_rpc_types_compat::from_recovered_with_block_context(
                 tx.into(),
                 block.header.hash,
                 block.header.number,
@@ -232,20 +246,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
     //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
     //https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-types/src/eth/call.rs#L7
 
-    /// Template env for eth_call
-    const CALL_CFG_ENV_TEMPLATE: revm::primitives::CfgEnv = revm::primitives::CfgEnv {
-        // Reth sets this to true and uses only timeout, but other clients use this as a part of DOS attacks protection, with 100mln gas limit
-        // https://github.com/paradigmxyz/reth/blob/62f39a5a151c5f4ddc9bf0851725923989df0412/crates/rpc/rpc/src/eth/revm_utils.rs#L215
-        disable_block_gas_limit: false,
-        disable_eip3607: true,
-        disable_base_fee: true,
-        chain_id: revm::primitives::U256::ZERO,
-        spec_id: revm::primitives::SpecId::LATEST,
-        perf_all_precompiles_have_balance: false,
-        perf_analyse_created_bytecodes: revm::primitives::AnalysisKind::Analyse,
-        limit_contract_code_size: None,
-    };
-
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "call")]
     pub fn get_call(
@@ -261,7 +261,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         let block_env = self.pending_block.get(working_set).unwrap_or_default();
         let cfg = self.cfg.get(working_set).unwrap_or_default();
-        let cfg_env = get_cfg_env(&block_env, cfg, Some(Self::CALL_CFG_ENV_TEMPLATE));
+        let cfg_env = get_cfg_env(&block_env, cfg, Some(self.get_cfg_env_template()));
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
@@ -318,13 +318,13 @@ pub(crate) fn build_rpc_receipt(
     let transaction_kind = transaction.kind();
 
     let transaction_hash = Some(transaction.hash);
-    let transaction_index = Some(U256::from(tx_number - block.transactions.start));
+    let transaction_index = tx_number - block.transactions.start;
     let block_hash = Some(block.header.hash);
     let block_number = Some(U256::from(block.header.number));
 
     reth_rpc_types::TransactionReceipt {
         transaction_hash,
-        transaction_index,
+        transaction_index: U64::from(transaction_index),
         block_hash,
         block_number,
         from: transaction.signer(),
@@ -334,6 +334,8 @@ pub(crate) fn build_rpc_receipt(
         },
         cumulative_gas_used: U256::from(receipt.receipt.cumulative_gas_used),
         gas_used: Some(U256::from(receipt.gas_used)),
+        // EIP-4844 related
+        blob_gas_used: None,
         contract_address: match transaction_kind {
             Create => Some(create_address(transaction.signer(), transaction.nonce())),
             Call(_) => None,
@@ -341,6 +343,8 @@ pub(crate) fn build_rpc_receipt(
         effective_gas_price: U128::from(
             transaction.effective_gas_price(block.header.base_fee_per_gas),
         ),
+        // EIP-4844 related
+        blob_gas_price: None,
         transaction_type: transaction.tx_type().into(),
         logs_bloom: receipt.receipt.bloom_slow(),
         status_code: if receipt.receipt.success {
@@ -361,7 +365,7 @@ pub(crate) fn build_rpc_receipt(
                 block_hash,
                 block_number,
                 transaction_hash,
-                transaction_index,
+                transaction_index: Some(U256::from(transaction_index)),
                 log_index: Some(U256::from(receipt.log_index_start + idx as u64)),
                 removed: false,
             })

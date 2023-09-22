@@ -218,7 +218,7 @@ pub mod experimental {
                         .get_transaction_count(from, None, &mut working_set)
                         .unwrap_or_default();
 
-                    transaction_request.nonce = Some(reth_primitives::U256::from(nonce.as_u64()));
+                    transaction_request.nonce = Some(nonce);
                 }
 
                 let chain_id = evm
@@ -291,7 +291,7 @@ pub mod experimental {
             TypedTransactionRequest::Legacy(tx) => {
                 reth_primitives::Transaction::Legacy(reth_primitives::TxLegacy {
                     chain_id: tx.chain_id,
-                    nonce: convert_u256_to_u64(tx.nonce)?,
+                    nonce: tx.nonce.as_u64(),
                     gas_price: u128::from_be_bytes(tx.gas_price.to_be_bytes()),
                     gas_limit: convert_u256_to_u64(tx.gas_limit)?,
                     to: tx.kind.into(),
@@ -302,7 +302,7 @@ pub mod experimental {
             TypedTransactionRequest::EIP2930(tx) => {
                 reth_primitives::Transaction::Eip2930(reth_primitives::TxEip2930 {
                     chain_id: tx.chain_id,
-                    nonce: convert_u256_to_u64(tx.nonce)?,
+                    nonce: tx.nonce.as_u64(),
                     gas_price: u128::from_be_bytes(tx.gas_price.to_be_bytes()),
                     gas_limit: convert_u256_to_u64(tx.gas_limit)?,
                     to: tx.kind.into(),
@@ -314,7 +314,7 @@ pub mod experimental {
             TypedTransactionRequest::EIP1559(tx) => {
                 reth_primitives::Transaction::Eip1559(reth_primitives::TxEip1559 {
                     chain_id: tx.chain_id,
-                    nonce: convert_u256_to_u64(tx.nonce)?,
+                    nonce: tx.nonce.as_u64(),
                     max_fee_per_gas: u128::from_be_bytes(tx.max_fee_per_gas.to_be_bytes()),
                     gas_limit: convert_u256_to_u64(tx.gas_limit)?,
                     to: tx.kind.into(),

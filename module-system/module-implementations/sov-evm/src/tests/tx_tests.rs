@@ -81,10 +81,12 @@ fn prepare_call_env_conversion() {
         gas: Some(U256::from(200u64)),
         value: Some(U256::from(300u64)),
         input: CallInput::default(),
-        nonce: Some(U256::from(1u64)),
+        nonce: Some(U64::from(1u64)),
         chain_id: Some(U64::from(1u64)),
         access_list: None,
         transaction_type: Some(U8::from(2u8)),
+        blob_versioned_hashes: vec![],
+        max_fee_per_blob_gas: None,
     };
 
     let tx_env = prepare_call_env(request);
@@ -99,6 +101,8 @@ fn prepare_call_env_conversion() {
         chain_id: Some(1u64),
         nonce: Some(1u64),
         access_list: vec![],
+        blob_hashes: vec![],
+        max_fee_per_blob_gas: None,
     };
 
     assert_eq!(tx_env.caller, expected.caller);

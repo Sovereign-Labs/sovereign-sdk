@@ -44,6 +44,8 @@ impl From<&BlockEnv> for ReVmBlockEnv {
             prevrandao: Some(block_env.prevrandao),
             basefee: U256::from(block_env.basefee),
             gas_limit: U256::from(block_env.gas_limit),
+            // EIP-4844 related field
+            blob_excess_gas_and_price: None,
         }
     }
 }
@@ -66,6 +68,9 @@ pub(crate) fn create_tx_env(tx: &TransactionSignedEcRecovered) -> TxEnv {
         nonce: Some(tx.nonce()),
         // TODO handle access list
         access_list: vec![],
+        // EIP-4844 related fields
+        blob_hashes: vec![],
+        max_fee_per_blob_gas: None,
     }
 }
 
@@ -133,5 +138,8 @@ pub fn prepare_call_env(request: CallRequest) -> TxEnv {
             .access_list
             .map(AccessList::flattened)
             .unwrap_or_default(),
+        // EIP-4844 related fields
+        blob_hashes: request.blob_versioned_hashes,
+        max_fee_per_blob_gas: request.max_fee_per_blob_gas,
     }
 }

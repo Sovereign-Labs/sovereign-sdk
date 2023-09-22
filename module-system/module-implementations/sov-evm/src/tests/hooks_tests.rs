@@ -85,7 +85,10 @@ fn end_slot_hook_sets_head() {
                 mix_hash: *DA_ROOT_HASH,
                 nonce: 0,
                 base_fee_per_gas: Some(62u64),
-                extra_data: Bytes::default()
+                extra_data: Bytes::default(),
+                blob_gas_used: None,
+                excess_blob_gas: None,
+                parent_beacon_block_root: None,
             },
             transactions: 0..2
         }
@@ -223,7 +226,10 @@ fn finalize_hook_creates_final_block() {
                     )),
                     nonce: 0,
                     base_fee_per_gas: Some(62),
-                    extra_data: Bytes::default()
+                    extra_data: Bytes::default(),
+                    blob_gas_used: None,
+                    excess_blob_gas: None,
+                    parent_beacon_block_root: None,
                 },
                 hash: H256(hex!(
                     "0da4e80c5cbd00d9538cb0215d069bfee5be5b59ae4da00244f9b8db429e6889"

@@ -1,7 +1,9 @@
 use lazy_static::lazy_static;
 use reth_primitives::constants::{EMPTY_RECEIPTS, EMPTY_TRANSACTIONS, ETHEREUM_BLOCK_GAS_LIMIT};
 use reth_primitives::hex_literal::hex;
-use reth_primitives::{Address, Bloom, Bytes, Header, SealedHeader, EMPTY_OMMER_ROOT, H256};
+use reth_primitives::{
+    Address, BaseFeeParams, Bloom, Bytes, Header, SealedHeader, EMPTY_OMMER_ROOT, H256,
+};
 use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Module, WorkingSet};
@@ -21,7 +23,7 @@ lazy_static! {
             code: Bytes::default(),
             nonce: 0,
         }],
-        spec: vec![(0, SpecId::BERLIN), (1, SpecId::LATEST)]
+        spec: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)]
             .into_iter()
             .collect(),
         chain_id: 1000,
@@ -31,6 +33,7 @@ lazy_static! {
         coinbase: Address::from([3u8; 20]),
         limit_contract_code_size: Some(5000),
         starting_base_fee: 70,
+        base_fee_params: BaseFeeParams::ethereum(),
     };
 }
 
@@ -85,12 +88,13 @@ fn genesis_cfg() {
     assert_eq!(
         cfg,
         EvmChainConfig {
-            spec: vec![(0, SpecId::BERLIN), (1, SpecId::LATEST)],
+            spec: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)],
             chain_id: 1000,
             block_gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
             block_timestamp_delta: 2,
             coinbase: Address::from([3u8; 20]),
-            limit_contract_code_size: Some(5000)
+            limit_contract_code_size: Some(5000),
+            base_fee_params: BaseFeeParams::ethereum(),
         }
     );
 }
@@ -111,7 +115,7 @@ fn genesis_empty_spec_defaults_to_latest() {
     let (evm, mut working_set) = get_evm(&config);
 
     let cfg = evm.cfg.get(&mut working_set).unwrap();
-    assert_eq!(cfg.spec, vec![(0, SpecId::LATEST)]);
+    assert_eq!(cfg.spec, vec![(0, SpecId::SHANGHAI)]);
 }
 
 #[test]
@@ -153,7 +157,10 @@ fn genesis_block() {
                     base_fee_per_gas: Some(70),
                     ommers_hash: EMPTY_OMMER_ROOT,
                     beneficiary: *BENEFICIARY,
-                    withdrawals_root: None
+                    withdrawals_root: None,
+                    blob_gas_used: None,
+                    excess_blob_gas: None,
+                    parent_beacon_block_root: None,
                 },
                 hash: GENESIS_HASH
             },
@@ -188,7 +195,10 @@ fn genesis_head() {
                 base_fee_per_gas: Some(70),
                 ommers_hash: EMPTY_OMMER_ROOT,
                 beneficiary: *BENEFICIARY,
-                withdrawals_root: None
+                withdrawals_root: None,
+                blob_gas_used: None,
+                excess_blob_gas: None,
+                parent_beacon_block_root: None,
             },
             transactions: (0u64..0u64),
         }
