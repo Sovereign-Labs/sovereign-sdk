@@ -72,7 +72,7 @@ where
         Witness = Witness,
     >,
     Witness: Default,
-    Root: Clone,
+    Root: Clone + AsRef<[u8]>,
 {
     /// Creates a new `StateTransitionRunner`.
     ///
@@ -97,7 +97,10 @@ where
         } else {
             info!("No history detected. Initializing chain...");
             let genesis_root = app.init_chain(genesis_config);
-            info!("Chain initialization is done.");
+            info!(
+                "Chain initialization is done. Genesis root: 0x{}",
+                hex::encode(genesis_root.as_ref())
+            );
             genesis_root
         };
 
