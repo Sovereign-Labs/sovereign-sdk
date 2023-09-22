@@ -11,21 +11,18 @@ use crate::{Context, Spec};
 
 /// A working set accumulates reads and writes on top of the underlying DB,
 /// automating witness creation.
-pub struct Delta<C: Context> {
-    inner: <C as Spec>::Storage,
-    witness: <<C as Spec>::Storage as Storage>::Witness,
+pub struct Delta<S: Storage> {
+    inner: S,
+    witness: S::Witness,
     cache: StorageInternalCache,
 }
 
-impl<C: Context> Delta<C> {
-    fn new(inner: <C as Spec>::Storage) -> Self {
+impl<S: Storage + Send + Sync> Delta<S> {
+    fn new(inner: S) -> Self {
         Self::with_witness(inner, Default::default())
     }
 
-    fn with_witness(
-        inner: <C as Spec>::Storage,
-        witness: <<C as Spec>::Storage as Storage>::Witness,
-    ) -> Self {
+    fn with_witness(inner: S, witness: S::Witness) -> Self {
         Self {
             inner,
             witness,
@@ -33,12 +30,7 @@ impl<C: Context> Delta<C> {
         }
     }
 
-    fn freeze(
-        &mut self,
-    ) -> (
-        OrderedReadsAndWrites,
-        <<C as Spec>::Storage as Storage>::Witness,
-    ) {
+    fn freeze(&mut self) -> (OrderedReadsAndWrites, S::Witness) {
         let cache = std::mem::take(&mut self.cache);
         let witness = std::mem::take(&mut self.witness);
 
@@ -46,13 +38,13 @@ impl<C: Context> Delta<C> {
     }
 }
 
-impl<C: Context> Debug for Delta<C> {
+impl<S: Storage> Debug for Delta<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Delta").finish()
     }
 }
 
-impl<C: Context> StateReaderAndWriter for Delta<C> {
+impl<S: Storage> StateReaderAndWriter for Delta<S> {
     fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
         self.cache.get_or_fetch(key, &self.inner, &self.witness)
     }
@@ -74,7 +66,7 @@ type RevertableWrites = HashMap<CacheKey, Option<CacheValue>>;
 ///  1. With [`WorkingSet::checkpoint`].
 ///  2. With [`WorkingSet::revert`].
 pub struct StateCheckpoint<C: Context> {
-    delta: Delta<C>,
+    delta: Delta<C::Storage>,
     accessory_delta: AccessoryDelta<C>,
 }
 
@@ -191,7 +183,7 @@ impl<C: Context> StateReaderAndWriter for AccessoryDelta<C> {
 /// 1. By using the checkpoint() method, where all the changes are added to the underlying StateCheckpoint.
 /// 2. By using the revert method, where the most recent changes are reverted and the previous `StateCheckpoint` is returned.
 pub struct WorkingSet<C: Context> {
-    delta: RevertableWriter<Delta<C>>,
+    delta: RevertableWriter<Delta<C::Storage>>,
     accessory_delta: RevertableWriter<AccessoryDelta<C>>,
     events: Vec<Event>,
 }
