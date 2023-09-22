@@ -11,7 +11,7 @@ impl<'a, C: sov_modules_api::Context> DatabaseCommit for EvmDb<'a, C> {
 
             // TODO figure out what to do when account is destroyed.
             // https://github.com/Sovereign-Labs/sovereign-sdk/issues/425
-            if account.is_destroyed {
+            if account.is_selfdestructed() {
                 todo!("Account destruction not supported")
             }
 

@@ -68,6 +68,7 @@ mod experimental {
         pub block_gas_limit: u64,
         pub genesis_timestamp: u64,
         pub block_timestamp_delta: u64,
+        pub base_fee_params: reth_primitives::BaseFeeParams,
     }
 
     #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -82,12 +83,13 @@ mod experimental {
                 data: vec![],
                 chain_id: 1,
                 limit_contract_code_size: None,
-                spec: vec![(0, SpecId::LATEST)].into_iter().collect(),
+                spec: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
                 coinbase: Address::zero(),
                 starting_base_fee: reth_primitives::constants::MIN_PROTOCOL_BASE_FEE,
                 block_gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
                 block_timestamp_delta: reth_primitives::constants::SLOT_DURATION.as_secs(),
                 genesis_timestamp: 0,
+                base_fee_params: reth_primitives::BaseFeeParams::ethereum(),
             }
         }
     }
