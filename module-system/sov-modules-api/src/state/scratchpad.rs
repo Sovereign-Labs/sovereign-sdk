@@ -67,7 +67,7 @@ type RevertableWrites = HashMap<CacheKey, Option<CacheValue>>;
 ///  2. With [`WorkingSet::revert`].
 pub struct StateCheckpoint<C: Context> {
     delta: Delta<C::Storage>,
-    accessory_delta: AccessoryDelta<C>,
+    accessory_delta: AccessoryDelta<C::Storage>,
 }
 
 impl<C: Context> StateCheckpoint<C> {
@@ -131,16 +131,16 @@ impl<C: Context> StateCheckpoint<C> {
     }
 }
 
-struct AccessoryDelta<C: Context> {
+struct AccessoryDelta<S: Storage> {
     // This inner storage is never accessed inside the zkVM because reads are
     // not allowed, so it can result as dead code.
     #[allow(dead_code)]
-    storage: <C as Spec>::Storage,
+    storage: S,
     writes: RevertableWrites,
 }
 
-impl<C: Context> AccessoryDelta<C> {
-    fn new(storage: <C as Spec>::Storage) -> Self {
+impl<S: Storage> AccessoryDelta<S> {
+    fn new(storage: S) -> Self {
         Self {
             storage,
             writes: Default::default(),
@@ -159,7 +159,7 @@ impl<C: Context> AccessoryDelta<C> {
     }
 }
 
-impl<C: Context> StateReaderAndWriter for AccessoryDelta<C> {
+impl<S: Storage> StateReaderAndWriter for AccessoryDelta<S> {
     fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
         let cache_key = key.to_cache_key();
         if let Some(value) = self.writes.get(&cache_key) {
@@ -184,7 +184,7 @@ impl<C: Context> StateReaderAndWriter for AccessoryDelta<C> {
 /// 2. By using the revert method, where the most recent changes are reverted and the previous `StateCheckpoint` is returned.
 pub struct WorkingSet<C: Context> {
     delta: RevertableWriter<Delta<C::Storage>>,
-    accessory_delta: RevertableWriter<AccessoryDelta<C>>,
+    accessory_delta: RevertableWriter<AccessoryDelta<C::Storage>>,
     events: Vec<Event>,
 }
 
