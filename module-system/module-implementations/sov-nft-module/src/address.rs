@@ -15,3 +15,6 @@ pub struct OwnerAddress;
 #[address_type]
 /// Address representing a creator of an NFT collection
 pub struct CreatorAddress;
+#[address_type]
+/// Address representing an authorized minter
+pub struct AuthorizedMinterAddress;

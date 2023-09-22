@@ -2,7 +2,8 @@ use anyhow::Result;
 use sov_modules_api::{CallResponse, Context, WorkingSet};
 
 use crate::address::UserAddress;
-use crate::{Collection, CollectionAddress, Nft, NftIdentifier, NonFungibleToken, TokenId};
+use crate::{Collection, CollectionAddress, AuthorizedMinterAddress,
+            Nft, NftIdentifier, NonFungibleToken, TokenId};
 
 #[cfg_attr(
     feature = "native",
@@ -18,13 +19,15 @@ pub enum CallMessage<C: Context> {
     CreateCollection {
         /// Name of the collection
         name: String,
-        /// meta data url for collection
+        /// Metadata url for collection
         collection_uri: String,
+        /// Vector of authorized minters for a collection
+        authorized_minters: Vec<AuthorizedMinterAddress<C>>
     },
     /// update collection metadata
     UpdateCollection {
-        /// Name of the collection
-        name: String,
+        /// Address of the collection
+        collection_address: CollectionAddress<C>,
         /// meta data url for collection
         collection_uri: String,
     },
@@ -32,12 +35,12 @@ pub enum CallMessage<C: Context> {
     /// This prevents new NFTs from being minted.
     FreezeCollection {
         /// collection name
-        collection_name: String,
+        collection_address: CollectionAddress<C>,
     },
     /// mint a new nft
     MintNft {
         /// Name of the collection
-        collection_name: String,
+        collection_address: CollectionAddress<C>,
         /// Meta data url for collection
         token_uri: String,
         /// nft id. a unique identifier for each NFT
@@ -50,8 +53,8 @@ pub enum CallMessage<C: Context> {
     },
     /// Update nft metadata url or frozen status
     UpdateNft {
-        /// Name of the collection
-        collection_name: String,
+        /// Address of the collection
+        collection_address: CollectionAddress<C>,
         /// nft id
         token_id: TokenId,
         /// Meta data url for collection
@@ -75,12 +78,14 @@ impl<C: Context> NonFungibleToken<C> {
         &self,
         collection_name: &str,
         collection_uri: &str,
+        authorized_minters: Vec<AuthorizedMinterAddress<C>>,
         context: &C,
         working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         let (collection_address, collection) = Collection::new(
             collection_name,
             collection_uri,
+            &authorized_minters,
             &self.collections,
             context,
             working_set,
@@ -92,15 +97,15 @@ impl<C: Context> NonFungibleToken<C> {
 
     pub(crate) fn update_collection(
         &self,
-        collection_name: &str,
+        collection_address: &CollectionAddress<C>,
         collection_uri: &str,
         context: &C,
         working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
-        let (collection_address, collection_state) = Collection::get_owned_collection(
-            collection_name,
+        let collection_state = Collection::get_authorized_collection(
+            collection_address,
             &self.collections,
-            context,
+            &AuthorizedMinterAddress::new(context.sender()),
             working_set,
         )?;
         let mut collection = collection_state.get_mutable_or_bail()?;
@@ -112,14 +117,14 @@ impl<C: Context> NonFungibleToken<C> {
 
     pub(crate) fn freeze_collection(
         &self,
-        collection_name: &str,
+        collection_address: &CollectionAddress<C>,
         context: &C,
         working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
-        let (collection_address, collection_state) = Collection::get_owned_collection(
-            collection_name,
+        let collection_state = Collection::get_authorized_collection(
+            collection_address,
             &self.collections,
-            context,
+            &AuthorizedMinterAddress::new(context.sender()),
             working_set,
         )?;
         let mut collection = collection_state.get_mutable_or_bail()?;
@@ -130,20 +135,34 @@ impl<C: Context> NonFungibleToken<C> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn mint_nft(
+    pub(crate) fn mint_nft_from_eoa(
         &self,
         token_id: u64,
-        collection_name: &str,
+        collection_address: &CollectionAddress<C>,
         token_uri: &str,
         mint_to_address: &UserAddress<C>,
         frozen: bool,
         context: &C,
         working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
-        let (collection_address, collection_state) = Collection::get_owned_collection(
-            collection_name,
+        self.mint_nft(token_id, collection_address, token_uri, &mint_to_address, frozen, &AuthorizedMinterAddress::new(context.sender()), working_set)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn mint_nft(
+        &self,
+        token_id: u64,
+        collection_address: &CollectionAddress<C>,
+        token_uri: &str,
+        mint_to_address: &UserAddress<C>,
+        frozen: bool,
+        authorized_address: &AuthorizedMinterAddress<C>,
+        working_set: &mut WorkingSet<C>,
+    ) -> Result<CallResponse> {
+        let collection_state = Collection::get_authorized_collection(
+            collection_address,
             &self.collections,
-            context,
+            authorized_address,
             working_set,
         )?;
         let mut collection = collection_state.get_mutable_or_bail()?;
@@ -189,16 +208,16 @@ impl<C: Context> NonFungibleToken<C> {
 
     pub(crate) fn update_nft(
         &self,
-        collection_name: &str,
+        collection_address: &CollectionAddress<C>,
         token_id: u64,
         token_uri: Option<String>,
         frozen: Option<bool>,
         context: &C,
         working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
-        let (collection_address, mut mutable_nft) = Nft::get_mutable_nft(
+        let mut mutable_nft = Nft::get_mutable_nft(
             token_id,
-            collection_name,
+            collection_address,
             &self.nfts,
             &self.collections,
             context,
@@ -211,7 +230,7 @@ impl<C: Context> NonFungibleToken<C> {
             mutable_nft.update_token_uri(&uri);
         }
         self.nfts.set(
-            &NftIdentifier(token_id, collection_address),
+            &NftIdentifier(token_id, collection_address.clone()),
             mutable_nft.inner(),
             working_set,
         );

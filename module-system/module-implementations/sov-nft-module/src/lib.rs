@@ -65,19 +65,20 @@ impl<C: Context> Module for NonFungibleToken<C> {
             CallMessage::CreateCollection {
                 name,
                 collection_uri,
-            } => self.create_collection(&name, &collection_uri, context, working_set),
-            CallMessage::FreezeCollection { collection_name } => {
-                self.freeze_collection(&collection_name, context, working_set)
+                authorized_minters,
+            } => self.create_collection(&name, &collection_uri, authorized_minters, context, working_set),
+            CallMessage::FreezeCollection { collection_address } => {
+                self.freeze_collection(&collection_address, context, working_set)
             }
             CallMessage::MintNft {
-                collection_name,
+                collection_address,
                 token_uri,
                 token_id,
                 owner,
                 frozen,
-            } => self.mint_nft(
+            } => self.mint_nft_from_eoa(
                 token_id,
-                &collection_name,
+                &collection_address,
                 &token_uri,
                 &owner,
                 frozen,
@@ -85,21 +86,21 @@ impl<C: Context> Module for NonFungibleToken<C> {
                 working_set,
             ),
             CallMessage::UpdateCollection {
-                name,
+                collection_address,
                 collection_uri,
-            } => self.update_collection(&name, &collection_uri, context, working_set),
+            } => self.update_collection(&collection_address, &collection_uri, context, working_set),
             CallMessage::TransferNft {
                 collection_address,
                 token_id,
                 to,
             } => self.transfer_nft(token_id, &collection_address, &to, context, working_set),
             CallMessage::UpdateNft {
-                collection_name,
+                collection_address,
                 token_id,
                 token_uri,
                 frozen,
             } => self.update_nft(
-                &collection_name,
+                &collection_address,
                 token_id,
                 token_uri,
                 frozen,

@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Context as _};
 use sov_modules_api::{Context, StateMap, WorkingSet};
 
-use crate::address::CollectionAddress;
+use crate::address::{CollectionAddress, AuthorizedMinterAddress};
 use crate::utils::get_collection_address;
 use crate::CreatorAddress;
 
@@ -18,17 +18,16 @@ pub struct Collection<C: Context> {
     /// duplicate collection names
     name: String,
     /// Address of the collection creator
-    /// This is the only address that can mint new NFTs for the collection
     creator: CreatorAddress<C>,
-    /// If a collection is frozen, then new NFTs
-    /// cannot be minted and the supply is frozen
-    frozen: bool,
     /// Supply of the collection. This is dynamic and changes
     /// with the number of NFTs created. It stops changing
-    /// when frozen is set to true.
+    /// when the collection is frozen
     supply: u64,
-    /// collection metadata stored at this url
+    /// Collection metadata stored at this url
     collection_uri: String,
+    /// Authorized minters for the collection.
+    /// If authorized minters is empty, then new NFTs cannot be minted
+    authorized_minters: Vec<AuthorizedMinterAddress<C>>,
 }
 
 pub enum CollectionState<C: Context> {
@@ -53,6 +52,7 @@ impl<C: Context> Collection<C> {
     pub fn new(
         collection_name: &str,
         collection_uri: &str,
+        authorized_minters: &[AuthorizedMinterAddress<C>],
         collections: &StateMap<CollectionAddress<C>, Collection<C>>,
         context: &C,
         working_set: &mut WorkingSet<C>,
@@ -72,7 +72,7 @@ impl<C: Context> Collection<C> {
                 Collection {
                     name: collection_name.to_string(),
                     creator: CreatorAddress::new(creator),
-                    frozen: false,
+                    authorized_minters: authorized_minters.to_vec(),
                     supply: 0,
                     collection_uri: collection_uri.to_string(),
                 },
@@ -80,29 +80,32 @@ impl<C: Context> Collection<C> {
         }
     }
 
-    pub fn get_owned_collection(
-        collection_name: &str,
+    pub fn get_authorized_collection(
+        collection_address: &CollectionAddress<C>,
         collections: &StateMap<CollectionAddress<C>, Collection<C>>,
-        context: &C,
+        authorized_address: &AuthorizedMinterAddress<C>,
         working_set: &mut WorkingSet<C>,
-    ) -> anyhow::Result<(CollectionAddress<C>, CollectionState<C>)> {
-        let creator = context.sender();
-        let collection_address = get_collection_address(collection_name, creator.as_ref());
+    ) -> anyhow::Result<CollectionState<C>> {
         let collection = collections.get(&collection_address, working_set);
         if let Some(collection) = collection {
             if collection.is_frozen() {
-                Ok((collection_address, CollectionState::Frozen(collection)))
+                Ok(CollectionState::Frozen(collection))
             } else {
-                Ok((
-                    collection_address,
-                    CollectionState::Mutable(MutableCollection(collection)),
-                ))
+                if !collection.authorized_minters.contains(&authorized_address) {
+                    return Err(anyhow!("sender not authorized")).with_context(|| {
+                        format!(
+                            "Sender with address: {} not authorized for collection with address: {}",
+                            authorized_address, collection_address
+                        )
+                    });
+                }
+                Ok(CollectionState::Mutable(MutableCollection(collection)))
             }
         } else {
             Err(anyhow!("Collection not found")).with_context(|| {
                 format!(
-                    "Collection with name: {} does not exist for creator {}",
-                    collection_name, creator
+                    "Collection with address: {} does not exist",
+                    collection_address
                 )
             })
         }
@@ -122,7 +125,7 @@ impl<C: Context> Collection<C> {
     }
     #[allow(dead_code)]
     pub fn is_frozen(&self) -> bool {
-        self.frozen
+        self.authorized_minters.is_empty()
     }
     #[allow(dead_code)]
     pub fn get_supply(&self) -> u64 {
@@ -151,7 +154,7 @@ impl<C: Context> MutableCollection<C> {
         &self.0
     }
     pub fn freeze(&mut self) {
-        self.0.frozen = true;
+        self.0.authorized_minters = vec![];
     }
 
     pub fn set_collection_uri(&mut self, collection_uri: &str) {

@@ -2,7 +2,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::{Context, Module, WorkingSet};
 use sov_nft_module::utils::get_collection_address;
-use sov_nft_module::{CallMessage, NonFungibleToken, OwnerAddress, UserAddress};
+use sov_nft_module::{AuthorizedMinterAddress, CallMessage, NonFungibleToken, OwnerAddress, UserAddress};
 use sov_state::{DefaultStorageSpec, ProverStorage};
 
 const PK1: [u8; 32] = [
@@ -38,6 +38,7 @@ fn mints_and_transfers() {
     let create_collection_message = CallMessage::CreateCollection {
         name: collection_name.to_string(),
         collection_uri: collection_uri.to_string(),
+        authorized_minters: vec![AuthorizedMinterAddress::new(&creator_address)],
     };
 
     let creator_context = DefaultContext::new(creator_address);
@@ -67,7 +68,7 @@ fn mints_and_transfers() {
     let owner = UserAddress::new(&private_key_1.default_address());
 
     let mint_nft_message = CallMessage::MintNft {
-        collection_name: collection_name.to_string(),
+        collection_address: collection_address.clone(),
         token_uri: token_uri.to_string(),
         token_id,
         owner: owner.clone(),
@@ -92,8 +93,10 @@ fn mints_and_transfers() {
 
     // Mint NFT to non-existent collection
     let ne_collection_name = "NON_EXISTENT_COLLECTION";
+    let ne_collection_address =
+        get_collection_address::<DefaultContext>(ne_collection_name, creator_address.as_ref());
     let mint_nft_message = CallMessage::MintNft {
-        collection_name: ne_collection_name.to_string(),
+        collection_address: ne_collection_address.clone(),
         token_uri: token_uri.to_string(),
         token_id,
         owner,
@@ -105,8 +108,8 @@ fn mints_and_transfers() {
             sov_modules_api::Error::ModuleError(anyhow_err) => {
                 let err_message = anyhow_err.to_string();
                 let expected_message = format!(
-                    "Collection with name: {} does not exist for creator {}",
-                    ne_collection_name, creator_address
+                    "Collection with address: {} does not exist",
+                    ne_collection_address
                 );
                 assert_eq!(err_message, expected_message);
             }
@@ -118,7 +121,7 @@ fn mints_and_transfers() {
     // Update a collection
     let new_collection_uri = "http://new/uri";
     let create_collection_message = CallMessage::UpdateCollection {
-        name: collection_name.to_string(),
+        collection_address: collection_address.clone(),
         collection_uri: new_collection_uri.to_string(),
     };
 
@@ -142,7 +145,7 @@ fn mints_and_transfers() {
 
     // Freeze a non existent collection
     let freeze_collection_message = CallMessage::FreezeCollection {
-        collection_name: ne_collection_name.to_string(),
+        collection_address: ne_collection_address.clone(),
     };
 
     let creator_context = DefaultContext::new(creator_address);
@@ -157,8 +160,8 @@ fn mints_and_transfers() {
             sov_modules_api::Error::ModuleError(anyhow_err) => {
                 let err_message = anyhow_err.to_string();
                 let expected_message = format!(
-                    "Collection with name: {} does not exist for creator {}",
-                    ne_collection_name, creator_address
+                    "Collection with address: {} does not exist",
+                    ne_collection_address
                 );
                 assert_eq!(err_message, expected_message);
             }
@@ -169,7 +172,7 @@ fn mints_and_transfers() {
 
     // Freeze collection
     let freeze_collection_message = CallMessage::FreezeCollection {
-        collection_name: collection_name.to_string(),
+        collection_address: collection_address.clone()
     };
 
     let creator_context = DefaultContext::new(creator_address);
@@ -188,15 +191,15 @@ fn mints_and_transfers() {
     // Update collection uri for frozen collection
     // Update a collection
     let un_updated_collection_uri = "http://new/uri2";
-    let create_collection_message = CallMessage::UpdateCollection {
-        name: collection_name.to_string(),
+    let update_collection_message = CallMessage::UpdateCollection {
+        collection_address: collection_address.clone(),
         collection_uri: un_updated_collection_uri.to_string(),
     };
 
     let creator_context = DefaultContext::new(creator_address);
 
     let update_response = nft.call(
-        create_collection_message,
+        update_collection_message,
         &creator_context,
         &mut working_set,
     );
@@ -230,7 +233,7 @@ fn mints_and_transfers() {
     let owner: OwnerAddress<DefaultContext> = OwnerAddress::new(&private_key_1.default_address());
 
     let mint_nft_message = CallMessage::MintNft {
-        collection_name: collection_name.to_string(),
+        collection_address: collection_address.clone(),
         token_uri: new_token_uri.to_string(),
         token_id: new_token_id,
         owner: UserAddress::new(owner.get_address()),
@@ -341,7 +344,7 @@ fn mints_and_transfers() {
     let token_id = 42;
     let new_token_uri = "http://foo.bar/test_collection/new_url/42";
     let update_nft_message = CallMessage::UpdateNft {
-        collection_name: collection_name.to_string(),
+        collection_address: collection_address.clone(),
         token_id,
         token_uri: Some(new_token_uri.to_string()),
         frozen: None,
@@ -365,7 +368,7 @@ fn mints_and_transfers() {
     // Freeze NFT
     let token_id = 42;
     let update_nft_message = CallMessage::UpdateNft {
-        collection_name: collection_name.to_string(),
+        collection_address: collection_address.clone(),
         token_id,
         token_uri: None,
         frozen: Some(true),
@@ -390,7 +393,7 @@ fn mints_and_transfers() {
     let token_id = 42;
     let new_token_uri_fail = "http://foo.bar/test_collection/new_url_fail/42";
     let update_nft_message = CallMessage::UpdateNft {
-        collection_name: collection_name.to_string(),
+        collection_address: collection_address.clone(),
         token_id,
         token_uri: Some(new_token_uri_fail.to_string()),
         frozen: None,

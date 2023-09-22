@@ -2,7 +2,7 @@ use anyhow::{anyhow, bail, Context as _};
 use sov_modules_api::{Context, StateMap, WorkingSet};
 
 use crate::collection::Collection;
-use crate::{CollectionAddress, OwnerAddress, UserAddress};
+use crate::{AuthorizedMinterAddress, CollectionAddress, OwnerAddress, UserAddress};
 
 /// tokenId for the NFT that's unique within the scope of the collection
 pub type TokenId = u64;
@@ -136,19 +136,18 @@ impl<C: Context> Nft<C> {
 
     pub fn get_mutable_nft(
         token_id: TokenId,
-        collection_name: &str,
+        collection_address: &CollectionAddress<C>,
         nfts: &StateMap<NftIdentifier<C>, Nft<C>>,
         collections: &StateMap<CollectionAddress<C>, Collection<C>>,
         context: &C,
         working_set: &mut WorkingSet<C>,
-    ) -> anyhow::Result<(CollectionAddress<C>, MutableNft<C>)> {
-        let (collection_address, _) =
-            Collection::get_owned_collection(collection_name, collections, context, working_set)?;
+    ) -> anyhow::Result<MutableNft<C>> {
+        Collection::get_authorized_collection(collection_address, collections, &AuthorizedMinterAddress::new(context.sender()), working_set)?;
         let token_identifier = NftIdentifier(token_id, collection_address.clone());
         let n = nfts.get(&token_identifier, working_set);
         if let Some(nft) = n {
             if !nft.frozen {
-                Ok((collection_address, MutableNft(nft.clone())))
+                Ok(MutableNft(nft.clone()))
             } else {
                 bail!(
                     "NFT with token id {} in collection address {} is frozen",
