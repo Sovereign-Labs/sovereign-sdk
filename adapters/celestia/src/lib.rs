@@ -1,7 +1,6 @@
 pub mod celestia;
 #[cfg(feature = "native")]
 mod da_service;
-pub mod share_commit;
 pub mod shares;
 pub mod types;
 mod utils;

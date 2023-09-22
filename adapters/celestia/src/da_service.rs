@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use celestia_rpc::prelude::*;
-use celestia_types::blob::{Blob as RawBlob, SubmitOptions};
+use celestia_types::blob::{Blob as RawBlob, Commitment, SubmitOptions};
 use celestia_types::nmt::Namespace;
 use celestia_types::DataAvailabilityHeader;
 use jsonrpsee::http_client::{HeaderMap, HttpClient};
@@ -12,7 +12,6 @@ use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::Bytes;
 use tracing::{debug, info, instrument};
 
-use crate::share_commit::recreate_commitment;
 use crate::shares::{Blob, NamespaceGroup, Share};
 use crate::types::{ExtendedDataSquare, FilteredCelestiaBlock, Row};
 use crate::utils::BoxError;
@@ -199,12 +198,12 @@ impl DaService for CelestiaService {
     ) -> Vec<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction> {
         let mut output = Vec::new();
         for blob_ref in block.rollup_data.blobs() {
-            let commitment = recreate_commitment(block.square_size(), blob_ref.clone())
+            let commitment = Commitment::for_shares(self.rollup_namespace, blob_ref.0)
                 .expect("blob must be valid");
             info!("Blob: {:?}", commitment);
             let sender = block
                 .relevant_pfbs
-                .get(&commitment[..])
+                .get(&commitment.0[..])
                 .expect("blob must be relevant")
                 .0
                 .signer
@@ -215,7 +214,7 @@ impl DaService for CelestiaService {
             let blob_tx = BlobWithSender {
                 blob: CountedBufReader::new(blob.into_iter()),
                 sender: CelestiaAddress::from_str(&sender).expect("Incorrect sender address"),
-                hash: commitment,
+                hash: commitment.0,
             };
 
             output.push(blob_tx)
