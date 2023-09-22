@@ -22,7 +22,6 @@ use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
-use sov_state::storage::Storage;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
 
@@ -174,12 +173,7 @@ async fn main() -> Result<(), anyhow::Error> {
         Default::default(),
     );
     println!("Starting from empty storage, initialization chain");
-    app.stf.init_chain(genesis_config);
-
-    let mut prev_state_root = app
-        .get_storage()
-        .get_state_root(&Default::default())
-        .expect("The storage needs to have a state root");
+    let mut prev_state_root = app.stf.init_chain(genesis_config);
 
     let mut demo = app.stf;
 
@@ -199,7 +193,7 @@ async fn main() -> Result<(), anyhow::Error> {
         println!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
-            hex::encode(prev_state_root)
+            hex::encode(prev_state_root.0)
         );
         let filtered_block = &bincoded_blocks[height as usize];
         let _header_hash = hex::encode(filtered_block.header.header.hash());
@@ -217,6 +211,7 @@ async fn main() -> Result<(), anyhow::Error> {
         }
 
         let result = demo.apply_slot(
+            &prev_state_root,
             Default::default(),
             &filtered_block.header,
             &filtered_block.validity_condition(),
@@ -238,7 +233,7 @@ async fn main() -> Result<(), anyhow::Error> {
             .run_without_proving()
             .expect("Prover should run successfully");
         println!("==================================================\n");
-        prev_state_root = result.state_root.0;
+        prev_state_root = result.state_root;
     }
 
     #[cfg(feature = "bench")]

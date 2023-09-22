@@ -50,7 +50,7 @@ fn rollup_bench(_bench: &mut Criterion) {
         Default::default(),
     );
 
-    demo.init_chain(demo_genesis_config);
+    let mut current_root = demo.init_chain(demo_genesis_config);
 
     // data generation
     let mut blobs = vec![];
@@ -81,11 +81,13 @@ fn rollup_bench(_bench: &mut Criterion) {
 
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
             let apply_block_result = demo.apply_slot(
+                &current_root,
                 Default::default(),
                 &filtered_block.header,
                 &filtered_block.validity_cond,
                 &mut blobs[height as usize],
             );
+            current_root = apply_block_result.state_root;
             for receipts in apply_block_result.batch_receipts {
                 data_to_commit.add_batch(receipts);
             }

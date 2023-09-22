@@ -29,7 +29,7 @@ fn test_simple_chain_state() {
     // Genesis, initialize and then commit the state
     chain_state.genesis(&config, &mut working_set).unwrap();
     let (reads_writes, witness) = working_set.checkpoint().freeze();
-    storage.validate_and_commit(reads_writes, &witness).unwrap();
+    let genesis_root = storage.validate_and_commit(reads_writes, &witness).unwrap();
 
     // Computes the initial, post genesis, working set
     let mut working_set = WorkingSet::new(storage.clone());
@@ -61,14 +61,14 @@ fn test_simple_chain_state() {
     chain_state.begin_slot_hook(
         &slot_data.header,
         &slot_data.validity_cond,
+        &genesis_root,
         &mut working_set,
     );
 
     // Check that the root hash has been stored correctly
-    let stored_root: [u8; 32] = chain_state.get_genesis_hash(&mut working_set).unwrap();
-    let init_root_hash = storage.get_state_root(&Default::default()).unwrap();
+    let stored_root = chain_state.get_genesis_hash(&mut working_set).unwrap();
 
-    assert_eq!(stored_root, init_root_hash, "Genesis hashes don't match");
+    assert_eq!(stored_root, genesis_root, "Genesis hashes don't match");
     assert_eq!(
         chain_state.get_time(&mut working_set),
         slot_data.header.time(),
@@ -100,8 +100,7 @@ fn test_simple_chain_state() {
 
     // We now commit the new state (which updates the root hash)
     let (reads_writes, witness) = working_set.checkpoint().freeze();
-    storage.validate_and_commit(reads_writes, &witness).unwrap();
-    let new_root_hash = storage.get_state_root(&Default::default());
+    let new_root_hash = storage.validate_and_commit(reads_writes, &witness).unwrap();
 
     // Computes the new working set
     let mut working_set = WorkingSet::new(storage);
@@ -120,6 +119,7 @@ fn test_simple_chain_state() {
     chain_state.begin_slot_hook(
         &new_slot_data.header,
         &new_slot_data.validity_cond,
+        &new_root_hash,
         &mut working_set,
     );
 
@@ -151,7 +151,7 @@ fn test_simple_chain_state() {
     );
 
     // Check the transition stored
-    let last_tx_stored: StateTransitionId<MockDaSpec> = chain_state
+    let last_tx_stored: StateTransitionId<MockDaSpec, _> = chain_state
         .get_historical_transitions(INIT_HEIGHT + 1, &mut working_set)
         .unwrap();
 
@@ -159,7 +159,7 @@ fn test_simple_chain_state() {
         last_tx_stored,
         StateTransitionId::new(
             [1; 32].into(),
-            new_root_hash.unwrap(),
+            new_root_hash,
             MockValidityCond { is_valid: true }
         )
     );

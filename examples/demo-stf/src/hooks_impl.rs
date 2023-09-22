@@ -6,6 +6,7 @@ use sov_modules_stf_template::SequencerOutcome;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_sequencer_registry::SequencerRegistry;
+use sov_state::Storage;
 use tracing::info;
 
 use crate::runtime::Runtime;
@@ -82,6 +83,8 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
         &self,
         #[allow(unused_variables)] slot_header: &Da::BlockHeader,
         #[allow(unused_variables)] validity_condition: &Da::ValidityCondition,
+        #[allow(unused_variables)]
+        pre_state_root: &<<Self::Context as Spec>::Storage as Storage>::Root,
         #[allow(unused_variables)] working_set: &mut sov_modules_api::WorkingSet<C>,
     ) {
         #[cfg(feature = "experimental")]
@@ -103,7 +106,7 @@ impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for Runtime<C, Da
 
     fn finalize_slot_hook(
         &self,
-        #[allow(unused_variables)] root_hash: [u8; 32],
+        #[allow(unused_variables)] root_hash: &<<Self::Context as Spec>::Storage as Storage>::Root,
         #[allow(unused_variables)] accessory_working_set: &mut AccessoryWorkingSet<C>,
     ) {
         #[cfg(feature = "experimental")]

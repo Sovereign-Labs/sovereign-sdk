@@ -131,6 +131,7 @@ pub trait StateTransitionFunction<Vm: Zkvm, Da: DaSpec> {
     /// Commits state changes to the database
     fn apply_slot<'a, I>(
         &mut self,
+        pre_state_root: &Self::StateRoot,
         witness: Self::Witness,
         slot_header: &Da::BlockHeader,
         validity_condition: &Da::ValidityCondition,
@@ -143,10 +144,6 @@ pub trait StateTransitionFunction<Vm: Zkvm, Da: DaSpec> {
     >
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>;
-
-    /// Gets the state root from the associated state. If not available (because the chain has not been initialized yet),
-    /// return None.
-    fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot>;
 }
 
 /// A key-value pair representing a change to the rollup state

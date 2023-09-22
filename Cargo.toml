@@ -56,7 +56,7 @@ rust-version = "1.66"
 
 [workspace.dependencies]
 # Dependencies maintained by Sovereign
-jmt = { version = "0.7.0" }
+jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "199ae1c185e74ee2133db773efacff56706085aa" }
 
 # External dependencies
 async-trait = "0.1.71"

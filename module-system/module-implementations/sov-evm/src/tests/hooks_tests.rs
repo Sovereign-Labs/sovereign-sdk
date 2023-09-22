@@ -192,8 +192,8 @@ fn finalize_hook_creates_final_block() {
     evm.end_slot_hook(&mut working_set);
 
     let mut accessory_state = working_set.accessory_state();
-    let root_hash = [99u8; 32];
-    evm.finalize_slot_hook(root_hash, &mut accessory_state);
+    let root_hash = [99u8; 32].into();
+    evm.finalize_slot_hook(&root_hash, &mut accessory_state);
 
     assert_eq!(evm.blocks.len(&mut accessory_state), 2);
 
@@ -207,7 +207,7 @@ fn finalize_hook_creates_final_block() {
                     parent_hash: SEALED_GENESIS_HASH,
                     ommers_hash: EMPTY_OMMER_ROOT,
                     beneficiary: TEST_CONFIG.coinbase,
-                    state_root: H256::from(root_hash),
+                    state_root: H256::from(root_hash.0),
                     transactions_root: H256(hex!(
                         "30eb5f6050df7ea18ca34cf3503f4713119315a2d3c11f892c5c8920acf816f4"
                     )),
