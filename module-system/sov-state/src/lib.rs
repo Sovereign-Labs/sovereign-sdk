@@ -37,7 +37,7 @@ pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 
 /// A prefix prepended to each key before insertion and retrieval from the storage.
 ///
-/// When interacing with state containers, you will usually use the same working set instance to
+/// When interacting with state containers, you will usually use the same working set instance to
 /// access them, as required by the module API. This also means that you might get key collisions,
 /// so it becomes necessary to prepend a prefix to each key.
 #[derive(

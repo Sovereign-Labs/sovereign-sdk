@@ -268,10 +268,6 @@ where
 }
 
 impl<T: StateReaderAndWriter> StateReaderAndWriter for RevertableWriter<T> {
-    fn delete(&mut self, key: &StorageKey) {
-        self.writes.insert(key.to_cache_key(), None);
-    }
-
     fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
         if let Some(value) = self.writes.get(&key.to_cache_key()) {
             value.as_ref().cloned().map(Into::into)
@@ -283,6 +279,10 @@ impl<T: StateReaderAndWriter> StateReaderAndWriter for RevertableWriter<T> {
     fn set(&mut self, key: &StorageKey, value: StorageValue) {
         self.writes
             .insert(key.to_cache_key(), Some(value.into_cache_value()));
+    }
+
+    fn delete(&mut self, key: &StorageKey) {
+        self.writes.insert(key.to_cache_key(), None);
     }
 }
 
