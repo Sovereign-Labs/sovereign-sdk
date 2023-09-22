@@ -18,8 +18,9 @@ use proofs::*;
 use sov_zk_cycle_macros::cycle_tracker;
 
 use self::address::CelestiaAddress;
-use crate::shares::{read_varint, NamespaceGroup, Share};
+use crate::shares::{NamespaceGroup, Share};
 use crate::types::ValidationError;
+use crate::utils::read_varint;
 use crate::{pfb_from_iter, BlobWithSender, CelestiaHeader};
 
 pub struct CelestiaVerifier {
@@ -276,8 +277,8 @@ impl da::DaVerifier for CelestiaVerifier {
                 }
 
                 // Link blob commitment to e-tx commitment
-                let expected_commitment = Commitment::for_shares(self.rollup_namespace, blob_ref.0)
-                    .map_err(|_| {
+                let expected_commitment =
+                    Commitment::from_shares(self.rollup_namespace, blob_ref.0).map_err(|_| {
                         ValidationError::InvalidEtxProof("failed to recreate commitment")
                     })?;
 

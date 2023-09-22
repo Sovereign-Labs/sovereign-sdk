@@ -23,9 +23,8 @@ use celestia_proto::celestia::blob::v1::MsgPayForBlobs;
 use celestia_proto::cosmos::tx::v1beta1::Tx;
 use tendermint_proto::v0_34::types::IndexWrapper;
 
-// use crate::pfb::{BlobTx, MsgPayForBlobs, Tx};
-use crate::shares::{read_varint, BlobIterator, BlobRefIterator, NamespaceGroup};
-use crate::utils::BoxError;
+use crate::shares::{BlobIterator, BlobRefIterator, NamespaceGroup};
+use crate::utils::{read_varint, BoxError};
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::{ChainValidityCondition, TmHash, PFB_NAMESPACE};
 
