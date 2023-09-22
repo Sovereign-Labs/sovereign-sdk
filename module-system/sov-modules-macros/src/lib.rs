@@ -17,6 +17,7 @@ mod dispatch;
 mod manifest;
 mod module_call_json_schema;
 mod module_info;
+mod new_types;
 #[cfg(feature = "native")]
 mod rpc;
 
@@ -27,10 +28,11 @@ use dispatch::dispatch_call::DispatchCallMacro;
 use dispatch::genesis::GenesisMacro;
 use dispatch::message_codec::MessageCodec;
 use module_call_json_schema::derive_module_call_json_schema;
+use new_types::address_type_helper;
 use proc_macro::TokenStream;
 #[cfg(feature = "native")]
 use rpc::ExposeRpcMacro;
-use syn::parse_macro_input;
+use syn::{parse_macro_input, DeriveInput};
 
 #[proc_macro_derive(ModuleInfo, attributes(state, module, address))]
 pub fn module_info(input: TokenStream) -> TokenStream {
@@ -195,4 +197,69 @@ pub fn cli_parser(input: TokenStream) -> TokenStream {
 pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
     let input: syn::DeriveInput = parse_macro_input!(input);
     handle_macro_error(derive_cli_wallet_arg(input))
+}
+
+/// Simple convenience macro for adding some common derive macros and
+/// impls specifically for a NewType wrapping an Address.
+/// The reason for having this is that we assumes NewTypes for address as a common use case
+///
+/// ## Example
+/// ```
+///use sov_modules_macros::address_type;
+///use std::fmt;
+///use sov_modules_api::Context;
+///#[address_type]
+///pub struct UserAddress;
+/// ```
+///
+/// This is exactly equivalent to hand-writing
+///
+/// ```
+/// use std::fmt;
+/// use sov_modules_api::Context;
+///#[cfg(feature = "native")]
+///#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+///#[schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "UserAddress")]
+///#[serde(transparent)]
+///#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Clone, Debug, PartialEq, Eq, Hash)]
+///pub struct UserAddress<C: Context>(C::Address);
+///
+///#[cfg(not(feature = "native"))]
+///#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Clone, Debug, PartialEq, Eq, Hash)]
+///pub struct UserAddress<C: Context>(C::Address);
+///
+///impl<C: Context> UserAddress<C> {
+///    /// Public constructor
+///    pub fn new(address: &C::Address) -> Self {
+///        UserAddress(address.clone())
+///    }
+///
+///    /// Public getter
+///    pub fn get_address(&self) -> &C::Address {
+///        &self.0
+///    }
+///}
+///
+///impl<C: Context> fmt::Display for UserAddress<C>
+///where
+///    C::Address: fmt::Display,
+///{
+///    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+///        write!(f, "{}", self.0)
+///    }
+///}
+///
+///impl<C: Context> AsRef<[u8]> for UserAddress<C>
+///where
+///    C::Address: AsRef<[u8]>,
+///{
+///    fn as_ref(&self) -> &[u8] {
+///        self.0.as_ref()
+///    }
+///}
+/// ```
+#[proc_macro_attribute]
+pub fn address_type(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
+    handle_macro_error(address_type_helper(input))
 }

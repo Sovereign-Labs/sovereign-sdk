@@ -86,6 +86,8 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
     let value_setter_data = std::fs::read_to_string(value_setter_genesis_path)
         .with_context(|| format!("Failed to read genesis from {}", value_setter_genesis_path))?;
 
+    let nft_config = sov_nft_module::NonFungibleTokenConfig {};
+
     let value_setter_config: ValueSetterConfig<C> = serde_json::from_str(&value_setter_data)
         .with_context(|| format!("Failed to parse genesis from {}", value_setter_genesis_path))?;
 
@@ -105,6 +107,7 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
         sov_accounts::AccountConfig { pub_keys: vec![] },
         #[cfg(feature = "experimental")]
         get_evm_config(evm_genesis_addresses),
+        nft_config,
     ))
 }
 

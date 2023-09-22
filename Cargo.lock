@@ -1519,21 +1519,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eaa37046cc0f6c3cc6090fbdbf73ef0b8ef4cfcc37f6befc0020f63e8cf121e1"
 
 [[package]]
-name = "demo-nft-module"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "borsh",
- "demo-nft-module",
- "jsonrpsee",
- "serde",
- "sov-modules-api",
- "sov-rollup-interface",
- "sov-state",
- "tempfile",
-]
-
-[[package]]
 name = "demo-simple-stf"
 version = "0.2.0"
 dependencies = [
@@ -1567,6 +1552,7 @@ dependencies = [
  "sov-evm",
  "sov-modules-api",
  "sov-modules-stf-template",
+ "sov-nft-module",
  "sov-rollup-interface",
  "sov-sequencer",
  "sov-sequencer-registry",
@@ -6400,6 +6386,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "simple-nft-module"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "jsonrpsee",
+ "serde",
+ "simple-nft-module",
+ "sov-modules-api",
+ "sov-rollup-interface",
+ "sov-state",
+ "tempfile",
+]
+
+[[package]]
 name = "siphasher"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6918,6 +6919,25 @@ dependencies = [
  "sov-zk-cycle-utils",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "sov-nft-module"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "jsonrpsee",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sov-data-generators",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-nft-module",
+ "sov-rollup-interface",
+ "sov-state",
+ "tempfile",
 ]
 
 [[package]]
