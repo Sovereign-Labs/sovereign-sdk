@@ -17,7 +17,7 @@ pub struct Delta<S: Storage> {
     cache: StorageInternalCache,
 }
 
-impl<S: Storage + Send + Sync> Delta<S> {
+impl<S: Storage> Delta<S> {
     fn new(inner: S) -> Self {
         Self::with_witness(inner, Default::default())
     }
