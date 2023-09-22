@@ -1,6 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_types::nmt::Namespace;
-use celestia_types::DataAvailabilityHeader;
+use celestia_types::{Commitment, DataAvailabilityHeader};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{
     self, BlobReaderTrait, BlockHashTrait as BlockHash, BlockHeaderTrait, DaSpec,
@@ -18,7 +18,6 @@ use proofs::*;
 use sov_zk_cycle_macros::cycle_tracker;
 
 use self::address::CelestiaAddress;
-use crate::share_commit::recreate_commitment;
 use crate::shares::{read_varint, NamespaceGroup, Share};
 use crate::types::ValidationError;
 use crate::{pfb_from_iter, BlobWithSender, CelestiaHeader};
@@ -277,12 +276,12 @@ impl da::DaVerifier for CelestiaVerifier {
                 }
 
                 // Link blob commitment to e-tx commitment
-                let expected_commitment =
-                    recreate_commitment(square_size, blob_ref).map_err(|_| {
+                let expected_commitment = Commitment::for_shares(self.rollup_namespace, blob_ref.0)
+                    .map_err(|_| {
                         ValidationError::InvalidEtxProof("failed to recreate commitment")
                     })?;
 
-                assert_eq!(&pfb.share_commitments[blob_idx][..], &expected_commitment);
+                assert_eq!(&pfb.share_commitments[blob_idx][..], &expected_commitment.0);
             }
         }
 
