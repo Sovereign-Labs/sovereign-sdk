@@ -2,8 +2,10 @@ use anyhow::Result;
 use sov_modules_api::{CallResponse, Context, WorkingSet};
 
 use crate::address::UserAddress;
-use crate::{Collection, CollectionAddress, AuthorizedMinterAddress,
-            Nft, NftIdentifier, NonFungibleToken, TokenId};
+use crate::{
+    AuthorizedMinterAddress, Collection, CollectionAddress, Nft, NftIdentifier, NonFungibleToken,
+    TokenId,
+};
 
 #[cfg_attr(
     feature = "native",
@@ -22,7 +24,7 @@ pub enum CallMessage<C: Context> {
         /// Metadata url for collection
         collection_uri: String,
         /// Vector of authorized minters for a collection
-        authorized_minters: Vec<AuthorizedMinterAddress<C>>
+        authorized_minters: Vec<AuthorizedMinterAddress<C>>,
     },
     /// update collection metadata
     UpdateCollection {
@@ -111,7 +113,7 @@ impl<C: Context> NonFungibleToken<C> {
         let mut collection = collection_state.get_mutable_or_bail()?;
         collection.set_collection_uri(collection_uri);
         self.collections
-            .set(&collection_address, collection.inner(), working_set);
+            .set(collection_address, collection.inner(), working_set);
         Ok(CallResponse::default())
     }
 
@@ -130,7 +132,7 @@ impl<C: Context> NonFungibleToken<C> {
         let mut collection = collection_state.get_mutable_or_bail()?;
         collection.freeze();
         self.collections
-            .set(&collection_address, collection.inner(), working_set);
+            .set(collection_address, collection.inner(), working_set);
         Ok(CallResponse::default())
     }
 
@@ -145,7 +147,15 @@ impl<C: Context> NonFungibleToken<C> {
         context: &C,
         working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
-        self.mint_nft(token_id, collection_address, token_uri, &mint_to_address, frozen, &AuthorizedMinterAddress::new(context.sender()), working_set)
+        self.mint_nft(
+            token_id,
+            collection_address,
+            token_uri,
+            mint_to_address,
+            frozen,
+            &AuthorizedMinterAddress::new(context.sender()),
+            working_set,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -171,7 +181,7 @@ impl<C: Context> NonFungibleToken<C> {
             token_uri,
             mint_to_address,
             frozen,
-            &collection_address,
+            collection_address,
             &self.nfts,
             working_set,
         )?;
@@ -182,7 +192,7 @@ impl<C: Context> NonFungibleToken<C> {
         );
         collection.increment_supply();
         self.collections
-            .set(&collection_address, collection.inner(), working_set);
+            .set(collection_address, collection.inner(), working_set);
 
         Ok(CallResponse::default())
     }

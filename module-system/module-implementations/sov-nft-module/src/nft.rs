@@ -142,7 +142,12 @@ impl<C: Context> Nft<C> {
         context: &C,
         working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<MutableNft<C>> {
-        Collection::get_authorized_collection(collection_address, collections, &AuthorizedMinterAddress::new(context.sender()), working_set)?;
+        Collection::get_authorized_collection(
+            collection_address,
+            collections,
+            &AuthorizedMinterAddress::new(context.sender()),
+            working_set,
+        )?;
         let token_identifier = NftIdentifier(token_id, collection_address.clone());
         let n = nfts.get(&token_identifier, working_set);
         if let Some(nft) = n {

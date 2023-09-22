@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Context as _};
 use sov_modules_api::{Context, StateMap, WorkingSet};
 
-use crate::address::{CollectionAddress, AuthorizedMinterAddress};
+use crate::address::{AuthorizedMinterAddress, CollectionAddress};
 use crate::utils::get_collection_address;
 use crate::CreatorAddress;
 
@@ -86,12 +86,12 @@ impl<C: Context> Collection<C> {
         authorized_address: &AuthorizedMinterAddress<C>,
         working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<CollectionState<C>> {
-        let collection = collections.get(&collection_address, working_set);
+        let collection = collections.get(collection_address, working_set);
         if let Some(collection) = collection {
             if collection.is_frozen() {
                 Ok(CollectionState::Frozen(collection))
             } else {
-                if !collection.authorized_minters.contains(&authorized_address) {
+                if !collection.authorized_minters.contains(authorized_address) {
                     return Err(anyhow!("sender not authorized")).with_context(|| {
                         format!(
                             "Sender with address: {} not authorized for collection with address: {}",

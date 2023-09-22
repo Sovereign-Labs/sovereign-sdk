@@ -2,7 +2,9 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::{Context, Module, WorkingSet};
 use sov_nft_module::utils::get_collection_address;
-use sov_nft_module::{AuthorizedMinterAddress, CallMessage, NonFungibleToken, OwnerAddress, UserAddress};
+use sov_nft_module::{
+    AuthorizedMinterAddress, CallMessage, NonFungibleToken, OwnerAddress, UserAddress,
+};
 use sov_state::{DefaultStorageSpec, ProverStorage};
 
 const PK1: [u8; 32] = [
@@ -172,7 +174,7 @@ fn mints_and_transfers() {
 
     // Freeze collection
     let freeze_collection_message = CallMessage::FreezeCollection {
-        collection_address: collection_address.clone()
+        collection_address: collection_address.clone(),
     };
 
     let creator_context = DefaultContext::new(creator_address);

@@ -66,7 +66,13 @@ impl<C: Context> Module for NonFungibleToken<C> {
                 name,
                 collection_uri,
                 authorized_minters,
-            } => self.create_collection(&name, &collection_uri, authorized_minters, context, working_set),
+            } => self.create_collection(
+                &name,
+                &collection_uri,
+                authorized_minters,
+                context,
+                working_set,
+            ),
             CallMessage::FreezeCollection { collection_address } => {
                 self.freeze_collection(&collection_address, context, working_set)
             }
