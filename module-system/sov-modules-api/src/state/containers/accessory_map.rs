@@ -173,7 +173,7 @@ where
 
     /// Deletes a key-value pair from the map.
     ///
-    /// This is equivalent to [`AccessoryStateMap::remove`], 
+    /// This is equivalent to [`AccessoryStateMap::remove`],
     /// but doesn't deserialize and return the value before deletion.
     pub fn delete<Q, C>(&self, key: &Q, working_set: &mut AccessoryWorkingSet<C>)
     where
