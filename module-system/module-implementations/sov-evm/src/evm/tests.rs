@@ -62,6 +62,11 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
 
     let contract = SimpleStorageContract::default();
 
+    // We are not supporting CANCUN yet
+    // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
+    let mut cfg_env = CfgEnv::default();
+    cfg_env.spec_id = SpecId::SHANGHAI;
+
     let contract_address: B160 = {
         let tx = dev_signer
             .sign_default_transaction(TransactionKind::Create, contract.byte_code().to_vec(), 1)
@@ -73,11 +78,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
             ..Default::default()
         };
 
-        // We are not supporting CANCUN yet
-        let mut cfg_env = CfgEnv::default();
-        cfg_env.spec_id = SpecId::SHANGHAI;
-
-        let result = executor::execute_tx(&mut evm_db, &block_env, tx, cfg_env).unwrap();
+        let result = executor::execute_tx(&mut evm_db, &block_env, tx, cfg_env.clone()).unwrap();
         contract_address(&result).expect("Expected successful contract creation")
     };
 
@@ -94,12 +95,8 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
             )
             .unwrap();
 
-        // We are not supporting CANCUN yet
-        let mut cfg_env = CfgEnv::default();
-        cfg_env.spec_id = SpecId::SHANGHAI;
-
         let tx = &tx.try_into().unwrap();
-        executor::execute_tx(&mut evm_db, &BlockEnv::default(), tx, cfg_env).unwrap();
+        executor::execute_tx(&mut evm_db, &BlockEnv::default(), tx, cfg_env.clone()).unwrap();
     }
 
     let get_res = {
@@ -113,12 +110,9 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
             )
             .unwrap();
 
-        // We are not supporting CANCUN yet
-        let mut cfg_env = CfgEnv::default();
-        cfg_env.spec_id = SpecId::SHANGHAI;
-
         let tx = &tx.try_into().unwrap();
-        let result = executor::execute_tx(&mut evm_db, &BlockEnv::default(), tx, cfg_env).unwrap();
+        let result =
+            executor::execute_tx(&mut evm_db, &BlockEnv::default(), tx, cfg_env.clone()).unwrap();
 
         let out = output(result);
         ethereum_types::U256::from(out.as_ref())

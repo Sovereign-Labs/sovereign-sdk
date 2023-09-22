@@ -23,6 +23,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         cfg_env.disable_eip3607 = true;
         cfg_env.disable_base_fee = true;
         cfg_env.chain_id = 0;
+        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
         cfg_env.spec_id = revm::primitives::SpecId::SHANGHAI;
         cfg_env.perf_analyse_created_bytecodes = revm::primitives::AnalysisKind::Analyse;
         cfg_env.limit_contract_code_size = None;
@@ -335,7 +336,9 @@ pub(crate) fn build_rpc_receipt(
         cumulative_gas_used: U256::from(receipt.receipt.cumulative_gas_used),
         gas_used: Some(U256::from(receipt.gas_used)),
         // EIP-4844 related
+        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
         blob_gas_used: None,
+        blob_gas_price: None,
         contract_address: match transaction_kind {
             Create => Some(create_address(transaction.signer(), transaction.nonce())),
             Call(_) => None,
@@ -343,8 +346,6 @@ pub(crate) fn build_rpc_receipt(
         effective_gas_price: U128::from(
             transaction.effective_gas_price(block.header.base_fee_per_gas),
         ),
-        // EIP-4844 related
-        blob_gas_price: None,
         transaction_type: transaction.tx_type().into(),
         logs_bloom: receipt.receipt.bloom_slow(),
         status_code: if receipt.receipt.success {

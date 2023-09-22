@@ -96,6 +96,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
             base_fee_per_gas: parent_block.header.next_block_base_fee(cfg.base_fee_params),
             extra_data: Bytes::default(),
             // EIP-4844 related fields
+            // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
             blob_gas_used: None,
             excess_blob_gas: None,
             // EIP-4788 related field

@@ -62,6 +62,8 @@ fn evm_test() {
             code: Bytes::default(),
             nonce: 0,
         }],
+        // SHANGAI instead of LATEST
+        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
         spec: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
         ..Default::default()
     };

@@ -109,13 +109,22 @@ fn genesis_cfg_missing_specs() {
 }
 
 #[test]
-fn genesis_empty_spec_defaults_to_latest() {
+fn genesis_empty_spec_defaults_to_shanghai() {
     let mut config = TEST_CONFIG.clone();
     config.spec.clear();
     let (evm, mut working_set) = get_evm(&config);
 
     let cfg = evm.cfg.get(&mut working_set).unwrap();
     assert_eq!(cfg.spec, vec![(0, SpecId::SHANGHAI)]);
+}
+
+#[test]
+#[should_panic(expected = "Cancun is not supported")]
+fn genesis_cfg_cancun() {
+    get_evm(&EvmConfig {
+        spec: vec![(0, SpecId::CANCUN)].into_iter().collect(),
+        ..Default::default()
+    });
 }
 
 #[test]
