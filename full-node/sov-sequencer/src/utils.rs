@@ -3,6 +3,7 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
+use tracing::info;
 
 /// A simple client for the sequencer RPC.
 pub struct SimpleClient {
@@ -33,7 +34,7 @@ impl SimpleClient {
             .http_client
             .request("sequencer_publishBatch", batch)
             .await?;
-        println!("response: {:?}", response);
+        info!("publish batch response: {:?}", response);
         Ok(())
     }
 

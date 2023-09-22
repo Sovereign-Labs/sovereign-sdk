@@ -165,7 +165,7 @@ macro_rules! define_table_with_default_codec {
 
 /// Macro similar to [`define_table_with_default_codec`], but to be used when
 /// your key type should be [`SeekKeyEncoder`]. Borsh serializes integers as
-/// little-endian, but RocksDB uses lexigographic ordering which is only
+/// little-endian, but RocksDB uses lexicographic ordering which is only
 /// compatible with big-endian, so we use [`bincode`] with the big-endian option
 /// here.
 macro_rules! define_table_with_seek_key_codec {

@@ -23,7 +23,7 @@ const LEDGER_DB_PATH_SUFFIX: &str = "ledger";
 #[derive(Clone, Debug)]
 /// A database which stores the ledger history (slots, transactions, events, etc).
 /// Ledger data is first ingested into an in-memory map before being fed to the state-transition function.
-/// Once the state-transition function has been executed and finalzied, the results are committed to the final db
+/// Once the state-transition function has been executed and finalized, the results are committed to the final db
 pub struct LedgerDB {
     /// The database which stores the committed ledger. Uses an optimized layout which
     /// requires transactions to be executed before being committed.
@@ -47,7 +47,7 @@ pub struct ItemNumbers {
     pub event_number: u64,
 }
 
-/// All of the data to be commited to the ledger db for a single slot.
+/// All of the data to be committed to the ledger db for a single slot.
 #[derive(Debug)]
 pub struct SlotCommit<S: SlotData, B, T> {
     slot_data: S,
@@ -279,7 +279,7 @@ impl LedgerDB {
         // Once all batches are inserted, Insert slot
         let slot_to_store = StoredSlot {
             hash: data_to_commit.slot_data.hash(),
-            // TODO: Add a method to the slotdata trait allowing additional data to be stored
+            // TODO: Add a method to the slot data trait allowing additional data to be stored
             extra_data: vec![].into(),
             batches: BatchNumber(first_batch_number)..BatchNumber(last_batch_number),
         };
