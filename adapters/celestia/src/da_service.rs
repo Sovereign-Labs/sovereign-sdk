@@ -9,7 +9,6 @@ use celestia_types::DataAvailabilityHeader;
 use jsonrpsee::http_client::{HeaderMap, HttpClient};
 use sov_rollup_interface::da::CountedBufReader;
 use sov_rollup_interface::services::da::DaService;
-use sov_rollup_interface::Bytes;
 use tracing::{debug, info, instrument};
 
 use crate::shares::{Blob, NamespaceGroup, Share};
@@ -50,22 +49,18 @@ async fn fetch_needed_shares_by_header(
     let (rollup_shares_resp, etx_shares_resp) =
         tokio::join!(rollup_shares_future, etx_shares_future);
 
-    let rollup_shares = NamespaceGroup::Sparse(
-        rollup_shares_resp?
-            .rows
-            .into_iter()
-            .flat_map(|row| row.shares.into_iter())
-            .map(|share| Share::new(Bytes::copy_from_slice(&share.data)))
-            .collect(),
-    );
-    let tx_data = NamespaceGroup::Compact(
-        etx_shares_resp?
-            .rows
-            .into_iter()
-            .flat_map(|row| row.shares.into_iter())
-            .map(|share| Share::new(Bytes::copy_from_slice(&share.data)))
-            .collect(),
-    );
+    let rollup_shares = rollup_shares_resp?
+        .rows
+        .into_iter()
+        .flat_map(|row| row.shares.into_iter())
+        .map(Share::from)
+        .collect();
+    let tx_data = etx_shares_resp?
+        .rows
+        .into_iter()
+        .flat_map(|row| row.shares.into_iter())
+        .map(Share::from)
+        .collect();
 
     Ok((rollup_shares, tx_data))
 }
@@ -185,7 +180,7 @@ impl DaService for CelestiaService {
             pfb_rows: etx_rows,
         };
 
-        Ok::<Self::FilteredBlock, BoxError>(filtered_block)
+        Ok(filtered_block)
     }
 
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
@@ -198,7 +193,7 @@ impl DaService for CelestiaService {
     ) -> Vec<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction> {
         let mut output = Vec::new();
         for blob_ref in block.rollup_data.blobs() {
-            let commitment = Commitment::for_shares(self.rollup_namespace, blob_ref.0)
+            let commitment = Commitment::from_shares(self.rollup_namespace, blob_ref.0)
                 .expect("blob must be valid");
             info!("Blob: {:?}", commitment);
             let sender = block
