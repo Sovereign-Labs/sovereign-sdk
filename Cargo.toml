@@ -102,12 +102,12 @@ risc0-build = "0.18"
 
 # EVM dependencies
 ethereum-types = "0.14.1"
-ethers = "2.0.10"
-ethers-core = { version = "2.0.10", default-features = false }
-ethers-contract = "2.0.10"
-ethers-providers = { version = "2.0.10", default-features = false }
-ethers-signers = { version = "2.0.10", default-features = false }
-ethers-middleware = { version = "2.0.10", default-features = false }
+ethers = "=2.0.10"
+ethers-core = { version = "=2.0.10", default-features = false }
+ethers-contract = "=2.0.10"
+ethers-providers = { version = "=2.0.10", default-features = false }
+ethers-signers = { version = "=2.0.10", default-features = false }
+ethers-middleware = { version = "=2.0.10", default-features = false }
 
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
 reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
