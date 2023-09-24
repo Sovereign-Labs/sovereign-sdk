@@ -10,6 +10,7 @@ impl<C: sov_modules_api::Context> Evm<C>
 where
     <C::Storage as Storage>::Root: Into<[u8; 32]>,
 {
+    /// Logic executed at the beginning of the slot.
     pub fn begin_slot_hook(&self, da_root_hash: [u8; 32], working_set: &mut WorkingSet<C>) {
         let parent_block = self
             .head
@@ -34,6 +35,7 @@ where
         self.block_env.set(&new_pending_env, working_set);
     }
 
+    /// Logic executed at the end of the slot.
     pub fn end_slot_hook(&self, working_set: &mut WorkingSet<C>) {
         let cfg = self.cfg.get(working_set).unwrap_or_default();
 
@@ -139,6 +141,7 @@ where
         self.pending_transactions.clear(working_set);
     }
 
+    /// Logic executed after root hash calulation.
     pub fn finalize_slot_hook(
         &self,
         root_hash: &<<C as Spec>::Storage as Storage>::Root,

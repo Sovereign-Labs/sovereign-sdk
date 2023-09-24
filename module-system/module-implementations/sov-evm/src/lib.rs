@@ -1,6 +1,5 @@
-//#![deny(missing_docs)]
-///#![doc = include_str!("../README.md")]
-///! TODO
+#![deny(missing_docs)]
+//! TODO
 #[cfg(feature = "experimental")]
 mod call;
 #[cfg(feature = "experimental")]
@@ -10,7 +9,7 @@ mod genesis;
 #[cfg(feature = "experimental")]
 mod hooks;
 #[cfg(feature = "experimental")]
-pub use {call::*, evm::*, genesis::*, hooks::*};
+pub use {call::*, evm::*, genesis::*, hooks::*, primitive_types::RawEvmTxConversionError};
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
 mod query;
@@ -64,10 +63,12 @@ mod experimental {
     }
 
     impl AccountData {
+        /// Empty code hash.
         pub fn empty_code() -> H256 {
             KECCAK_EMPTY
         }
 
+        /// Account balance.
         pub fn balance(balance: u64) -> U256 {
             U256::from(balance)
         }

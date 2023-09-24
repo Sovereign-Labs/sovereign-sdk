@@ -16,8 +16,11 @@ use crate::Evm;
     derive(serde::Serialize),
     derive(serde::Deserialize)
 )]
+
+/// EVM call message.
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct CallMessage {
+    /// RLP encoded transaction.
     pub tx: RlpEvmTransaction,
 }
 
