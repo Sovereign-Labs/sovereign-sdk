@@ -13,9 +13,13 @@ mod query;
 #[cfg(feature = "experimental")]
 pub use query::*;
 #[cfg(feature = "experimental")]
-pub mod signer;
+mod signer;
+#[cfg(feature = "experimental")]
+pub use signer::DevSigner;
 #[cfg(feature = "smart_contracts")]
-pub mod smart_contracts;
+mod smart_contracts;
+#[cfg(feature = "smart_contracts")]
+pub use smart_contracts::SimpleStorageContract;
 #[cfg(feature = "experimental")]
 #[cfg(test)]
 mod tests;
@@ -94,7 +98,7 @@ mod experimental {
         }
     }
 
-    /// TODO
+    /// The sov-evm module provides compatibility with the EVM.
     #[allow(dead_code)]
     // #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
     #[derive(ModuleInfo, Clone)]

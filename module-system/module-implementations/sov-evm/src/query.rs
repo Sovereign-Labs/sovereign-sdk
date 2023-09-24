@@ -298,13 +298,13 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _block_number: Option<reth_primitives::BlockId>,
         _working_set: &mut WorkingSet<C>,
     ) -> RpcResult<reth_primitives::U256> {
-        unimplemented!("eth_sendTransaction not implemented")
+        unimplemented!("eth_estimateGas not implemented")
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "gasPrice")]
-    pub fn gas_price(&self) -> RpcResult<reth_primitives::U256> {
-        unimplemented!("eth_sendTransaction not implemented")
+    pub fn gas_price(&self, _working_set: &mut WorkingSet<C>) -> RpcResult<reth_primitives::U256> {
+        unimplemented!("eth_gasPrice not implemented")
     }
 }
 

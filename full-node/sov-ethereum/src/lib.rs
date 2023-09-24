@@ -3,7 +3,7 @@ mod batch_builder;
 #[cfg(feature = "experimental")]
 pub use experimental::{get_ethereum_rpc, Ethereum};
 #[cfg(feature = "experimental")]
-pub use sov_evm::signer::DevSigner;
+pub use sov_evm::DevSigner;
 
 #[cfg(feature = "experimental")]
 pub mod experimental {
