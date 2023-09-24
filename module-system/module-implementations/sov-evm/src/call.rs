@@ -30,7 +30,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     ) -> Result<CallResponse> {
         let evm_tx_recovered: TransactionSignedEcRecovered = tx.try_into()?;
         let block_env = self
-            .pending_block
+            .block_env
             .get(working_set)
             .expect("Pending block must be set");
 

@@ -260,7 +260,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         info!("evm module: eth_call");
         let tx_env = prepare_call_env(request);
 
-        let block_env = self.pending_block.get(working_set).unwrap_or_default();
+        let block_env = self.block_env.get(working_set).unwrap_or_default();
         let cfg = self.cfg.get(working_set).unwrap_or_default();
         let cfg_env = get_cfg_env(&block_env, cfg, Some(self.get_cfg_env_template()));
 

@@ -20,7 +20,7 @@ where
         // self.head.set(&parent_block, working_set);
 
         let cfg = self.cfg.get(working_set).unwrap_or_default();
-        let new_pending_block = BlockEnv {
+        let new_pending_env = BlockEnv {
             number: parent_block.header.number + 1,
             coinbase: cfg.coinbase,
             timestamp: parent_block.header.timestamp + cfg.block_timestamp_delta,
@@ -31,14 +31,14 @@ where
                 .unwrap(),
             gas_limit: cfg.block_gas_limit,
         };
-        self.pending_block.set(&new_pending_block, working_set);
+        self.block_env.set(&new_pending_env, working_set);
     }
 
     pub fn end_slot_hook(&self, working_set: &mut WorkingSet<C>) {
         let cfg = self.cfg.get(working_set).unwrap_or_default();
 
-        let pending_block = self
-            .pending_block
+        let block_env = self
+            .block_env
             .get(working_set)
             .expect("Pending block should always be set");
 
@@ -50,9 +50,9 @@ where
 
         let expected_block_number = parent_block.header.number + 1;
         assert_eq!(
-            pending_block.number, expected_block_number,
+            block_env.number, expected_block_number,
             "Pending head must be set to block {}, but found block {}",
-            expected_block_number, pending_block.number
+            expected_block_number, block_env.number
         );
 
         let pending_transactions: Vec<PendingTransaction> =
@@ -78,8 +78,8 @@ where
 
         let header = reth_primitives::Header {
             parent_hash: parent_block.header.hash,
-            timestamp: pending_block.timestamp,
-            number: pending_block.number,
+            timestamp: block_env.timestamp,
+            number: block_env.number,
             ommers_hash: reth_primitives::constants::EMPTY_OMMER_ROOT,
             beneficiary: parent_block.header.beneficiary,
             // This will be set in finalize_slot_hook or in the next begin_slot_hook
@@ -93,9 +93,9 @@ where
                 .iter()
                 .fold(Bloom::zero(), |bloom, r| bloom | r.bloom),
             difficulty: U256::ZERO,
-            gas_limit: pending_block.gas_limit,
+            gas_limit: block_env.gas_limit,
             gas_used,
-            mix_hash: pending_block.prevrandao,
+            mix_hash: block_env.prevrandao,
             nonce: 0,
             base_fee_per_gas: parent_block.header.next_block_base_fee(cfg.base_fee_params),
             extra_data: Bytes::default(),

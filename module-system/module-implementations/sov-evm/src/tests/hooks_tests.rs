@@ -20,7 +20,7 @@ lazy_static! {
 fn begin_slot_hook_creates_pending_block() {
     let (evm, mut working_set) = get_evm(&TEST_CONFIG);
     evm.begin_slot_hook(DA_ROOT_HASH.0, &mut working_set);
-    let pending_block = evm.pending_block.get(&mut working_set).unwrap();
+    let pending_block = evm.block_env.get(&mut working_set).unwrap();
     assert_eq!(
         pending_block,
         BlockEnv {
