@@ -15,6 +15,7 @@ use crate::Evm;
 
 #[rpc_gen(client, server, namespace = "eth")]
 impl<C: sov_modules_api::Context> Evm<C> {
+    /// Handler for: `eth_chainId`
     #[rpc_method(name = "chainId")]
     pub fn chain_id(
         &self,
@@ -32,6 +33,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(Some(chain_id))
     }
 
+    /// Handler for: `eth_getBlockByNumber`
     #[rpc_method(name = "getBlockByNumber")]
     pub fn get_block_by_number(
         &self,
@@ -90,6 +92,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(Some(block.into()))
     }
 
+    /// Handler for: `eth_getTransactionCount`
     #[rpc_method(name = "getTransactionCount")]
     pub fn get_transaction_count(
         &self,
@@ -111,6 +114,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(nonce.into())
     }
 
+    /// Handler for: `eth_feeHistory`
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "feeHistory")]
     pub fn fee_history(
@@ -126,6 +130,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         })
     }
 
+    /// Handler for: `eth_getTransactionByHash`
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "getTransactionByHash")]
     pub fn get_transaction_by_hash(
@@ -166,6 +171,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(transaction)
     }
 
+    /// Handler for: `eth_getTransactionReceipt`
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "getTransactionReceipt")]
     pub fn get_transaction_receipt(
@@ -200,9 +206,9 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(receipt)
     }
 
-    //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
-    //https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-types/src/eth/call.rs#L7
-
+    /// Handler for: `eth_call`
+    // https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
+    // https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-types/src/eth/call.rs#L7
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "call")]
     pub fn get_call(
@@ -231,6 +237,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(output.into_data().into())
     }
 
+    /// Handler for: `eth_blockNumber`
     #[rpc_method(name = "blockNumber")]
     pub fn block_number(
         &self,
@@ -246,6 +253,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(block_number)
     }
 
+    /// Handler for: `eth_estimateGas`
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "estimateGas")]
     pub fn eth_estimate_gas(
@@ -257,6 +265,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         unimplemented!("eth_estimateGas not implemented")
     }
 
+    /// Handler for: `eth_gasPrice`
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "gasPrice")]
     pub fn gas_price(&self, _working_set: &mut WorkingSet<C>) -> RpcResult<reth_primitives::U256> {
