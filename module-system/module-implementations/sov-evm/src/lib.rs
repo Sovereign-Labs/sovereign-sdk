@@ -42,12 +42,19 @@ mod experimental {
     use crate::evm::primitive_types::{
         Block, BlockEnv, Receipt, SealedBlock, TransactionSignedAndRecovered,
     };
+
+    /// Evm account.
     #[derive(Clone, Debug)]
     pub struct AccountData {
+        /// Account address.
         pub address: Address,
+        /// Account balance.
         pub balance: U256,
+        /// Code hash.
         pub code_hash: H256,
+        /// Smart contract code.
         pub code: Bytes,
+        /// Account nonce.
         pub nonce: u64,
     }
 
@@ -61,17 +68,28 @@ mod experimental {
         }
     }
 
+    /// Genesis configuration.
     #[derive(Clone, Debug)]
     pub struct EvmConfig {
+        /// Genesis accounts.
         pub data: Vec<AccountData>,
+        /// Chain id.
         pub chain_id: u64,
+        /// Limits size of contract code size.
         pub limit_contract_code_size: Option<usize>,
+        /// List of EVM hardforks by block number
         pub spec: HashMap<u64, SpecId>,
+        /// Coinbase where all the fees go
         pub coinbase: Address,
+        /// Starting base fee.
         pub starting_base_fee: u64,
+        /// Gas limit for single block
         pub block_gas_limit: u64,
+        /// Genesis timestamp.
         pub genesis_timestamp: u64,
+        /// Delta to add to parent block timestamp,
         pub block_timestamp_delta: u64,
+        /// Base fee params.
         pub base_fee_params: reth_primitives::BaseFeeParams,
     }
 
