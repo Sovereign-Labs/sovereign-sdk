@@ -1,10 +1,11 @@
 use std::collections::HashMap;
+use std::slice::Chunks;
 
 use anyhow::ensure;
 // use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_proto::celestia::blob::v1::MsgPayForBlobs;
-use celestia_types::nmt::{NamespacedHash, NamespacedHashExt, Nmt};
-use celestia_types::ExtendedDataSquare as RawExtendedDataSquare;
+use celestia_types::nmt::{Namespace, NamespacedHash, NamespacedHashExt, Nmt, NS_SIZE};
+use celestia_types::ExtendedDataSquare;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::services::da::SlotData;
@@ -12,29 +13,19 @@ use sov_rollup_interface::Bytes;
 use tendermint::crypto::default::Sha256;
 use tendermint::merkle;
 
-use crate::shares::{NamespaceGroup, Share};
+use crate::shares::NamespaceGroup;
 use crate::utils::BoxError;
 use crate::verifier::{ChainValidityCondition, PARITY_SHARES_NAMESPACE};
 use crate::{CelestiaHeader, TxPosition};
 
-pub struct ExtendedDataSquare {
-    data_square: Vec<Share>,
+pub trait ExtendedDataSquareExt {
+    fn square_size(&self) -> Result<usize, BoxError>;
+
+    fn rows(&self) -> Result<Chunks<'_, Vec<u8>>, BoxError>;
 }
 
-impl From<RawExtendedDataSquare> for ExtendedDataSquare {
-    fn from(value: RawExtendedDataSquare) -> Self {
-        Self {
-            data_square: value
-                .data_square
-                .into_iter()
-                .map(|share| Share::new(Bytes::from(share)))
-                .collect(),
-        }
-    }
-}
-
-impl ExtendedDataSquare {
-    pub fn square_size(&self) -> Result<usize, BoxError> {
+impl ExtendedDataSquareExt for ExtendedDataSquare {
+    fn square_size(&self) -> Result<usize, BoxError> {
         let len = self.data_square.len();
         let square_size = (len as f64).sqrt() as usize;
         ensure!(
@@ -45,16 +36,9 @@ impl ExtendedDataSquare {
         Ok(square_size)
     }
 
-    pub fn rows(&self) -> Result<Vec<&[Share]>, BoxError> {
+    fn rows(&self) -> Result<Chunks<'_, Vec<u8>>, BoxError> {
         let square_size = self.square_size()?;
-
-        let mut output = Vec::with_capacity(square_size);
-        for i in 0..square_size {
-            let row_start = i * square_size;
-            let row_end = (i + 1) * square_size;
-            output.push(&self.data_square[row_start..row_end])
-        }
-        Ok(output)
+        Ok(self.data_square.chunks(square_size))
     }
 }
 
@@ -149,7 +133,7 @@ impl CelestiaHeader {
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)] // TODO: , BorshSerialize, BorshDeserialize)]
 pub struct Row {
-    pub shares: Vec<Share>,
+    pub shares: Vec<Vec<u8>>,
     pub root: NamespacedHash,
 }
 
@@ -160,15 +144,26 @@ impl Row {
             // Shares in the two left-hand quadrants are prefixed with their namespace, while parity
             // shares (in the right-hand) quadrants always have the PARITY_SHARES_NAMESPACE
             let namespace = if idx < self.shares.len() / 2 {
-                share.namespace()
+                share_namespace_unchecked(share)
             } else {
                 PARITY_SHARES_NAMESPACE
             };
-            nmt.push_leaf(share.as_ref(), namespace.into())
+            nmt.push_leaf(share.as_ref(), *namespace)
                 .expect("shares are pushed in order");
         }
         nmt
     }
+}
+
+/// get namespace from a share without verifying if it's a correct namespace
+/// (version 0 or parity ns).
+fn share_namespace_unchecked(share: &[u8]) -> Namespace {
+    nmt_rs::NamespaceId(
+        share[..NS_SIZE]
+            .try_into()
+            .expect("must succeed for correct size"),
+    )
+    .into()
 }
 
 #[cfg(test)]
