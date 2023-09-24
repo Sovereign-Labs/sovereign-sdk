@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::str::FromStr;
 
 use async_trait::async_trait;
 use celestia_rpc::prelude::*;
@@ -12,9 +11,8 @@ use sov_rollup_interface::services::da::DaService;
 use tracing::{debug, info, instrument};
 
 use crate::shares::{Blob, NamespaceGroup, Share};
-use crate::types::{ExtendedDataSquare, FilteredCelestiaBlock, Row};
+use crate::types::{ExtendedDataSquareExt, FilteredCelestiaBlock, Row};
 use crate::utils::BoxError;
-use crate::verifier::address::CelestiaAddress;
 use crate::verifier::proofs::{CompletenessProof, CorrectnessProof};
 use crate::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams, PFB_NAMESPACE};
 use crate::{parse_pfb_namespace, BlobWithSender, CelestiaHeader};
@@ -143,21 +141,15 @@ impl DaService for CelestiaService {
 
         debug!("Fetching EDS...");
         // Fetch entire extended data square
-        let data_square: ExtendedDataSquare = client.share_get_eds(&header.dah).await?.into();
+        let data_square = client.share_get_eds(&header.dah).await?;
 
         debug!("Parsing namespaces...");
         // Parse out all of the rows containing etxs
-        let etx_rows = get_rows_containing_namespace(
-            PFB_NAMESPACE,
-            &header.dah,
-            data_square.rows()?.into_iter(),
-        )?;
+        let etx_rows =
+            get_rows_containing_namespace(PFB_NAMESPACE, &header.dah, data_square.rows()?)?;
         // Parse out all of the rows containing rollup data
-        let rollup_rows = get_rows_containing_namespace(
-            rollup_namespace,
-            &header.dah,
-            data_square.rows()?.into_iter(),
-        )?;
+        let rollup_rows =
+            get_rows_containing_namespace(rollup_namespace, &header.dah, data_square.rows()?)?;
 
         debug!("Decoding pfb protobufs...");
         // Parse out the pfds and store them for later retrieval
@@ -208,7 +200,7 @@ impl DaService for CelestiaService {
 
             let blob_tx = BlobWithSender {
                 blob: CountedBufReader::new(blob.into_iter()),
-                sender: CelestiaAddress::from_str(&sender).expect("Incorrect sender address"),
+                sender: sender.parse().expect("Incorrect sender address"),
                 hash: commitment.0,
             };
 
@@ -268,7 +260,7 @@ fn get_gas_limit_for_bytes(n: usize) -> usize {
 fn get_rows_containing_namespace<'a>(
     nid: Namespace,
     dah: &'a DataAvailabilityHeader,
-    data_square_rows: impl Iterator<Item = &'a [Share]>,
+    data_square_rows: impl Iterator<Item = &'a [Vec<u8>]>,
 ) -> Result<Vec<Row>, BoxError> {
     let mut output = vec![];
 
