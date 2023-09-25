@@ -3,12 +3,6 @@
 use std::fmt::Display;
 
 use jsonrpsee::core::RpcResult;
-use reth_interfaces::RethResult;
-use reth_primitives::Block;
-
-use crate::error::rpc::EthApiError;
-
-extern crate self as result;
 
 /// Helper trait to easily convert various `Result` types into [`RpcResult`]
 pub(crate) trait ToRpcResult<Ok, Err> {
@@ -55,17 +49,6 @@ pub(crate) trait ToRpcResultExt {
     /// Maps the `Ok` variant of this type into [Self::Ok] and maps the `Err` variant into rpc
     /// error.
     fn map_ok_or_rpc_err(self) -> RpcResult<<Self as ToRpcResultExt>::Ok>;
-}
-
-impl ToRpcResultExt for RethResult<Option<Block>> {
-    type Ok = Block;
-
-    fn map_ok_or_rpc_err(self) -> RpcResult<<Self as ToRpcResultExt>::Ok> {
-        match self {
-            Ok(block) => block.ok_or_else(|| EthApiError::UnknownBlockNumber.into()),
-            Err(err) => Err(internal_rpc_err(err.to_string())),
-        }
-    }
 }
 
 /// Constructs an invalid params JSON-RPC error.
