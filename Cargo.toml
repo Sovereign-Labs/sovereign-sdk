@@ -77,8 +77,8 @@ prometheus = { version = "0.13.3", default-features = false }
 proptest = "1.0.0"
 proptest-derive = "0.3.0"
 rand = "0.8"
-rayon = "1.5.2"
-rocksdb = { path="/Users/dubbelosix/rust-rocksdb", features = ["lz4"] }
+rayon = "1.8.0"
+rocksdb = { version = "0.21.0", features = ["lz4"] }
 serde = { version = "1.0.188", features = ["derive", "rc"] }
 serde_json = { version = "1.0" }
 sha2 = "0.10.6"
