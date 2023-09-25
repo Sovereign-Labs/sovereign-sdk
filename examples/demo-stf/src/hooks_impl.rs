@@ -104,13 +104,12 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
 impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for Runtime<C, Da> {
     type Context = C;
 
-    fn finalize_slot_hook(
+    fn finalize_hook(
         &self,
         #[allow(unused_variables)] root_hash: &<<Self::Context as Spec>::Storage as Storage>::Root,
         #[allow(unused_variables)] accessory_working_set: &mut AccessoryWorkingSet<C>,
     ) {
         #[cfg(feature = "experimental")]
-        self.evm
-            .finalize_slot_hook(root_hash, accessory_working_set);
+        self.evm.finalize_hook(root_hash, accessory_working_set);
     }
 }

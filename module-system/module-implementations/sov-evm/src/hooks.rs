@@ -10,17 +10,19 @@ impl<C: sov_modules_api::Context> Evm<C>
 where
     <C::Storage as Storage>::Root: Into<[u8; 32]>,
 {
+    /// Logic executed at the beginning of the slot. Here we set the root hash of the previous head.
     pub fn begin_slot_hook(&self, da_root_hash: [u8; 32], working_set: &mut WorkingSet<C>) {
         let parent_block = self
             .head
             .get(working_set)
             .expect("Head block should always be set");
 
+        // TODO
         // parent_block.header.state_root = root_hash.into();
         // self.head.set(&parent_block, working_set);
 
         let cfg = self.cfg.get(working_set).unwrap_or_default();
-        let new_pending_block = BlockEnv {
+        let new_pending_env = BlockEnv {
             number: parent_block.header.number + 1,
             coinbase: cfg.coinbase,
             timestamp: parent_block.header.timestamp + cfg.block_timestamp_delta,
@@ -31,14 +33,16 @@ where
                 .unwrap(),
             gas_limit: cfg.block_gas_limit,
         };
-        self.pending_block.set(&new_pending_block, working_set);
+        self.block_env.set(&new_pending_env, working_set);
     }
 
+    /// Logic executed at the end of the slot. Here, we generate an authenticated block and set it as the new head of the chain.
+    /// It's important to note that the state root hash is not known at this moment, so we postpone setting this field until the begin_slot_hook of the next slot.
     pub fn end_slot_hook(&self, working_set: &mut WorkingSet<C>) {
         let cfg = self.cfg.get(working_set).unwrap_or_default();
 
-        let pending_block = self
-            .pending_block
+        let block_env = self
+            .block_env
             .get(working_set)
             .expect("Pending block should always be set");
 
@@ -50,9 +54,9 @@ where
 
         let expected_block_number = parent_block.header.number + 1;
         assert_eq!(
-            pending_block.number, expected_block_number,
+            block_env.number, expected_block_number,
             "Pending head must be set to block {}, but found block {}",
-            expected_block_number, pending_block.number
+            expected_block_number, block_env.number
         );
 
         let pending_transactions: Vec<PendingTransaction> =
@@ -78,11 +82,11 @@ where
 
         let header = reth_primitives::Header {
             parent_hash: parent_block.header.hash,
-            timestamp: pending_block.timestamp,
-            number: pending_block.number,
+            timestamp: block_env.timestamp,
+            number: block_env.number,
             ommers_hash: reth_primitives::constants::EMPTY_OMMER_ROOT,
             beneficiary: parent_block.header.beneficiary,
-            // This will be set in finalize_slot_hook or in the next begin_slot_hook
+            // This will be set in finalize_hook or in the next begin_slot_hook
             state_root: reth_primitives::constants::KECCAK_EMPTY,
             transactions_root: reth_primitives::proofs::calculate_transaction_root(
                 transactions.as_slice(),
@@ -93,9 +97,9 @@ where
                 .iter()
                 .fold(Bloom::zero(), |bloom, r| bloom | r.bloom),
             difficulty: U256::ZERO,
-            gas_limit: pending_block.gas_limit,
+            gas_limit: block_env.gas_limit,
             gas_used,
-            mix_hash: pending_block.prevrandao,
+            mix_hash: block_env.prevrandao,
             nonce: 0,
             base_fee_per_gas: parent_block.header.next_block_base_fee(cfg.base_fee_params),
             extra_data: Bytes::default(),
@@ -139,7 +143,12 @@ where
         self.pending_transactions.clear(working_set);
     }
 
-    pub fn finalize_slot_hook(
+    /// This logic is executed after calculating the root hash.
+    /// At this point, it is impossible to alter state variables because the state root is fixed.
+    /// However, non-state data can be modified.
+    /// This function's purpose is to add the block to the (non-authenticated) blocks structure,
+    /// enabling block-related RPC queries.
+    pub fn finalize_hook(
         &self,
         root_hash: &<<C as Spec>::Storage as Storage>::Root,
         accesorry_working_set: &mut AccessoryWorkingSet<C>,
