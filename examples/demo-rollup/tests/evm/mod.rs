@@ -12,7 +12,7 @@ use ethers_signers::{LocalWallet, Signer, Wallet};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use jsonrpsee::rpc_params;
-use sov_evm::smart_contracts::SimpleStorageContract;
+use sov_evm::SimpleStorageContract;
 use sov_risc0_adapter::host::Risc0Host;
 
 use super::test_helpers::start_rollup;

@@ -69,7 +69,7 @@ pub trait SlotHooks<Da: DaSpec> {
 pub trait FinalizeHook<Da: DaSpec> {
     type Context: Context;
 
-    fn finalize_slot_hook(
+    fn finalize_hook(
         &self,
         root_hash: &<<Self::Context as Spec>::Storage as Storage>::Root,
         accesorry_working_set: &mut AccessoryWorkingSet<Self::Context>,

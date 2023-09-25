@@ -126,7 +126,7 @@ where
         let mut working_set = checkpoint.to_revertable();
 
         self.runtime
-            .finalize_slot_hook(&root_hash, &mut working_set.accessory_state());
+            .finalize_hook(&root_hash, &mut working_set.accessory_state());
 
         let accessory_log = working_set.checkpoint().freeze_non_provable();
 
@@ -174,7 +174,7 @@ where
         let mut working_set = checkpoint.to_revertable();
 
         self.runtime
-            .finalize_slot_hook(&genesis_hash, &mut working_set.accessory_state());
+            .finalize_hook(&genesis_hash, &mut working_set.accessory_state());
 
         let accessory_log = working_set.checkpoint().freeze_non_provable();
 

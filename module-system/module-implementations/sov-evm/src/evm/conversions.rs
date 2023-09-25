@@ -117,7 +117,7 @@ impl From<TransactionSignedAndRecovered> for TransactionSignedEcRecovered {
 
 // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/576
 // https://github.com/paradigmxyz/reth/blob/d8677b4146f77c7c82d659c59b79b38caca78778/crates/rpc/rpc/src/eth/revm_utils.rs#L201
-pub fn prepare_call_env(request: CallRequest) -> TxEnv {
+pub(crate) fn prepare_call_env(request: CallRequest) -> TxEnv {
     TxEnv {
         caller: request.from.unwrap(),
         gas_limit: request.gas.map(|p| p.try_into().unwrap()).unwrap(),
