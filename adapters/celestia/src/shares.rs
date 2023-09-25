@@ -9,13 +9,14 @@ use crate::utils::read_varint;
 use crate::verifier::PFB_NAMESPACE;
 
 /// The length of the "reserved bytes" field in a compact share
-pub const RESERVED_BYTES_LEN: usize = 4;
+pub const RESERVED_BYTES_LEN: usize =
+    celestia_types::consts::appconsts::COMPACT_SHARE_RESERVED_BYTES;
 /// The length of the "info byte" field in a compact share
-pub const INFO_BYTE_LEN: usize = 1;
+pub const INFO_BYTE_LEN: usize = celestia_types::consts::appconsts::SHARE_INFO_BYTES;
 /// The length of the "sequence length" field
-pub const SEQUENCE_LENGTH_BYTES: usize = 4;
+pub const SEQUENCE_LENGTH_BYTES: usize = celestia_types::consts::appconsts::SEQUENCE_LEN_BYTES;
 /// The size of a share, in bytes
-pub const SHARE_SIZE: usize = 512;
+pub const SHARE_SIZE: usize = celestia_types::consts::appconsts::SHARE_SIZE;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
 pub enum Share {
