@@ -1,5 +1,6 @@
 // use borsh::{BorshDeserialize, BorshSerialize};
-use celestia_types::nmt::{Namespace, NamespaceProof};
+use celestia_types::nmt::NamespaceProof;
+use celestia_types::NamespacedShares;
 use serde::{Deserialize, Serialize};
 
 use super::CelestiaSpec;
@@ -18,28 +19,12 @@ pub struct EtxRangeProof {
     pub start_offset: usize,
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)] // TODO:, BorshDeserialize, BorshSerialize)]
-pub struct RelevantRowProof {
-    pub leaves: Vec<Vec<u8>>,
-    pub proof: NamespaceProof,
-}
-
 #[derive(Debug, PartialEq, Clone)]
-pub struct CompletenessProof(pub Vec<RelevantRowProof>);
+pub struct CompletenessProof(pub NamespacedShares);
 
 impl CompletenessProof {
-    pub fn from_filtered_block(block: &FilteredCelestiaBlock, namespace: Namespace) -> Self {
-        let mut row_proofs = Vec::new();
-        for row in block.rollup_rows.iter() {
-            let mut nmt = row.merklized();
-            let (leaves, proof) = nmt.get_namespace_with_proof(namespace.into());
-            let row_proof = RelevantRowProof {
-                leaves,
-                proof: proof.into(),
-            };
-            row_proofs.push(row_proof)
-        }
-        Self(row_proofs)
+    pub fn from_filtered_block(block: &FilteredCelestiaBlock) -> Self {
+        Self(block.rollup_rows.clone())
     }
 }
 
