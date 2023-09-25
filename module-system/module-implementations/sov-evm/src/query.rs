@@ -19,50 +19,7 @@ use crate::Evm;
 
 #[rpc_gen(client, server, namespace = "eth")]
 impl<C: sov_modules_api::Context> Evm<C> {
-    fn get_cfg_env_template(&self) -> revm::primitives::CfgEnv {
-        let mut cfg_env = revm::primitives::CfgEnv::default();
-        // Reth sets this to true and uses only timeout, but other clients use this as a part of DOS attacks protection, with 100mln gas limit
-        // https://github.com/paradigmxyz/reth/blob/62f39a5a151c5f4ddc9bf0851725923989df0412/crates/rpc/rpc/src/eth/revm_utils.rs#L215
-        cfg_env.disable_block_gas_limit = false;
-        cfg_env.disable_eip3607 = true;
-        cfg_env.disable_base_fee = true;
-        cfg_env.chain_id = 0;
-        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
-        cfg_env.spec_id = revm::primitives::SpecId::SHANGHAI;
-        cfg_env.perf_analyse_created_bytecodes = revm::primitives::AnalysisKind::Analyse;
-        cfg_env.limit_contract_code_size = None;
-        cfg_env
-    }
-
-    fn get_sealed_block_by_number(
-        &self,
-        block_number: Option<String>,
-        working_set: &mut WorkingSet<C>,
-    ) -> SealedBlock {
-        // safe, finalized, and pending are not supported
-        match block_number {
-            Some(ref block_number) if block_number == "earliest" => self
-                .blocks
-                .get(0, &mut working_set.accessory_state())
-                .expect("Genesis block must be set"),
-            Some(ref block_number) if block_number == "latest" => self
-                .blocks
-                .last(&mut working_set.accessory_state())
-                .expect("Head block must be set"),
-            Some(ref block_number) => {
-                let block_number =
-                    usize::from_str_radix(block_number, 16).expect("Block number must be hex");
-                self.blocks
-                    .get(block_number, &mut working_set.accessory_state())
-                    .expect("Block must be set")
-            }
-            None => self
-                .blocks
-                .last(&mut working_set.accessory_state())
-                .expect("Head block must be set"),
-        }
-    }
-
+    /// Handler for: `eth_chainId`
     #[rpc_method(name = "chainId")]
     pub fn chain_id(
         &self,
@@ -80,6 +37,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(Some(chain_id))
     }
 
+    /// Handler for: `eth_getBlockByNumber`
     #[rpc_method(name = "getBlockByNumber")]
     pub fn get_block_by_number(
         &self,
@@ -126,9 +84,10 @@ impl<C: sov_modules_api::Context> Evm<C> {
         };
 
         // Build rpc block response
+        let total_difficulty = Some(block.header.difficulty);
         let block = reth_rpc_types::Block {
             header,
-            total_difficulty: Default::default(),
+            total_difficulty,
             uncles: Default::default(),
             transactions,
             size: Default::default(),
@@ -138,6 +97,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(Some(block.into()))
     }
 
+    /// Handler for: `eth_getTransactionCount`
     #[rpc_method(name = "getTransactionCount")]
     pub fn get_transaction_count(
         &self,
@@ -159,6 +119,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(nonce.into())
     }
 
+    /// Handler for: `eth_feeHistory`
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "feeHistory")]
     pub fn fee_history(
@@ -174,6 +135,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         })
     }
 
+    /// Handler for: `eth_getTransactionByHash`
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "getTransactionByHash")]
     pub fn get_transaction_by_hash(
@@ -214,6 +176,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(transaction)
     }
 
+    /// Handler for: `eth_getTransactionReceipt`
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "getTransactionReceipt")]
     pub fn get_transaction_receipt(
@@ -274,7 +237,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
             }
         };
         let cfg = self.cfg.get(working_set).unwrap_or_default();
-        let cfg_env = get_cfg_env(&block_env, cfg, Some(self.get_cfg_env_template()));
+        let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
@@ -287,6 +250,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         }
     }
 
+    /// Handler for: `eth_blockNumber`
     #[rpc_method(name = "blockNumber")]
     pub fn block_number(
         &self,
@@ -302,6 +266,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(block_number)
     }
 
+    /// Handler for: `eth_estimateGas`
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "estimateGas")]
     pub fn eth_estimate_gas(
@@ -310,14 +275,59 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _block_number: Option<reth_primitives::BlockId>,
         _working_set: &mut WorkingSet<C>,
     ) -> RpcResult<reth_primitives::U256> {
-        unimplemented!("eth_sendTransaction not implemented")
+        unimplemented!("eth_estimateGas not implemented")
     }
 
+    /// Handler for: `eth_gasPrice`
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "gasPrice")]
-    pub fn gas_price(&self) -> RpcResult<reth_primitives::U256> {
-        unimplemented!("eth_sendTransaction not implemented")
+    pub fn gas_price(&self, _working_set: &mut WorkingSet<C>) -> RpcResult<reth_primitives::U256> {
+        unimplemented!("eth_gasPrice not implemented")
     }
+
+    fn get_sealed_block_by_number(
+        &self,
+        block_number: Option<String>,
+        working_set: &mut WorkingSet<C>,
+    ) -> SealedBlock {
+        // safe, finalized, and pending are not supported
+        match block_number {
+            Some(ref block_number) if block_number == "earliest" => self
+                .blocks
+                .get(0, &mut working_set.accessory_state())
+                .expect("Genesis block must be set"),
+            Some(ref block_number) if block_number == "latest" => self
+                .blocks
+                .last(&mut working_set.accessory_state())
+                .expect("Head block must be set"),
+            Some(ref block_number) => {
+                let block_number =
+                    usize::from_str_radix(block_number, 16).expect("Block number must be hex");
+                self.blocks
+                    .get(block_number, &mut working_set.accessory_state())
+                    .expect("Block must be set")
+            }
+            None => self
+                .blocks
+                .last(&mut working_set.accessory_state())
+                .expect("Head block must be set"),
+        }
+    }
+}
+
+fn get_cfg_env_template() -> revm::primitives::CfgEnv {
+    let mut cfg_env = revm::primitives::CfgEnv::default();
+    // Reth sets this to true and uses only timeout, but other clients use this as a part of DOS attacks protection, with 100mln gas limit
+    // https://github.com/paradigmxyz/reth/blob/62f39a5a151c5f4ddc9bf0851725923989df0412/crates/rpc/rpc/src/eth/revm_utils.rs#L215
+    cfg_env.disable_block_gas_limit = false;
+    cfg_env.disable_eip3607 = true;
+    cfg_env.disable_base_fee = true;
+    cfg_env.chain_id = 0;
+    // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
+    cfg_env.spec_id = revm::primitives::SpecId::SHANGHAI;
+    cfg_env.perf_analyse_created_bytecodes = revm::primitives::AnalysisKind::Analyse;
+    cfg_env.limit_contract_code_size = None;
+    cfg_env
 }
 
 // modified from: https://github.com/paradigmxyz/reth/blob/cc576bc8690a3e16e6e5bf1cbbbfdd029e85e3d4/crates/rpc/rpc/src/eth/api/transactions.rs#L849

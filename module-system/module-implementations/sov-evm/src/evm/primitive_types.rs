@@ -121,12 +121,16 @@ pub(crate) struct Receipt {
     pub(crate) error: Option<EVMError<u8>>,
 }
 
+/// Tx conversion error.
 #[derive(Error, Debug)]
 pub enum RawEvmTxConversionError {
+    /// Transaction is empty,
     #[error("Empty raw transaction data")]
     EmptyRawTransactionData,
+    /// Decoding error.
     #[error("Failed to decode signed transaction")]
     FailedToDecodeSignedTransaction,
+    /// Unable to recover signer.
     #[error("Failed to recover signer")]
     FailedToRecoverSigner,
 }

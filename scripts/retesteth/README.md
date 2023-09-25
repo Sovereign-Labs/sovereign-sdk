@@ -1,0 +1,1 @@
+`config.json` is the WIP configuration file for using `retesteth` with `sov-evm`. It's based on the configuration options of `evmone` and must be extensively updated to work with `sov-evm`, it's broken as of now. Nonetheless, it's committed into version control to share progress across `sov-evm` maintainers.
