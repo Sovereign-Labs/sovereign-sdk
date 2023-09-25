@@ -126,7 +126,7 @@ impl DaService for CelestiaService {
 
     type Error = BoxError;
 
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(skip(self), err)]
     async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let client = self.client.clone();
         let rollup_namespace = self.rollup_namespace;
@@ -142,6 +142,8 @@ impl DaService for CelestiaService {
         debug!("Fetching EDS...");
         // Fetch entire extended data square
         let data_square = client.share_get_eds(&header.dah).await?;
+        // validate the data
+        data_square.validate()?;
 
         debug!("Parsing namespaces...");
         // Parse out all of the rows containing etxs
@@ -224,6 +226,7 @@ impl DaService for CelestiaService {
         (etx_proofs.0, rollup_row_proofs.0)
     }
 
+    #[instrument(skip_all, err)]
     async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
         debug!("Sending {} bytes of raw data to Celestia.", blob.len());
         // https://docs.celestia.org/learn/submit-data/#fees-and-gas-limits
