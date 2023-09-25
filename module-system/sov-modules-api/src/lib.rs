@@ -160,7 +160,14 @@ pub trait PublicKey:
 
 /// A PrivateKey used in the Module System.
 #[cfg(feature = "native")]
-pub trait PrivateKey {
+pub trait PrivateKey:
+    Debug
+    + Send
+    + Sync
+    + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
+    + Serialize
+    + DeserializeOwned
+{
     type PublicKey: PublicKey;
     type Signature: Signature<PublicKey = Self::PublicKey>;
     fn generate() -> Self;
@@ -214,13 +221,7 @@ pub trait Spec {
 
     /// The public key used for digital signatures
     #[cfg(feature = "native")]
-    type PrivateKey: Debug
-        + Send
-        + Sync
-        + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
-        + Serialize
-        + DeserializeOwned
-        + PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
+    type PrivateKey: PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
 
     /// The hasher preferred by the rollup, such as Sha256 or Poseidon.
     type Hasher: Digest<OutputSize = U32>;
