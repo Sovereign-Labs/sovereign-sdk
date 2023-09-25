@@ -598,7 +598,7 @@ dependencies = [
  "lazy_static",
  "lazycell",
  "peeking_take_while",
- "prettyplease 0.2.15",
+ "prettyplease",
  "proc-macro2 1.0.67",
  "quote 1.0.33",
  "regex",
@@ -620,7 +620,7 @@ dependencies = [
  "lazycell",
  "log",
  "peeking_take_while",
- "prettyplease 0.2.15",
+ "prettyplease",
  "proc-macro2 1.0.67",
  "quote 1.0.33",
  "regex",
@@ -2349,7 +2349,7 @@ dependencies = [
  "ethers-core",
  "ethers-etherscan",
  "eyre",
- "prettyplease 0.2.15",
+ "prettyplease",
  "proc-macro2 1.0.67",
  "quote 1.0.33",
  "regex",
@@ -4995,16 +4995,6 @@ checksum = "925383efa346730478fb4838dbe9137d2a47675ad789c546d150a6e1dd4ab31c"
 
 [[package]]
 name = "prettyplease"
-version = "0.1.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c8646e95016a7a6c4adea95bafa8a16baab64b583356217f2c85db4a39d9a86"
-dependencies = [
- "proc-macro2 1.0.67",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "prettyplease"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae005bd773ab59b4725093fd7df83fd7892f7d8eafb48dbd7de6e024e4215f9d"
@@ -5184,28 +5174,6 @@ dependencies = [
 
 [[package]]
 name = "prost-build"
-version = "0.11.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "119533552c9a7ffacc21e099c24a0ac8bb19c2a2a3f363de84cd9b844feab270"
-dependencies = [
- "bytes",
- "heck",
- "itertools 0.10.5",
- "lazy_static",
- "log",
- "multimap",
- "petgraph",
- "prettyplease 0.1.25",
- "prost 0.11.9",
- "prost-types 0.11.9",
- "regex",
- "syn 1.0.109",
- "tempfile",
- "which",
-]
-
-[[package]]
-name = "prost-build"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8bdf592881d821b83d471f8af290226c8d51402259e9bb5be7f9f8bdebbb11ac"
@@ -5217,7 +5185,7 @@ dependencies = [
  "multimap",
  "once_cell",
  "petgraph",
- "prettyplease 0.2.15",
+ "prettyplease",
  "prost 0.12.1",
  "prost-types 0.12.1",
  "regex",
@@ -6232,7 +6200,7 @@ dependencies = [
  "num-derive 0.4.0",
  "num-traits",
  "prost 0.12.1",
- "prost-build 0.12.1",
+ "prost-build",
  "protobuf-src",
  "rand 0.8.5",
  "rayon",
@@ -7133,7 +7101,7 @@ dependencies = [
  "postcard",
  "proptest",
  "prost 0.11.9",
- "prost-build 0.11.9",
+ "prost-build",
  "prost-types 0.11.9",
  "risc0-zkvm",
  "risc0-zkvm-platform",
