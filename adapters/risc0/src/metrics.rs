@@ -1,3 +1,4 @@
+//! Defines utilities for collecting runtime metrics from inside a Risc0 VM
 use std::collections::HashMap;
 
 use anyhow::Context;
