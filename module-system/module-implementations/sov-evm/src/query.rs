@@ -1,9 +1,10 @@
 use ethereum_types::U64;
 use jsonrpsee::core::RpcResult;
+use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
 use reth_primitives::contract::create_address;
 use reth_primitives::TransactionKind::{Call, Create};
 use reth_primitives::{Bytes, TransactionSignedEcRecovered, U128, U256};
-use reth_rpc::eth::error::{EthResult, RevertError, RpcInvalidTransactionError};
+use reth_rpc::eth::error::{EthApiError, EthResult, RevertError, RpcInvalidTransactionError};
 use revm::primitives::{ExecutionResult, Halt, OutOfGasError};
 use sov_modules_api::macros::rpc_gen;
 use sov_modules_api::utils::to_jsonrpsee_error_object;
@@ -249,8 +250,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
     //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
     //https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-types/src/eth/call.rs#L7
-
-    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "call")]
     pub fn get_call(
         &self,
@@ -281,7 +280,11 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         let result = executor::inspect(evm_db, &block_env, tx_env, cfg_env).unwrap();
 
-        Ok(ensure_success(result.result).unwrap())
+        match ensure_success(result.result) {
+            Ok(bytes) => Ok(bytes),
+            // FIXME: this conversion is broken because From impl is not accessible
+            Err(err) => Err(err.into()),
+        }
     }
 
     #[rpc_method(name = "blockNumber")]

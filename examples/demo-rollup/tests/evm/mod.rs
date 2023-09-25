@@ -5,13 +5,16 @@ use ethereum_types::H160;
 use ethers_core::abi::Address;
 use ethers_core::k256::ecdsa::SigningKey;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
-use ethers_core::types::{Block, Eip1559TransactionRequest, Transaction, TxHash};
+use ethers_core::types::{
+    Block, Eip1559TransactionRequest, Transaction, TransactionRequest, TxHash,
+};
 use ethers_middleware::SignerMiddleware;
 use ethers_providers::{Http, Middleware, PendingTransaction, Provider};
 use ethers_signers::{LocalWallet, Signer, Wallet};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use jsonrpsee::rpc_params;
+use reth_primitives::Bytes;
 use sov_evm::smart_contracts::SimpleStorageContract;
 use sov_risc0_adapter::host::Risc0Host;
 
@@ -131,6 +134,54 @@ impl TestClient {
             .unwrap()
     }
 
+    async fn set_value_call(
+        &self,
+        contract_address: H160,
+        set_arg: u32,
+    ) -> Result<Bytes, Box<dyn std::error::Error>> {
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+
+        // FIXME: EIP-1559 failing
+        let req = TransactionRequest::new()
+            .from(self.from_addr)
+            .to(contract_address)
+            .chain_id(self.chain_id)
+            .nonce(nonce)
+            .data(self.contract.set_call_data(set_arg))
+            .gas_price(10u64)
+            .gas(900000u64);
+
+        let typed_transaction = TypedTransaction::Legacy(req);
+
+        let response = self
+            .eth_call(typed_transaction, Some("latest".to_owned()))
+            .await?;
+
+        Ok(response)
+    }
+
+    async fn failing_call(
+        &self,
+        contract_address: H160,
+    ) -> Result<Bytes, Box<dyn std::error::Error>> {
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+
+        // FIXME: EIP-1559 failing
+        let req = TransactionRequest::new()
+            .from(self.from_addr)
+            .to(contract_address)
+            .chain_id(self.chain_id)
+            .nonce(nonce)
+            .data(self.contract.failing_function_call_data())
+            .gas_price(10u64)
+            .gas(900000u64);
+
+        let typed_transaction = TypedTransaction::Legacy(req);
+
+        self.eth_call(typed_transaction, Some("latest".to_owned()))
+            .await
+    }
+
     async fn query_contract(
         &self,
         contract_address: H160,
@@ -207,6 +258,20 @@ impl TestClient {
             .unwrap()
     }
 
+    async fn eth_call(
+        &self,
+        tx: TypedTransaction,
+        block_number: Option<String>,
+    ) -> Result<Bytes, Box<dyn std::error::Error>> {
+        let response: Bytes = self
+            .http_client
+            .request("eth_call", rpc_params![tx, block_number])
+            .await
+            .unwrap();
+
+        Ok(response)
+    }
+
     async fn execute(self) -> Result<(), Box<dyn std::error::Error>> {
         // Nonce should be 0 in genesis
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
@@ -252,6 +317,16 @@ impl TestClient {
         assert_eq!(latest_block.number.unwrap().as_u64(), 2);
         assert_eq!(latest_block.transactions.len(), 1);
         assert_eq!(latest_block.transactions[0].hash, tx_hash);
+
+        // This should just pass without error
+        self.set_value_call(contract_address, set_arg)
+            .await
+            .unwrap();
+
+        // This call should fail because function does not exist
+        let failing_call = self.failing_call(contract_address).await;
+        println!("failing_call: {:?}", failing_call);
+        assert!(failing_call.is_err());
 
         // Create a blob with multiple transactions.
         let mut requests = Vec::default();
