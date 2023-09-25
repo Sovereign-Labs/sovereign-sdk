@@ -52,7 +52,7 @@ sha2 = { workspace = true }
 hex = { workspace = true }
 serde_json = { workspace = true }
 reqwest = "0.11"
-tendermint = "0.32"
+tendermint = "0.33"
 tempfile = { workspace = true }
 proptest = { workspace = true }
 sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }
