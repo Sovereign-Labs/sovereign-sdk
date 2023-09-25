@@ -80,9 +80,10 @@ impl<C: sov_modules_api::Context> Evm<C> {
         };
 
         // Build rpc block response
+        let total_difficulty = Some(block.header.difficulty);
         let block = reth_rpc_types::Block {
             header,
-            total_difficulty: Default::default(),
+            total_difficulty,
             uncles: Default::default(),
             transactions,
             size: Default::default(),
