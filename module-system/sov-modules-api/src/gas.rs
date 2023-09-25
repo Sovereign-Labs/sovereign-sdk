@@ -4,20 +4,38 @@ pub mod sov_modules_api {
     use core::marker::PhantomData;
 
     pub trait GasUnit {
-        //: serde::Serialize + serde::de::DeserializeOwned {
         fn value(&self, price: &Self) -> u64;
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct TupleGasUnit<const N: usize>(pub [u64; N]);
+
+    impl<const N: usize> GasUnit for TupleGasUnit<N> {
+        fn value(&self, price: &Self) -> u64 {
+            self.0
+                .iter()
+                .zip(price.0.iter().copied())
+                .map(|(a, b)| a.saturating_mul(b))
+                .fold(0, |a, b| a.saturating_add(b))
+        }
     }
 
     pub trait Context {
         type GasUnit: GasUnit;
     }
 
-    pub struct GasoMeter<GasUnit> {
+    pub struct GasoMeter<GU>
+    where
+        GU: GasUnit,
+    {
         remaining_funds: u64,
-        gas_price: GasUnit,
+        gas_price: GU,
     }
 
-    impl<GU: GasUnit> GasoMeter<GU> {
+    impl<GU> GasoMeter<GU>
+    where
+        GU: GasUnit,
+    {
         pub fn new(remaining_funds: u64, gas_price: GU) -> Self {
             Self {
                 remaining_funds,
@@ -26,23 +44,28 @@ pub mod sov_modules_api {
         }
 
         pub fn charge_gas(&mut self, gas: &GU) -> Result<()> {
-            // TODO add checks
+            let gas = gas.value(&self.gas_price);
             self.remaining_funds = self
                 .remaining_funds
-                .saturating_sub(gas.value(&self.gas_price));
+                .checked_sub(gas)
+                .ok_or_else(|| anyhow::anyhow!("Not enough gas"))?;
 
             Ok(())
         }
     }
-    pub struct WorkingSet<C: Context> {
+
+    pub struct WorkingSet<C>
+    where
+        C: Context,
+    {
         gaso_meter: GasoMeter<C::GasUnit>,
         _context: PhantomData<C>,
     }
 
     impl<C: Context> WorkingSet<C> {
-        pub fn new(gaso_meter: GasoMeter<C::GasUnit>) -> Self {
+        pub fn new(remaining_funds: u64, gas_price: C::GasUnit) -> Self {
             Self {
-                gaso_meter,
+                gaso_meter: GasoMeter::new(remaining_funds, gas_price),
                 _context: PhantomData,
             }
         }
@@ -52,90 +75,63 @@ pub mod sov_modules_api {
         }
     }
 
-    #[derive(serde::Serialize, serde::Deserialize)]
-    pub struct TupleGasUnit {
-        pub a: u64,
-        pub b: u64,
-        pub c: u64,
-    }
+    pub trait Module {
+        type Context: Context;
+        type GasConfig;
+        const GAS_CONFIG: Self::GasConfig;
 
-    impl GasUnit for TupleGasUnit {
-        fn value(&self, price: &Self) -> u64 {
-            self.a.saturating_mul(price.a).saturating_add(
-                self.b
-                    .saturating_mul(price.b)
-                    .saturating_add(self.c.saturating_mul(price.c)),
-            )
+        fn charge_gas(
+            ws: &mut WorkingSet<Self::Context>,
+            price: &<Self::Context as Context>::GasUnit,
+        ) -> Result<()> {
+            ws.charge_gas(price)
         }
     }
 
-    pub struct DefaultContext {}
-
-    impl Context for DefaultContext {
-        type GasUnit = TupleGasUnit;
+    pub struct DefaultContext<GU>
+    where
+        GU: GasUnit,
+    {
+        _gas_unit: PhantomData<GU>,
     }
 
-    // The `GasConfig` will have the whole implementation encapsulated by macros.
-
-    pub trait GasConfig {
-        const MANIFEST: Self;
-    }
-
-    pub trait Module {
-        type Context: Context;
-        type GasConfig: GasConfig;
+    impl<GU> Context for DefaultContext<GU>
+    where
+        GU: GasUnit,
+    {
+        type GasUnit = GU;
     }
 }
 
 pub mod foo {
-    use std::marker::PhantomData;
-
     use anyhow::Result;
 
-    use super::sov_modules_api::{Context, GasConfig, GasUnit, Module, WorkingSet};
+    use super::sov_modules_api::{DefaultContext, GasUnit, Module, TupleGasUnit, WorkingSet};
 
-    //#[derive(serde::Serialize, serde::Deserialize)]
-    pub struct FooGasConfig<GS> {
-        complex_math_operation: GS,
-        another_operation: GS,
+    pub struct FooGasConfig<GU>
+    where
+        GU: GasUnit,
+    {
+        pub complex_math_operation: GU,
+        pub some_other_operation: GU,
     }
 
-    impl<GS: GasUnit> GasConfig for FooGasConfig<GS> {
-        const MANIFEST: Self = {
-            Self {
-                complex_math_operation: todo!(),
-                another_operation: todo!(),
-            }
+    pub struct FooModule;
+
+    impl Module for FooModule {
+        type Context = DefaultContext<TupleGasUnit<3>>;
+        type GasConfig = FooGasConfig<TupleGasUnit<3>>;
+        const GAS_CONFIG: Self::GasConfig = FooGasConfig {
+            complex_math_operation: TupleGasUnit([1, 2, 3]),
+            some_other_operation: TupleGasUnit([4, 5, 6]),
         };
     }
 
-    // then we define a custom module
-
-    pub struct FooModule<C: Context> {
-        _context: PhantomData<C>,
-        gas_config: FooGasConfig<C::GasUnit>,
-    }
-
-    impl<C: Context> Module for FooModule<C> {
-        type Context = C;
-        type GasConfig = FooGasConfig<C::GasUnit>;
-    }
-
-    // we can charge gas using our custom unit to define the price
-
-    impl<C: Context> FooModule<C> {
-        pub fn new() -> Self {
-            Self {
-                _context: PhantomData::<C>,
-                gas_config: GasConfig::MANIFEST,
-            }
-        }
-
-        pub fn some_cool_function(&self, ws: &mut WorkingSet<C>) -> Result<()> {
-            //.. some code
-            ws.charge_gas(&self.gas_config.complex_math_operation)?;
-            //.. more code
-            Ok(())
+    impl FooModule {
+        pub fn some_cool_function(
+            ws: &mut WorkingSet<DefaultContext<TupleGasUnit<3>>>,
+        ) -> Result<()> {
+            Self::charge_gas(ws, &Self::GAS_CONFIG.complex_math_operation)
         }
     }
 }
@@ -143,15 +139,11 @@ pub mod foo {
 #[test]
 fn it_works() {
     use foo::FooModule;
-    use sov_modules_api::{DefaultContext, GasoMeter, WorkingSet};
+    use sov_modules_api::{TupleGasUnit, WorkingSet};
 
-    let funds = 1_000_000;
-    let price = TupleGasUnit { a: 1, b: 2, c: 3 };
-    let gs = GasoMeter::new(funds, price);
+    let gas = 1_000_000;
+    let price = TupleGasUnit([7, 8, 9]);
+    let mut ws = WorkingSet::new(gas, price);
 
-    let mut ws = WorkingSet::<DefaultContext>::new(gs);
-
-    let foo = FooModule::new();
-
-    foo.some_cool_function(&mut ws).unwrap();
+    FooModule::some_cool_function(&mut ws).unwrap();
 }
