@@ -1,5 +1,5 @@
 #![deny(missing_docs)]
-//! TODO
+#![doc = include_str!("../README.md")]
 #[cfg(feature = "experimental")]
 mod call;
 #[cfg(feature = "experimental")]
