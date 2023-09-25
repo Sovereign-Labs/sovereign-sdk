@@ -1,6 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_types::nmt::{Namespace, NS_SIZE};
-use celestia_types::Share as RawShare;
+use celestia_types::NamespacedShares;
 use prost::bytes::Buf;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::Bytes;
@@ -38,6 +38,10 @@ impl Share {
         } else {
             Self::Start(inner)
         }
+    }
+
+    pub fn from_slice(slice: impl AsRef<[u8]>) -> Self {
+        Self::new(Bytes::copy_from_slice(slice.as_ref()))
     }
 
     pub fn as_serialized(&self) -> &[u8] {
@@ -173,18 +177,6 @@ impl AsRef<[u8]> for Share {
     }
 }
 
-impl From<RawShare> for Share {
-    fn from(value: RawShare) -> Self {
-        let data = Bytes::copy_from_slice(&value.data);
-
-        if is_continuation_unchecked(&data) {
-            Self::Continuation(data)
-        } else {
-            Self::Start(data)
-        }
-    }
-}
-
 fn is_continuation_unchecked(share: &[u8]) -> bool {
     share[NS_SIZE] & 0x01 == 0
 }
@@ -201,10 +193,14 @@ pub enum NamespaceGroup {
 }
 
 impl NamespaceGroup {
-    pub fn from_shares_unchecked(shares: Vec<Vec<u8>>) -> Self {
+    pub fn from_shares<I, B>(shares: I) -> Self
+    where
+        I: IntoIterator<Item = B>,
+        B: AsRef<[u8]>,
+    {
         shares
             .into_iter()
-            .map(|share| Share::new(Bytes::from(share)))
+            .map(|bytes| Share::new(Bytes::copy_from_slice(bytes.as_ref())))
             .collect()
     }
 
@@ -221,6 +217,10 @@ impl NamespaceGroup {
             shares: self,
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.shares().is_empty()
+    }
 }
 
 impl FromIterator<Share> for NamespaceGroup {
@@ -236,6 +236,12 @@ impl FromIterator<Share> for NamespaceGroup {
         } else {
             NamespaceGroup::Sparse(shares)
         }
+    }
+}
+
+impl From<&NamespacedShares> for NamespaceGroup {
+    fn from(value: &NamespacedShares) -> Self {
+        Self::from_shares(value.rows.iter().flat_map(|row| row.shares.iter()))
     }
 }
 
