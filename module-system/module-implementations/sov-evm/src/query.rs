@@ -1,17 +1,14 @@
 use ethereum_types::U64;
 use jsonrpsee::core::RpcResult;
-use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
 use reth_primitives::contract::create_address;
 use reth_primitives::TransactionKind::{Call, Create};
-use reth_primitives::{Bytes, TransactionSignedEcRecovered, U128, U256};
-use reth_rpc::eth::error::{EthApiError, EthResult, RevertError, RpcInvalidTransactionError};
-use revm::primitives::{ExecutionResult, Halt, OutOfGasError};
+use reth_primitives::{TransactionSignedEcRecovered, U128, U256};
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_modules_api::WorkingSet;
 use tracing::info;
 
 use crate::call::get_cfg_env;
+use crate::error::rpc::ensure_success;
 use crate::evm::db::EvmDb;
 use crate::evm::primitive_types::{BlockEnv, Receipt, SealedBlock, TransactionSignedAndRecovered};
 use crate::evm::{executor, prepare_call_env};
@@ -211,6 +208,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(receipt)
     }
 
+    /// Handler for: `eth_call`
     //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
     //https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-types/src/eth/call.rs#L7
     #[rpc_method(name = "call")]
@@ -226,11 +224,9 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let tx_env = prepare_call_env(request);
 
         let block_env = match block_number {
-            Some(ref block_number) if block_number == "pending" => self
-                .pending_block
-                .get(working_set)
-                .unwrap_or_default()
-                .clone(),
+            Some(ref block_number) if block_number == "pending" => {
+                self.block_env.get(working_set).unwrap_or_default().clone()
+            }
             _ => {
                 let block = self.get_sealed_block_by_number(block_number, working_set);
                 BlockEnv::from(&block)
@@ -393,39 +389,5 @@ pub(crate) fn build_rpc_receipt(
                 removed: false,
             })
             .collect(),
-    }
-}
-
-// https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc/src/eth/error.rs#L617
-pub(crate) fn ensure_success(result: ExecutionResult) -> EthResult<Bytes> {
-    match result {
-        ExecutionResult::Success { output, .. } => Ok(output.into_data().into()),
-        ExecutionResult::Revert { output, .. } => {
-            Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into())
-        }
-        ExecutionResult::Halt { reason, gas_used } => Err(halt(reason, gas_used).into()),
-    }
-}
-
-// https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc/src/eth/error.rs#L617
-pub(crate) fn halt(reason: Halt, gas_limit: u64) -> RpcInvalidTransactionError {
-    match reason {
-        Halt::OutOfGas(err) => out_of_gas(err, gas_limit),
-        Halt::NonceOverflow => RpcInvalidTransactionError::NonceMaxValue,
-        err => RpcInvalidTransactionError::EvmHalt(err),
-    }
-}
-
-// https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc/src/eth/error.rs#L341
-pub(crate) fn out_of_gas(reason: OutOfGasError, gas_limit: u64) -> RpcInvalidTransactionError {
-    let gas_limit = U256::from(gas_limit);
-    match reason {
-        OutOfGasError::BasicOutOfGas => RpcInvalidTransactionError::BasicOutOfGas(gas_limit),
-        OutOfGasError::Memory => RpcInvalidTransactionError::MemoryOutOfGas(gas_limit),
-        OutOfGasError::Precompile => RpcInvalidTransactionError::PrecompileOutOfGas(gas_limit),
-        OutOfGasError::InvalidOperand => {
-            RpcInvalidTransactionError::InvalidOperandOutOfGas(gas_limit)
-        }
-        OutOfGasError::MemoryLimit => RpcInvalidTransactionError::MemoryOutOfGas(gas_limit),
     }
 }

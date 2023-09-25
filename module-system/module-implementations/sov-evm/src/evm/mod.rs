@@ -8,6 +8,7 @@ pub(crate) mod conversions;
 pub(crate) mod db;
 mod db_commit;
 pub(crate) mod db_init;
+pub(crate) mod error;
 pub(crate) mod executor;
 pub(crate) mod primitive_types;
 #[cfg(test)]

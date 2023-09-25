@@ -263,13 +263,10 @@ impl TestClient {
         tx: TypedTransaction,
         block_number: Option<String>,
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
-        let response: Bytes = self
-            .http_client
+        self.http_client
             .request("eth_call", rpc_params![tx, block_number])
             .await
-            .unwrap();
-
-        Ok(response)
+            .map_err(|e| e.into())
     }
 
     async fn execute(self) -> Result<(), Box<dyn std::error::Error>> {
@@ -325,7 +322,6 @@ impl TestClient {
 
         // This call should fail because function does not exist
         let failing_call = self.failing_call(contract_address).await;
-        println!("failing_call: {:?}", failing_call);
         assert!(failing_call.is_err());
 
         // Create a blob with multiple transactions.
