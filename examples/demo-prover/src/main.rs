@@ -4,7 +4,8 @@ use methods::ROLLUP_ELF;
 use sov_demo_rollup::{new_rollup_with_celestia_da, DemoProverConfig};
 use sov_risc0_adapter::host::Risc0Host;
 use tracing::info;
-use tracing_subscriber::{filter::LevelFilter, EnvFilter};
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
