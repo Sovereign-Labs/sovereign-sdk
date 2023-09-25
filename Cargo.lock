@@ -7146,7 +7146,7 @@ dependencies = [
  "proptest",
  "prost 0.11.9",
  "prost-build 0.11.9",
- "prost-types 0.11.9",
+ "prost-types 0.12.1",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",
