@@ -104,13 +104,13 @@ impl Manifest {
         let root = self
             .value
             .as_object()
-            .ok_or_else(|| self.err(&parent, "manifest is not an object"))?
+            .ok_or_else(|| self.err(parent, "manifest is not an object"))?
             .get("gas")
-            .ok_or_else(|| self.err(&parent, "manifest does not contain a `gas` attribute"))?
+            .ok_or_else(|| self.err(parent, "manifest does not contain a `gas` attribute"))?
             .as_object()
             .ok_or_else(|| {
                 self.err(
-                    &parent,
+                    parent,
                     format!("`gas` attribute of `{}` is not an object", parent),
                 )
             })?;
@@ -119,7 +119,7 @@ impl Manifest {
             Some(Value::Object(m)) => m,
             Some(_) => {
                 return Err(self.err(
-                    &parent,
+                    parent,
                     format!(
                         "matching constants entry `{}` is not an object",
                         &parent.to_string()
@@ -133,19 +133,19 @@ impl Manifest {
         for (k, v) in root {
             let k: Ident = syn::parse_str(k).map_err(|e| {
                 self.err(
-                    &parent,
+                    parent,
                     format!("failed to parse key attribyte `{}`: {}", k, e),
                 )
             })?;
 
             let v = v
                 .as_array()
-                .ok_or_else(|| self.err(&parent, format!("`{}` attribute is not an array", k)))?
-                .into_iter()
+                .ok_or_else(|| self.err(parent, format!("`{}` attribute is not an array", k)))?
+                .iter()
                 .map(|v| {
                     v.as_u64().ok_or_else(|| {
                         self.err(
-                            &parent,
+                            parent,
                             format!("`{}` attribute is not an array of integers", k),
                         )
                     })
