@@ -138,7 +138,9 @@ pub enum SigVerificationError {
 }
 
 /// Signature used in the Module System.
-pub trait Signature {
+pub trait Signature:
+    borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug + Send + Sync
+{
     type PublicKey;
 
     fn verify(&self, pub_key: &Self::PublicKey, msg: &[u8]) -> Result<(), SigVerificationError>;
@@ -150,7 +152,9 @@ pub trait Signature {
 pub enum NonInstantiable {}
 
 /// PublicKey used in the Module System.
-pub trait PublicKey {
+pub trait PublicKey:
+    borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Hash + Clone + Debug + Send + Sync
+{
     fn to_address<A: RollupAddress>(&self) -> A;
 }
 
@@ -199,19 +203,14 @@ pub trait Spec {
 
     /// The public key used for digital signatures
     #[cfg(feature = "native")]
-    type PublicKey: borsh::BorshDeserialize
-        + borsh::BorshSerialize
-        + Eq
-        + Hash
-        + Clone
-        + Debug
-        + PublicKey
+    type PublicKey: PublicKey
         + Serialize
         + for<'a> Deserialize<'a>
         + ::schemars::JsonSchema
-        + Send
-        + Sync
         + FromStr<Err = anyhow::Error>;
+
+    #[cfg(not(feature = "native"))]
+    type PublicKey: PublicKey;
 
     /// The public key used for digital signatures
     #[cfg(feature = "native")]
@@ -223,45 +222,20 @@ pub trait Spec {
         + DeserializeOwned
         + PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
 
-    #[cfg(not(feature = "native"))]
-    type PublicKey: borsh::BorshDeserialize
-        + borsh::BorshSerialize
-        + Eq
-        + Hash
-        + Clone
-        + Debug
-        + Send
-        + Sync
-        + PublicKey;
-
     /// The hasher preferred by the rollup, such as Sha256 or Poseidon.
     type Hasher: Digest<OutputSize = U32>;
 
     /// The digital signature scheme used by the rollup
     #[cfg(feature = "native")]
-    type Signature: borsh::BorshDeserialize
-        + borsh::BorshSerialize
+    type Signature: Signature<PublicKey = Self::PublicKey>
+        + FromStr<Err = anyhow::Error>
         + Serialize
         + for<'a> Deserialize<'a>
-        + schemars::JsonSchema
-        + Eq
-        + Clone
-        + Debug
-        + Send
-        + Sync
-        + FromStr<Err = anyhow::Error>
-        + Signature<PublicKey = Self::PublicKey>;
+        + schemars::JsonSchema;
 
     /// The digital signature scheme used by the rollup
     #[cfg(not(feature = "native"))]
-    type Signature: borsh::BorshDeserialize
-        + borsh::BorshSerialize
-        + Eq
-        + Clone
-        + Debug
-        + Signature<PublicKey = Self::PublicKey>
-        + Send
-        + Sync;
+    type Signature: Signature<PublicKey = Self::PublicKey>;
 
     /// A structure containing the non-deterministic inputs from the prover to the zk-circuit
     type Witness: Witness;
