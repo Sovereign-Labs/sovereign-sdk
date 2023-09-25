@@ -123,7 +123,10 @@ impl Manifest {
     ///
     /// The `gas` field resolution will first attempt to query `gas.parent`, and then fallback to
     /// `gas`. They must be objects with arrays of integers as fields.
-    pub(crate) fn parse_gas_config(&self, parent: &Ident) -> Result<TokenStream, syn::Error> {
+    pub fn parse_gas_config(
+        &self,
+        parent: &Ident,
+    ) -> Result<(Ident, TokenStream, TokenStream), syn::Error> {
         let root = self
             .value
             .as_object()
@@ -160,6 +163,7 @@ impl Manifest {
             None => root,
         };
 
+        let mut field_values = vec![];
         let mut fields = vec![];
         for (k, v) in root {
             let k: Ident = syn::parse_str(k).map_err(|e| {
@@ -191,14 +195,35 @@ impl Manifest {
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
-            fields.push(quote::quote!(#k: [#(#v,)*]));
+            let n = v.len();
+            fields.push(quote::quote!(pub #k: [u64; #n]));
+            field_values.push(quote::quote!(#k: [#(#v,)*]));
         }
 
-        Ok(quote::quote! {
-            const GAS_CONFIG: Self::GasConfig = Self::GasConfig {
+        let ty = format!("{parent}GasConfig");
+        let ty = syn::parse_str(&ty).map_err(|e| {
+            Self::err(
+                &self.path,
+                parent,
+                format!("failed to parse type name `{}`: {}", ty, e),
+            )
+        })?;
+
+        let def = quote::quote! {
+            #[allow(missing_docs)]
+            #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+            pub struct #ty {
                 #(#fields,)*
-            };
-        })
+            }
+        };
+
+        let decl = quote::quote! {
+            #ty {
+                #(#field_values,)*
+            }
+        };
+
+        Ok((ty, def, decl))
     }
 
     fn err<P, T>(path: P, ident: &syn::Ident, msg: T) -> syn::Error
@@ -248,20 +273,43 @@ fn parse_gas_config_works() {
         }
     }"#;
 
-    let parent = Ident::new("foo", proc_macro2::Span::call_site());
-    let gas_config = Manifest::read_str(input, PathBuf::from("foo.toml"), &parent)
+    let parent = Ident::new("Foo", proc_macro2::Span::call_site());
+    let (ty, def, decl) = Manifest::read_str(input, PathBuf::from("foo.json"), &parent)
         .unwrap()
         .parse_gas_config(&parent)
         .unwrap();
 
     #[rustfmt::skip]
     assert_eq!(
-        gas_config.to_string(),
+        ty.to_string(),
         quote::quote!(
-            const GAS_CONFIG: Self::GasConfig = Self::GasConfig {
+            FooGasConfig
+        )
+        .to_string()
+    );
+
+    #[rustfmt::skip]
+    assert_eq!(
+        def.to_string(),
+        quote::quote!(
+            #[allow(missing_docs)]
+            #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+            pub struct FooGasConfig {
+                pub complex_math_operation: [u64; 3usize],
+                pub some_other_operation: [u64; 3usize],
+            }
+        )
+        .to_string()
+    );
+
+    #[rustfmt::skip]
+    assert_eq!(
+        decl.to_string(),
+        quote::quote!(
+            FooGasConfig {
                 complex_math_operation: [1u64, 2u64, 3u64, ],
                 some_other_operation: [4u64, 5u64, 6u64, ],
-            };
+            }
         )
         .to_string()
     );
