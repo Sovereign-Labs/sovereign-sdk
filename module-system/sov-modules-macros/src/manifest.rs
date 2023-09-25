@@ -1,7 +1,7 @@
 // TODO remove once consumed
 #![allow(dead_code)]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{env, fmt, fs, ops};
 
 use proc_macro2::{Ident, TokenStream};
@@ -25,12 +25,14 @@ impl Manifest {
     /// Parse a manifest file from a string.
     ///
     /// The provided path will be used to feedback error to the user, if any.
-    pub fn read_str<S>(manifest: S, path: PathBuf) -> anyhow::Result<Self>
+    ///
+    /// The `parent` is used to report the errors to the correct span location.
+    pub fn read_str<S>(manifest: S, path: PathBuf, parent: &Ident) -> Result<Self, syn::Error>
     where
         S: AsRef<str>,
     {
         let value = serde_json::from_str(manifest.as_ref())
-            .map_err(|e| anyhow::anyhow!("Could not parse `{}`: {}", path.display(), e))?;
+            .map_err(|e| Self::err(&path, parent, format!("failed to parse manifest: {e}")))?;
 
         Ok(Self { path, value })
     }
@@ -39,29 +41,47 @@ impl Manifest {
     /// current implementation.
     ///
     /// If the environment variable `CONSTANTS_MANIFEST` is set, it will use that instead.
-    pub fn read_constants() -> anyhow::Result<Self> {
+    ///
+    /// The `parent` is used to report the errors to the correct span location.
+    pub fn read_constants(parent: &Ident) -> Result<Self, syn::Error> {
         let manifest = "constants.json";
         let initial_path = match env::var("CONSTANTS_MANIFEST") {
             Ok(p) => PathBuf::from(&p).canonicalize().map_err(|e| {
-                anyhow::anyhow!("failed access base dir for sovereign manifest file `{p}`: {e}",)
+                Self::err(
+                    &p,
+                    parent,
+                    format!("failed access base dir for sovereign manifest file `{p}`: {e}"),
+                )
             }),
             Err(_) => {
                 // read the target directory set via build script since `OUT_DIR` is available only at build
                 let initial_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                     .canonicalize()
                     .map_err(|e| {
-                        anyhow::anyhow!("failed access base dir for sovereign manifest file: {e}")
+                        Self::err(
+                            manifest,
+                            parent,
+                            format!("failed access base dir for sovereign manifest file: {e}"),
+                        )
                     })?
                     .join("target-path");
 
                 let initial_path = fs::read_to_string(&initial_path).map_err(|e| {
-                    anyhow::anyhow!("failed to read target path for sovereign manifest file: {e}")
+                    Self::err(
+                        &initial_path,
+                        parent,
+                        format!("failed to read target path for sovereign manifest file: {e}"),
+                    )
                 })?;
 
                 PathBuf::from(initial_path.trim())
                     .canonicalize()
                     .map_err(|e| {
-                        anyhow::anyhow!("failed access base dir for sovereign manifest file: {e}")
+                        Self::err(
+                            &initial_path,
+                            parent,
+                            format!("failed access base dir for sovereign manifest file: {e}"),
+                        )
                     })
             }
         }?;
@@ -74,16 +94,19 @@ impl Manifest {
                 break;
             }
 
-            current_path = current_path
-                .parent()
-                .ok_or_else(|| anyhow::anyhow!("Could not find a parent `{}`", manifest))?;
+            current_path = current_path.parent().ok_or_else(|| {
+                Self::err(
+                    &current_path,
+                    parent,
+                    format!("Could not find a parent `{manifest}`"),
+                )
+            })?;
         }
 
-        let manifest = fs::read_to_string(&path).map_err(|e| {
-            anyhow::anyhow!("Could not read the manifest `{}`: {e}", path.display())
-        })?;
+        let manifest = fs::read_to_string(&path)
+            .map_err(|e| Self::err(&current_path, parent, format!("failed to read file: {e}")))?;
 
-        Self::read_str(manifest, path)
+        Self::read_str(manifest, path, parent)
     }
 
     /// Parses a gas config constant from the manifest file. Returns a `TokenStream` with the
@@ -104,12 +127,19 @@ impl Manifest {
         let root = self
             .value
             .as_object()
-            .ok_or_else(|| self.err(parent, "manifest is not an object"))?
+            .ok_or_else(|| Self::err(&self.path, parent, "manifest is not an object"))?
             .get("gas")
-            .ok_or_else(|| self.err(parent, "manifest does not contain a `gas` attribute"))?
+            .ok_or_else(|| {
+                Self::err(
+                    &self.path,
+                    parent,
+                    "manifest does not contain a `gas` attribute",
+                )
+            })?
             .as_object()
             .ok_or_else(|| {
-                self.err(
+                Self::err(
+                    &self.path,
                     parent,
                     format!("`gas` attribute of `{}` is not an object", parent),
                 )
@@ -118,7 +148,8 @@ impl Manifest {
         let root = match root.get(&parent.to_string()) {
             Some(Value::Object(m)) => m,
             Some(_) => {
-                return Err(self.err(
+                return Err(Self::err(
+                    &self.path,
                     parent,
                     format!(
                         "matching constants entry `{}` is not an object",
@@ -132,7 +163,8 @@ impl Manifest {
         let mut fields = vec![];
         for (k, v) in root {
             let k: Ident = syn::parse_str(k).map_err(|e| {
-                self.err(
+                Self::err(
+                    &self.path,
                     parent,
                     format!("failed to parse key attribyte `{}`: {}", k, e),
                 )
@@ -140,11 +172,18 @@ impl Manifest {
 
             let v = v
                 .as_array()
-                .ok_or_else(|| self.err(parent, format!("`{}` attribute is not an array", k)))?
+                .ok_or_else(|| {
+                    Self::err(
+                        &self.path,
+                        parent,
+                        format!("`{}` attribute is not an array", k),
+                    )
+                })?
                 .iter()
                 .map(|v| {
                     v.as_u64().ok_or_else(|| {
-                        self.err(
+                        Self::err(
+                            &self.path,
                             parent,
                             format!("`{}` attribute is not an array of integers", k),
                         )
@@ -162,15 +201,16 @@ impl Manifest {
         })
     }
 
-    fn err<T>(&self, ident: &syn::Ident, msg: T) -> syn::Error
+    fn err<P, T>(path: P, ident: &syn::Ident, msg: T) -> syn::Error
     where
+        P: AsRef<Path>,
         T: fmt::Display,
     {
         syn::Error::new(
             ident.span(),
             format!(
                 "failed to parse manifest `{}` for `{}`: {}",
-                self.path.display(),
+                path.as_ref().display(),
                 ident,
                 msg
             ),
@@ -193,7 +233,8 @@ fn fetch_manifest_works() {
     let expected = fs::read_to_string(path).unwrap();
     let expected: Value = serde_json::from_str(&expected).unwrap();
 
-    let manifest = Manifest::read_constants().unwrap();
+    let parent = Ident::new("foo", proc_macro2::Span::call_site());
+    let manifest = Manifest::read_constants(&parent).unwrap();
     assert_eq!(*manifest, expected);
 }
 
@@ -208,7 +249,7 @@ fn parse_gas_config_works() {
     }"#;
 
     let parent = Ident::new("foo", proc_macro2::Span::call_site());
-    let gas_config = Manifest::read_str(input, PathBuf::from("foo.toml"))
+    let gas_config = Manifest::read_str(input, PathBuf::from("foo.toml"), &parent)
         .unwrap()
         .parse_gas_config(&parent)
         .unwrap();
