@@ -3,7 +3,7 @@ mod batch_builder;
 #[cfg(feature = "experimental")]
 pub use experimental::{get_ethereum_rpc, Ethereum};
 #[cfg(feature = "experimental")]
-pub use sov_evm::signer::DevSigner;
+pub use sov_evm::DevSigner;
 
 #[cfg(feature = "experimental")]
 pub mod experimental {
@@ -21,9 +21,7 @@ pub mod experimental {
         Address as RethAddress, TransactionSignedNoHash as RethTransactionSignedNoHash,
     };
     use reth_rpc_types::{TransactionRequest, TypedTransactionRequest};
-    use sov_evm::call::CallMessage;
-    use sov_evm::evm::RlpEvmTransaction;
-    use sov_evm::Evm;
+    use sov_evm::{CallMessage, Evm, RlpEvmTransaction};
     use sov_modules_api::transaction::Transaction;
     use sov_modules_api::utils::to_jsonrpsee_error_object;
     use sov_modules_api::{EncodeCall, WorkingSet};
@@ -93,9 +91,9 @@ pub mod experimental {
             let signed_transaction: RethTransactionSignedNoHash = raw_tx.clone().try_into()?;
 
             let tx_hash = signed_transaction.hash();
-            let sender = signed_transaction.recover_signer().ok_or(
-                sov_evm::evm::primitive_types::RawEvmTxConversionError::FailedToRecoverSigner,
-            )?;
+            let sender = signed_transaction
+                .recover_signer()
+                .ok_or(sov_evm::RawEvmTxConversionError::FailedToRecoverSigner)?;
 
             let mut nonces = self.nonces.lock().unwrap();
             let nonce = *nonces.entry(sender).and_modify(|n| *n += 1).or_insert(0);

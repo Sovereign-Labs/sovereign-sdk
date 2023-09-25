@@ -85,7 +85,7 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da> {
 impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for TestRuntime<C, Da> {
     type Context = C;
 
-    fn finalize_slot_hook(
+    fn finalize_hook(
         &self,
         _root_hash: &<<Self::Context as Spec>::Storage as Storage>::Root,
         _accesorry_working_set: &mut AccessoryWorkingSet<C>,

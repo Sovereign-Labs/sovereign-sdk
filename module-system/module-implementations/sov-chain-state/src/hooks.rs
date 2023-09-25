@@ -64,7 +64,7 @@ impl<C: Context, Da: sov_modules_api::DaSpec> SlotHooks<Da> for ChainState<C, Da
 impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for ChainState<C, Da> {
     type Context = C;
 
-    fn finalize_slot_hook(
+    fn finalize_hook(
         &self,
         _root_hash: &<C::Storage as Storage>::Root,
         _accesorry_working_set: &mut AccessoryWorkingSet<C>,

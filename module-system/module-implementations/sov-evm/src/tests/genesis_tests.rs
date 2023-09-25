@@ -219,7 +219,7 @@ pub(crate) fn get_evm(config: &EvmConfig) -> (Evm<C>, WorkingSet<DefaultContext>
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let evm = Evm::<C>::default();
     evm.genesis(config, &mut working_set).unwrap();
-    evm.finalize_slot_hook(&[10u8; 32].into(), &mut working_set.accessory_state());
+    evm.finalize_hook(&[10u8; 32].into(), &mut working_set.accessory_state());
 
     (evm, working_set)
 }

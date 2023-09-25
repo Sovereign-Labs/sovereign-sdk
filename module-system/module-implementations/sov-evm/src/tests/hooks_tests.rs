@@ -20,7 +20,7 @@ lazy_static! {
 fn begin_slot_hook_creates_pending_block() {
     let (evm, mut working_set) = get_evm(&TEST_CONFIG);
     evm.begin_slot_hook(DA_ROOT_HASH.0, &mut working_set);
-    let pending_block = evm.pending_block.get(&mut working_set).unwrap();
+    let pending_block = evm.block_env.get(&mut working_set).unwrap();
     assert_eq!(
         pending_block,
         BlockEnv {
@@ -193,7 +193,7 @@ fn finalize_hook_creates_final_block() {
 
     let mut accessory_state = working_set.accessory_state();
     let root_hash = [99u8; 32].into();
-    evm.finalize_slot_hook(&root_hash, &mut accessory_state);
+    evm.finalize_hook(&root_hash, &mut accessory_state);
 
     assert_eq!(evm.blocks.len(&mut accessory_state), 2);
 
