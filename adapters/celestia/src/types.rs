@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::slice::Chunks;
 
-use anyhow::ensure;
+use anyhow::{bail, ensure};
 // use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_proto::celestia::blob::v1::MsgPayForBlobs;
+use celestia_types::consts::appconsts::SHARE_SIZE;
 use celestia_types::nmt::{Namespace, NamespacedHash, NamespacedHashExt, Nmt, NS_SIZE};
 use celestia_types::ExtendedDataSquare;
 use serde::{Deserialize, Serialize};
@@ -22,6 +23,8 @@ pub trait ExtendedDataSquareExt {
     fn square_size(&self) -> Result<usize, BoxError>;
 
     fn rows(&self) -> Result<Chunks<'_, Vec<u8>>, BoxError>;
+
+    fn validate(&self) -> Result<(), BoxError>;
 }
 
 impl ExtendedDataSquareExt for ExtendedDataSquare {
@@ -39,6 +42,21 @@ impl ExtendedDataSquareExt for ExtendedDataSquare {
     fn rows(&self) -> Result<Chunks<'_, Vec<u8>>, BoxError> {
         let square_size = self.square_size()?;
         Ok(self.data_square.chunks(square_size))
+    }
+
+    fn validate(&self) -> Result<(), BoxError> {
+        let len = self.square_size()?;
+        ensure!(len * len == self.data_square.len(), "Invalid square size");
+
+        if let Some(share) = self
+            .rows()
+            .expect("after first check this must succeed")
+            .flatten()
+            .find(|shares| shares.len() != SHARE_SIZE)
+        {
+            bail!("Invalid share size: {}", share.len())
+        }
+        Ok(())
     }
 }
 
@@ -142,7 +160,7 @@ impl Row {
         let mut nmt = Nmt::new();
         for (idx, share) in self.shares.iter().enumerate() {
             // Shares in the two left-hand quadrants are prefixed with their namespace, while parity
-            // shares (in the right-hand) quadrants always have the PARITY_SHARES_NAMESPACE
+            // shares (in the right-hand) quadrants should always be treated as PARITY_SHARES_NAMESPACE
             let namespace = if idx < self.shares.len() / 2 {
                 share_namespace_unchecked(share)
             } else {
