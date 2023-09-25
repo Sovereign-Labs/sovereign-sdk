@@ -449,7 +449,7 @@ pub mod parsing {
         } else {
             Err(syn::Error::new_spanned(
                 ident,
-                "This field is missing an attribute: add `#[module]`, `#[state]` or `#[address]`.",
+                format!("The field `{}` is missing an attribute: add `#[module]`, `#[state]` or `#[address]`.", ident),
             ))
         }
     }
