@@ -4,35 +4,43 @@
 use std::path::PathBuf;
 use std::{env, fmt, fs, ops};
 
-use proc_macro2::TokenStream;
-use toml::{Table, Value};
-
-use crate::common::StructDef;
-use crate::module_info::parsing::ModuleField;
+use proc_macro2::{Ident, TokenStream};
+use serde_json::Value;
 
 #[derive(Debug, Clone)]
 pub struct Manifest {
     path: PathBuf,
-    table: Table,
+    value: Value,
 }
 
 impl ops::Deref for Manifest {
-    type Target = Table;
+    type Target = Value;
 
     fn deref(&self) -> &Self::Target {
-        &self.table
+        &self.value
     }
 }
 
 impl Manifest {
-    /// The file name of the manifest.
-    pub const MANIFEST_NAME: &'static str = "constants.toml";
+    /// Parse a manifest file from a string.
+    ///
+    /// The provided path will be used to feedback error to the user, if any.
+    pub fn read_str<S>(manifest: S, path: PathBuf) -> anyhow::Result<Self>
+    where
+        S: AsRef<str>,
+    {
+        let value = serde_json::from_str(manifest.as_ref())
+            .map_err(|e| anyhow::anyhow!("Could not parse `{}`: {}", path.display(), e))?;
 
-    /// Reads a `sovereign.toml` manifest file, recursing from the target directory that builds the
+        Ok(Self { path, value })
+    }
+
+    /// Reads a `constants.json` manifest file, recursing from the target directory that builds the
     /// current implementation.
     ///
     /// If the environment variable `CONSTANTS_MANIFEST` is set, it will use that instead.
-    pub fn read() -> anyhow::Result<Self> {
+    pub fn read_constants() -> anyhow::Result<Self> {
+        let manifest = "constants.json";
         let initial_path = match env::var("CONSTANTS_MANIFEST") {
             Ok(p) => PathBuf::from(&p).canonicalize().map_err(|e| {
                 anyhow::anyhow!("failed access base dir for sovereign manifest file `{p}`: {e}",)
@@ -61,103 +69,95 @@ impl Manifest {
         let path: PathBuf;
         let mut current_path = initial_path.as_path();
         loop {
-            if current_path.join(Self::MANIFEST_NAME).exists() {
-                path = current_path.join(Self::MANIFEST_NAME);
+            if current_path.join(manifest).exists() {
+                path = current_path.join(manifest);
                 break;
             }
 
-            current_path = current_path.parent().ok_or_else(|| {
-                anyhow::anyhow!("Could not find a parent {}", Self::MANIFEST_NAME)
-            })?;
+            current_path = current_path
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("Could not find a parent `{}`", manifest))?;
         }
 
-        let manifest = fs::read_to_string(&path)
-            .map_err(|e| anyhow::anyhow!("Could not read the parent `{}`: {e}", path.display()))?;
+        let manifest = fs::read_to_string(&path).map_err(|e| {
+            anyhow::anyhow!("Could not read the manifest `{}`: {e}", path.display())
+        })?;
 
-        let table = toml::from_str(&manifest)
-            .map_err(|e| anyhow::anyhow!("Could not parse `{}`: {}", path.display(), e))?;
-
-        Ok(Self { path, table })
+        Self::read_str(manifest, path)
     }
 
-    /// Parses a module struct from the manifest file. Returns a `TokenStream` with the following
-    /// structure:
+    /// Parses a gas config constant from the manifest file. Returns a `TokenStream` with the
+    /// following structure:
     ///
     /// ```rust,ignore
-    /// let foo = Foo {
-    ///     bar: Into::into("baz"),
+    /// const GAS_CONFIG: Self::GasConfig = Self::GasConfig {
+    ///     foo: [1u64, 2u64, 3u64, ],
+    ///     bar: [4u64, 5u64, 6u64, ],
     /// };
     /// ```
     ///
-    /// Since this will be static code, the `TokensStream` will act as a constant, if there is no
-    /// allocation such as with `String`.
+    /// Where `foo` and `bar` are fields of the json constants file under the located `gas` field.
     ///
-    /// The routine will first query `section.parent`, and then fallback to `section`. Example
-    ///
-    /// ```toml
-    /// [module]
-    /// bar = "general"
-    ///
-    /// [module.Foo]
-    /// bar = "baz"
-    /// ```
-    ///
-    /// A call with a parent `Foo` will yield `bar = "baz"`, and a call with a parent `Etc` will
-    /// yield `bar = "general"`.
-    pub(crate) fn parse_module_struct(
-        &self,
-        section: &str,
-        parent: &StructDef,
-        field: &ModuleField,
-    ) -> Result<TokenStream, syn::Error> {
+    /// The `gas` field resolution will first attempt to query `gas.parent`, and then fallback to
+    /// `gas`. They must be objects with arrays of integers as fields.
+    pub(crate) fn parse_gas_config(&self, parent: &Ident) -> Result<TokenStream, syn::Error> {
         let root = self
-            .table
-            .get(section)
-            .ok_or_else(|| self.err(&field.ident, format!("no `{}` section", section)))?
-            .as_table()
+            .value
+            .as_object()
+            .ok_or_else(|| self.err(&parent, "manifest is not an object"))?
+            .get("gas")
+            .ok_or_else(|| self.err(&parent, "manifest does not contain a `gas` attribute"))?
+            .as_object()
             .ok_or_else(|| {
                 self.err(
-                    &field.ident,
-                    format!("`{}` section must be a table", section),
+                    &parent,
+                    format!("`gas` attribute of `{}` is not an object", parent),
                 )
-            })?
-            .clone();
+            })?;
 
-        let root = match root.get(&parent.ident.to_string()) {
-            Some(Value::Table(t)) => t.clone(),
-            _ => root
-                .into_iter()
-                // skip all tables so other modules are not included
-                .filter(|(_, v)| !v.is_table())
-                .collect(),
+        let root = match root.get(&parent.to_string()) {
+            Some(Value::Object(m)) => m,
+            Some(_) => {
+                return Err(self.err(
+                    &parent,
+                    format!(
+                        "matching constants entry `{}` is not an object",
+                        &parent.to_string()
+                    ),
+                ))
+            }
+            None => root,
         };
 
-        let struct_fields = root
-            .iter()
-            .map(|(f, v)| (quote::format_ident!("{f}"), v))
-            .map(|(f, v)| match v {
-                // TODO this can be optimized to specific cases based on type and avoid
-                // `Into::into` (i.e. u32 as u64)
-                Value::String(v) => Ok(quote::quote!(#f: #v)),
-                Value::Integer(v) => Ok(quote::quote!(#f: #v)),
-                Value::Float(v) => Ok(quote::quote!(#f: #v)),
-                Value::Boolean(v) => Ok(quote::quote!(#f: #v)),
-                _ => Err(self.err(
-                    &field.ident,
-                    format!(
-                        "the contents of the section `{}` must be string, integer, float, or boolean",
-                        section
-                    ),
-                )),
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut fields = vec![];
+        for (k, v) in root {
+            let k: Ident = syn::parse_str(k).map_err(|e| {
+                self.err(
+                    &parent,
+                    format!("failed to parse key attribyte `{}`: {}", k, e),
+                )
+            })?;
 
-        let t = &field.ty;
-        let field_ident = &field.ident;
+            let v = v
+                .as_array()
+                .ok_or_else(|| self.err(&parent, format!("`{}` attribute is not an array", k)))?
+                .into_iter()
+                .map(|v| {
+                    v.as_u64().ok_or_else(|| {
+                        self.err(
+                            &parent,
+                            format!("`{}` attribute is not an array of integers", k),
+                        )
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            fields.push(quote::quote!(#k: [#(#v,)*]));
+        }
 
         Ok(quote::quote! {
-            let #field_ident = #t {
-                #(#struct_fields,)*
+            const GAS_CONFIG: Self::GasConfig = Self::GasConfig {
+                #(#fields,)*
             };
         })
     }
@@ -186,13 +186,42 @@ fn fetch_manifest_works() {
         .unwrap()
         .parent()
         .unwrap()
-        .join(Manifest::MANIFEST_NAME)
+        .join("constants.json")
         .canonicalize()
         .unwrap();
 
     let expected = fs::read_to_string(path).unwrap();
-    let expected = toml::from_str(&expected).unwrap();
+    let expected: Value = serde_json::from_str(&expected).unwrap();
 
-    let manifest = Manifest::read().unwrap();
+    let manifest = Manifest::read_constants().unwrap();
     assert_eq!(*manifest, expected);
+}
+
+#[test]
+fn parse_gas_config_works() {
+    let input = r#"{
+        "comment": "Sovereign SDK constants",
+        "gas": {
+            "complex_math_operation": [1, 2, 3],
+            "some_other_operation": [4, 5, 6]
+        }
+    }"#;
+
+    let parent = Ident::new("foo", proc_macro2::Span::call_site());
+    let gas_config = Manifest::read_str(input, PathBuf::from("foo.toml"))
+        .unwrap()
+        .parse_gas_config(&parent)
+        .unwrap();
+
+    #[rustfmt::skip]
+    assert_eq!(
+        gas_config.to_string(),
+        quote::quote!(
+            const GAS_CONFIG: Self::GasConfig = Self::GasConfig {
+                complex_math_operation: [1u64, 2u64, 3u64, ],
+                some_other_operation: [4u64, 5u64, 6u64, ],
+            };
+        )
+        .to_string()
+    );
 }
