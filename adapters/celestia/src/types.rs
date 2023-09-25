@@ -5,60 +5,17 @@ use anyhow::{bail, ensure};
 // use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_proto::celestia::blob::v1::MsgPayForBlobs;
 use celestia_types::consts::appconsts::SHARE_SIZE;
-use celestia_types::nmt::{Namespace, NamespacedHash, NamespacedHashExt, Nmt, NS_SIZE};
-use celestia_types::ExtendedDataSquare;
+use celestia_types::nmt::{Namespace, NamespacedHash, Nmt, NS_SIZE};
+use celestia_types::{ExtendedDataSquare, ValidateBasic};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::Bytes;
-use tendermint::crypto::default::Sha256;
-use tendermint::merkle;
 
 use crate::shares::NamespaceGroup;
 use crate::utils::BoxError;
 use crate::verifier::{ChainValidityCondition, PARITY_SHARES_NAMESPACE};
 use crate::{CelestiaHeader, TxPosition};
-
-pub trait ExtendedDataSquareExt {
-    fn square_size(&self) -> Result<usize, BoxError>;
-
-    fn rows(&self) -> Result<Chunks<'_, Vec<u8>>, BoxError>;
-
-    fn validate(&self) -> Result<(), BoxError>;
-}
-
-impl ExtendedDataSquareExt for ExtendedDataSquare {
-    fn square_size(&self) -> Result<usize, BoxError> {
-        let len = self.data_square.len();
-        let square_size = (len as f64).sqrt() as usize;
-        ensure!(
-            square_size * square_size == len,
-            "eds size {} is not a perfect square",
-            len
-        );
-        Ok(square_size)
-    }
-
-    fn rows(&self) -> Result<Chunks<'_, Vec<u8>>, BoxError> {
-        let square_size = self.square_size()?;
-        Ok(self.data_square.chunks(square_size))
-    }
-
-    fn validate(&self) -> Result<(), BoxError> {
-        let len = self.square_size()?;
-        ensure!(len * len == self.data_square.len(), "Invalid square size");
-
-        if let Some(share) = self
-            .rows()
-            .expect("after first check this must succeed")
-            .flatten()
-            .find(|shares| shares.len() != SHARE_SIZE)
-        {
-            bail!("Invalid share size: {}", share.len())
-        }
-        Ok(())
-    }
-}
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)] // TODO: , BorshSerialize, BorshDeserialize)]
 pub struct FilteredCelestiaBlock {
@@ -117,33 +74,84 @@ impl FilteredCelestiaBlock {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, thiserror::Error)]
 pub enum ValidationError {
+    #[error("Missing data hash in header")]
     MissingDataHash,
+
+    #[error("Data root hash doesn't match computed one")]
     InvalidDataRoot,
+
+    #[error("Invalid etx proof: {0}")]
     InvalidEtxProof(&'static str),
+
+    #[error("Transaction missing")]
     MissingTx,
+
+    #[error("Invalid row proof")]
     InvalidRowProof,
+
+    #[error("Invalid signer")]
     InvalidSigner,
+
+    #[error("Incomplete data")]
     IncompleteData,
+
+    #[error(transparent)]
+    DahValidation(#[from] celestia_types::ValidationError),
 }
 
 impl CelestiaHeader {
     pub fn validate_dah(&self) -> Result<(), ValidationError> {
-        let rows_iter = self.dah.row_roots.iter();
-        let cols_iter = self.dah.column_roots.iter();
-        let byte_vecs: Vec<_> = rows_iter
-            .chain(cols_iter)
-            .map(NamespacedHashExt::to_array)
-            .collect();
-        let root = merkle::simple_hash_from_byte_vectors::<Sha256>(&byte_vecs);
+        self.dah.validate_basic()?;
         let data_hash = self
             .header
             .data_hash
             .as_ref()
             .ok_or(ValidationError::MissingDataHash)?;
-        if root != data_hash.0 {
+        if self.dah.hash != data_hash.0 {
             return Err(ValidationError::InvalidDataRoot);
+        }
+        Ok(())
+    }
+}
+
+pub trait ExtendedDataSquareExt {
+    fn square_size(&self) -> Result<usize, BoxError>;
+
+    fn rows(&self) -> Result<Chunks<'_, Vec<u8>>, BoxError>;
+
+    fn validate(&self) -> Result<(), BoxError>;
+}
+
+impl ExtendedDataSquareExt for ExtendedDataSquare {
+    fn square_size(&self) -> Result<usize, BoxError> {
+        let len = self.data_square.len();
+        let square_size = (len as f64).sqrt() as usize;
+        ensure!(
+            square_size * square_size == len,
+            "eds size {} is not a perfect square",
+            len
+        );
+        Ok(square_size)
+    }
+
+    fn rows(&self) -> Result<Chunks<'_, Vec<u8>>, BoxError> {
+        let square_size = self.square_size()?;
+        Ok(self.data_square.chunks(square_size))
+    }
+
+    fn validate(&self) -> Result<(), BoxError> {
+        let len = self.square_size()?;
+        ensure!(len * len == self.data_square.len(), "Invalid square size");
+
+        if let Some(share) = self
+            .rows()
+            .expect("after first check this must succeed")
+            .flatten()
+            .find(|shares| shares.len() != SHARE_SIZE)
+        {
+            bail!("Invalid share size: {}", share.len())
         }
         Ok(())
     }
