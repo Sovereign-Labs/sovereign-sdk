@@ -69,7 +69,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
             parent_hash: H256::default(),
             ommers_hash: EMPTY_OMMER_ROOT,
             beneficiary: config.coinbase,
-            // This will be set in finalize_slot_hook or in the next begin_slot_hook
+            // This will be set in finalize_hook or in the next begin_slot_hook
             state_root: KECCAK_EMPTY,
             transactions_root: EMPTY_TRANSACTIONS,
             receipts_root: EMPTY_RECEIPTS,

@@ -160,12 +160,12 @@ mod experimental {
 
         /// Used only by the RPC: This represents the head of the chain and is set in two distinct stages:
         /// 1. `end_slot_hook`: the pending head is populated with data from pending_transactions.
-        /// 2. `finalize_slot_hook` the `root_hash` is populated.
-        /// Since this value is not authenticated, it can be modified in the `finalize_slot_hook` with the correct `state_root`.
+        /// 2. `finalize_hook` the `root_hash` is populated.
+        /// Since this value is not authenticated, it can be modified in the `finalize_hook` with the correct `state_root`.
         #[state]
         pub(crate) pending_head: sov_modules_api::AccessoryStateValue<Block, BcsCodec>,
 
-        /// Used only by the RPC: The vec is extended with `pending_head` in `finalize_slot_hook`.
+        /// Used only by the RPC: The vec is extended with `pending_head` in `finalize_hook`.
         #[state]
         pub(crate) blocks: sov_modules_api::AccessoryStateVec<SealedBlock, BcsCodec>,
 
