@@ -7144,7 +7144,7 @@ dependencies = [
  "nmt-rs",
  "postcard",
  "proptest",
- "prost 0.11.9",
+ "prost 0.12.1",
  "prost-build 0.11.9",
  "prost-types 0.11.9",
  "risc0-zkvm",
