@@ -30,6 +30,20 @@ impl Default for BlockEnv {
     }
 }
 
+// BlockEnv from SealedBlock
+impl From<&SealedBlock> for BlockEnv {
+    fn from(block: &SealedBlock) -> Self {
+        Self {
+            number: block.header.number,
+            coinbase: block.header.beneficiary,
+            timestamp: block.header.timestamp,
+            prevrandao: Default::default(),
+            basefee: block.header.base_fee_per_gas.unwrap_or_default(),
+            gas_limit: block.header.gas_limit,
+        }
+    }
+}
+
 /// Rlp encoded evm transaction.
 #[cfg_attr(
     feature = "native",

@@ -2,14 +2,17 @@ use ethereum_types::U64;
 use jsonrpsee::core::RpcResult;
 use reth_primitives::contract::create_address;
 use reth_primitives::TransactionKind::{Call, Create};
-use reth_primitives::{TransactionSignedEcRecovered, U128, U256};
+use reth_primitives::{Bytes, TransactionSignedEcRecovered, U128, U256};
+use reth_rpc::eth::error::{EthResult, RevertError, RpcInvalidTransactionError};
+use revm::primitives::{ExecutionResult, Halt, OutOfGasError};
 use sov_modules_api::macros::rpc_gen;
+use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_modules_api::WorkingSet;
 use tracing::info;
 
 use crate::call::get_cfg_env;
 use crate::evm::db::EvmDb;
-use crate::evm::primitive_types::{Receipt, SealedBlock, TransactionSignedAndRecovered};
+use crate::evm::primitive_types::{BlockEnv, Receipt, SealedBlock, TransactionSignedAndRecovered};
 use crate::evm::{executor, prepare_call_env};
 use crate::Evm;
 
@@ -252,7 +255,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     pub fn get_call(
         &self,
         request: reth_rpc_types::CallRequest,
-        _block_number: Option<reth_primitives::BlockId>,
+        block_number: Option<String>,
         _state_overrides: Option<reth_rpc_types::state::StateOverride>,
         _block_overrides: Option<Box<reth_rpc_types::BlockOverrides>>,
         working_set: &mut WorkingSet<C>,
@@ -260,19 +263,25 @@ impl<C: sov_modules_api::Context> Evm<C> {
         info!("evm module: eth_call");
         let tx_env = prepare_call_env(request);
 
-        let block_env = self.pending_block.get(working_set).unwrap_or_default();
+        let block_env = match block_number {
+            Some(ref block_number) if block_number == "pending" => self
+                .pending_block
+                .get(working_set)
+                .unwrap_or_default()
+                .clone(),
+            _ => {
+                let block = self.get_sealed_block_by_number(block_number, working_set);
+                BlockEnv::from(&block)
+            }
+        };
         let cfg = self.cfg.get(working_set).unwrap_or_default();
         let cfg_env = get_cfg_env(&block_env, cfg, Some(self.get_cfg_env_template()));
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
-        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
         let result = executor::inspect(evm_db, &block_env, tx_env, cfg_env).unwrap();
-        let output = match result.result {
-            revm::primitives::ExecutionResult::Success { output, .. } => output,
-            _ => todo!(),
-        };
-        Ok(output.into_data().into())
+
+        Ok(ensure_success(result.result).unwrap())
     }
 
     #[rpc_method(name = "blockNumber")]
@@ -371,5 +380,39 @@ pub(crate) fn build_rpc_receipt(
                 removed: false,
             })
             .collect(),
+    }
+}
+
+// https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc/src/eth/error.rs#L617
+pub(crate) fn ensure_success(result: ExecutionResult) -> EthResult<Bytes> {
+    match result {
+        ExecutionResult::Success { output, .. } => Ok(output.into_data().into()),
+        ExecutionResult::Revert { output, .. } => {
+            Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into())
+        }
+        ExecutionResult::Halt { reason, gas_used } => Err(halt(reason, gas_used).into()),
+    }
+}
+
+// https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc/src/eth/error.rs#L617
+pub(crate) fn halt(reason: Halt, gas_limit: u64) -> RpcInvalidTransactionError {
+    match reason {
+        Halt::OutOfGas(err) => out_of_gas(err, gas_limit),
+        Halt::NonceOverflow => RpcInvalidTransactionError::NonceMaxValue,
+        err => RpcInvalidTransactionError::EvmHalt(err),
+    }
+}
+
+// https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc/src/eth/error.rs#L341
+pub(crate) fn out_of_gas(reason: OutOfGasError, gas_limit: u64) -> RpcInvalidTransactionError {
+    let gas_limit = U256::from(gas_limit);
+    match reason {
+        OutOfGasError::BasicOutOfGas => RpcInvalidTransactionError::BasicOutOfGas(gas_limit),
+        OutOfGasError::Memory => RpcInvalidTransactionError::MemoryOutOfGas(gas_limit),
+        OutOfGasError::Precompile => RpcInvalidTransactionError::PrecompileOutOfGas(gas_limit),
+        OutOfGasError::InvalidOperand => {
+            RpcInvalidTransactionError::InvalidOperandOutOfGas(gas_limit)
+        }
+        OutOfGasError::MemoryLimit => RpcInvalidTransactionError::MemoryOutOfGas(gas_limit),
     }
 }

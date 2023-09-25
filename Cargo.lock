@@ -118,6 +118,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c99f64d1e06488f620f932677e24bc6e2897582980441ae90a671415bd7ec2f"
 dependencies = [
  "cfg-if",
+ "getrandom 0.2.10",
  "once_cell",
  "version_check",
 ]
@@ -222,6 +223,20 @@ name = "anyhow"
 version = "1.0.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4668cab20f66d8d020e1fbc0ebe47217433c1b6c8f2040faf858554e394ace6"
+
+[[package]]
+name = "aquamarine"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df752953c49ce90719c7bf1fc587bc8227aed04732ea0c0f85e5397d7fdbd1a1"
+dependencies = [
+ "include_dir",
+ "itertools 0.10.5",
+ "proc-macro-error",
+ "proc-macro2 1.0.67",
+ "quote 1.0.33",
+ "syn 1.0.109",
+]
 
 [[package]]
 name = "arbitrary"
@@ -1739,7 +1754,7 @@ dependencies = [
  "clap",
  "demo-stf",
  "hex",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "rand 0.8.5",
  "reth-primitives",
  "serde",
@@ -3484,6 +3499,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "include_dir"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18762faeff7122e89e0857b02f7ce6fcc0d101d5e9ad2ad7846cc01d61b7f19e"
+dependencies = [
+ "include_dir_macros",
+]
+
+[[package]]
+name = "include_dir_macros"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b139284b5cf57ecfa712bcc66950bb635b31aff41c188e8a4cfc758eca374a3f"
+dependencies = [
+ "proc-macro2 1.0.67",
+ "quote 1.0.33",
+]
+
+[[package]]
 name = "indenter"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3656,13 +3690,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1822d18e4384a5e79d94dc9e4d1239cfa9fad24e55b44d2efeff5b394c9fece4"
 dependencies = [
  "jsonrpsee-client-transport",
- "jsonrpsee-core",
+ "jsonrpsee-core 0.18.2",
  "jsonrpsee-http-client",
- "jsonrpsee-proc-macros",
- "jsonrpsee-server",
+ "jsonrpsee-proc-macros 0.18.2",
+ "jsonrpsee-server 0.18.2",
  "jsonrpsee-types 0.18.2",
  "jsonrpsee-wasm-client",
  "jsonrpsee-ws-client",
+ "tracing",
+]
+
+[[package]]
+name = "jsonrpsee"
+version = "0.20.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ad9b31183a8bcbe843e32ca8554ad2936633548d95a7bb6a8e14c767dea6b05"
+dependencies = [
+ "jsonrpsee-core 0.20.1",
+ "jsonrpsee-proc-macros 0.20.1",
+ "jsonrpsee-server 0.20.1",
+ "jsonrpsee-types 0.20.1",
+ "tokio",
  "tracing",
 ]
 
@@ -3676,7 +3724,7 @@ dependencies = [
  "futures-util",
  "gloo-net",
  "http",
- "jsonrpsee-core",
+ "jsonrpsee-core 0.18.2",
  "pin-project",
  "rustls-native-certs",
  "soketto",
@@ -3717,6 +3765,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "jsonrpsee-core"
+version = "0.20.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35dc957af59ce98373bcdde0c1698060ca6c2d2e9ae357b459c7158b6df33330"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "beef",
+ "futures-util",
+ "hyper",
+ "jsonrpsee-types 0.20.1",
+ "parking_lot 0.12.1",
+ "rand 0.8.5",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "soketto",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "jsonrpsee-http-client"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3725,7 +3796,7 @@ dependencies = [
  "async-trait",
  "hyper",
  "hyper-rustls",
- "jsonrpsee-core",
+ "jsonrpsee-core 0.18.2",
  "jsonrpsee-types 0.18.2",
  "serde",
  "serde_json",
@@ -3749,6 +3820,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "jsonrpsee-proc-macros"
+version = "0.20.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cef91b1017a4edb63f65239381c18de39f88d0e0760ab626d806e196f7f51477"
+dependencies = [
+ "heck",
+ "proc-macro-crate 1.3.1",
+ "proc-macro2 1.0.67",
+ "quote 1.0.33",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "jsonrpsee-server"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3756,11 +3840,34 @@ checksum = "4f06661d1a6b6e5b85469dc9c29acfbb9b3bb613797a6fd10a3ebb8a70754057"
 dependencies = [
  "futures-util",
  "hyper",
- "jsonrpsee-core",
+ "jsonrpsee-core 0.18.2",
  "jsonrpsee-types 0.18.2",
  "serde",
  "serde_json",
  "soketto",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tower",
+ "tracing",
+]
+
+[[package]]
+name = "jsonrpsee-server"
+version = "0.20.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24f4e2f3d223d810e363fb8b5616ec4c6254243ee7f452d05ac281cdc9cf76b2"
+dependencies = [
+ "futures-util",
+ "http",
+ "hyper",
+ "jsonrpsee-core 0.20.1",
+ "jsonrpsee-types 0.20.1",
+ "route-recognizer",
+ "serde",
+ "serde_json",
+ "soketto",
+ "thiserror",
  "tokio",
  "tokio-stream",
  "tokio-util",
@@ -3803,7 +3910,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34e6ea7c6d862e60f8baebd946c037b70c6808a4e4e31e792a4029184e3ce13a"
 dependencies = [
  "jsonrpsee-client-transport",
- "jsonrpsee-core",
+ "jsonrpsee-core 0.18.2",
  "jsonrpsee-types 0.18.2",
 ]
 
@@ -3815,7 +3922,7 @@ checksum = "a64b2589680ba1ad7863f279cd2d5083c1dc0a7c0ea959d22924553050f8ab9f"
 dependencies = [
  "http",
  "jsonrpsee-client-transport",
- "jsonrpsee-core",
+ "jsonrpsee-core 0.18.2",
  "jsonrpsee-types 0.18.2",
 ]
 
@@ -5596,6 +5703,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4389f1d5789befaf6029ebd9f7dac4af7f7e3d61b69d4f30e2ac02b57e7712b0"
 
 [[package]]
+name = "reth-beacon-consensus"
+version = "0.1.0-alpha.8"
+source = "git+https://github.com/paradigmxyz/reth?rev=e83d3aa#e83d3aa704f87825ca8cab6f593ab4d4adbf6792"
+dependencies = [
+ "futures",
+ "metrics",
+ "reth-consensus-common",
+ "reth-db",
+ "reth-interfaces",
+ "reth-metrics",
+ "reth-payload-builder",
+ "reth-primitives",
+ "reth-provider",
+ "reth-prune",
+ "reth-rpc-types",
+ "reth-rpc-types-compat",
+ "reth-stages",
+ "reth-tasks",
+ "schnellru",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+]
+
+[[package]]
 name = "reth-codecs"
 version = "0.1.0-alpha.8"
 source = "git+https://github.com/paradigmxyz/reth?rev=e83d3aa#e83d3aa704f87825ca8cab6f593ab4d4adbf6792"
@@ -5834,6 +5967,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "reth-payload-builder"
+version = "0.1.0-alpha.8"
+source = "git+https://github.com/paradigmxyz/reth?rev=e83d3aa#e83d3aa704f87825ca8cab6f593ab4d4adbf6792"
+dependencies = [
+ "futures-util",
+ "metrics",
+ "reth-interfaces",
+ "reth-metrics",
+ "reth-primitives",
+ "reth-revm-primitives",
+ "reth-rlp",
+ "reth-rpc-types",
+ "reth-rpc-types-compat",
+ "reth-transaction-pool",
+ "revm-primitives",
+ "sha2 0.10.7",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+]
+
+[[package]]
 name = "reth-primitives"
 version = "0.1.0-alpha.8"
 source = "git+https://github.com/paradigmxyz/reth?rev=e83d3aa#e83d3aa704f87825ca8cab6f593ab4d4adbf6792"
@@ -5891,9 +6047,27 @@ dependencies = [
  "reth-interfaces",
  "reth-primitives",
  "reth-revm-primitives",
+ "reth-rlp",
  "reth-trie",
  "tokio",
  "tokio-stream",
+ "tracing",
+]
+
+[[package]]
+name = "reth-prune"
+version = "0.1.0-alpha.8"
+source = "git+https://github.com/paradigmxyz/reth?rev=e83d3aa#e83d3aa704f87825ca8cab6f593ab4d4adbf6792"
+dependencies = [
+ "itertools 0.11.0",
+ "metrics",
+ "rayon",
+ "reth-db",
+ "reth-interfaces",
+ "reth-metrics",
+ "reth-primitives",
+ "reth-provider",
+ "thiserror",
  "tracing",
 ]
 
@@ -5964,6 +6138,88 @@ dependencies = [
 ]
 
 [[package]]
+name = "reth-rpc"
+version = "0.1.0-alpha.8"
+source = "git+https://github.com/paradigmxyz/reth?rev=e83d3aa#e83d3aa704f87825ca8cab6f593ab4d4adbf6792"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "ethers-core",
+ "futures",
+ "hex",
+ "http",
+ "http-body",
+ "hyper",
+ "jsonrpsee 0.20.1",
+ "jsonwebtoken",
+ "lazy_static",
+ "metrics",
+ "pin-project",
+ "rand 0.8.5",
+ "rayon",
+ "reth-consensus-common",
+ "reth-interfaces",
+ "reth-metrics",
+ "reth-network-api",
+ "reth-primitives",
+ "reth-provider",
+ "reth-revm",
+ "reth-rlp",
+ "reth-rpc-api",
+ "reth-rpc-engine-api",
+ "reth-rpc-types",
+ "reth-rpc-types-compat",
+ "reth-tasks",
+ "reth-transaction-pool",
+ "revm",
+ "revm-primitives",
+ "schnellru",
+ "secp256k1",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tower",
+ "tracing",
+ "tracing-futures",
+]
+
+[[package]]
+name = "reth-rpc-api"
+version = "0.1.0-alpha.8"
+source = "git+https://github.com/paradigmxyz/reth?rev=e83d3aa#e83d3aa704f87825ca8cab6f593ab4d4adbf6792"
+dependencies = [
+ "jsonrpsee 0.20.1",
+ "reth-primitives",
+ "reth-rpc-types",
+ "serde_json",
+]
+
+[[package]]
+name = "reth-rpc-engine-api"
+version = "0.1.0-alpha.8"
+source = "git+https://github.com/paradigmxyz/reth?rev=e83d3aa#e83d3aa704f87825ca8cab6f593ab4d4adbf6792"
+dependencies = [
+ "async-trait",
+ "jsonrpsee-core 0.20.1",
+ "jsonrpsee-types 0.20.1",
+ "reth-beacon-consensus",
+ "reth-interfaces",
+ "reth-payload-builder",
+ "reth-primitives",
+ "reth-provider",
+ "reth-rpc-api",
+ "reth-rpc-types",
+ "reth-rpc-types-compat",
+ "reth-tasks",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "reth-rpc-types"
 version = "0.1.0-alpha.8"
 source = "git+https://github.com/paradigmxyz/reth?rev=e83d3aa#e83d3aa704f87825ca8cab6f593ab4d4adbf6792"
@@ -5985,6 +6241,77 @@ dependencies = [
  "reth-primitives",
  "reth-rlp",
  "reth-rpc-types",
+]
+
+[[package]]
+name = "reth-stages"
+version = "0.1.0-alpha.8"
+source = "git+https://github.com/paradigmxyz/reth?rev=e83d3aa#e83d3aa704f87825ca8cab6f593ab4d4adbf6792"
+dependencies = [
+ "aquamarine",
+ "async-trait",
+ "futures-util",
+ "itertools 0.11.0",
+ "metrics",
+ "num-traits",
+ "pin-project",
+ "rayon",
+ "reth-codecs",
+ "reth-db",
+ "reth-interfaces",
+ "reth-metrics",
+ "reth-primitives",
+ "reth-provider",
+ "reth-trie",
+ "revm",
+ "serde",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+]
+
+[[package]]
+name = "reth-tasks"
+version = "0.1.0-alpha.8"
+source = "git+https://github.com/paradigmxyz/reth?rev=e83d3aa#e83d3aa704f87825ca8cab6f593ab4d4adbf6792"
+dependencies = [
+ "dyn-clone",
+ "futures-util",
+ "metrics",
+ "reth-metrics",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-futures",
+]
+
+[[package]]
+name = "reth-transaction-pool"
+version = "0.1.0-alpha.8"
+source = "git+https://github.com/paradigmxyz/reth?rev=e83d3aa#e83d3aa704f87825ca8cab6f593ab4d4adbf6792"
+dependencies = [
+ "aquamarine",
+ "async-trait",
+ "auto_impl",
+ "bitflags 2.4.0",
+ "fnv",
+ "futures-util",
+ "metrics",
+ "parking_lot 0.12.1",
+ "paste",
+ "rand 0.8.5",
+ "reth-interfaces",
+ "reth-metrics",
+ "reth-primitives",
+ "reth-provider",
+ "reth-rlp",
+ "reth-tasks",
+ "serde",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tracing",
 ]
 
 [[package]]
@@ -6301,6 +6628,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "route-recognizer"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "afab94fb28594581f62d981211a9a4d53cc8130bbcbbb89a0440d9b8e81a7746"
+
+[[package]]
 name = "rrs-lib"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6555,6 +6888,17 @@ dependencies = [
  "quote 1.0.33",
  "serde_derive_internals",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "schnellru"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "772575a524feeb803e5b0fcbc6dd9f367e579488197c94c6e4023aad2305774d"
+dependencies = [
+ "ahash 0.8.3",
+ "cfg-if",
+ "hashbrown 0.13.2",
 ]
 
 [[package]]
@@ -6930,7 +7274,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "serde",
  "simple-nft-module",
  "sov-modules-api",
@@ -7042,7 +7386,7 @@ name = "sov-accessory-state"
 version = "0.2.0"
 dependencies = [
  "borsh",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "serde",
  "sov-modules-api",
  "sov-state",
@@ -7057,7 +7401,7 @@ dependencies = [
  "arbitrary",
  "borsh",
  "clap",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "schemars",
  "serde",
  "serde_json",
@@ -7094,7 +7438,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "schemars",
  "serde",
  "serde_json",
@@ -7114,7 +7458,7 @@ dependencies = [
  "borsh",
  "clap",
  "hex",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "schemars",
  "serde",
  "serde_json",
@@ -7140,7 +7484,7 @@ dependencies = [
  "borsh",
  "hex",
  "hex-literal",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "nmt-rs",
  "postcard",
  "proptest",
@@ -7168,7 +7512,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "serde",
  "serde_json",
  "sov-chain-state",
@@ -7188,7 +7532,7 @@ dependencies = [
  "demo-stf",
  "directories",
  "hex",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "serde",
  "serde_json",
  "sov-accounts",
@@ -7243,7 +7587,7 @@ dependencies = [
  "demo-stf",
  "env_logger",
  "hex",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "log",
  "log4rs",
  "methods",
@@ -7288,7 +7632,7 @@ dependencies = [
  "ethers-providers",
  "ethers-signers",
  "hex",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "prettytable-rs",
  "prometheus 0.11.0",
  "proptest",
@@ -7328,7 +7672,7 @@ dependencies = [
  "borsh",
  "demo-stf",
  "ethers",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "reth-primitives",
  "reth-rpc-types",
  "serde_json",
@@ -7354,10 +7698,11 @@ dependencies = [
  "ethers-middleware",
  "ethers-signers",
  "hex",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "lazy_static",
  "reth-primitives",
  "reth-revm",
+ "reth-rpc",
  "reth-rpc-types",
  "reth-rpc-types-compat",
  "revm",
@@ -7410,7 +7755,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "jmt",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "rand 0.8.5",
  "risc0-zkvm",
  "risc0-zkvm-platform",
@@ -7437,7 +7782,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "proc-macro2 1.0.67",
  "quote 1.0.33",
  "schemars",
@@ -7479,7 +7824,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "schemars",
  "serde",
  "serde_json",
@@ -7570,7 +7915,7 @@ dependencies = [
  "async-trait",
  "borsh",
  "hex",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "serde",
  "sov-rollup-interface",
  "tokio",
@@ -7584,7 +7929,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "schemars",
@@ -7632,7 +7977,7 @@ dependencies = [
  "borsh",
  "futures",
  "hex",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "rand 0.8.5",
  "serde",
  "sov-accounts",
@@ -7658,7 +8003,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "schemars",
  "serde",
  "serde_json",
@@ -7676,7 +8021,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "schemars",
  "serde",
  "serde_json",
