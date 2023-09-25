@@ -96,7 +96,7 @@ impl Manifest {
 
             current_path = current_path.parent().ok_or_else(|| {
                 Self::err(
-                    &current_path,
+                    current_path,
                     parent,
                     format!("Could not find a parent `{manifest}`"),
                 )
@@ -104,7 +104,7 @@ impl Manifest {
         }
 
         let manifest = fs::read_to_string(&path)
-            .map_err(|e| Self::err(&current_path, parent, format!("failed to read file: {e}")))?;
+            .map_err(|e| Self::err(current_path, parent, format!("failed to read file: {e}")))?;
 
         Self::read_str(manifest, path, parent)
     }
