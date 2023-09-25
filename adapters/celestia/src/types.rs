@@ -6,7 +6,7 @@ use anyhow::{bail, ensure};
 use celestia_proto::celestia::blob::v1::MsgPayForBlobs;
 use celestia_types::consts::appconsts::SHARE_SIZE;
 use celestia_types::nmt::{Namespace, NamespacedHash, Nmt, NS_SIZE};
-use celestia_types::{ExtendedDataSquare, ValidateBasic};
+use celestia_types::{ExtendedDataSquare, NamespacedShares, ValidateBasic};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::services::da::SlotData;
@@ -24,8 +24,8 @@ pub struct FilteredCelestiaBlock {
     /// A mapping from blob commitment to the PFB containing that commitment
     /// for each blob addressed to the rollup namespace
     pub relevant_pfbs: HashMap<Bytes, (MsgPayForBlobs, TxPosition)>,
-    /// All rows in the extended data square which contain rollup data
-    pub rollup_rows: Vec<Row>,
+    /// All rollup shares as they appear in extended data square, with proofs
+    pub rollup_rows: NamespacedShares,
     /// All rows in the extended data square which contain pfb data
     pub pfb_rows: Vec<Row>,
 }

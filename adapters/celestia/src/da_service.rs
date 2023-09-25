@@ -8,9 +8,9 @@ use celestia_types::DataAvailabilityHeader;
 use jsonrpsee::http_client::{HeaderMap, HttpClient};
 use sov_rollup_interface::da::CountedBufReader;
 use sov_rollup_interface::services::da::DaService;
-use tracing::{debug, info, instrument};
+use tracing::{debug, info, instrument, trace};
 
-use crate::shares::{Blob, NamespaceGroup, Share};
+use crate::shares::{Blob, NamespaceGroup};
 use crate::types::{ExtendedDataSquareExt, FilteredCelestiaBlock, Row};
 use crate::utils::BoxError;
 use crate::verifier::proofs::{CompletenessProof, CorrectnessProof};
@@ -33,34 +33,6 @@ impl CelestiaService {
             rollup_namespace: nid,
         }
     }
-}
-
-/// Fetch the rollup namespace shares and etx data. Returns a tuple `(rollup_shares, etx_shares)`
-async fn fetch_needed_shares_by_header(
-    rollup_namespace: Namespace,
-    client: &HttpClient,
-    dah: &DataAvailabilityHeader,
-) -> Result<(NamespaceGroup, NamespaceGroup), BoxError> {
-    let rollup_shares_future = client.share_get_shares_by_namespace(dah, rollup_namespace);
-    let etx_shares_future = client.share_get_shares_by_namespace(dah, PFB_NAMESPACE);
-
-    let (rollup_shares_resp, etx_shares_resp) =
-        tokio::join!(rollup_shares_future, etx_shares_future);
-
-    let rollup_shares = rollup_shares_resp?
-        .rows
-        .into_iter()
-        .flat_map(|row| row.shares.into_iter())
-        .map(Share::from)
-        .collect();
-    let tx_data = etx_shares_resp?
-        .rows
-        .into_iter()
-        .flat_map(|row| row.shares.into_iter())
-        .map(Share::from)
-        .collect();
-
-    Ok((rollup_shares, tx_data))
 }
 
 /// Runtime configuration for the DA service
@@ -132,29 +104,33 @@ impl DaService for CelestiaService {
         let rollup_namespace = self.rollup_namespace;
 
         // Fetch the header and relevant shares via RPC
-        debug!("Fetching header at height={}...", height);
+        debug!("Fetching header");
         let header = client.header_get_by_height(height).await?;
-        // debug!(header_result = ?header);
-        debug!("Fetching shares...");
-        let (rollup_shares, tx_data) =
-            fetch_needed_shares_by_header(rollup_namespace, &client, &header.dah).await?;
+        trace!(header_result = ?header);
 
-        debug!("Fetching EDS...");
-        // Fetch entire extended data square
-        let data_square = client.share_get_eds(&header.dah).await?;
-        // validate the data
+        // Fetch the rollup namespace shares, etx data and extended data square
+        debug!("Fetching rollup data...");
+        let rollup_rows_future =
+            client.share_get_shares_by_namespace(&header.dah, rollup_namespace);
+        let etx_rows_future = client.share_get_shares_by_namespace(&header.dah, PFB_NAMESPACE);
+        let data_square_future = client.share_get_eds(&header.dah);
+
+        let (rollup_rows, etx_rows, data_square) =
+            tokio::try_join!(rollup_rows_future, etx_rows_future, data_square_future)?;
+
+        // validate the extended data square
         data_square.validate()?;
 
-        debug!("Parsing namespaces...");
-        // Parse out all of the rows containing etxs
-        let etx_rows =
-            get_rows_containing_namespace(PFB_NAMESPACE, &header.dah, data_square.rows()?)?;
-        // Parse out all of the rows containing rollup data
-        let rollup_rows =
-            get_rows_containing_namespace(rollup_namespace, &header.dah, data_square.rows()?)?;
+        let rollup_data = NamespaceGroup::from(&rollup_rows);
+        let tx_data = NamespaceGroup::from(&etx_rows);
 
-        debug!("Decoding pfb protobufs...");
+        // Parse out all of the rows containing etxs
+        debug!("Parsing namespaces...");
+        let pfb_rows =
+            get_rows_containing_namespace(PFB_NAMESPACE, &header.dah, data_square.rows()?)?;
+
         // Parse out the pfds and store them for later retrieval
+        debug!("Decoding pfb protobufs...");
         let pfds = parse_pfb_namespace(tx_data)?;
         let mut pfd_map = HashMap::new();
         for tx in pfds {
@@ -168,10 +144,10 @@ impl DaService for CelestiaService {
 
         let filtered_block = FilteredCelestiaBlock {
             header: CelestiaHeader::new(header.dah, header.header.into()),
-            rollup_data: rollup_shares,
+            rollup_data,
             relevant_pfbs: pfd_map,
             rollup_rows,
-            pfb_rows: etx_rows,
+            pfb_rows,
         };
 
         Ok(filtered_block)
@@ -220,8 +196,7 @@ impl DaService for CelestiaService {
         <Self::Spec as sov_rollup_interface::da::DaSpec>::CompletenessProof,
     ) {
         let etx_proofs = CorrectnessProof::for_block(block, blobs);
-        let rollup_row_proofs =
-            CompletenessProof::from_filtered_block(block, self.rollup_namespace);
+        let rollup_row_proofs = CompletenessProof::from_filtered_block(block);
 
         (etx_proofs.0, rollup_row_proofs.0)
     }

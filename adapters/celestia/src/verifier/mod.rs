@@ -1,6 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_types::nmt::Namespace;
-use celestia_types::{Commitment, DataAvailabilityHeader};
+use celestia_types::{Commitment, DataAvailabilityHeader, NamespacedShares};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{
     self, BlobReaderTrait, BlockHashTrait as BlockHash, BlockHeaderTrait, DaSpec,
@@ -112,7 +112,7 @@ impl DaSpec for CelestiaSpec {
 
     type InclusionMultiProof = Vec<EtxProof>;
 
-    type CompletenessProof = Vec<RelevantRowProof>;
+    type CompletenessProof = NamespacedShares;
 
     type ChainParams = RollupParams;
 }
@@ -184,20 +184,19 @@ impl da::DaVerifier for CelestiaVerifier {
 
         // Check the validity and completeness of the rollup row proofs, against the DAH.
         // Extract the data from the row proofs and build a namespace_group from it
-        let rollup_shares_u8 = self.verify_row_proofs(completeness_proof, &block_header.dah)?;
-        if rollup_shares_u8.is_empty() {
+        let verified_shares = self.verify_row_proofs(completeness_proof, &block_header.dah)?;
+        if verified_shares.is_empty() {
             if txs.is_empty() {
                 return Ok(validity_condition);
             }
             return Err(ValidationError::MissingTx);
         }
-        let namespace = NamespaceGroup::from_shares_unchecked(rollup_shares_u8);
 
         // Check the e-tx proofs...
         // TODO(@preston-evans98): Remove this logic if Celestia adds blob.sender metadata directly into blob
         let mut tx_iter = txs.iter();
         let square_size = block_header.dah.row_roots.len();
-        for (blob, tx_proof) in namespace.blobs().zip(inclusion_proof.into_iter()) {
+        for (blob, tx_proof) in verified_shares.blobs().zip(inclusion_proof.into_iter()) {
             // Force the row number to be monotonically increasing
             let start_offset = tx_proof.proof[0].start_offset;
 
@@ -293,12 +292,12 @@ impl da::DaVerifier for CelestiaVerifier {
 impl CelestiaVerifier {
     pub fn verify_row_proofs(
         &self,
-        row_proofs: Vec<RelevantRowProof>,
+        row_proofs: NamespacedShares,
         dah: &DataAvailabilityHeader,
-    ) -> Result<Vec<Vec<u8>>, ValidationError> {
-        let mut row_proofs = row_proofs.into_iter();
+    ) -> Result<NamespaceGroup, ValidationError> {
+        let mut row_proofs = row_proofs.rows.into_iter();
         // Check the validity and completeness of the rollup share proofs
-        let mut rollup_shares_u8: Vec<Vec<u8>> = Vec::new();
+        let mut verified_shares = Vec::new();
         for row_root in dah.row_roots.iter() {
             // TODO: short circuit this loop at the first row after the rollup namespace
             if row_root.contains(self.rollup_namespace.into()) {
@@ -307,16 +306,16 @@ impl CelestiaVerifier {
                     .proof
                     .verify_complete_namespace(
                         row_root,
-                        &row_proof.leaves,
+                        &row_proof.shares,
                         self.rollup_namespace.into(),
                     )
                     .expect("Proofs must be valid");
 
-                for leaf in row_proof.leaves {
-                    rollup_shares_u8.push(leaf)
+                for leaf in row_proof.shares {
+                    verified_shares.push(leaf)
                 }
             }
         }
-        Ok(rollup_shares_u8)
+        Ok(NamespaceGroup::from_shares(verified_shares))
     }
 }
