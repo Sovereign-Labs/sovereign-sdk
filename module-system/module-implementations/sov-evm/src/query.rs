@@ -46,6 +46,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
                 .last(&mut working_set.accessory_state())
                 .expect("Head block must be set"),
             Some(ref block_number) => {
+                let block_number = block_number.strip_prefix("0x").unwrap_or(block_number);
                 let block_number =
                     usize::from_str_radix(block_number, 16).expect("Block number must be hex");
                 self.blocks
@@ -122,9 +123,10 @@ impl<C: sov_modules_api::Context> Evm<C> {
         };
 
         // Build rpc block response
+        let total_difficulty = Some(block.header.difficulty);
         let block = reth_rpc_types::Block {
             header,
-            total_difficulty: Default::default(),
+            total_difficulty,
             uncles: Default::default(),
             transactions,
             size: Default::default(),
