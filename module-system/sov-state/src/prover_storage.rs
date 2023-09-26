@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::Arc;
 
+use borsh::BorshSerialize;
 use jmt::storage::{NodeBatch, TreeWriter};
 use jmt::{JellyfishMerkleTree, KeyHash, RootHash, Version};
 use sov_db::native_db::NativeDB;
@@ -130,15 +131,18 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             witness.add_hint(proof);
         }
 
+        let mut diff = vec![];
         // Compute the jmt update from the write batch
         let batch = state_accesses
             .ordered_writes
             .into_iter()
             .map(|(key, value)| {
-                let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
+                let key_bytes = Arc::try_unwrap(key.key).unwrap_or_else(|arc| (*arc).clone());
+                let key_hash = KeyHash::with::<S::Hasher>(&key_bytes);
                 self.db
-                    .put_preimage(key_hash, key.key.as_ref())
+                    .put_preimage(key_hash, &key_bytes)
                     .expect("preimage must succeed");
+                diff.push((key_bytes, value.as_ref().map(|v| v.value.clone())));
                 (
                     key_hash,
                     value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
@@ -150,6 +154,16 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         let (new_root, update_proof, tree_update) = jmt
             .put_value_set_with_proof(batch, next_version)
             .expect("JMT update must succeed");
+
+        let filename = format!("diff_from_{}_to_{}.borsh", next_version - 1, next_version);
+        let diff = diff.try_to_vec().expect("diff must be serializable");
+        std::fs::write(filename, &diff).expect("File creation must succeed");
+
+        println!(
+            "Uncompressed diff size for version {} bytes: {}",
+            next_version,
+            diff.len()
+        );
 
         witness.add_hint(update_proof);
         witness.add_hint(new_root.0);
