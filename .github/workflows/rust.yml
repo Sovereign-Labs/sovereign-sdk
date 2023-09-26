@@ -144,6 +144,10 @@ jobs:
       - uses: rui314/setup-mold@v1
       - name: Install Rust
         run: rustup show
+      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
+        run: cargo install cargo-risczero
+      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
+        run: cargo risczero install
       - uses: Swatinem/rust-cache@v2
         with:
           cache-provider: "buildjet"
@@ -295,6 +299,7 @@ jobs:
         run: git diff --exit-code
   check-demo-rollup-bash-commands:
     runs-on: ubuntu-latest
+    needs: test
     steps:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
