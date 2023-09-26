@@ -241,25 +241,28 @@ which re-executes the transactions in a (more expensive) zk environment to creat
 workflow looks roughly like this:
 
 ```rust
-// First, execute transactions natively to generate a witness for the zkVM
-let native_rollup_instance = my_state_transition::<DefaultContext>::new(config);
-let witness = Default::default()
-native_rollup_instance.begin_slot(witness);
-for batch in batches.cloned() {
-	native_rollup_instance.apply_batch(batch);
-}
-let (_new_state_root, populated_witness) = native_rollup_instance.end_batch();
+use sov_modules_api::DefaultContext;
+fn main() {
+    // First, execute transactions natively to generate a witness for the zkVM
+    let native_rollup_instance = my_state_transition::<DefaultContext>::new(config);
+    let witness = Default::default();
+    native_rollup_instance.begin_slot(witness);
+    for batch in batches.cloned() {
+        native_rollup_instance.apply_batch(batch);
+    }
+    let (_new_state_root, populated_witness) = native_rollup_instance.end_batch();
 
-// Then, re-execute the state transitions in the zkVM using the witness
-let proof = MyZkvm::prove(|| {
-	let zk_rollup_instance = my_state_transition::<ZkDefaultContext>::new(config);
-	zk_rollup_instance.begin_slot(populated_witness);
-	for batch in batches {
-		zk_rollup_instance.apply(batch);
-	}
-	let (new_state_root, _) = zk_rollup_instance.end_batch();
-	MyZkvm::commit(new_state_root)
-})
+    // Then, re-execute the state transitions in the zkVM using the witness
+    let proof = MyZkvm::prove(|| {
+        let zk_rollup_instance = my_state_transition::<ZkDefaultContext>::new(config);
+        zk_rollup_instance.begin_slot(populated_witness);
+        for batch in batches {
+            zk_rollup_instance.apply(batch);
+        }
+        let (new_state_root, _) = zk_rollup_instance.end_batch();
+        MyZkvm::commit(new_state_root)
+    });
+}
 ```
 
 This distinction between native _execution_ and zero-knowledge _re-execution_ is deeply baked into the Module System. We take the
@@ -272,15 +275,18 @@ The most important trait we use to enable this abstraction is the `Spec` trait. 
 
 ```rust
 pub trait Spec {
+    type Address;
     type Storage;
+    type PrivateKey;
     type PublicKey;
     type Hasher;
     type Signature;
+    type Witness;
 }
 ```
 
 As you can see, a `Spec` for a rollup specifies the concrete types that will be used for many kinds of cryptographic operations.
-That way, you can define your business logic in terms of _abstract_ cryptography, and then instantiate it with cryptography which
+That way, you can define your business logic in terms of _abstract_ cryptography, and then instantiate it with cryptography, which
 is efficient in your particular choice of zkVM.
 
 In addition to the `Spec` trait, the Module System provides a simple `Context` trait which is defined like this:
@@ -318,7 +324,7 @@ Similarly, since each of the banks helper functions is automatically generic ove
 can abstract away the distinctions between `zk` and `native` execution. For example, when a rollup is running in native mode
 its `Storage` type will almost certainly be [`ProverStorage`](./sov-state/src/prover_storage.rs), which holds its data in a
 Merkle tree backed by RocksDB. But if you're running in zk mode the `Storage` type will instead be [`ZkStorage`](./sov-state/src/zk_storage.rs), which reads
-its data from a set of "hints" provided by the prover. Because all of the rollups modules are generic, none of them need to worry
+its data from a set of "hints" provided by the prover. Because all the rollups modules are generic, none of them need to worry
 about this distinction.
 
 For more information on `Context` and `Spec`, and to see some example implementations, check out the [`sov_modules_api`](./sov-modules-api/) docs.

@@ -223,14 +223,14 @@ pub trait Spec {
 
     /// The public key used for digital signatures
     #[cfg(feature = "native")]
+    type PrivateKey: PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
+
+    /// The public key used for digital signatures
+    #[cfg(feature = "native")]
     type PublicKey: PublicKey + ::schemars::JsonSchema + FromStr<Err = anyhow::Error>;
 
     #[cfg(not(feature = "native"))]
     type PublicKey: PublicKey;
-
-    /// The public key used for digital signatures
-    #[cfg(feature = "native")]
-    type PrivateKey: PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
 
     /// The hasher preferred by the rollup, such as Sha256 or Poseidon.
     type Hasher: Digest<OutputSize = U32>;
