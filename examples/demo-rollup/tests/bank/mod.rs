@@ -7,6 +7,7 @@ use demo_stf::app::DefaultPrivateKey;
 use demo_stf::runtime::RuntimeCall;
 use jsonrpsee::core::client::{Subscription, SubscriptionClientT};
 use jsonrpsee::rpc_params;
+use sov_demo_rollup::DemoProverConfig;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{PrivateKey, Spec};
@@ -70,11 +71,11 @@ async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow
 async fn bank_tx_tests() -> Result<(), anyhow::Error> {
     let (port_tx, port_rx) = tokio::sync::oneshot::channel();
 
-    // Use a dummy `elf` file, since the prover doesn't currently use it in native execution
-    let prover = Risc0Host::new(&[]);
+    let prover = Risc0Host::new(MOCK_DA_ELF);
+    let config = DemoProverConfig::Execute;
 
     let rollup_task = tokio::spawn(async {
-        start_rollup(port_tx, Some(prover)).await;
+        start_rollup(port_tx, Some((prover, config))).await;
     });
 
     // Wait for rollup task to start:
