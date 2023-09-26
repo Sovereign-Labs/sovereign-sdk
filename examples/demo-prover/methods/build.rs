@@ -6,7 +6,9 @@ fn main() {
         let out_dir = std::env::var_os("OUT_DIR").unwrap();
         let out_dir = std::path::Path::new(&out_dir);
         let methods_path = out_dir.join("methods.rs");
-        std::fs::write(methods_path, "pub const ROLLUP_ELF: &[u8] = &[];")
+        std::fs::write(methods_path.clone(), "pub const ROLLUP_ELF: &[u8] = &[];")
+            .expect("Failed to write mock rollup elf");
+        std::fs::write(methods_path, "pub const MOCK_DA_ELF: &[u8] = &[];")
             .expect("Failed to write mock rollup elf");
     } else {
         let guest_pkg_to_options = get_guest_options();
