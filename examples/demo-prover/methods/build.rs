@@ -25,7 +25,7 @@ fn get_guest_options() -> HashMap<&'static str, risc0_build::GuestOptions> {
 fn get_guest_options() -> HashMap<&'static str, risc0_build::GuestOptions> {
     let mut guest_pkg_to_options = HashMap::new();
     guest_pkg_to_options.insert(
-        "sov-demo-prover-guest",
+        "sov-demo-prover-guest-celestia",
         risc0_build::GuestOptions {
             features: vec!["bench".to_string()],
         },
