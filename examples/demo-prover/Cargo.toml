@@ -37,7 +37,7 @@ methods = { path = "./methods" }
 [dev-dependencies]
 tempfile = { workspace = true }
 once_cell = "1.7.2"
-parking_lot = "0.11.1"
+parking_lot = "0.12.1"
 prettytable-rs = "^0.10"
 env_logger = "0.10.0"
 log = "0.4"
