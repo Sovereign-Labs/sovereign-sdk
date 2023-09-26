@@ -5,7 +5,7 @@ use anyhow::{bail, ensure};
 // use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_proto::celestia::blob::v1::MsgPayForBlobs;
 use celestia_types::consts::appconsts::SHARE_SIZE;
-use celestia_types::nmt::{Namespace, NamespacedHash, Nmt, NS_SIZE};
+use celestia_types::nmt::{ NamespacedHash, Nmt, NS_SIZE};
 use celestia_types::{ExtendedDataSquare, NamespacedShares, ValidateBasic};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::BlockHeaderTrait;
@@ -16,6 +16,9 @@ use crate::shares::NamespaceGroup;
 use crate::utils::BoxError;
 use crate::verifier::{ChainValidityCondition, PARITY_SHARES_NAMESPACE};
 use crate::{CelestiaHeader, TxPosition};
+
+/// Reexport the [`Namespace`] from `celestia-types`
+pub use celestia_types::nmt::Namespace;
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)] // TODO: , BorshSerialize, BorshDeserialize)]
 pub struct FilteredCelestiaBlock {

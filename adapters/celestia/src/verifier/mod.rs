@@ -16,6 +16,7 @@ pub mod proofs;
 use proofs::*;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use sov_zk_cycle_macros::cycle_tracker;
+use tracing::warn;
 
 use self::address::CelestiaAddress;
 use crate::shares::{NamespaceGroup, Share};
@@ -191,6 +192,7 @@ impl da::DaVerifier for CelestiaVerifier {
             }
             return Err(ValidationError::MissingTx);
         }
+        warn!("Verified inclusion");
 
         // Check the e-tx proofs...
         // TODO(@preston-evans98): Remove this logic if Celestia adds blob.sender metadata directly into blob
@@ -282,6 +284,7 @@ impl da::DaVerifier for CelestiaVerifier {
                     })?;
 
                 assert_eq!(&pfb.share_commitments[blob_idx][..], &expected_commitment.0);
+                warn!("Verified blob");
             }
         }
 
