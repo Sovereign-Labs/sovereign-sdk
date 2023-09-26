@@ -321,6 +321,7 @@ pub trait ModuleCallJsonSchema: Module {
 
 /// Every module has to implement this trait.
 pub trait ModuleInfo {
+    /// Execution context.
     type Context: Context;
 
     /// Returns address of the module.
@@ -333,10 +334,37 @@ pub trait ModuleInfo {
     fn dependencies(&self) -> Vec<&<Self::Context as Spec>::Address>;
 }
 
+/// A type that is addressable.
+pub trait Addressable {
+    /// Execution context.
+    type Context: Context;
+
+    /// Returns address of the instance.
+    fn address(&self) -> &<Self::Context as Spec>::Address;
+
+    /// Returns the addresses of all dependencies of this instance.
+    fn dependencies(&self) -> Vec<&<Self::Context as Spec>::Address>;
+}
+
+impl<T, C: Context> Addressable for T
+where
+    T: ModuleInfo<Context = C>,
+{
+    type Context = C;
+
+    fn address(&self) -> &<Self::Context as Spec>::Address {
+        self.address()
+    }
+
+    fn dependencies(&self) -> Vec<&<Self::Context as Spec>::Address> {
+        self.dependencies()
+    }
+}
+
 struct ModuleVisitor<'a, C: Context> {
     visited: HashSet<&'a <C as Spec>::Address>,
     visited_on_this_path: Vec<&'a <C as Spec>::Address>,
-    sorted_modules: std::vec::Vec<&'a dyn ModuleInfo<Context = C>>,
+    sorted_modules: std::vec::Vec<&'a dyn Addressable<Context = C>>,
 }
 
 impl<'a, C: Context> ModuleVisitor<'a, C> {
@@ -351,7 +379,7 @@ impl<'a, C: Context> ModuleVisitor<'a, C> {
     /// Visits all the modules and their dependencies, and populates a Vec of modules sorted by their dependencies
     fn visit_modules(
         &mut self,
-        modules: Vec<&'a dyn ModuleInfo<Context = C>>,
+        modules: Vec<&'a dyn Addressable<Context = C>>,
     ) -> Result<(), anyhow::Error> {
         let mut module_map = HashMap::new();
 
@@ -370,8 +398,8 @@ impl<'a, C: Context> ModuleVisitor<'a, C> {
     /// Visits a module and its dependencies, and populates a Vec of modules sorted by their dependencies
     fn visit_module(
         &mut self,
-        module: &'a dyn ModuleInfo<Context = C>,
-        module_map: &HashMap<&<C as Spec>::Address, &'a (dyn ModuleInfo<Context = C>)>,
+        module: &'a dyn Addressable<Context = C>,
+        module_map: &HashMap<&<C as Spec>::Address, &'a (dyn Addressable<Context = C>)>,
     ) -> Result<(), anyhow::Error> {
         let address = module.address();
 
@@ -414,8 +442,8 @@ impl<'a, C: Context> ModuleVisitor<'a, C> {
 
 /// Sorts ModuleInfo objects by their dependencies
 fn sort_modules_by_dependencies<C: Context>(
-    modules: Vec<&dyn ModuleInfo<Context = C>>,
-) -> Result<Vec<&dyn ModuleInfo<Context = C>>, anyhow::Error> {
+    modules: Vec<&dyn Addressable<Context = C>>,
+) -> Result<Vec<&dyn Addressable<Context = C>>, anyhow::Error> {
     let mut module_visitor = ModuleVisitor::<C>::new();
     module_visitor.visit_modules(modules)?;
     Ok(module_visitor.sorted_modules)
@@ -423,7 +451,7 @@ fn sort_modules_by_dependencies<C: Context>(
 
 /// Accepts Vec<> of tuples (&ModuleInfo, &TValue), and returns Vec<&TValue> sorted by mapped module dependencies
 pub fn sort_values_by_modules_dependencies<C: Context, TValue>(
-    module_value_tuples: Vec<(&dyn ModuleInfo<Context = C>, TValue)>,
+    module_value_tuples: Vec<(&dyn Addressable<Context = C>, TValue)>,
 ) -> Result<Vec<TValue>, anyhow::Error>
 where
     TValue: Clone,

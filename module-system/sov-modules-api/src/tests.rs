@@ -3,7 +3,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use crate::default_context::DefaultContext;
 use crate::default_signature::private_key::DefaultPrivateKey;
 use crate::default_signature::{DefaultPublicKey, DefaultSignature};
-use crate::{Address, ModuleInfo, PrivateKey, Signature};
+use crate::{Address, Addressable, PrivateKey, Signature};
 
 #[test]
 fn test_account_bech32m_display() {
@@ -82,7 +82,7 @@ fn test_sorting_modules() {
         dependencies: vec![module_a.address, module_b.address],
     };
 
-    let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, i32)> =
+    let modules: Vec<(&dyn Addressable<Context = DefaultContext>, i32)> =
         vec![(&module_b, 2), (&module_c, 3), (&module_a, 1)];
 
     let sorted_modules = crate::sort_values_by_modules_dependencies(modules).unwrap();
@@ -102,7 +102,7 @@ fn test_sorting_modules_missing_module() {
         dependencies: vec![module_a_address, module_b.address],
     };
 
-    let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, i32)> =
+    let modules: Vec<(&dyn Addressable<Context = DefaultContext>, i32)> =
         vec![(&module_b, 2), (&module_c, 3)];
 
     let sorted_modules = crate::sort_values_by_modules_dependencies(modules);
@@ -132,7 +132,7 @@ fn test_sorting_modules_cycle() {
         dependencies: vec![module_a.address, module_d.address],
     };
 
-    let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, i32)> = vec![
+    let modules: Vec<(&dyn Addressable<Context = DefaultContext>, i32)> = vec![
         (&module_b, 2),
         (&module_d, 3),
         (&module_a, 1),
@@ -161,7 +161,7 @@ fn test_sorting_modules_duplicate() {
         dependencies: vec![],
     };
 
-    let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, u32)> =
+    let modules: Vec<(&dyn Addressable<Context = DefaultContext>, u32)> =
         vec![(&module_b, 3), (&module_a, 1), (&module_a2, 2)];
 
     let sorted_modules = crate::sort_values_by_modules_dependencies(modules);
