@@ -142,6 +142,7 @@ impl TestClient {
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
 
+        // Any type of transaction can be used for eth_call
         let req = TransactionRequest::new()
             .from(self.from_addr)
             .to(contract_address)
@@ -166,6 +167,7 @@ impl TestClient {
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
 
+        // Any type of transaction can be used for eth_call
         let req = Eip1559TransactionRequest::new()
             .from(self.from_addr)
             .to(contract_address)
