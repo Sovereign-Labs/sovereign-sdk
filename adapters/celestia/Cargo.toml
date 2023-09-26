@@ -11,15 +11,14 @@ publish = false
 borsh = { workspace = true, features = ["bytes"] }
 bech32 = { workspace = true }
 prost = "0.12"
-prost-types = "0.12"
 # I keep this commented as a reminder to opportunity to optimze this crate for non native compilation
 #tendermint = { version = "0.32", default-features = false, features = ["std"] }
 
-celestia-proto = { git = "https://github.com/eigerco/celestia-node-rs.git", branch = "main" }
-celestia-rpc = { git = "https://github.com/eigerco/celestia-node-rs.git", branch = "main", default-features = false, optional = true }
-celestia-types = { git = "https://github.com/eigerco/celestia-node-rs.git", branch = "main" }
-tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "19dc3da" }
-tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "19dc3da" }
+celestia-proto = { git = "https://github.com/eigerco/celestia-node-rs.git", rev = "dfe8f2f" }
+celestia-rpc = { git = "https://github.com/eigerco/celestia-node-rs.git", rev = "dfe8f2f", default-features = false, optional = true }
+celestia-types = { git = "https://github.com/eigerco/celestia-node-rs.git", rev = "dfe8f2f" }
+tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "1f8b574", default-features = false }
+tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "1f8b574" }
 nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "d821332", features = [
   "serde",
   "borsh",
