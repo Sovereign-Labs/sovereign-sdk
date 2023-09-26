@@ -240,10 +240,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         let result = executor::inspect(evm_db, &block_env, tx_env, cfg_env).unwrap();
 
-        match ensure_success(result.result) {
-            Ok(bytes) => Ok(bytes),
-            Err(err) => Err(err.into()),
-        }
+        Ok(ensure_success(result.result)?)
     }
 
     /// Handler for: `eth_blockNumber`

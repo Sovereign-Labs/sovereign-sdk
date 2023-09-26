@@ -93,7 +93,7 @@ pub mod experimental {
             let tx_hash = signed_transaction.hash();
             let sender = signed_transaction
                 .recover_signer()
-                .ok_or(sov_evm::RawEvmTxConversionError::FailedToRecoverSigner)?;
+                .ok_or(sov_evm::EthApiError::InvalidTransactionSignature)?;
 
             let mut nonces = self.nonces.lock().unwrap();
             let nonce = *nonces.entry(sender).and_modify(|n| *n += 1).or_insert(0);

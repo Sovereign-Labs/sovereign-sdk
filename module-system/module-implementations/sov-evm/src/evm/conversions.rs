@@ -6,10 +6,9 @@ use revm::primitives::{
     AccountInfo as ReVmAccountInfo, BlockEnv as ReVmBlockEnv, CreateScheme, TransactTo, TxEnv, U256,
 };
 
-use super::primitive_types::{
-    BlockEnv, RawEvmTxConversionError, RlpEvmTransaction, TransactionSignedAndRecovered,
-};
+use super::primitive_types::{BlockEnv, RlpEvmTransaction, TransactionSignedAndRecovered};
 use super::AccountInfo;
+use crate::error::rpc::EthApiError;
 
 impl From<AccountInfo> for ReVmAccountInfo {
     fn from(info: AccountInfo) -> Self {
@@ -75,30 +74,30 @@ pub(crate) fn create_tx_env(tx: &TransactionSignedEcRecovered) -> TxEnv {
 }
 
 impl TryFrom<RlpEvmTransaction> for TransactionSignedNoHash {
-    type Error = RawEvmTxConversionError;
+    type Error = EthApiError;
 
     fn try_from(data: RlpEvmTransaction) -> Result<Self, Self::Error> {
         let data = RethBytes::from(data.rlp);
         if data.is_empty() {
-            return Err(RawEvmTxConversionError::EmptyRawTransactionData);
+            return Err(EthApiError::EmptyRawTransactionData);
         }
 
         let transaction = TransactionSigned::decode_enveloped(data)
-            .map_err(|_| RawEvmTxConversionError::FailedToDecodeSignedTransaction)?;
+            .map_err(|_| EthApiError::FailedToDecodeSignedTransaction)?;
 
         Ok(transaction.into())
     }
 }
 
 impl TryFrom<RlpEvmTransaction> for TransactionSignedEcRecovered {
-    type Error = RawEvmTxConversionError;
+    type Error = EthApiError;
 
     fn try_from(evm_tx: RlpEvmTransaction) -> Result<Self, Self::Error> {
         let tx = TransactionSignedNoHash::try_from(evm_tx)?;
         let tx: TransactionSigned = tx.into();
         let tx = tx
             .into_ecrecovered()
-            .ok_or(RawEvmTxConversionError::FailedToDecodeSignedTransaction)?;
+            .ok_or(EthApiError::FailedToDecodeSignedTransaction)?;
 
         Ok(tx)
     }
