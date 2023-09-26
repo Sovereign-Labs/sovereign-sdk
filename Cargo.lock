@@ -7245,6 +7245,7 @@ dependencies = [
  "ethers-signers",
  "hex",
  "jsonrpsee",
+ "methods",
  "prettytable-rs",
  "prometheus 0.11.0",
  "proptest",

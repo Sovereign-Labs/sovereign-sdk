@@ -8,6 +8,7 @@ use demo_stf::app::DefaultPrivateKey;
 use demo_stf::app::{create_zk_app_template, App, DefaultContext};
 use demo_stf::genesis_config::get_genesis_config;
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig, Runtime};
+use demo_stf::AppVerifier;
 #[cfg(feature = "experimental")]
 use secp256k1::SecretKey;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
@@ -18,7 +19,6 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::experimental::EthRpcConfig;
-use demo_stf::AppVerifier;
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::mocks::{MockAddress, MockDaConfig, MockDaService};
@@ -29,6 +29,7 @@ use sov_stf_runner::{
 };
 use tokio::sync::oneshot;
 use tracing::debug;
+
 #[cfg(feature = "experimental")]
 use crate::register_rpc::register_ethereum;
 use crate::register_rpc::{register_ledger, register_sequencer};
