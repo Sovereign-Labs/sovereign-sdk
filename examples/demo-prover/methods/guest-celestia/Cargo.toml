@@ -1,5 +1,5 @@
 [package]
-name = "sov-demo-prover-guest"
+name = "sov-demo-prover-guest-celestia"
 version = "0.2.0"
 edition = "2021"
 resolver = "2"

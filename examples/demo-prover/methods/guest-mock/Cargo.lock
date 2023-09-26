@@ -1317,12 +1317,9 @@ dependencies = [
  "prost 0.11.9",
  "prost-build",
  "prost-types 0.11.9",
- "risc0-zkvm",
- "risc0-zkvm-platform",
  "serde",
  "sha2 0.10.6",
  "sov-rollup-interface",
- "sov-zk-cycle-macros",
  "tendermint",
  "tendermint-proto",
  "thiserror",
@@ -1342,7 +1339,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-demo-prover-guest"
+name = "sov-demo-prover-guest-mock"
 version = "0.2.0"
 dependencies = [
  "anyhow",
@@ -1350,7 +1347,6 @@ dependencies = [
  "demo-stf",
  "risc0-zkvm",
  "risc0-zkvm-platform",
- "sov-celestia-adapter",
  "sov-risc0-adapter",
 ]
 
@@ -1500,17 +1496,6 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "thiserror",
-]
-
-[[package]]
-name = "sov-zk-cycle-macros"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "borsh",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]

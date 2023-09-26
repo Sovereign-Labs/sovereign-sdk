@@ -1,5 +1,7 @@
 use std::net::SocketAddr;
 
+use methods::MOCK_DA_ELF;
+
 use borsh::BorshSerialize;
 use demo_stf::app::DefaultPrivateKey;
 use demo_stf::runtime::RuntimeCall;
