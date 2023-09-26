@@ -199,8 +199,6 @@ jobs:
   coverage:
     runs-on: buildjet-8vcpu-ubuntu-2204
     timeout-minutes: 90
-    env:
-      CI_SKIP_GUEST_BUILD: "1"
     steps:
       - uses: actions/checkout@v3
         with:
@@ -208,7 +206,8 @@ jobs:
       - uses: rui314/setup-mold@v1
       - name: Install Rust
         run: rustup show
-      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
+      - name: Ins
+      tall cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
         run: cargo install cargo-risczero
       - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
         run: cargo risczero install
