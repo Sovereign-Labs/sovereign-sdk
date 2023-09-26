@@ -14,7 +14,6 @@ use ethers_signers::{LocalWallet, Signer, Wallet};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use jsonrpsee::rpc_params;
-use jsonrpsee::types::ErrorObject;
 use reth_primitives::Bytes;
 use sov_evm::SimpleStorageContract;
 use sov_risc0_adapter::host::Risc0Host;
