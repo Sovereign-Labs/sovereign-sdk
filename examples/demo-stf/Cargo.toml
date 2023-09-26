@@ -22,7 +22,10 @@ tokio = { workspace = true, optional = true }
 hex = { workspace = true }
 tracing = { workspace = true }
 
-sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
+
+sov-stf-runner = { path = "../../full-node/sov-stf-runner", optional = true }
+
+
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-cli = { path = "../../module-system/sov-cli", optional = true }
 sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry" }
@@ -49,9 +52,10 @@ tempfile = { workspace = true }
 rand = "0.8"
 
 [features]
-default = []
+default = ["sov-stf-runner"]
 experimental = ["sov-evm/experimental", "reth-primitives"]
 native = [
+    "sov-stf-runner/native",
     "sov-bank/native",
     "sov-nft-module/native",
     "sov-cli",
