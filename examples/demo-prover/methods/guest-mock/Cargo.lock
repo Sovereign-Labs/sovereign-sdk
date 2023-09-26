@@ -1348,6 +1348,7 @@ dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "sov-risc0-adapter",
+ "sov-rollup-interface",
 ]
 
 [[package]]
@@ -1442,6 +1443,7 @@ dependencies = [
  "digest 0.10.7",
  "hex",
  "serde",
+ "sha2 0.10.6",
  "thiserror",
 ]
 
