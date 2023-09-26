@@ -18,6 +18,7 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::experimental::EthRpcConfig;
+use demo_stf::AppVerifier;
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::mocks::{MockAddress, MockDaConfig, MockDaService};
@@ -28,11 +29,10 @@ use sov_stf_runner::{
 };
 use tokio::sync::oneshot;
 use tracing::debug;
-
 #[cfg(feature = "experimental")]
 use crate::register_rpc::register_ethereum;
 use crate::register_rpc::{register_ledger, register_sequencer};
-use crate::{initialize_ledger, AppVerifier, ROLLUP_NAMESPACE};
+use crate::{initialize_ledger, ROLLUP_NAMESPACE};
 
 #[cfg(feature = "experimental")]
 const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.json";

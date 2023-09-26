@@ -11,7 +11,6 @@ anyhow = "1.0.68"
 risc0-zkvm = { version = "0.18", default-features = false, features = ["std"] }
 risc0-zkvm-platform = "0.18"
 demo-stf = { path = "../../../demo-stf", default-features = false }
-sov-demo-rollup = { path = "../../../demo-rollup", default-features = false }
 sov-risc0-adapter = { path = "../../../../adapters/risc0" }
 const-rollup-config = { path = "../../../const-rollup-config" }
 sov-celestia-adapter = { path = "../../../../adapters/celestia" }

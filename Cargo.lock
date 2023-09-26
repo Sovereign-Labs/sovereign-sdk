@@ -7405,7 +7405,6 @@ dependencies = [
  "sov-state",
  "syn 1.0.109",
  "tempfile",
- "toml 0.8.0",
  "trybuild",
 ]
 
