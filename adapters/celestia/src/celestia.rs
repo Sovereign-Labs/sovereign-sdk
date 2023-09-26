@@ -361,9 +361,9 @@ fn next_pfb(mut data: &mut BlobRefIterator) -> Result<(MsgPayForBlobs, TxPositio
 mod tests {
     use celestia_types::ExtendedHeader;
 
-    use crate::CompactHeader;
+    use crate::{CelestiaHeader, CompactHeader};
 
-    const HEADER_RESPONSE_JSON: &[u8] = include_bytes!("./header_response.json");
+    const HEADER_RESPONSE_JSON: &[u8] = include_bytes!("../test_data/header_response.json");
 
     #[test]
     fn test_compact_header_serde() {
@@ -385,11 +385,23 @@ mod tests {
 
         assert_eq!(tm_header.hash(), compact_header.hash());
         assert_eq!(
-            hex::decode("32381A0B7262F15F081ACEF769EE59E6BB4C42C1013A3EEE23967FBF32B86AE6")
+            hex::decode("34843C107EDD591AC8D28F4897A00EC34B1707CBB0C0C4AD96C08F7C24A8B30D")
                 .unwrap(),
             compact_header.hash().as_bytes()
         );
 
         assert_eq!(tm_header.hash(), compact_header.hash(),);
+    }
+
+    #[test]
+    fn test_zkvm_serde_celestia_header() {
+        // https://github.com/eigerco/celestia-tendermint-rs/pull/12
+        let original_header: ExtendedHeader = serde_json::from_slice(HEADER_RESPONSE_JSON).unwrap();
+        let cel_header = CelestiaHeader::new(original_header.dah, original_header.header.into());
+
+        let serialized = risc0_zkvm::serde::to_vec(&cel_header).unwrap();
+        let deserialized = risc0_zkvm::serde::from_slice(&serialized).unwrap();
+
+        assert_eq!(cel_header, deserialized);
     }
 }
