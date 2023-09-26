@@ -35,7 +35,7 @@ impl From<&SealedBlock> for BlockEnv {
             number: block.header.number,
             coinbase: block.header.beneficiary,
             timestamp: block.header.timestamp,
-            prevrandao: Default::default(),
+            prevrandao: block.header.mix_hash,
             basefee: block.header.base_fee_per_gas.unwrap_or_default(),
             gas_limit: block.header.gas_limit,
         }
