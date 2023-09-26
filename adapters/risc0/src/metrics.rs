@@ -3,12 +3,13 @@ use std::collections::HashMap;
 use anyhow::Context;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use risc0_zkvm::Bytes;
 
+/// Global hashmap for storing metrics
 pub static GLOBAL_HASHMAP: Lazy<Mutex<HashMap<String, (u64, u64)>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
-pub fn add_value(metric: String, value: u64) {
+/// Adds metric to the global hashmap
+fn add_value(metric: String, value: u64) {
     let mut hashmap = GLOBAL_HASHMAP.lock();
     hashmap
         .entry(metric)
@@ -19,7 +20,8 @@ pub fn add_value(metric: String, value: u64) {
         .or_insert((value, 1));
 }
 
-pub fn deserialize_custom(serialized: Bytes) -> Result<(String, u64), anyhow::Error> {
+/// Deserializes custom [`risc0_zkvm::Bytes`] into a tuple of (metric, value)
+fn deserialize_custom(serialized: risc0_zkvm::Bytes) -> Result<(String, u64), anyhow::Error> {
     let null_pos = serialized
         .iter()
         .position(|&b| b == 0)
@@ -31,8 +33,9 @@ pub fn deserialize_custom(serialized: Bytes) -> Result<(String, u64), anyhow::Er
     Ok((string, size))
 }
 
-pub fn metrics_callback(input: risc0_zkvm::Bytes) -> Result<Bytes, anyhow::Error> {
+/// Track metric provided as raw bytes. The bytes are expected to be a tuple of (metric, value)
+pub fn metrics_callback(input: risc0_zkvm::Bytes) -> Result<risc0_zkvm::Bytes, anyhow::Error> {
     let met_tuple = deserialize_custom(input)?;
     add_value(met_tuple.0, met_tuple.1);
-    Ok(Bytes::new())
+    Ok(risc0_zkvm::Bytes::new())
 }

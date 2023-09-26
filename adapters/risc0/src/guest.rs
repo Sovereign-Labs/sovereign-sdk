@@ -29,15 +29,17 @@ struct Hints {
     position: usize,
 }
 
+/// A helper structure used in non-"zkVM" environments to assist with the serialization
+/// and deserialization processes by keeping track of provided hints and their positions.
 #[cfg(not(target_os = "zkvm"))]
 impl Hints {
-    pub fn with_hints(hints: Vec<u32>) -> Self {
+    fn with_hints(hints: Vec<u32>) -> Self {
         Hints {
             values: hints,
             position: 0,
         }
     }
-    pub fn remaining(&self) -> usize {
+    fn remaining(&self) -> usize {
         self.values.len() - self.position
     }
 }
@@ -64,6 +66,7 @@ impl WordRead for Hints {
     }
 }
 
+/// Control struct for Risc0 guest.
 #[derive(Default)]
 pub struct Risc0Guest {
     #[cfg(not(target_os = "zkvm"))]
@@ -73,10 +76,13 @@ pub struct Risc0Guest {
 }
 
 impl Risc0Guest {
+    /// Creates and returns a new `Risc0Guest` instance with default values.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Creates and returns a new `Risc0Guest` instance initialized with provided hints.
+    /// Only available in non-"zkVM" environments.
     #[cfg(not(target_os = "zkvm"))]
     pub fn with_hints(hints: Vec<u32>) -> Self {
         Self {
@@ -86,6 +92,8 @@ impl Risc0Guest {
     }
 }
 
+/// This trait implementation allows `Risc0Guest` to interact with the Risc0 virtual machine,
+/// offering mechanisms to read data from the host and commit data back to it.
 #[cfg(not(target_os = "zkvm"))]
 impl ZkvmGuest for Risc0Guest {
     fn read_from_host<T: serde::de::DeserializeOwned>(&self) -> T {
@@ -110,7 +118,7 @@ impl Zkvm for Risc0Guest {
         _serialized_proof: &'a [u8],
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<&'a [u8], Self::Error> {
-        // Implement this method once risc0 supports recursion: issue #633
+        // Implement this method once Risc0 supports recursion: issue #633
         todo!("Implement once risc0 supports recursion: https://github.com/Sovereign-Labs/sovereign-sdk/issues/633")
     }
 
