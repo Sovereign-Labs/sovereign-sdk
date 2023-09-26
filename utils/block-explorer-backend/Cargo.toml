@@ -14,10 +14,16 @@ autotests = false
 [dependencies]
 anyhow = "1"
 axum = { version = "0.6" }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
+hex = "0.4"
 indoc = "2"
-sea-orm = { version = "0.12.0", features = ["sqlx-postgres", "runtime-tokio-native-tls", "macros"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
-sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-native-tls"] }
+sov-celestia-adapter = { path = "../../adapters/celestia", version = "0.2" }
+sov-db = { path = "../../full-node/db/sov-db", version = "0.2" }
+sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", version = "0.2" }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
+sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-native-tls", "json"] }
 tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
