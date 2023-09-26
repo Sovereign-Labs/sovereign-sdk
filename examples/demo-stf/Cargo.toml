@@ -24,6 +24,7 @@ tracing = { workspace = true }
 
 
 sov-stf-runner = { path = "../../full-node/sov-stf-runner", optional = true }
+#sov-stf-runner = { path = "../../full-node/sov-stf-runner"}
 
 
 sov-rollup-interface = { path = "../../rollup-interface" }
@@ -53,7 +54,7 @@ rand = "0.8"
 
 [features]
 default = ["sov-stf-runner"]
-experimental = ["sov-evm/experimental", "reth-primitives"]
+experimental = ["default", "sov-evm/experimental", "reth-primitives"]
 native = [
     "sov-stf-runner/native",
     "sov-bank/native",
