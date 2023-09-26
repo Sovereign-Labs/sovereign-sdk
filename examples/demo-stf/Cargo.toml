@@ -24,7 +24,6 @@ tracing = { workspace = true }
 
 
 sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
-
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-cli = { path = "../../module-system/sov-cli", optional = true }
 sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry" }
