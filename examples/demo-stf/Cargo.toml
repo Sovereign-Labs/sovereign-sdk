@@ -23,9 +23,7 @@ hex = { workspace = true }
 tracing = { workspace = true }
 
 
-sov-stf-runner = { path = "../../full-node/sov-stf-runner", optional = true }
-#sov-stf-runner = { path = "../../full-node/sov-stf-runner"}
-
+sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
 
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-cli = { path = "../../module-system/sov-cli", optional = true }
@@ -53,7 +51,7 @@ tempfile = { workspace = true }
 rand = "0.8"
 
 [features]
-default = ["sov-stf-runner"]
+default = []
 experimental = ["default", "sov-evm/experimental", "reth-primitives"]
 native = [
     "sov-stf-runner/native",
