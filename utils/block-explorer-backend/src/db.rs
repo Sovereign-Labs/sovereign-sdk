@@ -1,9 +1,9 @@
-use crate::models as m;
-
 use indoc::indoc;
 use serde_json::Value;
 use sqlx::{PgPool, QueryBuilder};
 use tracing::info;
+
+use crate::models as m;
 
 #[derive(Clone)]
 pub struct Db {
@@ -103,21 +103,11 @@ impl Db {
 
 /// Write operations.
 impl Db {
-    pub async fn insert_tx(&self, tx: &Value) -> anyhow::Result<()> {
-        sqlx::query(indoc!(
-            r#"
-			INSERT INTO transactions (blob)
-			VALUES ($1)
-			"#
-        ))
-        .bind(tx)
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
-    }
-
     pub async fn upsert_blocks(&self, blocks: &[&Value]) -> anyhow::Result<()> {
+        if blocks.is_empty() {
+            return Ok(());
+        }
+
         let mut query = QueryBuilder::new("INSERT INTO blocks (blob) ");
 
         query.push_values(blocks, |mut builder, block| {
@@ -129,17 +119,19 @@ impl Db {
         Ok(())
     }
 
-    pub async fn insert_event(&self, event: &Value) -> anyhow::Result<()> {
-        sqlx::query(indoc!(
-            r#"
-			INSERT INTO events (blob)
-			VALUES ($1)
-			"#
-        ))
-        .bind(event)
-        .execute(&self.pool)
-        .await?;
+    pub async fn upsert_transactions(&self, txs: &[Value]) -> anyhow::Result<()> {
+        if txs.is_empty() {
+            return Ok(());
+        }
 
+        let mut query = QueryBuilder::new("INSERT INTO transactions (blob) ");
+
+        query.push_values(txs, |mut builder, tx| {
+            builder.push_bind(tx);
+        });
+        query.push(" ON CONFLICT ((blob->>'tx_hash')) DO UPDATE SET blob = EXCLUDED.blob");
+
+        query.build().execute(&self.pool).await?;
         Ok(())
     }
 }

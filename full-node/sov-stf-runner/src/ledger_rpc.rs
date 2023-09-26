@@ -29,7 +29,7 @@ fn register_ledger_rpc_methods<
     rpc: &mut RpcModule<LedgerDB>,
 ) -> Result<(), jsonrpsee::core::Error> {
     rpc.register_method("ledger_getHead", move |_, db| {
-        db.get_head::<B, T>()
+        db.get_head::<B, T>(sov_rollup_interface::rpc::QueryMode::Full)
             .map_err(|e| to_jsonrpsee_error_object(e, LEDGER_RPC_ERROR))
     })?;
 
