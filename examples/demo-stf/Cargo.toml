@@ -52,7 +52,7 @@ rand = "0.8"
 
 [features]
 default = []
-experimental = ["default", "sov-evm/experimental", "reth-primitives"]
+experimental = ["default", "native", "sov-evm/experimental", "reth-primitives"]
 native = [
     "sov-stf-runner/native",
     "sov-bank/native",
