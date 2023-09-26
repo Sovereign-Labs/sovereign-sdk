@@ -1,8 +1,4 @@
-use crate::{
-    models::{EventsQuery, HexString},
-    AppState,
-};
-
+use crate::{models as m, AppState};
 use axum::{
     extract::{Path, Query, State},
     routing::get,
@@ -11,6 +7,17 @@ use axum::{
 use serde_json::{json, Value as JsonValue};
 
 type AxumState = State<AppState>;
+
+#[derive(Debug, serde::Serialize)]
+struct Response<T> {
+    pub data: T,
+    pub errors: Vec<ResponseError>,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct ResponseError {
+    pub message: String,
+}
 
 pub fn api_v0_router(app_state: AppState) -> Router {
     Router::new()
@@ -33,20 +40,9 @@ async fn unimplemented() -> Json<JsonValue> {
     }))
 }
 
-#[derive(Debug, serde::Serialize)]
-struct Response<T> {
-    pub data: T,
-    pub errors: Vec<ResponseError>,
-}
-
-#[derive(Debug, serde::Serialize)]
-struct ResponseError {
-    pub message: String,
-}
-
 async fn get_tx_by_hash(
     State(state): AxumState,
-    Path(tx_hash): Path<HexString>,
+    Path(tx_hash): Path<m::HexString>,
 ) -> Json<Response<JsonValue>> {
     let tx_opt = state.db.get_tx_by_hash(&tx_hash.0).await.unwrap();
     Json(Response {
@@ -60,7 +56,18 @@ async fn get_block_by_id(State(state): AxumState, Path(block_id): Path<i64>) -> 
     Json(serde_json::to_value(blocks).unwrap())
 }
 
-async fn get_events(State(state): AxumState, params: Query<EventsQuery>) -> Json<JsonValue> {
+#[derive(Debug, serde::Serialize)]
+struct GetEventsData {
+    events: Vec<m::Event>,
+}
+
+async fn get_events(
+    State(state): AxumState,
+    params: Query<m::EventsQuery>,
+) -> Json<Response<GetEventsData>> {
     let events = state.db.get_events(&params).await.unwrap();
-    Json(serde_json::to_value(events).unwrap())
+    Json(Response {
+        data: GetEventsData { events },
+        errors: vec![],
+    })
 }

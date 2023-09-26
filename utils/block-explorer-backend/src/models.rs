@@ -1,3 +1,10 @@
+#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
+pub struct Event {
+    pub id: i64,
+    pub key: Vec<u8>,
+    pub value: Vec<u8>,
+}
+
 #[derive(Debug, serde::Deserialize)]
 pub struct EventsQuery {
     /// Cumulative event ID across all transactions.

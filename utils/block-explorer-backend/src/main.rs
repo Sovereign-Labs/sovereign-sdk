@@ -15,8 +15,8 @@ use db::Db;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_stf_template::{SequencerOutcome, TxEffect};
-use sov_rollup_interface::rpc::{LedgerRpcProvider, TxIdentifier};
-use tracing::info;
+use sov_rollup_interface::rpc::{LedgerRpcProvider, QueryMode, TxIdentifier};
+use tracing::{info, trace, warn};
 
 type AppState = Arc<AppStateInner>;
 
@@ -63,17 +63,42 @@ async fn index_blocks(app_state: AppState, polling_interval: Duration) {
     type Tx = TxEffect;
 
     loop {
+        trace!(
+            polling_interval_in_msecs = polling_interval.as_millis(),
+            "Going to sleep before new polling cycle"
+        );
         // Sleep for a bit. We wouldn't want to spam the node.
         tokio::time::sleep(polling_interval).await;
 
         // TODO: retry and error handling.
-        let chain_head = app_state.rpc.get_head::<B, Tx>().unwrap();
-        println!("Chain head: {:?}", chain_head);
+        let chain_head = if let Some(head) = app_state.rpc.get_head::<B, Tx>().unwrap() {
+            head
+        } else {
+            warn!("`get_head` returned no data, can't index blocks.");
+            continue;
+        };
 
-        if let Some(block) = chain_head {
-            let block = serde_json::to_value(block).unwrap();
-            app_state.db.upsert_block(&block).await.unwrap();
+        let chain_block_range = 0..=chain_head.number;
+        for i in chain_block_range {
+            let block = app_state
+                .rpc
+                .get_slot_by_number::<B, Tx>(i, QueryMode::Standard)
+                .unwrap();
+            if let Some(block) = block {
+                let block_json = serde_json::to_value(block).unwrap();
+                app_state.db.upsert_blocks(&[&block_json]).await.unwrap();
+            } else {
+                warn!("`get_slot_by_number` returned no data for block {}", i);
+            }
         }
+
+        // Finally, insert the chain head.
+        let chain_head_json = serde_json::to_value(chain_head).unwrap();
+        app_state
+            .db
+            .upsert_blocks(&[&chain_head_json])
+            .await
+            .unwrap();
 
         let txs = app_state
             .rpc

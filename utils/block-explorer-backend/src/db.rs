@@ -1,4 +1,4 @@
-use crate::models::EventsQuery;
+use crate::models as m;
 
 use indoc::indoc;
 use serde_json::Value;
@@ -66,9 +66,9 @@ impl Db {
         Ok(rows.into_iter().map(|v| v.0).collect())
     }
 
-    pub async fn get_events(&self, query: &EventsQuery) -> anyhow::Result<Vec<Value>> {
+    pub async fn get_events(&self, query: &m::EventsQuery) -> anyhow::Result<Vec<m::Event>> {
         let mut where_clauses = vec![];
-        let mut query_builder = QueryBuilder::new("SELECT blob FROM events");
+        let mut query_builder = QueryBuilder::new("SELECT (id, key, value) FROM events");
 
         if let Some(event_id) = query.id {
             where_clauses.push("id = ?");
@@ -96,11 +96,8 @@ impl Db {
             query_builder.push(where_clauses.join(" AND "));
         }
 
-        let query = query_builder.build();
-        let events = query.fetch_all(&self.pool).await?;
-
-        // FIXME: return the queried data.
-        Ok(vec![])
+        let query = query_builder.build_query_as();
+        Ok(query.fetch_all(&self.pool).await?)
     }
 }
 
@@ -120,19 +117,15 @@ impl Db {
         Ok(())
     }
 
-    pub async fn upsert_block(&self, block: &Value) -> anyhow::Result<()> {
-        sqlx::query(indoc!(
-            r#"
-			INSERT INTO blocks (blob)
-			VALUES ($1)
-			ON CONFLICT ((blob->>'hash')) DO UPDATE
-			SET blob = EXCLUDED.blob
-			"#
-        ))
-        .bind(block)
-        .execute(&self.pool)
-        .await?;
+    pub async fn upsert_blocks(&self, blocks: &[&Value]) -> anyhow::Result<()> {
+        let mut query = QueryBuilder::new("INSERT INTO blocks (blob) ");
 
+        query.push_values(blocks, |mut builder, block| {
+            builder.push_bind(block);
+        });
+        query.push(" ON CONFLICT ((blob->>'hash')) DO UPDATE SET blob = EXCLUDED.blob");
+
+        query.build().execute(&self.pool).await?;
         Ok(())
     }
 
