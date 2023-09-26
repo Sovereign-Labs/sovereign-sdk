@@ -196,7 +196,7 @@ pub trait PrivateKey:
 /// over a Context, rollup developers can easily optimize their code for different environments
 /// by simply swapping out the Context (and by extension, the Spec).
 ///
-/// For example, a rollup running in a STARK-based zkvm like Risc0 might pick Sha256 or Poseidon as its preferred hasher,
+/// For example, a rollup running in a STARK-based zkVM like Risc0 might pick Sha256 or Poseidon as its preferred hasher,
 /// while a rollup running in an elliptic-curve based SNARK such as `Placeholder` from the =nil; foundation might
 /// prefer a Pedersen hash. By using a generic Context and Spec, a rollup developer can trivially customize their
 /// code for either (or both!) of these environments without touching their module implementations.

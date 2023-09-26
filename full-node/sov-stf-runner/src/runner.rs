@@ -34,17 +34,17 @@ where
     prover: Option<Prover<V, Da, Vm>>,
 }
 
-/// Represents the possible modes of execution for a zkvm program
+/// Represents the possible modes of execution for a zkVM program
 pub enum ProofGenConfig<ST, Da: DaService, Vm: ZkvmHost>
 where
     ST: StateTransitionFunction<Vm::Guest, Da::Spec>,
 {
-    /// The simulator runs the rollup verifier logic without even emulating the zkvm
+    /// The simulator runs the rollup verifier logic without even emulating the zkVM
     Simulate(StateTransitionVerifier<ST, Da::Verifier, Vm::Guest>),
-    /// The executor runs the rollup verification logic in the zkvm, but does not actually
+    /// The executor runs the rollup verification logic in the zkVM, but does not actually
     /// produce a zk proof
     Execute,
-    /// The prover runs the rollup verification logic in the zkvm and produces a zk proof
+    /// The prover runs the rollup verification logic in the zkVM and produces a zk proof
     Prover,
 }
 

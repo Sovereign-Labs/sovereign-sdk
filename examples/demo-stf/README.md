@@ -28,7 +28,7 @@ interface](../../rollup-interface/specs/interfaces/stf.md) ("STF") , which speci
 a related trait called `State Transition Runner` ("STR") which tells a full node how to instantiate your abstract STF on a concrete machine.
 
 Strictly speaking, it's sufficient for a rollup to only implement the first interface. If you've done that, it's possible to integrate
-with ZKVMs and DA Layers - but you'll have to customize your full node implementation a bit to deal with your particular rollup's
+with zkVMs and DA Layers - but you'll have to customize your full node implementation a bit to deal with your particular rollup's
 configuration. By implementing the STR trait, we make it much easier for the full-node implementation to understand how to interact
 with the rollup generically - so we can keep our modifications to the node as minimal as possible. In this demo, we'll implement both traits.
 
@@ -168,7 +168,7 @@ to import your custom STF! But, when you're building an STF it's useful to stick
 That way, you can minimize the changeset for your custom node implementation, which reduces the risk of bugs.
 
 To help you integrate with full node implementations, we provide standard tools for initializing an app (`StateTransitionRunner`). In this section, we'll briefly show how to use them. Again it is not strictly
-required - just by implementing STF, you get the capability to integrate with DA layers and ZKVMs. But, using these structures
+required - just by implementing STF, you get the capability to integrate with DA layers and zkVMs. But, using these structures
 makes you more compatible with full node implementations out of the box.
 
 ### Using State Transition Runner
@@ -184,4 +184,4 @@ The State Transition Runner struct contains logic related to initialization and 
 
 Whew, that was a lot of information. To recap, implementing your own state transition function is as simple as plugging  
 a Runtime, a Transaction Verifier, and some Transaction Hooks into the pre-built app template. Once you've done that,
-you can integrate with any DA layer and ZKVM to create a Sovereign Rollup.
+you can integrate with any DA layer and zkVM to create a Sovereign Rollup.

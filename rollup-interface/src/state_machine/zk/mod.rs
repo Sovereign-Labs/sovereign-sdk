@@ -1,4 +1,4 @@
-//! Defines the traits that must be implemented by zkVMs. A ZKVM like Risc0 consists of two components,
+//! Defines the traits that must be implemented by zkVMs. A zkVM like Risc0 consists of two components,
 //! a "guest" and a "host". The guest is the zkVM program itself, and the host is the physical machine on
 //! which the zkVM is running. Both the guest and the host are required to implement the [`Zkvm`] trait, in
 //! addition to the specialized [`ZkvmGuest`] and [`ZkvmHost`] trait which is appropriate to that environment.
@@ -31,7 +31,7 @@ pub trait ZkvmHost: Zkvm {
 
     /// Run the guest in the true zk environment using the provided hints.
     ///
-    /// This runs the guest binary compiled for the ZKVM target, optionally
+    /// This runs the guest binary compiled for the zkVM target, optionally
     /// creating a SNARK of correct execution. Running the true guest binary comes
     /// with some mild performance overhead and is not as easy to debug as [`simulate_with_hints`](ZkvmHost::simulate_with_hints).
     fn run(&mut self, with_proof: bool) -> Result<(), anyhow::Error>;

@@ -241,7 +241,7 @@ which re-executes the transactions in a (more expensive) zk environment to creat
 workflow looks roughly like this:
 
 ```rust
-// First, execute transactions natively to generate a witness for the zkvm
+// First, execute transactions natively to generate a witness for the zkVM
 let native_rollup_instance = my_state_transition::<DefaultContext>::new(config);
 let witness = Default::default()
 native_rollup_instance.begin_slot(witness);
@@ -250,7 +250,7 @@ for batch in batches.cloned() {
 }
 let (_new_state_root, populated_witness) = native_rollup_instance.end_batch();
 
-// Then, re-execute the state transitions in the zkvm using the witness
+// Then, re-execute the state transitions in the zkVM using the witness
 let proof = MyZkvm::prove(|| {
 	let zk_rollup_instance = my_state_transition::<ZkDefaultContext>::new(config);
 	zk_rollup_instance.begin_slot(populated_witness);
@@ -281,7 +281,7 @@ pub trait Spec {
 
 As you can see, a `Spec` for a rollup specifies the concrete types that will be used for many kinds of cryptographic operations.
 That way, you can define your business logic in terms of _abstract_ cryptography, and then instantiate it with cryptography which
-is efficient in your particular choice of ZKVM.
+is efficient in your particular choice of zkVM.
 
 In addition to the `Spec` trait, the Module System provides a simple `Context` trait which is defined like this:
 
