@@ -11,10 +11,9 @@ use serde::{Deserialize, Serialize};
 use crate::da::{
     BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec, DaVerifier, Time,
 };
-
+use crate::mocks::MockValidityCond;
 #[cfg(feature = "native")]
 use crate::services::da::DaService;
-use crate::mocks::MockValidityCond;
 use crate::services::da::SlotData;
 use crate::{BasicAddress, RollupAddress};
 

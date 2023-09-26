@@ -1,12 +1,11 @@
 use std::net::SocketAddr;
 
-use methods::MOCK_DA_ELF;
-
 use borsh::BorshSerialize;
 use demo_stf::app::DefaultPrivateKey;
 use demo_stf::runtime::RuntimeCall;
 use jsonrpsee::core::client::{Subscription, SubscriptionClientT};
 use jsonrpsee::rpc_params;
+use methods::MOCK_DA_ELF;
 use sov_demo_rollup::DemoProverConfig;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::transaction::Transaction;
