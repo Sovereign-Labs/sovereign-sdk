@@ -221,8 +221,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
         working_set: &mut WorkingSet<C>,
     ) -> RpcResult<reth_primitives::Bytes> {
         info!("evm module: eth_call");
-        let tx_env = prepare_call_env(request);
-
         let block_env = match block_number {
             Some(ref block_number) if block_number == "pending" => {
                 self.block_env.get(working_set).unwrap_or_default().clone()
@@ -232,6 +230,9 @@ impl<C: sov_modules_api::Context> Evm<C> {
                 BlockEnv::from(&block)
             }
         };
+
+        let tx_env = prepare_call_env(&block_env, request.clone()).unwrap();
+
         let cfg = self.cfg.get(working_set).unwrap_or_default();
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
 
@@ -241,7 +242,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         match ensure_success(result.result) {
             Ok(bytes) => Ok(bytes),
-            // FIXME: this conversion is broken because From impl is not accessible
             Err(err) => Err(err.into()),
         }
     }

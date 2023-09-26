@@ -14,6 +14,7 @@ use ethers_signers::{LocalWallet, Signer, Wallet};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use jsonrpsee::rpc_params;
+use jsonrpsee::types::ErrorObject;
 use reth_primitives::Bytes;
 use sov_evm::SimpleStorageContract;
 use sov_risc0_adapter::host::Risc0Host;
@@ -141,7 +142,6 @@ impl TestClient {
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
 
-        // FIXME: EIP-1559 failing
         let req = TransactionRequest::new()
             .from(self.from_addr)
             .to(contract_address)
@@ -166,17 +166,17 @@ impl TestClient {
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
 
-        // FIXME: EIP-1559 failing
-        let req = TransactionRequest::new()
+        let req = Eip1559TransactionRequest::new()
             .from(self.from_addr)
             .to(contract_address)
             .chain_id(self.chain_id)
             .nonce(nonce)
             .data(self.contract.failing_function_call_data())
-            .gas_price(10u64)
+            .max_priority_fee_per_gas(10u64)
+            .max_fee_per_gas(MAX_FEE_PER_GAS)
             .gas(900000u64);
 
-        let typed_transaction = TypedTransaction::Legacy(req);
+        let typed_transaction = TypedTransaction::Eip1559(req);
 
         self.eth_call(typed_transaction, Some("latest".to_owned()))
             .await

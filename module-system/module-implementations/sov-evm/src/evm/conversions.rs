@@ -1,9 +1,7 @@
 use bytes::Bytes;
 use reth_primitives::{
-    AccessList, Bytes as RethBytes, TransactionSigned, TransactionSignedEcRecovered,
-    TransactionSignedNoHash,
+    Bytes as RethBytes, TransactionSigned, TransactionSignedEcRecovered, TransactionSignedNoHash,
 };
-use reth_rpc_types::CallRequest;
 use revm::primitives::{
     AccountInfo as ReVmAccountInfo, BlockEnv as ReVmBlockEnv, CreateScheme, TransactTo, TxEnv, U256,
 };
@@ -112,37 +110,5 @@ impl From<TransactionSignedAndRecovered> for TransactionSignedEcRecovered {
             value.signed_transaction,
             value.signer,
         )
-    }
-}
-
-// TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/576
-// https://github.com/paradigmxyz/reth/blob/d8677b4146f77c7c82d659c59b79b38caca78778/crates/rpc/rpc/src/eth/revm_utils.rs#L201
-pub(crate) fn prepare_call_env(request: CallRequest) -> TxEnv {
-    TxEnv {
-        caller: request.from.unwrap(),
-        gas_limit: request.gas.map(|p| p.try_into().unwrap()).unwrap(),
-        gas_price: request.gas_price.unwrap_or_default(),
-        gas_priority_fee: request.max_priority_fee_per_gas,
-        transact_to: request
-            .to
-            .map(TransactTo::Call)
-            .unwrap_or_else(TransactTo::create),
-        value: request.value.unwrap_or_default(),
-        data: request
-            .input
-            .try_into_unique_input()
-            .unwrap()
-            .map(|data| data.0)
-            .unwrap_or_default(),
-        chain_id: request.chain_id.map(|c| c.as_u64()),
-        nonce: request.nonce.map(|n| TryInto::<u64>::try_into(n).unwrap()),
-        access_list: request
-            .access_list
-            .map(AccessList::flattened)
-            .unwrap_or_default(),
-        // EIP-4844 related fields
-        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
-        blob_hashes: request.blob_versioned_hashes,
-        max_fee_per_blob_gas: request.max_fee_per_blob_gas,
     }
 }

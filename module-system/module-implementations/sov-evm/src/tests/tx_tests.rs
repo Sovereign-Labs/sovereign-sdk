@@ -11,6 +11,7 @@ use revm::primitives::{TransactTo, TxEnv};
 
 use crate::evm::prepare_call_env;
 use crate::evm::primitive_types::TransactionSignedAndRecovered;
+use crate::primitive_types::BlockEnv;
 
 #[tokio::test]
 async fn tx_rlp_encoding_test() -> Result<(), Box<dyn std::error::Error>> {
@@ -89,7 +90,9 @@ fn prepare_call_env_conversion() {
         max_fee_per_blob_gas: None,
     };
 
-    let tx_env = prepare_call_env(request);
+    let block_env = BlockEnv::default();
+
+    let tx_env = prepare_call_env(&block_env, request).unwrap();
     let expected = TxEnv {
         caller: from,
         gas_price: U256::from(100u64),
