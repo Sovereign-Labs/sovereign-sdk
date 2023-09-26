@@ -33,3 +33,23 @@ tempfile = { workspace = true }
 default = []
 native = ["serde", "serde_json", "jsonrpsee", "clap", "schemars", "sov-state/native", "sov-modules-api/native", ]
 cli = ["native"]
+
+[[test]]
+name = "burn_test"
+required-features = ["native"]
+
+[[test]]
+name = "create_token_test"
+required-features = ["native"]
+
+[[test]]
+name = "freeze_test"
+required-features = ["native"]
+
+[[test]]
+name = "mint_test"
+required-features = ["native"]
+
+[[test]]
+name = "transfer_test"
+required-features = ["native"]

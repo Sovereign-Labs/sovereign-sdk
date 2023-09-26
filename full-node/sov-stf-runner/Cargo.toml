@@ -37,6 +37,7 @@ sov-bank = { path = "../../module-system/module-implementations/sov-bank", featu
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
 sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", features = ["native"] }
 sov-accounts = { path = "../../module-system/module-implementations/sov-accounts", features = ["native"] }
+sov-celestia-adapter = { path = "../../adapters/celestia", features = ["native"] }
 
 [features]
 default = []

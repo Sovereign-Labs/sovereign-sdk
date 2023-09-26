@@ -16,7 +16,7 @@ pub trait FuzzHasher {
 
 /// The default hasher to use for fuzzing
 fn default_fuzz_hasher() -> Box<dyn FuzzHasher> {
-    Box::new(::sha2::Sha256::new())
+    Box::new(sha2::Sha256::new())
 }
 
 impl<T: Digest<OutputSize = U32> + Clone> FuzzHasher for T {

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::da::DaSpec;
 use crate::zk::{ValidityCondition, Zkvm};
 
-#[cfg(any(test, feature = "fuzzing"))]
+#[cfg(any(all(test, feature = "sha2"), feature = "fuzzing"))]
 pub mod fuzzing;
 
 /// The configuration of a full node of the rollup which creates zk proofs.

@@ -423,7 +423,7 @@ fn next_pfb(mut data: &mut BlobRefIterator) -> Result<(MsgPayForBlobs, TxPositio
     ))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "native"))]
 mod tests {
     use crate::{CelestiaHeaderResponse, CompactHeader};
 
