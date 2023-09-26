@@ -214,6 +214,7 @@ pub trait Spec {
         + Serialize
         + for<'a> Deserialize<'a>
         + ::schemars::JsonSchema
+        //TODO
         + FromStr<Err = anyhow::Error>;
 
     #[cfg(not(feature = "native"))]
