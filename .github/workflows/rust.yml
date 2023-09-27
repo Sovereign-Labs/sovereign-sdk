@@ -113,16 +113,19 @@ jobs:
       - name: cargo hack
         run: make check-features
   test:
+    name: test
     runs-on: buildjet-4vcpu-ubuntu-2204
     timeout-minutes: 60
-    env:
-      CI_SKIP_GUEST_BUILD: "1"
     steps:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
       - name: Install Rust
         run: rustup show
       # `cargo-nextest` is much faster than standard `cargo test`.
+      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
+        run: cargo install cargo-risczero
+      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
+        run: cargo risczero install
       - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
         with:
@@ -144,6 +147,10 @@ jobs:
       - uses: rui314/setup-mold@v1
       - name: Install Rust
         run: rustup show
+      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
+        run: cargo install cargo-risczero
+      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
+        run: cargo risczero install
       - uses: Swatinem/rust-cache@v2
         with:
           cache-provider: "buildjet"
@@ -193,10 +200,9 @@ jobs:
           echo "demo-rollup took too long to process transaction; exiting"
           exit 1
   coverage:
+    name: coverage
     runs-on: buildjet-8vcpu-ubuntu-2204
     timeout-minutes: 90
-    env:
-      CI_SKIP_GUEST_BUILD: "1"
     steps:
       - uses: actions/checkout@v3
         with:
@@ -204,6 +210,10 @@ jobs:
       - uses: rui314/setup-mold@v1
       - name: Install Rust
         run: rustup show
+      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
+        run: cargo install cargo-risczero
+      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
+        run: cargo risczero install
       - name: add llvm component
         run: rustup component add llvm-tools-preview
       - name: cargo install cargo-llvm-cov
@@ -295,11 +305,18 @@ jobs:
         run: git diff --exit-code
   check-demo-rollup-bash-commands:
     runs-on: ubuntu-latest
+    # `test` has already built dependencies, so we can share
+    # caches (the profile is `dev` in both cases).
+    needs: test
     steps:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
       - name: Install Rust
         run: rustup show
+      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
+        run: cargo install cargo-risczero
+      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
+        run: cargo risczero install
       - uses: Swatinem/rust-cache@v2
         with:
           cache-provider: "buildjet"

@@ -8,6 +8,7 @@ use demo_stf::app::DefaultPrivateKey;
 use demo_stf::app::{create_zk_app_template, App, DefaultContext};
 use demo_stf::genesis_config::get_genesis_config;
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig, Runtime};
+use demo_stf::AppVerifier;
 #[cfg(feature = "experimental")]
 use secp256k1::SecretKey;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
@@ -32,7 +33,7 @@ use tracing::debug;
 #[cfg(feature = "experimental")]
 use crate::register_rpc::register_ethereum;
 use crate::register_rpc::{register_ledger, register_sequencer};
-use crate::{initialize_ledger, AppVerifier, ROLLUP_NAMESPACE};
+use crate::{initialize_ledger, ROLLUP_NAMESPACE};
 
 #[cfg(feature = "experimental")]
 const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.json";
@@ -136,7 +137,6 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
-            #[cfg(feature = "local")]
             eth_signer,
         },
         prover,
@@ -185,7 +185,6 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost>(
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
-            #[cfg(feature = "local")]
             eth_signer,
         },
         prover,

@@ -312,6 +312,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
+ "sov-stf-runner",
  "sov-value-setter",
  "tracing",
 ]
@@ -1341,7 +1342,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-demo-prover-guest"
+name = "sov-demo-prover-guest-celestia"
 version = "0.2.0"
 dependencies = [
  "anyhow",
@@ -1350,23 +1351,7 @@ dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "sov-celestia-adapter",
- "sov-demo-rollup",
  "sov-risc0-adapter",
-]
-
-[[package]]
-name = "sov-demo-rollup"
-version = "0.2.0"
-dependencies = [
- "const-rollup-config",
- "demo-stf",
- "sov-celestia-adapter",
- "sov-modules-api",
- "sov-modules-stf-template",
- "sov-risc0-adapter",
- "sov-rollup-interface",
- "sov-state",
- "sov-stf-runner",
 ]
 
 [[package]]
@@ -1500,7 +1485,6 @@ dependencies = [
  "borsh",
  "hex",
  "serde",
- "sov-celestia-adapter",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",

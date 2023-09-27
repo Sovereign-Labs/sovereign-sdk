@@ -1,5 +1,5 @@
 [package]
-name = "sov-demo-prover-guest"
+name = "sov-demo-prover-guest-celestia"
 version = "0.2.0"
 edition = "2021"
 resolver = "2"
@@ -10,8 +10,7 @@ resolver = "2"
 anyhow = "1.0.68"
 risc0-zkvm = { version = "0.18", default-features = false, features = ["std"] }
 risc0-zkvm-platform = "0.18"
-demo-stf = { path = "../../../demo-stf", default-features = false }
-sov-demo-rollup = { path = "../../../demo-rollup", default-features = false }
+demo-stf = { path = "../../../demo-stf" }
 sov-risc0-adapter = { path = "../../../../adapters/risc0" }
 const-rollup-config = { path = "../../../const-rollup-config" }
 sov-celestia-adapter = { path = "../../../../adapters/celestia" }
