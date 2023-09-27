@@ -30,7 +30,6 @@ anyhow = { workspace = true }
 sha2 = { workspace = true }
 base64 = "0.21.2"
 hex = { workspace = true, features = ["serde"] }
-hex-literal = "0.4.1"
 jsonrpsee = { workspace = true, features = ["http-client"], optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true, optional = true }

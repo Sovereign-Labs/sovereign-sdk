@@ -13,12 +13,11 @@ use thiserror::Error;
 pub mod address;
 pub mod proofs;
 
-use proofs::*;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use sov_zk_cycle_macros::cycle_tracker;
-use tracing::warn;
 
 use self::address::CelestiaAddress;
+use self::proofs::*;
 use crate::shares::{NamespaceGroup, Share};
 use crate::types::ValidationError;
 use crate::utils::read_varint;
@@ -28,7 +27,7 @@ pub struct CelestiaVerifier {
     pub rollup_namespace: Namespace,
 }
 
-pub const PFB_NAMESPACE: Namespace = Namespace::const_v0(hex_literal::hex!("00000000000000000004"));
+pub const PFB_NAMESPACE: Namespace = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 4]);
 pub const PARITY_SHARES_NAMESPACE: Namespace = Namespace::MAX;
 
 impl BlobReaderTrait for BlobWithSender {
@@ -192,7 +191,6 @@ impl da::DaVerifier for CelestiaVerifier {
             }
             return Err(ValidationError::MissingTx);
         }
-        warn!("Verified inclusion");
 
         // Check the e-tx proofs...
         // TODO(@preston-evans98): Remove this logic if Celestia adds blob.sender metadata directly into blob
@@ -284,7 +282,6 @@ impl da::DaVerifier for CelestiaVerifier {
                     })?;
 
                 assert_eq!(&pfb.share_commitments[blob_idx][..], &expected_commitment.0);
-                warn!("Verified blob");
             }
         }
 
