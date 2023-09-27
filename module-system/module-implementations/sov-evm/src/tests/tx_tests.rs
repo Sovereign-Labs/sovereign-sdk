@@ -11,6 +11,7 @@ use revm::primitives::{TransactTo, TxEnv};
 
 use crate::evm::prepare_call_env;
 use crate::evm::primitive_types::TransactionSignedAndRecovered;
+use crate::primitive_types::{Block, BlockEnv};
 
 #[tokio::test]
 async fn tx_rlp_encoding_test() -> Result<(), Box<dyn std::error::Error>> {
@@ -89,7 +90,9 @@ fn prepare_call_env_conversion() {
         max_fee_per_blob_gas: None,
     };
 
-    let tx_env = prepare_call_env(request);
+    let block_env = BlockEnv::default();
+
+    let tx_env = prepare_call_env(&block_env, request).unwrap();
     let expected = TxEnv {
         caller: from,
         gas_price: U256::from(100u64),
@@ -118,4 +121,26 @@ fn prepare_call_env_conversion() {
     assert_eq!(tx_env.chain_id, expected.chain_id);
     assert_eq!(tx_env.nonce, expected.nonce);
     assert_eq!(tx_env.access_list, expected.access_list);
+}
+
+#[test]
+fn prepare_call_block_env() {
+    let block = Block {
+        header: Default::default(),
+        transactions: Default::default(),
+    };
+
+    let sealed_block = &block.clone().seal();
+
+    let block_env = BlockEnv::from(sealed_block);
+
+    assert_eq!(block_env.number, block.header.number);
+    assert_eq!(block_env.coinbase, block.header.beneficiary);
+    assert_eq!(block_env.timestamp, block.header.timestamp);
+    assert_eq!(
+        block_env.basefee,
+        block.header.base_fee_per_gas.unwrap_or_default()
+    );
+    assert_eq!(block_env.gas_limit, block.header.gas_limit);
+    assert_eq!(block_env.prevrandao, block.header.mix_hash);
 }
