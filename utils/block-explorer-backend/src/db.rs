@@ -37,7 +37,7 @@ impl Db {
 
 /// Read operations.
 impl Db {
-    pub async fn get_tx_by_hash(&self, tx_hash: &[u8]) -> anyhow::Result<Option<Value>> {
+    pub async fn get_tx_by_hash(&self, tx_hash: &m::HexString) -> anyhow::Result<Option<Value>> {
         let row_opt: Option<(Value,)> = sqlx::query_as(indoc!(
             r#"
             SELECT blob FROM transactions
@@ -45,21 +45,21 @@ impl Db {
             LIMIT 1
             "#
         ))
-        .bind(tx_hash)
+        .bind(tx_hash.to_string())
         .fetch_optional(&self.pool)
         .await?;
 
         Ok(row_opt.map(|r| r.0))
     }
 
-    pub async fn get_blocks_by_height(&self, height: i64) -> anyhow::Result<Vec<Value>> {
+    pub async fn get_block_by_hash(&self, hash: &m::HexString) -> anyhow::Result<Vec<Value>> {
         let rows: Vec<(Value,)> = sqlx::query_as(indoc!(
             r#"
             SELECT blob FROM blocks
-            WHERE blob->>'number' = $1
+            WHERE blob->>'hash' = $1
             "#
         ))
-        .bind(height)
+        .bind(hash.to_string())
         .fetch_all(&self.pool)
         .await?;
 

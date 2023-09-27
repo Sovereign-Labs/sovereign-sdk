@@ -1,7 +1,7 @@
+mod api_v0;
 mod db;
 mod indexer;
 pub(crate) mod models;
-mod routing;
 
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::PathBuf;
@@ -43,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
         config: config.clone(),
     });
 
-    let app = Router::new().nest("/api/v0", routing::api_v0_router(app_state.clone()));
+    let app = Router::new().nest("/api/v0", api_v0::router(app_state.clone()));
     let socket_addr: SocketAddr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, config.port).into();
 
     let app_state_clone = app_state.clone();
@@ -62,7 +62,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 #[derive(Debug, Parser)]
-struct Config {
+pub struct Config {
     #[clap(long, default_value = "2")]
     polling_interval_in_secs: u64,
     #[clap(long, env)]
