@@ -18,6 +18,7 @@ mod manifest;
 mod module_call_json_schema;
 mod module_info;
 mod new_types;
+mod offchain;
 #[cfg(feature = "native")]
 mod rpc;
 
@@ -29,10 +30,11 @@ use dispatch::genesis::GenesisMacro;
 use dispatch::message_codec::MessageCodec;
 use module_call_json_schema::derive_module_call_json_schema;
 use new_types::address_type_helper;
+use offchain::offchain_generator;
 use proc_macro::TokenStream;
 #[cfg(feature = "native")]
 use rpc::ExposeRpcMacro;
-use syn::{parse_macro_input, DeriveInput};
+use syn::{parse_macro_input, DeriveInput, ItemFn};
 
 #[proc_macro_derive(ModuleInfo, attributes(state, module, address))]
 pub fn module_info(input: TokenStream) -> TokenStream {
@@ -262,4 +264,10 @@ pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
 pub fn address_type(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     handle_macro_error(address_type_helper(input))
+}
+
+#[proc_macro_attribute]
+pub fn offchain(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemFn);
+    handle_macro_error(offchain_generator(input))
 }

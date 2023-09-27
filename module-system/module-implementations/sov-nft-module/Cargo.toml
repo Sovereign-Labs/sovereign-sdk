@@ -21,6 +21,9 @@ sov-modules-api = { path = "../../sov-modules-api" }
 sov-modules-macros = {path = "../../sov-modules-macros"}
 sov-state = { path = "../../sov-state" }
 
+postgres = {version = "0.19.7", optional = true}
+tokio = {version = "1.32.0", features=["full"],optional = true}
+
 [dev-dependencies]
 sov-rollup-interface = { path = "../../../rollup-interface" }
 sov-data-generators = { path = "../../utils/sov-data-generators" }
@@ -29,6 +32,7 @@ sov-nft-module = { version = "*", features = ["native"], path = "." }
 
 [features]
 default = []
+offchain = ["postgres","tokio"]
 serde = ["dep:serde"]
 native = ["serde", "serde_json", "jsonrpsee", "schemars", "sov-state/native", "sov-modules-api/native", ]
 test = ["native"]

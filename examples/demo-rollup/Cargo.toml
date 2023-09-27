@@ -80,6 +80,7 @@ native = ["anyhow", "jsonrpsee", "serde", "serde_json", "tracing", "tokio", "tra
 	"sov-modules-api/native"]
 bench = ["native", "async-trait", "borsh", "hex"]
 local = ["sov-ethereum/local"]
+offchain = ["demo-stf/offchain"]
 
 [[bench]]
 name = "rollup_bench"
