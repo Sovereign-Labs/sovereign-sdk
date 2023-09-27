@@ -8,8 +8,9 @@ use sov_modules_api::WorkingSet;
 use tracing::info;
 
 use crate::call::get_cfg_env;
+use crate::error::rpc::ensure_success;
 use crate::evm::db::EvmDb;
-use crate::evm::primitive_types::{Receipt, SealedBlock, TransactionSignedAndRecovered};
+use crate::evm::primitive_types::{BlockEnv, Receipt, SealedBlock, TransactionSignedAndRecovered};
 use crate::evm::{executor, prepare_call_env};
 use crate::Evm;
 
@@ -208,34 +209,38 @@ impl<C: sov_modules_api::Context> Evm<C> {
     }
 
     /// Handler for: `eth_call`
-    // https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
-    // https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-types/src/eth/call.rs#L7
-    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
+    //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
+    //https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-types/src/eth/call.rs#L7
     #[rpc_method(name = "call")]
     pub fn get_call(
         &self,
         request: reth_rpc_types::CallRequest,
-        _block_number: Option<reth_primitives::BlockId>,
+        block_number: Option<String>,
         _state_overrides: Option<reth_rpc_types::state::StateOverride>,
         _block_overrides: Option<Box<reth_rpc_types::BlockOverrides>>,
         working_set: &mut WorkingSet<C>,
     ) -> RpcResult<reth_primitives::Bytes> {
         info!("evm module: eth_call");
-        let tx_env = prepare_call_env(request);
+        let block_env = match block_number {
+            Some(ref block_number) if block_number == "pending" => {
+                self.block_env.get(working_set).unwrap_or_default().clone()
+            }
+            _ => {
+                let block = self.get_sealed_block_by_number(block_number, working_set);
+                BlockEnv::from(&block)
+            }
+        };
 
-        let block_env = self.block_env.get(working_set).unwrap_or_default();
+        let tx_env = prepare_call_env(&block_env, request.clone()).unwrap();
+
         let cfg = self.cfg.get(working_set).unwrap_or_default();
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
-        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
         let result = executor::inspect(evm_db, &block_env, tx_env, cfg_env).unwrap();
-        let output = match result.result {
-            revm::primitives::ExecutionResult::Success { output, .. } => output,
-            _ => todo!(),
-        };
-        Ok(output.into_data().into())
+
+        Ok(ensure_success(result.result)?)
     }
 
     /// Handler for: `eth_blockNumber`
