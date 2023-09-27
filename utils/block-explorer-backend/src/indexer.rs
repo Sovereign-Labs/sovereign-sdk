@@ -29,6 +29,12 @@ fn get_txs_from_slot_response(
         .collect::<Vec<_>>()
 }
 
+/// Indexing workflow:
+/// - Get the chain head.
+/// - If you are behind, start fetching blocks from the last indexed block.
+/// - For each block, insert it into the database.
+/// - For each transaction, insert it into the database.
+/// Repeat.
 pub async fn index_blocks(app_state: AppState, polling_interval: Duration) {
     type B = SequencerOutcome<CelestiaAddress>;
     type Tx = TxEffect;
@@ -50,6 +56,12 @@ pub async fn index_blocks(app_state: AppState, polling_interval: Duration) {
                 continue;
             };
 
+        app_state
+            .db
+            .insert_chain_head(&serde_json::to_value(&chain_head).unwrap())
+            .await
+            .unwrap();
+
         // FIXME: slot n. 0 is nonexistent, but it's probably a bug in the node's
         // JSON-RPC.
         for i in 1..chain_head.number {
@@ -60,7 +72,7 @@ pub async fn index_blocks(app_state: AppState, polling_interval: Duration) {
             if let Some(block) = block {
                 let txs = get_txs_from_slot_response(&block);
                 let block_json = serde_json::to_value(block).unwrap();
-                app_state.db.upsert_blocks(&[&block_json]).await.unwrap();
+                app_state.db.upsert_blocks(&[block_json]).await.unwrap();
                 let txs_json = txs
                     .into_iter()
                     .map(|tx| serde_json::to_value(tx).unwrap())
@@ -75,7 +87,7 @@ pub async fn index_blocks(app_state: AppState, polling_interval: Duration) {
         let chain_head_json = serde_json::to_value(chain_head).unwrap();
         app_state
             .db
-            .upsert_blocks(&[&chain_head_json])
+            .upsert_blocks(&[chain_head_json])
             .await
             .unwrap();
     }

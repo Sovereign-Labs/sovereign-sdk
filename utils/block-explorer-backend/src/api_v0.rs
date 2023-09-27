@@ -21,6 +21,7 @@ pub fn router(app_state: AppState) -> Router {
         .route("/transactions/:tx_hash", get(get_tx_by_hash))
         .route("/events", get(get_events))
         // Unimplemented
+        .route("/indexing-status", get(get_indexing_status))
         .route("/batches", get(unimplemented))
         .route("/batches/:batch_id", get(unimplemented))
         .route("/accounts/:address", get(unimplemented))
@@ -191,6 +192,20 @@ async fn get_transactions(
                 })
                 .collect(),
         )),
+        errors: vec![],
+        links: HashMap::new(),
+    })
+}
+
+async fn get_indexing_status(State(state): AxumState) -> Json<ResponseObject<JsonValue>> {
+    let chain_head_opt = state.db.chain_head().await.unwrap();
+
+    Json(ResponseObject {
+        data: Some(ResponseObjectData::Single(ResourceObject {
+            resoure_type: "indexingStatus",
+            id: "latest".to_string(),
+            attributes: chain_head_opt.unwrap_or_default(),
+        })),
         errors: vec![],
         links: HashMap::new(),
     })

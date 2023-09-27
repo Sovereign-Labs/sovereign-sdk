@@ -52,6 +52,16 @@ impl Db {
         Ok(row_opt.map(|r| r.0))
     }
 
+    pub async fn chain_head(&self) -> anyhow::Result<Option<Value>> {
+        // We always fetch the last known chain head value.
+        let row: Option<(Value,)> =
+            sqlx::query_as("SELECT chain_head_blob FROM indexing_status ORDER BY id DESC LIMIT 1")
+                .fetch_optional(&self.pool)
+                .await?;
+
+        Ok(row.map(|r| r.0))
+    }
+
     pub async fn get_block_by_hash(&self, hash: &m::HexString) -> anyhow::Result<Vec<Value>> {
         let rows: Vec<(Value,)> = sqlx::query_as(indoc!(
             r#"
@@ -172,7 +182,15 @@ impl Db {
 
 /// Write operations.
 impl Db {
-    pub async fn upsert_blocks(&self, blocks: &[&Value]) -> anyhow::Result<()> {
+    pub async fn insert_chain_head(&self, blob: &Value) -> anyhow::Result<()> {
+        sqlx::query("INSERT INTO indexing_status (chain_head_blob) VALUES ($1)")
+            .bind(blob)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn upsert_blocks(&self, blocks: &[Value]) -> anyhow::Result<()> {
         if blocks.is_empty() {
             return Ok(());
         }
