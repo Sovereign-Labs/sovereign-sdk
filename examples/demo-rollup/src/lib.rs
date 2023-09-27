@@ -6,7 +6,6 @@ pub mod register_rpc;
 #[cfg(feature = "native")]
 mod rollup;
 
-mod verifier;
 use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 #[cfg(feature = "native")]
 pub use rollup::{
@@ -16,7 +15,6 @@ pub use rollup::{
 use sov_celestia_adapter::types::NamespaceId;
 #[cfg(feature = "native")]
 use sov_db::ledger_db::LedgerDB;
-pub use verifier::AppVerifier;
 
 /// The rollup stores its data in the namespace b"sov-test" on Celestia
 /// You can change this constant to point your rollup at a different namespace

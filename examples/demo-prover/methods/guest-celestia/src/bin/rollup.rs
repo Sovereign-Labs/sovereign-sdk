@@ -6,7 +6,7 @@ use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 use demo_stf::app::create_zk_app_template;
 use sov_celestia_adapter::types::NamespaceId;
 use sov_celestia_adapter::verifier::CelestiaVerifier;
-use sov_demo_rollup::AppVerifier;
+use demo_stf::AppVerifier;
 use sov_risc0_adapter::guest::Risc0Guest;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
