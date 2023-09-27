@@ -3,6 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
 use borsh::{BorshDeserialize, BorshSerialize};
+use celestia_proto::celestia::blob::v1::MsgPayForBlobs;
+use celestia_proto::cosmos::tx::v1beta1::Tx;
 use celestia_types::DataAvailabilityHeader;
 use prost::bytes::Buf;
 use prost::Message;
@@ -15,19 +17,16 @@ use tendermint::crypto::default::Sha256;
 use tendermint::merkle::simple_hash_from_byte_vectors;
 use tendermint::Hash;
 pub use tendermint_proto::v0_34 as celestia_tm_version;
+use tendermint_proto::v0_34::types::IndexWrapper;
 use tendermint_proto::Protobuf;
 use tracing::debug;
-
-pub const GENESIS_PLACEHOLDER_HASH: &[u8; 32] = &[255; 32];
-
-use celestia_proto::celestia::blob::v1::MsgPayForBlobs;
-use celestia_proto::cosmos::tx::v1beta1::Tx;
-use tendermint_proto::v0_34::types::IndexWrapper;
 
 use crate::shares::{BlobIterator, BlobRefIterator, NamespaceGroup};
 use crate::utils::{read_varint, BoxError};
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::{ChainValidityCondition, TmHash, PFB_NAMESPACE};
+
+pub const GENESIS_PLACEHOLDER_HASH: &[u8; 32] = &[255; 32];
 
 /// A partially serialized tendermint header. Only fields which are actually inspected by
 /// Jupiter are included in their raw form. Other fields are pre-encoded as protobufs.
