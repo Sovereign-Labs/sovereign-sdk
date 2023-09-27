@@ -20,7 +20,7 @@ sov-rollup-interface = { path = "../../rollup-interface" }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" }
 sov-modules-api = { path = "../../module-system/sov-modules-api" }
 demo-stf = { path = "../demo-stf" }
-
+methods = { path = "../demo-prover/methods" }
 async-trait = { workspace = true, optional = true }
 anyhow = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["bytes"], optional = true }
@@ -73,13 +73,13 @@ revm = { workspace = true }
 
 [features]
 default = ["native"] # Deviate from convention by making the "native" feature active by default. This aligns with how this package is meant to be used (as a binary first, library second).
-experimental = ["sov-ethereum/experimental", "reth-primitives", "secp256k1", "demo-stf/experimental", "local"]
+experimental = ["default", "sov-ethereum/experimental", "reth-primitives", "secp256k1", "demo-stf/experimental", "sov-ethereum/local"]
 native = ["anyhow", "jsonrpsee", "serde", "serde_json", "tracing", "tokio", "tracing-subscriber",
 	"demo-stf/native", "sov-modules-stf-template/native", "sov-risc0-adapter/native", "sov-modules-api/native",
 	"sov-state/native", "sov-cli", "clap", "sov-celestia-adapter/native", "sov-db", "sov-sequencer", "sov-stf-runner/native",
-	"sov-modules-api/native"]
+	"sov-modules-api/native", "sov-rollup-interface/native"]
 bench = ["native", "async-trait", "borsh", "hex"]
-local = ["sov-ethereum/local"]
+
 
 [[bench]]
 name = "rollup_bench"

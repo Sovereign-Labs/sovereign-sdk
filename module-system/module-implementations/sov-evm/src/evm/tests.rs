@@ -118,7 +118,25 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
         ethereum_types::U256::from(out.as_ref())
     };
 
-    assert_eq!(set_arg, get_res.as_u32())
+    assert_eq!(set_arg, get_res.as_u32());
+
+    {
+        let failing_call_data = contract.failing_function_call_data();
+
+        let tx = dev_signer
+            .sign_default_transaction(
+                TransactionKind::Call(contract_address.into()),
+                hex::decode(hex::encode(&failing_call_data)).unwrap(),
+                4,
+            )
+            .unwrap();
+
+        let tx = &tx.try_into().unwrap();
+        let result =
+            executor::execute_tx(&mut evm_db, &BlockEnv::default(), tx, cfg_env.clone()).unwrap();
+
+        assert!(matches!(result, ExecutionResult::Revert { .. }));
+    }
 }
 
 fn contract_address(result: &ExecutionResult) -> Option<B160> {

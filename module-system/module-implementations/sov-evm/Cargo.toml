@@ -49,6 +49,7 @@ revm = { workspace = true, features = [
     "optional_no_base_fee",
 ] }
 reth-primitives = { workspace = true }
+reth-interfaces = { workspace = true }
 reth-rpc-types = { workspace = true }
 reth-rpc-types-compat = { workspace = true }
 reth-revm = { workspace = true }
