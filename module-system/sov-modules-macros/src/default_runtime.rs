@@ -31,8 +31,8 @@ impl DefaultRuntimeMacro {
 
         // Implements the Default Runtime Config trait
         Ok(quote::quote! {
-        impl #impl_generics ::std::default::Default for #ident #type_generics #where_clause {
-            fn default() -> Self {
+        impl #impl_generics #ident #type_generics #where_clause {
+            pub fn default() -> Self {
                 use ::sov_modules_api::ModuleInfo as _;
 
                 Self {
