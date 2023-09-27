@@ -60,6 +60,18 @@ pub struct SortingQuery<T> {
     pub direction: SortingQueryDirection,
 }
 
+impl<T> SortingQuery<T> {
+    pub fn map_to_string<F>(&self, f: F) -> SortingQuery<&'static str>
+    where
+        F: Fn(&T) -> &'static str,
+    {
+        SortingQuery {
+            by: f(&self.by),
+            direction: self.direction,
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SortingQueryDirection {
@@ -169,7 +181,19 @@ pub struct TransactionsQuery {
     pub pagination: PaginationQuery<HexString>,
     /// Transactions can only ever be sorted by their ID i.e. number.
     #[serde(flatten)]
-    pub sorting: SortingQuery<u64>,
+    pub sorting: SortingQuery<TransactionsQuerySortBy>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TransactionsQuerySortBy {
+    Id,
+}
+
+impl Default for TransactionsQuerySortBy {
+    fn default() -> Self {
+        TransactionsQuerySortBy::Id
+    }
 }
 
 /// A newtype wrapper around [`Vec<u8>`] which is serialized as a

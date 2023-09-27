@@ -1,5 +1,3 @@
-mod jsonapi;
-
 use std::collections::HashMap;
 
 use axum::extract::{OriginalUri, Path, Query, State};
@@ -9,7 +7,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde_json::Value as JsonValue;
 
-use self::jsonapi::{ErrorObject, Links, ResourceObject, ResponseObject, ResponseObjectData};
+use self::jsonapi_utils::{ErrorObject, Links, ResourceObject, ResponseObject, ResponseObjectData};
 use crate::{models as m, AppState};
 
 type AxumState = State<AppState>;
@@ -196,4 +194,78 @@ async fn get_transactions(
         errors: vec![],
         links: HashMap::new(),
     })
+}
+
+/// Helpers for {JSON:API}.
+/// See: <https://jsonapi.org/>.
+mod jsonapi_utils {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    use crate::Config;
+
+    #[derive(Debug, serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct ResponseObject<T> {
+        #[serde(skip_serializing_if = "HashMap::is_empty")]
+        pub links: HashMap<String, String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub data: Option<ResponseObjectData<T>>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        pub errors: Vec<ErrorObject>,
+    }
+
+    #[derive(Debug, serde::Serialize)]
+    #[serde(untagged)]
+    pub enum ResponseObjectData<T> {
+        Single(ResourceObject<T>),
+        Many(Vec<ResourceObject<T>>),
+    }
+
+    impl<T> From<ResourceObject<T>> for ResponseObjectData<T> {
+        fn from(resource: ResourceObject<T>) -> Self {
+            Self::Single(resource)
+        }
+    }
+
+    #[derive(Debug, serde::Serialize)]
+    pub struct ResourceObject<T, Id = String> {
+        #[serde(rename = "type")]
+        pub resoure_type: &'static str,
+        pub id: Id,
+        pub attributes: T,
+    }
+
+    /// Many other fields are available, but we don't need them for now.
+    /// See: <https://jsonapi.org/format/#error-objects>.
+    #[derive(Debug, serde::Serialize)]
+    pub struct ErrorObject {
+        pub status: i32,
+        pub title: String,
+        pub details: Option<String>,
+    }
+
+    pub struct Links {
+        config: Arc<Config>,
+        links: HashMap<String, String>,
+    }
+
+    impl Links {
+        pub fn new(config: Arc<Config>) -> Self {
+            Self {
+                config,
+                links: HashMap::new(),
+            }
+        }
+
+        pub fn add(&mut self, name: impl ToString, path: impl AsRef<str>) {
+            let mut url = self.config.base_url.clone();
+            url.push_str(path.as_ref());
+            self.links.insert(name.to_string(), url);
+        }
+
+        pub fn links(self) -> HashMap<String, String> {
+            self.links
+        }
+    }
 }

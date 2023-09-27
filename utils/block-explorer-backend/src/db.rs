@@ -3,7 +3,7 @@ use serde_json::Value;
 use sqlx::{PgPool, Postgres, QueryBuilder};
 use tracing::info;
 
-use crate::models as m;
+use crate::models::{self as m};
 
 #[derive(Clone)]
 pub struct Db {
@@ -119,13 +119,10 @@ impl Db {
         // TODO
 
         // Sorting
-        query_builder.query.push(" ORDER BY ");
-        query_builder.query.push(match query.sorting.by {
+        query_builder.order_by(&query.sorting.map_to_string(|by| match by {
             m::BlocksQuerySortBy::Height => "(blob->>'number')::bigint",
             m::BlocksQuerySortBy::Timestamp => "blob->>'timestamp'",
-        });
-        query_builder.query.push(" ");
-        query_builder.push_order_direction(query.sorting.direction);
+        }));
 
         let query = query_builder.query.build_query_as();
         let rows: Vec<(Value,)> = query.fetch_all(&self.pool).await?;
@@ -161,43 +158,15 @@ impl Db {
         // TODO
 
         // Sorting
-        query_builder.query.push(" ORDER BY id ");
-        query_builder.push_order_direction(query.sorting.direction);
+        query_builder.order_by(
+            &query
+                .sorting
+                .map_to_string(|m::TransactionsQuerySortBy::Id| "id"),
+        );
 
         let query = query_builder.query.build_query_as();
         let rows: Vec<(Value,)> = query.fetch_all(&self.pool).await?;
         Ok(rows.into_iter().map(|v| v.0).collect())
-    }
-}
-
-struct WhereClausesBuilder<'a> {
-    query: QueryBuilder<'a, Postgres>,
-    where_used_already: bool,
-}
-
-impl<'a> WhereClausesBuilder<'a> {
-    fn new(query: QueryBuilder<'a, Postgres>) -> Self {
-        Self {
-            query,
-            where_used_already: false,
-        }
-    }
-
-    fn push_condition(&mut self, condition: &str) {
-        if self.where_used_already {
-            self.query.push(" AND ");
-        } else {
-            self.query.push(" WHERE ");
-            self.where_used_already = true;
-        }
-        self.query.push(condition);
-    }
-
-    fn push_order_direction(&mut self, dir: m::SortingQueryDirection) {
-        self.query.push(match dir {
-            m::SortingQueryDirection::Ascending => "ASC",
-            m::SortingQueryDirection::Descending => "DESC",
-        });
     }
 }
 
@@ -233,5 +202,63 @@ impl Db {
 
         query.build().execute(&self.pool).await?;
         Ok(())
+    }
+
+    pub async fn upsert_events(&self, events: &[m::Event]) -> anyhow::Result<()> {
+        if events.is_empty() {
+            return Ok(());
+        }
+
+        let mut query = QueryBuilder::new("INSERT INTO events (id, key, value) ");
+
+        query.push_values(events, |mut builder, event| {
+            builder.push_bind(event.id);
+            builder.push_bind(&event.key);
+            builder.push_bind(&event.value);
+        });
+        query.push(" ON CONFLICT ((id)) DO UPDATE SET value = EXCLUDED.value");
+
+        query.build().execute(&self.pool).await?;
+        Ok(())
+    }
+}
+
+/// A wrapper around [`sqlx::QueryBuilder`] which adds some custom functionality
+/// on top of it:
+///
+/// - Syntactically correct `WHERE` clauses.
+/// - Type-safe `ORDER BY` clauses.
+/// - TODO: cursor-based pagination.
+struct WhereClausesBuilder<'a> {
+    query: QueryBuilder<'a, Postgres>,
+    where_used_already: bool,
+}
+
+impl<'a> WhereClausesBuilder<'a> {
+    fn new(query: QueryBuilder<'a, Postgres>) -> Self {
+        Self {
+            query,
+            where_used_already: false,
+        }
+    }
+
+    fn push_condition(&mut self, condition: &str) {
+        if self.where_used_already {
+            self.query.push(" AND ");
+        } else {
+            self.query.push(" WHERE ");
+            self.where_used_already = true;
+        }
+        self.query.push(condition);
+    }
+
+    fn order_by(&mut self, sorting: &m::SortingQuery<&str>) {
+        self.query.push(" ORDER BY ");
+        self.query.push(sorting.by);
+        self.query.push(" ");
+        self.query.push(match sorting.direction {
+            m::SortingQueryDirection::Ascending => "ASC",
+            m::SortingQueryDirection::Descending => "DESC",
+        });
     }
 }
