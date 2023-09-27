@@ -205,7 +205,7 @@ impl TestClient {
         Ok(ethereum_types::U256::from(resp_array))
     }
 
-    #[cfg(feature = "local")]
+    
     async fn eth_accounts(&self) -> Vec<Address> {
         self.http_client
             .request("eth_accounts", rpc_params![])
@@ -213,7 +213,7 @@ impl TestClient {
             .unwrap()
     }
 
-    #[cfg(feature = "local")]
+    
     async fn eth_send_transaction(&self, tx: TypedTransaction) -> PendingTransaction<'_, Http> {
         self.client
             .provider()
@@ -343,7 +343,7 @@ impl TestClient {
             assert_eq!(102, get_arg.as_u32());
         }
 
-        #[cfg(feature = "local")]
+        
         {
             let value = 103;
 
@@ -378,11 +378,9 @@ async fn send_tx_test_to_eth(rpc_address: SocketAddr) -> Result<(), Box<dyn std:
 
     let test_client = TestClient::new(chain_id, key, from_addr, contract, rpc_address).await;
 
-    #[cfg(feature = "local")]
-    {
-        let etc_accounts = test_client.eth_accounts().await;
-        assert_eq!(vec![from_addr], etc_accounts);
-    }
+    let etc_accounts = test_client.eth_accounts().await;
+    assert_eq!(vec![from_addr], etc_accounts);
+    
 
     let eth_chain_id = test_client.eth_chain_id().await;
     assert_eq!(chain_id, eth_chain_id);
