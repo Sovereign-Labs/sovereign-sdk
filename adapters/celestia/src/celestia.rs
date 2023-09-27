@@ -363,45 +363,60 @@ mod tests {
 
     use crate::{CelestiaHeader, CompactHeader};
 
-    const HEADER_RESPONSE_JSON: &[u8] = include_bytes!("../test_data/header_response.json");
+    const HEADER_JSON_RESPONSES: &[&str] = &[
+        include_str!("../test_data/block_with_rollup_data/header.json"),
+        include_str!("../test_data/block_without_rollup_data/header.json"),
+    ];
 
     #[test]
     fn test_compact_header_serde() {
-        let original_header: ExtendedHeader = serde_json::from_slice(HEADER_RESPONSE_JSON).unwrap();
+        for header_json in HEADER_JSON_RESPONSES {
+            let original_header: ExtendedHeader = serde_json::from_str(header_json).unwrap();
 
-        let header: CompactHeader = original_header.header.into();
+            let header: CompactHeader = original_header.header.into();
 
-        let serialized_header = postcard::to_stdvec(&header).unwrap();
-        let deserialized_header: CompactHeader = postcard::from_bytes(&serialized_header).unwrap();
-        assert_eq!(deserialized_header, header)
+            let serialized_header = postcard::to_stdvec(&header).unwrap();
+            let deserialized_header: CompactHeader =
+                postcard::from_bytes(&serialized_header).unwrap();
+            assert_eq!(deserialized_header, header)
+        }
     }
 
     #[test]
     fn test_compact_header_hash() {
-        let original_header: ExtendedHeader = serde_json::from_slice(HEADER_RESPONSE_JSON).unwrap();
+        let expected_hashes = [
+            "C839E720DA55CC6E43EC7CE00744D6151D79E84C81D7F6995F3B13B7AE532456",
+            "F769490DC768E7678160384070727533B7AE809477EA5D191CF7AF5C917A7973",
+        ];
+        for (header_json, expected_hash) in HEADER_JSON_RESPONSES.iter().zip(expected_hashes.iter())
+        {
+            let original_header: ExtendedHeader = serde_json::from_str(header_json).unwrap();
 
-        let tm_header = original_header.header.clone();
-        let compact_header: CompactHeader = original_header.header.into();
+            let tm_header = original_header.header.clone();
+            let compact_header: CompactHeader = original_header.header.into();
 
-        assert_eq!(tm_header.hash(), compact_header.hash());
-        assert_eq!(
-            hex::decode("34843C107EDD591AC8D28F4897A00EC34B1707CBB0C0C4AD96C08F7C24A8B30D")
-                .unwrap(),
-            compact_header.hash().as_bytes()
-        );
+            assert_eq!(tm_header.hash(), compact_header.hash());
+            assert_eq!(
+                hex::decode(expected_hash).unwrap(),
+                compact_header.hash().as_bytes()
+            );
 
-        assert_eq!(tm_header.hash(), compact_header.hash(),);
+            assert_eq!(tm_header.hash(), compact_header.hash(),);
+        }
     }
 
     #[test]
     fn test_zkvm_serde_celestia_header() {
-        // https://github.com/eigerco/celestia-tendermint-rs/pull/12
-        let original_header: ExtendedHeader = serde_json::from_slice(HEADER_RESPONSE_JSON).unwrap();
-        let cel_header = CelestiaHeader::new(original_header.dah, original_header.header.into());
+        // regression https://github.com/eigerco/celestia-tendermint-rs/pull/12
+        for header_json in HEADER_JSON_RESPONSES {
+            let original_header: ExtendedHeader = serde_json::from_str(header_json).unwrap();
+            let cel_header =
+                CelestiaHeader::new(original_header.dah, original_header.header.into());
 
-        let serialized = risc0_zkvm::serde::to_vec(&cel_header).unwrap();
-        let deserialized = risc0_zkvm::serde::from_slice(&serialized).unwrap();
+            let serialized = risc0_zkvm::serde::to_vec(&cel_header).unwrap();
+            let deserialized = risc0_zkvm::serde::from_slice(&serialized).unwrap();
 
-        assert_eq!(cel_header, deserialized);
+            assert_eq!(cel_header, deserialized);
+        }
     }
 }
