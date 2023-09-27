@@ -8,7 +8,7 @@ mod genesis;
 mod query;
 #[cfg(feature = "native")]
 pub use query::*;
-#[cfg(all(test, feature = "native"))]
+#[cfg(test)]
 mod tests;
 
 pub use call::{CallMessage, UPDATE_ACCOUNT_MSG};

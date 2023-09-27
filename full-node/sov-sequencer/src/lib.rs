@@ -134,7 +134,6 @@ pub enum SubmitTransactionResponse {
 #[cfg(test)]
 mod tests {
 
-    #[cfg(feature = "native")]
     use sov_rollup_interface::da::BlobReaderTrait;
     use sov_rollup_interface::mocks::{MockAddress, MockDaService};
 
@@ -191,7 +190,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(feature = "native")]
     async fn test_submit_happy_path() {
         let tx1 = vec![1, 2, 3];
         let tx2 = vec![3, 4, 5];
@@ -214,7 +212,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(feature = "native")]
     async fn test_accept_tx() {
         let batch_builder = MockBatchBuilder { mempool: vec![] };
         let da_service = MockDaService::new(MockAddress::default());
