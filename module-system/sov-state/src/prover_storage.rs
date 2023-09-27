@@ -73,8 +73,8 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     type Witness = S::Witness;
     type RuntimeConfig = Config;
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
-    type StateUpdate = NodeBatch;
     type Root = jmt::RootHash;
+    type StateUpdate = NodeBatch;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Self::with_path(config.path.as_path())
@@ -175,11 +175,6 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         self.db.inc_next_version();
     }
 
-    // Based on assumption `validate_and_commit` increments version.
-    fn is_empty(&self) -> bool {
-        self.db.get_next_version() <= 1
-    }
-
     fn open_proof(
         &self,
         state_root: Self::Root,
@@ -190,6 +185,11 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
 
         proof.verify(state_root, key_hash, value.as_ref().map(|v| v.value()))?;
         Ok((key, value))
+    }
+
+    // Based on assumption `validate_and_commit` increments version.
+    fn is_empty(&self) -> bool {
+        self.db.get_next_version() <= 1
     }
 }
 

@@ -8,6 +8,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::da::DaSpec;
+use crate::state::StateSnapshot;
 use crate::zk::{ValidityCondition, Zkvm};
 
 #[cfg(any(test, feature = "fuzzing"))]
@@ -77,13 +78,15 @@ pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
 ///  - B - generic for batch receipt contents
 ///  - T - generic for transaction receipt contents
 ///  - W - generic for witness
-pub struct SlotResult<S, B, T, W> {
+pub struct SlotResult<S, B, T, W, Snap: StateSnapshot> {
     /// Final state root after all blobs were applied
     pub state_root: S,
     /// Receipt for each applied batch
     pub batch_receipts: Vec<BatchReceipt<B, T>>,
     /// Witness after applying the whole block
     pub witness: W,
+
+    pub new_snapshot: Snap,
 }
 
 // TODO(@preston-evans98): update spec with simplified API
@@ -129,8 +132,9 @@ pub trait StateTransitionFunction<Vm: Zkvm, Da: DaSpec> {
     /// which is why we use a generic here instead of an associated type.
     ///
     /// Commits state changes to the database
-    fn apply_slot<'a, I>(
+    fn apply_slot<'a, I, S: StateSnapshot>(
         &mut self,
+        pre_state: S,
         pre_state_root: &Self::StateRoot,
         witness: Self::Witness,
         slot_header: &Da::BlockHeader,
@@ -141,6 +145,7 @@ pub trait StateTransitionFunction<Vm: Zkvm, Da: DaSpec> {
         Self::BatchReceiptContents,
         Self::TxReceiptContents,
         Self::Witness,
+        S,
     >
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>;

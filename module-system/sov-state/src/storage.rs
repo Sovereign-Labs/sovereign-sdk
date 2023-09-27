@@ -200,6 +200,7 @@ pub trait Storage: Clone {
     ) -> Result<(Self::Root, Self::StateUpdate), anyhow::Error>;
 
     /// Commits state changes to the database.
+    /// TODO: What is accessor
     fn commit(&self, node_batch: &Self::StateUpdate, accessory_update: &OrderedReadsAndWrites);
 
     /// Validate all of the storage accesses in a particular cache log,
