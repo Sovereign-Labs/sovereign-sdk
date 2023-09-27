@@ -91,6 +91,8 @@ impl Db {
             query_builder.query.push_bind(offset);
         }
 
+        // TODO: pagination and sorting.
+
         let query = query_builder.query.build_query_as();
         Ok(query.fetch_all(&self.pool).await?)
     }
@@ -99,6 +101,7 @@ impl Db {
         let mut query_builder =
             WhereClausesBuilder::new(QueryBuilder::new("SELECT blob FROM blocks"));
 
+        // Filtering
         if let Some(hash) = &query.hash {
             query_builder.push_condition("blob->>'hash' = ");
             query_builder.query.push_bind(hash.to_string());
@@ -111,6 +114,55 @@ impl Db {
             query_builder.push_condition("blob->>'parentHash' = ");
             query_builder.query.push_bind(parent_hash.to_string());
         }
+
+        // Pagination
+        // TODO
+
+        // Sorting
+        query_builder.query.push(" ORDER BY ");
+        query_builder.query.push(match query.sorting.by {
+            m::BlocksQuerySortBy::Height => "(blob->>'number')::bigint",
+            m::BlocksQuerySortBy::Timestamp => "blob->>'timestamp'",
+        });
+        query_builder.query.push(" ");
+        query_builder.push_order_direction(query.sorting.direction);
+
+        let query = query_builder.query.build_query_as();
+        let rows: Vec<(Value,)> = query.fetch_all(&self.pool).await?;
+        Ok(rows.into_iter().map(|v| v.0).collect())
+    }
+
+    pub async fn get_transactions(
+        &self,
+        query: &m::TransactionsQuery,
+    ) -> anyhow::Result<Vec<Value>> {
+        let mut query_builder =
+            WhereClausesBuilder::new(QueryBuilder::new("SELECT blob FROM transactions"));
+
+        // Filtering
+        if let Some(filter) = &query.filter {
+            match filter {
+                m::TransactionsQueryFilter::Batch(batch_id, batch_txs_offset) => {
+                    query_builder.push_condition("blob->>'batch_id' = ");
+                    query_builder.query.push_bind(batch_id.to_string());
+                }
+                m::TransactionsQueryFilter::Hash(hash) => {
+                    query_builder.push_condition("blob->>'tx_hash' = ");
+                    query_builder.query.push_bind(hash.to_string());
+                }
+                m::TransactionsQueryFilter::Number(num) => {
+                    query_builder.push_condition("blob->>'tx_number' = ");
+                    query_builder.query.push_bind(num.to_string());
+                }
+            }
+        }
+
+        // Pagination
+        // TODO
+
+        // Sorting
+        query_builder.query.push(" ORDER BY id ");
+        query_builder.push_order_direction(query.sorting.direction);
 
         let query = query_builder.query.build_query_as();
         let rows: Vec<(Value,)> = query.fetch_all(&self.pool).await?;
@@ -139,6 +191,13 @@ impl<'a> WhereClausesBuilder<'a> {
             self.where_used_already = true;
         }
         self.query.push(condition);
+    }
+
+    fn push_order_direction(&mut self, dir: m::SortingQueryDirection) {
+        self.query.push(match dir {
+            m::SortingQueryDirection::Ascending => "ASC",
+            m::SortingQueryDirection::Descending => "DESC",
+        });
     }
 }
 
@@ -175,14 +234,4 @@ impl Db {
         query.build().execute(&self.pool).await?;
         Ok(())
     }
-}
-
-fn sort(query: &mut QueryBuilder<Postgres>, sorting: m::SortingQuery) {
-    query.push(" ORDER BY ");
-    query.push_bind(sorting.by);
-    query.push(" ");
-    query.push_bind(match sorting.direction {
-        m::SortingQueryDirection::Ascending => "ASC",
-        m::SortingQueryDirection::Descending => "DESC",
-    });
 }

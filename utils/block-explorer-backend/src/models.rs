@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+const MAX_PAGINATION_SIZE: u32 = 100;
+
 #[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
 pub struct Event {
     pub id: i64,
@@ -25,15 +27,36 @@ pub struct PaginationQuery<T> {
     pub before: Option<T>,
 }
 
+impl<T> PaginationQuery<T> {
+    pub fn validate(&self) -> anyhow::Result<()> {
+        if self.size > MAX_PAGINATION_SIZE {
+            anyhow::bail!(
+                "Pagination size cannot be greater than {}",
+                MAX_PAGINATION_SIZE
+            );
+        }
+
+        if self.size == 0 {
+            anyhow::bail!("Pagination size cannot be zero");
+        }
+
+        if self.after.is_some() && self.before.is_some() {
+            anyhow::bail!("Cannot paginate with both `before` and `after`");
+        }
+
+        Ok(())
+    }
+}
+
 fn default_page_size() -> u32 {
     25
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
-pub struct SortingQuery {
-    #[serde(rename = "sort[by]")]
-    pub by: String,
-    #[serde(rename = "sort[direction]")]
+pub struct SortingQuery<T> {
+    #[serde(rename = "sort[by]", default)]
+    pub by: T,
+    #[serde(rename = "sort[direction]", default)]
     pub direction: SortingQueryDirection,
 }
 
@@ -53,16 +76,51 @@ impl Default for SortingQueryDirection {
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BlocksQuery {
-    #[serde(rename = "filter[hash]")]
+    #[serde(rename = "filter[hash]", skip_serializing_if = "Option::is_none")]
     pub hash: Option<HexString>,
-    #[serde(rename = "filter[height]")]
+    #[serde(rename = "filter[height]", skip_serializing_if = "Option::is_none")]
     pub height: Option<i64>,
-    #[serde(rename = "filter[parentHash]")]
+    #[serde(rename = "filter[parentHash]", skip_serializing_if = "Option::is_none")]
     pub parent_hash: Option<HexString>,
     #[serde(flatten)]
-    pagination: PaginationQuery<HexString>,
+    pub pagination: PaginationQuery<HexString>,
     #[serde(flatten)]
-    sorting: SortingQuery,
+    pub sorting: SortingQuery<BlocksQuerySortBy>,
+}
+
+#[derive(Debug, Copy, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BlocksQuerySortBy {
+    Height,
+    Timestamp,
+}
+
+impl Default for BlocksQuerySortBy {
+    fn default() -> Self {
+        BlocksQuerySortBy::Height
+    }
+}
+
+impl BlocksQuery {
+    pub fn validate(&self) -> anyhow::Result<()> {
+        if self.hash.is_some() && self.height.is_some() {
+            anyhow::bail!("Cannot filter by both hash and height");
+        }
+        if self.hash.is_some() && self.parent_hash.is_some() {
+            anyhow::bail!("Cannot filter by both hash and parent hash");
+        }
+
+        self.pagination.validate()?;
+
+        Ok(())
+    }
+
+    fn default_sorting() -> SortingQuery<BlocksQuerySortBy> {
+        SortingQuery {
+            by: BlocksQuerySortBy::Height,
+            direction: SortingQueryDirection::Descending,
+        }
+    }
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -74,6 +132,44 @@ pub struct EventsQuery {
     pub tx_hash: Option<HexString>,
     pub tx_height: Option<i64>,
     pub key: Option<HexString>,
+}
+
+impl EventsQuery {
+    pub fn validate(&self) -> anyhow::Result<()> {
+        if self.id.is_some() {
+            if self.offset.is_some()
+                || self.tx_hash.is_some()
+                || self.tx_height.is_some()
+                || self.key.is_some()
+            {
+                anyhow::bail!("Cannot filter by both id and other fields");
+            }
+        }
+
+        // TODO
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(untagged)]
+pub enum TransactionsQueryFilter {
+    Number(u64),
+    Hash(HexString),
+    Batch(u64, u64),
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransactionsQuery {
+    #[serde(flatten)]
+    pub filter: Option<TransactionsQueryFilter>,
+    #[serde(flatten)]
+    pub pagination: PaginationQuery<HexString>,
+    /// Transactions can only ever be sorted by their ID i.e. number.
+    #[serde(flatten)]
+    pub sorting: SortingQuery<u64>,
 }
 
 /// A newtype wrapper around [`Vec<u8>`] which is serialized as a
