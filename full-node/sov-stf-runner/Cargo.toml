@@ -28,7 +28,6 @@ sov-state = { path = "../../module-system/sov-state", version = "0.2" }
 sov-modules-api = { path = "../../module-system/sov-modules-api", version = "0.2" }
 
 [dev-dependencies]
-sov-celestia-adapter = { path = "../../adapters/celestia", version = "0.2" }
 tempfile = { workspace = true }
 rand = { workspace = true }
 
