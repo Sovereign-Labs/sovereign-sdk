@@ -1485,7 +1485,6 @@ dependencies = [
  "borsh",
  "hex",
  "serde",
- "sov-celestia-adapter",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",

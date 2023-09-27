@@ -51,7 +51,7 @@ rand = "0.8"
 
 [features]
 default = []
-experimental = ["default", "native", "sov-evm/experimental", "reth-primitives"]
+experimental = ["sov-evm/experimental", "reth-primitives"]
 native = [
     "sov-stf-runner/native",
     "sov-bank/native",
@@ -64,6 +64,7 @@ native = [
     "sov-value-setter/native",
     "sov-modules-api/native",
     "sov-rollup-interface/mocks",
+    "sov-rollup-interface/native",
     "sov-modules-stf-template/native",
     "sov-sequencer",
     "clap",

@@ -137,7 +137,6 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
-            #[cfg(feature = "local")]
             eth_signer,
         },
         prover,
@@ -186,7 +185,6 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost>(
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
-            #[cfg(feature = "local")]
             eth_signer,
         },
         prover,
