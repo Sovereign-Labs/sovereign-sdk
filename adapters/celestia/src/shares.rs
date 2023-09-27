@@ -491,6 +491,7 @@ impl<'a> std::iter::Iterator for NamespaceIterator<'a> {
 
 #[cfg(test)]
 mod tests {
+    use celestia_types::nmt::NS_ID_V0_SIZE;
     use postcard::{from_bytes, to_allocvec, Result};
     use proptest::collection::vec;
     use proptest::prelude::*;
@@ -512,11 +513,19 @@ mod tests {
         assert_eq!(share, decoded_share);
     }
 
-    fn share_bytes_strategy() -> impl Strategy<Value = Vec<u8>> {
-        vec(0u8.., 9..=SHARE_SIZE).prop_map(|mut vec| {
-            vec[8] &= 0x01;
-            vec
-        })
+    prop_compose! {
+        fn share_bytes_strategy()(
+            ns in vec(0u8.., NS_ID_V0_SIZE),
+            mut share in vec(0u8.., SHARE_SIZE),
+        ) -> Vec<u8> {
+            let namespace = Namespace::new_v0(&ns).expect("doesn't exceed size");
+            // overwrite namespace
+            share[..NS_SIZE].copy_from_slice(namespace.as_ref());
+            // set version to zero
+            share[NS_SIZE] &= 0x01;
+
+            share
+        }
     }
 
     proptest! {

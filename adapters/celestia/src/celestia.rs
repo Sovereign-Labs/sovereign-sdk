@@ -1,6 +1,7 @@
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
+use anyhow::Context;
 use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_types::DataAvailabilityHeader;
 use prost::bytes::Buf;
@@ -299,10 +300,8 @@ pub fn parse_pfb_namespace(
     assert_eq!(group.shares()[0].namespace(), PFB_NAMESPACE);
     let mut pfbs = Vec::new();
     for blob in group.blobs() {
-        debug!(blob = ?blob, "blob!");
         let mut data = blob.data();
         while data.has_remaining() {
-            debug!("has remaining!");
             pfbs.push(next_pfb(&mut data)?)
         }
     }
@@ -321,25 +320,18 @@ pub struct TxPosition {
 }
 
 pub(crate) fn pfb_from_iter(data: impl Buf, pfb_len: usize) -> Result<MsgPayForBlobs, BoxError> {
-    debug!("Decoding blob tx");
-    let blob_tx = IndexWrapper::decode(data.take(pfb_len))?;
-    debug!("Index wrapper: {:?}", blob_tx);
-    debug!("Decoding cosmos sdk tx");
-    let cosmos_tx = Tx::decode(&blob_tx.tx[..])?;
-    let messages = cosmos_tx
-        .body
-        .ok_or(anyhow::format_err!("No body in cosmos tx"))?
-        .messages;
-    if messages.len() != 1 {
-        return Err(anyhow::format_err!("Expected 1 message in cosmos tx"));
-    }
-    debug!("Decoding PFB from blob tx value");
-    Ok(MsgPayForBlobs::decode(&messages[0].value[..])?)
+    let blob_tx = IndexWrapper::decode(data.take(pfb_len)).context("failed decoding blob tx")?;
+    let cosmos_tx =
+        Tx::decode(&blob_tx.tx[..]).context("failed decoding cosmos tx from blob tx")?;
+    let messages = cosmos_tx.body.context("No body in cosmos tx")?.messages;
+
+    anyhow::ensure!(messages.len() == 1, "Expected 1 message in cosmos tx");
+    MsgPayForBlobs::decode(&messages[0].value[..]).context("failed decoding PFB frob cosmos tx")
 }
 
 fn next_pfb(mut data: &mut BlobRefIterator) -> Result<(MsgPayForBlobs, TxPosition), BoxError> {
     let (start_idx, start_offset) = data.current_position();
-    let (len, len_of_len) = read_varint(&mut data).expect("Varint must be valid");
+    let (len, len_of_len) = read_varint(&mut data).context("failed decoding varint")?;
     debug!(
         "Decoding wrapped PFB of length {}. Stripped {} bytes of prefix metadata",
         len, len_of_len

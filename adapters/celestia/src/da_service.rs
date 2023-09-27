@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use celestia_rpc::prelude::*;
-use celestia_types::blob::{Blob as RawBlob, Commitment, SubmitOptions};
+use celestia_types::blob::{Blob as JsonBlob, Commitment, SubmitOptions};
+use celestia_types::consts::appconsts::{
+    CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE, SHARE_SIZE,
+};
 use celestia_types::nmt::Namespace;
 use celestia_types::DataAvailabilityHeader;
 use jsonrpsee::http_client::{HeaderMap, HttpClient};
@@ -18,7 +21,8 @@ use crate::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams, PFB_NAMESPAC
 use crate::{parse_pfb_namespace, BlobWithSender, CelestiaHeader};
 
 // Approximate value, just to make it work.
-const GAS_PER_BYTE: usize = 120;
+const GAS_PER_BYTE: usize = 20;
+const GAS_PRICE: usize = 1;
 
 #[derive(Debug, Clone)]
 pub struct CelestiaService {
@@ -204,15 +208,13 @@ impl DaService for CelestiaService {
     #[instrument(skip_all, err)]
     async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
         debug!("Sending {} bytes of raw data to Celestia.", blob.len());
-        // https://docs.celestia.org/learn/submit-data/#fees-and-gas-limits
-        let fee: u64 = 65000;
-        // We factor extra share to be occupied for namespace, which is pessimistic
-        let gas_limit = get_gas_limit_for_bytes(blob.len()) as u64;
 
-        let blob = RawBlob::new(self.rollup_namespace, blob.to_vec())?;
+        let gas_limit = get_gas_limit_for_bytes(blob.len()) as u64;
+        let fee = gas_limit * GAS_PRICE as u64;
+
+        let blob = JsonBlob::new(self.rollup_namespace, blob.to_vec())?;
         info!("Submiting: {:?}", blob.commitment);
 
-        // Note, we only deserialize what we can use, other fields might be left over
         let height = self
             .client
             .blob_submit(
@@ -231,8 +233,15 @@ impl DaService for CelestiaService {
     }
 }
 
+// https://docs.celestia.org/learn/submit-data/#fees-and-gas-limits
 fn get_gas_limit_for_bytes(n: usize) -> usize {
-    (n + 512) * GAS_PER_BYTE + 1060
+    let fixed_cost = 75000;
+
+    let continuation_shares_needed =
+        n.saturating_sub(FIRST_SPARSE_SHARE_CONTENT_SIZE) / CONTINUATION_SPARSE_SHARE_CONTENT_SIZE;
+    let shares_needed = 1 + continuation_shares_needed + 1; // add one extra, pessimistic
+
+    fixed_cost + shares_needed * SHARE_SIZE * GAS_PER_BYTE
 }
 
 fn get_rows_containing_namespace<'a>(
@@ -258,49 +267,50 @@ mod tests {
     use std::time::Duration;
 
     use celestia_types::nmt::Namespace;
+    use celestia_types::Blob as JsonBlob;
+    use celestia_types::NamespacedShares;
     use serde_json::json;
     use sov_rollup_interface::services::da::DaService;
     use wiremock::matchers::{bearer_token, body_json, method, path};
     use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
     use super::default_request_timeout_seconds;
+    use crate::da_service::get_gas_limit_for_bytes;
+    use crate::da_service::GAS_PRICE;
     use crate::da_service::{CelestiaService, DaServiceConfig};
     use crate::parse_pfb_namespace;
-    use crate::shares::{NamespaceGroup, Share};
+    use crate::shares::NamespaceGroup;
     use crate::verifier::RollupParams;
 
-    const SERIALIZED_PFB_SHARES: &str = r#"["AAAAAAAAAAQBAAABRQAAABHDAgq3AgqKAQqHAQogL2NlbGVzdGlhLmJsb2IudjEuTXNnUGF5Rm9yQmxvYnMSYwovY2VsZXN0aWExemZ2cnJmYXE5dWQ2Zzl0NGt6bXNscGYyNHlzYXhxZm56ZWU1dzkSCHNvdi10ZXN0GgEoIiCB8FoaUuOPrX2wFBbl4MnWY3qE72tns7sSY8xyHnQtr0IBABJmClAKRgofL2Nvc21vcy5jcnlwdG8uc2VjcDI1NmsxLlB1YktleRIjCiEDmXaTf6RVIgUVdG0XZ6bqecEn8jWeAi+LjzTis5QZdd4SBAoCCAEYARISCgwKBHV0aWESBDIwMDAQgPEEGkAhq2CzD1DqxsVXIriANXYyLAmJlnnt8YTNXiwHgMQQGUbl65QUe37UhnbNVrOzDVYK/nQV9TgI+5NetB2JbIz6EgEBGgRJTkRYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="]"#;
-    const SERIALIZED_ROLLUP_DATA_SHARES: &str = r#"["c292LXRlc3QBAAAAKHsia2V5IjogInRlc3RrZXkiLCAidmFsdWUiOiAidGVzdHZhbHVlIn0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="]"#;
+    const ROLLUP_ROWS_JSON: &str =
+        include_str!("../test_data/block_with_rollup_data/rollup_rows.json");
+    const ETX_ROWS_JSON: &str = include_str!("../test_data/block_with_rollup_data/etx_rows.json");
 
     #[test]
     fn test_get_pfbs() {
-        // the following test case is taken from arabica-6, block 275345
-        let shares: Vec<Share> =
-            serde_json::from_str(SERIALIZED_PFB_SHARES).expect("failed to deserialize pfb shares");
+        let rows: NamespacedShares =
+            serde_json::from_str(ETX_ROWS_JSON).expect("failed to deserialize pfb shares");
 
-        assert_eq!(shares.len(), 1);
-
-        let pfb_ns = NamespaceGroup::Compact(shares);
+        let pfb_ns = NamespaceGroup::from(&rows);
         let pfbs = parse_pfb_namespace(pfb_ns).expect("failed to parse pfb shares");
-        assert_eq!(pfbs.len(), 1);
+        assert_eq!(pfbs.len(), 3);
     }
 
     #[test]
     fn test_get_rollup_data() {
-        let shares: Vec<Share> = serde_json::from_str(SERIALIZED_ROLLUP_DATA_SHARES)
-            .expect("failed to deserialize pfb shares");
+        let rows: NamespacedShares =
+            serde_json::from_str(ROLLUP_ROWS_JSON).expect("failed to deserialize pfb shares");
 
-        let rollup_ns_group = NamespaceGroup::Sparse(shares);
+        let rollup_ns_group = NamespaceGroup::from(&rows);
         let mut blobs = rollup_ns_group.blobs();
         let first_blob = blobs
             .next()
             .expect("iterator should contain exactly one blob");
 
-        let found_data: Vec<u8> = first_blob.data().collect();
-        assert_eq!(
-            found_data,
-            r#"{"key": "testkey", "value": "testvalue"}"#.as_bytes()
-        );
+        // this is a batch submitted by sequencer, consisting of a single
+        // "CreateToken" transaction, but we verify only length there to
+        // not make this test depend on deserialization logic
+        assert_eq!(first_blob.data().count(), 252);
 
         assert!(blobs.next().is_none());
     }
@@ -308,7 +318,7 @@ mod tests {
     // Last return value is namespace
     async fn setup_service(
         timeout_sec: Option<u64>,
-    ) -> (MockServer, DaServiceConfig, CelestiaService, [u8; 8]) {
+    ) -> (MockServer, DaServiceConfig, CelestiaService, Namespace) {
         // Start a background HTTP server on a random local port
         let mock_server = MockServer::start().await;
 
@@ -319,14 +329,8 @@ mod tests {
             max_celestia_response_body_size: 120_000,
             celestia_rpc_timeout_seconds: timeout_sec,
         };
-        let namespace = [9u8; 8];
-        let da_service = CelestiaService::new(
-            config.clone(),
-            RollupParams {
-                namespace: Namespace::new_v0(&namespace).unwrap(),
-            },
-        )
-        .await;
+        let namespace = Namespace::new_v0(&[9u8; 8]).unwrap();
+        let da_service = CelestiaService::new(config.clone(), RollupParams { namespace }).await;
 
         (mock_server, config, da_service, namespace)
     }
@@ -343,18 +347,20 @@ mod tests {
     async fn test_submit_blob_correct() -> anyhow::Result<()> {
         let (mock_server, config, da_service, namespace) = setup_service(None).await;
 
-        let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
+        let blob = [1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
+        let gas_limit = get_gas_limit_for_bytes(blob.len());
 
         // TODO: Fee is hardcoded for now
         let expected_body = json!({
             "id": 0,
             "jsonrpc": "2.0",
-            "method": "state.SubmitPayForBlob",
+            "method": "blob.Submit",
             "params": [
-                namespace,
-                blob,
-                "2000",
-                63700
+                [JsonBlob::new(namespace, blob.to_vec()).unwrap()],
+                {
+                    "GasLimit": gas_limit,
+                    "Fee": gas_limit * GAS_PRICE,
+                },
             ]
         });
 
@@ -367,18 +373,7 @@ mod tests {
                 let response_json = json!({
                     "jsonrpc": "2.0",
                     "id": request.id,
-                    "result": {
-                        "data": "122A0A282F365",
-                        "events": ["some event"],
-                        "gas_used": 70522,
-                        "gas_wanted": 133540,
-                        "height": 26,
-                        "logs":  [
-                           "some log"
-                        ],
-                        "raw_log": "some raw logs",
-                        "txhash": "C9FEFD6D35FCC73F9E7D5C74E1D33F0B7666936876F2AD75E5D0FB2944BFADF2"
-                    }
+                    "result": 14, // just some block-height
                 });
 
                 ResponseTemplate::new(200)
@@ -410,13 +405,9 @@ mod tests {
                 let response_json = json!({
                     "jsonrpc": "2.0",
                     "id": request.id,
-                    "result": {
-                        "code": 11,
-                        "codespace": "sdk",
-                        "gas_used": 10_000,
-                        "gas_wanted": 12_000,
-                        "raw_log": "out of gas in location: ReadFlat; gasWanted: 10, gasUsed: 1000: out of gas",
-                        "txhash": "C9FEFD6D35FCC73F9E7D5C74E1D33F0B7666936876F2AD75E5D0FB2944BFADF2"
+                    "error": {
+                        "code": 1,
+                        "message": ": out of gas"
                     }
                 });
                 ResponseTemplate::new(200)
@@ -427,14 +418,13 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let result = da_service.send_transaction(&blob).await;
+        let error = da_service
+            .send_transaction(&blob)
+            .await
+            .unwrap_err()
+            .to_string();
 
-        assert!(result.is_err());
-        let error_string = result.err().unwrap().to_string();
-        assert!(error_string.contains("Error returned from Celestia node:"));
-        assert!(error_string.contains(
-            "out of gas in location: ReadFlat; gasWanted: 10, gasUsed: 1000: out of gas"
-        ));
+        assert!(error.contains("out of gas"));
         Ok(())
     }
 
@@ -455,11 +445,13 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let result = da_service.send_transaction(&blob).await;
+        let error = da_service
+            .send_transaction(&blob)
+            .await
+            .unwrap_err()
+            .to_string();
 
-        assert!(result.is_err());
-        let error_string = result.err().unwrap().to_string();
-        assert!(error_string.contains(
+        assert!(error.contains(
             "Networking or low-level protocol error: Server returned an error status code: 500"
         ));
         Ok(())
@@ -506,11 +498,13 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let result = da_service.send_transaction(&blob).await;
+        let error = da_service
+            .send_transaction(&blob)
+            .await
+            .unwrap_err()
+            .to_string();
 
-        assert!(result.is_err());
-        let error_string = result.err().unwrap().to_string();
-        assert!(error_string.contains("Request timeout"));
+        assert!(error.contains("Request timeout"));
         Ok(())
     }
 }
