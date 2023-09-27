@@ -4,16 +4,18 @@ use serde::{Deserialize, Serialize};
 use sov_modules_api::StateMap;
 use sov_state::Prefix;
 
+pub(crate) mod call;
 pub(crate) mod conversions;
 pub(crate) mod db;
 mod db_commit;
 pub(crate) mod db_init;
+pub(crate) mod error;
 pub(crate) mod executor;
 pub(crate) mod primitive_types;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use conversions::prepare_call_env;
+pub(crate) use call::prepare_call_env;
 pub use primitive_types::RlpEvmTransaction;
 use sov_state::codec::BcsCodec;
 

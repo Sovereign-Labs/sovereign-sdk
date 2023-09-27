@@ -7377,6 +7377,7 @@ dependencies = [
  "hex",
  "jsonrpsee",
  "lazy_static",
+ "reth-interfaces",
  "reth-primitives",
  "reth-revm",
  "reth-rpc-types",

@@ -111,6 +111,7 @@ ethers-signers = { version = "=2.0.10", default-features = false }
 ethers-middleware = { version = "=2.0.10", default-features = false }
 
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
+reth-interfaces = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
 reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
 reth-rpc-types-compat = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
 reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
