@@ -27,3 +27,6 @@ sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-native-tls", "j
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
+
+[dev-dependencies]
+axum-test = "12"

@@ -1,6 +1,6 @@
 use indoc::indoc;
 use serde_json::Value;
-use sqlx::{PgPool, QueryBuilder};
+use sqlx::{PgPool, Postgres, QueryBuilder};
 use tracing::info;
 
 use crate::models as m;
@@ -56,7 +56,7 @@ impl Db {
         let rows: Vec<(Value,)> = sqlx::query_as(indoc!(
             r#"
             SELECT blob FROM blocks
-            WHERE blob->>'height' = $1
+            WHERE blob->>'number' = $1
             "#
         ))
         .bind(height)
@@ -67,37 +67,78 @@ impl Db {
     }
 
     pub async fn get_events(&self, query: &m::EventsQuery) -> anyhow::Result<Vec<m::Event>> {
-        let mut where_clauses = vec![];
-        let mut query_builder = QueryBuilder::new("SELECT (id, key, value) FROM events");
+        let mut query_builder =
+            WhereClausesBuilder::new(QueryBuilder::new("SELECT (id, key, value) FROM events"));
 
         if let Some(event_id) = query.id {
-            where_clauses.push("id = ?");
-            query_builder.push_bind(event_id);
+            query_builder.push_condition("id = ");
+            query_builder.query.push_bind(event_id);
         }
         if let Some(tx_hash) = &query.tx_hash {
-            where_clauses.push("tx_hash = ?");
-            query_builder.push_bind(&tx_hash.0);
+            query_builder.push_condition("tx_hash = ");
+            query_builder.query.push_bind(&tx_hash.0);
         }
         if let Some(tx_height) = query.tx_height {
-            where_clauses.push("tx_height = ?");
-            query_builder.push_bind(tx_height);
+            query_builder.push_condition("tx_height = $?");
+            query_builder.query.push_bind(tx_height);
         }
         if let Some(key) = &query.key {
-            where_clauses.push("key = ?");
-            query_builder.push_bind(&key.0);
+            query_builder.push_condition("key = ");
+            query_builder.query.push_bind(&key.0);
         }
         if let Some(offset) = query.offset {
-            where_clauses.push("offset = ?");
-            query_builder.push_bind(offset);
+            query_builder.push_condition("offset = ");
+            query_builder.query.push_bind(offset);
         }
 
-        if !where_clauses.is_empty() {
-            query_builder.push(" WHERE ");
-            query_builder.push(where_clauses.join(" AND "));
-        }
-
-        let query = query_builder.build_query_as();
+        let query = query_builder.query.build_query_as();
         Ok(query.fetch_all(&self.pool).await?)
+    }
+
+    pub async fn get_blocks(&self, query: &m::BlocksQuery) -> anyhow::Result<Vec<Value>> {
+        let mut query_builder =
+            WhereClausesBuilder::new(QueryBuilder::new("SELECT blob FROM blocks"));
+
+        if let Some(hash) = &query.hash {
+            query_builder.push_condition("blob->>'hash' = ");
+            query_builder.query.push_bind(hash.to_string());
+        }
+        if let Some(height) = query.height {
+            query_builder.push_condition("blob->>'number' = ");
+            query_builder.query.push_bind(height.to_string());
+        }
+        if let Some(parent_hash) = &query.parent_hash {
+            query_builder.push_condition("blob->>'parentHash' = ");
+            query_builder.query.push_bind(parent_hash.to_string());
+        }
+
+        let query = query_builder.query.build_query_as();
+        let rows: Vec<(Value,)> = query.fetch_all(&self.pool).await?;
+        Ok(rows.into_iter().map(|v| v.0).collect())
+    }
+}
+
+struct WhereClausesBuilder<'a> {
+    query: QueryBuilder<'a, Postgres>,
+    where_used_already: bool,
+}
+
+impl<'a> WhereClausesBuilder<'a> {
+    fn new(query: QueryBuilder<'a, Postgres>) -> Self {
+        Self {
+            query,
+            where_used_already: false,
+        }
+    }
+
+    fn push_condition(&mut self, condition: &str) {
+        if self.where_used_already {
+            self.query.push(" AND ");
+        } else {
+            self.query.push(" WHERE ");
+            self.where_used_already = true;
+        }
+        self.query.push(condition);
     }
 }
 
@@ -134,4 +175,14 @@ impl Db {
         query.build().execute(&self.pool).await?;
         Ok(())
     }
+}
+
+fn sort(query: &mut QueryBuilder<Postgres>, sorting: m::SortingQuery) {
+    query.push(" ORDER BY ");
+    query.push_bind(sorting.by);
+    query.push(" ");
+    query.push_bind(match sorting.direction {
+        m::SortingQueryDirection::Ascending => "ASC",
+        m::SortingQueryDirection::Descending => "DESC",
+    });
 }

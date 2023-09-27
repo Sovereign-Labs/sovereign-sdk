@@ -11,11 +11,8 @@ use std::time::Duration;
 use axum::Router;
 use clap::Parser;
 use db::Db;
-use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_db::ledger_db::LedgerDB;
-use sov_modules_stf_template::{SequencerOutcome, TxEffect};
-use sov_rollup_interface::rpc::{LedgerRpcProvider, QueryMode, TxIdentifier};
-use tracing::{info, trace, warn};
+use tracing::info;
 
 use crate::indexer::index_blocks;
 
@@ -25,13 +22,14 @@ type AppState = Arc<AppStateInner>;
 pub struct AppStateInner {
     db: Db,
     rpc: LedgerDB,
+    config: Arc<Config>,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
-    let config = Config::parse();
+    let config = Arc::new(Config::parse());
 
     // Initialize the database.
     let db = Db::new(&config.db_connection_url).await?;
@@ -39,7 +37,11 @@ async fn main() -> anyhow::Result<()> {
     // the ledger RocksDB (so it's not really an RPC).
     // TODO: connect to the node via RPC.
     let rpc = LedgerDB::with_path(&config.ledger_db_path).expect("Failed to open ledger db");
-    let app_state = Arc::new(AppStateInner { db, rpc });
+    let app_state = Arc::new(AppStateInner {
+        db,
+        rpc,
+        config: config.clone(),
+    });
 
     let app = Router::new().nest("/api/v0", routing::api_v0_router(app_state.clone()));
     let socket_addr: SocketAddr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, config.port).into();
@@ -69,4 +71,6 @@ struct Config {
     port: u16,
     #[clap(long)]
     ledger_db_path: PathBuf,
+    #[clap(long, default_value = "http://localhost:3010")]
+    base_url: String,
 }
