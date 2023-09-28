@@ -9,9 +9,11 @@ mod query;
 pub use call::CallMessage;
 #[cfg(feature = "native")]
 pub use query::*;
+use serde::{Deserialize, Serialize};
 use sov_modules_api::{Error, ModuleInfo, WorkingSet};
 
 /// Initial configuration for sov-vec-setter module.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VecSetterConfig<C: sov_modules_api::Context> {
     /// Admin of the module.
     pub admin: C::Address,

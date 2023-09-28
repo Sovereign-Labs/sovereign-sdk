@@ -32,7 +32,7 @@ hex = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true, features = [] }
 
-ed25519-dalek = { version = "2.0.0", default-features = false }
+ed25519-dalek = { version = "2.0.0", default-features = false, features = ["serde"] }
 rand = { version = "0.8", optional = true }
 
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", version = "0.2", optional = true }
@@ -55,7 +55,6 @@ native = [
 	"hex",
 	"schemars",
 	"ed25519-dalek/default",
-	"ed25519-dalek/serde",
 	"ed25519-dalek/rand_core",
 	"clap",
 	"jsonrpsee",
