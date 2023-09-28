@@ -6,7 +6,7 @@ use primitive_types::H256;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Eq, Hash)]
-pub struct AvailAddress(pub [u8; 32]);
+pub struct AvailAddress([u8; 32]);
 
 impl sov_rollup_interface::BasicAddress for AvailAddress {}
 

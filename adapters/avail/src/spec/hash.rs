@@ -3,7 +3,13 @@ use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::BlockHashTrait;
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
-pub struct AvailHash(pub H256);
+pub struct AvailHash(H256);
+
+impl AvailHash {
+    pub fn new(hash: H256) -> Self {
+        Self(hash)
+    }
+}
 
 impl BlockHashTrait for AvailHash {}
 

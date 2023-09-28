@@ -30,7 +30,7 @@ pub struct AvailHeader {
 impl AvailHeader {
     pub fn new(header: SubxtHeader, hash: H256) -> Self {
         Self {
-            hash: AvailHash(hash),
+            hash: AvailHash::new(hash),
             header: Header {
                 parent_hash: header.parent_hash,
                 number: header.number,
@@ -46,7 +46,7 @@ impl BlockHeaderTrait for AvailHeader {
     type Hash = AvailHash;
 
     fn prev_hash(&self) -> Self::Hash {
-        AvailHash(self.header.parent_hash)
+        AvailHash::new(self.header.parent_hash)
     }
 
     fn hash(&self) -> Self::Hash {
