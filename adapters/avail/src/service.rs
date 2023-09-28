@@ -153,11 +153,13 @@ impl DaService for DaProvider {
         let header = node_client.rpc().header(Some(hash)).await?.unwrap();
 
         let header = AvailHeader::new(header, hash);
-        let transactions = appdata
-            .extrinsics
-            .iter()
-            .map(AvailBlobTransaction::new)
-            .collect();
+        let transactions: Result<Vec<AvailBlobTransaction>, anyhow::Error> = appdata
+        .extrinsics
+        .iter()
+        .map(|x| AvailBlobTransaction::new(x))
+        .collect();
+    
+        let transactions = transactions?;
         Ok(AvailBlock {
             header,
             transactions,

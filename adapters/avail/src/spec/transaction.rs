@@ -8,6 +8,7 @@ use bytes::Bytes;
 use codec::Encode;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
+use anyhow::anyhow;
 
 use super::address::AvailAddress;
 
@@ -47,23 +48,23 @@ impl BlobReaderTrait for AvailBlobTransaction {
 
 impl AvailBlobTransaction {
     #[cfg(feature = "native")]
-    pub fn new(unchecked_extrinsic: &AppUncheckedExtrinsic) -> Self {
+    pub fn new(unchecked_extrinsic: &AppUncheckedExtrinsic) -> anyhow::Result<Self> {
         let address = match &unchecked_extrinsic.signature {
             Some((subxt::utils::MultiAddress::Id(id), _, _)) => AvailAddress(id.clone().0),
-            _ => unimplemented!(),
+            _ => return Err(anyhow!("Unsigned extrinsic being used to create AvailBlobTransaction.")),
         };
         let blob = match &unchecked_extrinsic.function {
             DataAvailability(Call::submit_data { data }) => {
                 CountedBufReader::<Bytes>::new(Bytes::copy_from_slice(&data.0))
             }
-            _ => unimplemented!(),
+            _ => return Err(anyhow!("Invalid type of extrinsic being converted to AvailBlobTransaction.")),
         };
 
-        AvailBlobTransaction {
+        Ok(AvailBlobTransaction {
             hash: sp_core_hashing::blake2_256(&unchecked_extrinsic.encode()),
             address,
             blob,
-        }
+        })
     }
 
     pub fn combine_hash(&self, hash: [u8; 32]) -> [u8; 32] {
