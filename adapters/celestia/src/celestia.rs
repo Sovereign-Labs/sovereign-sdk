@@ -351,6 +351,7 @@ fn next_pfb(mut data: &mut BlobRefIterator) -> Result<(MsgPayForBlobs, TxPositio
 #[cfg(test)]
 mod tests {
     use celestia_types::ExtendedHeader;
+    use sov_rollup_interface::{services::da::SlotData, zk::ValidityCondition};
 
     use crate::{CelestiaHeader, CompactHeader};
 
@@ -358,6 +359,27 @@ mod tests {
         include_str!("../test_data/block_with_rollup_data/header.json"),
         include_str!("../test_data/block_without_rollup_data/header.json"),
     ];
+
+    #[test]
+    fn test_validity_condition() {
+        let headers: Vec<_> = HEADER_JSON_RESPONSES
+            .iter()
+            .map(|header| {
+                let eh: ExtendedHeader = serde_json::from_str(header).unwrap();
+                CelestiaHeader::new(eh.dah, eh.header.into())
+            })
+            .collect();
+
+        let former_validity_cond = headers[0].validity_condition();
+        let latter_validity_cond = headers[1].validity_condition();
+
+        assert!(former_validity_cond
+            .combine::<sha2::Sha256>(latter_validity_cond)
+            .is_ok());
+        assert!(latter_validity_cond
+            .combine::<sha2::Sha256>(former_validity_cond)
+            .is_err());
+    }
 
     #[test]
     fn test_compact_header_serde() {
