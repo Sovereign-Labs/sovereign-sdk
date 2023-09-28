@@ -114,20 +114,6 @@ mod tests {
         assert_eq!(encoded, output);
     }
 
-    // 20 u8 -> 32 u5
-    // fn check_borsh(input: [u8; 20]) {
-    //     let address_str = bech32::encode("celestia", input.to_base32(), VARIANT).unwrap();
-
-    //     let address = CelestiaAddress::from_str(&address_str).unwrap();
-    //     let serialized = BorshSerialize::try_to_vec(&address).unwrap();
-    //     let deserialized = CelestiaAddress::try_from_slice(&serialized).unwrap();
-
-    //     assert_eq!(deserialized, address);
-
-    //     let address_str2 = format!("{}", deserialized);
-    //     assert_eq!(address_str2, address_str);
-    // }
-
     proptest! {
         #[test]
         fn test_try_from_any_slice(input in prop::collection::vec(any::<u8>(), 0..100)) {
@@ -158,10 +144,5 @@ mod tests {
         fn test_try_as_ref_from(input in proptest::array::uniform20(0u8..=255)) {
             check_from_as_ref(input);
         }
-
-        // #[test]
-        // fn test_borsh(input in proptest::array::uniform20(0u8..=255)) {
-        //     check_borsh(input);
-        // }
     }
 }

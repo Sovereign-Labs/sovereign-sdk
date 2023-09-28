@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use async_trait::async_trait;
 use celestia_rpc::prelude::*;
 use celestia_types::blob::{Blob as JsonBlob, Commitment, SubmitOptions};
@@ -7,18 +5,17 @@ use celestia_types::consts::appconsts::{
     CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE, SHARE_SIZE,
 };
 use celestia_types::nmt::Namespace;
-use celestia_types::DataAvailabilityHeader;
 use jsonrpsee::http_client::{HeaderMap, HttpClient};
 use sov_rollup_interface::da::CountedBufReader;
 use sov_rollup_interface::services::da::DaService;
 use tracing::{debug, info, instrument, trace};
 
-use crate::shares::{Blob, NamespaceGroup};
-use crate::types::{ExtendedDataSquareExt, FilteredCelestiaBlock, Row};
+use crate::shares::Blob;
+use crate::types::FilteredCelestiaBlock;
 use crate::utils::BoxError;
 use crate::verifier::proofs::{CompletenessProof, CorrectnessProof};
 use crate::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams, PFB_NAMESPACE};
-use crate::{parse_pfb_namespace, BlobWithSender, CelestiaHeader};
+use crate::BlobWithSender;
 
 // Approximate value, just to make it work.
 const GAS_PER_BYTE: usize = 20;
@@ -122,39 +119,13 @@ impl DaService for CelestiaService {
         let (rollup_rows, etx_rows, data_square) =
             tokio::try_join!(rollup_rows_future, etx_rows_future, data_square_future)?;
 
-        // validate the extended data square
-        data_square.validate()?;
-
-        let rollup_data = NamespaceGroup::from(&rollup_rows);
-        let tx_data = NamespaceGroup::from(&etx_rows);
-
-        // Parse out all of the rows containing etxs
-        debug!("Parsing namespaces...");
-        let pfb_rows =
-            get_rows_containing_namespace(PFB_NAMESPACE, &header.dah, data_square.rows()?)?;
-
-        // Parse out the pfds and store them for later retrieval
-        debug!("Decoding pfb protobufs...");
-        let pfds = parse_pfb_namespace(tx_data)?;
-        let mut pfd_map = HashMap::new();
-        for tx in pfds {
-            for (idx, nid) in tx.0.namespaces.iter().enumerate() {
-                if nid == rollup_namespace.as_bytes() {
-                    // TODO: Retool this map to avoid cloning txs
-                    pfd_map.insert(tx.0.share_commitments[idx].clone().into(), tx.clone());
-                }
-            }
-        }
-
-        let filtered_block = FilteredCelestiaBlock {
-            header: CelestiaHeader::new(header.dah, header.header.into()),
-            rollup_data,
-            relevant_pfbs: pfd_map,
+        FilteredCelestiaBlock::new(
+            self.rollup_namespace,
+            header,
             rollup_rows,
-            pfb_rows,
-        };
-
-        Ok(filtered_block)
+            etx_rows,
+            data_square,
+        )
     }
 
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
@@ -244,24 +215,6 @@ fn get_gas_limit_for_bytes(n: usize) -> usize {
     fixed_cost + shares_needed * SHARE_SIZE * GAS_PER_BYTE
 }
 
-fn get_rows_containing_namespace<'a>(
-    nid: Namespace,
-    dah: &'a DataAvailabilityHeader,
-    data_square_rows: impl Iterator<Item = &'a [Vec<u8>]>,
-) -> Result<Vec<Row>, BoxError> {
-    let mut output = vec![];
-
-    for (row, root) in data_square_rows.zip(dah.row_roots.iter()) {
-        if root.contains(*nid) {
-            output.push(Row {
-                shares: row.to_vec(),
-                root: root.clone(),
-            })
-        }
-    }
-    Ok(output)
-}
-
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -270,6 +223,8 @@ mod tests {
     use celestia_types::Blob as JsonBlob;
     use celestia_types::NamespacedShares;
     use serde_json::json;
+    use sov_rollup_interface::da::BlockHeaderTrait;
+    use sov_rollup_interface::da::DaVerifier;
     use sov_rollup_interface::services::da::DaService;
     use wiremock::matchers::{bearer_token, body_json, method, path};
     use wiremock::{Mock, MockServer, Request, ResponseTemplate};
@@ -280,11 +235,13 @@ mod tests {
     use crate::da_service::{CelestiaService, DaServiceConfig};
     use crate::parse_pfb_namespace;
     use crate::shares::NamespaceGroup;
+    use crate::types::tests::with_rollup_data;
+    use crate::types::tests::without_rollup_data;
+    use crate::verifier::CelestiaVerifier;
     use crate::verifier::RollupParams;
 
-    const ROLLUP_ROWS_JSON: &str =
-        include_str!("../test_data/block_with_rollup_data/rollup_rows.json");
-    const ETX_ROWS_JSON: &str = include_str!("../test_data/block_with_rollup_data/etx_rows.json");
+    const ROLLUP_ROWS_JSON: &str = with_rollup_data::ROLLUP_ROWS_JSON;
+    const ETX_ROWS_JSON: &str = with_rollup_data::ETX_ROWS_JSON;
 
     #[test]
     fn test_get_pfbs() {
@@ -329,14 +286,14 @@ mod tests {
             max_celestia_response_body_size: 120_000,
             celestia_rpc_timeout_seconds: timeout_sec,
         };
-        let namespace = Namespace::new_v0(&[9u8; 8]).unwrap();
+        let namespace = Namespace::new_v0(b"sov-test").unwrap();
         let da_service = CelestiaService::new(config.clone(), RollupParams { namespace }).await;
 
         (mock_server, config, da_service, namespace)
     }
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-    struct BasicJsonRpcResponse {
+    struct BasicJsonRpcRequest {
         jsonrpc: String,
         id: u64,
         method: String,
@@ -369,7 +326,7 @@ mod tests {
             .and(bearer_token(config.celestia_rpc_auth_token))
             .and(body_json(&expected_body))
             .respond_with(|req: &Request| {
-                let request: BasicJsonRpcResponse = serde_json::from_slice(&req.body).unwrap();
+                let request: BasicJsonRpcRequest = serde_json::from_slice(&req.body).unwrap();
                 let response_json = json!({
                     "jsonrpc": "2.0",
                     "id": request.id,
@@ -401,7 +358,7 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/"))
             .respond_with(|req: &Request| {
-                let request: BasicJsonRpcResponse = serde_json::from_slice(&req.body).unwrap();
+                let request: BasicJsonRpcRequest = serde_json::from_slice(&req.body).unwrap();
                 let response_json = json!({
                     "jsonrpc": "2.0",
                     "id": request.id,
@@ -506,5 +463,72 @@ mod tests {
 
         assert!(error.contains("Request timeout"));
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn verification_succeeds_for_correct_blocks() {
+        let blocks = [
+            with_rollup_data::filtered_block(),
+            without_rollup_data::filtered_block(),
+        ];
+
+        for block in blocks {
+            let (_, _, da_service, namespace) = setup_service(None).await;
+
+            let txs = da_service.extract_relevant_txs(&block);
+            let (correctness_proof, completeness_proof) =
+                da_service.get_extraction_proof(&block, &txs).await;
+
+            let verifier = CelestiaVerifier::new(RollupParams { namespace });
+
+            let validity_cond = verifier
+                .verify_relevant_tx_list(&block.header, &txs, correctness_proof, completeness_proof)
+                .unwrap();
+
+            assert_eq!(validity_cond.prev_hash, *block.header.prev_hash().inner());
+            assert_eq!(validity_cond.block_hash, *block.header.hash().inner());
+        }
+    }
+
+    #[tokio::test]
+    async fn verification_fails_if_tx_missing() {
+        let block = with_rollup_data::filtered_block();
+        let (_, _, da_service, namespace) = setup_service(None).await;
+
+        let txs = da_service.extract_relevant_txs(&block);
+        let (correctness_proof, completeness_proof) =
+            da_service.get_extraction_proof(&block, &txs).await;
+
+        let verifier = CelestiaVerifier::new(RollupParams { namespace });
+
+        // give verifier empty txs list
+        let error = verifier
+            .verify_relevant_tx_list(&block.header, &[], correctness_proof, completeness_proof)
+            .unwrap_err();
+
+        assert!(error.to_string().contains("Transaction missing"));
+    }
+
+    #[tokio::test]
+    #[should_panic]
+    async fn verification_fails_for_incorrect_namespace() {
+        let block = with_rollup_data::filtered_block();
+        let (_, _, da_service, _) = setup_service(None).await;
+
+        let txs = da_service.extract_relevant_txs(&block);
+        let (correctness_proof, completeness_proof) =
+            da_service.get_extraction_proof(&block, &txs).await;
+
+        let verifier = CelestiaVerifier::new(RollupParams {
+            namespace: Namespace::new_v0(b"abc").unwrap(),
+        });
+
+        // give verifier empty txs list
+        let _panics = verifier.verify_relevant_tx_list(
+            &block.header,
+            &[],
+            correctness_proof,
+            completeness_proof,
+        );
     }
 }

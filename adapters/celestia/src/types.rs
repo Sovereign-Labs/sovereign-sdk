@@ -5,17 +5,20 @@ use anyhow::{bail, ensure};
 // use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_proto::celestia::blob::v1::MsgPayForBlobs;
 use celestia_types::consts::appconsts::SHARE_SIZE;
-use celestia_types::nmt::{ NamespacedHash, Nmt, NS_SIZE};
-use celestia_types::{ExtendedDataSquare, NamespacedShares, ValidateBasic};
+use celestia_types::nmt::{NamespacedHash, Nmt, NS_SIZE};
+use celestia_types::{
+    DataAvailabilityHeader, ExtendedDataSquare, ExtendedHeader, NamespacedShares, ValidateBasic,
+};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::Bytes;
+use tracing::debug;
 
 use crate::shares::NamespaceGroup;
 use crate::utils::BoxError;
-use crate::verifier::{ChainValidityCondition, PARITY_SHARES_NAMESPACE};
-use crate::{CelestiaHeader, TxPosition};
+use crate::verifier::{ChainValidityCondition, PARITY_SHARES_NAMESPACE, PFB_NAMESPACE};
+use crate::{parse_pfb_namespace, CelestiaHeader, TxPosition};
 
 /// Reexport the [`Namespace`] from `celestia-types`
 pub use celestia_types::nmt::Namespace;
@@ -57,6 +60,46 @@ impl SlotData for FilteredCelestiaBlock {
 }
 
 impl FilteredCelestiaBlock {
+    pub fn new(
+        rollup_ns: Namespace,
+        header: ExtendedHeader,
+        rollup_rows: NamespacedShares,
+        etx_rows: NamespacedShares,
+        data_square: ExtendedDataSquare,
+    ) -> Result<Self, BoxError> {
+        // validate the extended data square
+        data_square.validate()?;
+
+        let rollup_data = NamespaceGroup::from(&rollup_rows);
+        let tx_data = NamespaceGroup::from(&etx_rows);
+
+        // Parse out all of the rows containing etxs
+        debug!("Parsing namespaces...");
+        let pfb_rows =
+            get_rows_containing_namespace(PFB_NAMESPACE, &header.dah, data_square.rows()?)?;
+
+        // Parse out the pfds and store them for later retrieval
+        debug!("Decoding pfb protobufs...");
+        let pfbs = parse_pfb_namespace(tx_data)?;
+        let mut pfb_map = HashMap::new();
+        for tx in pfbs {
+            for (idx, nid) in tx.0.namespaces.iter().enumerate() {
+                if nid == rollup_ns.as_bytes() {
+                    // TODO: Retool this map to avoid cloning txs
+                    pfb_map.insert(tx.0.share_commitments[idx].clone().into(), tx.clone());
+                }
+            }
+        }
+
+        Ok(FilteredCelestiaBlock {
+            header: CelestiaHeader::new(header.dah, header.header.into()),
+            rollup_data,
+            relevant_pfbs: pfb_map,
+            rollup_rows,
+            pfb_rows,
+        })
+    }
+
     pub fn square_size(&self) -> usize {
         self.header.square_size()
     }
@@ -195,35 +238,139 @@ fn share_namespace_unchecked(share: &[u8]) -> Namespace {
     .into()
 }
 
+fn get_rows_containing_namespace<'a>(
+    nid: Namespace,
+    dah: &'a DataAvailabilityHeader,
+    data_square_rows: impl Iterator<Item = &'a [Vec<u8>]>,
+) -> Result<Vec<Row>, BoxError> {
+    let mut output = vec![];
+
+    for (row, root) in data_square_rows.zip(dah.row_roots.iter()) {
+        if root.contains(*nid) {
+            output.push(Row {
+                shares: row.to_vec(),
+                root: root.clone(),
+            })
+        }
+    }
+    Ok(output)
+}
+
 #[cfg(test)]
-mod tests {
+pub mod tests {
+    use celestia_types::{nmt::Namespace, ExtendedDataSquare, ExtendedHeader, NamespacedShares};
 
-    // use nmt_rs::{NamespaceProof, NamespacedSha2Hasher};
+    use crate::verifier::PFB_NAMESPACE;
 
-    // use super::{ns_hash_from_b64, RpcNamespacedSharesResponse};
+    use super::FilteredCelestiaBlock;
 
-    // const ROW_ROOTS: &[&'static str] = &[
-    //     "AAAAAAAAAAEAAAAAAAAAAT4A1HvHQCYkf1sQ7zmTJH11jd1Hxn+YCcC9mIGbl1WJ",
-    //     "c292LXRlc3T//////////vSMLQPlgfwCOf4QTkOhMnQxk6ra3lI+ybCMfUyanYSd",
-    //     "/////////////////////wp55V2JEu8z3LhdNIIqxbq6uvpyGSGu7prq67ajVVAt",
-    //     "/////////////////////7gaLStbqIBiy2pxi1D68MFUpq6sVxWBB4zdQHWHP/Tl",
-    // ];
+    pub const ROLLUP_NAMESPACE: Namespace = Namespace::const_v0(*b"\0\0sov-test");
 
-    // TODO: Re-enable this test after Celestia releases an endpoint which returns nmt proofs instead of
-    // ipld.Proofs
-    // #[test]
-    // fn test_known_good_msg() {
-    // let msg = r#"[{"Proof":{"End":1,"Nodes":[{"/":"bagao4amb5yatb7777777777773777777777777tjxe2jqsatxobgu3jqwkwsefsxscursxyaqzvvrxzv73aphwunua"},{"/":"bagao4amb5yatb77777777777777777777777776yvm54zu2vfqwyhd2nsebctxar7pxutz6uya7z3m2tzsmdtshjbm"}],"Start":0},"Shares":["c292LXRlc3QBKHsia2V5IjogInRlc3RrZXkiLCAidmFsdWUiOiAidGVzdHZhbHVlIn0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="]}]"#;
-    //     let deserialized: RpcNamespacedSharesResponse =
-    //         serde_json::from_str(msg).expect("message must deserialize");
+    pub mod with_rollup_data {
+        use super::*;
 
-    //     let root = ns_hash_from_b64(ROW_ROOTS[0]);
+        pub const HEADER_JSON: &str =
+            include_str!("../test_data/block_with_rollup_data/header.json");
+        pub const ROLLUP_ROWS_JSON: &str =
+            include_str!("../test_data/block_with_rollup_data/rollup_rows.json");
+        pub const ETX_ROWS_JSON: &str =
+            include_str!("../test_data/block_with_rollup_data/etx_rows.json");
+        pub const EDS_JSON: &str = include_str!("../test_data/block_with_rollup_data/eds.json");
 
-    //     for row in deserialized.0.expect("shares response is not empty") {
-    //         let proof: NamespaceProof<NamespacedSha2Hasher> = row.proof.into();
-    //         proof
-    //             .verify_range(&root, &row.shares, ROLLUP_NAMESPACE)
-    //             .expect("proof should be valid");
-    //     }
-    // }
+        pub fn filtered_block() -> FilteredCelestiaBlock {
+            filtered_block_from_jsons(
+                ROLLUP_NAMESPACE,
+                HEADER_JSON,
+                ROLLUP_ROWS_JSON,
+                ETX_ROWS_JSON,
+                EDS_JSON,
+            )
+        }
+    }
+
+    pub mod without_rollup_data {
+        use super::*;
+
+        pub const HEADER_JSON: &str =
+            include_str!("../test_data/block_without_rollup_data/header.json");
+        pub const ROLLUP_ROWS_JSON: &str =
+            include_str!("../test_data/block_without_rollup_data/rollup_rows.json");
+        pub const ETX_ROWS_JSON: &str =
+            include_str!("../test_data/block_without_rollup_data/etx_rows.json");
+        pub const EDS_JSON: &str = include_str!("../test_data/block_without_rollup_data/eds.json");
+
+        pub fn filtered_block() -> FilteredCelestiaBlock {
+            filtered_block_from_jsons(
+                ROLLUP_NAMESPACE,
+                HEADER_JSON,
+                ROLLUP_ROWS_JSON,
+                ETX_ROWS_JSON,
+                EDS_JSON,
+            )
+        }
+    }
+
+    fn filtered_block_from_jsons(
+        ns: Namespace,
+        header: &str,
+        rollup_rows: &str,
+        etx_rows: &str,
+        eds: &str,
+    ) -> FilteredCelestiaBlock {
+        let header: ExtendedHeader = serde_json::from_str(header).unwrap();
+        let rollup_rows: NamespacedShares = serde_json::from_str(rollup_rows).unwrap();
+        let etx_rows: NamespacedShares = serde_json::from_str(etx_rows).unwrap();
+        let eds: ExtendedDataSquare = serde_json::from_str(eds).unwrap();
+
+        FilteredCelestiaBlock::new(ns, header, rollup_rows, etx_rows, eds).unwrap()
+    }
+
+    #[test]
+    fn filtered_block_with_rollup_data() {
+        let block = with_rollup_data::filtered_block();
+
+        // valid dah
+        block.header.validate_dah().unwrap();
+
+        // single rollup share
+        assert_eq!(block.rollup_data.shares().len(), 1);
+        assert_eq!(block.rollup_rows.rows.len(), 1);
+        assert_eq!(block.rollup_rows.rows[0].shares.len(), 1);
+        assert!(block.rollup_rows.rows[0].proof.is_of_presence());
+
+        // 3 pfbs at all but only one belongs to rollup
+        assert_eq!(block.pfb_rows.len(), 1);
+        let pfbs_count = block.pfb_rows[0]
+            .shares
+            .iter()
+            .filter(|share| share.starts_with(PFB_NAMESPACE.as_ref()))
+            .count();
+        assert_eq!(pfbs_count, 3);
+        assert_eq!(block.relevant_pfbs.len(), 1);
+    }
+
+    #[test]
+    fn filtered_block_without_rollup_data() {
+        let block = without_rollup_data::filtered_block();
+
+        // valid dah
+        block.header.validate_dah().unwrap();
+
+        // no rollup shares
+        assert_eq!(block.rollup_data.shares().len(), 0);
+        // we still get single row, but with absence proof and no shares
+        assert_eq!(block.rollup_rows.rows.len(), 1);
+        assert_eq!(block.rollup_rows.rows[0].shares.len(), 0);
+        assert!(block.rollup_rows.rows[0].proof.is_of_absence());
+
+        // 2 pfbs at all and no relevant
+        assert_eq!(block.pfb_rows.len(), 1);
+        let pfbs_count = block.pfb_rows[0]
+            .shares
+            .iter()
+            .filter(|share| share.starts_with(PFB_NAMESPACE.as_ref()))
+            .count();
+        assert_eq!(pfbs_count, 2);
+        assert_eq!(block.relevant_pfbs.len(), 0);
+    }
 }
