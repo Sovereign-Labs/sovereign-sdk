@@ -65,6 +65,8 @@ pub async fn index_blocks(app_state: AppState, polling_interval: Duration) {
         // FIXME: slot n. 0 is nonexistent, but it's probably a bug in the node's
         // JSON-RPC.
         for i in 1..chain_head.number {
+            // TODO: batch requests to improve performance and reduce load on
+            // the node.
             let block = app_state
                 .rpc
                 .get_slot_by_number::<B, Tx>(i, QueryMode::Full)
