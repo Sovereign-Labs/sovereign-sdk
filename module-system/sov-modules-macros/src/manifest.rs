@@ -1,19 +1,18 @@
-// TODO remove once consumed
-#![allow(dead_code)]
-
 use std::path::{Path, PathBuf};
 use std::{env, fmt, fs, ops};
 
 use proc_macro2::{Ident, TokenStream};
 use serde_json::Value;
+use syn::{PathArguments, Type, TypePath};
 
 #[derive(Debug, Clone)]
-pub struct Manifest {
+pub struct Manifest<'a> {
+    parent: &'a Ident,
     path: PathBuf,
     value: Value,
 }
 
-impl ops::Deref for Manifest {
+impl<'a> ops::Deref for Manifest<'a> {
     type Target = Value;
 
     fn deref(&self) -> &Self::Target {
@@ -21,20 +20,24 @@ impl ops::Deref for Manifest {
     }
 }
 
-impl Manifest {
+impl<'a> Manifest<'a> {
     /// Parse a manifest file from a string.
     ///
     /// The provided path will be used to feedback error to the user, if any.
     ///
     /// The `parent` is used to report the errors to the correct span location.
-    pub fn read_str<S>(manifest: S, path: PathBuf, parent: &Ident) -> Result<Self, syn::Error>
+    pub fn read_str<S>(manifest: S, path: PathBuf, parent: &'a Ident) -> Result<Self, syn::Error>
     where
         S: AsRef<str>,
     {
         let value = serde_json::from_str(manifest.as_ref())
             .map_err(|e| Self::err(&path, parent, format!("failed to parse manifest: {e}")))?;
 
-        Ok(Self { path, value })
+        Ok(Self {
+            parent,
+            path,
+            value,
+        })
     }
 
     /// Reads a `constants.json` manifest file, recursing from the target directory that builds the
@@ -43,7 +46,7 @@ impl Manifest {
     /// If the environment variable `CONSTANTS_MANIFEST` is set, it will use that instead.
     ///
     /// The `parent` is used to report the errors to the correct span location.
-    pub fn read_constants(parent: &Ident) -> Result<Self, syn::Error> {
+    pub fn read_constants(parent: &'a Ident) -> Result<Self, syn::Error> {
         let manifest = "constants.json";
         let initial_path = match env::var("CONSTANTS_MANIFEST") {
             Ok(p) => PathBuf::from(&p).canonicalize().map_err(|e| {
@@ -123,19 +126,18 @@ impl Manifest {
     ///
     /// The `gas` field resolution will first attempt to query `gas.parent`, and then fallback to
     /// `gas`. They must be objects with arrays of integers as fields.
-    pub fn parse_gas_config(
-        &self,
-        parent: &Ident,
-    ) -> Result<(Ident, TokenStream, TokenStream), syn::Error> {
-        let root = self
+    pub fn parse_gas_config(&self, ty: &Type, field: &Ident) -> Result<TokenStream, syn::Error> {
+        let map = self
             .value
             .as_object()
-            .ok_or_else(|| Self::err(&self.path, parent, "manifest is not an object"))?
+            .ok_or_else(|| Self::err(&self.path, &self.parent, "manifest is not an object"))?;
+
+        let root = map
             .get("gas")
             .ok_or_else(|| {
                 Self::err(
                     &self.path,
-                    parent,
+                    &self.parent,
                     "manifest does not contain a `gas` attribute",
                 )
             })?
@@ -143,20 +145,20 @@ impl Manifest {
             .ok_or_else(|| {
                 Self::err(
                     &self.path,
-                    parent,
-                    format!("`gas` attribute of `{}` is not an object", parent),
+                    &self.parent,
+                    format!("`gas` attribute of `{}` is not an object", &self.parent),
                 )
             })?;
 
-        let root = match root.get(&parent.to_string()) {
+        let root = match root.get(&self.parent.to_string()) {
             Some(Value::Object(m)) => m,
             Some(_) => {
                 return Err(Self::err(
                     &self.path,
-                    parent,
+                    &self.parent,
                     format!(
                         "matching constants entry `{}` is not an object",
-                        &parent.to_string()
+                        self.parent.to_string()
                     ),
                 ))
             }
@@ -164,12 +166,11 @@ impl Manifest {
         };
 
         let mut field_values = vec![];
-        let mut fields = vec![];
         for (k, v) in root {
             let k: Ident = syn::parse_str(k).map_err(|e| {
                 Self::err(
                     &self.path,
-                    parent,
+                    &self.parent,
                     format!("failed to parse key attribyte `{}`: {}", k, e),
                 )
             })?;
@@ -179,7 +180,7 @@ impl Manifest {
                 .ok_or_else(|| {
                     Self::err(
                         &self.path,
-                        parent,
+                        &self.parent,
                         format!("`{}` attribute is not an array", k),
                     )
                 })?
@@ -188,42 +189,29 @@ impl Manifest {
                     v.as_u64().ok_or_else(|| {
                         Self::err(
                             &self.path,
-                            parent,
+                            &self.parent,
                             format!("`{}` attribute is not an array of integers", k),
                         )
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
-            let n = v.len();
-            fields.push(quote::quote!(pub #k: [u64; #n]));
-            field_values.push(quote::quote!(#k: [#(#v,)*]));
+            field_values.push(quote::quote!(#k: <<<Self as ::sov_modules_api::Module>::Context as ::sov_modules_api::Context>::GasUnit as ::sov_modules_api::GasUnit>::from_arbitrary_dimensions(&[#(#v,)*])));
         }
 
-        let ty = format!("{parent}GasConfig");
-        let ty = syn::parse_str(&ty).map_err(|e| {
-            Self::err(
-                &self.path,
-                parent,
-                format!("failed to parse type name `{}`: {}", ty, e),
-            )
-        })?;
+        // remove generics, if any
+        let mut ty = ty.clone();
+        if let Type::Path(TypePath { path, .. }) = &mut ty {
+            path.segments
+                .last_mut()
+                .map(|p| p.arguments = PathArguments::None);
+        }
 
-        let def = quote::quote! {
-            #[allow(missing_docs)]
-            #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-            pub struct #ty {
-                #(#fields,)*
-            }
-        };
-
-        let decl = quote::quote! {
-            #ty {
+        Ok(quote::quote! {
+            let #field = #ty {
                 #(#field_values,)*
-            }
-        };
-
-        Ok((ty, def, decl))
+            };
+        })
     }
 
     fn err<P, T>(path: P, ident: &syn::Ident, msg: T) -> syn::Error
@@ -267,6 +255,7 @@ fn fetch_manifest_works() {
 fn parse_gas_config_works() {
     let input = r#"{
         "comment": "Sovereign SDK constants",
+        "gas_unit": "TupleGasUnit<5>",
         "gas": {
             "complex_math_operation": [1, 2, 3],
             "some_other_operation": [4, 5, 6]
@@ -274,42 +263,22 @@ fn parse_gas_config_works() {
     }"#;
 
     let parent = Ident::new("Foo", proc_macro2::Span::call_site());
-    let (ty, def, decl) = Manifest::read_str(input, PathBuf::from("foo.json"), &parent)
+    let gas_config: Type = syn::parse_str("FooGasConfig<C::GasUnit>").unwrap();
+    let field: Ident = syn::parse_str("foo_gas_config").unwrap();
+
+    let decl = Manifest::read_str(input, PathBuf::from("foo.json"), &parent)
         .unwrap()
-        .parse_gas_config(&parent)
+        .parse_gas_config(&gas_config, &field)
         .unwrap();
-
-    #[rustfmt::skip]
-    assert_eq!(
-        ty.to_string(),
-        quote::quote!(
-            FooGasConfig
-        )
-        .to_string()
-    );
-
-    #[rustfmt::skip]
-    assert_eq!(
-        def.to_string(),
-        quote::quote!(
-            #[allow(missing_docs)]
-            #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-            pub struct FooGasConfig {
-                pub complex_math_operation: [u64; 3usize],
-                pub some_other_operation: [u64; 3usize],
-            }
-        )
-        .to_string()
-    );
 
     #[rustfmt::skip]
     assert_eq!(
         decl.to_string(),
         quote::quote!(
-            FooGasConfig {
-                complex_math_operation: [1u64, 2u64, 3u64, ],
-                some_other_operation: [4u64, 5u64, 6u64, ],
-            }
+            let foo_gas_config = FooGasConfig {
+                complex_math_operation: <<<Self as ::sov_modules_api::Module>::Context as ::sov_modules_api::Context>::GasUnit as ::sov_modules_api::GasUnit>::from_arbitrary_dimensions(&[1u64, 2u64, 3u64, ]),
+                some_other_operation: <<<Self as ::sov_modules_api::Module>::Context as ::sov_modules_api::Context>::GasUnit as ::sov_modules_api::GasUnit>::from_arbitrary_dimensions(&[4u64, 5u64, 6u64, ]),
+            };
         )
         .to_string()
     );

@@ -9,6 +9,7 @@ pub mod default_signature;
 mod dispatch;
 mod encode;
 mod error;
+mod gas;
 pub mod hooks;
 
 #[cfg(feature = "macros")]
@@ -45,6 +46,7 @@ use digest::Digest;
 pub use dispatch::CliWallet;
 pub use dispatch::{DispatchCall, EncodeCall, Genesis};
 pub use error::Error;
+pub use gas::{GasUnit, TupleGasUnit};
 pub use prefix::Prefix;
 pub use response::CallResponse;
 #[cfg(feature = "native")]
@@ -250,6 +252,9 @@ pub trait Spec {
 /// instance of the state transition function. By making modules generic over a `Context`, developers
 /// can easily update their cryptography to conform to the needs of different zk-proof systems.
 pub trait Context: Spec + Clone + Debug + PartialEq + 'static {
+    /// Gas unit for the gas price computation.
+    type GasUnit: GasUnit;
+
     /// Sender of the transaction.
     fn sender(&self) -> &Self::Address;
 
@@ -305,6 +310,17 @@ pub trait Module {
     ) -> Result<CallResponse, Error> {
         unreachable!()
     }
+
+    /// Attempts to charge the provided amount of gas from the working set.
+    ///
+    /// The scalar gas value will be computed from the price defined on the working set.
+    fn charge_gas(
+        &self,
+        working_set: &mut WorkingSet<Self::Context>,
+        gas: &<Self::Context as Context>::GasUnit,
+    ) -> anyhow::Result<()> {
+        working_set.charge_gas(gas)
+    }
 }
 
 /// A [`Module`] that has a well-defined and known [JSON
@@ -321,6 +337,7 @@ pub trait ModuleCallJsonSchema: Module {
 
 /// Every module has to implement this trait.
 pub trait ModuleInfo {
+    /// Execution context.
     type Context: Context;
 
     /// Returns address of the module.
