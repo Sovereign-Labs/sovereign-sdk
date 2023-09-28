@@ -68,6 +68,7 @@ pub struct Bank<C: sov_modules_api::Context> {
     #[address]
     pub(crate) address: C::Address,
 
+    /// The gas configuration of the sov-bank module.
     #[gas]
     pub(crate) gas: BankGasConfig<C::GasUnit>,
 

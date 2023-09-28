@@ -61,6 +61,53 @@ impl<S: Storage> StateReaderAndWriter for Delta<S> {
 
 type RevertableWrites = HashMap<CacheKey, Option<CacheValue>>;
 
+struct AccessoryDelta<S: Storage> {
+    // This inner storage is never accessed inside the zkVM because reads are
+    // not allowed, so it can result as dead code.
+    #[allow(dead_code)]
+    storage: S,
+    writes: RevertableWrites,
+}
+
+impl<S: Storage> AccessoryDelta<S> {
+    fn new(storage: S) -> Self {
+        Self {
+            storage,
+            writes: Default::default(),
+        }
+    }
+
+    fn freeze(&mut self) -> OrderedReadsAndWrites {
+        let mut reads_and_writes = OrderedReadsAndWrites::default();
+        let writes = std::mem::take(&mut self.writes);
+
+        for write in writes {
+            reads_and_writes.ordered_writes.push((write.0, write.1));
+        }
+
+        reads_and_writes
+    }
+}
+
+impl<S: Storage> StateReaderAndWriter for AccessoryDelta<S> {
+    fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
+        let cache_key = key.to_cache_key();
+        if let Some(value) = self.writes.get(&cache_key) {
+            return value.clone().map(Into::into);
+        }
+        self.storage.get_accessory(key)
+    }
+
+    fn set(&mut self, key: &StorageKey, value: StorageValue) {
+        self.writes
+            .insert(key.to_cache_key(), Some(value.into_cache_value()));
+    }
+
+    fn delete(&mut self, key: &StorageKey) {
+        self.writes.insert(key.to_cache_key(), None);
+    }
+}
+
 /// This structure is responsible for storing the `read-write` set.
 ///
 /// A [`StateCheckpoint`] can be obtained from a [`WorkingSet`] in two ways:
@@ -79,11 +126,6 @@ impl<C: Context> StateCheckpoint<C> {
             delta: Delta::new(inner.clone()),
             accessory_delta: AccessoryDelta::new(inner),
         }
-    }
-
-    /// Fetches a value from the underlying storage.
-    pub fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
-        self.delta.get(key)
     }
 
     /// Creates a new [`StateCheckpoint`] instance without any changes, backed
@@ -133,53 +175,6 @@ impl<C: Context> StateCheckpoint<C> {
     }
 }
 
-struct AccessoryDelta<S: Storage> {
-    // This inner storage is never accessed inside the zkVM because reads are
-    // not allowed, so it can result as dead code.
-    #[allow(dead_code)]
-    storage: S,
-    writes: RevertableWrites,
-}
-
-impl<S: Storage> AccessoryDelta<S> {
-    fn new(storage: S) -> Self {
-        Self {
-            storage,
-            writes: Default::default(),
-        }
-    }
-
-    fn freeze(&mut self) -> OrderedReadsAndWrites {
-        let mut reads_and_writes = OrderedReadsAndWrites::default();
-        let writes = std::mem::take(&mut self.writes);
-
-        for write in writes {
-            reads_and_writes.ordered_writes.push((write.0, write.1));
-        }
-
-        reads_and_writes
-    }
-}
-
-impl<S: Storage> StateReaderAndWriter for AccessoryDelta<S> {
-    fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
-        let cache_key = key.to_cache_key();
-        if let Some(value) = self.writes.get(&cache_key) {
-            return value.clone().map(Into::into);
-        }
-        self.storage.get_accessory(key)
-    }
-
-    fn set(&mut self, key: &StorageKey, value: StorageValue) {
-        self.writes
-            .insert(key.to_cache_key(), Some(value.into_cache_value()));
-    }
-
-    fn delete(&mut self, key: &StorageKey) {
-        self.writes.insert(key.to_cache_key(), None);
-    }
-}
-
 /// This structure contains the read-write set and the events collected during the execution of a transaction.
 /// There are two ways to convert it into a StateCheckpoint:
 /// 1. By using the checkpoint() method, where all the changes are added to the underlying StateCheckpoint.
@@ -189,6 +184,90 @@ pub struct WorkingSet<C: Context> {
     accessory_delta: RevertableWriter<AccessoryDelta<C::Storage>>,
     events: Vec<Event>,
     gas_meter: GasMeter<C::GasUnit>,
+}
+
+impl<C: Context> WorkingSet<C> {
+    /// Creates a new [`WorkingSet`] instance backed by the given [`Storage`].
+    ///
+    /// The witness value is set to [`Default::default`]. Use
+    /// [`WorkingSet::with_witness`] to set a custom witness value.
+    pub fn new(inner: <C as Spec>::Storage) -> Self {
+        StateCheckpoint::new(inner).to_revertable()
+    }
+
+    /// Returns a handler for the accessory state (non-JMT state).
+    ///
+    /// You can use this method when calling getters and setters on accessory
+    /// state containers, like [`AccessoryStateMap`](crate::AccessoryStateMap).
+    pub fn accessory_state(&mut self) -> AccessoryWorkingSet<C> {
+        AccessoryWorkingSet { ws: self }
+    }
+
+    /// Creates a new [`WorkingSet`] instance backed by the given [`Storage`]
+    /// and a custom witness value.
+    pub fn with_witness(
+        inner: <C as Spec>::Storage,
+        witness: <<C as Spec>::Storage as Storage>::Witness,
+    ) -> Self {
+        StateCheckpoint::with_witness(inner, witness).to_revertable()
+    }
+
+    /// Turns this [`WorkingSet`] into a [`StateCheckpoint`], in preparation for
+    /// committing the changes to the underlying [`Storage`] via
+    /// [`StateCheckpoint::freeze`].
+    pub fn checkpoint(self) -> StateCheckpoint<C> {
+        StateCheckpoint {
+            delta: self.delta.commit(),
+            accessory_delta: self.accessory_delta.commit(),
+        }
+    }
+
+    /// Reverts the most recent changes to this [`WorkingSet`], returning a pristine
+    /// [`StateCheckpoint`] instance.
+    pub fn revert(self) -> StateCheckpoint<C> {
+        StateCheckpoint {
+            delta: self.delta.revert(),
+            accessory_delta: self.accessory_delta.revert(),
+        }
+    }
+
+    /// Adds an event to the working set.
+    pub fn add_event(&mut self, key: &str, value: &str) {
+        self.events.push(Event::new(key, value));
+    }
+
+    /// Extracts all events from this working set.
+    pub fn take_events(&mut self) -> Vec<Event> {
+        std::mem::take(&mut self.events)
+    }
+
+    /// Returns an immutable slice of all events that have been previously
+    /// written to this working set.
+    pub fn events(&self) -> &[Event] {
+        &self.events
+    }
+
+    /// Returns an immutable reference to the [`Storage`] instance backing this
+    /// working set.
+    pub fn backing(&self) -> &<C as Spec>::Storage {
+        &self.delta.inner.inner
+    }
+
+    /// Returns the remaining gas funds.
+    pub const fn gas_remaining_funds(&self) -> u64 {
+        self.gas_meter.remaining_funds()
+    }
+
+    /// Overrides the current gas settings with the provided values.
+    pub fn set_gas(&mut self, funds: u64, gas_price: C::GasUnit) {
+        self.gas_meter = GasMeter::new(funds, gas_price);
+    }
+
+    /// Attempts to charge the provided gas unit from the gas meter, using the internal price to
+    /// compute the scalar value.
+    pub fn charge_gas(&mut self, gas: &C::GasUnit) -> anyhow::Result<()> {
+        self.gas_meter.charge_gas(gas)
+    }
 }
 
 impl<C: Context> StateReaderAndWriter for WorkingSet<C> {
@@ -286,90 +365,6 @@ impl<T: StateReaderAndWriter> StateReaderAndWriter for RevertableWriter<T> {
 
     fn delete(&mut self, key: &StorageKey) {
         self.writes.insert(key.to_cache_key(), None);
-    }
-}
-
-impl<C: Context> WorkingSet<C> {
-    /// Creates a new [`WorkingSet`] instance backed by the given [`Storage`].
-    ///
-    /// The witness value is set to [`Default::default`]. Use
-    /// [`WorkingSet::with_witness`] to set a custom witness value.
-    pub fn new(inner: <C as Spec>::Storage) -> Self {
-        StateCheckpoint::new(inner).to_revertable()
-    }
-
-    /// Returns a handler for the accessory state (non-JMT state).
-    ///
-    /// You can use this method when calling getters and setters on accessory
-    /// state containers, like [`AccessoryStateMap`](crate::AccessoryStateMap).
-    pub fn accessory_state(&mut self) -> AccessoryWorkingSet<C> {
-        AccessoryWorkingSet { ws: self }
-    }
-
-    /// Creates a new [`WorkingSet`] instance backed by the given [`Storage`]
-    /// and a custom witness value.
-    pub fn with_witness(
-        inner: <C as Spec>::Storage,
-        witness: <<C as Spec>::Storage as Storage>::Witness,
-    ) -> Self {
-        StateCheckpoint::with_witness(inner, witness).to_revertable()
-    }
-
-    /// Turns this [`WorkingSet`] into a [`StateCheckpoint`], in preparation for
-    /// committing the changes to the underlying [`Storage`] via
-    /// [`StateCheckpoint::freeze`].
-    pub fn checkpoint(self) -> StateCheckpoint<C> {
-        StateCheckpoint {
-            delta: self.delta.commit(),
-            accessory_delta: self.accessory_delta.commit(),
-        }
-    }
-
-    /// Reverts the most recent changes to this [`WorkingSet`], returning a pristine
-    /// [`StateCheckpoint`] instance.
-    pub fn revert(self) -> StateCheckpoint<C> {
-        StateCheckpoint {
-            delta: self.delta.revert(),
-            accessory_delta: self.accessory_delta.revert(),
-        }
-    }
-
-    /// Adds an event to the working set.
-    pub fn add_event(&mut self, key: &str, value: &str) {
-        self.events.push(Event::new(key, value));
-    }
-
-    /// Extracts all events from this working set.
-    pub fn take_events(&mut self) -> Vec<Event> {
-        std::mem::take(&mut self.events)
-    }
-
-    /// Returns an immutable slice of all events that have been previously
-    /// written to this working set.
-    pub fn events(&self) -> &[Event] {
-        &self.events
-    }
-
-    /// Returns an immutable reference to the [`Storage`] instance backing this
-    /// working set.
-    pub fn backing(&self) -> &<C as Spec>::Storage {
-        &self.delta.inner.inner
-    }
-
-    /// Returns the remaining gas funds.
-    pub const fn gas_remaining_funds(&self) -> u64 {
-        self.gas_meter.remaining_funds()
-    }
-
-    /// Overrides the current gas settings with the provided values.
-    pub fn set_gas(&mut self, funds: u64, gas_price: C::GasUnit) {
-        self.gas_meter = GasMeter::new(funds, gas_price);
-    }
-
-    /// Attempts to charge the provided gas unit from the gas meter, using the internal price to
-    /// compute the scalar value.
-    pub fn charge_gas(&mut self, gas: &C::GasUnit) -> anyhow::Result<()> {
-        self.gas_meter.charge_gas(gas)
     }
 }
 

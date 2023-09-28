@@ -172,26 +172,51 @@ impl<'a> Manifest<'a> {
                 )
             })?;
 
-            let v = v
-                .as_array()
-                .ok_or_else(|| {
-                    Self::err(
-                        &self.path,
-                        field,
-                        format!("`{}` attribute is not an array", k),
-                    )
-                })?
-                .iter()
-                .map(|v| {
-                    v.as_u64().ok_or_else(|| {
+            let v = match v {
+                Value::Array(a) => a
+                    .iter()
+                    .map(|v| match v {
+                        Value::Bool(b) => Ok(*b as u64),
+                        Value::Number(n) => n.as_u64().ok_or_else(|| {
+                            Self::err(
+                                &self.path,
+                                field,
+                                format!(
+                                    "the value of the field `{k}` must be an array of valid `u64`"
+                                ),
+                            )
+                        }),
+                        _ => Err(Self::err(
+                            &self.path,
+                            field,
+                            format!(
+                            "the value of the field `{k}` must be an array of numbers, or booleans"
+                        ),
+                        )),
+                    })
+                    .collect::<Result<_, _>>()?,
+                Value::Number(n) => n
+                    .as_u64()
+                    .ok_or_else(|| {
                         Self::err(
                             &self.path,
                             field,
-                            format!("`{}` attribute is not an array of integers", k),
+                            format!("the value of the field `{k}` must be a `u64`"),
                         )
                     })
-                })
-                .collect::<Result<Vec<_>, _>>()?;
+                    .map(|n| vec![n])?,
+                Value::Bool(b) => vec![*b as u64],
+
+                _ => {
+                    return Err(Self::err(
+                        &self.path,
+                        field,
+                        format!(
+                            "the value of the field `{k}` must be an array, number, or boolean"
+                        ),
+                    ))
+                }
+            };
 
             field_values.push(quote::quote!(#k: <<<Self as ::sov_modules_api::Module>::Context as ::sov_modules_api::Context>::GasUnit as ::sov_modules_api::GasUnit>::from_arbitrary_dimensions(&[#(#v,)*])));
         }
@@ -252,7 +277,6 @@ fn fetch_manifest_works() {
 fn parse_gas_config_works() {
     let input = r#"{
         "comment": "Sovereign SDK constants",
-        "gas_unit": "TupleGasUnit<5>",
         "gas": {
             "complex_math_operation": [1, 2, 3],
             "some_other_operation": [4, 5, 6]
@@ -275,6 +299,38 @@ fn parse_gas_config_works() {
             let foo_gas_config = FooGasConfig {
                 complex_math_operation: <<<Self as ::sov_modules_api::Module>::Context as ::sov_modules_api::Context>::GasUnit as ::sov_modules_api::GasUnit>::from_arbitrary_dimensions(&[1u64, 2u64, 3u64, ]),
                 some_other_operation: <<<Self as ::sov_modules_api::Module>::Context as ::sov_modules_api::Context>::GasUnit as ::sov_modules_api::GasUnit>::from_arbitrary_dimensions(&[4u64, 5u64, 6u64, ]),
+            };
+        )
+        .to_string()
+    );
+}
+
+#[test]
+fn parse_gas_config_single_dimension_works() {
+    let input = r#"{
+        "comment": "Sovereign SDK constants",
+        "gas": {
+            "complex_math_operation": 1,
+            "some_other_operation": 2
+        }
+    }"#;
+
+    let parent = Ident::new("Foo", proc_macro2::Span::call_site());
+    let gas_config: Type = syn::parse_str("FooGasConfig<C::GasUnit>").unwrap();
+    let field: Ident = syn::parse_str("foo_gas_config").unwrap();
+
+    let decl = Manifest::read_str(input, PathBuf::from("foo.json"), &parent)
+        .unwrap()
+        .parse_gas_config(&gas_config, &field)
+        .unwrap();
+
+    #[rustfmt::skip]
+    assert_eq!(
+        decl.to_string(),
+        quote::quote!(
+            let foo_gas_config = FooGasConfig {
+                complex_math_operation: <<<Self as ::sov_modules_api::Module>::Context as ::sov_modules_api::Context>::GasUnit as ::sov_modules_api::GasUnit>::from_arbitrary_dimensions(&[1u64, ]),
+                some_other_operation: <<<Self as ::sov_modules_api::Module>::Context as ::sov_modules_api::Context>::GasUnit as ::sov_modules_api::GasUnit>::from_arbitrary_dimensions(&[2u64, ]),
             };
         )
         .to_string()

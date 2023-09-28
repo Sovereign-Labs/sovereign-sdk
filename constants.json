@@ -1,13 +1,12 @@
 {
     "comment": "Sovereign SDK constants",
     "gas": {
-        "multiplier": [1],
         "Bank": {
-            "create_token": [1],
-            "transfer": [1],
-            "burn": [1],
-            "mint": [1],
-            "freeze": [1]
+            "create_token": 4,
+            "transfer": 5,
+            "burn": 2,
+            "mint": 2,
+            "freeze": 1
         }
     }
 }
