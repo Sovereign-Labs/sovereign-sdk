@@ -4279,26 +4279,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4a24736216ec316047a1fc4252e27dabb04218aa4a3f37c6e7ddbf1f9782b54"
 
 [[package]]
-name = "nft-utils"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "borsh",
- "demo-stf",
- "jsonrpsee",
- "schemars",
- "serde",
- "serde_json",
- "sov-cli",
- "sov-modules-api",
- "sov-modules-macros",
- "sov-nft-module",
- "sov-rollup-interface",
- "sov-sequencer",
- "tokio",
-]
-
-[[package]]
 name = "nibble_vec"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7333,6 +7313,7 @@ dependencies = [
  "sov-evm",
  "sov-modules-api",
  "sov-modules-stf-template",
+ "sov-nft-module",
  "sov-risc0-adapter",
  "sov-rollup-interface",
  "sov-sequencer",

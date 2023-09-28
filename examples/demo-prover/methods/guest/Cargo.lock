@@ -1363,6 +1363,7 @@ dependencies = [
  "sov-celestia-adapter",
  "sov-modules-api",
  "sov-modules-stf-template",
+ "sov-nft-module",
  "sov-risc0-adapter",
  "sov-rollup-interface",
  "sov-state",

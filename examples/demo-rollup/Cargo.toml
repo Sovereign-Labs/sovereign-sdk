@@ -42,6 +42,7 @@ sov-risc0-adapter = { path = "../../adapters/risc0" }
 sov-state = { path = "../../module-system/sov-state" }
 sov-cli = { path = "../../module-system/sov-cli", optional = true }
 clap = { workspace = true, optional = true}
+sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module" }
 
 
 [dev-dependencies]
@@ -77,7 +78,7 @@ experimental = ["sov-ethereum/experimental", "reth-primitives", "secp256k1", "de
 native = ["anyhow", "jsonrpsee", "serde", "serde_json", "tracing", "tokio", "tracing-subscriber",
 	"demo-stf/native", "sov-modules-stf-template/native", "sov-risc0-adapter/native", "sov-modules-api/native",
 	"sov-state/native", "sov-cli", "clap", "sov-celestia-adapter/native", "sov-db", "sov-sequencer", "sov-stf-runner/native",
-	"sov-modules-api/native"]
+	"sov-modules-api/native", "borsh"]
 bench = ["native", "async-trait", "borsh", "hex"]
 local = ["sov-ethereum/local"]
 offchain = ["demo-stf/offchain"]
@@ -99,6 +100,11 @@ required-features = ["bench"]
 [[bin]]
 name = "sov-cli"
 path = "src/sov-cli/main.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "nft-cli"
+path = "src/nft_utils/main.rs"
 required-features = ["native"]
 
 [[bin]]

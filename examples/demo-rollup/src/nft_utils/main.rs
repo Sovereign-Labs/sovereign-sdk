@@ -1,7 +1,7 @@
 use std::thread;
 use std::time::Duration;
 
-use nft_utils::{
+use sov_demo_rollup::nft_utils::{
     build_create_collection_transactions, build_mint_transactions, build_transfer_transactions,
 };
 use sov_modules_api::default_context::DefaultContext;
