@@ -50,7 +50,8 @@ impl AvailBlobTransaction {
     #[cfg(feature = "native")]
     pub fn new(unchecked_extrinsic: &AppUncheckedExtrinsic) -> anyhow::Result<Self> {
         let address = match &unchecked_extrinsic.signature {
-            Some((subxt::utils::MultiAddress::Id(id), _, _)) => AvailAddress(id.clone().0),
+            //TODO: Handle other types of MultiAddress.
+            Some((subxt::utils::MultiAddress::Id(id), _, _)) => AvailAddress::from(id.clone().0),
             _ => return Err(anyhow!("Unsigned extrinsic being used to create AvailBlobTransaction.")),
         };
         let blob = match &unchecked_extrinsic.function {
