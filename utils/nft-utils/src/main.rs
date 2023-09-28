@@ -44,6 +44,7 @@ async fn main() {
 
     // sleep is necessary because of how the sequencer currently works
     // without the sleep, there is a concurrency issue and some transactions would be ignored
+    // TODO: remove after https://github.com/Sovereign-Labs/sovereign-sdk/issues/949 is fixed
     thread::sleep(Duration::from_millis(1000));
 
     let mut nft_id = 1;
@@ -81,6 +82,7 @@ async fn main() {
         .send_transactions(transactions.clone(), None)
         .await
         .unwrap();
+    // TODO: remove after https://github.com/Sovereign-Labs/sovereign-sdk/issues/949 is fixed
     thread::sleep(Duration::from_millis(3000));
 
     let collection_1_address = get_collection_address::<DefaultContext>(
