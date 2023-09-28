@@ -1,3 +1,7 @@
+pub mod models;
+mod pagination;
+mod sorting;
+
 use std::collections::HashMap;
 
 use axum::extract::{OriginalUri, Path, Query, State};
@@ -5,10 +9,15 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
+pub use pagination::*;
 use serde_json::Value as JsonValue;
+pub use sorting::*;
 
-use self::jsonapi_utils::{ErrorObject, Links, ResourceObject, ResponseObject, ResponseObjectData};
-use crate::{models as m, AppState};
+use self::jsonapi_utils::{
+    bad_request_response, ErrorObject, Links, ResourceObject, ResponseObject, ResponseObjectData,
+};
+use crate::utils::HexString;
+use crate::AppState;
 
 type AxumState = State<AppState>;
 
@@ -43,7 +52,7 @@ async fn unimplemented() -> Json<ResponseObject<()>> {
 
 async fn get_tx_by_hash(
     State(state): AxumState,
-    Path(tx_hash): Path<m::HexString>,
+    Path(tx_hash): Path<HexString>,
 ) -> impl IntoResponse {
     let tx_opt = state.db.get_tx_by_hash(&tx_hash).await.unwrap();
 
@@ -83,7 +92,7 @@ async fn get_tx_by_hash(
 
 async fn get_block_by_hash(
     State(state): AxumState,
-    Path(block_hash): Path<m::HexString>,
+    Path(block_hash): Path<HexString>,
     OriginalUri(uri): OriginalUri,
 ) -> Json<ResponseObject<JsonValue>> {
     let blocks = state.db.get_block_by_hash(&block_hash).await.unwrap();
@@ -106,18 +115,10 @@ async fn get_block_by_hash(
 
 async fn get_events(
     State(state): AxumState,
-    params: Query<m::EventsQuery>,
-) -> Json<ResponseObject<m::Event>> {
+    params: Query<models::EventsQuery>,
+) -> Json<ResponseObject<models::Event>> {
     if let Err(err) = params.0.validate() {
-        return Json(ResponseObject {
-            data: None,
-            errors: vec![ErrorObject {
-                status: 400,
-                title: "Bad request".to_string(),
-                details: Some(err.to_string()),
-            }],
-            links: HashMap::new(),
-        });
+        return bad_request_response(err);
     }
 
     let events = state.db.get_events(&params).await.unwrap();
@@ -144,18 +145,10 @@ struct GetBlocksData {
 
 async fn get_blocks(
     State(state): AxumState,
-    params: Query<m::BlocksQuery>,
+    params: Query<models::BlocksQuery>,
 ) -> Json<ResponseObject<JsonValue>> {
     if let Err(err) = params.validate() {
-        return Json(ResponseObject {
-            data: None,
-            errors: vec![ErrorObject {
-                status: 400,
-                title: "Bad request".to_string(),
-                details: Some(err.to_string()),
-            }],
-            links: HashMap::new(),
-        });
+        return bad_request_response(err);
     }
 
     let blocks = state.db.get_blocks(&params.0).await.unwrap();
@@ -178,8 +171,12 @@ async fn get_blocks(
 
 async fn get_transactions(
     State(state): AxumState,
-    params: Query<m::TransactionsQuery>,
+    params: Query<models::TransactionsQuery>,
 ) -> Json<ResponseObject<JsonValue>> {
+    if let Err(err) = params.validate() {
+        return bad_request_response(err);
+    }
+
     let txs = state.db.get_transactions(&params.0).await.unwrap();
 
     Json(ResponseObject {
@@ -215,6 +212,28 @@ async fn get_indexing_status(State(state): AxumState) -> Json<ResponseObject<Jso
 /// See: <https://jsonapi.org/>.
 mod jsonapi_utils {
     use std::collections::HashMap;
+
+    use axum::Json;
+
+    pub fn bad_request_response<T>(err: impl ToString) -> Json<ResponseObject<T>> {
+        Json(ResponseObject {
+            data: None,
+            errors: vec![ErrorObject {
+                status: 400,
+                title: "Bad request".to_string(),
+                details: Some(err.to_string()),
+            }],
+            links: HashMap::new(),
+        })
+    }
+
+    #[derive(Debug, serde::Serialize)]
+    pub struct PaginationLinks {
+        pub first: String,
+        pub last: String,
+        pub next: String,
+        pub prev: String,
+    }
 
     #[derive(Debug, serde::Serialize)]
     #[serde(rename_all = "camelCase")]

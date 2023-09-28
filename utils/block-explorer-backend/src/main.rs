@@ -1,7 +1,7 @@
 mod api_v0;
 mod db;
 mod indexer;
-pub(crate) mod models;
+pub mod utils;
 
 #[cfg(test)]
 mod tests;

@@ -721,6 +721,7 @@ name = "block-explorer-backend"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "arbitrary",
  "axum",
  "axum-test",
  "block-explorer-backend",
@@ -728,6 +729,7 @@ dependencies = [
  "demo-stf",
  "hex",
  "indoc",
+ "lazy_static",
  "serde",
  "serde_json",
  "sov-celestia-adapter",

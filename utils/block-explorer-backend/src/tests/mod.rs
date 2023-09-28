@@ -8,6 +8,7 @@ use axum::routing;
 use axum_test::TestServer;
 use demo_stf::app::{App, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
+use serde_json::Value;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_modules_api::PrivateKey;
 use sov_risc0_adapter::host::Risc0Verifier;
@@ -22,6 +23,7 @@ use tempfile::TempDir;
 
 use crate::db::Db;
 use crate::indexer::index_blocks;
+use crate::models::{default_pagination_size, Pagination, MAX_PAGINATION_SIZE};
 use crate::{api_v0, indexer, AppState, AppStateInner, Config};
 
 fn populate_ledger_db() -> LedgerDB {
@@ -116,12 +118,50 @@ async fn create_test_server(pool: Pool<Postgres>) -> TestServer {
     TestServer::new(service).unwrap()
 }
 
+fn is_sorted<T>(iter: &[T]) -> bool
+where
+    T: Ord,
+{
+    iter.windows(2).all(|pair| pair[0] <= pair[1])
+}
+
 #[sqlx::test]
-async fn test(pool: Pool<Postgres>) {
-    let server = create_test_server(pool).await;
-    let txs = server
+async fn transactions_default_pagination_size(pool: Pool<Postgres>) {
+    let txs_response = create_test_server(pool)
+        .await
         .get("/transactions")
         .await
         .json::<serde_json::Value>();
-    assert_eq!(txs["data"].as_array().unwrap().len(), 25);
+    let txs = txs_response["data"].as_array().unwrap();
+
+    assert_eq!(txs.len(), default_pagination_size() as usize);
+}
+
+#[sqlx::test]
+async fn max_pagination_size_is_respected(pool: Pool<Postgres>) {
+    let txs_response = create_test_server(pool)
+        .await
+        .get("/transactions")
+        .add_query_param("page[size]", "10000")
+        .await
+        .json::<serde_json::Value>();
+
+    assert_ne!(txs_response["errors"].as_array().unwrap(), &[] as &[Value]);
+}
+
+#[sqlx::test]
+async fn blocks(pool: Pool<Postgres>) {
+    let blocks_response = create_test_server(pool)
+        .await
+        .get("/blocks")
+        .await
+        .json::<serde_json::Value>();
+    let blocks = blocks_response["data"].as_array().unwrap();
+
+    assert!(is_sorted(
+        &blocks
+            .iter()
+            .map(|block| { block["number"].as_str().unwrap().parse::<u64>().unwrap() })
+            .collect::<Vec<u64>>()
+    ));
 }

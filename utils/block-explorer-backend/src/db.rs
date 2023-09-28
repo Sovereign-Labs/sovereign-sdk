@@ -3,7 +3,9 @@ use serde_json::Value;
 use sqlx::{PgPool, Postgres, QueryBuilder};
 use tracing::info;
 
-use crate::models::{self as m};
+use crate::api_v0::models::{self as m};
+use crate::api_v0::{Pagination, Sorting, SortingOrder};
+use crate::utils::HexString;
 
 #[derive(Clone)]
 pub struct Db {
@@ -37,7 +39,7 @@ impl Db {
 
 /// Read operations.
 impl Db {
-    pub async fn get_tx_by_hash(&self, tx_hash: &m::HexString) -> anyhow::Result<Option<Value>> {
+    pub async fn get_tx_by_hash(&self, tx_hash: &HexString) -> anyhow::Result<Option<Value>> {
         let row_opt: Option<(Value,)> = sqlx::query_as(indoc!(
             r#"
             SELECT blob FROM transactions
@@ -62,7 +64,7 @@ impl Db {
         Ok(row.map(|r| r.0))
     }
 
-    pub async fn get_block_by_hash(&self, hash: &m::HexString) -> anyhow::Result<Vec<Value>> {
+    pub async fn get_block_by_hash(&self, hash: &HexString) -> anyhow::Result<Vec<Value>> {
         let rows: Vec<(Value,)> = sqlx::query_as(indoc!(
             r#"
             SELECT blob FROM blocks
@@ -80,6 +82,7 @@ impl Db {
         let mut query_builder =
             WhereClausesBuilder::new(QueryBuilder::new("SELECT (id, key, value) FROM events"));
 
+        // Filtering
         if let Some(event_id) = query.id {
             query_builder.push_condition("id = ");
             query_builder.query.push_bind(event_id);
@@ -101,7 +104,7 @@ impl Db {
             query_builder.query.push_bind(offset);
         }
 
-        // TODO: pagination and sorting.
+        // TODO: Sorting and pagination
 
         let query = query_builder.query.build_query_as();
         Ok(query.fetch_all(&self.pool).await?)
@@ -112,27 +115,31 @@ impl Db {
             WhereClausesBuilder::new(QueryBuilder::new("SELECT blob FROM blocks"));
 
         // Filtering
-        if let Some(hash) = &query.hash {
-            query_builder.push_condition("blob->>'hash' = ");
-            query_builder.query.push_bind(hash.to_string());
+        if let Some(filter) = &query.filter {
+            match filter {
+                m::BlocksQueryFilter::Hash(hash) => {
+                    query_builder.push_condition("blob->>'hash' = ");
+                    query_builder.query.push_bind(hash.to_string());
+                }
+                m::BlocksQueryFilter::Number(number) => {
+                    query_builder.push_condition("blob->>'number' = ");
+                    query_builder.query.push_bind(number.to_string());
+                }
+                m::BlocksQueryFilter::ParentHash(parent_hash) => {
+                    query_builder.push_condition("blob->>'parentHash' = ");
+                    query_builder.query.push_bind(parent_hash.to_string());
+                }
+            };
         }
-        if let Some(height) = query.height {
-            query_builder.push_condition("blob->>'number' = ");
-            query_builder.query.push_bind(height.to_string());
-        }
-        if let Some(parent_hash) = &query.parent_hash {
-            query_builder.push_condition("blob->>'parentHash' = ");
-            query_builder.query.push_bind(parent_hash.to_string());
-        }
-
-        // Pagination
-        // TODO
 
         // Sorting
-        query_builder.order_by(&query.sorting.map_to_string(|by| match by {
-            m::BlocksQuerySortBy::Height => "(blob->>'number')::bigint",
+        query_builder.order_by(&query.sort.map_to_string(|by| match by {
+            m::BlocksQuerySortBy::Number => "(blob->>'number')::bigint",
             m::BlocksQuerySortBy::Timestamp => "blob->>'timestamp'",
         }));
+
+        // Pagination
+        query_builder.pagination(&query.pagination);
 
         let query = query_builder.query.build_query_as();
         let rows: Vec<(Value,)> = query.fetch_all(&self.pool).await?;
@@ -164,15 +171,15 @@ impl Db {
             }
         }
 
-        // Pagination
-        // TODO
-
         // Sorting
         query_builder.order_by(
             &query
-                .sorting
+                .sort
                 .map_to_string(|m::TransactionsQuerySortBy::Id| "id"),
         );
+
+        // Pagination
+        query_builder.pagination(&query.pagination);
 
         let query = query_builder.query.build_query_as();
         let rows: Vec<(Value,)> = query.fetch_all(&self.pool).await?;
@@ -270,13 +277,19 @@ impl<'a> WhereClausesBuilder<'a> {
         self.query.push(condition);
     }
 
-    fn order_by(&mut self, sorting: &m::SortingQuery<&str>) {
+    fn pagination<T>(&mut self, pagination: &Pagination<T>) {
+        self.query.push(" LIMIT ");
+        self.query.push(pagination.size.to_string());
+        // TODO: rest of the pagination logic.
+    }
+
+    fn order_by(&mut self, sorting: &Sorting<&str>) {
         self.query.push(" ORDER BY ");
         self.query.push(sorting.by);
         self.query.push(" ");
-        self.query.push(match sorting.direction {
-            m::SortingQueryDirection::Ascending => "ASC",
-            m::SortingQueryDirection::Descending => "DESC",
+        self.query.push(match sorting.order {
+            SortingOrder::Ascending => "ASC",
+            SortingOrder::Descending => "DESC",
         });
     }
 }
