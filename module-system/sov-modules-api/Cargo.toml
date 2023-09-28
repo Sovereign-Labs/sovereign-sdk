@@ -28,7 +28,7 @@ bech32 = { workspace = true }
 derive_more = { workspace = true }
 jmt = { workspace = true }
 serde_json = { workspace = true, optional = true }
-hex = { workspace = true, optional = true }
+hex = { workspace = true }
 clap = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true, features = [] }
 
@@ -52,7 +52,6 @@ default = ["macros"]
 native = [
 	"serde_json",
 	"rand",
-	"hex",
 	"schemars",
 	"ed25519-dalek/default",
 	"ed25519-dalek/serde",

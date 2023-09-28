@@ -1,6 +1,8 @@
+use crate::default_signature::DefaultPublicKey;
 use derive_more::Display;
 
-use crate::default_signature::DefaultPublicKey;
+use ed25519_dalek::{VerifyingKey as DalekPublicKey, PUBLIC_KEY_LENGTH};
+use thiserror::Error;
 #[derive(
     serde::Serialize,
     serde::Deserialize,
@@ -18,38 +20,59 @@ pub struct PublicKeyHex {
     hex: String,
 }
 
-impl PublicKeyHex {
-    pub fn new(hex: String) -> Self {
-        todo!();
-    }
+#[derive(Error, Debug)]
+pub enum HexConversionError {
+    #[error("todo")]
+    OddLength,
+    #[error("todo")]
+    InvalidHexCharacter { c: char, index: usize },
 }
 
 impl TryFrom<String> for PublicKeyHex {
-    type Error = String;
+    type Error = HexConversionError;
 
     fn try_from(hex: String) -> Result<Self, Self::Error> {
-        todo!()
+        if hex.len() & 1 != 0 {
+            return Err(HexConversionError::OddLength);
+        }
+
+        if let Some((index, c)) = hex.chars().enumerate().find(|(_, c)| {
+            !matches!(c, '0'..='9' | 'a'..='f')
+            //Case::Upper => !matches!(c, '0'..='9' | 'A'..='F'),
+        }) {
+            return Err(HexConversionError::InvalidHexCharacter { c, index });
+        }
+
+        Ok(Self { hex })
     }
 }
 
 impl From<PublicKeyHex> for String {
-    fn from(value: PublicKeyHex) -> Self {
-        todo!()
+    fn from(pub_key: PublicKeyHex) -> Self {
+        pub_key.hex
     }
 }
 
-impl TryFrom<DefaultPublicKey> for PublicKeyHex {
-    type Error = String;
-
-    fn try_from(value: DefaultPublicKey) -> Result<Self, Self::Error> {
-        todo!()
+impl From<DefaultPublicKey> for PublicKeyHex {
+    fn from(pub_key: DefaultPublicKey) -> Self {
+        let hex = hex::encode(pub_key.pub_key.as_bytes());
+        Self { hex }
     }
 }
 
 impl TryFrom<PublicKeyHex> for DefaultPublicKey {
-    type Error = String;
+    type Error = anyhow::Error;
 
-    fn try_from(value: PublicKeyHex) -> Result<Self, Self::Error> {
-        todo!()
+    fn try_from(pub_key: PublicKeyHex) -> Result<Self, Self::Error> {
+        let bytes = hex::decode(pub_key.hex)?;
+
+        let bytes: [u8; PUBLIC_KEY_LENGTH] = bytes
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Invalid public key size"))?;
+
+        let pub_key = DalekPublicKey::from_bytes(&bytes)
+            .map_err(|_| anyhow::anyhow!("Invalid public key"))?;
+
+        Ok(DefaultPublicKey { pub_key: pub_key })
     }
 }
