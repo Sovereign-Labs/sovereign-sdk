@@ -5,6 +5,8 @@ use anyhow::{bail, ensure};
 // use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_proto::celestia::blob::v1::MsgPayForBlobs;
 use celestia_types::consts::appconsts::SHARE_SIZE;
+/// Reexport the [`Namespace`] from `celestia-types`
+pub use celestia_types::nmt::Namespace;
 use celestia_types::nmt::{NamespacedHash, Nmt, NS_SIZE};
 use celestia_types::{
     DataAvailabilityHeader, ExtendedDataSquare, ExtendedHeader, NamespacedShares, ValidateBasic,
@@ -19,9 +21,6 @@ use crate::shares::NamespaceGroup;
 use crate::utils::BoxError;
 use crate::verifier::{ChainValidityCondition, PARITY_SHARES_NAMESPACE, PFB_NAMESPACE};
 use crate::{parse_pfb_namespace, CelestiaHeader, TxPosition};
-
-/// Reexport the [`Namespace`] from `celestia-types`
-pub use celestia_types::nmt::Namespace;
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)] // TODO: , BorshSerialize, BorshDeserialize)]
 pub struct FilteredCelestiaBlock {
@@ -258,11 +257,11 @@ fn get_rows_containing_namespace<'a>(
 
 #[cfg(test)]
 pub mod tests {
-    use celestia_types::{nmt::Namespace, ExtendedDataSquare, ExtendedHeader, NamespacedShares};
-
-    use crate::verifier::PFB_NAMESPACE;
+    use celestia_types::nmt::Namespace;
+    use celestia_types::{ExtendedDataSquare, ExtendedHeader, NamespacedShares};
 
     use super::FilteredCelestiaBlock;
+    use crate::verifier::PFB_NAMESPACE;
 
     pub const ROLLUP_NAMESPACE: Namespace = Namespace::const_v0(*b"\0\0sov-test");
 

@@ -6,6 +6,7 @@ pub mod types;
 mod utils;
 pub mod verifier;
 
-pub use crate::celestia::*;
 #[cfg(feature = "native")]
 pub use da_service::{CelestiaService, DaServiceConfig};
+
+pub use crate::celestia::*;
