@@ -1,6 +1,6 @@
-use anyhow::Result;
-
 use core::fmt;
+
+use anyhow::Result;
 
 /// A gas unit that provides scalar conversion from complex, multi-dimensional types.
 pub trait GasUnit: fmt::Debug + Clone {
