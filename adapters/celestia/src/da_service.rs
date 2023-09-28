@@ -220,25 +220,19 @@ mod tests {
     use std::time::Duration;
 
     use celestia_types::nmt::Namespace;
-    use celestia_types::Blob as JsonBlob;
-    use celestia_types::NamespacedShares;
+    use celestia_types::{Blob as JsonBlob, NamespacedShares};
     use serde_json::json;
-    use sov_rollup_interface::da::BlockHeaderTrait;
-    use sov_rollup_interface::da::DaVerifier;
+    use sov_rollup_interface::da::{BlockHeaderTrait, DaVerifier};
     use sov_rollup_interface::services::da::DaService;
     use wiremock::matchers::{bearer_token, body_json, method, path};
     use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
     use super::default_request_timeout_seconds;
-    use crate::da_service::get_gas_limit_for_bytes;
-    use crate::da_service::GAS_PRICE;
-    use crate::da_service::{CelestiaService, DaServiceConfig};
+    use crate::da_service::{get_gas_limit_for_bytes, CelestiaService, DaServiceConfig, GAS_PRICE};
     use crate::parse_pfb_namespace;
     use crate::shares::NamespaceGroup;
-    use crate::types::tests::with_rollup_data;
-    use crate::types::tests::without_rollup_data;
-    use crate::verifier::CelestiaVerifier;
-    use crate::verifier::RollupParams;
+    use crate::types::tests::{with_rollup_data, without_rollup_data};
+    use crate::verifier::{CelestiaVerifier, RollupParams};
 
     const ROLLUP_ROWS_JSON: &str = with_rollup_data::ROLLUP_ROWS_JSON;
     const ETX_ROWS_JSON: &str = with_rollup_data::ETX_ROWS_JSON;
