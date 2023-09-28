@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 mod bech32;
+mod pub_key_hex;
 pub mod capabilities;
 #[cfg(feature = "native")]
 pub mod cli;
