@@ -5,8 +5,10 @@ mod query;
 pub use call::CallMessage;
 #[cfg(feature = "native")]
 pub use query::*;
+use serde::{Deserialize, Serialize};
 use sov_modules_api::{Error, ModuleInfo, WorkingSet};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExampleModuleConfig {}
 
 /// A new module:

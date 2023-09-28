@@ -12,7 +12,7 @@ publish = false
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 
 sov-modules-api = { path = "../../module-system/sov-modules-api" }
 sov-state = { path = "../../module-system/sov-state" }
@@ -27,6 +27,5 @@ simple-nft-module = { version = "*", features = ["native"], path = "." }
 
 [features]
 default = []
-serde = ["dep:serde"]
-native = ["serde", "sov-state/native", "sov-modules-api/native", "jsonrpsee"]
+native = ["sov-state/native", "sov-modules-api/native", "jsonrpsee"]
 test = ["native"]

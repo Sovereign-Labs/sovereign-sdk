@@ -24,7 +24,7 @@ sov-bank = { path = "../sov-bank", version = "0.2" }
 sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
 sov-state = { path = "../../sov-state", version = "0.2" }
 schemars = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["rc"] }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
@@ -37,7 +37,6 @@ sov-zk-cycle-utils = { path = "../../../utils/zk-cycle-utils", version = "0.2", 
 bench = ["sov-zk-cycle-macros/bench", "risc0-zkvm", "risc0-zkvm-platform", "sov-zk-cycle-utils"]
 default = []
 native = [
-    "serde",
     "serde_json",
     "jsonrpsee",
     "schemars",

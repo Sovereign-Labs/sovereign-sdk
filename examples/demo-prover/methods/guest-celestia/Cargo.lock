@@ -380,6 +380,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60f6d271ca33075c88028be6f04d502853d63a5ece419d269c15315d4fc1cf1d"
 dependencies = [
  "pkcs8",
+ "serde",
  "signature",
 ]
 
@@ -404,6 +405,7 @@ checksum = "7277392b266383ef8396db7fdeb1e77b6c52fed775f5df15bb24f35b72156980"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
+ "serde",
  "sha2 0.10.6",
 ]
 
@@ -1270,6 +1272,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "serde",
  "sov-modules-api",
  "sov-state",
  "thiserror",
@@ -1281,6 +1284,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "serde",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
@@ -1415,6 +1419,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "serde",
  "sov-modules-api",
  "sov-modules-macros",
  "sov-state",
@@ -1455,6 +1460,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "serde",
  "sov-bank",
  "sov-modules-api",
  "sov-state",
@@ -1496,6 +1502,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "serde",
  "sov-modules-api",
  "sov-state",
  "thiserror",

@@ -14,6 +14,7 @@ pub use call::CallMessage;
 /// The response type used by RPC queries.
 #[cfg(feature = "native")]
 pub use query::*;
+use serde::{Deserialize, Serialize};
 use sov_modules_api::{Context, Error, ModuleInfo, WorkingSet, Zkvm};
 use sov_state::codec::BcsCodec;
 
@@ -21,6 +22,7 @@ use sov_state::codec::BcsCodec;
 /// address of the bonding token, the minimum bond, the commitment to
 /// the allowed verifier method and a set of initial provers with their
 /// bonding amount.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProverIncentivesConfig<C: Context, Vm: Zkvm> {
     /// The address of the token to be used for bonding.
     bonding_token_address: C::Address,

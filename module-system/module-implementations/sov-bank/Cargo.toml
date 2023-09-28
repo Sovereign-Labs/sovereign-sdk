@@ -17,7 +17,7 @@ borsh = { workspace = true, features = ["rc"] }
 clap = { workspace = true, optional = true, features = ["derive"] }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 schemars = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
@@ -31,5 +31,5 @@ tempfile = { workspace = true }
 
 [features]
 default = []
-native = ["serde", "serde_json", "jsonrpsee", "clap", "schemars", "sov-state/native", "sov-modules-api/native", ]
+native = ["serde_json", "jsonrpsee", "clap", "schemars", "sov-state/native", "sov-modules-api/native", ]
 cli = ["native"]
