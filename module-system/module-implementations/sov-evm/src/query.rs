@@ -294,8 +294,9 @@ impl<C: sov_modules_api::Context> Evm<C> {
                 .last(&mut working_set.accessory_state())
                 .expect("Head block must be set"),
             Some(ref block_number) => {
-                let block_number =
-                    usize::from_str_radix(block_number, 16).expect("Block number must be hex");
+                // hex representation may have 0x prefix
+                let block_number = usize::from_str_radix(block_number.trim_start_matches("0x"), 16)
+                    .expect("Block number must be a valid hex number, with or without 0x prefix");
                 self.blocks
                     .get(block_number, &mut working_set.accessory_state())
                     .expect("Block must be set")
