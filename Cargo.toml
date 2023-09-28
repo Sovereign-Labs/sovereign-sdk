@@ -16,6 +16,8 @@ members = [
     "full-node/sov-ethereum",
     "full-node/sov-stf-runner",
 
+    "templates/rollup-template",
+
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
     "utils/bashtestmd",

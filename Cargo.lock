@@ -6257,6 +6257,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "rollup-template"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "clap",
+ "jsonrpsee",
+ "serde",
+ "serde_json",
+ "sov-accounts",
+ "sov-bank",
+ "sov-celestia-adapter",
+ "sov-db",
+ "sov-modules-api",
+ "sov-modules-stf-template",
+ "sov-rollup-interface",
+ "sov-sequencer",
+ "sov-sequencer-registry",
+ "sov-state",
+ "sov-stf-runner",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "rrs-lib"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
