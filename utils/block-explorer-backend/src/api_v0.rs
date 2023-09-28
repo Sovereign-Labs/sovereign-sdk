@@ -48,7 +48,7 @@ async fn get_tx_by_hash(
     let tx_opt = state.db.get_tx_by_hash(&tx_hash).await.unwrap();
 
     if let Some(tx) = tx_opt {
-        let mut links = Links::new(state.config.clone());
+        let mut links = Links::new(state.base_url.clone());
         links.add("self", format!("/transactions/{}", tx_hash));
 
         let data = Some(ResponseObjectData::Single(ResourceObject {
@@ -87,7 +87,7 @@ async fn get_block_by_hash(
     OriginalUri(uri): OriginalUri,
 ) -> Json<ResponseObject<JsonValue>> {
     let blocks = state.db.get_block_by_hash(&block_hash).await.unwrap();
-    let mut links = Links::new(state.config.clone());
+    let mut links = Links::new(state.base_url.clone());
     links.add("self", uri.to_string());
 
     Json(ResponseObject {
@@ -215,9 +215,6 @@ async fn get_indexing_status(State(state): AxumState) -> Json<ResponseObject<Jso
 /// See: <https://jsonapi.org/>.
 mod jsonapi_utils {
     use std::collections::HashMap;
-    use std::sync::Arc;
-
-    use crate::Config;
 
     #[derive(Debug, serde::Serialize)]
     #[serde(rename_all = "camelCase")]
@@ -261,20 +258,20 @@ mod jsonapi_utils {
     }
 
     pub struct Links {
-        config: Arc<Config>,
+        base_url: String,
         links: HashMap<String, String>,
     }
 
     impl Links {
-        pub fn new(config: Arc<Config>) -> Self {
+        pub fn new(base_url: String) -> Self {
             Self {
-                config,
+                base_url,
                 links: HashMap::new(),
             }
         }
 
         pub fn add(&mut self, name: impl ToString, path: impl AsRef<str>) {
-            let mut url = self.config.base_url.clone();
+            let mut url = self.base_url.clone();
             url.push_str(path.as_ref());
             self.links.insert(name.to_string(), url);
         }

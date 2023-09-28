@@ -37,3 +37,4 @@ sov-modules-api = { path = "../../module-system/sov-modules-api" }
 sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
 sov-rng-da-service = { path = "../rng-da-service" }
 tempfile = "3"
+toml = { workspace = true }

@@ -3,6 +3,9 @@ mod db;
 mod indexer;
 pub(crate) mod models;
 
+#[cfg(test)]
+mod tests;
+
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -14,7 +17,7 @@ use db::Db;
 use sov_db::ledger_db::LedgerDB;
 use tracing::info;
 
-use crate::indexer::index_blocks;
+use crate::indexer::index_blocks_loop;
 
 type AppState = Arc<AppStateInner>;
 
@@ -22,7 +25,7 @@ type AppState = Arc<AppStateInner>;
 pub struct AppStateInner {
     db: Db,
     rpc: LedgerDB,
-    config: Arc<Config>,
+    base_url: String,
 }
 
 #[tokio::main]
@@ -40,14 +43,14 @@ async fn main() -> anyhow::Result<()> {
     let app_state = Arc::new(AppStateInner {
         db,
         rpc,
-        config: config.clone(),
+        base_url: config.base_url.clone(),
     });
 
     let app = Router::new().nest("/api/v0", api_v0::router(app_state.clone()));
     let socket_addr: SocketAddr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, config.port).into();
 
     let app_state_clone = app_state.clone();
-    tokio::task::spawn(index_blocks(
+    tokio::task::spawn(index_blocks_loop(
         app_state_clone,
         Duration::from_secs(config.polling_interval_in_secs),
     ));
