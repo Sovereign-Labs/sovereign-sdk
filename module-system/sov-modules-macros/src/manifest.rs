@@ -130,14 +130,14 @@ impl<'a> Manifest<'a> {
         let map = self
             .value
             .as_object()
-            .ok_or_else(|| Self::err(&self.path, &self.parent, "manifest is not an object"))?;
+            .ok_or_else(|| Self::err(&self.path, field, "manifest is not an object"))?;
 
         let root = map
             .get("gas")
             .ok_or_else(|| {
                 Self::err(
                     &self.path,
-                    &self.parent,
+                    field,
                     "manifest does not contain a `gas` attribute",
                 )
             })?
@@ -145,8 +145,8 @@ impl<'a> Manifest<'a> {
             .ok_or_else(|| {
                 Self::err(
                     &self.path,
-                    &self.parent,
-                    format!("`gas` attribute of `{}` is not an object", &self.parent),
+                    field,
+                    format!("`gas` attribute of `{}` is not an object", field),
                 )
             })?;
 
@@ -155,11 +155,8 @@ impl<'a> Manifest<'a> {
             Some(_) => {
                 return Err(Self::err(
                     &self.path,
-                    &self.parent,
-                    format!(
-                        "matching constants entry `{}` is not an object",
-                        self.parent.to_string()
-                    ),
+                    field,
+                    format!("matching constants entry `{}` is not an object", field),
                 ))
             }
             None => root,
@@ -170,7 +167,7 @@ impl<'a> Manifest<'a> {
             let k: Ident = syn::parse_str(k).map_err(|e| {
                 Self::err(
                     &self.path,
-                    &self.parent,
+                    field,
                     format!("failed to parse key attribyte `{}`: {}", k, e),
                 )
             })?;
@@ -180,7 +177,7 @@ impl<'a> Manifest<'a> {
                 .ok_or_else(|| {
                     Self::err(
                         &self.path,
-                        &self.parent,
+                        field,
                         format!("`{}` attribute is not an array", k),
                     )
                 })?
@@ -189,7 +186,7 @@ impl<'a> Manifest<'a> {
                     v.as_u64().ok_or_else(|| {
                         Self::err(
                             &self.path,
-                            &self.parent,
+                            field,
                             format!("`{}` attribute is not an array of integers", k),
                         )
                     })
@@ -202,9 +199,9 @@ impl<'a> Manifest<'a> {
         // remove generics, if any
         let mut ty = ty.clone();
         if let Type::Path(TypePath { path, .. }) = &mut ty {
-            path.segments
-                .last_mut()
-                .map(|p| p.arguments = PathArguments::None);
+            if let Some(p) = path.segments.last_mut() {
+                p.arguments = PathArguments::None;
+            }
         }
 
         Ok(quote::quote! {
