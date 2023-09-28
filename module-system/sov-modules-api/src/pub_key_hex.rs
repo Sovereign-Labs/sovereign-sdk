@@ -28,6 +28,14 @@ pub enum HexConversionError {
     InvalidHexCharacter { c: char, index: usize },
 }
 
+impl TryFrom<&str> for PublicKeyHex {
+    type Error = HexConversionError;
+
+    fn try_from(hex: &str) -> Result<Self, Self::Error> {
+        Self::try_from(hex.to_owned())
+    }
+}
+
 impl TryFrom<String> for PublicKeyHex {
     type Error = HexConversionError;
 
@@ -73,6 +81,16 @@ impl TryFrom<PublicKeyHex> for DefaultPublicKey {
         let pub_key = DalekPublicKey::from_bytes(&bytes)
             .map_err(|_| anyhow::anyhow!("Invalid public key"))?;
 
-        Ok(DefaultPublicKey { pub_key: pub_key })
+        Ok(DefaultPublicKey { pub_key })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pub_key_hex() {
+        let pk_hex = PublicKeyHex::try_from("z").unwrap();
     }
 }

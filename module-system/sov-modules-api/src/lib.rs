@@ -1,7 +1,6 @@
 #![doc = include_str!("../README.md")]
 
 mod bech32;
-mod pub_key_hex;
 pub mod capabilities;
 #[cfg(feature = "native")]
 pub mod cli;
@@ -11,6 +10,7 @@ mod dispatch;
 mod encode;
 mod error;
 pub mod hooks;
+mod pub_key_hex;
 
 #[cfg(feature = "macros")]
 mod reexport_macros;
