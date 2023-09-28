@@ -39,7 +39,34 @@ fn get_nft_metadata_url(collection_address: &str, nft_id: u64) -> String {
     format!("{}/nft/{}/{}", DUMMY_URL, collection_address, nft_id)
 }
 
-async fn create_collection(
+/// Convenience and readability wrapper for build_create_collection_transaction
+fn build_create_collection_transactions(
+    creator_pk: &DefaultPrivateKey,
+    start_nonce: &mut u64,
+    collections: &[&str],
+) -> Vec<Transaction<DefaultContext>> {
+    collections
+        .iter()
+        .map(|&collection| {
+            let tx = build_create_collection_transaction(creator_pk, *start_nonce, collection);
+            *start_nonce += 1;
+            tx
+        })
+        .collect()
+}
+
+/// Constructs a transaction to create a new NFT collection.
+///
+/// # Arguments
+///
+/// * `signer`: The private key used for signing the transaction.
+/// * `nonce`: The nonce to be used for the transaction.
+/// * `collection_name`: The name of the collection to be created.
+///
+/// # Returns
+///
+/// Returns a signed transaction for creating a new NFT collection.
+fn build_create_collection_transaction(
     signer: &DefaultPrivateKey,
     nonce: u64,
     collection_name: &str,
@@ -63,7 +90,45 @@ async fn create_collection(
     )
 }
 
-async fn mint_nft(
+/// Convenience and readability wrapper for build_mint_nft_transaction
+fn build_mint_transactions(
+    creator_pk: &DefaultPrivateKey,
+    start_nonce: &mut u64,
+    collection: &str,
+    start_nft_id: &mut u64,
+    num: usize,
+    owner_pk: &DefaultPrivateKey,
+) -> Vec<Transaction<DefaultContext>> {
+    (0..num)
+        .map(|_| {
+            let tx = build_mint_nft_transaction(
+                creator_pk,
+                *start_nonce,
+                collection,
+                *start_nft_id,
+                &owner_pk.default_address(),
+            );
+            *start_nft_id += 1;
+            *start_nonce += 1;
+            tx
+        })
+        .collect()
+}
+
+/// Constructs a transaction to mint a new NFT.
+///
+/// # Arguments
+///
+/// * `signer`: The private key used for signing the transaction.
+/// * `nonce`: The nonce to be used for the transaction.
+/// * `collection_name`: The name of the collection to which the NFT belongs.
+/// * `token_id`: The unique identifier for the new NFT.
+/// * `owner`: The address of the user to whom the NFT will be minted.
+///
+/// # Returns
+///
+/// Returns a signed transaction for minting a new NFT to a specified user.
+fn build_mint_nft_transaction(
     signer: &DefaultPrivateKey,
     nonce: u64,
     collection_name: &str,
@@ -90,7 +155,44 @@ async fn mint_nft(
     )
 }
 
-async fn transfer_nft(
+/// Convenience and readability wrapper for build_transfer_nft_transaction
+fn build_transfer_transactions(
+    signer: &DefaultPrivateKey,
+    start_nonce: &mut u64,
+    collection_address: &CollectionAddress<DefaultContext>,
+    nft_ids: Vec<u64>,
+) -> Vec<Transaction<DefaultContext>> {
+    nft_ids
+        .into_iter()
+        .map(|nft_id| {
+            let new_owner = DefaultPrivateKey::generate().default_address();
+            let tx = build_transfer_nft_transaction(
+                signer,
+                *start_nonce,
+                collection_address,
+                nft_id,
+                &new_owner,
+            );
+            *start_nonce += 1;
+            tx
+        })
+        .collect()
+}
+
+/// Constructs a transaction to transfer an NFT to another user.
+///
+/// # Arguments
+///
+/// * `signer`: The private key used for signing the transaction.
+/// * `nonce`: The nonce to be used for the transaction.
+/// * `collection_address`: The address of the collection to which the NFT belongs.
+/// * `token_id`: The unique identifier for the NFT being transferred.
+/// * `to`: The address of the user to whom the NFT will be transferred.
+///
+/// # Returns
+///
+/// Returns a signed transaction for transferring an NFT to a specified user.
+fn build_transfer_nft_transaction(
     signer: &DefaultPrivateKey,
     nonce: u64,
     collection_address: &CollectionAddress<DefaultContext>,
@@ -120,98 +222,63 @@ async fn main() {
     let client = SimpleClient::new("localhost", 12345).await.unwrap();
 
     let mut nonce = 0;
-    let mut nft_id = 1;
-    let mut transactions = vec![];
-    transactions.push(create_collection(&creator_pk, nonce, COLLECTION_1).await);
-    nonce += 1;
-    transactions.push(create_collection(&creator_pk, nonce, COLLECTION_2).await);
-    nonce += 1;
-    transactions.push(create_collection(&creator_pk, nonce, COLLECTION_3).await);
-
+    let collections = [COLLECTION_1, COLLECTION_2, COLLECTION_3];
+    let transactions = build_create_collection_transactions(&creator_pk, &mut nonce, &collections);
     client.send_transactions(transactions, None).await.unwrap();
+
     // sleep is necessary because of how the sequencer currently works
     // without the sleep, there is a concurrency issue and some transactions would be ignored
     thread::sleep(Duration::from_millis(1000));
 
-    let mut transactions = vec![];
-    for _ in 0..15 {
-        nonce += 1;
-        transactions.push(
-            mint_nft(
-                &creator_pk,
-                nonce,
-                COLLECTION_1,
-                nft_id,
-                &owner_1_pk.default_address(),
-            )
-            .await,
-        );
-        nft_id += 1;
-    }
-
-    client.send_transactions(transactions, None).await.unwrap();
-    thread::sleep(Duration::from_millis(1000));
-
-    let mut transactions = vec![];
-    for _ in 0..5 {
-        nonce += 1;
-        transactions.push(
-            mint_nft(
-                &creator_pk,
-                nonce,
-                COLLECTION_1,
-                nft_id,
-                &owner_2_pk.default_address(),
-            )
-            .await,
-        );
-        nft_id += 1;
-    }
-
     let mut nft_id = 1;
-    for _ in 0..20 {
-        nonce += 1;
-        transactions.push(
-            mint_nft(
-                &creator_pk,
-                nonce,
-                COLLECTION_2,
-                nft_id,
-                &owner_1_pk.default_address(),
-            )
-            .await,
-        );
-        nft_id += 1;
-    }
+    let mut transactions = build_mint_transactions(
+        &creator_pk,
+        &mut nonce,
+        COLLECTION_1,
+        &mut nft_id,
+        15,
+        &owner_1_pk,
+    );
 
-    client.send_transactions(transactions, None).await.unwrap();
-    thread::sleep(Duration::from_millis(1000));
-
-    let mut transactions = vec![];
-
-    let mut owner_1_nonce = 0;
+    transactions.extend(build_mint_transactions(
+        &creator_pk,
+        &mut nonce,
+        COLLECTION_1,
+        &mut nft_id,
+        5,
+        &owner_2_pk,
+    ));
     let mut nft_id = 1;
+    transactions.extend(build_mint_transactions(
+        &creator_pk,
+        &mut nonce,
+        COLLECTION_2,
+        &mut nft_id,
+        20,
+        &owner_1_pk,
+    ));
+
+    client
+        .send_transactions(transactions.clone(), None)
+        .await
+        .unwrap();
+    thread::sleep(Duration::from_millis(3000));
+
     let collection_1_address = get_collection_address::<DefaultContext>(
         COLLECTION_1,
         creator_pk.default_address().as_ref(),
     );
 
-    #[allow(clippy::explicit_counter_loop)]
-    for _ in 1..7 {
-        let new_owner = DefaultPrivateKey::generate().default_address();
-        transactions.push(
-            transfer_nft(
-                &owner_1_pk,
-                owner_1_nonce,
-                &collection_1_address,
-                nft_id,
-                &new_owner,
-            )
-            .await,
-        );
-        owner_1_nonce += 1;
-        nft_id += 1;
-    }
-
-    client.send_transactions(transactions, None).await.unwrap();
+    let mut owner_1_nonce = 0;
+    let nft_ids_to_transfer: Vec<u64> = (1..=6).collect();
+    transactions = build_transfer_transactions(
+        &owner_1_pk,
+        &mut owner_1_nonce,
+        &collection_1_address,
+        nft_ids_to_transfer,
+    );
+    client
+        .send_transactions(transactions.clone(), None)
+        .await
+        .unwrap();
 }

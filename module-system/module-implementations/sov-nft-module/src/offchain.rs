@@ -4,20 +4,14 @@ use sov_modules_macros::offchain;
 
 #[cfg(feature = "offchain")]
 use crate::utils::get_collection_address;
-use crate::{Collection, CollectionAddress, Nft};
+#[cfg(feature = "offchain")]
+use crate::CollectionAddress;
+use crate::{Collection, Nft, OwnerAddress};
 
-// CREATE TABLE collection (
-//     collection_address TEXT PRIMARY KEY,
-//     collection_name TEXT NOT NULL,
-//     creator_address TEXT NOT NULL,
-//     frozen BOOLEAN NOT NULL,
-//     metadata_url TEXT,
-//     supply BIGINT NOT NULL
-// );
-
+/// Syncs a collection to the corresponding table "collections" in postgres
 #[offchain]
-pub fn track_collection<C: sov_modules_api::Context>(collection: &Collection<C>) {
-    // data extraction
+pub fn update_collection<C: sov_modules_api::Context>(collection: &Collection<C>) {
+    // Extract the necessary metadata from the collection
     let collection_name = collection.get_name();
     let creator_address = collection.get_creator();
     let frozen = collection.is_frozen();
@@ -53,116 +47,96 @@ pub fn track_collection<C: sov_modules_api::Context>(collection: &Collection<C>)
                         ],
                     );
                     if let Err(e) = result {
-                        println!("Failed to execute query: {}", e);
+                        tracing::error!("Failed to execute query: {}", e);
                     }
                 }
                 Err(e) => {
-                    println!("Failed to connect to the database: {}", e);
+                    tracing::error!("Failed to connect to the database: {}", e);
                 }
             }
         } else {
-            println!("Environment variable POSTGRES_CONNECTION_STRING is not set");
+            tracing::error!("Environment variable POSTGRES_CONNECTION_STRING is not set");
         }
     })
 }
 
-// CREATE TABLE nft (
-//     collection_address TEXT NOT NULL,
-//     nft_id BIGINT NOT NULL,
-//     metadata_url TEXT,
-//     owner TEXT NOT NULL,
-//     frozen BOOLEAN NOT NULL,
-//     PRIMARY KEY (collection_address, nft_id)
-// );
-
+/// Syncs an NFT to the corresponding table "nfts" in postgres
+/// Additionally, this function also has logic to track the counts of NFTs held by each user
+/// in each collection.
 #[offchain]
-pub fn track_nft<C: sov_modules_api::Context>(nft: &Nft<C>) {
+pub fn update_nft<C: sov_modules_api::Context>(nft: &Nft<C>, old_owner: Option<OwnerAddress<C>>) {
     let collection_address = nft.get_collection_address().to_string();
     let nft_id = nft.get_token_id();
-    let owner = nft.get_owner().to_string();
+    let new_owner_str = nft.get_owner().to_string();
     let frozen = nft.is_frozen();
     let metadata_url = nft.get_token_uri();
-    tokio::task::block_in_place(|| {
-        if let Ok(conn_string) = std::env::var("POSTGRES_CONNECTION_STRING") {
-            match postgres::Client::connect(&conn_string, NoTls) {
-                Ok(mut client) => {
-                    let result = client.execute(
-                        "INSERT INTO nfts (\
-                        collection_address, nft_id, metadata_url,\
-                        owner, frozen)\
-                        VALUES ($1, $2, $3, $4, $5)\
-                        ON CONFLICT (collection_address, nft_id)\
-                        DO UPDATE SET metadata_url = EXCLUDED.metadata_url,\
-                                      owner = EXCLUDED.owner,\
-                                      frozen = EXCLUDED.frozen",
-                        &[
-                            &collection_address,
-                            &(nft_id as i64),
-                            &metadata_url,
-                            &owner,
-                            &frozen,
-                        ],
-                    );
-                    if let Err(e) = result {
-                        println!("Failed to execute query: {}", e);
-                    }
-                }
-                Err(e) => {
-                    println!("Failed to connect to the database: {}", e);
-                }
-            }
-        } else {
-            println!("Environment variable POSTGRES_CONNECTION_STRING is not set");
-        }
-    })
-}
+    let old_owner_address = old_owner.map(|x| x.to_string());
 
-// CREATE TABLE top_owners (
-//     owner TEXT NOT NULL,
-//     collection_address TEXT NOT NULL,
-//     count BIGINT NOT NULL,
-//     PRIMARY KEY (owner, collection_address)
-// );
-
-#[offchain]
-pub fn update_top_owners<C: sov_modules_api::Context>(
-    collection_address: &CollectionAddress<C>,
-    owner_count_incr: Option<&[(String, u64)]>,
-    owner_count_decr: Option<&[(String, u64)]>,
-) {
-    let collection_address_str = collection_address.to_string();
     tokio::task::block_in_place(|| {
         if let Ok(conn_string) = std::env::var("POSTGRES_CONNECTION_STRING") {
             let mut client = postgres::Client::connect(&conn_string, NoTls).unwrap();
 
-            // Handle increments if provided
-            if let Some(increments) = owner_count_incr {
-                for (owner, increment_value) in increments {
-                    let result = client.execute(
-                        "INSERT INTO top_owners (owner, collection_address, count) VALUES ($1, $2, $3) \
-                         ON CONFLICT (owner, collection_address) \
-                         DO UPDATE SET count = top_owners.count + EXCLUDED.count",
-                        &[&&owner, &collection_address_str, &(*increment_value as i64)],
+            // Check current owner in the database for the NFT
+            let rows = client
+                .query(
+                    "SELECT owner FROM nfts WHERE collection_address = $1 AND nft_id = $2",
+                    &[&collection_address, &(nft_id as i64)],
+                )
+                .unwrap();
+
+            let db_owner: Option<String> = rows.get(0).map(|row| row.get(0));
+
+            // Handle ownership change logic for top_owners table
+            if let Some(db_owner_str) = db_owner {
+                if old_owner_address.is_none() {
+                    // This means it's a mint operation but the NFT already exists in the table.
+                    // Do nothing as we shouldn't increment in this scenario.
+                } else if old_owner_address.as_ref() != Some(&new_owner_str) {
+                    // Transfer occurred
+
+                    // Decrement count for the database owner (which would be the old owner in a transfer scenario)
+                    let _ = client.execute(
+                        "UPDATE top_owners SET count = count - 1 \
+                        WHERE owner = $1 AND collection_address = $2 AND count > 0",
+                        &[&db_owner_str, &collection_address],
                     );
-                    if let Err(e) = result {
-                        eprintln!("Failed to execute query: {}", e);
-                    }
+
+                    // Increment count for new owner
+                    let _ = client.execute(
+                        "INSERT INTO top_owners (owner, collection_address, count) VALUES ($1, $2, 1) \
+                        ON CONFLICT (owner, collection_address) \
+                        DO UPDATE SET count = top_owners.count + 1",
+                        &[&new_owner_str, &collection_address],
+                    );
                 }
+            } else if old_owner_address.is_none() {
+                // Mint operation, and NFT doesn't exist in the database. Increment for the new owner.
+                let _ = client.execute(
+                    "INSERT INTO top_owners (owner, collection_address, count) VALUES ($1, $2, 1) \
+                    ON CONFLICT (owner, collection_address) \
+                    DO UPDATE SET count = top_owners.count + 1",
+                    &[&new_owner_str, &collection_address],
+                );
             }
 
-            // Handle decrements if provided
-            if let Some(decrements) = owner_count_decr {
-                for (owner, decrement_value) in decrements {
-                    let result = client.execute(
-                        "UPDATE top_owners SET count = count - $3 \
-                         WHERE owner = $1 AND collection_address = $2 AND count >= $3",
-                        &[&owner, &collection_address_str, &(*decrement_value as i64)],
-                    );
-                    if let Err(e) = result {
-                        eprintln!("Failed to execute query: {}", e);
-                    }
-                }
-            }
+            // Update NFT information after handling top_owners logic
+            let _ = client.execute(
+                "INSERT INTO nfts (\
+                collection_address, nft_id, metadata_url,\
+                owner, frozen)\
+                VALUES ($1, $2, $3, $4, $5)\
+                ON CONFLICT (collection_address, nft_id)\
+                DO UPDATE SET metadata_url = EXCLUDED.metadata_url,\
+                              owner = EXCLUDED.owner,\
+                              frozen = EXCLUDED.frozen",
+                &[
+                    &collection_address,
+                    &(nft_id as i64),
+                    &metadata_url,
+                    &new_owner_str,
+                    &frozen,
+                ],
+            );
         }
     })
 }

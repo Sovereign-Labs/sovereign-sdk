@@ -266,6 +266,35 @@ pub fn address_type(_attr: TokenStream, item: TokenStream) -> TokenStream {
     handle_macro_error(address_type_helper(input))
 }
 
+/// The offchain macro is used to annotate functions that should only be executed by the rollup
+/// when the "offchain" feature flag is passed. The macro produces one of two functions depending on
+/// the presence flag.
+/// "offchain" feature enabled: function is present as defined
+/// "offchain" feature absent: function body is replaced with an empty definition
+///
+/// The idea here is that offchain computation is optionally enabled for a full node and is not
+/// part of chain state and does not impact consensus, prover or anything else.
+///
+/// ## Example
+/// ```
+/// use sov_modules_macros::offchain;
+/// #[offchain]
+/// fn redis_insert(count: u64){
+///     println!("Inserting {} to redis", count);
+/// }
+/// ```
+///
+/// This is exactly equivalent to hand-writing
+///```
+/// #[cfg(feature = "offchain")]
+/// fn redis_insert(count: u64){
+///     println!("Inserting {} to redis", count);
+/// }
+///
+/// #[cfg(not(feature = "offchain"))]
+/// fn redis_insert(count: u64){
+/// }
+///```
 #[proc_macro_attribute]
 pub fn offchain(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);

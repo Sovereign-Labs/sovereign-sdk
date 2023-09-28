@@ -42,14 +42,14 @@ impl SimpleClient {
     pub async fn send_transactions<Tx: BorshSerialize>(
         &self,
         txs: Vec<Tx>,
-        micro_batch: Option<usize>,
+        chunk_size: Option<usize>,
     ) -> Result<(), anyhow::Error> {
         let serialized_txs: Vec<Vec<u8>> = txs
             .into_iter()
             .map(|tx| tx.try_to_vec())
             .collect::<Result<_, _>>()?;
 
-        match micro_batch {
+        match chunk_size {
             Some(batch_size) => {
                 for chunk in serialized_txs.chunks(batch_size) {
                     let response: String = self

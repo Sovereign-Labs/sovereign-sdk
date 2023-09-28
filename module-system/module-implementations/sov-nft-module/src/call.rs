@@ -2,7 +2,7 @@ use anyhow::Result;
 use sov_modules_api::{CallResponse, Context, WorkingSet};
 
 use crate::address::UserAddress;
-use crate::offchain::{track_collection, track_nft, update_top_owners};
+use crate::offchain::{update_collection, update_nft};
 use crate::{Collection, CollectionAddress, Nft, NftIdentifier, NonFungibleToken, TokenId};
 
 #[cfg_attr(
@@ -88,8 +88,7 @@ impl<C: Context> NonFungibleToken<C> {
         )?;
         self.collections
             .set(&collection_address, &collection, working_set);
-        std::thread::sleep(std::time::Duration::from_millis(300));
-        track_collection(&collection);
+        update_collection(&collection);
         Ok(CallResponse::default())
     }
 
@@ -110,7 +109,7 @@ impl<C: Context> NonFungibleToken<C> {
         collection.set_collection_uri(collection_uri);
         self.collections
             .set(&collection_address, collection.inner(), working_set);
-        track_collection(collection.inner());
+        update_collection(collection.inner());
         Ok(CallResponse::default())
     }
 
@@ -130,7 +129,7 @@ impl<C: Context> NonFungibleToken<C> {
         collection.freeze();
         self.collections
             .set(&collection_address, collection.inner(), working_set);
-        track_collection(collection.inner());
+        update_collection(collection.inner());
         Ok(CallResponse::default())
     }
 
@@ -170,13 +169,8 @@ impl<C: Context> NonFungibleToken<C> {
         self.collections
             .set(&collection_address, collection.inner(), working_set);
 
-        track_collection(collection.inner());
-        track_nft(&new_nft);
-        update_top_owners(
-            &collection_address,
-            Some(&[(mint_to_address.to_string(), 1)]),
-            None,
-        );
+        update_collection(collection.inner());
+        update_nft(&new_nft, None);
 
         Ok(CallResponse::default())
     }
@@ -198,12 +192,7 @@ impl<C: Context> NonFungibleToken<C> {
             owned_nft.inner(),
             working_set,
         );
-        track_nft(owned_nft.inner());
-        update_top_owners(
-            collection_address,
-            Some(&[(to.to_string(), 1)]),
-            Some(&[(original_owner.to_string(), 1)]),
-        );
+        update_nft(owned_nft.inner(), Some(original_owner.clone()));
         Ok(CallResponse::default())
     }
 
@@ -235,7 +224,7 @@ impl<C: Context> NonFungibleToken<C> {
             mutable_nft.inner(),
             working_set,
         );
-        track_nft(mutable_nft.inner());
+        update_nft(mutable_nft.inner(), None);
         Ok(CallResponse::default())
     }
 }

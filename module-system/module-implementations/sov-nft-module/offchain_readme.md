@@ -1,5 +1,9 @@
 ## Offchain testing
 
+### Introduction
+This readme outlines the steps to demonstrate the offchain processing functionality that is part of the `sov-nft-module`
+
+### Steps
 * Install postgres on your system
 * Start the postgres terminal
 * Create the tables necessary for offchain processing
