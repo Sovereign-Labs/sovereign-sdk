@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::{App, DefaultPrivateKey};
-use demo_stf::genesis_config::create_demo_genesis_config;
+use demo_stf::app::App;
+use demo_stf::genesis_config::get_genesis_config;
 use log4rs::config::{Appender, Config, Root};
 use methods::ROLLUP_ELF;
 use regex::Regex;
@@ -17,12 +17,11 @@ use sov_celestia_adapter::types::{FilteredCelestiaBlock, NamespaceId};
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::{CelestiaSpec, RollupParams};
 use sov_celestia_adapter::CelestiaService;
-use sov_modules_api::{PrivateKey, SlotData};
+use sov_modules_api::SlotData;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
-use sov_state::storage::Storage;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
 
@@ -164,27 +163,17 @@ async fn main() -> Result<(), anyhow::Error> {
     )
     .await;
 
-    let sequencer_private_key = DefaultPrivateKey::generate();
-
     let mut app: App<Risc0Host, CelestiaSpec> = App::new(rollup_config.storage.clone());
 
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
 
-    let genesis_config = create_demo_genesis_config(
-        100000000,
-        sequencer_private_key.default_address(),
-        sequencer_da_address.as_ref().to_vec(),
-        &sequencer_private_key,
+    let genesis_config = get_genesis_config(
+        sequencer_da_address,
         #[cfg(feature = "experimental")]
         Default::default(),
     );
     println!("Starting from empty storage, initialization chain");
-    app.stf.init_chain(genesis_config);
-
-    let mut prev_state_root = app
-        .get_storage()
-        .get_state_root(&Default::default())
-        .expect("The storage needs to have a state root");
+    let mut prev_state_root = app.stf.init_chain(genesis_config);
 
     let mut demo = app.stf;
 
@@ -204,7 +193,7 @@ async fn main() -> Result<(), anyhow::Error> {
         println!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
-            hex::encode(prev_state_root)
+            hex::encode(prev_state_root.0)
         );
         let filtered_block = &bincoded_blocks[height as usize];
         let _header_hash = hex::encode(filtered_block.header.header.hash());
@@ -222,6 +211,7 @@ async fn main() -> Result<(), anyhow::Error> {
         }
 
         let result = demo.apply_slot(
+            &prev_state_root,
             Default::default(),
             &filtered_block.header,
             &filtered_block.validity_condition(),
@@ -243,7 +233,7 @@ async fn main() -> Result<(), anyhow::Error> {
             .run_without_proving()
             .expect("Prover should run successfully");
         println!("==================================================\n");
-        prev_state_root = result.state_root.0;
+        prev_state_root = result.state_root;
     }
 
     #[cfg(feature = "bench")]

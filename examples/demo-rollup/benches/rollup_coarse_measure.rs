@@ -6,12 +6,10 @@ use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use demo_stf::app::App;
-use demo_stf::genesis_config::create_demo_genesis_config;
+use demo_stf::genesis_config::get_genesis_config;
 use prometheus::{Histogram, HistogramOpts, Registry};
 use rng_xfers::{RngDaService, RngDaSpec, SEQUENCER_DA_ADDRESS};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::PrivateKey;
 use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rollup_interface::mocks::{MockAddress, MockBlock, MockBlockHeader};
 use sov_rollup_interface::services::da::DaService;
@@ -102,18 +100,14 @@ async fn main() -> Result<(), anyhow::Error> {
     let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(rollup_config.storage);
 
     let mut demo = demo_runner.stf;
-    let sequencer_private_key = DefaultPrivateKey::generate();
     let sequencer_da_address = MockAddress::from(SEQUENCER_DA_ADDRESS);
-    let demo_genesis_config = create_demo_genesis_config(
-        100000000,
-        sequencer_private_key.default_address(),
-        sequencer_da_address.as_ref().to_vec(),
-        &sequencer_private_key,
+    let demo_genesis_config = get_genesis_config(
+        sequencer_da_address,
         #[cfg(feature = "experimental")]
         Default::default(),
     );
 
-    demo.init_chain(demo_genesis_config);
+    let mut current_root = demo.init_chain(demo_genesis_config);
 
     // data generation
     let mut blobs = vec![];
@@ -141,11 +135,13 @@ async fn main() -> Result<(), anyhow::Error> {
     let filtered_block = &blocks[0usize];
     let mut data_to_commit = SlotCommit::new(filtered_block.clone());
     let apply_block_results = demo.apply_slot(
+        &current_root,
         Default::default(),
         &filtered_block.header,
         &filtered_block.validity_cond,
         &mut blobs[0usize],
     );
+    current_root = apply_block_results.state_root;
     data_to_commit.add_batch(apply_block_results.batch_receipts[0].clone());
 
     ledger_db.commit_slot(data_to_commit).unwrap();
@@ -161,11 +157,13 @@ async fn main() -> Result<(), anyhow::Error> {
         let now = Instant::now();
 
         let apply_block_results = demo.apply_slot(
+            &current_root,
             Default::default(),
             &filtered_block.header,
             &filtered_block.validity_cond,
             &mut blobs[height as usize],
         );
+        current_root = apply_block_results.state_root;
 
         apply_block_time += now.elapsed();
         h_apply_block.observe(now.elapsed().as_secs_f64());

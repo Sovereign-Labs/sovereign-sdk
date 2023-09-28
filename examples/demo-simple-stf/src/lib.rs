@@ -52,6 +52,7 @@ impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, 
 
     fn apply_slot<'a, I>(
         &mut self,
+        _pre_state_root: &(),
         _witness: Self::Witness,
         _slot_header: &Da::BlockHeader,
         _validity_condition: &Da::ValidityCondition,
@@ -95,9 +96,5 @@ impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, 
             batch_receipts: receipts,
             witness: (),
         }
-    }
-
-    fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot> {
-        Ok(())
     }
 }

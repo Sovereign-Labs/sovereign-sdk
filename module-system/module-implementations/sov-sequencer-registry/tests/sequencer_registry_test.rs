@@ -5,6 +5,7 @@ use sov_state::ProverStorage;
 mod helpers;
 
 use helpers::*;
+use sov_rollup_interface::mocks::MockAddress;
 use sov_sequencer_registry::SequencerRegistry;
 
 // Happy path for registration and exit
@@ -24,14 +25,14 @@ fn test_registration_lifecycle() {
         let sequencer_address = generate_address(GENESIS_SEQUENCER_KEY);
         let registry_response = test_sequencer
             .registry
-            .sequencer_address(GENESIS_SEQUENCER_DA_ADDRESS.to_vec(), working_set)
+            .sequencer_address(MockAddress::from(GENESIS_SEQUENCER_DA_ADDRESS), working_set)
             .unwrap();
         assert_eq!(Some(sequencer_address), registry_response.address);
     }
 
     // Check normal lifecycle
 
-    let da_address = ANOTHER_SEQUENCER_DA_ADDRESS.to_vec();
+    let da_address = MockAddress::from(ANOTHER_SEQUENCER_DA_ADDRESS);
 
     let sequencer_address = generate_address(ANOTHER_SEQUENCER_KEY);
     let sender_context = C::new(sequencer_address);
@@ -44,12 +45,12 @@ fn test_registration_lifecycle() {
 
     let registry_response_before = test_sequencer
         .registry
-        .sequencer_address(da_address.clone(), working_set)
+        .sequencer_address(da_address, working_set)
         .unwrap();
     assert!(registry_response_before.address.is_none());
 
     let register_message = CallMessage::Register {
-        da_address: da_address.clone(),
+        da_address: da_address.as_ref().to_vec(),
     };
     test_sequencer
         .registry
@@ -65,7 +66,7 @@ fn test_registration_lifecycle() {
 
     let registry_response_after_registration = test_sequencer
         .registry
-        .sequencer_address(da_address.clone(), working_set)
+        .sequencer_address(da_address, working_set)
         .unwrap();
     assert_eq!(
         Some(sequencer_address),
@@ -73,7 +74,7 @@ fn test_registration_lifecycle() {
     );
 
     let exit_message = CallMessage::Exit {
-        da_address: da_address.clone(),
+        da_address: da_address.as_ref().to_vec(),
     };
     test_sequencer
         .registry
@@ -101,12 +102,14 @@ fn test_registration_not_enough_funds() {
     let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
 
-    let da_address = ANOTHER_SEQUENCER_DA_ADDRESS.to_vec();
+    let da_address = MockAddress::from(ANOTHER_SEQUENCER_DA_ADDRESS);
 
     let sequencer_address = generate_address(LOW_FUND_KEY);
     let sender_context = C::new(sequencer_address);
 
-    let register_message = CallMessage::Register { da_address };
+    let register_message = CallMessage::Register {
+        da_address: da_address.as_ref().to_vec(),
+    };
     let response = test_sequencer
         .registry
         .call(register_message, &sender_context, working_set);
@@ -152,12 +155,14 @@ fn test_registration_second_time() {
     let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
 
-    let da_address = GENESIS_SEQUENCER_DA_ADDRESS.to_vec();
+    let da_address = MockAddress::from(GENESIS_SEQUENCER_DA_ADDRESS);
 
     let sequencer_address = generate_address(GENESIS_SEQUENCER_KEY);
     let sender_context = C::new(sequencer_address);
 
-    let register_message = CallMessage::Register { da_address };
+    let register_message = CallMessage::Register {
+        da_address: da_address.as_ref().to_vec(),
+    };
     let response = test_sequencer
         .registry
         .call(register_message, &sender_context, working_set);
@@ -176,22 +181,22 @@ fn test_exit_different_sender() {
     let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
 
-    let da_address = ANOTHER_SEQUENCER_DA_ADDRESS.to_vec();
-
     let sequencer_address = generate_address(ANOTHER_SEQUENCER_KEY);
     let sender_context = C::new(sequencer_address);
     let attacker_address = generate_address("some_random_key");
     let attacker_context = C::new(attacker_address);
 
     let register_message = CallMessage::Register {
-        da_address: da_address.clone(),
+        da_address: ANOTHER_SEQUENCER_DA_ADDRESS.to_vec(),
     };
     test_sequencer
         .registry
         .call(register_message, &sender_context, working_set)
         .expect("Sequencer registration has failed");
 
-    let exit_message = CallMessage::Exit { da_address };
+    let exit_message = CallMessage::Exit {
+        da_address: ANOTHER_SEQUENCER_DA_ADDRESS.to_vec(),
+    };
     let response = test_sequencer
         .registry
         .call(exit_message, &attacker_context, working_set);
@@ -233,7 +238,7 @@ fn test_preferred_sequencer_returned_and_removed() {
         bank_config.tokens[0].salt,
     );
 
-    let registry = SequencerRegistry::<C>::default();
+    let registry = SequencerRegistry::<C, Da>::default();
     let mut sequencer_config = create_sequencer_config(seq_rollup_address, token_address);
 
     sequencer_config.is_preferred_sequencer = true;

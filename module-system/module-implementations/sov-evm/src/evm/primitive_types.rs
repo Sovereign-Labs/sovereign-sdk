@@ -1,9 +1,7 @@
 use std::ops::Range;
 
-use jsonrpsee::types::ErrorObject;
 use reth_primitives::{Address, Header, SealedHeader, TransactionSigned, H256};
 use revm::primitives::EVMError;
-use thiserror::Error;
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Clone)]
 pub(crate) struct BlockEnv {
@@ -26,6 +24,20 @@ impl Default for BlockEnv {
             prevrandao: Default::default(),
             basefee: Default::default(),
             gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
+        }
+    }
+}
+
+// BlockEnv from SealedBlock
+impl From<&SealedBlock> for BlockEnv {
+    fn from(block: &SealedBlock) -> Self {
+        Self {
+            number: block.header.number,
+            coinbase: block.header.beneficiary,
+            timestamp: block.header.timestamp,
+            prevrandao: block.header.mix_hash,
+            basefee: block.header.base_fee_per_gas.unwrap_or_default(),
+            gas_limit: block.header.gas_limit,
         }
     }
 }
@@ -105,24 +117,4 @@ pub(crate) struct Receipt {
     pub(crate) gas_used: u64,
     pub(crate) log_index_start: u64,
     pub(crate) error: Option<EVMError<u8>>,
-}
-
-#[derive(Error, Debug)]
-pub enum RawEvmTxConversionError {
-    #[error("Empty raw transaction data")]
-    EmptyRawTransactionData,
-    #[error("Failed to decode signed transaction")]
-    FailedToDecodeSignedTransaction,
-    #[error("Failed to recover signer")]
-    FailedToRecoverSigner,
-}
-
-impl From<RawEvmTxConversionError> for jsonrpsee::core::Error {
-    fn from(error: RawEvmTxConversionError) -> Self {
-        jsonrpsee::core::Error::Call(ErrorObject::owned::<&[u8]>(
-            jsonrpsee::types::error::INVALID_PARAMS_CODE,
-            error.to_string(),
-            None,
-        ))
-    }
 }

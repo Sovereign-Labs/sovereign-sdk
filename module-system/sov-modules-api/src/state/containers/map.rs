@@ -195,7 +195,7 @@ where
     /// Deletes a key-value pair from the map.
     ///
     /// This is equivalent to [`StateMap::remove`], but doesn't deserialize and
-    /// return the value beforing deletion.
+    /// return the value before deletion.
     pub fn delete<Q, C>(&self, key: &Q, working_set: &mut WorkingSet<C>)
     where
         Codec: StateCodec,
@@ -219,7 +219,7 @@ where
     /// Returns an arbitrary [`StateMap`] instance.
     ///
     /// See the [`arbitrary`] crate for more information.
-    pub fn arbitrary_workset<C>(
+    pub fn arbitrary_working_set<C>(
         u: &mut arbitrary::Unstructured<'a>,
         working_set: &mut WorkingSet<C>,
     ) -> arbitrary::Result<Self>

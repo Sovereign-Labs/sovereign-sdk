@@ -10,7 +10,6 @@ use sov_db::state_db::StateDB;
 use crate::config::Config;
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::storage::{NativeStorage, Storage, StorageKey, StorageProof, StorageValue};
-use crate::tree_db::TreeReadLogger;
 use crate::witness::Witness;
 use crate::MerkleProofSpec;
 
@@ -62,7 +61,8 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         }
     }
 
-    fn get_root_hash(&self, version: Version) -> Result<RootHash, anyhow::Error> {
+    /// Get the root hash of the tree at the requested version
+    pub fn get_root_hash(&self, version: Version) -> Result<RootHash, anyhow::Error> {
         let temp_merkle: JellyfishMerkleTree<'_, StateDB, S::Hasher> =
             JellyfishMerkleTree::new(&self.db);
         temp_merkle.get_root_hash(version)
@@ -74,6 +74,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     type RuntimeConfig = Config;
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
     type StateUpdate = NodeBatch;
+    type Root = jmt::RootHash;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Self::with_path(config.path.as_path())
@@ -93,28 +94,19 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             .map(Into::into)
     }
 
-    fn get_state_root(&self, _witness: &Self::Witness) -> anyhow::Result<[u8; 32]> {
-        self.get_root_hash(self.db.get_next_version() - 1)
-            .map(|root| root.0)
-    }
-
     fn compute_state_update(
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-    ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error> {
+    ) -> Result<(Self::Root, Self::StateUpdate), anyhow::Error> {
         let latest_version = self.db.get_next_version() - 1;
-        let read_logger = TreeReadLogger::with_db_and_witness(self.db.clone(), witness);
-        let untracked_jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&self.db);
+        let jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&self.db);
 
-        // Handle empty untracked_jmt
-        if untracked_jmt
-            .get_root_hash_option(latest_version)?
-            .is_none()
-        {
+        // Handle empty jmt
+        if jmt.get_root_hash_option(latest_version)?.is_none() {
             assert_eq!(latest_version, 0);
             let empty_batch = Vec::default().into_iter();
-            let (_, tree_update) = untracked_jmt
+            let (_, tree_update) = jmt
                 .put_value_set(empty_batch, latest_version)
                 .expect("JMT update must succeed");
 
@@ -122,24 +114,22 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
                 .write_node_batch(&tree_update.node_batch)
                 .expect("db write must succeed");
         }
-        let prev_root = untracked_jmt
+        let prev_root = jmt
             .get_root_hash(latest_version)
             .expect("Previous root hash was just populated");
         witness.add_hint(prev_root.0);
-        witness.add_hint(latest_version);
 
         // For each value that's been read from the tree, read it from the logged JMT to populate hints
         for (key, read_value) in state_accesses.ordered_reads {
             let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
             // TODO: Switch to the batch read API once it becomes available
-            let (result, proof) = untracked_jmt.get_with_proof(key_hash, latest_version)?;
+            let (result, proof) = jmt.get_with_proof(key_hash, latest_version)?;
             if result.as_ref() != read_value.as_ref().map(|f| f.value.as_ref()) {
                 anyhow::bail!("Bug! Incorrect value read from jmt");
             }
             witness.add_hint(proof);
         }
 
-        let tracked_jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&read_logger);
         // Compute the jmt update from the write batch
         let batch = state_accesses
             .ordered_writes
@@ -157,11 +147,14 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
 
         let next_version = self.db.get_next_version();
 
-        let (new_root, tree_update) = tracked_jmt
-            .put_value_set(batch, next_version)
+        let (new_root, update_proof, tree_update) = jmt
+            .put_value_set_with_proof(batch, next_version)
             .expect("JMT update must succeed");
 
-        Ok((new_root.0, tree_update.node_batch))
+        witness.add_hint(update_proof);
+        witness.add_hint(new_root.0);
+
+        Ok((new_root, tree_update.node_batch))
     }
 
     fn commit(&self, node_batch: &Self::StateUpdate, accessory_writes: &OrderedReadsAndWrites) {
@@ -189,17 +182,13 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
 
     fn open_proof(
         &self,
-        state_root: [u8; 32],
+        state_root: Self::Root,
         state_proof: StorageProof<Self::Proof>,
     ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error> {
         let StorageProof { key, value, proof } = state_proof;
         let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
 
-        proof.verify(
-            jmt::RootHash(state_root),
-            key_hash,
-            value.as_ref().map(|v| v.value()),
-        )?;
+        proof.verify(state_root, key_hash, value.as_ref().map(|v| v.value()))?;
         Ok((key, value))
     }
 }

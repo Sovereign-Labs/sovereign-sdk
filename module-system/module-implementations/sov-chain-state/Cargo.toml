@@ -24,9 +24,6 @@ sov-rollup-interface = { path = "../../../rollup-interface", version = "0.2" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-sov-bank = { path = "../sov-bank" }
-sov-value-setter = { path = "../examples/sov-value-setter" }
-sov-modules-stf-template = { path = "../../sov-modules-stf-template" }
 sov-data-generators = { path = "../../utils/sov-data-generators" }
 sov-chain-state = { path = ".", features = ["native"] }
 sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"] }

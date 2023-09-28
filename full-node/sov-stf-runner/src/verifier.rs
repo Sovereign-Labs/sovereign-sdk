@@ -44,6 +44,7 @@ where
         )?;
 
         let result = self.app.apply_slot(
+            &data.pre_state_root,
             data.state_transition_witness,
             &data.da_block_header,
             &validity_condition,

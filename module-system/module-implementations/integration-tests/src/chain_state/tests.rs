@@ -2,6 +2,7 @@ use sov_chain_state::{StateTransitionId, TransitionInProgress};
 use sov_data_generators::value_setter_data::ValueSetterMessages;
 use sov_data_generators::{has_tx_events, new_test_blob_from_batch, MessageGenerator};
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::Spec;
 use sov_modules_stf_template::{AppTemplate, SequencerOutcome};
 use sov_rollup_interface::mocks::{
     MockBlock, MockBlockHeader, MockDaSpec, MockHash, MockValidityCond, MockZkvm,
@@ -9,7 +10,9 @@ use sov_rollup_interface::mocks::{
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::{ProverStorage, Storage};
 
-use crate::chain_state::helpers::{create_demo_genesis_config, get_working_set, TestRuntime};
+use crate::chain_state::helpers::{
+    create_chain_state_genesis_config, get_working_set, TestRuntime,
+};
 
 type C = DefaultContext;
 
@@ -35,7 +38,7 @@ fn test_simple_value_setter_with_chain_state() {
     let admin_pub_key = value_setter_messages.messages[0].admin.default_address();
 
     // Genesis
-    let init_root_hash = app_template.init_chain(create_demo_genesis_config(admin_pub_key));
+    let init_root_hash = app_template.init_chain(create_chain_state_genesis_config(admin_pub_key));
 
     const MOCK_SEQUENCER_DA_ADDRESS: [u8; 32] = [1_u8; 32];
 
@@ -67,6 +70,7 @@ fn test_simple_value_setter_with_chain_state() {
     assert_eq!(new_height_storage, 0, "The initial height was not computed");
 
     let result = app_template.apply_slot(
+        &init_root_hash,
         Default::default(),
         &slot_data.header,
         &slot_data.validity_cond,
@@ -85,15 +89,12 @@ fn test_simple_value_setter_with_chain_state() {
     let mut working_set = get_working_set(&app_template);
     let chain_state_ref = &app_template.runtime.chain_state;
 
-    // Get the new state root hash
-    let new_root_hash = app_template
-        .current_storage
-        .get_state_root(&Default::default());
+    let new_root_hash = result.state_root;
 
     // Check that the root hash has been stored correctly
-    let stored_root: [u8; 32] = chain_state_ref.get_genesis_hash(&mut working_set).unwrap();
+    let stored_root = chain_state_ref.get_genesis_hash(&mut working_set).unwrap();
 
-    assert_eq!(stored_root, init_root_hash.0, "Root hashes don't match");
+    assert_eq!(stored_root, init_root_hash, "Root hashes don't match");
 
     // Check the slot height
     let new_height_storage = chain_state_ref.get_slot_height(&mut working_set);
@@ -125,6 +126,7 @@ fn test_simple_value_setter_with_chain_state() {
     };
 
     let result = app_template.apply_slot(
+        &result.state_root,
         Default::default(),
         &new_slot_data.header,
         &new_slot_data.validity_cond,
@@ -144,9 +146,9 @@ fn test_simple_value_setter_with_chain_state() {
     let chain_state_ref = &app_template.runtime.chain_state;
 
     // Check that the root hash has been stored correctly
-    let stored_root: [u8; 32] = chain_state_ref.get_genesis_hash(&mut working_set).unwrap();
+    let stored_root = chain_state_ref.get_genesis_hash(&mut working_set).unwrap();
 
-    assert_eq!(stored_root, init_root_hash.0, "Root hashes don't match");
+    assert_eq!(stored_root, init_root_hash, "Root hashes don't match");
 
     // Check the slot height
     let new_height_storage = chain_state_ref.get_slot_height(&mut working_set);
@@ -163,16 +165,15 @@ fn test_simple_value_setter_with_chain_state() {
         "The new transition has not been correctly stored"
     );
 
-    let last_tx_stored: StateTransitionId<MockDaSpec> = chain_state_ref
+    let last_tx_stored: StateTransitionId<
+        MockDaSpec,
+        <<DefaultContext as Spec>::Storage as Storage>::Root,
+    > = chain_state_ref
         .get_historical_transitions(1, &mut working_set)
         .unwrap();
 
     assert_eq!(
         last_tx_stored,
-        StateTransitionId::new(
-            [10; 32].into(),
-            new_root_hash.unwrap(),
-            MockValidityCond::default()
-        )
+        StateTransitionId::new([10; 32].into(), new_root_hash, MockValidityCond::default())
     );
 }

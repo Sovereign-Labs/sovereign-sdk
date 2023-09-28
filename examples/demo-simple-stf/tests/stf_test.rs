@@ -23,6 +23,7 @@ fn test_stf_success() {
 
     let result = StateTransitionFunction::<MockZkvm, MockDaSpec>::apply_slot(
         stf,
+        &(),
         (),
         &MockBlockHeader::default(),
         &MockValidityCond::default(),

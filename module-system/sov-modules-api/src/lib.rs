@@ -138,7 +138,9 @@ pub enum SigVerificationError {
 }
 
 /// Signature used in the Module System.
-pub trait Signature {
+pub trait Signature:
+    borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug + Send + Sync
+{
     type PublicKey;
 
     fn verify(&self, pub_key: &Self::PublicKey, msg: &[u8]) -> Result<(), SigVerificationError>;
@@ -150,13 +152,22 @@ pub trait Signature {
 pub enum NonInstantiable {}
 
 /// PublicKey used in the Module System.
-pub trait PublicKey {
+pub trait PublicKey:
+    borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Hash + Clone + Debug + Send + Sync
+{
     fn to_address<A: RollupAddress>(&self) -> A;
 }
 
 /// A PrivateKey used in the Module System.
 #[cfg(feature = "native")]
-pub trait PrivateKey {
+pub trait PrivateKey:
+    Debug
+    + Send
+    + Sync
+    + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
+    + Serialize
+    + DeserializeOwned
+{
     type PublicKey: PublicKey;
     type Signature: Signature<PublicKey = Self::PublicKey>;
     fn generate() -> Self;
@@ -195,73 +206,37 @@ pub trait Spec {
     type Address: RollupAddress + BorshSerialize + BorshDeserialize;
 
     /// Authenticated state storage used by the rollup. Typically some variant of a merkle-patricia trie.
-    type Storage: Storage + Clone + Send + Sync;
+    type Storage: Storage + Send + Sync;
 
     /// The public key used for digital signatures
     #[cfg(feature = "native")]
-    type PublicKey: borsh::BorshDeserialize
-        + borsh::BorshSerialize
-        + Eq
-        + Hash
-        + Clone
-        + Debug
-        + PublicKey
+    type PublicKey: PublicKey
         + Serialize
         + for<'a> Deserialize<'a>
         + ::schemars::JsonSchema
-        + Send
-        + Sync
         + FromStr<Err = anyhow::Error>;
+
+    #[cfg(not(feature = "native"))]
+    type PublicKey: PublicKey;
 
     /// The public key used for digital signatures
     #[cfg(feature = "native")]
-    type PrivateKey: Debug
-        + Send
-        + Sync
-        + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
-        + Serialize
-        + DeserializeOwned
-        + PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
-
-    #[cfg(not(feature = "native"))]
-    type PublicKey: borsh::BorshDeserialize
-        + borsh::BorshSerialize
-        + Eq
-        + Hash
-        + Clone
-        + Debug
-        + Send
-        + Sync
-        + PublicKey;
+    type PrivateKey: PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
 
     /// The hasher preferred by the rollup, such as Sha256 or Poseidon.
     type Hasher: Digest<OutputSize = U32>;
 
     /// The digital signature scheme used by the rollup
     #[cfg(feature = "native")]
-    type Signature: borsh::BorshDeserialize
-        + borsh::BorshSerialize
+    type Signature: Signature<PublicKey = Self::PublicKey>
+        + FromStr<Err = anyhow::Error>
         + Serialize
         + for<'a> Deserialize<'a>
-        + schemars::JsonSchema
-        + Eq
-        + Clone
-        + Debug
-        + Send
-        + Sync
-        + FromStr<Err = anyhow::Error>
-        + Signature<PublicKey = Self::PublicKey>;
+        + schemars::JsonSchema;
 
     /// The digital signature scheme used by the rollup
     #[cfg(not(feature = "native"))]
-    type Signature: borsh::BorshDeserialize
-        + borsh::BorshSerialize
-        + Eq
-        + Clone
-        + Debug
-        + Signature<PublicKey = Self::PublicKey>
-        + Send
-        + Sync;
+    type Signature: Signature<PublicKey = Self::PublicKey>;
 
     /// A structure containing the non-deterministic inputs from the prover to the zk-circuit
     type Witness: Witness;
@@ -301,7 +276,7 @@ where
 
 /// All the methods have a default implementation that can't be invoked (because they take `NonInstantiable` parameter).
 /// This allows developers to override only some of the methods in their implementation and safely ignore the others.
-pub trait Module: Default {
+pub trait Module {
     /// Execution context.
     type Context: Context;
 

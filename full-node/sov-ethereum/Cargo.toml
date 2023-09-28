@@ -19,8 +19,6 @@ sov-rollup-interface = { path = "../../rollup-interface" }
 sov-evm = { path = "../../module-system/module-implementations/sov-evm" }
 demo-stf = { path = "../../examples/demo-stf", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api" }
-const-rollup-config = { path = "../../examples/const-rollup-config" }
-sov-celestia-adapter = { path = "../../adapters/celestia", features = ["native"] }
 
 borsh = { workspace = true }
 serde_json = { workspace = true }
@@ -37,5 +35,6 @@ tokio = { workspace = true }
 
 [features]
 default = []
-experimental = ["demo-stf/experimental", "sov-evm/experimental"]
+local = []
+experimental = ["demo-stf/experimental", "sov-evm/experimental", "local"]
 native = ["demo-stf/native", "sov-evm/native"]

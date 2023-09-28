@@ -33,10 +33,10 @@ pub type Result<T, E = CodecError> = core::result::Result<T, E>;
 
 /// This trait defines a type that can serve as a [`Schema::Key`].
 ///
-/// [`KeyCodec`] is a marker trait with a blaket implementation for all types
+/// [`KeyCodec`] is a marker trait with a blanket implementation for all types
 /// that are both [`KeyEncoder`] and [`KeyDecoder`]. Having [`KeyEncoder`] and
 /// [`KeyDecoder`] as two standalone traits on top of [`KeyCodec`] may seem
-/// superflous, but it allows for zero-copy key encoding under specific
+/// superfluous, but it allows for zero-copy key encoding under specific
 /// circumstances. E.g.:
 ///
 /// ```rust

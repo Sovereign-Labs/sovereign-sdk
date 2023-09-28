@@ -1,5 +1,6 @@
 # How to Create a New Module Using the Module System
 
+
 ### Understanding the Module System
 
 The Sovereign Software Development Kit (SDK) includes a [Module System](../../module-system/README.md),
@@ -12,6 +13,10 @@ These modules are the fundamental building blocks of a rollup and include:
   These modules often use state, modules-API, and macros modules to simplify their development and operation.
 
 ### Creating a Non-Fungible Token (NFT) Module
+
+**Note**: This tutorial focuses on illustrating the usage of the Sovereign SDK by creating a simple NFT module. 
+The focus here is on the module system and not the application logic. For a more complete NFT module, please refer
+to [sov-nft-module](../../module-system/module-implementations/sov-nft-module)
 
 In this tutorial, we will focus on developing an application-level module. Users of this module will be able to mint
 unique tokens, transfer them to each other, or burn them. Users can also check the ownership of a particular token. For
@@ -385,7 +390,7 @@ sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branc
 Here is some boilerplate for NFT module integration tests:
 
 ```rust
-use demo_nft_module::{CallMessage, NonFungibleToken, NonFungibleTokenConfig, OwnerResponse};
+use simple_nft_module::{CallMessage, NonFungibleToken, NonFungibleTokenConfig, OwnerResponse};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Context, Module, WorkingSet};
 use sov_rollup_interface::stf::Event;
@@ -457,6 +462,6 @@ pub struct Runtime<C: sov_modules_api::Context> {
     bank: sov_bank::Bank<C>,
 
     #[allow(unused)]
-    nft: demo_nft_module::NonFungibleToken<C>,
+    nft: simple_nft_module::NonFungibleToken<C>,
 }
 ```

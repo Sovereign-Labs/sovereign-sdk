@@ -11,7 +11,7 @@ impl<'a, C: sov_modules_api::Context> DatabaseCommit for EvmDb<'a, C> {
 
             // TODO figure out what to do when account is destroyed.
             // https://github.com/Sovereign-Labs/sovereign-sdk/issues/425
-            if account.is_destroyed {
+            if account.is_selfdestructed() {
                 todo!("Account destruction not supported")
             }
 
@@ -22,7 +22,20 @@ impl<'a, C: sov_modules_api::Context> DatabaseCommit for EvmDb<'a, C> {
                 .get(&address, self.working_set)
                 .unwrap_or_else(|| DbAccount::new(accounts_prefix, address));
 
-            db_account.info = account.info.into();
+            let account_info = account.info;
+
+            if let Some(ref code) = account_info.code {
+                if !code.is_empty() {
+                    // TODO: would be good to have a contains_key method on the StateMap that would be optimized, so we can check the hash before storing the code
+                    self.code.set(
+                        &account_info.code_hash,
+                        &code.bytecode.as_ref().into(),
+                        self.working_set,
+                    );
+                }
+            }
+
+            db_account.info = account_info.into();
 
             for (key, value) in account.storage.into_iter() {
                 let value = value.present_value();

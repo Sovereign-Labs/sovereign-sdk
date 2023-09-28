@@ -26,7 +26,11 @@ serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
-jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
+jsonrpsee = { workspace = true, features = [
+    "macros",
+    "client-core",
+    "server",
+], optional = true }
 tracing = { workspace = true }
 derive_more = { workspace = true }
 lazy_static = "1.4.0"
@@ -39,9 +43,15 @@ ethers-middleware = { workspace = true }
 ethers-signers = { workspace = true }
 ethers = { workspace = true }
 
-revm = { workspace = true, features = ["optional_block_gas_limit", "optional_eip3607", "optional_no_base_fee"] }
+revm = { workspace = true, features = [
+    "optional_block_gas_limit",
+    "optional_eip3607",
+    "optional_no_base_fee",
+] }
 reth-primitives = { workspace = true }
+reth-interfaces = { workspace = true }
 reth-rpc-types = { workspace = true }
+reth-rpc-types-compat = { workspace = true }
 reth-revm = { workspace = true }
 secp256k1 = { workspace = true }
 
@@ -54,6 +64,14 @@ bytes = { workspace = true }
 
 [features]
 default = []
-native = ["serde", "serde_json", "jsonrpsee", "schemars", "clap", "sov-state/native", "sov-modules-api/native"]
+native = [
+    "serde",
+    "serde_json",
+    "jsonrpsee",
+    "schemars",
+    "clap",
+    "sov-state/native",
+    "sov-modules-api/native",
+]
 experimental = ["native"]
 smart_contracts = ["experimental"]

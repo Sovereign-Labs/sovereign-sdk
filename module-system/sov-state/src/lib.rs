@@ -7,9 +7,6 @@ pub mod codec;
 #[cfg(feature = "native")]
 mod prover_storage;
 
-#[cfg(feature = "native")]
-mod tree_db;
-
 mod internal_cache;
 
 /// Trait and type definitions related to the [`Storage`] trait.
@@ -33,11 +30,11 @@ pub use sov_first_read_last_write_cache::cache::CacheLog;
 use sov_rollup_interface::digest::Digest;
 pub use utils::AlignedVec;
 
-pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
+pub use crate::witness::{ArrayWitness, Witness};
 
 /// A prefix prepended to each key before insertion and retrieval from the storage.
 ///
-/// When interacing with state containers, you will usually use the same working set instance to
+/// When interacting with state containers, you will usually use the same working set instance to
 /// access them, as required by the module API. This also means that you might get key collisions,
 /// so it becomes necessary to prepend a prefix to each key.
 #[derive(

@@ -21,13 +21,13 @@ pub struct ProofOfBond<StateProof> {
 #[derive(
     Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Default,
 )]
-pub struct Attestation<Da: DaSpec, StateProof> {
+pub struct Attestation<Da: DaSpec, StateProof, StateRoot> {
     /// The alleged state root before applying the contents of the da block
-    pub initial_state_root: [u8; 32],
+    pub initial_state_root: StateRoot,
     /// The hash of the block in which the transition occurred
     pub da_block_hash: Da::SlotHash,
     /// The alleged post-state root
-    pub post_state_root: [u8; 32],
+    pub post_state_root: StateRoot,
     /// A proof that the attester was bonded at some point in time before the attestation is generated
     pub proof_of_bond: ProofOfBond<StateProof>,
 }
@@ -35,11 +35,11 @@ pub struct Attestation<Da: DaSpec, StateProof> {
 /// The contents of a challenge to an attestation, which are contained as a public output of the proof
 /// Generic over an address type and a validity condition
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
-pub struct ChallengeContents<Address, Da: DaSpec> {
+pub struct ChallengeContents<Address, Da: DaSpec, Root> {
     /// The rollup address of the originator of this challenge
     pub challenger_address: Address,
     /// The state transition that was proven
-    pub state_transition: StateTransition<Da, Address>,
+    pub state_transition: StateTransition<Da, Address, Root>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, Serialize, Deserialize)]

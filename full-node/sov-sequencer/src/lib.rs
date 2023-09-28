@@ -127,7 +127,7 @@ impl SubmitTransaction {
 pub enum SubmitTransactionResponse {
     /// Submission succeeded
     Registered,
-    /// Submission faileds
+    /// Submission failed with given reason
     Failed(String),
 }
 

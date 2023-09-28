@@ -1,14 +1,13 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use jmt::storage::NodeBatch;
-use jmt::{JellyfishMerkleTree, KeyHash, Version};
+use jmt::KeyHash;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use sov_zk_cycle_macros::cycle_tracker;
 
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::storage::{Storage, StorageKey, StorageProof, StorageValue};
-use crate::witness::{TreeWitnessReader, Witness};
+use crate::witness::Witness;
 use crate::MerkleProofSpec;
 
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
@@ -41,7 +40,8 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     type Witness = S::Witness;
     type RuntimeConfig = ();
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
-    type StateUpdate = NodeBatch;
+    type StateUpdate = ();
+    type Root = jmt::RootHash;
 
     fn with_config(_config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Ok(Self::new())
@@ -51,19 +51,13 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         witness.get_hint()
     }
 
-    fn get_state_root(&self, witness: &Self::Witness) -> anyhow::Result<[u8; 32]> {
-        Ok(witness.get_hint())
-    }
-
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn compute_state_update(
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-    ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error> {
+    ) -> Result<(Self::Root, Self::StateUpdate), anyhow::Error> {
         let prev_state_root = witness.get_hint();
-        let latest_version: Version = witness.get_hint();
-        let reader = TreeWitnessReader::new(witness);
 
         // For each value that's been read from the tree, verify the provided smt proof
         for (key, read_value) in state_accesses.ordered_reads {
@@ -90,17 +84,20 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
                     key_hash,
                     value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
                 )
-            });
+            })
+            .collect::<Vec<_>>();
 
-        let next_version = latest_version + 1;
-        // TODO: Make updates verifiable. Currently, writes don't verify that the provided siblings existed in the old tree
-        // because the TreeReader is trusted
-        let jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&reader);
+        let update_proof: jmt::proof::UpdateMerkleProof<S::Hasher> = witness.get_hint();
+        let new_root: [u8; 32] = witness.get_hint();
+        update_proof
+            .verify_update(
+                jmt::RootHash(prev_state_root),
+                jmt::RootHash(new_root),
+                batch,
+            )
+            .expect("Updates must be valid");
 
-        let (new_root, tree_update) = jmt
-            .put_value_set(batch, next_version)
-            .expect("JMT update must succeed");
-        Ok((new_root.0, tree_update.node_batch))
+        Ok((jmt::RootHash(new_root), ()))
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
@@ -112,17 +109,13 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
 
     fn open_proof(
         &self,
-        state_root: [u8; 32],
+        state_root: Self::Root,
         state_proof: StorageProof<Self::Proof>,
     ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error> {
         let StorageProof { key, value, proof } = state_proof;
         let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
 
-        proof.verify(
-            jmt::RootHash(state_root),
-            key_hash,
-            value.as_ref().map(|v| v.value()),
-        )?;
+        proof.verify(state_root, key_hash, value.as_ref().map(|v| v.value()))?;
         Ok((key, value))
     }
 }

@@ -138,9 +138,9 @@ pub fn split_tx_for_storage<R: Serialize>(
 /// An identifier that specifies a single event
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum EventIdentifier {
-    /// A unique identifier for an event consiting of a [`TxIdentifier`] and an offset into that transaction's event list
+    /// A unique identifier for an event consisting of a [`TxIdentifier`] and an offset into that transaction's event list
     TxIdAndIndex((TxIdentifier, u64)),
-    /// A unique identifier for an event consiting of a [`TxIdentifier`] and an event key
+    /// A unique identifier for an event consisting of a [`TxIdentifier`] and an event key
     TxIdAndKey((TxIdentifier, EventKey)),
     /// The monotonically increasing number of the event, ordered by the DA layer For example, if the first tx
     /// contains 7 events, tx 2 contains 11 events, and tx 3 contains 7 txs,
@@ -153,7 +153,8 @@ pub enum EventIdentifier {
 pub enum EventGroupIdentifier {
     /// All of the events which occurred in a particular transaction
     TxId(TxIdentifier),
-    /// All events wich a particular key (typically, these events will have been emitted by several different transactions)
+    /// All events which a particular key
+    /// (typically, these events will have been emitted by several different transactions)
     Key(Vec<u8>),
 }
 
