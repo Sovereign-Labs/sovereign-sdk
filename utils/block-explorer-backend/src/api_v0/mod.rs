@@ -14,7 +14,8 @@ use serde_json::Value as JsonValue;
 pub use sorting::*;
 
 use self::jsonapi_utils::{
-    bad_request_response, ErrorObject, Links, ResourceObject, ResponseObject, ResponseObjectData,
+    bad_request_response, gateway_timeout_response, ErrorObject, Links, ResourceObject,
+    ResponseObject, ResponseObjectData,
 };
 use crate::utils::HexString;
 use crate::AppState;
@@ -54,7 +55,12 @@ async fn get_tx_by_hash(
     State(state): AxumState,
     Path(tx_hash): Path<HexString>,
 ) -> impl IntoResponse {
-    let tx_opt = state.db.get_tx_by_hash(&tx_hash).await.unwrap();
+    let tx_opt = match state.db.get_tx_by_hash(&tx_hash).await {
+        Ok(tx_opt) => tx_opt,
+        Err(err) => {
+            return gateway_timeout_response(err);
+        }
+    };
 
     if let Some(tx) = tx_opt {
         let mut links = Links::new(state.base_url.clone());
@@ -94,12 +100,18 @@ async fn get_block_by_hash(
     State(state): AxumState,
     Path(block_hash): Path<HexString>,
     OriginalUri(uri): OriginalUri,
-) -> Json<ResponseObject<JsonValue>> {
-    let blocks = state.db.get_block_by_hash(&block_hash).await.unwrap();
+) -> (StatusCode, Json<ResponseObject<JsonValue>>) {
+    let blocks = match state.db.get_block_by_hash(&block_hash).await {
+        Ok(blocks) => blocks,
+        Err(err) => {
+            return gateway_timeout_response(err);
+        }
+    };
+
     let mut links = Links::new(state.base_url.clone());
     links.add("self", uri.to_string());
 
-    Json(ResponseObject {
+    let response_obj = ResponseObject {
         data: Some(
             ResourceObject {
                 resoure_type: "block",
@@ -110,19 +122,26 @@ async fn get_block_by_hash(
         ),
         links: links.links(),
         errors: vec![],
-    })
+    };
+    (StatusCode::OK, Json(response_obj))
 }
 
 async fn get_events(
     State(state): AxumState,
     params: Query<models::EventsQuery>,
-) -> Json<ResponseObject<models::Event>> {
+) -> (StatusCode, Json<ResponseObject<models::Event>>) {
     if let Err(err) = params.0.validate() {
         return bad_request_response(err);
     }
 
-    let events = state.db.get_events(&params).await.unwrap();
-    Json(ResponseObject {
+    let events = match state.db.get_events(&params).await {
+        Ok(events) => events,
+        Err(err) => {
+            return gateway_timeout_response(err);
+        }
+    };
+
+    let response_obj = ResponseObject {
         data: Some(ResponseObjectData::Many(
             events
                 .into_iter()
@@ -135,20 +154,26 @@ async fn get_events(
         )),
         errors: vec![],
         links: HashMap::new(),
-    })
+    };
+    (StatusCode::OK, Json(response_obj))
 }
 
 async fn get_blocks(
     State(state): AxumState,
     params: Query<models::BlocksQuery>,
-) -> Json<ResponseObject<JsonValue>> {
+) -> (StatusCode, Json<ResponseObject<JsonValue>>) {
     if let Err(err) = params.validate() {
         return bad_request_response(err);
     }
 
-    let blocks = state.db.get_blocks(&params.0).await.unwrap();
+    let blocks = match state.db.get_blocks(&params.0).await {
+        Ok(blocks) => blocks,
+        Err(err) => {
+            return gateway_timeout_response(err);
+        }
+    };
 
-    Json(ResponseObject {
+    let response_obj = ResponseObject {
         data: Some(ResponseObjectData::Many(
             blocks
                 .into_iter()
@@ -161,20 +186,26 @@ async fn get_blocks(
         )),
         errors: vec![],
         links: HashMap::new(),
-    })
+    };
+    (StatusCode::OK, Json(response_obj))
 }
 
 async fn get_transactions(
     State(state): AxumState,
     params: Query<models::TransactionsQuery>,
-) -> Json<ResponseObject<JsonValue>> {
+) -> (StatusCode, Json<ResponseObject<JsonValue>>) {
     if let Err(err) = params.validate() {
         return bad_request_response(err);
     }
 
-    let txs = state.db.get_transactions(&params.0).await.unwrap();
+    let txs = match state.db.get_transactions(&params.0).await {
+        Ok(txs) => txs,
+        Err(err) => {
+            return gateway_timeout_response(err);
+        }
+    };
 
-    Json(ResponseObject {
+    let response_obj = ResponseObject {
         data: Some(ResponseObjectData::Many(
             txs.into_iter()
                 .map(|tx| ResourceObject {
@@ -186,7 +217,8 @@ async fn get_transactions(
         )),
         errors: vec![],
         links: HashMap::new(),
-    })
+    };
+    (StatusCode::OK, Json(response_obj))
 }
 
 async fn get_indexing_status(State(state): AxumState) -> Json<ResponseObject<JsonValue>> {
@@ -208,18 +240,46 @@ async fn get_indexing_status(State(state): AxumState) -> Json<ResponseObject<Jso
 mod jsonapi_utils {
     use std::collections::HashMap;
 
+    use axum::http::StatusCode;
     use axum::Json;
+    use tracing::error;
 
-    pub fn bad_request_response<T>(err: impl ToString) -> Json<ResponseObject<T>> {
-        Json(ResponseObject {
-            data: None,
-            errors: vec![ErrorObject {
-                status: 400,
-                title: "Bad request".to_string(),
-                details: Some(err.to_string()),
-            }],
-            links: HashMap::new(),
-        })
+    pub fn gateway_timeout_response<T>(
+        err: impl ToString,
+    ) -> (StatusCode, Json<ResponseObject<T>>) {
+        // We don't include the database error in the response, because it may
+        // contain sensitive information. But we log it.
+        error!(
+            error = err.to_string(),
+            "Database error while serving request."
+        );
+        (
+            StatusCode::GATEWAY_TIMEOUT,
+            Json(ResponseObject {
+                data: None,
+                errors: vec![ErrorObject {
+                    status: StatusCode::GATEWAY_TIMEOUT.as_u16() as _,
+                    title: "Database unavailable".to_string(),
+                    details: Some("An error occurred while accessing the database. Please try again later and contact system administrators if the problem persists.".to_string()),
+                }],
+                links: HashMap::new(),
+            }),
+        )
+    }
+
+    pub fn bad_request_response<T>(err: impl ToString) -> (StatusCode, Json<ResponseObject<T>>) {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ResponseObject {
+                data: None,
+                errors: vec![ErrorObject {
+                    status: StatusCode::BAD_REQUEST.as_u16() as _,
+                    title: "Bad request".to_string(),
+                    details: Some(err.to_string()),
+                }],
+                links: HashMap::new(),
+            }),
+        )
     }
 
     #[derive(Debug, serde::Serialize)]

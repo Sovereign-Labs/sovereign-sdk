@@ -27,16 +27,11 @@ impl<T> Pagination<T> {
             anyhow::bail!("Page size must be between 1 and {}", max_pagination_size());
         }
 
-        // Cursor is required for next/prev, but it doesn't make sense for
-        // first/last.
-        match (&self.selection, self.cursor.is_some()) {
-            (PageSelection::Next | PageSelection::Prev, false) => {
-                anyhow::bail!("Cursor is required for next/prev")
+        // Cursor is required for first/last, but it's optional for next/prev.
+        if self.selection == PageSelection::First || self.selection == PageSelection::Last {
+            if self.cursor.is_none() {
+                anyhow::bail!("Cursor is required for first/last");
             }
-            (PageSelection::First | PageSelection::Last, true) => {
-                anyhow::bail!("Cursor is required for next/prev")
-            }
-            _ => (),
         }
 
         Ok(())
@@ -115,17 +110,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cursor() {
+    async fn cursor_with_next_and_prev_is_optional() {
         deserialize(&[("page[selection]", "next"), ("page[cursor]", "foo")])
             .await
             .unwrap();
         deserialize(&[("page[selection]", "prev"), ("page[cursor]", "foo")])
             .await
             .unwrap();
+
+        deserialize(&[("page[selection]", "next")]).await.unwrap();
+        deserialize(&[("page[selection]", "prev")]).await.unwrap();
     }
 
     #[tokio::test]
-    async fn cursor_with_first_and_last_pages_not_ok() {
+    async fn cursor_with_first_and_last_not_ok() {
         deserialize(&[("page[selection]", "first"), ("page[cursor]", "foo")])
             .await
             .unwrap_err();

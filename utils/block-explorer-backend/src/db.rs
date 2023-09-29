@@ -1,10 +1,10 @@
 use indoc::indoc;
 use serde_json::Value;
-use sqlx::{PgPool, Postgres, QueryBuilder};
+use sqlx::{PgPool, Postgres, QueryBuilder, Type};
 use tracing::info;
 
 use crate::api_v0::models::{self as m};
-use crate::api_v0::{Pagination, Sorting, SortingOrder};
+use crate::api_v0::{PageSelection, Pagination, Sorting, SortingOrder};
 use crate::utils::HexString;
 
 #[derive(Clone)]
@@ -79,8 +79,10 @@ impl Db {
     }
 
     pub async fn get_events(&self, query: &m::EventsQuery) -> anyhow::Result<Vec<m::Event>> {
-        let mut query_builder =
-            WhereClausesBuilder::new(QueryBuilder::new("SELECT (id, key, value) FROM events"));
+        let mut query_builder = SqlBuilder::new();
+        query_builder
+            .query
+            .push("SELECT (id, key, value) FROM events");
 
         // Filtering
         if let Some(event_id) = query.id {
@@ -104,15 +106,15 @@ impl Db {
             query_builder.query.push_bind(offset);
         }
 
-        // TODO: Sorting and pagination
+        // TODO: pagination and sorting.
 
         let query = query_builder.query.build_query_as();
         Ok(query.fetch_all(&self.pool).await?)
     }
 
     pub async fn get_blocks(&self, query: &m::BlocksQuery) -> anyhow::Result<Vec<Value>> {
-        let mut query_builder =
-            WhereClausesBuilder::new(QueryBuilder::new("SELECT blob FROM blocks"));
+        let mut query_builder = SqlBuilder::new();
+        query_builder.query.push("SELECT blob FROM blocks");
 
         // Filtering
         if let Some(filter) = &query.filter {
@@ -132,14 +134,13 @@ impl Db {
             };
         }
 
-        // Sorting
-        query_builder.order_by(&query.sort.map_to_string(|by| match by {
+        let sorting = query.sort.map_to_string(|by| match by {
             m::BlocksQuerySortBy::Number => "(blob->>'number')::bigint",
             m::BlocksQuerySortBy::Timestamp => "blob->>'timestamp'",
-        }));
+        });
 
-        // Pagination
-        query_builder.pagination(&query.pagination);
+        query_builder.pagination(sorting.by, &query.pagination);
+        query_builder.sorting(&sorting);
 
         let query = query_builder.query.build_query_as();
         let rows: Vec<(Value,)> = query.fetch_all(&self.pool).await?;
@@ -150,8 +151,8 @@ impl Db {
         &self,
         query: &m::TransactionsQuery,
     ) -> anyhow::Result<Vec<Value>> {
-        let mut query_builder =
-            WhereClausesBuilder::new(QueryBuilder::new("SELECT blob FROM transactions"));
+        let mut query_builder = SqlBuilder::new();
+        query_builder.query.push("SELECT blob FROM transactions");
 
         // Filtering
         if let Some(filter) = &query.filter {
@@ -171,15 +172,12 @@ impl Db {
             }
         }
 
-        // Sorting
-        query_builder.order_by(
-            &query
-                .sort
-                .map_to_string(|m::TransactionsQuerySortBy::Id| "id"),
-        );
+        let sorting = query
+            .sort
+            .map_to_string(|m::TransactionsQuerySortBy::Id| "id");
 
-        // Pagination
-        query_builder.pagination(&query.pagination);
+        query_builder.pagination(sorting.by, &query.pagination);
+        query_builder.sorting(&sorting);
 
         let query = query_builder.query.build_query_as();
         let rows: Vec<(Value,)> = query.fetch_all(&self.pool).await?;
@@ -251,18 +249,18 @@ impl Db {
 /// A wrapper around [`sqlx::QueryBuilder`] which adds some custom functionality
 /// on top of it:
 ///
-/// - Syntactically correct `WHERE` clauses.
+/// - Syntactically correct `WHERE` clauses, with correct handling of `AND`s.
 /// - Type-safe `ORDER BY` clauses.
-/// - TODO: cursor-based pagination.
-struct WhereClausesBuilder<'a> {
+/// - Cursor-based pagination.
+struct SqlBuilder<'a> {
     query: QueryBuilder<'a, Postgres>,
     where_used_already: bool,
 }
 
-impl<'a> WhereClausesBuilder<'a> {
-    fn new(query: QueryBuilder<'a, Postgres>) -> Self {
+impl<'a> SqlBuilder<'a> {
+    fn new() -> Self {
         Self {
-            query,
+            query: QueryBuilder::new("WITH subquery AS ("),
             where_used_already: false,
         }
     }
@@ -277,20 +275,37 @@ impl<'a> WhereClausesBuilder<'a> {
         self.query.push(condition);
     }
 
-    fn pagination<T>(&mut self, pagination: &Pagination<T>) {
-        //if let Some(cursor) = &pagination.cursor {
-        //    self.query.push(" WHERE ");
-        //    self.query.push(cursor);
-        //}
-        // TODO: rest of the pagination logic.
+    fn pagination<T>(&mut self, column_name: &str, pagination: &Pagination<T>)
+    where
+        T: for<'t> sqlx::Encode<'t, Postgres> + Send + Type<Postgres>,
+    {
+        let comparison_operator = match pagination.selection {
+            PageSelection::Next => Some(">"),
+            PageSelection::Prev => Some("<"),
+            PageSelection::First | PageSelection::Last => None,
+        };
+
+        if let Some(cmp_op) = comparison_operator {
+            self.push_condition(&format!("{} {} ", column_name, cmp_op));
+            self.query
+                .push_bind(pagination.cursor.expect("Cursor is required"));
+        }
+
         self.query.push(" LIMIT ");
         self.query.push(pagination.size.to_string());
+        self.query.push(" ORDER BY ");
+        self.query.push(column_name);
+        self.query.push(" ");
+        self.query.push(match pagination.selection {
+            PageSelection::Next | PageSelection::First => "ASC",
+            PageSelection::Prev | PageSelection::Last => "DESC",
+        });
     }
 
-    fn order_by(&mut self, sorting: &Sorting<&str>) {
-        self.query.push(" ORDER BY ");
+    /// MUST be called after all `WHERE` clauses have been pushed and after [`SqlBuilder::pagination`].
+    fn sorting(mut self, sorting: &Sorting<&str>) -> QueryBuilder<'a, Postgres> {
+        self.query.push(") SELECT * from subquery ORDER BY ");
         self.query.push(sorting.by);
-        self.query.push(" ");
         self.query.push(match sorting.order {
             SortingOrder::Ascending => "ASC",
             SortingOrder::Descending => "DESC",

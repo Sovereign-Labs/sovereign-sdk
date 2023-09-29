@@ -24,7 +24,7 @@ use crate::AppStateInner;
 
 fn populate_ledger_db() -> LedgerDB {
     let start_height: u64 = 0u64;
-    let mut end_height: u64 = 100u64;
+    let end_height: u64 = 100u64;
 
     let mut rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
         toml::from_str(include_str!("rollup_config.toml"))
@@ -147,6 +147,7 @@ async fn blocks(pool: Pool<Postgres>) {
         .get("/blocks")
         .await
         .json::<serde_json::Value>();
+    println!("{:?}", blocks_response);
     let blocks = blocks_response["data"].as_array().unwrap();
 
     assert!(is_sorted(
