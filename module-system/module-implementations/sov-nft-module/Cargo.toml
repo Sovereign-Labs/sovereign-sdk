@@ -1,5 +1,6 @@
 [package]
 name = "sov-nft-module"
+description = "A Sovereign SDK module for managing non-fungible tokens"
 version = { workspace = true }
 edition = { workspace = true }
 authors = { workspace = true }
