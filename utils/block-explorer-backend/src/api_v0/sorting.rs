@@ -20,13 +20,26 @@ where
     where
         D: serde::Deserializer<'a>,
     {
-        let s = String::deserialize(deserializer)?;
-        let mut chars = s.chars();
-        let order = match chars.next() {
-            Some('-') => SortingOrder::Descending,
-            _ => SortingOrder::Ascending,
+        let string = String::deserialize(deserializer)?;
+
+        let mut chars = string.chars();
+        let (order, sort_by) = match chars.next() {
+            Some('-') => (SortingOrder::Descending, chars.as_str()),
+            Some('+') => (SortingOrder::Ascending, chars.as_str()),
+            Some(_) => (SortingOrder::Ascending, string.as_str()),
+            None => {
+                return Err(serde::de::Error::custom(
+                    "Empty sorting value is not allowed",
+                ))
+            }
         };
-        let by = T::from_str(chars.as_str()).map_err(serde::de::Error::custom)?;
+        if sort_by.chars().any(|c| !c.is_ascii_alphanumeric()) {
+            return Err(serde::de::Error::custom(
+                "The sort-by field can only contain alphanumeric characters",
+            ));
+        }
+
+        let by = T::from_str(sort_by).map_err(serde::de::Error::custom)?;
         Ok(Sorting { by, order })
     }
 }
@@ -43,7 +56,7 @@ where
             SortingOrder::Ascending => "+",
             SortingOrder::Descending => "-",
         };
-        format!("{}{}", self.by.to_string(), sign).serialize(serializer)
+        format!("{}{}", sign, self.by.to_string()).serialize(serializer)
     }
 }
 
@@ -67,19 +80,18 @@ pub enum SortingOrder {
 
 #[cfg(test)]
 mod tests {
-    use axum::extract::Query;
-    use axum::http::Uri;
-
     use super::*;
+    use crate::utils;
 
     #[derive(Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
-    struct SortingQuery<T> {
-        sort: Sorting<T>,
+    struct SortingQuery {
+        // Testing with signed integers is better than strings because we can
+        // catch bugs related to handling of '-'.
+        sort: Sorting<i32>,
     }
 
-    fn deserialize(query: &str) -> anyhow::Result<SortingQuery<String>> {
-        let uri = query.parse().expect("Failed to parse URI");
-        let deserialized = Query::try_from_uri(uri)?.0;
+    async fn deserialize(query_params: &[(&str, &str)]) -> anyhow::Result<SortingQuery> {
+        let deserialized: SortingQuery = utils::serialize_query_params(query_params).await?;
 
         // As an extra test we get for free, we serialize and deserialize the
         // query again. When serialized they may not be equal, but semantic
@@ -89,28 +101,28 @@ mod tests {
             anyhow::bail!("Round trip failed");
         }
 
-        Ok(Query::try_from_uri(uri)?.0)
+        Ok(deserialized)
     }
 
-    #[test]
-    fn deserialize() {
-        deserialize("http://example.com?sort=id").unwrap();
-        deserialize("http://example.com?sort=+id").unwrap();
-        deserialize("http://example.com?sort=-id").unwrap();
+    #[tokio::test]
+    async fn ok_cases() {
+        deserialize(&[("sort", "foo")]).await.unwrap_err();
+        deserialize(&[("sort", "a")]).await.unwrap_err();
+        deserialize(&[("sort", "100")]).await.unwrap();
+        deserialize(&[("sort", "+100")]).await.unwrap();
+        deserialize(&[("sort", "-100")]).await.unwrap();
     }
 
-    #[test]
-    fn disallowed_characters() {
-        deserialize("http://example.com?sort=_age").unwrap_err();
-        deserialize("http://example.com?sort=-_age").unwrap_err();
-        deserialize("http://example.com?sort=+-age").unwrap_err();
+    #[tokio::test]
+    async fn disallowed_characters() {
+        deserialize(&[("sort", "_100")]).await.unwrap_err();
+        deserialize(&[("sort", "-_100")]).await.unwrap_err();
+        deserialize(&[("sort", "+-100")]).await.unwrap_err();
     }
 
-    #[test]
-    fn empty_value() {
-        deserialize("http://example.com?sort").unwrap_err();
-        deserialize("http://example.com?sort=").unwrap_err();
-        deserialize("http://example.com?sort=+").unwrap_err();
-        deserialize("http://example.com?sort=-").unwrap_err();
+    #[tokio::test]
+    async fn empty_value() {
+        deserialize(&[("sort", "+")]).await.unwrap_err();
+        deserialize(&[("sort", "-")]).await.unwrap_err();
     }
 }

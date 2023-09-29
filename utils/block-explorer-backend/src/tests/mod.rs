@@ -1,41 +1,35 @@
-use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
-use axum::routing;
 use axum_test::TestServer;
-use demo_stf::app::{App, DefaultPrivateKey};
-use demo_stf::genesis_config::create_demo_genesis_config;
+use demo_stf::app::App;
+use demo_stf::genesis_config::get_genesis_config;
 use serde_json::Value;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_modules_api::PrivateKey;
 use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rng_da_service::{RngDaService, RngDaSpec};
-use sov_rollup_interface::digest::typenum::Le;
 use sov_rollup_interface::mocks::{MockAddress, MockBlock, MockBlockHeader};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_stf_runner::{from_toml_path, RollupConfig};
+use sov_stf_runner::RollupConfig;
 use sqlx::{Pool, Postgres};
 use tempfile::TempDir;
 
+use crate::api_v0::default_pagination_size;
 use crate::db::Db;
 use crate::indexer::index_blocks;
-use crate::models::{default_pagination_size, Pagination, MAX_PAGINATION_SIZE};
-use crate::{api_v0, indexer, AppState, AppStateInner, Config};
+use crate::AppStateInner;
 
 fn populate_ledger_db() -> LedgerDB {
     let start_height: u64 = 0u64;
     let mut end_height: u64 = 100u64;
-    if let Ok(val) = env::var("BLOCKS") {
-        end_height = val.parse().expect("BLOCKS var should be a +ve number");
-    }
 
     let mut rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
         toml::from_str(include_str!("rollup_config.toml"))
-            .expect("Failed to read rollup configuration");
+            .context("Failed to read rollup configuration")
+            .unwrap();
 
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
     rollup_config.storage.path = PathBuf::from(temp_dir.path());
@@ -47,24 +41,19 @@ fn populate_ledger_db() -> LedgerDB {
     let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(rollup_config.storage);
 
     let mut demo = demo_runner.stf;
-    let sequencer_private_key = DefaultPrivateKey::generate();
     let sequencer_da_address = MockAddress::from(RngDaService::SEQUENCER_DA_ADDRESS);
-    let demo_genesis_config = create_demo_genesis_config(
-        100_000_000,
-        sequencer_private_key.default_address(),
-        sequencer_da_address.as_ref().to_vec(),
-        &sequencer_private_key,
+    let demo_genesis_config = get_genesis_config(
+        sequencer_da_address,
         #[cfg(feature = "experimental")]
         Default::default(),
     );
 
-    demo.init_chain(demo_genesis_config);
+    let mut current_root = demo.init_chain(demo_genesis_config);
 
     // data generation
     let mut blobs = vec![];
     let mut blocks = vec![];
     for height in start_height..end_height {
-        println!("Generating block {}", height);
         let num_bytes = height.to_le_bytes();
         let mut barray = [0u8; 32];
         barray[..num_bytes.len()].copy_from_slice(&num_bytes);
@@ -84,17 +73,19 @@ fn populate_ledger_db() -> LedgerDB {
     }
 
     let mut height = 0u64;
+
     while height < end_height {
-        println!("Processing block {}", height);
         let filtered_block = &blocks[height as usize];
 
         let mut data_to_commit = SlotCommit::new(filtered_block.clone());
         let apply_block_result = demo.apply_slot(
+            &current_root,
             Default::default(),
             &filtered_block.header,
             &filtered_block.validity_cond,
             &mut blobs[height as usize],
         );
+        current_root = apply_block_result.state_root;
         for receipts in apply_block_result.batch_receipts {
             data_to_commit.add_batch(receipts);
         }

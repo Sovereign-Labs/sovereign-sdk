@@ -45,7 +45,7 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
     .expect("Unable to read genesis configuration")
 }
 
-fn create_genesis_config<C: Context, Da: DaSpec>(
+pub fn create_genesis_config<C: Context, Da: DaSpec>(
     initial_sequencer_balance: u64,
     sequencer_address: C::Address,
     sequencer_da_address: Da::Address,

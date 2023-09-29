@@ -66,3 +66,23 @@ impl<'a> serde::Deserialize<'a> for HexString {
             .map_err(serde::de::Error::custom)
     }
 }
+
+#[cfg(test)]
+pub async fn serialize_query_params<T>(query_params: &[(&str, &str)]) -> anyhow::Result<T>
+where
+    T: for<'a> serde::Deserialize<'a>,
+{
+    use axum::extract::Query;
+    use axum::Router;
+
+    let server = axum_test::TestServer::new(Router::new().into_make_service()).unwrap();
+    let url = server
+        .get("/")
+        .add_query_params(query_params)
+        .await
+        .request_url()
+        .to_string();
+    let uri = url.parse().expect("Failed to parse URI");
+
+    Ok(Query::try_from_uri(&uri)?.0)
+}

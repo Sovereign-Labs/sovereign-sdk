@@ -12,7 +12,7 @@ publish = false
 
 [dependencies]
 anyhow = "1"
-arbitrary = "1"
+arbitrary = { version = "1", features = ["derive"] }
 axum = { version = "0.6" }
 clap = { version = "4", features = ["derive", "env"] }
 hex = "0.4"
@@ -33,9 +33,12 @@ axum-test = "12"
 block-explorer-backend = { path = "." }
 demo-stf = { path = "../../examples/demo-stf" }
 lazy_static = "1"
+sov-bank = { path = "../../module-system/module-implementations/sov-bank" }
+sov-cli = { path = "../../module-system/sov-cli" }
 sov-risc0-adapter = { path = "../../adapters/risc0" }
 sov-demo-rollup = { path = "../../examples/demo-rollup" }
 sov-modules-api = { path = "../../module-system/sov-modules-api" }
+sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry" }
 sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
 sov-rng-da-service = { path = "../rng-da-service" }
 tempfile = "3"

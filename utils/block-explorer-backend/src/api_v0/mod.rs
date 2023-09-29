@@ -29,10 +29,10 @@ pub fn router(app_state: AppState) -> Router {
         .route("/transactions", get(get_transactions))
         .route("/transactions/:tx_hash", get(get_tx_by_hash))
         .route("/events", get(get_events))
-        // Unimplemented
         .route("/indexing-status", get(get_indexing_status))
+        // Unimplemented
         .route("/batches", get(unimplemented))
-        .route("/batches/:batch_id", get(unimplemented))
+        .route("/batches/:batch_hash", get(unimplemented))
         .route("/accounts/:address", get(unimplemented))
         .route("/accounts/:address/transactions", get(unimplemented))
         .with_state(app_state)
@@ -136,11 +136,6 @@ async fn get_events(
         errors: vec![],
         links: HashMap::new(),
     })
-}
-
-#[derive(Debug, serde::Serialize)]
-struct GetBlocksData {
-    blocks: Vec<JsonValue>,
 }
 
 async fn get_blocks(

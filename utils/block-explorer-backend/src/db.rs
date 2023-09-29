@@ -278,9 +278,13 @@ impl<'a> WhereClausesBuilder<'a> {
     }
 
     fn pagination<T>(&mut self, pagination: &Pagination<T>) {
+        //if let Some(cursor) = &pagination.cursor {
+        //    self.query.push(" WHERE ");
+        //    self.query.push(cursor);
+        //}
+        // TODO: rest of the pagination logic.
         self.query.push(" LIMIT ");
         self.query.push(pagination.size.to_string());
-        // TODO: rest of the pagination logic.
     }
 
     fn order_by(&mut self, sorting: &Sorting<&str>) {
