@@ -1,0 +1,25 @@
+[package]
+name = "nft-utils"
+authors = { workspace = true }
+description = "Utils for NFTs"
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+resolver = "2"
+autotests = false
+publish = false
+
+[dependencies]
+borsh = { workspace = true }
+tokio = { workspace = true }
+
+sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module", features = ["native"]}
+sov-sequencer = { path = "../../full-node/sov-sequencer"}
+demo-stf = {path = "../../examples/demo-stf"}
+sov-rollup-interface = {path = "../../rollup-interface"}
+
+sov-modules-api = {path = "../../module-system/sov-modules-api", features = ["native"]}

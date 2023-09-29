@@ -7,6 +7,7 @@ use sov_state::codec::{EncodeKeyLike, StateCodec, StateValueCodec};
 use sov_state::storage::{Storage, StorageKey, StorageValue};
 use sov_state::{OrderedReadsAndWrites, Prefix, StorageInternalCache};
 
+use crate::gas::GasMeter;
 use crate::{Context, Spec};
 
 /// A working set accumulates reads and writes on top of the underlying DB,
@@ -145,6 +146,7 @@ impl<C: Context> StateCheckpoint<C> {
             delta: RevertableWriter::new(self.delta),
             accessory_delta: RevertableWriter::new(self.accessory_delta),
             events: Default::default(),
+            gas_meter: GasMeter::default(),
         }
     }
 
@@ -181,6 +183,7 @@ pub struct WorkingSet<C: Context> {
     delta: RevertableWriter<Delta<C::Storage>>,
     accessory_delta: RevertableWriter<AccessoryDelta<C::Storage>>,
     events: Vec<Event>,
+    gas_meter: GasMeter<C::GasUnit>,
 }
 
 impl<C: Context> WorkingSet<C> {
@@ -248,6 +251,22 @@ impl<C: Context> WorkingSet<C> {
     /// working set.
     pub fn backing(&self) -> &<C as Spec>::Storage {
         &self.delta.inner.inner
+    }
+
+    /// Returns the remaining gas funds.
+    pub const fn gas_remaining_funds(&self) -> u64 {
+        self.gas_meter.remaining_funds()
+    }
+
+    /// Overrides the current gas settings with the provided values.
+    pub fn set_gas(&mut self, funds: u64, gas_price: C::GasUnit) {
+        self.gas_meter = GasMeter::new(funds, gas_price);
+    }
+
+    /// Attempts to charge the provided gas unit from the gas meter, using the internal price to
+    /// compute the scalar value.
+    pub fn charge_gas(&mut self, gas: &C::GasUnit) -> anyhow::Result<()> {
+        self.gas_meter.charge_gas(gas)
     }
 }
 
