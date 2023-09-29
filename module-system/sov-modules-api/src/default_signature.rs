@@ -254,15 +254,8 @@ impl FromStr for DefaultPublicKey {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let bytes = hex::decode(s)?;
-
-        let bytes: [u8; PUBLIC_KEY_LENGTH] = bytes
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("Invalid public key size"))?;
-
-        let pub_key = DalekPublicKey::from_bytes(&bytes)
-            .map_err(|_| anyhow::anyhow!("Invalid public key"))?;
-        Ok(DefaultPublicKey { pub_key })
+        let pk_hex = crate::pub_key_hex::PublicKeyHex::try_from(s)?;
+        pk_hex.try_into()
     }
 }
 
