@@ -94,6 +94,52 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(Some(block.into()))
     }
 
+    /// Handler for: `eth_getBalance`
+    #[rpc_method(name = "getBalance")]
+    pub fn get_balance(
+        &self,
+        address: reth_primitives::Address,
+        _block_number: Option<String>,
+        working_set: &mut WorkingSet<C>,
+    ) -> RpcResult<reth_primitives::U256> {
+        info!("evm module: eth_getBalance");
+
+        // TODO: Implement block_number once we have archival state #951
+        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/951
+
+        let balance = self
+            .accounts
+            .get(&address, working_set)
+            .map(|account| account.info.balance)
+            .unwrap_or_default();
+
+        Ok(balance.into())
+    }
+
+    /// Handler for: `eth_getStorageAt`
+    #[rpc_method(name = "getStorageAt")]
+    pub fn get_storage_at(
+        &self,
+        address: reth_primitives::Address,
+        index: reth_primitives::U256,
+        _block_number: Option<String>,
+        working_set: &mut WorkingSet<C>,
+    ) -> RpcResult<reth_primitives::U256> {
+        info!("evm module: eth_getStorageAt");
+
+        // TODO: Implement block_number once we have archival state #951
+        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/951
+
+        let storage_slot = self
+            .accounts
+            .get(&address, working_set)
+            .map(|account| account.storage.get(&index, working_set))
+            .flatten()
+            .unwrap_or_default();
+
+        Ok(storage_slot)
+    }
+
     /// Handler for: `eth_getTransactionCount`
     #[rpc_method(name = "getTransactionCount")]
     pub fn get_transaction_count(
@@ -114,6 +160,29 @@ impl<C: sov_modules_api::Context> Evm<C> {
             .unwrap_or_default();
 
         Ok(nonce.into())
+    }
+
+    /// Handler for: `eth_getCode`
+    #[rpc_method(name = "getCode")]
+    pub fn get_code(
+        &self,
+        address: reth_primitives::Address,
+        _block_number: Option<String>,
+        working_set: &mut WorkingSet<C>,
+    ) -> RpcResult<reth_primitives::Bytes> {
+        info!("evm module: eth_getCode");
+
+        // TODO: Implement block_number once we have archival state #951
+        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/951
+
+        let code = self
+            .accounts
+            .get(&address, working_set)
+            .map(|account| self.code.get(&account.info.code_hash, working_set))
+            .flatten()
+            .unwrap_or_default();
+
+        Ok(code)
     }
 
     /// Handler for: `eth_feeHistory`
