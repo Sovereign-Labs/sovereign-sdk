@@ -28,8 +28,8 @@ pub mod transaction;
 #[cfg(feature = "native")]
 pub mod utils;
 
+pub use pub_key_hex::PublicKeyHex;
 pub use state::*;
-
 #[cfg(feature = "macros")]
 extern crate sov_modules_macros;
 
@@ -166,6 +166,7 @@ pub trait PublicKey:
     + Sync
     + Serialize
     + for<'a> Deserialize<'a>
+    + for<'a> TryFrom<&'a PublicKeyHex, Error = anyhow::Error>
 {
     fn to_address<A: RollupAddress>(&self) -> A;
 }

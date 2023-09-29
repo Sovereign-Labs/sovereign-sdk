@@ -63,11 +63,11 @@ impl From<DefaultPublicKey> for PublicKeyHex {
     }
 }
 
-impl TryFrom<PublicKeyHex> for DefaultPublicKey {
+impl TryFrom<&PublicKeyHex> for DefaultPublicKey {
     type Error = anyhow::Error;
 
-    fn try_from(pub_key: PublicKeyHex) -> Result<Self, Self::Error> {
-        let bytes = hex::decode(pub_key.hex)?;
+    fn try_from(pub_key: &PublicKeyHex) -> Result<Self, Self::Error> {
+        let bytes = hex::decode(&pub_key.hex)?;
 
         let bytes: [u8; PUBLIC_KEY_LENGTH] = bytes
             .try_into()
@@ -90,7 +90,7 @@ mod tests {
     fn test_pub_key_hex() {
         let pub_key = DefaultPrivateKey::generate().pub_key();
         let pub_key_hex = PublicKeyHex::try_from(pub_key.clone()).unwrap();
-        let converted_pub_key = DefaultPublicKey::try_from(pub_key_hex).unwrap();
+        let converted_pub_key = DefaultPublicKey::try_from(&pub_key_hex).unwrap();
         assert_eq!(pub_key, converted_pub_key);
     }
 
@@ -100,8 +100,8 @@ mod tests {
         let pub_key_hex_lower: PublicKeyHex = key.try_into().unwrap();
         let pub_key_hex_upper: PublicKeyHex = key.to_uppercase().try_into().unwrap();
 
-        let pub_key_lower = DefaultPublicKey::try_from(pub_key_hex_lower).unwrap();
-        let pub_key_upper = DefaultPublicKey::try_from(pub_key_hex_upper).unwrap();
+        let pub_key_lower = DefaultPublicKey::try_from(&pub_key_hex_lower).unwrap();
+        let pub_key_upper = DefaultPublicKey::try_from(&pub_key_hex_upper).unwrap();
 
         assert_eq!(pub_key_lower, pub_key_upper)
     }
@@ -120,5 +120,13 @@ mod tests {
         let err = PublicKeyHex::try_from(key).unwrap_err();
 
         assert_eq!(err.to_string(), "Bad hex conversion: odd input length")
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl<'a> arbitrary::Arbitrary<'a> for PublicKeyHex {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+        let hex: String = hex::encode(String::arbitrary(u)?);
+        Ok(PublicKeyHex::try_from(hex).unwrap())
     }
 }
