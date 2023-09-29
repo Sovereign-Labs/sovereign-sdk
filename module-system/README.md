@@ -44,6 +44,111 @@ This has several consequences. First, it means that modules are always cheap to 
 always yields the same result as calling `MyModule::new()`. Finally, it means that every method of the module which reads or
 modifies state needs to take a `WorkingSet` as an argument.
 
+### Gas configuration
+
+The module might contain a field for the gas configuration. If annotated with `#[gas]` under a struct that derives `ModuleInfo`, it will attempt to read a `constants.json` file from the root of the project, and inject it into the `Default::default()` implementation of the module.
+
+Here is an example `constants.json` file:
+
+```json
+{
+    "gas": {
+        "create_token": 4,
+        "transfer": 5,
+        "burn": 2,
+        "mint": 2,
+        "freeze": 1
+    }
+}
+```
+
+The `ModuleInfo` macro will look for a `gas` field inside the JSON, that must be an object, and will look for the name of the module inside of the `gas` object. If present, it will parse that object as gas configuration; otherwise, it will parse the `gas` object directly. On the example above, it will attempt to parse a structure that looks like this:
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BankGasConfig<GU: GasUnit> {
+    pub create_token: GU,
+    pub transfer: GU,
+    pub burn: GU,
+    pub mint: GU,
+    pub freeze: GU,
+}
+```
+
+The `GasUnit` generic type will be defined by the runtime `Context`. For `DefaultContext`, we use `TupleGasUnit<2>` - that is, a gas unit with a two dimensions. The same setup is defined for `ZkDefaultContext`. Here is an example of a `constants.json` file, specific to the `Bank` module:
+
+```json
+{
+    "gas": {
+        "comment": "this field will be ignored, as there is a matching module field",
+        "Bank": {
+            "create_token": [4, 19],
+            "transfer": [5, 25],
+            "burn": [2, 7],
+            "mint": [2, 6],
+            "freeze": [1, 4]
+        }
+    }
+}
+```
+
+As you can see above, the fields can be either array, numeric, or boolean. If boolean, it will be converted to either `0` or `1`. If array, each element is expected to be either a numeric or boolean. The example above will create a gas unit of two dimensions. If the `Context` requires less dimensions than available, it will pick the first ones of relevance, and ignore the rest. That is: with a `Context` of one dimension, , the effective config will be expanded to:
+
+```rust
+BankGasConfig {
+    create_token: [4],
+    transfer: [5],
+    burn: [2],
+    mint: [2],
+    freeze: [1],
+}
+```
+
+In order to charge gas from the working set, the function `charge_gas` can be used.
+
+```rust
+fn call(
+    &self,
+    msg: Self::CallMessage,
+    context: &Self::Context,
+    working_set: &mut WorkingSet<C>,
+) -> Result<sov_modules_api::CallResponse, Error> {
+    match msg {
+        call::CallMessage::CreateToken {
+            salt,
+            token_name,
+            initial_balance,
+            minter_address,
+            authorized_minters,
+        } => {
+            self.charge_gas(working_set, &self.gas.create_token)?;
+            // Implementation elided...
+}
+```
+
+On the example above, we charge the configured unit from the working set. Concretely, we will charge a unit of `[4, 19]` from both `DefaultContext` and `ZkDefaultContext`. The working set will be the responsible to perform a scalar conversion from the dimensions to a single funds value. It will perform an inner product of the loaded price, with the provided unit.
+
+Let's assume we have a working set with the loaded price `[3, 2]`. The charged gas of the operation above will be `[3] · [4] = 3 × 4 = 12` for a single dimension context, and `[3, 2] · [4, 19] = 3 × 4 + 2 × 19 = 50` for both `DefaultContext` and `ZkDefaultContext`. This approach is intended to unlock [Dynamic Pricing](https://arxiv.org/abs/2208.07919).
+
+The aforementioned `Bank` struct, with the gas configuration, will look like this:
+
+```rust
+#[derive(ModuleInfo)]
+pub struct Bank<C: sov_modules_api::Context> {
+    /// The address of the bank module.
+    #[address]
+    pub(crate) address: C::Address,
+
+    /// The gas configuration of the sov-bank module.
+    #[gas]
+    pub(crate) gas: BankGasConfig<C::GasUnit>,
+
+    /// A mapping of addresses to tokens in the bank.
+    #[state]
+    pub(crate) tokens: sov_state::StateMap<C::Address, Token<C>>,
+}
+```
+
 ### Public Functions: The Module-to-Module Interface
 
 The first interface that modules expose is defined by the public methods from the rollup's `impl`. These methods are
