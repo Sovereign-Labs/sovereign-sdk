@@ -1,5 +1,4 @@
-pub const INSERT_OR_UPDATE_COLLECTION: &str =
-    "INSERT INTO collections (\
+pub const INSERT_OR_UPDATE_COLLECTION: &str = "INSERT INTO collections (\
         collection_address, collection_name, creator_address,\
         frozen, metadata_url, supply)\
         VALUES ($1, $2, $3, $4, $5, $6)\
@@ -13,8 +12,7 @@ pub const INSERT_OR_UPDATE_COLLECTION: &str =
 pub const QUERY_OWNER_FROM_NFTS: &str =
     "SELECT owner FROM nfts WHERE collection_address = $1 AND nft_id = $2";
 
-pub const DECREMENT_COUNT_FOR_OLD_OWNER: &str =
-    "UPDATE top_owners SET count = count - 1 \
+pub const DECREMENT_COUNT_FOR_OLD_OWNER: &str = "UPDATE top_owners SET count = count - 1 \
         WHERE owner = $1 AND collection_address = $2 AND count > 0";
 
 pub const INCREMENT_OR_UPDATE_COUNT_FOR_NEW_OWNER: &str =
@@ -22,8 +20,7 @@ pub const INCREMENT_OR_UPDATE_COUNT_FOR_NEW_OWNER: &str =
         ON CONFLICT (owner, collection_address) \
         DO UPDATE SET count = top_owners.count + 1";
 
-pub const INSERT_OR_UPDATE_NFT: &str =
-    "INSERT INTO nfts (\
+pub const INSERT_OR_UPDATE_NFT: &str = "INSERT INTO nfts (\
         collection_address, nft_id, metadata_url,\
         owner, frozen)\
         VALUES ($1, $2, $3, $4, $5)\

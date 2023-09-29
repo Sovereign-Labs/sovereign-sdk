@@ -3,13 +3,12 @@ use postgres::NoTls;
 use sov_modules_macros::offchain;
 
 #[cfg(feature = "offchain")]
+use crate::sql::*;
+#[cfg(feature = "offchain")]
 use crate::utils::get_collection_address;
 #[cfg(feature = "offchain")]
 use crate::CollectionAddress;
 use crate::{Collection, Nft, OwnerAddress};
-
-#[cfg(feature = "offchain")]
-include!("sql.rs");
 
 /// Syncs a collection to the corresponding table "collections" in postgres
 #[offchain]
