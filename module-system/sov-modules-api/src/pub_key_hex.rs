@@ -122,3 +122,21 @@ mod tests {
         assert_eq!(err.to_string(), "Bad hex conversion: odd input length")
     }
 }
+
+#[cfg(feature = "arbitrary")]
+impl<'a> arbitrary::Arbitrary<'a> for PublicKeyHex {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+        use rand::rngs::StdRng;
+        use rand::SeedableRng;
+
+        // it is important to generate the secret deterministically from the arbitrary argument
+        // so keys and signatures will be reproducible for a given seed.
+        // this unlocks fuzzy replay
+        let seed = <[u8; 32]>::arbitrary(u)?;
+        let rng = &mut StdRng::from_seed(seed);
+        //let key_pair = SigningKey::generate(rng);
+
+        //Ok(Self { key_pair })
+        todo!()
+    }
+}
