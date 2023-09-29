@@ -101,6 +101,7 @@ impl GenesisMacro {
 
         quote::quote! {
             #[doc = "Initial configuration for the rollup."]
+            #[derive(::serde::Deserialize, ::serde::Serialize)]
             pub struct GenesisConfig #impl_generics #where_clause{
                 #(#[doc = "Module configuration"] pub #fields)*
             }

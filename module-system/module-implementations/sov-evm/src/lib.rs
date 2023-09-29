@@ -48,7 +48,7 @@ mod experimental {
     };
 
     /// Evm account.
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
     pub struct AccountData {
         /// Account address.
         pub address: Address,
@@ -75,7 +75,7 @@ mod experimental {
     }
 
     /// Genesis configuration.
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
     pub struct EvmConfig {
         /// Genesis accounts.
         pub data: Vec<AccountData>,

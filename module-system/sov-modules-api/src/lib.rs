@@ -10,6 +10,7 @@ mod dispatch;
 mod encode;
 mod error;
 pub mod hooks;
+mod pub_key_hex;
 
 #[cfg(feature = "macros")]
 mod reexport_macros;
@@ -153,7 +154,16 @@ pub enum NonInstantiable {}
 
 /// PublicKey used in the Module System.
 pub trait PublicKey:
-    borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Hash + Clone + Debug + Send + Sync
+    borsh::BorshDeserialize
+    + borsh::BorshSerialize
+    + Eq
+    + Hash
+    + Clone
+    + Debug
+    + Send
+    + Sync
+    + Serialize
+    + for<'a> Deserialize<'a>
 {
     fn to_address<A: RollupAddress>(&self) -> A;
 }
@@ -210,11 +220,7 @@ pub trait Spec {
 
     /// The public key used for digital signatures
     #[cfg(feature = "native")]
-    type PublicKey: PublicKey
-        + Serialize
-        + for<'a> Deserialize<'a>
-        + ::schemars::JsonSchema
-        + FromStr<Err = anyhow::Error>;
+    type PublicKey: PublicKey + ::schemars::JsonSchema + FromStr<Err = anyhow::Error>;
 
     #[cfg(not(feature = "native"))]
     type PublicKey: PublicKey;
