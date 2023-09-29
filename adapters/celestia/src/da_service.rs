@@ -469,7 +469,7 @@ mod tests {
         for block in blocks {
             let (_, _, da_service, namespace) = setup_service(None).await;
 
-            let txs = da_service.extract_relevant_txs(&block);
+            let txs = da_service.extract_relevant_blobs(&block);
             let (correctness_proof, completeness_proof) =
                 da_service.get_extraction_proof(&block, &txs).await;
 
@@ -489,7 +489,7 @@ mod tests {
         let block = with_rollup_data::filtered_block();
         let (_, _, da_service, namespace) = setup_service(None).await;
 
-        let txs = da_service.extract_relevant_txs(&block);
+        let txs = da_service.extract_relevant_blobs(&block);
         let (correctness_proof, completeness_proof) =
             da_service.get_extraction_proof(&block, &txs).await;
 
@@ -504,23 +504,65 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn verification_fails_if_not_all_etxs_are_proven() {
+        let block = with_rollup_data::filtered_block();
+        let (_, _, da_service, namespace) = setup_service(None).await;
+
+        let txs = da_service.extract_relevant_blobs(&block);
+        let (mut correctness_proof, completeness_proof) =
+            da_service.get_extraction_proof(&block, &txs).await;
+
+        // drop the proof for last etx
+        correctness_proof.pop();
+
+        let verifier = CelestiaVerifier::new(RollupParams { namespace });
+
+        let error = verifier
+            .verify_relevant_tx_list(&block.header, &txs, correctness_proof, completeness_proof)
+            .unwrap_err();
+
+        assert!(error.to_string().contains("not all blobs proven"));
+    }
+
+    #[tokio::test]
+    async fn verification_fails_if_there_is_less_blobs_than_proofs() {
+        let block = with_rollup_data::filtered_block();
+        let (_, _, da_service, namespace) = setup_service(None).await;
+
+        let txs = da_service.extract_relevant_blobs(&block);
+        let (mut correctness_proof, completeness_proof) =
+            da_service.get_extraction_proof(&block, &txs).await;
+
+        // push one extra etx proof
+        correctness_proof.push(correctness_proof[0].clone());
+
+        let verifier = CelestiaVerifier::new(RollupParams { namespace });
+
+        let error = verifier
+            .verify_relevant_tx_list(&block.header, &txs, correctness_proof, completeness_proof)
+            .unwrap_err();
+
+        assert!(error.to_string().contains("more proofs than blobs"));
+    }
+
+    #[tokio::test]
     #[should_panic]
     async fn verification_fails_for_incorrect_namespace() {
         let block = with_rollup_data::filtered_block();
         let (_, _, da_service, _) = setup_service(None).await;
 
-        let txs = da_service.extract_relevant_txs(&block);
+        let txs = da_service.extract_relevant_blobs(&block);
         let (correctness_proof, completeness_proof) =
             da_service.get_extraction_proof(&block, &txs).await;
 
+        // create a verifier with a different namespace than the da_service
         let verifier = CelestiaVerifier::new(RollupParams {
             namespace: Namespace::new_v0(b"abc").unwrap(),
         });
 
-        // give verifier empty txs list
         let _panics = verifier.verify_relevant_tx_list(
             &block.header,
-            &[],
+            &txs,
             correctness_proof,
             completeness_proof,
         );

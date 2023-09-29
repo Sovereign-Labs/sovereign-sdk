@@ -195,8 +195,14 @@ impl da::DaVerifier for CelestiaVerifier {
         // Check the e-tx proofs...
         // TODO(@preston-evans98): Remove this logic if Celestia adds blob.sender metadata directly into blob
         let mut tx_iter = txs.iter();
+        let mut tx_proofs = inclusion_proof.into_iter();
         let square_size = block_header.dah.row_roots.len();
-        for (blob, tx_proof) in verified_shares.blobs().zip(inclusion_proof.into_iter()) {
+        for blob in verified_shares.blobs() {
+            // Get the etx proof for this blob
+            let Some(tx_proof) = tx_proofs.next() else {
+                return Err(ValidationError::InvalidEtxProof("not all blobs proven"));
+            };
+
             // Force the row number to be monotonically increasing
             let start_offset = tx_proof.proof[0].start_offset;
 
@@ -283,6 +289,10 @@ impl da::DaVerifier for CelestiaVerifier {
 
                 assert_eq!(&pfb.share_commitments[blob_idx][..], &expected_commitment.0);
             }
+        }
+
+        if tx_proofs.next().is_some() {
+            return Err(ValidationError::InvalidEtxProof("more proofs than blobs"));
         }
 
         Ok(validity_condition)
