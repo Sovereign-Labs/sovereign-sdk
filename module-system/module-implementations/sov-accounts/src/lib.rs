@@ -94,7 +94,7 @@ where
 }
 
 #[cfg(feature = "arbitrary")]
-impl<'a, C> arbitrary::Arbitrary<'a> for AccountConfig<C>
+impl<'a, C> arbitrary::Arbitrary<'a> for AccountConfig
 where
     C: Context,
     C::PublicKey: arbitrary::Arbitrary<'a>,
