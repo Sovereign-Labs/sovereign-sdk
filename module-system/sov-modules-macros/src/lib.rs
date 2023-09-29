@@ -36,7 +36,7 @@ use proc_macro::TokenStream;
 use rpc::ExposeRpcMacro;
 use syn::{parse_macro_input, DeriveInput, ItemFn};
 
-#[proc_macro_derive(ModuleInfo, attributes(state, module, address))]
+#[proc_macro_derive(ModuleInfo, attributes(state, module, address, gas))]
 pub fn module_info(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
 

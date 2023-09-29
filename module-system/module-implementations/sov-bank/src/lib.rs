@@ -13,7 +13,7 @@ pub mod utils;
 /// Specifies the call methods using in that module.
 pub use call::CallMessage;
 use serde::{Deserialize, Serialize};
-use sov_modules_api::{CallResponse, Error, ModuleInfo, WorkingSet};
+use sov_modules_api::{CallResponse, Error, GasUnit, ModuleInfo, WorkingSet};
 use token::Token;
 /// Specifies an interface to interact with tokens.
 pub use token::{Amount, Coins};
@@ -41,6 +41,25 @@ pub struct BankConfig<C: sov_modules_api::Context> {
     pub tokens: Vec<TokenConfig<C>>,
 }
 
+/// Gas configuration for the bank module
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BankGasConfig<GU: GasUnit> {
+    /// Gas price multiplier for the create token operation
+    pub create_token: GU,
+
+    /// Gas price multiplier for the transfer operation
+    pub transfer: GU,
+
+    /// Gas price multiplier for the burn operation
+    pub burn: GU,
+
+    /// Gas price multiplier for the mint operation
+    pub mint: GU,
+
+    /// Gas price multiplier for the freeze operation
+    pub freeze: GU,
+}
+
 /// The sov-bank module manages user balances. It provides functionality for:
 /// - Token creation.
 /// - Token transfers.
@@ -51,6 +70,10 @@ pub struct Bank<C: sov_modules_api::Context> {
     /// The address of the sov-bank module.
     #[address]
     pub(crate) address: C::Address,
+
+    /// The gas configuration of the sov-bank module.
+    #[gas]
+    pub(crate) gas: BankGasConfig<C::GasUnit>,
 
     /// A mapping of addresses to tokens in the sov-bank.
     #[state]
@@ -82,6 +105,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
                 minter_address,
                 authorized_minters,
             } => {
+                self.charge_gas(working_set, &self.gas.create_token)?;
                 self.create_token(
                     token_name,
                     salt,
@@ -95,10 +119,12 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
             }
 
             call::CallMessage::Transfer { to, coins } => {
+                self.charge_gas(working_set, &self.gas.create_token)?;
                 Ok(self.transfer(to, coins, context, working_set)?)
             }
 
             call::CallMessage::Burn { coins } => {
+                self.charge_gas(working_set, &self.gas.burn)?;
                 Ok(self.burn_from_eoa(coins, context, working_set)?)
             }
 
@@ -106,11 +132,13 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
                 coins,
                 minter_address,
             } => {
+                self.charge_gas(working_set, &self.gas.mint)?;
                 self.mint_from_eoa(&coins, &minter_address, context, working_set)?;
                 Ok(CallResponse::default())
             }
 
             call::CallMessage::Freeze { token_address } => {
+                self.charge_gas(working_set, &self.gas.freeze)?;
                 Ok(self.freeze(token_address, context, working_set)?)
             }
         }

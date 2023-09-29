@@ -14,6 +14,9 @@ crate:
     - Interaction with user messages: The module must define the `call` method and the `CallMessage` type, which handle
       user messages. These messages typically result in changes to the module's state.
 
+    - Gas configuration: The module may use a `GasConfig` type, annotated by `#[gas]`, that will be loaded from the 
+      constants manifest configuration.
+
 1. The `ModuleInfo` trait: Provides additional information related to a module. This trait is automatically derived.
 
 1. The `Spec` trait: It defines all the types that modules are generic over. This separation allows the module logic to
@@ -29,3 +32,6 @@ crate:
 
 1. The `DispatchCall` trait: Defines how messages are forwarded to the appropriate module and how the call message is
    executed. The implementation of this trait can be generated automatically using a macro.
+
+1. The `GasUnit` trait: Defines how the scalar gas value is deducted from the working set. This is implemented for
+   `[u64; N]`, and can be customized by the user.
