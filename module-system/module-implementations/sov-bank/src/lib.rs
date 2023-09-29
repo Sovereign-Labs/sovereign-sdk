@@ -12,6 +12,7 @@ pub mod utils;
 
 /// Specifies the call methods using in that module.
 pub use call::CallMessage;
+use serde::{Deserialize, Serialize};
 use sov_modules_api::{CallResponse, Error, GasUnit, ModuleInfo, WorkingSet};
 use token::Token;
 /// Specifies an interface to interact with tokens.
@@ -21,6 +22,7 @@ pub use utils::{get_genesis_token_address, get_token_address};
 
 /// [`TokenConfig`] specifies a configuration used when generating a token for the bank
 /// module.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenConfig<C: sov_modules_api::Context> {
     /// The name of the token.
     pub token_name: String,
@@ -33,6 +35,7 @@ pub struct TokenConfig<C: sov_modules_api::Context> {
 }
 
 /// Initial configuration for sov-bank module.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BankConfig<C: sov_modules_api::Context> {
     /// A list of configurations for the initial tokens.
     pub tokens: Vec<TokenConfig<C>>,

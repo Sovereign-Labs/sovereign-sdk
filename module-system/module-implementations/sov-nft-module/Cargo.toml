@@ -12,7 +12,7 @@ publish = false
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 schemars =  { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
@@ -29,6 +29,5 @@ sov-nft-module = { version = "*", features = ["native"], path = "." }
 
 [features]
 default = []
-serde = ["dep:serde"]
-native = ["serde", "serde_json", "jsonrpsee", "schemars", "sov-state/native", "sov-modules-api/native", ]
+native = ["serde_json", "jsonrpsee", "schemars", "sov-state/native", "sov-modules-api/native", ]
 test = ["native"]

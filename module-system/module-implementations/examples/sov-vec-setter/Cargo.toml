@@ -22,7 +22,7 @@ sov-modules-api = { path = "../../../sov-modules-api", default-features = false,
 sov-state = { path = "../../../sov-state", default-features = false }
 sov-rollup-interface = { path = "../../../../rollup-interface" }
 schemars = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
@@ -31,4 +31,4 @@ clap = { workspace = true, optional = true }
 
 [features]
 default = ["native"]
-native = ["serde", "serde_json", "jsonrpsee", "schemars", "clap", "sov-modules-api/native"]
+native = ["serde_json", "jsonrpsee", "schemars", "clap", "sov-modules-api/native"]

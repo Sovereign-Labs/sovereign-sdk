@@ -8,6 +8,7 @@ mod genesis;
 mod query;
 #[cfg(feature = "native")]
 pub use query::*;
+use serde::{Deserialize, Serialize};
 use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, WorkingSet};
 
 #[derive(ModuleInfo, Clone)]
@@ -29,6 +30,7 @@ pub struct NonFungibleToken<C: Context> {
 
 /// Config for the NonFungibleToken module.
 /// Sets admin and existing owners.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NonFungibleTokenConfig<C: Context> {
     /// Admin of the NonFungibleToken module.
     pub admin: C::Address,
