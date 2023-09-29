@@ -75,9 +75,7 @@ pub struct BankGasConfig<GU: GasUnit> {
 }
 ```
 
-The `GasUnit` generic type will be defined by the runtime `Context`. For `DefaultContext`, we use `TupleGasUnit<1>` - that is, a gas unit with a single dimension; in other words, a raw `u64`. For `ZkDefaultContext`, we use `TupleGasUnit<2>` - that is, a gas unit with two dimensions; one for the ZK context, the other for the native context.
-
-Here is an example of a `constants.json` file, specific to the `Bank` module:
+The `GasUnit` generic type will be defined by the runtime `Context`. For `DefaultContext`, we use `TupleGasUnit<2>` - that is, a gas unit with a two dimensions. The same setup is defined for `ZkDefaultContext`. Here is an example of a `constants.json` file, specific to the `Bank` module:
 
 ```json
 {
@@ -94,7 +92,7 @@ Here is an example of a `constants.json` file, specific to the `Bank` module:
 }
 ```
 
-As you can see above, the fields can be either array, numeric, or boolean. If boolean, it will be converted to either `0` or `1`. If array, each element is expected to be either a numeric or boolean. The example above will create a gas unit of two dimensions. If the `Context` requires less dimensions than available, it will pick the first ones of relevance, and ignore the rest. That is: if the setup above is executed under `DefaultContext` (i.e. only one dimension), the effective config will be:
+As you can see above, the fields can be either array, numeric, or boolean. If boolean, it will be converted to either `0` or `1`. If array, each element is expected to be either a numeric or boolean. The example above will create a gas unit of two dimensions. If the `Context` requires less dimensions than available, it will pick the first ones of relevance, and ignore the rest. That is: with a `Context` of one dimension, , the effective config will be expanded to:
 
 ```rust
 BankGasConfig {
@@ -128,9 +126,9 @@ fn call(
 }
 ```
 
-On the example above, we charge the configured unit from the working set. Concretely, we will charge a unit of `[4]` from a `DefaultContext`, and `[4, 19]` from a `ZkDefaultContext`. The working set will be the responsible to perform a scalar conversion from the dimensions to a single funds value. It will perform an inner product of the loaded price, with the provided unit.
+On the example above, we charge the configured unit from the working set. Concretely, we will charge a unit of `[4, 19]` from both `DefaultContext` and `ZkDefaultContext`. The working set will be the responsible to perform a scalar conversion from the dimensions to a single funds value. It will perform an inner product of the loaded price, with the provided unit.
 
-Let's assume we have a working set with the loaded price `[3, 2]`. The charged gas of the operation above will be `[3] · [4] = 3 × 4 = 12` for `DefaultContext`, and `[3, 2] · [4, 19] = 3 × 4 + 2 × 19 = 50` from `ZkDefaultContext`. This approach is intended to unlock [Dynamic Pricing](https://arxiv.org/abs/2208.07919).
+Let's assume we have a working set with the loaded price `[3, 2]`. The charged gas of the operation above will be `[3] · [4] = 3 × 4 = 12` for a single dimension context, and `[3, 2] · [4, 19] = 3 × 4 + 2 × 19 = 50` for both `DefaultContext` and `ZkDefaultContext`. This approach is intended to unlock [Dynamic Pricing](https://arxiv.org/abs/2208.07919).
 
 The aforementioned `Bank` struct, with the gas configuration, will look like this:
 

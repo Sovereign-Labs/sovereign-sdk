@@ -31,7 +31,7 @@ impl Spec for DefaultContext {
 
 #[cfg(feature = "native")]
 impl Context for DefaultContext {
-    type GasUnit = TupleGasUnit<1>;
+    type GasUnit = TupleGasUnit<2>;
 
     fn sender(&self) -> &Self::Address {
         &self.sender
