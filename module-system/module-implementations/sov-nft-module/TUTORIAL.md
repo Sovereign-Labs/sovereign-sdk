@@ -245,11 +245,40 @@ pub fn update_collection<C: sov_modules_api::Context>(_collection: &Collection<C
 * Most of the remaining code is error handling and formatting. 
 * We make use of the `tracing` library to emit errors. Note that since this entire function only runs in an offchain context, we can also include things here like sentry logging, pagerduty alerts, email clients as well!
 * We now add the logic for the second function that handles updating the `nfts` table and the `top_owners` table
+* We require 4 queries for this that we'll add to `sql.rs`
+```rust
+pub const QUERY_OWNER_FROM_NFTS: &str =
+    "SELECT owner FROM nfts WHERE collection_address = $1 AND nft_id = $2";
+
+pub const DECREMENT_COUNT_FOR_OLD_OWNER: &str = "UPDATE top_owners SET count = count - 1 \
+        WHERE owner = $1 AND collection_address = $2 AND count > 0";
+
+pub const INCREMENT_OR_UPDATE_COUNT_FOR_NEW_OWNER: &str =
+    "INSERT INTO top_owners (owner, collection_address, count) VALUES ($1, $2, 1) \
+        ON CONFLICT (owner, collection_address) \
+        DO UPDATE SET count = top_owners.count + 1";
+
+pub const INSERT_OR_UPDATE_NFT: &str = "INSERT INTO nfts (\
+        collection_address, nft_id, metadata_url,\
+        owner, frozen)\
+        VALUES ($1, $2, $3, $4, $5)\
+        ON CONFLICT (collection_address, nft_id)\
+        DO UPDATE SET metadata_url = EXCLUDED.metadata_url,\
+                      owner = EXCLUDED.owner,\
+                      frozen = EXCLUDED.frozen";
+```
+* The first query `QUERY_OWNER_FROM_NFTS` is for fetching an NFT from the `nfts` table using the primary key `collection_address` and `nft_id`
+* The next two queries `DECREMENT_COUNT_FOR_OLD_OWNER` and `INCREMENT_OR_UPDATE_COUNT_FOR_NEW_OWNER` are against the `top_owners` table
+  * `DECREMENT_COUNT_FOR_OLD_OWNER` just decrements the count for an for a specific collection by 1
+  * `INCREMENT_OR_UPDATE_COUNT_FOR_NEW_OWNER` increments the count but also inserts a new row if its not present
+* The final query `INSERT_OR_UPDATE_NFT` is an upsert on the `nfts` table using the `Nft` object passed to the function
 ```rust
 use sov_modules_macros::offchain;
 
 #[cfg(feature = "offchain")]
 use postgres::NoTls;
+#[cfg(feature = "offchain")]
+use crate::sql::*;
 #[cfg(feature = "offchain")]
 use crate::utils::get_collection_address;
 #[cfg(feature = "offchain")]
@@ -274,7 +303,7 @@ pub fn update_nft<C: sov_modules_api::Context>(nft: &Nft<C>, old_owner: Option<O
             // Check current owner in the database for the NFT
             let rows = client
                 .query(
-                    "SELECT owner FROM nfts WHERE collection_address = $1 AND nft_id = $2",
+                    QUERY_OWNER_FROM_NFTS,
                     &[&collection_address, &(nft_id as i64)],
                 )
                 .unwrap();
@@ -291,39 +320,27 @@ pub fn update_nft<C: sov_modules_api::Context>(nft: &Nft<C>, old_owner: Option<O
 
                     // Decrement count for the database owner (which would be the old owner in a transfer scenario)
                     let _ = client.execute(
-                        "UPDATE top_owners SET count = count - 1 \
-                        WHERE owner = $1 AND collection_address = $2 AND count > 0",
+                        DECREMENT_COUNT_FOR_OLD_OWNER,
                         &[&db_owner_str, &collection_address],
                     );
 
                     // Increment count for new owner
                     let _ = client.execute(
-                        "INSERT INTO top_owners (owner, collection_address, count) VALUES ($1, $2, 1) \
-                        ON CONFLICT (owner, collection_address) \
-                        DO UPDATE SET count = top_owners.count + 1",
+                        INCREMENT_OR_UPDATE_COUNT_FOR_NEW_OWNER,
                         &[&new_owner_str, &collection_address],
                     );
                 }
             } else if old_owner_address.is_none() {
                 // Mint operation, and NFT doesn't exist in the database. Increment for the new owner.
                 let _ = client.execute(
-                    "INSERT INTO top_owners (owner, collection_address, count) VALUES ($1, $2, 1) \
-                    ON CONFLICT (owner, collection_address) \
-                    DO UPDATE SET count = top_owners.count + 1",
+                    INCREMENT_OR_UPDATE_COUNT_FOR_NEW_OWNER,
                     &[&new_owner_str, &collection_address],
                 );
             }
 
             // Update NFT information after handling top_owners logic
             let _ = client.execute(
-                "INSERT INTO nfts (\
-                collection_address, nft_id, metadata_url,\
-                owner, frozen)\
-                VALUES ($1, $2, $3, $4, $5)\
-                ON CONFLICT (collection_address, nft_id)\
-                DO UPDATE SET metadata_url = EXCLUDED.metadata_url,\
-                              owner = EXCLUDED.owner,\
-                              frozen = EXCLUDED.frozen",
+                INCREMENT_OR_UPDATE_COUNT_FOR_NEW_OWNER,
                 &[
                     &collection_address,
                     &(nft_id as i64),
@@ -359,7 +376,7 @@ old_owner: Option<OwnerAddress<C>>
 // Check current owner in the database for the NFT
 let rows = client
     .query(
-        "SELECT owner FROM nfts WHERE collection_address = $1 AND nft_id = $2",
+        QUERY_OWNER_FROM_NFTS,
         &[&collection_address, &(nft_id as i64)],
     )
     .unwrap();
@@ -375,16 +392,13 @@ let rows = client
             // Transfer occurred
             // Decrement count for the database owner (which would be the old owner in a transfer scenario)
             let _ = client.execute(
-                "UPDATE top_owners SET count = count - 1 \
-                WHERE owner = $1 AND collection_address = $2 AND count > 0",
+                DECREMENT_COUNT_FOR_OLD_OWNER,
                 &[&db_owner_str, &collection_address],
             );
 
             // Increment count for new owner
             let _ = client.execute(
-                "INSERT INTO top_owners (owner, collection_address, count) VALUES ($1, $2, 1) \
-                ON CONFLICT (owner, collection_address) \
-                DO UPDATE SET count = top_owners.count + 1",
+                INCREMENT_OR_UPDATE_COUNT_FOR_NEW_OWNER,
                 &[&new_owner_str, &collection_address],
             );
 ```
@@ -428,7 +442,7 @@ use crate::offchain::{update_collection, update_nft};
 
 ```
 * Simply insert `update_collection(&collection)` after `self.collections.set` which handles updating the on-chain state
-* Similarly we insert `update_collection` and `update_nft` in all the functions that process transactions impacting our postgres tables
+* Similarly, we insert `update_collection` and `update_nft` in all the functions that process transactions impacting our postgres tables
 * `mint_nft` for example requires both the functions because minting a new nft involves incrementing the supply for collection and creating a new nft
 ```
         self.nfts.set(
@@ -492,13 +506,13 @@ psql postgres -f sovereign/module-system/module-implementations/sov-nft-module/s
 ```
 * Submit some transactions using the NFT minting script
 ```bash
-$ cd examples/demo-rollup
-$ cargo run --bin nft-cli  
+$ cd sovereign/utils/nft-utils
+$ cargo run 
 ```
 * The above script creates 3 NFT collections
   * It creates 20 NFTs for 2 of the collections
   * Also creates 6 transfers.
-* Specifics of the logic can be seen in [nft-cli](../../../examples/demo-rollup/src/nft_utils/main.rs)
+* Specifics of the logic can be seen in [main.rs](../../../utils/nft-utils/src/main.rs) and [lib.rs](../../../utils/nft-utils/src/lib.rs)
 * The tables can be explored by connecting to postgres and running sample queries
 * running the following query can show the top owners for a specific collection
 ```bash
@@ -539,4 +553,12 @@ WHERE rank = 1;
  Sovereign Squirrel Syndicate | sov1tkrc3gcm27cry7z5sxzqtcgfgzwzqkan0rjccvhc7wvvk3ra06gqfg6240 |     9
  Celestial Dolphins           | sov1tkrc3gcm27cry7z5sxzqtcgfgzwzqkan0rjccvhc7wvvk3ra06gqfg6240 |    20
 (2 rows)
-```        
+```
+
+### Notes on Offchain Functions
+* It's recommended to confine all offchain processing, including type conversions, within the offchain functions. Performing these operations outside could increase the workload for the on-chain logic.
+  * For instance, it's better to design a function that accepts an address and performs the conversion to a string within its body rather than doing the conversion in the on-chain context or within the function parameter.
+  * Using offchain_function(x) and then executing x.expensive_conversion() inside the function is more optimal than offchain_function(x.expensive_conversion()), as it minimizes computation in the on-chain context.
+* Parameters passed to offchain functions should remain immutable. This ensures the offchain context doesn't introduce mutations that could affect the on-chain state. Such mutations are risky, potentially causing nodes running in offchain mode to fork from those not utilizing this feature.
+* For similar reasons, offchain functions should not return any values.
+* The three concerns mentioned above are being addressed at the macro level, and this enhancement is currently in progress. Updates will be made to this documentation once the macro is refined.
