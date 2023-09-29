@@ -1,18 +1,24 @@
+use std::array::TryFromSliceError;
+
 use ethereum_types::U64;
 use jsonrpsee::core::RpcResult;
 use reth_primitives::contract::create_address;
 use reth_primitives::TransactionKind::{Call, Create};
 use reth_primitives::{TransactionSignedEcRecovered, U128, U256};
+use revm::primitives::{
+    EVMError, ExecutionResult, Halt, InvalidTransaction, TransactTo, KECCAK_EMPTY,
+};
 use sov_modules_api::macros::rpc_gen;
 use sov_modules_api::WorkingSet;
 use tracing::info;
 
 use crate::call::get_cfg_env;
-use crate::error::rpc::ensure_success;
+use crate::error::rpc::{ensure_success, RevertError, RpcInvalidTransactionError};
 use crate::evm::db::EvmDb;
 use crate::evm::primitive_types::{BlockEnv, Receipt, SealedBlock, TransactionSignedAndRecovered};
 use crate::evm::{executor, prepare_call_env};
-use crate::Evm;
+use crate::experimental::{MIN_CREATE_GAS, MIN_TRANSACTION_GAS};
+use crate::{EthApiError, Evm};
 
 #[rpc_gen(client, server, namespace = "eth")]
 impl<C: sov_modules_api::Context> Evm<C> {
@@ -327,15 +333,177 @@ impl<C: sov_modules_api::Context> Evm<C> {
     }
 
     /// Handler for: `eth_estimateGas`
-    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
+    // https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc/src/eth/api/call.rs#L172
     #[rpc_method(name = "estimateGas")]
     pub fn eth_estimate_gas(
         &self,
-        _data: reth_rpc_types::CallRequest,
-        _block_number: Option<reth_primitives::BlockId>,
-        _working_set: &mut WorkingSet<C>,
-    ) -> RpcResult<reth_primitives::U256> {
-        unimplemented!("eth_estimateGas not implemented")
+        request: reth_rpc_types::CallRequest,
+        block_number: Option<String>,
+        working_set: &mut WorkingSet<C>,
+    ) -> RpcResult<reth_primitives::U64> {
+        info!("evm module: eth_estimateGas");
+        let mut block_env = match block_number {
+            Some(ref block_number) if block_number == "pending" => {
+                self.block_env.get(working_set).unwrap_or_default().clone()
+            }
+            _ => {
+                let block = self.get_sealed_block_by_number(block_number, working_set);
+                BlockEnv::from(&block)
+            }
+        };
+
+        let tx_env = prepare_call_env(&block_env, request.clone()).unwrap();
+
+        let cfg = self.cfg.get(working_set).unwrap_or_default();
+        let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
+
+        let request_gas = request.gas;
+        let request_gas_price = request.gas_price;
+        let env_gas_limit = block_env.gas_limit;
+
+        // get the highest possible gas limit, either the request's set value or the currently
+        // configured gas limit
+        let mut highest_gas_limit = request.gas.unwrap_or(U256::from(env_gas_limit));
+
+        let account = self.accounts.get(&tx_env.caller, working_set).unwrap();
+
+        // if the request is a simple transfer we can optimize
+        if tx_env.data.is_empty() {
+            if let TransactTo::Call(to) = tx_env.transact_to {
+                let to_account = self.accounts.get(&to, working_set).unwrap();
+                if KECCAK_EMPTY == to_account.info.code_hash {
+                    // simple transfer, check if caller has sufficient funds
+                    let available_funds = account.info.balance;
+
+                    if tx_env.value > available_funds {
+                        return Err(RpcInvalidTransactionError::InsufficientFundsForTransfer.into());
+                    }
+                    return Ok(U64::from(MIN_TRANSACTION_GAS));
+                }
+            }
+        }
+
+        // check funds of the sender
+        if tx_env.gas_price > U256::ZERO {
+            // allowance is (balance - tx.value) / tx.gas_price
+            let allowance = (account.info.balance - tx_env.value) / tx_env.gas_price;
+
+            if highest_gas_limit > allowance {
+                // cap the highest gas limit by max gas caller can afford with given gas price
+                highest_gas_limit = allowance;
+            }
+        }
+
+        // if the provided gas limit is less than computed cap, use that
+        let gas_limit = std::cmp::min(U256::from(tx_env.gas_limit), highest_gas_limit);
+        block_env.gas_limit = convert_u256_to_u64(gas_limit).unwrap();
+
+        let evm_db = self.get_db(working_set);
+
+        // execute the call without writing to db
+        let result = executor::inspect(evm_db, &block_env, tx_env.clone(), cfg_env.clone());
+
+        // Exceptional case: init used too much gas, we need to increase the gas limit and try
+        // again
+        if let Err(EVMError::Transaction(InvalidTransaction::CallerGasLimitMoreThanBlock)) = result
+        {
+            // if price or limit was included in the request then we can execute the request
+            // again with the block's gas limit to check if revert is gas related or not
+            if request_gas.is_some() || request_gas_price.is_some() {
+                let evm_db = self.get_db(working_set);
+                return Err(map_out_of_gas_err(block_env, tx_env, cfg_env, evm_db).into());
+            }
+        }
+
+        let result = result.unwrap();
+
+        match result.result {
+            ExecutionResult::Success { .. } => {
+                // succeeded
+            }
+            ExecutionResult::Halt { reason, gas_used } => {
+                return Err(RpcInvalidTransactionError::halt(reason, gas_used).into())
+            }
+            ExecutionResult::Revert { output, .. } => {
+                // if price or limit was included in the request then we can execute the request
+                // again with the block's gas limit to check if revert is gas related or not
+                return if request_gas.is_some() || request_gas_price.is_some() {
+                    let evm_db = self.get_db(working_set);
+                    Err(map_out_of_gas_err(block_env, tx_env, cfg_env, evm_db).into())
+                } else {
+                    // the transaction did revert
+                    Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into())
+                };
+            }
+        }
+
+        // at this point we know the call succeeded but want to find the _best_ (lowest) gas the
+        // transaction succeeds with. we  find this by doing a binary search over the
+        // possible range NOTE: this is the gas the transaction used, which is less than the
+        // transaction requires to succeed
+        let gas_used = result.result.gas_used();
+        // the lowest value is capped by the gas it takes for a transfer
+        let mut lowest_gas_limit = if tx_env.transact_to.is_create() {
+            MIN_CREATE_GAS
+        } else {
+            MIN_TRANSACTION_GAS
+        };
+        let mut highest_gas_limit: u64 = highest_gas_limit.try_into().unwrap_or(u64::MAX);
+        // pick a point that's close to the estimated gas
+        let mut mid_gas_limit = std::cmp::min(
+            gas_used * 3,
+            ((highest_gas_limit as u128 + lowest_gas_limit as u128) / 2) as u64,
+        );
+        // binary search
+        while (highest_gas_limit - lowest_gas_limit) > 1 {
+            let mut tx_env = tx_env.clone();
+            tx_env.gas_limit = mid_gas_limit;
+
+            let evm_db = self.get_db(working_set);
+            let result = executor::inspect(evm_db, &block_env, tx_env.clone(), cfg_env.clone());
+
+            // Exceptional case: init used too much gas, we need to increase the gas limit and try
+            // again
+            if let Err(EVMError::Transaction(InvalidTransaction::CallerGasLimitMoreThanBlock)) =
+                result
+            {
+                // increase the lowest gas limit
+                lowest_gas_limit = mid_gas_limit;
+
+                // new midpoint
+                mid_gas_limit = ((highest_gas_limit as u128 + lowest_gas_limit as u128) / 2) as u64;
+                continue;
+            }
+
+            let result = result.unwrap();
+            match result.result {
+                ExecutionResult::Success { .. } => {
+                    // cap the highest gas limit with succeeding gas limit
+                    highest_gas_limit = mid_gas_limit;
+                }
+                ExecutionResult::Revert { .. } => {
+                    // increase the lowest gas limit
+                    lowest_gas_limit = mid_gas_limit;
+                }
+                ExecutionResult::Halt { reason, .. } => {
+                    match reason {
+                        Halt::OutOfGas(_) => {
+                            // increase the lowest gas limit
+                            lowest_gas_limit = mid_gas_limit;
+                        }
+                        err => {
+                            // these should be unreachable because we know the transaction succeeds,
+                            // but we consider these cases an error
+                            return Err(RpcInvalidTransactionError::EvmHalt(err).into());
+                        }
+                    }
+                }
+            }
+            // new midpoint
+            mid_gas_limit = ((highest_gas_limit as u128 + lowest_gas_limit as u128) / 2) as u64;
+        }
+
+        Ok(U64::from(highest_gas_limit))
     }
 
     /// Handler for: `eth_gasPrice`
@@ -454,4 +622,33 @@ pub(crate) fn build_rpc_receipt(
             })
             .collect(),
     }
+}
+
+fn map_out_of_gas_err<C: sov_modules_api::Context>(
+    block_env: BlockEnv,
+    mut tx_env: revm::primitives::TxEnv,
+    cfg_env: revm::primitives::CfgEnv,
+    db: EvmDb<'_, C>,
+) -> EthApiError {
+    let req_gas_limit = tx_env.gas_limit;
+    tx_env.gas_limit = block_env.gas_limit;
+    let res = executor::inspect(db, &block_env, tx_env, cfg_env).unwrap();
+    match res.result {
+        ExecutionResult::Success { .. } => {
+            // transaction succeeded by manually increasing the gas limit to
+            // highest, which means the caller lacks funds to pay for the tx
+            RpcInvalidTransactionError::BasicOutOfGas(U256::from(req_gas_limit)).into()
+        }
+        ExecutionResult::Revert { output, .. } => {
+            // reverted again after bumping the limit
+            RpcInvalidTransactionError::Revert(RevertError::new(output)).into()
+        }
+        ExecutionResult::Halt { reason, .. } => RpcInvalidTransactionError::EvmHalt(reason).into(),
+    }
+}
+
+fn convert_u256_to_u64(u256: reth_primitives::U256) -> Result<u64, TryFromSliceError> {
+    let bytes: [u8; 32] = u256.to_be_bytes();
+    let bytes: [u8; 8] = bytes[24..].try_into()?;
+    Ok(u64::from_be_bytes(bytes))
 }
