@@ -1,7 +1,5 @@
-use std::{
-    os::unix::process::ExitStatusExt,
-    process::{Command, ExitStatus},
-};
+use std::os::unix::process::ExitStatusExt;
+use std::process::{Command, ExitStatus};
 fn main() {
     let is_risczero_installed = Command::new("cargo")
         .args(&["risczero", "help"])
