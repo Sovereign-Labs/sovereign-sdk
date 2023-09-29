@@ -92,17 +92,15 @@ impl TestClient {
         contract_address: H160,
         set_arg: u32,
     ) -> PendingTransaction<'_, Http> {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-
+        // Tx without gas_limit should estimate and include it in send_transaction endpoint
+        // Tx without nonce should fetch and include it in send_transaction endpoint
         let req = Eip1559TransactionRequest::new()
             .from(self.from_addr)
             .to(contract_address)
             .chain_id(self.chain_id)
-            .nonce(nonce)
             .data(self.contract.set_call_data(set_arg))
             .max_priority_fee_per_gas(10u64)
-            .max_fee_per_gas(MAX_FEE_PER_GAS)
-            .gas(900000u64);
+            .max_fee_per_gas(MAX_FEE_PER_GAS);
 
         let typed_transaction = TypedTransaction::Eip1559(req);
 
@@ -148,9 +146,17 @@ impl TestClient {
             .chain_id(self.chain_id)
             .nonce(nonce)
             .data(self.contract.set_call_data(set_arg))
-            .gas_price(10u64)
-            .gas(900000u64);
+            .gas_price(10u64);
 
+        let typed_transaction = TypedTransaction::Legacy(req.clone());
+
+        // Estimate gas on rpc
+        let gas = self
+            .eth_estimate_gas(typed_transaction, Some("latest".to_owned()))
+            .await;
+
+        // Call with the estimated gas
+        let req = req.gas(gas);
         let typed_transaction = TypedTransaction::Legacy(req);
 
         let response = self
@@ -266,6 +272,16 @@ impl TestClient {
             .request("eth_call", rpc_params![tx, block_number])
             .await
             .map_err(|e| e.into())
+    }
+
+    async fn eth_estimate_gas(&self, tx: TypedTransaction, block_number: Option<String>) -> u64 {
+        let gas: ethereum_types::U64 = self
+            .http_client
+            .request("eth_estimateGas", rpc_params![tx, block_number])
+            .await
+            .unwrap();
+
+        gas.as_u64()
     }
 
     async fn execute(self) -> Result<(), Box<dyn std::error::Error>> {
