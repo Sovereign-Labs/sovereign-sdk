@@ -94,11 +94,7 @@ where
 }
 
 #[cfg(feature = "arbitrary")]
-impl<'a, C> arbitrary::Arbitrary<'a> for AccountConfig
-where
-    C: Context,
-    C::PublicKey: arbitrary::Arbitrary<'a>,
-{
+impl<'a> arbitrary::Arbitrary<'a> for AccountConfig {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         // TODO we might want a dedicated struct that will generate the private key counterpart so
         // payloads can be signed and verified

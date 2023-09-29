@@ -7,9 +7,8 @@ use crate::{call, query, ValueSetterConfig};
 
 #[test]
 fn test_config_serialization() {
-    /*
     let admin = Address::from([1; 32]);
-    let config = A
+    let config = ValueSetterConfig::<DefaultContext> { admin };
 
     let data = r#"
     {
@@ -17,7 +16,7 @@ fn test_config_serialization() {
     }"#;
 
     let parsed_config: ValueSetterConfig<DefaultContext> = serde_json::from_str(data).unwrap();
-    assert_eq!(parsed_config, config);*/
+    assert_eq!(parsed_config, config);
 }
 
 #[test]

@@ -10,7 +10,7 @@ impl<C: sov_modules_api::Context> Accounts<C> {
         working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         for pub_key_hex in config.pub_keys.iter() {
-            let pub_key = pub_key_hex.try_into().unwrap();
+            let pub_key = pub_key_hex.try_into()?;
             if self.accounts.get(&pub_key, working_set).is_some() {
                 bail!("Account already exists")
             }
