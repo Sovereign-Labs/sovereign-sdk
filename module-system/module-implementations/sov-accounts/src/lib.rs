@@ -122,7 +122,7 @@ where
     ) -> arbitrary::Result<Self> {
         use sov_modules_api::Module;
 
-        let config: AccountConfig<C> = u.arbitrary()?;
+        let config: AccountConfig = u.arbitrary()?;
         let accounts = Accounts::default();
 
         accounts
