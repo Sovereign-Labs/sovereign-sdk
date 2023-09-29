@@ -221,10 +221,17 @@ async fn get_transactions(
     (StatusCode::OK, Json(response_obj))
 }
 
-async fn get_indexing_status(State(state): AxumState) -> Json<ResponseObject<JsonValue>> {
-    let chain_head_opt = state.db.chain_head().await.unwrap();
+async fn get_indexing_status(
+    State(state): AxumState,
+) -> (StatusCode, Json<ResponseObject<JsonValue>>) {
+    let chain_head_opt = match state.db.chain_head().await {
+        Ok(chain_head_opt) => chain_head_opt,
+        Err(err) => {
+            return gateway_timeout_response(err);
+        }
+    };
 
-    Json(ResponseObject {
+    let response_obj = ResponseObject {
         data: Some(ResponseObjectData::Single(ResourceObject {
             resoure_type: "indexingStatus",
             id: "latest".to_string(),
@@ -232,7 +239,8 @@ async fn get_indexing_status(State(state): AxumState) -> Json<ResponseObject<Jso
         })),
         errors: vec![],
         links: HashMap::new(),
-    })
+    };
+    (StatusCode::OK, Json(response_obj))
 }
 
 /// Helpers for {JSON:API}.
