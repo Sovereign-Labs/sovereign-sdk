@@ -8,6 +8,9 @@ use crate::utils::get_collection_address;
 use crate::CollectionAddress;
 use crate::{Collection, Nft, OwnerAddress};
 
+#[cfg(feature = "offchain")]
+include!("sql.rs");
+
 /// Syncs a collection to the corresponding table "collections" in postgres
 #[offchain]
 pub fn update_collection<C: sov_modules_api::Context>(collection: &Collection<C>) {
@@ -27,16 +30,7 @@ pub fn update_collection<C: sov_modules_api::Context>(collection: &Collection<C>
             match postgres::Client::connect(&conn_string, NoTls) {
                 Ok(mut client) => {
                     let result = client.execute(
-                        "INSERT INTO collections (\
-                    collection_address, collection_name, creator_address,\
-                    frozen, metadata_url, supply)\
-                    VALUES ($1, $2, $3, $4, $5, $6)\
-                    ON CONFLICT (collection_address)\
-                    DO UPDATE SET collection_name = EXCLUDED.collection_name,\
-                                  creator_address = EXCLUDED.creator_address,\
-                                  frozen = EXCLUDED.frozen,\
-                                  metadata_url = EXCLUDED.metadata_url,\
-                                  supply = EXCLUDED.supply",
+                        INSERT_OR_UPDATE_COLLECTION,
                         &[
                             &collection_address_str,
                             &collection_name,
@@ -79,7 +73,7 @@ pub fn update_nft<C: sov_modules_api::Context>(nft: &Nft<C>, old_owner: Option<O
             // Check current owner in the database for the NFT
             let rows = client
                 .query(
-                    "SELECT owner FROM nfts WHERE collection_address = $1 AND nft_id = $2",
+                    QUERY_OWNER_FROM_NFTS,
                     &[&collection_address, &(nft_id as i64)],
                 )
                 .unwrap();
@@ -96,39 +90,27 @@ pub fn update_nft<C: sov_modules_api::Context>(nft: &Nft<C>, old_owner: Option<O
 
                     // Decrement count for the database owner (which would be the old owner in a transfer scenario)
                     let _ = client.execute(
-                        "UPDATE top_owners SET count = count - 1 \
-                        WHERE owner = $1 AND collection_address = $2 AND count > 0",
+                        DECREMENT_COUNT_FOR_OLD_OWNER,
                         &[&db_owner_str, &collection_address],
                     );
 
                     // Increment count for new owner
                     let _ = client.execute(
-                        "INSERT INTO top_owners (owner, collection_address, count) VALUES ($1, $2, 1) \
-                        ON CONFLICT (owner, collection_address) \
-                        DO UPDATE SET count = top_owners.count + 1",
+                        INCREMENT_OR_UPDATE_COUNT_FOR_NEW_OWNER,
                         &[&new_owner_str, &collection_address],
                     );
                 }
             } else if old_owner_address.is_none() {
                 // Mint operation, and NFT doesn't exist in the database. Increment for the new owner.
                 let _ = client.execute(
-                    "INSERT INTO top_owners (owner, collection_address, count) VALUES ($1, $2, 1) \
-                    ON CONFLICT (owner, collection_address) \
-                    DO UPDATE SET count = top_owners.count + 1",
+                    INCREMENT_OR_UPDATE_COUNT_FOR_NEW_OWNER,
                     &[&new_owner_str, &collection_address],
                 );
             }
 
             // Update NFT information after handling top_owners logic
             let _ = client.execute(
-                "INSERT INTO nfts (\
-                collection_address, nft_id, metadata_url,\
-                owner, frozen)\
-                VALUES ($1, $2, $3, $4, $5)\
-                ON CONFLICT (collection_address, nft_id)\
-                DO UPDATE SET metadata_url = EXCLUDED.metadata_url,\
-                              owner = EXCLUDED.owner,\
-                              frozen = EXCLUDED.frozen",
+                INSERT_OR_UPDATE_NFT,
                 &[
                     &collection_address,
                     &(nft_id as i64),
