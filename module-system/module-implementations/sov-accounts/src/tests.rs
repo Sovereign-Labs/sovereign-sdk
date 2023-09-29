@@ -1,5 +1,8 @@
+use std::str::FromStr;
+
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_modules_api::default_signature::DefaultPublicKey;
 use sov_modules_api::{AddressBech32, Context, Module, PrivateKey, PublicKey, Spec, WorkingSet};
 use sov_state::ProverStorage;
 
@@ -8,14 +11,33 @@ use crate::{call, AccountConfig, Accounts};
 type C = DefaultContext;
 
 #[test]
+fn test_config_serialization() {
+    let pub_key = &DefaultPublicKey::from_str(
+        "1cd4e2d9d5943e6f3d12589d31feee6bb6c11e7b8cd996a393623e207da72cbf",
+    )
+    .unwrap();
+
+    let config = AccountConfig {
+        pub_keys: vec![pub_key.clone().try_into().unwrap()],
+    };
+
+    let data = r#"
+    {
+        "pub_keys":["1cd4e2d9d5943e6f3d12589d31feee6bb6c11e7b8cd996a393623e207da72cbf"]
+    }"#;
+
+    let parsed_config: AccountConfig = serde_json::from_str(data).unwrap();
+    assert_eq!(parsed_config, config);
+}
+
+#[test]
 fn test_config_account() {
     let priv_key = DefaultPrivateKey::generate();
-
     let init_pub_key = priv_key.pub_key();
     let init_pub_key_addr = init_pub_key.to_address::<<C as Spec>::Address>();
 
-    let account_config = AccountConfig::<C> {
-        pub_keys: vec![init_pub_key.clone()],
+    let account_config = AccountConfig {
+        pub_keys: vec![init_pub_key.clone().try_into().unwrap()],
     };
 
     let accounts = &mut Accounts::<C>::default();

@@ -12,18 +12,17 @@ pub use query::*;
 mod tests;
 
 pub use call::{CallMessage, UPDATE_ACCOUNT_MSG};
-use sov_modules_api::{Context, Error, ModuleInfo, WorkingSet};
+use sov_modules_api::{Context, Error, ModuleInfo, PublicKeyHex, WorkingSet};
 
 /// Initial configuration for sov-accounts module.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(bound = "C::PublicKey: serde::Serialize + serde::de::DeserializeOwned")]
-pub struct AccountConfig<C: Context> {
+pub struct AccountConfig {
     /// Public keys to initialize the rollup.
-    pub pub_keys: Vec<C::PublicKey>,
+    pub pub_keys: Vec<PublicKeyHex>,
 }
 
-impl<C: Context> FromIterator<C::PublicKey> for AccountConfig<C> {
-    fn from_iter<T: IntoIterator<Item = C::PublicKey>>(iter: T) -> Self {
+impl FromIterator<PublicKeyHex> for AccountConfig {
+    fn from_iter<T: IntoIterator<Item = PublicKeyHex>>(iter: T) -> Self {
         Self {
             pub_keys: iter.into_iter().collect(),
         }
@@ -59,7 +58,7 @@ pub struct Accounts<C: Context> {
 impl<C: Context> sov_modules_api::Module for Accounts<C> {
     type Context = C;
 
-    type Config = AccountConfig<C>;
+    type Config = AccountConfig;
 
     type CallMessage = call::CallMessage<C>;
 
@@ -95,11 +94,7 @@ where
 }
 
 #[cfg(feature = "arbitrary")]
-impl<'a, C> arbitrary::Arbitrary<'a> for AccountConfig<C>
-where
-    C: Context,
-    C::PublicKey: arbitrary::Arbitrary<'a>,
-{
+impl<'a> arbitrary::Arbitrary<'a> for AccountConfig {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         // TODO we might want a dedicated struct that will generate the private key counterpart so
         // payloads can be signed and verified
@@ -123,7 +118,7 @@ where
     ) -> arbitrary::Result<Self> {
         use sov_modules_api::Module;
 
-        let config: AccountConfig<C> = u.arbitrary()?;
+        let config: AccountConfig = u.arbitrary()?;
         let accounts = Accounts::default();
 
         accounts

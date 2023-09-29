@@ -254,7 +254,7 @@ impl FromStr for DefaultPublicKey {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let pk_hex = crate::pub_key_hex::PublicKeyHex::try_from(s)?;
+        let pk_hex = &crate::pub_key_hex::PublicKeyHex::try_from(s)?;
         pk_hex.try_into()
     }
 }

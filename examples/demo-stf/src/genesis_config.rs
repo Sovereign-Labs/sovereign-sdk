@@ -1,6 +1,7 @@
 use anyhow::Context as AnyhowContext;
 #[cfg(feature = "experimental")]
 use reth_primitives::Bytes;
+use sov_accounts::AccountConfig;
 use sov_chain_state::ChainStateConfig;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 #[cfg(feature = "experimental")]
@@ -85,12 +86,17 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
     let value_setter_genesis_path = "../test-data/genesis/value_setter.json";
     let value_setter_data = std::fs::read_to_string(value_setter_genesis_path)
         .with_context(|| format!("Failed to read genesis from {}", value_setter_genesis_path))?;
-
-    let nft_config = sov_nft_module::NonFungibleTokenConfig {};
-
     let value_setter_config: ValueSetterConfig<C> = serde_json::from_str(&value_setter_data)
         .with_context(|| format!("Failed to parse genesis from {}", value_setter_genesis_path))?;
 
+    let accounts_genesis_path = "../test-data/genesis/accounts.json";
+    let accounts_data = std::fs::read_to_string(accounts_genesis_path)
+        .with_context(|| format!("Failed to read genesis from {}", accounts_genesis_path))?;
+
+    let accounts_config: AccountConfig = serde_json::from_str(&accounts_data)
+        .with_context(|| format!("Failed to parse genesis from {}", accounts_genesis_path))?;
+
+    let nft_config = sov_nft_module::NonFungibleTokenConfig {};
     // This will be read from a file: #872
     let chain_state_config = ChainStateConfig {
         // TODO: Put actual value
@@ -104,7 +110,7 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
         (),
         chain_state_config,
         value_setter_config,
-        sov_accounts::AccountConfig { pub_keys: vec![] },
+        accounts_config,
         #[cfg(feature = "experimental")]
         get_evm_config(evm_genesis_addresses),
         nft_config,
