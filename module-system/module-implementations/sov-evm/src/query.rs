@@ -113,7 +113,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
             .map(|account| account.info.balance)
             .unwrap_or_default();
 
-        Ok(balance.into())
+        Ok(balance)
     }
 
     /// Handler for: `eth_getStorageAt`
@@ -133,8 +133,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let storage_slot = self
             .accounts
             .get(&address, working_set)
-            .map(|account| account.storage.get(&index, working_set))
-            .flatten()
+            .and_then(|account| account.storage.get(&index, working_set))
             .unwrap_or_default();
 
         Ok(storage_slot)
@@ -178,8 +177,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let code = self
             .accounts
             .get(&address, working_set)
-            .map(|account| self.code.get(&account.info.code_hash, working_set))
-            .flatten()
+            .and_then(|account| self.code.get(&account.info.code_hash, working_set))
             .unwrap_or_default();
 
         Ok(code)
