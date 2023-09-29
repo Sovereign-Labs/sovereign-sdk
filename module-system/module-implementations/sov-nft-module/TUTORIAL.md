@@ -126,11 +126,35 @@ CREATE TABLE top_owners
  offchain = ["postgres","tokio","tracing"]
  ```
    * Now we're ready to write a function to accept a `Collection` object and upsert it into the `collections` postgres table.
+   * Let's handle the query first. Since we'll need a number of queries, it's better to organize them in a separate file called `sql.rs`
+   * In `sql.rs`, lets create the following query to handle upserts for collections
 ```rust
+pub const INSERT_OR_UPDATE_COLLECTION: &str = "INSERT INTO collections (\
+        collection_address, collection_name, creator_address,\
+        frozen, metadata_url, supply)\
+        VALUES ($1, $2, $3, $4, $5, $6)\
+        ON CONFLICT (collection_address)\
+        DO UPDATE SET collection_name = EXCLUDED.collection_name,\
+                      creator_address = EXCLUDED.creator_address,\
+                      frozen = EXCLUDED.frozen,\
+                      metadata_url = EXCLUDED.metadata_url,\
+                      supply = EXCLUDED.supply";
+```
+  * It's a standard sql query for inserting a new row or updating all the fields if the primary key is present.
+  * In order to use the constant, we can make `sql.rs` a module and add that to `lib.rs`
+```rust
+#[cfg(feature = "offchain")]
+mod sql;
+```
+  * We feature gate it with the `offchain` feature to avoid warnings. Note that this isn't strictly necessary but cleanly separates the code and makes it readable.
+  * Next we add the necessary imports to `offchain.rs` and write the first function
+```rust
+#[cfg(feature = "offchain")]
+use postgres::NoTls;
 use sov_modules_macros::offchain;
 
 #[cfg(feature = "offchain")]
-use postgres::NoTls;
+use crate::sql::*;
 #[cfg(feature = "offchain")]
 use crate::utils::get_collection_address;
 #[cfg(feature = "offchain")]
@@ -156,16 +180,7 @@ pub fn update_collection<C: sov_modules_api::Context>(collection: &Collection<C>
             match postgres::Client::connect(&conn_string, NoTls) {
                 Ok(mut client) => {
                     let result = client.execute(
-                        "INSERT INTO collections (\
-                    collection_address, collection_name, creator_address,\
-                    frozen, metadata_url, supply)\
-                    VALUES ($1, $2, $3, $4, $5, $6)\
-                    ON CONFLICT (collection_address)\
-                    DO UPDATE SET collection_name = EXCLUDED.collection_name,\
-                                  creator_address = EXCLUDED.creator_address,\
-                                  frozen = EXCLUDED.frozen,\
-                                  metadata_url = EXCLUDED.metadata_url,\
-                                  supply = EXCLUDED.supply",
+                      INSERT_OR_UPDATE_COLLECTION,
                         &[
                             &collection_address_str,
                             &collection_name,
@@ -189,10 +204,13 @@ pub fn update_collection<C: sov_modules_api::Context>(collection: &Collection<C>
     })
 }
 ```
-* Breaking down the above code, we feature gate our imports as well since we only need them when the offchain feature is enabled
+* Breaking down the above code, we feature gate our imports (except the offchain macro) as well since we only need them when the offchain feature is enabled
 ```rust
+use sov_modules_macros::offchain;
 #[cfg(feature = "offchain")]
 use postgres::NoTls;
+#[cfg(feature = "offchain")]
+use crate::sql::*;
 #[cfg(feature = "offchain")]
 use crate::utils::get_collection_address;
 #[cfg(feature = "offchain")]
@@ -223,19 +241,7 @@ pub fn update_collection<C: sov_modules_api::Context>(_collection: &Collection<C
   * retrieving the `collection_address` based on the `collection_name` and the `creator_address`
   * `to_string()` conversions for addresses
 * We make use of an environment variable `POSTGRES_CONNECTION_STRING` so that we can pass in connection params when starting our rollup binary
-* The actual query is simple postgres logic to insert into the collections table if not present, but if present, it updates the values against the primary key
-```
-INSERT INTO collections (\
-collection_address, collection_name, creator_address,\
-frozen, metadata_url, supply)\
-VALUES ($1, $2, $3, $4, $5, $6)\
-ON CONFLICT (collection_address)\
-DO UPDATE SET collection_name = EXCLUDED.collection_name,\
-              creator_address = EXCLUDED.creator_address,\
-              frozen = EXCLUDED.frozen,\
-              metadata_url = EXCLUDED.metadata_url,\
-              supply = EXCLUDED.supply
-```
+* The query that's executed is from the constant string `INSERT_OR_UPDATE_COLLECTION`
 * Most of the remaining code is error handling and formatting. 
 * We make use of the `tracing` library to emit errors. Note that since this entire function only runs in an offchain context, we can also include things here like sentry logging, pagerduty alerts, email clients as well!
 * We now add the logic for the second function that handles updating the `nfts` table and the `top_owners` table
