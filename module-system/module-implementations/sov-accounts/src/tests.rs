@@ -8,14 +8,28 @@ use crate::{call, AccountConfig, Accounts};
 type C = DefaultContext;
 
 #[test]
+fn test_config_serialization() {
+    /*let admin = Address::from([1; 32]);
+    let config = ValueSetterConfig::<DefaultContext> { admin };
+
+    let data = r#"
+    {
+        "admin":"sov1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs259tk3"
+    }"#;
+
+    let parsed_config: ValueSetterConfig<DefaultContext> = serde_json::from_str(data).unwrap();
+    assert_eq!(parsed_config, config);*/
+}
+
+#[test]
 fn test_config_account() {
     let priv_key = DefaultPrivateKey::generate();
 
     let init_pub_key = priv_key.pub_key();
     let init_pub_key_addr = init_pub_key.to_address::<<C as Spec>::Address>();
 
-    let account_config = AccountConfig::<C> {
-        pub_keys: vec![init_pub_key.clone()],
+    let account_config = AccountConfig {
+        pub_keys: vec![init_pub_key.clone().try_into().unwrap()],
     };
 
     let accounts = &mut Accounts::<C>::default();
