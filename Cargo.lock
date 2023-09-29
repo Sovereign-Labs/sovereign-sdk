@@ -3542,6 +3542,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "serde",
  "sov-chain-state",
  "sov-data-generators",
  "sov-modules-api",

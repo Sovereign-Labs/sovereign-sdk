@@ -6,6 +6,7 @@ use std::fmt::Formatter;
 use std::num::ParseIntError;
 
 use anyhow::{bail, Context, Result};
+use serde::{Deserialize, Serialize};
 use sov_modules_api::WorkingSet;
 use sov_state::Prefix;
 #[cfg(feature = "native")]
@@ -21,13 +22,13 @@ pub type Amount = u64;
 /// (type [`sov_modules_api::Spec::Address`]).
 #[cfg_attr(
     feature = "native",
-    derive(serde::Serialize),
-    derive(serde::Deserialize),
     derive(clap::Parser),
     derive(schemars::JsonSchema),
     schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "Coins")
 )]
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
+#[derive(
+    borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone, Serialize, Deserialize,
+)]
 pub struct Coins<C: sov_modules_api::Context> {
     /// An `amount` of coins stored.
     pub amount: Amount,
