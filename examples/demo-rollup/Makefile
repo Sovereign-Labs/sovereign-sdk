@@ -40,9 +40,7 @@ stop: check-docker
 	@$(compose_down)
 
 # clean up rollup data and stop the celestia network
-clean: check-docker
-	@$(compose_stop)
-	$(MAKE) clean-rollup-db
+clean: stop clean-rollup-db
 
 # listen to celestia network logs
 compose-logs: check-docker
