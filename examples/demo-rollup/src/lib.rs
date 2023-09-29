@@ -2,8 +2,6 @@
 #![doc = include_str!("../README.md")]
 
 #[cfg(feature = "native")]
-pub mod nft_utils;
-#[cfg(feature = "native")]
 pub mod register_rpc;
 #[cfg(feature = "native")]
 mod rollup;

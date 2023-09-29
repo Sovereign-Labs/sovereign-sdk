@@ -18,6 +18,7 @@ members = [
 
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
+    "utils/nft-utils",
     "utils/bashtestmd",
     "utils/nft-utils",
 
