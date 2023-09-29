@@ -6,7 +6,9 @@ use crate::PrivateKey;
 use crate::{Context, Signature};
 
 /// A Transaction object that is compatible with the module-system/sov-default-stf.
-#[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
+#[derive(
+    Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize, serde::Serialize,
+)]
 pub struct Transaction<C: Context> {
     signature: C::Signature,
     pub_key: C::PublicKey,

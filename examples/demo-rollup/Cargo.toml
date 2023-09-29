@@ -79,7 +79,7 @@ native = ["anyhow", "jsonrpsee", "serde", "serde_json", "tracing", "tokio", "tra
 	"sov-state/native", "sov-cli", "clap", "sov-celestia-adapter/native", "sov-db", "sov-sequencer", "sov-stf-runner/native",
 	"sov-modules-api/native", "sov-rollup-interface/native"]
 bench = ["native", "async-trait", "borsh", "hex"]
-
+offchain = ["demo-stf/offchain"]
 
 [[bench]]
 name = "rollup_bench"
