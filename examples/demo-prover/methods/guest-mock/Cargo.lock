@@ -937,6 +937,7 @@ dependencies = [
  "borsh",
  "derive_more",
  "ed25519-dalek",
+ "hex",
  "jmt",
  "serde",
  "sha2",

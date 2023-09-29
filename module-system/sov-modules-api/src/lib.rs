@@ -10,6 +10,7 @@ mod dispatch;
 mod encode;
 mod error;
 pub mod hooks;
+mod pub_key_hex;
 
 #[cfg(feature = "macros")]
 mod reexport_macros;
