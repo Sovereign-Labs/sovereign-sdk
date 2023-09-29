@@ -15,6 +15,7 @@ resolver = "2"
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 tempfile = { workspace = true }
+serde = { workspace = true }
 
 sov-modules-api = { path = "../../sov-modules-api", features = ["native"] }
 sov-state = { path = "../../sov-state", features = ["native"] }
