@@ -1,6 +1,7 @@
 use ed25519_dalek::VerifyingKey as DalekPublicKey;
 
-use crate::{default_signature::DefaultPublicKey, PublicKeyHex};
+use crate::default_signature::DefaultPublicKey;
+use crate::PublicKeyHex;
 
 impl serde::Serialize for DefaultPublicKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -33,7 +34,7 @@ impl<'de> serde::Deserialize<'de> for DefaultPublicKey {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    
 
     #[test]
     fn test_pub_key() {}
