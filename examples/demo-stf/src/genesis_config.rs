@@ -15,6 +15,7 @@ use sov_modules_api::Context;
 use sov_rollup_interface::da::DaSpec;
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
+use std::convert::AsRef;
 
 /// Creates config for a rollup with some default settings, the config is used in demos and tests.
 use crate::runtime::GenesisConfig;
@@ -46,8 +47,6 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
     )
     .expect("Unable to read genesis configuration")
 }
-
-use std::convert::AsRef;
 
 fn create_genesis_config<C: Context, Da: DaSpec>(
     sequencer_address: C::Address,
