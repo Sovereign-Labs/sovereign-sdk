@@ -1,3 +1,4 @@
+use std::convert::AsRef;
 use std::path::Path;
 
 use anyhow::Context as AnyhowContext;
@@ -15,7 +16,6 @@ use sov_modules_api::Context;
 use sov_rollup_interface::da::DaSpec;
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
-use std::convert::AsRef;
 
 /// Creates config for a rollup with some default settings, the config is used in demos and tests.
 use crate::runtime::GenesisConfig;
