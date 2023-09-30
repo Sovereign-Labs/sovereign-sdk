@@ -11,10 +11,9 @@ mod tests;
 mod token;
 /// Util functions for bank
 pub mod utils;
-use serde::de::DeserializeOwned;
-
 /// Specifies the call methods using in that module.
 pub use call::CallMessage;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::{CallResponse, Error, GasUnit, ModuleInfo, WorkingSet};
 use token::Token;

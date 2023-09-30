@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
-use sov_modules_api::{default_context::DefaultContext, AddressBech32, Spec};
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::{AddressBech32, Spec};
 
 use crate::{BankConfig, TokenConfig};
 

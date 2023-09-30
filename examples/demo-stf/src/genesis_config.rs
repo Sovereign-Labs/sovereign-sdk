@@ -1,5 +1,3 @@
-/// Creates config for a rollup with some default settings, the config is used in demos and tests.
-use crate::runtime::GenesisConfig;
 use anyhow::Context as AnyhowContext;
 #[cfg(feature = "experimental")]
 use reth_primitives::Bytes;
@@ -14,6 +12,9 @@ use sov_modules_api::Context;
 use sov_rollup_interface::da::DaSpec;
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
+
+/// Creates config for a rollup with some default settings, the config is used in demos and tests.
+use crate::runtime::GenesisConfig;
 
 pub const LOCKED_AMOUNT: u64 = 50;
 pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
@@ -82,7 +83,6 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
     let accounts_genesis_path = "../test-data/genesis/accounts.json";
     let accounts_data = std::fs::read_to_string(accounts_genesis_path)
         .with_context(|| format!("Failed to read genesis from {}", accounts_genesis_path))?;
-
     let accounts_config: AccountConfig = serde_json::from_str(&accounts_data)
         .with_context(|| format!("Failed to parse genesis from {}", accounts_genesis_path))?;
 
