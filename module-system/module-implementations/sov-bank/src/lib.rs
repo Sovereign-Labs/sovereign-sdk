@@ -6,9 +6,12 @@ mod genesis;
 mod query;
 #[cfg(feature = "native")]
 pub use query::*;
+#[cfg(test)]
+mod tests;
 mod token;
 /// Util functions for bank
 pub mod utils;
+use serde::de::DeserializeOwned;
 
 /// Specifies the call methods using in that module.
 pub use call::CallMessage;
@@ -22,7 +25,8 @@ pub use utils::{get_genesis_token_address, get_token_address};
 
 /// [`TokenConfig`] specifies a configuration used when generating a token for the bank
 /// module.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(bound = "C::Address: Serialize + DeserializeOwned")]
 pub struct TokenConfig<C: sov_modules_api::Context> {
     /// The name of the token.
     pub token_name: String,
@@ -35,7 +39,8 @@ pub struct TokenConfig<C: sov_modules_api::Context> {
 }
 
 /// Initial configuration for sov-bank module.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(bound = "C::Address: Serialize + DeserializeOwned")]
 pub struct BankConfig<C: sov_modules_api::Context> {
     /// A list of configurations for the initial tokens.
     pub tokens: Vec<TokenConfig<C>>,

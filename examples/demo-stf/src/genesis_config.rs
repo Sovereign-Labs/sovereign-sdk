@@ -1,7 +1,10 @@
+/// Creates config for a rollup with some default settings, the config is used in demos and tests.
+use crate::runtime::GenesisConfig;
 use anyhow::Context as AnyhowContext;
 #[cfg(feature = "experimental")]
 use reth_primitives::Bytes;
 use sov_accounts::AccountConfig;
+use sov_bank::BankConfig;
 use sov_chain_state::ChainStateConfig;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 #[cfg(feature = "experimental")]
@@ -11,9 +14,6 @@ use sov_modules_api::Context;
 use sov_rollup_interface::da::DaSpec;
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
-
-/// Creates config for a rollup with some default settings, the config is used in demos and tests.
-use crate::runtime::GenesisConfig;
 
 pub const LOCKED_AMOUNT: u64 = 50;
 pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
@@ -32,12 +32,9 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
     sequencer_da_address: Da::Address,
     #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
 ) -> GenesisConfig<C, Da> {
-    // This will be read from a file: #872
-    let initial_sequencer_balance = 100000000;
     let token_deployer: PrivateKeyAndAddress<C> = read_private_key();
 
     create_genesis_config(
-        initial_sequencer_balance,
         token_deployer.address.clone(),
         sequencer_da_address,
         #[cfg(feature = "experimental")]
@@ -47,23 +44,16 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
 }
 
 fn create_genesis_config<C: Context, Da: DaSpec>(
-    initial_sequencer_balance: u64,
     sequencer_address: C::Address,
     sequencer_da_address: Da::Address,
     #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
 ) -> anyhow::Result<GenesisConfig<C, Da>> {
-    // This will be read from a file: #872
-    let token_config: sov_bank::TokenConfig<C> = sov_bank::TokenConfig {
-        token_name: DEMO_TOKEN_NAME.to_owned(),
-        address_and_balances: vec![(sequencer_address.clone(), initial_sequencer_balance)],
-        authorized_minters: vec![sequencer_address.clone()],
-        salt: 0,
-    };
-
-    // This will be read from a file: #872
-    let bank_config = sov_bank::BankConfig {
-        tokens: vec![token_config],
-    };
+    // This path will be injected as a parameter: #872
+    let bank_genesis_path = "../test-data/genesis/bank.json";
+    let bank_data = std::fs::read_to_string(bank_genesis_path)
+        .with_context(|| format!("Failed to read genesis from {}", bank_genesis_path))?;
+    let bank_config: BankConfig<C> = serde_json::from_str(&bank_data)
+        .with_context(|| format!("Failed to parse genesis from {}", bank_genesis_path))?;
 
     // This will be read from a file: #872
     let token_address = sov_bank::get_genesis_token_address::<C>(
