@@ -1,6 +1,9 @@
+use std::path::Path;
+
 use anyhow::Context as AnyhowContext;
 #[cfg(feature = "experimental")]
 use reth_primitives::Bytes;
+use serde::de::DeserializeOwned;
 use sov_accounts::AccountConfig;
 use sov_bank::BankConfig;
 use sov_chain_state::ChainStateConfig;
@@ -44,6 +47,8 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
     .expect("Unable to read genesis configuration")
 }
 
+use std::convert::AsRef;
+
 fn create_genesis_config<C: Context, Da: DaSpec>(
     sequencer_address: C::Address,
     sequencer_da_address: Da::Address,
@@ -51,11 +56,7 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
 ) -> anyhow::Result<GenesisConfig<C, Da>> {
     // This path will be injected as a parameter: #872
     let bank_genesis_path = "../test-data/genesis/bank.json";
-    let bank_data = std::fs::read_to_string(bank_genesis_path)
-        .with_context(|| format!("Failed to read genesis from {}", bank_genesis_path))?;
-    let bank_config: BankConfig<C> = serde_json::from_str(&bank_data)
-        .with_context(|| format!("Failed to parse genesis from {}", bank_genesis_path))?;
-
+    let bank_config: BankConfig<C> = read_json_file(bank_genesis_path)?;
     // This will be read from a file: #872
     let token_address = sov_bank::get_genesis_token_address::<C>(
         &bank_config.tokens[0].token_name,
@@ -75,16 +76,10 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
 
     // This path will be injected as a parameter: #872
     let value_setter_genesis_path = "../test-data/genesis/value_setter.json";
-    let value_setter_data = std::fs::read_to_string(value_setter_genesis_path)
-        .with_context(|| format!("Failed to read genesis from {}", value_setter_genesis_path))?;
-    let value_setter_config: ValueSetterConfig<C> = serde_json::from_str(&value_setter_data)
-        .with_context(|| format!("Failed to parse genesis from {}", value_setter_genesis_path))?;
+    let value_setter_config: ValueSetterConfig<C> = read_json_file(value_setter_genesis_path)?;
 
     let accounts_genesis_path = "../test-data/genesis/accounts.json";
-    let accounts_data = std::fs::read_to_string(accounts_genesis_path)
-        .with_context(|| format!("Failed to read genesis from {}", accounts_genesis_path))?;
-    let accounts_config: AccountConfig = serde_json::from_str(&accounts_data)
-        .with_context(|| format!("Failed to parse genesis from {}", accounts_genesis_path))?;
+    let accounts_config: AccountConfig = read_json_file(accounts_genesis_path)?;
 
     let nft_config = sov_nft_module::NonFungibleTokenConfig {};
     // This will be read from a file: #872
@@ -105,6 +100,17 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
         get_evm_config(evm_genesis_addresses),
         nft_config,
     ))
+}
+
+fn read_json_file<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> anyhow::Result<T> {
+    let path_str = path.as_ref().display();
+
+    let data = std::fs::read_to_string(&path)
+        .with_context(|| format!("Failed to read genesis from {}", path_str))?;
+    let config: T = serde_json::from_str(&data)
+        .with_context(|| format!("Failed to parse genesis from {}", path_str))?;
+
+    Ok(config)
 }
 
 // TODO: #840
