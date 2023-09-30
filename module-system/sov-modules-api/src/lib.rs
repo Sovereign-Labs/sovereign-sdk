@@ -21,6 +21,7 @@ pub use reexport_macros::*;
 mod prefix;
 mod response;
 mod serde_address;
+mod serde_pub_key;
 mod state;
 #[cfg(test)]
 mod tests;
