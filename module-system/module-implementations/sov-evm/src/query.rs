@@ -2,13 +2,13 @@ use std::array::TryFromSliceError;
 
 use ethereum_types::U64;
 use jsonrpsee::core::RpcResult;
-use reth_interfaces::db::DatabaseError;
-use reth_interfaces::RethError;
+
+
 use reth_primitives::contract::create_address;
 use reth_primitives::TransactionKind::{Call, Create};
 use reth_primitives::{TransactionSignedEcRecovered, U128, U256};
 use revm::primitives::{
-    EVMError, ExecutionResult, Halt, InvalidHeader, InvalidTransaction, TransactTo, KECCAK_EMPTY,
+    EVMError, ExecutionResult, Halt, InvalidTransaction, TransactTo, KECCAK_EMPTY,
 };
 use sov_modules_api::macros::rpc_gen;
 use sov_modules_api::WorkingSet;
