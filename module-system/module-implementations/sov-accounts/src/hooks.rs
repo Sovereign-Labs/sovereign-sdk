@@ -14,9 +14,9 @@ impl<C: Context> TxHooks for Accounts<C> {
     ) -> anyhow::Result<<Self::Context as Spec>::Address> {
         let pub_key = tx.pub_key();
 
-        let account = match self.accounts.get(&pub_key, working_set) {
+        let account = match self.accounts.get(pub_key, working_set) {
             Some(acc) => Ok(acc),
-            None => self.create_default_account(&pub_key, working_set),
+            None => self.create_default_account(pub_key, working_set),
         }?;
 
         let tx_nonce = tx.nonce();
