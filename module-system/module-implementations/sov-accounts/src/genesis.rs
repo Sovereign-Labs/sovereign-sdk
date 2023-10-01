@@ -9,13 +9,12 @@ impl<C: sov_modules_api::Context> Accounts<C> {
         config: &<Self as sov_modules_api::Module>::Config,
         working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
-        for pub_key_hex in config.pub_keys.iter() {
-            let pub_key = pub_key_hex.try_into()?;
-            if self.accounts.get(&pub_key, working_set).is_some() {
+        for pub_key in config.pub_keys.iter() {
+            if self.accounts.get(pub_key, working_set).is_some() {
                 bail!("Account already exists")
             }
 
-            self.create_default_account(pub_key, working_set)?;
+            self.create_default_account(pub_key.clone(), working_set)?;
         }
 
         Ok(())

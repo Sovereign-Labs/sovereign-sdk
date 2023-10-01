@@ -17,8 +17,8 @@ fn test_config_serialization() {
     )
     .unwrap();
 
-    let config = AccountConfig {
-        pub_keys: vec![pub_key.clone().try_into().unwrap()],
+    let config = AccountConfig::<DefaultContext> {
+        pub_keys: vec![pub_key.clone()],
     };
 
     let data = r#"
@@ -26,7 +26,7 @@ fn test_config_serialization() {
         "pub_keys":["1cd4e2d9d5943e6f3d12589d31feee6bb6c11e7b8cd996a393623e207da72cbf"]
     }"#;
 
-    let parsed_config: AccountConfig = serde_json::from_str(data).unwrap();
+    let parsed_config: AccountConfig<DefaultContext> = serde_json::from_str(data).unwrap();
     assert_eq!(parsed_config, config);
 }
 
