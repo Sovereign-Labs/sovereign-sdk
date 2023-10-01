@@ -37,7 +37,7 @@ fn test_config_account() {
     let init_pub_key_addr = init_pub_key.to_address::<<C as Spec>::Address>();
 
     let account_config = AccountConfig {
-        pub_keys: vec![init_pub_key.clone().try_into().unwrap()],
+        pub_keys: vec![init_pub_key.clone()],
     };
 
     let accounts = &mut Accounts::<C>::default();

@@ -167,7 +167,6 @@ pub trait PublicKey:
     + Sync
     + Serialize
     + for<'a> Deserialize<'a>
-    + for<'a> TryFrom<&'a PublicKeyHex, Error = anyhow::Error>
 {
     fn to_address<A: RollupAddress>(&self) -> A;
 }

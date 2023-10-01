@@ -56,8 +56,8 @@ impl From<PublicKeyHex> for String {
     }
 }
 
-impl From<DefaultPublicKey> for PublicKeyHex {
-    fn from(pub_key: DefaultPublicKey) -> Self {
+impl From<&DefaultPublicKey> for PublicKeyHex {
+    fn from(pub_key: &DefaultPublicKey) -> Self {
         let hex = hex::encode(pub_key.pub_key.as_bytes());
         Self { hex }
     }

@@ -10,7 +10,7 @@ impl serde::Serialize for DefaultPublicKey {
     {
         if serializer.is_human_readable() {
             // TODO remove clone
-            serde::Serialize::serialize(&PublicKeyHex::from(self.clone()), serializer)
+            serde::Serialize::serialize(&PublicKeyHex::from(self), serializer)
         } else {
             serde::Serialize::serialize(&self.pub_key, serializer)
         }
