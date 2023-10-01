@@ -89,7 +89,7 @@ mod tests {
     #[test]
     fn test_pub_key_hex() {
         let pub_key = DefaultPrivateKey::generate().pub_key();
-        let pub_key_hex = PublicKeyHex::try_from(pub_key.clone()).unwrap();
+        let pub_key_hex = PublicKeyHex::try_from(&pub_key).unwrap();
         let converted_pub_key = DefaultPublicKey::try_from(&pub_key_hex).unwrap();
         assert_eq!(pub_key, converted_pub_key);
     }
