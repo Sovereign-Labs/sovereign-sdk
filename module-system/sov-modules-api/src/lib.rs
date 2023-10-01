@@ -9,6 +9,7 @@ pub mod default_signature;
 mod dispatch;
 mod encode;
 mod error;
+mod events;
 mod gas;
 pub mod hooks;
 mod pub_key_hex;
