@@ -1,6 +1,5 @@
-use sov_rollup_interface::da::{NanoSeconds, Time};
-
 use crate::ChainStateConfig;
+use sov_rollup_interface::da::{NanoSeconds, Time};
 
 #[test]
 fn test_config_serialization() {
