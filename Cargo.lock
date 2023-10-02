@@ -937,7 +937,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f5353f36341f7451062466f0b755b96ac3a9547e4d7f6b70d603fc721a7d7896"
 dependencies = [
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "tinyvec",
 ]
 
@@ -1252,7 +1252,7 @@ dependencies = [
  "hmac",
  "k256",
  "serde",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "thiserror",
 ]
 
@@ -1268,7 +1268,7 @@ dependencies = [
  "once_cell",
  "pbkdf2 0.12.2",
  "rand 0.8.5",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "thiserror",
 ]
 
@@ -1287,7 +1287,7 @@ dependencies = [
  "ripemd",
  "serde",
  "serde_derive",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "sha3",
  "thiserror",
 ]
@@ -1716,7 +1716,7 @@ dependencies = [
  "anyhow",
  "hex",
  "serde",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "sov-rollup-interface",
 ]
 
@@ -2038,7 +2038,7 @@ dependencies = [
  "ed25519",
  "rand_core 0.6.4",
  "serde",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "zeroize",
 ]
 
@@ -2236,7 +2236,7 @@ dependencies = [
  "scrypt",
  "serde",
  "serde_json",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "sha3",
  "thiserror",
  "uuid",
@@ -2500,7 +2500,7 @@ dependencies = [
  "eth-keystore",
  "ethers-core",
  "rand 0.8.5",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "thiserror",
  "tracing",
 ]
@@ -3311,7 +3311,7 @@ dependencies = [
  "prost 0.11.9",
  "ripemd",
  "serde",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "sha3",
 ]
 
@@ -3623,7 +3623,7 @@ dependencies = [
  "num-derive 0.3.3",
  "num-traits",
  "serde",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "thiserror",
  "tracing",
 ]
@@ -3840,7 +3840,7 @@ dependencies = [
  "ecdsa",
  "elliptic-curve",
  "once_cell",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "signature",
 ]
 
@@ -4309,7 +4309,7 @@ dependencies = [
  "borsh",
  "bytes",
  "serde",
- "sha2 0.10.7",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -4759,7 +4759,7 @@ dependencies = [
  "digest 0.10.7",
  "hmac",
  "password-hash",
- "sha2 0.10.7",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -5029,7 +5029,7 @@ dependencies = [
  "md-5",
  "memchr",
  "rand 0.8.5",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "stringprep",
 ]
 
@@ -5706,7 +5706,7 @@ dependencies = [
  "reth-primitives",
  "reth-rlp",
  "secp256k1",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "sha3",
  "thiserror",
  "tokio",
@@ -5882,7 +5882,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "strum",
  "sucds",
  "tempfile",
@@ -6056,7 +6056,7 @@ dependencies = [
  "revm-primitives",
  "ripemd",
  "secp256k1",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "sha3",
  "substrate-bn",
 ]
@@ -6157,7 +6157,7 @@ dependencies = [
  "directories",
  "glob",
  "hex",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "tempfile",
 ]
 
@@ -6236,7 +6236,7 @@ dependencies = [
  "risc0-sys",
  "risc0-zkvm-platform",
  "serde",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "tracing",
 ]
 
@@ -6274,7 +6274,7 @@ dependencies = [
  "risc0-zkvm-platform",
  "rrs-lib",
  "serde",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "tempfile",
  "thiserror",
  "tracing",
@@ -6591,7 +6591,7 @@ dependencies = [
  "hmac",
  "pbkdf2 0.11.0",
  "salsa20",
- "sha2 0.10.7",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -6884,9 +6884,9 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.10.7"
+version = "0.10.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "479fb9d862239e610720565ca91403019f2f00410f1864c5aa7479b950a76ed8"
+checksum = "793db75ad2bcafc3ffa7c68b215fee268f537982cd901d132f89c6343f3a3dc8"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -7172,7 +7172,7 @@ dependencies = [
  "risc0-zkvm-platform",
  "serde",
  "serde_json",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "sov-celestia-adapter",
  "sov-rollup-interface",
  "sov-zk-cycle-macros",
@@ -7276,7 +7276,7 @@ dependencies = [
  "risc0-zkvm",
  "serde",
  "serde_json",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "sov-celestia-adapter",
  "sov-demo-rollup",
  "sov-modules-api",
@@ -7321,7 +7321,7 @@ dependencies = [
  "secp256k1",
  "serde",
  "serde_json",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "sov-bank",
  "sov-celestia-adapter",
  "sov-cli",
@@ -7441,7 +7441,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "sov-bank",
  "sov-first-read-last-write-cache",
  "sov-modules-api",
@@ -7569,7 +7569,7 @@ dependencies = [
  "proptest-derive",
  "serde",
  "serde_json",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "thiserror",
  "tokio",
 ]
@@ -7641,7 +7641,7 @@ dependencies = [
  "risc0-zkvm-platform",
  "serde",
  "serde_json",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "sov-db",
  "sov-first-read-last-write-cache",
  "sov-rollup-interface",
@@ -7895,7 +7895,7 @@ dependencies = [
  "semver 1.0.18",
  "serde",
  "serde_json",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "thiserror",
  "url",
  "zip",
@@ -7997,7 +7997,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "serde_repr",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "signature",
  "subtle",
  "subtle-encoding",
