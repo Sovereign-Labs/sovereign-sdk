@@ -13,6 +13,7 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_evm::{AccountData, EvmConfig, SpecId};
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Context;
+use sov_nft_module::NonFungibleTokenConfig;
 use sov_rollup_interface::da::DaSpec;
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
@@ -80,13 +81,11 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
     let accounts_genesis_path = "../test-data/genesis/accounts.json";
     let accounts_config: AccountConfig<C> = read_json_file(accounts_genesis_path)?;
 
-    let nft_config = sov_nft_module::NonFungibleTokenConfig {};
-    // This will be read from a file: #872
-    let chain_state_config = ChainStateConfig {
-        // TODO: Put actual value
-        initial_slot_height: 0,
-        current_time: Default::default(),
-    };
+    let nft_config_genesis_path = "../test-data/genesis/nft.json";
+    let nft_config: NonFungibleTokenConfig = read_json_file(nft_config_genesis_path)?;
+
+    let chain_state_path = "../test-data/genesis/chain_state.json";
+    let chain_state_config: ChainStateConfig = read_json_file(chain_state_path)?;
 
     Ok(GenesisConfig::new(
         bank_config,
