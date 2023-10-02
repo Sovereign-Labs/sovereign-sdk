@@ -81,8 +81,7 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
     let accounts_genesis_path = "../test-data/genesis/accounts.json";
     let accounts_config: AccountConfig<C> = read_json_file(accounts_genesis_path)?;
 
-    let nft_config_genesis_path = "../test-data/genesis/nft.json";
-    let nft_config: NonFungibleTokenConfig = read_json_file(nft_config_genesis_path)?;
+    let nft_config: NonFungibleTokenConfig = NonFungibleTokenConfig {};
 
     let chain_state_path = "../test-data/genesis/chain_state.json";
     let chain_state_config: ChainStateConfig = read_json_file(chain_state_path)?;
