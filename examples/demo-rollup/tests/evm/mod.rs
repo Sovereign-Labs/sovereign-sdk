@@ -87,22 +87,37 @@ impl TestClient {
         Ok(receipt_req)
     }
 
+    async fn deploy_contract_call(&self) -> Result<Bytes, Box<dyn std::error::Error>> {
+        let req = Eip1559TransactionRequest::new()
+            .from(self.from_addr)
+            .chain_id(self.chain_id)
+            .nonce(0u64)
+            .max_priority_fee_per_gas(10u64)
+            .max_fee_per_gas(MAX_FEE_PER_GAS)
+            .gas(900000u64)
+            .data(self.contract.byte_code());
+
+        let typed_transaction = TypedTransaction::Eip1559(req);
+
+        let receipt_req = self.eth_call(typed_transaction, None).await?;
+
+        Ok(receipt_req)
+    }
+
     async fn set_value_unsigned(
         &self,
         contract_address: H160,
         set_arg: u32,
     ) -> PendingTransaction<'_, Http> {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-
+        // Tx without gas_limit should estimate and include it in send_transaction endpoint
+        // Tx without nonce should fetch and include it in send_transaction endpoint
         let req = Eip1559TransactionRequest::new()
             .from(self.from_addr)
             .to(contract_address)
             .chain_id(self.chain_id)
-            .nonce(nonce)
             .data(self.contract.set_call_data(set_arg))
             .max_priority_fee_per_gas(10u64)
-            .max_fee_per_gas(MAX_FEE_PER_GAS)
-            .gas(900000u64);
+            .max_fee_per_gas(MAX_FEE_PER_GAS);
 
         let typed_transaction = TypedTransaction::Eip1559(req);
 
@@ -148,9 +163,17 @@ impl TestClient {
             .chain_id(self.chain_id)
             .nonce(nonce)
             .data(self.contract.set_call_data(set_arg))
-            .gas_price(10u64)
-            .gas(900000u64);
+            .gas_price(10u64);
 
+        let typed_transaction = TypedTransaction::Legacy(req.clone());
+
+        // Estimate gas on rpc
+        let gas = self
+            .eth_estimate_gas(typed_transaction, Some("latest".to_owned()))
+            .await;
+
+        // Call with the estimated gas
+        let req = req.gas(gas);
         let typed_transaction = TypedTransaction::Legacy(req);
 
         let response = self
@@ -230,6 +253,31 @@ impl TestClient {
         chain_id.as_u64()
     }
 
+    async fn eth_get_balance(&self, address: Address) -> ethereum_types::U256 {
+        self.http_client
+            .request("eth_getBalance", rpc_params![address, "latest"])
+            .await
+            .unwrap()
+    }
+
+    async fn eth_get_storage_at(
+        &self,
+        address: Address,
+        index: ethereum_types::U256,
+    ) -> ethereum_types::U256 {
+        self.http_client
+            .request("eth_getStorageAt", rpc_params![address, index, "latest"])
+            .await
+            .unwrap()
+    }
+
+    async fn eth_get_code(&self, address: Address) -> Bytes {
+        self.http_client
+            .request("eth_getCode", rpc_params![address, "latest"])
+            .await
+            .unwrap()
+    }
+
     async fn eth_get_transaction_count(&self, address: Address) -> u64 {
         let count: ethereum_types::U64 = self
             .http_client
@@ -268,21 +316,44 @@ impl TestClient {
             .map_err(|e| e.into())
     }
 
+    async fn eth_estimate_gas(&self, tx: TypedTransaction, block_number: Option<String>) -> u64 {
+        let gas: ethereum_types::U64 = self
+            .http_client
+            .request("eth_estimateGas", rpc_params![tx, block_number])
+            .await
+            .unwrap();
+
+        gas.as_u64()
+    }
+
     async fn execute(self) -> Result<(), Box<dyn std::error::Error>> {
         // Nonce should be 0 in genesis
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
         assert_eq!(0, nonce);
 
-        let contract_address = {
+        // Balance should be > 0 in genesis
+        let balance = self.eth_get_balance(self.from_addr).await;
+        assert!(balance > ethereum_types::U256::zero());
+
+        let (contract_address, runtime_code) = {
+            let runtime_code = self.deploy_contract_call().await?;
+
             let deploy_contract_req = self.deploy_contract().await?;
             self.send_publish_batch_request().await;
 
-            deploy_contract_req
+            let contract_address = deploy_contract_req
                 .await?
                 .unwrap()
                 .contract_address
-                .unwrap()
+                .unwrap();
+
+            (contract_address, runtime_code)
         };
+
+        // Assert contract deployed correctly
+        let code = self.eth_get_code(contract_address).await;
+        // code has natural following 0x00 bytes, so we need to trim it
+        assert_eq!(code.to_vec()[..runtime_code.len()], runtime_code.to_vec());
 
         // Nonce should be 1 after the deploy
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
@@ -303,6 +374,13 @@ impl TestClient {
 
         let get_arg = self.query_contract(contract_address).await?;
         assert_eq!(set_arg, get_arg.as_u32());
+
+        // Assert storage slot is set
+        let storage_slot = 0x0;
+        let storage_value = self
+            .eth_get_storage_at(contract_address, storage_slot.into())
+            .await;
+        assert_eq!(storage_value, ethereum_types::U256::from(set_arg));
 
         // Check that the second block has published
         // None should return the latest block

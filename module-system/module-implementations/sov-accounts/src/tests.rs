@@ -1,5 +1,8 @@
+use std::str::FromStr;
+
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_modules_api::default_signature::DefaultPublicKey;
 use sov_modules_api::{AddressBech32, Context, Module, PrivateKey, PublicKey, Spec, WorkingSet};
 use sov_state::ProverStorage;
 
@@ -8,13 +11,32 @@ use crate::{call, AccountConfig, Accounts};
 type C = DefaultContext;
 
 #[test]
+fn test_config_serialization() {
+    let pub_key = &DefaultPublicKey::from_str(
+        "1cd4e2d9d5943e6f3d12589d31feee6bb6c11e7b8cd996a393623e207da72cbf",
+    )
+    .unwrap();
+
+    let config = AccountConfig::<DefaultContext> {
+        pub_keys: vec![pub_key.clone()],
+    };
+
+    let data = r#"
+    {
+        "pub_keys":["1cd4e2d9d5943e6f3d12589d31feee6bb6c11e7b8cd996a393623e207da72cbf"]
+    }"#;
+
+    let parsed_config: AccountConfig<DefaultContext> = serde_json::from_str(data).unwrap();
+    assert_eq!(parsed_config, config);
+}
+
+#[test]
 fn test_config_account() {
     let priv_key = DefaultPrivateKey::generate();
-
     let init_pub_key = priv_key.pub_key();
     let init_pub_key_addr = init_pub_key.to_address::<<C as Spec>::Address>();
 
-    let account_config = AccountConfig::<C> {
+    let account_config = AccountConfig {
         pub_keys: vec![init_pub_key.clone()],
     };
 
@@ -54,7 +76,7 @@ fn test_update_account() {
     // Test new account creation
     {
         accounts
-            .create_default_account(sender.clone(), native_working_set)
+            .create_default_account(&sender, native_working_set)
             .unwrap();
 
         let query_response = accounts
@@ -113,7 +135,7 @@ fn test_update_account_fails() {
     let sender_context_1 = C::new(sender_1.to_address());
 
     accounts
-        .create_default_account(sender_1, native_working_set)
+        .create_default_account(&sender_1, native_working_set)
         .unwrap();
 
     let priv_key = DefaultPrivateKey::generate();
@@ -121,7 +143,7 @@ fn test_update_account_fails() {
     let sig_2 = priv_key.sign(&call::UPDATE_ACCOUNT_MSG);
 
     accounts
-        .create_default_account(sender_2.clone(), native_working_set)
+        .create_default_account(&sender_2, native_working_set)
         .unwrap();
 
     // The new public key already exists and the call fails.
@@ -145,7 +167,7 @@ fn test_get_account_after_pub_key_update() {
     let sender_context_1 = C::new(sender_1_addr);
 
     accounts
-        .create_default_account(sender_1, native_working_set)
+        .create_default_account(&sender_1, native_working_set)
         .unwrap();
 
     let priv_key = DefaultPrivateKey::generate();

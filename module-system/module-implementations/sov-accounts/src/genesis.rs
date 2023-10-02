@@ -14,7 +14,7 @@ impl<C: sov_modules_api::Context> Accounts<C> {
                 bail!("Account already exists")
             }
 
-            self.create_default_account(pub_key.clone(), working_set)?;
+            self.create_default_account(pub_key, working_set)?;
         }
 
         Ok(())
@@ -22,7 +22,7 @@ impl<C: sov_modules_api::Context> Accounts<C> {
 
     pub(crate) fn create_default_account(
         &self,
-        pub_key: C::PublicKey,
+        pub_key: &C::PublicKey,
         working_set: &mut WorkingSet<C>,
     ) -> Result<Account<C>> {
         let default_address = pub_key.to_address();
@@ -33,10 +33,9 @@ impl<C: sov_modules_api::Context> Accounts<C> {
             nonce: 0,
         };
 
-        self.accounts.set(&pub_key, &new_account, working_set);
+        self.accounts.set(pub_key, &new_account, working_set);
 
-        self.public_keys
-            .set(&default_address, &pub_key, working_set);
+        self.public_keys.set(&default_address, pub_key, working_set);
         Ok(new_account)
     }
 

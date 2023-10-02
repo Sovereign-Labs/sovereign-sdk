@@ -16,6 +16,9 @@ mod query;
 pub use query::*;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, StateMap, WorkingSet};
+mod offchain;
+#[cfg(feature = "offchain")]
+mod sql;
 /// Utility functions.
 pub mod utils;
 

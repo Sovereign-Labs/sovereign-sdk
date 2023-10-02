@@ -18,6 +18,7 @@ mod manifest;
 mod module_call_json_schema;
 mod module_info;
 mod new_types;
+mod offchain;
 #[cfg(feature = "native")]
 mod rpc;
 
@@ -29,12 +30,13 @@ use dispatch::genesis::GenesisMacro;
 use dispatch::message_codec::MessageCodec;
 use module_call_json_schema::derive_module_call_json_schema;
 use new_types::address_type_helper;
+use offchain::offchain_generator;
 use proc_macro::TokenStream;
 #[cfg(feature = "native")]
 use rpc::ExposeRpcMacro;
-use syn::{parse_macro_input, DeriveInput};
+use syn::{parse_macro_input, DeriveInput, ItemFn};
 
-#[proc_macro_derive(ModuleInfo, attributes(state, module, address))]
+#[proc_macro_derive(ModuleInfo, attributes(state, module, address, gas))]
 pub fn module_info(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
 
@@ -262,4 +264,39 @@ pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
 pub fn address_type(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     handle_macro_error(address_type_helper(input))
+}
+
+/// The offchain macro is used to annotate functions that should only be executed by the rollup
+/// when the "offchain" feature flag is passed. The macro produces one of two functions depending on
+/// the presence flag.
+/// "offchain" feature enabled: function is present as defined
+/// "offchain" feature absent: function body is replaced with an empty definition
+///
+/// The idea here is that offchain computation is optionally enabled for a full node and is not
+/// part of chain state and does not impact consensus, prover or anything else.
+///
+/// ## Example
+/// ```
+/// use sov_modules_macros::offchain;
+/// #[offchain]
+/// fn redis_insert(count: u64){
+///     println!("Inserting {} to redis", count);
+/// }
+/// ```
+///
+/// This is exactly equivalent to hand-writing
+///```
+/// #[cfg(feature = "offchain")]
+/// fn redis_insert(count: u64){
+///     println!("Inserting {} to redis", count);
+/// }
+///
+/// #[cfg(not(feature = "offchain"))]
+/// fn redis_insert(count: u64){
+/// }
+///```
+#[proc_macro_attribute]
+pub fn offchain(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemFn);
+    handle_macro_error(offchain_generator(input))
 }

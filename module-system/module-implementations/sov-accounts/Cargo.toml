@@ -27,6 +27,7 @@ sov-state = { path = "../../sov-state", version = "0.2" }
 
 
 [dev-dependencies]
+sov-accounts = { path = ".", features = ["native"] }
 tempfile = { workspace = true }
 
 [features]

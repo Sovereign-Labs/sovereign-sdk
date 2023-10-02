@@ -20,7 +20,9 @@ members = [
 
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
+    "utils/nft-utils",
     "utils/bashtestmd",
+    "utils/nft-utils",
 
     "module-system/sov-cli",
     "module-system/sov-modules-stf-template",
