@@ -74,7 +74,7 @@ impl SnapshotManager {
         // in a lop until we reach db
         // 1. current = get_current_snapshot
         // 2. parent = get_parent_snapshot
-        // current.get_or_fetch(k, parent, todo: witness)
+        // get from current or parent until loop ends
 
         todo!()
     }
