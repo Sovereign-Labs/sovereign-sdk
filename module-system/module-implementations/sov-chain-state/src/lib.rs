@@ -3,6 +3,8 @@
 
 /// Contains the call methods used by the module
 pub mod call;
+#[cfg(test)]
+mod tests;
 
 /// Genesis state configuration
 pub mod genesis;
@@ -147,7 +149,7 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
 }
 
 /// Initial configuration of the chain state
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct ChainStateConfig {
     /// Initial slot height
     pub initial_slot_height: TransitionHeight,
