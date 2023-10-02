@@ -21,6 +21,7 @@ pub use reexport_macros::*;
 mod prefix;
 mod response;
 mod serde_address;
+mod serde_pub_key;
 mod state;
 #[cfg(test)]
 mod tests;
@@ -166,7 +167,6 @@ pub trait PublicKey:
     + Sync
     + Serialize
     + for<'a> Deserialize<'a>
-    + for<'a> TryFrom<&'a PublicKeyHex, Error = anyhow::Error>
 {
     fn to_address<A: RollupAddress>(&self) -> A;
 }

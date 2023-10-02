@@ -20,10 +20,25 @@ use crate::evm::{executor, prepare_call_env};
 use crate::experimental::{MIN_CREATE_GAS, MIN_TRANSACTION_GAS};
 use crate::{EthApiError, Evm};
 
-#[rpc_gen(client, server, namespace = "eth")]
+#[rpc_gen(client, server)]
 impl<C: sov_modules_api::Context> Evm<C> {
+    /// Handler for `net_version`
+    #[rpc_method(name = "net_version")]
+    pub fn net_version(&self, _working_set: &mut WorkingSet<C>) -> RpcResult<String> {
+        info!("evm module: net_version");
+
+        // Network ID is the same as chain ID for most networks
+        let chain_id = self
+            .cfg
+            .get(_working_set)
+            .expect("Evm config must be set")
+            .chain_id;
+
+        Ok(chain_id.to_string())
+    }
+
     /// Handler for: `eth_chainId`
-    #[rpc_method(name = "chainId")]
+    #[rpc_method(name = "eth_chainId")]
     pub fn chain_id(
         &self,
         working_set: &mut WorkingSet<C>,
@@ -41,7 +56,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     }
 
     /// Handler for: `eth_getBlockByNumber`
-    #[rpc_method(name = "getBlockByNumber")]
+    #[rpc_method(name = "eth_getBlockByNumber")]
     pub fn get_block_by_number(
         &self,
         block_number: Option<String>,
@@ -101,7 +116,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     }
 
     /// Handler for: `eth_getBalance`
-    #[rpc_method(name = "getBalance")]
+    #[rpc_method(name = "eth_getBalance")]
     pub fn get_balance(
         &self,
         address: reth_primitives::Address,
@@ -123,7 +138,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     }
 
     /// Handler for: `eth_getStorageAt`
-    #[rpc_method(name = "getStorageAt")]
+    #[rpc_method(name = "eth_getStorageAt")]
     pub fn get_storage_at(
         &self,
         address: reth_primitives::Address,
@@ -146,7 +161,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     }
 
     /// Handler for: `eth_getTransactionCount`
-    #[rpc_method(name = "getTransactionCount")]
+    #[rpc_method(name = "eth_getTransactionCount")]
     pub fn get_transaction_count(
         &self,
         address: reth_primitives::Address,
@@ -168,7 +183,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     }
 
     /// Handler for: `eth_getCode`
-    #[rpc_method(name = "getCode")]
+    #[rpc_method(name = "eth_getCode")]
     pub fn get_code(
         &self,
         address: reth_primitives::Address,
@@ -191,7 +206,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
     /// Handler for: `eth_feeHistory`
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
-    #[rpc_method(name = "feeHistory")]
+    #[rpc_method(name = "eth_feeHistory")]
     pub fn fee_history(
         &self,
         _working_set: &mut WorkingSet<C>,
@@ -207,7 +222,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
     /// Handler for: `eth_getTransactionByHash`
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
-    #[rpc_method(name = "getTransactionByHash")]
+    #[rpc_method(name = "eth_getTransactionByHash")]
     pub fn get_transaction_by_hash(
         &self,
         hash: reth_primitives::H256,
@@ -248,7 +263,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
     /// Handler for: `eth_getTransactionReceipt`
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
-    #[rpc_method(name = "getTransactionReceipt")]
+    #[rpc_method(name = "eth_getTransactionReceipt")]
     pub fn get_transaction_receipt(
         &self,
         hash: reth_primitives::H256,
@@ -284,7 +299,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     /// Handler for: `eth_call`
     //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
     //https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-types/src/eth/call.rs#L7
-    #[rpc_method(name = "call")]
+    #[rpc_method(name = "eth_call")]
     pub fn get_call(
         &self,
         request: reth_rpc_types::CallRequest,
@@ -311,13 +326,16 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
-        let result = executor::inspect(evm_db, &block_env, tx_env, cfg_env).unwrap();
+        let result = match executor::inspect(evm_db, &block_env, tx_env, cfg_env) {
+            Ok(result) => result.result,
+            Err(err) => return Err(EthApiError::from(err).into()),
+        };
 
-        Ok(ensure_success(result.result)?)
+        Ok(ensure_success(result)?)
     }
 
     /// Handler for: `eth_blockNumber`
-    #[rpc_method(name = "blockNumber")]
+    #[rpc_method(name = "eth_blockNumber")]
     pub fn block_number(
         &self,
         working_set: &mut WorkingSet<C>,
@@ -334,7 +352,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
     /// Handler for: `eth_estimateGas`
     // https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc/src/eth/api/call.rs#L172
-    #[rpc_method(name = "estimateGas")]
+    #[rpc_method(name = "eth_estimateGas")]
     pub fn eth_estimate_gas(
         &self,
         request: reth_rpc_types::CallRequest,
@@ -365,15 +383,23 @@ impl<C: sov_modules_api::Context> Evm<C> {
         // configured gas limit
         let mut highest_gas_limit = request.gas.unwrap_or(U256::from(env_gas_limit));
 
-        let account = self.accounts.get(&tx_env.caller, working_set).unwrap();
+        let account = self
+            .accounts
+            .get(&tx_env.caller, working_set)
+            .map(|account| account.info)
+            .unwrap_or_default();
 
         // if the request is a simple transfer we can optimize
         if tx_env.data.is_empty() {
             if let TransactTo::Call(to) = tx_env.transact_to {
-                let to_account = self.accounts.get(&to, working_set).unwrap();
-                if KECCAK_EMPTY == to_account.info.code_hash {
+                let to_account = self
+                    .accounts
+                    .get(&to, working_set)
+                    .map(|account| account.info)
+                    .unwrap_or_default();
+                if KECCAK_EMPTY == to_account.code_hash {
                     // simple transfer, check if caller has sufficient funds
-                    let available_funds = account.info.balance;
+                    let available_funds = account.balance;
 
                     if tx_env.value > available_funds {
                         return Err(RpcInvalidTransactionError::InsufficientFundsForTransfer.into());
@@ -386,7 +412,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         // check funds of the sender
         if tx_env.gas_price > U256::ZERO {
             // allowance is (balance - tx.value) / tx.gas_price
-            let allowance = (account.info.balance - tx_env.value) / tx_env.gas_price;
+            let allowance = (account.balance - tx_env.value) / tx_env.gas_price;
 
             if highest_gas_limit > allowance {
                 // cap the highest gas limit by max gas caller can afford with given gas price
@@ -415,33 +441,32 @@ impl<C: sov_modules_api::Context> Evm<C> {
             }
         }
 
-        let result = result.unwrap();
-
-        match result.result {
-            ExecutionResult::Success { .. } => {
-                // succeeded
-            }
-            ExecutionResult::Halt { reason, gas_used } => {
-                return Err(RpcInvalidTransactionError::halt(reason, gas_used).into())
-            }
-            ExecutionResult::Revert { output, .. } => {
-                // if price or limit was included in the request then we can execute the request
-                // again with the block's gas limit to check if revert is gas related or not
-                return if request_gas.is_some() || request_gas_price.is_some() {
-                    let evm_db = self.get_db(working_set);
-                    Err(map_out_of_gas_err(block_env, tx_env, cfg_env, evm_db).into())
-                } else {
-                    // the transaction did revert
-                    Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into())
-                };
-            }
-        }
+        let result = match result {
+            Ok(result) => match result.result {
+                ExecutionResult::Success { .. } => result.result,
+                ExecutionResult::Halt { reason, gas_used } => {
+                    return Err(RpcInvalidTransactionError::halt(reason, gas_used).into())
+                }
+                ExecutionResult::Revert { output, .. } => {
+                    // if price or limit was included in the request then we can execute the request
+                    // again with the block's gas limit to check if revert is gas related or not
+                    return if request_gas.is_some() || request_gas_price.is_some() {
+                        let evm_db = self.get_db(working_set);
+                        Err(map_out_of_gas_err(block_env, tx_env, cfg_env, evm_db).into())
+                    } else {
+                        // the transaction did revert
+                        Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into())
+                    };
+                }
+            },
+            Err(err) => return Err(EthApiError::from(err).into()),
+        };
 
         // at this point we know the call succeeded but want to find the _best_ (lowest) gas the
         // transaction succeeds with. we  find this by doing a binary search over the
         // possible range NOTE: this is the gas the transaction used, which is less than the
         // transaction requires to succeed
-        let gas_used = result.result.gas_used();
+        let gas_used = result.gas_used();
         // the lowest value is capped by the gas it takes for a transfer
         let mut lowest_gas_limit = if tx_env.transact_to.is_create() {
             MIN_CREATE_GAS
@@ -475,30 +500,33 @@ impl<C: sov_modules_api::Context> Evm<C> {
                 continue;
             }
 
-            let result = result.unwrap();
-            match result.result {
-                ExecutionResult::Success { .. } => {
-                    // cap the highest gas limit with succeeding gas limit
-                    highest_gas_limit = mid_gas_limit;
-                }
-                ExecutionResult::Revert { .. } => {
-                    // increase the lowest gas limit
-                    lowest_gas_limit = mid_gas_limit;
-                }
-                ExecutionResult::Halt { reason, .. } => {
-                    match reason {
-                        Halt::OutOfGas(_) => {
-                            // increase the lowest gas limit
-                            lowest_gas_limit = mid_gas_limit;
-                        }
-                        err => {
-                            // these should be unreachable because we know the transaction succeeds,
-                            // but we consider these cases an error
-                            return Err(RpcInvalidTransactionError::EvmHalt(err).into());
+            match result {
+                Ok(result) => match result.result {
+                    ExecutionResult::Success { .. } => {
+                        // cap the highest gas limit with succeeding gas limit
+                        highest_gas_limit = mid_gas_limit;
+                    }
+                    ExecutionResult::Revert { .. } => {
+                        // increase the lowest gas limit
+                        lowest_gas_limit = mid_gas_limit;
+                    }
+                    ExecutionResult::Halt { reason, .. } => {
+                        match reason {
+                            Halt::OutOfGas(_) => {
+                                // increase the lowest gas limit
+                                lowest_gas_limit = mid_gas_limit;
+                            }
+                            err => {
+                                // these should be unreachable because we know the transaction succeeds,
+                                // but we consider these cases an error
+                                return Err(RpcInvalidTransactionError::EvmHalt(err).into());
+                            }
                         }
                     }
-                }
-            }
+                },
+                Err(err) => return Err(EthApiError::from(err).into()),
+            };
+
             // new midpoint
             mid_gas_limit = ((highest_gas_limit as u128 + lowest_gas_limit as u128) / 2) as u64;
         }
@@ -508,7 +536,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
     /// Handler for: `eth_gasPrice`
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
-    #[rpc_method(name = "gasPrice")]
+    #[rpc_method(name = "eth_gasPrice")]
     pub fn gas_price(&self, _working_set: &mut WorkingSet<C>) -> RpcResult<reth_primitives::U256> {
         unimplemented!("eth_gasPrice not implemented")
     }
@@ -529,8 +557,9 @@ impl<C: sov_modules_api::Context> Evm<C> {
                 .last(&mut working_set.accessory_state())
                 .expect("Head block must be set"),
             Some(ref block_number) => {
-                let block_number =
-                    usize::from_str_radix(block_number, 16).expect("Block number must be hex");
+                // hex representation may have 0x prefix
+                let block_number = usize::from_str_radix(block_number.trim_start_matches("0x"), 16)
+                    .expect("Block number must be a valid hex number, with or without 0x prefix");
                 self.blocks
                     .get(block_number, &mut working_set.accessory_state())
                     .expect("Block must be set")

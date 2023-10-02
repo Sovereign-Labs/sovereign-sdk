@@ -78,7 +78,7 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
     let value_setter_config: ValueSetterConfig<C> = read_json_file(value_setter_genesis_path)?;
 
     let accounts_genesis_path = "../test-data/genesis/accounts.json";
-    let accounts_config: AccountConfig = read_json_file(accounts_genesis_path)?;
+    let accounts_config: AccountConfig<C> = read_json_file(accounts_genesis_path)?;
 
     let nft_config = sov_nft_module::NonFungibleTokenConfig {};
     // This will be read from a file: #872
