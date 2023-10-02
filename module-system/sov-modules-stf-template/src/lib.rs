@@ -2,8 +2,8 @@
 #![doc = include_str!("../README.md")]
 mod app_template;
 mod batch;
+mod forks;
 mod tx_verifier;
-
 pub use app_template::AppTemplate;
 pub use batch::Batch;
 use sov_modules_api::capabilities::BlobSelector;

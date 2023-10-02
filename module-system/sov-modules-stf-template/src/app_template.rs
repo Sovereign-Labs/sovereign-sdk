@@ -86,7 +86,15 @@ where
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
-    pub(crate) fn apply_blob(&mut self, blob: &mut Da::BlobTransaction) -> ApplyBatch<Da> {
+    pub(crate) fn apply_blob(
+        &mut self,
+        blob: &mut Da::BlobTransaction,
+        // fork_info:  ForkInfo {
+        //    parent_block_hash: Hash,
+        //    current_block_hash: Hash
+        //    block_hash_to_finalize: Hash,
+        // }
+    ) -> ApplyBatch<Da> {
         debug!(
             "Applying batch from sequencer: 0x{}",
             hex::encode(blob.sender())
@@ -98,6 +106,9 @@ where
             .take()
             .expect("Working_set was initialized in begin_slot")
             .to_revertable();
+
+        // batch_workspace.finalize(fork_info.block_hash_to_finalize);
+        // batch_workspace.set_head(fork_info.parent_block_hash, fork_info.current_block_hash);
 
         // ApplyBlobHook: begin
         if let Err(e) = self.runtime.begin_blob_hook(blob, &mut batch_workspace) {
