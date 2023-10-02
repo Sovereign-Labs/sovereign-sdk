@@ -28,23 +28,42 @@ serde_json = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, optional = true }
 anyhow = { workspace = true }
 
-sov-db = { path = "../../full-node/db/sov-db" } 
-sov-sequencer = { path = "../../full-node/sov-sequencer" } 
+sov-db = { path = "../../full-node/db/sov-db", optional = true } 
+sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true } 
 sov-rollup-interface = { path = "../../rollup-interface" } 
-tokio = { workspace = true }
+tokio = { workspace = true, optional = true }
+
+# Switch these dependencies to use a different DA layer or ZKVM
 sov-celestia-adapter = { path = "../../adapters/celestia" } 
+sov-risc0-adapter = { path = "../../adapters/risc0" }
 
 # binary dependencies
 tracing-subscriber = "0.3.16"
 
 [features]
-default = ["native"]
+default = []
 native = [
 	"sov-modules-api/native", 
 	"sov-accounts/native", 
 	"sov-bank/native", 
 	"sov-sequencer-registry/native",
+	"sov-celestia-adapter/native",
+	"sov-risc0-adapter/native",
+	"sov-stf-runner/native",
+	"sov-db",
+	"sov-sequencer",
+	"tokio",
 	"clap",
 	"serde_json",
 	"jsonrpsee",
 ]
+
+[[bin]]
+name = "node"
+path = "src/bin/node.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "cli_wallet"
+path = "src/bin/cli_wallet.rs"
+required-features = ["native"]

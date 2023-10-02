@@ -1,15 +1,14 @@
+//! This binary runs the rollup full node.
 use anyhow::Context;
 use rollup_template::rollup::Rollup;
 use sov_celestia_adapter::{types::NamespaceId, verifier::RollupParams};
+use sov_risc0_adapter::host::Risc0Host;
 use sov_stf_runner::{from_toml_path, RollupConfig};
-// use rollup_template::
 use tracing_subscriber::{filter::LevelFilter, EnvFilter};
 
 type DaConfig = sov_celestia_adapter::DaServiceConfig;
 type DaService = sov_celestia_adapter::CelestiaService;
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId([11; 8]);
-
-// type
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -28,7 +27,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let rollup_config: RollupConfig<DaConfig> =
         from_toml_path("rollup_config.toml").context("Failed to read rollup configuration")?;
     let da_service = DaService::new(
-        rollup_config.da,
+        rollup_config.da.clone(),
         RollupParams {
             namespace: ROLLUP_NAMESPACE,
         },
@@ -37,7 +36,10 @@ async fn main() -> Result<(), anyhow::Error> {
     let genesis_config =
         serde_json::from_str(std::fs::read_to_string("genesis_config.json")?.as_str())?;
 
-    let rollup = Rollup::new(da_service, genesis_config, rollup_config, None)?;
+    let rollup: Rollup<Risc0Host, _> =
+        Rollup::new(da_service, genesis_config, rollup_config, None)?;
+
+    rollup.run().await?;
 
     Ok(())
 }

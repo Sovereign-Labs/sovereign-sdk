@@ -3,6 +3,7 @@
 //! - Before and after each transaction is executed.
 //! - At the beginning and end of each batch ("blob")
 //! - At the beginning and end of each slot (DA layer block)
+
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{AccessoryWorkingSet, BlobReaderTrait, Context, DaSpec, Spec, WorkingSet};
