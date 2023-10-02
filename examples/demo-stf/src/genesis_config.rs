@@ -62,6 +62,7 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
         bank_config.tokens[0].salt,
     );
 
+    println!("create_genesis_config: {:?}", sequencer_da_address);
     // This will be read from a file: #872
     let sequencer_registry_config = sov_sequencer_registry::SequencerConfig {
         seq_rollup_address: sequencer_address,
@@ -72,6 +73,10 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
         },
         is_preferred_sequencer: true,
     };
+
+    let json = serde_json::to_string(&sequencer_registry_config).unwrap();
+
+    println!("{}", json);
 
     // This path will be injected as a parameter: #872
     let value_setter_genesis_path = "../test-data/genesis/value_setter.json";

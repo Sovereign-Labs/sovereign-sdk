@@ -110,6 +110,7 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
     let app = App::new(rollup_config.storage);
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS)?;
 
+    println!("{:?} {:?}", sequencer_da_address, SEQUENCER_DA_ADDRESS);
     #[cfg(feature = "experimental")]
     let eth_signer = read_eth_tx_signers();
     let genesis_config = demo_stf::genesis_config::get_genesis_config(
