@@ -9,20 +9,18 @@ use crate::zk::{ValidityCondition, ValidityConditionChecker};
 
 /// A trivial test validity condition structure that only contains a boolean
 #[derive(
-    Debug,
-    BorshDeserialize,
-    BorshSerialize,
-    Serialize,
-    Deserialize,
-    PartialEq,
-    Clone,
-    Copy,
-    Default,
-    Eq,
+    Debug, BorshDeserialize, BorshSerialize, Serialize, Deserialize, PartialEq, Clone, Copy, Eq,
 )]
 pub struct MockValidityCond {
     /// The associated validity condition field. If it is true, the validity condition is verified
     pub is_valid: bool,
+}
+
+// Validity conditions should usually be valid
+impl Default for MockValidityCond {
+    fn default() -> Self {
+        Self { is_valid: true }
+    }
 }
 
 impl ValidityCondition for MockValidityCond {

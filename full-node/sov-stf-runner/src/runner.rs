@@ -196,16 +196,16 @@ where
                         state_transition_witness: slot_result.witness,
                     };
                 vm.add_hint(transition_data);
-
-                match config {
-                    ProofGenConfig::Simulate(verifier) => {
-                        verifier.run_block(vm.simulate_with_hints()).map_err(|e| {
+                tracing::info_span!("guest_execution").in_scope(|| match config {
+                    ProofGenConfig::Simulate(verifier) => verifier
+                        .run_block(vm.simulate_with_hints())
+                        .map_err(|e| {
                             anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)
-                        })?;
-                    }
-                    ProofGenConfig::Execute => vm.run(false)?,
-                    ProofGenConfig::Prover => vm.run(true)?,
-                }
+                        })
+                        .map(|_| ()),
+                    ProofGenConfig::Execute => vm.run(false),
+                    ProofGenConfig::Prover => vm.run(true),
+                })?;
             }
             let next_state_root = slot_result.state_root;
 
