@@ -1,5 +1,6 @@
 //! Implementation specific Errors for the `eth_` namespace.
 
+use std::convert::Infallible;
 use std::time::Duration;
 
 use jsonrpsee::core::Error as RpcError;
@@ -184,18 +185,17 @@ impl From<reth_interfaces::provider::ProviderError> for EthApiError {
     }
 }
 
-impl<T> From<EVMError<T>> for EthApiError
-where
-    T: Into<EthApiError>,
-{
-    fn from(err: EVMError<T>) -> Self {
+impl From<EVMError<Infallible>> for EthApiError {
+    fn from(err: EVMError<Infallible>) -> Self {
         match err {
             EVMError::Transaction(err) => RpcInvalidTransactionError::from(err).into(),
             EVMError::Header(InvalidHeader::PrevrandaoNotSet) => EthApiError::PrevrandaoNotSet,
             EVMError::Header(InvalidHeader::ExcessBlobGasNotSet) => {
                 EthApiError::ExcessBlobGasNotSet
             }
-            EVMError::Database(err) => err.into(),
+            EVMError::Database(_) => {
+                EthApiError::Internal(RethError::Custom("Database error".into()))
+            }
         }
     }
 }
