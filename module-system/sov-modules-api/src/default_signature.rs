@@ -167,7 +167,7 @@ pub mod private_key {
 }
 
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
-#[derive(PartialEq, Eq, Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct DefaultPublicKey {
     #[cfg_attr(
         feature = "native",

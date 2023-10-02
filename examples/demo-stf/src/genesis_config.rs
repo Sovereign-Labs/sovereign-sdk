@@ -93,7 +93,7 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
     let accounts_data = std::fs::read_to_string(accounts_genesis_path)
         .with_context(|| format!("Failed to read genesis from {}", accounts_genesis_path))?;
 
-    let accounts_config: AccountConfig = serde_json::from_str(&accounts_data)
+    let accounts_config: AccountConfig<C> = serde_json::from_str(&accounts_data)
         .with_context(|| format!("Failed to parse genesis from {}", accounts_genesis_path))?;
 
     let nft_config = sov_nft_module::NonFungibleTokenConfig {};
