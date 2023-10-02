@@ -2,8 +2,6 @@ use std::array::TryFromSliceError;
 
 use ethereum_types::U64;
 use jsonrpsee::core::RpcResult;
-
-
 use reth_primitives::contract::create_address;
 use reth_primitives::TransactionKind::{Call, Create};
 use reth_primitives::{TransactionSignedEcRecovered, U128, U256};
