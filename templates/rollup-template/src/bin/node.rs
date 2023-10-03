@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use anyhow::Context;
 use rollup_template::da::{start_da_service, DaConfig};
 use rollup_template::rollup::Rollup;
-
 use sov_risc0_adapter::host::Risc0Host;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tracing::{debug, info, trace};

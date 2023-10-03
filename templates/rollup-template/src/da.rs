@@ -14,10 +14,10 @@ pub type DaVerifier = sov_celestia_adapter::verifier::CelestiaVerifier;
 #[cfg(feature = "native")]
 pub type DaService = sov_celestia_adapter::CelestiaService;
 
+use sov_celestia_adapter::types::NamespaceId;
+use sov_celestia_adapter::verifier::CelestiaVerifier;
 #[cfg(feature = "native")]
 use sov_celestia_adapter::verifier::RollupParams;
-use sov_celestia_adapter::{types::NamespaceId, verifier::CelestiaVerifier};
-
 #[cfg(feature = "native")]
 use sov_stf_runner::RollupConfig;
 

@@ -7,12 +7,10 @@
 pub use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
 pub use sov_bank::{BankRpcImpl, BankRpcServer};
-use sov_modules_api::{
-    capabilities::{BlobRefOrOwned, BlobSelector},
-    default_context::ZkDefaultContext,
-    macros::DefaultRuntime,
-    Context, DaSpec, DispatchCall, Genesis, MessageCodec, Zkvm,
-};
+use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
+use sov_modules_api::default_context::ZkDefaultContext;
+use sov_modules_api::macros::DefaultRuntime;
+use sov_modules_api::{Context, DaSpec, DispatchCall, Genesis, MessageCodec, Zkvm};
 use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::da::DaVerifier;
 #[cfg(feature = "native")]
@@ -58,7 +56,7 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for Runtime<C, Da> {
     {
         Ok(current_blobs
             .into_iter()
-            .map(|blob| BlobRefOrOwned::Ref(blob))
+            .map(BlobRefOrOwned::Ref)
             .collect())
     }
 }
