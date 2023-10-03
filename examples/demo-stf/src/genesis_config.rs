@@ -86,6 +86,15 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
     let chain_state_path = "../test-data/genesis/chain_state.json";
     let chain_state_config: ChainStateConfig = read_json_file(chain_state_path)?;
 
+    #[cfg(feature = "experimental")]
+    let evm_config = get_evm_config(evm_genesis_addresses);
+
+    #[cfg(feature = "experimental")]
+    {
+        let s = serde_json::to_string(&evm_config).unwrap();
+        println!("{}",s);
+    }
+
     Ok(GenesisConfig::new(
         bank_config,
         sequencer_registry_config,
@@ -94,7 +103,7 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
         value_setter_config,
         accounts_config,
         #[cfg(feature = "experimental")]
-        get_evm_config(evm_genesis_addresses),
+        evm_config,
         nft_config,
     ))
 }
