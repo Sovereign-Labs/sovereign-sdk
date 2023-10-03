@@ -33,6 +33,7 @@ jsonrpsee = { workspace = true, features = [
 ], optional = true }
 tracing = { workspace = true }
 derive_more = { workspace = true }
+tokio = { workspace = true }
 lazy_static = "1.4.0"
 
 
