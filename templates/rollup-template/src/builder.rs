@@ -1,15 +1,17 @@
-use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
+//! This module implements the batch builder for the rollup.
+//! To swap out the batch builder, simply replace the
+//! FifoStructBatchBuilder in `StfWithBuilder` with a type of your choosing.
+use sov_modules_api::default_context::DefaultContext;
 #[cfg(feature = "native")]
 use sov_modules_api::Spec;
 use sov_modules_api::{DaSpec, Zkvm};
 use sov_modules_stf_template::AppTemplate;
-use sov_state::ZkStorage;
 #[cfg(feature = "native")]
 use sov_state::{ProverStorage, Storage};
 #[cfg(feature = "native")]
 use sov_stf_runner::FiFoStrictBatchBuilder;
 
-use crate::Runtime;
+use crate::runtime::Runtime;
 
 /// The "native" version of the STF and a batch builder
 pub struct StfWithBuilder<Vm: Zkvm, Da: DaSpec> {
@@ -40,11 +42,4 @@ impl<Vm: Zkvm, Da: DaSpec> StfWithBuilder<Vm, Da> {
     pub fn get_storage(&self) -> <DefaultContext as Spec>::Storage {
         self.stf.current_storage.clone()
     }
-}
-
-/// Create the zk version of the STF.
-pub fn zk_stf<Vm: Zkvm, Da: DaSpec>(
-) -> AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>> {
-    let storage = ZkStorage::new();
-    AppTemplate::new(storage, Runtime::default())
 }

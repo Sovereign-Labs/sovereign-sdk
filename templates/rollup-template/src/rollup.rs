@@ -8,9 +8,8 @@ use tokio::sync::oneshot;
 
 use crate::{
     builder::StfWithBuilder,
-    get_rpc_methods,
     rpc::{register_ledger, register_sequencer},
-    GenesisConfig, Runtime,
+    runtime::{get_rpc_methods, GenesisConfig, Runtime},
 };
 
 type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>;

@@ -12,7 +12,7 @@ use sov_sequencer_registry::SequencerRegistry;
 use sov_state::Storage;
 use tracing::info;
 
-use crate::Runtime;
+use crate::runtime::Runtime;
 
 impl<C: Context, Da: DaSpec> TxHooks for Runtime<C, Da> {
     type Context = C;

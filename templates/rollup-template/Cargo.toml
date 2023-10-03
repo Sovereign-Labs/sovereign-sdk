@@ -38,10 +38,10 @@ sov-celestia-adapter = { path = "../../adapters/celestia" }
 sov-risc0-adapter = { path = "../../adapters/risc0" }
 
 # binary dependencies
-tracing-subscriber = "0.3.16"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"], optional = true }
 
 [features]
-default = []
+default = ["native"]
 native = [
 	"sov-modules-api/native", 
 	"sov-accounts/native", 
@@ -56,6 +56,7 @@ native = [
 	"clap",
 	"serde_json",
 	"jsonrpsee",
+	"tracing-subscriber",
 ]
 
 [[bin]]
