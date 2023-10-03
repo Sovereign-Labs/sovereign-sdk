@@ -70,7 +70,7 @@ fn rollup_bench(_bench: &mut Criterion) {
         };
         blocks.push(filtered_block.clone());
 
-        let blob_txs = da_service.extract_relevant_txs(&filtered_block);
+        let blob_txs = da_service.extract_relevant_blobs(&filtered_block);
         blobs.push(blob_txs.clone());
     }
 
