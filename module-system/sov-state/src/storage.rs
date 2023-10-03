@@ -237,7 +237,6 @@ pub trait Storage: Clone {
     /// Opens a storage access proof and validates it against a state root.
     /// It returns a result with the opened leaf (key, value) pair in case of success.
     fn open_proof(
-        &self,
         state_root: Self::Root,
         proof: StorageProof<Self::Proof>,
     ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error>;

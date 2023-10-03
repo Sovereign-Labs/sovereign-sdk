@@ -3,7 +3,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use jmt::storage::{NodeBatch, TreeWriter};
-use jmt::{JellyfishMerkleTree, KeyHash, RootHash, Version};
+use jmt::{JellyfishMerkleTree, KeyHash, Version};
 use sov_db::native_db::NativeDB;
 use sov_db::state_db::StateDB;
 
@@ -62,7 +62,7 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
     }
 
     /// Get the root hash of the tree at the requested version
-    pub fn get_root_hash(&self, version: Version) -> Result<RootHash, anyhow::Error> {
+    pub fn get_root_hash(&self, version: Version) -> Result<jmt::RootHash, anyhow::Error> {
         let temp_merkle: JellyfishMerkleTree<'_, StateDB, S::Hasher> =
             JellyfishMerkleTree::new(&self.db);
         temp_merkle.get_root_hash(version)
@@ -73,8 +73,8 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     type Witness = S::Witness;
     type RuntimeConfig = Config;
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
-    type StateUpdate = NodeBatch;
     type Root = jmt::RootHash;
+    type StateUpdate = NodeBatch;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Self::with_path(config.path.as_path())
@@ -175,13 +175,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         self.db.inc_next_version();
     }
 
-    // Based on assumption `validate_and_commit` increments version.
-    fn is_empty(&self) -> bool {
-        self.db.get_next_version() <= 1
-    }
-
     fn open_proof(
-        &self,
         state_root: Self::Root,
         state_proof: StorageProof<Self::Proof>,
     ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error> {
@@ -190,6 +184,11 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
 
         proof.verify(state_root, key_hash, value.as_ref().map(|v| v.value()))?;
         Ok((key, value))
+    }
+
+    // Based on assumption `validate_and_commit` increments version.
+    fn is_empty(&self) -> bool {
+        self.db.get_next_version() <= 1
     }
 }
 

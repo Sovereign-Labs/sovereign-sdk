@@ -247,12 +247,6 @@ impl<C: Context> WorkingSet<C> {
         &self.events
     }
 
-    /// Returns an immutable reference to the [`Storage`] instance backing this
-    /// working set.
-    pub fn backing(&self) -> &<C as Spec>::Storage {
-        &self.delta.inner.inner
-    }
-
     /// Returns the remaining gas funds.
     pub const fn gas_remaining_funds(&self) -> u64 {
         self.gas_meter.remaining_funds()

@@ -223,10 +223,8 @@ where
         state_root: <C::Storage as Storage>::Root,
         proof: StorageProof<<C::Storage as Storage>::Proof>,
         expected_key: &C::Address,
-        working_set: &mut WorkingSet<C>,
     ) -> Result<Option<StorageValue>, anyhow::Error> {
-        let storage = working_set.backing();
-        let (storage_key, storage_value) = storage.open_proof(state_root, proof)?;
+        let (storage_key, storage_value) = C::Storage::open_proof(state_root, proof)?;
         let prefix = self.bonded_attesters.prefix();
         let codec = self.bonded_attesters.codec();
 
@@ -524,7 +522,6 @@ where
                 bonding_root,
                 attestation.proof_of_bond.proof.clone(),
                 context.sender(),
-                working_set,
             )
             .map_err(|_err| AttesterIncentiveErrors::InvalidBondingProof)?;
 
