@@ -52,7 +52,7 @@ mod experimental {
     pub(crate) const MIN_CREATE_GAS: u64 = 53_000u64;
 
     /// Evm account.
-    #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+    #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
     pub struct AccountData {
         /// Account address.
         pub address: Address,
@@ -79,7 +79,7 @@ mod experimental {
     }
 
     /// Genesis configuration.
-    #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+    #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
     pub struct EvmConfig {
         /// Genesis accounts.
         pub data: Vec<AccountData>,
