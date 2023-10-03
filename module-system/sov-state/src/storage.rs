@@ -147,7 +147,7 @@ pub struct StorageProof<P> {
 /// An interface for storing and retrieving values in the storage.
 pub trait Storage: Clone {
     /// The witness type for this storage instance.
-    type Witness: Witness;
+    type Witness: Witness + Send + Sync;
 
     /// The runtime config for this storage instance.
     type RuntimeConfig;

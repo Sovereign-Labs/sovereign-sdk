@@ -3,7 +3,7 @@ use core::fmt;
 use anyhow::Result;
 
 /// A gas unit that provides scalar conversion from complex, multi-dimensional types.
-pub trait GasUnit: fmt::Debug + Clone {
+pub trait GasUnit: fmt::Debug + Clone + Send+ Sync {
     /// A zeroed instance of the unit.
     const ZEROED: Self;
 

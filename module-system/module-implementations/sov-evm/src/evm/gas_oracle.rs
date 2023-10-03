@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use sov_modules_api::{AccessoryWorkingSet, WorkingSet};
 use tokio::sync::Mutex;
 
-
 use tracing::warn;
 
 use crate::error::rpc::{EthApiError, EthResult, RpcInvalidTransactionError};
@@ -91,7 +90,7 @@ pub struct GasPriceOracle<C: sov_modules_api::Context> {
     last_price: Mutex<GasPriceOracleResult>,
 }
 
-unsafe impl<C: sov_modules_api::Context> Send for GasPriceOracle<C> {}
+//unsafe impl<C: sov_modules_api::Context> Send for GasPriceOracle<C> {}
 
 impl<C: sov_modules_api::Context> GasPriceOracle<C> {
     /// Creates and returns the [GasPriceOracle].
