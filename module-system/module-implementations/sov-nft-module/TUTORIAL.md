@@ -1,69 +1,69 @@
 # Offchain Computation Tutorial
 
 ## Introduction
-This tutorial aims to explain the design and process of augmenting Sovereign SDK modules with offchain computation and storage.
+This tutorial serves to explain the design and process of augmenting Sovereign SDK modules with offchain computation and storage capabilities
 
-## Use cases
-* Realtime Offchain indexing for on-chain transactions and state
-  * Tracking NFT owners
-  * Tracking large or interesting trades/orders in a DEX
-* Send events to web2 infrastructure - Sentry, Kafka
-* Simulation, ML and forecasting
-* Email or Pagerduty alerting for on-chain activities
-* Triggering transactions on other chains (or even the same chain)
+## Use Cases
+- **Real-time Offchain Indexing** for on-chain transactions and states:
+  - Monitor NFT ownership changes
+  - Keep tabs on significant or large trades/orders within a DEX
+- **Event Forwarding** to web2 infrastructures such as Sentry or Kafka
+- **Simulation, Machine Learning, and Forecasting**
+- **Alerting Mechanisms**: Email or Pagerduty notifications for on-chain activities
+- **Triggering Transactions** on other chains, or even on the same chain
 
 ## Tutorial Outline
-We will be adding offchain capability to the `sov-nft-module`  to keep track of
-1. NFT Collections
-2. NFTs that are minted to the collections created in step 1
-3. Top Owners for each collection
-This data would be maintained in postgres for the purpose of this tutorial
+In this tutorial, we will enhance the `sov-nft-module` with offchain capabilities to:
+1. Catalog NFT Collections
+2. Track NFTs minted to the collections created in the first step
+3. List the top owners for each collection
+For the purpose of this tutorial, we will use PostgreSQL to store this data.
 
 ## Steps
-### Install postgres
-* Install postgres on your system
- ```bash
- brew install postgres@14
- ```
-* Start the postgres instance (This command would vary based on your specific system configuration). The below command starts it interactively but you can also start it in the background
- ```bash
- /opt/homebrew/opt/postgresql@14/bin/postgres -D /opt/homebrew/var/postgres
- ```
-
-### Setup the necessary tables
-* Login to the postgres instance from another windows
- ```
-psql postgres
- ```
-* Create the tables necessary for offchain processing
- ```sql
- -- The collections table
- DROP TABLE IF EXISTS collections CASCADE;
- CREATE TABLE collections
- (
- collection_address TEXT PRIMARY KEY,
- collection_name    TEXT    NOT NULL,
- creator_address    TEXT    NOT NULL,
- frozen             BOOLEAN NOT NULL,
- metadata_url       TEXT,
- supply             BIGINT  NOT NULL
- );
-   
--- The nfts table
-DROP TABLE IF EXISTS nfts CASCADE;
-CREATE TABLE nfts
-(
-collection_address TEXT    NOT NULL,
-nft_id             BIGINT  NOT NULL,
-metadata_url       TEXT,
-owner              TEXT    NOT NULL,
-frozen             BOOLEAN NOT NULL,
-PRIMARY KEY (collection_address, nft_id)
-);
+### 1. Install PostgreSQL
+* Install PostgreSQL on your system:
+```bash
+brew install postgres@14
 ```
+* Start the PostgreSQL instance (Note: This command may vary based on your system's configuration). The following command starts PostgreSQL interactively, but you can also run it in the background:
+```bash
+/opt/homebrew/opt/postgresql@14/bin/postgres -D /opt/homebrew/var/postgres
+```
+
+### 2. Set Up the Required Tables
+* **Log into the PostgreSQL instance**: Launch another terminal or window and enter:
+  ```bash
+  psql postgres
+  ```
+* **Create the tables necessary for offchain processing**:
+  ```sql
+   -- The collections table
+   DROP TABLE IF EXISTS collections CASCADE;
+   CREATE TABLE collections
+   (
+   collection_address TEXT PRIMARY KEY,
+   collection_name    TEXT    NOT NULL,
+   creator_address    TEXT    NOT NULL,
+   frozen             BOOLEAN NOT NULL,
+   metadata_url       TEXT,
+   supply             BIGINT  NOT NULL
+   );
+     
+  -- The nfts table
+  DROP TABLE IF EXISTS nfts CASCADE;
+  CREATE TABLE nfts
+  (
+  collection_address TEXT    NOT NULL,
+  nft_id             BIGINT  NOT NULL,
+  metadata_url       TEXT,
+  owner              TEXT    NOT NULL,
+  frozen             BOOLEAN NOT NULL,
+  PRIMARY KEY (collection_address, nft_id)
+  );
+  ```
 * The first 2 tables as created above are straightforward and map directly to the two primary data structures in the `sov-nft-module` - `Collection` and `Nft`
-* The `collections` table has the `collection_address` as a primary key
-* The `nfts` table has `collection_address` and `nft_id` as the primary key (since each NFT is unique to the collection it exists in)
+* The `collections` table uses `collection_address` as its primary key.
+* The `nfts` table employs a combination of `collection_address` and `nft_id` as its primary key, given that each NFT is unique within its collection.
 * We will create one more table that can show the benefits of indexing
 ```sql
 -- Create top_owners table
@@ -75,21 +75,22 @@ CREATE TABLE top_owners
    PRIMARY KEY (owner, collection_address)
 );
 ```
-* The above table keeps track of each user in the system and the number of NFTs within a specific collection that they own
-* This can help us extract information such as
-  * Who is the largest owner for each collection and how many NFTs do they own?
-  * What is the owner distribution for each collection?
-* [init_db.sql](src/init_db.sql) contains a script that creates the 3 tables as well as indexes necessary to speed up querying. The script wipes existing tables and recreates them
+* This table monitors each user in the system and the number of NFTs they own within a specific collection.
+* With this data, you can deduce:
+  * Who is the predominant owner for a particular collection, and how many NFTs they possess?
+  * What does the ownership distribution look like for each collection?
+* For convenience, [init_db.sql](src/init_db.sql) provides a script that initializes the three aforementioned tables and the necessary indexes to enhance query speed. It's worth noting that the script removes any pre-existing tables before recreating them.
 
-### Create the offchain functions
-* Once the tables are created, lets add the offchain functionality to the [sov-nft-module](../sov-nft-module)
-* In order to do this, we make use of the `#[offchain]` proc macro defined at [sov-modules-macros](../../sov-modules-macros/src/lib.rs)
+### 3. Create the Offchain Functions
+* **Initialization**: With the tables set up, it's time to add offchain functionality to the [sov-nft-module](../sov-nft-module).
+* **Using the `#[offchain]` proc macro**: This is available in the [sov-modules-macros](../../sov-modules-macros/src/lib.rs) crate. Functions marked with this macro will only execute by the rollup when the `offchain` feature flag is active.
+  - If the `offchain` feature is enabled: the function is present as defined.
+  - If the `offchain` feature is absent: the function body is replaced with an empty definition.
 * The offchain macro is used to annotate functions that should only be executed by the rollup when the `offchain` feature flag is passed.
 * The macro produces one of two functions depending on the presence flag.
   `offchain` feature enabled: function is present as defined
   `offchain` feature absent: function body is replaced with an empty definition
-* The idea here is that offchain computation is optionally enabled for a full node and is not part of chain state and does not impact consensus, prover or anything else.
-* An example of how the offchain macro works
+* **Macro Functionality**: Offchain computation should only be optionally enabled for a full node. It doesn't influence the chain state, consensus, prover, etc.
   ```
   use sov_modules_macros::offchain;
   #[offchain]
@@ -97,7 +98,7 @@ CREATE TABLE top_owners
    println!("Inserting {} to redis", count);
   }
   ```
-    This is exactly equivalent to hand-writing
+    This is equivalent to hand-writing:
   ```
   #[cfg(feature = "offchain")]
   fn postgres_insert(count: u64){
@@ -108,19 +109,19 @@ CREATE TABLE top_owners
   fn postgres_insert(count: u64){
   }
   ```
-* As a first step, we create `offchain.rs` in our `sov-nft-module`, and we import the `offchain` macro
+* **Setting Up `offchain.rs`**: Start by creating an `offchain.rs` file in the `sov-nft-module` and import the `offchain` macro.
  ```rust
  use sov_modules_macros::offchain;
  ```
-* Next we get the necessary crates to help us insert data into our postgres tables. Edit `Cargo.toml`
- ```
+* **Include Required Crates**: Next we get the necessary crates to help us insert data into our postgres tables. Edit `Cargo.toml`
+ ```toml
   sov-modules-macros = { path = "../../sov-modules-macros" }
   postgres = { version = "0.19.7", optional = true }
   tokio = { version = "1.32.0", features=["full"], optional = true }
   tracing = { workspace = true, optional = true }
  ```
-* Important note: `sov-modules-macros` does not have `optional = true` because the macro is used to produce the functions for both the offchain and non-offchain contexts.
-* We set `optional = true` for `postgres`, `tokio` and `tracing` because we want to use those three packages conditionally. Specifically when the `offchain` feature is passed, so we also add the feature and the crates to be conditionally imported to `Cargo.toml`
+  > **Note**: The macro from `sov-modules-macros` is not optional because it produces functions for both offchain and non-offchain contexts. However, `postgres`, `tokio`, and `tracing` are marked as optional as they are conditionally used when the `offchain` feature is activated.
+* **Define Offchain Features**: Add the feature and the crates to be conditionally imported to `Cargo.toml`:
  ```
  [features]
  offchain = ["postgres","tokio","tracing"]
@@ -413,7 +414,7 @@ let rows = client
   * If it's not, we need to decrement the count of the old owner and increment the count of the new owner
 * Once we update `top_owners`, we sync the `nfts` table with the `nft` object using an upsert much like in `collections`
 
-### Insert offchain functionality into the module
+### 4. Insert Offchain functionality into the module
 * We now need to import the functions and insert them into the calls that handle transactions for the module
 * We have the following call messages supported by the `sov-nft-module`. Fields for the variants excluded for readability - the full definition of the enum is here [call.rs](src/call.rs)
 ```
@@ -472,27 +473,24 @@ use crate::offchain::{update_collection, update_nft};
 ```
 * Because we're transferring the NFT, we set the second parameter to original_owner of the NFT who is also the signer of the transaction `context.sender()` since only the owner can initate the transaction to transfer the NFT to another user.
 
-### Propagate the `offchain` feature
+### 5. Propagate the `offchain` feature
 * We added the `offchain` feature to the `sov-nft-module`, but this feature needs to be passed in from the `demo-rollup` binary
-* We need to add the `offchain` feature in 2 places to propagate it to the demo-rollup
-* `demo-stf` where the Runtime is defined (Runtime has all the modules that are run by the rollup)
+* The dependency is as follows - 
+  * `demo-rollup`
+  * `demo-stf`
+  * `sov-nft-module`
+* `demo-rollup` already has the offchain flag and if passed in, conditionally includes `demo-stf` with the feature enabled
+* `demo-stf` also has the offchain feature. But the module we just created is a new one, so we need to ensure that `demo-stf` includes out module with the `offchain` flag enabled.
 * Modify [Cargo.toml](../../../examples/demo-stf/Cargo.toml)
 ```
 [features]
 ...
 offchain = ["sov-nft-module/offchain"]
 ```
-* We're creating a new feature `offchain` and stating that when it's passed we're also enabling `offchain` for `sov-nft-module`
-* Modify [Cargo.toml](../../../examples/demo-rollup/Cargo.toml)
-```
-[features]
-...
-offchain = ["demo-stf/offchain"]
-```
 
-### Test the functionality
+### 6. Test the functionality
 * We need to start `demo-rollup` with the `offchain` feature enabled.
-* For Data Availability, we'll be using the MockDA which mocks it in memory and doesn't require running or connecting to any external services
+* For Data Availability, we'll be using the MockDA which functions in-memory and does not require running or connecting to any external services
 ```bash
 rm -rf demo_data; POSTGRES_CONNECTION_STRING="postgresql://username:password@localhost/postgres" cargo run --features offchain -- --da-layer mock
 ```
@@ -514,7 +512,7 @@ $ cargo run
   * Also creates 6 transfers.
 * Specifics of the logic can be seen in [main.rs](../../../utils/nft-utils/src/main.rs) and [lib.rs](../../../utils/nft-utils/src/lib.rs)
 * The tables can be explored by connecting to postgres and running sample queries
-* running the following query can show the top owners for a specific collection
+* Running the following query can show the top owners for a specific collection
 ```bash
 postgres=# SELECT owner, count
            FROM top_owners
@@ -535,7 +533,7 @@ owner                              | count
 (5 rows)
 
 ```
-* running the following query can show the largest owner for each collection
+* Running the following query can show the largest owner for each collection
 ```bash
 postgres=# SELECT
   collection_name,
@@ -555,7 +553,7 @@ WHERE rank = 1;
 (2 rows)
 ```
 
-### Notes on Offchain Functions
+### Notes on Offchain Functions and their current limitations
 * It's recommended to confine all offchain processing, including type conversions, within the offchain functions. Performing these operations outside could increase the workload for the on-chain logic.
   * For instance, it's better to design a function that accepts an address and performs the conversion to a string within its body rather than doing the conversion in the on-chain context or within the function parameter.
   * Using offchain_function(x) and then executing x.expensive_conversion() inside the function is more optimal than offchain_function(x.expensive_conversion()), as it minimizes computation in the on-chain context.
