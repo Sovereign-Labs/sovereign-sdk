@@ -1,8 +1,9 @@
 use std::str::FromStr;
 
-use crate::{AccountData, EvmConfig};
 use reth_primitives::{Address, Bytes};
 use revm::primitives::SpecId;
+
+use crate::{AccountData, EvmConfig};
 
 #[test]
 fn test_config_serialization() {
