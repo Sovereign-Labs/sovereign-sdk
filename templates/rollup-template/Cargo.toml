@@ -40,6 +40,9 @@ sov-risc0-adapter = { path = "../../adapters/risc0" }
 # binary dependencies
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"], optional = true }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [features]
 default = ["native"]
 native = [
@@ -50,6 +53,7 @@ native = [
 	"sov-celestia-adapter/native",
 	"sov-risc0-adapter/native",
 	"sov-stf-runner/native",
+	"sov-modules-stf-template/native",
 	"sov-db",
 	"sov-sequencer",
 	"tokio",

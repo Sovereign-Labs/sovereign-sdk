@@ -33,6 +33,7 @@ const JAN_1_2023: i64 = 1672531200;
     borsh::BorshDeserialize,
     borsh::BorshSerialize,
 )]
+#[serde(transparent)]
 pub struct MockAddress {
     /// Underlying mock address.
     pub addr: [u8; 32],
