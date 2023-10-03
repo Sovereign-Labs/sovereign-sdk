@@ -51,9 +51,9 @@ pub struct ZkDefaultContext {
 impl Spec for ZkDefaultContext {
     type Address = Address;
     type Storage = ZkStorage<DefaultStorageSpec>;
-    type PublicKey = DefaultPublicKey;
     #[cfg(feature = "native")]
     type PrivateKey = DefaultPrivateKey;
+    type PublicKey = DefaultPublicKey;
     type Hasher = sha2::Sha256;
     type Signature = DefaultSignature;
     type Witness = ArrayWitness;

@@ -2,17 +2,16 @@ use std::convert::AsRef;
 use std::path::Path;
 
 use anyhow::Context as AnyhowContext;
-#[cfg(feature = "experimental")]
-use reth_primitives::Bytes;
 use serde::de::DeserializeOwned;
 use sov_accounts::AccountConfig;
 use sov_bank::BankConfig;
 use sov_chain_state::ChainStateConfig;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 #[cfg(feature = "experimental")]
-use sov_evm::{AccountData, EvmConfig, SpecId};
+use sov_evm::EvmConfig;
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Context;
+use sov_nft_module::NonFungibleTokenConfig;
 use sov_rollup_interface::da::DaSpec;
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
@@ -35,7 +34,7 @@ pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
 /// ```
 pub fn get_genesis_config<C: Context, Da: DaSpec>(
     sequencer_da_address: Da::Address,
-    #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
+    #[cfg(feature = "experimental")] eth_signers: Vec<reth_primitives::Address>,
 ) -> GenesisConfig<C, Da> {
     let token_deployer: PrivateKeyAndAddress<C> = read_private_key();
 
@@ -43,7 +42,7 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
         token_deployer.address.clone(),
         sequencer_da_address,
         #[cfg(feature = "experimental")]
-        evm_genesis_addresses,
+        eth_signers,
     )
     .expect("Unable to read genesis configuration")
 }
@@ -51,7 +50,7 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
 fn create_genesis_config<C: Context, Da: DaSpec>(
     sequencer_address: C::Address,
     sequencer_da_address: Da::Address,
-    #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
+    #[cfg(feature = "experimental")] eth_signers: Vec<reth_primitives::Address>,
 ) -> anyhow::Result<GenesisConfig<C, Da>> {
     // This path will be injected as a parameter: #872
     let bank_genesis_path = "../test-data/genesis/bank.json";
@@ -80,13 +79,16 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
     let accounts_genesis_path = "../test-data/genesis/accounts.json";
     let accounts_config: AccountConfig<C> = read_json_file(accounts_genesis_path)?;
 
-    let nft_config = sov_nft_module::NonFungibleTokenConfig {};
-    // This will be read from a file: #872
-    let chain_state_config = ChainStateConfig {
-        // TODO: Put actual value
-        initial_slot_height: 0,
-        current_time: Default::default(),
-    };
+    let nft_config: NonFungibleTokenConfig = NonFungibleTokenConfig {};
+
+    let chain_state_path = "../test-data/genesis/chain_state.json";
+    let chain_state_config: ChainStateConfig = read_json_file(chain_state_path)?;
+
+    #[cfg(feature = "experimental")]
+    let evm_path = "../test-data/genesis/evm.json";
+
+    #[cfg(feature = "experimental")]
+    let evm_config = get_evm_config(evm_path, eth_signers)?;
 
     Ok(GenesisConfig::new(
         bank_config,
@@ -96,7 +98,7 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
         value_setter_config,
         accounts_config,
         #[cfg(feature = "experimental")]
-        get_evm_config(evm_genesis_addresses),
+        evm_config,
         nft_config,
     ))
 }
@@ -112,28 +114,21 @@ fn read_json_file<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> anyhow::Resul
     Ok(config)
 }
 
-// TODO: #840
 #[cfg(feature = "experimental")]
-fn get_evm_config(genesis_addresses: Vec<reth_primitives::Address>) -> EvmConfig {
-    let data = genesis_addresses
-        .into_iter()
-        .map(|address| AccountData {
-            address,
-            balance: AccountData::balance(u64::MAX),
-            code_hash: AccountData::empty_code(),
-            code: Bytes::default(),
-            nonce: 0,
-        })
-        .collect();
+fn get_evm_config<P: AsRef<Path>>(
+    evm_path: P,
+    signers: Vec<reth_primitives::Address>,
+) -> anyhow::Result<EvmConfig> {
+    let config: EvmConfig = read_json_file(evm_path)?;
+    let addresses: std::collections::HashSet<reth_primitives::Address> =
+        config.data.iter().map(|acc| acc.address).collect();
 
-    EvmConfig {
-        data,
-        chain_id: 1,
-        limit_contract_code_size: None,
-        spec: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
-        block_timestamp_delta: 1u64,
-        ..Default::default()
+    // check if all the eth signer are in genesis.
+    for signer in signers {
+        assert!(addresses.contains(&signer));
     }
+
+    Ok(config)
 }
 
 pub fn read_private_key<C: Context>() -> PrivateKeyAndAddress<C> {

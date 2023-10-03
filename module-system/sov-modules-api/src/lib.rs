@@ -196,7 +196,7 @@ pub trait PrivateKey:
 /// over a Context, rollup developers can easily optimize their code for different environments
 /// by simply swapping out the Context (and by extension, the Spec).
 ///
-/// For example, a rollup running in a STARK-based zkvm like Risc0 might pick Sha256 or Poseidon as its preferred hasher,
+/// For example, a rollup running in a STARK-based zkVM like Risc0 might pick Sha256 or Poseidon as its preferred hasher,
 /// while a rollup running in an elliptic-curve based SNARK such as `Placeholder` from the =nil; foundation might
 /// prefer a Pedersen hash. By using a generic Context and Spec, a rollup developer can trivially customize their
 /// code for either (or both!) of these environments without touching their module implementations.
@@ -223,14 +223,14 @@ pub trait Spec {
 
     /// The public key used for digital signatures
     #[cfg(feature = "native")]
+    type PrivateKey: PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
+
+    /// The public key used for digital signatures
+    #[cfg(feature = "native")]
     type PublicKey: PublicKey + ::schemars::JsonSchema + FromStr<Err = anyhow::Error>;
 
     #[cfg(not(feature = "native"))]
     type PublicKey: PublicKey;
-
-    /// The public key used for digital signatures
-    #[cfg(feature = "native")]
-    type PrivateKey: PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
 
     /// The hasher preferred by the rollup, such as Sha256 or Poseidon.
     type Hasher: Digest<OutputSize = U32>;
