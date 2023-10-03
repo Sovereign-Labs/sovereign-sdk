@@ -12,9 +12,9 @@ impl<C: Context> TxHooks for Accounts<C> {
         tx: &Transaction<C>,
         working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<<Self::Context as Spec>::Address> {
-        let pub_key = tx.pub_key().clone();
+        let pub_key = tx.pub_key();
 
-        let account = match self.accounts.get(&pub_key, working_set) {
+        let account = match self.accounts.get(pub_key, working_set) {
             Some(acc) => Ok(acc),
             None => self.create_default_account(pub_key, working_set),
         }?;
