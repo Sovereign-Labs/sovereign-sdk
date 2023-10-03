@@ -1,7 +1,8 @@
 use std::str::FromStr;
 
 use sov_bank::Coins;
-use sov_modules_api::{default_context::DefaultContext, AddressBech32, Spec};
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::{AddressBech32, Spec};
 use sov_rollup_interface::mocks::{MockAddress, MockDaSpec};
 
 use crate::SequencerConfig;
@@ -23,8 +24,10 @@ fn test_config_serialization() {
         token_address,
     };
 
-    let seq_da_addreess = MockAddress::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap()];
-    
+    let seq_da_addreess =
+        MockAddress::from_str("0000000000000000000000000000000000000000000000000000000000000000")
+            .unwrap();
+
     let config = SequencerConfig::<DefaultContext, MockDaSpec> {
         seq_rollup_address,
         seq_da_address: seq_da_addreess,
@@ -42,6 +45,7 @@ fn test_config_serialization() {
         "is_preferred_sequencer":true
     }"#;
 
-    let parsed_config: SequencerConfig::<DefaultContext, MockDaSpec> = serde_json::from_str(data).unwrap();
+    let parsed_config: SequencerConfig<DefaultContext, MockDaSpec> =
+        serde_json::from_str(data).unwrap();
     assert_eq!(config, parsed_config)
 }
