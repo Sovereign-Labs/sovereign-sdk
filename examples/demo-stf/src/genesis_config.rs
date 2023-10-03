@@ -119,12 +119,8 @@ fn get_evm_config<P: AsRef<Path>>(
     evm_path: P,
     signers: Vec<reth_primitives::Address>,
 ) -> anyhow::Result<EvmConfig> {
-    use std::collections::HashSet;
-
-    use reth_primitives::Address;
-
     let config: EvmConfig = read_json_file(evm_path)?;
-    let addresses: HashSet<Address> = config.data.iter().map(|acc| acc.address).collect();
+    let addresses: std::collections::HashSet<reth_primitives::Address> = config.data.iter().map(|acc| acc.address).collect();
 
     // check if all the eth signer are in genesis.
     for signer in signers {
