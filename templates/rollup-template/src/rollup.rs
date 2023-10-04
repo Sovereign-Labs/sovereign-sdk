@@ -33,6 +33,7 @@ pub struct Rollup<Vm: ZkvmHost, Da: DaService + Clone> {
 
 impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> {
     /// Creates a new rollup instance
+    #[allow(clippy::type_complexity)]
     pub fn new<DaConfig: DeserializeOwned>(
         da_service: Da,
         genesis_config: GenesisConfig<DefaultContext, Da::Spec>,

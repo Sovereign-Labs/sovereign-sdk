@@ -54,10 +54,7 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for Runtime<C, Da> {
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
     {
-        Ok(current_blobs
-            .into_iter()
-            .map(BlobRefOrOwned::Ref)
-            .collect())
+        Ok(current_blobs.into_iter().map(BlobRefOrOwned::Ref).collect())
     }
 }
 
