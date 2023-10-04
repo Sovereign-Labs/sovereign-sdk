@@ -135,7 +135,7 @@ impl DaService for RngDaService {
         unimplemented!()
     }
 
-    fn extract_relevant_txs(
+    fn extract_relevant_blobs(
         &self,
         block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction> {

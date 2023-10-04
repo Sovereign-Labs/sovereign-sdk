@@ -215,7 +215,7 @@ impl DaService for CelestiaService {
         self.get_finalized_at(height).await
     }
 
-    fn extract_relevant_txs(
+    fn extract_relevant_blobs(
         &self,
         block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction> {
