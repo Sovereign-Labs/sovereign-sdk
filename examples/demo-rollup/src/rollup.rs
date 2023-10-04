@@ -92,7 +92,7 @@ pub enum DemoProverConfig {
 pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost, P: AsRef<Path>>(
     rollup_config_path: &str,
     prover: Option<(Vm, DemoProverConfig)>,
-    genesis_paths: GenesisPaths<P>,
+    genesis_paths: &GenesisPaths<P>,
 ) -> Result<Rollup<Vm, CelestiaService>, anyhow::Error> {
     debug!(
         "Starting demo celestia rollup with config {}",
@@ -152,7 +152,7 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost, P: AsRef<Path>>(
 pub fn new_rollup_with_mock_da<Vm: ZkvmHost, P: AsRef<Path>>(
     rollup_config_path: &str,
     prover: Option<(Vm, DemoProverConfig)>,
-    genesis_paths: GenesisPaths<P>,
+    genesis_paths: &GenesisPaths<P>,
 ) -> Result<Rollup<Vm, MockDaService>, anyhow::Error> {
     debug!("Starting mock rollup with config {}", rollup_config_path);
 
@@ -166,7 +166,7 @@ pub fn new_rollup_with_mock_da<Vm: ZkvmHost, P: AsRef<Path>>(
 pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost, P: AsRef<Path>>(
     rollup_config: RollupConfig<MockDaConfig>,
     prover: Option<(Vm, DemoProverConfig)>,
-    genesis_paths: GenesisPaths<P>,
+    genesis_paths: &GenesisPaths<P>,
 ) -> Result<Rollup<Vm, MockDaService>, anyhow::Error> {
     let ledger_db = initialize_ledger(&rollup_config.storage.path);
     let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);

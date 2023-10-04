@@ -53,7 +53,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let rollup = new_rollup_with_celestia_da(
         &rollup_config_path,
         Some((prover, prover_config)),
-        genesis_paths,
+        &genesis_paths,
     )
     .await?;
     rollup.run().await?;

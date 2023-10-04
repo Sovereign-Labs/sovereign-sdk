@@ -25,6 +25,15 @@ use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
 
+const GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
+    bank_genesis_path: "../test-data/genesis/demo-tests/bank.json",
+    sequencer_genesis_path: "../test-data/genesis/demo-tests/sequencer_registry.json",
+    value_setter_genesis_path: "../test-data/genesis/demo-tests/value_setter.json",
+    accounts_genesis_path: "../test-data/genesis/demo-tests/accounts.json",
+    chain_state_genesis_path: "../test-data/genesis/demo-tests/chain_state.json",
+    evm_genesis_path: "../test-data/genesis/demo-tests/evm.json",
+};
+
 #[derive(Debug)]
 struct RegexAppender {
     regex: Regex,
@@ -167,18 +176,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
 
-    let genesis_paths = GenesisPaths {
-        bank_genesis_path: "../test-data/genesis/demo-tests/bank.json",
-        sequencer_genesis_path: "../test-data/genesis/demo-tests/sequencer_registry.json",
-        value_setter_genesis_path: "../test-data/genesis/demo-tests/value_setter.json",
-        accounts_genesis_path: "../test-data/genesis/demo-tests/accounts.json",
-        chain_state_genesis_path: "../test-data/genesis/demo-tests/chain_state.json",
-        evm_genesis_path: "../test-data/genesis/demo-tests/evm.json",
-    };
-
     let genesis_config = get_genesis_config(
         sequencer_da_address,
-        genesis_paths,
+        &GENESIS_PATHS,
         #[cfg(feature = "experimental")]
         Default::default(),
     );

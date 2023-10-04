@@ -45,12 +45,12 @@ pub struct GenesisPaths<P: AsRef<Path>> {
 /// ```
 pub fn get_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
     sequencer_da_address: Da::Address,
-    genesis_paths: GenesisPaths<P>,
+    genesis_paths: &GenesisPaths<P>,
     #[cfg(feature = "experimental")] eth_signers: Vec<reth_primitives::Address>,
 ) -> GenesisConfig<C, Da> {
     create_genesis_config(
         sequencer_da_address,
-        &genesis_paths,
+        genesis_paths,
         #[cfg(feature = "experimental")]
         eth_signers,
     )

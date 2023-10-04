@@ -115,7 +115,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let demo_genesis_config = get_genesis_config(
         sequencer_da_address,
-        genesis_paths,
+        &genesis_paths,
         #[cfg(feature = "experimental")]
         Default::default(),
     );

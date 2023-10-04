@@ -53,7 +53,7 @@ async fn main() -> Result<(), anyhow::Error> {
             let rollup = new_rollup_with_mock_da::<Risc0Host<'static>, _>(
                 rollup_config_path,
                 None,
-                genesis_paths,
+                &genesis_paths,
             )?;
             rollup.run().await
         }
@@ -70,7 +70,7 @@ async fn main() -> Result<(), anyhow::Error> {
             let rollup = new_rollup_with_celestia_da::<Risc0Host<'static>, _>(
                 rollup_config_path,
                 None,
-                genesis_paths,
+                &genesis_paths,
             )
             .await?;
             rollup.run().await
