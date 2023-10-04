@@ -1,3 +1,4 @@
+#[cfg(feature = "native")]
 use anyhow::anyhow;
 #[cfg(feature = "native")]
 use avail_subxt::{
