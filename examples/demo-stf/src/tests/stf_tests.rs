@@ -7,17 +7,14 @@ pub mod test {
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
     use sov_modules_api::{PrivateKey, WorkingSet};
     use sov_modules_stf_template::{Batch, SequencerOutcome};
-    use sov_rollup_interface::mocks::{MockBlock, MockDaSpec};
+    use sov_rollup_interface::mocks::{MockBlock, MockDaSpec, MOCK_SEQUENCER_DA_ADDRESS};
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::ProverStorage;
 
     use crate::genesis_config::read_private_key;
     use crate::runtime::Runtime;
     use crate::tests::da_simulation::simulate_da;
-    use crate::tests::{
-        create_new_app_template_for_tests, get_genesis_config_for_tests, C,
-        TEST_SEQUENCER_DA_ADDRESS,
-    };
+    use crate::tests::{create_new_app_template_for_tests, get_genesis_config_for_tests, C};
 
     #[test]
     fn test_demo_values_in_db() {
@@ -32,7 +29,7 @@ pub mod test {
 
             let priv_key = read_private_key::<DefaultContext>().private_key;
             let txs = simulate_da(priv_key);
-            let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
+            let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
 
             let mut blobs = [blob];
 
@@ -90,7 +87,7 @@ pub mod test {
         let private_key = read_private_key::<DefaultContext>().private_key;
         let txs = simulate_da(private_key);
 
-        let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
+        let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
         let data = MockBlock::default();
 
@@ -141,7 +138,7 @@ pub mod test {
             let genesis_root = demo.init_chain(config);
 
             let txs = simulate_da(value_setter_admin_private_key);
-            let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
+            let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
             let mut blobs = [blob];
             let data = MockBlock::default();
 

@@ -11,10 +11,9 @@ use sov_modules_api::{Address, AddressBech32, EncodeCall, PrivateKey, PublicKey,
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::mocks::{
     MockAddress, MockBlob, MockBlock, MockBlockHeader, MockHash, MockValidityCond,
+    MOCK_SEQUENCER_DA_ADDRESS,
 };
 use sov_rollup_interface::services::da::DaService;
-
-pub const SEQUENCER_DA_ADDRESS: [u8; 32] = [99; 32];
 
 #[derive(Clone)]
 /// A simple DaService for a random number generator.
@@ -154,7 +153,7 @@ impl DaService for RngDaService {
             generate_transfers(num_txns, (block.header.height - 1) * (num_txns as u64))
         };
 
-        let address = MockAddress::from(SEQUENCER_DA_ADDRESS);
+        let address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
         let blob = MockBlob::new(data, address, [0u8; 32]);
 
         vec![blob]

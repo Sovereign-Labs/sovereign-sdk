@@ -1,11 +1,22 @@
 use std::env;
 
+use demo_stf::genesis_config::GenesisPaths;
 use methods::ROLLUP_ELF;
 use sov_demo_rollup::{new_rollup_with_celestia_da, DemoProverConfig};
 use sov_risc0_adapter::host::Risc0Host;
 use tracing::info;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;
+
+const GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
+    bank_genesis_path: "../test-data/genesis/demo-tests/bank.json",
+    sequencer_genesis_path: "../test-data/genesis/demo-tests/sequencer_registry.json",
+    value_setter_genesis_path: "../test-data/genesis/demo-tests/value_setter.json",
+    accounts_genesis_path: "../test-data/genesis/demo-tests/accounts.json",
+    chain_state_genesis_path: "../test-data/genesis/demo-tests/chain_state.json",
+    #[cfg(feature = "experimental")]
+    evm_genesis_path: "../test-data/genesis/demo-tests/evm.json",
+};
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -39,8 +50,13 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Initialize the rollup. For this demo, we use Risc0 and Celestia.
     let prover = Risc0Host::new(ROLLUP_ELF);
-    let rollup =
-        new_rollup_with_celestia_da(&rollup_config_path, Some((prover, prover_config))).await?;
+
+    let rollup = new_rollup_with_celestia_da(
+        &rollup_config_path,
+        Some((prover, prover_config)),
+        &GENESIS_PATHS,
+    )
+    .await?;
     rollup.run().await?;
 
     Ok(())

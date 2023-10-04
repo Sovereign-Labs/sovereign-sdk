@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Context;
@@ -6,7 +7,7 @@ use const_rollup_config::SEQUENCER_DA_ADDRESS;
 #[cfg(feature = "experimental")]
 use demo_stf::app::DefaultPrivateKey;
 use demo_stf::app::{create_zk_app_template, App, DefaultContext};
-use demo_stf::genesis_config::get_genesis_config;
+use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig, Runtime};
 use demo_stf::AppVerifier;
 #[cfg(feature = "experimental")]
@@ -21,7 +22,9 @@ use sov_db::ledger_db::LedgerDB;
 use sov_ethereum::experimental::EthRpcConfig;
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_stf_template::AppTemplate;
-use sov_rollup_interface::mocks::{MockAddress, MockDaConfig, MockDaService};
+use sov_rollup_interface::mocks::{
+    MockAddress, MockDaConfig, MockDaService, MOCK_SEQUENCER_DA_ADDRESS,
+};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{
@@ -86,9 +89,10 @@ pub enum DemoProverConfig {
 }
 
 /// Creates celestia based rollup.
-pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
+pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost, P: AsRef<Path>>(
     rollup_config_path: &str,
     prover: Option<(Vm, DemoProverConfig)>,
+    genesis_paths: &GenesisPaths<P>,
 ) -> Result<Rollup<Vm, CelestiaService>, anyhow::Error> {
     debug!(
         "Starting demo celestia rollup with config {}",
@@ -114,6 +118,7 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
     let eth_signer = read_eth_tx_signers();
     let genesis_config = demo_stf::genesis_config::get_genesis_config(
         sequencer_da_address,
+        genesis_paths,
         #[cfg(feature = "experimental")]
         eth_signer.signers(),
     );
@@ -144,25 +149,27 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
 }
 
 /// Creates MockDa based rollup.
-pub fn new_rollup_with_mock_da<Vm: ZkvmHost>(
+pub fn new_rollup_with_mock_da<Vm: ZkvmHost, P: AsRef<Path>>(
     rollup_config_path: &str,
     prover: Option<(Vm, DemoProverConfig)>,
+    genesis_paths: &GenesisPaths<P>,
 ) -> Result<Rollup<Vm, MockDaService>, anyhow::Error> {
     debug!("Starting mock rollup with config {}", rollup_config_path);
 
     let rollup_config: RollupConfig<MockDaConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
 
-    new_rollup_with_mock_da_from_config(rollup_config, prover)
+    new_rollup_with_mock_da_from_config(rollup_config, prover, genesis_paths)
 }
 
 /// Creates MockDa based rollup.
-pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost>(
+pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost, P: AsRef<Path>>(
     rollup_config: RollupConfig<MockDaConfig>,
     prover: Option<(Vm, DemoProverConfig)>,
+    genesis_paths: &GenesisPaths<P>,
 ) -> Result<Rollup<Vm, MockDaService>, anyhow::Error> {
     let ledger_db = initialize_ledger(&rollup_config.storage.path);
-    let sequencer_da_address = MockAddress::from([0u8; 32]);
+    let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
     let da_service = MockDaService::new(sequencer_da_address);
 
     #[cfg(feature = "experimental")]
@@ -170,6 +177,7 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost>(
     let app = App::new(rollup_config.storage);
     let genesis_config = get_genesis_config(
         sequencer_da_address,
+        genesis_paths,
         #[cfg(feature = "experimental")]
         eth_signer.signers(),
     );

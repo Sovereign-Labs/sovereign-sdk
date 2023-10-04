@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::str::FromStr;
 #[cfg(feature = "native")]
 use std::sync::Arc;
 
@@ -19,26 +20,47 @@ use crate::{BasicAddress, RollupAddress};
 
 const JAN_1_2023: i64 = 1672531200;
 
+/// Sequencer DA address used in tests.
+pub const MOCK_SEQUENCER_DA_ADDRESS: [u8; 32] = [0u8; 32];
+
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
 #[derive(
-    Debug,
-    PartialEq,
-    Clone,
-    Eq,
-    Copy,
-    serde::Serialize,
-    serde::Deserialize,
-    Hash,
-    Default,
-    borsh::BorshDeserialize,
-    borsh::BorshSerialize,
+    Debug, PartialEq, Clone, Eq, Copy, Hash, Default, borsh::BorshDeserialize, borsh::BorshSerialize,
 )]
 pub struct MockAddress {
     /// Underlying mock address.
     pub addr: [u8; 32],
 }
 
-impl core::str::FromStr for MockAddress {
+impl serde::Serialize for MockAddress {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if serializer.is_human_readable() {
+            serde::Serialize::serialize(&hex::encode(self.addr), serializer)
+        } else {
+            serde::Serialize::serialize(&self.addr, serializer)
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for MockAddress {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        if deserializer.is_human_readable() {
+            let hex_addr: String = serde::Deserialize::deserialize(deserializer)?;
+            Ok(MockAddress::from_str(&hex_addr).map_err(serde::de::Error::custom)?)
+        } else {
+            let addr = <[u8; 32] as serde::Deserialize>::deserialize(deserializer)?;
+            Ok(MockAddress { addr })
+        }
+    }
+}
+
+impl FromStr for MockAddress {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {

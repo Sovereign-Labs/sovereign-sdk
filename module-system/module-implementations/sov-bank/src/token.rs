@@ -27,7 +27,14 @@ pub type Amount = u64;
     schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "Coins")
 )]
 #[derive(
-    borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone, Serialize, Deserialize,
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
 )]
 pub struct Coins<C: sov_modules_api::Context> {
     /// An `amount` of coins stored.

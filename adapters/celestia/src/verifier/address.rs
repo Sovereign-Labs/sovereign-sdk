@@ -3,7 +3,6 @@ use std::str::FromStr;
 
 use bech32::WriteBase32;
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Human Readable Part: "celestia" for Celestia network
@@ -15,10 +14,40 @@ const VARIANT: bech32::Variant = bech32::Variant::Bech32;
 /// <https://github.com/celestiaorg/celestia-specs/blob/e59efd63a2165866584833e91e1cb8a6ed8c8203/src/specs/data_structures.md#address>
 /// Spec says: "Addresses have a length of 32 bytes.", but in reality it is 32 `u5` elements, which can be compressed as 20 bytes.
 /// TODO: Switch to bech32::u5 when it has repr transparent: <https://github.com/Sovereign-Labs/sovereign-sdk/issues/646>
-#[derive(
-    Debug, PartialEq, Clone, Eq, Serialize, Deserialize, BorshDeserialize, BorshSerialize, Hash,
-)]
+#[derive(Debug, PartialEq, Clone, Eq, BorshDeserialize, BorshSerialize, Hash)]
 pub struct CelestiaAddress([u8; 32]);
+
+impl serde::Serialize for CelestiaAddress {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if serializer.is_human_readable() {
+            let serialized = format!("{}", &self);
+            serializer.serialize_str(&serialized)
+        } else {
+            serde::Serialize::serialize(&self.0, serializer)
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for CelestiaAddress {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        if deserializer.is_human_readable() {
+            let address_bech32: String = serde::Deserialize::deserialize(deserializer)?;
+            address_bech32
+                .as_bytes()
+                .try_into()
+                .map_err(serde::de::Error::custom)
+        } else {
+            let addr = <[u8; 32] as serde::Deserialize>::deserialize(deserializer)?;
+            Ok(CelestiaAddress(addr))
+        }
+    }
+}
 
 impl AsRef<[u8]> for CelestiaAddress {
     fn as_ref(&self) -> &[u8] {
@@ -178,6 +207,32 @@ mod tests {
 
         let address_str2 = format!("{}", deserialized);
         assert_eq!(address_str2, address_str);
+    }
+
+    #[test]
+    fn test_human_readable_address_serialization() {
+        let address = CelestiaAddress([11; 32]);
+        let data: String = serde_json::to_string(&address).unwrap();
+        let deserialized_address = serde_json::from_str::<CelestiaAddress>(&data).unwrap();
+
+        assert_eq!(address, deserialized_address);
+        assert_eq!(
+            deserialized_address.to_string(),
+            "celestia1tttttttttttttttttttttttttttttttt9grhcq"
+        );
+    }
+
+    #[test]
+    fn test_binary_address_serialization() {
+        let address = CelestiaAddress([11; 32]);
+        let data = postcard::to_allocvec(&address).unwrap();
+        let deserialized_address = postcard::from_bytes::<CelestiaAddress>(&data).unwrap();
+
+        assert_eq!(address, deserialized_address);
+        assert_eq!(
+            deserialized_address.to_string(),
+            "celestia1tttttttttttttttttttttttttttttttt9grhcq"
+        );
     }
 
     proptest! {
