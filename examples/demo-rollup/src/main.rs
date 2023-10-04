@@ -13,7 +13,7 @@ const DEMO_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
     value_setter_genesis_path: "../test-data/genesis/demo-tests/value_setter.json",
     accounts_genesis_path: "../test-data/genesis/demo-tests/accounts.json",
     chain_state_genesis_path: "../test-data/genesis/demo-tests/chain_state.json",
-    #[cfg(experimental)]
+    #[cfg(feature = "experimental")]
     evm_genesis_path: "../test-data/genesis/demo-tests/evm.json",
 };
 
@@ -23,7 +23,7 @@ const TEST_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
     value_setter_genesis_path: "../test-data/genesis/integration-tests/value_setter.json",
     accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
     chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
-    #[cfg(experimental)]
+    #[cfg(feature = "experimental")]
     evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
 };
 

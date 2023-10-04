@@ -50,5 +50,5 @@ harness = false
 required-features = ["bench"]
 
 [features]
-bench = ["sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "methods/bench"]
-experimental = ["sov-demo-rollup/experimental"]
+bench = ["sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "methods/bench", "experimental"]
+experimental = ["sov-demo-rollup/experimental", "demo-stf/experimental"]
