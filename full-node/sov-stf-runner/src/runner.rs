@@ -34,17 +34,17 @@ where
     prover: Option<Prover<V, Da, Vm>>,
 }
 
-/// Represents the possible modes of execution for a zkvm program
+/// Represents the possible modes of execution for a zkVM program
 pub enum ProofGenConfig<ST, Da: DaService, Vm: ZkvmHost>
 where
     ST: StateTransitionFunction<Vm::Guest, Da::Spec>,
 {
-    /// The simulator runs the rollup verifier logic without even emulating the zkvm
+    /// The simulator runs the rollup verifier logic without even emulating the zkVM
     Simulate(StateTransitionVerifier<ST, Da::Verifier, Vm::Guest>),
-    /// The executor runs the rollup verification logic in the zkvm, but does not actually
+    /// The executor runs the rollup verification logic in the zkVM, but does not actually
     /// produce a zk proof
     Execute,
-    /// The prover runs the rollup verification logic in the zkvm and produces a zk proof
+    /// The prover runs the rollup verification logic in the zkVM and produces a zk proof
     Prover,
 }
 
@@ -196,16 +196,16 @@ where
                         state_transition_witness: slot_result.witness,
                     };
                 vm.add_hint(transition_data);
-
-                match config {
-                    ProofGenConfig::Simulate(verifier) => {
-                        verifier.run_block(vm.simulate_with_hints()).map_err(|e| {
+                tracing::info_span!("guest_execution").in_scope(|| match config {
+                    ProofGenConfig::Simulate(verifier) => verifier
+                        .run_block(vm.simulate_with_hints())
+                        .map_err(|e| {
                             anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)
-                        })?;
-                    }
-                    ProofGenConfig::Execute => vm.run(false)?,
-                    ProofGenConfig::Prover => vm.run(true)?,
-                }
+                        })
+                        .map(|_| ()),
+                    ProofGenConfig::Execute => vm.run(false),
+                    ProofGenConfig::Prover => vm.run(true),
+                })?;
             }
             let next_state_root = slot_result.state_root;
 
