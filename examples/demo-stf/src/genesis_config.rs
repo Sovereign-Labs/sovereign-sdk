@@ -73,13 +73,13 @@ fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
 
     // Sanity check: `token_address` in `sequencer_registry_config` match `token_address` from the bank module.
     {
-        let token_address = sov_bank::get_genesis_token_address::<C>(
+        let token_address = &sov_bank::get_genesis_token_address::<C>(
             &bank_config.tokens[0].token_name,
             bank_config.tokens[0].salt,
         );
 
         let coins_token_addr = &sequencer_registry_config.coins_to_lock.token_address;
-        if coins_token_addr != &token_address {
+        if coins_token_addr != token_address {
             bail!(
                 "Wrong token address in `sequencer_registry_config` expected {} but found {}",
                 token_address,
