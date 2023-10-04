@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 use std::str::FromStr;
 
+use demo_stf::genesis_config::GenesisPaths;
 use ethereum_types::H160;
 use ethers_core::abi::Address;
 use ethers_core::k256::ecdsa::SigningKey;
@@ -476,9 +477,18 @@ async fn send_tx_test_to_eth(rpc_address: SocketAddr) -> Result<(), Box<dyn std:
 async fn evm_tx_tests() -> Result<(), anyhow::Error> {
     let (port_tx, port_rx) = tokio::sync::oneshot::channel();
 
+    let genesis_paths = GenesisPaths {
+        bank_genesis_path: "../test-data/genesis/bank.json",
+        sequencer_genesis_path: "../test-data/genesis/sequencer_registry.json",
+        value_setter_genesis_path: "../test-data/genesis/value_setter.json",
+        accounts_genesis_path: "../test-data/genesis/accounts.json",
+        chain_state_genesis_path: "../test-data/genesis/chain_state.json",
+        evm_genesis_path: "../test-data/genesis/evm.json",
+    };
+
     let rollup_task = tokio::spawn(async {
         // Don't provide a prover since the EVM is not currently provable
-        start_rollup::<Risc0Host<'static>>(port_tx, None).await;
+        start_rollup::<Risc0Host<'static>, _>(port_tx, None, genesis_paths).await;
     });
 
     // Wait for rollup task to start:

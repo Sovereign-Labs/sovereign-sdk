@@ -50,22 +50,22 @@ pub fn get_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
 ) -> GenesisConfig<C, Da> {
     create_genesis_config(
         sequencer_da_address,
+        &genesis_paths,
         #[cfg(feature = "experimental")]
         eth_signers,
     )
     .expect("Unable to read genesis configuration")
 }
 
-fn create_genesis_config<C: Context, Da: DaSpec>(
+fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
     sequencer_da_address: Da::Address,
+    genesis_paths: &GenesisPaths<P>,
     #[cfg(feature = "experimental")] eth_signers: Vec<reth_primitives::Address>,
 ) -> anyhow::Result<GenesisConfig<C, Da>> {
-    let bank_genesis_path = "../test-data/genesis/bank.json";
-    let bank_config: BankConfig<C> = read_json_file(bank_genesis_path)?;
+    let bank_config: BankConfig<C> = read_json_file(&genesis_paths.bank_genesis_path)?;
 
-    let sequencer_registry_path = "../test-data/genesis/sequencer_registry.json";
     let sequencer_registry_config: SequencerConfig<C, Da> =
-        read_json_file(sequencer_registry_path)?;
+        read_json_file(&genesis_paths.sequencer_genesis_path)?;
 
     // Validation
     {
@@ -84,23 +84,19 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
             token_address
         );
     }
-    // This path will be injected as a parameter: #872
-    let value_setter_genesis_path = "../test-data/genesis/value_setter.json";
-    let value_setter_config: ValueSetterConfig<C> = read_json_file(value_setter_genesis_path)?;
 
-    let accounts_genesis_path = "../test-data/genesis/accounts.json";
-    let accounts_config: AccountConfig<C> = read_json_file(accounts_genesis_path)?;
+    let value_setter_config: ValueSetterConfig<C> =
+        read_json_file(&genesis_paths.value_setter_genesis_path)?;
+
+    let accounts_config: AccountConfig<C> = read_json_file(&genesis_paths.accounts_genesis_path)?;
 
     let nft_config: NonFungibleTokenConfig = NonFungibleTokenConfig {};
 
-    let chain_state_path = "../test-data/genesis/chain_state.json";
-    let chain_state_config: ChainStateConfig = read_json_file(chain_state_path)?;
+    let chain_state_config: ChainStateConfig =
+        read_json_file(&genesis_paths.chain_state_genesis_path)?;
 
     #[cfg(feature = "experimental")]
-    let evm_path = "../test-data/genesis/evm.json";
-
-    #[cfg(feature = "experimental")]
-    let evm_config = get_evm_config(evm_path, eth_signers)?;
+    let evm_config = get_evm_config(&genesis_paths.evm_genesis_path, eth_signers)?;
 
     Ok(GenesisConfig::new(
         bank_config,
