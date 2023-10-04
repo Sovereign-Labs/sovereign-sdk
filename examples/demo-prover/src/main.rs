@@ -1,8 +1,9 @@
+use std::env;
+
 use demo_stf::genesis_config::GenesisPaths;
 use methods::ROLLUP_ELF;
 use sov_demo_rollup::{new_rollup_with_celestia_da, DemoProverConfig};
 use sov_risc0_adapter::host::Risc0Host;
-use std::env;
 use tracing::info;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;

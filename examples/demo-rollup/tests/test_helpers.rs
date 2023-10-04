@@ -1,4 +1,5 @@
-use std::{net::SocketAddr, path::Path};
+use std::net::SocketAddr;
+use std::path::Path;
 
 use demo_stf::genesis_config::GenesisPaths;
 use sov_demo_rollup::{new_rollup_with_mock_da_from_config, DemoProverConfig};

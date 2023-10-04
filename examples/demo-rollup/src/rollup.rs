@@ -22,7 +22,9 @@ use sov_db::ledger_db::LedgerDB;
 use sov_ethereum::experimental::EthRpcConfig;
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_stf_template::AppTemplate;
-use sov_rollup_interface::mocks::{MockAddress, MockDaConfig, MockDaService};
+use sov_rollup_interface::mocks::{
+    MockAddress, MockDaConfig, MockDaService, MOCK_SEQUENCER_DA_ADDRESS,
+};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{
@@ -112,7 +114,6 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost, P: AsRef<Path>>(
     let app = App::new(rollup_config.storage);
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS)?;
 
-    println!("{:?} {:?}", sequencer_da_address, SEQUENCER_DA_ADDRESS);
     #[cfg(feature = "experimental")]
     let eth_signer = read_eth_tx_signers();
     let genesis_config = demo_stf::genesis_config::get_genesis_config(
@@ -168,7 +169,7 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost, P: AsRef<Path>>(
     genesis_paths: GenesisPaths<P>,
 ) -> Result<Rollup<Vm, MockDaService>, anyhow::Error> {
     let ledger_db = initialize_ledger(&rollup_config.storage.path);
-    let sequencer_da_address = MockAddress::from([0u8; 32]);
+    let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
     let da_service = MockDaService::new(sequencer_da_address);
 
     #[cfg(feature = "experimental")]

@@ -20,6 +20,9 @@ use crate::{BasicAddress, RollupAddress};
 
 const JAN_1_2023: i64 = 1672531200;
 
+/// Sequencer DA address used in tests.
+pub const MOCK_SEQUENCER_DA_ADDRESS: [u8; 32] = [0u8; 32];
+
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
 #[derive(
     Debug, PartialEq, Clone, Eq, Copy, Hash, Default, borsh::BorshDeserialize, borsh::BorshSerialize,
