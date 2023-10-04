@@ -7,6 +7,7 @@
 //! Your rollup full node will automatically switch to the new DA layer.
 
 /// The type alias for the DA layer configuration. Change the contents of this alias if you change DA layers.
+#[cfg(feature = "native")]
 pub type DaConfig = sov_celestia_adapter::DaServiceConfig;
 /// The type alias for the DA layer verifier. Change the contents of this alias if you change DA layers.
 pub type DaVerifier = sov_celestia_adapter::verifier::CelestiaVerifier;
