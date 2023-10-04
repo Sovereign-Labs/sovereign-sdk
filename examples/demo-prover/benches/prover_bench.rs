@@ -10,6 +10,7 @@ use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::App;
 use demo_stf::genesis_config::get_genesis_config;
+use demo_stf::genesis_config::GenesisPaths;
 use log4rs::config::{Appender, Config, Root};
 use methods::ROLLUP_ELF;
 use regex::Regex;
@@ -167,8 +168,18 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
 
+    let genesis_paths = GenesisPaths {
+        bank_genesis_path: "../test-data/genesis/demo-tests/bank.json",
+        sequencer_genesis_path: "../test-data/genesis/demo-tests/sequencer_registry.json",
+        value_setter_genesis_path: "../test-data/genesis/demo-tests/value_setter.json",
+        accounts_genesis_path: "../test-data/genesis/demo-tests/accounts.json",
+        chain_state_genesis_path: "../test-data/genesis/demo-tests/chain_state.json",
+        evm_genesis_path: "../test-data/genesis/demo-tests/evm.json",
+    };
+
     let genesis_config = get_genesis_config(
         sequencer_da_address,
+        genesis_paths,
         #[cfg(feature = "experimental")]
         Default::default(),
     );

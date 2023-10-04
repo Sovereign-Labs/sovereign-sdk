@@ -39,17 +39,22 @@ async fn main() -> Result<(), anyhow::Error> {
 
     match args.da_layer.as_str() {
         "mock" => {
-            let paths = GenesisPaths {
-                bank_genesis_path: "",
-                sequencer_genesis_path: todo!(),
-                value_setter_genesis_path: todo!(),
-                accounts_genesis_path: todo!(),
-                chain_state_genesis_path: todo!(),
-                evm_genesis_path: todo!(),
+            let genesis_paths = GenesisPaths {
+                bank_genesis_path: "../test-data/genesis/integration-tests/bank.json",
+                sequencer_genesis_path:
+                    "../test-data/genesis/integration-tests/sequencer_registry.json",
+                value_setter_genesis_path:
+                    "../test-data/genesis/integration-tests/value_setter.json",
+                accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
+                chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
+                evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
             };
 
-            let rollup =
-                new_rollup_with_mock_da::<Risc0Host<'static>, _>(rollup_config_path, None, paths)?;
+            let rollup = new_rollup_with_mock_da::<Risc0Host<'static>, _>(
+                rollup_config_path,
+                None,
+                genesis_paths,
+            )?;
             rollup.run().await
         }
         "celestia" => {
