@@ -17,7 +17,7 @@ impl SlotData for AvailBlock {
     type Cond = ChainValidityCondition;
 
     fn hash(&self) -> [u8; 32] {
-        self.header.hash().inner().clone()
+        *self.header.hash().inner()
     }
 
     fn header(&self) -> &Self::BlockHeader {
