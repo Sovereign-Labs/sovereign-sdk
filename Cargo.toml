@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "rollup-interface",
+    "adapters/avail",
     "adapters/risc0",
     "adapters/celestia",
     "examples/const-rollup-config",
