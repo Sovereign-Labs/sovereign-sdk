@@ -22,7 +22,7 @@ tracing-subscriber = "0.3.16"
 
 sov-celestia-adapter = { path = "../../adapters/celestia", features = ["native", "bench"] }
 sov-demo-rollup = { path = "../demo-rollup", features = ["native"] }
-demo-stf = { path = "../demo-stf", optional = true }
+demo-stf = { path = "../demo-stf" }
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-risc0-adapter = { path = "../../adapters/risc0", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
@@ -50,5 +50,5 @@ harness = false
 required-features = ["bench"]
 
 [features]
-bench = ["sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "methods/bench", "demo-stf"]
+bench = ["sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "methods/bench"]
 experimental = ["sov-demo-rollup/experimental"]

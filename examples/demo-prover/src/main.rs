@@ -1,8 +1,8 @@
-use std::env;
-
+use demo_stf::genesis_config::GenesisPaths;
 use methods::ROLLUP_ELF;
 use sov_demo_rollup::{new_rollup_with_celestia_da, DemoProverConfig};
 use sov_risc0_adapter::host::Risc0Host;
+use std::env;
 use tracing::info;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;
@@ -39,8 +39,19 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Initialize the rollup. For this demo, we use Risc0 and Celestia.
     let prover = Risc0Host::new(ROLLUP_ELF);
+
+    let paths = GenesisPaths {
+        bank_genesis_path: "",
+        sequencer_genesis_path: todo!(),
+        value_setter_genesis_path: todo!(),
+        accounts_genesis_path: todo!(),
+        chain_state_genesis_path: todo!(),
+        evm_genesis_path: todo!(),
+    };
+
     let rollup =
-        new_rollup_with_celestia_da(&rollup_config_path, Some((prover, prover_config))).await?;
+        new_rollup_with_celestia_da(&rollup_config_path, Some((prover, prover_config)), paths)
+            .await?;
     rollup.run().await?;
 
     Ok(())

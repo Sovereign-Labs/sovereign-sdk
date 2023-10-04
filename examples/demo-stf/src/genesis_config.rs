@@ -23,6 +23,16 @@ use crate::runtime::GenesisConfig;
 pub const LOCKED_AMOUNT: u64 = 50;
 pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
 
+///
+pub struct GenesisPaths<P: AsRef<Path>> {
+    pub bank_genesis_path: P,
+    pub sequencer_genesis_path: P,
+    pub value_setter_genesis_path: P,
+    pub accounts_genesis_path: P,
+    pub chain_state_genesis_path: P,
+    pub evm_genesis_path: P,
+}
+
 /// Configure our rollup with a centralized sequencer using the SEQUENCER_DA_ADDRESS
 /// address constant. Since the centralize sequencer's address is consensus critical,
 /// it has to be hardcoded as a constant, rather than read from the config at runtime.
@@ -33,8 +43,9 @@ pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
 /// ```rust,no_run
 /// const SEQUENCER_DA_ADDRESS: &str = "celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208";
 /// ```
-pub fn get_genesis_config<C: Context, Da: DaSpec>(
+pub fn get_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
     sequencer_da_address: Da::Address,
+    genesis_paths: GenesisPaths<P>,
     #[cfg(feature = "experimental")] eth_signers: Vec<reth_primitives::Address>,
 ) -> GenesisConfig<C, Da> {
     create_genesis_config(

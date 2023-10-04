@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use clap::Parser;
+use demo_stf::genesis_config::GenesisPaths;
 use sov_demo_rollup::{new_rollup_with_celestia_da, new_rollup_with_mock_da};
 use sov_risc0_adapter::host::Risc0Host;
 use tracing_subscriber::prelude::*;
@@ -38,12 +39,35 @@ async fn main() -> Result<(), anyhow::Error> {
 
     match args.da_layer.as_str() {
         "mock" => {
-            let rollup = new_rollup_with_mock_da::<Risc0Host<'static>>(rollup_config_path, None)?;
+            let paths = GenesisPaths {
+                bank_genesis_path: "",
+                sequencer_genesis_path: todo!(),
+                value_setter_genesis_path: todo!(),
+                accounts_genesis_path: todo!(),
+                chain_state_genesis_path: todo!(),
+                evm_genesis_path: todo!(),
+            };
+
+            let rollup =
+                new_rollup_with_mock_da::<Risc0Host<'static>, _>(rollup_config_path, None, paths)?;
             rollup.run().await
         }
         "celestia" => {
-            let rollup =
-                new_rollup_with_celestia_da::<Risc0Host<'static>>(rollup_config_path, None).await?;
+            let paths = GenesisPaths {
+                bank_genesis_path: "",
+                sequencer_genesis_path: todo!(),
+                value_setter_genesis_path: todo!(),
+                accounts_genesis_path: todo!(),
+                chain_state_genesis_path: todo!(),
+                evm_genesis_path: todo!(),
+            };
+
+            let rollup = new_rollup_with_celestia_da::<Risc0Host<'static>, _>(
+                rollup_config_path,
+                None,
+                paths,
+            )
+            .await?;
             rollup.run().await
         }
         da => panic!("DA Layer not supported: {}", da),
