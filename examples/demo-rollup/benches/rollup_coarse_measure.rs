@@ -6,12 +6,14 @@ use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use demo_stf::app::App;
-use demo_stf::genesis_config::get_genesis_config;
+use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
 use prometheus::{Histogram, HistogramOpts, Registry};
-use rng_xfers::{RngDaService, RngDaSpec, SEQUENCER_DA_ADDRESS};
+use rng_xfers::{RngDaService, RngDaSpec};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_risc0_adapter::host::Risc0Verifier;
-use sov_rollup_interface::mocks::{MockAddress, MockBlock, MockBlockHeader};
+use sov_rollup_interface::mocks::{
+    MockAddress, MockBlock, MockBlockHeader, MOCK_SEQUENCER_DA_ADDRESS,
+};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_stf_runner::{from_toml_path, RollupConfig};
@@ -100,9 +102,20 @@ async fn main() -> Result<(), anyhow::Error> {
     let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(rollup_config.storage);
 
     let mut demo = demo_runner.stf;
-    let sequencer_da_address = MockAddress::from(SEQUENCER_DA_ADDRESS);
+    let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
+
+    let genesis_paths = GenesisPaths {
+        bank_genesis_path: "../test-data/genesis/integration-tests/bank.json",
+        sequencer_genesis_path: "../test-data/genesis/integration-tests/sequencer_registry.json",
+        value_setter_genesis_path: "../test-data/genesis/integration-tests/value_setter.json",
+        accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
+        chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
+        evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
+    };
+
     let demo_genesis_config = get_genesis_config(
         sequencer_da_address,
+        genesis_paths,
         #[cfg(feature = "experimental")]
         Default::default(),
     );

@@ -34,7 +34,7 @@ fn test_tx_revert() {
         let genesis_root = demo.init_chain(config);
 
         let txs = simulate_da_with_revert_msg();
-        let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
+        let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
         let data = MockBlock::default();
 
@@ -84,7 +84,7 @@ fn test_tx_revert() {
         let resp = runtime
             .sequencer_registry
             .sequencer_address(
-                MockAddress::from(TEST_SEQUENCER_DA_ADDRESS),
+                MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS),
                 &mut working_set,
             )
             .unwrap();
@@ -106,7 +106,7 @@ fn test_nonce_incremented_on_revert() {
         let genesis_root = demo.init_chain(config);
 
         let txs = simulate_da_with_revert_msg();
-        let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
+        let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
         let data = MockBlock::default();
 
@@ -174,7 +174,7 @@ fn test_tx_bad_sig() {
 
         let txs = simulate_da_with_bad_sig();
 
-        let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
+        let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
         let blob_sender = blob.sender();
         let mut blobs = [blob];
 
