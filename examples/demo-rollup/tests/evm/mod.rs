@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 use std::str::FromStr;
 
+use demo_stf::genesis_config::GenesisPaths;
 use ethereum_types::H160;
 use ethers_core::abi::Address;
 use ethers_core::k256::ecdsa::SigningKey;
@@ -21,6 +22,16 @@ use sov_risc0_adapter::host::Risc0Host;
 use super::test_helpers::start_rollup;
 
 const MAX_FEE_PER_GAS: u64 = 100000001;
+
+const TEST_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
+    bank_genesis_path: "../test-data/genesis/integration-tests/bank.json",
+    sequencer_genesis_path: "../test-data/genesis/integration-tests/sequencer_registry.json",
+    value_setter_genesis_path: "../test-data/genesis/integration-tests/value_setter.json",
+    accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
+    chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
+    #[cfg(feature = "experimental")]
+    evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
+};
 
 struct TestClient {
     chain_id: u64,
@@ -478,7 +489,7 @@ async fn evm_tx_tests() -> Result<(), anyhow::Error> {
 
     let rollup_task = tokio::spawn(async {
         // Don't provide a prover since the EVM is not currently provable
-        start_rollup::<Risc0Host<'static>>(port_tx, None).await;
+        start_rollup::<Risc0Host<'static>, _>(port_tx, None, &TEST_GENESIS_PATHS).await;
     });
 
     // Wait for rollup task to start:

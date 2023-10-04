@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::App;
-use demo_stf::genesis_config::get_genesis_config;
+use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
 use log4rs::config::{Appender, Config, Root};
 use methods::ROLLUP_ELF;
 use regex::Regex;
@@ -24,6 +24,16 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
+
+const GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
+    bank_genesis_path: "../test-data/genesis/demo-tests/bank.json",
+    sequencer_genesis_path: "../test-data/genesis/demo-tests/sequencer_registry.json",
+    value_setter_genesis_path: "../test-data/genesis/demo-tests/value_setter.json",
+    accounts_genesis_path: "../test-data/genesis/demo-tests/accounts.json",
+    chain_state_genesis_path: "../test-data/genesis/demo-tests/chain_state.json",
+    #[cfg(feature = "experimental")]
+    evm_genesis_path: "../test-data/genesis/demo-tests/evm.json",
+};
 
 #[derive(Debug)]
 struct RegexAppender {
@@ -169,6 +179,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let genesis_config = get_genesis_config(
         sequencer_da_address,
+        &GENESIS_PATHS,
         #[cfg(feature = "experimental")]
         Default::default(),
     );
