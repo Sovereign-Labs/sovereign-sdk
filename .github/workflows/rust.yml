@@ -113,16 +113,19 @@ jobs:
       - name: cargo hack
         run: make check-features
   test:
+    name: test
     runs-on: buildjet-4vcpu-ubuntu-2204
     timeout-minutes: 60
-    env:
-      CI_SKIP_GUEST_BUILD: "1"
     steps:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
       - name: Install Rust
         run: rustup show
       # `cargo-nextest` is much faster than standard `cargo test`.
+      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
+        run: cargo install cargo-risczero
+      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
+        run: cargo risczero install
       - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
         with:
@@ -134,69 +137,10 @@ jobs:
       # separately.
       # TODO: https://github.com/nextest-rs/nextest/issues/16
       - run: cargo test --workspace --doc --all-features
-  demo-rollup-local:
-    # `test` has already built dependencies, so we can share
-    # caches (the profile is `dev` in both cases).
-    needs: test
-    runs-on: buildjet-8vcpu-ubuntu-2204
-    steps:
-      - uses: actions/checkout@v3
-      - uses: rui314/setup-mold@v1
-      - name: Install Rust
-        run: rustup show
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-provider: "buildjet"
-          shared-key: cargo-build
-          save-if: ${{ github.ref == 'refs/heads/nightly' }}
-      - name: start celestia local
-        working-directory: ./examples/demo-rollup
-        run: make start
-      - name: start sovereign demo-rollup
-        working-directory: ./examples/demo-rollup
-        run: |
-          cargo build
-          ../../target/debug/sov-demo-rollup &
-      - name: wait for service to be up
-        run: |
-          SECONDS=0
-          while ((SECONDS <= 1200))
-          do
-            if curl -f -s -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_supplyOf","params":["sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsavg2ft"],"id":1}' http://127.0.0.1:12345; then
-              echo "demo-rollup is up"
-              exit 0
-            fi
-            echo "Not up yet, sleeping for 3 seconds..."
-            sleep 3
-            SECONDS=$((SECONDS+3))
-          done
-          echo "demo-rollup took too long to start; exiting"
-          exit 1
-      - name: submit rollup transaction
-        working-directory: ./examples/demo-rollup
-        run: make test-create-token
-      - name: check token supply
-        # simple grep check on RPC to verify if the curl output contains "1000" which is the supply of token - could use jq and parse, but considering this won't change, it seems like a simple check to get it out quick
-        # if we want more complex parsing in the future and validation, we can switch to jq or other tools
-        run: |
-          SECONDS=0
-          while ((SECONDS <= 300))
-          do
-            if curl -f -s -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_supplyOf","params":["sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"],"id":1}' http://127.0.0.1:12345 | grep -q 1000; then
-              echo "demo-rollup test succeeded"
-              exit 0
-            fi
-            echo "Not up yet, sleeping for 3 seconds..."
-            sleep 3
-            SECONDS=$((SECONDS+3))
-          done
-          echo "demo-rollup took too long to process transaction; exiting"
-          exit 1
   coverage:
+    name: coverage
     runs-on: buildjet-8vcpu-ubuntu-2204
     timeout-minutes: 90
-    env:
-      CI_SKIP_GUEST_BUILD: "1"
     steps:
       - uses: actions/checkout@v3
         with:
@@ -204,6 +148,10 @@ jobs:
       - uses: rui314/setup-mold@v1
       - name: Install Rust
         run: rustup show
+      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
+        run: cargo install cargo-risczero
+      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
+        run: cargo risczero install
       - name: add llvm component
         run: rustup component add llvm-tools-preview
       - name: cargo install cargo-llvm-cov
@@ -295,11 +243,18 @@ jobs:
         run: git diff --exit-code
   check-demo-rollup-bash-commands:
     runs-on: ubuntu-latest
+    # `test` has already built dependencies, so we can share
+    # caches (the profile is `dev` in both cases).
+    needs: test
     steps:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
       - name: Install Rust
         run: rustup show
+      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
+        run: cargo install cargo-risczero
+      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
+        run: cargo risczero install
       - uses: Swatinem/rust-cache@v2
         with:
           cache-provider: "buildjet"

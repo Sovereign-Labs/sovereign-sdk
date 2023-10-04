@@ -42,7 +42,7 @@ fuzz_target!(|input: (u16, [u8; 32], Vec<DefaultPrivateKey>)| -> Corpus {
     let storage = <C as Spec>::Storage::with_path(tmpdir.path()).unwrap();
     let working_set = &mut WorkingSet::new(storage);
 
-    let config: AccountConfig<C> = keys.iter().map(|k| k.pub_key()).collect();
+    let config: AccountConfig = keys.iter().map(|k| k.pub_key()).collect();
     let accounts: Accounts<C> = Accounts::default();
     accounts.genesis(&config, working_set).unwrap();
 

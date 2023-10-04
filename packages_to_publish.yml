@@ -17,6 +17,7 @@
 - sov-prover-incentives
 - sov-chain-state
 - sov-blob-storage
+- sov-nft-module
 
 # Adapters
 - sov-risc0-adapter

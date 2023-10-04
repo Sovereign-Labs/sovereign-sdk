@@ -28,7 +28,7 @@ pub mod test {
         {
             let mut demo = create_new_app_template_for_tests(path);
 
-            demo.init_chain(config);
+            let genesis_root = demo.init_chain(config);
 
             let priv_key = read_private_key::<DefaultContext>().private_key;
             let txs = simulate_da(priv_key);
@@ -39,6 +39,7 @@ pub mod test {
             let data = MockBlock::default();
 
             let result = demo.apply_slot(
+                &genesis_root,
                 Default::default(),
                 &data.header,
                 &data.validity_cond,
@@ -84,7 +85,7 @@ pub mod test {
 
         let config = get_genesis_config_for_tests();
 
-        demo.init_chain(config);
+        let genesis_root = demo.init_chain(config);
 
         let private_key = read_private_key::<DefaultContext>().private_key;
         let txs = simulate_da(private_key);
@@ -94,6 +95,7 @@ pub mod test {
         let data = MockBlock::default();
 
         let apply_block_result = demo.apply_slot(
+            &genesis_root,
             Default::default(),
             &data.header,
             &data.validity_cond,
@@ -136,7 +138,7 @@ pub mod test {
         let config = get_genesis_config_for_tests();
         {
             let mut demo = create_new_app_template_for_tests(path);
-            demo.init_chain(config);
+            let genesis_root = demo.init_chain(config);
 
             let txs = simulate_da(value_setter_admin_private_key);
             let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
@@ -144,6 +146,7 @@ pub mod test {
             let data = MockBlock::default();
 
             let apply_block_result = demo.apply_slot(
+                &genesis_root,
                 Default::default(),
                 &data.header,
                 &data.validity_cond,
@@ -187,7 +190,7 @@ pub mod test {
         config.sequencer_registry.is_preferred_sequencer = false;
 
         let mut demo = create_new_app_template_for_tests(path);
-        demo.init_chain(config);
+        let genesis_root = demo.init_chain(config);
 
         let some_sequencer: [u8; 32] = [121; 32];
 
@@ -198,6 +201,7 @@ pub mod test {
         let data = MockBlock::default();
 
         let apply_block_result = demo.apply_slot(
+            &genesis_root,
             Default::default(),
             &data.header,
             &data.validity_cond,

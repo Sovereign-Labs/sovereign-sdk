@@ -85,19 +85,29 @@ where
         &mut self,
         slot_header: &Da::BlockHeader,
         validity_condition: &Da::ValidityCondition,
+        pre_state_root: &<C::Storage as Storage>::Root,
         witness: <Self as StateTransitionFunction<Vm, Da>>::Witness,
     ) {
         let state_checkpoint = StateCheckpoint::with_witness(self.current_storage.clone(), witness);
         let mut working_set = state_checkpoint.to_revertable();
 
-        self.runtime
-            .begin_slot_hook(slot_header, validity_condition, &mut working_set);
+        self.runtime.begin_slot_hook(
+            slot_header,
+            validity_condition,
+            pre_state_root,
+            &mut working_set,
+        );
 
         self.checkpoint = Some(working_set.checkpoint());
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
-    fn end_slot(&mut self) -> (jmt::RootHash, <<C as Spec>::Storage as Storage>::Witness) {
+    fn end_slot(
+        &mut self,
+    ) -> (
+        <<C as Spec>::Storage as Storage>::Root,
+        <<C as Spec>::Storage as Storage>::Witness,
+    ) {
         let checkpoint = self.checkpoint.take().unwrap();
 
         // Run end end_slot_hook
@@ -116,14 +126,14 @@ where
         let mut working_set = checkpoint.to_revertable();
 
         self.runtime
-            .finalize_slot_hook(root_hash, &mut working_set.accessory_state());
+            .finalize_hook(&root_hash, &mut working_set.accessory_state());
 
         let accessory_log = working_set.checkpoint().freeze_non_provable();
 
         self.current_storage
             .commit(&authenticated_node_batch, &accessory_log);
 
-        (jmt::RootHash(root_hash), witness)
+        (root_hash, witness)
     }
 }
 
@@ -134,7 +144,7 @@ where
     Vm: Zkvm,
     RT: Runtime<C, Da>,
 {
-    type StateRoot = jmt::RootHash;
+    type StateRoot = <C::Storage as Storage>::Root;
 
     type InitialState = <RT as Genesis>::Config;
 
@@ -146,7 +156,7 @@ where
 
     type Condition = Da::ValidityCondition;
 
-    fn init_chain(&mut self, params: Self::InitialState) -> jmt::RootHash {
+    fn init_chain(&mut self, params: Self::InitialState) -> Self::StateRoot {
         let mut working_set = StateCheckpoint::new(self.current_storage.clone()).to_revertable();
 
         self.runtime
@@ -164,17 +174,18 @@ where
         let mut working_set = checkpoint.to_revertable();
 
         self.runtime
-            .finalize_slot_hook(genesis_hash, &mut working_set.accessory_state());
+            .finalize_hook(&genesis_hash, &mut working_set.accessory_state());
 
         let accessory_log = working_set.checkpoint().freeze_non_provable();
 
         self.current_storage.commit(&node_batch, &accessory_log);
 
-        jmt::RootHash(genesis_hash)
+        genesis_hash
     }
 
     fn apply_slot<'a, I>(
         &mut self,
+        pre_state_root: &Self::StateRoot,
         witness: Self::Witness,
         slot_header: &Da::BlockHeader,
         validity_condition: &Da::ValidityCondition,
@@ -188,7 +199,7 @@ where
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
     {
-        self.begin_slot(slot_header, validity_condition, witness);
+        self.begin_slot(slot_header, validity_condition, pre_state_root, witness);
 
         // Initialize batch workspace
         let mut batch_workspace = self
@@ -238,11 +249,5 @@ where
             batch_receipts,
             witness,
         }
-    }
-
-    fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot> {
-        self.current_storage
-            .get_state_root(&Default::default())
-            .map(jmt::RootHash)
     }
 }

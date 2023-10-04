@@ -2,6 +2,7 @@ use std::io::Write;
 
 use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::zk::{Matches, Zkvm};
@@ -78,10 +79,14 @@ impl Zkvm for MockZkvm {
         Ok(proof.log)
     }
 
-    fn verify_and_extract_output<Add: crate::RollupAddress, Da: crate::da::DaSpec>(
+    fn verify_and_extract_output<
+        Add: crate::RollupAddress,
+        Da: crate::da::DaSpec,
+        Root: Serialize + DeserializeOwned,
+    >(
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<crate::zk::StateTransition<Da, Add>, Self::Error> {
+    ) -> Result<crate::zk::StateTransition<Da, Add, Root>, Self::Error> {
         let output = Self::verify(serialized_proof, code_commitment)?;
         Ok(bincode::deserialize(output)?)
     }

@@ -21,7 +21,7 @@ fn test_valid_challenge() {
     let mut working_set = WorkingSet::new(storage.clone());
     let (module, token_address, attester_address, challenger_address) = setup(&mut working_set);
 
-    let working_set = commit_get_new_working_set(&storage, working_set);
+    let (_, working_set) = commit_get_new_working_set(&storage, working_set);
 
     // Simulate the execution of a chain, with the genesis hash and two transitions after.
     // Update the chain_state module and the optimistic module accordingly
@@ -64,7 +64,7 @@ fn test_valid_challenge() {
     };
 
     {
-        let transition = StateTransition::<MockDaSpec, _> {
+        let transition = StateTransition::<MockDaSpec, _, _> {
             initial_state_root: initial_transition.state_root,
             slot_hash: [1; 32].into(),
             final_state_root: transition_1.state_root,
@@ -175,7 +175,7 @@ fn test_invalid_challenge() {
     let mut working_set = WorkingSet::new(storage.clone());
     let (module, _token_address, attester_address, challenger_address) = setup(&mut working_set);
 
-    let working_set = commit_get_new_working_set(&storage, working_set);
+    let (_, working_set) = commit_get_new_working_set(&storage, working_set);
 
     // Simulate the execution of a chain, with the genesis hash and two transitions after.
     // Update the chain_state module and the optimistic module accordingly
@@ -196,7 +196,7 @@ fn test_invalid_challenge() {
         sender: challenger_address,
     };
 
-    let transition: StateTransition<MockDaSpec, _> = StateTransition {
+    let transition: StateTransition<MockDaSpec, _, _> = StateTransition {
         initial_state_root: initial_transition.state_root,
         slot_hash: [1; 32].into(),
         final_state_root: transition_1.state_root,
@@ -257,7 +257,7 @@ fn test_invalid_challenge() {
         );
 
         // Bad slot hash
-        let bad_transition = StateTransition::<MockDaSpec, _> {
+        let bad_transition = StateTransition::<MockDaSpec, _, _> {
             initial_state_root: initial_transition.state_root,
             slot_hash: [2; 32].into(),
             final_state_root: transition_1.state_root,
@@ -285,7 +285,7 @@ fn test_invalid_challenge() {
         );
 
         // Bad validity condition
-        let bad_transition = StateTransition::<MockDaSpec, _> {
+        let bad_transition = StateTransition::<MockDaSpec, _, _> {
             initial_state_root: initial_transition.state_root,
             slot_hash: [1; 32].into(),
             final_state_root: transition_1.state_root,
@@ -313,7 +313,7 @@ fn test_invalid_challenge() {
         );
 
         // Bad initial root
-        let bad_transition = StateTransition::<MockDaSpec, _> {
+        let bad_transition = StateTransition::<MockDaSpec, _, _> {
             initial_state_root: transition_1.state_root,
             slot_hash: [1; 32].into(),
             final_state_root: transition_1.state_root,

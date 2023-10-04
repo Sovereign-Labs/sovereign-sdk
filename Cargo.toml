@@ -9,7 +9,7 @@ members = [
     "examples/demo-stf",
     "examples/demo-simple-stf",
     "examples/demo-rollup",
-    "examples/demo-nft-module",
+    "examples/simple-nft-module",
     "examples/demo-prover",
 
     "full-node/db/sov-db",
@@ -19,7 +19,9 @@ members = [
 
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
+    "utils/nft-utils",
     "utils/bashtestmd",
+    "utils/nft-utils",
 
     "module-system/sov-cli",
     "module-system/sov-modules-stf-template",
@@ -31,6 +33,7 @@ members = [
     "module-system/utils/sov-data-generators",
     "module-system/module-implementations/sov-accounts",
     "module-system/module-implementations/sov-bank",
+    "module-system/module-implementations/sov-nft-module",
     "module-system/module-implementations/sov-chain-state",
     "module-system/module-implementations/sov-blob-storage",
     "module-system/module-implementations/sov-evm",
@@ -56,7 +59,7 @@ rust-version = "1.66"
 
 [workspace.dependencies]
 # Dependencies maintained by Sovereign
-jmt = { version = "0.7.0" }
+jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "199ae1c185e74ee2133db773efacff56706085aa" }
 
 # External dependencies
 async-trait = "0.1.71"
@@ -76,7 +79,7 @@ prometheus = { version = "0.13.3", default-features = false }
 proptest = "1.0.0"
 proptest-derive = "0.3.0"
 rand = "0.8"
-rayon = "1.5.2"
+rayon = "1.8.0"
 rocksdb = { version = "0.21.0", features = ["lz4"] }
 serde = { version = "1.0.188", features = ["derive", "rc"] }
 serde_json = { version = "1.0" }
@@ -102,23 +105,24 @@ risc0-build = "0.18"
 
 # EVM dependencies
 ethereum-types = "0.14.1"
-ethers = "=2.0.8"
-ethers-core = "=2.0.8"
-ethers-contract = "=2.0.8"
-ethers-providers = "=2.0.8"
-ethers-signers = { version = "=2.0.8", default-features = false }
-ethers-middleware = "=2.0.8"
+ethers = "=2.0.10"
+ethers-core = { version = "=2.0.10", default-features = false }
+ethers-contract = "=2.0.10"
+ethers-providers = { version = "=2.0.10", default-features = false }
+ethers-signers = { version = "=2.0.10", default-features = false }
+ethers-middleware = { version = "=2.0.10", default-features = false }
 
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7" }
-reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7" }
-reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7" }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
+reth-interfaces = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
+reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
+reth-rpc-types-compat = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
+reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
 
-revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
-revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
+revm = { git = "https://github.com/bluealloy/revm", rev = "516f62cc" }
+revm-primitives = { git = "https://github.com/bluealloy/revm", rev = "516f62cc" }
 
-secp256k1 = { version = "0.27.0", default-features = false, features = ["global-context", "rand-std", "recovery"] }
-
-[patch.crates-io]
-# See reth: https://github.com/paradigmxyz/reth/blob/main/Cargo.toml#L79
-revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
-revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
+secp256k1 = { version = "0.27.0", default-features = false, features = [
+    "global-context",
+    "rand-std",
+    "recovery",
+] }

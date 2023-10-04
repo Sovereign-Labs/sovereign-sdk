@@ -37,9 +37,6 @@ You'll need at least 96GiB of RAM to run this example on a x86_64 CPU. If you do
 3. Make sure that there's no data from previous runs `rm -rf demo_data`
 4. Execute `cargo run -- ../demo-rollup/rollup_config.toml`.
 
-## Development
-
-Follow our [IDE integration](./ide_setup.md) guide document.
 
 ## License
 

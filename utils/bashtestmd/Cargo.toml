@@ -13,5 +13,5 @@ autotests = false
 
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }
-markdown = "1.0.0-alpha.12"
+markdown = "1.0.0-alpha.14"
 shell-escape = "0.1.5"

@@ -42,12 +42,13 @@ pub fn register_ledger(
 
 #[cfg(feature = "experimental")]
 /// register ethereum methods.
-pub fn register_ethereum<Da: DaService>(
+pub fn register_ethereum<C: sov_modules_api::Context, Da: DaService>(
     da_service: Da,
     eth_rpc_config: EthRpcConfig,
+    storage: C::Storage,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error> {
-    let ethereum_rpc = sov_ethereum::get_ethereum_rpc(da_service, eth_rpc_config);
+    let ethereum_rpc = sov_ethereum::get_ethereum_rpc::<C, Da>(da_service, eth_rpc_config, storage);
 
     methods
         .merge(ethereum_rpc)

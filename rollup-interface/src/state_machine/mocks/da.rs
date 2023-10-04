@@ -1,6 +1,8 @@
 use std::fmt::Display;
+#[cfg(feature = "native")]
 use std::sync::Arc;
 
+#[cfg(feature = "native")]
 use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Bytes;
@@ -10,7 +12,9 @@ use crate::da::{
     BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec, DaVerifier, Time,
 };
 use crate::mocks::MockValidityCond;
-use crate::services::da::{DaService, SlotData};
+#[cfg(feature = "native")]
+use crate::services::da::DaService;
+use crate::services::da::SlotData;
 use crate::{BasicAddress, RollupAddress};
 
 const JAN_1_2023: i64 = 1672531200;
@@ -269,9 +273,12 @@ impl DaSpec for MockDaSpec {
     type ChainParams = ();
 }
 
+#[cfg(feature = "native")]
 use tokio::sync::mpsc::{self, Receiver, Sender};
+#[cfg(feature = "native")]
 use tokio::sync::Mutex;
 
+#[cfg(feature = "native")]
 #[derive(Clone)]
 /// DaService used in tests.
 pub struct MockDaService {
@@ -280,6 +287,7 @@ pub struct MockDaService {
     sequencer_da_address: MockAddress,
 }
 
+#[cfg(feature = "native")]
 impl MockDaService {
     /// Creates a new MockDaService.
     pub fn new(sequencer_da_address: MockAddress) -> Self {
@@ -292,6 +300,7 @@ impl MockDaService {
     }
 }
 
+#[cfg(feature = "native")]
 #[async_trait]
 impl DaService for MockDaService {
     type Spec = MockDaSpec;
@@ -316,7 +325,7 @@ impl DaService for MockDaService {
         self.get_finalized_at(height).await
     }
 
-    fn extract_relevant_txs(
+    fn extract_relevant_blobs(
         &self,
         block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction> {
@@ -364,7 +373,7 @@ impl DaVerifier for MockDaVerifier {
         _inclusion_proof: <Self::Spec as DaSpec>::InclusionMultiProof,
         _completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
     ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error> {
-        Ok(MockValidityCond { is_valid: true })
+        Ok(Default::default())
     }
 }
 

@@ -16,8 +16,11 @@ use crate::Evm;
     derive(serde::Serialize),
     derive(serde::Deserialize)
 )]
+
+/// EVM call message.
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct CallMessage {
+    /// RLP encoded transaction.
     pub tx: RlpEvmTransaction,
 }
 
@@ -30,7 +33,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     ) -> Result<CallResponse> {
         let evm_tx_recovered: TransactionSignedEcRecovered = tx.try_into()?;
         let block_env = self
-            .pending_block
+            .block_env
             .get(working_set)
             .expect("Pending block must be set");
 
@@ -77,7 +80,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
                 log_index_start,
                 error: Some(match err {
                     EVMError::Transaction(err) => EVMError::Transaction(err),
-                    EVMError::PrevrandaoNotSet => EVMError::PrevrandaoNotSet,
+                    EVMError::Header(e) => EVMError::Header(e),
                     EVMError::Database(_) => EVMError::Database(0u8),
                 }),
             },
@@ -107,13 +110,11 @@ pub(crate) fn get_cfg_env(
     cfg: EvmChainConfig,
     template_cfg: Option<CfgEnv>,
 ) -> CfgEnv {
-    CfgEnv {
-        chain_id: revm::primitives::U256::from(cfg.chain_id),
-        limit_contract_code_size: cfg.limit_contract_code_size,
-        spec_id: get_spec_id(cfg.spec, block_env.number),
-        // disable_gas_refund: !cfg.gas_refunds, // option disabled for now, we could add if needed
-        ..template_cfg.unwrap_or_default()
-    }
+    let mut cfg_env = template_cfg.unwrap_or(CfgEnv::default());
+    cfg_env.chain_id = cfg.chain_id;
+    cfg_env.spec_id = get_spec_id(cfg.spec, block_env.number);
+    cfg_env.limit_contract_code_size = cfg.limit_contract_code_size;
+    cfg_env
 }
 
 /// Get spec id for a given block number

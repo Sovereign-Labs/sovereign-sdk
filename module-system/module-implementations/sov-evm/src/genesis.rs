@@ -35,13 +35,20 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let mut spec = config
             .spec
             .iter()
-            .map(|(k, v)| (*k, *v))
+            .map(|(k, v)| {
+                // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
+                if *v == SpecId::CANCUN {
+                    panic!("Cancun is not supported");
+                }
+
+                (*k, *v)
+            })
             .collect::<Vec<_>>();
 
         spec.sort_by(|a, b| a.0.cmp(&b.0));
 
         if spec.is_empty() {
-            spec.push((0, SpecId::LATEST));
+            spec.push((0, SpecId::SHANGHAI));
         } else if spec[0].0 != 0u64 {
             panic!("EVM spec must start from block 0");
         }
@@ -53,6 +60,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
             coinbase: config.coinbase,
             block_gas_limit: config.block_gas_limit,
             block_timestamp_delta: config.block_timestamp_delta,
+            base_fee_params: config.base_fee_params,
         };
 
         self.cfg.set(&chain_cfg, working_set);
@@ -61,7 +69,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
             parent_hash: H256::default(),
             ommers_hash: EMPTY_OMMER_ROOT,
             beneficiary: config.coinbase,
-            // This will be set in finalize_slot_hook or in the next begin_slot_hook
+            // This will be set in finalize_hook or in the next begin_slot_hook
             state_root: KECCAK_EMPTY,
             transactions_root: EMPTY_TRANSACTIONS,
             receipts_root: EMPTY_RECEIPTS,
@@ -76,6 +84,13 @@ impl<C: sov_modules_api::Context> Evm<C> {
             nonce: 0,
             base_fee_per_gas: Some(config.starting_base_fee),
             extra_data: Bytes::default(),
+            // EIP-4844 related fields
+            // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
+            blob_gas_used: None,
+            excess_blob_gas: None,
+            // EIP-4788 related field
+            // unrelated for rollups
+            parent_beacon_block_root: None,
         };
 
         let block = Block {

@@ -9,7 +9,9 @@ pub mod default_signature;
 mod dispatch;
 mod encode;
 mod error;
+mod gas;
 pub mod hooks;
+mod pub_key_hex;
 
 #[cfg(feature = "macros")]
 mod reexport_macros;
@@ -19,6 +21,7 @@ pub use reexport_macros::*;
 mod prefix;
 mod response;
 mod serde_address;
+mod serde_pub_key;
 mod state;
 #[cfg(test)]
 mod tests;
@@ -26,8 +29,8 @@ pub mod transaction;
 #[cfg(feature = "native")]
 pub mod utils;
 
+pub use pub_key_hex::PublicKeyHex;
 pub use state::*;
-
 #[cfg(feature = "macros")]
 extern crate sov_modules_macros;
 
@@ -45,6 +48,7 @@ use digest::Digest;
 pub use dispatch::CliWallet;
 pub use dispatch::{DispatchCall, EncodeCall, Genesis};
 pub use error::Error;
+pub use gas::{GasUnit, TupleGasUnit};
 pub use prefix::Prefix;
 pub use response::CallResponse;
 #[cfg(feature = "native")]
@@ -138,7 +142,9 @@ pub enum SigVerificationError {
 }
 
 /// Signature used in the Module System.
-pub trait Signature {
+pub trait Signature:
+    borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug + Send + Sync
+{
     type PublicKey;
 
     fn verify(&self, pub_key: &Self::PublicKey, msg: &[u8]) -> Result<(), SigVerificationError>;
@@ -150,13 +156,31 @@ pub trait Signature {
 pub enum NonInstantiable {}
 
 /// PublicKey used in the Module System.
-pub trait PublicKey {
+pub trait PublicKey:
+    borsh::BorshDeserialize
+    + borsh::BorshSerialize
+    + Eq
+    + Hash
+    + Clone
+    + Debug
+    + Send
+    + Sync
+    + Serialize
+    + for<'a> Deserialize<'a>
+{
     fn to_address<A: RollupAddress>(&self) -> A;
 }
 
 /// A PrivateKey used in the Module System.
 #[cfg(feature = "native")]
-pub trait PrivateKey {
+pub trait PrivateKey:
+    Debug
+    + Send
+    + Sync
+    + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
+    + Serialize
+    + DeserializeOwned
+{
     type PublicKey: PublicKey;
     type Signature: Signature<PublicKey = Self::PublicKey>;
     fn generate() -> Self;
@@ -172,7 +196,7 @@ pub trait PrivateKey {
 /// over a Context, rollup developers can easily optimize their code for different environments
 /// by simply swapping out the Context (and by extension, the Spec).
 ///
-/// For example, a rollup running in a STARK-based zkvm like Risc0 might pick Sha256 or Poseidon as its preferred hasher,
+/// For example, a rollup running in a STARK-based zkVM like Risc0 might pick Sha256 or Poseidon as its preferred hasher,
 /// while a rollup running in an elliptic-curve based SNARK such as `Placeholder` from the =nil; foundation might
 /// prefer a Pedersen hash. By using a generic Context and Spec, a rollup developer can trivially customize their
 /// code for either (or both!) of these environments without touching their module implementations.
@@ -195,73 +219,33 @@ pub trait Spec {
     type Address: RollupAddress + BorshSerialize + BorshDeserialize;
 
     /// Authenticated state storage used by the rollup. Typically some variant of a merkle-patricia trie.
-    type Storage: Storage + Clone + Send + Sync;
+    type Storage: Storage + Send + Sync;
 
     /// The public key used for digital signatures
     #[cfg(feature = "native")]
-    type PublicKey: borsh::BorshDeserialize
-        + borsh::BorshSerialize
-        + Eq
-        + Hash
-        + Clone
-        + Debug
-        + PublicKey
-        + Serialize
-        + for<'a> Deserialize<'a>
-        + ::schemars::JsonSchema
-        + Send
-        + Sync
-        + FromStr<Err = anyhow::Error>;
+    type PrivateKey: PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
 
     /// The public key used for digital signatures
     #[cfg(feature = "native")]
-    type PrivateKey: Debug
-        + Send
-        + Sync
-        + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
-        + Serialize
-        + DeserializeOwned
-        + PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
+    type PublicKey: PublicKey + ::schemars::JsonSchema + FromStr<Err = anyhow::Error>;
 
     #[cfg(not(feature = "native"))]
-    type PublicKey: borsh::BorshDeserialize
-        + borsh::BorshSerialize
-        + Eq
-        + Hash
-        + Clone
-        + Debug
-        + Send
-        + Sync
-        + PublicKey;
+    type PublicKey: PublicKey;
 
     /// The hasher preferred by the rollup, such as Sha256 or Poseidon.
     type Hasher: Digest<OutputSize = U32>;
 
     /// The digital signature scheme used by the rollup
     #[cfg(feature = "native")]
-    type Signature: borsh::BorshDeserialize
-        + borsh::BorshSerialize
+    type Signature: Signature<PublicKey = Self::PublicKey>
+        + FromStr<Err = anyhow::Error>
         + Serialize
         + for<'a> Deserialize<'a>
-        + schemars::JsonSchema
-        + Eq
-        + Clone
-        + Debug
-        + Send
-        + Sync
-        + FromStr<Err = anyhow::Error>
-        + Signature<PublicKey = Self::PublicKey>;
+        + schemars::JsonSchema;
 
     /// The digital signature scheme used by the rollup
     #[cfg(not(feature = "native"))]
-    type Signature: borsh::BorshDeserialize
-        + borsh::BorshSerialize
-        + Eq
-        + Clone
-        + Debug
-        + Signature<PublicKey = Self::PublicKey>
-        + Send
-        + Sync;
+    type Signature: Signature<PublicKey = Self::PublicKey>;
 
     /// A structure containing the non-deterministic inputs from the prover to the zk-circuit
     type Witness: Witness;
@@ -275,6 +259,9 @@ pub trait Spec {
 /// instance of the state transition function. By making modules generic over a `Context`, developers
 /// can easily update their cryptography to conform to the needs of different zk-proof systems.
 pub trait Context: Spec + Clone + Debug + PartialEq + 'static {
+    /// Gas unit for the gas price computation.
+    type GasUnit: GasUnit;
+
     /// Sender of the transaction.
     fn sender(&self) -> &Self::Address;
 
@@ -301,7 +288,7 @@ where
 
 /// All the methods have a default implementation that can't be invoked (because they take `NonInstantiable` parameter).
 /// This allows developers to override only some of the methods in their implementation and safely ignore the others.
-pub trait Module: Default {
+pub trait Module {
     /// Execution context.
     type Context: Context;
 
@@ -330,6 +317,17 @@ pub trait Module: Default {
     ) -> Result<CallResponse, Error> {
         unreachable!()
     }
+
+    /// Attempts to charge the provided amount of gas from the working set.
+    ///
+    /// The scalar gas value will be computed from the price defined on the working set.
+    fn charge_gas(
+        &self,
+        working_set: &mut WorkingSet<Self::Context>,
+        gas: &<Self::Context as Context>::GasUnit,
+    ) -> anyhow::Result<()> {
+        working_set.charge_gas(gas)
+    }
 }
 
 /// A [`Module`] that has a well-defined and known [JSON
@@ -346,6 +344,7 @@ pub trait ModuleCallJsonSchema: Module {
 
 /// Every module has to implement this trait.
 pub trait ModuleInfo {
+    /// Execution context.
     type Context: Context;
 
     /// Returns address of the module.

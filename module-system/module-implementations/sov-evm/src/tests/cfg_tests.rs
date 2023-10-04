@@ -1,4 +1,4 @@
-use revm::primitives::{CfgEnv, SpecId, U256};
+use revm::primitives::{CfgEnv, SpecId};
 
 use crate::call::{get_cfg_env, get_spec_id};
 use crate::evm::primitive_types::BlockEnv;
@@ -17,24 +17,19 @@ fn cfg_test() {
         ..Default::default()
     };
 
-    let template_cfg = CfgEnv {
-        chain_id: U256::from(2),
-        disable_base_fee: true,
-        ..Default::default()
-    };
+    let mut template_cfg_env = CfgEnv::default();
+    template_cfg_env.chain_id = 2;
+    template_cfg_env.disable_base_fee = true;
 
-    let cfg_env = get_cfg_env(&block_env, cfg, Some(template_cfg));
+    let cfg_env = get_cfg_env(&block_env, cfg, Some(template_cfg_env));
 
-    assert_eq!(
-        cfg_env,
-        CfgEnv {
-            chain_id: U256::from(1),
-            disable_base_fee: true,
-            spec_id: SpecId::SHANGHAI,
-            limit_contract_code_size: Some(100),
-            ..Default::default()
-        }
-    );
+    let mut expected_cfg_env = CfgEnv::default();
+    expected_cfg_env.chain_id = 1;
+    expected_cfg_env.disable_base_fee = true;
+    expected_cfg_env.spec_id = SpecId::SHANGHAI;
+    expected_cfg_env.limit_contract_code_size = Some(100);
+
+    assert_eq!(cfg_env, expected_cfg_env,);
 }
 
 #[test]

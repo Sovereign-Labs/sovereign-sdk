@@ -6,6 +6,7 @@ use sov_modules_stf_template::SequencerOutcome;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_sequencer_registry::SequencerRegistry;
+use sov_state::Storage;
 use tracing::info;
 
 use crate::runtime::Runtime;
@@ -82,11 +83,20 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
         &self,
         #[allow(unused_variables)] slot_header: &Da::BlockHeader,
         #[allow(unused_variables)] validity_condition: &Da::ValidityCondition,
+        #[allow(unused_variables)]
+        pre_state_root: &<<Self::Context as Spec>::Storage as Storage>::Root,
         #[allow(unused_variables)] working_set: &mut sov_modules_api::WorkingSet<C>,
     ) {
         #[cfg(feature = "experimental")]
         self.evm
             .begin_slot_hook(slot_header.hash().into(), working_set);
+
+        self.chain_state.begin_slot_hook(
+            slot_header,
+            validity_condition,
+            pre_state_root,
+            working_set,
+        );
     }
 
     fn end_slot_hook(
@@ -95,19 +105,23 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
     ) {
         #[cfg(feature = "experimental")]
         self.evm.end_slot_hook(working_set);
+
+        self.chain_state.end_slot_hook(working_set);
     }
 }
 
 impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for Runtime<C, Da> {
     type Context = C;
 
-    fn finalize_slot_hook(
+    fn finalize_hook(
         &self,
-        #[allow(unused_variables)] root_hash: [u8; 32],
+        #[allow(unused_variables)] root_hash: &<<Self::Context as Spec>::Storage as Storage>::Root,
         #[allow(unused_variables)] accessory_working_set: &mut AccessoryWorkingSet<C>,
     ) {
         #[cfg(feature = "experimental")]
-        self.evm
-            .finalize_slot_hook(root_hash, accessory_working_set);
+        self.evm.finalize_hook(root_hash, accessory_working_set);
+
+        self.chain_state
+            .finalize_hook(root_hash, accessory_working_set);
     }
 }

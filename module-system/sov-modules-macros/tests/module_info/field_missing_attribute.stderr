@@ -1,4 +1,4 @@
-error: This field is missing an attribute: add `#[module]`, `#[state]` or `#[address]`.
+error: The field `test_state1` is missing an attribute: add `#[module]`, `#[state]`, `#[address]`, or #[gas].
  --> tests/module_info/field_missing_attribute.rs:8:5
   |
 8 |     test_state1: StateMap<u32, u32>,

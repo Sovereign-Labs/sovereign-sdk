@@ -26,7 +26,6 @@ sov-db = { path = "../db/sov-db", version = "0.2", optional = true }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
 sov-state = { path = "../../module-system/sov-state", version = "0.2" }
 sov-modules-api = { path = "../../module-system/sov-modules-api", version = "0.2" }
-sov-celestia-adapter = { path = "../../adapters/celestia", version = "0.2" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -37,6 +36,7 @@ sov-bank = { path = "../../module-system/module-implementations/sov-bank", featu
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
 sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", features = ["native"] }
 sov-accounts = { path = "../../module-system/module-implementations/sov-accounts", features = ["native"] }
+sov-celestia-adapter = { path = "../../adapters/celestia", features = ["native"] }
 
 [features]
 default = []

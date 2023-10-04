@@ -101,12 +101,14 @@ impl GenesisMacro {
 
         quote::quote! {
             #[doc = "Initial configuration for the rollup."]
+            #[derive(::serde::Deserialize, ::serde::Serialize)]
             pub struct GenesisConfig #impl_generics #where_clause{
                 #(#[doc = "Module configuration"] pub #fields)*
             }
 
             impl #impl_generics GenesisConfig #type_generics #where_clause {
                 #[doc = "GenesisConfig constructor."]
+                #[allow(clippy::too_many_arguments)]
                 pub fn new(#(#fields)*) -> Self {
                     Self {
                         #(#field_names),*

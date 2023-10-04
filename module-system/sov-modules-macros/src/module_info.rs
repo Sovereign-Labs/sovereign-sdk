@@ -5,6 +5,7 @@ use syn::{
 
 use self::parsing::{ModuleField, ModuleFieldAttribute, StructDef};
 use crate::common::get_generics_type_param;
+use crate::manifest::Manifest;
 
 pub(crate) fn derive_module_info(
     input: DeriveInput,
@@ -84,6 +85,10 @@ fn impl_module_info(struct_def: &StructDef) -> Result<proc_macro2::TokenStream, 
                 impl_self_init.push(make_init_address(field, ident, generic_param)?);
                 impl_self_body.push(&field.ident);
             }
+            ModuleFieldAttribute::Gas => {
+                impl_self_init.push(make_init_gas_config(ident, field)?);
+                impl_self_body.push(&field.ident);
+            }
         };
     }
 
@@ -93,7 +98,6 @@ fn impl_module_info(struct_def: &StructDef) -> Result<proc_macro2::TokenStream, 
 
     Ok(quote::quote! {
         impl #impl_generics ::std::default::Default for #ident #type_generics #where_clause{
-
             fn default() -> Self {
                 #(#impl_self_init)*
 
@@ -213,6 +217,16 @@ fn make_init_module(field: &ModuleField) -> Result<proc_macro2::TokenStream, syn
     })
 }
 
+fn make_init_gas_config(
+    parent: &Ident,
+    field: &ModuleField,
+) -> Result<proc_macro2::TokenStream, syn::Error> {
+    let field_ident = &field.ident;
+    let ty = &field.ty;
+
+    Manifest::read_constants(parent)?.parse_gas_config(ty, field_ident)
+}
+
 fn make_module_prefix_fn(struct_ident: &Ident) -> proc_macro2::TokenStream {
     let body = make_module_prefix_fn_body(struct_ident);
     quote::quote! {
@@ -270,6 +284,7 @@ pub mod parsing {
             let (impl_generics, type_generics, where_clause) = input.generics.split_for_impl();
             let fields = parse_module_fields(&input.data)?;
             check_exactly_one_address(&fields)?;
+            check_zero_or_one_gas(&fields)?;
 
             Ok(StructDef {
                 ident,
@@ -301,6 +316,7 @@ pub mod parsing {
         Module,
         State { codec_builder: Option<syn::Path> },
         Address,
+        Gas,
     }
 
     impl ModuleFieldAttribute {
@@ -327,6 +343,16 @@ pub mod parsing {
                     }
                 }
                 "state" => parse_state_attr(attr),
+                "gas" => {
+                    if attr.tokens.is_empty() {
+                        Ok(Self::Gas)
+                    } else {
+                        Err(syn::Error::new_spanned(
+                            attr,
+                            "The `#[gas]` attribute does not accept any arguments.",
+                        ))
+                    }
+                }
                 _ => unreachable!("attribute names were validated already; this is a bug"),
             }
         }
@@ -407,6 +433,24 @@ pub mod parsing {
         }
     }
 
+    fn check_zero_or_one_gas(fields: &[ModuleField]) -> syn::Result<()> {
+        let gas_fields = fields
+            .iter()
+            .filter(|field| matches!(field.attr, ModuleFieldAttribute::Gas))
+            .collect::<Vec<_>>();
+
+        match gas_fields.len() {
+            0 | 1 => Ok(()),
+            _ => Err(syn::Error::new_spanned(
+                gas_fields[1].ident.clone(),
+                format!(
+                    "The `gas` attribute is defined more than once, revisit field: {}",
+                    gas_fields[1].ident,
+                ),
+            )),
+        }
+    }
+
     fn data_to_struct(data: &syn::Data) -> syn::Result<&DataStruct> {
         match data {
             syn::Data::Struct(data_struct) => Ok(data_struct),
@@ -433,9 +477,9 @@ pub mod parsing {
         let mut attr = None;
         for a in field.attrs.iter() {
             match a.path.segments[0].ident.to_string().as_str() {
-                "state" | "module" | "address" => {
+                "state" | "module" | "address" | "gas" => {
                     if attr.is_some() {
-                        return Err(syn::Error::new_spanned(ident, "Only one attribute out of `#[module]`, `#[state]` and `#[address]` is allowed per field."));
+                        return Err(syn::Error::new_spanned(ident, "Only one attribute out of `#[module]`, `#[state]`, `#[address]`, and #[gas] is allowed per field."));
                     } else {
                         attr = Some(a);
                     }
@@ -449,7 +493,7 @@ pub mod parsing {
         } else {
             Err(syn::Error::new_spanned(
                 ident,
-                "This field is missing an attribute: add `#[module]`, `#[state]` or `#[address]`.",
+                format!("The field `{}` is missing an attribute: add `#[module]`, `#[state]`, `#[address]`, or #[gas].", ident),
             ))
         }
     }

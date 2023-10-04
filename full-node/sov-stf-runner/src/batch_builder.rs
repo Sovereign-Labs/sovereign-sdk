@@ -125,12 +125,12 @@ where
             current_batch_size += tx_len;
         }
 
-        if txs.is_empty() {
-            bail!("No valid transactions are available");
-        }
-
         for (tx, err) in dismissed {
             warn!("Transaction 0x{} was dismissed: {:?}", hex::encode(tx), err);
+        }
+
+        if txs.is_empty() {
+            bail!("No valid transactions are available");
         }
 
         Ok(txs)

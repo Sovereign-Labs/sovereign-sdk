@@ -3,6 +3,8 @@
 
 /// Contains the call methods used by the module
 pub mod call;
+#[cfg(test)]
+mod tests;
 
 /// Genesis state configuration
 pub mod genesis;
@@ -16,28 +18,30 @@ mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use query::*;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::{DaSpec, Error, ModuleInfo, ValidityConditionChecker, WorkingSet};
 use sov_rollup_interface::da::Time;
 use sov_state::codec::BcsCodec;
+use sov_state::Storage;
 
 /// Type alias that contains the height of a given transition
 pub type TransitionHeight = u64;
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 /// Structure that contains the information needed to represent a single state transition.
-pub struct StateTransitionId<Da: DaSpec> {
+pub struct StateTransitionId<Da: DaSpec, StateRoot> {
     da_block_hash: Da::SlotHash,
-    post_state_root: [u8; 32],
+    post_state_root: StateRoot,
     validity_condition: Da::ValidityCondition,
 }
 
-impl<Da: DaSpec> StateTransitionId<Da> {
+impl<Da: DaSpec, StateRoot> StateTransitionId<Da, StateRoot> {
     /// Creates a new state transition. Only available for testing as we only want to create
     /// new state transitions from existing [`TransitionInProgress`].
     pub fn new(
         da_block_hash: Da::SlotHash,
-        post_state_root: [u8; 32],
+        post_state_root: StateRoot,
         validity_condition: Da::ValidityCondition,
     ) -> Self {
         Self {
@@ -48,16 +52,20 @@ impl<Da: DaSpec> StateTransitionId<Da> {
     }
 }
 
-impl<Da: DaSpec> StateTransitionId<Da> {
+impl<Da: DaSpec, StateRoot: Serialize + DeserializeOwned + Eq> StateTransitionId<Da, StateRoot> {
     /// Compare the transition block hash and state root with the provided input couple. If
     /// the pairs are equal, return [`true`].
-    pub fn compare_hashes(&self, da_block_hash: &Da::SlotHash, post_state_root: &[u8; 32]) -> bool {
+    pub fn compare_hashes(
+        &self,
+        da_block_hash: &Da::SlotHash,
+        post_state_root: &StateRoot,
+    ) -> bool {
         self.da_block_hash == *da_block_hash && self.post_state_root == *post_state_root
     }
 
     /// Returns the post state root of a state transition
-    pub fn post_state_root(&self) -> [u8; 32] {
-        self.post_state_root
+    pub fn post_state_root(&self) -> &StateRoot {
+        &self.post_state_root
     }
 
     /// Returns the da block hash of a state transition
@@ -120,8 +128,11 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
     /// is stored during transition i+1. This is mainly due to the fact that this structure depends on the
     /// rollup's root hash which is only stored once the transition has completed.
     #[state]
-    historical_transitions:
-        sov_modules_api::StateMap<TransitionHeight, StateTransitionId<Da>, BcsCodec>,
+    historical_transitions: sov_modules_api::StateMap<
+        TransitionHeight,
+        StateTransitionId<Da, <C::Storage as Storage>::Root>,
+        BcsCodec,
+    >,
 
     /// The transition that is currently processed
     #[state]
@@ -130,7 +141,7 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
     /// The genesis root hash.
     /// Set after the first transaction of the rollup is executed, using the `begin_slot` hook.
     #[state]
-    genesis_hash: sov_modules_api::StateValue<[u8; 32]>,
+    genesis_hash: sov_modules_api::StateValue<<C::Storage as Storage>::Root>,
 
     /// The height of genesis
     #[state]
@@ -138,6 +149,7 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
 }
 
 /// Initial configuration of the chain state
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct ChainStateConfig {
     /// Initial slot height
     pub initial_slot_height: TransitionHeight,
@@ -161,7 +173,10 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da>
     }
 
     /// Return the genesis hash of the module.
-    pub fn get_genesis_hash(&self, working_set: &mut WorkingSet<C>) -> Option<[u8; 32]> {
+    pub fn get_genesis_hash(
+        &self,
+        working_set: &mut WorkingSet<C>,
+    ) -> Option<<C::Storage as Storage>::Root> {
         self.genesis_hash.get(working_set)
     }
 
@@ -183,7 +198,7 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da>
         &self,
         transition_num: TransitionHeight,
         working_set: &mut WorkingSet<C>,
-    ) -> Option<StateTransitionId<Da>> {
+    ) -> Option<StateTransitionId<Da, <C::Storage as Storage>::Root>> {
         self.historical_transitions
             .get(&transition_num, working_set)
     }

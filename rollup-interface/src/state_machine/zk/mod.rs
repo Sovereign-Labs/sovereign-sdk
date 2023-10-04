@@ -1,4 +1,4 @@
-//! Defines the traits that must be implemented by zkVMs. A ZKVM like Risc0 consists of two components,
+//! Defines the traits that must be implemented by zkVMs. A zkVM like Risc0 consists of two components,
 //! a "guest" and a "host". The guest is the zkVM program itself, and the host is the physical machine on
 //! which the zkVM is running. Both the guest and the host are required to implement the [`Zkvm`] trait, in
 //! addition to the specialized [`ZkvmGuest`] and [`ZkvmHost`] trait which is appropriate to that environment.
@@ -31,7 +31,7 @@ pub trait ZkvmHost: Zkvm {
 
     /// Run the guest in the true zk environment using the provided hints.
     ///
-    /// This runs the guest binary compiled for the ZKVM target, optionally
+    /// This runs the guest binary compiled for the zkVM target, optionally
     /// creating a SNARK of correct execution. Running the true guest binary comes
     /// with some mild performance overhead and is not as easy to debug as [`simulate_with_hints`](ZkvmHost::simulate_with_hints).
     fn run(&mut self, with_proof: bool) -> Result<(), anyhow::Error>;
@@ -60,10 +60,14 @@ pub trait Zkvm {
     /// Same as [`verify`](Zkvm::verify), except that instead of returning the output
     /// as a serialized array, it returns a state transition structure.
     /// TODO: specify a deserializer for the output
-    fn verify_and_extract_output<Add: RollupAddress, Da: DaSpec>(
+    fn verify_and_extract_output<
+        Add: RollupAddress,
+        Da: DaSpec,
+        Root: Serialize + DeserializeOwned,
+    >(
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<StateTransition<Da, Add>, Self::Error>;
+    ) -> Result<StateTransition<Da, Add, Root>, Self::Error>;
 }
 
 /// A trait which is accessible from within a zkVM program.
@@ -101,11 +105,11 @@ pub trait ValidityCondition:
 ///
 /// The period of time covered by a state transition proof may be a single slot, or a range of slots on the DA layer.
 #[derive(Clone, Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, PartialEq, Eq)]
-pub struct StateTransition<Da: DaSpec, Address> {
+pub struct StateTransition<Da: DaSpec, Address, Root> {
     /// The state of the rollup before the transition
-    pub initial_state_root: [u8; 32],
+    pub initial_state_root: Root,
     /// The state of the rollup after the transition
-    pub final_state_root: [u8; 32],
+    pub final_state_root: Root,
     /// The slot hash of the state transition
     pub slot_hash: Da::SlotHash,
 

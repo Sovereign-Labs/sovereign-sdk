@@ -16,7 +16,7 @@ anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["rc"] }
 schemars = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 clap = { workspace = true, optional = true }
@@ -27,9 +27,10 @@ sov-state = { path = "../../sov-state", version = "0.2" }
 
 
 [dev-dependencies]
+sov-accounts = { path = ".", features = ["native"] }
 tempfile = { workspace = true }
 
 [features]
 default = []
 arbitrary = ["dep:arbitrary", "sov-state/arbitrary", "sov-modules-api/arbitrary"]
-native = ["serde", "serde_json", "jsonrpsee", "schemars", "clap", "sov-state/native", "sov-modules-api/native"]
+native = ["serde_json", "jsonrpsee", "schemars", "clap", "sov-state/native", "sov-modules-api/native"]

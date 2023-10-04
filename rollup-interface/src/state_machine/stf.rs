@@ -10,13 +10,13 @@ use serde::{Deserialize, Serialize};
 use crate::da::DaSpec;
 use crate::zk::{ValidityCondition, Zkvm};
 
-#[cfg(any(test, feature = "fuzzing"))]
+#[cfg(any(all(test, feature = "sha2"), feature = "fuzzing"))]
 pub mod fuzzing;
 
 /// The configuration of a full node of the rollup which creates zk proofs.
 pub struct ProverConfig;
 /// The configuration used to initialize the "Verifier" of the state transition function
-/// which runs inside of the zkvm.
+/// which runs inside of the zkVM.
 pub struct ZkConfig;
 /// The configuration of a standard full node of the rollup which does not create zk proofs
 pub struct StandardConfig;
@@ -131,6 +131,7 @@ pub trait StateTransitionFunction<Vm: Zkvm, Da: DaSpec> {
     /// Commits state changes to the database
     fn apply_slot<'a, I>(
         &mut self,
+        pre_state_root: &Self::StateRoot,
         witness: Self::Witness,
         slot_header: &Da::BlockHeader,
         validity_condition: &Da::ValidityCondition,
@@ -143,10 +144,6 @@ pub trait StateTransitionFunction<Vm: Zkvm, Da: DaSpec> {
     >
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>;
-
-    /// Gets the state root from the associated state. If not available (because the chain has not been initialized yet),
-    /// return None.
-    fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot>;
 }
 
 /// A key-value pair representing a change to the rollup state

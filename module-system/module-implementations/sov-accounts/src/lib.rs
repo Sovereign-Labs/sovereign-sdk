@@ -15,7 +15,8 @@ pub use call::{CallMessage, UPDATE_ACCOUNT_MSG};
 use sov_modules_api::{Context, Error, ModuleInfo, WorkingSet};
 
 /// Initial configuration for sov-accounts module.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(bound = "C::PublicKey: serde::Serialize + serde::de::DeserializeOwned")]
 pub struct AccountConfig<C: Context> {
     /// Public keys to initialize the rollup.
     pub pub_keys: Vec<C::PublicKey>,
