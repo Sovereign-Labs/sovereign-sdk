@@ -25,6 +25,15 @@ extern crate prettytable;
 use prettytable::Table;
 use sov_modules_stf_template::TxEffect;
 
+const TEST_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
+    bank_genesis_path: "../test-data/genesis/integration-tests/bank.json",
+    sequencer_genesis_path: "../test-data/genesis/integration-tests/sequencer_registry.json",
+    value_setter_genesis_path: "../test-data/genesis/integration-tests/value_setter.json",
+    accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
+    chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
+    evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
+};
+
 fn print_times(
     total: Duration,
     apply_block_time: Duration,
@@ -104,18 +113,9 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut demo = demo_runner.stf;
     let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
 
-    let genesis_paths = GenesisPaths {
-        bank_genesis_path: "../test-data/genesis/integration-tests/bank.json",
-        sequencer_genesis_path: "../test-data/genesis/integration-tests/sequencer_registry.json",
-        value_setter_genesis_path: "../test-data/genesis/integration-tests/value_setter.json",
-        accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
-        chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
-        evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
-    };
-
     let demo_genesis_config = get_genesis_config(
         sequencer_da_address,
-        &genesis_paths,
+        &TEST_GENESIS_PATHS,
         #[cfg(feature = "experimental")]
         Default::default(),
     );

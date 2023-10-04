@@ -11,7 +11,7 @@ use tokio::sync::oneshot;
 pub async fn start_rollup<Vm: ZkvmHost, P: AsRef<Path>>(
     rpc_reporting_channel: oneshot::Sender<SocketAddr>,
     prover: Option<(Vm, DemoProverConfig)>,
-    genesis_paths: GenesisPaths<P>,
+    genesis_paths: &GenesisPaths<P>,
 ) {
     let temp_dir = tempfile::tempdir().unwrap();
     let temp_path = temp_dir.path();

@@ -15,6 +15,15 @@ mod tx_revert_tests;
 pub(crate) type C = DefaultContext;
 pub(crate) type Da = MockDaSpec;
 
+const TEST_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
+    bank_genesis_path: "../test-data/genesis/integration-tests/bank.json",
+    sequencer_genesis_path: "../test-data/genesis/integration-tests/sequencer_registry.json",
+    value_setter_genesis_path: "../test-data/genesis/integration-tests/value_setter.json",
+    accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
+    chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
+    evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
+};
+
 pub(crate) fn create_new_app_template_for_tests(
     path: impl AsRef<Path>,
 ) -> AppTemplate<
@@ -29,18 +38,9 @@ pub(crate) fn create_new_app_template_for_tests(
 }
 
 pub(crate) fn get_genesis_config_for_tests<Da: DaSpec>() -> GenesisConfig<DefaultContext, Da> {
-    let genesis_paths = GenesisPaths {
-        bank_genesis_path: "../test-data/genesis/integration-tests/bank.json",
-        sequencer_genesis_path: "../test-data/genesis/integration-tests/sequencer_registry.json",
-        value_setter_genesis_path: "../test-data/genesis/integration-tests/value_setter.json",
-        accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
-        chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
-        evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
-    };
-
     get_genesis_config::<DefaultContext, Da, _>(
         Da::Address::try_from(&MOCK_SEQUENCER_DA_ADDRESS).unwrap(),
-        genesis_paths,
+        &TEST_GENESIS_PATHS,
         #[cfg(feature = "experimental")]
         Vec::default(),
     )
