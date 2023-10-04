@@ -347,7 +347,7 @@ impl DaService for MockDaService {
         self.get_finalized_at(height).await
     }
 
-    fn extract_relevant_txs(
+    fn extract_relevant_blobs(
         &self,
         block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction> {
