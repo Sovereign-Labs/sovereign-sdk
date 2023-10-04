@@ -81,7 +81,8 @@ $ cd examples/demo-rollup/
 
 ```sh,test-ci,bashtestmd:long-running
 $ make clean
-$ make start   # Make sure to run `make stop` when you're done with this demo!
+# Make sure to run `make stop` or `make clean` when you're done with this demo!
+$ make start
 ```
 
 If interested, you can check out what the Makefile does [here](#Makefile).  
