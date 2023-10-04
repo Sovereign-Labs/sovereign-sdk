@@ -30,6 +30,7 @@ pub struct DaServiceConfig {
     pub seed: String,
     pub polling_timeout: Option<u64>, 
     pub polling_interval: Option<u64>,
+    pub app_id: u64,
 }
 
 const DEFAULT_POLLING_TIMEOUT: Duration = Duration::from_secs(60);
@@ -42,6 +43,7 @@ pub struct DaProvider {
     signer: PairSigner<AvailConfig, Pair>,
     polling_timeout: Duration, 
     polling_interval: Duration,
+    app_id: u64,
 }
 
 impl DaProvider {
@@ -76,6 +78,7 @@ impl DaProvider {
                 Some(i) =>  Duration::from_secs(i), 
                 None => DEFAULT_POLLING_INTERVAL,
             }, 
+            app_id: config.app_id,
         }
     }
 }
@@ -87,7 +90,7 @@ async fn wait_for_confidence(confidence_url: &str, polling_timeout: Duration, po
 
     loop {
         if start_time.elapsed() >= polling_timeout {
-            return Err(anyhow!("Timeout..."));
+            return Err(anyhow!("Confidence not received after timeout: {}s", polling_timeout.as_secs()));
         }
 
         let response = reqwest::get(confidence_url).await?;
@@ -173,7 +176,7 @@ impl DaService for DaProvider {
         let transactions: Result<Vec<AvailBlobTransaction>, anyhow::Error> = appdata
         .extrinsics
         .iter()
-        .map(|x| AvailBlobTransaction::new(x))
+        .map(AvailBlobTransaction::new)
         .collect();
     
         let transactions = transactions?;
