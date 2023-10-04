@@ -64,15 +64,12 @@ fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
 ) -> anyhow::Result<GenesisConfig<C, Da>> {
     let bank_config: BankConfig<C> = read_json_file(&genesis_paths.bank_genesis_path)?;
 
-    let sequencer_registry_config: SequencerConfig<C, Da> =
+    let mut sequencer_registry_config: SequencerConfig<C, Da> =
         read_json_file(&genesis_paths.sequencer_genesis_path)?;
 
     // Validation
     {
-        assert_eq!(
-            sequencer_registry_config.seq_da_address,
-            sequencer_da_address
-        );
+        sequencer_registry_config.seq_da_address = sequencer_da_address;
 
         let token_address = sov_bank::get_genesis_token_address::<C>(
             &bank_config.tokens[0].token_name,
