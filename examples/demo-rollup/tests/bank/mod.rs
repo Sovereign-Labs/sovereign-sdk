@@ -75,12 +75,12 @@ async fn bank_tx_tests() -> Result<(), anyhow::Error> {
     let config = DemoProverConfig::Execute;
 
     let genesis_paths = GenesisPaths {
-        bank_genesis_path: "../test-data/genesis/bank.json",
-        sequencer_genesis_path: "../test-data/genesis/sequencer_registry.json",
-        value_setter_genesis_path: "../test-data/genesis/value_setter.json",
-        accounts_genesis_path: "../test-data/genesis/accounts.json",
-        chain_state_genesis_path: "../test-data/genesis/chain_state.json",
-        evm_genesis_path: "../test-data/genesis/evm.json",
+        bank_genesis_path: "../test-data/genesis/integration-tests/bank.json",
+        sequencer_genesis_path: "../test-data/genesis/integration-tests/sequencer_registry.json",
+        value_setter_genesis_path: "../test-data/genesis/integration-tests/value_setter.json",
+        accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
+        chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
+        evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
     };
 
     let rollup_task = tokio::spawn(async {
