@@ -8,7 +8,7 @@ In this tutorial, we’ll build an STF which checks if the input data (called a 
 
 The [State Transition Function
 interface](../../rollup-interface/specs/interfaces/stf.md) serves as the core component of our rollup, where the business logic will reside.
-Implementations of this trait can be integrated with any ZKVM and DA Layer resulting in a fully functional rollup. To begin, we will create a structure called `CheckHashPreimageStf`, and implement the `StateTransitionFunction` trait for it. You can find the complete code in the `lib.rs` file, but we will go over the most important parts here:
+Implementations of this trait can be integrated with any zkVM and DA Layer resulting in a fully functional rollup. To begin, we will create a structure called `CheckHashPreimageStf`, and implement the `StateTransitionFunction` trait for it. You can find the complete code in the `lib.rs` file, but we will go over the most important parts here:
 
 ```rust, ignore
 pub struct CheckHashPreimageStf {}

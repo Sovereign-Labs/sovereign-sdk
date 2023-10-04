@@ -82,7 +82,7 @@ pub fn configure_prover<Vm: ZkvmHost, Da: DaService>(
 pub enum DemoProverConfig {
     /// Run the rollup verification logic inside the current process
     Simulate,
-    /// Run the rollup verifier in a zkvm executor
+    /// Run the rollup verifier in a zkVM executor
     Execute,
     /// Run the rollup verifier and create a SNARK of execution
     Prove,

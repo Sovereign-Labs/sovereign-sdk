@@ -395,7 +395,7 @@ impl DaVerifier for MockDaVerifier {
         _inclusion_proof: <Self::Spec as DaSpec>::InclusionMultiProof,
         _completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
     ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error> {
-        Ok(MockValidityCond { is_valid: true })
+        Ok(Default::default())
     }
 }
 

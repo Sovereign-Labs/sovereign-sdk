@@ -16,7 +16,7 @@ pub mod fuzzing;
 /// The configuration of a full node of the rollup which creates zk proofs.
 pub struct ProverConfig;
 /// The configuration used to initialize the "Verifier" of the state transition function
-/// which runs inside of the zkvm.
+/// which runs inside of the zkVM.
 pub struct ZkConfig;
 /// The configuration of a standard full node of the rollup which does not create zk proofs
 pub struct StandardConfig;
