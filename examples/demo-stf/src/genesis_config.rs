@@ -37,10 +37,7 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
     sequencer_da_address: Da::Address,
     #[cfg(feature = "experimental")] eth_signers: Vec<reth_primitives::Address>,
 ) -> GenesisConfig<C, Da> {
-    let token_deployer: PrivateKeyAndAddress<C> = read_private_key();
-
     create_genesis_config(
-        token_deployer.address.clone(),
         sequencer_da_address,
         #[cfg(feature = "experimental")]
         eth_signers,
@@ -49,7 +46,6 @@ pub fn get_genesis_config<C: Context, Da: DaSpec>(
 }
 
 fn create_genesis_config<C: Context, Da: DaSpec>(
-    sequencer_address: C::Address,
     sequencer_da_address: Da::Address,
     #[cfg(feature = "experimental")] eth_signers: Vec<reth_primitives::Address>,
 ) -> anyhow::Result<GenesisConfig<C, Da>> {
@@ -62,19 +58,14 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
 
     // Validation
     {
-        let token_address = sov_bank::get_genesis_token_address::<C>(
-            &bank_config.tokens[0].token_name,
-            bank_config.tokens[0].salt,
-        );
-
-        assert_eq!(
-            sequencer_registry_config.seq_rollup_address,
-            sequencer_address
-        );
-
         assert_eq!(
             sequencer_registry_config.seq_da_address,
             sequencer_da_address
+        );
+
+        let token_address = sov_bank::get_genesis_token_address::<C>(
+            &bank_config.tokens[0].token_name,
+            bank_config.tokens[0].salt,
         );
 
         assert_eq!(
