@@ -30,6 +30,7 @@ pub struct GenesisPaths<P: AsRef<Path>> {
     pub value_setter_genesis_path: P,
     pub accounts_genesis_path: P,
     pub chain_state_genesis_path: P,
+    #[cfg(feature = "experimental")]
     pub evm_genesis_path: P,
 }
 
