@@ -8,6 +8,15 @@ use tracing::info;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
+const GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
+    bank_genesis_path: "../test-data/genesis/demo-tests/bank.json",
+    sequencer_genesis_path: "../test-data/genesis/demo-tests/sequencer_registry.json",
+    value_setter_genesis_path: "../test-data/genesis/demo-tests/value_setter.json",
+    accounts_genesis_path: "../test-data/genesis/demo-tests/accounts.json",
+    chain_state_genesis_path: "../test-data/genesis/demo-tests/chain_state.json",
+    evm_genesis_path: "../test-data/genesis/demo-tests/evm.json",
+};
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     // If SKIP_PROVER is set, We still compile and run the zkVM code inside of an emulator without generating
@@ -41,19 +50,10 @@ async fn main() -> Result<(), anyhow::Error> {
     // Initialize the rollup. For this demo, we use Risc0 and Celestia.
     let prover = Risc0Host::new(ROLLUP_ELF);
 
-    let genesis_paths = GenesisPaths {
-        bank_genesis_path: "../test-data/genesis/demo-tests/bank.json",
-        sequencer_genesis_path: "../test-data/genesis/demo-tests/sequencer_registry.json",
-        value_setter_genesis_path: "../test-data/genesis/demo-tests/value_setter.json",
-        accounts_genesis_path: "../test-data/genesis/demo-tests/accounts.json",
-        chain_state_genesis_path: "../test-data/genesis/demo-tests/chain_state.json",
-        evm_genesis_path: "../test-data/genesis/demo-tests/evm.json",
-    };
-
     let rollup = new_rollup_with_celestia_da(
         &rollup_config_path,
         Some((prover, prover_config)),
-        &genesis_paths,
+        &GENESIS_PATHS,
     )
     .await?;
     rollup.run().await?;

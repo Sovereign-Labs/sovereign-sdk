@@ -23,7 +23,7 @@ use crate::runtime::GenesisConfig;
 pub const LOCKED_AMOUNT: u64 = 50;
 pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
 
-///
+/// Paths pointing to genesis files.
 pub struct GenesisPaths<P: AsRef<Path>> {
     pub bank_genesis_path: P,
     pub sequencer_genesis_path: P,
@@ -58,7 +58,7 @@ pub fn get_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
 }
 
 fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
-    sequencer_da_address: Da::Address,
+    seq_da_address: Da::Address,
     genesis_paths: &GenesisPaths<P>,
     #[cfg(feature = "experimental")] eth_signers: Vec<reth_primitives::Address>,
 ) -> anyhow::Result<GenesisConfig<C, Da>> {
@@ -67,10 +67,11 @@ fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
     let mut sequencer_registry_config: SequencerConfig<C, Da> =
         read_json_file(&genesis_paths.sequencer_genesis_path)?;
 
-    // Validation
-    {
-        sequencer_registry_config.seq_da_address = sequencer_da_address;
+    // The `seq_da_address` is overridden with the value from rollup binary.
+    sequencer_registry_config.seq_da_address = seq_da_address;
 
+    // Sanity check: `token_address` in `sequencer_registry_config` match `token_address` from the bank module.
+    {
         let token_address = sov_bank::get_genesis_token_address::<C>(
             &bank_config.tokens[0].token_name,
             bank_config.tokens[0].salt,
