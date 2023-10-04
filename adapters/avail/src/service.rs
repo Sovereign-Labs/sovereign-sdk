@@ -28,9 +28,9 @@ pub struct DaServiceConfig {
     pub node_client_url: String,
     //TODO: Safer strategy to load seed so it is not accidentally revealed.
     pub seed: String,
-    pub polling_timeout: Option<u64>, 
+    pub polling_timeout: Option<u64>,
     pub polling_interval: Option<u64>,
-    pub app_id: u64,
+    pub app_id: u32,
 }
 
 const DEFAULT_POLLING_TIMEOUT: Duration = Duration::from_secs(60);
@@ -41,9 +41,9 @@ pub struct DaProvider {
     pub node_client: OnlineClient<AvailConfig>,
     pub light_client_url: String,
     signer: PairSigner<AvailConfig, Pair>,
-    polling_timeout: Duration, 
+    polling_timeout: Duration,
     polling_interval: Duration,
-    app_id: u64,
+    app_id: u32,
 }
 
 impl DaProvider {
@@ -71,13 +71,13 @@ impl DaProvider {
             light_client_url,
             signer,
             polling_timeout: match config.polling_timeout {
-                Some(i) =>  Duration::from_secs(i), 
+                Some(i) => Duration::from_secs(i),
                 None => DEFAULT_POLLING_TIMEOUT,
             },
             polling_interval: match config.polling_interval {
-                Some(i) =>  Duration::from_secs(i), 
+                Some(i) => Duration::from_secs(i),
                 None => DEFAULT_POLLING_INTERVAL,
-            }, 
+            },
             app_id: config.app_id,
         }
     }
@@ -85,12 +85,19 @@ impl DaProvider {
 
 // TODO: Is there a way to avoid coupling to tokio?
 
-async fn wait_for_confidence(confidence_url: &str, polling_timeout: Duration, polling_interval: Duration) -> anyhow::Result<()> {
+async fn wait_for_confidence(
+    confidence_url: &str,
+    polling_timeout: Duration,
+    polling_interval: Duration,
+) -> anyhow::Result<()> {
     let start_time = std::time::Instant::now();
 
     loop {
         if start_time.elapsed() >= polling_timeout {
-            return Err(anyhow!("Confidence not received after timeout: {}s", polling_timeout.as_secs()));
+            return Err(anyhow!(
+                "Confidence not received after timeout: {}s",
+                polling_timeout.as_secs()
+            ));
         }
 
         let response = reqwest::get(confidence_url).await?;
@@ -113,12 +120,20 @@ async fn wait_for_confidence(confidence_url: &str, polling_timeout: Duration, po
     Ok(())
 }
 
-async fn wait_for_appdata(appdata_url: &str, block: u32, polling_timeout: Duration, polling_interval: Duration) -> anyhow::Result<ExtrinsicsData> {
+async fn wait_for_appdata(
+    appdata_url: &str,
+    block: u32,
+    polling_timeout: Duration,
+    polling_interval: Duration,
+) -> anyhow::Result<ExtrinsicsData> {
     let start_time = std::time::Instant::now();
 
     loop {
         if start_time.elapsed() >= polling_timeout {
-            return Err(anyhow!("RPC call for filtered block to light client timed out. Timeout: {}s", polling_timeout.as_secs()));
+            return Err(anyhow!(
+                "RPC call for filtered block to light client timed out. Timeout: {}s",
+                polling_timeout.as_secs()
+            ));
         }
 
         let response = reqwest::get(appdata_url).await?;
@@ -156,29 +171,32 @@ impl DaService for DaProvider {
         let appdata_url = self.appdata_url(height);
 
         wait_for_confidence(&confidence_url, self.polling_timeout, self.polling_interval).await?;
-        let appdata = wait_for_appdata(&appdata_url, height as u32, self.polling_timeout, self.polling_interval).await?;
+        let appdata = wait_for_appdata(
+            &appdata_url,
+            height as u32,
+            self.polling_timeout,
+            self.polling_interval,
+        )
+        .await?;
         info!("Appdata: {:?}", appdata);
 
-        let hash = match {node_client
-            .rpc()
-            .block_hash(Some(height.into()))
-            .await?} {
-                Some(i) => i,
-                None => return Err(anyhow!("Hash for height: {} not found.", height))
-            };
-
-        let header = match {node_client.rpc().header(Some(hash)).await?} {
+        let hash = match { node_client.rpc().block_hash(Some(height.into())).await? } {
             Some(i) => i,
-            None => return Err(anyhow!("Header for hash: {} not found.", hash))
+            None => return Err(anyhow!("Hash for height: {} not found.", height)),
+        };
+
+        let header = match { node_client.rpc().header(Some(hash)).await? } {
+            Some(i) => i,
+            None => return Err(anyhow!("Header for hash: {} not found.", hash)),
         };
 
         let header = AvailHeader::new(header, hash);
         let transactions: Result<Vec<AvailBlobTransaction>, anyhow::Error> = appdata
-        .extrinsics
-        .iter()
-        .map(AvailBlobTransaction::new)
-        .collect();
-    
+            .extrinsics
+            .iter()
+            .map(AvailBlobTransaction::new)
+            .collect();
+
         let transactions = transactions?;
         Ok(AvailBlock {
             header,
@@ -195,7 +213,7 @@ impl DaService for DaProvider {
     // Extract the blob transactions relevant to a particular rollup from a block.
     // NOTE: The avail light client is expected to be run in app specific mode, and hence the
     // transactions in the block are already filtered and retrieved by light client.
-    fn extract_relevant_txs(
+    fn extract_relevant_blobs(
         &self,
         block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction> {
@@ -221,7 +239,7 @@ impl DaService for DaProvider {
             .data_availability()
             .submit_data(BoundedVec(blob.to_vec()));
 
-        let extrinsic_params = AvailExtrinsicParams::new_with_app_id(7.into());
+        let extrinsic_params = AvailExtrinsicParams::new_with_app_id(self.app_id.into());
 
         let h = self
             .node_client

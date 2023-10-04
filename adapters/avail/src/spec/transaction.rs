@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 #[cfg(feature = "native")]
 use avail_subxt::{
     api::runtime_types::{da_control::pallet::Call, da_runtime::RuntimeCall::DataAvailability},
@@ -8,7 +9,6 @@ use bytes::Bytes;
 use codec::Encode;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
-use anyhow::anyhow;
 
 use super::address::AvailAddress;
 
@@ -52,13 +52,21 @@ impl AvailBlobTransaction {
         let address = match &unchecked_extrinsic.signature {
             //TODO: Handle other types of MultiAddress.
             Some((subxt::utils::MultiAddress::Id(id), _, _)) => AvailAddress::from(id.clone().0),
-            _ => return Err(anyhow!("Unsigned extrinsic being used to create AvailBlobTransaction.")),
+            _ => {
+                return Err(anyhow!(
+                    "Unsigned extrinsic being used to create AvailBlobTransaction."
+                ))
+            }
         };
         let blob = match &unchecked_extrinsic.function {
             DataAvailability(Call::submit_data { data }) => {
                 CountedBufReader::<Bytes>::new(Bytes::copy_from_slice(&data.0))
             }
-            _ => return Err(anyhow!("Invalid type of extrinsic being converted to AvailBlobTransaction.")),
+            _ => {
+                return Err(anyhow!(
+                    "Invalid type of extrinsic being converted to AvailBlobTransaction."
+                ))
+            }
         };
 
         Ok(AvailBlobTransaction {
