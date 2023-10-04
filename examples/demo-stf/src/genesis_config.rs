@@ -1,7 +1,7 @@
 use std::convert::AsRef;
 use std::path::Path;
 
-use anyhow::Context as AnyhowContext;
+use anyhow::{bail, Context as AnyhowContext};
 use serde::de::DeserializeOwned;
 use sov_accounts::AccountConfig;
 use sov_bank::BankConfig;
@@ -78,10 +78,14 @@ fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
             bank_config.tokens[0].salt,
         );
 
-        assert_eq!(
-            sequencer_registry_config.coins_to_lock.token_address,
-            token_address
-        );
+        let coins_token_addr = &sequencer_registry_config.coins_to_lock.token_address;
+        if coins_token_addr != &token_address {
+            bail!(
+                "Wrong token address in `sequencer_registry_config` expected {} but found {}",
+                token_address,
+                coins_token_addr
+            )
+        }
     }
 
     let value_setter_config: ValueSetterConfig<C> =
