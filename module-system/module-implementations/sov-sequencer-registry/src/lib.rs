@@ -12,7 +12,8 @@ mod genesis;
 mod hooks;
 #[cfg(feature = "native")]
 mod query;
-
+#[cfg(test)]
+mod tests;
 pub use call::CallMessage;
 #[cfg(feature = "native")]
 pub use query::*;
@@ -26,7 +27,8 @@ use sov_state::codec::BcsCodec;
 /// [`Module::genesis`](sov_modules_api::Module::genesis).
 ///
 // TODO: Should we allow multiple sequencers in genesis?
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(bound = "C::Address: serde::Serialize + serde::de::DeserializeOwned")]
 pub struct SequencerConfig<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> {
     /// The rollup address of the sequencer.
     pub seq_rollup_address: C::Address,
