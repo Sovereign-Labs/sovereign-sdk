@@ -44,7 +44,7 @@ impl<C: Context, Da: DaSpec> ApplyBlobHooks<Da::BlobTransaction> for Runtime<C, 
         blob: &mut Da::BlobTransaction,
         working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
-        // Before executing each batch, check that the sender is regsitered as a sequencer
+        // Before executing each batch, check that the sender is registered as a sequencer
         self.sequencer_registry.begin_blob_hook(blob, working_set)
     }
 

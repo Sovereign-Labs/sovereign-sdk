@@ -1,6 +1,6 @@
 //! This module implements the batch builder for the rollup.
 //! To swap out the batch builder, simply replace the
-//! FifoStructBatchBuilder in `StfWithBuilder` with a type of your choosing.
+//! FiFoStrictBatchBuilder in `StfWithBuilder` with a type of your choosing.
 use sov_modules_api::default_context::DefaultContext;
 #[cfg(feature = "native")]
 use sov_modules_api::Spec;

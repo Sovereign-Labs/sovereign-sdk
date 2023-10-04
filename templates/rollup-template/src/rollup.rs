@@ -1,3 +1,5 @@
+//! Defines the rollup full node implementation, including logic for configuring
+//! and starting the rollup node.
 use serde::de::DeserializeOwned;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};

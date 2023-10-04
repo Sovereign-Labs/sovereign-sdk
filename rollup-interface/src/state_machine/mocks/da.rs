@@ -27,7 +27,6 @@ pub const MOCK_SEQUENCER_DA_ADDRESS: [u8; 32] = [0u8; 32];
 #[derive(
     Debug, PartialEq, Clone, Eq, Copy, Hash, Default, borsh::BorshDeserialize, borsh::BorshSerialize,
 )]
-#[serde(transparent)]
 pub struct MockAddress {
     /// Underlying mock address.
     pub addr: [u8; 32],
