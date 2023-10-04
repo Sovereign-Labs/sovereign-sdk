@@ -13,6 +13,7 @@ pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Context;
 use sov_nft_module::NonFungibleTokenConfig;
 use sov_rollup_interface::da::DaSpec;
+use sov_sequencer_registry::SequencerConfig;
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
 
@@ -52,31 +53,35 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
     sequencer_da_address: Da::Address,
     #[cfg(feature = "experimental")] eth_signers: Vec<reth_primitives::Address>,
 ) -> anyhow::Result<GenesisConfig<C, Da>> {
-    // This path will be injected as a parameter: #872
     let bank_genesis_path = "../test-data/genesis/bank.json";
     let bank_config: BankConfig<C> = read_json_file(bank_genesis_path)?;
-    // This will be read from a file: #872
-    let token_address = sov_bank::get_genesis_token_address::<C>(
-        &bank_config.tokens[0].token_name,
-        bank_config.tokens[0].salt,
-    );
 
-    println!("create_genesis_config: {:?}", sequencer_da_address);
-    // This will be read from a file: #872
-    let sequencer_registry_config = sov_sequencer_registry::SequencerConfig {
-        seq_rollup_address: sequencer_address,
-        seq_da_address: sequencer_da_address,
-        coins_to_lock: sov_bank::Coins {
-            amount: LOCKED_AMOUNT,
-            token_address,
-        },
-        is_preferred_sequencer: true,
-    };
+    let sequencer_registry_path = "../test-data/genesis/sequencer_registry.json";
+    let sequencer_registry_config: SequencerConfig<C, Da> =
+        read_json_file(sequencer_registry_path)?;
 
-    let json = serde_json::to_string(&sequencer_registry_config).unwrap();
+    // Validation
+    {
+        let token_address = sov_bank::get_genesis_token_address::<C>(
+            &bank_config.tokens[0].token_name,
+            bank_config.tokens[0].salt,
+        );
 
-    println!("{}", json);
+        assert_eq!(
+            sequencer_registry_config.seq_rollup_address,
+            sequencer_address
+        );
 
+        assert_eq!(
+            sequencer_registry_config.seq_da_address,
+            sequencer_da_address
+        );
+
+        assert_eq!(
+            sequencer_registry_config.coins_to_lock.token_address,
+            token_address
+        );
+    }
     // This path will be injected as a parameter: #872
     let value_setter_genesis_path = "../test-data/genesis/value_setter.json";
     let value_setter_config: ValueSetterConfig<C> = read_json_file(value_setter_genesis_path)?;
