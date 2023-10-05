@@ -23,7 +23,7 @@ use sov_stf_runner::RollupConfig;
 /// Creates a new instance of the DA Service
 #[cfg(feature = "native")]
 pub async fn start_da_service(rollup_config: &RollupConfig<DaConfig>) -> DaService {
-    DaService::new(rollup_config.da.sender_address.clone())
+    DaService::new(rollup_config.da.sender_address)
 }
 
 /// Creates a new verifier for the rollup's DA.
