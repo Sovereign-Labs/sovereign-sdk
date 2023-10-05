@@ -2516,19 +2516,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "env_logger"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85cdab6a89accf66733ad5a1693a4dcced6aeff64602b634530dd73c1f3ee9f0"
-dependencies = [
- "humantime",
- "is-terminal",
- "log",
- "regex",
- "termcolor",
-]
-
-[[package]]
 name = "environmental"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8327,42 +8314,6 @@ dependencies = [
  "sov-schema-db",
  "tempfile",
  "tokio",
-]
-
-[[package]]
-name = "sov-demo-prover-host"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "bincode",
- "borsh",
- "const-rollup-config",
- "demo-stf",
- "env_logger",
- "hex",
- "jsonrpsee 0.18.2",
- "log",
- "log4rs",
- "once_cell",
- "parking_lot 0.12.1",
- "prettytable-rs",
- "regex",
- "risc0-zkvm",
- "serde",
- "serde_json",
- "sha2 0.10.8",
- "sov-celestia-adapter",
- "sov-demo-rollup",
- "sov-modules-api",
- "sov-risc0-adapter",
- "sov-rollup-interface",
- "sov-state",
- "sov-stf-runner",
- "sov-zk-cycle-macros",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber 0.3.17",
 ]
 
 [[package]]
