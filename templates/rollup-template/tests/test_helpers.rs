@@ -11,6 +11,10 @@ use tokio::sync::oneshot;
 pub async fn start_rollup<Vm: ZkvmHost>(rpc_reporting_channel: oneshot::Sender<SocketAddr>) {
     let temp_dir = tempfile::tempdir().unwrap();
     let temp_path = temp_dir.path();
+    let genesis_config = serde_json::from_str::<GenesisConfig<DefaultContext, MockDaSpec>>(
+        include_str!("test_genesis.json"),
+    )
+    .expect("Test genesis configuration must be valid");
 
     let rollup_config = RollupConfig {
         storage: StorageConfig {
@@ -23,12 +27,11 @@ pub async fn start_rollup<Vm: ZkvmHost>(rpc_reporting_channel: oneshot::Sender<S
                 bind_port: 0,
             },
         },
-        da: MockDaConfig {},
+        da: MockDaConfig {
+            sender_address: genesis_config.sequencer_registry.seq_da_address.clone(),
+        },
     };
-    let genesis_config = serde_json::from_str::<GenesisConfig<DefaultContext, MockDaSpec>>(
-        include_str!("test_genesis.json"),
-    )
-    .unwrap();
+
     let rollup = Rollup::<Vm, _>::new(
         MockDaService::new(genesis_config.sequencer_registry.seq_da_address),
         genesis_config,

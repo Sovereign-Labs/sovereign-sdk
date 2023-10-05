@@ -7178,13 +7178,12 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
- "clap",
- "jsonrpsee",
+ "clap 4.4.6",
+ "jsonrpsee 0.18.2",
  "serde",
  "serde_json",
  "sov-accounts",
  "sov-bank",
- "sov-celestia-adapter",
  "sov-db",
  "sov-modules-api",
  "sov-modules-stf-template",
@@ -7197,7 +7196,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
- "tracing-subscriber",
+ "tracing-subscriber 0.3.17",
 ]
 
 [[package]]

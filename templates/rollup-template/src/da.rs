@@ -8,38 +8,24 @@
 
 /// The type alias for the DA layer configuration. Change the contents of this alias if you change DA layers.
 #[cfg(feature = "native")]
-pub type DaConfig = sov_celestia_adapter::DaServiceConfig;
+pub type DaConfig = sov_rollup_interface::mocks::MockDaConfig;
 /// The type alias for the DA layer verifier. Change the contents of this alias if you change DA layers.
-pub type DaVerifier = sov_celestia_adapter::verifier::CelestiaVerifier;
+pub type DaVerifier = MockDaVerifier;
 /// The type alias for the DA service. Change the contents of this alias if you change DA layers.
 #[cfg(feature = "native")]
-pub type DaService = sov_celestia_adapter::CelestiaService;
+pub type DaService = sov_rollup_interface::mocks::MockDaService;
 
-use sov_celestia_adapter::types::NamespaceId;
-use sov_celestia_adapter::verifier::CelestiaVerifier;
-#[cfg(feature = "native")]
-use sov_celestia_adapter::verifier::RollupParams;
+use sov_rollup_interface::{da::DaVerifier as _, mocks::MockDaVerifier};
 #[cfg(feature = "native")]
 use sov_stf_runner::RollupConfig;
-
-/// The Celestia namespace to which the rollup will write its data
-const ROLLUP_NAMESPACE: NamespaceId = NamespaceId([11; 8]);
 
 /// Creates a new instance of the DA Service
 #[cfg(feature = "native")]
 pub async fn start_da_service(rollup_config: &RollupConfig<DaConfig>) -> DaService {
-    DaService::new(
-        rollup_config.da.clone(),
-        RollupParams {
-            namespace: ROLLUP_NAMESPACE,
-        },
-    )
-    .await
+    DaService::new(rollup_config.da.sender_address.clone())
 }
 
 /// Creates a new verifier for the rollup's DA.
 pub fn new_da_verifier() -> DaVerifier {
-    CelestiaVerifier {
-        rollup_namespace: ROLLUP_NAMESPACE,
-    }
+    DaVerifier::new(())
 }

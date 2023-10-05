@@ -33,8 +33,7 @@ sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true }
 sov-rollup-interface = { path = "../../rollup-interface" } 
 tokio = { workspace = true, optional = true }
 
-# Switch these dependencies to use a different DA layer or ZKVM
-sov-celestia-adapter = { path = "../../adapters/celestia" } 
+# Change dependencies here to use a different DA layer or ZKVM
 sov-risc0-adapter = { path = "../../adapters/risc0" }
 
 # binary dependencies
@@ -50,7 +49,6 @@ native = [
 	"sov-accounts/native", 
 	"sov-bank/native", 
 	"sov-sequencer-registry/native",
-	"sov-celestia-adapter/native",
 	"sov-risc0-adapter/native",
 	"sov-stf-runner/native",
 	"sov-modules-stf-template/native",
