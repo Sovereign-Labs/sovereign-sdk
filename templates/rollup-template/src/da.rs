@@ -15,7 +15,8 @@ pub type DaVerifier = MockDaVerifier;
 #[cfg(feature = "native")]
 pub type DaService = sov_rollup_interface::mocks::MockDaService;
 
-use sov_rollup_interface::{da::DaVerifier as _, mocks::MockDaVerifier};
+use sov_rollup_interface::da::DaVerifier as _;
+use sov_rollup_interface::mocks::MockDaVerifier;
 #[cfg(feature = "native")]
 use sov_stf_runner::RollupConfig;
 
