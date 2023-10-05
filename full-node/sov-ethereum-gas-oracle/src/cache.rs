@@ -1,7 +1,5 @@
-use std::{
-    hash::Hash,
-    sync::{Mutex, RwLock},
-};
+use std::hash::Hash;
+use std::sync::{Mutex, RwLock};
 
 use reth_primitives::H256;
 use reth_rpc_types::{Block, Rich, RichBlock};

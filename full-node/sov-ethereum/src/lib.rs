@@ -11,9 +11,6 @@ pub mod experimental {
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
-    use super::batch_builder::EthBatchBuilder;
-    #[cfg(feature = "local")]
-    use super::DevSigner;
     use borsh::ser::BorshSerialize;
     use demo_stf::app::DefaultPrivateKey;
     use demo_stf::runtime::{DefaultContext, Runtime};
@@ -29,6 +26,10 @@ pub mod experimental {
     use sov_modules_api::utils::to_jsonrpsee_error_object;
     use sov_modules_api::{EncodeCall, WorkingSet};
     use sov_rollup_interface::services::da::DaService;
+
+    use super::batch_builder::EthBatchBuilder;
+    #[cfg(feature = "local")]
+    use super::DevSigner;
 
     const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
 

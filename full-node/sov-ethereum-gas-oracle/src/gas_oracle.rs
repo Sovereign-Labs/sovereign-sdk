@@ -7,13 +7,10 @@ use reth_primitives::{H256, U256, U64};
 use reth_rpc_types::{Block, BlockTransactions};
 use schnellru::ByLength;
 use serde::{Deserialize, Serialize};
+use sov_evm::{EthApiError, EthResult, Evm, RpcInvalidTransactionError};
 use sov_modules_api::{AccessoryWorkingSet, WorkingSet};
 use tokio::sync::Mutex;
-
 use tracing::warn;
-
-use sov_evm::{EthApiError, EthResult};
-use sov_evm::{Evm, RpcInvalidTransactionError};
 
 use crate::cache::BlockCache;
 
