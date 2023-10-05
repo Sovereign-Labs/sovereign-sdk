@@ -20,7 +20,7 @@ sov-rollup-interface = { path = "../../rollup-interface" }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" }
 sov-modules-api = { path = "../../module-system/sov-modules-api" }
 demo-stf = { path = "../demo-stf" }
-methods = { path = "./methods" }
+risc0 = { path = "./provers/risc0" }
 async-trait = { workspace = true, optional = true }
 anyhow = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["bytes"], optional = true }
@@ -85,7 +85,7 @@ native = ["anyhow", "jsonrpsee", "serde", "serde_json", "tracing", "tokio", "tra
 	"sov-state/native", "sov-cli", "clap", "sov-celestia-adapter/native", "sov-db", "sov-sequencer", "sov-stf-runner/native",
 	"sov-modules-api/native", "sov-rollup-interface/native"]
 
-bench = ["native", "async-trait", "borsh", "hex", "sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "methods/bench"]
+bench = ["native", "async-trait", "borsh", "hex", "sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "risc0/bench"]
 
 offchain = ["demo-stf/offchain"]
 
