@@ -19,6 +19,8 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::experimental::EthRpcConfig;
+#[cfg(feature = "experimental")]
+use sov_ethereum_gas_price::experimental::GasPriceOracleConfig;
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::mocks::{MockAddress, MockDaConfig, MockDaService};
@@ -32,7 +34,7 @@ use tracing::debug;
 
 #[cfg(feature = "experimental")]
 use crate::register_rpc::register_ethereum;
-use crate::register_rpc::{register_ledger, register_sequencer};
+use crate::register_rpc::{register_ethereum_gas_price, register_ledger, register_sequencer};
 use crate::{initialize_ledger, ROLLUP_NAMESPACE};
 
 #[cfg(feature = "experimental")]
@@ -55,6 +57,9 @@ pub struct Rollup<Vm: ZkvmHost, Da: DaService + Clone> {
     #[cfg(feature = "experimental")]
     /// Configuration for the Ethereum RPC.
     pub eth_rpc_config: EthRpcConfig,
+    #[cfg(feature = "experimental")]
+    /// Configuration for the gas price oracle.
+    pub gas_price_oracle_config: GasPriceOracleConfig,
     /// Prover for the rollup.
     #[allow(clippy::type_complexity)]
     pub prover: Option<Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm>>,
@@ -117,6 +122,7 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
         #[cfg(feature = "experimental")]
         eth_signer.signers(),
     );
+
     let prover = prover.map(|(vm, config)| {
         configure_prover(
             vm,
@@ -139,6 +145,8 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
             eth_signer,
         },
+        #[cfg(feature = "experimental")]
+        gas_price_oracle_config: GasPriceOracleConfig::default(),
         prover,
     })
 }
@@ -187,6 +195,8 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost>(
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
             eth_signer,
         },
+        #[cfg(feature = "experimental")]
+        gas_price_oracle_config: GasPriceOracleConfig::default(),
         prover,
     })
 }
@@ -238,6 +248,12 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
             register_ethereum::<DefaultContext, Da>(
                 self.da_service.clone(),
                 self.eth_rpc_config,
+                storage.clone(),
+                &mut methods,
+            )?;
+            #[cfg(feature = "experimental")]
+            register_ethereum_gas_price::<DefaultContext>(
+                self.gas_price_oracle_config,
                 storage,
                 &mut methods,
             )?;

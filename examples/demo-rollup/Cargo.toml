@@ -24,7 +24,10 @@ methods = { path = "../demo-prover/methods" }
 async-trait = { workspace = true, optional = true }
 anyhow = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["bytes"], optional = true }
-jsonrpsee = { workspace = true, features = ["http-client", "server"], optional = true }
+jsonrpsee = { workspace = true, features = [
+	"http-client",
+	"server",
+], optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 serde_json = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
@@ -33,20 +36,27 @@ secp256k1 = { workspace = true, optional = true }
 
 tokio = { workspace = true, optional = true }
 reth-primitives = { workspace = true, optional = true }
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"], optional = true }
+tracing-subscriber = { version = "0.3.17", features = [
+	"env-filter",
+], optional = true }
 
 sov-db = { path = "../../full-node/db/sov-db", optional = true }
+sov-ethereum-gas-price = { path = "../../full-node/sov-ethereum-gas-price", optional = true }
 sov-ethereum = { path = "../../full-node/sov-ethereum", optional = true }
-sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true  }
+sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true }
 sov-risc0-adapter = { path = "../../adapters/risc0" }
 sov-state = { path = "../../module-system/sov-state" }
 sov-cli = { path = "../../module-system/sov-cli", optional = true }
-clap = { workspace = true, optional = true}
+clap = { workspace = true, optional = true }
 
 
 [dev-dependencies]
-sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["smart_contracts"] }
-sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
+sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = [
+	"smart_contracts",
+] }
+sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = [
+	"native",
+] }
 borsh = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
@@ -55,7 +65,9 @@ reqwest = "0.11"
 tendermint = "0.32"
 tempfile = { workspace = true }
 proptest = { workspace = true }
-sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }
+sov-rollup-interface = { path = "../../rollup-interface", features = [
+	"fuzzing",
+] }
 tokio = { workspace = true }
 sov-demo-rollup = { path = ".", features = ["native"] }
 prometheus = "0.11.0"
@@ -72,12 +84,40 @@ ethers = { workspace = true }
 revm = { workspace = true }
 
 [features]
-default = ["native"] # Deviate from convention by making the "native" feature active by default. This aligns with how this package is meant to be used (as a binary first, library second).
-experimental = ["default", "sov-ethereum/experimental", "reth-primitives", "secp256k1", "demo-stf/experimental", "sov-ethereum/local"]
-native = ["anyhow", "jsonrpsee", "serde", "serde_json", "tracing", "tokio", "tracing-subscriber",
-	"demo-stf/native", "sov-modules-stf-template/native", "sov-risc0-adapter/native", "sov-modules-api/native",
-	"sov-state/native", "sov-cli", "clap", "sov-celestia-adapter/native", "sov-db", "sov-sequencer", "sov-stf-runner/native",
-	"sov-modules-api/native", "sov-rollup-interface/native"]
+default = [
+	"native",
+] # Deviate from convention by making the "native" feature active by default. This aligns with how this package is meant to be used (as a binary first, library second).
+experimental = [
+	"default",
+	"sov-ethereum/experimental",
+	"sov-ethereum-gas-price/experimental",
+	"reth-primitives",
+	"secp256k1",
+	"demo-stf/experimental",
+	"sov-ethereum/local",
+]
+native = [
+	"anyhow",
+	"jsonrpsee",
+	"serde",
+	"serde_json",
+	"tracing",
+	"tokio",
+	"tracing-subscriber",
+	"demo-stf/native",
+	"sov-modules-stf-template/native",
+	"sov-risc0-adapter/native",
+	"sov-modules-api/native",
+	"sov-state/native",
+	"sov-cli",
+	"clap",
+	"sov-celestia-adapter/native",
+	"sov-db",
+	"sov-sequencer",
+	"sov-stf-runner/native",
+	"sov-modules-api/native",
+	"sov-rollup-interface/native",
+]
 bench = ["native", "async-trait", "borsh", "hex"]
 offchain = ["demo-stf/offchain"]
 
