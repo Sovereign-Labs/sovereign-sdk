@@ -221,7 +221,7 @@ Here's an example of a JSON representing the above call:
     "to": "sov1zgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfqve8h6h",
     "coins": {
       "amount": 200,
-      "token_address": "sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"
+      "token_address": "sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsavg2ft"
     }
   }
 }
@@ -267,7 +267,7 @@ Adding the following transaction to batch:
       "to": "sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94",
       "coins": {
         "amount": 200,
-        "token_address": "sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"
+        "token_address": "sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsavg2ft"
       }
     }
   }
@@ -290,7 +290,7 @@ This command will use your default private key.
 #### 4. Verify the Token Supply
 
 ```bash,test-ci,bashtestmd:compare-output
-$ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_supplyOf","params":["sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"],"id":1}' http://127.0.0.1:12345
+$ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_supplyOf","params":["sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsavg2ft"],"id":1}' http://127.0.0.1:12345
 {"jsonrpc":"2.0","result":{"amount":1000},"id":1}
 ```
 
