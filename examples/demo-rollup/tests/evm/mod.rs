@@ -408,6 +408,22 @@ impl TestClient {
 
         self.send_publish_batch_request().await;
 
+        // second block
+        self.send_publish_batch_request().await;
+
+        let first_block = self.eth_get_block_by_number(Some("0".to_owned())).await;
+        let second_block = self.eth_get_block_by_number(Some("1".to_owned())).await;
+
+        println!("first_block: {:?}", first_block);
+        println!("second_block: {:?}", second_block);
+
+        // assert parent hash
+        assert_eq!(
+            first_block.hash.unwrap(),
+            second_block.parent_hash,
+            "Parent hash should be the hash of the previous block"
+        );
+
         for req in requests {
             req.await.unwrap();
         }

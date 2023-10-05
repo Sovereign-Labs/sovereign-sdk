@@ -3,6 +3,7 @@ use reth_primitives::TransactionSignedEcRecovered;
 use reth_revm::into_reth_log;
 use revm::primitives::{CfgEnv, EVMError, SpecId};
 use sov_modules_api::{CallResponse, WorkingSet};
+use tracing::info;
 
 use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};
@@ -42,6 +43,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
         let result = executor::execute_tx(evm_db, &block_env, &evm_tx_recovered, cfg_env);
+        info!("EVM call result: {:?}", result);
         let previous_transaction = self.pending_transactions.last(working_set);
         let previous_transaction_cumulative_gas_used = previous_transaction
             .as_ref()

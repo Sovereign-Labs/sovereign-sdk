@@ -1,5 +1,5 @@
 [package]
-name = "sov-ethereum-gas-oracle"
+name = "sov-ethereum-gas-price"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }

@@ -7340,6 +7340,7 @@ dependencies = [
  "sov-db",
  "sov-demo-rollup",
  "sov-ethereum",
+ "sov-ethereum-gas-price",
  "sov-evm",
  "sov-modules-api",
  "sov-modules-stf-template",
@@ -7374,7 +7375,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-ethereum-gas-oracle"
+name = "sov-ethereum-gas-price"
 version = "0.2.0"
 dependencies = [
  "anyhow",
