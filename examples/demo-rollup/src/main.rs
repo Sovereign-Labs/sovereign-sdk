@@ -60,23 +60,25 @@ async fn main() -> Result<(), anyhow::Error> {
 
     match args.da_layer.as_str() {
         "mock" => {
-            let prover = Risc0Host::new(MOCK_DA_ELF);
-            let config = DemoProverConfig::Execute;
+            let _prover = Risc0Host::new(MOCK_DA_ELF);
+            let _config = DemoProverConfig::Execute;
 
             let rollup = new_rollup_with_mock_da::<Risc0Host<'static>, _>(
                 rollup_config_path,
-                Some((prover, config)),
+                //Some((prover, config)),
+                None,
                 &TEST_GENESIS_PATHS,
             )?;
             rollup.run().await
         }
         "celestia" => {
-            let prover = Risc0Host::new(ROLLUP_ELF);
-            let config = DemoProverConfig::Execute;
+            let _prover = Risc0Host::new(ROLLUP_ELF);
+            let _config = DemoProverConfig::Execute;
 
             let rollup = new_rollup_with_celestia_da::<Risc0Host<'static>, _>(
                 rollup_config_path,
-                Some((prover, config)),
+                //Some((prover, config)),
+                None,
                 &DEMO_GENESIS_PATHS,
             )
             .await?;
