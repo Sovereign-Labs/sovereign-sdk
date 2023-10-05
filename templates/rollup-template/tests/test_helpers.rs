@@ -28,7 +28,7 @@ pub async fn start_rollup<Vm: ZkvmHost>(rpc_reporting_channel: oneshot::Sender<S
             },
         },
         da: MockDaConfig {
-            sender_address: genesis_config.sequencer_registry.seq_da_address.clone(),
+            sender_address: genesis_config.sequencer_registry.seq_da_address,
         },
     };
 
