@@ -1,5 +1,5 @@
 use std::env;
-
+/* 
 use demo_stf::genesis_config::GenesisPaths;
 use methods::ROLLUP_ELF;
 use sov_demo_rollup::{new_rollup_with_celestia_da, DemoProverConfig};
@@ -16,10 +16,11 @@ const GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
     chain_state_genesis_path: "../test-data/genesis/demo-tests/chain_state.json",
     #[cfg(feature = "experimental")]
     evm_genesis_path: "../test-data/genesis/demo-tests/evm.json",
-};
+};*/
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    /* 
     // If SKIP_PROVER is set, We still compile and run the zkVM code inside of an emulator without generating
     // a proof. This dramatically reduces the runtime of the prover, while still ensuring that our rollup
     // code is valid and operates as expected.
@@ -58,6 +59,6 @@ async fn main() -> Result<(), anyhow::Error> {
     )
     .await?;
     rollup.run().await?;
-
+*/
     Ok(())
 }

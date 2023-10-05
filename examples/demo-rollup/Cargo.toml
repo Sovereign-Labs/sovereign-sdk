@@ -20,7 +20,7 @@ sov-rollup-interface = { path = "../../rollup-interface" }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" }
 sov-modules-api = { path = "../../module-system/sov-modules-api" }
 demo-stf = { path = "../demo-stf" }
-methods = { path = "../demo-prover/methods" }
+methods = { path = "./methods" }
 async-trait = { workspace = true, optional = true }
 anyhow = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["bytes"], optional = true }

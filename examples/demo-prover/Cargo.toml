@@ -31,7 +31,7 @@ sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", optional = true }
 sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
 
-methods = { path = "./methods" }
+
 
 
 [dev-dependencies]
@@ -50,5 +50,6 @@ harness = false
 required-features = ["bench"]
 
 [features]
-bench = ["sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "methods/bench", "experimental"]
+#bench = ["sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "methods/bench", "experimental"]
+bench = ["sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "experimental"]
 experimental = ["sov-demo-rollup/experimental", "demo-stf/experimental"]
