@@ -38,7 +38,7 @@ fn main() {
     let kp = read_keypair_file(signer).unwrap();
     let c = Client::new(Cluster::Localnet, Rc::new(kp));
     let program_id: Pubkey = Pubkey::new(
-        &bs58::decode("669V5MzeTYri4kmbuY794EMxcKY2LKHZQzL9recSdPUL").into_vec().unwrap());
+        &bs58::decode("6YQGvP866CHpLTdHwmLqj2Vh5q7T1GF4Kk9gS9MCta8E").into_vec().unwrap());
     let prog = c.program(program_id).unwrap();
     let signature = prog.request()
         .accounts(blockroot_accounts::Initialize {})
