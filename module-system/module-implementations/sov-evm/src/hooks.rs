@@ -11,7 +11,12 @@ where
     <C::Storage as Storage>::Root: Into<[u8; 32]>,
 {
     /// Logic executed at the beginning of the slot. Here we set the root hash of the previous head.
-    pub fn begin_slot_hook(&self, da_root_hash: [u8; 32], working_set: &mut WorkingSet<C>) {
+    pub fn begin_slot_hook(
+        &self,
+        da_root_hash: [u8; 32],
+        _pre_state_root: &<<C as Spec>::Storage as Storage>::Root,
+        working_set: &mut WorkingSet<C>,
+    ) {
         let parent_block = self
             .head
             .get(working_set)
