@@ -1,15 +1,21 @@
 //! An implementation of the eth gas price oracle, used for providing gas price estimates based on
 //! previous blocks.
+use std::array::TryFromSliceError;
+
 use reth_primitives::constants::GWEI_TO_WEI;
-use reth_primitives::{H256, U256};
+use reth_primitives::{H256, U256, U64};
+use reth_rpc_types::{Block, BlockTransactions};
+use schnellru::ByLength;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::{AccessoryWorkingSet, WorkingSet};
 use tokio::sync::Mutex;
 
 use tracing::warn;
 
-use crate::error::rpc::{EthApiError, EthResult, RpcInvalidTransactionError};
-use crate::Evm;
+use sov_evm::{EthApiError, EthResult};
+use sov_evm::{Evm, RpcInvalidTransactionError};
+
+use crate::cache::BlockCache;
 
 /// The number of transactions sampled in a block
 pub const SAMPLE_NUMBER: u32 = 3;
@@ -31,7 +37,7 @@ pub struct GasPriceOracleConfig {
     pub percentile: u32,
 
     /// The maximum number of headers to keep in the cache
-    pub max_header_history: u64,
+    pub max_header_history: u32,
 
     /// The maximum number of blocks for estimating gas price
     pub max_block_history: u64,
@@ -88,6 +94,8 @@ pub struct GasPriceOracle<C: sov_modules_api::Context> {
     oracle_config: GasPriceOracleConfig,
     /// The latest calculated price and its block hash
     last_price: Mutex<GasPriceOracleResult>,
+    /// Cache
+    cache: BlockCache<C>,
 }
 
 //unsafe impl<C: sov_modules_api::Context> Send for GasPriceOracle<C> {}
@@ -101,10 +109,13 @@ impl<C: sov_modules_api::Context> GasPriceOracle<C> {
             oracle_config.percentile = 100;
         }
 
+        let max_header_history = oracle_config.max_header_history;
+
         Self {
-            provider,
+            provider: provider.clone(),
             oracle_config,
             last_price: Default::default(),
+            cache: BlockCache::<C>::new(max_header_history, provider),
         }
     }
 
@@ -115,18 +126,17 @@ impl<C: sov_modules_api::Context> GasPriceOracle<C> {
 
     /// Suggests a gas price estimate based on recent blocks, using the configured percentile.
     pub async fn suggest_tip_cap(&self, working_set: &mut WorkingSet<C>) -> EthResult<U256> {
-        let header = self
+        let header = &self
             .provider
-            .head
-            .get(working_set)
-            .expect("Head block must be set")
-            .seal()
+            .get_block_by_number(None, None, working_set)
+            .unwrap()
+            .unwrap()
             .header;
 
         let mut last_price = self.last_price.lock().await;
 
         // if we have stored a last price, then we check whether or not it was for the same head
-        if last_price.block_hash == header.hash {
+        if last_price.block_hash == header.hash.unwrap() {
             return Ok(last_price.price);
         }
 
@@ -135,24 +145,22 @@ impl<C: sov_modules_api::Context> GasPriceOracle<C> {
         //
         // we only return more than check_block blocks' worth of prices if one or more return empty
         // transactions
-        let mut current_hash = header.hash;
+        let mut current_hash = header.hash.unwrap();
         let mut results = Vec::new();
         let mut populated_blocks = 0;
 
         // we only check a maximum of 2 * max_block_history, or the number of blocks in the chain
-        let max_blocks = if self.oracle_config.max_block_history * 2 > header.number {
-            header.number
+        let max_blocks = if self.oracle_config.max_block_history * 2
+            > convert_u256_to_u64(header.number.unwrap()).unwrap()
+        {
+            convert_u256_to_u64(header.number.unwrap()).unwrap()
         } else {
             self.oracle_config.max_block_history * 2
         };
 
         for _ in 0..max_blocks {
             let (parent_hash, block_values) = self
-                .get_block_values(
-                    current_hash,
-                    SAMPLE_NUMBER as usize,
-                    &mut working_set.accessory_state(),
-                )
+                .get_block_values(current_hash, SAMPLE_NUMBER as usize, working_set)
                 .await?
                 .ok_or(EthApiError::UnknownBlockNumber)?;
 
@@ -188,7 +196,7 @@ impl<C: sov_modules_api::Context> GasPriceOracle<C> {
         }
 
         *last_price = GasPriceOracleResult {
-            block_hash: header.hash,
+            block_hash: header.hash.unwrap(),
             price,
         };
 
@@ -206,15 +214,10 @@ impl<C: sov_modules_api::Context> GasPriceOracle<C> {
         &self,
         block_hash: H256,
         limit: usize,
-        working_set: &mut AccessoryWorkingSet<'_, C>,
+        working_set: &mut WorkingSet<C>,
     ) -> EthResult<Option<(H256, Vec<U256>)>> {
         // check the cache (this will hit the disk if the block is not cached)
-        let block = match self
-            .provider
-            .block_hashes
-            .get(&block_hash, working_set)
-            .and_then(|block_number| self.provider.blocks.get(block_number as usize, working_set))
-        {
+        let block = match self.cache.get_block(block_hash, working_set)? {
             Some(block) => block,
             None => return Ok(None),
         };
@@ -222,41 +225,29 @@ impl<C: sov_modules_api::Context> GasPriceOracle<C> {
         // sort the transactions by effective tip
         // but first filter those that should be ignored
 
-        let transactions_with_ids = block.transactions.clone().map(|id| {
-            let tx = self
-                .provider
-                .transactions
-                .get(id as usize, working_set)
-                .expect("Transaction must be set");
-            (id, tx)
-        });
-
-        let txs = transactions_with_ids.map(|(_, tx)| tx.signed_transaction);
+        // get the transactions (block.transactions is a enum but we only care about the 2nd arm)
+        let txs = match &block.transactions {
+            BlockTransactions::Full(txs) => txs,
+            _ => return Ok(None),
+        };
 
         let mut txs = txs
+            .iter()
             .filter(|tx| {
                 if let Some(ignore_under) = self.oracle_config.ignore_price {
-                    if tx
-                        .effective_gas_tip(block.header.base_fee_per_gas)
-                        .map(U256::from)
-                        < Some(ignore_under)
-                    {
+                    let effective_gas_tip = effective_gas_tip(tx, block.header.base_fee_per_gas);
+                    if effective_gas_tip < Some(ignore_under) {
                         return false;
                     }
                 }
 
-                // recover sender, check if coinbase
-                let sender = tx.recover_signer();
-                match sender {
-                    // transactions will be filtered if this is false
-                    Some(addr) => addr != block.header.beneficiary,
-                    // TODO: figure out an error for this case or ignore
-                    None => false,
-                }
+                // check if coinbase
+                let sender = tx.from;
+                sender != block.header.miner
             })
             // map all values to effective_gas_tip because we will be returning those values
             // anyways
-            .map(|tx| tx.effective_gas_tip(block.header.base_fee_per_gas))
+            .map(|tx| effective_gas_tip(tx, block.header.base_fee_per_gas))
             .collect::<Vec<_>>();
 
         // now do the sort
@@ -293,6 +284,32 @@ impl Default for GasPriceOracleResult {
     }
 }
 
+fn effective_gas_tip(
+    transaction: &reth_rpc_types::Transaction,
+    base_fee: Option<U256>,
+) -> Option<U256> {
+    let priority_fee_or_price = U256::from(match transaction.transaction_type {
+        Some(U64([2])) => transaction.max_priority_fee_per_gas.unwrap(),
+        _ => transaction.gas_price.unwrap(),
+    });
+
+    if let Some(base_fee) = base_fee {
+        let max_fee_per_gas = U256::from(match transaction.transaction_type {
+            Some(U64([2])) => transaction.max_fee_per_gas.unwrap(),
+            _ => transaction.gas_price.unwrap(),
+        });
+
+        if max_fee_per_gas < base_fee {
+            None
+        } else {
+            let effective_max_fee = max_fee_per_gas - base_fee;
+            Some(std::cmp::min(effective_max_fee, priority_fee_or_price))
+        }
+    } else {
+        Some(priority_fee_or_price)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use reth_primitives::constants::GWEI_TO_WEI;
@@ -309,4 +326,16 @@ mod tests {
     fn ignore_price_sanity() {
         assert_eq!(DEFAULT_IGNORE_PRICE, U256::from(2u64));
     }
+}
+
+fn convert_u256_to_u64(u256: reth_primitives::U256) -> Result<u64, TryFromSliceError> {
+    let bytes: [u8; 32] = u256.to_be_bytes();
+    let bytes: [u8; 8] = bytes[24..].try_into()?;
+    Ok(u64::from_be_bytes(bytes))
+}
+
+fn convert_u256_to_u128(u256: reth_primitives::U256) -> Result<u128, TryFromSliceError> {
+    let bytes: [u8; 32] = u256.to_be_bytes();
+    let bytes: [u8; 16] = bytes[16..].try_into()?;
+    Ok(u128::from_be_bytes(bytes))
 }

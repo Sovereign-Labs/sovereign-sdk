@@ -1,0 +1,45 @@
+[package]
+name = "sov-ethereum-gas-oracle"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+resolver = "2"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+sov-rollup-interface = { path = "../../rollup-interface" }
+
+sov-evm = { path = "../../module-system/module-implementations/sov-evm" }
+demo-stf = { path = "../../examples/demo-stf", features = ["native"] }
+sov-modules-api = { path = "../../module-system/sov-modules-api" }
+
+borsh = { workspace = true }
+serde_json = { workspace = true }
+
+reth-primitives = { workspace = true }
+reth-rpc-types = { workspace = true }
+reth-interfaces = { workspace = true }
+
+ethers = { workspace = true }
+schnellru = "0.2.1"
+
+[dev-dependencies]
+sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
+tokio = { workspace = true }
+
+
+[features]
+default = []
+local = []
+experimental = ["demo-stf/experimental", "sov-evm/experimental", "local"]
+native = ["demo-stf/native", "sov-evm/native"]

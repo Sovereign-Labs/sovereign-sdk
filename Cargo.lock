@@ -118,6 +118,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c99f64d1e06488f620f932677e24bc6e2897582980441ae90a671415bd7ec2f"
 dependencies = [
  "cfg-if",
+ "getrandom 0.2.10",
  "once_cell",
  "version_check",
 ]
@@ -6577,6 +6578,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "schnellru"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "772575a524feeb803e5b0fcbc6dd9f367e579488197c94c6e4023aad2305774d"
+dependencies = [
+ "ahash 0.8.3",
+ "cfg-if",
+ "hashbrown 0.13.2",
+]
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7359,6 +7371,28 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "tokio",
+]
+
+[[package]]
+name = "sov-ethereum-gas-oracle"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "demo-stf",
+ "ethers",
+ "jsonrpsee",
+ "reth-interfaces",
+ "reth-primitives",
+ "reth-rpc-types",
+ "schnellru",
+ "serde",
+ "serde_json",
+ "sov-evm",
+ "sov-modules-api",
+ "sov-rollup-interface",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
