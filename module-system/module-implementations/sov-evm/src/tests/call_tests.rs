@@ -77,7 +77,7 @@ fn evm_test() {
             .as_slice(),
     );
 
-    evm.begin_slot_hook([5u8; 32], working_set);
+    evm.begin_slot_hook([5u8; 32], &[10u8; 32].into(), working_set);
 
     let set_arg = 999;
     let sender_context = C::new(
@@ -140,7 +140,7 @@ fn failed_transaction_test() {
             .as_slice(),
     );
 
-    evm.begin_slot_hook([5u8; 32], working_set);
+    evm.begin_slot_hook([5u8; 32], &[10u8; 32].into(), working_set);
 
     let set_arg = 999;
     let sender_context = C::new(
