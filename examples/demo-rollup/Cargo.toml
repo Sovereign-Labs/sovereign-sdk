@@ -83,16 +83,19 @@ offchain = ["demo-stf/offchain"]
 
 [[bench]]
 name = "rollup_bench"
+path = "benches/node/rollup_bench.rs"
 harness = false
 required-features = ["bench"]
 
 [[bench]]
 name = "rollup_coarse_measure"
+path = "benches/node/rollup_coarse_measure.rs"
 harness = false
 required-features = ["bench"]
 
 [[bench]]
 name = "rng_xfers"
+path = "benches/node/rng_xfers.rs"
 required-features = ["bench"]
 
 [[bin]]
