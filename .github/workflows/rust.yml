@@ -114,7 +114,7 @@ jobs:
         run: make check-features
   test:
     name: test
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on: buildjet-16vcpu-ubuntu-2204
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v3
