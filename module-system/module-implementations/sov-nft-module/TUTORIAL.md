@@ -1,8 +1,7 @@
 # Offchain Computation Tutorial
 
 ## Introduction
-This tutorial serves to explain the design and process of augmenting Sovereign SDK modules with offchain computation and storage capabilities
-
+This guide demonstrates how to add off-chain compute and storage capabilities to Sovereign SDK modules by walking you through a simple indexer implementation.
 ## Use Cases
 - **Real-time Offchain Indexing** for on-chain transactions and states:
   - Monitor NFT ownership changes
@@ -78,7 +77,7 @@ CREATE TABLE top_owners
 * This table monitors each user in the system and the number of NFTs they own within a specific collection.
 * With this data, you can deduce:
   * Who is the predominant owner for a particular collection, and how many NFTs they possess?
-  * What does the ownership distribution look like for each collection?
+  * How does the ownership distribution look like for each collection?
 * For convenience, [init_db.sql](src/init_db.sql) provides a script that initializes the three aforementioned tables and the necessary indexes to enhance query speed. It's worth noting that the script removes any pre-existing tables before recreating them.
 
 ### 3. Create the Offchain Functions
@@ -86,10 +85,8 @@ CREATE TABLE top_owners
 * **Using the `#[offchain]` proc macro**: This is available in the [sov-modules-macros](../../sov-modules-macros/src/lib.rs) crate. Functions marked with this macro will only execute by the rollup when the `offchain` feature flag is active.
   - If the `offchain` feature is enabled: the function is present as defined.
   - If the `offchain` feature is absent: the function body is replaced with an empty definition.
-* The offchain macro is used to annotate functions that should only be executed by the rollup when the `offchain` feature flag is passed.
-* The macro produces one of two functions depending on the presence flag.
-  `offchain` feature enabled: function is present as defined
-  `offchain` feature absent: function body is replaced with an empty definition
+* The `#[offchain]` macro is used to annotate functions that should only be executed by the rollup when the `offchain` feature flag is passed.
+* The macro ensures that the function definition is replaced by an empty body if the feature flag is not passed, thus avoiding any offchain processing or storage when not desired.
 * **Macro Functionality**: Offchain computation should only be optionally enabled for a full node. It doesn't influence the chain state, consensus, prover, etc.
   ```
   use sov_modules_macros::offchain;
