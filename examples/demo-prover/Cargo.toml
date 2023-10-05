@@ -30,10 +30,7 @@ sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["n
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", optional = true }
 sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
-
-
-
-
+ 
 [dev-dependencies]
 tempfile = { workspace = true }
 once_cell = "1.7.2"
