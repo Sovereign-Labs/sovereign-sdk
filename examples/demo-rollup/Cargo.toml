@@ -86,7 +86,6 @@ native = ["anyhow", "jsonrpsee", "serde", "serde_json", "tracing", "tokio", "tra
 	"sov-modules-api/native", "sov-rollup-interface/native"]
 
 bench = ["native", "async-trait", "borsh", "hex", "sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "risc0/bench"]
-
 offchain = ["demo-stf/offchain"]
 
 [[bench]]

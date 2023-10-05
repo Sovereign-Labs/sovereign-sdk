@@ -9,6 +9,7 @@ members = [
     "examples/demo-stf",
     "examples/demo-simple-stf",
     "examples/demo-rollup",
+    "examples/demo-rollup/provers",
     "examples/simple-nft-module",
 
     "full-node/db/sov-db",
