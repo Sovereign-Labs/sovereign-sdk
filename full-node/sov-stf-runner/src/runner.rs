@@ -149,7 +149,6 @@ where
     /// Runs the rollup.
     pub async fn run_in_process(&mut self) -> Result<(), anyhow::Error> {
         for height in self.start_height.. {
-            println!("h {:?}", height);
             debug!("Requesting data for height {}", height,);
 
             let filtered_block = self.da_service.get_finalized_at(height).await?;
@@ -183,7 +182,6 @@ where
             }
 
             if let Some(Prover { vm, config }) = self.prover.as_mut() {
-                println!("looo prover");
                 let (inclusion_proof, completeness_proof) = self
                     .da_service
                     .get_extraction_proof(&filtered_block, &blobs)
