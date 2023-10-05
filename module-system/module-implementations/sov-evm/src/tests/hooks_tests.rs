@@ -98,7 +98,7 @@ fn end_slot_hook_sets_head() {
 #[test]
 fn end_slot_hook_moves_transactions_and_receipts() {
     let (evm, mut working_set) = get_evm(&TEST_CONFIG);
-    evm.begin_slot_hook(DA_ROOT_HASH.0, [10u8; 32].into(), &mut working_set);
+    evm.begin_slot_hook(DA_ROOT_HASH.0, &[10u8; 32].into(), &mut working_set);
 
     let tx1 = create_pending_transaction(H256::from([1u8; 32]), 1);
     evm.pending_transactions.push(&tx1, &mut working_set);
@@ -180,7 +180,7 @@ fn create_pending_transaction(hash: H256, index: u64) -> PendingTransaction {
 #[test]
 fn finalize_hook_creates_final_block() {
     let (evm, mut working_set) = get_evm(&TEST_CONFIG);
-    evm.begin_slot_hook(DA_ROOT_HASH.0, [10u8; 32].into(), &mut working_set);
+    evm.begin_slot_hook(DA_ROOT_HASH.0, &[10u8; 32].into(), &mut working_set);
     evm.pending_transactions.push(
         &create_pending_transaction(H256::from([1u8; 32]), 1),
         &mut working_set,
