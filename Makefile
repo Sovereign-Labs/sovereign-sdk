@@ -24,10 +24,11 @@ install-dev-tools:  ## Installs all necessary cargo helpers
 	cargo install cargo-risczero
 	cargo risczero install
 
-lint: check-fuzz  ## cargo check and clippy. Skip clippy on guest code since it's not supported by risc0
+lint:  ## cargo check and clippy. Skip clippy on guest code since it's not supported by risc0
 	## fmt first, because it's the cheapest
 	cargo +nightly fmt --all --check
 	cargo check --all-targets --all-features
+	$(MAKE) check-fuzz
 	CI_SKIP_GUEST_BUILD=1 cargo clippy --all-targets --all-features
 
 lint-fix:  ## cargo fmt, fix and clippy. Skip clippy on guest code since it's not supported by risc0

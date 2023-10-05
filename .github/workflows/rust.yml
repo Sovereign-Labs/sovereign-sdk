@@ -80,6 +80,9 @@ jobs:
           cache-provider: "buildjet"
           shared-key: cargo-check
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
+          workspaces: |
+            .
+            fuzz
       - name: Run lint
         run: |
           if ! make lint ; then
@@ -109,6 +112,9 @@ jobs:
           cache-provider: "buildjet"
           shared-key: cargo-check
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
+          workspaces: |
+            .
+            fuzz
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
       - name: cargo hack
         run: make check-features
