@@ -28,9 +28,9 @@ pub struct RpcConfig {
 pub struct RollupConfig<DaServiceConfig, StorageConfig> {
     /// Path to serialized storage configuration.
     pub storage: StorageConfig,
-    ///
+    /// Runner own configuration.
     pub runner: RunnerConfig,
-    /// DA configuration.
+    /// Data Availability service configuration.
     pub da: DaServiceConfig,
 }
 
