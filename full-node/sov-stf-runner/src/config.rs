@@ -1,8 +1,7 @@
 use std::fs::File;
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use jsonrpsee::core::__reexports::serde_json;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
@@ -26,22 +25,13 @@ pub struct RpcConfig {
 
 /// Rollup Configuration
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct RollupConfig<DaServiceConfig> {
+pub struct RollupConfig<DaServiceConfig, StorageConfig> {
     /// Path to serialized storage configuration.
-    pub storage: PathBuf,
+    pub storage: StorageConfig,
     ///
     pub runner: RunnerConfig,
     /// DA configuration.
     pub da: DaServiceConfig,
-}
-
-impl<DaServiceConfig> RollupConfig<DaServiceConfig> {
-    /// Deserializes concrete implementation of storage config
-    pub fn get_storage_config<T: DeserializeOwned>(&self) -> anyhow::Result<T> {
-        let storage_config_file = File::open(&self.storage)?;
-        let config: T = serde_json::from_reader(storage_config_file)?;
-        Ok(config)
-    }
 }
 
 /// Reads toml file as a specific type.
@@ -90,7 +80,7 @@ mod tests {
 
         let config_file = create_config_from(config);
 
-        let config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
+        let config: RollupConfig<sov_celestia_adapter::DaServiceConfig, sov_state::config::Config> =
             from_toml_path(config_file.path()).unwrap();
         let expected = RollupConfig {
             runner: RunnerConfig {
@@ -107,7 +97,9 @@ mod tests {
                 max_celestia_response_body_size: 980,
                 celestia_rpc_timeout_seconds: 60,
             },
-            storage: PathBuf::from("/tmp"),
+            storage: sov_state::config::Config {
+                path: PathBuf::from("/tmp"),
+            },
         };
         assert_eq!(config, expected);
     }

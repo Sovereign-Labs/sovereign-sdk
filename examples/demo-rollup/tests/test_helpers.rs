@@ -17,7 +17,9 @@ pub async fn start_rollup<Vm: ZkvmHost, P: AsRef<Path>>(
     let temp_path = temp_dir.path();
 
     let rollup_config = RollupConfig {
-        storage: temp_path.to_path_buf(),
+        storage: sov_state::config::Config {
+            path: temp_path.to_path_buf(),
+        },
         runner: RunnerConfig {
             start_height: 0,
             rpc_config: RpcConfig {

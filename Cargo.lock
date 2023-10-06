@@ -8739,7 +8739,6 @@ dependencies = [
  "hex",
  "jsonrpsee 0.18.2",
  "serde",
- "serde_json",
  "sov-accounts",
  "sov-bank",
  "sov-celestia-adapter",

@@ -16,7 +16,6 @@ anyhow = { workspace = true }
 borsh = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"], optional = true }
 tokio = { workspace = true, optional = true }
 hex = { workspace = true }
@@ -50,7 +49,6 @@ native = [
     "sov-state/native",
     "sov-modules-api/native",
     "jsonrpsee",
-    "serde_json",
     "toml",
     "tokio",
     "tracing",

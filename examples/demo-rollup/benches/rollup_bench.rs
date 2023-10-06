@@ -4,9 +4,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::Context;
 use criterion::{criterion_group, criterion_main, Criterion};
 use demo_stf::app::App;
-use demo_stf::genesis_config::{get_genesis_config, GenesisPaths, StorageConfig};
+use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
 use rng_xfers::{RngDaService, RngDaSpec};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_risc0_adapter::host::Risc0Verifier;
@@ -15,6 +16,7 @@ use sov_rollup_interface::mocks::{
 };
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
 
 const TEST_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
@@ -37,15 +39,22 @@ fn rollup_bench(_bench: &mut Criterion) {
     let mut c = Criterion::default()
         .sample_size(10)
         .measurement_time(Duration::from_secs(20));
+    let rollup_config_path = "benches/rollup_config.toml".to_string();
+    let mut rollup_config: RollupConfig<
+        sov_celestia_adapter::DaServiceConfig,
+        sov_state::config::Config,
+    > = from_toml_path(&rollup_config_path)
+        .context("Failed to read rollup configuration")
+        .unwrap();
+
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
-    let storage_config = StorageConfig {
-        path: PathBuf::from(temp_dir.path()),
-    };
-    let ledger_db = LedgerDB::with_path(&storage_config.path).expect("Ledger DB failed to open");
+    rollup_config.storage.path = PathBuf::from(temp_dir.path());
+    let ledger_db =
+        LedgerDB::with_path(&rollup_config.storage.path).expect("Ledger DB failed to open");
 
     let da_service = Arc::new(RngDaService::new());
 
-    let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(storage_config);
+    let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(rollup_config.storage);
 
     let mut demo = demo_runner.stf;
     let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
