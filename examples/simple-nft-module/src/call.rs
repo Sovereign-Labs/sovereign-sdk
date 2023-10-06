@@ -1,12 +1,15 @@
-use anyhow::{bail, Result};
-use sov_modules_api::{CallResponse, Context, WorkingSet};
-
 use crate::NonFungibleToken;
+use anyhow::{bail, Result};
+use sov_modules_api::macros::CliWalletArg;
+use sov_modules_api::{CallResponse, Context, WorkingSet};
 
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
-    derive(serde::Deserialize)
+    derive(serde::Deserialize),
+    derive(CliWalletArg),
+    derive(schemars::JsonSchema),
+    schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "CallMessage")
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 /// A transaction handled by the NFT module. Mints, Transfers, or Burns an NFT by id

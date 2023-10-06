@@ -29,7 +29,8 @@ sov-cli = { path = "../../module-system/sov-cli", optional = true }
 sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry" }
 sov-blob-storage = { path = "../../module-system/module-implementations/sov-blob-storage" }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank" }
-sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module" }
+#sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module" }
+simple-nft-module = { path = "../simple-nft-module" }
 
 sov-chain-state = { path = "../../module-system/module-implementations/sov-chain-state" }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" }
@@ -51,12 +52,13 @@ rand = "0.8"
 
 [features]
 default = []
-offchain = ["sov-nft-module/offchain"]
+offchain = []#["sov-nft-module/offchain"]
 experimental = ["sov-evm/experimental", "reth-primitives"]
 native = [
     "sov-stf-runner/native",
     "sov-bank/native",
-    "sov-nft-module/native",
+    #"sov-nft-module/native",
+    "simple-nft-module/native",
     "sov-cli",
     "sov-accounts/native",
     "sov-sequencer-registry/native",

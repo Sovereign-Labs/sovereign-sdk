@@ -3,6 +3,7 @@ use std::path::Path;
 
 use anyhow::{bail, Context as AnyhowContext};
 use serde::de::DeserializeOwned;
+use simple_nft_module::NonFungibleTokenConfig;
 use sov_accounts::AccountConfig;
 use sov_bank::BankConfig;
 use sov_chain_state::ChainStateConfig;
@@ -11,7 +12,6 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_evm::EvmConfig;
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Context;
-use sov_nft_module::NonFungibleTokenConfig;
 use sov_rollup_interface::da::DaSpec;
 use sov_sequencer_registry::SequencerConfig;
 pub use sov_state::config::Config as StorageConfig;
@@ -93,7 +93,10 @@ fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
 
     let accounts_config: AccountConfig<C> = read_json_file(&genesis_paths.accounts_genesis_path)?;
 
-    let nft_config: NonFungibleTokenConfig = NonFungibleTokenConfig {};
+    let nft_config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
+        admin: todo!(),
+        owners: todo!(),
+    };
 
     let chain_state_config: ChainStateConfig =
         read_json_file(&genesis_paths.chain_state_genesis_path)?;

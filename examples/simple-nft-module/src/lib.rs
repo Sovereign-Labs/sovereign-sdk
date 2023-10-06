@@ -11,6 +11,7 @@ pub use query::*;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, WorkingSet};
 
+#[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo, Clone)]
 /// Module for non-fungible tokens (NFT).
 /// Each token is represented by a unique ID.
