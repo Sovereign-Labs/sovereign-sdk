@@ -5,6 +5,7 @@ mod call;
 pub use call::CallMessage;
 mod address;
 mod genesis;
+#[cfg(test)]
 pub use address::*;
 mod collection;
 use collection::*;
