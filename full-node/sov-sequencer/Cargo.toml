@@ -25,6 +25,10 @@ sov-modules-api = { path = "../../module-system/sov-modules-api", version = "0.2
 sov-state = { path = "../../module-system/sov-state", version = "0.2" }
 
 [dev-dependencies]
-async-trait = { workspace = true }
-sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks", "native"] }
+tempfile = { workspace = true }
+rand = { workspace = true }
 tokio = { workspace = true }
+async-trait = { workspace = true }
+
+sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks", "native"] }
+sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", features = ["native"] }

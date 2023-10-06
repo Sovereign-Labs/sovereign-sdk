@@ -1,6 +1,5 @@
-use std::fs::File;
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Context;
@@ -103,7 +102,7 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost, P: AsRef<Path>>(
     let rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
 
-    let storage_config = get_storage_config_from_path(&rollup_config.storage)?;
+    let storage_config: StorageConfig = rollup_config.get_storage_config()?;
     let ledger_db = initialize_ledger(&storage_config.path);
 
     let da_service = CelestiaService::new(
@@ -171,7 +170,7 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost, P: AsRef<Path>>(
     prover: Option<(Vm, DemoProverConfig)>,
     genesis_paths: &GenesisPaths<P>,
 ) -> Result<Rollup<Vm, MockDaService>, anyhow::Error> {
-    let storage_config = get_storage_config_from_path(&rollup_config.storage)?;
+    let storage_config: StorageConfig = rollup_config.get_storage_config()?;
     let ledger_db = initialize_ledger(&storage_config.path);
     let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
     let da_service = MockDaService::new(sequencer_da_address);
@@ -270,10 +269,4 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
 
         Ok(())
     }
-}
-
-fn get_storage_config_from_path(path: &PathBuf) -> anyhow::Result<StorageConfig> {
-    let storage_config_file = File::open(path)?;
-    let config: StorageConfig = serde_json::from_reader(storage_config_file)?;
-    Ok(config)
 }

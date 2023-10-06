@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::App;
-use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
+use demo_stf::genesis_config::{get_genesis_config, GenesisPaths, StorageConfig};
 use log4rs::config::{Appender, Config, Root};
 use methods::ROLLUP_ELF;
 use regex::Regex;
@@ -152,7 +152,14 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     let rollup_config_path = "benches/rollup_config.toml".to_string();
-    let mut rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
+    let temp_dir = TempDir::new().expect("Unable to create temporary directory");
+    let storage_config = StorageConfig {
+        path: PathBuf::from(temp_dir.path()),
+    };
+    // Note: if you have problems here, proper way to modify rollup_config would be
+    // to serialize this storage config somewhere and then set path to this json to rollup_config
+
+    let rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
         from_toml_path(&rollup_config_path)
             .context("Failed to read rollup configuration")
             .unwrap();
@@ -162,18 +169,15 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut num_blocks_with_txns = 0;
     let mut num_total_transactions = 0;
 
-    let temp_dir = TempDir::new().expect("Unable to create temporary directory");
-    rollup_config.storage.path = PathBuf::from(temp_dir.path());
-
     let da_service = CelestiaService::new(
-        rollup_config.da.clone(),
+        rollup_config.da,
         RollupParams {
             namespace: ROLLUP_NAMESPACE,
         },
     )
     .await;
 
-    let mut app: App<Risc0Host, CelestiaSpec> = App::new(rollup_config.storage.clone());
+    let mut app: App<Risc0Host, CelestiaSpec> = App::new(storage_config);
 
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
 

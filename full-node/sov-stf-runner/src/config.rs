@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+use jsonrpsee::core::__reexports::serde_json;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
@@ -32,6 +33,15 @@ pub struct RollupConfig<DaServiceConfig> {
     pub runner: RunnerConfig,
     /// DA configuration.
     pub da: DaServiceConfig,
+}
+
+impl<DaServiceConfig> RollupConfig<DaServiceConfig> {
+    /// Deserializes concrete implementation of storage config
+    pub fn get_storage_config<T: DeserializeOwned>(&self) -> anyhow::Result<T> {
+        let storage_config_file = File::open(&self.storage)?;
+        let config: T = serde_json::from_reader(storage_config_file)?;
+        Ok(config)
+    }
 }
 
 /// Reads toml file as a specific type.
