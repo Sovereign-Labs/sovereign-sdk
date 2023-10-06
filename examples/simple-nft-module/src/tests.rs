@@ -1,5 +1,6 @@
+use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address as gen_addr_generic;
-use sov_modules_api::{default_context::DefaultContext, Spec};
+use sov_modules_api::Spec;
 
 use crate::NonFungibleTokenConfig;
 
