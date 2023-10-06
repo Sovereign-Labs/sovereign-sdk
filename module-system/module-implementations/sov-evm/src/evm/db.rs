@@ -41,7 +41,7 @@ impl<'a, C: sov_modules_api::Context> Database for EvmDb<'a, C> {
         let bytecode = Bytecode::new_raw(
             self.code
                 .get(&code_hash, self.working_set)
-                .unwrap_or(Bytes::default())
+                .unwrap_or_default()
                 .into(),
         );
 
