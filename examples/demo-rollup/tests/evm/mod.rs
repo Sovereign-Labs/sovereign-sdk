@@ -29,6 +29,7 @@ const TEST_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
     value_setter_genesis_path: "../test-data/genesis/integration-tests/value_setter.json",
     accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
     chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
+    nft: "../test-data/genesis/integration-tests/nft.json",
     #[cfg(feature = "experimental")]
     evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
 };
