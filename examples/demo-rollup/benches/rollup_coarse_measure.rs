@@ -110,7 +110,10 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let da_service = Arc::new(RngDaService::new());
 
-    let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(rollup_config.storage);
+    let storage_config = sov_state::config::Config {
+        path: rollup_config.storage.path,
+    };
+    let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(storage_config);
 
     let mut demo = demo_runner.stf;
     let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);

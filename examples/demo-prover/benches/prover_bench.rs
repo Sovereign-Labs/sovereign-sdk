@@ -164,6 +164,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut num_total_transactions = 0;
 
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
+
     rollup_config.storage.path = PathBuf::from(temp_dir.path());
 
     let da_service = CelestiaService::new(
@@ -174,7 +175,10 @@ async fn main() -> Result<(), anyhow::Error> {
     )
     .await;
 
-    let mut app: App<Risc0Host, CelestiaSpec> = App::new(rollup_config.storage.clone());
+    let storage_config = sov_state::config::Config {
+        path: rollup_config.storage.path,
+    };
+    let mut app: App<Risc0Host, CelestiaSpec> = App::new(storage_config);
 
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
 
