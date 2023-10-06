@@ -9,6 +9,7 @@ use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 
 /// An implementation of the
 /// [`StateTransitionFunction`]
+/// An implementation of the [`StateTransitionFunction`]
 /// that is specifically designed to check if someone knows a preimage of a specific hash.
 #[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub struct CheckHashPreimageStf<Cond> {

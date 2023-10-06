@@ -283,7 +283,7 @@ impl SchemaBatch {
             .lock()
             .expect("Lock must not be poisoned")
             .entry(S::COLUMN_FAMILY_NAME)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(WriteOp::Value { key, value });
 
         Ok(())
@@ -296,7 +296,7 @@ impl SchemaBatch {
             .lock()
             .expect("Lock must not be poisoned")
             .entry(S::COLUMN_FAMILY_NAME)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(WriteOp::Deletion { key });
 
         Ok(())
