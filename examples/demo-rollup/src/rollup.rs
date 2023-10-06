@@ -98,7 +98,7 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost, P: AsRef<Path>>(
         "Starting demo celestia rollup with config {}",
         rollup_config_path
     );
-    let rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig, StorageConfig> =
+    let rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
 
     let ledger_db = initialize_ledger(&rollup_config.storage.path);
@@ -111,12 +111,15 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost, P: AsRef<Path>>(
     )
     .await;
 
-    let app = App::new(rollup_config.storage);
+    let storage_config = StorageConfig {
+        path: rollup_config.storage.path,
+    };
+    let app = App::new(storage_config);
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS)?;
 
     #[cfg(feature = "experimental")]
     let eth_signer = read_eth_tx_signers();
-    let genesis_config = demo_stf::genesis_config::get_genesis_config(
+    let genesis_config = get_genesis_config(
         sequencer_da_address,
         genesis_paths,
         #[cfg(feature = "experimental")]
@@ -156,7 +159,7 @@ pub fn new_rollup_with_mock_da<Vm: ZkvmHost, P: AsRef<Path>>(
 ) -> Result<Rollup<Vm, MockDaService>, anyhow::Error> {
     debug!("Starting mock rollup with config {}", rollup_config_path);
 
-    let rollup_config: RollupConfig<MockDaConfig, StorageConfig> =
+    let rollup_config: RollupConfig<MockDaConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
 
     new_rollup_with_mock_da_from_config(rollup_config, prover, genesis_paths)
@@ -164,7 +167,7 @@ pub fn new_rollup_with_mock_da<Vm: ZkvmHost, P: AsRef<Path>>(
 
 /// Creates MockDa based rollup.
 pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost, P: AsRef<Path>>(
-    rollup_config: RollupConfig<MockDaConfig, StorageConfig>,
+    rollup_config: RollupConfig<MockDaConfig>,
     prover: Option<(Vm, DemoProverConfig)>,
     genesis_paths: &GenesisPaths<P>,
 ) -> Result<Rollup<Vm, MockDaService>, anyhow::Error> {
@@ -174,7 +177,10 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost, P: AsRef<Path>>(
 
     #[cfg(feature = "experimental")]
     let eth_signer = read_eth_tx_signers();
-    let app = App::new(rollup_config.storage);
+    let storage_config = StorageConfig {
+        path: rollup_config.storage.path,
+    };
+    let app = App::new(storage_config);
     let genesis_config = get_genesis_config(
         sequencer_da_address,
         genesis_paths,

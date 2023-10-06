@@ -40,12 +40,10 @@ fn rollup_bench(_bench: &mut Criterion) {
         .sample_size(10)
         .measurement_time(Duration::from_secs(20));
     let rollup_config_path = "benches/rollup_config.toml".to_string();
-    let mut rollup_config: RollupConfig<
-        sov_celestia_adapter::DaServiceConfig,
-        sov_state::config::Config,
-    > = from_toml_path(&rollup_config_path)
-        .context("Failed to read rollup configuration")
-        .unwrap();
+    let mut rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
+        from_toml_path(&rollup_config_path)
+            .context("Failed to read rollup configuration")
+            .unwrap();
 
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
     rollup_config.storage.path = PathBuf::from(temp_dir.path());
@@ -54,7 +52,10 @@ fn rollup_bench(_bench: &mut Criterion) {
 
     let da_service = Arc::new(RngDaService::new());
 
-    let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(rollup_config.storage);
+    let storage_config = sov_state::config::Config {
+        path: rollup_config.storage.path,
+    };
+    let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(storage_config);
 
     let mut demo = demo_runner.stf;
     let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);

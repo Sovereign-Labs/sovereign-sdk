@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -23,10 +23,17 @@ pub struct RpcConfig {
     pub bind_port: u16,
 }
 
+/// Simple storage configuration
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct StorageConfig {
+    /// Path that can be utilized by concrete implementation
+    pub path: PathBuf,
+}
+
 /// Rollup Configuration
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct RollupConfig<DaServiceConfig, StorageConfig> {
-    /// Path to serialized storage configuration.
+pub struct RollupConfig<DaServiceConfig> {
+    /// Currently rollup config runner only supports storage path parameter
     pub storage: StorageConfig,
     /// Runner own configuration.
     pub runner: RunnerConfig,
@@ -80,7 +87,7 @@ mod tests {
 
         let config_file = create_config_from(config);
 
-        let config: RollupConfig<sov_celestia_adapter::DaServiceConfig, sov_state::config::Config> =
+        let config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
             from_toml_path(config_file.path()).unwrap();
         let expected = RollupConfig {
             runner: RunnerConfig {
@@ -97,7 +104,7 @@ mod tests {
                 max_celestia_response_body_size: 980,
                 celestia_rpc_timeout_seconds: 60,
             },
-            storage: sov_state::config::Config {
+            storage: StorageConfig {
                 path: PathBuf::from("/tmp"),
             },
         };
