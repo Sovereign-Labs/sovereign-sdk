@@ -13,9 +13,6 @@ fn test_config_serialization() {
         owners: vec![(0, owner)],
     };
 
-    let str = serde_json::to_string(&config).unwrap();
-    println!("S {}", str);
-
     let data = r#"
     {
         "admin":"sov1335hded4gyzpt00fpz75mms4m7ck02wgw07yhw9grahj4dzg4yvqk63pml",

@@ -6,6 +6,7 @@ pub use call::CallMessage;
 mod address;
 mod genesis;
 #[cfg(test)]
+mod tests;
 pub use address::*;
 mod collection;
 use collection::*;
@@ -43,7 +44,7 @@ pub struct NonFungibleToken<C: Context> {
 
 /// Config for the NonFungibleToken module.
 /// Sets admin and existing owners.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct NonFungibleTokenConfig {}
 
 impl<C: Context> Module for NonFungibleToken<C> {
