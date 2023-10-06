@@ -688,9 +688,11 @@ version = "0.1.0"
 dependencies = [
  "anchor-client",
  "anchor-lang",
+ "anyhow",
  "blockroot",
  "bs58 0.5.0",
  "clap 4.4.6",
+ "solana-rpc-client",
  "solana-sdk",
 ]
 

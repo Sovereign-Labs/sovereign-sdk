@@ -12,5 +12,7 @@ solana-sdk = "1.16"
 bs58 = "0.5.0"
 clap = {version="4.4.6", features = ['derive']}
 blockroot = {path = "../solana_da_programs/programs/blockroot", features = ["no-entrypoint"]}
+solana-rpc-client = "1.16"
+anyhow = "1.0.75"
 
 [workspace]
