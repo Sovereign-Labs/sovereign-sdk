@@ -1496,9 +1496,7 @@ dependencies = [
  "borsh",
  "hex",
  "serde",
- "sov-modules-api",
  "sov-rollup-interface",
- "sov-state",
 ]
 
 [[package]]

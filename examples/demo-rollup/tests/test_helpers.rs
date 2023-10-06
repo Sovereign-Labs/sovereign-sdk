@@ -5,7 +5,7 @@ use demo_stf::genesis_config::GenesisPaths;
 use sov_demo_rollup::{new_rollup_with_mock_da_from_config, DemoProverConfig};
 use sov_rollup_interface::mocks::MockDaConfig;
 use sov_rollup_interface::zk::ZkvmHost;
-use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
+use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig};
 use tokio::sync::oneshot;
 
 pub async fn start_rollup<Vm: ZkvmHost, P: AsRef<Path>>(
@@ -17,9 +17,7 @@ pub async fn start_rollup<Vm: ZkvmHost, P: AsRef<Path>>(
     let temp_path = temp_dir.path();
 
     let rollup_config = RollupConfig {
-        storage: StorageConfig {
-            path: temp_path.to_path_buf(),
-        },
+        storage: temp_path.to_path_buf(),
         runner: RunnerConfig {
             start_height: 0,
             rpc_config: RpcConfig {

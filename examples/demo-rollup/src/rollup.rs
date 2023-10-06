@@ -1,5 +1,6 @@
+use std::fs::File;
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::Context;
@@ -27,6 +28,7 @@ use sov_rollup_interface::mocks::{
 };
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::ZkvmHost;
+use sov_state::config::Config as StorageConfig;
 use sov_stf_runner::{
     from_toml_path, ProofGenConfig, Prover, RollupConfig, RunnerConfig, StateTransitionRunner,
 };
@@ -101,7 +103,8 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost, P: AsRef<Path>>(
     let rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
 
-    let ledger_db = initialize_ledger(&rollup_config.storage.path);
+    let storage_config = get_storage_config_from_path(&rollup_config.storage)?;
+    let ledger_db = initialize_ledger(&storage_config.path);
 
     let da_service = CelestiaService::new(
         rollup_config.da.clone(),
@@ -111,7 +114,7 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost, P: AsRef<Path>>(
     )
     .await;
 
-    let app = App::new(rollup_config.storage);
+    let app = App::new(storage_config);
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS)?;
 
     #[cfg(feature = "experimental")]
@@ -168,13 +171,14 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost, P: AsRef<Path>>(
     prover: Option<(Vm, DemoProverConfig)>,
     genesis_paths: &GenesisPaths<P>,
 ) -> Result<Rollup<Vm, MockDaService>, anyhow::Error> {
-    let ledger_db = initialize_ledger(&rollup_config.storage.path);
+    let storage_config = get_storage_config_from_path(&rollup_config.storage)?;
+    let ledger_db = initialize_ledger(&storage_config.path);
     let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
     let da_service = MockDaService::new(sequencer_da_address);
 
     #[cfg(feature = "experimental")]
     let eth_signer = read_eth_tx_signers();
-    let app = App::new(rollup_config.storage);
+    let app = App::new(storage_config);
     let genesis_config = get_genesis_config(
         sequencer_da_address,
         genesis_paths,
@@ -266,4 +270,10 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
 
         Ok(())
     }
+}
+
+fn get_storage_config_from_path(path: &PathBuf) -> anyhow::Result<StorageConfig> {
+    let storage_config_file = File::open(path)?;
+    let config: StorageConfig = serde_json::from_reader(storage_config_file)?;
+    Ok(config)
 }

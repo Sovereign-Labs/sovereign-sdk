@@ -1,10 +1,9 @@
 use std::fs::File;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
-pub use sov_state::config::Config as StorageConfig;
 
 /// Configuration for StateTransitionRunner.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -27,9 +26,9 @@ pub struct RpcConfig {
 /// Rollup Configuration
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RollupConfig<DaServiceConfig> {
-    /// Runner configuration.
-    pub storage: StorageConfig,
-    /// TODO
+    /// Path to serialized storage configuration.
+    pub storage: PathBuf,
+    ///
     pub runner: RunnerConfig,
     /// DA configuration.
     pub da: DaServiceConfig,
@@ -98,9 +97,7 @@ mod tests {
                 max_celestia_response_body_size: 980,
                 celestia_rpc_timeout_seconds: 60,
             },
-            storage: StorageConfig {
-                path: PathBuf::from("/tmp"),
-            },
+            storage: PathBuf::from("/tmp"),
         };
         assert_eq!(config, expected);
     }
