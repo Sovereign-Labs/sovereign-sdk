@@ -180,7 +180,8 @@ fn create_pending_transaction(hash: H256, index: u64) -> PendingTransaction {
 #[test]
 fn finalize_hook_creates_final_block() {
     let (evm, mut working_set) = get_evm(&TEST_CONFIG);
-    evm.begin_slot_hook(DA_ROOT_HASH.0, &[10u8; 32].into(), &mut working_set);
+    let p = [10u8; 32].into();
+    evm.begin_slot_hook(DA_ROOT_HASH.0, &p, &mut working_set);
     evm.pending_transactions.push(
         &create_pending_transaction(H256::from([1u8; 32]), 1),
         &mut working_set,
@@ -191,12 +192,19 @@ fn finalize_hook_creates_final_block() {
     );
     evm.end_slot_hook(&mut working_set);
 
-    let mut accessory_state = working_set.accessory_state();
     let root_hash = [99u8; 32].into();
-    evm.finalize_hook(&root_hash, &mut accessory_state);
+    {
+        let mut accessory_state = working_set.accessory_state();
+        evm.finalize_hook(&root_hash, &mut accessory_state);
+        assert_eq!(evm.blocks.len(&mut accessory_state), 2);
+    }
 
-    assert_eq!(evm.blocks.len(&mut accessory_state), 2);
+    evm.begin_slot_hook(DA_ROOT_HASH.0, &root_hash, &mut working_set);
 
+    let mut accessory_state = working_set.accessory_state();
+
+    let parent_block = evm.blocks.get(0usize, &mut accessory_state).unwrap();
+    let parent_hash = parent_block.header.hash;
     let block = evm.blocks.get(1usize, &mut accessory_state).unwrap();
 
     assert_eq!(
@@ -204,7 +212,7 @@ fn finalize_hook_creates_final_block() {
         SealedBlock {
             header: SealedHeader {
                 header: Header {
-                    parent_hash: SEALED_GENESIS_HASH,
+                    parent_hash,
                     ommers_hash: EMPTY_OMMER_ROOT,
                     beneficiary: TEST_CONFIG.coinbase,
                     state_root: H256::from(root_hash.0),
@@ -232,7 +240,7 @@ fn finalize_hook_creates_final_block() {
                     parent_beacon_block_root: None,
                 },
                 hash: H256(hex!(
-                    "0da4e80c5cbd00d9538cb0215d069bfee5be5b59ae4da00244f9b8db429e6889"
+                    "38cd68642013a65c7fdeea92f9f0e1b5709156ac9140f00ffb182c7a605337b0"
                 )),
             },
             transactions: 0..2

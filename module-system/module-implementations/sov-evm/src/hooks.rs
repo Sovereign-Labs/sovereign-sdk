@@ -1,4 +1,4 @@
-use reth_primitives::{Bloom, Bytes, U256};
+use reth_primitives::{Bloom, Bytes, U256, H256};
 use sov_modules_api::{AccessoryWorkingSet, Spec, WorkingSet};
 use sov_state::Storage;
 
@@ -14,17 +14,17 @@ where
     pub fn begin_slot_hook(
         &self,
         da_root_hash: [u8; 32],
-        _pre_state_root: &<<C as Spec>::Storage as Storage>::Root,
+        pre_state_root: &<<C as Spec>::Storage as Storage>::Root,
         working_set: &mut WorkingSet<C>,
     ) {
-        let parent_block = self
+        let mut parent_block = self
             .head
             .get(working_set)
             .expect("Head block should always be set");
 
-        // TODO
-        // parent_block.header.state_root = root_hash.into();
-        // self.head.set(&parent_block, working_set);
+        
+        parent_block.header.state_root = H256(pre_state_root.clone().into());
+        self.head.set(&parent_block, working_set);
 
         let cfg = self.cfg.get(working_set).unwrap_or_default();
         let new_pending_env = BlockEnv {
