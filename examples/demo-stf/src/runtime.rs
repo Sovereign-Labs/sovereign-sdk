@@ -1,6 +1,4 @@
 #[cfg(feature = "native")]
-use simple_nft_module::{NonFungibleTokenRpcImpl, NonFungibleTokenRpcServer};
-#[cfg(feature = "native")]
 use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
 use sov_bank::{BankRpcImpl, BankRpcServer};
@@ -18,8 +16,8 @@ use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
 use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec};
-//#[cfg(feature = "native")]
-//use sov_nft_module::{NonFungibleTokenRpcImpl, NonFungibleTokenRpcServer};
+#[cfg(feature = "native")]
+use sov_nft_module::{NonFungibleTokenRpcImpl, NonFungibleTokenRpcServer};
 use sov_rollup_interface::da::DaSpec;
 #[cfg(feature = "native")]
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
@@ -78,7 +76,7 @@ pub struct Runtime<C: Context, Da: DaSpec> {
     pub chain_state: sov_chain_state::ChainState<C, Da>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
-    pub nft: simple_nft_module::NonFungibleToken<C>,
+    pub nft: sov_nft_module::NonFungibleToken<C>,
 }
 
 #[cfg(feature = "experimental")]

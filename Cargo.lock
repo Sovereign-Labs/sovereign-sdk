@@ -2017,6 +2017,7 @@ dependencies = [
  "sov-evm",
  "sov-modules-api",
  "sov-modules-stf-template",
+ "sov-nft-module",
  "sov-rollup-interface",
  "sov-sequencer",
  "sov-sequencer-registry",

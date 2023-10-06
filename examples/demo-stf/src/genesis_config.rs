@@ -3,7 +3,7 @@ use std::path::Path;
 
 use anyhow::{bail, Context as AnyhowContext};
 use serde::de::DeserializeOwned;
-use simple_nft_module::NonFungibleTokenConfig;
+use sov_nft_module::NonFungibleTokenConfig;
 use sov_accounts::AccountConfig;
 use sov_bank::BankConfig;
 use sov_chain_state::ChainStateConfig;
@@ -93,10 +93,7 @@ fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
 
     let accounts_config: AccountConfig<C> = read_json_file(&genesis_paths.accounts_genesis_path)?;
 
-    let nft_config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
-        admin: todo!(),
-        owners: todo!(),
-    };
+    let nft_config: NonFungibleTokenConfig = NonFungibleTokenConfig {};
 
     let chain_state_config: ChainStateConfig =
         read_json_file(&genesis_paths.chain_state_genesis_path)?;
