@@ -1,14 +1,15 @@
+mod test_client;
+
 use std::net::SocketAddr;
 use std::str::FromStr;
 
-use super::test_helpers::start_rollup;
 use demo_stf::genesis_config::GenesisPaths;
 use ethers_core::abi::Address;
 use ethers_signers::{LocalWallet, Signer};
 use sov_evm::SimpleStorageContract;
 use sov_risc0_adapter::host::Risc0Host;
 
-mod test_client;
+use super::test_helpers::start_rollup;
 use test_client::TestClient;
 
 const TEST_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
@@ -21,6 +22,23 @@ const TEST_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
     #[cfg(feature = "experimental")]
     evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
 };
+
+#[cfg(feature = "experimental")]
+#[tokio::test]
+async fn evm_tx_tests() -> Result<(), anyhow::Error> {
+    let (port_tx, port_rx) = tokio::sync::oneshot::channel();
+
+    let rollup_task = tokio::spawn(async {
+        // Don't provide a prover since the EVM is not currently provable
+        start_rollup::<Risc0Host<'static>, _>(port_tx, None, &TEST_GENESIS_PATHS).await;
+    });
+
+    // Wait for rollup task to start:
+    let port = port_rx.await.unwrap();
+    send_tx_test_to_eth(port).await.unwrap();
+    rollup_task.abort();
+    Ok(())
+}
 
 async fn send_tx_test_to_eth(rpc_address: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
     let chain_id: u64 = 1;
@@ -52,22 +70,133 @@ async fn send_tx_test_to_eth(rpc_address: SocketAddr) -> Result<(), Box<dyn std:
     assert_eq!(latest_block, earliest_block);
     assert_eq!(latest_block.number.unwrap().as_u64(), 0);
 
-    test_client.execute().await
+    execute(&test_client).await
 }
 
-#[cfg(feature = "experimental")]
-#[tokio::test]
-async fn evm_tx_tests() -> Result<(), anyhow::Error> {
-    let (port_tx, port_rx) = tokio::sync::oneshot::channel();
+async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> {
+    // Nonce should be 0 in genesis
+    let nonce = client.eth_get_transaction_count(client.from_addr).await;
+    assert_eq!(0, nonce);
 
-    let rollup_task = tokio::spawn(async {
-        // Don't provide a prover since the EVM is not currently provable
-        start_rollup::<Risc0Host<'static>, _>(port_tx, None, &TEST_GENESIS_PATHS).await;
-    });
+    // Balance should be > 0 in genesis
+    let balance = client.eth_get_balance(client.from_addr).await;
+    assert!(balance > ethereum_types::U256::zero());
 
-    // Wait for rollup task to start:
-    let port = port_rx.await.unwrap();
-    send_tx_test_to_eth(port).await.unwrap();
-    rollup_task.abort();
+    let (contract_address, runtime_code) = {
+        let runtime_code = client.deploy_contract_call().await?;
+
+        let deploy_contract_req = client.deploy_contract().await?;
+        client.send_publish_batch_request().await;
+
+        let contract_address = deploy_contract_req
+            .await?
+            .unwrap()
+            .contract_address
+            .unwrap();
+
+        (contract_address, runtime_code)
+    };
+
+    // Assert contract deployed correctly
+    let code = client.eth_get_code(contract_address).await;
+    // code has natural following 0x00 bytes, so we need to trim it
+    assert_eq!(code.to_vec()[..runtime_code.len()], runtime_code.to_vec());
+
+    // Nonce should be 1 after the deploy
+    let nonce = client.eth_get_transaction_count(client.from_addr).await;
+    assert_eq!(1, nonce);
+
+    // Check that the first block has published
+    // It should have a single transaction, deploying the contract
+    let first_block = client.eth_get_block_by_number(Some("1".to_owned())).await;
+    assert_eq!(first_block.number.unwrap().as_u64(), 1);
+    assert_eq!(first_block.transactions.len(), 1);
+
+    let set_arg = 923;
+    let tx_hash = {
+        let set_value_req = client.set_value(contract_address, set_arg).await;
+        client.send_publish_batch_request().await;
+        set_value_req.await.unwrap().unwrap().transaction_hash
+    };
+
+    let get_arg = client.query_contract(contract_address).await?;
+    assert_eq!(set_arg, get_arg.as_u32());
+
+    // Assert storage slot is set
+    let storage_slot = 0x0;
+    let storage_value = client
+        .eth_get_storage_at(contract_address, storage_slot.into())
+        .await;
+    assert_eq!(storage_value, ethereum_types::U256::from(set_arg));
+
+    // Check that the second block has published
+    // None should return the latest block
+    // It should have a single transaction, setting the value
+    let latest_block = client.eth_get_block_by_number_with_detail(None).await;
+    assert_eq!(latest_block.number.unwrap().as_u64(), 2);
+    assert_eq!(latest_block.transactions.len(), 1);
+    assert_eq!(latest_block.transactions[0].hash, tx_hash);
+
+    // This should just pass without error
+    client
+        .set_value_call(contract_address, set_arg)
+        .await
+        .unwrap();
+
+    // This call should fail because function does not exist
+    let failing_call = client.failing_call(contract_address).await;
+    assert!(failing_call.is_err());
+
+    // Create a blob with multiple transactions.
+    let mut requests = Vec::default();
+    for value in 100..103 {
+        let set_value_req = client.set_value(contract_address, value).await;
+        requests.push(set_value_req);
+    }
+
+    client.send_publish_batch_request().await;
+
+    // second block
+    client.send_publish_batch_request().await;
+
+    let first_block = client.eth_get_block_by_number(Some("0".to_owned())).await;
+    let second_block = client.eth_get_block_by_number(Some("1".to_owned())).await;
+
+    println!("first_block: {:?}", first_block);
+    println!("second_block: {:?}", second_block);
+
+    // assert parent hash
+    assert_eq!(
+        first_block.hash.unwrap(),
+        second_block.parent_hash,
+        "Parent hash should be the hash of the previous block"
+    );
+
+    for req in requests {
+        req.await.unwrap();
+    }
+
+    {
+        let get_arg = client.query_contract(contract_address).await?;
+        assert_eq!(102, get_arg.as_u32());
+    }
+
+    {
+        let value = 103;
+
+        let tx_hash = {
+            let set_value_req = client.set_value_unsigned(contract_address, value).await;
+            client.send_publish_batch_request().await;
+            set_value_req.await.unwrap().unwrap().transaction_hash
+        };
+
+        let latest_block = client.eth_get_block_by_number(None).await;
+        assert_eq!(latest_block.transactions.len(), 1);
+        assert_eq!(latest_block.transactions[0], tx_hash);
+
+        let get_arg = client.query_contract(contract_address).await?;
+        assert_eq!(value, get_arg.as_u32());
+    }
+
     Ok(())
 }

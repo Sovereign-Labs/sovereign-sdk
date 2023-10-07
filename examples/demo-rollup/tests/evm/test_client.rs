@@ -1,5 +1,3 @@
-use std::net::SocketAddr;
-
 use ethereum_types::H160;
 use ethers_core::abi::Address;
 use ethers_core::k256::ecdsa::SigningKey;
@@ -9,7 +7,7 @@ use ethers_core::types::{
 };
 use ethers_middleware::SignerMiddleware;
 use ethers_providers::{Http, Middleware, PendingTransaction, Provider};
-use ethers_signers::{Signer, Wallet};
+use ethers_signers::Wallet;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use jsonrpsee::rpc_params;
@@ -20,7 +18,7 @@ const MAX_FEE_PER_GAS: u64 = 100000001;
 
 pub(crate) struct TestClient {
     chain_id: u64,
-    from_addr: Address,
+    pub(crate) from_addr: Address,
     contract: SimpleStorageContract,
     client: SignerMiddleware<Provider<Http>, Wallet<SigningKey>>,
     http_client: HttpClient,
@@ -330,132 +328,5 @@ impl TestClient {
             .unwrap();
 
         gas.as_u64()
-    }
-
-    pub(crate) async fn execute(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // Nonce should be 0 in genesis
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-        assert_eq!(0, nonce);
-
-        // Balance should be > 0 in genesis
-        let balance = self.eth_get_balance(self.from_addr).await;
-        assert!(balance > ethereum_types::U256::zero());
-
-        let (contract_address, runtime_code) = {
-            let runtime_code = self.deploy_contract_call().await?;
-
-            let deploy_contract_req = self.deploy_contract().await?;
-            self.send_publish_batch_request().await;
-
-            let contract_address = deploy_contract_req
-                .await?
-                .unwrap()
-                .contract_address
-                .unwrap();
-
-            (contract_address, runtime_code)
-        };
-
-        // Assert contract deployed correctly
-        let code = self.eth_get_code(contract_address).await;
-        // code has natural following 0x00 bytes, so we need to trim it
-        assert_eq!(code.to_vec()[..runtime_code.len()], runtime_code.to_vec());
-
-        // Nonce should be 1 after the deploy
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-        assert_eq!(1, nonce);
-
-        // Check that the first block has published
-        // It should have a single transaction, deploying the contract
-        let first_block = self.eth_get_block_by_number(Some("1".to_owned())).await;
-        assert_eq!(first_block.number.unwrap().as_u64(), 1);
-        assert_eq!(first_block.transactions.len(), 1);
-
-        let set_arg = 923;
-        let tx_hash = {
-            let set_value_req = self.set_value(contract_address, set_arg).await;
-            self.send_publish_batch_request().await;
-            set_value_req.await.unwrap().unwrap().transaction_hash
-        };
-
-        let get_arg = self.query_contract(contract_address).await?;
-        assert_eq!(set_arg, get_arg.as_u32());
-
-        // Assert storage slot is set
-        let storage_slot = 0x0;
-        let storage_value = self
-            .eth_get_storage_at(contract_address, storage_slot.into())
-            .await;
-        assert_eq!(storage_value, ethereum_types::U256::from(set_arg));
-
-        // Check that the second block has published
-        // None should return the latest block
-        // It should have a single transaction, setting the value
-        let latest_block = self.eth_get_block_by_number_with_detail(None).await;
-        assert_eq!(latest_block.number.unwrap().as_u64(), 2);
-        assert_eq!(latest_block.transactions.len(), 1);
-        assert_eq!(latest_block.transactions[0].hash, tx_hash);
-
-        // This should just pass without error
-        self.set_value_call(contract_address, set_arg)
-            .await
-            .unwrap();
-
-        // This call should fail because function does not exist
-        let failing_call = self.failing_call(contract_address).await;
-        assert!(failing_call.is_err());
-
-        // Create a blob with multiple transactions.
-        let mut requests = Vec::default();
-        for value in 100..103 {
-            let set_value_req = self.set_value(contract_address, value).await;
-            requests.push(set_value_req);
-        }
-
-        self.send_publish_batch_request().await;
-
-        // second block
-        self.send_publish_batch_request().await;
-
-        let first_block = self.eth_get_block_by_number(Some("0".to_owned())).await;
-        let second_block = self.eth_get_block_by_number(Some("1".to_owned())).await;
-
-        println!("first_block: {:?}", first_block);
-        println!("second_block: {:?}", second_block);
-
-        // assert parent hash
-        assert_eq!(
-            first_block.hash.unwrap(),
-            second_block.parent_hash,
-            "Parent hash should be the hash of the previous block"
-        );
-
-        for req in requests {
-            req.await.unwrap();
-        }
-
-        {
-            let get_arg = self.query_contract(contract_address).await?;
-            assert_eq!(102, get_arg.as_u32());
-        }
-
-        {
-            let value = 103;
-
-            let tx_hash = {
-                let set_value_req = self.set_value_unsigned(contract_address, value).await;
-                self.send_publish_batch_request().await;
-                set_value_req.await.unwrap().unwrap().transaction_hash
-            };
-
-            let latest_block = self.eth_get_block_by_number(None).await;
-            assert_eq!(latest_block.transactions.len(), 1);
-            assert_eq!(latest_block.transactions[0], tx_hash);
-
-            let get_arg = self.query_contract(contract_address).await?;
-            assert_eq!(value, get_arg.as_u32());
-        }
-
-        Ok(())
     }
 }
