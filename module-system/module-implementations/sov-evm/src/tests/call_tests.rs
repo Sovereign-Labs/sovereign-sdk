@@ -7,8 +7,8 @@ use sov_modules_api::{Context, Module};
 use crate::call::CallMessage;
 use crate::evm::primitive_types::Receipt;
 use crate::smart_contracts::SimpleStorageContract;
-use crate::tests::dev_signer::TestSigner;
 use crate::tests::genesis_tests::get_evm;
+use crate::tests::test_signer::TestSigner;
 use crate::{AccountData, EvmConfig};
 type C = DefaultContext;
 
@@ -99,12 +99,11 @@ fn failed_transaction_test() {
     let working_set = &mut working_set;
 
     evm.begin_slot_hook([5u8; 32], &[10u8; 32].into(), working_set);
-
     {
         let sender_address = generate_address::<C>("sender");
         let context = C::new(sender_address);
-
         let messages = vec![create_contract_message(&dev_signer, 0)];
+
         for tx in messages {
             evm.call(tx, &context, working_set).unwrap();
         }
