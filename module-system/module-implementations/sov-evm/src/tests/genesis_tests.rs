@@ -132,6 +132,7 @@ fn genesis_block() {
         .block_hashes
         .get(&GENESIS_HASH, &mut accessory_state)
         .unwrap();
+
     let block = evm
         .blocks
         .get(block_number as usize, &mut accessory_state)
@@ -177,7 +178,6 @@ fn genesis_block() {
 #[test]
 fn genesis_head() {
     let (evm, mut working_set) = get_evm(&TEST_CONFIG);
-
     let head = evm.head.get(&mut working_set).unwrap();
 
     assert_eq!(
@@ -216,6 +216,5 @@ pub(crate) fn get_evm(config: &EvmConfig) -> (Evm<C>, WorkingSet<DefaultContext>
     let evm = Evm::<C>::default();
     evm.genesis(config, &mut working_set).unwrap();
     evm.finalize_hook(&[10u8; 32].into(), &mut working_set.accessory_state());
-
     (evm, working_set)
 }

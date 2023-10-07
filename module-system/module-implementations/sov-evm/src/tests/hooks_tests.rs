@@ -191,11 +191,10 @@ fn finalize_hook_creates_final_block() {
     evm.end_slot_hook(&mut working_set);
 
     let root_hash = [99u8; 32].into();
-    {
-        let mut accessory_state = working_set.accessory_state();
-        evm.finalize_hook(&root_hash, &mut accessory_state);
-        assert_eq!(evm.blocks.len(&mut accessory_state), 2);
-    }
+
+    let mut accessory_state = working_set.accessory_state();
+    evm.finalize_hook(&root_hash, &mut accessory_state);
+    assert_eq!(evm.blocks.len(&mut accessory_state), 2);
 
     evm.begin_slot_hook(DA_ROOT_HASH.0, &root_hash, &mut working_set);
 
