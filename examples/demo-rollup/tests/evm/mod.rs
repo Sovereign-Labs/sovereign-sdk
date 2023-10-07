@@ -8,9 +8,9 @@ use ethers_core::abi::Address;
 use ethers_signers::{LocalWallet, Signer};
 use sov_evm::SimpleStorageContract;
 use sov_risc0_adapter::host::Risc0Host;
+use test_client::TestClient;
 
 use super::test_helpers::start_rollup;
-use test_client::TestClient;
 
 const TEST_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
     bank_genesis_path: "../test-data/genesis/integration-tests/bank.json",
