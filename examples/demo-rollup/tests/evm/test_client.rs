@@ -15,6 +15,7 @@ use reth_primitives::Bytes;
 use sov_evm::SimpleStorageContract;
 
 const MAX_FEE_PER_GAS: u64 = 100000001;
+const GAS: u64 = 900000u64;
 
 pub(crate) struct TestClient {
     chain_id: u64,
@@ -68,7 +69,7 @@ impl TestClient {
             .nonce(0u64)
             .max_priority_fee_per_gas(10u64)
             .max_fee_per_gas(MAX_FEE_PER_GAS)
-            .gas(900000u64)
+            .gas(GAS)
             .data(self.contract.byte_code());
 
         let typed_transaction = TypedTransaction::Eip1559(req);
@@ -88,7 +89,7 @@ impl TestClient {
             .nonce(0u64)
             .max_priority_fee_per_gas(10u64)
             .max_fee_per_gas(MAX_FEE_PER_GAS)
-            .gas(900000u64)
+            .gas(GAS)
             .data(self.contract.byte_code());
 
         let typed_transaction = TypedTransaction::Eip1559(req);
@@ -133,7 +134,7 @@ impl TestClient {
             .data(self.contract.set_call_data(set_arg))
             .max_priority_fee_per_gas(10u64)
             .max_fee_per_gas(MAX_FEE_PER_GAS)
-            .gas(900000u64);
+            .gas(GAS);
 
         let typed_transaction = TypedTransaction::Eip1559(req);
 
@@ -192,7 +193,7 @@ impl TestClient {
             .data(self.contract.failing_function_call_data())
             .max_priority_fee_per_gas(10u64)
             .max_fee_per_gas(MAX_FEE_PER_GAS)
-            .gas(900000u64);
+            .gas(GAS);
 
         let typed_transaction = TypedTransaction::Eip1559(req);
 
@@ -212,7 +213,7 @@ impl TestClient {
             .chain_id(self.chain_id)
             .nonce(nonce)
             .data(self.contract.get_call_data())
-            .gas(900000u64);
+            .gas(GAS);
 
         let typed_transaction = TypedTransaction::Eip1559(req);
 
