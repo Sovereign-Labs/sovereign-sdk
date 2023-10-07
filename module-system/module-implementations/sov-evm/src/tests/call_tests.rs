@@ -101,20 +101,10 @@ fn failed_transaction_test() {
     evm.begin_slot_hook([5u8; 32], &[10u8; 32].into(), working_set);
 
     {
-        let contract_addr: Address = Address::from_slice(
-            hex::decode("819c5497b157177315e1204f52e588b393771719")
-                .unwrap()
-                .as_slice(),
-        );
-
         let sender_address = generate_address::<C>("sender");
-        let set_arg = 999;
         let context = C::new(sender_address);
 
-        let messages = vec![
-            create_contract_message(&dev_signer, 0),
-            set_arg_message(contract_addr, &dev_signer, 1, set_arg),
-        ];
+        let messages = vec![create_contract_message(&dev_signer, 0)];
         for tx in messages {
             evm.call(tx, &context, working_set).unwrap();
         }
