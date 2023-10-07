@@ -41,10 +41,6 @@ pub(crate) const GENESIS_HASH: H256 = H256(hex!(
     "3441c3084e43183a53aabbbe3e94512bb3db4aca826af8f23b38f0613811571d"
 ));
 
-pub(crate) const SEALED_GENESIS_HASH: H256 = H256(hex!(
-    "d57423e4375c45bc114cd137146aab671dbd3f6304f05b31bdd416301b4a99f0"
-));
-
 pub(crate) const GENESIS_STATE_ROOT: H256 = H256(hex!(
     "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
 ));

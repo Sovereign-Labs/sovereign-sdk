@@ -10,7 +10,7 @@ use crate::evm::primitive_types::{
     Block, BlockEnv, Receipt, SealedBlock, TransactionSignedAndRecovered,
 };
 use crate::experimental::PendingTransaction;
-use crate::tests::genesis_tests::{BENEFICIARY, SEALED_GENESIS_HASH};
+use crate::tests::genesis_tests::{BENEFICIARY, GENESIS_HASH};
 
 lazy_static! {
     pub(crate) static ref DA_ROOT_HASH: H256 = H256::from([5u8; 32]);
@@ -62,10 +62,8 @@ fn end_slot_hook_sets_head() {
         Block {
             header: Header {
                 // TODO: temp parent hash until: https://github.com/Sovereign-Labs/sovereign-sdk/issues/876
-                // parent_hash: GENESIS_HASH,
-                parent_hash: H256(hex!(
-                    "d57423e4375c45bc114cd137146aab671dbd3f6304f05b31bdd416301b4a99f0"
-                )),
+                parent_hash: GENESIS_HASH,
+
                 ommers_hash: EMPTY_OMMER_ROOT,
                 beneficiary: TEST_CONFIG.coinbase,
                 state_root: KECCAK_EMPTY,

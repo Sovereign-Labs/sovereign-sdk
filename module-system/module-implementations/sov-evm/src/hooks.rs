@@ -1,4 +1,4 @@
-use reth_primitives::{Bloom, Bytes, U256, H256};
+use reth_primitives::{Bloom, Bytes, H256, U256};
 use sov_modules_api::{AccessoryWorkingSet, Spec, WorkingSet};
 use sov_state::Storage;
 
@@ -22,7 +22,6 @@ where
             .get(working_set)
             .expect("Head block should always be set");
 
-        
         parent_block.header.state_root = H256(pre_state_root.clone().into());
         self.head.set(&parent_block, working_set);
 
