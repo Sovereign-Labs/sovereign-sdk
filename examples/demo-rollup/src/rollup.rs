@@ -7,7 +7,7 @@ use const_rollup_config::SEQUENCER_DA_ADDRESS;
 #[cfg(feature = "experimental")]
 use demo_stf::app::DefaultPrivateKey;
 use demo_stf::app::{create_zk_app_template, App, DefaultContext};
-use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
+use demo_stf::genesis_config::{get_genesis_config, GenesisPaths, StorageConfig};
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig, Runtime};
 use demo_stf::AppVerifier;
 #[cfg(feature = "experimental")]
@@ -111,12 +111,15 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost, P: AsRef<Path>>(
     )
     .await;
 
-    let app = App::new(rollup_config.storage);
+    let storage_config = StorageConfig {
+        path: rollup_config.storage.path,
+    };
+    let app = App::new(storage_config);
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS)?;
 
     #[cfg(feature = "experimental")]
     let eth_signer = read_eth_tx_signers();
-    let genesis_config = demo_stf::genesis_config::get_genesis_config(
+    let genesis_config = get_genesis_config(
         sequencer_da_address,
         genesis_paths,
         #[cfg(feature = "experimental")]
@@ -174,7 +177,10 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost, P: AsRef<Path>>(
 
     #[cfg(feature = "experimental")]
     let eth_signer = read_eth_tx_signers();
-    let app = App::new(rollup_config.storage);
+    let storage_config = StorageConfig {
+        path: rollup_config.storage.path,
+    };
+    let app = App::new(storage_config);
     let genesis_config = get_genesis_config(
         sequencer_da_address,
         genesis_paths,

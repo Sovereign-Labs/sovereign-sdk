@@ -1,7 +1,6 @@
 use borsh::BorshSerialize;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
-use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
 use tracing::info;
 
@@ -80,13 +79,4 @@ impl SimpleClient {
     pub fn ws(&self) -> &WsClient {
         &self.ws_client
     }
-}
-
-/// Creates an jsonrpsee ErrorObject
-pub fn to_jsonrpsee_error_object(err: impl ToString, message: &str) -> ErrorObjectOwned {
-    ErrorObjectOwned::owned(
-        jsonrpsee::types::error::UNKNOWN_ERROR_CODE,
-        message,
-        Some(err.to_string()),
-    )
 }

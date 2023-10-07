@@ -30,6 +30,7 @@ pub struct GenesisPaths<P: AsRef<Path>> {
     pub value_setter_genesis_path: P,
     pub accounts_genesis_path: P,
     pub chain_state_genesis_path: P,
+    pub nft_path: P,
     #[cfg(feature = "experimental")]
     pub evm_genesis_path: P,
 }
@@ -92,8 +93,7 @@ fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
         read_json_file(&genesis_paths.value_setter_genesis_path)?;
 
     let accounts_config: AccountConfig<C> = read_json_file(&genesis_paths.accounts_genesis_path)?;
-
-    let nft_config: NonFungibleTokenConfig = NonFungibleTokenConfig {};
+    let nft_config: NonFungibleTokenConfig = read_json_file(&genesis_paths.nft_path)?;
 
     let chain_state_config: ChainStateConfig =
         read_json_file(&genesis_paths.chain_state_genesis_path)?;
