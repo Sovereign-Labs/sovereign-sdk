@@ -1,4 +1,8 @@
-pub mod app;
+//#![deny(missing_docs)]
+//#![doc = include_str!("../README.md")]
+
+mod app;
+pub use app::*;
 
 #[cfg(feature = "native")]
 pub mod genesis_config;
@@ -11,7 +15,6 @@ pub mod tests;
 pub mod cli;
 
 use runtime::Runtime;
-use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::da::DaVerifier;
 pub use sov_state::ArrayWitness;

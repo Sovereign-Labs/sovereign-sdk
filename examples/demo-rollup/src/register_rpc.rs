@@ -1,7 +1,7 @@
 //! Full-Node specific RPC methods.
 
 use anyhow::Context;
-use demo_stf::app::App;
+use demo_stf::App;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
