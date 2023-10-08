@@ -30,7 +30,7 @@ pub enum Workflows<Da: DaSpec> {
 
 #[derive(clap::Parser)]
 #[command(author, version, about, long_about = None)]
-pub struct App<Da: DaSpec> {
+pub struct CliApp<Da: DaSpec> {
     #[clap(subcommand)]
     workflow: Workflows<Da>,
 }
@@ -44,7 +44,7 @@ pub async fn run<Da: DaSpec + serde::Serialize + serde::de::DeserializeOwned>(
     let mut wallet_state: WalletState<RuntimeCall<Ctx, Da>, Ctx> =
         WalletState::load(&wallet_state_path)?;
 
-    let invocation = App::<Da>::parse();
+    let invocation = CliApp::<Da>::parse();
 
     match invocation.workflow {
         Workflows::Transactions(tx) => tx

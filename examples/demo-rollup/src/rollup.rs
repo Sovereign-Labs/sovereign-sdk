@@ -21,7 +21,6 @@ use sov_modules_api::default_context::ZkDefaultContext;
 #[cfg(feature = "experimental")]
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_stf_template::AppTemplate;
-use sov_risc0_adapter::guest::Risc0Guest;
 use sov_rollup_interface::mocks::{
     MockAddress, MockDaConfig, MockDaService, MOCK_SEQUENCER_DA_ADDRESS,
 };
@@ -70,7 +69,7 @@ pub fn configure_prover<Vm: ZkvmHost, Da: DaService>(
 ) -> Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm> {
     let config = match cfg {
         DemoProverConfig::Simulate => ProofGenConfig::Simulate(AppVerifier::new(
-            ZkApp::<Risc0Guest, _>::default().stf,
+            ZkApp::<Vm::Guest, _>::default().stf,
             da_verifier,
         )),
         DemoProverConfig::Execute => ProofGenConfig::Execute,
