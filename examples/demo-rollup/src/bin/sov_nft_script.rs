@@ -1,12 +1,18 @@
 use std::thread;
 use std::time::Duration;
 
-use nft_utils::{
-    build_create_collection_transactions, build_mint_transactions, build_transfer_transactions,
-};
+use borsh::ser::BorshSerialize;
+use demo_stf::runtime::RuntimeCall;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_nft_module::utils::get_collection_address;
+use sov_modules_api::transaction::Transaction;
+use sov_modules_api::PrivateKey;
+use sov_nft_module::utils::{
+    get_collection_address, get_create_collection_message, get_mint_nft_message,
+    get_transfer_nft_message,
+};
+use sov_nft_module::{CallMessage, CollectionAddress};
+use sov_rollup_interface::mocks::MockDaSpec;
 use sov_sequencer::utils::SimpleClient;
 
 const COLLECTION_1: &str = "Sovereign Squirrel Syndicate";
@@ -27,6 +33,94 @@ const PK3: [u8; 32] = [
     233, 139, 68, 72, 169, 252, 229, 117, 72, 144, 47, 191, 13, 42, 32, 107, 190, 52, 102, 210,
     161, 208, 245, 116, 93, 84, 37, 87, 171, 44, 30, 239,
 ];
+
+pub fn build_transaction(
+    signer: &DefaultPrivateKey,
+    message: CallMessage<DefaultContext>,
+    nonce: u64,
+) -> Transaction<DefaultContext> {
+    let runtime_encoded_message = RuntimeCall::<DefaultContext, MockDaSpec>::nft(message);
+    Transaction::<DefaultContext>::new_signed_tx(
+        signer,
+        runtime_encoded_message.try_to_vec().unwrap(),
+        nonce,
+    )
+}
+
+pub fn build_create_collection_transactions(
+    creator_pk: &DefaultPrivateKey,
+    start_nonce: &mut u64,
+    base_uri: &str,
+    collections: &[&str],
+) -> Vec<Transaction<DefaultContext>> {
+    collections
+        .iter()
+        .map(|&collection_name| {
+            let tx = build_transaction(
+                creator_pk,
+                get_create_collection_message(
+                    &creator_pk.default_address(),
+                    collection_name,
+                    base_uri,
+                ),
+                *start_nonce,
+            );
+            *start_nonce += 1;
+            tx
+        })
+        .collect()
+}
+
+/// Convenience and readability wrapper for build_mint_nft_transaction
+pub fn build_mint_transactions(
+    creator_pk: &DefaultPrivateKey,
+    start_nonce: &mut u64,
+    collection: &str,
+    start_nft_id: &mut u64,
+    num: usize,
+    base_uri: &str,
+    owner_pk: &DefaultPrivateKey,
+) -> Vec<Transaction<DefaultContext>> {
+    (0..num)
+        .map(|_| {
+            let tx = build_transaction(
+                creator_pk,
+                get_mint_nft_message(
+                    &creator_pk.default_address(),
+                    collection,
+                    *start_nft_id,
+                    base_uri,
+                    &owner_pk.default_address(),
+                ),
+                *start_nonce,
+            );
+            *start_nft_id += 1;
+            *start_nonce += 1;
+            tx
+        })
+        .collect()
+}
+
+pub fn build_transfer_transactions(
+    signer: &DefaultPrivateKey,
+    start_nonce: &mut u64,
+    collection_address: &CollectionAddress<DefaultContext>,
+    nft_ids: Vec<u64>,
+) -> Vec<Transaction<DefaultContext>> {
+    nft_ids
+        .into_iter()
+        .map(|nft_id| {
+            let new_owner = DefaultPrivateKey::generate().default_address();
+            let tx = build_transaction(
+                signer,
+                get_transfer_nft_message(collection_address, nft_id, &new_owner),
+                *start_nonce,
+            );
+            *start_nonce += 1;
+            tx
+        })
+        .collect()
+}
 
 #[tokio::main]
 async fn main() {

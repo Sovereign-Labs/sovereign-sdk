@@ -1,9 +1,9 @@
 use futures::future::{select, Either};
+use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::{RpcModule, SubscriptionMessage};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_db::ledger_db::LedgerDB;
-use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_rollup_interface::rpc::{
     BatchIdentifier, EventIdentifier, LedgerRpcProvider, SlotIdentifier, TxIdentifier,
 };
@@ -127,4 +127,12 @@ mod query_args {
         let ids: Vec<I> = params.parse()?;
         Ok(QueryArgs(ids, Default::default()))
     }
+}
+
+pub fn to_jsonrpsee_error_object(err: impl ToString, message: &str) -> ErrorObjectOwned {
+    ErrorObjectOwned::owned(
+        jsonrpsee::types::error::UNKNOWN_ERROR_CODE,
+        message,
+        Some(err.to_string()),
+    )
 }

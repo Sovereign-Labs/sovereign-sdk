@@ -25,6 +25,7 @@ const TEST_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
     value_setter_genesis_path: "../test-data/genesis/integration-tests/value_setter.json",
     accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
     chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
+    nft_path: "../test-data/genesis/integration-tests/nft.json",
     #[cfg(feature = "experimental")]
     evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
 };
@@ -52,7 +53,10 @@ fn rollup_bench(_bench: &mut Criterion) {
 
     let da_service = Arc::new(RngDaService::new());
 
-    let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(rollup_config.storage);
+    let storage_config = sov_state::config::Config {
+        path: rollup_config.storage.path,
+    };
+    let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(storage_config);
 
     let mut demo = demo_runner.stf;
     let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);

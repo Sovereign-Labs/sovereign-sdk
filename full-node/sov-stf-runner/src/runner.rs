@@ -2,9 +2,8 @@ use std::net::SocketAddr;
 
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_modules_api::SlotData;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
-use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 use tokio::sync::oneshot;
