@@ -16,8 +16,7 @@ use sov_modules_api::default_context::ZkDefaultContext;
 #[cfg(feature = "native")]
 use sov_modules_api::Spec;
 use sov_modules_stf_template::AppTemplate;
-use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::da::DaVerifier;
+use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::zk::Zkvm;
 #[cfg(feature = "native")]
 use sov_sequencer::batch_builder::FiFoStrictBatchBuilder;

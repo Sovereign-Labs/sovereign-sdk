@@ -17,8 +17,7 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::experimental::EthRpcConfig;
-use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::default_context::ZkDefaultContext;
+use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 #[cfg(feature = "experimental")]
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_stf_template::AppTemplate;
