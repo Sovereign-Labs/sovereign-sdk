@@ -19,14 +19,18 @@ use sov_state::{ProverStorage, Storage};
 
 use crate::runtime::Runtime;
 
+/// Contains StateTransitionFunction and other necessary dependencies needed for implementing a full node.
 #[cfg(feature = "native")]
 pub struct App<Vm: Zkvm, Da: DaSpec> {
+    /// Concrete state transition function.
     pub stf: AppTemplate<DefaultContext, Da, Vm, Runtime<DefaultContext, Da>>,
+    /// Batch builder.
     pub batch_builder: Option<FiFoStrictBatchBuilder<Runtime<DefaultContext, Da>, DefaultContext>>,
 }
 
 #[cfg(feature = "native")]
 impl<Vm: Zkvm, Da: DaSpec> App<Vm, Da> {
+    /// Creates a new `App`.
     pub fn new(storage_config: StorageConfig) -> Self {
         let storage =
             ProverStorage::with_config(storage_config).expect("Failed to open prover storage");
@@ -49,8 +53,16 @@ impl<Vm: Zkvm, Da: DaSpec> App<Vm, Da> {
     }
 }
 
-pub fn create_zk_app_template<Vm: Zkvm, Da: DaSpec>(
-) -> AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>> {
-    let storage = ZkStorage::new();
-    AppTemplate::new(storage, Runtime::default())
+/// Contains StateTransitionFunction for the `zk` context.
+pub struct ZkApp<Vm: Zkvm, Da: DaSpec> {
+    pub stf: AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>,
+}
+
+impl<Vm: Zkvm, Da: DaSpec> Default for ZkApp<Vm, Da> {
+    fn default() -> Self {
+        let storage = ZkStorage::new();
+        Self {
+            stf: AppTemplate::new(storage, Runtime::default()),
+        }
+    }
 }
