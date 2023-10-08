@@ -1,8 +1,6 @@
 #[cfg(feature = "native")]
-pub use sov_modules_api::default_context::DefaultContext;
-pub use sov_modules_api::default_context::ZkDefaultContext;
-#[cfg(feature = "native")]
-pub use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_context::ZkDefaultContext;
 #[cfg(feature = "native")]
 use sov_modules_api::Spec;
 use sov_modules_stf_template::AppTemplate;
@@ -53,16 +51,8 @@ impl<Vm: Zkvm, Da: DaSpec> App<Vm, Da> {
     }
 }
 
-/// Contains StateTransitionFunction for the `zk` context.
-pub struct ZkApp<Vm: Zkvm, Da: DaSpec> {
-    pub stf: AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>,
-}
-
-impl<Vm: Zkvm, Da: DaSpec> Default for ZkApp<Vm, Da> {
-    fn default() -> Self {
-        let storage = ZkStorage::new();
-        Self {
-            stf: AppTemplate::new(storage, Runtime::default()),
-        }
-    }
+pub fn create_zk_app_template<Vm: Zkvm, Da: DaSpec>(
+) -> AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>> {
+    let storage = ZkStorage::new();
+    AppTemplate::new(storage, Runtime::default())
 }

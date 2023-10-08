@@ -15,6 +15,7 @@ pub mod tests;
 pub mod cli;
 
 use runtime::Runtime;
+use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::da::DaVerifier;
 pub use sov_state::ArrayWitness;

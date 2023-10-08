@@ -3,7 +3,7 @@
 #![no_main]
 
 use const_rollup_config::ROLLUP_NAMESPACE_RAW;
-use demo_stf::{AppVerifier, ZkApp};
+use demo_stf::{create_zk_app_template, AppVerifier};
 use sov_celestia_adapter::types::NamespaceId;
 use sov_celestia_adapter::verifier::CelestiaVerifier;
 use sov_risc0_adapter::guest::Risc0Guest;
@@ -16,7 +16,7 @@ risc0_zkvm::guest::entry!(main);
 pub fn main() {
     let guest = Risc0Guest::new();
     let mut stf_verifier = AppVerifier::new(
-        ZkApp::<Risc0Guest, _>::default().stf,
+        create_zk_app_template::<Risc0Guest, _>(),
         CelestiaVerifier {
             rollup_namespace: ROLLUP_NAMESPACE,
         },
