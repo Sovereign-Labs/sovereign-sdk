@@ -15,7 +15,7 @@ members = [
     "full-node/db/sov-db",
     "full-node/sov-sequencer",
     "full-node/sov-ethereum",
-    "full-node/sov-ethereum-gas-oracle",
+    "full-node/sov-ethereum-gas-price",
     "full-node/sov-stf-runner",
 
     "utils/zk-cycle-macros",

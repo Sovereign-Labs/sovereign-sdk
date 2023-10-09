@@ -4,7 +4,6 @@ pub use experimental::{get_ethereum_gas_price_rpc, EthereumGasPrice};
 mod cache;
 #[cfg(feature = "experimental")]
 mod gas_oracle;
-
 #[cfg(feature = "experimental")]
 pub mod experimental {
     use jsonrpsee::types::ErrorObjectOwned;
@@ -13,7 +12,9 @@ pub mod experimental {
     use sov_evm::Evm;
     use sov_modules_api::WorkingSet;
 
-    use crate::gas_oracle::{GasPriceOracle, GasPriceOracleConfig};
+    use crate::gas_oracle::{GasPriceOracle};
+
+    pub use crate::gas_oracle::GasPriceOracleConfig;
 
     pub fn get_ethereum_gas_price_rpc<C: sov_modules_api::Context>(
         gas_price_oracle_config: GasPriceOracleConfig,

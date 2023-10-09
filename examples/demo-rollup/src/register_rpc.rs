@@ -54,3 +54,19 @@ pub fn register_ethereum<C: sov_modules_api::Context, Da: DaService>(
         .merge(ethereum_rpc)
         .context("Failed to merge Ethereum RPC modules")
 }
+
+#[cfg(feature = "experimental")]
+/// register ethereum gas price methods.
+pub fn register_ethereum_gas_price<C: sov_modules_api::Context>(
+    gas_price_oracle_config: sov_ethereum_gas_price::experimental::GasPriceOracleConfig,
+    storage: C::Storage,
+    methods: &mut jsonrpsee::RpcModule<()>,
+) -> Result<(), anyhow::Error> {
+    let ethereum_gas_price_rpc = sov_ethereum_gas_price::experimental::get_ethereum_gas_price_rpc::<
+        C,
+    >(gas_price_oracle_config, storage);
+
+    methods
+        .merge(ethereum_gas_price_rpc)
+        .context("Failed to merge Ethereum gas price RPC modules")
+}

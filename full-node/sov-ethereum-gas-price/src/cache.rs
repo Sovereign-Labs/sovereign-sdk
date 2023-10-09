@@ -37,12 +37,13 @@ impl<C: sov_modules_api::Context> BlockCache<C> {
         let block = self
             .provider
             .get_block_by_hash(block_hash.into(), Some(true), working_set)
-            .unwrap()
-            .unwrap();
+            .unwrap_or(None);
 
-        // Add block to cache
-        cache.insert(block_hash, block.clone());
+        // Add block to cache if it exists
+        if let Some(block) = &block {
+            cache.insert(block_hash, block.clone());
+        }
 
-        Ok(Some(block))
+        Ok(block)
     }
 }
