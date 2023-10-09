@@ -115,9 +115,9 @@ fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
         chain_state_config,
         value_setter_config,
         accounts_config,
+        nft_config,
         #[cfg(feature = "experimental")]
         evm_config,
-        nft_config,
     ))
 }
 
