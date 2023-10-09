@@ -98,15 +98,16 @@ mod tests {
             is_preferred_sequencer: true,
         };
 
-        let data = r#"{
-        "seq_rollup_address":"sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94",
-        "seq_da_address":"0000000000000000000000000000000000000000000000000000000000000000",
-        "coins_to_lock":{
-            "amount":50,
-            "token_address":"sov1zsnx7n2wjvtkr0ttscfgt06pjca3v2e6stxeu49qwynavmk7a8xqlxkkjp"
-        },
-        "is_preferred_sequencer":true
-    }"#;
+        let data = r#"
+        {
+            "seq_rollup_address":"sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94",
+            "seq_da_address":"0000000000000000000000000000000000000000000000000000000000000000",
+            "coins_to_lock":{
+                "amount":50,
+                "token_address":"sov1zsnx7n2wjvtkr0ttscfgt06pjca3v2e6stxeu49qwynavmk7a8xqlxkkjp"
+            },
+            "is_preferred_sequencer":true
+        }"#;
 
         let parsed_config: SequencerConfig<DefaultContext, MockDaSpec> =
             serde_json::from_str(data).unwrap();
