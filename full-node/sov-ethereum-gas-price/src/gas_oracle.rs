@@ -1,5 +1,8 @@
 //! An implementation of the eth gas price oracle, used for providing gas price estimates based on
 //! previous blocks.
+
+// Adopted from: https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc/src/eth/gas_oracle.rs
+
 use std::array::TryFromSliceError;
 
 use reth_primitives::constants::GWEI_TO_WEI;
@@ -145,11 +148,11 @@ impl<C: sov_modules_api::Context> GasPriceOracle<C> {
         let mut results = Vec::new();
         let mut populated_blocks = 0;
 
+        let header_number = convert_u256_to_u64(header.number.unwrap()).unwrap();
+
         // we only check a maximum of 2 * max_block_history, or the number of blocks in the chain
-        let max_blocks = if self.oracle_config.max_block_history * 2
-            > convert_u256_to_u64(header.number.unwrap()).unwrap()
-        {
-            convert_u256_to_u64(header.number.unwrap()).unwrap()
+        let max_blocks = if self.oracle_config.max_block_history * 2 > header_number {
+            header_number
         } else {
             self.oracle_config.max_block_history * 2
         };
@@ -280,6 +283,7 @@ impl Default for GasPriceOracleResult {
     }
 }
 
+// Adopted from: https://github.com/paradigmxyz/reth/blob/main/crates/primitives/src/transaction/mod.rs#L297
 fn effective_gas_tip(
     transaction: &reth_rpc_types::Transaction,
     base_fee: Option<U256>,
@@ -328,10 +332,4 @@ fn convert_u256_to_u64(u256: reth_primitives::U256) -> Result<u64, TryFromSliceE
     let bytes: [u8; 32] = u256.to_be_bytes();
     let bytes: [u8; 8] = bytes[24..].try_into()?;
     Ok(u64::from_be_bytes(bytes))
-}
-
-fn convert_u256_to_u128(u256: reth_primitives::U256) -> Result<u128, TryFromSliceError> {
-    let bytes: [u8; 32] = u256.to_be_bytes();
-    let bytes: [u8; 16] = bytes[16..].try_into()?;
-    Ok(u128::from_be_bytes(bytes))
 }

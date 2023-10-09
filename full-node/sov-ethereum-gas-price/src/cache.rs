@@ -7,7 +7,7 @@ use schnellru::{ByLength, LruMap};
 use sov_evm::EthResult;
 use sov_modules_api::WorkingSet;
 
-// Create BlockCache
+/// Block cache for gas oracle
 pub struct BlockCache<C: sov_modules_api::Context> {
     cache: Mutex<LruMap<H256, Rich<Block>, ByLength>>,
     provider: sov_evm::Evm<C>,
