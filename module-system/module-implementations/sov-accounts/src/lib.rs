@@ -84,6 +84,8 @@ impl<C: Context> sov_modules_api::Module for Accounts<C> {
 
 #[cfg(feature = "arbitrary")]
 mod arbitrary_impls {
+    use std::sync::{Arc, Mutex};
+
     use arbitrary::{Arbitrary, Unstructured};
     use proptest::arbitrary::any;
     use proptest::prelude::RngCore;
@@ -92,8 +94,6 @@ mod arbitrary_impls {
     use sov_state::Prefix;
 
     use super::*;
-
-    use std::sync::{Arc, Mutex};
 
     impl<'a, C> Arbitrary<'a> for Account<C>
     where
