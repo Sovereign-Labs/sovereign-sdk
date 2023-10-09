@@ -2,15 +2,13 @@
 #![doc = include_str!("../README.md")]
 
 mod call;
-#[cfg(test)]
-mod tests;
 pub use call::CallMessage;
 mod genesis;
+pub use genesis::*;
 #[cfg(feature = "native")]
 mod query;
 #[cfg(feature = "native")]
 pub use query::*;
-use serde::{Deserialize, Serialize};
 use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, WorkingSet};
 
 #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
@@ -29,16 +27,6 @@ pub struct NonFungibleToken<C: Context> {
     #[state]
     /// Mapping of tokens to their owners
     owners: sov_modules_api::StateMap<u64, C::Address>,
-}
-
-/// Config for the NonFungibleToken module.
-/// Sets admin and existing owners.
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-pub struct NonFungibleTokenConfig<C: Context> {
-    /// Admin of the NonFungibleToken module.
-    pub admin: C::Address,
-    /// Existing owners of the NonFungibleToken module.
-    pub owners: Vec<(u64, C::Address)>,
 }
 
 impl<C: Context> Module for NonFungibleToken<C> {
