@@ -218,7 +218,7 @@ pub mod test {
         assert!(!has_tx_events(&apply_blob_outcome));
     }
 
-    pub fn read_private_key<C: Context>() -> PrivateKeyAndAddress<C> {
+    fn read_private_key<C: Context>() -> PrivateKeyAndAddress<C> {
         let token_deployer_data =
             std::fs::read_to_string("../test-data/keys/token_deployer_private_key.json")
                 .expect("Unable to read file to string");
