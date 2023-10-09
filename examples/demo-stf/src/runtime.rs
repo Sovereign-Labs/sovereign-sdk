@@ -1,3 +1,5 @@
+//!TODO
+
 #[cfg(feature = "native")]
 use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
@@ -59,27 +61,7 @@ use sov_value_setter::{ValueSetterRpcImpl, ValueSetterRpcServer};
 /// Similar mechanism works for queries with the difference that queries are submitted by users directly to the rollup node
 /// instead of going through the DA layer.
 
-#[cfg(not(feature = "experimental"))]
-#[cfg_attr(feature = "native", derive(CliWallet), expose_rpc)]
-#[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
-#[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-#[cfg_attr(
-    feature = "native",
-    serialization(serde::Serialize, serde::Deserialize)
-)]
-pub struct Runtime<C: Context, Da: DaSpec> {
-    pub bank: sov_bank::Bank<C>,
-    pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C, Da>,
-    #[cfg_attr(feature = "native", cli_skip)]
-    pub blob_storage: sov_blob_storage::BlobStorage<C, Da>,
-    #[cfg_attr(feature = "native", cli_skip)]
-    pub chain_state: sov_chain_state::ChainState<C, Da>,
-    pub value_setter: sov_value_setter::ValueSetter<C>,
-    pub accounts: sov_accounts::Accounts<C>,
-    pub nft: sov_nft_module::NonFungibleToken<C>,
-}
 
-#[cfg(feature = "experimental")]
 #[cfg_attr(feature = "native", derive(CliWallet), expose_rpc)]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
@@ -97,6 +79,7 @@ pub struct Runtime<C: Context, Da: DaSpec> {
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
     #[cfg_attr(feature = "native", cli_skip)]
+    #[cfg(feature = "experimental")]
     pub evm: sov_evm::Evm<C>,
     pub nft: sov_nft_module::NonFungibleToken<C>,
 }
