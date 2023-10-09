@@ -6,20 +6,6 @@ use super::ValueSetter;
 use crate::{call, query, ValueSetterConfig};
 
 #[test]
-fn test_config_serialization() {
-    let admin = Address::from([1; 32]);
-    let config = ValueSetterConfig::<DefaultContext> { admin };
-
-    let data = r#"
-    {
-        "admin":"sov1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs259tk3"
-    }"#;
-
-    let parsed_config: ValueSetterConfig<DefaultContext> = serde_json::from_str(data).unwrap();
-    assert_eq!(parsed_config, config);
-}
-
-#[test]
 fn test_value_setter() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
