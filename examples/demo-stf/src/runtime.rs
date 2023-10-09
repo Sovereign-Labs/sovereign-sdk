@@ -58,13 +58,12 @@ use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServe
 use sov_value_setter::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
 /// The `demo-stf runtime`.
+#[cfg_attr(feature = "native", derive(CliWallet), expose_rpc)]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 #[cfg_attr(
     feature = "native",
-    serialization(serde::Serialize, serde::Deserialize),
-    derive(CliWallet),
-    expose_rpc
+    serialization(serde::Serialize, serde::Deserialize)
 )]
 pub struct Runtime<C: Context, Da: DaSpec> {
     /// The Bank module.
