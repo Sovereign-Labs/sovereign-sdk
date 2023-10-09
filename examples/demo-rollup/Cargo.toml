@@ -14,12 +14,8 @@ default-run = "sov-demo-rollup"
 [dependencies]
 # non-optional dependencies
 
-<<<<<<< HEAD
-borsh = { workspace = true, features = ["bytes"], optional = true }
-=======
-
->>>>>>> nightly
-serde = { workspace = true, features = ["derive"], optional = true }sov-celestia-adapter = { path = "../../adapters/celestia" }
+serde = { workspace = true, features = ["derive"], optional = true }
+sov-celestia-adapter = { path = "../../adapters/celestia" }
 const-rollup-config = { path = "../const-rollup-config" }
 sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
 sov-rollup-interface = { path = "../../rollup-interface" }
@@ -31,10 +27,6 @@ methods = { path = "../demo-prover/methods" }
 borsh = { workspace = true, features = ["bytes"] }
 async-trait = { workspace = true, optional = true }
 anyhow = { workspace = true, optional = true }
-jsonrpsee = { workspace = true, features = [
-	"http-client",
-	"server",
-], optional = true }
 jsonrpsee = { workspace = true, features = [
 	"http-client",
 	"server",
