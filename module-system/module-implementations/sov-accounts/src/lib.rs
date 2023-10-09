@@ -1,9 +1,9 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
 mod hooks;
-
 mod call;
 mod genesis;
+pub use genesis::*;
 #[cfg(feature = "native")]
 mod query;
 #[cfg(feature = "native")]
@@ -14,13 +14,6 @@ mod tests;
 pub use call::{CallMessage, UPDATE_ACCOUNT_MSG};
 use sov_modules_api::{Context, Error, ModuleInfo, WorkingSet};
 
-/// Initial configuration for sov-accounts module.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(bound = "C::PublicKey: serde::Serialize + serde::de::DeserializeOwned")]
-pub struct AccountConfig<C: Context> {
-    /// Public keys to initialize the rollup.
-    pub pub_keys: Vec<C::PublicKey>,
-}
 
 impl<C: Context> FromIterator<C::PublicKey> for AccountConfig<C> {
     fn from_iter<T: IntoIterator<Item = C::PublicKey>>(iter: T) -> Self {
