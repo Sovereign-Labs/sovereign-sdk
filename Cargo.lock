@@ -8437,7 +8437,7 @@ dependencies = [
  "borsh",
  "demo-stf",
  "ethers",
- "jsonrpsee",
+ "jsonrpsee 0.18.2",
  "reth-interfaces",
  "reth-primitives",
  "reth-rpc-types",
