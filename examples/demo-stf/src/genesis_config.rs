@@ -1,3 +1,7 @@
+//! While the `GenesisConfig` type for `Rollup` is generated from the underlying runtime through a macro,
+//! specific module configurations are obtained from files. This code is responsible for the logic
+//! that transforms module genesis data into Rollup genesis data.
+
 use std::convert::AsRef;
 use std::path::Path;
 
@@ -6,7 +10,6 @@ use serde::de::DeserializeOwned;
 use sov_accounts::AccountConfig;
 use sov_bank::BankConfig;
 use sov_chain_state::ChainStateConfig;
-use sov_cli::wallet_state::PrivateKeyAndAddress;
 #[cfg(feature = "experimental")]
 use sov_evm::EvmConfig;
 pub use sov_modules_api::default_context::DefaultContext;
@@ -20,18 +23,22 @@ use sov_value_setter::ValueSetterConfig;
 /// Creates config for a rollup with some default settings, the config is used in demos and tests.
 use crate::runtime::GenesisConfig;
 
-pub const LOCKED_AMOUNT: u64 = 50;
-pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
-
 /// Paths pointing to genesis files.
 pub struct GenesisPaths<P: AsRef<Path>> {
+    /// Bank genesis path.
     pub bank_genesis_path: P,
+    /// Sequencer Registry genesis path.
     pub sequencer_genesis_path: P,
+    /// Value Setter genesis path.
     pub value_setter_genesis_path: P,
+    /// Accounts genesis path.
     pub accounts_genesis_path: P,
+    /// Chain State genesis path.
     pub chain_state_genesis_path: P,
+    /// Nft genesis path.
     pub nft_path: P,
     #[cfg(feature = "experimental")]
+    /// EVM genesis path.
     pub evm_genesis_path: P,
 }
 
@@ -108,9 +115,9 @@ fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
         chain_state_config,
         value_setter_config,
         accounts_config,
+        nft_config,
         #[cfg(feature = "experimental")]
         evm_config,
-        nft_config,
     ))
 }
 
@@ -140,26 +147,4 @@ fn get_evm_config<P: AsRef<Path>>(
     }
 
     Ok(config)
-}
-
-pub fn read_private_key<C: Context>() -> PrivateKeyAndAddress<C> {
-    // TODO fix the hardcoded path: #872
-    let token_deployer_data =
-        std::fs::read_to_string("../test-data/keys/token_deployer_private_key.json")
-            .expect("Unable to read file to string");
-
-    let token_deployer: PrivateKeyAndAddress<C> = serde_json::from_str(&token_deployer_data)
-        .unwrap_or_else(|_| {
-            panic!(
-                "Unable to convert data {} to PrivateKeyAndAddress",
-                &token_deployer_data
-            )
-        });
-
-    assert!(
-        token_deployer.is_matching_to_default(),
-        "Inconsistent key data"
-    );
-
-    token_deployer
 }
