@@ -61,8 +61,32 @@ impl AsRef<Vec<u8>> for AlignedVec {
 }
 
 #[cfg(feature = "arbitrary")]
-impl<'a> arbitrary::Arbitrary<'a> for AlignedVec {
-    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        u.arbitrary().map(Self::new)
+mod arbitrary_impls {
+    use arbitrary::{Arbitrary, Unstructured};
+    use proptest::arbitrary::any;
+    use proptest::strategy::{BoxedStrategy, Strategy};
+
+    use super::*;
+
+    impl<'a> Arbitrary<'a> for AlignedVec {
+        fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
+            u.arbitrary().map(|v: Vec<u8>| {
+                // we re-allocate so the capacity is also guaranteed to be aligned
+                Self::new(v[..(v.len() / Self::ALIGNMENT) * Self::ALIGNMENT].to_vec())
+            })
+        }
+    }
+
+    impl proptest::arbitrary::Arbitrary for AlignedVec {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            any::<Vec<u8>>()
+                .prop_map(|v| {
+                    Self::new(v[..(v.len() / Self::ALIGNMENT) * Self::ALIGNMENT].to_vec())
+                })
+                .boxed()
+        }
     }
 }

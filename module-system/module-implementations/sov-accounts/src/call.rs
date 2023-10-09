@@ -73,21 +73,47 @@ impl<C: Context> Accounts<C> {
 }
 
 #[cfg(all(feature = "arbitrary", feature = "native"))]
-impl<'a, C> arbitrary::Arbitrary<'a> for CallMessage<C>
-where
-    C: Context,
-    C::PrivateKey: arbitrary::Arbitrary<'a>,
-{
-    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        use sov_modules_api::PrivateKey;
+mod arbitrary_impls {
+    use arbitrary::{Arbitrary, Unstructured};
+    use proptest::arbitrary::any;
+    use proptest::strategy::{BoxedStrategy, Strategy};
+    use sov_modules_api::PrivateKey;
 
-        let secret = C::PrivateKey::arbitrary(u)?;
-        let public = secret.pub_key();
+    use super::*;
 
-        let payload_len = u.arbitrary_len::<u8>()?;
-        let payload = u.bytes(payload_len)?;
-        let signature = secret.sign(payload);
+    impl<'a, C> Arbitrary<'a> for CallMessage<C>
+    where
+        C: Context,
+        C::PrivateKey: Arbitrary<'a>,
+    {
+        fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
+            let secret = C::PrivateKey::arbitrary(u)?;
+            let public = secret.pub_key();
 
-        Ok(Self::UpdatePublicKey(public, signature))
+            let payload_len = u.arbitrary_len::<u8>()?;
+            let payload = u.bytes(payload_len)?;
+            let signature = secret.sign(payload);
+
+            Ok(Self::UpdatePublicKey(public, signature))
+        }
+    }
+
+    impl<C> proptest::arbitrary::Arbitrary for CallMessage<C>
+    where
+        C: Context,
+        C::PrivateKey: proptest::arbitrary::Arbitrary,
+    {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            (any::<C::PrivateKey>(), any::<Vec<u8>>())
+                .prop_map(|(secret, payload)| {
+                    let public = secret.pub_key();
+                    let signature = secret.sign(&payload);
+                    Self::UpdatePublicKey(public, signature)
+                })
+                .boxed()
+        }
     }
 }

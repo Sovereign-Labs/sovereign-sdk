@@ -42,6 +42,7 @@ pub struct Account<C: Context> {
 /// A module responsible for managing accounts on the rollup.
 #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo, Clone)]
+#[cfg_attr(feature = "arbitrary", derive(Debug))]
 pub struct Accounts<C: Context> {
     /// The address of the sov-accounts module.
     #[address]
@@ -82,54 +83,141 @@ impl<C: Context> sov_modules_api::Module for Accounts<C> {
 }
 
 #[cfg(feature = "arbitrary")]
-impl<'a, C> arbitrary::Arbitrary<'a> for Account<C>
-where
-    C: Context,
-    C::Address: arbitrary::Arbitrary<'a>,
-{
-    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        let addr = u.arbitrary()?;
-        let nonce = u.arbitrary()?;
-        Ok(Self { addr, nonce })
+mod arbitrary_impls {
+    use arbitrary::{Arbitrary, Unstructured};
+    use proptest::arbitrary::any;
+    use proptest::prelude::RngCore;
+    use proptest::strategy::{BoxedStrategy, Strategy};
+    use sov_modules_api::{Module, PrivateKey, StateMap};
+    use sov_state::Prefix;
+
+    use super::*;
+
+    use std::sync::{Arc, Mutex};
+
+    impl<'a, C> Arbitrary<'a> for Account<C>
+    where
+        C: Context,
+        C::Address: Arbitrary<'a>,
+    {
+        fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
+            let addr = u.arbitrary()?;
+            let nonce = u.arbitrary()?;
+            Ok(Self { addr, nonce })
+        }
     }
-}
 
-#[cfg(feature = "arbitrary")]
-impl<'a, C> arbitrary::Arbitrary<'a> for AccountConfig<C>
-where
-    C: Context,
-    C::PublicKey: arbitrary::Arbitrary<'a>,
-{
-    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        // TODO we might want a dedicated struct that will generate the private key counterpart so
-        // payloads can be signed and verified
-        Ok(Self {
-            pub_keys: u.arbitrary_iter()?.collect::<Result<_, _>>()?,
-        })
+    impl<C> proptest::arbitrary::Arbitrary for Account<C>
+    where
+        C: Context,
+        C::Address: proptest::arbitrary::Arbitrary,
+    {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            (any::<C::Address>(), any::<u64>())
+                .prop_map(|(addr, nonce)| Account { addr, nonce })
+                .boxed()
+        }
     }
-}
 
-#[cfg(feature = "arbitrary")]
-impl<'a, C> Accounts<C>
-where
-    C: Context,
-    C::Address: arbitrary::Arbitrary<'a>,
-    C::PublicKey: arbitrary::Arbitrary<'a>,
-{
-    /// Creates an arbitrary set of accounts and stores it under `working_set`.
-    pub fn arbitrary_workset(
-        u: &mut arbitrary::Unstructured<'a>,
-        working_set: &mut WorkingSet<C>,
-    ) -> arbitrary::Result<Self> {
-        use sov_modules_api::Module;
+    impl<'a, C> Arbitrary<'a> for AccountConfig<C>
+    where
+        C: Context,
+        C::PublicKey: Arbitrary<'a>,
+    {
+        fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
+            // TODO we might want a dedicated struct that will generate the private key counterpart so
+            // payloads can be signed and verified
+            Ok(Self {
+                pub_keys: u.arbitrary_iter()?.collect::<Result<_, _>>()?,
+            })
+        }
+    }
 
-        let config: AccountConfig<C> = u.arbitrary()?;
-        let accounts = Accounts::default();
+    impl<C> proptest::arbitrary::Arbitrary for AccountConfig<C>
+    where
+        C: Context,
+        C::PrivateKey: proptest::arbitrary::Arbitrary,
+    {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
 
-        accounts
-            .genesis(&config, working_set)
-            .map_err(|_| arbitrary::Error::IncorrectFormat)?;
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            any::<Vec<C::PrivateKey>>()
+                .prop_map(|keys| AccountConfig {
+                    pub_keys: keys.into_iter().map(|k| k.pub_key()).collect(),
+                })
+                .boxed()
+        }
+    }
 
-        Ok(accounts)
+    impl<'a, C> Accounts<C>
+    where
+        C: Context,
+        C::Address: Arbitrary<'a>,
+        C::PublicKey: Arbitrary<'a>,
+    {
+        /// Creates an arbitrary set of accounts and stores it under `working_set`.
+        pub fn arbitrary_workset(
+            u: &mut Unstructured<'a>,
+            working_set: &mut WorkingSet<C>,
+        ) -> arbitrary::Result<Self> {
+            let config: AccountConfig<C> = u.arbitrary()?;
+            let accounts = Accounts::default();
+
+            accounts
+                .genesis(&config, working_set)
+                .map_err(|_| arbitrary::Error::IncorrectFormat)?;
+
+            Ok(accounts)
+        }
+    }
+
+    impl<C> Accounts<C>
+    where
+        C: Context,
+        C::Address: proptest::arbitrary::Arbitrary,
+        C::PrivateKey: proptest::arbitrary::Arbitrary,
+    {
+        /// Creates an arbitrary set of accounts and stores it under `working_set`.
+        ///
+        /// We take the `WorkingSet` as `Arc<Mutex<_>>` so the strategy can freely implement
+        /// parallelism while preserving interior mutability safety. The return is a reference to a
+        /// promise of a strategy; hence, the `WorkingSet` lifetime must be locked to its lifetime.
+        pub fn arbitrary_proptest_workset(
+            working_set: Arc<Mutex<WorkingSet<C>>>,
+        ) -> impl Strategy<Value = Self> {
+            any::<(C::Address, AccountConfig<C>, Prefix, Prefix)>()
+                .prop_perturb(
+                    move |(address, config, prefix_keys, prefix_accounts), mut rng| {
+                        let mut working_set_lock =
+                            working_set.lock().expect("working set lock is poisoned");
+                        let working_set = &mut *working_set_lock;
+                        let public_keys = StateMap::new(prefix_keys);
+                        let accounts = StateMap::new(prefix_accounts);
+
+                        for public in config.pub_keys {
+                            let mut address = [0u8; 32];
+                            rng.fill_bytes(&mut address);
+
+                            let addr = C::Address::from(address);
+                            let nonce = rng.next_u64();
+                            let account: Account<C> = Account { addr, nonce };
+
+                            public_keys.set(&account.addr, &public, working_set);
+                            accounts.set(&public, &account, working_set);
+                        }
+
+                        Accounts {
+                            address,
+                            public_keys,
+                            accounts,
+                        }
+                    },
+                )
+                .boxed()
+        }
     }
 }
