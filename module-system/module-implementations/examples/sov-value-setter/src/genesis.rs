@@ -24,7 +24,8 @@ impl<C: sov_modules_api::Context> ValueSetter<C> {
 
 #[cfg(test)]
 mod tests {
-    use sov_modules_api::{default_context::DefaultContext, Address};
+    use sov_modules_api::default_context::DefaultContext;
+    use sov_modules_api::Address;
 
     use crate::ValueSetterConfig;
 

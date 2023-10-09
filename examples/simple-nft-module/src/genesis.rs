@@ -33,8 +33,11 @@ impl<C: Context> NonFungibleToken<C> {
 
 #[cfg(test)]
 mod test {
+    use sov_modules_api::default_context::DefaultContext;
+    use sov_modules_api::utils::generate_address;
+    use sov_modules_api::Spec;
+
     use super::NonFungibleTokenConfig;
-    use sov_modules_api::{default_context::DefaultContext, utils::generate_address, Spec};
 
     #[test]
     fn test_config_serialization() {
