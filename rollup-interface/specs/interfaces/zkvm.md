@@ -1,4 +1,4 @@
-# ZKVM
+# zkVM
 
 The sovereign SDK is designed to support any zkVM capable of running Rust code.
 However, VMs must be capable of supporting a standard set of APIs.
@@ -7,7 +7,7 @@ However, VMs must be capable of supporting a standard set of APIs.
 
 This specification does *not* define any standards relating to performance: proof size, prover work,
 verification time, latency. This omission should not be understood to imply
-that the SDK will work equally well for all choice of proof system. However, since, the SDK will *function* correctly when
+that the SDK will work equally well for all choice of proof system. However, the SDK will *function* correctly when
 defined in any sound proof system, we don't define any specific requirements.
 We strongly suggest that users consider a performant VM such as Risc0.
 
@@ -59,17 +59,16 @@ when proof verification fails.
 
 Expressed in Rust, zkVM would be a `trait` that looked something like the following:
 
-
 ```rust
-pub trait ZkVM {
-    type CodeCommitment: PartialEq + Clone;
-    type Proof: Encode + Decode<Error = DeserializationError>;
-    type Error;
+pub trait Zkvm {
+  type CodeCommitment: PartialEq + Clone;
+  type Proof: Encode + Decode<Error=DeserializationError>;
+  type Error;
 
-    fn log<T: Encode>(item: T);
-    fn verify<T: Decode>(
-        proof: Self::Proof,
-        code_commitment: &Self::CodeCommitment,
-    ) -> Result<T, Self::Error>;
+  fn log<T: Encode>(item: T);
+  fn verify<T: Decode>(
+    proof: Self::Proof,
+    code_commitment: &Self::CodeCommitment,
+  ) -> Result<T, Self::Error>;
 }
 ```

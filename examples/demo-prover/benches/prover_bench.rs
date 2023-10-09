@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::App;
-use demo_stf::genesis_config::get_genesis_config;
+use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
 use log4rs::config::{Appender, Config, Root};
 use methods::ROLLUP_ELF;
 use regex::Regex;
@@ -24,6 +24,17 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
+
+const GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
+    bank_genesis_path: "../test-data/genesis/demo-tests/bank.json",
+    sequencer_genesis_path: "../test-data/genesis/demo-tests/sequencer_registry.json",
+    value_setter_genesis_path: "../test-data/genesis/demo-tests/value_setter.json",
+    accounts_genesis_path: "../test-data/genesis/demo-tests/accounts.json",
+    chain_state_genesis_path: "../test-data/genesis/demo-tests/chain_state.json",
+    nft_path: "../test-data/genesis/demo-tests/nft.json",
+    #[cfg(feature = "experimental")]
+    evm_genesis_path: "../test-data/genesis/demo-tests/evm.json",
+};
 
 #[derive(Debug)]
 struct RegexAppender {
@@ -153,6 +164,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut num_total_transactions = 0;
 
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
+
     rollup_config.storage.path = PathBuf::from(temp_dir.path());
 
     let da_service = CelestiaService::new(
@@ -163,12 +175,16 @@ async fn main() -> Result<(), anyhow::Error> {
     )
     .await;
 
-    let mut app: App<Risc0Host, CelestiaSpec> = App::new(rollup_config.storage.clone());
+    let storage_config = sov_state::config::Config {
+        path: rollup_config.storage.path,
+    };
+    let mut app: App<Risc0Host, CelestiaSpec> = App::new(storage_config);
 
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
 
     let genesis_config = get_genesis_config(
         sequencer_da_address,
+        &GENESIS_PATHS,
         #[cfg(feature = "experimental")]
         Default::default(),
     );
@@ -199,7 +215,7 @@ async fn main() -> Result<(), anyhow::Error> {
         let _header_hash = hex::encode(filtered_block.header.header.hash());
         host.add_hint(&filtered_block.header);
         let (mut blob_txs, inclusion_proof, completeness_proof) = da_service
-            .extract_relevant_txs_with_proof(filtered_block)
+            .extract_relevant_blobs_with_proof(filtered_block)
             .await;
 
         host.add_hint(&inclusion_proof);

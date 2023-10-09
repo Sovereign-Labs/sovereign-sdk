@@ -2,6 +2,8 @@
 #![doc = include_str!("../README.md")]
 
 mod call;
+#[cfg(test)]
+mod tests;
 pub use call::CallMessage;
 mod genesis;
 #[cfg(feature = "native")]
@@ -11,6 +13,7 @@ pub use query::*;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, WorkingSet};
 
+#[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo, Clone)]
 /// Module for non-fungible tokens (NFT).
 /// Each token is represented by a unique ID.
@@ -30,7 +33,7 @@ pub struct NonFungibleToken<C: Context> {
 
 /// Config for the NonFungibleToken module.
 /// Sets admin and existing owners.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct NonFungibleTokenConfig<C: Context> {
     /// Admin of the NonFungibleToken module.
     pub admin: C::Address,

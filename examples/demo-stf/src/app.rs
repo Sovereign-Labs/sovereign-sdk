@@ -9,13 +9,13 @@ use sov_modules_stf_template::AppTemplate;
 pub use sov_modules_stf_template::Batch;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::zk::Zkvm;
+#[cfg(feature = "native")]
+use sov_sequencer::batch_builder::FiFoStrictBatchBuilder;
+#[cfg(feature = "native")]
+use sov_state::config::Config as StorageConfig;
 use sov_state::ZkStorage;
 #[cfg(feature = "native")]
 use sov_state::{ProverStorage, Storage};
-#[cfg(feature = "native")]
-use sov_stf_runner::FiFoStrictBatchBuilder;
-#[cfg(feature = "native")]
-use sov_stf_runner::StorageConfig;
 
 use crate::runtime::Runtime;
 
