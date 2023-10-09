@@ -29,6 +29,8 @@
 //! `#[derive(MessageCodec)` adds deserialization capabilities to the `Runtime` (implements `decode_call` method).
 //! `Runtime::decode_call` accepts serialized call message and returns a type that implements the `DispatchCall` trait.
 //!  The `DispatchCall` implementation (derived by a macro) forwards the message to the appropriate module and executes its `call` method.
+
+#![allow(unused_doc_comments)]
 #[cfg(feature = "native")]
 use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
@@ -56,12 +58,13 @@ use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServe
 use sov_value_setter::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
 /// The `demo-stf runtime`.
-#[cfg_attr(feature = "native", derive(CliWallet), expose_rpc)]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 #[cfg_attr(
     feature = "native",
-    serialization(serde::Serialize, serde::Deserialize)
+    serialization(serde::Serialize, serde::Deserialize),
+    derive(CliWallet),
+    expose_rpc
 )]
 pub struct Runtime<C: Context, Da: DaSpec> {
     /// The Bank module.
@@ -82,6 +85,7 @@ pub struct Runtime<C: Context, Da: DaSpec> {
     pub nft: sov_nft_module::NonFungibleToken<C>,
     #[cfg(feature = "experimental")]
     #[cfg_attr(feature = "native", cli_skip)]
+    /// The EVM module.
     pub evm: sov_evm::Evm<C>,
 }
 
