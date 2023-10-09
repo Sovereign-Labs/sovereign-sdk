@@ -4,7 +4,7 @@
 
 use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 use demo_stf::{create_zk_app_template, AppVerifier};
-use sov_celestia_adapter::types::NamespaceId;
+use sov_celestia_adapter::types::Namespace;
 use sov_celestia_adapter::verifier::CelestiaVerifier;
 use sov_risc0_adapter::guest::Risc0Guest;
 
