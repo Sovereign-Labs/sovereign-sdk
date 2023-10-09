@@ -40,7 +40,7 @@ sov-state = { path = "../../module-system/sov-state" }
 sov-modules-api = { path = "../../module-system/sov-modules-api" }
 sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true }
 # Only enable the evm on "experimental" feature
-#sov-evm = { path = "../../module-system/module-implementations/sov-evm", optional = true }
+sov-evm = { path = "../../module-system/module-implementations/sov-evm", optional = true }
 reth-primitives = { workspace = true, optional = true }
 
 [dev-dependencies]
@@ -52,7 +52,7 @@ rand = "0.8"
 
 [features]
 default = []
-offchain = ["sov-nft-module/offchain"]
+offchain = ["sov-evm/experimental", "sov-nft-module/offchain"]
 experimental = [ "reth-primitives"]
 native = [
     "sov-stf-runner/native",
