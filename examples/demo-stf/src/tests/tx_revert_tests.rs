@@ -5,7 +5,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{PrivateKey, WorkingSet};
 use sov_modules_stf_template::{Batch, SequencerOutcome, SlashingReason, TxEffect};
 use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::mocks::{MockAddress, MockBlock, MockDaSpec};
+use sov_rollup_interface::mocks::{MockAddress, MockBlock, MockDaSpec, MOCK_SEQUENCER_DA_ADDRESS};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::ProverStorage;
 
@@ -15,7 +15,6 @@ use crate::tests::da_simulation::{
     simulate_da_with_bad_nonce, simulate_da_with_bad_serialization, simulate_da_with_bad_sig,
     simulate_da_with_revert_msg,
 };
-use crate::tests::TEST_SEQUENCER_DA_ADDRESS;
 
 // Assume there was proper address and we converted it to bytes already.
 const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
@@ -35,7 +34,7 @@ fn test_tx_revert() {
         let genesis_root = demo.init_chain(config);
 
         let txs = simulate_da_with_revert_msg();
-        let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
+        let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
         let data = MockBlock::default();
 
@@ -85,7 +84,7 @@ fn test_tx_revert() {
         let resp = runtime
             .sequencer_registry
             .sequencer_address(
-                MockAddress::from(TEST_SEQUENCER_DA_ADDRESS),
+                MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS),
                 &mut working_set,
             )
             .unwrap();
@@ -107,7 +106,7 @@ fn test_nonce_incremented_on_revert() {
         let genesis_root = demo.init_chain(config);
 
         let txs = simulate_da_with_revert_msg();
-        let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
+        let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
         let data = MockBlock::default();
 
@@ -175,7 +174,7 @@ fn test_tx_bad_sig() {
 
         let txs = simulate_da_with_bad_sig();
 
-        let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
+        let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
         let blob_sender = blob.sender();
         let mut blobs = [blob];
 
@@ -220,7 +219,7 @@ fn test_tx_bad_nonce() {
 
         let txs = simulate_da_with_bad_nonce();
 
-        let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
+        let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
 
         let data = MockBlock::default();
@@ -286,7 +285,7 @@ fn test_tx_bad_serialization() {
         let mut demo = create_new_app_template_for_tests(path);
 
         let txs = simulate_da_with_bad_serialization();
-        let blob = new_test_blob_from_batch(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS, [0; 32]);
+        let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
         let blob_sender = blob.sender();
         let mut blobs = [blob];
 
