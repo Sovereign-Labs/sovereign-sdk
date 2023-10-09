@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use anyhow::Result;
 use reth_primitives::constants::{EMPTY_RECEIPTS, EMPTY_TRANSACTIONS};
-use reth_primitives::{Bloom, Bytes, EMPTY_OMMER_ROOT, H256, KECCAK_EMPTY, U256};
+use reth_primitives::{Address, Bloom, Bytes, EMPTY_OMMER_ROOT, H256, KECCAK_EMPTY, U256};
 use revm::primitives::SpecId;
 use sov_modules_api::WorkingSet;
 
@@ -8,8 +10,6 @@ use crate::evm::db_init::InitEvmDb;
 use crate::evm::primitive_types::Block;
 use crate::evm::{AccountInfo, EvmChainConfig};
 use crate::Evm;
-use reth_primitives::Address;
-use std::collections::HashMap;
 
 /// Evm account.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
@@ -179,10 +179,12 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{AccountData, EvmConfig};
+    use std::str::FromStr;
+
     use reth_primitives::Bytes;
     use revm::primitives::{Address, SpecId};
-    use std::str::FromStr;
+
+    use crate::{AccountData, EvmConfig};
 
     #[test]
     fn test_config_serialization() {

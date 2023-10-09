@@ -15,7 +15,6 @@ use nft::*;
 mod query;
 #[cfg(feature = "native")]
 pub use query::*;
-
 use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, StateMap, WorkingSet};
 mod offchain;
 #[cfg(feature = "offchain")]
