@@ -1,8 +1,8 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
-mod hooks;
 mod call;
 mod genesis;
+mod hooks;
 pub use genesis::*;
 #[cfg(feature = "native")]
 mod query;
@@ -13,7 +13,6 @@ mod tests;
 
 pub use call::{CallMessage, UPDATE_ACCOUNT_MSG};
 use sov_modules_api::{Context, Error, ModuleInfo, WorkingSet};
-
 
 impl<C: Context> FromIterator<C::PublicKey> for AccountConfig<C> {
     fn from_iter<T: IntoIterator<Item = C::PublicKey>>(iter: T) -> Self {

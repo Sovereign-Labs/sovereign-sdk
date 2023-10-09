@@ -64,7 +64,8 @@ impl<C: sov_modules_api::Context> Accounts<C> {
 mod tests {
     use std::str::FromStr;
 
-    use sov_modules_api::{default_context::DefaultContext, default_signature::DefaultPublicKey};
+    use sov_modules_api::default_context::DefaultContext;
+    use sov_modules_api::default_signature::DefaultPublicKey;
 
     use super::*;
 
