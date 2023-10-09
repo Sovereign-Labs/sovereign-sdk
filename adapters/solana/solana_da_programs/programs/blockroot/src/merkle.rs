@@ -1,22 +1,24 @@
 use anchor_lang::solana_program;
 use solana_program::keccak::hashv;
 
-pub fn compute_merkle_root(data: Vec<&[u8]>) -> [u8;32] {
-    let mut hashes = data.iter().map(|item| hashv(&[*item])).collect::<Vec<_>>();
+pub fn compute_merkle_root(hashes: &Vec<[u8; 32]>) -> [u8; 32] {
+    let mut current_level = hashes.clone();
 
-    while hashes.len() > 1 {
-        if hashes.len() % 2 != 0 {
-            hashes.push(hashes.last().unwrap().clone());
+    while current_level.len() > 1 {
+        let mut new_level = Vec::new();
+
+        for nodes in current_level.chunks(2) {
+            if nodes.len() == 2 {
+                let combined = hashv(&[&nodes[0], &nodes[1]]);
+                new_level.push(combined.to_bytes());
+            } else {
+                // If there's a single item (odd number of nodes), push it to the next level as-is.
+                new_level.push(nodes[0]);
+            }
         }
 
-        let mut new_hashes = Vec::new();
-        for i in (0..hashes.len()).step_by(2) {
-            let combined = hashv(&[&hashes[i].as_ref(), &hashes[i+1].as_ref()]);
-            new_hashes.push(combined);
-        }
-
-        hashes = new_hashes;
+        current_level = new_level;
     }
 
-    hashes[0].to_bytes()
+    current_level[0]
 }
