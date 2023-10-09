@@ -92,6 +92,7 @@ default = [
 experimental = [
 	"default",
 	"sov-ethereum/experimental",
+	"sov-ethereum-gas-price/experimental",
 	"reth-primitives",
 	"secp256k1",
 	"demo-stf/experimental",
