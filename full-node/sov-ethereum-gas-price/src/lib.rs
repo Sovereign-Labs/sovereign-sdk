@@ -11,6 +11,7 @@ pub mod experimental {
     use reth_primitives::U256;
     use sov_evm::Evm;
     use sov_modules_api::WorkingSet;
+    use tracing::info;
 
     use crate::gas_oracle::GasPriceOracle;
     pub use crate::gas_oracle::GasPriceOracleConfig;
@@ -45,6 +46,8 @@ pub mod experimental {
         rpc: &mut RpcModule<EthereumGasPrice<C>>,
     ) -> Result<(), jsonrpsee::core::Error> {
         rpc.register_async_method("eth_gasPrice", |_, ethereum| async move {
+            info!("evm gas price module: eth_gasPrice");
+
             let price = {
                 let mut working_set = WorkingSet::<C>::new(ethereum.storage.clone());
 

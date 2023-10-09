@@ -1,4 +1,3 @@
-use std::hash::Hash;
 use std::sync::Mutex;
 
 use reth_primitives::H256;

@@ -118,11 +118,6 @@ impl<C: sov_modules_api::Context> GasPriceOracle<C> {
         }
     }
 
-    /// Returns the configuration of the gas price oracle.
-    pub fn config(&self) -> &GasPriceOracleConfig {
-        &self.oracle_config
-    }
-
     /// Suggests a gas price estimate based on recent blocks, using the configured percentile.
     pub async fn suggest_tip_cap(&self, working_set: &mut WorkingSet<C>) -> EthResult<U256> {
         let header = &self
