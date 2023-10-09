@@ -29,8 +29,6 @@
 //! `#[derive(MessageCodec)` adds deserialization capabilities to the `Runtime` (implements `decode_call` method).
 //! `Runtime::decode_call` accepts serialized call message and returns a type that implements the `DispatchCall` trait.
 //!  The `DispatchCall` implementation (derived by a macro) forwards the message to the appropriate module and executes its `call` method.
-
-
 #[cfg(feature = "native")]
 use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]

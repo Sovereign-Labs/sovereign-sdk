@@ -1,3 +1,4 @@
+//! Generates wallet cli for the runtime.
 use sov_cli::wallet_state::WalletState;
 use sov_cli::workflows::keys::KeyWorkflow;
 use sov_cli::workflows::rpc::RpcWorkflows;

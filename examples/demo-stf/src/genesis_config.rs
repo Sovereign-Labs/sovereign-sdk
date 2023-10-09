@@ -1,3 +1,7 @@
+//! While the `GenesisConfig` type for `Rollup` is generated from the underlying runtime through a macro,
+//! specific module configurations are obtained from files. This code is responsible for the logic
+//! that transforms module genesis data into Rollup genesis data.
+
 use std::convert::AsRef;
 use std::path::Path;
 

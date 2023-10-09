@@ -1,5 +1,5 @@
-// #![deny(missing_docs)]
-// #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+#![doc = include_str!("../README.md")]
 
 #[cfg(feature = "native")]
 pub mod cli;
@@ -68,6 +68,7 @@ impl<Vm: Zkvm, Da: DaSpec> App<Vm, Da> {
         }
     }
 
+    /// Gets underlying storage.
     pub fn get_storage(&self) -> <DefaultContext as Spec>::Storage {
         self.stf.current_storage.clone()
     }
