@@ -70,6 +70,7 @@ impl ExposeRpcMacro {
         let mut rpc_trait_impls = proc_macro2::TokenStream::new();
 
         for field in fields {
+            let attrs = field.attrs;
             let ty = match field.ty {
                 syn::Type::Path(type_path) => type_path.clone(),
                 _ => panic!("Expected a path type"),
@@ -91,6 +92,7 @@ impl ExposeRpcMacro {
                 syn::Ident::new(&format!("{}RpcServer", &module_ident), module_ident.span());
 
             let merge_operation = quote! {
+                #(#attrs)*
                 module
                     .merge(#rpc_server_ident:: #field_path_args ::into_rpc(r.clone()))
                     .unwrap();
@@ -99,6 +101,7 @@ impl ExposeRpcMacro {
             merge_operations.extend(merge_operation);
 
             let rpc_trait_impl = quote! {
+                #(#attrs)*
                 impl #impl_generics #rpc_trait_ident #field_path_args for RpcStorage #ty_generics #where_clause {
                     /// Get a working set on top of the current storage
                     fn get_working_set(&self) -> ::sov_modules_api::WorkingSet<#context_type>
