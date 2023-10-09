@@ -2014,6 +2014,7 @@ dependencies = [
  "sov-chain-state",
  "sov-cli",
  "sov-data-generators",
+ "sov-evm",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-nft-module",
