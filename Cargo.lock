@@ -8388,7 +8388,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "demo-stf",
- "ethers",
  "jsonrpsee 0.18.2",
  "reth-interfaces",
  "reth-primitives",

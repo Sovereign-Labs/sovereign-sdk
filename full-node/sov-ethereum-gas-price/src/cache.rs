@@ -1,9 +1,9 @@
 use std::hash::Hash;
-use std::sync::{Mutex, RwLock};
+use std::sync::Mutex;
 
 use reth_primitives::H256;
-use reth_rpc_types::{Block, Rich, RichBlock};
-use schnellru::{ByLength, Limiter, LruMap};
+use reth_rpc_types::{Block, Rich};
+use schnellru::{ByLength, LruMap};
 use sov_evm::EthResult;
 use sov_modules_api::WorkingSet;
 

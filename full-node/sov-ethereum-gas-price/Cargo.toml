@@ -30,7 +30,6 @@ reth-primitives = { workspace = true }
 reth-rpc-types = { workspace = true }
 reth-interfaces = { workspace = true }
 
-ethers = { workspace = true }
 schnellru = "0.2.1"
 
 [dev-dependencies]

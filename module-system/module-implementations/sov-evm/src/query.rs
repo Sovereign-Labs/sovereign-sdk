@@ -65,14 +65,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
     ) -> RpcResult<Option<reth_rpc_types::RichBlock>> {
         info!("evm module: eth_getBlockByHash");
 
-        info!("block hash: {:?}", block_hash);
-        info!(
-            "all block hashes so far: {:?}",
-            self.blocks
-                .iter(&mut working_set.accessory_state())
-                .collect::<Vec<_>>()
-        );
-
         let block_number_hex = self
             .block_hashes
             .get(&block_hash, &mut working_set.accessory_state())
@@ -138,8 +130,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
             size: Default::default(),
             withdrawals: Default::default(),
         };
-
-        info!("block: {:?}", block);
 
         Ok(Some(block.into()))
     }

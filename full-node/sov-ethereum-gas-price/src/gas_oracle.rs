@@ -4,11 +4,10 @@ use std::array::TryFromSliceError;
 
 use reth_primitives::constants::GWEI_TO_WEI;
 use reth_primitives::{H256, U256, U64};
-use reth_rpc_types::{Block, BlockTransactions};
-use schnellru::ByLength;
+use reth_rpc_types::BlockTransactions;
 use serde::{Deserialize, Serialize};
 use sov_evm::{EthApiError, EthResult, Evm, RpcInvalidTransactionError};
-use sov_modules_api::{AccessoryWorkingSet, WorkingSet};
+use sov_modules_api::WorkingSet;
 use tokio::sync::Mutex;
 use tracing::warn;
 

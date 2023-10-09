@@ -36,8 +36,8 @@ use tokio::sync::oneshot;
 use tracing::debug;
 
 #[cfg(feature = "experimental")]
-use crate::register_rpc::register_ethereum;
-use crate::register_rpc::{register_ethereum_gas_price, register_ledger, register_sequencer};
+use crate::register_rpc::{register_ethereum, register_ethereum_gas_price};
+use crate::register_rpc::{register_ledger, register_sequencer};
 use crate::{initialize_ledger, ROLLUP_NAMESPACE};
 
 #[cfg(feature = "experimental")]

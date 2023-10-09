@@ -12,8 +12,7 @@ pub mod experimental {
     use sov_evm::Evm;
     use sov_modules_api::WorkingSet;
 
-    use crate::gas_oracle::{GasPriceOracle};
-
+    use crate::gas_oracle::GasPriceOracle;
     pub use crate::gas_oracle::GasPriceOracleConfig;
 
     pub fn get_ethereum_gas_price_rpc<C: sov_modules_api::Context>(
