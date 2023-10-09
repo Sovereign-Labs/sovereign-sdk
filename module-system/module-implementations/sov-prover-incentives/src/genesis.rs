@@ -11,13 +11,13 @@ use crate::ProverIncentives;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProverIncentivesConfig<C: sov_modules_api::Context, Vm: Zkvm> {
     /// The address of the token to be used for bonding.
-    bonding_token_address: C::Address,
+    pub bonding_token_address: C::Address,
     /// The minimum bond for a prover.
-    minimum_bond: u64,
+    pub minimum_bond: u64,
     /// A code commitment to be used for verifying proofs
-    commitment_of_allowed_verifier_method: Vm::CodeCommitment,
+    pub commitment_of_allowed_verifier_method: Vm::CodeCommitment,
     /// A list of initial provers and their bonded amount.
-    initial_provers: Vec<(C::Address, u64)>,
+    pub initial_provers: Vec<(C::Address, u64)>,
 }
 
 impl<C: sov_modules_api::Context, Vm: sov_modules_api::Zkvm> ProverIncentives<C, Vm> {
