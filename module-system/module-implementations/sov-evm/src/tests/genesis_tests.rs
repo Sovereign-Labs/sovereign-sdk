@@ -41,10 +41,6 @@ pub(crate) const GENESIS_HASH: H256 = H256(hex!(
     "3441c3084e43183a53aabbbe3e94512bb3db4aca826af8f23b38f0613811571d"
 ));
 
-pub(crate) const SEALED_GENESIS_HASH: H256 = H256(hex!(
-    "d57423e4375c45bc114cd137146aab671dbd3f6304f05b31bdd416301b4a99f0"
-));
-
 pub(crate) const GENESIS_STATE_ROOT: H256 = H256(hex!(
     "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
 ));
@@ -136,6 +132,7 @@ fn genesis_block() {
         .block_hashes
         .get(&GENESIS_HASH, &mut accessory_state)
         .unwrap();
+
     let block = evm
         .blocks
         .get(block_number as usize, &mut accessory_state)
@@ -181,7 +178,6 @@ fn genesis_block() {
 #[test]
 fn genesis_head() {
     let (evm, mut working_set) = get_evm(&TEST_CONFIG);
-
     let head = evm.head.get(&mut working_set).unwrap();
 
     assert_eq!(
@@ -220,6 +216,5 @@ pub(crate) fn get_evm(config: &EvmConfig) -> (Evm<C>, WorkingSet<DefaultContext>
     let evm = Evm::<C>::default();
     evm.genesis(config, &mut working_set).unwrap();
     evm.finalize_hook(&[10u8; 32].into(), &mut working_set.accessory_state());
-
     (evm, working_set)
 }
