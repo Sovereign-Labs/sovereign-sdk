@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
-use demo_stf::app::App;
 use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
+use demo_stf::App;
 use prometheus::{Histogram, HistogramOpts, Registry};
 use rng_xfers::{RngDaService, RngDaSpec};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};

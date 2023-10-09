@@ -6,8 +6,8 @@ use std::time::Duration;
 
 use anyhow::Context;
 use criterion::{criterion_group, criterion_main, Criterion};
-use demo_stf::app::App;
 use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
+use demo_stf::App;
 use rng_xfers::{RngDaService, RngDaSpec};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_risc0_adapter::host::Risc0Verifier;

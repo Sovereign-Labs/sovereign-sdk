@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::App;
 use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
+use demo_stf::App;
 use log4rs::config::{Appender, Config, Root};
 use regex::Regex;
 use risc0::ROLLUP_ELF;

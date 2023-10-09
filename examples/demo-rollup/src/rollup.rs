@@ -4,12 +4,9 @@ use std::str::FromStr;
 
 use anyhow::Context;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
-#[cfg(feature = "experimental")]
-use demo_stf::app::DefaultPrivateKey;
-use demo_stf::app::{create_zk_app_template, App, DefaultContext};
 use demo_stf::genesis_config::{get_genesis_config, GenesisPaths, StorageConfig};
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig, Runtime};
-use demo_stf::AppVerifier;
+use demo_stf::{create_zk_app_template, App, AppVerifier};
 #[cfg(feature = "experimental")]
 use secp256k1::SecretKey;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
@@ -20,7 +17,9 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::experimental::EthRpcConfig;
-use sov_modules_api::default_context::ZkDefaultContext;
+use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
+#[cfg(feature = "experimental")]
+use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::mocks::{
     MockAddress, MockDaConfig, MockDaService, MOCK_SEQUENCER_DA_ADDRESS,
@@ -69,9 +68,10 @@ pub fn configure_prover<Vm: ZkvmHost, Da: DaService>(
     da_verifier: Da::Verifier,
 ) -> Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm> {
     let config = match cfg {
-        DemoProverConfig::Simulate => {
-            ProofGenConfig::Simulate(AppVerifier::new(create_zk_app_template(), da_verifier))
-        }
+        DemoProverConfig::Simulate => ProofGenConfig::Simulate(AppVerifier::new(
+            create_zk_app_template::<Vm::Guest, _>(),
+            da_verifier,
+        )),
         DemoProverConfig::Execute => ProofGenConfig::Execute,
         DemoProverConfig::Prove => ProofGenConfig::Prover,
     };
