@@ -78,7 +78,7 @@ async fn bank_tx_tests() -> Result<(), anyhow::Error> {
         start_rollup(
             port_tx,
             Some((prover, config)),
-            &GenesisPaths::from_dir("../test_data/genesis/integration-tests"),
+            &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
         )
         .await;
     });
