@@ -53,8 +53,8 @@ rm -rf demo_data; POSTGRES_CONNECTION_STRING="postgresql://username:password@loc
   * `--da-layer mock` is used to run an in-memory local DA layer
 * Run the NFT minting script
 ```bash
-$ cd sovereign/utils/nft-utils
-$ cargo run
+$ cd sovereign/examples/demo-rollup
+$ cargo run --bin sov-nft-script
 ```
   * The above script creates 3 NFT collections, mints some NFTs to each collection
   * The tables can be explored by connecting to postgres and running sample queries from above

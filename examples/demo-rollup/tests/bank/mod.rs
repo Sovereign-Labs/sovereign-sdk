@@ -1,13 +1,14 @@
 use std::net::SocketAddr;
 
 use borsh::BorshSerialize;
-use demo_stf::app::DefaultPrivateKey;
+use demo_stf::genesis_config::GenesisPaths;
 use demo_stf::runtime::RuntimeCall;
 use jsonrpsee::core::client::{Subscription, SubscriptionClientT};
 use jsonrpsee::rpc_params;
-use methods::MOCK_DA_ELF;
+use risc0::MOCK_DA_ELF;
 use sov_demo_rollup::DemoProverConfig;
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{PrivateKey, Spec};
 use sov_risc0_adapter::host::Risc0Host;
@@ -74,7 +75,12 @@ async fn bank_tx_tests() -> Result<(), anyhow::Error> {
     let config = DemoProverConfig::Execute;
 
     let rollup_task = tokio::spawn(async {
-        start_rollup(port_tx, Some((prover, config))).await;
+        start_rollup(
+            port_tx,
+            Some((prover, config)),
+            &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
+        )
+        .await;
     });
 
     // Wait for rollup task to start:

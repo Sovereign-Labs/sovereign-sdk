@@ -1,9 +1,8 @@
 use std::marker::PhantomData;
 
-use sov_modules_api::Zkvm;
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::ZkvmGuest;
+use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
 use crate::StateTransitionData;
 

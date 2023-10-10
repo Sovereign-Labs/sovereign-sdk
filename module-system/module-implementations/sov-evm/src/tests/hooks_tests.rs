@@ -10,7 +10,7 @@ use crate::evm::primitive_types::{
     Block, BlockEnv, Receipt, SealedBlock, TransactionSignedAndRecovered,
 };
 use crate::experimental::PendingTransaction;
-use crate::tests::genesis_tests::{BENEFICIARY, SEALED_GENESIS_HASH};
+use crate::tests::genesis_tests::{BENEFICIARY, GENESIS_HASH};
 
 lazy_static! {
     pub(crate) static ref DA_ROOT_HASH: H256 = H256::from([5u8; 32]);
@@ -19,7 +19,7 @@ lazy_static! {
 #[test]
 fn begin_slot_hook_creates_pending_block() {
     let (evm, mut working_set) = get_evm(&TEST_CONFIG);
-    evm.begin_slot_hook(DA_ROOT_HASH.0, &mut working_set);
+    evm.begin_slot_hook(DA_ROOT_HASH.0, &[10u8; 32].into(), &mut working_set);
     let pending_block = evm.block_env.get(&mut working_set).unwrap();
     assert_eq!(
         pending_block,
@@ -37,7 +37,7 @@ fn begin_slot_hook_creates_pending_block() {
 #[test]
 fn end_slot_hook_sets_head() {
     let (evm, mut working_set) = get_evm(&TEST_CONFIG);
-    evm.begin_slot_hook(DA_ROOT_HASH.0, &mut working_set);
+    evm.begin_slot_hook(DA_ROOT_HASH.0, &[10u8; 32].into(), &mut working_set);
 
     evm.pending_transactions.push(
         &create_pending_transaction(H256::from([1u8; 32]), 1),
@@ -62,10 +62,8 @@ fn end_slot_hook_sets_head() {
         Block {
             header: Header {
                 // TODO: temp parent hash until: https://github.com/Sovereign-Labs/sovereign-sdk/issues/876
-                // parent_hash: GENESIS_HASH,
-                parent_hash: H256(hex!(
-                    "d57423e4375c45bc114cd137146aab671dbd3f6304f05b31bdd416301b4a99f0"
-                )),
+                parent_hash: GENESIS_HASH,
+
                 ommers_hash: EMPTY_OMMER_ROOT,
                 beneficiary: TEST_CONFIG.coinbase,
                 state_root: KECCAK_EMPTY,
@@ -98,7 +96,7 @@ fn end_slot_hook_sets_head() {
 #[test]
 fn end_slot_hook_moves_transactions_and_receipts() {
     let (evm, mut working_set) = get_evm(&TEST_CONFIG);
-    evm.begin_slot_hook(DA_ROOT_HASH.0, &mut working_set);
+    evm.begin_slot_hook(DA_ROOT_HASH.0, &[10u8; 32].into(), &mut working_set);
 
     let tx1 = create_pending_transaction(H256::from([1u8; 32]), 1);
     evm.pending_transactions.push(&tx1, &mut working_set);
@@ -180,7 +178,8 @@ fn create_pending_transaction(hash: H256, index: u64) -> PendingTransaction {
 #[test]
 fn finalize_hook_creates_final_block() {
     let (evm, mut working_set) = get_evm(&TEST_CONFIG);
-    evm.begin_slot_hook(DA_ROOT_HASH.0, &mut working_set);
+    let p = [10u8; 32].into();
+    evm.begin_slot_hook(DA_ROOT_HASH.0, &p, &mut working_set);
     evm.pending_transactions.push(
         &create_pending_transaction(H256::from([1u8; 32]), 1),
         &mut working_set,
@@ -191,12 +190,18 @@ fn finalize_hook_creates_final_block() {
     );
     evm.end_slot_hook(&mut working_set);
 
-    let mut accessory_state = working_set.accessory_state();
     let root_hash = [99u8; 32].into();
-    evm.finalize_hook(&root_hash, &mut accessory_state);
 
+    let mut accessory_state = working_set.accessory_state();
+    evm.finalize_hook(&root_hash, &mut accessory_state);
     assert_eq!(evm.blocks.len(&mut accessory_state), 2);
 
+    evm.begin_slot_hook(DA_ROOT_HASH.0, &root_hash, &mut working_set);
+
+    let mut accessory_state = working_set.accessory_state();
+
+    let parent_block = evm.blocks.get(0usize, &mut accessory_state).unwrap();
+    let parent_hash = parent_block.header.hash;
     let block = evm.blocks.get(1usize, &mut accessory_state).unwrap();
 
     assert_eq!(
@@ -204,7 +209,7 @@ fn finalize_hook_creates_final_block() {
         SealedBlock {
             header: SealedHeader {
                 header: Header {
-                    parent_hash: SEALED_GENESIS_HASH,
+                    parent_hash,
                     ommers_hash: EMPTY_OMMER_ROOT,
                     beneficiary: TEST_CONFIG.coinbase,
                     state_root: H256::from(root_hash.0),
@@ -232,7 +237,7 @@ fn finalize_hook_creates_final_block() {
                     parent_beacon_block_root: None,
                 },
                 hash: H256(hex!(
-                    "0da4e80c5cbd00d9538cb0215d069bfee5be5b59ae4da00244f9b8db429e6889"
+                    "38cd68642013a65c7fdeea92f9f0e1b5709156ac9140f00ffb182c7a605337b0"
                 )),
             },
             transactions: 0..2

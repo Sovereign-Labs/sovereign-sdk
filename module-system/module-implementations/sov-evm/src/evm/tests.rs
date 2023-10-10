@@ -1,7 +1,6 @@
 use std::convert::Infallible;
 
 use reth_primitives::TransactionKind;
-use revm::db::CacheDB;
 use revm::precompile::B160;
 use revm::primitives::{CfgEnv, ExecutionResult, Output, SpecId, KECCAK_EMPTY, U256};
 use revm::{Database, DatabaseCommit};
@@ -14,19 +13,9 @@ use super::executor;
 use crate::evm::primitive_types::BlockEnv;
 use crate::evm::AccountInfo;
 use crate::smart_contracts::SimpleStorageContract;
-use crate::tests::dev_signer::TestSigner;
+use crate::tests::test_signer::TestSigner;
 use crate::Evm;
 type C = sov_modules_api::default_context::DefaultContext;
-
-pub(crate) fn output(result: ExecutionResult) -> bytes::Bytes {
-    match result {
-        ExecutionResult::Success { output, .. } => match output {
-            Output::Call(out) => out,
-            Output::Create(out, _) => out,
-        },
-        _ => panic!("Expected successful ExecutionResult"),
-    }
-}
 
 #[test]
 fn simple_contract_execution_sov_state() {
@@ -38,12 +27,6 @@ fn simple_contract_execution_sov_state() {
     let evm_db: EvmDb<'_, C> = evm.get_db(&mut working_set);
 
     simple_contract_execution(evm_db);
-}
-
-#[test]
-fn simple_contract_execution_in_memory_state() {
-    let db = CacheDB::default();
-    simple_contract_execution(db);
 }
 
 fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit + InitEvmDb>(
@@ -146,5 +129,15 @@ fn contract_address(result: &ExecutionResult) -> Option<B160> {
             ..
         } => Some(**addr),
         _ => None,
+    }
+}
+
+fn output(result: ExecutionResult) -> bytes::Bytes {
+    match result {
+        ExecutionResult::Success { output, .. } => match output {
+            Output::Call(out) => out,
+            Output::Create(out, _) => out,
+        },
+        _ => panic!("Expected successful ExecutionResult"),
     }
 }

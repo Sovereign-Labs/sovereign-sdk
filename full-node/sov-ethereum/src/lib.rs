@@ -12,7 +12,6 @@ pub mod experimental {
     use std::sync::{Arc, Mutex};
 
     use borsh::ser::BorshSerialize;
-    use demo_stf::app::DefaultPrivateKey;
     use demo_stf::runtime::{DefaultContext, Runtime};
     use ethers::types::{Bytes, H256};
     use jsonrpsee::types::ErrorObjectOwned;
@@ -22,6 +21,7 @@ pub mod experimental {
     };
     use reth_rpc_types::{CallRequest, TransactionRequest, TypedTransactionRequest};
     use sov_evm::{CallMessage, Evm, RlpEvmTransaction};
+    use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
     use sov_modules_api::transaction::Transaction;
     use sov_modules_api::utils::to_jsonrpsee_error_object;
     use sov_modules_api::{EncodeCall, WorkingSet};

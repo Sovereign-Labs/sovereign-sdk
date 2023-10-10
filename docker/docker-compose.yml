@@ -1,0 +1,54 @@
+services:
+  validator:
+    image: validator
+    build:
+      context: .
+      dockerfile: Dockerfile.validator
+    # uncomment to provide amount of sequencers to provision (default: 1)
+    # command: ["/opt/entrypoint.sh", "2"]
+    volumes:
+      - credentials:/credentials
+      - genesis:/genesis
+
+  sequencer-0:
+    image: bridge
+    build:
+      context: .
+      dockerfile: Dockerfile.bridge
+    # uncomment to provide the id of the sequencer (default: 0)
+    # command: ["/opt/entrypoint.sh", "0"]
+    ports:
+      - 26658:26658
+    volumes:
+      - credentials:/credentials
+      - genesis:/genesis
+
+  # Uncomment for another sequencer
+  # remember to adjust services.validator.command
+  # sequencer-1:
+  #   image: bridge
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.bridge
+  #   # uncomment to provide the id of the sequencer (default: 0)
+  #   command: ["/opt/entrypoint.sh", "1"]
+  #   ports:
+  #     # remap the default port as it's already used
+  #     - 36658:26658
+  #   volumes:
+  #     - credentials:/credentials
+  #     - genesis:/genesis
+
+volumes:
+  # local volume where sequencer's credentials can persist
+  credentials:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      device: './credentials'
+  # a temporary fs where the genesis hash is announced
+  genesis:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs

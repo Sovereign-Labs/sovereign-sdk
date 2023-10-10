@@ -9,30 +9,13 @@ mod tests;
 #[cfg(feature = "native")]
 mod query;
 
-/// The call methods specified in this module
-pub use call::CallMessage;
+pub use call::*;
+pub use genesis::*;
 /// The response type used by RPC queries.
 #[cfg(feature = "native")]
 pub use query::*;
-use serde::{Deserialize, Serialize};
 use sov_modules_api::{Context, Error, ModuleInfo, WorkingSet, Zkvm};
 use sov_state::codec::BcsCodec;
-
-/// Configuration of the prover incentives module. Specifies the
-/// address of the bonding token, the minimum bond, the commitment to
-/// the allowed verifier method and a set of initial provers with their
-/// bonding amount.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProverIncentivesConfig<C: Context, Vm: Zkvm> {
-    /// The address of the token to be used for bonding.
-    bonding_token_address: C::Address,
-    /// The minimum bond for a prover.
-    minimum_bond: u64,
-    /// A code commitment to be used for verifying proofs
-    commitment_of_allowed_verifier_method: Vm::CodeCommitment,
-    /// A list of initial provers and their bonded amount.
-    initial_provers: Vec<(C::Address, u64)>,
-}
 
 /// A new module:
 /// - Must derive `ModuleInfo`

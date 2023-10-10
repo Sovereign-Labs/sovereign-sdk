@@ -2,9 +2,8 @@ use std::net::SocketAddr;
 
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_modules_api::SlotData;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
-use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 use tokio::sync::oneshot;
@@ -141,7 +140,7 @@ where
             }
             info!("Starting RPC server at {} ", &bound_address);
 
-            let _server_handle = server.start(methods).unwrap();
+            let _server_handle = server.start(methods);
             futures::future::pending::<()>().await;
         });
     }
@@ -152,7 +151,7 @@ where
             debug!("Requesting data for height {}", height,);
 
             let filtered_block = self.da_service.get_finalized_at(height).await?;
-            let mut blobs = self.da_service.extract_relevant_txs(&filtered_block);
+            let mut blobs = self.da_service.extract_relevant_blobs(&filtered_block);
 
             info!(
                 "Extracted {} relevant blobs at height {}: {:?}",
@@ -180,6 +179,7 @@ where
             for receipt in slot_result.batch_receipts {
                 data_to_commit.add_batch(receipt);
             }
+
             if let Some(Prover { vm, config }) = self.prover.as_mut() {
                 let (inclusion_proof, completeness_proof) = self
                     .da_service
