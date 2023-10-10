@@ -41,7 +41,7 @@ pub trait DaService: Send + Sync + 'static {
 
     /// Extract the relevant transactions from a block. For example, this method might return
     /// all of the blob transactions in rollup's namespace on Celestia.
-    fn extract_relevant_txs(
+    fn extract_relevant_blobs(
         &self,
         block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction>;
@@ -62,7 +62,7 @@ pub trait DaService: Send + Sync + 'static {
     /// together with a range proof against the root of the namespaced-merkle-tree, demonstrating that the entire
     /// rollup namespace has been covered.
     #[allow(clippy::type_complexity)]
-    async fn extract_relevant_txs_with_proof(
+    async fn extract_relevant_blobs_with_proof(
         &self,
         block: &Self::FilteredBlock,
     ) -> (
@@ -70,7 +70,7 @@ pub trait DaService: Send + Sync + 'static {
         <Self::Spec as DaSpec>::InclusionMultiProof,
         <Self::Spec as DaSpec>::CompletenessProof,
     ) {
-        let relevant_txs = self.extract_relevant_txs(block);
+        let relevant_txs = self.extract_relevant_blobs(block);
 
         let (etx_proofs, rollup_row_proofs) = self
             .get_extraction_proof(block, relevant_txs.as_slice())

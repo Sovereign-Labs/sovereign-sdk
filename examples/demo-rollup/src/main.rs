@@ -1,10 +1,34 @@
 use std::str::FromStr;
 
 use clap::Parser;
-use sov_demo_rollup::{new_rollup_with_celestia_da, new_rollup_with_mock_da};
+use demo_stf::genesis_config::GenesisPaths;
+use risc0::{MOCK_DA_ELF, ROLLUP_ELF};
+use sov_demo_rollup::{new_rollup_with_celestia_da, new_rollup_with_mock_da, DemoProverConfig};
 use sov_risc0_adapter::host::Risc0Host;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
+
+const DEMO_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
+    bank_genesis_path: "../test-data/genesis/demo-tests/bank.json",
+    sequencer_genesis_path: "../test-data/genesis/demo-tests/sequencer_registry.json",
+    value_setter_genesis_path: "../test-data/genesis/demo-tests/value_setter.json",
+    accounts_genesis_path: "../test-data/genesis/demo-tests/accounts.json",
+    chain_state_genesis_path: "../test-data/genesis/demo-tests/chain_state.json",
+    nft_path: "../test-data/genesis/demo-tests/nft.json",
+    #[cfg(feature = "experimental")]
+    evm_genesis_path: "../test-data/genesis/demo-tests/evm.json",
+};
+
+const TEST_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
+    bank_genesis_path: "../test-data/genesis/integration-tests/bank.json",
+    sequencer_genesis_path: "../test-data/genesis/integration-tests/sequencer_registry.json",
+    value_setter_genesis_path: "../test-data/genesis/integration-tests/value_setter.json",
+    accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
+    chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
+    nft_path: "../test-data/genesis/integration-tests/nft.json",
+    #[cfg(feature = "experimental")]
+    evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
+};
 
 #[cfg(test)]
 mod test_rpc;
@@ -38,12 +62,28 @@ async fn main() -> Result<(), anyhow::Error> {
 
     match args.da_layer.as_str() {
         "mock" => {
-            let rollup = new_rollup_with_mock_da::<Risc0Host<'static>>(rollup_config_path, None)?;
+            let _prover = Risc0Host::new(MOCK_DA_ELF);
+            let _config = DemoProverConfig::Execute;
+
+            let rollup = new_rollup_with_mock_da::<Risc0Host<'static>, _>(
+                rollup_config_path,
+                //Some((prover, config)),
+                None,
+                &TEST_GENESIS_PATHS,
+            )?;
             rollup.run().await
         }
         "celestia" => {
-            let rollup =
-                new_rollup_with_celestia_da::<Risc0Host<'static>>(rollup_config_path, None).await?;
+            let _prover = Risc0Host::new(ROLLUP_ELF);
+            let _config = DemoProverConfig::Execute;
+
+            let rollup = new_rollup_with_celestia_da::<Risc0Host<'static>, _>(
+                rollup_config_path,
+                //Some((prover, config)),
+                None,
+                &DEMO_GENESIS_PATHS,
+            )
+            .await?;
             rollup.run().await
         }
         da => panic!("DA Layer not supported: {}", da),

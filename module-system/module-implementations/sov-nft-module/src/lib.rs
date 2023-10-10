@@ -2,10 +2,11 @@
 #![doc = include_str!("../README.md")]
 
 mod call;
-pub use call::CallMessage;
+pub use call::*;
 mod address;
 mod genesis;
 pub use address::*;
+pub use genesis::*;
 mod collection;
 use collection::*;
 mod nft;
@@ -15,6 +16,9 @@ mod query;
 #[cfg(feature = "native")]
 pub use query::*;
 use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, StateMap, WorkingSet};
+mod offchain;
+#[cfg(feature = "offchain")]
+mod sql;
 /// Utility functions.
 pub mod utils;
 
@@ -35,10 +39,6 @@ pub struct NonFungibleToken<C: Context> {
     /// Mapping of tokens to their owners
     nfts: StateMap<NftIdentifier<C>, Nft<C>>,
 }
-
-/// Config for the NonFungibleToken module.
-/// Sets admin and existing owners.
-pub struct NonFungibleTokenConfig {}
 
 impl<C: Context> Module for NonFungibleToken<C> {
     type Context = C;

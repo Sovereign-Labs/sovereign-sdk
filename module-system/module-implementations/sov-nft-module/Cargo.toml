@@ -1,5 +1,6 @@
 [package]
 name = "sov-nft-module"
+description = "A Sovereign SDK module for managing non-fungible tokens"
 version = { workspace = true }
 edition = { workspace = true }
 authors = { workspace = true }
@@ -12,7 +13,7 @@ publish = false
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 schemars =  { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
@@ -20,6 +21,10 @@ jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], 
 sov-modules-api = { path = "../../sov-modules-api" }
 sov-modules-macros = {path = "../../sov-modules-macros"}
 sov-state = { path = "../../sov-state" }
+
+postgres = { version = "0.19.7", optional = true }
+tokio = { version = "1.33.0", features=["full"], optional = true }
+tracing = { workspace = true, optional = true }
 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../../rollup-interface" }
@@ -29,6 +34,6 @@ sov-nft-module = { version = "*", features = ["native"], path = "." }
 
 [features]
 default = []
-serde = ["dep:serde"]
-native = ["serde", "serde_json", "jsonrpsee", "schemars", "sov-state/native", "sov-modules-api/native", ]
+offchain = ["postgres","tokio","tracing"]
+native = ["serde_json", "jsonrpsee", "schemars", "sov-state/native", "sov-modules-api/native", ]
 test = ["native"]

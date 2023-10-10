@@ -2,10 +2,13 @@
 #![doc = include_str!("../README.md")]
 
 /// Contains the call methods used by the module
-pub mod call;
+mod call;
+pub use call::*;
+#[cfg(test)]
+mod tests;
 
-/// Genesis state configuration
-pub mod genesis;
+mod genesis;
+pub use genesis::*;
 
 /// Hook implementation for the module
 pub mod hooks;
@@ -144,14 +147,6 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
     /// The height of genesis
     #[state]
     genesis_height: sov_modules_api::StateValue<TransitionHeight>,
-}
-
-/// Initial configuration of the chain state
-pub struct ChainStateConfig {
-    /// Initial slot height
-    pub initial_slot_height: TransitionHeight,
-    /// The time at genesis
-    pub current_time: Time,
 }
 
 impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da> {

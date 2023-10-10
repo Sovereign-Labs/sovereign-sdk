@@ -3,7 +3,7 @@ mod batch_builder;
 #[cfg(feature = "experimental")]
 pub use experimental::{get_ethereum_rpc, Ethereum};
 #[cfg(feature = "experimental")]
-pub use sov_evm::signer::DevSigner;
+pub use sov_evm::DevSigner;
 
 #[cfg(feature = "experimental")]
 pub mod experimental {
@@ -12,18 +12,16 @@ pub mod experimental {
     use std::sync::{Arc, Mutex};
 
     use borsh::ser::BorshSerialize;
-    use demo_stf::app::DefaultPrivateKey;
     use demo_stf::runtime::{DefaultContext, Runtime};
     use ethers::types::{Bytes, H256};
     use jsonrpsee::types::ErrorObjectOwned;
     use jsonrpsee::RpcModule;
     use reth_primitives::{
-        Address as RethAddress, TransactionSignedNoHash as RethTransactionSignedNoHash,
+        Address as RethAddress, TransactionSignedNoHash as RethTransactionSignedNoHash, U128, U256,
     };
-    use reth_rpc_types::{TransactionRequest, TypedTransactionRequest};
-    use sov_evm::call::CallMessage;
-    use sov_evm::evm::RlpEvmTransaction;
-    use sov_evm::Evm;
+    use reth_rpc_types::{CallRequest, TransactionRequest, TypedTransactionRequest};
+    use sov_evm::{CallMessage, Evm, RlpEvmTransaction};
+    use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
     use sov_modules_api::transaction::Transaction;
     use sov_modules_api::utils::to_jsonrpsee_error_object;
     use sov_modules_api::{EncodeCall, WorkingSet};
@@ -93,9 +91,9 @@ pub mod experimental {
             let signed_transaction: RethTransactionSignedNoHash = raw_tx.clone().try_into()?;
 
             let tx_hash = signed_transaction.hash();
-            let sender = signed_transaction.recover_signer().ok_or(
-                sov_evm::evm::primitive_types::RawEvmTxConversionError::FailedToRecoverSigner,
-            )?;
+            let sender = signed_transaction
+                .recover_signer()
+                .ok_or(sov_evm::EthApiError::InvalidTransactionSignature)?;
 
             let mut nonces = self.nonces.lock().unwrap();
             let nonce = *nonces.entry(sender).and_modify(|n| *n += 1).or_insert(0);
@@ -213,6 +211,8 @@ pub mod experimental {
 
             let raw_evm_tx = {
                 let mut working_set = WorkingSet::<C>::new(ethereum.storage.clone());
+
+                // set nonce if none
                 if transaction_request.nonce.is_none() {
                     let nonce = evm
                         .get_transaction_count(from, None, &mut working_set)
@@ -221,27 +221,43 @@ pub mod experimental {
                     transaction_request.nonce = Some(nonce);
                 }
 
+                // get current chain id
                 let chain_id = evm
                     .chain_id(&mut working_set)
                     .expect("Failed to get chain id")
                     .map(|id| id.as_u64())
                     .unwrap_or(1);
 
-                // TODO: implement gas logic after gas estimation (#906) is implemented
-                // https://github.com/Sovereign-Labs/sovereign-sdk/issues/906
+                // get call request to estimate gas and gas prices
+                let (call_request, gas_price, max_fee_per_gas) =
+                    get_call_request_and_params(from, chain_id, &transaction_request);
+
+                // estimate gas limit
+                let gas_limit = U256::from(
+                    evm.eth_estimate_gas(call_request, None, &mut working_set)?
+                        .as_u64(),
+                );
+
+                // get typed transaction request
                 let transaction_request = match transaction_request.into_typed_request() {
                     Some(TypedTransactionRequest::Legacy(mut m)) => {
                         m.chain_id = Some(chain_id);
+                        m.gas_limit = gas_limit;
+                        m.gas_price = gas_price;
 
                         TypedTransactionRequest::Legacy(m)
                     }
                     Some(TypedTransactionRequest::EIP2930(mut m)) => {
                         m.chain_id = chain_id;
+                        m.gas_limit = gas_limit;
+                        m.gas_price = gas_price;
 
                         TypedTransactionRequest::EIP2930(m)
                     }
                     Some(TypedTransactionRequest::EIP1559(mut m)) => {
                         m.chain_id = chain_id;
+                        m.gas_limit = gas_limit;
+                        m.max_fee_per_gas = max_fee_per_gas;
 
                         TypedTransactionRequest::EIP1559(m)
                     }
@@ -253,10 +269,12 @@ pub mod experimental {
                     }
                 };
 
+                // get raw transaction
                 let transaction = into_transaction(transaction_request).map_err(|_| {
                     to_jsonrpsee_error_object("Invalid types in transaction request", ETH_RPC_ERROR)
                 })?;
 
+                // sign transaction
                 let signed_tx = ethereum
                     .eth_rpc_config
                     .eth_signer
@@ -339,5 +357,57 @@ pub mod experimental {
         let bytes: [u8; 32] = u256.to_be_bytes();
         let bytes: [u8; 16] = bytes[16..].try_into()?;
         Ok(u128::from_be_bytes(bytes))
+    }
+
+    fn get_call_request_and_params(
+        from: reth_primitives::H160,
+        chain_id: u64,
+        transaction_request: &TransactionRequest,
+    ) -> (CallRequest, U128, U128) {
+        // TODO: we need an oracle to fetch the gas price of the current chain
+        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/883
+        let gas_price = transaction_request.gas_price.unwrap_or_default();
+        let max_fee_per_gas = transaction_request.max_fee_per_gas.unwrap_or_default();
+
+        // TODO: Generate call request better according to the transaction type
+        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/946
+        let call_request = CallRequest {
+            from: Some(from),
+            to: transaction_request.to,
+            gas: transaction_request.gas,
+            gas_price: {
+                if transaction_request.max_priority_fee_per_gas.is_some() {
+                    // eip 1559
+                    None
+                } else {
+                    // legacy
+                    Some(U256::from(gas_price))
+                }
+            },
+            max_fee_per_gas: Some(U256::from(max_fee_per_gas)),
+            value: transaction_request.value,
+            input: transaction_request.data.clone().into(),
+            nonce: transaction_request.nonce,
+            chain_id: Some(chain_id.into()),
+            access_list: transaction_request.access_list.clone(),
+            max_priority_fee_per_gas: {
+                if transaction_request.max_priority_fee_per_gas.is_some() {
+                    // eip 1559
+                    Some(U256::from(
+                        transaction_request
+                            .max_priority_fee_per_gas
+                            .unwrap_or(max_fee_per_gas),
+                    ))
+                } else {
+                    // legacy
+                    None
+                }
+            },
+            transaction_type: None,
+            blob_versioned_hashes: vec![],
+            max_fee_per_blob_gas: None,
+        };
+
+        (call_request, gas_price, max_fee_per_gas)
     }
 }

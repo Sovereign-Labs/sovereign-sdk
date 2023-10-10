@@ -1,21 +1,46 @@
-use anyhow::Context as AnyhowContext;
-#[cfg(feature = "experimental")]
-use reth_primitives::Bytes;
+//! While the `GenesisConfig` type for `Rollup` is generated from the underlying runtime through a macro,
+//! specific module configurations are obtained from files. This code is responsible for the logic
+//! that transforms module genesis data into Rollup genesis data.
+
+use std::convert::AsRef;
+use std::path::Path;
+
+use anyhow::{bail, Context as AnyhowContext};
+use serde::de::DeserializeOwned;
+use sov_accounts::AccountConfig;
+use sov_bank::BankConfig;
 use sov_chain_state::ChainStateConfig;
-use sov_cli::wallet_state::PrivateKeyAndAddress;
 #[cfg(feature = "experimental")]
-use sov_evm::{AccountData, EvmConfig, SpecId};
+use sov_evm::EvmConfig;
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Context;
+use sov_nft_module::NonFungibleTokenConfig;
 use sov_rollup_interface::da::DaSpec;
+use sov_sequencer_registry::SequencerConfig;
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
 
 /// Creates config for a rollup with some default settings, the config is used in demos and tests.
 use crate::runtime::GenesisConfig;
 
-pub const LOCKED_AMOUNT: u64 = 50;
-pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
+/// Paths pointing to genesis files.
+pub struct GenesisPaths<P: AsRef<Path>> {
+    /// Bank genesis path.
+    pub bank_genesis_path: P,
+    /// Sequencer Registry genesis path.
+    pub sequencer_genesis_path: P,
+    /// Value Setter genesis path.
+    pub value_setter_genesis_path: P,
+    /// Accounts genesis path.
+    pub accounts_genesis_path: P,
+    /// Chain State genesis path.
+    pub chain_state_genesis_path: P,
+    /// Nft genesis path.
+    pub nft_path: P,
+    #[cfg(feature = "experimental")]
+    /// EVM genesis path.
+    pub evm_genesis_path: P,
+}
 
 /// Configure our rollup with a centralized sequencer using the SEQUENCER_DA_ADDRESS
 /// address constant. Since the centralize sequencer's address is consensus critical,
@@ -27,76 +52,61 @@ pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
 /// ```rust,no_run
 /// const SEQUENCER_DA_ADDRESS: &str = "celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208";
 /// ```
-pub fn get_genesis_config<C: Context, Da: DaSpec>(
+pub fn get_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
     sequencer_da_address: Da::Address,
-    #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
+    genesis_paths: &GenesisPaths<P>,
+    #[cfg(feature = "experimental")] eth_signers: Vec<reth_primitives::Address>,
 ) -> GenesisConfig<C, Da> {
-    // This will be read from a file: #872
-    let initial_sequencer_balance = 100000000;
-    let token_deployer: PrivateKeyAndAddress<C> = read_private_key();
-
     create_genesis_config(
-        initial_sequencer_balance,
-        token_deployer.address.clone(),
         sequencer_da_address,
+        genesis_paths,
         #[cfg(feature = "experimental")]
-        evm_genesis_addresses,
+        eth_signers,
     )
     .expect("Unable to read genesis configuration")
 }
 
-fn create_genesis_config<C: Context, Da: DaSpec>(
-    initial_sequencer_balance: u64,
-    sequencer_address: C::Address,
-    sequencer_da_address: Da::Address,
-    #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
+fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
+    seq_da_address: Da::Address,
+    genesis_paths: &GenesisPaths<P>,
+    #[cfg(feature = "experimental")] eth_signers: Vec<reth_primitives::Address>,
 ) -> anyhow::Result<GenesisConfig<C, Da>> {
-    // This will be read from a file: #872
-    let token_config: sov_bank::TokenConfig<C> = sov_bank::TokenConfig {
-        token_name: DEMO_TOKEN_NAME.to_owned(),
-        address_and_balances: vec![(sequencer_address.clone(), initial_sequencer_balance)],
-        authorized_minters: vec![sequencer_address.clone()],
-        salt: 0,
-    };
+    let bank_config: BankConfig<C> = read_json_file(&genesis_paths.bank_genesis_path)?;
 
-    // This will be read from a file: #872
-    let bank_config = sov_bank::BankConfig {
-        tokens: vec![token_config],
-    };
+    let mut sequencer_registry_config: SequencerConfig<C, Da> =
+        read_json_file(&genesis_paths.sequencer_genesis_path)?;
 
-    // This will be read from a file: #872
-    let token_address = sov_bank::get_genesis_token_address::<C>(
-        &bank_config.tokens[0].token_name,
-        bank_config.tokens[0].salt,
-    );
+    // The `seq_da_address` is overridden with the value from rollup binary.
+    sequencer_registry_config.seq_da_address = seq_da_address;
 
-    // This will be read from a file: #872
-    let sequencer_registry_config = sov_sequencer_registry::SequencerConfig {
-        seq_rollup_address: sequencer_address,
-        seq_da_address: sequencer_da_address,
-        coins_to_lock: sov_bank::Coins {
-            amount: LOCKED_AMOUNT,
-            token_address,
-        },
-        is_preferred_sequencer: true,
-    };
+    // Sanity check: `token_address` in `sequencer_registry_config` match `token_address` from the bank module.
+    {
+        let token_address = &sov_bank::get_genesis_token_address::<C>(
+            &bank_config.tokens[0].token_name,
+            bank_config.tokens[0].salt,
+        );
 
-    // This path will be injected as a parameter: #872
-    let value_setter_genesis_path = "../test-data/genesis/value_setter.json";
-    let value_setter_data = std::fs::read_to_string(value_setter_genesis_path)
-        .with_context(|| format!("Failed to read genesis from {}", value_setter_genesis_path))?;
+        let coins_token_addr = &sequencer_registry_config.coins_to_lock.token_address;
+        if coins_token_addr != token_address {
+            bail!(
+                "Wrong token address in `sequencer_registry_config` expected {} but found {}",
+                token_address,
+                coins_token_addr
+            )
+        }
+    }
 
-    let nft_config = sov_nft_module::NonFungibleTokenConfig {};
+    let value_setter_config: ValueSetterConfig<C> =
+        read_json_file(&genesis_paths.value_setter_genesis_path)?;
 
-    let value_setter_config: ValueSetterConfig<C> = serde_json::from_str(&value_setter_data)
-        .with_context(|| format!("Failed to parse genesis from {}", value_setter_genesis_path))?;
+    let accounts_config: AccountConfig<C> = read_json_file(&genesis_paths.accounts_genesis_path)?;
+    let nft_config: NonFungibleTokenConfig = read_json_file(&genesis_paths.nft_path)?;
 
-    // This will be read from a file: #872
-    let chain_state_config = ChainStateConfig {
-        // TODO: Put actual value
-        initial_slot_height: 0,
-        current_time: Default::default(),
-    };
+    let chain_state_config: ChainStateConfig =
+        read_json_file(&genesis_paths.chain_state_genesis_path)?;
+
+    #[cfg(feature = "experimental")]
+    let evm_config = get_evm_config(&genesis_paths.evm_genesis_path, eth_signers)?;
 
     Ok(GenesisConfig::new(
         bank_config,
@@ -104,55 +114,37 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
         (),
         chain_state_config,
         value_setter_config,
-        sov_accounts::AccountConfig { pub_keys: vec![] },
-        #[cfg(feature = "experimental")]
-        get_evm_config(evm_genesis_addresses),
+        accounts_config,
         nft_config,
+        #[cfg(feature = "experimental")]
+        evm_config,
     ))
 }
 
-// TODO: #840
-#[cfg(feature = "experimental")]
-fn get_evm_config(genesis_addresses: Vec<reth_primitives::Address>) -> EvmConfig {
-    let data = genesis_addresses
-        .into_iter()
-        .map(|address| AccountData {
-            address,
-            balance: AccountData::balance(u64::MAX),
-            code_hash: AccountData::empty_code(),
-            code: Bytes::default(),
-            nonce: 0,
-        })
-        .collect();
+fn read_json_file<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> anyhow::Result<T> {
+    let path_str = path.as_ref().display();
 
-    EvmConfig {
-        data,
-        chain_id: 1,
-        limit_contract_code_size: None,
-        spec: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
-        block_timestamp_delta: 1u64,
-        ..Default::default()
-    }
+    let data = std::fs::read_to_string(&path)
+        .with_context(|| format!("Failed to read genesis from {}", path_str))?;
+    let config: T = serde_json::from_str(&data)
+        .with_context(|| format!("Failed to parse genesis from {}", path_str))?;
+
+    Ok(config)
 }
 
-pub fn read_private_key<C: Context>() -> PrivateKeyAndAddress<C> {
-    // TODO fix the hardcoded path: #872
-    let token_deployer_data =
-        std::fs::read_to_string("../test-data/keys/token_deployer_private_key.json")
-            .expect("Unable to read file to string");
+#[cfg(feature = "experimental")]
+fn get_evm_config<P: AsRef<Path>>(
+    evm_path: P,
+    signers: Vec<reth_primitives::Address>,
+) -> anyhow::Result<EvmConfig> {
+    let config: EvmConfig = read_json_file(evm_path)?;
+    let addresses: std::collections::HashSet<reth_primitives::Address> =
+        config.data.iter().map(|acc| acc.address).collect();
 
-    let token_deployer: PrivateKeyAndAddress<C> = serde_json::from_str(&token_deployer_data)
-        .unwrap_or_else(|_| {
-            panic!(
-                "Unable to convert data {} to PrivateKeyAndAddress",
-                &token_deployer_data
-            )
-        });
+    // check if all the eth signer are in genesis.
+    for signer in signers {
+        assert!(addresses.contains(&signer));
+    }
 
-    assert!(
-        token_deployer.is_matching_to_default(),
-        "Inconsistent key data"
-    );
-
-    token_deployer
+    Ok(config)
 }

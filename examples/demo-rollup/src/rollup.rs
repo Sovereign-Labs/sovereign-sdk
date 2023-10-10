@@ -1,13 +1,12 @@
 use std::net::SocketAddr;
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Context;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
-#[cfg(feature = "experimental")]
-use demo_stf::app::DefaultPrivateKey;
-use demo_stf::app::{create_zk_app_template, App, DefaultContext};
-use demo_stf::genesis_config::get_genesis_config;
+use demo_stf::genesis_config::{get_genesis_config, GenesisPaths, StorageConfig};
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig, Runtime};
+use demo_stf::{create_zk_app_template, App, AppVerifier};
 #[cfg(feature = "experimental")]
 use secp256k1::SecretKey;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
@@ -18,9 +17,13 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::experimental::EthRpcConfig;
-use sov_modules_api::default_context::ZkDefaultContext;
+use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
+#[cfg(feature = "experimental")]
+use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_stf_template::AppTemplate;
-use sov_rollup_interface::mocks::{MockAddress, MockDaConfig, MockDaService};
+use sov_rollup_interface::mocks::{
+    MockAddress, MockDaConfig, MockDaService, MOCK_SEQUENCER_DA_ADDRESS,
+};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{
@@ -32,7 +35,7 @@ use tracing::debug;
 #[cfg(feature = "experimental")]
 use crate::register_rpc::register_ethereum;
 use crate::register_rpc::{register_ledger, register_sequencer};
-use crate::{initialize_ledger, AppVerifier, ROLLUP_NAMESPACE};
+use crate::{initialize_ledger, ROLLUP_NAMESPACE};
 
 #[cfg(feature = "experimental")]
 const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.json";
@@ -65,9 +68,10 @@ pub fn configure_prover<Vm: ZkvmHost, Da: DaService>(
     da_verifier: Da::Verifier,
 ) -> Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm> {
     let config = match cfg {
-        DemoProverConfig::Simulate => {
-            ProofGenConfig::Simulate(AppVerifier::new(create_zk_app_template(), da_verifier))
-        }
+        DemoProverConfig::Simulate => ProofGenConfig::Simulate(AppVerifier::new(
+            create_zk_app_template::<Vm::Guest, _>(),
+            da_verifier,
+        )),
         DemoProverConfig::Execute => ProofGenConfig::Execute,
         DemoProverConfig::Prove => ProofGenConfig::Prover,
     };
@@ -78,21 +82,23 @@ pub fn configure_prover<Vm: ZkvmHost, Da: DaService>(
 pub enum DemoProverConfig {
     /// Run the rollup verification logic inside the current process
     Simulate,
-    /// Run the rollup verifier in a zkvm executor
+    /// Run the rollup verifier in a zkVM executor
     Execute,
     /// Run the rollup verifier and create a SNARK of execution
     Prove,
 }
 
 /// Creates celestia based rollup.
-pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
+pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost, P: AsRef<Path>>(
     rollup_config_path: &str,
     prover: Option<(Vm, DemoProverConfig)>,
+    genesis_paths: &GenesisPaths<P>,
 ) -> Result<Rollup<Vm, CelestiaService>, anyhow::Error> {
     debug!(
         "Starting demo celestia rollup with config {}",
         rollup_config_path
     );
+
     let rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
 
@@ -106,13 +112,17 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
     )
     .await;
 
-    let app = App::new(rollup_config.storage);
+    let storage_config = StorageConfig {
+        path: rollup_config.storage.path,
+    };
+    let app = App::new(storage_config);
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS)?;
 
     #[cfg(feature = "experimental")]
     let eth_signer = read_eth_tx_signers();
-    let genesis_config = demo_stf::genesis_config::get_genesis_config(
+    let genesis_config = get_genesis_config(
         sequencer_da_address,
+        genesis_paths,
         #[cfg(feature = "experimental")]
         eth_signer.signers(),
     );
@@ -136,7 +146,6 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
-            #[cfg(feature = "local")]
             eth_signer,
         },
         prover,
@@ -144,32 +153,38 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
 }
 
 /// Creates MockDa based rollup.
-pub fn new_rollup_with_mock_da<Vm: ZkvmHost>(
+pub fn new_rollup_with_mock_da<Vm: ZkvmHost, P: AsRef<Path>>(
     rollup_config_path: &str,
     prover: Option<(Vm, DemoProverConfig)>,
+    genesis_paths: &GenesisPaths<P>,
 ) -> Result<Rollup<Vm, MockDaService>, anyhow::Error> {
     debug!("Starting mock rollup with config {}", rollup_config_path);
 
     let rollup_config: RollupConfig<MockDaConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
 
-    new_rollup_with_mock_da_from_config(rollup_config, prover)
+    new_rollup_with_mock_da_from_config(rollup_config, prover, genesis_paths)
 }
 
 /// Creates MockDa based rollup.
-pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost>(
+pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost, P: AsRef<Path>>(
     rollup_config: RollupConfig<MockDaConfig>,
     prover: Option<(Vm, DemoProverConfig)>,
+    genesis_paths: &GenesisPaths<P>,
 ) -> Result<Rollup<Vm, MockDaService>, anyhow::Error> {
     let ledger_db = initialize_ledger(&rollup_config.storage.path);
-    let sequencer_da_address = MockAddress::from([0u8; 32]);
+    let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
     let da_service = MockDaService::new(sequencer_da_address);
 
     #[cfg(feature = "experimental")]
     let eth_signer = read_eth_tx_signers();
-    let app = App::new(rollup_config.storage);
+    let storage_config = StorageConfig {
+        path: rollup_config.storage.path,
+    };
+    let app = App::new(storage_config);
     let genesis_config = get_genesis_config(
         sequencer_da_address,
+        genesis_paths,
         #[cfg(feature = "experimental")]
         eth_signer.signers(),
     );
@@ -185,7 +200,6 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost>(
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
-            #[cfg(feature = "local")]
             eth_signer,
         },
         prover,

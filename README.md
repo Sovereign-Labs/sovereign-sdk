@@ -30,7 +30,7 @@ must implement. In the Sovereign SDK, we define a rollup as the combination of t
 1. A [State Transition Function](./rollup-interface/specs/interfaces/stf.md) ("STF") which defines the "business logic" of the rollup
 1. A [Data Availability Layer](./rollup-interface/specs/interfaces/da.md) ("DA layer") which determines the set of transactions that are fed
    to the state transition function
-1. A Zero Knowledge proving system (aka "Zero Knowledge Virtual Machine" or "ZKVM"), which takes the compiled rollup code and
+1. A Zero Knowledge proving system (aka "Zero Knowledge Virtual Machine" or "zkVM"), which takes the compiled rollup code and
    produces succinct proofs that the logic has been executed correctly.
 
 One of the primary goals of the Sovereign SDK is to enable a clean separation of concerns between these three components.
@@ -104,7 +104,7 @@ If you want to add support for a new data availability layer, the easiest way to
 
 Adapters contain the logic integrating 3rd party codebases into the Sovereign SDK. Over time, we expect Sovereign SDK
 to have adapters for almost all Data Availability Layers and LLVM-compatible proof systems. Currently, we
-maintain adapters for [`Risc0`](https://www.risczero.com) (a ZKVM) and [`Celestia`](https://www.celestia.org) a (DA layer).
+maintain adapters for [`Risc0`](https://www.risczero.com) (a zkVM) and [`Celestia`](https://www.celestia.org) a (DA layer).
 The Avail project also maintains an adapter for their DA layer, which can be found [here](https://github.com/availproject/avail-sovereign-da-adapter).
 [Chainway](https://chainway.xyz/) team also maintains an open-source Bitcoin DA adapter for their Sovereign Rollup on Bitcoin, which can be found [here](https://github.com/chainwayxyz/bitcoin-da).
 

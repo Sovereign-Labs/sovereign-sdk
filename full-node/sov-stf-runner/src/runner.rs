@@ -2,9 +2,8 @@ use std::net::SocketAddr;
 
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_modules_api::SlotData;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
-use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 use tokio::sync::oneshot;
@@ -34,17 +33,17 @@ where
     prover: Option<Prover<V, Da, Vm>>,
 }
 
-/// Represents the possible modes of execution for a zkvm program
+/// Represents the possible modes of execution for a zkVM program
 pub enum ProofGenConfig<ST, Da: DaService, Vm: ZkvmHost>
 where
     ST: StateTransitionFunction<Vm::Guest, Da::Spec>,
 {
-    /// The simulator runs the rollup verifier logic without even emulating the zkvm
+    /// The simulator runs the rollup verifier logic without even emulating the zkVM
     Simulate(StateTransitionVerifier<ST, Da::Verifier, Vm::Guest>),
-    /// The executor runs the rollup verification logic in the zkvm, but does not actually
+    /// The executor runs the rollup verification logic in the zkVM, but does not actually
     /// produce a zk proof
     Execute,
-    /// The prover runs the rollup verification logic in the zkvm and produces a zk proof
+    /// The prover runs the rollup verification logic in the zkVM and produces a zk proof
     Prover,
 }
 
@@ -152,7 +151,7 @@ where
             debug!("Requesting data for height {}", height,);
 
             let filtered_block = self.da_service.get_finalized_at(height).await?;
-            let mut blobs = self.da_service.extract_relevant_txs(&filtered_block);
+            let mut blobs = self.da_service.extract_relevant_blobs(&filtered_block);
 
             info!(
                 "Extracted {} relevant blobs at height {}: {:?}",
@@ -180,6 +179,7 @@ where
             for receipt in slot_result.batch_receipts {
                 data_to_commit.add_batch(receipt);
             }
+
             if let Some(Prover { vm, config }) = self.prover.as_mut() {
                 let (inclusion_proof, completeness_proof) = self
                     .da_service
@@ -196,16 +196,16 @@ where
                         state_transition_witness: slot_result.witness,
                     };
                 vm.add_hint(transition_data);
-
-                match config {
-                    ProofGenConfig::Simulate(verifier) => {
-                        verifier.run_block(vm.simulate_with_hints()).map_err(|e| {
+                tracing::info_span!("guest_execution").in_scope(|| match config {
+                    ProofGenConfig::Simulate(verifier) => verifier
+                        .run_block(vm.simulate_with_hints())
+                        .map_err(|e| {
                             anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)
-                        })?;
-                    }
-                    ProofGenConfig::Execute => vm.run(false)?,
-                    ProofGenConfig::Prover => vm.run(true)?,
-                }
+                        })
+                        .map(|_| ()),
+                    ProofGenConfig::Execute => vm.run(false),
+                    ProofGenConfig::Prover => vm.run(true),
+                })?;
             }
             let next_state_root = slot_result.state_root;
 

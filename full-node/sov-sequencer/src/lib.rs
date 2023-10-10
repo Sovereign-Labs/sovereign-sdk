@@ -2,14 +2,17 @@
 #![doc = include_str!("../README.md")]
 use std::sync::Mutex;
 
+/// Concrete implementations of `[BatchBuilder]`
+pub mod batch_builder;
 /// Utilities for the sequencer rpc
 pub mod utils;
+
 use anyhow::anyhow;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
+use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_rollup_interface::services::da::DaService;
-use utils::to_jsonrpsee_error_object;
 
 const SEQUENCER_RPC_ERROR: &str = "SEQUENCER_RPC_ERROR";
 

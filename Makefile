@@ -28,6 +28,7 @@ lint:  ## cargo check and clippy. Skip clippy on guest code since it's not suppo
 	## fmt first, because it's the cheapest
 	cargo +nightly fmt --all --check
 	cargo check --all-targets --all-features
+	$(MAKE) check-fuzz
 	CI_SKIP_GUEST_BUILD=1 cargo clippy --all-targets --all-features
 
 lint-fix:  ## cargo fmt, fix and clippy. Skip clippy on guest code since it's not supported by risc0

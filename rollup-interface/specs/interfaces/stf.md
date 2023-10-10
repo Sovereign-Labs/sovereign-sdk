@@ -39,8 +39,8 @@ adaptive gas pricing depending on prover throughput.
 - **Arguments**
 
 | Name               | Type               | Description                                                                                                                                                                                                                                                                                                                        |
-| ------------------ | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| witness            | WITNESS            | The witness to be used to process this slot. In prover mode, the witness argument is an empty struct which is populated with "hints" for the ZKVM during execution. In ZK mode, the argument is the pre-populated set of hints.                                                                                                    |
+| ------------------ | ------------------ |------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| witness            | WITNESS            | The witness to be used to process this slot. In prover mode, the witness argument is an empty struct which is populated with "hints" for the zkVM during execution. In ZK mode, the argument is the pre-populated set of hints.                                                                                                    |
 | slot_header        | BLOCK_HEADER       | The header of the block on the DA layer                                                                                                                                                                                                                                                                                            |
 | validity_condition | VALIDITY_CONDITION | Data for any extra checks which must be made by light clients before accepting the state transition from this slot. For example, if the DA layer uses a verkle tree which is too expensive to open in-circuit, this might contain a merkle root of the observed slot data - which light clients would need to check "out-of-band". |
 | blobs              | BLOB_TRANSACTIONS  | An iterator over the blobs included in this slot                                                                                                                                                                                                                                                                                   |
@@ -115,7 +115,7 @@ state of a particular instance of the state transition function.
 
 ### Witness
 
-A custom type for each state transition function containing the hints that are passed to the ZKVM.
+A custom type for each state transition function containing the hints that are passed to the zkVM.
 
 ## Optional Methods
 

@@ -4,12 +4,14 @@
 mod call;
 pub use call::CallMessage;
 mod genesis;
+pub use genesis::*;
 #[cfg(feature = "native")]
 mod query;
 #[cfg(feature = "native")]
 pub use query::*;
 use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, WorkingSet};
 
+#[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo, Clone)]
 /// Module for non-fungible tokens (NFT).
 /// Each token is represented by a unique ID.
@@ -25,15 +27,6 @@ pub struct NonFungibleToken<C: Context> {
     #[state]
     /// Mapping of tokens to their owners
     owners: sov_modules_api::StateMap<u64, C::Address>,
-}
-
-/// Config for the NonFungibleToken module.
-/// Sets admin and existing owners.
-pub struct NonFungibleTokenConfig<C: Context> {
-    /// Admin of the NonFungibleToken module.
-    pub admin: C::Address,
-    /// Existing owners of the NonFungibleToken module.
-    pub owners: Vec<(u64, C::Address)>,
 }
 
 impl<C: Context> Module for NonFungibleToken<C> {
