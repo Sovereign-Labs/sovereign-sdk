@@ -12,7 +12,7 @@ pub static GLOBAL_HASHMAP: Lazy<Mutex<HashMap<String, (u64, u64)>>> =
 
 /// Increments the requested metric by the given value, creating a
 /// new entry in the global map if necessary.
-pub fn add_value(metric: String, value: u64) {
+fn add_value(metric: String, value: u64) {
     let mut hashmap = GLOBAL_HASHMAP.lock();
     hashmap
         .entry(metric)
@@ -25,7 +25,7 @@ pub fn add_value(metric: String, value: u64) {
 
 /// Deserialize a `Bytes` into a null-separated `(String, u64)` tuple. This function
 /// expects its arguments to match the format of arguments to Risc0's io callbacks.
-pub fn deserialize_custom(serialized: Bytes) -> Result<(String, u64), anyhow::Error> {
+fn deserialize_custom(serialized: Bytes) -> Result<(String, u64), anyhow::Error> {
     let null_pos = serialized
         .iter()
         .position(|&b| b == 0)
