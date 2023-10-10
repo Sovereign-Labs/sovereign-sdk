@@ -8,6 +8,7 @@ pub use sov_evm::DevSigner;
 #[cfg(feature = "experimental")]
 pub mod experimental {
     use std::array::TryFromSliceError;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{Arc, Mutex};
 
     use borsh::ser::BorshSerialize;
@@ -55,7 +56,7 @@ pub mod experimental {
     }
 
     pub struct Ethereum<C: sov_modules_api::Context, Da: DaService> {
-        nonce: Mutex<u64>,
+        nonce: AtomicU64,
         da_service: Da,
         batch_builder: Arc<Mutex<EthBatchBuilder>>,
         eth_rpc_config: EthRpcConfig,
@@ -64,7 +65,7 @@ pub mod experimental {
 
     impl<C: sov_modules_api::Context, Da: DaService> Ethereum<C, Da> {
         fn new(
-            nonce: Mutex<u64>,
+            nonce: AtomicU64,
             da_service: Da,
             batch_builder: Arc<Mutex<EthBatchBuilder>>,
             eth_rpc_config: EthRpcConfig,
@@ -89,7 +90,7 @@ pub mod experimental {
 
             let tx_hash = signed_transaction.hash();
 
-            let mut nonce = self.nonce.lock().unwrap();
+            let nonce = self.nonce.load(Ordering::SeqCst);
 
             let tx = CallMessage { tx: raw_tx };
             let message = <Runtime<DefaultContext, Da::Spec> as EncodeCall<
@@ -99,10 +100,10 @@ pub mod experimental {
             let tx = Transaction::<DefaultContext>::new_signed_tx(
                 &self.eth_rpc_config.sov_tx_signer_priv_key,
                 message,
-                *nonce,
+                nonce,
             );
 
-            *nonce += 1;
+            self.nonce.store(nonce + 1, Ordering::SeqCst);
 
             Ok((H256::from(tx_hash), tx.try_to_vec()?))
         }
