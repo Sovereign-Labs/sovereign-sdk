@@ -9,17 +9,11 @@ mod tests;
 #[cfg(feature = "native")]
 mod query;
 
-pub use call::CallMessage;
+pub use call::*;
+pub use genesis::*;
 #[cfg(feature = "native")]
 pub use query::*;
 use sov_modules_api::{Error, ModuleInfo, WorkingSet};
-
-/// Initial configuration for sov-value-setter module.
-#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
-pub struct ValueSetterConfig<C: sov_modules_api::Context> {
-    /// Admin of the module.
-    pub admin: C::Address,
-}
 
 /// A new module:
 /// - Must derive `ModuleInfo`
