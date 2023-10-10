@@ -43,7 +43,6 @@ tracing-subscriber = { version = "0.3.17", features = [
 ], optional = true }
 
 sov-db = { path = "../../full-node/db/sov-db", optional = true }
-sov-ethereum-gas-price = { path = "../../full-node/sov-ethereum-gas-price", optional = true }
 sov-ethereum = { path = "../../full-node/sov-ethereum", optional = true }
 sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true }
 sov-risc0-adapter = { path = "../../adapters/risc0" }
@@ -92,7 +91,6 @@ default = [
 experimental = [
 	"default",
 	"sov-ethereum/experimental",
-	"sov-ethereum-gas-price/experimental",
 	"reth-primitives",
 	"secp256k1",
 	"demo-stf/experimental",

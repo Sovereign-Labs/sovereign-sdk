@@ -8346,7 +8346,6 @@ dependencies = [
  "sov-db",
  "sov-demo-rollup",
  "sov-ethereum",
- "sov-ethereum-gas-price",
  "sov-evm",
  "sov-modules-api",
  "sov-modules-stf-template",
@@ -8372,24 +8371,6 @@ dependencies = [
  "demo-stf",
  "ethers",
  "jsonrpsee 0.18.2",
- "reth-primitives",
- "reth-rpc-types",
- "serde_json",
- "sov-evm",
- "sov-modules-api",
- "sov-rollup-interface",
- "tokio",
-]
-
-[[package]]
-name = "sov-ethereum-gas-price"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "borsh",
- "demo-stf",
- "jsonrpsee 0.18.2",
- "reth-interfaces",
  "reth-primitives",
  "reth-rpc-types",
  "schnellru",
@@ -9658,7 +9639,7 @@ version = "0.12.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f36bdaa60a83aca3921b5259d5400cbf5e90fc51931376a9bd4a0eb79aa7210f"
 dependencies = [
- "proc-macro2 1.0.67",
+ "proc-macro2 1.0.69",
  "quote 1.0.33",
  "syn 1.0.109",
  "unicode-xid 0.2.4",
