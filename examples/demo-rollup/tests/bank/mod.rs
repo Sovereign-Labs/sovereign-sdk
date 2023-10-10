@@ -5,7 +5,7 @@ use demo_stf::genesis_config::GenesisPaths;
 use demo_stf::runtime::RuntimeCall;
 use jsonrpsee::core::client::{Subscription, SubscriptionClientT};
 use jsonrpsee::rpc_params;
-use methods::MOCK_DA_ELF;
+use risc0::MOCK_DA_ELF;
 use sov_demo_rollup::DemoProverConfig;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;

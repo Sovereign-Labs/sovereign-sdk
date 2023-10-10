@@ -4877,13 +4877,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "methods"
-version = "0.2.0"
-dependencies = [
- "risc0-build",
-]
-
-[[package]]
 name = "metrics"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6128,6 +6121,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "provers"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "borsh",
+ "const-rollup-config",
+ "demo-stf",
+ "env_logger",
+ "hex",
+ "jsonrpsee 0.18.2",
+ "log",
+ "log4rs",
+ "once_cell",
+ "parking_lot 0.12.1",
+ "prettytable-rs",
+ "regex",
+ "risc0",
+ "risc0-zkvm",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "sov-celestia-adapter",
+ "sov-demo-rollup",
+ "sov-modules-api",
+ "sov-risc0-adapter",
+ "sov-rollup-interface",
+ "sov-state",
+ "sov-stf-runner",
+ "sov-zk-cycle-macros",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.17",
+]
+
+[[package]]
 name = "psm"
 version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6958,6 +6988,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd124222d17ad93a644ed9d011a40f4fb64aa54275c08cc216524a9ea82fb09f"
 dependencies = [
  "digest 0.10.7",
+]
+
+[[package]]
+name = "risc0"
+version = "0.2.0"
+dependencies = [
+ "risc0-build",
 ]
 
 [[package]]
@@ -8321,48 +8358,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-demo-prover-host"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "bincode",
- "borsh",
- "const-rollup-config",
- "demo-stf",
- "env_logger",
- "hex",
- "jsonrpsee 0.18.2",
- "log",
- "log4rs",
- "methods",
- "once_cell",
- "parking_lot 0.12.1",
- "prettytable-rs",
- "regex",
- "risc0-zkvm",
- "serde",
- "serde_json",
- "sha2 0.10.8",
- "sov-celestia-adapter",
- "sov-demo-rollup",
- "sov-modules-api",
- "sov-risc0-adapter",
- "sov-rollup-interface",
- "sov-state",
- "sov-stf-runner",
- "sov-zk-cycle-macros",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber 0.3.17",
-]
-
-[[package]]
 name = "sov-demo-rollup"
 version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "bincode",
  "borsh",
  "clap 4.4.6",
  "const-rollup-config",
@@ -8377,13 +8378,16 @@ dependencies = [
  "ethers-signers",
  "hex",
  "jsonrpsee 0.18.2",
- "methods",
+ "log",
+ "log4rs",
  "prettytable-rs",
  "prometheus 0.11.0",
  "proptest",
+ "regex",
  "reqwest",
  "reth-primitives",
  "revm",
+ "risc0",
  "secp256k1 0.27.0",
  "serde",
  "serde_json",
@@ -8403,6 +8407,7 @@ dependencies = [
  "sov-sequencer",
  "sov-state",
  "sov-stf-runner",
+ "sov-zk-cycle-macros",
  "tempfile",
  "tendermint",
  "tokio",
