@@ -9,7 +9,6 @@ use ethers_signers::{LocalWallet, Signer};
 use sov_evm::SimpleStorageContract;
 use sov_risc0_adapter::host::Risc0Host;
 use test_client::TestClient;
-use tracing::info;
 
 use super::test_helpers::start_rollup;
 
