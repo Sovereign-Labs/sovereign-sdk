@@ -25,7 +25,7 @@ pub const DEFAULT_MAX_PRICE: U256 = U256::from_limbs([500_000_000_000u64, 0, 0, 
 /// The default minimum gas price, under which the sample will be ignored
 pub const DEFAULT_IGNORE_PRICE: U256 = U256::from_limbs([2u64, 0, 0, 0]);
 
-/// Settings for the [GasPriceOracle]
+/// Settings for the gas price oracle configured by node operators
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GasPriceOracleConfig {
