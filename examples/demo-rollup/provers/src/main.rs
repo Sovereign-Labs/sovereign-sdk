@@ -8,17 +8,6 @@ use tracing::info;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
-const GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
-    bank_genesis_path: "../../test-data/genesis/demo-tests/bank.json",
-    sequencer_genesis_path: "../../test-data/genesis/demo-tests/sequencer_registry.json",
-    value_setter_genesis_path: "../../test-data/genesis/demo-tests/value_setter.json",
-    accounts_genesis_path: "../../test-data/genesis/demo-tests/accounts.json",
-    chain_state_genesis_path: "../../test-data/genesis/demo-tests/chain_state.json",
-    nft_path: "../../test-data/genesis/demo-tests/nft.json",
-    #[cfg(feature = "experimental")]
-    evm_genesis_path: "../../test-data/genesis/demo-tests/evm.json",
-};
-
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     // If SKIP_PROVER is set, We still compile and run the zkVM code inside of an emulator without generating
@@ -51,7 +40,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let rollup = new_rollup_with_celestia_da(
         &rollup_config_path,
         Some((prover, prover_config)),
-        &GENESIS_PATHS,
+        &GenesisPaths::from_dir("../test-data/genesis/demo-tests"),
     )
     .await?;
     rollup.run().await?;

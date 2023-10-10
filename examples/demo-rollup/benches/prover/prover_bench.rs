@@ -25,17 +25,6 @@ use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
 
-const GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
-    bank_genesis_path: "../test-data/genesis/demo-tests/bank.json",
-    sequencer_genesis_path: "../test-data/genesis/demo-tests/sequencer_registry.json",
-    value_setter_genesis_path: "../test-data/genesis/demo-tests/value_setter.json",
-    accounts_genesis_path: "../test-data/genesis/demo-tests/accounts.json",
-    chain_state_genesis_path: "../test-data/genesis/demo-tests/chain_state.json",
-    nft_path: "../test-data/genesis/demo-tests/nft.json",
-    #[cfg(feature = "experimental")]
-    evm_genesis_path: "../test-data/genesis/demo-tests/evm.json",
-};
-
 #[derive(Debug)]
 struct RegexAppender {
     regex: Regex,
@@ -184,7 +173,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let genesis_config = get_genesis_config(
         sequencer_da_address,
-        &GENESIS_PATHS,
+        &GenesisPaths::from_dir("../test-data/genesis/demo-tests"),
         #[cfg(feature = "experimental")]
         Default::default(),
     );
