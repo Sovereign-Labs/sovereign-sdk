@@ -1,7 +1,6 @@
 #![no_main]
 
-use demo_stf::app::create_zk_app_template;
-use demo_stf::AppVerifier;
+use demo_stf::{create_zk_app_template, AppVerifier};
 use sov_risc0_adapter::guest::Risc0Guest;
 
 use sov_rollup_interface::mocks::MockDaVerifier;
@@ -13,7 +12,7 @@ pub fn main() {
 
     let mut stf_verifier =
         AppVerifier::new(create_zk_app_template::<Risc0Guest, _>(), MockDaVerifier {});
-    
+
     stf_verifier
         .run_block(guest)
         .expect("Prover must be honest");
