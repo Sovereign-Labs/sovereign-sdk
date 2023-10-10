@@ -97,8 +97,6 @@ pub struct GasPriceOracle<C: sov_modules_api::Context> {
     cache: BlockCache<C>,
 }
 
-//unsafe impl<C: sov_modules_api::Context> Send for GasPriceOracle<C> {}
-
 impl<C: sov_modules_api::Context> GasPriceOracle<C> {
     /// Creates and returns the [GasPriceOracle].
     pub fn new(provider: Evm<C>, mut oracle_config: GasPriceOracleConfig) -> Self {
