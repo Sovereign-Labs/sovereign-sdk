@@ -19,7 +19,10 @@ use super::ValueSetter;
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage {
     /// value to set
-    SetValue(u32),
+    SetValue(
+        /// new value
+        u32,
+    ),
 }
 
 /// Example of a custom error.

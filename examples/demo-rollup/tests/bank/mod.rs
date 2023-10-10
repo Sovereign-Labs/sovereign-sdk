@@ -1,14 +1,14 @@
 use std::net::SocketAddr;
 
 use borsh::BorshSerialize;
-use demo_stf::app::DefaultPrivateKey;
 use demo_stf::genesis_config::GenesisPaths;
 use demo_stf::runtime::RuntimeCall;
 use jsonrpsee::core::client::{Subscription, SubscriptionClientT};
 use jsonrpsee::rpc_params;
-use methods::MOCK_DA_ELF;
+use risc0::MOCK_DA_ELF;
 use sov_demo_rollup::DemoProverConfig;
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{PrivateKey, Spec};
 use sov_risc0_adapter::host::Risc0Host;
@@ -25,6 +25,7 @@ const TEST_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
     value_setter_genesis_path: "../test-data/genesis/integration-tests/value_setter.json",
     accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
     chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
+    nft_path: "../test-data/genesis/integration-tests/nft.json",
     #[cfg(feature = "experimental")]
     evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
 };

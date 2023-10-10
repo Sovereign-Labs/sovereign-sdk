@@ -6,44 +6,17 @@ mod genesis;
 mod query;
 #[cfg(feature = "native")]
 pub use query::*;
-#[cfg(test)]
-mod tests;
 mod token;
 /// Util functions for bank
 pub mod utils;
-/// Specifies the call methods using in that module.
-pub use call::CallMessage;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+pub use call::*;
+pub use genesis::*;
 use sov_modules_api::{CallResponse, Error, GasUnit, ModuleInfo, WorkingSet};
 use token::Token;
 /// Specifies an interface to interact with tokens.
 pub use token::{Amount, Coins};
 /// Methods to get a token address.
 pub use utils::{get_genesis_token_address, get_token_address};
-
-/// [`TokenConfig`] specifies a configuration used when generating a token for the bank
-/// module.
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-#[serde(bound = "C::Address: Serialize + DeserializeOwned")]
-pub struct TokenConfig<C: sov_modules_api::Context> {
-    /// The name of the token.
-    pub token_name: String,
-    /// A vector of tuples containing the initial addresses and balances (as u64)
-    pub address_and_balances: Vec<(C::Address, u64)>,
-    /// The addresses that are authorized to mint the token.
-    pub authorized_minters: Vec<C::Address>,
-    /// A salt used to encrypt the token address.
-    pub salt: u64,
-}
-
-/// Initial configuration for sov-bank module.
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-#[serde(bound = "C::Address: Serialize + DeserializeOwned")]
-pub struct BankConfig<C: sov_modules_api::Context> {
-    /// A list of configurations for the initial tokens.
-    pub tokens: Vec<TokenConfig<C>>,
-}
 
 /// Gas configuration for the bank module
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
