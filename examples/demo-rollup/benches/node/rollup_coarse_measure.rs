@@ -97,7 +97,7 @@ async fn main() -> Result<(), anyhow::Error> {
         timer_output = true;
     }
 
-    let rollup_config_path = "benches/rollup_config.toml".to_string();
+    let rollup_config_path = "benches/node/rollup_config.toml".to_string();
     let mut rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
         from_toml_path(&rollup_config_path)
             .context("Failed to read rollup configuration")

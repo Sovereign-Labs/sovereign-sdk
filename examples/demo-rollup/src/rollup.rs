@@ -98,6 +98,7 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost, P: AsRef<Path>>(
         "Starting demo celestia rollup with config {}",
         rollup_config_path
     );
+
     let rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
 

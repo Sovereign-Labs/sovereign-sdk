@@ -126,9 +126,9 @@ jobs:
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
       - name: cargo hack
         run: make check-features
-  test:
-    name: test
-    runs-on: buildjet-16vcpu-ubuntu-2204
+  nextest:
+    name: nextest
+    runs-on: buildjet-4vcpu-ubuntu-2204
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v3
@@ -139,18 +139,34 @@ jobs:
           version: "23.2"
       - name: Install Rust
         run: rustup show
-      # `cargo-nextest` is much faster than standard `cargo test`.
       - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
         run: cargo install cargo-risczero
       - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
         run: cargo risczero install
+        # `cargo-nextest` is much faster than standard `cargo test`.
       - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
         with:
           cache-provider: "buildjet"
-          shared-key: cargo-build
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
       - run: cargo nextest run --workspace --all-features
+  test:
+    name: test
+    runs-on: buildjet-4vcpu-ubuntu-2204
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v3
+      - uses: rui314/setup-mold@v1
+      - name: Install Rust
+        run: rustup show
+      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
+        run: cargo install cargo-risczero
+      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
+        run: cargo risczero install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-provider: "buildjet"
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
       # `cargo-nextest` does not support doctests (yet?), so we have to run them
       # separately.
       # TODO: https://github.com/nextest-rs/nextest/issues/16

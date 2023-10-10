@@ -1,7 +1,7 @@
 use std::env;
 
 use demo_stf::genesis_config::GenesisPaths;
-use methods::ROLLUP_ELF;
+use risc0::ROLLUP_ELF;
 use sov_demo_rollup::{new_rollup_with_celestia_da, DemoProverConfig};
 use sov_risc0_adapter::host::Risc0Host;
 use tracing::info;
@@ -9,14 +9,14 @@ use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
 const GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
-    bank_genesis_path: "../test-data/genesis/demo-tests/bank.json",
-    sequencer_genesis_path: "../test-data/genesis/demo-tests/sequencer_registry.json",
-    value_setter_genesis_path: "../test-data/genesis/demo-tests/value_setter.json",
-    accounts_genesis_path: "../test-data/genesis/demo-tests/accounts.json",
-    chain_state_genesis_path: "../test-data/genesis/demo-tests/chain_state.json",
-    nft_path: "../test-data/genesis/demo-tests/nft.json",
+    bank_genesis_path: "../../test-data/genesis/demo-tests/bank.json",
+    sequencer_genesis_path: "../../test-data/genesis/demo-tests/sequencer_registry.json",
+    value_setter_genesis_path: "../../test-data/genesis/demo-tests/value_setter.json",
+    accounts_genesis_path: "../../test-data/genesis/demo-tests/accounts.json",
+    chain_state_genesis_path: "../../test-data/genesis/demo-tests/chain_state.json",
+    nft_path: "../../test-data/genesis/demo-tests/nft.json",
     #[cfg(feature = "experimental")]
-    evm_genesis_path: "../test-data/genesis/demo-tests/evm.json",
+    evm_genesis_path: "../../test-data/genesis/demo-tests/evm.json",
 };
 
 #[tokio::main]
@@ -24,11 +24,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // If SKIP_PROVER is set, We still compile and run the zkVM code inside of an emulator without generating
     // a proof. This dramatically reduces the runtime of the prover, while still ensuring that our rollup
     // code is valid and operates as expected.
-    let prover_config = if env::var("SKIP_PROVER").is_ok() {
-        DemoProverConfig::Execute
-    } else {
-        DemoProverConfig::Prove
-    };
+    let prover_config = DemoProverConfig::Execute;
 
     // Initializing logging
     let subscriber = tracing_subscriber::fmt()

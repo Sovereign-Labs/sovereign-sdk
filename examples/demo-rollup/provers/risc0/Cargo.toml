@@ -1,5 +1,5 @@
 [package]
-name = "methods"
+name = "risc0"
 version = "0.2.0"
 edition = "2021"
 resolver = "2"

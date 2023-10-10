@@ -11,8 +11,8 @@ use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
 use demo_stf::App;
 use log4rs::config::{Appender, Config, Root};
-use methods::ROLLUP_ELF;
 use regex::Regex;
+use risc0::ROLLUP_ELF;
 use sov_celestia_adapter::types::{FilteredCelestiaBlock, Namespace};
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::{CelestiaSpec, RollupParams};
@@ -152,7 +152,7 @@ async fn main() -> Result<(), anyhow::Error> {
         }
     }
 
-    let rollup_config_path = "benches/rollup_config.toml".to_string();
+    let rollup_config_path = "benches/prover/rollup_config.toml".to_string();
     let mut rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
         from_toml_path(&rollup_config_path)
             .context("Failed to read rollup configuration")
@@ -193,7 +193,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let mut demo = app.stf;
 
-    let hex_data = read_to_string("benches/blocks.hex").expect("Failed to read data");
+    let hex_data = read_to_string("benches/prover/blocks.hex").expect("Failed to read data");
     let bincoded_blocks: Vec<FilteredCelestiaBlock> = hex_data
         .lines()
         .map(|line| {

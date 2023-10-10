@@ -5,7 +5,7 @@
 ## Running the bench
 * From sovereign-sdk
 ```
-$ cd examples/demo-prover/host/benches
+$ cd examples/demo-rollup/benches/prover
 $ cargo bench --features bench --bench prover_bench
 ```
 
