@@ -123,6 +123,8 @@ impl TestClient {
         &self,
         contract_address: H160,
         set_arg: u32,
+        max_priority_fee_per_gas: Option<u64>,
+        max_fee_per_gas: Option<u64>,
     ) -> PendingTransaction<'_, Http> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
 
@@ -132,8 +134,8 @@ impl TestClient {
             .chain_id(self.chain_id)
             .nonce(nonce)
             .data(self.contract.set_call_data(set_arg))
-            .max_priority_fee_per_gas(10u64)
-            .max_fee_per_gas(MAX_FEE_PER_GAS)
+            .max_priority_fee_per_gas(max_priority_fee_per_gas.unwrap_or(10u64))
+            .max_fee_per_gas(max_fee_per_gas.unwrap_or(MAX_FEE_PER_GAS))
             .gas(GAS);
 
         let typed_transaction = TypedTransaction::Eip1559(req);
@@ -284,6 +286,13 @@ impl TestClient {
             .unwrap();
 
         count.as_u64()
+    }
+
+    pub(crate) async fn eth_gas_price(&self) -> ethereum_types::U256 {
+        self.http_client
+            .request("eth_gasPrice", rpc_params![])
+            .await
+            .unwrap()
     }
 
     pub(crate) async fn eth_get_block_by_number(

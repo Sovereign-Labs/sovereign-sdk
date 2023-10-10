@@ -9,6 +9,7 @@ use ethers_signers::{LocalWallet, Signer};
 use sov_evm::SimpleStorageContract;
 use sov_risc0_adapter::host::Risc0Host;
 use test_client::TestClient;
+use tracing::info;
 
 use super::test_helpers::start_rollup;
 
@@ -114,7 +115,9 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
 
     let set_arg = 923;
     let tx_hash = {
-        let set_value_req = client.set_value(contract_address, set_arg).await;
+        let set_value_req = client
+            .set_value(contract_address, set_arg, None, None)
+            .await;
         client.send_publish_batch_request().await;
         set_value_req.await.unwrap().unwrap().transaction_hash
     };
@@ -150,7 +153,7 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
     // Create a blob with multiple transactions.
     let mut requests = Vec::default();
     for value in 100..103 {
-        let set_value_req = client.set_value(contract_address, value).await;
+        let set_value_req = client.set_value(contract_address, value, None, None).await;
         requests.push(set_value_req);
     }
 
@@ -193,6 +196,29 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
 
         let get_arg = client.query_contract(contract_address).await?;
         assert_eq!(value, get_arg.as_u32());
+    }
+
+    {
+        // get initial gas price
+        let initial_gas_price = client.eth_gas_price().await;
+
+        // send 100 set transaction with high gas fee
+        let mut requests = Vec::default();
+        for value in 200..300 {
+            let set_value_req = client
+                .set_value(contract_address, value, Some(20u64), Some(21u64))
+                .await;
+            requests.push(set_value_req);
+        }
+
+        client.send_publish_batch_request().await;
+
+        // get gas price
+        let latest_gas_price = client.eth_gas_price().await;
+
+        // assert gas price is higher
+        // TODO: emulate gas price oracle here to have exact value
+        assert!(latest_gas_price > initial_gas_price);
     }
 
     Ok(())
