@@ -17,8 +17,8 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::experimental::EthRpcConfig;
-use sov_ethereum::GasPriceOracleConfig;
 #[cfg(feature = "experimental")]
+use sov_ethereum::GasPriceOracleConfig;
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 #[cfg(feature = "experimental")]
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
@@ -257,7 +257,7 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
             register_ethereum::<DefaultContext, Da>(
                 self.da_service.clone(),
                 self.eth_rpc_config,
-                storage.clone(),
+                storage,
                 &mut methods,
             )?;
         }
