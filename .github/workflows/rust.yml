@@ -73,6 +73,7 @@ jobs:
         uses: arduino/setup-protoc@v2
         with:
           version: "23.2"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install Rust
         run: rustup show && rustup install nightly && rustup component add rustfmt --toolchain nightly-x86_64-unknown-linux-gnu # Nightly is needed for our configuration of cargo fmt
       - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
@@ -111,6 +112,7 @@ jobs:
         uses: arduino/setup-protoc@v2
         with:
           version: "23.2"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install Rust
         run: rustup show
       - name: cargo install cargo-hack
@@ -137,6 +139,7 @@ jobs:
         uses: arduino/setup-protoc@v2
         with:
           version: "23.2"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install Rust
         run: rustup show
       - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
@@ -161,6 +164,7 @@ jobs:
         uses: arduino/setup-protoc@v2
         with:
           version: "23.2"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install Rust
         run: rustup show
       - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
@@ -188,6 +192,7 @@ jobs:
         uses: arduino/setup-protoc@v2
         with:
           version: "23.2"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install Rust
         run: rustup show
       - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
@@ -235,6 +240,7 @@ jobs:
         uses: arduino/setup-protoc@v2
         with:
           version: "23.2"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install Rust
         run: rustup show
       - uses: Swatinem/rust-cache@v2
@@ -299,6 +305,7 @@ jobs:
         uses: arduino/setup-protoc@v2
         with:
           version: "23.2"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install Rust
         run: rustup show
       - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
