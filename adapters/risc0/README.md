@@ -1,6 +1,6 @@
 # Risc0 Adapter
 
-This package adapts Risc0 version 0.18 to work as a ZKVM for the Sovereign SDK.
+This package adapts Risc0 version 0.18 to work as a zkVM for the Sovereign SDK.
 
 ## Limitations
 
