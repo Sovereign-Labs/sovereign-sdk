@@ -21,7 +21,7 @@ pub struct SequencerConfig<C: sov_modules_api::Context, Da: sov_modules_api::DaS
     ///
     /// The coins will be transferred from
     /// [`SequencerConfig::seq_rollup_address`] to this module's address
-    /// ([`ModuleInfo::address`]) and locked away until the sequencer
+    /// ([`sov_modules_api::ModuleInfo::address`]) and locked away until the sequencer
     /// decides to exit (unregister).
     ///
     /// Only sequencers that are [`SequencerRegistry::is_sender_allowed`] list are
