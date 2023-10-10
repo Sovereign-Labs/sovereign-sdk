@@ -8,7 +8,14 @@ use anchor_lang::solana_program::keccak::hashv;
 
 declare_id!("6YQGvP866CHpLTdHwmLqj2Vh5q7T1GF4Kk9gS9MCta8E");
 
-const PREFIX: &str = "chunk_accumulator";
+// Prefix for the PDA that will hold the root of the rollup blocks
+// and be included in the solana block header as part of the account diff
+pub const PREFIX: &str = "chunk_accumulator";
+// 9000 slots is 1 hour approximately
+pub const MAX_RETENTION_FOR_INCOMPLETE_CHUNKS: u64 = 9000;
+// Solana transaction size is currently capped to 1280 bytes
+// So we're restricting our chunk size to 1 kb
+pub const CHUNK_SIZE: u64 = 1024;
 
 #[program]
 pub mod blockroot {
@@ -17,33 +24,50 @@ pub mod blockroot {
     pub fn initialize<'info>(ctx: Context<Initialize>) -> Result<()> {
         let accumulator = &mut ctx.accounts.chunk_accumulator;
         accumulator.chunks = BTreeMap::new();
-        accumulator.chunk_age = BTreeMap::new();
         Ok(())
     }
 
-    pub fn process_chunk<'info>(ctx: Context<ProcessChunk>, chunk:Chunk) -> Result<()> {
+    pub fn clear<'info>(ctx: Context<Clear>, digest: Option<[u8;32]>) -> Result<()> {
+        let accumulator = &mut ctx.accounts.chunk_accumulator;
+        if let Some(d) = digest {
+            accumulator.chunks.remove(&d);
+        } else {
+            accumulator.chunks = BTreeMap::new();
+        };
+        Ok(())
+    }
+
+    pub fn process_chunk<'info>(ctx: Context<ProcessChunk>, bump:u8, chunk:Chunk) -> Result<()> {
         let chunk_accumulator = &mut ctx.accounts.chunk_accumulator;
+        let blocks_root = &mut ctx.accounts.blocks_root;
         let digest = chunk.digest.clone();
+        let current_slot_num = ctx.accounts.clock.slot;
         chunk_accumulator.accumulate(chunk);
         msg!("{}",chunk_accumulator.is_complete(&digest));
-        if chunk_accumulator.is_complete(&digest) {
-            msg!("{:?}",chunk_accumulator.get_merkle_root(&digest));
+        if let Some(merkle_root) = chunk_accumulator.get_merkle_root(&digest) {
+            msg!("accumulation blob with digest: {:?} has completed with root {:?}",digest, merkle_root);
+            blocks_root.update_root(&merkle_root, current_slot_num);
+            msg!("blocks root for slot {}, blob root: {:?} combined root: {:?}",current_slot_num,merkle_root, blocks_root.digest);
+            chunk_accumulator.clear_digest(&digest);
         }
         Ok(())
     }
-}
-
-#[error_code]
-pub enum ErrorCode {
-    #[msg("Signer mismatch for accumulator account")]
-    IncorrectAccumulator,
 }
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(mut)]
     pub creator: Signer<'info>,
-    #[account(zero)]
+    #[account(signer, zero)]
+    pub chunk_accumulator:  Account<'info, ChunkAccumulator>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct Clear<'info> {
+    #[account(mut)]
+    pub creator: Signer<'info>,
+    #[account(signer, mut)]
     pub chunk_accumulator:  Account<'info, ChunkAccumulator>,
     pub system_program: Program<'info, System>,
 }
@@ -52,11 +76,13 @@ pub struct Initialize<'info> {
 pub struct ProcessChunk<'info> {
     #[account(mut)]
     pub creator: Signer<'info>,
-    #[account(mut)]
+    #[account(signer, mut)]
     pub chunk_accumulator:  Account<'info, ChunkAccumulator>,
+    #[account(init_if_needed, payer=creator, space=8+32+8, seeds= [PREFIX.as_bytes()], bump)]
+    pub blocks_root: Account<'info, BlocksRoot>,
     pub system_program: Program<'info, System>,
+    pub clock: Sysvar<'info, Clock>,
 }
-
 
 #[account]
 #[derive(Default, Debug)]
@@ -70,17 +96,46 @@ pub struct Chunk {
 
 #[account]
 #[derive(Default, Debug)]
+pub struct BlocksRoot {
+    pub digest: [u8; 32],
+    pub slot: u64,
+}
+
+#[account]
+#[derive(Default, Debug)]
 pub struct ChunkAccumulator {
     pub chunks: BTreeMap<[u8; 32], Vec<Vec<Option<[u8; 32]>>>>,
-    pub chunk_age: BTreeMap<[u8;32], u64>
+}
+
+impl BlocksRoot {
+    pub fn new() -> Self {
+        BlocksRoot {
+            digest: [0u8;32],
+            slot: 0
+        }
+    }
+
+    pub fn update_root(&mut self, blockroot: &[u8;32], slot_num: u64) {
+        // slot number switched
+        if slot_num > self.slot {
+            self.digest = *blockroot;
+            self.slot = self.slot;
+        } else {
+            // we're in the same solana slot
+            self.digest =  blocks_root_accumulator(&self.digest, blockroot);
+        }
+    }
 }
 
 impl ChunkAccumulator {
     pub fn new() -> Self {
         ChunkAccumulator {
-            chunks: BTreeMap::new(),
-            chunk_age: BTreeMap::new()
+            chunks: BTreeMap::new()
         }
+    }
+
+    pub fn clear_digest(&mut self, digest: &[u8;32]) {
+        self.chunks.remove(digest);
     }
 
     pub fn accumulate(&mut self, chunk: Chunk) {
@@ -91,6 +146,7 @@ impl ChunkAccumulator {
             chunk_body,
             ..
         } = chunk;
+
 
         let levels = self.chunks.entry(digest).or_insert_with(|| {
             let mut vec = Vec::new();
@@ -103,7 +159,6 @@ impl ChunkAccumulator {
             vec
         });
 
-        // Store the hash of the chunk body
         let chunk_hash = hashv(&[&chunk_body]).to_bytes();
         levels[0][chunk_num as usize] = Some(chunk_hash);
 
@@ -116,22 +171,20 @@ impl ChunkAccumulator {
                 let left = levels[current_level][current_index - 1].as_ref().unwrap();
                 let right = levels[current_level][current_index].as_ref().unwrap();
                 let merged = hashv(&[left, right]).to_bytes();
-                levels[current_level + 1][current_index / 2] = Some(merged);
 
+                levels[current_level + 1][current_index / 2] = Some(merged);
                 current_level += 1;
                 current_index /= 2;
+
             } else if chunk_num == num_chunks - 1 && current_index % 2 == 0 && levels[current_level][current_index].is_some() {
                 // Handle the case for unpaired nodes at the end of the level.
-
                 levels[current_level + 1][current_index / 2] = levels[current_level][current_index].clone();
-
                 current_level += 1;
                 current_index /= 2;
             } else {
                 break;
             }
         }
-
     }
 
 
@@ -196,13 +249,20 @@ pub fn merkleize(chunk_bodies: &[Vec<u8>]) -> [u8; 32] {
                     // Just copy the unpaired leaf to the next level.
                     next_level.push(pairs[0]);
                 },
-                _ => unreachable!(), // chunks() with 2 should only yield 1 or 2 items
+                // chunks() with 2 should only yield 1 or 2 items
+                // should never happen, but match completion.
+                // TODO: make this logic cleaner
+                _ => unreachable!(),
             }
         }
 
         current_level = next_level;
     }
-
     current_level[0]
+}
+
+fn blocks_root_accumulator(current_root: &[u8;32], block_digest: &[u8;32]) -> [u8;32] {
+    let combined = [current_root.as_ref(), block_digest.as_ref()];
+    hashv(&combined).0
 }
 
