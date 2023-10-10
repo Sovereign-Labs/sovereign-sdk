@@ -13,7 +13,7 @@ use demo_stf::App;
 use log4rs::config::{Appender, Config, Root};
 use regex::Regex;
 use risc0::ROLLUP_ELF;
-use sov_celestia_adapter::types::{FilteredCelestiaBlock, NamespaceId};
+use sov_celestia_adapter::types::{FilteredCelestiaBlock, Namespace};
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::{CelestiaSpec, RollupParams};
 use sov_celestia_adapter::CelestiaService;
@@ -103,7 +103,7 @@ fn get_config(rollup_trace: &str) -> Config {
 use sov_risc0_adapter::metrics::GLOBAL_HASHMAP;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
-const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
+const ROLLUP_NAMESPACE: Namespace = Namespace::const_v0(ROLLUP_NAMESPACE_RAW);
 
 #[macro_use]
 extern crate prettytable;

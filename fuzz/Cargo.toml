@@ -25,12 +25,6 @@ sov-state = { path = "../module-system/sov-state" }
 members = ["."]
 
 [[bin]]
-name = "namespace_group_from_b64"
-path = "fuzz_targets/namespace_group_from_b64.rs"
-test = false
-doc = false
-
-[[bin]]
 name = "parse_address"
 path = "fuzz_targets/parse_address.rs"
 test = false

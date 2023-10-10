@@ -11,3 +11,7 @@ fuzz/Cargo.lock
 
 demo_data/
 /.vscode/*
+
+/docker/credentials/*
+!/docker/credentials/bridge-0.addr
+!/docker/credentials/bridge-0.key
