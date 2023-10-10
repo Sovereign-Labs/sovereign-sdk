@@ -1,3 +1,4 @@
+//! Generates wallet cli for the runtime.
 use sov_cli::wallet_state::WalletState;
 use sov_cli::workflows::keys::KeyWorkflow;
 use sov_cli::workflows::rpc::RpcWorkflows;
@@ -14,7 +15,7 @@ type Ctx = DefaultContext;
 
 #[derive(clap::Subcommand)]
 #[command(author, version, about, long_about = None)]
-pub enum Workflows<Da: DaSpec> {
+enum Workflows<Da: DaSpec> {
     #[clap(subcommand)]
     Transactions(
         TransactionWorkflow<
@@ -30,12 +31,13 @@ pub enum Workflows<Da: DaSpec> {
 
 #[derive(clap::Parser)]
 #[command(author, version, about, long_about = None)]
-pub struct App<Da: DaSpec> {
+struct CliApp<Da: DaSpec> {
     #[clap(subcommand)]
     workflow: Workflows<Da>,
 }
 
-pub async fn run<Da: DaSpec + serde::Serialize + serde::de::DeserializeOwned>(
+/// Runs wallet cli.
+pub async fn run_wallet<Da: DaSpec + serde::Serialize + serde::de::DeserializeOwned>(
 ) -> Result<(), anyhow::Error> {
     let app_dir = wallet_dir()?;
     std::fs::create_dir_all(app_dir.as_ref())?;
@@ -44,7 +46,7 @@ pub async fn run<Da: DaSpec + serde::Serialize + serde::de::DeserializeOwned>(
     let mut wallet_state: WalletState<RuntimeCall<Ctx, Da>, Ctx> =
         WalletState::load(&wallet_state_path)?;
 
-    let invocation = App::<Da>::parse();
+    let invocation = CliApp::<Da>::parse();
 
     match invocation.workflow {
         Workflows::Transactions(tx) => tx
