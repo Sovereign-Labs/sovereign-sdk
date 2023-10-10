@@ -120,7 +120,7 @@ jobs:
         run: make check-features
   nextest:
     name: nextest
-    runs-on: buildjet-16vcpu-ubuntu-2204
+    runs-on: buildjet-4vcpu-ubuntu-2204
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v3
@@ -140,7 +140,7 @@ jobs:
       - run: cargo nextest run --workspace --all-features
   test:
     name: test
-    runs-on: buildjet-16vcpu-ubuntu-2204
+    runs-on: buildjet-4vcpu-ubuntu-2204
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v3
