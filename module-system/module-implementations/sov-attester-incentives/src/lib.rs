@@ -2,10 +2,12 @@
 #![doc = include_str!("../README.md")]
 
 /// Call methods for the module
-pub mod call;
-
+mod call;
 /// Methods used to instantiate the module
-pub mod genesis;
+mod genesis;
+
+pub use call::*;
+pub use genesis::*;
 
 #[cfg(test)]
 mod tests;
@@ -13,10 +15,7 @@ mod tests;
 #[cfg(feature = "native")]
 mod query;
 
-use std::marker::PhantomData;
-
 use borsh::{BorshDeserialize, BorshSerialize};
-use call::Role;
 #[cfg(feature = "native")]
 pub use query::*;
 use sov_bank::Amount;
@@ -25,38 +24,6 @@ use sov_modules_api::{
     Context, DaSpec, Error, ModuleInfo, ValidityConditionChecker, WorkingSet, Zkvm,
 };
 use sov_state::codec::BcsCodec;
-
-/// Configuration of the attester incentives module
-pub struct AttesterIncentivesConfig<C, Vm, Da, Checker>
-where
-    C: Context,
-    Vm: Zkvm,
-    Da: DaSpec,
-    Checker: ValidityConditionChecker<Da::ValidityCondition>,
-{
-    /// The address of the token to be used for bonding.
-    pub bonding_token_address: C::Address,
-    /// The address of the account holding the reward token supply
-    pub reward_token_supply_address: C::Address,
-    /// The minimum bond for an attester.
-    pub minimum_attester_bond: Amount,
-    /// The minimum bond for a challenger.
-    pub minimum_challenger_bond: Amount,
-    /// A code commitment to be used for verifying proofs
-    pub commitment_to_allowed_challenge_method: Vm::CodeCommitment,
-    /// A list of initial provers and their bonded amount.
-    pub initial_attesters: Vec<(C::Address, Amount)>,
-    /// The finality period of the rollup (constant) in the number of DA layer slots processed.
-    pub rollup_finality_period: TransitionHeight,
-    /// The current maximum attested height
-    pub maximum_attested_height: TransitionHeight,
-    /// The light client finalized height
-    pub light_client_finalized_height: TransitionHeight,
-    /// The validity condition checker used to check validity conditions
-    pub validity_condition_checker: Checker,
-    /// Phantom data that contains the validity condition
-    phantom_data: PhantomData<Da::ValidityCondition>,
-}
 
 /// The information about an attender's unbonding
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug)]
