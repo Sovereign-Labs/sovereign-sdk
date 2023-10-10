@@ -328,3 +328,22 @@ its data from a set of "hints" provided by the prover. Because all the rollups m
 about this distinction.
 
 For more information on `Context` and `Spec`, and to see some example implementations, check out the [`sov_modules_api`](./sov-modules-api/) docs.
+
+
+### Module CallMessage and `schemars::JsonSchema`.
+Like in the `bank` module the `CallMessage` can be parameterized by `C::Context`. To ensure a smooth wallet experience, we need the `CallMessage` to implement `schemars::JsonSchema` trait. However, simply adding `derive(schemars::JsonSchema)` to the `CallMessage` definition results in the following error:
+
+```
+the trait JsonSchema is not implemented for C
+```
+
+
+The reason for this issue is that the standard derive mechanism for `JsonSchema` cannot determine the correct trait bounds for the `Context`. To resolve this, we need to provide the following hint:
+
+```rust
+schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "CallMessage")
+```
+
+Now, the `schemars::derive` understands that it is sufficient for only `C::Address` to implement `schemars::JsonSchema`
+
+If `CallMessage` in your module uses an associated type from `Context` you might need to provide a similar hint.
