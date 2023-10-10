@@ -1,7 +1,11 @@
 #[cfg(feature = "experimental")]
 mod batch_builder;
 #[cfg(feature = "experimental")]
+mod gas_price;
+#[cfg(feature = "experimental")]
 pub use experimental::{get_ethereum_rpc, Ethereum};
+#[cfg(feature = "experimental")]
+pub use gas_price::gas_oracle::GasPriceOracleConfig;
 #[cfg(feature = "experimental")]
 pub use sov_evm::DevSigner;
 
@@ -27,6 +31,9 @@ pub mod experimental {
     use sov_modules_api::{EncodeCall, WorkingSet};
     use sov_rollup_interface::services::da::DaService;
 
+    use crate::gas_price::gas_oracle::GasPriceOracle;
+    use crate::GasPriceOracleConfig;
+
     use super::batch_builder::EthBatchBuilder;
     #[cfg(feature = "local")]
     use super::DevSigner;
@@ -36,6 +43,7 @@ pub mod experimental {
     pub struct EthRpcConfig {
         pub min_blob_size: Option<usize>,
         pub sov_tx_signer_priv_key: DefaultPrivateKey,
+        pub gas_price_oracle_config: GasPriceOracleConfig,
         #[cfg(feature = "local")]
         pub eth_signer: DevSigner,
     }
@@ -61,6 +69,7 @@ pub mod experimental {
         nonces: Mutex<HashMap<RethAddress, u64>>,
         da_service: Da,
         batch_builder: Arc<Mutex<EthBatchBuilder>>,
+        gas_price_oracle: GasPriceOracle<C>,
         eth_rpc_config: EthRpcConfig,
         storage: C::Storage,
     }
@@ -73,10 +82,14 @@ pub mod experimental {
             eth_rpc_config: EthRpcConfig,
             storage: C::Storage,
         ) -> Self {
+            let evm = Evm::<C>::default();
+            let gas_price_oracle_config = eth_rpc_config.gas_price_oracle_config.clone();
+            let gas_price_oracle = GasPriceOracle::new(evm, gas_price_oracle_config);
             Self {
                 nonces,
                 da_service,
                 batch_builder,
+                gas_price_oracle,
                 eth_rpc_config,
                 storage,
             }
@@ -149,6 +162,31 @@ pub mod experimental {
     fn register_rpc_methods<C: sov_modules_api::Context, Da: DaService>(
         rpc: &mut RpcModule<Ethereum<C, Da>>,
     ) -> Result<(), jsonrpsee::core::Error> {
+        rpc.register_async_method("eth_gasPrice", |_, ethereum| async move {
+            let price = {
+                let mut working_set = WorkingSet::<C>::new(ethereum.storage.clone());
+
+                let suggested_tip = ethereum
+                    .gas_price_oracle
+                    .suggest_tip_cap(&mut working_set)
+                    .await
+                    .unwrap();
+
+                let evm = Evm::<C>::default();
+                let base_fee = evm
+                    .get_block_by_number(None, None, &mut working_set)
+                    .unwrap()
+                    .unwrap()
+                    .header
+                    .base_fee_per_gas
+                    .unwrap_or_default();
+
+                suggested_tip + base_fee
+            };
+
+            Ok::<U256, ErrorObjectOwned>(price)
+        })?;
+
         rpc.register_async_method("eth_publishBatch", |params, ethereum| async move {
             let mut params_iter = params.sequence();
 
