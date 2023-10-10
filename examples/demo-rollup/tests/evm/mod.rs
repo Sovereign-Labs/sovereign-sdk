@@ -22,7 +22,7 @@ async fn evm_tx_tests() -> Result<(), anyhow::Error> {
         start_rollup::<Risc0Host<'static>, _>(
             port_tx,
             None,
-            &GenesisPaths::from_dir("../test_data/genesis/integration-tests"),
+            &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
         )
         .await;
     });
