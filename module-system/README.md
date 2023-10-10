@@ -328,3 +328,9 @@ its data from a set of "hints" provided by the prover. Because all the rollups m
 about this distinction.
 
 For more information on `Context` and `Spec`, and to see some example implementations, check out the [`sov_modules_api`](./sov-modules-api/) docs.
+
+
+### Module data serialization.
+Structures related to modules are parameterized by `C::Context`. These structures must implement `serde::Serialize` and `serde::Deserialize`. However, due to limitations, `serde` may not always be able to automatically infer the correct trait bounds. Therefore, we need to provide additional information to `serde` to ensure that the types have the correct bounds.
+This is why we use the `bound` attribute. For example:
+Without the additional hints `schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "CallMessage")` we would get the following error in the `bank` module:
