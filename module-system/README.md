@@ -330,7 +330,15 @@ about this distinction.
 For more information on `Context` and `Spec`, and to see some example implementations, check out the [`sov_modules_api`](./sov-modules-api/) docs.
 
 
-### Module data serialization.
-Structures related to modules are parameterized by `C::Context`. These structures must implement `serde::Serialize` and `serde::Deserialize`. However, due to limitations, `serde` may not always be able to automatically infer the correct trait bounds. Therefore, we need to provide additional information to `serde` to ensure that the types have the correct bounds.
-This is why we use the `bound` attribute. For example:
-Without the additional hints `schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "CallMessage")` we would get the following error in the `bank` module:
+### Module CallMessage.
+Like in the `bank` module the `CallMessage` can be parameterized by `C::Context`. To ensure a smooth wallet experience, we need the `CallMessag`' to implement `schemars::JsonSchema` trait. However, simply adding `derive(schemars::JsonSchema)` to the `CallMessage` definition results in the following error:
+`the trait JsonSchema is not implemented for C`.  
+
+
+The reason for this issue is that the standard derive mechanism for `JsonSchema` cannot determine the correct trait bounds for the `Context`. To resolve this, we need to provide the following hint:
+
+`schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "CallMessage")`
+
+Now, the schemars::derive understands that it is sufficient for only C::Address to implement schemars::JsonSche
+
+I a `CallMessage` in your module uses an associated type from `Context` you might need to provide a similar hint.
