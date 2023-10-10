@@ -12,17 +12,6 @@ use test_client::TestClient;
 
 use super::test_helpers::start_rollup;
 
-const TEST_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
-    bank_genesis_path: "../test-data/genesis/integration-tests/bank.json",
-    sequencer_genesis_path: "../test-data/genesis/integration-tests/sequencer_registry.json",
-    value_setter_genesis_path: "../test-data/genesis/integration-tests/value_setter.json",
-    accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
-    chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
-    nft_path: "../test-data/genesis/integration-tests/nft.json",
-    #[cfg(feature = "experimental")]
-    evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
-};
-
 #[cfg(feature = "experimental")]
 #[tokio::test]
 async fn evm_tx_tests() -> Result<(), anyhow::Error> {
@@ -30,7 +19,12 @@ async fn evm_tx_tests() -> Result<(), anyhow::Error> {
 
     let rollup_task = tokio::spawn(async {
         // Don't provide a prover since the EVM is not currently provable
-        start_rollup::<Risc0Host<'static>, _>(port_tx, None, &TEST_GENESIS_PATHS).await;
+        start_rollup::<Risc0Host<'static>, _>(
+            port_tx,
+            None,
+            &GenesisPaths::from_dir("../test_data/genesis/integration-tests"),
+        )
+        .await;
     });
 
     // Wait for rollup task to start:

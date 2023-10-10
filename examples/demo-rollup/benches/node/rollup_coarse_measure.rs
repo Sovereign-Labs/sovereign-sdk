@@ -25,17 +25,6 @@ extern crate prettytable;
 use prettytable::Table;
 use sov_modules_stf_template::TxEffect;
 
-const TEST_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
-    bank_genesis_path: "../test-data/genesis/integration-tests/bank.json",
-    sequencer_genesis_path: "../test-data/genesis/integration-tests/sequencer_registry.json",
-    value_setter_genesis_path: "../test-data/genesis/integration-tests/value_setter.json",
-    accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
-    chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
-    nft_path: "../test-data/genesis/integration-tests/nft.json",
-    #[cfg(feature = "experimental")]
-    evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
-};
-
 fn print_times(
     total: Duration,
     apply_block_time: Duration,
@@ -120,7 +109,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let demo_genesis_config = get_genesis_config(
         sequencer_da_address,
-        &TEST_GENESIS_PATHS,
+        &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
         #[cfg(feature = "experimental")]
         Default::default(),
     );
