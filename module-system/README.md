@@ -331,7 +331,7 @@ For more information on `Context` and `Spec`, and to see some example implementa
 
 
 ### Module CallMessage and `schemars::JsonSchema`.
-Like in the `bank` module the `CallMessage` can be parameterized by `C::Context`. To ensure a smooth wallet experience, we need the `CallMessag`' to implement `schemars::JsonSchema` trait. However, simply adding `derive(schemars::JsonSchema)` to the `CallMessage` definition results in the following error:
+Like in the `bank` module the `CallMessage` can be parameterized by `C::Context`. To ensure a smooth wallet experience, we need the `CallMessage` to implement `schemars::JsonSchema` trait. However, simply adding `derive(schemars::JsonSchema)` to the `CallMessage` definition results in the following error:
 
 ```
 the trait JsonSchema is not implemented for C
