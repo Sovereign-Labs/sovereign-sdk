@@ -226,6 +226,23 @@ pub struct Chunk {
   * The specific logic for merkelization can be seen in the `accumulate` function in [lib.rs](solana_da_programs/programs/blockroot/src/lib.rs)
   * The code also makes use of the `hashv` syscall.
   * For odd numbered levels, the un-paired leaves are promoted to the next level. (This logic needs to be audited since its custom)
+```
+          Root
+           |
+     +-----+----------+
+     |                |
+  Parent1         Parent2 [X]
+     |                |
+  +--+--+       +-----+------+
+  |     |       |            |
+Chunk1 Chunk2  Chunk3     Chunk4
+ [ ]   [ ]      [X]         [X]
+
+```
+  * The above diagram illustrates what the `ChunkAccumulator` might look like at a point in time when `Chunk3` and `Chunk4` have arrived
+  * `Chunk3` arrives first and everything else in the tree is empty.
+  * `Parent2` is calculated once `Chunk4` arrives
+  * `Chunk1`, `Chunk2`, `Parent1` and `Root` are still incomplete
 * Chunks can arrive in any order since they get inserted into the right slots of the tree in the `ChunkAccumulator` account's on-chain space
 * Once the final chunk arrives and the merkle root is available, the root is "accumulated" into the `BlocksRoot` PDA account
   * This accumulation takes the form of a hashlist (since we don't really need merkelization here)
