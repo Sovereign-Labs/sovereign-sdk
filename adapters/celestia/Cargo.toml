@@ -37,9 +37,7 @@ tokio = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", version = "0.2", optional = true }
-risc0-zkvm = { workspace = true, default-features = false, features = [
-  "std",
-], optional = true }
+risc0-zkvm = { workspace = true, default-features = false, features = ["std"], optional = true }
 risc0-zkvm-platform = { workspace = true, optional = true }
 
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
@@ -61,5 +59,12 @@ native = [
   "tendermint/default",
   "sov-rollup-interface/native",
 ]
-bench = ["sov-zk-cycle-macros/bench", "risc0-zkvm", "risc0-zkvm-platform"]
+risc0 = [
+  "dep:risc0-zkvm",
+  "dep:risc0-zkvm-platform"
+]
+bench = [
+    "sov-zk-cycle-macros/bench",
+    "risc0"
+]
 verifier = []
