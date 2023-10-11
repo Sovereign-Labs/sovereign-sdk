@@ -6,6 +6,3 @@ pub mod stf;
 #[cfg(feature = "native")]
 pub mod rollup;
 pub mod zkvm;
-
-#[cfg(feature = "native")]
-mod rpc;

@@ -1,5 +1,9 @@
 //! Defines the rollup full node implementation, including logic for configuring
 //! and starting the rollup node.
+
+#[cfg(feature = "native")]
+mod rpc;
+
 use serde::de::DeserializeOwned;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
@@ -9,8 +13,9 @@ use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{Prover, RollupConfig, RunnerConfig, StateTransitionRunner};
 use tokio::sync::oneshot;
 
-use crate::rpc::{register_ledger, register_sequencer};
 use crate::stf::{get_rpc_methods, GenesisConfig, Runtime, StfWithBuilder};
+
+use self::rpc::{register_ledger, register_sequencer};
 
 type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>;
 
@@ -74,13 +79,6 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
         {
             register_ledger::<Da>(self.ledger_db.clone(), &mut methods)?;
             register_sequencer(self.da_service.clone(), &mut self.app, &mut methods)?;
-            #[cfg(feature = "experimental")]
-            register_ethereum::<DefaultContext, Da>(
-                self.da_service.clone(),
-                self.eth_rpc_config,
-                storage,
-                &mut methods,
-            )?;
         }
 
         let mut runner = StateTransitionRunner::new(
