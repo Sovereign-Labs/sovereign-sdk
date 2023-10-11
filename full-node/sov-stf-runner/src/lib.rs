@@ -2,8 +2,6 @@
 #![doc = include_str!("../README.md")]
 
 #[cfg(feature = "native")]
-mod batch_builder;
-#[cfg(feature = "native")]
 mod config;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -14,16 +12,15 @@ mod ledger_rpc;
 #[cfg(feature = "native")]
 mod runner;
 #[cfg(feature = "native")]
-pub use batch_builder::FiFoStrictBatchBuilder;
-#[cfg(feature = "native")]
 pub use config::{from_toml_path, RollupConfig, RunnerConfig, StorageConfig};
 #[cfg(feature = "native")]
 pub use ledger_rpc::get_ledger_rpc;
 #[cfg(feature = "native")]
 pub use runner::*;
 use serde::{Deserialize, Serialize};
-use sov_modules_api::{DaSpec, Zkvm};
+use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_rollup_interface::zk::Zkvm;
 
 /// Implements the `StateTransitionVerifier` type for checking the validity of a state transition
 pub mod verifier;

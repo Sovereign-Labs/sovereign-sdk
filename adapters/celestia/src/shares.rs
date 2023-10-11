@@ -1,121 +1,27 @@
-use std::fmt::Display;
-
-use base64::engine::general_purpose::STANDARD as B64_ENGINE;
-use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
-use nmt_rs::{NamespaceId, NAMESPACE_ID_LEN};
-use prost::bytes::{Buf, BytesMut};
-use prost::encoding::decode_varint;
-use prost::DecodeError;
-use serde::de::Error;
-use serde::{Deserialize, Serialize, Serializer};
+use celestia_types::nmt::{Namespace, NS_SIZE};
+use celestia_types::NamespacedShares;
+use prost::bytes::Buf;
+use serde::{Deserialize, Serialize};
 use sov_rollup_interface::Bytes;
-use tracing::{error, info};
 
+use crate::utils::read_varint;
 use crate::verifier::PFB_NAMESPACE;
 
 /// The length of the "reserved bytes" field in a compact share
-pub const RESERVED_BYTES_LEN: usize = 4;
+pub const RESERVED_BYTES_LEN: usize =
+    celestia_types::consts::appconsts::COMPACT_SHARE_RESERVED_BYTES;
 /// The length of the "info byte" field in a compact share
-pub const INFO_BYTE_LEN: usize = 1;
+pub const INFO_BYTE_LEN: usize = celestia_types::consts::appconsts::SHARE_INFO_BYTES;
 /// The length of the "sequence length" field
-pub const SEQUENCE_LENGTH_BYTES: usize = 4;
-
-/// Skip over a varint. Returns the number of bytes read
-pub fn skip_varint(mut bytes: impl Buf) -> Result<usize, ErrInvalidVarint> {
-    // A varint may contain up to 10 bytes
-    for i in 0..10 {
-        // If the continuation bit is not set, we're done
-        if bytes.get_u8() < 0x80 {
-            return Ok(i + 1);
-        }
-    }
-    Err(ErrInvalidVarint)
-}
-
-/// Read a varint. Returns the value (as a u64) and the number of bytes read
-pub fn read_varint(mut bytes: impl Buf) -> Result<(u64, usize), DecodeError> {
-    let original_len = bytes.remaining();
-    let varint = decode_varint(&mut bytes)?;
-    Ok((varint, original_len - bytes.remaining()))
-}
-
-#[derive(Debug, PartialEq)]
-pub struct ErrInvalidVarint;
-
+pub const SEQUENCE_LENGTH_BYTES: usize = celestia_types::consts::appconsts::SEQUENCE_LEN_BYTES;
 /// The size of a share, in bytes
-const SHARE_SIZE: usize = 512;
-/// The size of base64 encoded share, in bytes
-const B64_SHARE_SIZE: usize = 684;
+pub const SHARE_SIZE: usize = celestia_types::consts::appconsts::SHARE_SIZE;
 
-#[derive(
-    Debug, Clone, PartialEq, serde::Serialize, Deserialize, BorshDeserialize, BorshSerialize,
-)]
-/// A group of shares, in a single namespace
-pub enum NamespaceGroup {
-    Compact(Vec<Share>),
-    Sparse(Vec<Share>),
-}
-
-#[derive(Debug, Clone, PartialEq, BorshDeserialize, BorshSerialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
 pub enum Share {
     Continuation(Bytes),
     Start(Bytes),
-}
-
-impl AsRef<[u8]> for Share {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            Share::Continuation(c) => c.as_ref(),
-            Share::Start(s) => s.as_ref(),
-        }
-    }
-}
-
-impl Serialize for Share {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let inner_bytes = match self {
-            Share::Continuation(b) => b,
-            Share::Start(b) => b,
-        };
-        serializer.serialize_bytes(inner_bytes.as_ref())
-    }
-}
-
-impl<'de> Deserialize<'de> for Share {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let mut share = <Bytes as Deserialize>::deserialize(deserializer)?;
-        if share.len() == B64_SHARE_SIZE {
-            let mut decoded = BytesMut::zeroed(SHARE_SIZE);
-            // TODO: https://github.com/marshallpierce/rust-base64/issues/210
-            B64_ENGINE
-                .decode_slice_unchecked(share, &mut decoded[..])
-                .map_err(|_| Error::custom("Invalid base64 encoding"))?;
-            share = decoded.freeze()
-        }
-        if share.len() != SHARE_SIZE {
-            // let expected = Unexpected::Bytes(&share);
-            return Err(Error::invalid_length(share.len(), &"A share of length 512"));
-        }
-        if is_continuation_unchecked(share.as_ref()) {
-            return Ok(Share::Continuation(share));
-        }
-        Ok(Share::Start(share))
-    }
-}
-
-fn is_continuation_unchecked(share: &[u8]) -> bool {
-    share[8] & 0x01 == 0
-}
-
-fn enforce_version_zero(share: &[u8]) {
-    assert_eq!(share[8] & !0x01, 0)
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -134,6 +40,10 @@ impl Share {
         }
     }
 
+    pub fn from_slice(slice: impl AsRef<[u8]>) -> Self {
+        Self::new(Bytes::copy_from_slice(slice.as_ref()))
+    }
+
     pub fn as_serialized(&self) -> &[u8] {
         self.raw_inner_ref()
     }
@@ -150,7 +60,7 @@ impl Share {
             Share::Continuation(_) => Err(ShareError::NotAStartShare),
             Share::Start(inner) => {
                 let mut inner = inner.clone();
-                inner.advance(9);
+                inner.advance(NS_SIZE + INFO_BYTE_LEN);
                 Ok(inner.get_u32() as u64)
             }
         }
@@ -184,7 +94,7 @@ impl Share {
         // FIXME: account for continuation vs. start shares
         match self {
             Share::Continuation(_) => {
-                let reserved_bytes_offset = NAMESPACE_ID_LEN + INFO_BYTE_LEN;
+                let reserved_bytes_offset = NS_SIZE + INFO_BYTE_LEN;
                 let mut raw = self.raw_inner();
                 raw.advance(reserved_bytes_offset);
                 let idx_of_next_start = raw.get_u32() as usize;
@@ -201,7 +111,7 @@ impl Share {
 
     fn get_data_offset(&self) -> usize {
         // All shares are prefixed with metadata including the namespace (8 bytes), and info byte (1 byte)
-        let mut offset = NAMESPACE_ID_LEN + INFO_BYTE_LEN;
+        let mut offset = NS_SIZE + INFO_BYTE_LEN;
         // Start shares are also prefixed with a sequence length
         if let Self::Start(_) = self {
             offset += SEQUENCE_LENGTH_BYTES;
@@ -226,10 +136,11 @@ impl Share {
     }
 
     /// Get the namespace associated with this share
-    pub fn namespace(&self) -> NamespaceId {
-        let mut out = [0u8; 8];
-        out.copy_from_slice(&self.raw_inner_ref()[..8]);
-        NamespaceId(out)
+    pub fn namespace(&self) -> Namespace {
+        let out: [_; NS_SIZE] = self.raw_inner_ref()[..NS_SIZE]
+            .try_into()
+            .expect("can't fail for correct size");
+        nmt_rs::NamespaceId(out).into()
     }
 
     pub fn is_valid_tx_start(&self, idx: usize) -> bool {
@@ -257,96 +168,40 @@ impl Share {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum ShareParsingError {
-    ErrInvalidBase64,
-    ErrWrongLength,
-}
-
-impl Display for ShareParsingError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl AsRef<[u8]> for Share {
+    fn as_ref(&self) -> &[u8] {
         match self {
-            ShareParsingError::ErrInvalidBase64 => {
-                f.write_str("ShareParsingError::ErrInvalidBase64")
-            }
-            ShareParsingError::ErrWrongLength => f.write_str("ShareParsingError::ErrWrongLength"),
+            Share::Continuation(c) => c.as_ref(),
+            Share::Start(s) => s.as_ref(),
         }
     }
 }
 
-impl std::error::Error for ShareParsingError {}
+fn is_continuation_unchecked(share: &[u8]) -> bool {
+    share[NS_SIZE] & 0x01 == 0
+}
+
+fn enforce_version_zero(share: &[u8]) {
+    assert_eq!(share[NS_SIZE] & !0x01, 0)
+}
+
+/// A group of shares, in a single namespace
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+pub enum NamespaceGroup {
+    Compact(Vec<Share>),
+    Sparse(Vec<Share>),
+}
 
 impl NamespaceGroup {
-    pub fn from_b64(b64: &str) -> Result<Self, ShareParsingError> {
-        if b64.is_empty() {
-            error!("Empty input");
-            return Err(ShareParsingError::ErrWrongLength);
-        }
-
-        let mut decoded = Vec::with_capacity((b64.len() + 3) / 4 * 3);
-
-        // unsafe { decoded.set_len((b64.len() / 4 * 3)) }
-        if let Err(err) = B64_ENGINE.decode_slice(b64, &mut decoded) {
-            info!("Error decoding NamespaceGroup from base64: {}", err);
-            return Err(ShareParsingError::ErrInvalidBase64);
-        }
-        let mut output: Bytes = decoded.into();
-        if output.len() % SHARE_SIZE != 0 {
-            error!(
-                "Wrong length: Expected a multiple of 512, got: {}",
-                output.len()
-            );
-            return Err(ShareParsingError::ErrWrongLength);
-        }
-        let mut shares = Vec::with_capacity((output.len() / 512) + 1);
-        while output.len() > SHARE_SIZE {
-            shares.push(Share::new(output.split_to(SHARE_SIZE)));
-        }
-        shares.push(Share::new(output));
-        // Check whether these shares come from a reserved (compact) namespace
-
-        if shares[0].namespace().is_reserved() {
-            Ok(Self::Compact(shares))
-        } else {
-            Ok(Self::Sparse(shares))
-        }
-    }
-
-    pub fn from_b64_shares(encoded_shares: &Vec<String>) -> Result<Self, ShareParsingError> {
-        if encoded_shares.is_empty() {
-            return Ok(Self::Sparse(vec![]));
-        }
-        let mut shares = Vec::with_capacity(encoded_shares.len());
-        for share in encoded_shares {
-            let decoded_vec = B64_ENGINE
-                .decode(share)
-                .map_err(|_| ShareParsingError::ErrInvalidBase64)?;
-            if decoded_vec.len() != 512 {
-                return Err(ShareParsingError::ErrWrongLength);
-            }
-            let share = Share::new(decoded_vec.into());
-            shares.push(share)
-        }
-
-        if shares[0].namespace().is_reserved() {
-            Ok(Self::Compact(shares))
-        } else {
-            Ok(Self::Sparse(shares))
-        }
-    }
-
-    // Panics if less than 1 share is provided
-    pub fn from_shares_unchecked(shares: Vec<Vec<u8>>) -> Self {
-        let shares: Vec<Share> = shares
+    pub fn from_shares<I, B>(shares: I) -> Self
+    where
+        I: IntoIterator<Item = B>,
+        B: AsRef<[u8]>,
+    {
+        shares
             .into_iter()
-            .map(|share| Share::new(Bytes::from(share)))
-            .collect();
-
-        if shares[0].namespace().is_reserved() {
-            Self::Compact(shares)
-        } else {
-            Self::Sparse(shares)
-        }
+            .map(|bytes| Share::new(Bytes::copy_from_slice(bytes.as_ref())))
+            .collect()
     }
 
     pub fn shares(&self) -> &Vec<Share> {
@@ -362,7 +217,34 @@ impl NamespaceGroup {
             shares: self,
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.shares().is_empty()
+    }
 }
+
+impl FromIterator<Share> for NamespaceGroup {
+    fn from_iter<T: IntoIterator<Item = Share>>(iter: T) -> Self {
+        let shares: Vec<_> = iter.into_iter().collect();
+        if shares.is_empty() {
+            // if there are no shares at all return sparse empty group
+            return NamespaceGroup::Sparse(vec![]);
+        }
+
+        if shares[0].namespace().is_reserved() {
+            NamespaceGroup::Compact(shares)
+        } else {
+            NamespaceGroup::Sparse(shares)
+        }
+    }
+}
+
+impl From<&NamespacedShares> for NamespaceGroup {
+    fn from(value: &NamespacedShares) -> Self {
+        Self::from_shares(value.rows.iter().flat_map(|row| row.shares.iter()))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
 pub struct Blob(pub Vec<Share>);
 
@@ -604,16 +486,12 @@ impl<'a> std::iter::Iterator for NamespaceIterator<'a> {
                 return Some(BlobRef::with(&shares[start..self.offset]));
             }
         }
-        // let start = self.offset;
-        // let length = 0;
-        // loop {
-
-        // }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use celestia_types::nmt::NS_ID_V0_SIZE;
     use postcard::{from_bytes, to_allocvec, Result};
     use proptest::collection::vec;
     use proptest::prelude::*;
@@ -635,11 +513,19 @@ mod tests {
         assert_eq!(share, decoded_share);
     }
 
-    fn share_bytes_strategy() -> impl Strategy<Value = Vec<u8>> {
-        vec(0u8.., 9..=SHARE_SIZE).prop_map(|mut vec| {
-            vec[8] &= 0x01;
-            vec
-        })
+    prop_compose! {
+        fn share_bytes_strategy()(
+            ns in vec(0u8.., NS_ID_V0_SIZE),
+            mut share in vec(0u8.., SHARE_SIZE),
+        ) -> Vec<u8> {
+            let namespace = Namespace::new_v0(&ns).expect("doesn't exceed size");
+            // overwrite namespace
+            share[..NS_SIZE].copy_from_slice(namespace.as_ref());
+            // set version to zero
+            share[NS_SIZE] &= 0x01;
+
+            share
+        }
     }
 
     proptest! {
