@@ -39,11 +39,8 @@ async fn main() -> Result<(), anyhow::Error> {
     info!("Initializing DA service");
     let da_service = start_da_service(&rollup_config).await;
 
-    let p = env::current_dir();
-
-    println!("Path {:?}", p);
     let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
-    let genesis_paths = GenesisPaths::from_dir("/Users/blaze/programming/sovereign-labs/sovereign/templates/rollup-template/test-data/genesis/");
+    let genesis_paths = GenesisPaths::from_dir("../../test-data/genesis/");
     let genesis_config = get_genesis_config(sequencer_da_address, &genesis_paths);
 
     // Start rollup
