@@ -56,7 +56,7 @@ pub struct Rollup<Vm: ZkvmHost, Da: DaService + Clone> {
     pub genesis_config: GenesisConfig<DefaultContext, Da::Spec>,
     #[cfg(feature = "experimental")]
     /// Configuration for the Ethereum RPC.
-    pub eth_rpc_config: EthRpcConfig,
+    pub eth_rpc_config: EthRpcConfig<DefaultContext>,
     /// Prover for the rollup.
     #[allow(clippy::type_complexity)]
     pub prover: Option<Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm>>,

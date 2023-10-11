@@ -19,6 +19,7 @@ sov-rollup-interface = { path = "../../rollup-interface" }
 sov-evm = { path = "../../module-system/module-implementations/sov-evm" }
 demo-stf = { path = "../../examples/demo-stf", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api" }
+sov-accounts = { path = "../../module-system/module-implementations/sov-accounts" }
 
 borsh = { workspace = true }
 serde_json = { workspace = true }
