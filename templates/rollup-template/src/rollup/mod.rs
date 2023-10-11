@@ -9,26 +9,25 @@ use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{Prover, RollupConfig, RunnerConfig, StateTransitionRunner};
 use tokio::sync::oneshot;
 
-use crate::builder::StfWithBuilder;
 use crate::rpc::{register_ledger, register_sequencer};
-use crate::runtime::{get_rpc_methods, GenesisConfig, Runtime};
+use crate::stf::{get_rpc_methods, GenesisConfig, Runtime, StfWithBuilder};
 
 type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>;
 
 /// Dependencies needed to run the rollup.
-// This is duplicated exactly from demo-rollup. Should go to stf-runner crate?
+/// This is duplicated exactly from demo-rollup. Should go to stf-runner crate?
 pub struct Rollup<Vm: ZkvmHost, Da: DaService + Clone> {
     // Implementation of the STF.
     pub(crate) app: StfWithBuilder<Vm, Da::Spec>,
-    /// Data availability service.
+    // Data availability service.
     pub(crate) da_service: Da,
-    /// Ledger db.
+    // Ledger db.
     pub(crate) ledger_db: LedgerDB,
-    /// Runner configuration.
+    // Runner configuration.
     pub(crate) runner_config: RunnerConfig,
-    /// Initial rollup configuration.
+    // Initial rollup configuration.
     pub(crate) genesis_config: GenesisConfig<DefaultContext, Da::Spec>,
-    /// Prover for the rollup.
+    // Prover for the rollup.
     #[allow(clippy::type_complexity)]
     pub(crate) prover: Option<Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm>>,
 }

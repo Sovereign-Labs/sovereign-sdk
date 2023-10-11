@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use rollup_template::rollup::Rollup;
-use rollup_template::runtime::GenesisConfig;
+use rollup_template::stf::GenesisConfig;
 use sov_modules_api::default_context::DefaultContext;
 use sov_rollup_interface::mocks::{MockDaConfig, MockDaService, MockDaSpec};
 use sov_rollup_interface::zk::ZkvmHost;

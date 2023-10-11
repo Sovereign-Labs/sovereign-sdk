@@ -49,9 +49,6 @@ use sov_stf_runner::verifier::StateTransitionVerifier;
 /// `#[derive(MessageCodec)` adds deserialization capabilities to the `Runtime` (by implementing the `decode_call` method).
 /// `Runtime::decode_call` accepts a serialized call message and returns a type that implements the `DispatchCall` trait.
 ///  The `DispatchCall` implementation (derived by a macro) forwards the message to the appropriate module and executes its `call` method.
-///
-/// A similar mechanism works for queries with the difference that queries are submitted by users directly to the rollup node
-/// instead of going through the DA layer.
 #[cfg_attr(
     feature = "native",
     derive(sov_modules_api::macros::CliWallet),

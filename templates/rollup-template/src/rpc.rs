@@ -1,3 +1,4 @@
+use crate::stf::StfWithBuilder;
 use anyhow::Context;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::{DaSpec, Zkvm};
@@ -5,8 +6,6 @@ use sov_modules_stf_template::{SequencerOutcome, TxEffect};
 use sov_rollup_interface::services::da::DaService;
 use sov_sequencer::get_sequencer_rpc;
 use sov_stf_runner::get_ledger_rpc;
-
-use crate::builder::StfWithBuilder;
 
 /// register sequencer rpc methods.
 pub(crate) fn register_sequencer<Vm, Da>(
