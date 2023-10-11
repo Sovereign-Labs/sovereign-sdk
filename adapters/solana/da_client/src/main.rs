@@ -217,10 +217,7 @@ enum Commands {
         chunk_account_path: String,
         blob_path: String,
     },
-    Verify {
-        chunk_account_path: String,
-        blob_path: String,
-    },
+    Verify,
 }
 
 #[derive(Subcommand)]
@@ -257,6 +254,11 @@ fn main() {
 
     // Cli parsing
     match &cli.command {
+        Commands::Verify => {
+            // TODO: we want to be able get the block data and the root from validator
+            // and verify that the data provided matches what was published on-chain
+            unimplemented!()
+        }
         Commands::ChunkAccount(chunk_args) => match chunk_args {
             ChunkAccountArgs::Create {
                 path,
