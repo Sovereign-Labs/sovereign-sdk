@@ -7,10 +7,10 @@ for sequencers (1 by default).
 
 ```sh
 # start the celestia network
-docker compose -f examples/celestia-docker/docker-compose.yml up --build --force-recreate -d
+docker compose -f docker/docker-compose.yml up --build --force-recreate -d
 
 # grab the jwt
-CELESTIA_NODE_AUTH_TOKEN="$(cat examples/celestia-docker/credentials/bridge-0.jwt)"
+CELESTIA_NODE_AUTH_TOKEN="$(cat docker/credentials/bridge-0.jwt)"
 
 # check the celestia rpc
 curl -X POST \                                                                           
@@ -25,7 +25,18 @@ curl -X POST \
   localhost:26658
 
 # stop the celestia network
-docker compose -f examples/celestia-docker/docker-compose.yml down
+docker compose -f docker/docker-compose.yml down
+```
+
+### Login to github registry
+
+You'll need to be logged in to the github's registry in order to pull celestia images.
+Follow [this guide](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic)
+to authorize yourself in github's container registry. (we use original celestia images which they publish in ghcr)
+
+```shell
+# this has to be ran only once, unless your token expires
+$ echo $MY_PERSONAL_GITHUB_TOKEN | docker login ghcr.io -u $MY_GITHUB_USERNAME --password-stdin
 ```
 
 ## Multiple sequencers
@@ -44,7 +55,7 @@ needs to be provided by uncommenting and aligning the `services.validator.comman
 ## Credentials
 
 Credentials for each new sequencer are created by validator on the first startup. The validator writes
-the keys and address of each sequencer to the `examples/celestia-docker/credentials` volume. Each consecutive
+the keys and address of each sequencer to the `docker/credentials` volume. Each consecutive
 run will use the same credentials until the directory is manually cleaned up.
 
 In addition, each sequencer on startup will write it's `JWT` token to the same directory. The token is
