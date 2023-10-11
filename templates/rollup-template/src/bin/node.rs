@@ -6,9 +6,11 @@ use std::path::PathBuf;
 use anyhow::Context;
 use rollup_template::da::{start_da_service, DaConfig};
 use rollup_template::rollup::Rollup;
+use rollup_template::stf::{get_genesis_config, GenesisPaths};
 use sov_risc0_adapter::host::Risc0Host;
+use sov_rollup_interface::mocks::{MockAddress, MOCK_SEQUENCER_DA_ADDRESS};
 use sov_stf_runner::{from_toml_path, RollupConfig};
-use tracing::{debug, info, trace};
+use tracing::info;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
@@ -37,19 +39,12 @@ async fn main() -> Result<(), anyhow::Error> {
     info!("Initializing DA service");
     let da_service = start_da_service(&rollup_config).await;
 
-    // Load genesis data from file
-    let genesis_path = env::args()
-        .nth(1)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("genesis.json"));
-    info!("Reading genesis configuration from {genesis_path:?}");
+    let p = env::current_dir();
 
-    let genesis_config =
-        std::fs::read_to_string(genesis_path).context("Failed to read genesis configuration")?;
-    debug!("Genesis config size: {} bytes", genesis_config.len());
-    trace!("Genesis config: {}", &genesis_config);
-
-    let genesis_config = serde_json::from_str(&genesis_config)?;
+    println!("Path {:?}", p);
+    let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
+    let genesis_paths = GenesisPaths::from_dir("/Users/blaze/programming/sovereign-labs/sovereign/templates/rollup-template/test-data/genesis/");
+    let genesis_config = get_genesis_config(sequencer_da_address, &genesis_paths);
 
     // Start rollup
     let rollup: Rollup<Risc0Host, _> =

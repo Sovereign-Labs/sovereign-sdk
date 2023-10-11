@@ -8,6 +8,7 @@ use sov_modules_api::{Context, DaSpec};
 use sov_sequencer_registry::SequencerConfig;
 use sov_stf_runner::read_json_file;
 
+/// Paths to genesis files.
 pub struct GenesisPaths<P: AsRef<Path>> {
     /// Accounts genesis path.
     pub accounts_genesis_path: P,

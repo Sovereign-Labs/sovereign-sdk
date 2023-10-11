@@ -7,4 +7,5 @@ mod runtime;
 
 #[cfg(feature = "native")]
 pub(crate) use builder::*;
+pub use genesis_config::*;
 pub use runtime::*;
