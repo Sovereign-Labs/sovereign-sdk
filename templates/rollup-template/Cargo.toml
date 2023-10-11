@@ -30,7 +30,7 @@ anyhow = { workspace = true }
 
 sov-db = { path = "../../full-node/db/sov-db", optional = true } 
 sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true } 
-sov-rollup-interface = { path = "../../rollup-interface" } 
+sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] } 
 tokio = { workspace = true, optional = true }
 
 # Change dependencies here to use a different DA layer or ZKVM
