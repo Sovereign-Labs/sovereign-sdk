@@ -1,8 +1,5 @@
-mod merkle;
-
 use std::collections::BTreeMap;
 use anchor_lang::prelude::*;
-use merkle::compute_merkle_root;
 use anchor_lang::solana_program::sysvar::clock::Clock;
 use anchor_lang::solana_program::keccak::hashv;
 
@@ -11,11 +8,11 @@ declare_id!("6YQGvP866CHpLTdHwmLqj2Vh5q7T1GF4Kk9gS9MCta8E");
 // Prefix for the PDA that will hold the root of the rollup blocks
 // and be included in the solana block header as part of the account diff
 pub const PREFIX: &str = "chunk_accumulator";
-// 9000 slots is 1 hour approximately
-pub const MAX_RETENTION_FOR_INCOMPLETE_CHUNKS: u64 = 9000;
-// Solana transaction size is currently capped to 1280 bytes
-// So we're restricting our chunk size to 1 kb
-pub const CHUNK_SIZE: u64 = 1024;
+
+// Solana transaction size is currently capped to 1280 bytes (including frame header)
+// We're picking a size that won't push our transaction size beyond 1280
+// This can be optimized further
+pub const CHUNK_SIZE: u64 = 768;
 
 #[program]
 pub mod blockroot {
@@ -37,6 +34,7 @@ pub mod blockroot {
         Ok(())
     }
 
+    #[allow(unused_variables)]
     pub fn process_chunk<'info>(ctx: Context<ProcessChunk>, bump:u8, chunk:Chunk) -> Result<()> {
         let chunk_accumulator = &mut ctx.accounts.chunk_accumulator;
         let blocks_root = &mut ctx.accounts.blocks_root;
@@ -143,8 +141,8 @@ impl ChunkAccumulator {
             digest,
             num_chunks,
             chunk_num,
+            actual_size,
             chunk_body,
-            ..
         } = chunk;
 
 
@@ -159,7 +157,13 @@ impl ChunkAccumulator {
             vec
         });
 
-        let chunk_hash = hashv(&[&chunk_body]).to_bytes();
+        // including the actual size as part of the merkelization. first 8 bytes
+        let chunk_hash = {
+            let mut combined = Vec::with_capacity(8 + chunk_body.len());
+            combined.extend_from_slice(&actual_size.to_le_bytes());
+            combined.extend(chunk_body);
+            hashv(&[&combined]).to_bytes()
+        };
         levels[0][chunk_num as usize] = Some(chunk_hash);
 
         let mut current_level = 0;
@@ -199,17 +203,17 @@ impl ChunkAccumulator {
     }
 }
 
-pub fn get_chunks(raw_data: &[u8], chunk_size: usize) -> Vec<Chunk> {
-    let data_length = raw_data.len();
+pub fn get_chunks(raw_data: &[u8], chunk_size: u64) -> Vec<Chunk> {
+    let data_length = raw_data.len() as u64;
     let num_chunks = (data_length as f64 / chunk_size as f64).ceil() as u64;
     let mut chunks = Vec::new();
     for i in 0..num_chunks {
-        let start = i as usize * chunk_size;
-        let end = std::cmp::min(start + chunk_size, data_length);
-        let mut chunk_body = raw_data[start..end].to_vec();
+        let start = i * chunk_size;
+        let end = std::cmp::min((start as u64) + chunk_size, data_length);
+        let mut chunk_body = raw_data[(start as usize)..(end as usize)].to_vec();
 
         // Padding
-        while chunk_body.len() < chunk_size {
+        while (chunk_body.len() as u64) < chunk_size {
             chunk_body.push(0);
         }
 
@@ -217,23 +221,28 @@ pub fn get_chunks(raw_data: &[u8], chunk_size: usize) -> Vec<Chunk> {
             digest: [0u8;32],
             num_chunks,
             chunk_num: i,
-            actual_size: (end - start) as u64,
+            actual_size: end - start,
             chunk_body,
         });
     }
 
-    let chunk_bodies: Vec<Vec<u8>> = chunks.iter().map(|x| x.chunk_body.clone()).collect();
-    let digest = merkleize(&chunk_bodies);
+    let digest = merkleize(&chunks);
     for c in &mut chunks {
         c.digest = digest;
     }
     chunks
 }
 
-pub fn merkleize(chunk_bodies: &[Vec<u8>]) -> [u8; 32] {
-    let mut current_level = chunk_bodies
+pub fn merkleize(chunks: &[Chunk]) -> [u8; 32] {
+
+    let mut current_level = chunks
         .iter()
-        .map(|body| hashv(&[body]).0)  // Destructuring to get the [u8; 32]
+        .map(|chunk| {
+            let mut combined = Vec::with_capacity(8 + chunk.chunk_body.len());
+            combined.extend_from_slice(&chunk.actual_size.to_le_bytes());
+            combined.extend(&chunk.chunk_body);
+            hashv(&[&combined]).0
+        })
         .collect::<Vec<_>>();
 
     while current_level.len() > 1 {

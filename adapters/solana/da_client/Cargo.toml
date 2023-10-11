@@ -1,5 +1,5 @@
 [package]
-name = "blob_submit"
+name = "da_client"
 version = "0.1.0"
 edition = "2021"
 
@@ -14,5 +14,7 @@ clap = {version="4.4.6", features = ['derive']}
 blockroot = {path = "../solana_da_programs/programs/blockroot", features = ["no-entrypoint"]}
 solana-rpc-client = "1.16"
 anyhow = "1.0.75"
+rand = "0.8.5"
+hex = "0.4.3"
 
 [workspace]

@@ -683,20 +683,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "blob_submit"
-version = "0.1.0"
-dependencies = [
- "anchor-client",
- "anchor-lang",
- "anyhow",
- "blockroot",
- "bs58 0.5.0",
- "clap 4.4.6",
- "solana-rpc-client",
- "solana-sdk",
-]
-
-[[package]]
 name = "block-buffer"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1229,6 +1215,22 @@ dependencies = [
  "serde",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "da_client"
+version = "0.1.0"
+dependencies = [
+ "anchor-client",
+ "anchor-lang",
+ "anyhow",
+ "blockroot",
+ "bs58 0.5.0",
+ "clap 4.4.6",
+ "hex",
+ "rand 0.8.5",
+ "solana-rpc-client",
+ "solana-sdk",
 ]
 
 [[package]]
@@ -1789,6 +1791,12 @@ name = "hermit-abi"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d77f7ec81a6d05a3abb01ab6eb7590f6083d08449fe5a1c8b1e620283546ccb7"
+
+[[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "histogram"
