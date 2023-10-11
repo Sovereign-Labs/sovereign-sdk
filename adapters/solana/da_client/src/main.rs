@@ -1,29 +1,21 @@
-use anchor_client::{Client, Cluster};
-use solana_sdk::commitment_config::{CommitmentConfig, CommitmentLevel};
-use solana_sdk::signature::EncodableKey;
-use solana_sdk::{
-    pubkey::Pubkey,
-    signature::{Keypair, Signature, Signer},
-    signer::keypair::read_keypair_file,
-    system_instruction, system_program,
-    transaction::Transaction,
-};
+use alloc::rc::Rc;
 use std::path::Path;
+use std::process;
 use std::str::FromStr;
 
+use anchor_client::{Client, Cluster};
 use anchor_lang::solana_program::sysvar::clock::Clock;
-use solana_sdk::sysvar::SysvarId;
-
-use blockroot::accounts as blockroot_accounts;
-use blockroot::instruction as blockroot_instruction;
-use blockroot::{get_chunks, Chunk, ChunkAccumulator, CHUNK_SIZE, PREFIX};
-
-use solana_rpc_client::rpc_client::RpcClient;
-
+use blockroot::da::{get_chunks, Chunk, ChunkAccumulator, CHUNK_SIZE, PREFIX};
+use blockroot::{accounts as blockroot_accounts, instruction as blockroot_instruction};
 use clap::{Parser, Subcommand};
-use std::process;
-
-use alloc::rc::Rc;
+use solana_rpc_client::rpc_client::RpcClient;
+use solana_sdk::commitment_config::{CommitmentConfig, CommitmentLevel};
+use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signature::{EncodableKey, Keypair, Signature, Signer};
+use solana_sdk::signer::keypair::read_keypair_file;
+use solana_sdk::sysvar::SysvarId;
+use solana_sdk::transaction::Transaction;
+use solana_sdk::{system_instruction, system_program};
 extern crate alloc;
 
 use da_client::{read_file_to_vec, write_random_bytes};
@@ -38,29 +30,27 @@ pub struct DaClient {
     pub blockroot_program: Pubkey,
     pub blockroot_pda: (Pubkey, u8),
     pub clock_account: Pubkey,
-    pub system_program: Pubkey
+    pub system_program: Pubkey,
 }
 
 impl DaClient {
     pub fn new(rpc_url: String, ws_url: String, signer: Keypair, blockroot_program: &str) -> Self {
         let blockroot_program_pubkey = Pubkey::from_str(blockroot_program).unwrap();
-        let (blockroot_pda, bump) = Pubkey::find_program_address(&[PREFIX.as_bytes()], &blockroot_program_pubkey);
+        let (blockroot_pda, bump) =
+            Pubkey::find_program_address(&[PREFIX.as_bytes()], &blockroot_program_pubkey);
 
         DaClient {
             rpc_url,
             ws_url,
             signer,
             blockroot_program: Pubkey::from_str(blockroot_program).unwrap(),
-            blockroot_pda: (blockroot_pda,bump),
+            blockroot_pda: (blockroot_pda, bump),
             clock_account: Clock::id(),
-            system_program: system_program::id()
+            system_program: system_program::id(),
         }
     }
 
-    pub fn create_account(&self,
-        chunks_account: &str,
-        size: u64,
-    ) -> anyhow::Result<Keypair> {
+    pub fn create_account(&self, chunks_account: &str, size: u64) -> anyhow::Result<Keypair> {
         let client = RpcClient::new(&self.rpc_url);
         let new_account = Keypair::new();
         new_account.write_to_file(chunks_account).unwrap();
@@ -85,9 +75,7 @@ impl DaClient {
         Ok(new_account)
     }
 
-    pub fn initialize_account(&self,
-        chunks_keypair: &Keypair,
-    ) -> anyhow::Result<Signature> {
+    pub fn initialize_account(&self, chunks_keypair: &Keypair) -> anyhow::Result<Signature> {
         let c = Client::new(
             Cluster::Custom(self.rpc_url.clone(), self.ws_url.clone()),
             Rc::new(self.signer.insecure_clone()),
@@ -107,17 +95,15 @@ impl DaClient {
         Ok(signature)
     }
 
-    pub fn create_large_account(&self,
-        chunks_account: &str,
-        size: u64,
-    ) -> anyhow::Result<Keypair> {
+    pub fn create_large_account(&self, chunks_account: &str, size: u64) -> anyhow::Result<Keypair> {
         let chunks_keypair = self.create_account(chunks_account, size)?;
         let signature = self.initialize_account(&chunks_keypair);
         println!("{:?}", signature);
         Ok(chunks_keypair)
     }
 
-    pub fn send_chunk_transaction(&self,
+    pub fn send_chunk_transaction(
+        &self,
         chunks_keypair: &Keypair,
         chunk: Chunk,
     ) -> anyhow::Result<Signature> {
@@ -137,7 +123,10 @@ impl DaClient {
                 blocks_root: self.blockroot_pda.0,
                 system_program: self.system_program,
             })
-            .args(blockroot_instruction::ProcessChunk { bump:self.blockroot_pda.1, chunk })
+            .args(blockroot_instruction::ProcessChunk {
+                bump: self.blockroot_pda.1,
+                chunk,
+            })
             .options(CommitmentConfig {
                 commitment: CommitmentLevel::Processed,
             })
@@ -146,9 +135,7 @@ impl DaClient {
         Ok(signature)
     }
 
-    pub fn wipe_account(&self,
-        chunks_keypair: &Keypair,
-    ) -> anyhow::Result<Signature> {
+    pub fn wipe_account(&self, chunks_keypair: &Keypair) -> anyhow::Result<Signature> {
         let creator_pubkey = self.signer.pubkey();
         let c = Client::new(
             Cluster::Custom(self.rpc_url.clone(), self.ws_url.clone()),
@@ -209,7 +196,10 @@ enum Commands {
     /// This is the scratch space for accumulating chunks on chain scoped to a sequencer
     ChunkAccount(ChunkAccountArgs),
     /// Produce test data (Random bytes of desired size)
-    CreateTestData { test_blob_path: String, size: u64 },
+    CreateTestData {
+        test_blob_path: String,
+        size: u64,
+    },
     /// Submit chunks to the chain
     Submit {
         chunk_account_path: String,
@@ -269,8 +259,7 @@ fn main() {
                 if Path::new(path).exists() {
                     if *force {
                         println!("Over-writing existing keypair at {} ", path);
-                        da_client.create_large_account(&path, *size,).unwrap();
-
+                        da_client.create_large_account(&path, *size).unwrap();
                     } else {
                         if *use_existing {
                             println!("Attempting to re-use existing keypair at {} ", path);
@@ -284,7 +273,7 @@ fn main() {
                         process::exit(1);
                     }
                 } else {
-                    da_client.create_large_account(&path, *size,).unwrap();
+                    da_client.create_large_account(&path, *size).unwrap();
                 }
             }
             ChunkAccountArgs::Clear { path } => {
@@ -317,7 +306,7 @@ fn main() {
                 hex::encode(chunk_list[0].digest)
             );
             for c in chunk_list {
-                let sig = da_client.send_chunk_transaction(&chunks_keypair,c);
+                let sig = da_client.send_chunk_transaction(&chunks_keypair, c);
                 println!("{:?}", sig);
             }
         }

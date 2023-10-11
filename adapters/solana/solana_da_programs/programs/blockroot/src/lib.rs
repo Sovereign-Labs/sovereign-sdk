@@ -1,8 +1,10 @@
 pub mod da;
 
-use anchor_lang::prelude::*;
 use std::collections::BTreeMap;
-use crate::da::{Chunk, ChunkAccumulator, BlocksRoot, PREFIX, CHUNK_SIZE};
+
+use anchor_lang::prelude::*;
+
+use crate::da::{BlocksRoot, Chunk, ChunkAccumulator, CHUNK_SIZE, PREFIX};
 
 declare_id!("6YQGvP866CHpLTdHwmLqj2Vh5q7T1GF4Kk9gS9MCta8E");
 
@@ -35,7 +37,7 @@ pub mod blockroot {
     /// # Returns
     ///
     /// * A `Result` indicating the success or failure of the clearing operation.
-    pub fn clear<'info>(ctx: Context<Clear>, digest: Option<[u8;32]>) -> Result<()> {
+    pub fn clear<'info>(ctx: Context<Clear>, digest: Option<[u8; 32]>) -> Result<()> {
         let accumulator = &mut ctx.accounts.chunk_accumulator;
         if let Some(d) = digest {
             accumulator.chunks.remove(&d);
@@ -59,20 +61,29 @@ pub mod blockroot {
     ///
     /// * A `Result` indicating the success or failure of the chunk processing operation.
     #[allow(unused_variables)]
-    pub fn process_chunk<'info>(ctx: Context<ProcessChunk>, bump:u8, chunk:Chunk) -> Result<()> {
+    pub fn process_chunk<'info>(ctx: Context<ProcessChunk>, bump: u8, chunk: Chunk) -> Result<()> {
         if chunk.chunk_body.len() > CHUNK_SIZE as usize {
-            return Err(error!(ErrorCode::ChunkSizeTooLarge))
+            return Err(error!(ErrorCode::ChunkSizeTooLarge));
         }
         let chunk_accumulator = &mut ctx.accounts.chunk_accumulator;
         let blocks_root = &mut ctx.accounts.blocks_root;
         let digest = chunk.digest.clone();
         let current_slot_num = ctx.accounts.clock.slot;
         chunk_accumulator.accumulate(chunk);
-        msg!("{}",chunk_accumulator.is_complete(&digest));
+        msg!("{}", chunk_accumulator.is_complete(&digest));
         if let Some(merkle_root) = chunk_accumulator.get_merkle_root(&digest) {
-            msg!("accumulation blob with digest: {:?} has completed with root {:?}",digest, merkle_root);
+            msg!(
+                "accumulation blob with digest: {:?} has completed with root {:?}",
+                digest,
+                merkle_root
+            );
             blocks_root.update_root(&merkle_root, current_slot_num);
-            msg!("blocks root for slot {}, blob root: {:?} combined root: {:?}",current_slot_num,merkle_root, blocks_root.digest);
+            msg!(
+                "blocks root for slot {}, blob root: {:?} combined root: {:?}",
+                current_slot_num,
+                merkle_root,
+                blocks_root.digest
+            );
             chunk_accumulator.clear_digest(&digest);
         }
         Ok(())
@@ -88,7 +99,7 @@ pub struct Initialize<'info> {
 
     /// The key pair account for storing chunk data for in-flight blobs. Must be zeroed for init. Must be a signer.
     #[account(signer, zero)]
-    pub chunk_accumulator:  Account<'info, ChunkAccumulator>,
+    pub chunk_accumulator: Account<'info, ChunkAccumulator>,
 
     /// The built-in Solana system program.
     pub system_program: Program<'info, System>,
@@ -103,7 +114,7 @@ pub struct Clear<'info> {
 
     /// The key pair account for storing chunk data for in-flight blobs. Must be a signer.
     #[account(signer, mut)]
-    pub chunk_accumulator:  Account<'info, ChunkAccumulator>,
+    pub chunk_accumulator: Account<'info, ChunkAccumulator>,
 
     /// The built-in Solana system program.
     pub system_program: Program<'info, System>,
@@ -118,7 +129,7 @@ pub struct ProcessChunk<'info> {
 
     /// The key pair account for storing chunk data for in-flight blobs. Must be a signer.
     #[account(signer, mut)]
-    pub chunk_accumulator:  Account<'info, ChunkAccumulator>,
+    pub chunk_accumulator: Account<'info, ChunkAccumulator>,
 
     /// Account (PDA) for storing the Merkle root of the accumulated chunks. Initializes if not already present.
     #[account(init_if_needed, payer=creator, space=8+32+8, seeds= [PREFIX.as_bytes()], bump)]
