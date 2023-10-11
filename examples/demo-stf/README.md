@@ -60,15 +60,27 @@ The final piece of the puzzle is your app's runtime. A runtime is just a list of
 module to your app, just add an additional field to the runtime.
 
 ```rust
+use sov_modules_api::{Genesis, DispatchCall, MessageCodec, Context};
+use sov_modules_api::macros::expose_rpc;
+use sov_sequencer::Sequencer;
+use sov_rollup_interface::da::DaSpec;
+#[cfg(feature = "native")]
+use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
+#[cfg(feature = "native")]
+use sov_bank::{BankRpcImpl, BankRpcServer};
+#[cfg(feature = "native")]
+use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
+
+
 #[cfg_attr(
     feature = "native",
     expose_rpc(DefaultContext)
 )]
 #[derive(Genesis, DispatchCall, MessageCodec)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub struct MyRuntime<C: Context> {
+pub struct MyRuntime<C: Context, Da: DaSpec> {
     #[allow(unused)]
-    sequencer: sov_sequencer_registry::Sequencer<C>,
+    sequencer: sov_sequencer_registry::SequencerRegistry<C, Da>,
 
     #[allow(unused)]
     bank: sov_bank::Bank<C>,

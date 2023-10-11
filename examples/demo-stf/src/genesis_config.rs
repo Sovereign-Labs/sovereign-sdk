@@ -1,12 +1,15 @@
+//! While the `GenesisConfig` type for `Rollup` is generated from the underlying runtime through a macro,
+//! specific module configurations are obtained from files. This code is responsible for the logic
+//! that transforms module genesis data into Rollup genesis data.
+
 use std::convert::AsRef;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context as AnyhowContext};
 use serde::de::DeserializeOwned;
 use sov_accounts::AccountConfig;
 use sov_bank::BankConfig;
 use sov_chain_state::ChainStateConfig;
-use sov_cli::wallet_state::PrivateKeyAndAddress;
 #[cfg(feature = "experimental")]
 use sov_evm::EvmConfig;
 pub use sov_modules_api::default_context::DefaultContext;
@@ -20,19 +23,43 @@ use sov_value_setter::ValueSetterConfig;
 /// Creates config for a rollup with some default settings, the config is used in demos and tests.
 use crate::runtime::GenesisConfig;
 
-pub const LOCKED_AMOUNT: u64 = 50;
-pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
-
 /// Paths pointing to genesis files.
 pub struct GenesisPaths<P: AsRef<Path>> {
+    /// Bank genesis path.
     pub bank_genesis_path: P,
+    /// Sequencer Registry genesis path.
     pub sequencer_genesis_path: P,
+    /// Value Setter genesis path.
     pub value_setter_genesis_path: P,
+    /// Accounts genesis path.
     pub accounts_genesis_path: P,
+    /// Chain State genesis path.
     pub chain_state_genesis_path: P,
+    /// NFT genesis path.
     pub nft_path: P,
     #[cfg(feature = "experimental")]
+    /// EVM genesis path.
     pub evm_genesis_path: P,
+}
+
+impl GenesisPaths<PathBuf> {
+    /// Creates a new [`GenesisPaths`] from the files contained in the given
+    /// directory.
+    ///
+    /// Take a look at the contents of the `test_data` directory to see the
+    /// expected files.
+    pub fn from_dir(dir: impl AsRef<Path>) -> Self {
+        Self {
+            bank_genesis_path: dir.as_ref().join("bank.json"),
+            sequencer_genesis_path: dir.as_ref().join("sequencer_registry.json"),
+            value_setter_genesis_path: dir.as_ref().join("value_setter.json"),
+            accounts_genesis_path: dir.as_ref().join("accounts.json"),
+            chain_state_genesis_path: dir.as_ref().join("chain_state.json"),
+            nft_path: dir.as_ref().join("nft.json"),
+            #[cfg(feature = "experimental")]
+            evm_genesis_path: dir.as_ref().join("evm.json"),
+        }
+    }
 }
 
 /// Configure our rollup with a centralized sequencer using the SEQUENCER_DA_ADDRESS
@@ -42,7 +69,7 @@ pub struct GenesisPaths<P: AsRef<Path>> {
 /// If you want to customize the rollup to accept transactions from your own celestia
 /// address, simply change the value of the SEQUENCER_DA_ADDRESS to your own address.
 /// For example:
-/// ```rust,no_run
+/// ```
 /// const SEQUENCER_DA_ADDRESS: &str = "celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208";
 /// ```
 pub fn get_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
@@ -108,9 +135,9 @@ fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
         chain_state_config,
         value_setter_config,
         accounts_config,
+        nft_config,
         #[cfg(feature = "experimental")]
         evm_config,
-        nft_config,
     ))
 }
 
@@ -140,26 +167,4 @@ fn get_evm_config<P: AsRef<Path>>(
     }
 
     Ok(config)
-}
-
-pub fn read_private_key<C: Context>() -> PrivateKeyAndAddress<C> {
-    // TODO fix the hardcoded path: #872
-    let token_deployer_data =
-        std::fs::read_to_string("../test-data/keys/token_deployer_private_key.json")
-            .expect("Unable to read file to string");
-
-    let token_deployer: PrivateKeyAndAddress<C> = serde_json::from_str(&token_deployer_data)
-        .unwrap_or_else(|_| {
-            panic!(
-                "Unable to convert data {} to PrivateKeyAndAddress",
-                &token_deployer_data
-            )
-        });
-
-    assert!(
-        token_deployer.is_matching_to_default(),
-        "Inconsistent key data"
-    );
-
-    token_deployer
 }

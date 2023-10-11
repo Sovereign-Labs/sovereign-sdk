@@ -140,7 +140,7 @@ where
             }
             info!("Starting RPC server at {} ", &bound_address);
 
-            let _server_handle = server.start(methods).unwrap();
+            let _server_handle = server.start(methods);
             futures::future::pending::<()>().await;
         });
     }
@@ -179,6 +179,7 @@ where
             for receipt in slot_result.batch_receipts {
                 data_to_commit.add_batch(receipt);
             }
+
             if let Some(Prover { vm, config }) = self.prover.as_mut() {
                 let (inclusion_proof, completeness_proof) = self
                     .da_service

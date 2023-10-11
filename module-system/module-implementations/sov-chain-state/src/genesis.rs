@@ -1,7 +1,18 @@
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use sov_modules_api::WorkingSet;
+use sov_rollup_interface::da::Time;
 
-use crate::ChainState;
+use crate::{ChainState, TransitionHeight};
+
+/// Initial configuration of the chain state
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct ChainStateConfig {
+    /// Initial slot height
+    pub initial_slot_height: TransitionHeight,
+    /// The time at genesis
+    pub current_time: Time,
+}
 
 impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da> {
     pub(crate) fn init_module(

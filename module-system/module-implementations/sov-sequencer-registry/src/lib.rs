@@ -6,51 +6,17 @@
 //! The module implements the [`sov_modules_api::hooks::ApplyBlobHooks`] trait.
 
 #![deny(missing_docs)]
-
 mod call;
 mod genesis;
 mod hooks;
 #[cfg(feature = "native")]
 mod query;
-#[cfg(test)]
-mod tests;
-pub use call::CallMessage;
+pub use call::*;
+pub use genesis::*;
 #[cfg(feature = "native")]
 pub use query::*;
-use serde::{Deserialize, Serialize};
 use sov_modules_api::{CallResponse, Error, ModuleInfo, StateMap, StateValue, WorkingSet};
 use sov_state::codec::BcsCodec;
-
-/// Genesis configuration for the [`SequencerRegistry`] module.
-///
-/// This `struct` must be passed as an argument to
-/// [`Module::genesis`](sov_modules_api::Module::genesis).
-///
-// TODO: Should we allow multiple sequencers in genesis?
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-#[serde(bound = "C::Address: serde::Serialize + serde::de::DeserializeOwned")]
-pub struct SequencerConfig<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> {
-    /// The rollup address of the sequencer.
-    pub seq_rollup_address: C::Address,
-    /// The Data Availability (DA) address of the sequencer.
-    pub seq_da_address: Da::Address,
-    /// Coins that will be slashed if the sequencer is malicious.
-    ///
-    /// The coins will be transferred from
-    /// [`SequencerConfig::seq_rollup_address`] to this module's address
-    /// ([`ModuleInfo::address`]) and locked away until the sequencer
-    /// decides to exit (unregister).
-    ///
-    /// Only sequencers that are [`SequencerRegistry::is_sender_allowed`] list are
-    /// allowed to exit.
-    pub coins_to_lock: sov_bank::Coins<C>,
-    /// Determines whether this sequencer is *regular* or *preferred*.
-    ///
-    /// Batches from the preferred sequencer are always processed first in
-    /// block, which means the preferred sequencer can guarantee soft
-    /// confirmation time for transactions.
-    pub is_preferred_sequencer: bool,
-}
 
 /// The `sov-sequencer-registry` module `struct`.
 #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
