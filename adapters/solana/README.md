@@ -244,6 +244,7 @@ pub struct Chunk {
 
 ### TBD
 * The logic to fetch the bank hash and verify availability still needs to be written into the da_client
+* Test cases for merkelization
 
 ### Notes
 * Since `ChunkAccumulator` is unique to each sequencer, multiple sequencers can do this simultaneously
