@@ -19,17 +19,6 @@ use super::test_helpers::start_rollup;
 const TOKEN_SALT: u64 = 0;
 const TOKEN_NAME: &str = "test_token";
 
-const TEST_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
-    bank_genesis_path: "../test-data/genesis/integration-tests/bank.json",
-    sequencer_genesis_path: "../test-data/genesis/integration-tests/sequencer_registry.json",
-    value_setter_genesis_path: "../test-data/genesis/integration-tests/value_setter.json",
-    accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
-    chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
-    nft_path: "../test-data/genesis/integration-tests/nft.json",
-    #[cfg(feature = "experimental")]
-    evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
-};
-
 async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow::Error> {
     let key = DefaultPrivateKey::generate();
     let user_address: <DefaultContext as Spec>::Address = key.to_address();
@@ -86,7 +75,12 @@ async fn bank_tx_tests() -> Result<(), anyhow::Error> {
     let config = DemoProverConfig::Execute;
 
     let rollup_task = tokio::spawn(async {
-        start_rollup(port_tx, Some((prover, config)), &TEST_GENESIS_PATHS).await;
+        start_rollup(
+            port_tx,
+            Some((prover, config)),
+            &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
+        )
+        .await;
     });
 
     // Wait for rollup task to start:

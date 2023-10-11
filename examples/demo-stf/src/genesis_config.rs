@@ -3,7 +3,7 @@
 //! that transforms module genesis data into Rollup genesis data.
 
 use std::convert::AsRef;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context as AnyhowContext};
 use serde::de::DeserializeOwned;
@@ -35,11 +35,31 @@ pub struct GenesisPaths<P: AsRef<Path>> {
     pub accounts_genesis_path: P,
     /// Chain State genesis path.
     pub chain_state_genesis_path: P,
-    /// Nft genesis path.
+    /// NFT genesis path.
     pub nft_path: P,
     #[cfg(feature = "experimental")]
     /// EVM genesis path.
     pub evm_genesis_path: P,
+}
+
+impl GenesisPaths<PathBuf> {
+    /// Creates a new [`GenesisPaths`] from the files contained in the given
+    /// directory.
+    ///
+    /// Take a look at the contents of the `test_data` directory to see the
+    /// expected files.
+    pub fn from_dir(dir: impl AsRef<Path>) -> Self {
+        Self {
+            bank_genesis_path: dir.as_ref().join("bank.json"),
+            sequencer_genesis_path: dir.as_ref().join("sequencer_registry.json"),
+            value_setter_genesis_path: dir.as_ref().join("value_setter.json"),
+            accounts_genesis_path: dir.as_ref().join("accounts.json"),
+            chain_state_genesis_path: dir.as_ref().join("chain_state.json"),
+            nft_path: dir.as_ref().join("nft.json"),
+            #[cfg(feature = "experimental")]
+            evm_genesis_path: dir.as_ref().join("evm.json"),
+        }
+    }
 }
 
 /// Configure our rollup with a centralized sequencer using the SEQUENCER_DA_ADDRESS
@@ -49,7 +69,7 @@ pub struct GenesisPaths<P: AsRef<Path>> {
 /// If you want to customize the rollup to accept transactions from your own celestia
 /// address, simply change the value of the SEQUENCER_DA_ADDRESS to your own address.
 /// For example:
-/// ```rust,no_run
+/// ```
 /// const SEQUENCER_DA_ADDRESS: &str = "celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208";
 /// ```
 pub fn get_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(

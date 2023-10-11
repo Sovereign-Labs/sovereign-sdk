@@ -8,28 +8,6 @@ use sov_risc0_adapter::host::Risc0Host;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 
-const DEMO_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
-    bank_genesis_path: "../test-data/genesis/demo-tests/bank.json",
-    sequencer_genesis_path: "../test-data/genesis/demo-tests/sequencer_registry.json",
-    value_setter_genesis_path: "../test-data/genesis/demo-tests/value_setter.json",
-    accounts_genesis_path: "../test-data/genesis/demo-tests/accounts.json",
-    chain_state_genesis_path: "../test-data/genesis/demo-tests/chain_state.json",
-    nft_path: "../test-data/genesis/demo-tests/nft.json",
-    #[cfg(feature = "experimental")]
-    evm_genesis_path: "../test-data/genesis/demo-tests/evm.json",
-};
-
-const TEST_GENESIS_PATHS: GenesisPaths<&str> = GenesisPaths {
-    bank_genesis_path: "../test-data/genesis/integration-tests/bank.json",
-    sequencer_genesis_path: "../test-data/genesis/integration-tests/sequencer_registry.json",
-    value_setter_genesis_path: "../test-data/genesis/integration-tests/value_setter.json",
-    accounts_genesis_path: "../test-data/genesis/integration-tests/accounts.json",
-    chain_state_genesis_path: "../test-data/genesis/integration-tests/chain_state.json",
-    nft_path: "../test-data/genesis/integration-tests/nft.json",
-    #[cfg(feature = "experimental")]
-    evm_genesis_path: "../test-data/genesis/integration-tests/evm.json",
-};
-
 #[cfg(test)]
 mod test_rpc;
 
@@ -54,7 +32,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // Initializing logging
     tracing_subscriber::registry()
         .with(fmt::layer())
-        .with(EnvFilter::from_str("info,sov_sequencer=warn").unwrap())
+        .with(EnvFilter::from_str("debug,hyper=info").unwrap())
         .init();
 
     let args = Args::parse();
@@ -69,7 +47,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 rollup_config_path,
                 //Some((prover, config)),
                 None,
-                &TEST_GENESIS_PATHS,
+                &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
             )?;
             rollup.run().await
         }
@@ -81,7 +59,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 rollup_config_path,
                 //Some((prover, config)),
                 None,
-                &DEMO_GENESIS_PATHS,
+                &GenesisPaths::from_dir("../test-data/genesis/demo-tests"),
             )
             .await?;
             rollup.run().await

@@ -80,7 +80,7 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<MockBlock, u
                 .await
                 .unwrap();
             let actual_address = server.local_addr().unwrap();
-            let _server_handle = server.start(ledger_rpc_module).unwrap();
+            let _server_handle = server.start(ledger_rpc_module);
             tx_start.send(actual_address.port()).unwrap();
             rx_end.await.unwrap();
         });

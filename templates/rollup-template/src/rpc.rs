@@ -9,7 +9,7 @@ use sov_stf_runner::get_ledger_rpc;
 use crate::builder::StfWithBuilder;
 
 /// register sequencer rpc methods.
-pub fn register_sequencer<Vm, Da>(
+pub(crate) fn register_sequencer<Vm, Da>(
     da_service: Da,
     app: &mut StfWithBuilder<Vm, Da::Spec>,
     methods: &mut jsonrpsee::RpcModule<()>,
@@ -26,7 +26,7 @@ where
 }
 
 /// register ledger rpc methods.
-pub fn register_ledger<Da: DaService>(
+pub(crate) fn register_ledger<Da: DaService>(
     ledger_db: LedgerDB,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error> {

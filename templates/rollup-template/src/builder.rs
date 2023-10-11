@@ -1,20 +1,20 @@
 //! This module implements the batch builder for the rollup.
 //! To swap out the batch builder, simply replace the
 //! FiFoStrictBatchBuilder in `StfWithBuilder` with a type of your choosing.
+use crate::runtime::Runtime;
 use sov_modules_api::default_context::DefaultContext;
 #[cfg(feature = "native")]
 use sov_modules_api::Spec;
 use sov_modules_api::{DaSpec, Zkvm};
 use sov_modules_stf_template::AppTemplate;
 #[cfg(feature = "native")]
-use sov_state::{ProverStorage, Storage};
-#[cfg(feature = "native")]
-use sov_stf_runner::FiFoStrictBatchBuilder;
+use sov_sequencer::batch_builder::FiFoStrictBatchBuilder;
 
-use crate::runtime::Runtime;
+#[cfg(feature = "native")]
+use sov_state::{ProverStorage, Storage};
 
 /// The "native" version of the STF and a batch builder
-pub struct StfWithBuilder<Vm: Zkvm, Da: DaSpec> {
+pub(crate) struct StfWithBuilder<Vm: Zkvm, Da: DaSpec> {
     pub stf: AppTemplate<DefaultContext, Da, Vm, Runtime<DefaultContext, Da>>,
     pub batch_builder: Option<FiFoStrictBatchBuilder<Runtime<DefaultContext, Da>, DefaultContext>>,
 }
@@ -22,9 +22,12 @@ pub struct StfWithBuilder<Vm: Zkvm, Da: DaSpec> {
 #[cfg(feature = "native")]
 impl<Vm: Zkvm, Da: DaSpec> StfWithBuilder<Vm, Da> {
     /// Create a new rollup instance
-    pub fn new(storage_config: sov_stf_runner::StorageConfig) -> Self {
-        let storage =
-            ProverStorage::with_config(storage_config).expect("Failed to open prover storage");
+    pub(crate) fn new(storage_config: sov_stf_runner::StorageConfig) -> Self {
+        let config = sov_state::config::Config {
+            path: storage_config.path,
+        };
+
+        let storage = ProverStorage::with_config(config).expect("Failed to open prover storage");
         let app = AppTemplate::new(storage.clone(), Runtime::default());
         let batch_size_bytes = 1024 * 100; // 100 KB
         let batch_builder = FiFoStrictBatchBuilder::new(
@@ -39,7 +42,7 @@ impl<Vm: Zkvm, Da: DaSpec> StfWithBuilder<Vm, Da> {
         }
     }
 
-    pub fn get_storage(&self) -> <DefaultContext as Spec>::Storage {
+    pub(crate) fn get_storage(&self) -> <DefaultContext as Spec>::Storage {
         self.stf.current_storage.clone()
     }
 }

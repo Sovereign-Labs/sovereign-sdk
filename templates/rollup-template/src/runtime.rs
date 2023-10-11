@@ -1,3 +1,4 @@
+#![allow(unused_doc_comments)]
 //! This module implements the core logic of the rollup.
 //! To add new functionality to your rollup:
 //!   1. Add a new module dependency to your `Cargo.toml` file

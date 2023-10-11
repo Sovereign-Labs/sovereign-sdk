@@ -59,7 +59,7 @@ rust-version = "1.66"
 
 [workspace.dependencies]
 # Dependencies maintained by Sovereign
-jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "199ae1c185e74ee2133db773efacff56706085aa" }
+jmt = "0.8.0"
 
 # External dependencies
 async-trait = "0.1.71"
@@ -92,7 +92,7 @@ bech32 = "0.9.1"
 derive_more = "0.99.11"
 clap = { version = "4.2.7", features = ["derive"] }
 toml = "0.8.0"
-jsonrpsee = { version = "0.18.2", features = ["jsonrpsee-types"] }
+jsonrpsee = { version = "0.20.1", features = ["jsonrpsee-types"] }
 schemars = { version = "0.8.12", features = ["derive"] }
 tempfile = "3.5"
 tokio = { version = "1", features = ["full"] }
@@ -126,3 +126,14 @@ secp256k1 = { version = "0.27.0", default-features = false, features = [
     "rand-std",
     "recovery",
 ] }
+
+[patch.'https://github.com/eigerco/celestia-node-rs.git']
+# Uncomment to apply local changes
+# celestia-proto = { path = "../celestia-node-rs/proto" }
+# celestia-rpc = { path = "../celestia-node-rs/rpc" }
+# celestia-types = { path = "../celestia-node-rs/types" }
+
+[patch.'https://github.com/eigerco/celestia-tendermint-rs.git']
+# Uncomment to apply local changes
+# tendermint = { path = "../celestia-tendermint-rs/tendermint" }
+# tendermint-proto = { path = "../celestia-tendermint-rs/proto" }

@@ -1,5 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use nmt_rs::NamespaceId;
+use celestia_types::nmt::Namespace;
+use celestia_types::{Commitment, DataAvailabilityHeader, NamespacedShares};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{
     self, BlobReaderTrait, BlockHashTrait as BlockHash, BlockHeaderTrait, DaSpec,
@@ -12,22 +13,22 @@ use thiserror::Error;
 pub mod address;
 pub mod proofs;
 
-use proofs::*;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use sov_zk_cycle_macros::cycle_tracker;
 
 use self::address::CelestiaAddress;
-use crate::share_commit::recreate_commitment;
-use crate::shares::{read_varint, NamespaceGroup, Share};
+use self::proofs::*;
+use crate::shares::{NamespaceGroup, Share};
 use crate::types::ValidationError;
-use crate::{pfb_from_iter, BlobWithSender, CelestiaHeader, DataAvailabilityHeader};
+use crate::utils::read_varint;
+use crate::{pfb_from_iter, BlobWithSender, CelestiaHeader};
 
 pub struct CelestiaVerifier {
-    pub rollup_namespace: NamespaceId,
+    pub rollup_namespace: Namespace,
 }
 
-pub const PFB_NAMESPACE: NamespaceId = NamespaceId(hex_literal::hex!("0000000000000004"));
-pub const PARITY_SHARES_NAMESPACE: NamespaceId = NamespaceId(hex_literal::hex!("ffffffffffffffff"));
+pub const PFB_NAMESPACE: Namespace = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 4]);
+pub const PARITY_SHARES_NAMESPACE: Namespace = Namespace::MAX;
 
 impl BlobReaderTrait for BlobWithSender {
     type Address = CelestiaAddress;
@@ -111,14 +112,14 @@ impl DaSpec for CelestiaSpec {
 
     type InclusionMultiProof = Vec<EtxProof>;
 
-    type CompletenessProof = Vec<RelevantRowProof>;
+    type CompletenessProof = NamespacedShares;
 
     type ChainParams = RollupParams;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RollupParams {
-    pub namespace: NamespaceId,
+    pub namespace: Namespace,
 }
 
 #[derive(
@@ -138,6 +139,7 @@ pub struct ChainValidityCondition {
     pub prev_hash: [u8; 32],
     pub block_hash: [u8; 32],
 }
+
 #[derive(Error, Debug)]
 pub enum ValidityConditionError {
     #[error("conditions for validity can only be combined if the blocks are consecutive")]
@@ -182,20 +184,25 @@ impl da::DaVerifier for CelestiaVerifier {
 
         // Check the validity and completeness of the rollup row proofs, against the DAH.
         // Extract the data from the row proofs and build a namespace_group from it
-        let rollup_shares_u8 = self.verify_row_proofs(completeness_proof, &block_header.dah)?;
-        if rollup_shares_u8.is_empty() {
+        let verified_shares = self.verify_row_proofs(completeness_proof, &block_header.dah)?;
+        if verified_shares.is_empty() {
             if txs.is_empty() {
                 return Ok(validity_condition);
             }
             return Err(ValidationError::MissingTx);
         }
-        let namespace = NamespaceGroup::from_shares_unchecked(rollup_shares_u8);
 
         // Check the e-tx proofs...
         // TODO(@preston-evans98): Remove this logic if Celestia adds blob.sender metadata directly into blob
         let mut tx_iter = txs.iter();
+        let mut tx_proofs = inclusion_proof.into_iter();
         let square_size = block_header.dah.row_roots.len();
-        for (blob, tx_proof) in namespace.blobs().zip(inclusion_proof.into_iter()) {
+        for blob in verified_shares.blobs() {
+            // Get the etx proof for this blob
+            let Some(tx_proof) = tx_proofs.next() else {
+                return Err(ValidationError::InvalidEtxProof("not all blobs proven"));
+            };
+
             // Force the row number to be monotonically increasing
             let start_offset = tx_proof.proof[0].start_offset;
 
@@ -213,7 +220,7 @@ impl da::DaVerifier for CelestiaVerifier {
                 let root = &block_header.dah.row_roots[row_num];
                 sub_proof
                     .proof
-                    .verify_range(root, &sub_proof.shares, PFB_NAMESPACE)
+                    .verify_range(root, &sub_proof.shares, PFB_NAMESPACE.into())
                     .map_err(|_| ValidationError::InvalidEtxProof("invalid sub proof"))?;
                 tx_shares.extend(
                     sub_proof
@@ -249,8 +256,8 @@ impl da::DaVerifier for CelestiaVerifier {
                 .map_err(|_| ValidationError::InvalidEtxProof("invalid pfb"))?;
 
             // Verify the sender and data of each blob which was sent into this namespace
-            for (blob_idx, nid) in pfb.namespace_ids.iter().enumerate() {
-                if nid != &self.rollup_namespace.0[..] {
+            for (blob_idx, nid) in pfb.namespaces.iter().enumerate() {
+                if nid != self.rollup_namespace.as_bytes() {
                     continue;
                 }
                 let tx: &BlobWithSender = tx_iter.next().ok_or(ValidationError::MissingTx)?;
@@ -276,12 +283,16 @@ impl da::DaVerifier for CelestiaVerifier {
 
                 // Link blob commitment to e-tx commitment
                 let expected_commitment =
-                    recreate_commitment(square_size, blob_ref).map_err(|_| {
+                    Commitment::from_shares(self.rollup_namespace, blob_ref.0).map_err(|_| {
                         ValidationError::InvalidEtxProof("failed to recreate commitment")
                     })?;
 
-                assert_eq!(&pfb.share_commitments[blob_idx][..], &expected_commitment);
+                assert_eq!(&pfb.share_commitments[blob_idx][..], &expected_commitment.0);
             }
+        }
+
+        if tx_proofs.next().is_some() {
+            return Err(ValidationError::InvalidEtxProof("more proofs than blobs"));
         }
 
         Ok(validity_condition)
@@ -291,26 +302,30 @@ impl da::DaVerifier for CelestiaVerifier {
 impl CelestiaVerifier {
     pub fn verify_row_proofs(
         &self,
-        row_proofs: Vec<RelevantRowProof>,
+        row_proofs: NamespacedShares,
         dah: &DataAvailabilityHeader,
-    ) -> Result<Vec<Vec<u8>>, ValidationError> {
-        let mut row_proofs = row_proofs.into_iter();
+    ) -> Result<NamespaceGroup, ValidationError> {
+        let mut row_proofs = row_proofs.rows.into_iter();
         // Check the validity and completeness of the rollup share proofs
-        let mut rollup_shares_u8: Vec<Vec<u8>> = Vec::new();
+        let mut verified_shares = Vec::new();
         for row_root in dah.row_roots.iter() {
             // TODO: short circuit this loop at the first row after the rollup namespace
-            if row_root.contains(self.rollup_namespace) {
+            if row_root.contains(self.rollup_namespace.into()) {
                 let row_proof = row_proofs.next().ok_or(ValidationError::InvalidRowProof)?;
                 row_proof
                     .proof
-                    .verify_complete_namespace(row_root, &row_proof.leaves, self.rollup_namespace)
+                    .verify_complete_namespace(
+                        row_root,
+                        &row_proof.shares,
+                        self.rollup_namespace.into(),
+                    )
                     .expect("Proofs must be valid");
 
-                for leaf in row_proof.leaves {
-                    rollup_shares_u8.push(leaf)
+                for leaf in row_proof.shares {
+                    verified_shares.push(leaf)
                 }
             }
         }
-        Ok(rollup_shares_u8)
+        Ok(NamespaceGroup::from_shares(verified_shares))
     }
 }
