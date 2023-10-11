@@ -5,12 +5,13 @@
 mod config;
 
 #[cfg(feature = "native")]
+use std::path::Path;
+
+#[cfg(feature = "native")]
 use anyhow::Context;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use config::RpcConfig;
-#[cfg(feature = "native")]
-use std::path::Path;
 #[cfg(feature = "native")]
 mod ledger_rpc;
 #[cfg(feature = "native")]

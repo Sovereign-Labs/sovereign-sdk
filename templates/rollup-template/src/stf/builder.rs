@@ -1,7 +1,6 @@
 //! This module implements the batch builder for the rollup.
 //! To swap out the batch builder, simply replace the
 //! FiFoStrictBatchBuilder in `StfWithBuilder` with a type of your choosing.
-use super::runtime::Runtime;
 use sov_modules_api::default_context::DefaultContext;
 #[cfg(feature = "native")]
 use sov_modules_api::Spec;
@@ -9,9 +8,10 @@ use sov_modules_api::{DaSpec, Zkvm};
 use sov_modules_stf_template::AppTemplate;
 #[cfg(feature = "native")]
 use sov_sequencer::batch_builder::FiFoStrictBatchBuilder;
-
 #[cfg(feature = "native")]
 use sov_state::{ProverStorage, Storage};
+
+use super::runtime::Runtime;
 
 /// The "native" version of the STF and a batch builder
 pub(crate) struct StfWithBuilder<Vm: Zkvm, Da: DaSpec> {

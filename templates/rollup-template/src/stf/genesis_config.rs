@@ -1,12 +1,13 @@
 use std::path::{Path, PathBuf};
 
-use super::GenesisConfig;
 use anyhow::bail;
 use sov_accounts::AccountConfig;
 use sov_bank::BankConfig;
 use sov_modules_api::{Context, DaSpec};
 use sov_sequencer_registry::SequencerConfig;
 use sov_stf_runner::read_json_file;
+
+use super::GenesisConfig;
 
 /// Paths to genesis files.
 pub struct GenesisPaths<P: AsRef<Path>> {
