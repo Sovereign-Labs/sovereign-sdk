@@ -2259,6 +2259,7 @@ dependencies = [
  "borsh",
  "hex",
  "serde",
+ "serde_json",
  "sov-rollup-interface",
 ]
 

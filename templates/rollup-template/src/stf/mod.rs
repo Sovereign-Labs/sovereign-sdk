@@ -1,6 +1,7 @@
 //! The rollup State Transition Function.
 #[cfg(feature = "native")]
 mod builder;
+mod genesis_config;
 mod hooks;
 mod runtime;
 
