@@ -101,7 +101,7 @@ jobs:
     # building dependencies, only chceking them, so we can share caches
     # effectively.
     needs: check
-    runs-on: buildjet-4vcpu-ubuntu-2204
+    runs-on: buildjet-8vcpu-ubuntu-2204
     timeout-minutes: 60
     env:
       CI_SKIP_GUEST_BUILD: "1"

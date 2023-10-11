@@ -1,15 +1,18 @@
+//! This module implements the various "hooks" that are called by the STF during execution.
+//! These hooks can be used to add custom logic at various points in the slot lifecycle:
+//! - Before and after each transaction is executed.
+//! - At the beginning and end of each batch ("blob")
+//! - At the beginning and end of each slot (DA layer block)
+
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{AccessoryWorkingSet, Context, Spec, WorkingSet};
+use sov_modules_api::{AccessoryWorkingSet, BlobReaderTrait, Context, DaSpec, Spec, WorkingSet};
 use sov_modules_stf_template::SequencerOutcome;
-#[cfg(feature = "experimental")]
-use sov_rollup_interface::da::BlockHeaderTrait;
-use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_sequencer_registry::SequencerRegistry;
 use sov_state::Storage;
 use tracing::info;
 
-use crate::runtime::Runtime;
+use super::runtime::Runtime;
 
 impl<C: Context, Da: DaSpec> TxHooks for Runtime<C, Da> {
     type Context = C;
@@ -44,7 +47,7 @@ impl<C: Context, Da: DaSpec> ApplyBlobHooks<Da::BlobTransaction> for Runtime<C, 
         blob: &mut Da::BlobTransaction,
         working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
-        // Before executing each batch, check that the sender is registered as a sequencer
+        // Before executing each batch, check that the sender is regsitered as a sequencer
         self.sequencer_registry.begin_blob_hook(blob, working_set)
     }
 
@@ -53,6 +56,7 @@ impl<C: Context, Da: DaSpec> ApplyBlobHooks<Da::BlobTransaction> for Runtime<C, 
         result: Self::BlobResult,
         working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
+        // After processing each blob, reward or slash the sequencer if appropriate
         match result {
             SequencerOutcome::Rewarded(_reward) => {
                 // TODO: Process reward here or above.
@@ -85,33 +89,14 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
 
     fn begin_slot_hook(
         &self,
-        #[allow(unused_variables)] slot_header: &Da::BlockHeader,
-        #[allow(unused_variables)] validity_condition: &Da::ValidityCondition,
-        #[allow(unused_variables)]
-        pre_state_root: &<<Self::Context as Spec>::Storage as Storage>::Root,
-        #[allow(unused_variables)] working_set: &mut sov_modules_api::WorkingSet<C>,
+        _slot_header: &Da::BlockHeader,
+        _validity_condition: &Da::ValidityCondition,
+        _pre_state_root: &<<Self::Context as Spec>::Storage as Storage>::Root,
+        _working_set: &mut sov_modules_api::WorkingSet<C>,
     ) {
-        #[cfg(feature = "experimental")]
-        self.evm
-            .begin_slot_hook(slot_header.hash().into(), pre_state_root, working_set);
-
-        self.chain_state.begin_slot_hook(
-            slot_header,
-            validity_condition,
-            pre_state_root,
-            working_set,
-        );
     }
 
-    fn end_slot_hook(
-        &self,
-        #[allow(unused_variables)] working_set: &mut sov_modules_api::WorkingSet<C>,
-    ) {
-        #[cfg(feature = "experimental")]
-        self.evm.end_slot_hook(working_set);
-
-        self.chain_state.end_slot_hook(working_set);
-    }
+    fn end_slot_hook(&self, _working_set: &mut sov_modules_api::WorkingSet<C>) {}
 }
 
 impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for Runtime<C, Da> {
@@ -119,13 +104,8 @@ impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for Runtime<C, Da
 
     fn finalize_hook(
         &self,
-        #[allow(unused_variables)] root_hash: &<<Self::Context as Spec>::Storage as Storage>::Root,
-        #[allow(unused_variables)] accessory_working_set: &mut AccessoryWorkingSet<C>,
+        _root_hash: &<<Self::Context as Spec>::Storage as Storage>::Root,
+        _accessory_working_set: &mut AccessoryWorkingSet<C>,
     ) {
-        #[cfg(feature = "experimental")]
-        self.evm.finalize_hook(root_hash, accessory_working_set);
-
-        self.chain_state
-            .finalize_hook(root_hash, accessory_working_set);
     }
 }

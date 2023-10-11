@@ -1,20 +1,20 @@
 use std::net::SocketAddr;
-use std::path::Path;
 
-use demo_stf::genesis_config::GenesisPaths;
-use sov_demo_rollup::{new_rollup_with_mock_da_from_config, DemoProverConfig};
-use sov_rollup_interface::mocks::{MockAddress, MockDaConfig};
+use rollup_template::rollup::Rollup;
+use rollup_template::stf::GenesisConfig;
+use sov_modules_api::default_context::DefaultContext;
+use sov_rollup_interface::mocks::{MockDaConfig, MockDaService, MockDaSpec};
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
 use tokio::sync::oneshot;
 
-pub async fn start_rollup<Vm: ZkvmHost, P: AsRef<Path>>(
-    rpc_reporting_channel: oneshot::Sender<SocketAddr>,
-    prover: Option<(Vm, DemoProverConfig)>,
-    genesis_paths: &GenesisPaths<P>,
-) {
+pub async fn start_rollup<Vm: ZkvmHost>(rpc_reporting_channel: oneshot::Sender<SocketAddr>) {
     let temp_dir = tempfile::tempdir().unwrap();
     let temp_path = temp_dir.path();
+    let genesis_config = serde_json::from_str::<GenesisConfig<DefaultContext, MockDaSpec>>(
+        include_str!("test_genesis.json"),
+    )
+    .expect("Test genesis configuration must be valid");
 
     let rollup_config = RollupConfig {
         storage: StorageConfig {
@@ -28,12 +28,18 @@ pub async fn start_rollup<Vm: ZkvmHost, P: AsRef<Path>>(
             },
         },
         da: MockDaConfig {
-            sender_address: MockAddress { addr: [0; 32] },
+            sender_address: genesis_config.sequencer_registry.seq_da_address,
         },
     };
 
-    let rollup = new_rollup_with_mock_da_from_config(rollup_config, prover, genesis_paths)
-        .expect("Rollup config is valid");
+    let rollup = Rollup::<Vm, _>::new(
+        MockDaService::new(genesis_config.sequencer_registry.seq_da_address),
+        genesis_config,
+        rollup_config,
+        None,
+    )
+    .unwrap();
+
     rollup
         .run_and_report_rpc_port(Some(rpc_reporting_channel))
         .await

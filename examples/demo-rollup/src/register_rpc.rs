@@ -12,8 +12,8 @@ use sov_rollup_interface::zk::Zkvm;
 use sov_sequencer::get_sequencer_rpc;
 use sov_stf_runner::get_ledger_rpc;
 
-/// register sequencer rpc methods.
-pub fn register_sequencer<Vm, Da>(
+// register sequencer rpc methods.
+pub(crate) fn register_sequencer<Vm, Da>(
     da_service: Da,
     app: &mut App<Vm, Da::Spec>,
     methods: &mut jsonrpsee::RpcModule<()>,
@@ -29,8 +29,8 @@ where
         .context("Failed to merge Txs RPC modules")
 }
 
-/// register ledger rpc methods.
-pub fn register_ledger(
+// register ledger rpc methods.
+pub(crate) fn register_ledger(
     ledger_db: LedgerDB,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error> {
@@ -41,8 +41,8 @@ pub fn register_ledger(
 }
 
 #[cfg(feature = "experimental")]
-/// register ethereum methods.
-pub fn register_ethereum<C: sov_modules_api::Context, Da: DaService>(
+// register ethereum methods.
+pub(crate) fn register_ethereum<C: sov_modules_api::Context, Da: DaService>(
     da_service: Da,
     eth_rpc_config: EthRpcConfig,
     storage: C::Storage,

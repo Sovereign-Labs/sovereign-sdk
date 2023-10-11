@@ -373,7 +373,10 @@ impl DaService for MockDaService {
 
 /// The configuration for mock da
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
-pub struct MockDaConfig {}
+pub struct MockDaConfig {
+    /// The address to use to "submit" blobs on the mock da layer
+    pub sender_address: MockAddress,
+}
 
 #[derive(Clone, Default)]
 /// DaVerifier used in tests.
