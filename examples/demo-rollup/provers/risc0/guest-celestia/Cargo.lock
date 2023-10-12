@@ -397,7 +397,7 @@ dependencies = [
 [[package]]
 name = "celestia-proto"
 version = "0.1.0"
-source = "git+https://github.com/eigerco/celestia-node-rs.git?rev=925836a#925836a889b2b2a372743583208c6f11fe9855c9"
+source = "git+https://github.com/eigerco/celestia-node-rs.git?rev=1fa61eb#1fa61ebd6be6a3663f12e61cf23618342e3a910f"
 dependencies = [
  "anyhow",
  "prost 0.12.1",
@@ -410,7 +410,7 @@ dependencies = [
 [[package]]
 name = "celestia-types"
 version = "0.1.0"
-source = "git+https://github.com/eigerco/celestia-node-rs.git?rev=925836a#925836a889b2b2a372743583208c6f11fe9855c9"
+source = "git+https://github.com/eigerco/celestia-node-rs.git?rev=1fa61eb#1fa61ebd6be6a3663f12e61cf23618342e3a910f"
 dependencies = [
  "base64 0.21.4",
  "bech32",
