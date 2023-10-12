@@ -1,7 +1,5 @@
 //! Defines the rollup full node implementation, including logic for configuring
 //! and starting the rollup node.
-
-#[cfg(feature = "native")]
 mod rpc;
 
 use serde::de::DeserializeOwned;
