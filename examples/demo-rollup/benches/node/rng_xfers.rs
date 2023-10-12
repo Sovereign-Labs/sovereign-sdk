@@ -2,6 +2,7 @@ use std::env;
 
 use async_trait::async_trait;
 use borsh::ser::BorshSerialize;
+use demo_stf::runtime::Runtime;
 use sov_bank::{Bank, CallMessage, Coins};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
@@ -13,7 +14,6 @@ use sov_rollup_interface::mocks::{
     MOCK_SEQUENCER_DA_ADDRESS,
 };
 use sov_rollup_interface::services::da::DaService;
-use demo_stf::runtime::Runtime;
 
 #[derive(Clone)]
 /// A simple DaService for a random number generator.

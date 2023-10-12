@@ -5,6 +5,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
+use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
+use demo_stf::App;
 use prometheus::{Histogram, HistogramOpts, Registry};
 use rng_xfers::{RngDaService, RngDaSpec};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
@@ -15,8 +17,6 @@ use sov_rollup_interface::mocks::{
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_stf_runner::{from_toml_path, RollupConfig};
-use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
-use demo_stf::App;
 use tempfile::TempDir;
 
 #[macro_use]

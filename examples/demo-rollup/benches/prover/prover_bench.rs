@@ -8,6 +8,8 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
+use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
+use demo_stf::App;
 use log4rs::config::{Appender, Config, Root};
 use regex::Regex;
 use risc0::ROLLUP_ELF;
@@ -21,8 +23,6 @@ use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{from_toml_path, RollupConfig};
-use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
-use demo_stf::App;
 use tempfile::TempDir;
 
 #[derive(Debug)]
