@@ -28,7 +28,7 @@ serde_json = { workspace = true }
 jsonrpsee = { workspace = true }
 anyhow = { workspace = true }
 
-template-stf = { path = "./stf" } 
+template-stf = { path = "./stf", features = ["native"] } 
 
 sov-db = { path = "../../full-node/db/sov-db" } 
 sov-sequencer = { path = "../../full-node/sov-sequencer" } 
