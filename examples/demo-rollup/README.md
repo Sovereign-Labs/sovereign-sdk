@@ -54,7 +54,7 @@ package instead.
 
 By swapping out or modifying the imported state transition function, you can customize
 this example full-node to run arbitrary logic.
-This particular example relies on the state transition exported by [`demo-stf`](../demo-stf/). If you want to
+This particular example relies on the state transition exported by [`demo-stf`](../demo-rollup/stf/). If you want to
 understand how to build your own state transition function, check out at the docs in that package.
 
 ## Getting Started

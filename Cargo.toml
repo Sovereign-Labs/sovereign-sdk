@@ -6,7 +6,6 @@ members = [
     "adapters/risc0",
     "adapters/celestia",
     "examples/const-rollup-config",
-    "examples/demo-stf",
     "examples/demo-simple-stf",
     "examples/demo-rollup",
     "examples/simple-nft-module",
