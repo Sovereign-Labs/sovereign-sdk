@@ -13,60 +13,45 @@ rust-version.workspace = true
 
 [dependencies]
 #stf dependencies
-sov-modules-api = { path = "../../module-system/sov-modules-api" }  # needs to re-export anyhow, serde, and borsh. native needs clap, serde_json, and jsonrpsee. Also, tracing
+sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }  
 sov-state = { path = "../../module-system/sov-state" } 
-sov-accounts = { path = "../../module-system/module-implementations/sov-accounts" } 
-sov-bank = { path = "../../module-system/module-implementations/sov-bank" } 
-sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry" } 
-sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template/" }
-sov-stf-runner = { path = "../../full-node/sov-stf-runner" } 
+sov-accounts = { path = "../../module-system/module-implementations/sov-accounts", features = ["native"]} 
+sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] } 
+sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry", features = ["native"] } 
+sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template/", features = ["native"] }
+sov-stf-runner = { path = "../../full-node/sov-stf-runner", features = ["native"] } 
 borsh = { workspace = true }
-clap = { workspace = true, optional = true }
+clap = { workspace = true }
 serde = { workspace = true }
 tracing = { workspace = true }
-serde_json = { workspace = true, optional = true }
-jsonrpsee = { workspace = true, optional = true }
+serde_json = { workspace = true }
+jsonrpsee = { workspace = true }
 anyhow = { workspace = true }
 
-sov-db = { path = "../../full-node/db/sov-db", optional = true } 
-sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true } 
+template-stf = { path = "./stf", features = ["native"] } 
+
+sov-db = { path = "../../full-node/db/sov-db" } 
+sov-sequencer = { path = "../../full-node/sov-sequencer" } 
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] } 
-tokio = { workspace = true, optional = true }
+tokio = { workspace = true}
 
 # Change dependencies here to use a different DA layer or ZKVM
-sov-risc0-adapter = { path = "../../adapters/risc0" }
+sov-risc0-adapter = { path = "../../adapters/risc0", features = ["native"] }
 
 # binary dependencies
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"], optional = true }
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }
 
 [features]
-default = ["native"]
-native = [
-	"sov-modules-api/native", 
-	"sov-accounts/native", 
-	"sov-bank/native", 
-	"sov-sequencer-registry/native",
-	"sov-risc0-adapter/native",
-	"sov-stf-runner/native",
-	"sov-modules-stf-template/native",
-	"sov-db",
-	"sov-sequencer",
-	"tokio",
-	"clap",
-	"serde_json",
-	"jsonrpsee",
-	"tracing-subscriber",
-]
+default = []
 
 [[bin]]
 name = "node"
 path = "src/bin/node.rs"
-required-features = ["native"]
 
 [[bin]]
 name = "cli_wallet"
 path = "src/bin/cli_wallet.rs"
-required-features = ["native"]
+
