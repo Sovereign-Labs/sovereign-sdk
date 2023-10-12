@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use demo_stf::runtime::{Runtime, RuntimeCall, RuntimeSubcommand};
+use stf::runtime::{Runtime, RuntimeCall, RuntimeSubcommand};
 use sov_cli::wallet_state::WalletState;
 use sov_cli::workflows::transactions::{ImportTransaction, TransactionWorkflow};
 use sov_modules_api::cli::{FileNameArg, JsonStringArg};

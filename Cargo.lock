@@ -2099,43 +2099,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "demo-stf"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "borsh",
- "clap 4.4.6",
- "demo-stf",
- "hex",
- "jsonrpsee 0.20.1",
- "rand 0.8.5",
- "reth-primitives",
- "serde",
- "serde_json",
- "simple-nft-module",
- "sov-accounts",
- "sov-bank",
- "sov-blob-storage",
- "sov-chain-state",
- "sov-cli",
- "sov-data-generators",
- "sov-evm",
- "sov-modules-api",
- "sov-modules-stf-template",
- "sov-nft-module",
- "sov-rollup-interface",
- "sov-sequencer",
- "sov-sequencer-registry",
- "sov-state",
- "sov-stf-runner",
- "sov-value-setter",
- "tempfile",
- "tokio",
- "toml 0.8.2",
- "tracing",
-]
-
-[[package]]
 name = "der"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8459,7 +8422,6 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
- "demo-stf",
  "directories",
  "hex",
  "jsonrpsee 0.20.1",
@@ -8469,6 +8431,7 @@ dependencies = [
  "sov-bank",
  "sov-modules-api",
  "sov-rollup-interface",
+ "stf",
  "tempfile",
 ]
 
@@ -8569,7 +8532,6 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
- "demo-stf",
  "ethers",
  "jsonrpsee 0.20.1",
  "reth-primitives",
@@ -8578,6 +8540,7 @@ dependencies = [
  "sov-evm",
  "sov-modules-api",
  "sov-rollup-interface",
+ "stf",
  "tokio",
 ]
 
