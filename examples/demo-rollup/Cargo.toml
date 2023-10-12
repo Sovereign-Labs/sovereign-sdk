@@ -13,14 +13,14 @@ default-run = "sov-demo-rollup"
 
 [dependencies]
 # non-optional dependencies
-sov-celestia-adapter = { path = "../../adapters/celestia" }
+sov-celestia-adapter = { path = "../../adapters/celestia", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
-sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
-sov-rollup-interface = { path = "../../rollup-interface" }
-sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" }
-sov-modules-api = { path = "../../module-system/sov-modules-api" }
+sov-stf-runner = { path = "../../full-node/sov-stf-runner", features = ["native"] }
+sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
+sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
+sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module" }
-demo-stf = { path = "../demo-stf" }
+demo-stf = { path = "../demo-stf", features = ["native"] }
 risc0 = { path = "./provers/risc0" }
 borsh = { workspace = true, features = ["bytes"]}
 async-trait = { workspace = true, optional = true }
@@ -39,11 +39,11 @@ tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
 sov-db = { path = "../../full-node/db/sov-db" }
 sov-ethereum = { path = "../../full-node/sov-ethereum", optional = true }
-sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true  }
-sov-risc0-adapter = { path = "../../adapters/risc0" }
-sov-state = { path = "../../module-system/sov-state" }
-sov-cli = { path = "../../module-system/sov-cli", optional = true }
-clap = { workspace = true, optional = true}
+sov-sequencer = { path = "../../full-node/sov-sequencer"}
+sov-risc0-adapter = { path = "../../adapters/risc0", features = ["native"] }
+sov-state = { path = "../../module-system/sov-state", features = ["native"] }
+sov-cli = { path = "../../module-system/sov-cli" }
+clap = { workspace = true}
 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }
@@ -82,11 +82,8 @@ regex = "1.5"
 [features]
 default = ["native"] # Deviate from convention by making the "native" feature active by default. This aligns with how this package is meant to be used (as a binary first, library second).
 experimental = ["default", "sov-ethereum/experimental", "reth-primitives", "secp256k1", "demo-stf/experimental", "sov-ethereum/local"]
-native = [  
-	"demo-stf/native", "sov-modules-stf-template/native", "sov-risc0-adapter/native", "sov-modules-api/native",
-	"sov-state/native", "sov-cli", "clap", "sov-celestia-adapter/native", "sov-sequencer", "sov-stf-runner/native",
-	"sov-modules-api/native", "sov-rollup-interface/native"]
-
+native = []  
+	
 bench = ["native", "async-trait", "hex", "sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "risc0/bench"]
 offchain = ["demo-stf/offchain"]
 
