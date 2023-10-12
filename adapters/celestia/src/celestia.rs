@@ -420,6 +420,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "risc0")]
     fn test_zkvm_serde_celestia_header() {
         // regression https://github.com/eigerco/celestia-tendermint-rs/pull/12
         for header_json in HEADER_JSON_RESPONSES {
