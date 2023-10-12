@@ -14,7 +14,7 @@ use sov_stf_runner::{Prover, RollupConfig, RunnerConfig, StateTransitionRunner};
 use tokio::sync::oneshot;
 
 use self::rpc::{register_ledger, register_sequencer};
-use crate::stf::{get_rpc_methods, GenesisConfig, Runtime, StfWithBuilder};
+use template_stf::{get_rpc_methods, GenesisConfig, Runtime, StfWithBuilder};
 
 type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>;
 

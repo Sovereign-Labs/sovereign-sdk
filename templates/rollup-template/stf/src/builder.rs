@@ -14,7 +14,7 @@ use sov_state::{ProverStorage, Storage};
 use super::runtime::Runtime;
 
 /// The "native" version of the STF and a batch builder
-pub(crate) struct StfWithBuilder<Vm: Zkvm, Da: DaSpec> {
+pub struct StfWithBuilder<Vm: Zkvm, Da: DaSpec> {
     pub stf: AppTemplate<DefaultContext, Da, Vm, Runtime<DefaultContext, Da>>,
     pub batch_builder: Option<FiFoStrictBatchBuilder<Runtime<DefaultContext, Da>, DefaultContext>>,
 }
@@ -22,7 +22,7 @@ pub(crate) struct StfWithBuilder<Vm: Zkvm, Da: DaSpec> {
 #[cfg(feature = "native")]
 impl<Vm: Zkvm, Da: DaSpec> StfWithBuilder<Vm, Da> {
     /// Create a new rollup instance
-    pub(crate) fn new(storage_config: sov_stf_runner::StorageConfig) -> Self {
+    pub fn new(storage_config: sov_stf_runner::StorageConfig) -> Self {
         let config = sov_state::config::Config {
             path: storage_config.path,
         };
@@ -42,7 +42,7 @@ impl<Vm: Zkvm, Da: DaSpec> StfWithBuilder<Vm, Da> {
         }
     }
 
-    pub(crate) fn get_storage(&self) -> <DefaultContext as Spec>::Storage {
+    pub fn get_storage(&self) -> <DefaultContext as Spec>::Storage {
         self.stf.current_storage.clone()
     }
 }

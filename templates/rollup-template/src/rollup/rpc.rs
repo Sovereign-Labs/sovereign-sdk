@@ -6,7 +6,7 @@ use sov_rollup_interface::services::da::DaService;
 use sov_sequencer::get_sequencer_rpc;
 use sov_stf_runner::get_ledger_rpc;
 
-use crate::stf::StfWithBuilder;
+use template_stf::StfWithBuilder;
 
 /// register sequencer rpc methods.
 pub(crate) fn register_sequencer<Vm, Da>(
