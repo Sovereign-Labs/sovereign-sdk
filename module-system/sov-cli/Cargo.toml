@@ -30,5 +30,5 @@ jsonrpsee = { workspace = true, features = ["client"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-demo-stf = { path = "../../examples/demo-stf", features = ["native"] }
+demo-stf = { path = "../../examples/demo-rollup/stf", features = ["native"] }
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }

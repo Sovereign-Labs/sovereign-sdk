@@ -478,7 +478,7 @@ use crate::offchain::{update_collection, update_nft};
   * `sov-nft-module`
 * `demo-rollup` already has the offchain flag and if passed in, conditionally includes `demo-stf` with the feature enabled
 * `demo-stf` also has the offchain feature. But the module we just created is a new one, so we need to ensure that `demo-stf` includes out module with the `offchain` flag enabled.
-* Modify [Cargo.toml](../../../examples/demo-stf/Cargo.toml)
+* Modify [Cargo.toml](../../../examples/demo-rollup/stf/Cargo.toml)
 ```
 [features]
 ...

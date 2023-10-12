@@ -1,11 +1,11 @@
 use std::net::SocketAddr;
 
 use rollup_template::rollup::Rollup;
-use rollup_template::stf::GenesisConfig;
 use sov_modules_api::default_context::DefaultContext;
 use sov_rollup_interface::mocks::{MockDaConfig, MockDaService, MockDaSpec};
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
+use template_stf::GenesisConfig;
 use tokio::sync::oneshot;
 
 pub async fn start_rollup<Vm: ZkvmHost>(rpc_reporting_channel: oneshot::Sender<SocketAddr>) {
