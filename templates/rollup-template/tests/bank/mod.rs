@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use borsh::BorshSerialize;
 use jsonrpsee::core::client::{Subscription, SubscriptionClientT};
 use jsonrpsee::rpc_params;
-use rollup_template::stf::RuntimeCall;
+use template_stf::RuntimeCall;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
