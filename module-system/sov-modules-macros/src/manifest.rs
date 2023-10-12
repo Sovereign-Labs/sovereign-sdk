@@ -3,7 +3,7 @@ use std::{env, fmt, fs, ops};
 
 use proc_macro2::{Ident, TokenStream};
 use quote::format_ident;
-use serde_json::Value;
+use serde_json::{Map, Value};
 use syn::{PathArguments, Type, TypePath};
 
 #[derive(Debug, Clone)]
@@ -49,11 +49,14 @@ impl<'a> Manifest<'a> {
     /// The `parent` is used to report the errors to the correct span location.
     pub fn read_constants(parent: &'a Ident) -> Result<Self, syn::Error> {
         let manifest = "constants.json";
-        let initial_path = match env::var("CONSTANTS_MANIFEST").and_then(|v| if v.is_empty() {
-            Err(env::VarError::NotPresent)
-        } else {
-            Ok(v)
-        }) {
+        let initial_path =  match env::var("CONSTANTS_MANIFEST"){
+            Ok(p) if p.is_empty() => {
+                Err(Self::err(
+                    &p,
+                    parent,
+                    format!("failed to read target path for sovereign manifest file: env var `CONSTANTS_MANIFEST` was set to the empty string"),
+                ))
+            },
             Ok(p) => PathBuf::from(&p).canonicalize().map_err(|e| {
                 Self::err(
                     &p,
@@ -117,6 +120,29 @@ impl<'a> Manifest<'a> {
         Self::read_str(manifest, path, parent)
     }
 
+    /// Gets the requested object from the manifest by key
+    fn get_object(&self, field: &Ident, key: &str) -> Result<&Map<String, Value>, syn::Error> {
+        self.value
+            .as_object()
+            .ok_or_else(|| Self::err(&self.path, field, "manifest is not an object"))?
+            .get(key)
+            .ok_or_else(|| {
+                Self::err(
+                    &self.path,
+                    field,
+                    format!("manifest does not contain a `{key}` attribute"),
+                )
+            })?
+            .as_object()
+            .ok_or_else(|| {
+                Self::err(
+                    &self.path,
+                    field,
+                    format!("`{key}` attribute of `{field}` is not an object"),
+                )
+            })
+    }
+
     /// Parses a gas config constant from the manifest file. Returns a `TokenStream` with the
     /// following structure:
     ///
@@ -132,28 +158,7 @@ impl<'a> Manifest<'a> {
     /// The `gas` field resolution will first attempt to query `gas.parent`, and then fallback to
     /// `gas`. They must be objects with arrays of integers as fields.
     pub fn parse_gas_config(&self, ty: &Type, field: &Ident) -> Result<TokenStream, syn::Error> {
-        let map = self
-            .value
-            .as_object()
-            .ok_or_else(|| Self::err(&self.path, field, "manifest is not an object"))?;
-
-        let root = map
-            .get("gas")
-            .ok_or_else(|| {
-                Self::err(
-                    &self.path,
-                    field,
-                    "manifest does not contain a `gas` attribute",
-                )
-            })?
-            .as_object()
-            .ok_or_else(|| {
-                Self::err(
-                    &self.path,
-                    field,
-                    format!("`gas` attribute of `{}` is not an object", field),
-                )
-            })?;
+        let root = self.get_object(field, "gas")?;
 
         let root = match root.get(&self.parent.to_string()) {
             Some(Value::Object(m)) => m,
@@ -248,28 +253,7 @@ impl<'a> Manifest<'a> {
         vis: syn::Visibility,
         attrs: &[syn::Attribute],
     ) -> Result<TokenStream, syn::Error> {
-        let map = self
-            .value
-            .as_object()
-            .ok_or_else(|| Self::err(&self.path, field, "manifest is not an object"))?;
-
-        let root = map
-            .get("constants")
-            .ok_or_else(|| {
-                Self::err(
-                    &self.path,
-                    field,
-                    "manifest does not contain a `constants` attribute",
-                )
-            })?
-            .as_object()
-            .ok_or_else(|| {
-                Self::err(
-                    &self.path,
-                    field,
-                    format!("`constants` attribute of `{}` is not an object", field),
-                )
-            })?;
+        let root = self.get_object(field, "constants")?;
         let value = root.get(&field.to_string()).ok_or_else(|| {
             Self::err(
                 &self.path,
@@ -292,13 +276,11 @@ impl<'a> Manifest<'a> {
         ty: &Type,
     ) -> Result<TokenStream, syn::Error> {
         match value {
-            Value::Null => {
-                return Err(Self::err(
-                    &self.path,
-                    field,
-                    format!("`{}` is `null`", field),
-                ))
-            }
+            Value::Null => Err(Self::err(
+                &self.path,
+                field,
+                format!("`{}` is `null`", field),
+            )),
             Value::Bool(b) => Ok(quote::quote!(#b)),
             Value::Number(n) => {
                 if n.is_u64() {
@@ -308,7 +290,7 @@ impl<'a> Manifest<'a> {
                     let n = n.as_i64().unwrap();
                     Ok(quote::quote!(#n as #ty))
                 } else {
-                    Err(Self::err(&self.path, field, format!("All numeric values must be representable as 64 bit integers during parsing.")))
+                    Err(Self::err(&self.path, field, "All numeric values must be representable as 64 bit integers during parsing.".to_string()))
                 }
             }
             Value::String(s) => Ok(quote::quote!(#s)),
