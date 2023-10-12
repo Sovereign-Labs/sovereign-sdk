@@ -3,7 +3,6 @@ use std::net::SocketAddr;
 use borsh::BorshSerialize;
 use jsonrpsee::core::client::{Subscription, SubscriptionClientT};
 use jsonrpsee::rpc_params;
-use template_stf::RuntimeCall;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
@@ -11,6 +10,7 @@ use sov_modules_api::{PrivateKey, Spec};
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::mocks::MockDaSpec;
 use sov_sequencer::utils::SimpleClient;
+use template_stf::RuntimeCall;
 
 use super::test_helpers::start_rollup;
 const TOKEN_SALT: u64 = 0;

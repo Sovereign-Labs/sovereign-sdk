@@ -9,10 +9,10 @@ use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{Prover, RollupConfig, RunnerConfig, StateTransitionRunner};
+use template_stf::{get_rpc_methods, GenesisConfig, Runtime, StfWithBuilder};
 use tokio::sync::oneshot;
 
 use self::rpc::{register_ledger, register_sequencer};
-use template_stf::{get_rpc_methods, GenesisConfig, Runtime, StfWithBuilder};
 
 type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>;
 
