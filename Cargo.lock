@@ -8556,6 +8556,7 @@ dependencies = [
  "sov-state",
  "sov-stf-runner",
  "sov-zk-cycle-macros",
+ "stf",
  "tempfile",
  "tendermint 0.32.2",
  "tokio",
@@ -9519,6 +9520,43 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "stf"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "clap 4.4.6",
+ "hex",
+ "jsonrpsee 0.20.1",
+ "rand 0.8.5",
+ "reth-primitives",
+ "serde",
+ "serde_json",
+ "simple-nft-module",
+ "sov-accounts",
+ "sov-bank",
+ "sov-blob-storage",
+ "sov-chain-state",
+ "sov-cli",
+ "sov-data-generators",
+ "sov-evm",
+ "sov-modules-api",
+ "sov-modules-stf-template",
+ "sov-nft-module",
+ "sov-rollup-interface",
+ "sov-sequencer",
+ "sov-sequencer-registry",
+ "sov-state",
+ "sov-stf-runner",
+ "sov-value-setter",
+ "stf",
+ "tempfile",
+ "tokio",
+ "toml 0.8.2",
+ "tracing",
+]
 
 [[package]]
 name = "string_cache"

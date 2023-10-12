@@ -21,6 +21,7 @@ sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-templat
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module" }
 demo-stf = { path = "../demo-stf", features = ["native"] }
+stf = { path = "./stf" }
 risc0 = { path = "./provers/risc0" }
 borsh = { workspace = true, features = ["bytes"]}
 async-trait = { workspace = true, optional = true }
