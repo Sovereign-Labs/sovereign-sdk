@@ -1,18 +1,20 @@
 use sov_modules_api::macros::config_constant;
 #[config_constant]
-pub const TEST_U32: u32 = 0;
+pub const TEST_U32: u32;
 
 #[config_constant]
-pub const TEST_ARRAY_OF_U8: [u8; 32] = [0; 32];
+pub const TEST_ARRAY_OF_U8: [u8; 32];
 
 #[config_constant]
-pub const TEST_NESTED_ARRAY: [[u8; 3]; 2] = [[0; 3]; 2];
+/// This one has a doc attr
+pub const TEST_NESTED_ARRAY: [[u8; 3]; 2];
 
 #[config_constant]
-pub const TEST_BOOL: bool = false;
+pub const TEST_BOOL: bool;
 
 #[config_constant]
-pub const TEST_STRING: &str = "Some String";
+/// This one is not visible
+const TEST_STRING: &str;
 
 fn main() {
     assert_eq!(TEST_U32, 42);
