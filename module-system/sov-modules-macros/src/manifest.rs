@@ -54,7 +54,7 @@ impl<'a> Manifest<'a> {
                 Err(Self::err(
                     &p,
                     parent,
-                    format!("failed to read target path for sovereign manifest file: env var `CONSTANTS_MANIFEST` was set to the empty string"),
+                    "failed to read target path for sovereign manifest file: env var `CONSTANTS_MANIFEST` was set to the empty string".to_string(),
                 ))
             },
             Ok(p) => PathBuf::from(&p).canonicalize().map_err(|e| {
