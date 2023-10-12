@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::{env, fmt, fs, ops};
 
 use proc_macro2::{Ident, TokenStream};
+use quote::format_ident;
 use serde_json::Value;
 use syn::{PathArguments, Type, TypePath};
 
@@ -48,12 +49,16 @@ impl<'a> Manifest<'a> {
     /// The `parent` is used to report the errors to the correct span location.
     pub fn read_constants(parent: &'a Ident) -> Result<Self, syn::Error> {
         let manifest = "constants.json";
-        let initial_path = match env::var("CONSTANTS_MANIFEST") {
+        let initial_path = match env::var("CONSTANTS_MANIFEST").and_then(|v| if v.is_empty() {
+            Err(env::VarError::NotPresent)
+        } else {
+            Ok(v)
+        }) {
             Ok(p) => PathBuf::from(&p).canonicalize().map_err(|e| {
                 Self::err(
                     &p,
                     parent,
-                    format!("failed access base dir for sovereign manifest file `{p}`: {e}"),
+                    format!("failed to canonicalize path for sovereign manifest file from env var `{p}`: {e}"),
                 )
             }),
             Err(_) => {
@@ -168,7 +173,7 @@ impl<'a> Manifest<'a> {
                 Self::err(
                     &self.path,
                     field,
-                    format!("failed to parse key attribyte `{}`: {}", k, e),
+                    format!("failed to parse key attribute `{}`: {}", k, e),
                 )
             })?;
 
@@ -234,6 +239,104 @@ impl<'a> Manifest<'a> {
                 #(#field_values,)*
             };
         })
+    }
+
+    pub fn parse_constant(
+        &self,
+        ty: &Type,
+        field: &Ident,
+        vis: syn::Visibility,
+        attrs: &[syn::Attribute],
+    ) -> Result<TokenStream, syn::Error> {
+        let map = self
+            .value
+            .as_object()
+            .ok_or_else(|| Self::err(&self.path, field, "manifest is not an object"))?;
+
+        let root = map
+            .get("constants")
+            .ok_or_else(|| {
+                Self::err(
+                    &self.path,
+                    field,
+                    "manifest does not contain a `constants` attribute",
+                )
+            })?
+            .as_object()
+            .ok_or_else(|| {
+                Self::err(
+                    &self.path,
+                    field,
+                    format!("`constants` attribute of `{}` is not an object", field),
+                )
+            })?;
+        let value = root.get(&field.to_string()).ok_or_else(|| {
+            Self::err(
+                &self.path,
+                field,
+                format!("manifest does not contain a `{}` attribute", field),
+            )
+        })?;
+        let value = self.value_to_tokens(field, value, ty)?;
+        let output = quote::quote! {
+            #(#attrs)*
+            #vis const #field: #ty = #value;
+        };
+        Ok(output)
+    }
+
+    fn value_to_tokens(
+        &self,
+        field: &Ident,
+        value: &serde_json::Value,
+        ty: &Type,
+    ) -> Result<TokenStream, syn::Error> {
+        match value {
+            Value::Null => {
+                return Err(Self::err(
+                    &self.path,
+                    field,
+                    format!("`{}` is `null`", field),
+                ))
+            }
+            Value::Bool(b) => Ok(quote::quote!(#b)),
+            Value::Number(n) => {
+                if n.is_u64() {
+                    let n = n.as_u64().unwrap();
+                    Ok(quote::quote!(#n as #ty))
+                } else if n.is_i64() {
+                    let n = n.as_i64().unwrap();
+                    Ok(quote::quote!(#n as #ty))
+                } else {
+                    Err(Self::err(&self.path, field, format!("All numeric values must be representable as 64 bit integers during parsing.")))
+                }
+            }
+            Value::String(s) => Ok(quote::quote!(#s)),
+            Value::Array(arr) => {
+                let mut values = Vec::with_capacity(arr.len());
+                let ty = if let Type::Array(ty) = ty {
+                    &ty.elem
+                } else {
+                    return Err(Self::err(
+                        &self.path,
+                        field,
+                        format!(
+                            "Found value of type {:?} while parsing `{}` but expected an array type ",
+                            ty, field
+                        ),
+                    ));
+                };
+                for (idx, value) in arr.iter().enumerate() {
+                    values.push(self.value_to_tokens(
+                        &format_ident!("{field}_{idx}"),
+                        value,
+                        ty,
+                    )?);
+                }
+                Ok(quote::quote!([#(#values,)*]))
+            }
+            Value::Object(_) => todo!(),
+        }
     }
 
     fn err<P, T>(path: P, ident: &syn::Ident, msg: T) -> syn::Error

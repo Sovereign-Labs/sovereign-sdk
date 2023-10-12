@@ -2,11 +2,29 @@
     "comment": "Sovereign SDK constants",
     "gas": {
         "Bank": {
-            "create_token": [4, 4],
-            "transfer": [5, 5],
-            "burn": [2, 2],
-            "mint": [2, 2],
-            "freeze": [1, 1]
+            "create_token": [
+                4,
+                4
+            ],
+            "transfer": [
+                5,
+                5
+            ],
+            "burn": [
+                2,
+                2
+            ],
+            "mint": [
+                2,
+                2
+            ],
+            "freeze": [
+                1,
+                1
+            ]
         }
+    },
+    "constants": {
+        "TEST_U32": 42
     }
 }
