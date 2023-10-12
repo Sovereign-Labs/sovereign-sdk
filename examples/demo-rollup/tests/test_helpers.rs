@@ -1,11 +1,11 @@
 use std::net::SocketAddr;
 use std::path::Path;
 
-use demo_stf::genesis_config::GenesisPaths;
 use sov_demo_rollup::{new_rollup_with_mock_da_from_config, DemoProverConfig};
 use sov_rollup_interface::mocks::{MockAddress, MockDaConfig};
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
+use stf::genesis_config::GenesisPaths;
 use tokio::sync::oneshot;
 
 pub async fn start_rollup<Vm: ZkvmHost, P: AsRef<Path>>(

@@ -20,8 +20,7 @@ sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] 
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module" }
-demo-stf = { path = "../demo-stf", features = ["native"] }
-stf = { path = "./stf" }
+stf = { path = "./stf", features = ["native"] }
 risc0 = { path = "./provers/risc0" }
 borsh = { workspace = true, features = ["bytes"]}
 async-trait = { workspace = true, optional = true }
@@ -81,10 +80,10 @@ regex = "1.5"
 
 [features]
 default = [] # Deviate from convention by making the "native" feature active by default. This aligns with how this package is meant to be used (as a binary first, library second).
-experimental = ["default", "sov-ethereum/experimental", "reth-primitives", "secp256k1", "demo-stf/experimental", "sov-ethereum/local"]  
+experimental = ["default", "sov-ethereum/experimental", "reth-primitives", "secp256k1", "stf/experimental", "sov-ethereum/local"]  
 	
 bench = ["async-trait", "hex", "sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "risc0/bench"]
-offchain = ["demo-stf/offchain"]
+offchain = ["stf/offchain"]
 
 [[bench]]
 name = "rollup_bench"

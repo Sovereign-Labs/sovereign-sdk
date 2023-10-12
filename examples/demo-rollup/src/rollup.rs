@@ -4,9 +4,6 @@ use std::str::FromStr;
 
 use anyhow::Context;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
-use demo_stf::genesis_config::{get_genesis_config, GenesisPaths, StorageConfig};
-use demo_stf::runtime::{get_rpc_methods, GenesisConfig, Runtime};
-use demo_stf::{create_zk_app_template, App, AppVerifier};
 #[cfg(feature = "experimental")]
 use secp256k1::SecretKey;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
@@ -29,6 +26,9 @@ use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{
     from_toml_path, ProofGenConfig, Prover, RollupConfig, RunnerConfig, StateTransitionRunner,
 };
+use stf::genesis_config::{get_genesis_config, GenesisPaths, StorageConfig};
+use stf::runtime::{get_rpc_methods, GenesisConfig, Runtime};
+use stf::{create_zk_app_template, App, AppVerifier};
 use tokio::sync::oneshot;
 use tracing::debug;
 
