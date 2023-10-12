@@ -13,7 +13,7 @@ use sov_rollup_interface::mocks::{
     MOCK_SEQUENCER_DA_ADDRESS,
 };
 use sov_rollup_interface::services::da::DaService;
-use stf::runtime::Runtime;
+use demo_stf::runtime::Runtime;
 
 #[derive(Clone)]
 /// A simple DaService for a random number generator.

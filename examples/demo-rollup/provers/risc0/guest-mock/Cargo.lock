@@ -246,6 +246,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "demo-stf"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "hex",
+ "serde",
+ "simple-nft-module",
+ "sov-accounts",
+ "sov-bank",
+ "sov-blob-storage",
+ "sov-chain-state",
+ "sov-modules-api",
+ "sov-modules-stf-template",
+ "sov-nft-module",
+ "sov-rollup-interface",
+ "sov-sequencer-registry",
+ "sov-state",
+ "sov-stf-runner",
+ "sov-value-setter",
+ "tracing",
+]
+
+[[package]]
 name = "derive_more"
 version = "0.99.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -898,11 +922,11 @@ name = "sov-demo-prover-guest-mock"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "demo-stf",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "sov-risc0-adapter",
  "sov-rollup-interface",
- "stf",
 ]
 
 [[package]]
@@ -1062,30 +1086,6 @@ version = "0.2.0"
 dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
-]
-
-[[package]]
-name = "stf"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "borsh",
- "hex",
- "serde",
- "simple-nft-module",
- "sov-accounts",
- "sov-bank",
- "sov-blob-storage",
- "sov-chain-state",
- "sov-modules-api",
- "sov-modules-stf-template",
- "sov-nft-module",
- "sov-rollup-interface",
- "sov-sequencer-registry",
- "sov-state",
- "sov-stf-runner",
- "sov-value-setter",
- "tracing",
 ]
 
 [[package]]

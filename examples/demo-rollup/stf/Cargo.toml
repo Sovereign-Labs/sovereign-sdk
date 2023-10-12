@@ -1,5 +1,5 @@
 [package]
-name = "stf"
+name = "demo-stf"
 version = { workspace = true }
 edition = { workspace = true }
 resolver = "2"
@@ -47,7 +47,7 @@ sov-evm = { path = "../../../module-system/module-implementations/sov-evm", opti
 [dev-dependencies]
 sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"] }
 sov-data-generators = { path = "../../../module-system/utils/sov-data-generators" }
-stf = { path = ".", features = ["native"] }
+demo-stf = { path = ".", features = ["native"] }
 tempfile = { workspace = true }
 rand = "0.8"
 

@@ -4,7 +4,7 @@ use clap::Parser;
 use risc0::{MOCK_DA_ELF, ROLLUP_ELF};
 use sov_demo_rollup::{new_rollup_with_celestia_da, new_rollup_with_mock_da, DemoProverConfig};
 use sov_risc0_adapter::host::Risc0Host;
-use stf::genesis_config::GenesisPaths;
+use demo_stf::genesis_config::GenesisPaths;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 

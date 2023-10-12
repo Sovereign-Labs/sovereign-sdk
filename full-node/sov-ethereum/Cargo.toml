@@ -17,7 +17,7 @@ jsonrpsee = { workspace = true, features = ["http-client", "server"] }
 sov-rollup-interface = { path = "../../rollup-interface" }
 
 sov-evm = { path = "../../module-system/module-implementations/sov-evm" }
-stf = { path = "../../examples/demo-rollup/stf", features = ["native"] }
+demo-stf = { path = "../../examples/demo-rollup/stf", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api" }
 
 borsh = { workspace = true }
@@ -36,5 +36,5 @@ tokio = { workspace = true }
 [features]
 default = []
 local = []
-experimental = ["stf/experimental", "sov-evm/experimental", "local"]
-native = ["stf/native", "sov-evm/native"]
+experimental = ["demo-stf/experimental", "sov-evm/experimental", "local"]
+native = ["demo-stf/native", "sov-evm/native"]

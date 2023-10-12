@@ -12,7 +12,7 @@ pub mod experimental {
     use std::sync::{Arc, Mutex};
 
     use borsh::ser::BorshSerialize;
-    use stf::runtime::{DefaultContext, Runtime};
+    use demo_stf::runtime::{DefaultContext, Runtime};
     use ethers::types::{Bytes, H256};
     use jsonrpsee::types::ErrorObjectOwned;
     use jsonrpsee::RpcModule;

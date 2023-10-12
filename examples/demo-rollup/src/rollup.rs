@@ -26,9 +26,9 @@ use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{
     from_toml_path, ProofGenConfig, Prover, RollupConfig, RunnerConfig, StateTransitionRunner,
 };
-use stf::genesis_config::{get_genesis_config, GenesisPaths, StorageConfig};
-use stf::runtime::{get_rpc_methods, GenesisConfig, Runtime};
-use stf::{create_zk_app_template, App, AppVerifier};
+use demo_stf::genesis_config::{get_genesis_config, GenesisPaths, StorageConfig};
+use demo_stf::runtime::{get_rpc_methods, GenesisConfig, Runtime};
+use demo_stf::{create_zk_app_template, App, AppVerifier};
 use tokio::sync::oneshot;
 use tracing::debug;
 

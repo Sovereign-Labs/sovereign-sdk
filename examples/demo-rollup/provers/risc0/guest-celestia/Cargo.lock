@@ -584,6 +584,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "demo-stf"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "hex",
+ "serde",
+ "simple-nft-module",
+ "sov-accounts",
+ "sov-bank",
+ "sov-blob-storage",
+ "sov-chain-state",
+ "sov-modules-api",
+ "sov-modules-stf-template",
+ "sov-nft-module",
+ "sov-rollup-interface",
+ "sov-sequencer-registry",
+ "sov-state",
+ "sov-stf-runner",
+ "sov-value-setter",
+ "tracing",
+]
+
+[[package]]
 name = "der"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1983,11 +2007,11 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "const-rollup-config",
+ "demo-stf",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "sov-celestia-adapter",
  "sov-risc0-adapter",
- "stf",
 ]
 
 [[package]]
@@ -2174,30 +2198,6 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
-name = "stf"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "borsh",
- "hex",
- "serde",
- "simple-nft-module",
- "sov-accounts",
- "sov-bank",
- "sov-blob-storage",
- "sov-chain-state",
- "sov-modules-api",
- "sov-modules-stf-template",
- "sov-nft-module",
- "sov-rollup-interface",
- "sov-sequencer-registry",
- "sov-state",
- "sov-stf-runner",
- "sov-value-setter",
- "tracing",
-]
 
 [[package]]
 name = "subtle"

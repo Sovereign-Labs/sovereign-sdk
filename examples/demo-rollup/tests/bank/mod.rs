@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
 
 use borsh::BorshSerialize;
-use stf::genesis_config::GenesisPaths;
-use stf::runtime::RuntimeCall;
+use demo_stf::genesis_config::GenesisPaths;
+use demo_stf::runtime::RuntimeCall;
 use jsonrpsee::core::client::{Subscription, SubscriptionClientT};
 use jsonrpsee::rpc_params;
 use risc0::MOCK_DA_ELF;

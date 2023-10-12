@@ -1,7 +1,6 @@
 #![no_main]
-
 use sov_risc0_adapter::guest::Risc0Guest;
-use stf::{create_zk_app_template, AppVerifier};
+use demo_stf::{create_zk_app_template, AppVerifier};
 
 use sov_rollup_interface::mocks::MockDaVerifier;
 

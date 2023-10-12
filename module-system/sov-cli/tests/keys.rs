@@ -1,4 +1,4 @@
-use stf::runtime::RuntimeCall;
+use demo_stf::runtime::RuntimeCall;
 use sov_cli::wallet_state::{KeyIdentifier, PrivateKeyAndAddress, WalletState};
 use sov_cli::workflows::keys::KeyWorkflow;
 use sov_modules_api::default_context::DefaultContext;

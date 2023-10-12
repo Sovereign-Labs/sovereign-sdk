@@ -10,7 +10,7 @@ use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::Zkvm;
 use sov_sequencer::get_sequencer_rpc;
 use sov_stf_runner::get_ledger_rpc;
-use stf::App;
+use demo_stf::App;
 
 // register sequencer rpc methods.
 pub(crate) fn register_sequencer<Vm, Da>(

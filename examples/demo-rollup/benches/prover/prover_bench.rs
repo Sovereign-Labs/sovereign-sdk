@@ -21,8 +21,8 @@ use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{from_toml_path, RollupConfig};
-use stf::genesis_config::{get_genesis_config, GenesisPaths};
-use stf::App;
+use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
+use demo_stf::App;
 use tempfile::TempDir;
 
 #[derive(Debug)]
