@@ -14,9 +14,9 @@ prost = "0.12"
 # I keep this commented as a reminder to opportunity to optimze this crate for non native compilation
 #tendermint = { version = "0.32", default-features = false, features = ["std"] }
 
-celestia-proto = { git = "https://github.com/eigerco/celestia-node-rs.git", rev = "925836a" }
-celestia-rpc = { git = "https://github.com/eigerco/celestia-node-rs.git", rev = "925836a", default-features = false, optional = true }
-celestia-types = { git = "https://github.com/eigerco/celestia-node-rs.git", rev = "925836a", default-features = false }
+celestia-proto = { git = "https://github.com/eigerco/celestia-node-rs.git", rev = "1fa61eb" }
+celestia-rpc = { git = "https://github.com/eigerco/celestia-node-rs.git", rev = "1fa61eb", default-features = false, optional = true }
+celestia-types = { git = "https://github.com/eigerco/celestia-node-rs.git", rev = "1fa61eb", default-features = false }
 tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "1f8b574", default-features = false }
 tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "1f8b574" }
 nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "d821332", features = [

@@ -111,10 +111,9 @@ impl DaService for CelestiaService {
 
         // Fetch the rollup namespace shares, etx data and extended data square
         debug!("Fetching rollup data...");
-        let rollup_rows_future =
-            client.share_get_shares_by_namespace(&header.dah, rollup_namespace);
-        let etx_rows_future = client.share_get_shares_by_namespace(&header.dah, PFB_NAMESPACE);
-        let data_square_future = client.share_get_eds(&header.dah);
+        let rollup_rows_future = client.share_get_shares_by_namespace(&header, rollup_namespace);
+        let etx_rows_future = client.share_get_shares_by_namespace(&header, PFB_NAMESPACE);
+        let data_square_future = client.share_get_eds(&header);
 
         let (rollup_rows, etx_rows, data_square) =
             tokio::try_join!(rollup_rows_future, etx_rows_future, data_square_future)?;
