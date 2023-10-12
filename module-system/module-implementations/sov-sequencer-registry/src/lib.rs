@@ -136,6 +136,21 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> SequencerRegistry
         self.preferred_sequencer.get(working_set)
     }
 
+    /// Returns the preferred sequencer, or [`None`] it wasn't set.
+    ///
+    /// Read about [`SequencerConfig::is_preferred_sequencer`] to learn about
+    /// preferred sequencers.
+    pub fn get_preferred_sequencer_rollup_address(
+        &self,
+        working_set: &mut WorkingSet<C>,
+    ) -> Option<C::Address> {
+        self.preferred_sequencer.get(working_set).map(|da_addr| {
+            self.allowed_sequencers
+                .get(&da_addr, working_set)
+                .expect("Preferred Sequencer must have known address on rollup")
+        })
+    }
+
     /// Checks whether `sender` is a registered sequencer.
     pub fn is_sender_allowed(&self, sender: &Da::Address, working_set: &mut WorkingSet<C>) -> bool {
         self.allowed_sequencers.get(sender, working_set).is_some()
