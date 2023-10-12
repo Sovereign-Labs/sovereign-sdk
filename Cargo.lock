@@ -7335,6 +7335,7 @@ dependencies = [
  "sov-state",
  "sov-stf-runner",
  "tempfile",
+ "template-stf",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.17",
@@ -9887,6 +9888,10 @@ dependencies = [
  "rustix 0.38.15",
  "windows-sys 0.48.0",
 ]
+
+[[package]]
+name = "template-stf"
+version = "0.2.0"
 
 [[package]]
 name = "tendermint"

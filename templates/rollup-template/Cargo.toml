@@ -28,6 +28,8 @@ serde_json = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, optional = true }
 anyhow = { workspace = true }
 
+template-stf = { path = "./stf" } 
+
 sov-db = { path = "../../full-node/db/sov-db", optional = true } 
 sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true } 
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] } 
