@@ -154,7 +154,7 @@ impl CelestiaHeader {
             .data_hash
             .as_ref()
             .ok_or(ValidationError::MissingDataHash)?;
-        if self.dah.hash != data_hash.0 {
+        if self.dah.hash().as_ref() != data_hash.0 {
             return Err(ValidationError::InvalidDataRoot);
         }
         Ok(())

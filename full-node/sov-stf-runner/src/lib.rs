@@ -4,6 +4,11 @@
 #[cfg(feature = "native")]
 mod config;
 
+#[cfg(feature = "native")]
+use std::path::Path;
+
+#[cfg(feature = "native")]
+use anyhow::Context;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use config::RpcConfig;
@@ -17,6 +22,8 @@ pub use config::{from_toml_path, RollupConfig, RunnerConfig, StorageConfig};
 pub use ledger_rpc::get_ledger_rpc;
 #[cfg(feature = "native")]
 pub use runner::*;
+#[cfg(feature = "native")]
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -46,4 +53,17 @@ where
     pub blobs: Vec<<DA as DaSpec>::BlobTransaction>,
     /// The witness for the state transition
     pub state_transition_witness: ST::Witness,
+}
+
+#[cfg(feature = "native")]
+/// Reads json file.
+pub fn read_json_file<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> anyhow::Result<T> {
+    let path_str = path.as_ref().display();
+
+    let data = std::fs::read_to_string(&path)
+        .with_context(|| format!("Failed to read genesis from {}", path_str))?;
+    let config: T = serde_json::from_str(&data)
+        .with_context(|| format!("Failed to parse genesis from {}", path_str))?;
+
+    Ok(config)
 }

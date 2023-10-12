@@ -5,8 +5,7 @@
 use std::convert::AsRef;
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context as AnyhowContext};
-use serde::de::DeserializeOwned;
+use anyhow::bail;
 use sov_accounts::AccountConfig;
 use sov_bank::BankConfig;
 use sov_chain_state::ChainStateConfig;
@@ -18,6 +17,7 @@ use sov_nft_module::NonFungibleTokenConfig;
 use sov_rollup_interface::da::DaSpec;
 use sov_sequencer_registry::SequencerConfig;
 pub use sov_state::config::Config as StorageConfig;
+use sov_stf_runner::read_json_file;
 use sov_value_setter::ValueSetterConfig;
 
 /// Creates config for a rollup with some default settings, the config is used in demos and tests.
@@ -139,17 +139,6 @@ fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
         #[cfg(feature = "experimental")]
         evm_config,
     ))
-}
-
-fn read_json_file<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> anyhow::Result<T> {
-    let path_str = path.as_ref().display();
-
-    let data = std::fs::read_to_string(&path)
-        .with_context(|| format!("Failed to read genesis from {}", path_str))?;
-    let config: T = serde_json::from_str(&data)
-        .with_context(|| format!("Failed to parse genesis from {}", path_str))?;
-
-    Ok(config)
 }
 
 #[cfg(feature = "experimental")]

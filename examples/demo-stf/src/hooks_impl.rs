@@ -19,6 +19,8 @@ impl<C: Context, Da: DaSpec> TxHooks for Runtime<C, Da> {
         tx: &Transaction<Self::Context>,
         working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<<Self::Context as Spec>::Address> {
+        // Before executing a transaction, retrieve the sender's address from the accounts module
+        // and check the nonce
         self.accounts.pre_dispatch_tx_hook(tx, working_set)
     }
 
@@ -27,6 +29,7 @@ impl<C: Context, Da: DaSpec> TxHooks for Runtime<C, Da> {
         tx: &Transaction<Self::Context>,
         working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
+        // After executing each transaction, update the nonce
         self.accounts.post_dispatch_tx_hook(tx, working_set)
     }
 }
@@ -41,6 +44,7 @@ impl<C: Context, Da: DaSpec> ApplyBlobHooks<Da::BlobTransaction> for Runtime<C, 
         blob: &mut Da::BlobTransaction,
         working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
+        // Before executing each batch, check that the sender is registered as a sequencer
         self.sequencer_registry.begin_blob_hook(blob, working_set)
     }
 

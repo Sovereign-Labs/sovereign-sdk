@@ -44,22 +44,22 @@ type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultCont
 
 /// Dependencies needed to run the rollup.
 pub struct Rollup<Vm: ZkvmHost, Da: DaService + Clone> {
-    /// Implementation of the STF.
-    pub app: App<Vm, Da::Spec>,
-    /// Data availability service.
-    pub da_service: Da,
-    /// Ledger db.
-    pub ledger_db: LedgerDB,
-    /// Runner configuration.
-    pub runner_config: RunnerConfig,
-    /// Initial rollup configuration.
-    pub genesis_config: GenesisConfig<DefaultContext, Da::Spec>,
+    // Implementation of the STF.
+    pub(crate) app: App<Vm, Da::Spec>,
+    // Data availability service.
+    pub(crate) da_service: Da,
+    // Ledger db.
+    pub(crate) ledger_db: LedgerDB,
+    // Runner configuration.
+    pub(crate) runner_config: RunnerConfig,
+    // Initial rollup configuration.
+    pub(crate) genesis_config: GenesisConfig<DefaultContext, Da::Spec>,
     #[cfg(feature = "experimental")]
-    /// Configuration for the Ethereum RPC.
-    pub eth_rpc_config: EthRpcConfig,
-    /// Prover for the rollup.
+    // Configuration for the Ethereum RPC.
+    pub(crate) eth_rpc_config: EthRpcConfig,
+    // Prover for the rollup.
     #[allow(clippy::type_complexity)]
-    pub prover: Option<Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm>>,
+    pub(crate) prover: Option<Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm>>,
 }
 
 pub fn configure_prover<Vm: ZkvmHost, Da: DaService>(
