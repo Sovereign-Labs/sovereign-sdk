@@ -8,7 +8,7 @@ Exposes 2 RPC methods:
 2. `sequencer_publishBatch` without any input, which builds the batch using batch builder and publishes it on DA layer.
 
 ### Submit transactions
-Please see [`demo-rollup` README](../../examples/demo-rollup/README.md), with one last parameter, RPC endpoint for sov-sequencer.
+Please see [`demo-rollup` README](../../examples/demo-rollup/README.md).
 
 ### Publish blob
 In order to submit transactions to DA layer, sequencer needs to publish them. This can be done by triggering `publishBatch` endpooint:
