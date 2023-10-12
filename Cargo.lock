@@ -9892,6 +9892,24 @@ dependencies = [
 [[package]]
 name = "template-stf"
 version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "clap 4.4.6",
+ "jsonrpsee 0.20.1",
+ "serde",
+ "serde_json",
+ "sov-accounts",
+ "sov-bank",
+ "sov-modules-api",
+ "sov-modules-stf-template",
+ "sov-rollup-interface",
+ "sov-sequencer",
+ "sov-sequencer-registry",
+ "sov-state",
+ "sov-stf-runner",
+ "tracing",
+]
 
 [[package]]
 name = "tendermint"
