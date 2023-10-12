@@ -47,7 +47,6 @@ clap = { workspace = true}
 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }
-sov-demo-rollup = { path = ".", features = ["native"] }
 sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["smart_contracts"] }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros"}
@@ -80,11 +79,10 @@ log4rs = "1.0"
 regex = "1.5"
 
 [features]
-default = ["native"] # Deviate from convention by making the "native" feature active by default. This aligns with how this package is meant to be used (as a binary first, library second).
-experimental = ["default", "sov-ethereum/experimental", "reth-primitives", "secp256k1", "demo-stf/experimental", "sov-ethereum/local"]
-native = []  
+default = [] # Deviate from convention by making the "native" feature active by default. This aligns with how this package is meant to be used (as a binary first, library second).
+experimental = ["default", "sov-ethereum/experimental", "reth-primitives", "secp256k1", "demo-stf/experimental", "sov-ethereum/local"]  
 	
-bench = ["native", "async-trait", "hex", "sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "risc0/bench"]
+bench = ["async-trait", "hex", "sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "risc0/bench"]
 offchain = ["demo-stf/offchain"]
 
 [[bench]]
