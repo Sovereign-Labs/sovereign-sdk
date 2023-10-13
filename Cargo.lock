@@ -7335,6 +7335,7 @@ dependencies = [
  "sov-state",
  "sov-stf-runner",
  "tempfile",
+ "template-risc0",
  "template-stf",
  "tokio",
  "tracing",
@@ -9890,6 +9891,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "template-risc0"
+version = "0.2.0"
+dependencies = [
+ "risc0-build",
+]
+
+[[package]]
 name = "template-stf"
 version = "0.2.0"
 dependencies = [
@@ -9903,6 +9911,7 @@ dependencies = [
  "sov-bank",
  "sov-modules-api",
  "sov-modules-stf-template",
+ "sov-risc0-adapter",
  "sov-rollup-interface",
  "sov-sequencer",
  "sov-sequencer-registry",

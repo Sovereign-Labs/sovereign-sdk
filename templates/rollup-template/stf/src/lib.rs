@@ -12,6 +12,7 @@ pub use builder::*;
 pub use genesis_config::*;
 pub use runtime::*;
 
+/* 
 use sov_rollup_interface::da::DaVerifier as _;
 use sov_rollup_interface::mocks::MockDaVerifier;
 use sov_risc0_adapter::guest::Risc0Guest;
@@ -25,4 +26,4 @@ pub type ZkvmGuest = Risc0Guest;
 /// Creates a new verifier for the rollup's DA.
 pub fn new_da_verifier() -> DaVerifier {
     DaVerifier::new(())
-}
+}*/
