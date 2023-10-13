@@ -1,4 +1,7 @@
+//! JSON-RPC server and client implementations for Sovereign SDK rollups.
+
 #![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 #[cfg(feature = "server")]
 pub mod server;
