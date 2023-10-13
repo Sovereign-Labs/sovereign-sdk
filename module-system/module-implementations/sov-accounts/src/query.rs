@@ -7,6 +7,10 @@ use crate::{Account, Accounts};
 
 /// This is the response returned from the accounts_getAccount endpoint.
 #[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]
+#[cfg_attr(
+    feature = "arbitrary",
+    derive(arbitrary::Arbitrary, proptest_derive::Arbitrary)
+)]
 pub enum Response {
     /// The account corresponding to the given public key exists.
     AccountExists {
