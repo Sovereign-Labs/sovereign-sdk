@@ -4,9 +4,7 @@
 //! See [`RpcClient`].
 
 use jsonrpsee::proc_macros::rpc;
-use sov_rollup_interface::rpc::{
-    BatchIdentifier, EventIdentifier, QueryMode, SlotIdentifier, TxIdentifier,
-};
+use sov_rollup_interface::rpc::{BatchIdentifier, QueryMode, SlotIdentifier, TxIdentifier};
 use sov_rollup_interface::stf::Event;
 
 use crate::HexHash;
@@ -18,6 +16,9 @@ use crate::HexHash;
 ///
 /// For more information about the specific methods, see the
 /// [`sov_rollup_interface::rpc`] module.
+///
+/// TODO: `getEvents`, which has a `Vec<T>` as a single parameter. That's not
+/// supported by `jsonrpsee`, surprisingly.
 #[rpc(client, namespace = "ledger")]
 pub trait Rpc<Slot, Batch, Tx>
 where
@@ -45,9 +46,6 @@ where
         transaction_ids: Vec<TxIdentifier>,
         query_mode: QueryMode,
     ) -> RpcResult<Vec<Option<Tx>>>;
-
-    #[method(name = "getEvents")]
-    async fn get_events(&self, event_ids: Vec<EventIdentifier>) -> RpcResult<Vec<Option<Event>>>;
 
     #[method(name = "getHead")]
     async fn get_head(&self, query_mode: QueryMode) -> RpcResult<Option<Slot>>;

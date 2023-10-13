@@ -5,9 +5,7 @@ use sov_db::ledger_db::LedgerDB;
 use sov_ledger_rpc::client::RpcClient;
 use sov_ledger_rpc::server::rpc_module;
 use sov_ledger_rpc::HexHash;
-use sov_rollup_interface::rpc::{
-    BatchResponse, EventIdentifier, QueryMode, SlotResponse, TxResponse,
-};
+use sov_rollup_interface::rpc::{BatchResponse, QueryMode, SlotResponse, TxResponse};
 use tempfile::tempdir;
 
 async fn rpc_server() -> (jsonrpsee::server::ServerHandle, SocketAddr) {
@@ -53,10 +51,6 @@ async fn getters_succeed() {
         .unwrap();
     rpc_client
         .get_transactions(vec![], QueryMode::Compact)
-        .await
-        .unwrap();
-    rpc_client
-        .get_events(vec![EventIdentifier::Number(0)])
         .await
         .unwrap();
 
