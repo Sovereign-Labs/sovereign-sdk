@@ -7335,6 +7335,7 @@ dependencies = [
  "sov-state",
  "sov-stf-runner",
  "tempfile",
+ "template-risc0",
  "template-stf",
  "tokio",
  "tracing",
@@ -9892,6 +9893,13 @@ dependencies = [
  "redox_syscall 0.3.5",
  "rustix 0.38.15",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "template-risc0"
+version = "0.2.0"
+dependencies = [
+ "risc0-build",
 ]
 
 [[package]]

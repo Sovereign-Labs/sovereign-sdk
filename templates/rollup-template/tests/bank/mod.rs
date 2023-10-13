@@ -10,7 +10,7 @@ use sov_modules_api::{PrivateKey, Spec};
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::mocks::MockDaSpec;
 use sov_sequencer::utils::SimpleClient;
-use template_stf::RuntimeCall;
+use template_stf::{GenesisPaths, RuntimeCall};
 
 use super::test_helpers::start_rollup;
 const TOKEN_SALT: u64 = 0;
@@ -69,7 +69,11 @@ async fn bank_tx_tests() -> Result<(), anyhow::Error> {
     let (port_tx, port_rx) = tokio::sync::oneshot::channel();
 
     let rollup_task = tokio::spawn(async {
-        start_rollup::<Risc0Host<'static>>(port_tx).await;
+        start_rollup::<Risc0Host<'static>, _>(
+            port_tx,
+            &GenesisPaths::from_dir("test-data/genesis/"),
+        )
+        .await;
     });
 
     // Wait for rollup task to start:

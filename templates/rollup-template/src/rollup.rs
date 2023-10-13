@@ -1,7 +1,5 @@
 //! Defines the rollup full node implementation, including logic for configuring
 //! and starting the rollup node.
-mod rpc;
-
 use serde::de::DeserializeOwned;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
@@ -12,7 +10,7 @@ use sov_stf_runner::{Prover, RollupConfig, RunnerConfig, StateTransitionRunner};
 use template_stf::{get_rpc_methods, GenesisConfig, Runtime, StfWithBuilder};
 use tokio::sync::oneshot;
 
-use self::rpc::{register_ledger, register_sequencer};
+use crate::rpc::{register_ledger, register_sequencer};
 
 type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>;
 

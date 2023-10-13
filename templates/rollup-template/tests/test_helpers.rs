@@ -1,20 +1,25 @@
 use std::net::SocketAddr;
+use std::path::Path;
 
 use rollup_template::rollup::Rollup;
-use sov_modules_api::default_context::DefaultContext;
-use sov_rollup_interface::mocks::{MockDaConfig, MockDaService, MockDaSpec};
+use sov_rollup_interface::mocks::{
+    MockAddress, MockDaConfig, MockDaService, MOCK_SEQUENCER_DA_ADDRESS,
+};
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
-use template_stf::GenesisConfig;
+use template_stf::{get_genesis_config, GenesisPaths};
 use tokio::sync::oneshot;
 
-pub async fn start_rollup<Vm: ZkvmHost>(rpc_reporting_channel: oneshot::Sender<SocketAddr>) {
+pub async fn start_rollup<Vm: ZkvmHost, P: AsRef<Path>>(
+    rpc_reporting_channel: oneshot::Sender<SocketAddr>,
+    genesis_paths: &GenesisPaths<P>,
+) {
     let temp_dir = tempfile::tempdir().unwrap();
     let temp_path = temp_dir.path();
-    let genesis_config = serde_json::from_str::<GenesisConfig<DefaultContext, MockDaSpec>>(
-        include_str!("test_genesis.json"),
-    )
-    .expect("Test genesis configuration must be valid");
+
+    let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
+
+    let genesis_config = get_genesis_config(sequencer_da_address, genesis_paths);
 
     let rollup_config = RollupConfig {
         storage: StorageConfig {
