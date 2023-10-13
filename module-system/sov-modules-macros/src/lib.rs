@@ -14,6 +14,7 @@ mod cli_parser;
 mod common;
 mod default_runtime;
 mod dispatch;
+mod make_constants;
 mod manifest;
 mod module_call_json_schema;
 mod module_info;
@@ -28,6 +29,7 @@ use default_runtime::DefaultRuntimeMacro;
 use dispatch::dispatch_call::DispatchCallMacro;
 use dispatch::genesis::GenesisMacro;
 use dispatch::message_codec::MessageCodec;
+use make_constants::{make_const, PartialItemConst};
 use module_call_json_schema::derive_module_call_json_schema;
 use new_types::address_type_helper;
 use offchain::offchain_generator;
@@ -80,6 +82,15 @@ pub fn codec(input: TokenStream) -> TokenStream {
     let codec_macro = MessageCodec::new("MessageCodec");
 
     handle_macro_error(codec_macro.derive_message_codec(input))
+}
+
+/// Sets a constant from the manifest file instead of hard-coding it inline.
+#[proc_macro_attribute]
+pub fn config_constant(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as PartialItemConst);
+    handle_macro_error(
+        make_const(&input.ident, &input.ty, input.vis, &input.attrs).map(|ok| ok.into()),
+    )
 }
 
 /// Derives a [`jsonrpsee`] implementation for the underlying type. Any code relying on this macro

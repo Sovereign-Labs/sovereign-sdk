@@ -104,7 +104,7 @@ Options:
 - The complete command for generating the create token transaction is
 
 ```
-demo-stf % cargo run --bin sov-cli generate-transaction-from-json my_private_key.json Bank src/sov-cli/test_data/create_token.json 1
+cargo run --bin sov-cli generate-transaction-from-json my_private_key.json Bank src/sov-cli/test_data/create_token.json 1
 ```
 
 - By default the file is formatted in `hex` and contains a blob ready for submission to celestia - the blob only contains a single transaction for now

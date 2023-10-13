@@ -1,8 +1,8 @@
 //! This binary implements the verification logic for the rollup. This is the code that runs inside
 //! of the zkvm in order to generate proofs for the rollup.
 use rollup_template::da::new_da_verifier;
-use rollup_template::stf::{zk_stf, RollupVerifier};
 use rollup_template::zkvm::ZkvmGuest;
+use template_stf::{zk_stf, RollupVerifier};
 
 fn main() {
     let guest = ZkvmGuest::new();

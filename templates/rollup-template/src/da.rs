@@ -7,21 +7,17 @@
 //! Your rollup full node will automatically switch to the new DA layer.
 
 /// The type alias for the DA layer configuration. Change the contents of this alias if you change DA layers.
-#[cfg(feature = "native")]
 pub type DaConfig = sov_rollup_interface::mocks::MockDaConfig;
 /// The type alias for the DA layer verifier. Change the contents of this alias if you change DA layers.
 pub type DaVerifier = MockDaVerifier;
 /// The type alias for the DA service. Change the contents of this alias if you change DA layers.
-#[cfg(feature = "native")]
 pub type DaService = sov_rollup_interface::mocks::MockDaService;
 
 use sov_rollup_interface::da::DaVerifier as _;
 use sov_rollup_interface::mocks::MockDaVerifier;
-#[cfg(feature = "native")]
 use sov_stf_runner::RollupConfig;
 
 /// Creates a new instance of the DA Service
-#[cfg(feature = "native")]
 pub async fn start_da_service(rollup_config: &RollupConfig<DaConfig>) -> DaService {
     DaService::new(rollup_config.da.sender_address)
 }
