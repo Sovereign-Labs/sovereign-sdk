@@ -28,6 +28,8 @@ serde_json = { workspace = true }
 jsonrpsee = { workspace = true }
 anyhow = { workspace = true }
 
+risc0 = { path = "./provers/risc0" }
+
 template-stf = { path = "./stf", features = ["native"] } 
 
 sov-db = { path = "../../full-node/db/sov-db" } 
