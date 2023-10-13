@@ -1,7 +1,7 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
 mod call;
-#[cfg(feature = "arbitrary")]
+#[cfg(all(feature = "arbitrary", feature = "native"))]
 mod fuzz;
 mod genesis;
 mod hooks;
