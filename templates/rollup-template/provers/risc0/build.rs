@@ -19,9 +19,8 @@ fn main() {
         println!("L3");
         risc0_build::embed_methods_with_options(guest_pkg_to_options);
         println!("L4");
-    }  
+    }
 }
-
 
 fn get_guest_options() -> HashMap<&'static str, risc0_build::GuestOptions> {
     HashMap::new()
