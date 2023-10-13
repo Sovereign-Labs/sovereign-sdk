@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 fn main() {
-    println!("==== L1");
     if std::env::var("CI_SKIP_GUEST_BUILD").is_ok() {
         println!("Skipping guest build for CI run");
         let out_dir = std::env::var_os("OUT_DIR").unwrap();
