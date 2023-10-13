@@ -7326,6 +7326,7 @@ dependencies = [
  "sov-accounts",
  "sov-bank",
  "sov-db",
+ "sov-ledger-rpc",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-risc0-adapter",

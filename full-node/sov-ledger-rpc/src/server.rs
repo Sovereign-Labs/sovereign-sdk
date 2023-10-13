@@ -49,8 +49,8 @@ where
     // Try removing the comma from tuples and you'll see the tests fail.
 
     rpc.register_method("ledger_getHead", move |params, ledger| {
-        let args: (Option<QueryMode>,) = params.parse()?;
-        let query_mode = args.0.unwrap_or(QueryMode::Compact);
+        let mut params = params.sequence();
+        let query_mode = params.optional_next()?.unwrap_or(QueryMode::Compact);
         ledger
             .get_head::<B, Tx>(query_mode)
             .map_err(|e| to_jsonrpsee_error_object(e, LEDGER_RPC_ERROR))
@@ -76,8 +76,8 @@ where
             .map_err(|e| to_jsonrpsee_error_object(e, LEDGER_RPC_ERROR))
     })?;
     rpc.register_method("ledger_getEvents", move |params, db| {
-        let ids: (Vec<EventIdentifier>,) = params.parse()?;
-        db.get_events(&ids.0)
+        let ids: Vec<EventIdentifier> = params.parse()?;
+        db.get_events(&ids)
             .map_err(|e| to_jsonrpsee_error_object(e, LEDGER_RPC_ERROR))
     })?;
 
@@ -121,9 +121,9 @@ where
             .map_err(|e| to_jsonrpsee_error_object(e, LEDGER_RPC_ERROR))
     })?;
     rpc.register_method("ledger_getEventByNumber", move |params, ledger| {
-        let args: (u64,) = params.parse()?;
+        let args: u64 = params.one()?;
         ledger
-            .get_event_by_number(args.0)
+            .get_event_by_number(args)
             .map_err(|e| to_jsonrpsee_error_object(e, LEDGER_RPC_ERROR))
     })?;
 
