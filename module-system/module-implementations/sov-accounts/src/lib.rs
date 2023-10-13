@@ -1,6 +1,8 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
 mod call;
+#[cfg(all(feature = "arbitrary", feature = "native"))]
+mod fuzz;
 mod genesis;
 mod hooks;
 pub use genesis::*;
@@ -34,6 +36,7 @@ pub struct Account<C: Context> {
 /// A module responsible for managing accounts on the rollup.
 #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo, Clone)]
+#[cfg_attr(feature = "arbitrary", derive(Debug))]
 pub struct Accounts<C: Context> {
     /// The address of the sov-accounts module.
     #[address]
@@ -70,58 +73,5 @@ impl<C: Context> sov_modules_api::Module for Accounts<C> {
                 Ok(self.update_public_key(new_pub_key, sig, context, working_set)?)
             }
         }
-    }
-}
-
-#[cfg(feature = "arbitrary")]
-impl<'a, C> arbitrary::Arbitrary<'a> for Account<C>
-where
-    C: Context,
-    C::Address: arbitrary::Arbitrary<'a>,
-{
-    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        let addr = u.arbitrary()?;
-        let nonce = u.arbitrary()?;
-        Ok(Self { addr, nonce })
-    }
-}
-
-#[cfg(feature = "arbitrary")]
-impl<'a, C> arbitrary::Arbitrary<'a> for AccountConfig<C>
-where
-    C: Context,
-    C::PublicKey: arbitrary::Arbitrary<'a>,
-{
-    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        // TODO we might want a dedicated struct that will generate the private key counterpart so
-        // payloads can be signed and verified
-        Ok(Self {
-            pub_keys: u.arbitrary_iter()?.collect::<Result<_, _>>()?,
-        })
-    }
-}
-
-#[cfg(feature = "arbitrary")]
-impl<'a, C> Accounts<C>
-where
-    C: Context,
-    C::Address: arbitrary::Arbitrary<'a>,
-    C::PublicKey: arbitrary::Arbitrary<'a>,
-{
-    /// Creates an arbitrary set of accounts and stores it under `working_set`.
-    pub fn arbitrary_workset(
-        u: &mut arbitrary::Unstructured<'a>,
-        working_set: &mut WorkingSet<C>,
-    ) -> arbitrary::Result<Self> {
-        use sov_modules_api::Module;
-
-        let config: AccountConfig<C> = u.arbitrary()?;
-        let accounts = Accounts::default();
-
-        accounts
-            .genesis(&config, working_set)
-            .map_err(|_| arbitrary::Error::IncorrectFormat)?;
-
-        Ok(accounts)
     }
 }

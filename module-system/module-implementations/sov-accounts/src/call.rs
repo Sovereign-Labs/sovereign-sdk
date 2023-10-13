@@ -71,23 +71,3 @@ impl<C: Context> Accounts<C> {
         Ok(())
     }
 }
-
-#[cfg(all(feature = "arbitrary", feature = "native"))]
-impl<'a, C> arbitrary::Arbitrary<'a> for CallMessage<C>
-where
-    C: Context,
-    C::PrivateKey: arbitrary::Arbitrary<'a>,
-{
-    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        use sov_modules_api::PrivateKey;
-
-        let secret = C::PrivateKey::arbitrary(u)?;
-        let public = secret.pub_key();
-
-        let payload_len = u.arbitrary_len::<u8>()?;
-        let payload = u.bytes(payload_len)?;
-        let signature = secret.sign(payload);
-
-        Ok(Self::UpdatePublicKey(public, signature))
-    }
-}

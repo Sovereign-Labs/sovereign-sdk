@@ -47,7 +47,10 @@ pub use crate::witness::{ArrayWitness, Witness};
     serde::Serialize,
     serde::Deserialize,
 )]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[cfg_attr(
+    feature = "arbitrary",
+    derive(arbitrary::Arbitrary, proptest_derive::Arbitrary)
+)]
 pub struct Prefix {
     prefix: AlignedVec,
 }
