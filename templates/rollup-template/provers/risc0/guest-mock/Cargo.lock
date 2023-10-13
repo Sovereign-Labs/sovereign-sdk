@@ -1054,7 +1054,6 @@ dependencies = [
  "sov-bank",
  "sov-modules-api",
  "sov-modules-stf-template",
- "sov-risc0-adapter",
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",

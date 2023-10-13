@@ -27,13 +27,9 @@ borsh = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true, optional = true }
 
-# Change dependencies here to use a different DA layer or ZKVM
-sov-risc0-adapter = { path = "../../../adapters/risc0" }
-
 [features]
 default = []
 native = [
-    "sov-risc0-adapter/native",
 	"sov-modules-api/native", 
 	"sov-accounts/native", 
 	"sov-bank/native", 
