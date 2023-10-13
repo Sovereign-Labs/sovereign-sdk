@@ -43,11 +43,6 @@ where
 {
     let mut rpc = RpcModule::new(ledger);
 
-    // Note: All the `(T, )` tuple hack is to work around a Serde idiosyncrasy,
-    // where tuples with a single element (and no comma) are serialized as
-    // newtypes: <https://github.com/serde-rs/serde/issues/1309>.
-    // Try removing the comma from tuples and you'll see the tests fail.
-
     rpc.register_method("ledger_getHead", move |params, ledger| {
         let mut params = params.sequence();
         let query_mode = params.optional_next()?.unwrap_or(QueryMode::Compact);
