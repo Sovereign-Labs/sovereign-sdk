@@ -8551,6 +8551,7 @@ dependencies = [
  "sov-db",
  "sov-ethereum",
  "sov-evm",
+ "sov-ledger-rpc",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-nft-module",
@@ -8628,6 +8629,22 @@ version = "0.2.0"
 dependencies = [
  "proptest",
  "thiserror",
+]
+
+[[package]]
+name = "sov-ledger-rpc"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "hex",
+ "jsonrpsee 0.20.1",
+ "serde",
+ "sov-db",
+ "sov-modules-api",
+ "sov-rollup-interface",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

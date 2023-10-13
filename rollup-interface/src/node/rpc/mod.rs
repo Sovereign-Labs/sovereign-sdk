@@ -197,6 +197,7 @@ pub trait LedgerRpcProvider {
     /// Get the latest slot in the ledger.
     fn get_head<B: DeserializeOwned + Clone, T: DeserializeOwned>(
         &self,
+        query_mode: QueryMode,
     ) -> Result<Option<SlotResponse<B, T>>, anyhow::Error>;
 
     /// Get a list of slots by id. The IDs need not be ordered.

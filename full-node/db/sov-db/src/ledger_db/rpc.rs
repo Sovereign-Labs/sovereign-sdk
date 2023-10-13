@@ -141,6 +141,7 @@ impl LedgerRpcProvider for LedgerDB {
 
     fn get_head<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
+        query_mode: QueryMode,
     ) -> Result<Option<SlotResponse<B, T>>, anyhow::Error> {
         let next_ids = self.get_next_items_numbers();
         let next_slot = next_ids.slot_number;
@@ -154,7 +155,7 @@ impl LedgerRpcProvider for LedgerDB {
             return Ok(Some(self.populate_slot_response(
                 head_number,
                 stored_slot,
-                QueryMode::Compact,
+                query_mode,
             )?));
         }
         Ok(None)
