@@ -14,11 +14,8 @@ fn main() {
 
         std::fs::write(methods_path, elf).expect("Failed to write mock rollup elf");
     } else {
-        println!("L2");
         let guest_pkg_to_options = get_guest_options();
-        println!("L3");
         risc0_build::embed_methods_with_options(guest_pkg_to_options);
-        println!("L4");
     }
 }
 
