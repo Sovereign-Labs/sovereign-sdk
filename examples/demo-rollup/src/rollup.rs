@@ -113,7 +113,6 @@ fn new_mock_rollup<P: AsRef<Path>>(
     rollup_config_path: &str,
     genesis_paths: &GenesisPaths<P>,
 ) -> NewRollup<DempRollupSpec> {
-    let prover = Risc0Host::new(risc0::MOCK_DA_ELF);
     let rollup_config: RollupConfig<MockDaConfig> = from_toml_path(rollup_config_path)
         .context("Failed to read rollup configuration")
         .unwrap();
@@ -140,11 +139,24 @@ fn new_mock_rollup<P: AsRef<Path>>(
     let native_stf = create_native_app_template(storage.clone());
     let batch_builder = create_batch_builder(storage);
 
+    let vm = Risc0Host::new(risc0::MOCK_DA_ELF);
+    //let prover_config = ProofGenConfig::Execute;
+
+    let prover_config = ProofGenConfig::Simulate(AppVerifier::new(
+        create_zk_app_template::<<<DempRollupSpec as RollupSpec>::Vm as ZkvmHost>::Guest, _>(),
+        Default::default(),
+    ));
+
+    let prover = Prover {
+        vm,
+        config: prover_config,
+    };
+
     NewRollup {
         genesis_config,
         native_stf,
         batch_builder: Some(batch_builder),
-        prover: todo!(),
+        prover: Some(prover),
         da_service,
         ledger_db,
         runner_config: rollup_config.runner,
@@ -155,6 +167,22 @@ fn new_mock_rollup<P: AsRef<Path>>(
             eth_signer,
         },
     }
+}
+
+pub fn _configure_prover<Vm: ZkvmHost, Da: DaService>(
+    vm: Vm,
+    cfg: DemoProverConfig,
+    da_verifier: Da::Verifier,
+) -> Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm> {
+    let config = match cfg {
+        DemoProverConfig::Simulate => ProofGenConfig::Simulate(AppVerifier::new(
+            create_zk_app_template::<Vm::Guest, _>(),
+            da_verifier,
+        )),
+        DemoProverConfig::Execute => ProofGenConfig::Execute,
+        DemoProverConfig::Prove => ProofGenConfig::Prover,
+    };
+    Prover { vm, config }
 }
 
 /// Dependencies needed to run the rollup.
