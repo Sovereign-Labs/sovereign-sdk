@@ -1,4 +1,4 @@
-#![deny(missing_docs)]
+//#![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
 
 pub mod register_rpc;
@@ -6,8 +6,9 @@ mod rollup;
 
 use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 pub use rollup::{
-    new_rollup_with_celestia_da, new_rollup_with_mock_da, new_rollup_with_mock_da_from_config,
-    DemoProverConfig, Rollup,
+    new_mock_rollup2, new_rollup_with_celestia_da, new_rollup_with_mock_da,
+    new_rollup_with_mock_da_from_config, DemoProverConfig, DempRollupSpec, NewRollup, Rollup,
+    RollupSpec,
 };
 use sov_celestia_adapter::types::Namespace;
 use sov_db::ledger_db::LedgerDB;

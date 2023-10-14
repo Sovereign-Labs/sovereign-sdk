@@ -52,7 +52,7 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 
 type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>;
 
-trait RollupSpec {
+pub trait RollupSpec {
     type DaService: DaService<Spec = Self::DaSpec, Error = anyhow::Error> + Clone;
     type DaSpec: DaSpec;
 
@@ -82,7 +82,7 @@ trait RollupSpec {
     // type G;
 }
 
-struct DempRollupSpec {}
+pub struct DempRollupSpec {}
 
 impl RollupSpec for DempRollupSpec {
     type DaService = MockDaService;
@@ -102,11 +102,11 @@ impl RollupSpec for DempRollupSpec {
     type NativeSTF = AppTemplate<Self::DefaultContext, Self::DaSpec, Self::Vm, Self::NativeRuntime>;
 }
 
-struct NewRollup<S: RollupSpec> {
-    storage: <S::DefaultContext as Spec>::Storage,
-    runner: StateTransitionRunner<S::NativeSTF, S::DaService, S::Vm, S::ZkSTF>,
-    ledger_db: LedgerDB,
-    da_service: S::DaService,
+pub struct NewRollup<S: RollupSpec> {
+    pub storage: <S::DefaultContext as Spec>::Storage,
+    pub runner: StateTransitionRunner<S::NativeSTF, S::DaService, S::Vm, S::ZkSTF>,
+    pub ledger_db: LedgerDB,
+    pub da_service: S::DaService,
 }
 
 impl<S: RollupSpec> NewRollup<S> {
@@ -144,7 +144,7 @@ where
 }
 
 impl NewRollup<DempRollupSpec> {
-    async fn create_methods(&self) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
+    pub async fn create_methods(&self) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
         let mut methods = get_rpc_methods::<
             <DempRollupSpec as RollupSpec>::DefaultContext,
             <DempRollupSpec as RollupSpec>::DaSpec,
@@ -182,14 +182,10 @@ impl NewRollup<DempRollupSpec> {
     }
 }
 
-async fn new_mock_rollup<P: AsRef<Path>>(
-    rollup_config_path: &str,
+pub fn new_mock_rollup2<P: AsRef<Path>>(
     genesis_paths: &GenesisPaths<P>,
+    rollup_config: RollupConfig<MockDaConfig>,
 ) -> Result<NewRollup<DempRollupSpec>, anyhow::Error> {
-    let rollup_config: RollupConfig<MockDaConfig> = from_toml_path(rollup_config_path)
-        .context("Failed to read rollup configuration")
-        .unwrap();
-
     let ledger_db = initialize_ledger(&rollup_config.storage.path);
     let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
     let da_service = MockDaService::new(sequencer_da_address);
@@ -249,6 +245,17 @@ async fn new_mock_rollup<P: AsRef<Path>>(
         ledger_db,
         runner,
     })
+}
+
+pub fn new_mock_rollup<P: AsRef<Path>>(
+    genesis_paths: &GenesisPaths<P>,
+    rollup_config_path: &str,
+) -> Result<NewRollup<DempRollupSpec>, anyhow::Error> {
+    let rollup_config: RollupConfig<MockDaConfig> = from_toml_path(rollup_config_path)
+        .context("Failed to read rollup configuration")
+        .unwrap();
+
+    new_mock_rollup2::<P>(genesis_paths, rollup_config)
 }
 
 /// Dependencies needed to run the rollup.
