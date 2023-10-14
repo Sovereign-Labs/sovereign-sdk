@@ -93,7 +93,6 @@ impl RollupSpec for DempRollupSpec {
 }
 
 struct NewRollup<S: RollupSpec> {
-    /*
     pub native_stf: S::NativeSTF,
     pub batch_builder: Option<S::Builder>,
     // todo genesis
@@ -106,12 +105,57 @@ struct NewRollup<S: RollupSpec> {
     // Runner configuration.
     pub(crate) runner_config: RunnerConfig,
 
-    */
-    pub batch_builder: Option<S::Builder>,
-    runner: StateTransitionRunner<S::NativeSTF, S::DaService, S::Vm, S::ZkSTF>,
     #[cfg(feature = "experimental")]
     // Configuration for the Ethereum RPC.
     pub(crate) eth_rpc_config: EthRpcConfig,
+}
+
+impl<S: RollupSpec> NewRollup<S> {
+    /// Runs the rollup.
+    pub async fn run(self) -> Result<(), anyhow::Error> {
+        self.run_and_report_rpc_port(None).await
+    }
+
+    /// Runs the rollup. Reports rpc port to the caller using the provided channel.
+    pub async fn run_and_report_rpc_port(
+        mut self,
+        channel: Option<oneshot::Sender<SocketAddr>>,
+    ) -> Result<(), anyhow::Error> {
+        let storage = self.app.get_storage();
+        let last_slot_opt = self.ledger_db.get_head_slot()?;
+        let prev_root = last_slot_opt
+            .map(|(number, _)| storage.get_root_hash(number.0))
+            .transpose()?;
+        let mut methods = get_rpc_methods::<S::DefaultContext, S::DaSpec>(storage.clone());
+
+        // register rpc methods
+        {
+            register_ledger(self.ledger_db.clone(), &mut methods)?;
+            register_sequencer(self.da_service.clone(), &mut self.app, &mut methods)?;
+            #[cfg(feature = "experimental")]
+            register_ethereum::<DefaultContext, Da>(
+                self.da_service.clone(),
+                self.eth_rpc_config,
+                storage,
+                &mut methods,
+            )?;
+        }
+
+        let mut runner = StateTransitionRunner::new(
+            self.runner_config,
+            self.da_service,
+            self.ledger_db,
+            self.native_stf,
+            prev_root,
+            self.genesis_config,
+            self.prover,
+        )?;
+
+        runner.start_rpc_server(methods, channel).await;
+        runner.run_in_process().await?;
+
+        Ok(())
+    }
 }
 
 fn new_mock_rollup<P: AsRef<Path>>(
@@ -157,24 +201,15 @@ fn new_mock_rollup<P: AsRef<Path>>(
         config: prover_config,
     };
 
-    let last_slot_opt = ledger_db.get_head_slot()?;
-    let prev_root = last_slot_opt
-        .map(|(number, _)| storage.get_root_hash(number.0))
-        .transpose()?;
-
-    let runner = StateTransitionRunner::new(
-        rollup_config.runner,
+    Ok(NewRollup {
+        native_stf,
+        batch_builder: Some(batch_builder),
+        genesis_config,
+        prover: Some(prover),
         da_service,
         ledger_db,
-        native_stf,
-        prev_root,
-        genesis_config,
-        Some(prover),
-    )?;
+        runner_config: rollup_config.runner,
 
-    Ok(NewRollup {
-        batch_builder: Some(batch_builder),
-        runner,
         #[cfg(feature = "experimental")]
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),
