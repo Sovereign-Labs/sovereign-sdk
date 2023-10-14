@@ -39,6 +39,7 @@ use tracing::debug;
 use crate::register_rpc::register_ethereum;
 use crate::register_rpc::{register_ledger, register_sequencer};
 use crate::{initialize_ledger, ROLLUP_NAMESPACE};
+use demo_stf::{create_batch_builder, create_native_app_template, get_storage};
 use sov_sequencer::batch_builder::FiFoStrictBatchBuilder;
 
 #[cfg(feature = "experimental")]
@@ -79,20 +80,24 @@ impl RollupSpec for DempRollupSpec {
     type Vm = Risc0Host<'static>;
 
     type ZkContext = ZkDefaultContext;
+    type DefaultContext = DefaultContext;
+    type Builder = FiFoStrictBatchBuilder<Self::NativeRuntime, Self::DefaultContext>;
+
+    ///
     type ZkRuntime = Runtime<Self::ZkContext, Self::DaSpec>;
     type ZkSTF =
         AppTemplate<Self::ZkContext, Self::DaSpec, <Self::Vm as ZkvmHost>::Guest, Self::ZkRuntime>;
 
-    type DefaultContext = DefaultContext;
     type NativeRuntime = Runtime<Self::DefaultContext, Self::DaSpec>;
     type NativeSTF = AppTemplate<Self::DefaultContext, Self::DaSpec, Self::Vm, Self::NativeRuntime>;
-    type Builder = FiFoStrictBatchBuilder<Self::NativeRuntime, Self::DefaultContext>;
 }
 
 struct NewRollup<S: RollupSpec> {
     pub native_stf: S::NativeSTF,
     pub batch_builder: Option<S::Builder>,
     // todo genesis
+    pub(crate) genesis_config: GenesisConfig<S::DefaultContext, S::DaSpec>,
+
     pub prover: Option<Prover<S::ZkSTF, S::DaService, S::Vm>>,
     pub(crate) da_service: S::DaService,
     pub(crate) ledger_db: LedgerDB,
@@ -104,28 +109,52 @@ struct NewRollup<S: RollupSpec> {
     pub(crate) eth_rpc_config: EthRpcConfig,
 }
 
-pub struct R<Vm: ZkvmHost, Da: DaService + Clone> {
-    /// Concrete state transition function.
-    pub stf: AppTemplate<DefaultContext, Da::Spec, Vm, Runtime<DefaultContext, Da::Spec>>,
-    /// Batch builder.
-    pub batch_builder:
-        Option<FiFoStrictBatchBuilder<Runtime<DefaultContext, Da::Spec>, DefaultContext>>,
-    // Initial rollup configuration.
-    pub(crate) genesis_config: GenesisConfig<DefaultContext, Da::Spec>,
-    // Prover for the rollup.
-    #[allow(clippy::type_complexity)]
-    pub(crate) prover: Option<Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm>>,
+fn new_mock_rollup<P: AsRef<Path>>(
+    rollup_config_path: &str,
+    genesis_paths: &GenesisPaths<P>,
+) -> NewRollup<DempRollupSpec> {
+    let prover = Risc0Host::new(risc0::MOCK_DA_ELF);
+    let rollup_config: RollupConfig<MockDaConfig> = from_toml_path(rollup_config_path)
+        .context("Failed to read rollup configuration")
+        .unwrap();
 
-    // Data availability service.
-    pub(crate) da_service: Da,
-    // Ledger db.
-    pub(crate) ledger_db: LedgerDB,
-    // Runner configuration.
-    pub(crate) runner_config: RunnerConfig,
+    let ledger_db = initialize_ledger(&rollup_config.storage.path);
+    let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
+    let da_service = MockDaService::new(sequencer_da_address);
+
+    let storage_config = StorageConfig {
+        path: rollup_config.storage.path,
+    };
 
     #[cfg(feature = "experimental")]
-    // Configuration for the Ethereum RPC.
-    pub(crate) eth_rpc_config: EthRpcConfig,
+    let eth_signer = read_eth_tx_signers();
+
+    let genesis_config = get_genesis_config(
+        sequencer_da_address,
+        genesis_paths,
+        #[cfg(feature = "experimental")]
+        eth_signer.signers(),
+    );
+
+    let storage = get_storage(storage_config);
+    let native_stf = create_native_app_template(storage.clone());
+    let batch_builder = create_batch_builder(storage);
+
+    NewRollup {
+        genesis_config,
+        native_stf,
+        batch_builder: Some(batch_builder),
+        prover: todo!(),
+        da_service,
+        ledger_db,
+        runner_config: rollup_config.runner,
+        #[cfg(feature = "experimental")]
+        eth_rpc_config: EthRpcConfig {
+            min_blob_size: Some(1),
+            sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
+            eth_signer,
+        },
+    }
 }
 
 /// Dependencies needed to run the rollup.
@@ -360,49 +389,3 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
         Ok(())
     }
 }
-
-/*
-struct DemoRollup<S: RollupSpec> {
-    /// ===
-    pub stf: <Self as RollupT>::AppTemp,
-    pub batch_builder: <Self as RollupT>::Bui,
-    pub genesis_config: <Self as RollupT>::G,
-    pub prover: <Self as RollupT>::Pr,
-
-    // ====
-    pub da_service: <Self as RollupT>::Da,
-    pub(crate) ledger_db: LedgerDB,
-    pub(crate) runner_config: RunnerConfig,
-    #[cfg(feature = "experimental")]
-    pub(crate) eth_rpc_config: EthRpcConfig,
-}*/
-
-/*
-impl RollupT for DemoRollup {
-    type Da = MockDaService;
-    type Vm = Risc0Host<'static>;
-
-    type AppTemp = AppTemplate<
-        DefaultContext,
-        <Self::Da as DaService>::Spec,
-        Self::Vm,
-        Runtime<DefaultContext, <Self::Da as DaService>::Spec>,
-    >;
-
-    type Pr = Option<
-        Prover<
-            ZkStf<<Self::Da as DaService>::Spec, <Self::Vm as ZkvmHost>::Guest>,
-            Self::Da,
-            Self::Vm,
-        >,
-    >;
-
-    type G = GenesisConfig<DefaultContext, <Self::Da as DaService>::Spec>;
-
-    type Bui = Option<
-        FiFoStrictBatchBuilder<
-            Runtime<DefaultContext, <Self::Da as DaService>::Spec>,
-            DefaultContext,
-        >,
-    >;
-}*/

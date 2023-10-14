@@ -74,6 +74,34 @@ impl<Vm: Zkvm, Da: DaSpec> App<Vm, Da> {
     }
 }
 
+#[cfg(feature = "native")]
+///TODO
+pub fn get_storage(storage_config: StorageConfig) -> ProverStorage<sov_state::DefaultStorageSpec> {
+    ProverStorage::with_config(storage_config).expect("Failed to open prover storage")
+}
+
+#[cfg(feature = "native")]
+///TODO
+pub fn create_batch_builder<Da: DaSpec>(
+    storage: ProverStorage<sov_state::DefaultStorageSpec>,
+) -> FiFoStrictBatchBuilder<Runtime<DefaultContext, Da>, DefaultContext> {
+    let batch_size_bytes = 1024 * 100; // 100 KB
+    FiFoStrictBatchBuilder::new(
+        batch_size_bytes,
+        u32::MAX as usize,
+        Runtime::default(),
+        storage,
+    )
+}
+
+/// TODO
+#[cfg(feature = "native")]
+pub fn create_native_app_template<Vm: Zkvm, Da: DaSpec>(
+    storage: ProverStorage<sov_state::DefaultStorageSpec>,
+) -> AppTemplate<DefaultContext, Da, Vm, Runtime<DefaultContext, Da>> {
+    AppTemplate::new(storage, Runtime::default())
+}
+
 /// Create `StateTransitionFunction` for Zk context.
 pub fn create_zk_app_template<Vm: Zkvm, Da: DaSpec>(
 ) -> AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>> {
