@@ -77,7 +77,7 @@ trait RollupSpec {
     >;
 
     type Vm: ZkvmHost;
-    type Builder: BatchBuilder;
+    type Builder: BatchBuilder + Send + Sync + 'static;
 
     // type G;
 }
@@ -103,58 +103,82 @@ impl RollupSpec for DempRollupSpec {
 }
 
 struct NewRollup<S: RollupSpec> {
-    /*
     storage: <S::DefaultContext as Spec>::Storage,
-    pub native_stf: S::NativeSTF,
-
-    // todo genesis
-    pub(crate) genesis_config: GenesisConfig<S::DefaultContext, S::DaSpec>,
-
-    pub prover: Option<Prover<S::ZkSTF, S::DaService, S::Vm>>,
-
-    pub(crate) da_service: S::DaService,
-    pub(crate) ledger_db: LedgerDB,
-    // Runner configuration.
-    pub(crate) runner_config: RunnerConfig,*/
     runner: StateTransitionRunner<S::NativeSTF, S::DaService, S::Vm, S::ZkSTF>,
-    pub batch_builder: Option<S::Builder>,
-    #[cfg(feature = "experimental")]
-    // Configuration for the Ethereum RPC.
-    pub(crate) eth_rpc_config: EthRpcConfig,
+    ledger_db: LedgerDB,
+    da_service: S::DaService,
 }
 
 impl<S: RollupSpec> NewRollup<S> {
-    //impl NewRollup<DempRollupSpec> {
     /// Runs the rollup.
-    pub async fn run(self) -> Result<(), anyhow::Error> {
-        self.run_and_report_rpc_port(None).await
+    pub async fn run(self, methods: jsonrpsee::RpcModule<()>) -> Result<(), anyhow::Error> {
+        self.run_and_report_rpc_port(None, methods).await
     }
 
     /// Runs the rollup. Reports rpc port to the caller using the provided channel.
     pub async fn run_and_report_rpc_port(
         mut self,
         channel: Option<oneshot::Sender<SocketAddr>>,
+        methods: jsonrpsee::RpcModule<()>,
     ) -> Result<(), anyhow::Error> {
-        let mut methods = jsonrpsee::RpcModule::<()>::new(());
-        //let mut methods = ///get_rpc_methods(storage.clone());
-
-        // register rpc methods
-        {
-            /*    register_ledger(self.ledger_db.clone(), &mut methods)?;
-            register_sequencer(self.da_service.clone(), &mut self.app, &mut methods)?;
-            #[cfg(feature = "experimental")]
-            register_ethereum::<DefaultContext, Da>(
-                self.da_service.clone(),
-                self.eth_rpc_config,
-                storage,
-                &mut methods,
-            )?;*/
-        }
-
         let mut runner = self.runner;
         runner.start_rpc_server(methods, channel).await;
         runner.run_in_process().await?;
         Ok(())
+    }
+}
+use sov_sequencer::get_sequencer_rpc;
+// register sequencer rpc methods.
+pub(crate) fn register_seq<Da, B: BatchBuilder + Send + Sync + 'static>(
+    da_service: Da,
+    batch_builder: B,
+    methods: &mut jsonrpsee::RpcModule<()>,
+) -> Result<(), anyhow::Error>
+where
+    Da: DaService,
+{
+    let sequencer_rpc = get_sequencer_rpc(batch_builder, da_service);
+    methods
+        .merge(sequencer_rpc)
+        .context("Failed to merge Txs RPC modules")
+}
+
+impl NewRollup<DempRollupSpec> {
+    async fn create_methods(&self) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
+        let mut methods = get_rpc_methods::<
+            <DempRollupSpec as RollupSpec>::DefaultContext,
+            <DempRollupSpec as RollupSpec>::DaSpec,
+        >(self.storage.clone());
+
+        let batch_builder =
+            create_batch_builder::<<DempRollupSpec as RollupSpec>::DaSpec>(self.storage.clone());
+
+        register_ledger(self.ledger_db.clone(), &mut methods)?;
+        register_seq(self.da_service.clone(), batch_builder, &mut methods)?;
+
+        #[cfg(feature = "experimental")]
+        let eth_signer = read_eth_tx_signers();
+
+        #[cfg(feature = "experimental")]
+        let eth_rpc_config = EthRpcConfig {
+            min_blob_size: Some(1),
+            sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
+            eth_signer,
+        };
+
+        #[cfg(feature = "experimental")]
+        register_ethereum::<
+            <DempRollupSpec as RollupSpec>::DefaultContext,
+            <DempRollupSpec as RollupSpec>::DaService,
+        >(
+            self.da_service.clone(),
+            eth_rpc_config,
+            self.storage.clone(),
+            &mut methods,
+        )
+        .unwrap();
+
+        Ok(methods)
     }
 }
 
@@ -186,7 +210,6 @@ async fn new_mock_rollup<P: AsRef<Path>>(
 
     let storage = get_storage(storage_config);
     let native_stf = create_native_app_template(storage.clone());
-    let batch_builder = create_batch_builder(storage.clone());
 
     let vm = Risc0Host::new(risc0::MOCK_DA_ELF);
     //let prover_config = ProofGenConfig::Execute;
@@ -212,34 +235,19 @@ async fn new_mock_rollup<P: AsRef<Path>>(
     //====
     let mut runner = StateTransitionRunner::new(
         rollup_config.runner,
-        da_service,
-        ledger_db,
+        da_service.clone(),
+        ledger_db.clone(),
         native_stf,
         prev_root,
         genesis_config,
         Some(prover),
     )?;
 
-    //runner.run_in_process().await?;
-
     Ok(NewRollup {
-        /*     storage,
-        native_stf,
-        batch_builder: Some(batch_builder),
-        genesis_config,
-        prover: Some(prover),
+        storage,
         da_service,
         ledger_db,
-        runner_config: rollup_config.runner,
-        */
         runner,
-        batch_builder: Some(batch_builder),
-        #[cfg(feature = "experimental")]
-        eth_rpc_config: EthRpcConfig {
-            min_blob_size: Some(1),
-            sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
-            eth_signer,
-        },
     })
 }
 
