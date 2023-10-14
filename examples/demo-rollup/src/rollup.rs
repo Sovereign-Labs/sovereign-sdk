@@ -93,17 +93,22 @@ impl RollupSpec for DempRollupSpec {
 }
 
 struct NewRollup<S: RollupSpec> {
+    /*
     pub native_stf: S::NativeSTF,
     pub batch_builder: Option<S::Builder>,
     // todo genesis
     pub(crate) genesis_config: GenesisConfig<S::DefaultContext, S::DaSpec>,
 
     pub prover: Option<Prover<S::ZkSTF, S::DaService, S::Vm>>,
+
     pub(crate) da_service: S::DaService,
     pub(crate) ledger_db: LedgerDB,
     // Runner configuration.
     pub(crate) runner_config: RunnerConfig,
 
+    */
+    pub batch_builder: Option<S::Builder>,
+    runner: StateTransitionRunner<S::NativeSTF, S::DaService, S::Vm, S::ZkSTF>,
     #[cfg(feature = "experimental")]
     // Configuration for the Ethereum RPC.
     pub(crate) eth_rpc_config: EthRpcConfig,
@@ -112,7 +117,7 @@ struct NewRollup<S: RollupSpec> {
 fn new_mock_rollup<P: AsRef<Path>>(
     rollup_config_path: &str,
     genesis_paths: &GenesisPaths<P>,
-) -> NewRollup<DempRollupSpec> {
+) -> Result<NewRollup<DempRollupSpec>, anyhow::Error> {
     let rollup_config: RollupConfig<MockDaConfig> = from_toml_path(rollup_config_path)
         .context("Failed to read rollup configuration")
         .unwrap();
@@ -137,7 +142,7 @@ fn new_mock_rollup<P: AsRef<Path>>(
 
     let storage = get_storage(storage_config);
     let native_stf = create_native_app_template(storage.clone());
-    let batch_builder = create_batch_builder(storage);
+    let batch_builder = create_batch_builder(storage.clone());
 
     let vm = Risc0Host::new(risc0::MOCK_DA_ELF);
     //let prover_config = ProofGenConfig::Execute;
@@ -152,37 +157,31 @@ fn new_mock_rollup<P: AsRef<Path>>(
         config: prover_config,
     };
 
-    NewRollup {
-        genesis_config,
-        native_stf,
-        batch_builder: Some(batch_builder),
-        prover: Some(prover),
+    let last_slot_opt = ledger_db.get_head_slot()?;
+    let prev_root = last_slot_opt
+        .map(|(number, _)| storage.get_root_hash(number.0))
+        .transpose()?;
+
+    let runner = StateTransitionRunner::new(
+        rollup_config.runner,
         da_service,
         ledger_db,
-        runner_config: rollup_config.runner,
+        native_stf,
+        prev_root,
+        genesis_config,
+        Some(prover),
+    )?;
+
+    Ok(NewRollup {
+        batch_builder: Some(batch_builder),
+        runner,
         #[cfg(feature = "experimental")]
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
             eth_signer,
         },
-    }
-}
-
-pub fn _configure_prover<Vm: ZkvmHost, Da: DaService>(
-    vm: Vm,
-    cfg: DemoProverConfig,
-    da_verifier: Da::Verifier,
-) -> Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm> {
-    let config = match cfg {
-        DemoProverConfig::Simulate => ProofGenConfig::Simulate(AppVerifier::new(
-            create_zk_app_template::<Vm::Guest, _>(),
-            da_verifier,
-        )),
-        DemoProverConfig::Execute => ProofGenConfig::Execute,
-        DemoProverConfig::Prove => ProofGenConfig::Prover,
-    };
-    Prover { vm, config }
+    })
 }
 
 /// Dependencies needed to run the rollup.
