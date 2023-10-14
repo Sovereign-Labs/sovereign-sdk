@@ -13,7 +13,6 @@ use crate::verifier::StateTransitionVerifier;
 use crate::{RunnerConfig, StateTransitionData};
 
 type StateRoot<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::StateRoot;
-
 type InitialState<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::InitialState;
 
 /// Combines `DaService` with `StateTransitionFunction` and "runs" the rollup.
