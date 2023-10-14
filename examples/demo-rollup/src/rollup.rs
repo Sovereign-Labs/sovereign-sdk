@@ -50,20 +50,20 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>;
 
 trait RollupSpec {
+    type DaService: DaService<Spec = Self::DaSpec> + Clone;
     type DaSpec: DaSpec;
+
     type ZkContext: Context;
-    type DefaultContext: Context;
-
     type ZkRuntime: RuntimeTrait<Self::ZkContext, Self::DaSpec>;
-    type NativeRuntime: RuntimeTrait<Self::DefaultContext, Self::DaSpec>;
+    type ZkSTF: StateTransitionFunction<<Self::Vm as ZkvmHost>::Guest, Self::DaSpec>;
 
-    type AppTemplate: StateTransitionFunction<
+    type DefaultContext: Context;
+    type NativeRuntime: RuntimeTrait<Self::DefaultContext, Self::DaSpec>;
+    type NativeSTF: StateTransitionFunction<
         Self::Vm,
         Self::DaSpec,
         Condition = <Self::DaSpec as DaSpec>::ValidityCondition,
     >;
-
-    type ZkAppTemplate: StateTransitionFunction<Self::Vm, Self::DaSpec>;
 
     type Vm: ZkvmHost;
     type Builder: BatchBuilder;
@@ -74,18 +74,34 @@ trait RollupSpec {
 struct DempRollupSpec {}
 
 impl RollupSpec for DempRollupSpec {
+    type DaService = MockDaService;
     type DaSpec = MockDaSpec;
     type Vm = Risc0Host<'static>;
 
     type ZkContext = ZkDefaultContext;
     type ZkRuntime = Runtime<Self::ZkContext, Self::DaSpec>;
-    type ZkAppTemplate = AppTemplate<Self::ZkContext, Self::DaSpec, Self::Vm, Self::ZkRuntime>;
+    type ZkSTF =
+        AppTemplate<Self::ZkContext, Self::DaSpec, <Self::Vm as ZkvmHost>::Guest, Self::ZkRuntime>;
 
     type DefaultContext = DefaultContext;
     type NativeRuntime = Runtime<Self::DefaultContext, Self::DaSpec>;
-    type AppTemplate =
-        AppTemplate<Self::DefaultContext, Self::DaSpec, Self::Vm, Self::NativeRuntime>;
+    type NativeSTF = AppTemplate<Self::DefaultContext, Self::DaSpec, Self::Vm, Self::NativeRuntime>;
     type Builder = FiFoStrictBatchBuilder<Self::NativeRuntime, Self::DefaultContext>;
+}
+
+struct NewRollup<S: RollupSpec> {
+    pub native_stf: S::NativeSTF,
+    pub batch_builder: Option<S::Builder>,
+    // todo genesis
+    pub prover: Option<Prover<S::ZkSTF, S::DaService, S::Vm>>,
+    pub(crate) da_service: S::DaService,
+    pub(crate) ledger_db: LedgerDB,
+    // Runner configuration.
+    pub(crate) runner_config: RunnerConfig,
+
+    #[cfg(feature = "experimental")]
+    // Configuration for the Ethereum RPC.
+    pub(crate) eth_rpc_config: EthRpcConfig,
 }
 
 pub struct R<Vm: ZkvmHost, Da: DaService + Clone> {
