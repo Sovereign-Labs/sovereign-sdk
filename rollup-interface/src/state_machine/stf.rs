@@ -95,7 +95,7 @@ pub struct SlotResult<S, B, T, W> {
 ///  - blob: Non serialised batch or anything else that can be posted on DA layer, like attestation or proof.
 pub trait StateTransitionFunction<Vm: Zkvm, Da: DaSpec> {
     /// Root hash of state merkle tree
-    type StateRoot: Serialize + DeserializeOwned + Clone;
+    type StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]>;
     /// The initial state of the rollup.
     type InitialState;
 

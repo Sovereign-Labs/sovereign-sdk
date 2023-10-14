@@ -66,6 +66,14 @@ trait RollupSpec {
         Self::Vm,
         Self::DaSpec,
         Condition = <Self::DaSpec as DaSpec>::ValidityCondition,
+        Witness = <Self::ZkSTF as StateTransitionFunction<
+            <Self::Vm as ZkvmHost>::Guest,
+            Self::DaSpec,
+        >>::Witness,
+        StateRoot = <Self::ZkSTF as StateTransitionFunction<
+            <Self::Vm as ZkvmHost>::Guest,
+            Self::DaSpec,
+        >>::StateRoot,
     >;
 
     type Vm: ZkvmHost;
@@ -115,7 +123,8 @@ struct NewRollup<S: RollupSpec> {
     pub(crate) eth_rpc_config: EthRpcConfig,
 }
 
-impl NewRollup<DempRollupSpec> {
+impl<S: RollupSpec> NewRollup<S> {
+    //impl NewRollup<DempRollupSpec> {
     /// Runs the rollup.
     pub async fn run(self) -> Result<(), anyhow::Error> {
         self.run_and_report_rpc_port(None).await
