@@ -29,7 +29,7 @@ jsonrpsee = { workspace = true }
 anyhow = { workspace = true }
 
 risc0-starter = { path = "./provers/risc0" }
-template-stf = { path = "./stf", features = ["native"] } 
+stf-starter = { path = "./stf", features = ["native"] } 
 
 sov-db = { path = "../../full-node/db/sov-db" } 
 sov-sequencer = { path = "../../full-node/sov-sequencer" } 

@@ -373,7 +373,7 @@ dependencies = [
  "risc0-zkvm-platform",
  "sov-risc0-adapter",
  "sov-rollup-interface",
- "template-stf",
+ "stf-starter",
 ]
 
 [[package]]
@@ -1003,6 +1003,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "stf-starter"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "serde",
+ "sov-accounts",
+ "sov-bank",
+ "sov-modules-api",
+ "sov-modules-stf-template",
+ "sov-rollup-interface",
+ "sov-sequencer-registry",
+ "sov-state",
+ "sov-stf-runner",
+ "tracing",
+]
+
+[[package]]
 name = "subtle"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1041,24 +1059,6 @@ dependencies = [
  "redox_syscall",
  "rustix",
  "windows-sys",
-]
-
-[[package]]
-name = "template-stf"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "borsh",
- "serde",
- "sov-accounts",
- "sov-bank",
- "sov-modules-api",
- "sov-modules-stf-template",
- "sov-rollup-interface",
- "sov-sequencer-registry",
- "sov-state",
- "sov-stf-runner",
- "tracing",
 ]
 
 [[package]]

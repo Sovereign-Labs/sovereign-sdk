@@ -9,7 +9,7 @@ use sov_rollup_interface::mocks::{MockAddress, MOCK_SEQUENCER_DA_ADDRESS};
 use sov_rollup_starter::da::{start_da_service, DaConfig};
 use sov_rollup_starter::rollup::Rollup;
 use sov_stf_runner::{from_toml_path, RollupConfig};
-use template_stf::{get_genesis_config, GenesisPaths};
+use stf_starter::{get_genesis_config, GenesisPaths};
 use tracing::info;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;

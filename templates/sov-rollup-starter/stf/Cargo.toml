@@ -1,5 +1,5 @@
 [package]
-name = "template-stf"
+name = "stf-starter"
 version = { workspace = true }
 edition = { workspace = true }
 resolver = "2"
