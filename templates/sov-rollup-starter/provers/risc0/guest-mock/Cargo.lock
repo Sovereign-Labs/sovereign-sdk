@@ -365,6 +365,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "guest-mock-starter"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
+ "sov-risc0-adapter",
+ "sov-rollup-interface",
+ "template-stf",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1029,18 +1041,6 @@ dependencies = [
  "redox_syscall",
  "rustix",
  "windows-sys",
-]
-
-[[package]]
-name = "template-prover-guest-mock"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "risc0-zkvm",
- "risc0-zkvm-platform",
- "sov-risc0-adapter",
- "sov-rollup-interface",
- "template-stf",
 ]
 
 [[package]]

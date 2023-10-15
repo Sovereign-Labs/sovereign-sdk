@@ -7196,6 +7196,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "risc0-starter"
+version = "0.2.0"
+dependencies = [
+ "risc0-build",
+]
+
+[[package]]
 name = "risc0-sys"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8778,6 +8785,7 @@ dependencies = [
  "borsh",
  "clap 4.4.6",
  "jsonrpsee 0.20.1",
+ "risc0-starter",
  "serde",
  "serde_json",
  "sov-accounts",
@@ -8792,7 +8800,6 @@ dependencies = [
  "sov-state",
  "sov-stf-runner",
  "tempfile",
- "template-risc0",
  "template-stf",
  "tokio",
  "tracing",
@@ -9893,13 +9900,6 @@ dependencies = [
  "redox_syscall 0.3.5",
  "rustix 0.38.15",
  "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "template-risc0"
-version = "0.2.0"
-dependencies = [
- "risc0-build",
 ]
 
 [[package]]
@@ -11624,3 +11624,8 @@ dependencies = [
  "libc",
  "pkg-config",
 ]
+
+[[patch.unused]]
+name = "cc"
+version = "1.0.79"
+source = "git+https://github.com/rust-lang/cc-rs?rev=e5bbdfa#e5bbdfa1fa468c028cb38fee6c35a3cf2e5a2736"
