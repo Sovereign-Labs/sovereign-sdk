@@ -1,5 +1,5 @@
 [package]
-name = "rollup-template"
+name = "sov-rollup-starter"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
