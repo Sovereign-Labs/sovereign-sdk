@@ -34,6 +34,8 @@ pub trait Runtime<C: Context, Da: DaSpec>:
         >,
     > + BlobSelector<Da, Context = C>
 {
+    /// TODO
+    type GenesisConfig;
 }
 
 /// The receipts of all the transactions in a batch.

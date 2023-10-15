@@ -52,16 +52,23 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 
 type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>;
 
-pub trait RollupSpec {
+pub trait RollupSpec: Sized {
+    type Foo<X>;
+
     type DaService: DaService<Spec = Self::DaSpec, Error = anyhow::Error> + Clone;
     type DaSpec: DaSpec;
+    type DaConfig;
 
     type ZkContext: Context;
-    type ZkRuntime: RuntimeTrait<Self::ZkContext, Self::DaSpec>;
-    type ZkSTF: StateTransitionFunction<<Self::Vm as ZkvmHost>::Guest, Self::DaSpec>;
-
     type DefaultContext: Context;
+
+    type ZkRuntime: RuntimeTrait<Self::ZkContext, Self::DaSpec>;
     type NativeRuntime: RuntimeTrait<Self::DefaultContext, Self::DaSpec>;
+
+    type Vm: ZkvmHost;
+    type Builder: BatchBuilder + Send + Sync + 'static;
+
+    type ZkSTF: StateTransitionFunction<<Self::Vm as ZkvmHost>::Guest, Self::DaSpec>;
     type NativeSTF: StateTransitionFunction<
         Self::Vm,
         Self::DaSpec,
@@ -76,17 +83,35 @@ pub trait RollupSpec {
         >>::StateRoot,
     >;
 
-    type Vm: ZkvmHost;
-    type Builder: BatchBuilder + Send + Sync + 'static;
+    fn _get_genesis_config<P: AsRef<Path>>(
+        genesis_paths: &GenesisPaths<P>,
+    ) -> <Self::NativeRuntime as RuntimeTrait<Self::DefaultContext, Self::DaSpec>>::GenesisConfig;
 
-    // type G;
+    fn _get_sequencer_da_address() -> <Self::DaSpec as DaSpec>::Address;
+
+    fn _get_sequencer_da_service() -> Self::DaService;
+
+    fn _get_prover() -> Prover<Self::ZkSTF, Self::DaService, Self::Vm>;
+
+    fn _get_ledger_db(rollup_config: RollupConfig<Self::DaConfig>) -> LedgerDB {
+        initialize_ledger(&rollup_config.storage.path)
+    }
+
+    fn create_new_rollup<P: AsRef<Path>>(
+        enesis_paths: &GenesisPaths<P>,
+        rollup_config: RollupConfig<Self::DaConfig>,
+    ) -> NewRollup<Self>;
 }
 
 pub struct DempRollupSpec {}
 
 impl RollupSpec for DempRollupSpec {
+    type Foo<X> = Vec<X>;
+
     type DaService = MockDaService;
     type DaSpec = MockDaSpec;
+    type DaConfig = MockDaConfig;
+
     type Vm = Risc0Host<'static>;
 
     type ZkContext = ZkDefaultContext;
@@ -100,6 +125,55 @@ impl RollupSpec for DempRollupSpec {
 
     type NativeRuntime = Runtime<Self::DefaultContext, Self::DaSpec>;
     type NativeSTF = AppTemplate<Self::DefaultContext, Self::DaSpec, Self::Vm, Self::NativeRuntime>;
+
+    fn _get_genesis_config<P: AsRef<Path>>(
+        genesis_paths: &GenesisPaths<P>,
+    ) -> <Self::NativeRuntime as RuntimeTrait<Self::DefaultContext, Self::DaSpec>>::GenesisConfig
+    {
+        let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
+
+        #[cfg(feature = "experimental")]
+        let eth_signer = read_eth_tx_signers();
+
+        get_genesis_config(
+            sequencer_da_address,
+            genesis_paths,
+            #[cfg(feature = "experimental")]
+            eth_signer.signers(),
+        )
+    }
+
+    fn _get_sequencer_da_address() -> <Self::DaSpec as DaSpec>::Address {
+        MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS)
+    }
+
+    fn _get_sequencer_da_service() -> Self::DaService {
+        //MockDaService::new(sequencer_da_address)
+        todo!()
+    }
+
+    // TODO change it to get vm & prover_config and assemble Prover in create_new_rollup
+    fn _get_prover() -> Prover<Self::ZkSTF, Self::DaService, Self::Vm> {
+        let vm = Risc0Host::new(risc0::MOCK_DA_ELF);
+        //let prover_config = ProofGenConfig::Execute;
+
+        let prover_config = ProofGenConfig::Simulate(AppVerifier::new(
+            create_zk_app_template::<<<DempRollupSpec as RollupSpec>::Vm as ZkvmHost>::Guest, _>(),
+            Default::default(),
+        ));
+
+        Prover {
+            vm,
+            config: prover_config,
+        }
+    }
+
+    fn create_new_rollup<P: AsRef<Path>>(
+        enesis_paths: &GenesisPaths<P>,
+        rollup_config: RollupConfig<MockDaConfig>,
+    ) -> NewRollup<Self> {
+        todo!()
+    }
 }
 
 pub struct NewRollup<S: RollupSpec> {

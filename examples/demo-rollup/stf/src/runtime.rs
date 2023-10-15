@@ -93,6 +93,7 @@ where
     C: Context,
     Da: DaSpec,
 {
+    type GenesisConfig = GenesisConfig<C, Da>;
 }
 
 impl<C: Context, Da: DaSpec> BlobSelector<Da> for Runtime<C, Da> {

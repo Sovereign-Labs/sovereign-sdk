@@ -74,6 +74,7 @@ where
     C: Context,
     Da: DaSpec,
 {
+    type GenesisConfig = GenesisConfig<C, Da>;
 }
 
 // Select which blobs will be executed in this slot. In this implementation simply execute all
