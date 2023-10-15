@@ -5,6 +5,7 @@ use stf_starter::{zk_stf, RollupVerifier};
 
 use sov_risc0_adapter::guest::Risc0Guest;
 use sov_rollup_interface::mocks::MockDaVerifier;
+
 risc0_zkvm::guest::entry!(main);
 
 pub fn main() {
