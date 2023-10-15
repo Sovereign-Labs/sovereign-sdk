@@ -7,7 +7,7 @@ use sov_rollup_interface::mocks::{
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_rollup_starter::rollup::Rollup;
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
-use template_stf::{get_genesis_config, GenesisPaths};
+use stf_starter::{get_genesis_config, GenesisPaths};
 use tokio::sync::oneshot;
 
 pub async fn start_rollup<Vm: ZkvmHost, P: AsRef<Path>>(
