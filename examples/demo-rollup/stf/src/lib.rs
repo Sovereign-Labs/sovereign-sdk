@@ -28,28 +28,26 @@ use sov_state::{ProverStorage, Storage};
 use sov_stf_runner::verifier::StateTransitionVerifier;
 
 /// A verifier for the demo rollup
-pub type AppVerifier<DA, Zk> = StateTransitionVerifier<
+pub type AppVerifier<DA> = StateTransitionVerifier<
     AppTemplate<
         ZkDefaultContext,
         <DA as DaVerifier>::Spec,
-        Zk,
         Runtime<ZkDefaultContext, <DA as DaVerifier>::Spec>,
     >,
     DA,
-    Zk,
 >;
 
 /// Contains StateTransitionFunction and other necessary dependencies needed for implementing a full node.
 #[cfg(feature = "native")]
-pub struct App<Vm: Zkvm, Da: DaSpec> {
+pub struct App<Da: DaSpec> {
     /// Concrete state transition function.
-    pub stf: AppTemplate<DefaultContext, Da, Vm, Runtime<DefaultContext, Da>>,
+    pub stf: AppTemplate<DefaultContext, Da, Runtime<DefaultContext, Da>>,
     /// Batch builder.
     pub batch_builder: Option<FiFoStrictBatchBuilder<Runtime<DefaultContext, Da>, DefaultContext>>,
 }
 
 #[cfg(feature = "native")]
-impl<Vm: Zkvm, Da: DaSpec> App<Vm, Da> {
+impl<Da: DaSpec> App<Da> {
     /// Creates a new `App`.
     pub fn new(storage_config: StorageConfig) -> Self {
         let storage =
@@ -96,15 +94,15 @@ pub fn create_batch_builder<Da: DaSpec>(
 
 /// TODO
 #[cfg(feature = "native")]
-pub fn create_native_app_template<Vm: Zkvm, Da: DaSpec>(
+pub fn create_native_app_template<Da: DaSpec>(
     storage: ProverStorage<sov_state::DefaultStorageSpec>,
-) -> AppTemplate<DefaultContext, Da, Vm, Runtime<DefaultContext, Da>> {
+) -> AppTemplate<DefaultContext, Da, Runtime<DefaultContext, Da>> {
     AppTemplate::new(storage, Runtime::default())
 }
 
 /// Create `StateTransitionFunction` for Zk context.
-pub fn create_zk_app_template<Vm: Zkvm, Da: DaSpec>(
-) -> AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>> {
+pub fn create_zk_app_template<Da: DaSpec>(
+) -> AppTemplate<ZkDefaultContext, Da, Runtime<ZkDefaultContext, Da>> {
     let storage = ZkStorage::new();
     AppTemplate::new(storage, Runtime::default())
 }

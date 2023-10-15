@@ -23,13 +23,13 @@ use sov_zk_cycle_macros::cycle_tracker;
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
 /// that is specifically designed to work with the module-system.
-pub struct AppTemplate<C: Context, Da: DaSpec, Vm, RT: Runtime<C, Da>> {
+pub struct AppTemplate<C: Context, Da: DaSpec, RT: Runtime<C, Da>> {
     /// State storage used by the rollup.
     pub current_storage: C::Storage,
     /// The runtime includes all the modules that the rollup supports.
     pub runtime: RT,
     pub(crate) checkpoint: Option<StateCheckpoint<C>>,
-    phantom_vm: PhantomData<Vm>,
+
     phantom_da: PhantomData<Da>,
 }
 
@@ -68,7 +68,7 @@ impl<A: BasicAddress> From<ApplyBatchError<A>> for BatchReceipt<SequencerOutcome
     }
 }
 
-impl<C, Vm, Da, RT> AppTemplate<C, Da, Vm, RT>
+impl<C, Da, RT> AppTemplate<C, Da, RT>
 where
     C: Context,
     Da: DaSpec,
@@ -80,7 +80,6 @@ where
             runtime,
             current_storage: storage,
             checkpoint: None,
-            phantom_vm: PhantomData,
             phantom_da: PhantomData,
         }
     }

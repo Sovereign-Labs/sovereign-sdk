@@ -12,13 +12,13 @@ use tokio::sync::oneshot;
 
 use crate::rpc::{register_ledger, register_sequencer};
 
-type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>;
+type ZkStf<Da> = AppTemplate<ZkDefaultContext, Da, Runtime<ZkDefaultContext, Da>>;
 
 /// Dependencies needed to run the rollup.
 /// This is duplicated exactly from demo-rollup. Should go to stf-runner crate?
 pub struct Rollup<Vm: ZkvmHost, Da: DaService + Clone> {
     // Implementation of the STF.
-    pub(crate) app: StfWithBuilder<Vm, Da::Spec>,
+    pub(crate) app: StfWithBuilder<Da::Spec>,
     // Data availability service.
     pub(crate) da_service: Da,
     // Ledger db.
@@ -29,7 +29,7 @@ pub struct Rollup<Vm: ZkvmHost, Da: DaService + Clone> {
     pub(crate) genesis_config: GenesisConfig<DefaultContext, Da::Spec>,
     // Prover for the rollup.
     #[allow(clippy::type_complexity)]
-    pub(crate) prover: Option<Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm>>,
+    pub(crate) prover: Option<Prover<ZkStf<Da::Spec>, Da, Vm>>,
 }
 
 impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> {
@@ -39,7 +39,7 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
         da_service: Da,
         genesis_config: GenesisConfig<DefaultContext, Da::Spec>,
         config: RollupConfig<DaConfig>,
-        prover: Option<Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm>>,
+        prover: Option<Prover<ZkStf<Da::Spec>, Da, Vm>>,
     ) -> Result<Self, anyhow::Error> {
         let ledger_db = LedgerDB::with_path(&config.storage.path)?;
         let app = StfWithBuilder::new(config.storage.clone());

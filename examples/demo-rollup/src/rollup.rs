@@ -50,37 +50,34 @@ const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.j
 use sov_modules_stf_template::Runtime as RuntimeTrait;
 use sov_rollup_interface::stf::StateTransitionFunction;
 
-type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>;
+type ZkStf<Da> = AppTemplate<ZkDefaultContext, Da, Runtime<ZkDefaultContext, Da>>;
 
 pub trait RollupSpec: Sized {
-    type Foo<X>;
-
     type DaService: DaService<Spec = Self::DaSpec, Error = anyhow::Error> + Clone;
-    type DaSpec: DaSpec;
-    type DaConfig;
 
     type ZkContext: Context;
     type DefaultContext: Context;
 
-    type ZkRuntime: RuntimeTrait<Self::ZkContext, Self::DaSpec>;
-    type NativeRuntime: RuntimeTrait<Self::DefaultContext, Self::DaSpec>;
-
     type Vm: ZkvmHost;
     type Builder: BatchBuilder + Send + Sync + 'static;
 
-    type ZkSTF: StateTransitionFunction<<Self::Vm as ZkvmHost>::Guest, Self::DaSpec>;
+    type NativeRuntime: RuntimeTrait<Self::DefaultContext, Self::DaSpec>;
+
+    ///=====
+    type DaSpec: DaSpec;
+    type DaConfig;
+
+    type ZkRuntime: RuntimeTrait<Self::ZkContext, Self::DaSpec>;
+
+    type ZkSTF: StateTransitionFunction<Self::DaSpec>;
     type NativeSTF: StateTransitionFunction<
-        Self::Vm,
         Self::DaSpec,
+        //
         Condition = <Self::DaSpec as DaSpec>::ValidityCondition,
-        Witness = <Self::ZkSTF as StateTransitionFunction<
-            <Self::Vm as ZkvmHost>::Guest,
-            Self::DaSpec,
-        >>::Witness,
-        StateRoot = <Self::ZkSTF as StateTransitionFunction<
-            <Self::Vm as ZkvmHost>::Guest,
-            Self::DaSpec,
-        >>::StateRoot,
+        //
+        Witness = <Self::ZkSTF as StateTransitionFunction<Self::DaSpec>>::Witness,
+        //
+        StateRoot = <Self::ZkSTF as StateTransitionFunction<Self::DaSpec>>::StateRoot,
     >;
 
     fn _get_genesis_config<P: AsRef<Path>>(
@@ -106,8 +103,6 @@ pub trait RollupSpec: Sized {
 pub struct DempRollupSpec {}
 
 impl RollupSpec for DempRollupSpec {
-    type Foo<X> = Vec<X>;
-
     type DaService = MockDaService;
     type DaSpec = MockDaSpec;
     type DaConfig = MockDaConfig;
@@ -118,13 +113,12 @@ impl RollupSpec for DempRollupSpec {
     type DefaultContext = DefaultContext;
     type Builder = FiFoStrictBatchBuilder<Self::NativeRuntime, Self::DefaultContext>;
 
-    ///
+    /// ===
     type ZkRuntime = Runtime<Self::ZkContext, Self::DaSpec>;
-    type ZkSTF =
-        AppTemplate<Self::ZkContext, Self::DaSpec, <Self::Vm as ZkvmHost>::Guest, Self::ZkRuntime>;
+    type ZkSTF = AppTemplate<Self::ZkContext, Self::DaSpec, Self::ZkRuntime>;
 
     type NativeRuntime = Runtime<Self::DefaultContext, Self::DaSpec>;
-    type NativeSTF = AppTemplate<Self::DefaultContext, Self::DaSpec, Self::Vm, Self::NativeRuntime>;
+    type NativeSTF = AppTemplate<Self::DefaultContext, Self::DaSpec, Self::NativeRuntime>;
 
     fn _get_genesis_config<P: AsRef<Path>>(
         genesis_paths: &GenesisPaths<P>,
@@ -158,7 +152,7 @@ impl RollupSpec for DempRollupSpec {
         //let prover_config = ProofGenConfig::Execute;
 
         let prover_config = ProofGenConfig::Simulate(AppVerifier::new(
-            create_zk_app_template::<<<DempRollupSpec as RollupSpec>::Vm as ZkvmHost>::Guest, _>(),
+            create_zk_app_template::<_>(),
             Default::default(),
         ));
 
@@ -285,7 +279,7 @@ pub fn new_mock_rollup2<P: AsRef<Path>>(
     //let prover_config = ProofGenConfig::Execute;
 
     let prover_config = ProofGenConfig::Simulate(AppVerifier::new(
-        create_zk_app_template::<<<DempRollupSpec as RollupSpec>::Vm as ZkvmHost>::Guest, _>(),
+        create_zk_app_template::<_>(),
         Default::default(),
     ));
 
@@ -335,7 +329,7 @@ pub fn new_mock_rollup<P: AsRef<Path>>(
 /// Dependencies needed to run the rollup.
 pub struct Rollup<Vm: ZkvmHost, Da: DaService + Clone> {
     // Implementation of the STF.
-    pub(crate) app: App<Vm, Da::Spec>,
+    pub(crate) app: App<Da::Spec>,
     // Data availability service.
     pub(crate) da_service: Da,
     // Ledger db.
@@ -349,19 +343,18 @@ pub struct Rollup<Vm: ZkvmHost, Da: DaService + Clone> {
     pub(crate) eth_rpc_config: EthRpcConfig,
     // Prover for the rollup.
     #[allow(clippy::type_complexity)]
-    pub(crate) prover: Option<Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm>>,
+    pub(crate) prover: Option<Prover<ZkStf<Da::Spec>, Da, Vm>>,
 }
 
 pub fn configure_prover<Vm: ZkvmHost, Da: DaService>(
     vm: Vm,
     cfg: DemoProverConfig,
     da_verifier: Da::Verifier,
-) -> Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm> {
+) -> Prover<ZkStf<Da::Spec>, Da, Vm> {
     let config = match cfg {
-        DemoProverConfig::Simulate => ProofGenConfig::Simulate(AppVerifier::new(
-            create_zk_app_template::<Vm::Guest, _>(),
-            da_verifier,
-        )),
+        DemoProverConfig::Simulate => {
+            ProofGenConfig::Simulate(AppVerifier::new(create_zk_app_template::<_>(), da_verifier))
+        }
         DemoProverConfig::Execute => ProofGenConfig::Execute,
         DemoProverConfig::Prove => ProofGenConfig::Prover,
     };

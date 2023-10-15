@@ -23,7 +23,7 @@ pub enum ApplySlotResult {
     Success,
 }
 
-impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, Da>
+impl<Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Da>
     for CheckHashPreimageStf<Cond>
 {
     // Since our rollup is stateless, we don't need to consider the StateRoot.

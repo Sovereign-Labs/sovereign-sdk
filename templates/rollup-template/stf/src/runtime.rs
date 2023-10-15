@@ -94,20 +94,17 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for Runtime<C, Da> {
 }
 
 /// Create the zk version of the STF.
-pub fn zk_stf<Vm: Zkvm, Da: DaSpec>(
-) -> AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>> {
+pub fn zk_stf<Da: DaSpec>() -> AppTemplate<ZkDefaultContext, Da, Runtime<ZkDefaultContext, Da>> {
     let storage = ZkStorage::new();
     AppTemplate::new(storage, Runtime::default())
 }
 
 /// A verifier for the rollup
-pub type RollupVerifier<DA, Zk> = StateTransitionVerifier<
+pub type RollupVerifier<DA> = StateTransitionVerifier<
     AppTemplate<
         ZkDefaultContext,
         <DA as DaVerifier>::Spec,
-        Zk,
         Runtime<ZkDefaultContext, <DA as DaVerifier>::Spec>,
     >,
     DA,
-    Zk,
 >;

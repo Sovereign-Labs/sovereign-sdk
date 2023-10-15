@@ -27,7 +27,6 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::Zkvm;
 
 /// Implements the `StateTransitionVerifier` type for checking the validity of a state transition
 pub mod verifier;
@@ -37,10 +36,7 @@ pub mod verifier;
 // StateTransitionFunction, DA, and Zkvm traits.
 #[serde(bound = "")]
 /// Data required to verify a state transition.
-pub struct StateTransitionData<ST: StateTransitionFunction<Zk, DA>, DA: DaSpec, Zk>
-where
-    Zk: Zkvm,
-{
+pub struct StateTransitionData<ST: StateTransitionFunction<DA>, DA: DaSpec> {
     /// The state root before the state transition
     pub pre_state_root: ST::StateRoot,
     /// The header of the da block that is being processed

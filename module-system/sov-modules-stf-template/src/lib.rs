@@ -75,10 +75,10 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
-impl<C, RT, Vm, Da> AppTemplate<C, Da, Vm, RT>
+impl<C, RT, Da> AppTemplate<C, Da, RT>
 where
     C: Context,
-    Vm: Zkvm,
+
     Da: DaSpec,
     RT: Runtime<C, Da>,
 {
@@ -88,7 +88,7 @@ where
         slot_header: &Da::BlockHeader,
         validity_condition: &Da::ValidityCondition,
         pre_state_root: &<C::Storage as Storage>::Root,
-        witness: <Self as StateTransitionFunction<Vm, Da>>::Witness,
+        witness: <Self as StateTransitionFunction<Da>>::Witness,
     ) {
         let state_checkpoint = StateCheckpoint::with_witness(self.current_storage.clone(), witness);
         let mut working_set = state_checkpoint.to_revertable();
@@ -139,11 +139,11 @@ where
     }
 }
 
-impl<C, RT, Vm, Da> StateTransitionFunction<Vm, Da> for AppTemplate<C, Da, Vm, RT>
+impl<C, RT, Da> StateTransitionFunction<Da> for AppTemplate<C, Da, RT>
 where
     C: Context,
     Da: DaSpec,
-    Vm: Zkvm,
+
     RT: Runtime<C, Da>,
 {
     type StateRoot = <C::Storage as Storage>::Root;

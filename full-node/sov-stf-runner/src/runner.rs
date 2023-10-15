@@ -12,33 +12,33 @@ use tracing::{debug, info};
 use crate::verifier::StateTransitionVerifier;
 use crate::{RunnerConfig, StateTransitionData};
 
-type StateRoot<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::StateRoot;
-type InitialState<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::InitialState;
+type StateRoot<ST, Da> = <ST as StateTransitionFunction<Da>>::StateRoot;
+type InitialState<ST, Da> = <ST as StateTransitionFunction<Da>>::InitialState;
 
 /// Combines `DaService` with `StateTransitionFunction` and "runs" the rollup.
 pub struct StateTransitionRunner<ST, Da, Vm, V>
 where
     Da: DaService,
     Vm: ZkvmHost,
-    ST: StateTransitionFunction<Vm, Da::Spec, Condition = <Da::Spec as DaSpec>::ValidityCondition>,
-    V: StateTransitionFunction<Vm::Guest, Da::Spec>,
+    ST: StateTransitionFunction<Da::Spec, Condition = <Da::Spec as DaSpec>::ValidityCondition>,
+    V: StateTransitionFunction<Da::Spec>,
 {
     start_height: u64,
     da_service: Da,
     app: ST,
     ledger_db: LedgerDB,
-    state_root: StateRoot<ST, Vm, Da::Spec>,
+    state_root: StateRoot<ST, Da::Spec>,
     listen_address: SocketAddr,
     prover: Option<Prover<V, Da, Vm>>,
 }
 
 /// Represents the possible modes of execution for a zkVM program
-pub enum ProofGenConfig<ST, Da: DaService, Vm: ZkvmHost>
+pub enum ProofGenConfig<ST, Da: DaService>
 where
-    ST: StateTransitionFunction<Vm::Guest, Da::Spec>,
+    ST: StateTransitionFunction<Da::Spec>,
 {
     /// The simulator runs the rollup verifier logic without even emulating the zkVM
-    Simulate(StateTransitionVerifier<ST, Da::Verifier, Vm::Guest>),
+    Simulate(StateTransitionVerifier<ST, Da::Verifier>),
     /// The executor runs the rollup verification logic in the zkVM, but does not actually
     /// produce a zk proof
     Execute,
@@ -49,21 +49,20 @@ where
 /// A prover for the demo rollup. Consists of a VM and a config
 pub struct Prover<ST, Da: DaService, Vm: ZkvmHost>
 where
-    ST: StateTransitionFunction<Vm::Guest, Da::Spec>,
+    ST: StateTransitionFunction<Da::Spec>,
 {
     /// The Zkvm Host to use
     pub vm: Vm,
     /// The prover configuration
-    pub config: ProofGenConfig<ST, Da, Vm>,
+    pub config: ProofGenConfig<ST, Da>,
 }
 
 impl<ST, Da, Vm, V, Root, Witness> StateTransitionRunner<ST, Da, Vm, V>
 where
     Da: DaService<Error = anyhow::Error> + Clone + Send + Sync + 'static,
     Vm: ZkvmHost,
-    V: StateTransitionFunction<Vm::Guest, Da::Spec, StateRoot = Root, Witness = Witness>,
+    V: StateTransitionFunction<Da::Spec, StateRoot = Root, Witness = Witness>,
     ST: StateTransitionFunction<
-        Vm,
         Da::Spec,
         StateRoot = Root,
         Condition = <Da::Spec as DaSpec>::ValidityCondition,
@@ -83,7 +82,7 @@ where
         ledger_db: LedgerDB,
         mut app: ST,
         prev_state_root: Option<Root>,
-        genesis_config: InitialState<ST, Vm, Da::Spec>,
+        genesis_config: InitialState<ST, Da::Spec>,
         prover: Option<Prover<V, Da, Vm>>,
     ) -> Result<Self, anyhow::Error> {
         let rpc_config = runner_config.rpc_config;
@@ -185,15 +184,14 @@ where
                     .get_extraction_proof(&filtered_block, &blobs)
                     .await;
 
-                let transition_data: StateTransitionData<V, Da::Spec, Vm::Guest> =
-                    StateTransitionData {
-                        pre_state_root: self.state_root.clone(),
-                        da_block_header: filtered_block.header().clone(),
-                        inclusion_proof,
-                        completeness_proof,
-                        blobs,
-                        state_transition_witness: slot_result.witness,
-                    };
+                let transition_data: StateTransitionData<ST, Da::Spec> = StateTransitionData {
+                    pre_state_root: self.state_root.clone(),
+                    da_block_header: filtered_block.header().clone(),
+                    inclusion_proof,
+                    completeness_proof,
+                    blobs,
+                    state_transition_witness: slot_result.witness,
+                };
                 vm.add_hint(transition_data);
                 tracing::info_span!("guest_execution").in_scope(|| match config {
                     ProofGenConfig::Simulate(verifier) => verifier

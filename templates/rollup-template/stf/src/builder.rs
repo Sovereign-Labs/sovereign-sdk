@@ -14,13 +14,13 @@ use sov_state::{ProverStorage, Storage};
 use super::runtime::Runtime;
 
 /// The "native" version of the STF and a batch builder
-pub struct StfWithBuilder<Vm: Zkvm, Da: DaSpec> {
-    pub stf: AppTemplate<DefaultContext, Da, Vm, Runtime<DefaultContext, Da>>,
+pub struct StfWithBuilder<Da: DaSpec> {
+    pub stf: AppTemplate<DefaultContext, Da, Runtime<DefaultContext, Da>>,
     pub batch_builder: Option<FiFoStrictBatchBuilder<Runtime<DefaultContext, Da>, DefaultContext>>,
 }
 
 #[cfg(feature = "native")]
-impl<Vm: Zkvm, Da: DaSpec> StfWithBuilder<Vm, Da> {
+impl<Da: DaSpec> StfWithBuilder<Da> {
     /// Create a new rollup instance
     pub fn new(storage_config: sov_stf_runner::StorageConfig) -> Self {
         let config = sov_state::config::Config {

@@ -7,34 +7,28 @@ use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 use crate::StateTransitionData;
 
 /// Verifies a state transition
-pub struct StateTransitionVerifier<ST, Da, Zk>
+pub struct StateTransitionVerifier<ST, Da>
 where
     Da: DaVerifier,
-    Zk: Zkvm,
-    ST: StateTransitionFunction<Zk, Da::Spec>,
+    ST: StateTransitionFunction<Da::Spec>,
 {
     app: ST,
     da_verifier: Da,
-    phantom: PhantomData<Zk>,
 }
-impl<ST, Da, Zk> StateTransitionVerifier<ST, Da, Zk>
+impl<ST, Da> StateTransitionVerifier<ST, Da>
 where
     Da: DaVerifier,
-    Zk: ZkvmGuest,
-    ST: StateTransitionFunction<Zk, Da::Spec>,
+
+    ST: StateTransitionFunction<Da::Spec>,
 {
     /// Create a [`StateTransitionVerifier`]
     pub fn new(app: ST, da_verifier: Da) -> Self {
-        Self {
-            app,
-            da_verifier,
-            phantom: Default::default(),
-        }
+        Self { app, da_verifier }
     }
 
     /// Verify the next block
-    pub fn run_block(&mut self, zkvm: Zk) -> Result<ST::StateRoot, Da::Error> {
-        let mut data: StateTransitionData<ST, Da::Spec, Zk> = zkvm.read_from_host();
+    pub fn run_block<Zk: ZkvmGuest>(&mut self, zkvm: Zk) -> Result<ST::StateRoot, Da::Error> {
+        let mut data: StateTransitionData<ST, Da::Spec> = zkvm.read_from_host();
         let validity_condition = self.da_verifier.verify_relevant_tx_list(
             &data.da_block_header,
             &data.blobs,
