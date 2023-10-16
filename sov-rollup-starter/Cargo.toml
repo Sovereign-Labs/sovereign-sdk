@@ -13,13 +13,14 @@ rust-version.workspace = true
 
 [dependencies]
 #stf dependencies
-sov-modules-api = { path = "../module-system/sov-modules-api", features = ["native"] }  
-sov-state = { path = "../module-system/sov-state" } 
-sov-accounts = { path = "../module-system/module-implementations/sov-accounts", features = ["native"]} 
-sov-bank = { path = "../module-system/module-implementations/sov-bank", features = ["native"] } 
-sov-sequencer-registry = { path = "../module-system/module-implementations/sov-sequencer-registry", features = ["native"] } 
+sov-modules-api = { path = "../module-system/sov-modules-api", features = ["native"] }
+sov-state = { path = "../module-system/sov-state" }
+sov-accounts = { path = "../module-system/module-implementations/sov-accounts", features = ["native"] }
+sov-bank = { path = "../module-system/module-implementations/sov-bank", features = ["native"] }
+sov-ledger-rpc = { path = "../full-node/sov-ledger-rpc", features = ["server"] }
+sov-sequencer-registry = { path = "../module-system/module-implementations/sov-sequencer-registry", features = ["native"] }
 sov-modules-stf-template = { path = "../module-system/sov-modules-stf-template/", features = ["native"] }
-sov-stf-runner = { path = "../full-node/sov-stf-runner", features = ["native"] } 
+sov-stf-runner = { path = "../full-node/sov-stf-runner", features = ["native"] }
 borsh = { workspace = true }
 clap = { workspace = true }
 serde = { workspace = true }
@@ -29,12 +30,12 @@ jsonrpsee = { workspace = true }
 anyhow = { workspace = true }
 
 risc0-starter = { path = "./provers/risc0" }
-stf-starter = { path = "./stf", features = ["native"] } 
+stf-starter = { path = "./stf", features = ["native"] }
 
-sov-db = { path = "../full-node/db/sov-db" } 
-sov-sequencer = { path = "../full-node/sov-sequencer" } 
-sov-rollup-interface = { path = "../rollup-interface", features = ["mocks"] } 
-tokio = { workspace = true}
+sov-db = { path = "../full-node/db/sov-db" }
+sov-sequencer = { path = "../full-node/sov-sequencer" }
+sov-rollup-interface = { path = "../rollup-interface", features = ["mocks"] }
+tokio = { workspace = true }
 
 # Change dependencies here to use a different DA layer or ZKVM
 sov-risc0-adapter = { path = "../adapters/risc0", features = ["native"] }
@@ -55,4 +56,3 @@ path = "src/bin/node.rs"
 [[bin]]
 name = "cli_wallet"
 path = "src/bin/cli_wallet.rs"
-
