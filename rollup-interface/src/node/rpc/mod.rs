@@ -54,7 +54,7 @@ pub struct TxIdAndKey {
 #[serde(untagged)]
 pub enum BatchIdentifier {
     /// The hex-encoded hash of the batch, as computed by the DA layer.
-    Hash(#[serde(with = "rpc_hex")] [u8; 32]),
+    Hash(#[serde(with = "utils::rpc_hex")] [u8; 32]),
     /// An offset into a particular slot (i.e. the 3rd batch in slot 5).
     SlotIdAndOffset(SlotIdAndOffset),
     /// The monotonically increasing number of the batch, ordered by the DA layer For example, if the genesis slot
@@ -68,7 +68,7 @@ pub enum BatchIdentifier {
 #[serde(untagged)]
 pub enum TxIdentifier {
     /// The hex encoded hash of the transaction.
-    Hash(#[serde(with = "rpc_hex")] [u8; 32]),
+    Hash(#[serde(with = "utils::rpc_hex")] [u8; 32]),
     /// An offset into a particular batch (i.e. the 3rd transaction in batch 5).
     BatchIdAndOffset(BatchIdAndOffset),
     /// The monotonically increasing number of the tx, ordered by the DA layer For example, if genesis
@@ -106,7 +106,7 @@ pub enum EventGroupIdentifier {
 #[serde(untagged)]
 pub enum SlotIdentifier {
     /// The hex encoded hash of the slot (i.e. the da layer's block hash).
-    Hash(#[serde(with = "rpc_hex")] [u8; 32]),
+    Hash(#[serde(with = "utils::rpc_hex")] [u8; 32]),
     /// The monotonically increasing number of the slot, ordered by the DA layer but starting from 0
     /// at the *rollup's* genesis.
     Number(u64),
@@ -140,7 +140,7 @@ pub struct SlotResponse<B, Tx> {
     /// The slot number.
     pub number: u64,
     /// The hex encoded slot hash.
-    #[serde(with = "rpc_hex")]
+    #[serde(with = "utils::rpc_hex")]
     pub hash: [u8; 32],
     /// The range of batches in this slot.
     pub batch_range: std::ops::Range<u64>,
@@ -153,7 +153,7 @@ pub struct SlotResponse<B, Tx> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct BatchResponse<B, Tx> {
     /// The hex encoded batch hash.
-    #[serde(with = "rpc_hex")]
+    #[serde(with = "utils::rpc_hex")]
     pub hash: [u8; 32],
     /// The range of transactions in this batch.
     pub tx_range: std::ops::Range<u64>,
@@ -169,7 +169,7 @@ pub struct BatchResponse<B, Tx> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct TxResponse<Tx> {
     /// The hex encoded transaction hash.
-    #[serde(with = "rpc_hex")]
+    #[serde(with = "utils::rpc_hex")]
     pub hash: [u8; 32],
     /// The range of events occurring in this transaction.
     pub event_range: std::ops::Range<u64>,
@@ -186,7 +186,7 @@ pub struct TxResponse<Tx> {
 #[serde(untagged)]
 pub enum ItemOrHash<T> {
     /// The hex encoded hash of the requested item.
-    Hash(#[serde(with = "rpc_hex")] [u8; 32]),
+    Hash(#[serde(with = "utils::rpc_hex")] [u8; 32]),
     /// The full item body.
     Full(T),
 }
@@ -306,70 +306,75 @@ pub trait LedgerRpcProvider {
     fn subscribe_slots(&self) -> Result<Receiver<u64>, anyhow::Error>;
 }
 
-mod rpc_hex {
-    use core::fmt;
-    use std::marker::PhantomData;
+/// JSON-RPC -related utilities. Occasionally useful but unimportant for most
+/// use cases.
+pub mod utils {
+    /// Serialization and deserialization logic for `0x`-prefixed hex strings.
+    pub mod rpc_hex {
+        use core::fmt;
+        use std::marker::PhantomData;
 
-    use hex::{FromHex, ToHex};
-    use serde::de::{Error, Visitor};
-    use serde::{Deserializer, Serializer};
+        use hex::{FromHex, ToHex};
+        use serde::de::{Error, Visitor};
+        use serde::{Deserializer, Serializer};
 
-    /// Serializes `data` as hex string using lowercase characters and prefixing with '0x'.
-    ///
-    /// Lowercase characters are used (e.g. `f9b4ca`). The resulting string's length
-    /// is always even, each byte in data is always encoded using two hex digits.
-    /// Thus, the resulting string contains exactly twice as many bytes as the input
-    /// data.
-    pub fn serialize<S, T>(data: T, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-        T: ToHex,
-    {
-        let formatted_string = format!("0x{}", data.encode_hex::<String>());
-        serializer.serialize_str(&formatted_string)
-    }
-
-    /// Deserializes a hex string into raw bytes.
-    ///
-    /// Both, upper and lower case characters are valid in the input string and can
-    /// even be mixed (e.g. `f9b4ca`, `F9B4CA` and `f9B4Ca` are all valid strings).
-    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-    where
-        D: Deserializer<'de>,
-        T: FromHex,
-        <T as FromHex>::Error: fmt::Display,
-    {
-        struct HexStrVisitor<T>(PhantomData<T>);
-
-        impl<'de, T> Visitor<'de> for HexStrVisitor<T>
+        /// Serializes `data` as hex string using lowercase characters and prefixing with '0x'.
+        ///
+        /// Lowercase characters are used (e.g. `f9b4ca`). The resulting string's length
+        /// is always even, each byte in data is always encoded using two hex digits.
+        /// Thus, the resulting string contains exactly twice as many bytes as the input
+        /// data.
+        pub fn serialize<S, T>(data: T, serializer: S) -> Result<S::Ok, S::Error>
         where
+            S: Serializer,
+            T: ToHex,
+        {
+            let formatted_string = format!("0x{}", data.encode_hex::<String>());
+            serializer.serialize_str(&formatted_string)
+        }
+
+        /// Deserializes a hex string into raw bytes.
+        ///
+        /// Both, upper and lower case characters are valid in the input string and can
+        /// even be mixed (e.g. `f9b4ca`, `F9B4CA` and `f9B4Ca` are all valid strings).
+        pub fn deserialize<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+        where
+            D: Deserializer<'de>,
             T: FromHex,
             <T as FromHex>::Error: fmt::Display,
         {
-            type Value = T;
+            struct HexStrVisitor<T>(PhantomData<T>);
 
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(f, "a hex encoded string")
-            }
-
-            fn visit_str<E>(self, data: &str) -> Result<Self::Value, E>
+            impl<'de, T> Visitor<'de> for HexStrVisitor<T>
             where
-                E: Error,
+                T: FromHex,
+                <T as FromHex>::Error: fmt::Display,
             {
-                let data = data.trim_start_matches("0x");
-                FromHex::from_hex(data).map_err(Error::custom)
+                type Value = T;
+
+                fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    write!(f, "a hex encoded string")
+                }
+
+                fn visit_str<E>(self, data: &str) -> Result<Self::Value, E>
+                where
+                    E: Error,
+                {
+                    let data = data.trim_start_matches("0x");
+                    FromHex::from_hex(data).map_err(Error::custom)
+                }
+
+                fn visit_borrowed_str<E>(self, data: &'de str) -> Result<Self::Value, E>
+                where
+                    E: Error,
+                {
+                    let data = data.trim_start_matches("0x");
+                    FromHex::from_hex(data).map_err(Error::custom)
+                }
             }
 
-            fn visit_borrowed_str<E>(self, data: &'de str) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                let data = data.trim_start_matches("0x");
-                FromHex::from_hex(data).map_err(Error::custom)
-            }
+            deserializer.deserialize_str(HexStrVisitor(PhantomData))
         }
-
-        deserializer.deserialize_str(HexStrVisitor(PhantomData))
     }
 }
 
@@ -379,7 +384,7 @@ mod rpc_hex_tests {
 
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
     struct TestStruct {
-        #[serde(with = "super::rpc_hex")]
+        #[serde(with = "super::utils::rpc_hex")]
         data: Vec<u8>,
     }
 

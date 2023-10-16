@@ -8638,7 +8638,6 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "futures",
- "hex",
  "jsonrpsee 0.20.1",
  "serde",
  "serde_json",

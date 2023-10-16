@@ -13,7 +13,6 @@ publish = true
 
 [dependencies]
 # Common dependencies
-hex = "0.4"
 jsonrpsee = { workspace = true }
 serde = "1"
 sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
