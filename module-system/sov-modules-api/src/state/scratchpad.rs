@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::marker::PhantomData;
 
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 use sov_rollup_interface::stf::Event;
@@ -17,7 +16,6 @@ pub struct Delta<S: Storage> {
     inner: S,
     witness: S::Witness,
     cache: StorageInternalCache,
-    parent: PhantomData<S>,
 }
 
 impl<S: Storage> Delta<S> {

@@ -62,9 +62,7 @@ where
     where
         C::Storage: NativeStorage,
     {
-        let prefix = self.bonded_attesters.prefix();
-        let codec = self.bonded_attesters.codec();
-        working_set.get_with_proof(StorageKey::new(prefix, &address, codec))
+        working_set.get_with_proof(self.get_attester_storage_key(address))
     }
 
     /// TODO: Make the unbonding amount queryable:
