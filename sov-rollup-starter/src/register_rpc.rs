@@ -2,7 +2,7 @@ use anyhow::Context;
 use sov_modules_api::Zkvm;
 use sov_rollup_interface::services::da::DaService;
 use sov_sequencer::get_sequencer_rpc;
-use template_stf::StfWithBuilder;
+use stf_starter::StfWithBuilder;
 
 /// register sequencer rpc methods.
 pub(crate) fn register_sequencer<Vm, Da>(

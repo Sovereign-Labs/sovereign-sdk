@@ -16,7 +16,7 @@ members = [
     "full-node/sov-ledger-rpc",
     "full-node/sov-stf-runner",
 
-    "templates/rollup-template",
+    "sov-rollup-starter",
 
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
