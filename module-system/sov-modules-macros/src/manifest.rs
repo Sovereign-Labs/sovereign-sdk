@@ -52,7 +52,7 @@ impl<'a> Manifest<'a> {
             .canonicalize()
             .map_err(|e| {
                 Self::err(
-                    "constants.json",
+                    "target-path",
                     parent,
                     format!("failed access base dir for sovereign manifest file: {e}"),
                 )

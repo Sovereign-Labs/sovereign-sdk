@@ -1,9 +1,9 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{env, fs, io};
 
 use anyhow::{anyhow, Context};
 
-fn resolve_manifest_path() -> anyhow::Result<PathBuf> {
+fn resolve_manifest_path(out_dir: &Path) -> anyhow::Result<PathBuf> {
     let manifest = "constants.json";
     match env::var("CONSTANTS_MANIFEST"){
         Ok(p) if p.is_empty() => {
@@ -15,10 +15,13 @@ fn resolve_manifest_path() -> anyhow::Result<PathBuf> {
                 anyhow!("failed to canonicalize path for sovereign manifest file from env var `{p}`: {e}")
         }),
         Err(_) => {
-            let mut current_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            // Start from the parent of out-dir to avoid a self-referential `cp` once the output file has been placed into `out_dir` for the first time
+            let current_path = out_dir.parent().ok_or(anyhow!("out dir must have parent but {out_dir:?} had none"))?;
+            let mut current_path = current_path.canonicalize().with_context(|| anyhow!("failed to canonicalize path to otput dirdir `{current_path:?}`"))?;
             loop {
-                if current_path.join(manifest).exists() {
-                    return Ok(current_path.join(manifest));
+                let path = current_path.join(manifest);
+                if path.exists() && path.is_file() {
+                    return Ok(path);
                 }
 
                 current_path = current_path.parent().ok_or_else(|| {
@@ -46,14 +49,20 @@ fn main() -> anyhow::Result<()> {
     // Write the path "OUT_DIR" to a file in the manifest directory so that it's available to macros
     fs::write(target_path_record, out_dir.display().to_string())?;
 
-    let manifest_path = resolve_manifest_path()?;
+    let input_manifest_path = resolve_manifest_path(&out_dir)?;
     let output_manifest_path = out_dir.join("constants.json");
 
     // Copy the constants.json file into out_dir
-    fs::copy(&manifest_path, &output_manifest_path).with_context(|| anyhow!("could not copy manifest from {manifest:?} to output directory `{output_manifest_path:?}`"))?;
+    let bytes_copied = fs::copy(&input_manifest_path, &output_manifest_path).with_context(|| anyhow!("could not copy manifest from {manifest:?} to output directory `{output_manifest_path:?}`"))?;
+    if bytes_copied == 0 {
+        return Err(anyhow!("Could not find valid `constants.json` Manifest file. The file at `{input_manifest_path:?}` was empty. You can set a different input file with the `CONSTANTS_MANIFEST` env var"));
+    }
     // Tell cargo to rebuild if constants.json changes
+    // We need to watch the output file in to handle the corner case where the user updates
+    // their input manifest from `a/constants.json` to a pre-existing `b/constants.json` without updating any rust files.
+    // Othewise, Cargo's timestamp based change detection will miss these changes.
     println!("cargo:rerun-if-changed={}", output_manifest_path.display());
-    println!("cargo:rerun-if-changed={}", manifest_path.display());
+    println!("cargo:rerun-if-changed={}", input_manifest_path.display());
 
     Ok(())
 }
