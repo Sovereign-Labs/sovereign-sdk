@@ -1,16 +1,19 @@
 //! Defines the rollup full node implementation, including logic for configuring
 //! and starting the rollup node.
+
+use jsonrpsee::RpcModule;
 use serde::de::DeserializeOwned;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
-use sov_modules_stf_template::AppTemplate;
+use sov_modules_api::Spec;
+use sov_modules_stf_template::{AppTemplate, SequencerOutcome, TxEffect};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{Prover, RollupConfig, RunnerConfig, StateTransitionRunner};
 use stf_starter::{get_rpc_methods, GenesisConfig, Runtime, StfWithBuilder};
 use tokio::sync::oneshot;
 
-use crate::rpc::{register_ledger, register_sequencer};
+use crate::register_rpc::register_sequencer;
 
 type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>;
 
@@ -68,13 +71,8 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
         let prev_root = last_slot_opt
             .map(|(number, _)| storage.get_root_hash(number.0))
             .transpose()?;
-        let mut methods = get_rpc_methods::<DefaultContext, Da::Spec>(storage.clone());
 
-        // register rpc methods
-        {
-            register_ledger::<Da>(self.ledger_db.clone(), &mut methods)?;
-            register_sequencer(self.da_service.clone(), &mut self.app, &mut methods)?;
-        }
+        let rpc_module = self.rpc_module(storage)?;
 
         let mut runner = StateTransitionRunner::new(
             self.runner_config,
@@ -86,9 +84,27 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
             self.prover,
         )?;
 
-        runner.start_rpc_server(methods, channel).await;
+        runner.start_rpc_server(rpc_module, channel).await;
         runner.run_in_process().await?;
 
         Ok(())
+    }
+
+    /// Creates a new [`jsonrpsee::RpcModule`] and registers all RPC methods
+    /// exposed by the node.
+    fn rpc_module(
+        &mut self,
+        storage: <DefaultContext as Spec>::Storage,
+    ) -> anyhow::Result<RpcModule<()>> {
+        let mut module = get_rpc_methods::<DefaultContext, Da::Spec>(storage.clone());
+
+        module.merge(sov_ledger_rpc::server::rpc_module::<
+            LedgerDB,
+            SequencerOutcome<<DefaultContext as Spec>::Address>,
+            TxEffect,
+        >(self.ledger_db.clone())?)?;
+        register_sequencer(self.da_service.clone(), &mut self.app, &mut module)?;
+
+        Ok(module)
     }
 }

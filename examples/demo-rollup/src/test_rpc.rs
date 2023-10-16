@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::net::SocketAddr;
 
 use proptest::prelude::any_with;
 use proptest::strategy::Strategy;
@@ -13,10 +12,8 @@ use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::fuzzing::BatchReceiptStrategyArgs;
 use sov_rollup_interface::stf::{BatchReceipt, Event, TransactionReceipt};
 #[cfg(test)]
-use sov_stf_runner::get_ledger_rpc;
 use sov_stf_runner::RpcConfig;
 use tendermint::crypto::Sha256;
-use tokio::sync::oneshot;
 
 struct TestExpect {
     payload: serde_json::Value,
@@ -61,39 +58,25 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<MockBlock, u
         .unwrap();
 
     rt.block_on(async {
-        let (tx_start, rx_start) = oneshot::channel();
-        let (tx_end, rx_end) = oneshot::channel();
-
-        let address = SocketAddr::new("127.0.0.1".parse().unwrap(), 0);
-
         // Initialize the ledger database, which stores blocks, transactions, events, etc.
         let tmpdir = tempfile::tempdir().unwrap();
         let mut ledger_db = LedgerDB::with_path(tmpdir.path()).unwrap();
-
         populate_ledger(&mut ledger_db, slots);
+        let server = jsonrpsee::server::ServerBuilder::default()
+            .build("127.0.0.1:0")
+            .await
+            .unwrap();
+        let addr = server.local_addr().unwrap();
+        let server_rpc_module =
+            sov_ledger_rpc::server::rpc_module::<LedgerDB, u32, u32>(ledger_db).unwrap();
+        let _server_handle = server.start(server_rpc_module);
 
-        let ledger_rpc_module = get_ledger_rpc::<u32, u32>(ledger_db.clone());
-
-        rt.spawn(async move {
-            let server = jsonrpsee::server::ServerBuilder::default()
-                .build([address].as_ref())
-                .await
-                .unwrap();
-            let actual_address = server.local_addr().unwrap();
-            let _server_handle = server.start(ledger_rpc_module);
-            tx_start.send(actual_address.port()).unwrap();
-            rx_end.await.unwrap();
-        });
-
-        let bind_port = rx_start.await.unwrap();
         let rpc_config = RpcConfig {
             bind_host: "127.0.0.1".to_string(),
-            bind_port,
+            bind_port: addr.port(),
         };
 
         queries_test_runner(test_queries, rpc_config).await;
-
-        tx_end.send("drop server").unwrap();
     });
 }
 
@@ -388,7 +371,7 @@ proptest!(
         let last_slot_start_batch = total_num_batches - last_slot_num_batches;
         let last_slot_end_batch = total_num_batches;
 
-        let payload = jsonrpc_req!("ledger_getHead", []);
+        let payload = jsonrpc_req!("ledger_getHead", ["Compact"]);
         let expected = jsonrpc_result!({
             "number": slots.len(),
             "hash": format!("0x{}", hex::encode(last_slot.slot_data().hash())),

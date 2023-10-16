@@ -13,6 +13,7 @@ members = [
     "full-node/db/sov-db",
     "full-node/sov-sequencer",
     "full-node/sov-ethereum",
+    "full-node/sov-ledger-rpc",
     "full-node/sov-stf-runner",
 
     "sov-rollup-starter",
