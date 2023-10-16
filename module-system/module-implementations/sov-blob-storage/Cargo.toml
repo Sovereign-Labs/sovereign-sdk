@@ -36,7 +36,10 @@ clap = { workspace = true, optional = true }
 sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"] }
 sov-blob-storage = { path = ".", features = ["native"] }
 sov-bank = { path = "../sov-bank" }
+sov-accounts = { path = "../sov-accounts" }
+sov-modules-stf-template = { path = "../../sov-modules-stf-template", features = ["native"] }
 tempfile = { workspace = true }
+jmt = { workspace = true }
 
 [features]
 default = []

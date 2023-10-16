@@ -47,38 +47,20 @@ fn get_bank_config(
     }
 }
 
-fn make_blobs(blob_num: &mut u8, senders: impl Iterator<Item = MockAddress>) -> Vec<MockBlob> {
-    let blobs: Vec<_> = senders
-        .enumerate()
-        .map(|(offset, sender)| B::new(vec![], sender, [*blob_num + offset as u8; 32]))
-        .collect();
-    *blob_num += blobs.len() as u8;
-    blobs
+fn make_empty_blob(number: u8, sender: MockAddress) -> MockBlob {
+    B::new(vec![], sender, [number; 32])
 }
 
-fn make_blobs_by_slot(is_from_preferred_by_slot: &[Vec<bool>]) -> Vec<Vec<MockBlob>> {
-    let mut blob_num = 0;
-    is_from_preferred_by_slot
-        .iter()
-        .map(|slot| {
-            make_blobs(
-                &mut blob_num,
-                slot.iter().map(|is_preferred| {
-                    if *is_preferred {
-                        PREFERRED_SEQUENCER_DA
-                    } else {
-                        REGULAR_SEQUENCER_DA
-                    }
-                }),
-            )
-        })
+fn make_blobs(senders: impl Iterator<Item = MockAddress>) -> Vec<MockBlob> {
+    senders
+        .enumerate()
+        .map(|(i, sender)| make_empty_blob(i as u8, *sender))
         .collect()
 }
 
 #[test]
 fn priority_sequencer_flow() {
-    let (app, runtime, genesis_root) = TestRuntime::pre_initialized();
-    let mut working_set = WorkingSet::new(app.current_storage.clone());
+    let (runtime, mut working_set) = TestRuntime::pre_initialized();
 
     let register_message = sov_sequencer_registry::CallMessage::Register {
         da_address: REGULAR_SEQUENCER_DA.as_ref().to_vec(),
@@ -97,12 +79,22 @@ fn priority_sequencer_flow() {
         vec![false, true, false],
         vec![false, false],
     ];
-    let blobs_by_slot: Vec<_> = make_blobs_by_slot(&is_from_preferred_by_slot);
+    let blobs_by_slot = is_from_preferred_by_slot
+        .iter()
+        .map(|slot| {
+            make_blobs(slot.iter().map(|is_preferred| {
+                if *is_preferred {
+                    PREFERRED_SEQUENCER_DA
+                } else {
+                    REGULAR_SEQUENCER_DA
+                }
+            }))
+        })
+        .collect();
 
-    let slot_1_blobs = blobs_by_slot[0].clone();
-    let slot_2_blobs = blobs_by_slot[1].clone();
-    let slot_3_blobs = blobs_by_slot[2].clone();
-    let blobs = blobs_by_slot.into_iter().flatten().collect::<Vec<_>>();
+    let slot_1_blobs = blobs_by_slot[0];
+    let slot_2_blobs = blobs_by_slot[1];
+    let slot_3_blobs = blobs_by_slot[2];
 
     // Slot 1: 3rd blob is from preferred sequencer, only it should be executed
     let mut slot_1_data = MockBlock {
@@ -114,7 +106,7 @@ fn priority_sequencer_flow() {
         validity_cond: Default::default(),
         blobs: slot_1_blobs,
     };
-    let current_root = genesis_root;
+    let current_root = jmt::RootHash([0u8; 32]);
     runtime.chain_state.begin_slot_hook(
         &slot_1_data.header,
         &slot_1_data.validity_cond,
@@ -128,7 +120,7 @@ fn priority_sequencer_flow() {
     )
     .unwrap();
     assert_eq!(1, execute_in_slot_1.len());
-    blobs_are_equal(blobs[2].clone(), execute_in_slot_1.remove(0), "slot 1");
+    blobs_are_equal(blob_3.clone(), execute_in_slot_1.remove(0), "slot 1");
     // Second attempt to get blobs for slot return existing slots as is.
     let mut execute_in_slot_1_attempt_2 =
         <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
@@ -141,11 +133,7 @@ fn priority_sequencer_flow() {
     // Same as before
     assert_eq!(1, execute_in_slot_1_attempt_2.len());
     // But blob is consumed by previous read comparison, so we compare hash only
-    blob_hashes_are_equal(
-        blobs[2].clone(),
-        execute_in_slot_1_attempt_2.remove(0),
-        "slot 1",
-    );
+    blob_hashes_are_equal(blob_3, execute_in_slot_1_attempt_2.remove(0), "slot 1");
 
     // Slot 2: 5th blob is from preferred sequencer + 2nd and 3rd that were deferred previously
     let mut slot_2_data = MockBlock {
@@ -170,9 +158,9 @@ fn priority_sequencer_flow() {
     )
     .unwrap();
     assert_eq!(3, execute_in_slot_2.len());
-    blobs_are_equal(blobs[4].clone(), execute_in_slot_2.remove(0), "slot 2");
-    blobs_are_equal(blobs[0].clone(), execute_in_slot_2.remove(0), "slot 2");
-    blobs_are_equal(blobs[1].clone(), execute_in_slot_2.remove(0), "slot 2");
+    blobs_are_equal(blob_5, execute_in_slot_2.remove(0), "slot 2");
+    blobs_are_equal(blob_1, execute_in_slot_2.remove(0), "slot 2");
+    blobs_are_equal(blob_2, execute_in_slot_2.remove(0), "slot 2");
 
     // Slot 3: no blobs from preferred sequencer, so deferred executed first and then current
     let mut slot_3_data = MockBlock {
@@ -197,8 +185,8 @@ fn priority_sequencer_flow() {
     )
     .unwrap();
     assert_eq!(2, execute_in_slot_3.len());
-    blobs_are_equal(blobs[3].clone(), execute_in_slot_3.remove(0), "slot 3");
-    blobs_are_equal(blobs[5].clone(), execute_in_slot_3.remove(0), "slot 3");
+    blobs_are_equal(blob_4, execute_in_slot_3.remove(0), "slot 3");
+    blobs_are_equal(blob_6, execute_in_slot_3.remove(0), "slot 3");
 
     // Slot 4: no blobs at all
     let mut slot_4_data = MockBlock {
@@ -224,8 +212,8 @@ fn priority_sequencer_flow() {
     .unwrap();
 
     assert_eq!(2, execute_in_slot_4.len());
-    blobs_are_equal(blobs[6].clone(), execute_in_slot_4.remove(0), "slot 4");
-    blobs_are_equal(blobs[7].clone(), execute_in_slot_4.remove(0), "slot 4");
+    blobs_are_equal(blob_7, execute_in_slot_4.remove(0), "slot 4");
+    blobs_are_equal(blob_8, execute_in_slot_4.remove(0), "slot 4");
 }
 
 #[test]
@@ -823,7 +811,6 @@ impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for TestRuntime<C
 impl TestRuntime<DefaultContext, MockDaSpec> {
     pub fn pre_initialized() -> (
         AppTemplate<DefaultContext, MockDaSpec, MockZkvm, Self>,
-        Self,
         jmt::RootHash,
     ) {
         use sov_rollup_interface::stf::StateTransitionFunction;
@@ -833,7 +820,7 @@ impl TestRuntime<DefaultContext, MockDaSpec> {
         let genesis_config = Self::build_genesis_config();
         let mut app = AppTemplate::new(storage, Self::default());
         let root = app.init_chain(genesis_config);
-        (app, Default::default(), root)
+        (app, root)
     }
 
     fn build_genesis_config() -> GenesisConfig<DefaultContext, MockDaSpec> {
