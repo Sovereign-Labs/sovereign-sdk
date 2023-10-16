@@ -1,6 +1,8 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use jsonrpsee::core::client::{ClientT, SubscriptionClientT};
+use jsonrpsee::core::params::ArrayParams;
 use sov_db::ledger_db::LedgerDB;
 use sov_ledger_rpc::client::RpcClient;
 use sov_ledger_rpc::server::rpc_module;
@@ -23,7 +25,10 @@ async fn rpc_server() -> (jsonrpsee::server::ServerHandle, SocketAddr) {
 
 async fn rpc_client(
     addr: SocketAddr,
-) -> Arc<impl RpcClient<SlotResponse<u32, u32>, BatchResponse<u32, u32>, TxResponse<u32>>> {
+) -> Arc<
+    impl RpcClient<SlotResponse<u32, u32>, BatchResponse<u32, u32>, TxResponse<u32>>
+        + SubscriptionClientT,
+> {
     Arc::new(
         jsonrpsee::ws_client::WsClientBuilder::new()
             .build(format!("ws://{}", addr))
@@ -101,4 +106,27 @@ async fn subscribe_slots_succeeds() {
     let rpc_client = rpc_client(addr).await;
 
     rpc_client.subscribe_slots().await.unwrap();
+}
+
+#[tokio::test]
+async fn get_head_with_optional_query_mode() {
+    let (_server_handle, addr) = rpc_server().await;
+    let rpc_client = rpc_client(addr).await;
+
+    // No QueryMode param.
+    {
+        rpc_client
+            .request::<serde_json::Value, _>("ledger_getHead", ArrayParams::new())
+            .await
+            .unwrap();
+    }
+    // With QueryMode param.
+    {
+        let mut params = ArrayParams::new();
+        params.insert(QueryMode::Standard).unwrap();
+        rpc_client
+            .request::<serde_json::Value, _>("ledger_getHead", params)
+            .await
+            .unwrap();
+    }
 }

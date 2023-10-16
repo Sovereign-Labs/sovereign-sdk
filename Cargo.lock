@@ -8641,6 +8641,7 @@ dependencies = [
  "hex",
  "jsonrpsee 0.20.1",
  "serde",
+ "serde_json",
  "sov-db",
  "sov-modules-api",
  "sov-rollup-interface",

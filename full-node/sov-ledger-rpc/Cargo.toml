@@ -13,11 +13,12 @@ publish = true
 
 [dependencies]
 # Common dependencies
+hex = "0.4"
 jsonrpsee = { workspace = true }
 serde = "1"
 sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
 # Client dependencies
-hex = { version = "0.4", optional = true }
+# (None)
 # Server dependencies
 anyhow = { version = "1", optional = true }
 futures = { version = "0.3", optional = true }
@@ -25,10 +26,11 @@ sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["n
 
 [dev-dependencies]
 tempfile = "3"
+serde_json = "1"
 sov-db = { path = "../../full-node/db/sov-db" }
 tokio = { workspace = true, features = ["full"] }
 
 [features]
 default = ["client", "server"]
 server = ["anyhow", "futures", "jsonrpsee/server", "sov-modules-api"]
-client = ["hex", "jsonrpsee/client", "jsonrpsee/macros"]
+client = ["jsonrpsee/client", "jsonrpsee/macros"]
