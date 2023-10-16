@@ -174,10 +174,6 @@ pub trait Storage: Clone {
     /// State update that will be committed to the database.
     type StateUpdate;
 
-    type Snapshot: Snapshot;
-
-    type SnapshotManager: QuerySnapshotLayers;
-
     /// Creates a new instance of this [`Storage`] type, with some configuration
     /// options.
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error>;
@@ -294,12 +290,4 @@ pub trait Snapshot {
 pub trait QuerySnapshotLayers {
     /// fetches value from parent cache layers.
     fn fetch_value(&self, snapshot_id: &SnapshotId, key: &StorageKey) -> Option<StorageValue>;
-}
-
-pub struct ZkStorageSnapshotManager;
-
-impl QuerySnapshotLayers for ZkStorageSnapshotManager {
-    fn fetch_value(&self, _snapshot_id: &SnapshotId, _key: &StorageKey) -> Option<StorageValue> {
-        None
-    }
 }

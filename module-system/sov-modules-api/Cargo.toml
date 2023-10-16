@@ -19,6 +19,7 @@ sov-first-read-last-write-cache = { path = "../utils/sov-first-read-last-write-c
 sov-state = { path = "../sov-state", version = "0.2" }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
 sov-modules-macros = { path = "../sov-modules-macros", version = "0.2", optional = true }
+sov-fork-manager = { path = "../sov-fork-manager", optional = true }
 serde = { workspace = true }
 borsh = { workspace = true }
 proptest = { workspace = true, optional = true }
@@ -66,5 +67,6 @@ native = [
     "macros",
     "sov-modules-macros/native",
     "sov-state/native",
+    "sov-fork-manager",
 ]
 macros = ["sov-modules-macros"]

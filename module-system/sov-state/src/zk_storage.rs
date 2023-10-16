@@ -6,9 +6,9 @@ use jmt::KeyHash;
 use sov_zk_cycle_macros::cycle_tracker;
 
 use crate::internal_cache::OrderedReadsAndWrites;
-use crate::storage::{Storage, StorageKey, StorageProof, StorageValue, ZkStorageSnapshotManager};
+use crate::storage::{Storage, StorageKey, StorageProof, StorageValue};
 use crate::witness::Witness;
-use crate::{MerkleProofSpec, StorageInternalCache};
+use crate::MerkleProofSpec;
 
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 extern crate risc0_zkvm;
@@ -42,8 +42,6 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
     type Root = jmt::RootHash;
     type StateUpdate = ();
-    type Snapshot = StorageInternalCache;
-    type SnapshotManager = ZkStorageSnapshotManager;
 
     fn with_config(_config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Ok(Self::new())

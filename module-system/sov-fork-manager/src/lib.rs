@@ -19,14 +19,14 @@ impl<T> ReadOnlyLock<T> {
     }
 }
 
-pub struct TreeQuery<S: sov_state::Storage> {
+pub struct TreeQuery<S: sov_state::Storage, Q: QuerySnapshotLayers> {
     id: SnapshotId,
     storage: S,
-    manager: ReadOnlyLock<S::SnapshotManager>,
+    manager: ReadOnlyLock<Q>,
 }
 
-impl<S: sov_state::Storage> TreeQuery<S> {
-    pub fn new(id: SnapshotId, storage: S, manager: ReadOnlyLock<S::SnapshotManager>) -> Self {
+impl<S: sov_state::Storage, Q: QuerySnapshotLayers> TreeQuery<S, Q> {
+    pub fn new(id: SnapshotId, storage: S, manager: ReadOnlyLock<Q>) -> Self {
         Self {
             id,
             storage,
@@ -39,7 +39,7 @@ impl<S: sov_state::Storage> TreeQuery<S> {
     }
 }
 
-impl<S: sov_state::Storage> TreeQuery<S> {
+impl<S: sov_state::Storage, Q: QuerySnapshotLayers> TreeQuery<S, Q> {
     pub fn query_value(&self, key: &StorageKey) -> Option<StorageValue> {
         let manager = self.manager.read().unwrap();
         let value_from_cache = manager.get_value_recursively(&self.id, key);
@@ -56,8 +56,8 @@ impl<S: sov_state::Storage> TreeQuery<S> {
 pub struct ForkManager<S: Snapshot, Da: DaSpec> {
     // Storage actually needed only to commit data to the database.
     // So technically we can extract it and "finalize" method here will just
-    db: StateDB,
-    native_db: NativeDB,
+    db: sov_db::state_db::StateDB,
+    native_db: sov_db::native_db::NativeDB,
 
     // TODO: Ugly, fix this with higher lever struct
     self_ref: Option<Arc<RwLock<ForkManager<S, Da>>>>,
@@ -105,9 +105,13 @@ where
     Da: DaSpec,
     Da::SlotHash: Hash,
 {
-    pub fn new_locked(storage: S) -> Arc<RwLock<Self>> {
+    pub fn new_locked(
+        db: sov_db::state_db::StateDB,
+        native_db: sov_db::native_db::NativeDB,
+    ) -> Arc<RwLock<Self>> {
         let block_state_manager = Arc::new(RwLock::new(Self {
-            storage,
+            db,
+            native_db,
             chain_forks: Default::default(),
             blocks_to_parent: Default::default(),
             snapshots: Default::default(),
@@ -134,24 +138,24 @@ where
             && self.snapshot_id_to_block_hash.is_empty()
     }
 
-    pub fn get_new_ref(&mut self, block_header: &Da::BlockHeader) -> TreeQuery<S> {
+    pub fn get_new_ref(&mut self, block_header: &Da::BlockHeader) -> SnapshotId {
         self.latest_snapshot_id += 1;
-        let new_snapshot_ref = TreeQuery {
-            id: self.latest_snapshot_id,
-            storage: self.storage.clone(),
-            manager: ReadOnlyLock::new(self.self_ref.clone().unwrap().clone()),
-        };
+        // let new_snapshot_ref = TreeQuery {
+        //     id: self.latest_snapshot_id,
+        //     storage: self.storage.clone(),
+        //     manager: ReadOnlyLock::new(self.self_ref.clone().unwrap().clone()),
+        // };
 
         let current_block_hash = block_header.hash();
         let prev_block_hash = block_header.prev_hash();
-
+        //
         self.snapshot_id_to_block_hash
             .insert(self.latest_snapshot_id, current_block_hash.clone());
-
+        //
         let c = self
             .blocks_to_parent
             .insert(current_block_hash.clone(), prev_block_hash.clone());
-        // TODO: Maybe assert that parent is the same? Then
+        // // TODO: Maybe assert that parent is the same? Then
         assert!(
             c.is_none(),
             "current block hash has already snapshot requested"
@@ -161,7 +165,7 @@ where
             .or_default()
             .push(current_block_hash);
 
-        new_snapshot_ref
+        self.latest_snapshot_id
     }
 
     pub fn add_snapshot(&mut self, snapshot: S::Snapshot) {

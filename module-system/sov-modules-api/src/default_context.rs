@@ -4,7 +4,7 @@ use sha2::Digest;
 use sov_rollup_interface::RollupAddress;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
-use sov_state::{ArrayWitness, DefaultStorageSpec, ZkStorage};
+use sov_state::{ArrayWitness, DefaultStorageSpec, OrderedReadsAndWrites, StorageInternalCache, ZkStorage};
 
 #[cfg(feature = "native")]
 use crate::default_signature::private_key::DefaultPrivateKey;
@@ -22,6 +22,7 @@ pub struct DefaultContext {
 impl Spec for DefaultContext {
     type Address = Address;
     type Storage = ProverStorage<DefaultStorageSpec>;
+    type SnapshotManager = sov_fork_manager::ForkManager<StorageInternalCache, >
     type PrivateKey = DefaultPrivateKey;
     type PublicKey = DefaultPublicKey;
     type Hasher = sha2::Sha256;

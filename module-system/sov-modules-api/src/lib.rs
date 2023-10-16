@@ -220,6 +220,7 @@ pub trait Spec {
 
     /// Authenticated state storage used by the rollup. Typically some variant of a merkle-patricia trie.
     type Storage: Storage + Send + Sync;
+    type SnapshotManager: sov_state::storage::QuerySnapshotLayers;
 
     /// The public key used for digital signatures
     #[cfg(feature = "native")]
