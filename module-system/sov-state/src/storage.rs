@@ -244,6 +244,13 @@ pub trait Storage: Clone {
     /// Indicates if storage is empty or not.
     /// Useful during initialization.
     fn is_empty(&self) -> bool;
+
+    /// Returns the value corresponding to the key or None if key is absent and a proof to
+    /// get the value.
+    /// Only supposed to be used in native context
+    fn get_with_proof(&self, _key: StorageKey) -> Option<StorageProof<Self::Proof>> {
+        None
+    }
 }
 
 // Used only in tests.

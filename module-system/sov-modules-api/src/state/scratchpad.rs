@@ -262,6 +262,15 @@ impl<C: Context> WorkingSet<C> {
     pub fn charge_gas(&mut self, gas: &C::GasUnit) -> anyhow::Result<()> {
         self.gas_meter.charge_gas(gas)
     }
+
+    #[cfg(feature = "native")]
+    pub fn get_with_proof(
+        &mut self,
+        key: StorageKey,
+    ) -> sov_state::storage::StorageProof<<C::Storage as Storage>::Proof> {
+        // First inner is `RevertableWriter` and second inner is actually a `Storage` instance
+        self.delta.inner.inner.get_with_proof(key).unwrap()
+    }
 }
 
 impl<C: Context> StateReaderAndWriter for WorkingSet<C> {
