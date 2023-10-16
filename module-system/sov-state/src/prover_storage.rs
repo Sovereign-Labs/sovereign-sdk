@@ -9,7 +9,7 @@ use sov_db::state_db::StateDB;
 
 use crate::config::Config;
 use crate::internal_cache::OrderedReadsAndWrites;
-use crate::storage::{Storage, StorageKey, StorageProof, StorageValue};
+use crate::storage::{NativeStorage, Storage, StorageKey, StorageProof, StorageValue};
 use crate::witness::Witness;
 use crate::MerkleProofSpec;
 
@@ -190,9 +190,10 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     fn is_empty(&self) -> bool {
         self.db.get_next_version() <= 1
     }
+}
 
-    #[cfg(feature = "native")]
-    fn get_with_proof(&self, key: StorageKey) -> Option<StorageProof<Self::Proof>> {
+impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
+    fn get_with_proof(&self, key: StorageKey) -> StorageProof<Self::Proof> {
         let merkle = JellyfishMerkleTree::<StateDB, S::Hasher>::new(&self.db);
         let (val_opt, proof) = merkle
             .get_with_proof(
@@ -200,10 +201,10 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
                 self.db.get_next_version() - 1,
             )
             .unwrap();
-        Some(StorageProof {
+        StorageProof {
             key,
             value: val_opt.map(StorageValue::from),
             proof,
-        })
+        }
     }
 }

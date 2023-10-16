@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::marker::PhantomData;
 
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 use sov_rollup_interface::stf::Event;
 use sov_state::codec::{EncodeKeyLike, StateCodec, StateValueCodec};
-use sov_state::storage::{Storage, StorageKey, StorageValue};
+use sov_state::storage::{NativeStorage, Storage, StorageKey, StorageValue};
 use sov_state::{OrderedReadsAndWrites, Prefix, StorageInternalCache};
 
 use crate::gas::GasMeter;
@@ -16,6 +17,7 @@ pub struct Delta<S: Storage> {
     inner: S,
     witness: S::Witness,
     cache: StorageInternalCache,
+    parent: PhantomData<S>,
 }
 
 impl<S: Storage> Delta<S> {
@@ -263,13 +265,16 @@ impl<C: Context> WorkingSet<C> {
         self.gas_meter.charge_gas(gas)
     }
 
-    #[cfg(feature = "native")]
+    /// Fetches given value and provides a proof of it presence/absence.
     pub fn get_with_proof(
         &mut self,
         key: StorageKey,
-    ) -> sov_state::storage::StorageProof<<C::Storage as Storage>::Proof> {
+    ) -> sov_state::storage::StorageProof<<C::Storage as Storage>::Proof>
+    where
+        C::Storage: NativeStorage,
+    {
         // First inner is `RevertableWriter` and second inner is actually a `Storage` instance
-        self.delta.inner.inner.get_with_proof(key).unwrap()
+        self.delta.inner.inner.get_with_proof(key)
     }
 }
 

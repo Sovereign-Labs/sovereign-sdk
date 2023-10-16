@@ -1,7 +1,7 @@
 //! Defines the query methods for the attester incentives module
 use serde::{Deserialize, Serialize};
 use sov_modules_api::{Spec, ValidityConditionChecker, WorkingSet};
-use sov_state::storage::{Storage, StorageKey, StorageProof};
+use sov_state::storage::{NativeStorage, Storage, StorageKey, StorageProof};
 
 use super::AttesterIncentives;
 use crate::call::Role;
@@ -54,12 +54,14 @@ where
     /// Used by attesters to get a proof that they were bonded before starting to produce attestations.
     /// A bonding proof is valid for `max_finality_period` blocks, the attester can only produce transition
     /// attestations for this specific amount of time.
-    #[cfg(feature = "native")]
     pub fn get_bond_proof(
         &self,
         address: C::Address,
         working_set: &mut WorkingSet<C>,
-    ) -> StorageProof<<C::Storage as Storage>::Proof> {
+    ) -> StorageProof<<C::Storage as Storage>::Proof>
+    where
+        C::Storage: NativeStorage,
+    {
         let prefix = self.bonded_attesters.prefix();
         let codec = self.bonded_attesters.codec();
         working_set.get_with_proof(StorageKey::new(prefix, &address, codec))
