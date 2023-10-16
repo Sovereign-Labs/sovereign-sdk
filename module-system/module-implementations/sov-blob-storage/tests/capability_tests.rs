@@ -77,7 +77,8 @@ fn make_blobs_by_slot(is_from_preferred_by_slot: &[Vec<bool>]) -> Vec<Vec<MockBl
 
 #[test]
 fn priority_sequencer_flow() {
-    let (app, runtime, genesis_root) = TestRuntime::pre_initialized();
+    assert_ne!(DEFERRED_SLOTS_COUNT, 7);
+    let (app, runtime, genesis_root) = TestRuntime::pre_initialized(true);
     let mut working_set = WorkingSet::new(app.current_storage.clone());
 
     let register_message = sov_sequencer_registry::CallMessage::Register {
@@ -230,57 +231,15 @@ fn priority_sequencer_flow() {
 
 #[test]
 fn test_blobs_from_non_registered_sequencers_are_not_saved() {
-    let tmpdir = tempfile::tempdir().unwrap();
-    let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
-    let mut working_set = WorkingSet::new(storage.clone());
+    let (app, runtime, genesis_root) = TestRuntime::pre_initialized(true);
+    let mut working_set = WorkingSet::new(app.current_storage.clone());
 
-    let some_sequencer = MockAddress::from([40u8; 32]);
-
-    let bank_config = get_bank_config(PREFERRED_SEQUENCER_ROLLUP, REGULAR_SEQUENCER_ROLLUP);
-
-    let token_address = sov_bank::get_genesis_token_address::<C>(
-        &bank_config.tokens[0].token_name,
-        bank_config.tokens[0].salt,
-    );
-
-    let sequencer_registry_config = SequencerConfig {
-        seq_rollup_address: PREFERRED_SEQUENCER_ROLLUP,
-        seq_da_address: PREFERRED_SEQUENCER_DA,
-        coins_to_lock: sov_bank::Coins {
-            amount: LOCKED_AMOUNT,
-            token_address,
-        },
-        is_preferred_sequencer: true,
-    };
-
-    let initial_slot_height = 0;
-    let chain_state_config = ChainStateConfig {
-        initial_slot_height,
-        current_time: Default::default(),
-    };
-
-    let bank = sov_bank::Bank::<C>::default();
-    let sequencer_registry = SequencerRegistry::<C, Da>::default();
-    let chain_state = ChainState::<C, Da>::default();
-    let blob_storage = BlobStorage::<C, Da>::default();
-    let valid_condition = MockValidityCond { is_valid: true };
-
-    bank.genesis(&bank_config, &mut working_set).unwrap();
-    sequencer_registry
-        .genesis(&sequencer_registry_config, &mut working_set)
-        .unwrap();
-    chain_state
-        .genesis(&chain_state_config, &mut working_set)
-        .unwrap();
-
-    let (reads_writes, witness) = working_set.checkpoint().freeze();
-    let current_root = storage.validate_and_commit(reads_writes, &witness).unwrap();
+    let unregistered_sequencer = MockAddress::new([7; 32]);
     let register_message = sov_sequencer_registry::CallMessage::Register {
         da_address: REGULAR_SEQUENCER_DA.as_ref().to_vec(),
     };
-    let mut working_set = WorkingSet::new(storage);
-
-    sequencer_registry
+    runtime
+        .sequencer_registry
         .call(
             register_message,
             &C::new(REGULAR_SEQUENCER_ROLLUP),
@@ -289,7 +248,7 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
         .unwrap();
 
     let blob_1 = B::new(vec![1], REGULAR_SEQUENCER_DA, [1u8; 32]);
-    let blob_2 = B::new(vec![2, 2], some_sequencer, [2u8; 32]);
+    let blob_2 = B::new(vec![2, 2], unregistered_sequencer, [2u8; 32]);
     let blob_3 = B::new(vec![3, 3, 3], PREFERRED_SEQUENCER_DA, [3u8; 32]);
 
     let slot_1_blobs = vec![blob_1.clone(), blob_2, blob_3.clone()];
@@ -300,17 +259,17 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
             hash: [1; 32].into(),
             height: 1,
         },
-        validity_cond: valid_condition,
+        validity_cond: Default::default(),
         blobs: slot_1_blobs,
     };
-    chain_state.begin_slot_hook(
+    runtime.chain_state.begin_slot_hook(
         &slot_1_data.header,
         &slot_1_data.validity_cond,
-        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
+        &genesis_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
-        &blob_storage,
+        &runtime.blob_storage,
         &mut slot_1_data.blobs,
         &mut working_set,
     )
@@ -324,17 +283,17 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
             hash: [2; 32].into(),
             height: 2,
         },
-        validity_cond: valid_condition,
+        validity_cond: Default::default(),
         blobs: Vec::new(),
     };
-    chain_state.begin_slot_hook(
+    runtime.chain_state.begin_slot_hook(
         &slot_2_data.header,
         &slot_2_data.validity_cond,
-        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
+        &genesis_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let mut execute_in_slot_2 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
-        &blob_storage,
+        &runtime.blob_storage,
         &mut slot_2_data.blobs,
         &mut working_set,
     )
@@ -345,55 +304,15 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
 
 #[test]
 fn test_blobs_no_deferred_without_preferred_sequencer() {
-    let tmpdir = tempfile::tempdir().unwrap();
-    let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
-    let mut working_set = WorkingSet::new(storage.clone());
-
-    let bank_config = get_bank_config(PREFERRED_SEQUENCER_ROLLUP, REGULAR_SEQUENCER_ROLLUP);
-
-    let token_address = sov_bank::get_genesis_token_address::<C>(
-        &bank_config.tokens[0].token_name,
-        bank_config.tokens[0].salt,
-    );
-
-    let sequencer_registry_config = SequencerConfig {
-        seq_rollup_address: PREFERRED_SEQUENCER_ROLLUP,
-        seq_da_address: PREFERRED_SEQUENCER_DA,
-        coins_to_lock: sov_bank::Coins {
-            amount: LOCKED_AMOUNT,
-            token_address,
-        },
-        is_preferred_sequencer: false,
-    };
-
-    let initial_slot_height = 0;
-    let chain_state_config = ChainStateConfig {
-        initial_slot_height,
-        current_time: Default::default(),
-    };
-
-    let bank = sov_bank::Bank::<C>::default();
-    let sequencer_registry = SequencerRegistry::<C, Da>::default();
-    let chain_state = ChainState::<C, Da>::default();
-    let blob_storage = BlobStorage::<C, Da>::default();
-    let valid_condition = MockValidityCond { is_valid: true };
-
-    bank.genesis(&bank_config, &mut working_set).unwrap();
-    sequencer_registry
-        .genesis(&sequencer_registry_config, &mut working_set)
-        .unwrap();
-    chain_state
-        .genesis(&chain_state_config, &mut working_set)
-        .unwrap();
-
-    let (reads_writes, witness) = working_set.checkpoint().freeze();
-    let current_root = storage.validate_and_commit(reads_writes, &witness).unwrap();
-    let mut working_set = WorkingSet::new(storage);
+    let (app, runtime, genesis_root) = TestRuntime::pre_initialized(false);
+    let mut working_set = WorkingSet::new(app.current_storage.clone());
 
     let register_message = sov_sequencer_registry::CallMessage::Register {
         da_address: REGULAR_SEQUENCER_DA.as_ref().to_vec(),
     };
-    sequencer_registry
+
+    runtime
+        .sequencer_registry
         .call(
             register_message,
             &C::new(REGULAR_SEQUENCER_ROLLUP),
@@ -413,17 +332,17 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
             hash: [1; 32].into(),
             height: 1,
         },
-        validity_cond: valid_condition,
+        validity_cond: Default::default(),
         blobs: slot_1_blobs,
     };
-    chain_state.begin_slot_hook(
+    runtime.chain_state.begin_slot_hook(
         &slot_1_data.header,
         &slot_1_data.validity_cond,
-        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
+        &genesis_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
-        &blob_storage,
+        &runtime.blob_storage,
         &mut slot_1_data.blobs,
         &mut working_set,
     )
@@ -439,18 +358,18 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
             hash: [2; 32].into(),
             height: 2,
         },
-        validity_cond: valid_condition,
+        validity_cond: Default::default(),
         blobs: Vec::new(),
     };
-    chain_state.begin_slot_hook(
+    runtime.chain_state.begin_slot_hook(
         &slot_2_data.header,
         &slot_2_data.validity_cond,
-        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
+        &genesis_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let execute_in_slot_2: Vec<BlobRefOrOwned<'_, B>> =
         <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
-            &blob_storage,
+            &runtime.blob_storage,
             &mut slot_2_data.blobs,
             &mut working_set,
         )
@@ -460,54 +379,14 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
 
 #[test]
 fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
-    let tmpdir = tempfile::tempdir().unwrap();
-    let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
-    let mut working_set = WorkingSet::new(storage.clone());
-
-    let bank_config = get_bank_config(PREFERRED_SEQUENCER_ROLLUP, REGULAR_SEQUENCER_ROLLUP);
-
-    let token_address = sov_bank::get_genesis_token_address::<C>(
-        &bank_config.tokens[0].token_name,
-        bank_config.tokens[0].salt,
-    );
-
-    let sequencer_registry_config = SequencerConfig {
-        seq_rollup_address: PREFERRED_SEQUENCER_ROLLUP,
-        seq_da_address: PREFERRED_SEQUENCER_DA,
-        coins_to_lock: sov_bank::Coins {
-            amount: LOCKED_AMOUNT,
-            token_address,
-        },
-        is_preferred_sequencer: true,
-    };
-    let initial_slot_height = 0;
-    let chain_state_config = ChainStateConfig {
-        initial_slot_height,
-        current_time: Default::default(),
-    };
-    let valid_condition = MockValidityCond { is_valid: true };
-
-    let bank = sov_bank::Bank::<C>::default();
-    let sequencer_registry = SequencerRegistry::<C, Da>::default();
-    let chain_state = ChainState::<C, Da>::default();
-    let blob_storage = BlobStorage::<C, Da>::default();
-
-    bank.genesis(&bank_config, &mut working_set).unwrap();
-    sequencer_registry
-        .genesis(&sequencer_registry_config, &mut working_set)
-        .unwrap();
-    chain_state
-        .genesis(&chain_state_config, &mut working_set)
-        .unwrap();
-
-    let (reads_writes, witness) = working_set.checkpoint().freeze();
-    let current_root = storage.validate_and_commit(reads_writes, &witness).unwrap();
-    let mut working_set = WorkingSet::new(storage);
+    let (app, runtime, genesis_root) = TestRuntime::pre_initialized(true);
+    let mut working_set = WorkingSet::new(app.current_storage.clone());
 
     let register_message = sov_sequencer_registry::CallMessage::Register {
         da_address: REGULAR_SEQUENCER_DA.as_ref().to_vec(),
     };
-    sequencer_registry
+    runtime
+        .sequencer_registry
         .call(
             register_message,
             &C::new(REGULAR_SEQUENCER_ROLLUP),
@@ -530,17 +409,17 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
             hash: [1; 32].into(),
             height: 1,
         },
-        validity_cond: valid_condition,
+        validity_cond: Default::default(),
         blobs: slot_1_blobs,
     };
-    chain_state.begin_slot_hook(
+    runtime.chain_state.begin_slot_hook(
         &slot_1_data.header,
         &slot_1_data.validity_cond,
-        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
+        &genesis_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
-        &blob_storage,
+        &runtime.blob_storage,
         &mut slot_1_data.blobs,
         &mut working_set,
     )
@@ -553,7 +432,8 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
         da_address: PREFERRED_SEQUENCER_DA.as_ref().to_vec(),
     };
 
-    sequencer_registry
+    runtime
+        .sequencer_registry
         .call(
             exit_message,
             &C::new(PREFERRED_SEQUENCER_ROLLUP),
@@ -561,7 +441,8 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
         )
         .unwrap();
 
-    assert!(sequencer_registry
+    assert!(runtime
+        .sequencer_registry
         .get_preferred_sequencer(&mut working_set)
         .is_none());
 
@@ -571,17 +452,17 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
             hash: [2; 32].into(),
             height: 2,
         },
-        validity_cond: valid_condition,
+        validity_cond: Default::default(),
         blobs: slot_2_blobs,
     };
-    chain_state.begin_slot_hook(
+    runtime.chain_state.begin_slot_hook(
         &slot_2_data.header,
         &slot_2_data.validity_cond,
-        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
+        &genesis_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let mut execute_in_slot_2 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
-        &blob_storage,
+        &runtime.blob_storage,
         &mut slot_2_data.blobs,
         &mut working_set,
     )
@@ -598,18 +479,18 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
             hash: [3; 32].into(),
             height: 3,
         },
-        validity_cond: valid_condition,
+        validity_cond: Default::default(),
         blobs: Vec::new(),
     };
-    chain_state.begin_slot_hook(
+    runtime.chain_state.begin_slot_hook(
         &slot_3_data.header,
         &slot_3_data.validity_cond,
-        &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
+        &genesis_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
         &mut working_set,
     );
     let execute_in_slot_3: Vec<BlobRefOrOwned<'_, B>> =
         <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
-            &blob_storage,
+            &runtime.blob_storage,
             &mut slot_3_data.blobs,
             &mut working_set,
         )
@@ -821,7 +702,9 @@ impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for TestRuntime<C
 }
 
 impl TestRuntime<DefaultContext, MockDaSpec> {
-    pub fn pre_initialized() -> (
+    pub fn pre_initialized(
+        with_preferred_sequencer: bool,
+    ) -> (
         AppTemplate<DefaultContext, MockDaSpec, MockZkvm, Self>,
         Self,
         jmt::RootHash,
@@ -830,13 +713,15 @@ impl TestRuntime<DefaultContext, MockDaSpec> {
         let tmpdir = tempfile::tempdir().unwrap();
         let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
 
-        let genesis_config = Self::build_genesis_config();
+        let genesis_config = Self::build_genesis_config(with_preferred_sequencer);
         let mut app = AppTemplate::new(storage, Self::default());
         let root = app.init_chain(genesis_config);
         (app, Default::default(), root)
     }
 
-    fn build_genesis_config() -> GenesisConfig<DefaultContext, MockDaSpec> {
+    fn build_genesis_config(
+        with_preferred_sequencer: bool,
+    ) -> GenesisConfig<DefaultContext, MockDaSpec> {
         let bank_config = get_bank_config(PREFERRED_SEQUENCER_ROLLUP, REGULAR_SEQUENCER_ROLLUP);
 
         let token_address = sov_bank::get_genesis_token_address::<C>(
@@ -851,7 +736,7 @@ impl TestRuntime<DefaultContext, MockDaSpec> {
                 amount: LOCKED_AMOUNT,
                 token_address,
             },
-            is_preferred_sequencer: true,
+            is_preferred_sequencer: with_preferred_sequencer,
         };
 
         let initial_slot_height = 0;
