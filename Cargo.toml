@@ -20,6 +20,7 @@ members = [
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
     "utils/bashtestmd",
+    "utils/rng-da-service",
 
     "module-system/sov-cli",
     "module-system/sov-modules-stf-template",
