@@ -60,7 +60,7 @@ rust-version = "1.66"
 jmt = "0.8.0"
 
 # External dependencies
-async-trait = "0.1.71"
+async-trait = "0.1.74"
 anyhow = "1.0.68"
 arbitrary = { version = "1.3.0", features = ["derive"] }
 borsh = { version = "0.10.3", features = ["rc", "bytes"] }
