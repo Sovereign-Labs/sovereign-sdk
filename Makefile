@@ -36,8 +36,8 @@ lint-fix:  ## cargo fmt, fix and clippy. Skip clippy on guest code since it's no
 	cargo fix --allow-dirty
 	CI_SKIP_GUEST_BUILD=1 cargo clippy --fix --allow-dirty
 
-check-features: ## Checks that project compiles with all combinations of features. default is not needed because we never check `cfg(default)`, we only use it as an alias.
-	cargo hack check --workspace --feature-powerset --exclude-features default
+check-features: ## Checks that project compiles with all combinations of features.
+	cargo hack check --workspace --feature-powerset --exclude-features --all-targets
 
 check-fuzz: ## Checks that fuzz member compiles
 	$(MAKE) -C fuzz check

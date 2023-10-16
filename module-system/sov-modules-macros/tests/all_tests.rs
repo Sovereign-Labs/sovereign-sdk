@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 #[test]
 fn module_info_tests() {
     let t = trybuild::TestCases::new();
@@ -45,4 +47,15 @@ fn cli_wallet_arg_tests() {
     t.pass("tests/cli_wallet_arg/derive_enum_mixed_fields.rs");
     t.pass("tests/cli_wallet_arg/derive_enum_unnamed_fields.rs");
     t.pass("tests/cli_wallet_arg/derive_wallet.rs");
+}
+
+#[test]
+fn constants_from_manifests_test() {
+    let t: trybuild::TestCases = trybuild::TestCases::new();
+    let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR").unwrap();
+    std::env::set_var(
+        "CONSTANTS_MANIFEST",
+        PathBuf::from(manifest_dir).join("tests"),
+    );
+    t.pass("tests/constants/create_constant.rs");
 }

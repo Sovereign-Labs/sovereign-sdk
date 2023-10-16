@@ -6,16 +6,16 @@ members = [
     "adapters/risc0",
     "adapters/celestia",
     "examples/const-rollup-config",
-    "examples/demo-stf",
     "examples/demo-simple-stf",
     "examples/demo-rollup",
-    "examples/demo-rollup/provers",
     "examples/simple-nft-module",
 
     "full-node/db/sov-db",
     "full-node/sov-sequencer",
     "full-node/sov-ethereum",
     "full-node/sov-stf-runner",
+
+    "templates/rollup-template",
 
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",

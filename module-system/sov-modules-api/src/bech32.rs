@@ -31,6 +31,10 @@ const HRP: &str = "sov";
     Into,
     Display,
 )]
+#[cfg_attr(
+    feature = "arbitrary",
+    derive(arbitrary::Arbitrary, proptest_derive::Arbitrary)
+)]
 #[serde(try_from = "String", into = "String")]
 #[display(fmt = "{}", "value")]
 pub struct AddressBech32 {
