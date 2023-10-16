@@ -102,7 +102,7 @@ jobs:
     # effectively.
     needs: check
     runs-on: buildjet-8vcpu-ubuntu-2204
-    timeout-minutes: 60
+    timeout-minutes: 120
     env:
       CI_SKIP_GUEST_BUILD: "1"
     steps:
