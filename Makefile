@@ -29,12 +29,12 @@ lint:  ## cargo check and clippy. Skip clippy on guest code since it's not suppo
 	cargo +nightly fmt --all --check
 	cargo check --all-targets --all-features
 	$(MAKE) check-fuzz
-	CI_SKIP_GUEST_BUILD=1 cargo clippy --all-targets --all-features
+	SKIP_GUEST_BUILD=1 cargo clippy --all-targets --all-features
 
 lint-fix:  ## cargo fmt, fix and clippy. Skip clippy on guest code since it's not supported by risc0
 	cargo +nightly fmt --all
 	cargo fix --allow-dirty
-	CI_SKIP_GUEST_BUILD=1 cargo clippy --fix --allow-dirty
+	SKIP_GUEST_BUILD=1 cargo clippy --fix --allow-dirty
 
 check-features: ## Checks that project compiles with all combinations of features.
 	cargo hack check --workspace --feature-powerset --exclude-features --all-targets
