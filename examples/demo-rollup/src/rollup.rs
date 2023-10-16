@@ -53,8 +53,6 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>;
 
 pub trait RollupSpec: Sized {
-    type Foo<X>;
-
     type DaService: DaService<Spec = Self::DaSpec, Error = anyhow::Error> + Clone;
     type DaSpec: DaSpec;
     type DaConfig;
@@ -73,14 +71,6 @@ pub trait RollupSpec: Sized {
         Self::Vm,
         Self::DaSpec,
         Condition = <Self::DaSpec as DaSpec>::ValidityCondition,
-        Witness = <Self::ZkSTF as StateTransitionFunction<
-            <Self::Vm as ZkvmHost>::Guest,
-            Self::DaSpec,
-        >>::Witness,
-        StateRoot = <Self::ZkSTF as StateTransitionFunction<
-            <Self::Vm as ZkvmHost>::Guest,
-            Self::DaSpec,
-        >>::StateRoot,
     >;
 
     fn _get_genesis_config<P: AsRef<Path>>(
@@ -106,8 +96,6 @@ pub trait RollupSpec: Sized {
 pub struct DempRollupSpec {}
 
 impl RollupSpec for DempRollupSpec {
-    type Foo<X> = Vec<X>;
-
     type DaService = MockDaService;
     type DaSpec = MockDaSpec;
     type DaConfig = MockDaConfig;
