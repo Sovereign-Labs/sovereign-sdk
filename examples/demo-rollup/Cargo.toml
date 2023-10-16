@@ -77,7 +77,7 @@ prettytable-rs = "^0.10"
 criterion = "0.5.1"
 log = "0.4"
 log4rs = "1.0"
-regex = "1.5"
+regex = "1.10"
 
 [features]
 default = [] # Deviate from convention by making the "native" feature active by default. This aligns with how this package is meant to be used (as a binary first, library second).
