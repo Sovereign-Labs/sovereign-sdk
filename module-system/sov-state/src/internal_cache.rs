@@ -1,13 +1,14 @@
 use sov_first_read_last_write_cache::cache::{self, CacheLog, ValueExists};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 
-use crate::storage::{Storage, StorageKey, StorageValue};
+use crate::storage::{Snapshot, SnapshotId, Storage, StorageKey, StorageValue};
 
 /// Caches reads and writes for a (key, value) pair. On the first read the value is fetched
 /// from an external source represented by the `ValueReader` trait. On following reads,
 /// the cache checks if the value we read was inserted before.
 #[derive(Default)]
 pub struct StorageInternalCache {
+    // TODO: Add snapshot id.
     /// Transaction cache.
     pub tx_cache: CacheLog,
     /// Ordered reads and writes.
@@ -22,6 +23,20 @@ pub struct OrderedReadsAndWrites {
     pub ordered_reads: Vec<(CacheKey, Option<CacheValue>)>,
     /// Ordered writes.
     pub ordered_writes: Vec<(CacheKey, Option<CacheValue>)>,
+}
+
+impl Snapshot for StorageInternalCache {
+    fn get_value(&self, key: &StorageKey) -> Option<StorageValue> {
+        let cache_key = key.to_cache_key();
+        match self.tx_cache.get_value(&cache_key) {
+            ValueExists::Yes(v) => v.map(Into::into),
+            ValueExists::No => None,
+        }
+    }
+
+    fn get_id(&self) -> SnapshotId {
+        todo!()
+    }
 }
 
 impl From<StorageInternalCache> for OrderedReadsAndWrites {

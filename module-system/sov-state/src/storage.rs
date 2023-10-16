@@ -174,6 +174,10 @@ pub trait Storage: Clone {
     /// State update that will be committed to the database.
     type StateUpdate;
 
+    type Snapshot: Snapshot;
+
+    type SnapshotManager: QuerySnapshotLayers;
+
     /// Creates a new instance of this [`Storage`] type, with some configuration
     /// options.
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error>;
@@ -270,4 +274,32 @@ pub trait NativeStorage: Storage {
     /// Returns the value corresponding to the key or None if key is absent and a proof to
     /// get the value.
     fn get_with_proof(&self, key: StorageKey) -> StorageProof<Self::Proof>;
+}
+
+/// Alias for a snapshot ID.
+pub type SnapshotId = u64;
+
+/// Snapshot of the state
+/// It can give a value that has been written/created during given state transition
+pub trait Snapshot {
+    /// Get own value, value from its own cache
+    fn get_value(&self, key: &StorageKey) -> Option<StorageValue>;
+
+    /// Helper method for mapping
+    fn get_id(&self) -> SnapshotId;
+}
+
+/// Trait that allows to query snapshot layers in correct order.
+/// If value is not found in any of the snapshots, [`None`] is returned.
+pub trait QuerySnapshotLayers {
+    /// fetches value from parent cache layers.
+    fn fetch_value(&self, snapshot_id: &SnapshotId, key: &StorageKey) -> Option<StorageValue>;
+}
+
+pub struct ZkStorageSnapshotManager;
+
+impl QuerySnapshotLayers for ZkStorageSnapshotManager {
+    fn fetch_value(&self, _snapshot_id: &SnapshotId, _key: &StorageKey) -> Option<StorageValue> {
+        None
+    }
 }

@@ -11,7 +11,7 @@ use crate::config::Config;
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::storage::{NativeStorage, Storage, StorageKey, StorageProof, StorageValue};
 use crate::witness::Witness;
-use crate::MerkleProofSpec;
+use crate::{MerkleProofSpec, StorageInternalCache};
 
 /// A [`Storage`] implementation to be used by the prover in a native execution
 /// environment (outside of the zkVM).
@@ -114,6 +114,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
                 .write_node_batch(&tree_update.node_batch)
                 .expect("db write must succeed");
         }
+
         let prev_root = jmt
             .get_root_hash(latest_version)
             .expect("Previous root hash was just populated");

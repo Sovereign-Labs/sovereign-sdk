@@ -116,6 +116,20 @@ where
         // Save checkpoint
         let mut checkpoint = working_set.checkpoint();
 
+        // Inside vm call validate
+        // Outside vm call
+
+        // There should be 1 struct can do 2 things:
+        // - query for Key
+        // - be saved to the database
+
+        // Option 2: Make NodeBatch queriable
+        //      a end_slots does clone of cache_log, returns cache_log and node_batch
+        //      b return NodeBatch, and it is stored inside ForkManager, and we query it using `.values()`
+        // Option 3:
+        //     - end_slots does clone of cache_log
+        //     - CacheLog can be converted into NodeBatch and commited
+
         let (cache_log, witness) = checkpoint.freeze();
 
         let (root_hash, authenticated_node_batch) = self
@@ -130,6 +144,7 @@ where
 
         let accessory_log = working_set.checkpoint().freeze_non_provable();
 
+        // OUT:
         self.current_storage
             .commit(&authenticated_node_batch, &accessory_log);
 

@@ -3,9 +3,7 @@ use std::hash::Hash;
 use std::sync::{Arc, LockResult, RwLock, RwLockReadGuard};
 
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
-use sov_state::storage::{StorageKey, StorageValue};
-
-pub type SnapshotId = u64;
+use sov_state::storage::{QuerySnapshotLayers, Snapshot, SnapshotId, StorageKey, StorageValue};
 
 pub struct ReadOnlyLock<T> {
     lock: Arc<RwLock<T>>,
@@ -21,41 +19,14 @@ impl<T> ReadOnlyLock<T> {
     }
 }
 
-/// Snapshot of the state
-/// It can give a value that has been written/created on given state
-/// [`ForkManager`] suppose to operate over those
-pub trait Snapshot {
-    /// Get own value, value from its own cache
-    fn get_value(&self, key: &StorageKey) -> Option<StorageValue>;
-
-    /// Helper method for mapping
-    fn get_id(&self) -> SnapshotId;
-}
-
-pub trait QuerySnapshotLayers {
-    fn get_value_recursively(
-        &self,
-        snapshot_block_hash: &SnapshotId,
-        key: &StorageKey,
-    ) -> Option<StorageValue>;
-}
-
-pub struct TreeQuery<S, Q>
-where
-    S: sov_state::Storage,
-    Q: QuerySnapshotLayers,
-{
+pub struct TreeQuery<S: sov_state::Storage> {
     id: SnapshotId,
     storage: S,
-    manager: ReadOnlyLock<Q>,
+    manager: ReadOnlyLock<S::SnapshotManager>,
 }
 
-impl<S, Q> TreeQuery<S, Q>
-where
-    S: sov_state::Storage,
-    Q: QuerySnapshotLayers,
-{
-    pub fn new(id: SnapshotId, storage: S, manager: ReadOnlyLock<Q>) -> Self {
+impl<S: sov_state::Storage> TreeQuery<S> {
+    pub fn new(id: SnapshotId, storage: S, manager: ReadOnlyLock<S::SnapshotManager>) -> Self {
         Self {
             id,
             storage,
@@ -68,11 +39,7 @@ where
     }
 }
 
-impl<S, Q> TreeQuery<S, Q>
-where
-    S: sov_state::Storage,
-    Q: QuerySnapshotLayers,
-{
+impl<S: sov_state::Storage> TreeQuery<S> {
     pub fn query_value(&self, key: &StorageKey) -> Option<StorageValue> {
         let manager = self.manager.read().unwrap();
         let value_from_cache = manager.get_value_recursively(&self.id, key);
@@ -86,13 +53,16 @@ where
 }
 
 #[derive(Debug)]
-pub struct ForkManager<S: sov_state::Storage, Sn: Snapshot, Da: DaSpec> {
-    storage: S,
+pub struct ForkManager<S: Snapshot, Da: DaSpec> {
+    // Storage actually needed only to commit data to the database.
+    // So technically we can extract it and "finalize" method here will just
+    db: StateDB,
+    native_db: NativeDB,
 
     // TODO: Ugly, fix this with higher lever struct
-    self_ref: Option<Arc<RwLock<ForkManager<S, Sn, Da>>>>,
+    self_ref: Option<Arc<RwLock<ForkManager<S, Da>>>>,
 
-    snapshots: HashMap<Da::SlotHash, Sn>,
+    snapshots: HashMap<Da::SlotHash, S>,
 
     // L1 forks representation
     // Chain: prev_block -> child_blocks
@@ -105,18 +75,13 @@ pub struct ForkManager<S: sov_state::Storage, Sn: Snapshot, Da: DaSpec> {
     snapshot_id_to_block_hash: HashMap<SnapshotId, Da::SlotHash>,
 }
 
-impl<S, Sn, Da> QuerySnapshotLayers for ForkManager<S, Sn, Da>
+impl<S, Da> QuerySnapshotLayers for ForkManager<S, Da>
 where
-    S: sov_state::Storage,
-    Sn: Snapshot,
+    S: Snapshot,
     Da: DaSpec,
     Da::SlotHash: Hash,
 {
-    fn get_value_recursively(
-        &self,
-        snapshot_id: &SnapshotId,
-        key: &StorageKey,
-    ) -> Option<StorageValue> {
+    fn fetch_value(&self, snapshot_id: &SnapshotId, key: &StorageKey) -> Option<StorageValue> {
         let snapshot_block_hash = self.snapshot_id_to_block_hash.get(snapshot_id)?;
         let parent_block_hash = self.blocks_to_parent.get(snapshot_block_hash)?;
         let mut parent_snapshot = self.snapshots.get(parent_block_hash);
@@ -134,10 +99,9 @@ where
     }
 }
 
-impl<S, Sn, Da> ForkManager<S, Sn, Da>
+impl<S, Da> ForkManager<S, Da>
 where
-    S: sov_state::Storage,
-    Sn: Snapshot,
+    S: Snapshot,
     Da: DaSpec,
     Da::SlotHash: Hash,
 {
@@ -170,10 +134,7 @@ where
             && self.snapshot_id_to_block_hash.is_empty()
     }
 
-    pub fn get_new_ref(
-        &mut self,
-        block_header: &Da::BlockHeader,
-    ) -> TreeQuery<S, ForkManager<S, Sn, Da>> {
+    pub fn get_new_ref(&mut self, block_header: &Da::BlockHeader) -> TreeQuery<S> {
         self.latest_snapshot_id += 1;
         let new_snapshot_ref = TreeQuery {
             id: self.latest_snapshot_id,
@@ -197,13 +158,13 @@ where
         );
         self.chain_forks
             .entry(prev_block_hash)
-            .or_insert(Vec::new())
+            .or_default()
             .push(current_block_hash);
 
         new_snapshot_ref
     }
 
-    pub fn add_snapshot(&mut self, snapshot: Sn) {
+    pub fn add_snapshot(&mut self, snapshot: S::Snapshot) {
         let snapshot_block_hash = self
             .snapshot_id_to_block_hash
             .get(&snapshot.get_id())
@@ -211,7 +172,7 @@ where
         self.snapshots.insert(snapshot_block_hash.clone(), snapshot);
     }
 
-    fn remove_snapshot(&mut self, block_hash: &Da::SlotHash) -> Sn {
+    fn remove_snapshot(&mut self, block_hash: &Da::SlotHash) -> S::Snapshot {
         let snapshot = self
             .snapshots
             .remove(&block_hash)
@@ -253,6 +214,15 @@ where
             }
         }
     }
+}
+
+/// OPTION WITH TRAIT
+pub trait ForkManagerTrait<Da: DaSpec> {
+    type Snapshot;
+    type Query;
+    fn get_new_ref(&mut self, block_header: &Da::BlockHeader) -> Self::Query;
+    fn add_snapshot(&mut self, snapshot: Self::Snapshot);
+    fn finalize_snapshot(&mut self, block_hash: &Da::SlotHash);
 }
 
 #[cfg(test)]
