@@ -18,5 +18,5 @@ serde = { workspace = true }
 # Sovereign dependencies
 demo-stf = { path = "../../examples/demo-rollup/stf" }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank" }
-sov-modules-api = { path = "../../module-system/sov-modules-api" }
-sov-rollup-interface = { path = "../../rollup-interface" }
+sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
+sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
