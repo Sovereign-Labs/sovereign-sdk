@@ -23,6 +23,7 @@ use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::Spec;
 use sov_modules_stf_template::{AppTemplate, SequencerOutcome, TxEffect};
+use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::mocks::{
     MockAddress, MockDaConfig, MockDaService, MOCK_SEQUENCER_DA_ADDRESS,
 };
@@ -276,7 +277,7 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
         module.merge(
             sov_ledger_rpc::server::rpc_module::<
                 LedgerDB,
-                SequencerOutcome<CelestiaAddress>,
+                SequencerOutcome<<<Da as DaService>::Spec as DaSpec>::Address>,
                 TxEffect,
             >(self.ledger_db.clone())?
             .remove_context(),
