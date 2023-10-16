@@ -7196,6 +7196,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "risc0-starter"
+version = "0.2.0"
+dependencies = [
+ "risc0-build",
+]
+
+[[package]]
 name = "risc0-sys"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7311,35 +7318,6 @@ checksum = "bb6f170a4041d50a0ce04b0d2e14916d6ca863ea2e422689a5b694395d299ffe"
 dependencies = [
  "libc",
  "librocksdb-sys",
-]
-
-[[package]]
-name = "rollup-template"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "borsh",
- "clap 4.4.6",
- "jsonrpsee 0.20.1",
- "serde",
- "serde_json",
- "sov-accounts",
- "sov-bank",
- "sov-db",
- "sov-modules-api",
- "sov-modules-stf-template",
- "sov-risc0-adapter",
- "sov-rollup-interface",
- "sov-sequencer",
- "sov-sequencer-registry",
- "sov-state",
- "sov-stf-runner",
- "tempfile",
- "template-risc0",
- "template-stf",
- "tokio",
- "tracing",
- "tracing-subscriber 0.3.17",
 ]
 
 [[package]]
@@ -8800,6 +8778,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-rollup-starter"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "clap 4.4.6",
+ "jsonrpsee 0.20.1",
+ "risc0-starter",
+ "serde",
+ "serde_json",
+ "sov-accounts",
+ "sov-bank",
+ "sov-db",
+ "sov-modules-api",
+ "sov-modules-stf-template",
+ "sov-risc0-adapter",
+ "sov-rollup-interface",
+ "sov-sequencer",
+ "sov-sequencer-registry",
+ "sov-state",
+ "sov-stf-runner",
+ "stf-starter",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.17",
+]
+
+[[package]]
 name = "sov-schema-db"
 version = "0.2.0"
 dependencies = [
@@ -9528,6 +9535,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
+name = "stf-starter"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "clap 4.4.6",
+ "jsonrpsee 0.20.1",
+ "serde",
+ "serde_json",
+ "sov-accounts",
+ "sov-bank",
+ "sov-modules-api",
+ "sov-modules-stf-template",
+ "sov-rollup-interface",
+ "sov-sequencer",
+ "sov-sequencer-registry",
+ "sov-state",
+ "sov-stf-runner",
+ "tracing",
+]
+
+[[package]]
 name = "string_cache"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9893,35 +9922,6 @@ dependencies = [
  "redox_syscall 0.3.5",
  "rustix 0.38.15",
  "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "template-risc0"
-version = "0.2.0"
-dependencies = [
- "risc0-build",
-]
-
-[[package]]
-name = "template-stf"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "borsh",
- "clap 4.4.6",
- "jsonrpsee 0.20.1",
- "serde",
- "serde_json",
- "sov-accounts",
- "sov-bank",
- "sov-modules-api",
- "sov-modules-stf-template",
- "sov-rollup-interface",
- "sov-sequencer",
- "sov-sequencer-registry",
- "sov-state",
- "sov-stf-runner",
- "tracing",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 [package]
-name = "template-risc0"
+name = "risc0-starter"
 version = "0.2.0"
 edition = "2021"
 resolver = "2"

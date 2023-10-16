@@ -1,5 +1,5 @@
 [package]
-name = "template-prover-guest-mock"
+name = "guest-mock-starter"
 version = "0.2.0"
 edition = "2021"
 resolver = "2"
@@ -10,9 +10,9 @@ resolver = "2"
 anyhow = "1.0.68"
 risc0-zkvm = { version = "0.18", default-features = false, features = ["std"] }
 risc0-zkvm-platform = "0.18"
-template-stf = { path = "../../../stf" }
-sov-risc0-adapter = { path = "../../../../../adapters/risc0" }
-sov-rollup-interface = { path = "../../../../../rollup-interface", features = ["mocks"] }
+stf-starter = { path = "../../../stf" }
+sov-risc0-adapter = { path = "../../../../adapters/risc0" }
+sov-rollup-interface = { path = "../../../../rollup-interface", features = ["mocks"] }
 
 [patch.crates-io]
 sha2 = { git = "https://github.com/risc0/RustCrypto-hashes", tag = "sha2/v0.10.6-risc0" }
