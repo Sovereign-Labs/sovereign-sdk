@@ -8,6 +8,7 @@ use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::genesis_config::{get_genesis_config, GenesisPaths, StorageConfig};
 use demo_stf::runtime::{GenesisConfig, Runtime};
 use demo_stf::{create_zk_app_template, App, AppVerifier};
+
 use jsonrpsee::core::async_trait;
 use jsonrpsee::RpcModule;
 #[cfg(feature = "experimental")]
@@ -79,7 +80,9 @@ pub trait RollupSpec: Sized + Send + Sync {
 
     fn create_methods(
         &self,
-        rollup: &NewRollup<Self>,
+        storage: &<Self::DefaultContext as Spec>::Storage,
+        ledger_db: &LedgerDB,
+        da_service: &Self::DaService,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error>;
 
     fn get_genesis_config<P: AsRef<Path>>(
@@ -127,15 +130,17 @@ impl RollupSpec for DemoRollupSpec {
 
     fn create_methods(
         &self,
-        rollup: &NewRollup<Self>,
+        storage: &<Self::DefaultContext as Spec>::Storage,
+        ledger_db: &LedgerDB,
+        da_service: &Self::DaService,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
         let batch_builder =
-            create_batch_builder::<<DemoRollupSpec as RollupSpec>::DaSpec>(rollup.storage.clone());
+            create_batch_builder::<<DemoRollupSpec as RollupSpec>::DaSpec>(storage.clone());
 
         let mut methods = demo_stf::runtime::get_rpc_methods::<
             <DemoRollupSpec as RollupSpec>::DefaultContext,
             <DemoRollupSpec as RollupSpec>::DaSpec,
-        >(rollup.storage.clone());
+        >(storage.clone());
 
         methods.merge(
             sov_ledger_rpc::server::rpc_module::<
@@ -143,11 +148,11 @@ impl RollupSpec for DemoRollupSpec {
                 //TODO fix address
                 SequencerOutcome<MockAddress>,
                 TxEffect,
-            >(rollup.ledger_db.clone())?
+            >(ledger_db.clone())?
             .remove_context(),
         )?;
 
-        register_seq(rollup.da_service.clone(), batch_builder, &mut methods)?;
+        register_seq(da_service.clone(), batch_builder, &mut methods)?;
 
         #[cfg(feature = "experimental")]
         let eth_signer = read_eth_tx_signers();
@@ -240,6 +245,7 @@ impl RollupSpec for DemoRollupSpec {
             .map(|(number, _)| storage.get_root_hash(number.0))
             .transpose()?;
 
+        let rpc_methods = self.create_methods(&storage, &ledger_db, &da_service)?;
         //====
         let mut runner = StateTransitionRunner::new(
             rollup_config.runner,
@@ -256,6 +262,7 @@ impl RollupSpec for DemoRollupSpec {
             runner,
             ledger_db,
             da_service,
+            rpc_methods,
         })
     }
 }
@@ -265,22 +272,22 @@ pub struct NewRollup<S: RollupSpec> {
     pub runner: StateTransitionRunner<S::NativeSTF, S::DaService, S::Vm, S::ZkSTF>,
     pub ledger_db: LedgerDB,
     pub da_service: S::DaService,
+    pub rpc_methods: jsonrpsee::RpcModule<()>,
 }
 
 impl<S: RollupSpec> NewRollup<S> {
     /// Runs the rollup.
-    pub async fn run(self, methods: jsonrpsee::RpcModule<()>) -> Result<(), anyhow::Error> {
-        self.run_and_report_rpc_port(None, methods).await
+    pub async fn run(self) -> Result<(), anyhow::Error> {
+        self.run_and_report_rpc_port(None).await
     }
 
     /// Runs the rollup. Reports rpc port to the caller using the provided channel.
     pub async fn run_and_report_rpc_port(
         mut self,
         channel: Option<oneshot::Sender<SocketAddr>>,
-        methods: jsonrpsee::RpcModule<()>,
     ) -> Result<(), anyhow::Error> {
         let mut runner = self.runner;
-        runner.start_rpc_server(methods, channel).await;
+        runner.start_rpc_server(self.rpc_methods, channel).await;
         runner.run_in_process().await?;
         Ok(())
     }

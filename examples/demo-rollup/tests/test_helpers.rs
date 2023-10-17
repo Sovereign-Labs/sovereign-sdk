@@ -75,9 +75,8 @@ pub async fn start_rollup2<P: AsRef<Path>>(
         .create_new_rollup(genesis_paths, rollup_config)
         .unwrap();
 
-    let methods = spec.create_methods(&rollup).unwrap();
     rollup
-        .run_and_report_rpc_port(Some(rpc_reporting_channel), methods)
+        .run_and_report_rpc_port(Some(rpc_reporting_channel))
         .await
         .unwrap();
 
