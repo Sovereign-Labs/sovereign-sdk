@@ -3,8 +3,14 @@
 //!
 //! See [`RpcClient`].
 
+use jsonrpsee::core::params::ArrayParams;
+use jsonrpsee::core::Error as RpcError;
 use jsonrpsee::proc_macros::rpc;
-use sov_rollup_interface::rpc::{BatchIdentifier, QueryMode, SlotIdentifier, TxIdentifier};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use sov_rollup_interface::rpc::{
+    BatchIdentifier, EventIdentifier, QueryMode, SlotIdentifier, TxIdentifier,
+};
 use sov_rollup_interface::stf::Event;
 
 use crate::HexHash;
@@ -16,9 +22,6 @@ use crate::HexHash;
 ///
 /// For more information about the specific methods, see the
 /// [`sov_rollup_interface::rpc`] module.
-///
-/// TODO: `getEvents`, which has a `Vec<T>` as a single parameter. That's not
-/// supported by `jsonrpsee`, surprisingly.
 #[rpc(client, namespace = "ledger")]
 pub trait Rpc<Slot, Batch, Tx>
 where
@@ -139,4 +142,33 @@ where
     /// processed.
     #[subscription(name = "subscribeSlots", item = u64)]
     async fn subscribe_slots(&self) -> SubscriptionResult;
+}
+
+/// `jsonrpsee`'s rpc macro does not support dynamic array as parameters.
+/// Implement `ledger_getEvents` by extending the core ledger rpc with the hand rolled method.
+#[async_trait::async_trait]
+pub trait RpcExt<Slot, Batch, Tx>: RpcClient<Slot, Batch, Tx>
+where
+    Slot: DeserializeOwned + Serialize + Send + Sync + 'static,
+    Batch: DeserializeOwned + Serialize + Send + Sync + 'static,
+    Tx: DeserializeOwned + Serialize + Send + Sync + 'static,
+{
+    async fn get_events(&self, ids: Vec<EventIdentifier>) -> Result<Vec<Option<Event>>, RpcError>;
+}
+
+#[async_trait::async_trait]
+impl<Slot, Batch, Tx, T> RpcExt<Slot, Batch, Tx> for T
+where
+    Slot: DeserializeOwned + Serialize + Send + Sync + 'static,
+    Batch: DeserializeOwned + Serialize + Send + Sync + 'static,
+    Tx: DeserializeOwned + Serialize + Send + Sync + 'static,
+    T: RpcClient<Slot, Batch, Tx> + Send + Sync,
+{
+    async fn get_events(&self, ids: Vec<EventIdentifier>) -> Result<Vec<Option<Event>>, RpcError> {
+        let mut params = ArrayParams::new();
+        for id in ids {
+            params.insert(id)?;
+        }
+        self.request("ledger_getEvents", params).await
+    }
 }

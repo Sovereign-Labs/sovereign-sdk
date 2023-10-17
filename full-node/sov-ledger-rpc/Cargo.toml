@@ -17,7 +17,7 @@ jsonrpsee = { workspace = true }
 serde = "1"
 sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
 # Client dependencies
-# (None)
+async-trait = { workspace = true, optional = true }
 # Server dependencies
 anyhow = { version = "1", optional = true }
 futures = { version = "0.3", optional = true }
@@ -33,4 +33,4 @@ sov-ledger-rpc = { path = ".", features = ["client", "server"] }
 [features]
 default = ["client", "server"]
 server = ["anyhow", "futures", "jsonrpsee/server", "sov-modules-api"]
-client = ["jsonrpsee/client", "jsonrpsee/macros"]
+client = ["jsonrpsee/client", "jsonrpsee/macros", "async-trait"]

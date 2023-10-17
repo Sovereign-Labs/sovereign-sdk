@@ -8621,6 +8621,7 @@ name = "sov-ledger-rpc"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "futures",
  "jsonrpsee 0.20.1",
  "serde",
