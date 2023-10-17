@@ -15,6 +15,7 @@ publish = false
 
 [dev-dependencies]
 sov-value-setter = { path = ".", features = ["native"] }
+sov-modules-api = { path = "../../../sov-modules-api", features = ["native"] }
 tempfile = { workspace = true }
 
 [dependencies]
