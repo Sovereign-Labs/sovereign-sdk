@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use std::path::Path;
 
 use demo_stf::genesis_config::GenesisPaths;
-use sov_demo_rollup::{new_rollup_with_mock_da_from_config, DemoProverConfig};
+use sov_demo_rollup::{new_rollup_with_mock_da_from_config, DemoProverConfig, DemoRollupSpec};
 use sov_rollup_interface::mocks::{MockAddress, MockDaConfig};
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
@@ -43,12 +43,12 @@ pub async fn start_rollup<Vm: ZkvmHost, P: AsRef<Path>>(
     temp_dir.close().unwrap();
 }
 
-use sov_demo_rollup::new_mock_rollup2;
 use sov_demo_rollup::NewRollup;
+use sov_demo_rollup::RollupSpec;
 
 pub async fn start_rollup2<P: AsRef<Path>>(
     rpc_reporting_channel: oneshot::Sender<SocketAddr>,
-    genesis_paths: &GenesisPaths<P>,
+    genesis_paths: GenesisPaths<P>,
 ) {
     let temp_dir = tempfile::tempdir().unwrap();
     let temp_path = temp_dir.path();
@@ -69,8 +69,13 @@ pub async fn start_rollup2<P: AsRef<Path>>(
         },
     };
 
-    let rollup = new_mock_rollup2(genesis_paths, rollup_config).unwrap();
-    let methods = rollup.create_methods().await.unwrap();
+    let spec = DemoRollupSpec {};
+
+    let rollup = spec
+        .create_new_rollup(genesis_paths, rollup_config)
+        .unwrap();
+
+    let methods = spec.create_methods(&rollup).unwrap();
     rollup
         .run_and_report_rpc_port(Some(rpc_reporting_channel), methods)
         .await

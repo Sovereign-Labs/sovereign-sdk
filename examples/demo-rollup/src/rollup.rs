@@ -8,6 +8,7 @@ use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::genesis_config::{get_genesis_config, GenesisPaths, StorageConfig};
 use demo_stf::runtime::{GenesisConfig, Runtime};
 use demo_stf::{create_zk_app_template, App, AppVerifier};
+use jsonrpsee::core::async_trait;
 use jsonrpsee::RpcModule;
 #[cfg(feature = "experimental")]
 use secp256k1::SecretKey;
@@ -55,7 +56,7 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 
 type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>>;
 
-pub trait RollupSpec: Sized {
+pub trait RollupSpec: Sized + Send + Sync {
     type DaService: DaService<Spec = Self::DaSpec, Error = anyhow::Error> + Clone;
     type DaSpec: DaSpec;
     type DaConfig;
@@ -81,13 +82,11 @@ pub trait RollupSpec: Sized {
         rollup: &NewRollup<Self>,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error>;
 
-    //
     fn get_genesis_config<P: AsRef<Path>>(
         &self,
         genesis_paths: &GenesisPaths<P>,
     ) -> <Self::NativeRuntime as RuntimeTrait<Self::DefaultContext, Self::DaSpec>>::GenesisConfig;
 
-    //
     fn get_sequencer_da_address(&self) -> <Self::DaSpec as DaSpec>::Address;
 
     fn get_sequencer_da_service(&self) -> Self::DaService;
@@ -100,14 +99,14 @@ pub trait RollupSpec: Sized {
 
     fn create_new_rollup<P: AsRef<Path>>(
         &self,
-        genesis_paths: &GenesisPaths<P>,
+        genesis_paths: GenesisPaths<P>,
         rollup_config: RollupConfig<Self::DaConfig>,
     ) -> Result<NewRollup<Self>, anyhow::Error>;
 }
 
-pub struct DempRollupSpec {}
+pub struct DemoRollupSpec {}
 
-impl RollupSpec for DempRollupSpec {
+impl RollupSpec for DemoRollupSpec {
     type DaService = MockDaService;
     type DaSpec = MockDaSpec;
     type DaConfig = MockDaConfig;
@@ -131,11 +130,11 @@ impl RollupSpec for DempRollupSpec {
         rollup: &NewRollup<Self>,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
         let batch_builder =
-            create_batch_builder::<<DempRollupSpec as RollupSpec>::DaSpec>(rollup.storage.clone());
+            create_batch_builder::<<DemoRollupSpec as RollupSpec>::DaSpec>(rollup.storage.clone());
 
         let mut methods = demo_stf::runtime::get_rpc_methods::<
-            <DempRollupSpec as RollupSpec>::DefaultContext,
-            <DempRollupSpec as RollupSpec>::DaSpec,
+            <DemoRollupSpec as RollupSpec>::DefaultContext,
+            <DemoRollupSpec as RollupSpec>::DaSpec,
         >(rollup.storage.clone());
 
         methods.merge(
@@ -162,8 +161,8 @@ impl RollupSpec for DempRollupSpec {
 
         #[cfg(feature = "experimental")]
         register_ethereum::<
-            <DempRollupSpec as RollupSpec>::DefaultContext,
-            <DempRollupSpec as RollupSpec>::DaService,
+            <DemoRollupSpec as RollupSpec>::DefaultContext,
+            <DemoRollupSpec as RollupSpec>::DaService,
         >(
             self.da_service.clone(),
             eth_rpc_config,
@@ -207,7 +206,7 @@ impl RollupSpec for DempRollupSpec {
         let prover_config = ProofGenConfig::Execute;
         /*
                 let prover_config = ProofGenConfig::Simulate(AppVerifier::new(
-                    create_zk_app_template::<<<DempRollupSpec as RollupSpec>::Vm as ZkvmHost>::Guest, _>(),
+                    create_zk_app_template::<<<DemoRollupSpec as RollupSpec>::Vm as ZkvmHost>::Guest, _>(),
                     Default::default(),
                 ));
         */
@@ -219,11 +218,11 @@ impl RollupSpec for DempRollupSpec {
 
     fn create_new_rollup<P: AsRef<Path>>(
         &self,
-        genesis_paths: &GenesisPaths<P>,
+        genesis_paths: GenesisPaths<P>,
         rollup_config: RollupConfig<MockDaConfig>,
     ) -> Result<NewRollup<Self>, anyhow::Error> {
         let ledger_db = self.get_ledger_db(rollup_config.clone());
-        let genesis_config = self.get_genesis_config(genesis_paths);
+        let genesis_config = self.get_genesis_config(&genesis_paths);
 
         let storage_config = StorageConfig {
             path: rollup_config.storage.path,
@@ -300,130 +299,6 @@ where
     methods
         .merge(sequencer_rpc)
         .context("Failed to merge Txs RPC modules")
-}
-
-impl NewRollup<DempRollupSpec> {
-    pub async fn create_methods(&self) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
-        let batch_builder =
-            create_batch_builder::<<DempRollupSpec as RollupSpec>::DaSpec>(self.storage.clone());
-
-        let mut methods = demo_stf::runtime::get_rpc_methods::<
-            <DempRollupSpec as RollupSpec>::DefaultContext,
-            <DempRollupSpec as RollupSpec>::DaSpec,
-        >(self.storage.clone());
-
-        methods.merge(
-            sov_ledger_rpc::server::rpc_module::<
-                LedgerDB,
-                //TODO fix address
-                SequencerOutcome<MockAddress>,
-                TxEffect,
-            >(self.ledger_db.clone())?
-            .remove_context(),
-        )?;
-
-        register_seq(self.da_service.clone(), batch_builder, &mut methods)?;
-
-        #[cfg(feature = "experimental")]
-        let eth_signer = read_eth_tx_signers();
-
-        #[cfg(feature = "experimental")]
-        let eth_rpc_config = EthRpcConfig {
-            min_blob_size: Some(1),
-            sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
-            eth_signer,
-        };
-
-        #[cfg(feature = "experimental")]
-        register_ethereum::<
-            <DempRollupSpec as RollupSpec>::DefaultContext,
-            <DempRollupSpec as RollupSpec>::DaService,
-        >(
-            self.da_service.clone(),
-            eth_rpc_config,
-            self.storage.clone(),
-            &mut methods,
-        )
-        .unwrap();
-
-        Ok(methods)
-    }
-}
-
-pub fn new_mock_rollup2<P: AsRef<Path>>(
-    genesis_paths: &GenesisPaths<P>,
-    rollup_config: RollupConfig<MockDaConfig>,
-) -> Result<NewRollup<DempRollupSpec>, anyhow::Error> {
-    let ledger_db = initialize_ledger(&rollup_config.storage.path);
-    let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
-    let da_service = MockDaService::new(sequencer_da_address);
-
-    let storage_config = StorageConfig {
-        path: rollup_config.storage.path,
-    };
-
-    #[cfg(feature = "experimental")]
-    let eth_signer = read_eth_tx_signers();
-
-    let genesis_config = get_genesis_config(
-        sequencer_da_address,
-        genesis_paths,
-        #[cfg(feature = "experimental")]
-        eth_signer.signers(),
-    );
-
-    let storage = get_storage(storage_config);
-    let native_stf = create_native_app_template(storage.clone());
-
-    let vm = Risc0Host::new(risc0::MOCK_DA_ELF);
-    //let prover_config = ProofGenConfig::Execute;
-
-    let prover_config = ProofGenConfig::Simulate(AppVerifier::new(
-        create_zk_app_template::<<<DempRollupSpec as RollupSpec>::Vm as ZkvmHost>::Guest, _>(),
-        Default::default(),
-    ));
-
-    let prover = Prover {
-        vm,
-        config: prover_config,
-    };
-
-    //====
-
-    let last_slot_opt = ledger_db.get_head_slot()?;
-
-    let prev_root = last_slot_opt
-        .map(|(number, _)| storage.get_root_hash(number.0))
-        .transpose()?;
-
-    //====
-    let mut runner = StateTransitionRunner::new(
-        rollup_config.runner,
-        da_service.clone(),
-        ledger_db.clone(),
-        native_stf,
-        prev_root,
-        genesis_config,
-        Some(prover),
-    )?;
-
-    Ok(NewRollup {
-        storage,
-        da_service,
-        ledger_db,
-        runner,
-    })
-}
-
-pub fn new_mock_rollup<P: AsRef<Path>>(
-    genesis_paths: &GenesisPaths<P>,
-    rollup_config_path: &str,
-) -> Result<NewRollup<DempRollupSpec>, anyhow::Error> {
-    let rollup_config: RollupConfig<MockDaConfig> = from_toml_path(rollup_config_path)
-        .context("Failed to read rollup configuration")
-        .unwrap();
-
-    new_mock_rollup2::<P>(genesis_paths, rollup_config)
 }
 
 /// Dependencies needed to run the rollup.
