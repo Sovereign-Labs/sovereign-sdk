@@ -25,6 +25,7 @@ use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::{Context, DaSpec, Spec};
 use sov_modules_stf_template::{AppTemplate, SequencerOutcome, TxEffect};
 use sov_risc0_adapter::host::Risc0Host;
+
 use sov_rollup_interface::mocks::{
     MockAddress, MockDaConfig, MockDaService, MockDaSpec, MOCK_SEQUENCER_DA_ADDRESS,
 };
@@ -220,7 +221,8 @@ impl NewRollup<DempRollupSpec> {
         methods.merge(
             sov_ledger_rpc::server::rpc_module::<
                 LedgerDB,
-                SequencerOutcome<CelestiaAddress>,
+                //TODO fix address
+                SequencerOutcome<MockAddress>,
                 TxEffect,
             >(self.ledger_db.clone())?
             .remove_context(),
@@ -562,8 +564,7 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
         module.merge(
             sov_ledger_rpc::server::rpc_module::<
                 LedgerDB,
-                //TODO fix address
-                SequencerOutcome<CelestiaAddress>,
+                SequencerOutcome<<<Da as DaService>::Spec as DaSpec>::Address>,
                 TxEffect,
             >(self.ledger_db.clone())?
             .remove_context(),

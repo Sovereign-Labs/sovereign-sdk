@@ -238,7 +238,6 @@ pub trait Storage: Clone {
     /// Opens a storage access proof and validates it against a state root.
     /// It returns a result with the opened leaf (key, value) pair in case of success.
     fn open_proof(
-        &self,
         state_root: Self::Root,
         proof: StorageProof<Self::Proof>,
     ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error>;
@@ -271,6 +270,5 @@ impl From<&str> for StorageValue {
 pub trait NativeStorage: Storage {
     /// Returns the value corresponding to the key or None if key is absent and a proof to
     /// get the value.
-    fn get_with_proof(&self, key: StorageKey, witness: &Self::Witness)
-        -> StorageProof<Self::Proof>;
+    fn get_with_proof(&self, key: StorageKey) -> StorageProof<Self::Proof>;
 }
