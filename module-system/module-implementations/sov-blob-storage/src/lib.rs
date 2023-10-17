@@ -8,7 +8,8 @@ mod query;
 #[cfg(feature = "native")]
 pub use query::*;
 use sov_chain_state::TransitionHeight;
-use sov_modules_api::{macros::config_constant, Module, ModuleInfo, StateMap, WorkingSet};
+use sov_modules_api::macros::config_constant;
+use sov_modules_api::{Module, ModuleInfo, StateMap, WorkingSet};
 
 /// For how many slots deferred blobs are stored before being executed
 #[config_constant]
