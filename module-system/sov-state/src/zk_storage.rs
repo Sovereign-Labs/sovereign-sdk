@@ -108,7 +108,6 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     }
 
     fn open_proof(
-        &self,
         state_root: Self::Root,
         state_proof: StorageProof<Self::Proof>,
     ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error> {

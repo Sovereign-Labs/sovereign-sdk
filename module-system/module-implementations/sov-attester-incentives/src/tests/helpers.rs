@@ -8,7 +8,7 @@ use sov_rollup_interface::mocks::{
     MockBlock, MockBlockHeader, MockCodeCommitment, MockDaSpec, MockValidityCond,
     MockValidityCondChecker, MockZkvm,
 };
-use sov_state::storage::StorageProof;
+use sov_state::storage::{NativeStorage, StorageProof};
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
 
 use crate::AttesterIncentives;
@@ -156,13 +156,11 @@ pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidit
         let (root_hash, w_set) = commit_get_new_working_set(storage, working_set);
         working_set = w_set;
 
+        let bond_proof = storage.get_with_proof(module.get_attester_storage_key(attester_address));
+
         ret_exec_vars.push(ExecutionSimulationVars {
             state_root: root_hash,
-            state_proof: module.get_bond_proof(
-                attester_address,
-                &Default::default(),
-                &mut working_set,
-            ),
+            state_proof: bond_proof,
         });
 
         // Then process the first transaction. Only sets the genesis hash and a transition in progress.
