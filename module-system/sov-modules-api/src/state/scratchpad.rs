@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 use sov_rollup_interface::stf::Event;
 use sov_state::codec::{EncodeKeyLike, StateCodec, StateValueCodec};
-use sov_state::storage::{Storage, StorageKey, StorageValue};
+use sov_state::storage::{NativeStorage, Storage, StorageKey, StorageValue};
 use sov_state::{OrderedReadsAndWrites, Prefix, StorageInternalCache};
 
 use crate::gas::GasMeter;
@@ -247,12 +247,6 @@ impl<C: Context> WorkingSet<C> {
         &self.events
     }
 
-    /// Returns an immutable reference to the [`Storage`] instance backing this
-    /// working set.
-    pub fn backing(&self) -> &<C as Spec>::Storage {
-        &self.delta.inner.inner
-    }
-
     /// Returns the remaining gas funds.
     pub const fn gas_remaining_funds(&self) -> u64 {
         self.gas_meter.remaining_funds()
@@ -267,6 +261,18 @@ impl<C: Context> WorkingSet<C> {
     /// compute the scalar value.
     pub fn charge_gas(&mut self, gas: &C::GasUnit) -> anyhow::Result<()> {
         self.gas_meter.charge_gas(gas)
+    }
+
+    /// Fetches given value and provides a proof of it presence/absence.
+    pub fn get_with_proof(
+        &mut self,
+        key: StorageKey,
+    ) -> sov_state::storage::StorageProof<<C::Storage as Storage>::Proof>
+    where
+        C::Storage: NativeStorage,
+    {
+        // First inner is `RevertableWriter` and second inner is actually a `Storage` instance
+        self.delta.inner.inner.get_with_proof(key)
     }
 }
 

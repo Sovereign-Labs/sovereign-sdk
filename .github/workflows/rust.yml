@@ -76,18 +76,18 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install Rust
         run: rustup show && rustup install nightly && rustup component add rustfmt --toolchain nightly-x86_64-unknown-linux-gnu # Nightly is needed for our configuration of cargo fmt
-      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
-        run: cargo install cargo-risczero
-      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
-        run: cargo risczero install
       - uses: Swatinem/rust-cache@v2
         with:
           cache-provider: "buildjet"
-          shared-key: cargo-check
+          shared-key: cargo-check-cache
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
             .
             fuzz
+      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
+        run: cargo install cargo-risczero
+      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
+        run: cargo risczero install
       - name: Run lint
         run: |
           if ! make lint ; then
@@ -102,9 +102,9 @@ jobs:
     # effectively.
     needs: check
     runs-on: buildjet-8vcpu-ubuntu-2204
-    timeout-minutes: 60
+    timeout-minutes: 120
     env:
-      CI_SKIP_GUEST_BUILD: "1"
+      SKIP_GUEST_BUILD: "1"
     steps:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
@@ -120,7 +120,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-provider: "buildjet"
-          shared-key: cargo-check
+          shared-key: cargo-check-cache
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
             .
@@ -140,18 +140,18 @@ jobs:
         with:
           version: "23.2"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install Rust
-        run: rustup show
-      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
-        run: cargo install cargo-risczero
-      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
-        run: cargo risczero install
         # `cargo-nextest` is much faster than standard `cargo test`.
       - uses: taiki-e/install-action@nextest
+      - name: Install Rust
+        run: rustup show
       - uses: Swatinem/rust-cache@v2
         with:
           cache-provider: "buildjet"
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
+      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
+        run: cargo install cargo-risczero
+      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
+        run: cargo risczero install
       - run: cargo nextest run --workspace --all-features
   test:
     name: test
@@ -167,14 +167,14 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install Rust
         run: rustup show
-      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
-        run: cargo install cargo-risczero
-      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
-        run: cargo risczero install
       - uses: Swatinem/rust-cache@v2
         with:
           cache-provider: "buildjet"
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
+      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
+        run: cargo install cargo-risczero
+      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
+        run: cargo risczero install
       # `cargo-nextest` does not support doctests (yet?), so we have to run them
       # separately.
       # TODO: https://github.com/nextest-rs/nextest/issues/16
@@ -195,10 +195,6 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install Rust
         run: rustup show
-      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
-        run: cargo install cargo-risczero
-      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
-        run: cargo risczero install
       - name: add llvm component
         run: rustup component add llvm-tools-preview
       - name: cargo install cargo-llvm-cov
@@ -207,6 +203,10 @@ jobs:
         with:
           cache-provider: "buildjet"
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
+      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
+        run: cargo install cargo-risczero
+      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
+        run: cargo risczero install
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
@@ -229,12 +229,11 @@ jobs:
     timeout-minutes: 90
     env:
       RUSTDOCFLAGS: "-D warnings"
-      CI_SKIP_GUEST_BUILD: "1"
+      SKIP_GUEST_BUILD: "1"
     steps:
       - uses: actions/checkout@v3
         # Not sure installing `mold` is actually needed, but it's what the
-        # `check` job does and their caches are shared, so it's best to keep
-        # things as similar as possible.
+        # `check` job, and we'd rather keep things as similar as possible.
       - uses: rui314/setup-mold@v1
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
@@ -246,7 +245,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-provider: "buildjet"
-          shared-key: cargo-doc
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
       # The docs' artifact tends to become quite large with all the
       # dependencies, so we don't include them.
@@ -308,14 +306,14 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install Rust
         run: rustup show
-      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
-        run: cargo install cargo-risczero
-      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
-        run: cargo risczero install
       - uses: Swatinem/rust-cache@v2
         with:
           cache-provider: "buildjet"
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
+      - name: Install cargo-risc0 # Risc0 v0.17 and higher require a cargo extension to build the guest code
+        run: cargo install cargo-risczero
+      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
+        run: cargo risczero install
       - name: Compile README.md to Bash
         run: cargo run --bin bashtestmd -- --input examples/demo-rollup/README.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh

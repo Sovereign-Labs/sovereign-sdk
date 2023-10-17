@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::*;
@@ -11,11 +9,14 @@ enum Operation {
 }
 
 impl Operation {
-    fn execute<C: Context>(&self, working_set: WorkingSet<C>) -> StateCheckpoint<C> {
+    fn execute<C: Context>(
+        &self,
+        working_set: WorkingSet<C>,
+        db: C::Storage,
+    ) -> StateCheckpoint<C> {
         match self {
             Operation::Merge => working_set.checkpoint(),
             Operation::Finalize => {
-                let db = working_set.backing().clone();
                 let (cache_log, witness) = working_set.checkpoint().freeze();
 
                 db.validate_and_commit(cache_log, &witness)
@@ -32,9 +33,9 @@ struct StorageOperation {
 }
 
 impl StorageOperation {
-    fn execute<C: Context>(&self, mut working_set: WorkingSet<C>) -> WorkingSet<C> {
+    fn execute<C: Context>(&self, mut working_set: WorkingSet<C>, db: C::Storage) -> WorkingSet<C> {
         for op in self.operations.iter() {
-            working_set = op.execute(working_set).to_revertable()
+            working_set = op.execute(working_set, db.clone()).to_revertable()
         }
         working_set
     }
@@ -76,31 +77,31 @@ fn create_storage_operations() -> Vec<(StorageOperation, StorageOperation)> {
     ]
 }
 
-fn create_state_map_and_storage(
+fn create_state_map(
     key: u32,
     value: u32,
-    path: impl AsRef<Path>,
-) -> (StateMap<u32, u32>, WorkingSet<DefaultContext>) {
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
-
+    working_set: &mut WorkingSet<DefaultContext>,
+) -> StateMap<u32, u32> {
     let state_map = StateMap::new(Prefix::new(vec![0]));
-    state_map.set(&key, &value, &mut working_set);
-    (state_map, working_set)
+    state_map.set(&key, &value, working_set);
+    state_map
 }
 
 #[test]
 fn test_state_map_with_remove() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
+    let storage = ProverStorage::with_path(path).unwrap();
     for (before_remove, after_remove) in create_storage_operations() {
         let key = 1;
         let value = 11;
-        let (state_map, mut working_set) = create_state_map_and_storage(key, value, path);
+        let mut working_set = WorkingSet::new(storage.clone());
+        let state_map = create_state_map(key, value, &mut working_set);
 
-        working_set = before_remove.execute(working_set);
+        working_set = before_remove.execute(working_set, storage.clone());
         assert_eq!(state_map.remove(&key, &mut working_set).unwrap(), value);
 
-        working_set = after_remove.execute(working_set);
+        working_set = after_remove.execute(working_set, storage.clone());
         assert!(state_map.get(&key, &mut working_set).is_none());
     }
 }
@@ -109,42 +110,41 @@ fn test_state_map_with_remove() {
 fn test_state_map_with_delete() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
+    let storage = ProverStorage::with_path(path).unwrap();
     for (before_delete, after_delete) in create_storage_operations() {
         let key = 1;
         let value = 11;
-        let (state_map, mut working_set) = create_state_map_and_storage(key, value, path);
+        let mut working_set = WorkingSet::new(storage.clone());
+        let state_map = create_state_map(key, value, &mut working_set);
 
-        working_set = before_delete.execute(working_set);
+        working_set = before_delete.execute(working_set, storage.clone());
         state_map.delete(&key, &mut working_set);
 
-        working_set = after_delete.execute(working_set);
+        working_set = after_delete.execute(working_set, storage.clone());
         assert!(state_map.get(&key, &mut working_set).is_none());
     }
 }
 
-fn create_state_value_and_storage(
-    value: u32,
-    path: impl AsRef<Path>,
-) -> (StateValue<u32>, WorkingSet<DefaultContext>) {
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
-
+fn create_state_value(value: u32, working_set: &mut WorkingSet<DefaultContext>) -> StateValue<u32> {
     let state_value = StateValue::new(Prefix::new(vec![0]));
-    state_value.set(&value, &mut working_set);
-    (state_value, working_set)
+    state_value.set(&value, working_set);
+    state_value
 }
 
 #[test]
 fn test_state_value_with_remove() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
+    let storage = ProverStorage::with_path(path).unwrap();
     for (before_remove, after_remove) in create_storage_operations() {
         let value = 11;
-        let (state_value, mut working_set) = create_state_value_and_storage(value, path);
+        let mut working_set = WorkingSet::new(storage.clone());
+        let state_value = create_state_value(value, &mut working_set);
 
-        working_set = before_remove.execute(working_set);
+        working_set = before_remove.execute(working_set, storage.clone());
         assert_eq!(state_value.remove(&mut working_set).unwrap(), value);
 
-        working_set = after_remove.execute(working_set);
+        working_set = after_remove.execute(working_set, storage.clone());
         assert!(state_value.get(&mut working_set).is_none());
     }
 }
@@ -153,20 +153,22 @@ fn test_state_value_with_remove() {
 fn test_state_value_with_delete() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
+    let storage = ProverStorage::with_path(path).unwrap();
     for (before_delete, after_delete) in create_storage_operations() {
         let value = 11;
-        let (state_value, mut working_set) = create_state_value_and_storage(value, path);
+        let mut working_set = WorkingSet::new(storage.clone());
+        let state_value = create_state_value(value, &mut working_set);
 
-        working_set = before_delete.execute(working_set);
+        working_set = before_delete.execute(working_set, storage.clone());
         state_value.delete(&mut working_set);
 
-        working_set = after_delete.execute(working_set);
+        working_set = after_delete.execute(working_set, storage.clone());
         assert!(state_value.get(&mut working_set).is_none());
     }
 }
 
 #[test]
-fn test_witness_roundtrip() {
+fn test_witness_round_trip() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
     let state_value = StateValue::new(Prefix::new(vec![0]));
@@ -201,28 +203,28 @@ fn test_witness_roundtrip() {
     };
 }
 
-fn create_state_vec_and_storage<T: BorshDeserialize + BorshSerialize>(
+fn create_state_vec<T: BorshDeserialize + BorshSerialize>(
     values: Vec<T>,
-    path: impl AsRef<Path>,
-) -> (StateVec<T>, WorkingSet<DefaultContext>) {
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
-
+    working_set: &mut WorkingSet<DefaultContext>,
+) -> StateVec<T> {
     let state_vec = StateVec::new(Prefix::new(vec![0]));
-    state_vec.set_all(values, &mut working_set);
-    (state_vec, working_set)
+    state_vec.set_all(values, working_set);
+    state_vec
 }
 
 #[test]
 fn test_state_vec_len() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
+    let storage = ProverStorage::with_path(path).unwrap();
     for (before_len, after_len) in create_storage_operations() {
         let values = vec![11, 22, 33];
-        let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
+        let mut working_set = WorkingSet::new(storage.clone());
+        let state_vec = create_state_vec(values.clone(), &mut working_set);
 
-        working_set = before_len.execute(working_set);
+        working_set = before_len.execute(working_set, storage.clone());
 
-        working_set = after_len.execute(working_set);
+        working_set = after_len.execute(working_set, storage.clone());
 
         assert_eq!(state_vec.len(&mut working_set), values.len());
     }
@@ -232,11 +234,13 @@ fn test_state_vec_len() {
 fn test_state_vec_get() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
+    let storage = ProverStorage::with_path(path).unwrap();
     for (before_get, after_get) in create_storage_operations() {
         let values = vec![56, 55, 54];
-        let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
+        let mut working_set = WorkingSet::new(storage.clone());
+        let state_vec = create_state_vec(values.clone(), &mut working_set);
 
-        working_set = before_get.execute(working_set);
+        working_set = before_get.execute(working_set, storage.clone());
 
         let val = state_vec.get(1, &mut working_set);
         let err_val = state_vec.get_or_err(3, &mut working_set);
@@ -246,7 +250,7 @@ fn test_state_vec_get() {
         let val = val.unwrap();
         assert_eq!(val, values.get(1).unwrap().clone());
 
-        working_set = after_get.execute(working_set);
+        working_set = after_get.execute(working_set, storage.clone());
         let val = state_vec.get(1, &mut working_set);
         let err_val = state_vec.get_or_err(3, &mut working_set);
         assert!(val.is_some());
@@ -261,18 +265,20 @@ fn test_state_vec_get() {
 fn test_state_vec_set() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
+    let storage = ProverStorage::with_path(path).unwrap();
     for (before_set, after_set) in create_storage_operations() {
         let values = vec![56, 55, 54];
-        let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
+        let mut working_set = WorkingSet::new(storage.clone());
+        let state_vec = create_state_vec(values.clone(), &mut working_set);
 
-        working_set = before_set.execute(working_set);
+        working_set = before_set.execute(working_set, storage.clone());
         let val = state_vec.set(1, &99, &mut working_set);
         assert!(val.is_ok());
 
         let val_err = state_vec.set(3, &99, &mut working_set);
         assert!(val_err.is_err());
 
-        working_set = after_set.execute(working_set);
+        working_set = after_set.execute(working_set, storage.clone());
 
         let val = state_vec.get(1, &mut working_set);
         let err_val = state_vec.get_or_err(3, &mut working_set);
@@ -289,15 +295,17 @@ fn test_state_vec_set() {
 fn test_state_vec_push() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
+    let storage = ProverStorage::with_path(path).unwrap();
     for (before_push, after_push) in create_storage_operations() {
         let values = vec![56, 55, 54];
-        let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
+        let mut working_set = WorkingSet::new(storage.clone());
+        let state_vec = create_state_vec(values.clone(), &mut working_set);
 
-        working_set = before_push.execute(working_set);
+        working_set = before_push.execute(working_set, storage.clone());
 
         state_vec.push(&53, &mut working_set);
 
-        working_set = after_push.execute(working_set);
+        working_set = after_push.execute(working_set, storage.clone());
 
         let len = state_vec.len(&mut working_set);
         assert_eq!(len, 4);
@@ -314,17 +322,19 @@ fn test_state_vec_push() {
 fn test_state_vec_pop() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
+    let storage = ProverStorage::with_path(path).unwrap();
     for (before_pop, after_pop) in create_storage_operations() {
         let values = vec![56, 55, 54];
-        let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
+        let mut working_set = WorkingSet::new(storage.clone());
+        let state_vec = create_state_vec(values.clone(), &mut working_set);
 
-        working_set = before_pop.execute(working_set);
+        working_set = before_pop.execute(working_set, storage.clone());
 
         let popped = state_vec.pop(&mut working_set);
 
         assert_eq!(popped.unwrap(), 54);
 
-        working_set = after_pop.execute(working_set);
+        working_set = after_pop.execute(working_set, storage.clone());
 
         let len = state_vec.len(&mut working_set);
         assert_eq!(len, 2);
@@ -341,16 +351,18 @@ fn test_state_vec_pop() {
 fn test_state_vec_set_all() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
+    let storage = ProverStorage::with_path(path).unwrap();
     for (before_set_all, after_set_all) in create_storage_operations() {
         let values = vec![56, 55, 54];
-        let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
+        let mut working_set = WorkingSet::new(storage.clone());
+        let state_vec = create_state_vec(values.clone(), &mut working_set);
 
-        working_set = before_set_all.execute(working_set);
+        working_set = before_set_all.execute(working_set, storage.clone());
 
         let new_values: Vec<u32> = vec![1];
         state_vec.set_all(new_values, &mut working_set);
 
-        working_set = after_set_all.execute(working_set);
+        working_set = after_set_all.execute(working_set, storage.clone());
 
         let val = state_vec.get(0, &mut working_set);
 
@@ -372,17 +384,19 @@ fn test_state_vec_set_all() {
 fn test_state_vec_diff_type() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
+    let storage = ProverStorage::with_path(path).unwrap();
     for (before_ops, after_ops) in create_storage_operations() {
         let values = vec![String::from("Hello"), String::from("World")];
-        let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
+        let mut working_set = WorkingSet::new(storage.clone());
+        let state_vec = create_state_vec(values.clone(), &mut working_set);
 
-        working_set = before_ops.execute(working_set);
+        working_set = before_ops.execute(working_set, storage.clone());
 
         let val0 = state_vec.get(0, &mut working_set);
         let val1 = state_vec.pop(&mut working_set);
         state_vec.push(&String::from("new str"), &mut working_set);
 
-        working_set = after_ops.execute(working_set);
+        working_set = after_ops.execute(working_set, storage.clone());
 
         assert!(val0.is_some());
         assert!(val1.is_some());

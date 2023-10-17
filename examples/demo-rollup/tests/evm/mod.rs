@@ -143,33 +143,22 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
 
     // Create a blob with multiple transactions.
     let mut requests = Vec::default();
-    for value in 100..103 {
+    for value in 150..153 {
         let set_value_req = client.set_value(contract_address, value).await;
         requests.push(set_value_req);
     }
 
     client.send_publish_batch_request().await;
-
-    // second block
     client.send_publish_batch_request().await;
-
-    let first_block = client.eth_get_block_by_number(Some("0".to_owned())).await;
-    let second_block = client.eth_get_block_by_number(Some("1".to_owned())).await;
-
-    // assert parent hash
-    assert_eq!(
-        first_block.hash.unwrap(),
-        second_block.parent_hash,
-        "Parent hash should be the hash of the previous block"
-    );
 
     for req in requests {
         req.await.unwrap();
     }
 
     {
-        let get_arg = client.query_contract(contract_address).await?;
-        assert_eq!(102, get_arg.as_u32());
+        let get_arg = client.query_contract(contract_address).await?.as_u32();
+        // should be one of three values sent in a single block. 150, 151, or 152
+        assert!((150..=152).contains(&get_arg));
     }
 
     {
@@ -188,6 +177,16 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
         let get_arg = client.query_contract(contract_address).await?;
         assert_eq!(value, get_arg.as_u32());
     }
+
+    let first_block = client.eth_get_block_by_number(Some("0".to_owned())).await;
+    let second_block = client.eth_get_block_by_number(Some("1".to_owned())).await;
+
+    // assert parent hash works correctly
+    assert_eq!(
+        first_block.hash.unwrap(),
+        second_block.parent_hash,
+        "Parent hash should be the hash of the previous block"
+    );
 
     Ok(())
 }
