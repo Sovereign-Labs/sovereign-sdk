@@ -195,6 +195,15 @@ impl From<MockHash> for [u8; 32] {
     }
 }
 
+impl std::hash::Hash for MockHash {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for byte in &self.0 {
+            state.write_u8(*byte);
+        }
+        state.finish();
+    }
+}
+
 impl BlockHashTrait for MockHash {}
 
 /// A mock block header used for testing.

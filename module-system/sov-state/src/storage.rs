@@ -281,6 +281,9 @@ pub trait Snapshot {
     /// Get own value, value from its own cache
     fn get_value(&self, key: &StorageKey) -> Option<StorageValue>;
 
+    /// Get own accessory value, value from its own cache
+    fn get_accessory_value(&self, key: &StorageKey) -> Option<StorageValue>;
+
     /// Helper method for mapping
     fn get_id(&self) -> SnapshotId;
 }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::sync::{Arc, RwLock};
 
+// use std::sync::{Arc, RwLock};
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_state::storage::{QuerySnapshotLayers, Snapshot, SnapshotId, StorageKey, StorageValue};
 
@@ -13,9 +13,6 @@ pub struct ForkManager<S: Snapshot, Da: DaSpec> {
     db: sov_db::state_db::StateDB,
     #[allow(dead_code)]
     native_db: sov_db::native_db::NativeDB,
-
-    // TODO: Ugly, fix this with higher lever struct
-    self_ref: Option<Arc<RwLock<ForkManager<S, Da>>>>,
 
     snapshots: HashMap<Da::SlotHash, S>,
 
@@ -71,27 +68,16 @@ where
     pub fn new_locked(
         db: sov_db::state_db::StateDB,
         native_db: sov_db::native_db::NativeDB,
-    ) -> Arc<RwLock<Self>> {
-        let block_state_manager = Arc::new(RwLock::new(Self {
+    ) -> Self {
+        Self {
             db,
             native_db,
             chain_forks: Default::default(),
             blocks_to_parent: Default::default(),
             snapshots: Default::default(),
-            self_ref: None,
             snapshot_id_to_block_hash: Default::default(),
             latest_snapshot_id: Default::default(),
-        }));
-        let self_ref = block_state_manager.clone();
-        {
-            let mut bm = block_state_manager.write().unwrap();
-            bm.self_ref = Some(self_ref);
         }
-        block_state_manager
-    }
-
-    pub fn stop(mut self) {
-        self.self_ref = None
     }
 
     pub fn is_empty(&self) -> bool {
@@ -103,11 +89,6 @@ where
 
     pub fn get_new_ref(&mut self, block_header: &Da::BlockHeader) -> SnapshotId {
         self.latest_snapshot_id += 1;
-        // let new_snapshot_ref = TreeQuery {
-        //     id: self.latest_snapshot_id,
-        //     storage: self.storage.clone(),
-        //     manager: ReadOnlyLock::new(self.self_ref.clone().unwrap().clone()),
-        // };
 
         let current_block_hash = block_header.hash();
         let prev_block_hash = block_header.prev_hash();
@@ -193,7 +174,46 @@ pub trait ForkManagerTrait<Da: DaSpec> {
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
+    use tempfile;
+
+    use super::*;
+    type Da = sov_rollup_interface::mocks::MockDaSpec;
+
+    struct MockSnapshot {
+        id: SnapshotId,
+        cache: HashMap<Vec<u8>, Vec<u8>>,
+        accessory_cache: HashMap<Vec<u8>, Vec<u8>>,
+    }
+
+    impl Snapshot for MockSnapshot {
+        fn get_value(&self, key: &StorageKey) -> Option<StorageValue> {
+            let key = (*key.key()).clone();
+            self.cache.get(&key).cloned().map(|v| StorageValue::from(v))
+        }
+
+        fn get_accessory_value(&self, key: &StorageKey) -> Option<StorageValue> {
+            let key = (*key.key()).clone();
+            self.accessory_cache
+                .get(&key)
+                .cloned()
+                .map(|v| StorageValue::from(v))
+        }
+
+        fn get_id(&self) -> SnapshotId {
+            self.id
+        }
+    }
+
+    #[test]
+    fn initiate_new() {
+        let tmpdir = tempfile::tempdir().unwrap();
+
+        let db = sov_db::state_db::StateDB::with_path(tmpdir.path()).unwrap();
+        let native_db = sov_db::native_db::NativeDB::with_path(tmpdir.path()).unwrap();
+        let fork_manager = ForkManager::<MockSnapshot, Da>::new_locked(db, native_db);
+        assert!(fork_manager.is_empty());
+    }
+
     // use crate::db::Database;
     // use crate::state::{StateCheckpoint, DB};
     // use crate::BlockHash;
