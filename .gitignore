@@ -15,3 +15,6 @@ demo_data/
 /docker/credentials/*
 !/docker/credentials/bridge-0.addr
 !/docker/credentials/bridge-0.key
+
+adapters/solana/libyellowstone_grpc_geyser.dylib
+test-data

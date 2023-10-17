@@ -56,9 +56,18 @@ WebSocket URL: ws://localhost:8900/ (computed)
 Keypair Path: ~/.solw/test.json 
 Commitment: confirmed 
 ```
-* Start the `solana-test-validator`
+* We also need to build the geyser plugin that streams account updates, so that a listener can calculate 
+  * A merkle proof of rollup block existence
+  * A non inclusion merkle proof of a rollup block being absent
+* Build the geyser plugin
 ```bash
-$ solana-test-validator
+cd sovereign/adapters/solana/
+make
+```
+* Start the `solana-test-validator` with the plugin config
+```bash
+$ cd sovereign
+$ solana-test-validator --geyser-plugin-config adapters/solana/config.json
 Ledger location: test-ledger
 Log: test-ledger/validator.log
 ⠴ Initializing...                                                                                                                
@@ -258,6 +267,13 @@ Chunk1 Chunk2  Chunk3     Chunk4
 * The Solana Bank hash providing a commitment to the value of `BlocksRoot` account is ultimately what enables DA
 * The accounts delta root is also calculated by sorting the leaves, which means we can also prove non-inclusion
   * Showing that the `BlocksRoot` PDA doesn't exist between two adjacent leaves tells us that there are no rollup blobs in a specific Solana block
+
+### Block Processor
+* Run the block processor binary, which streams geyser updates from the `solana-test-validator`
+```bash
+cd sovereign/adapters/solana/da_client
+cargo run --bin da_block_processor
+```
 
 ### TBD
 * The logic to fetch the bank hash and verify availability still needs to be written into the da_client
