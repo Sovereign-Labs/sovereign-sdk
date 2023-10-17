@@ -13,9 +13,10 @@ members = [
     "full-node/db/sov-db",
     "full-node/sov-sequencer",
     "full-node/sov-ethereum",
+    "full-node/sov-ledger-rpc",
     "full-node/sov-stf-runner",
 
-    "templates/rollup-template",
+    "sov-rollup-starter",
 
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
@@ -62,7 +63,7 @@ jmt = "0.8.0"
 # External dependencies
 async-trait = "0.1.71"
 anyhow = "1.0.68"
-arbitrary = { version = "1.3.0", features = ["derive"] }
+arbitrary = { version = "1.3.1", features = ["derive"] }
 borsh = { version = "0.10.3", features = ["rc", "bytes"] }
 # TODO: Consider replacing this serialization format
 #     https://github.com/Sovereign-Labs/sovereign-sdk/issues/283

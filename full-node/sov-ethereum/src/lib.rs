@@ -31,6 +31,7 @@ pub mod experimental {
 
     const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
 
+    #[derive(Clone)]
     pub struct EthRpcConfig {
         pub min_blob_size: Option<usize>,
         pub sov_tx_signer_priv_key: DefaultPrivateKey,

@@ -21,8 +21,9 @@ sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-templat
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module" }
 demo-stf = { path = "./stf", features = ["native"] }
+sov-ledger-rpc = { path = "../../full-node/sov-ledger-rpc", features = ["server"] }
 risc0 = { path = "./provers/risc0" }
-borsh = { workspace = true, features = ["bytes"]}
+borsh = { workspace = true, features = ["bytes"] }
 async-trait = { workspace = true, optional = true }
 anyhow = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
@@ -49,7 +50,7 @@ clap = { workspace = true}
 sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }
 sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["smart_contracts"] }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
-sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros"}
+sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros" }
 
 borsh = { workspace = true }
 bincode = { workspace = true }
@@ -76,7 +77,7 @@ prettytable-rs = "^0.10"
 criterion = "0.5.1"
 log = "0.4"
 log4rs = "1.0"
-regex = "1.5"
+regex = "1.10"
 
 [features]
 default = [] # Deviate from convention by making the "native" feature active by default. This aligns with how this package is meant to be used (as a binary first, library second).

@@ -48,7 +48,11 @@ impl ExposeRpcMacro {
         let rpc_storage_struct = quote! {
             struct RpcStorage #impl_generics #where_clause {
                 storage: #context_type::Storage,
-                _phantom: ::std::marker::PhantomData< #input_ident #ty_generics >,
+                // Function pointers are always Send + Sync, regardless of
+                // whether the return type is. The alternative would be to
+                // `unsafe impl Send/Sync` for `RpcStorage`, but this seems
+                // better (and safer).
+                _phantom: ::std::marker::PhantomData<fn() -> #input_ident #ty_generics >,
             }
 
             // Manually implementing clone, as in reality only cloning storage
@@ -60,10 +64,6 @@ impl ExposeRpcMacro {
                     }
                  }
             }
-
-            // As long as RpcStorage only cares about C::Storage, which is Sync + Send, we can do this:
-            unsafe impl #impl_generics ::std::marker::Sync for RpcStorage #ty_generics #where_clause {}
-            unsafe impl #impl_generics ::std::marker::Send for RpcStorage #ty_generics #where_clause {}
         };
 
         let mut merge_operations = proc_macro2::TokenStream::new();

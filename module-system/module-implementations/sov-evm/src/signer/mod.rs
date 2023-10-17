@@ -4,6 +4,7 @@ use reth_primitives::{sign_message, Address, Transaction, TransactionSigned, H25
 use secp256k1::{PublicKey, SecretKey};
 
 /// Ethereum transaction signer.
+#[derive(Clone)]
 pub struct DevSigner {
     signers: HashMap<Address, SecretKey>,
 }
