@@ -76,6 +76,11 @@ pub trait RollupSpec: Sized {
         Condition = <Self::DaSpec as DaSpec>::ValidityCondition,
     >;
 
+    fn create_methods(
+        &self,
+        rollup: &NewRollup<Self>,
+    ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error>;
+
     //
     fn get_genesis_config<P: AsRef<Path>>(
         &self,
@@ -120,6 +125,55 @@ impl RollupSpec for DempRollupSpec {
 
     type NativeRuntime = Runtime<Self::DefaultContext, Self::DaSpec>;
     type NativeSTF = AppTemplate<Self::DefaultContext, Self::DaSpec, Self::Vm, Self::NativeRuntime>;
+
+    fn create_methods(
+        &self,
+        rollup: &NewRollup<Self>,
+    ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
+        let batch_builder =
+            create_batch_builder::<<DempRollupSpec as RollupSpec>::DaSpec>(rollup.storage.clone());
+
+        let mut methods = demo_stf::runtime::get_rpc_methods::<
+            <DempRollupSpec as RollupSpec>::DefaultContext,
+            <DempRollupSpec as RollupSpec>::DaSpec,
+        >(rollup.storage.clone());
+
+        methods.merge(
+            sov_ledger_rpc::server::rpc_module::<
+                LedgerDB,
+                //TODO fix address
+                SequencerOutcome<MockAddress>,
+                TxEffect,
+            >(rollup.ledger_db.clone())?
+            .remove_context(),
+        )?;
+
+        register_seq(rollup.da_service.clone(), batch_builder, &mut methods)?;
+
+        #[cfg(feature = "experimental")]
+        let eth_signer = read_eth_tx_signers();
+
+        #[cfg(feature = "experimental")]
+        let eth_rpc_config = EthRpcConfig {
+            min_blob_size: Some(1),
+            sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
+            eth_signer,
+        };
+
+        #[cfg(feature = "experimental")]
+        register_ethereum::<
+            <DempRollupSpec as RollupSpec>::DefaultContext,
+            <DempRollupSpec as RollupSpec>::DaService,
+        >(
+            self.da_service.clone(),
+            eth_rpc_config,
+            self.storage.clone(),
+            &mut methods,
+        )
+        .unwrap();
+
+        Ok(methods)
+    }
 
     fn get_genesis_config<P: AsRef<Path>>(
         &self,
@@ -199,7 +253,7 @@ impl RollupSpec for DempRollupSpec {
         )?;
 
         Ok(NewRollup {
-            storage: todo!(),
+            storage,
             runner,
             ledger_db,
             da_service,
