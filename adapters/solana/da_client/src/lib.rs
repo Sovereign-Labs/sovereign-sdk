@@ -3,6 +3,9 @@ use std::io::{Read, Write};
 use std::path::Path;
 
 use blake3::traits::digest::Digest;
+use solana_runtime::accounts_hash::AccountsHasher;
+use solana_sdk::hash::Hash;
+use solana_sdk::pubkey::Pubkey;
 
 /// Util helper function to write `size` number of random bytes to file at path `P`
 pub fn write_random_bytes<P: AsRef<Path>>(path: P, size: u64) -> std::io::Result<()> {
@@ -54,4 +57,8 @@ pub fn hash_solana_account(
     hasher.update(pubkey.as_ref());
 
     hasher.finalize().into()
+}
+
+pub fn calculate_root(pubkey_hash_vec: Vec<(Pubkey, Hash)>) -> Hash {
+    AccountsHasher::accumulate_account_hashes(pubkey_hash_vec)
 }

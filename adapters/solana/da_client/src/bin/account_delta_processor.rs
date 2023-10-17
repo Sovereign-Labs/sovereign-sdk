@@ -6,7 +6,6 @@
 // ----------------------------------------------------------------------------
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use backoff::future::retry;
@@ -94,24 +93,18 @@ fn print_account(sub_account: SubscribeUpdateAccount) {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
-    let zero_attempts = Arc::new(Mutex::new(true));
     info!("Starting");
 
     let cli = Cli::parse();
     // optional overrides
     let grpc_url = &cli.grpc_url;
+    let mut maybe_first_attempt = Some(());
 
     retry(ExponentialBackoff::default(), move || {
-        let zero_attempts = Arc::clone(&zero_attempts);
-
         async move {
-            let mut zero_attempts = zero_attempts.lock().unwrap();
-            if *zero_attempts {
-                *zero_attempts = false;
-            } else {
+            if maybe_first_attempt.take().is_none() {
                 info!("Retry to connect to the server");
             }
-
             let mut client = GeyserGrpcClient::connect_with_timeout(
                 grpc_url.to_string(),
                 Option::<String>::None,
