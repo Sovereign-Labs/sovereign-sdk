@@ -51,7 +51,7 @@ impl Db<sqlx::Transaction<'static, Postgres>> {
         Ok(())
     }
 
-    pub async fn rollback(self) -> anyhow::Result<()> {
+    pub async fn _rollback(self) -> anyhow::Result<()> {
         self.conn.rollback().await?;
         Ok(())
     }
@@ -194,7 +194,7 @@ impl Db {
         // Filtering
         if let Some(filter) = &query.filter {
             match filter {
-                m::TransactionsQueryFilter::Batch(batch_id, batch_txs_offset) => {
+                m::TransactionsQueryFilter::Batch(batch_id, _batch_txs_offset) => {
                     query_builder.push_condition("blob->>'batch_id' = ");
                     query_builder.query.push_bind(batch_id.to_string());
                 }
