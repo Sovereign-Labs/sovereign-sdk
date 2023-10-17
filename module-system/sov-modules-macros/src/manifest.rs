@@ -48,76 +48,40 @@ impl<'a> Manifest<'a> {
     ///
     /// The `parent` is used to report the errors to the correct span location.
     pub fn read_constants(parent: &'a Ident) -> Result<Self, syn::Error> {
-        let manifest = "constants.json";
-        let initial_path =  match env::var("CONSTANTS_MANIFEST"){
-            Ok(p) if p.is_empty() => {
-                Err(Self::err(
-                    &p,
-                    parent,
-                    "failed to read target path for sovereign manifest file: env var `CONSTANTS_MANIFEST` was set to the empty string".to_string(),
-                ))
-            },
-            Ok(p) => PathBuf::from(&p).canonicalize().map_err(|e| {
+        let target_path_pointer = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .canonicalize()
+            .map_err(|e| {
                 Self::err(
-                    &p,
+                    "target-path",
                     parent,
-                    format!("failed to canonicalize path for sovereign manifest file from env var `{p}`: {e}"),
+                    format!("failed access base dir for sovereign manifest file: {e}"),
                 )
-            }),
-            Err(_) => {
-                // read the target directory set via build script since `OUT_DIR` is available only at build
-                let initial_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .canonicalize()
-                    .map_err(|e| {
-                        Self::err(
-                            manifest,
-                            parent,
-                            format!("failed access base dir for sovereign manifest file: {e}"),
-                        )
-                    })?
-                    .join("target-path");
+            })?
+            .join("target-path");
 
-                let initial_path = fs::read_to_string(&initial_path).map_err(|e| {
-                    Self::err(
-                        &initial_path,
-                        parent,
-                        format!("failed to read target path for sovereign manifest file: {e}"),
-                    )
-                })?;
+        let manifest_path = fs::read_to_string(&target_path_pointer).map_err(|e| {
+            Self::err(
+                &target_path_pointer,
+                parent,
+                format!("failed to read target path for sovereign manifest file: {e}"),
+            )
+        })?;
 
-                PathBuf::from(initial_path.trim())
-                    .canonicalize()
-                    .map_err(|e| {
-                        Self::err(
-                            &initial_path,
-                            parent,
-                            format!("failed access base dir for sovereign manifest file: {e}"),
-                        )
-                    })
-            }
-        }?;
-
-        let path: PathBuf;
-        let mut current_path = initial_path.as_path();
-        loop {
-            if current_path.join(manifest).exists() {
-                path = current_path.join(manifest);
-                break;
-            }
-
-            current_path = current_path.parent().ok_or_else(|| {
+        let manifest_path = PathBuf::from(manifest_path.trim())
+            .canonicalize()
+            .map_err(|e| {
                 Self::err(
-                    current_path,
+                    &manifest_path,
                     parent,
-                    format!("Could not find a parent `{manifest}`"),
+                    format!("failed access base dir for sovereign manifest file: {e}"),
                 )
-            })?;
-        }
+            })?
+            .join("constants.json");
 
-        let manifest = fs::read_to_string(&path)
-            .map_err(|e| Self::err(current_path, parent, format!("failed to read file: {e}")))?;
+        let manifest = fs::read_to_string(&manifest_path)
+            .map_err(|e| Self::err(&manifest_path, parent, format!("failed to read file: {e}")))?;
 
-        Self::read_str(manifest, path, parent)
+        Self::read_str(manifest, manifest_path, parent)
     }
 
     /// Gets the requested object from the manifest by key
