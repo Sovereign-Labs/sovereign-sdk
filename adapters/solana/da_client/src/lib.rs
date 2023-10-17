@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
+
 use blake3::traits::digest::Digest;
 
 /// Util helper function to write `size` number of random bytes to file at path `P`
@@ -27,10 +28,16 @@ pub fn read_file_to_vec<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<u8>> {
 /// We can see as we make the code more resilient to see if we can also make
 /// the structures match and use the function from solana-sdk, but currently it seems a bit more
 /// complicated and lower priority, since getting a stable version working is top priority
-pub fn hash_solana_account(lamports: u64, owner: &[u8], executable: bool,
-    rent_epoch: u64, data: &[u8], pubkey: &[u8]) -> [u8;32] {
+pub fn hash_solana_account(
+    lamports: u64,
+    owner: &[u8],
+    executable: bool,
+    rent_epoch: u64,
+    data: &[u8],
+    pubkey: &[u8],
+) -> [u8; 32] {
     if lamports == 0 {
-        return [08;32];
+        return [08; 32];
     }
     let mut hasher = blake3::Hasher::new();
 
@@ -48,4 +55,3 @@ pub fn hash_solana_account(lamports: u64, owner: &[u8], executable: bool,
 
     hasher.finalize().into()
 }
-

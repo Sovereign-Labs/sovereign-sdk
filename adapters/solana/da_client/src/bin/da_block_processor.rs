@@ -5,30 +5,29 @@
 // Credit to the original authors and contributors of the "yellowstone-grpc" project for their work.
 // ----------------------------------------------------------------------------
 
-use backoff::{future::retry, ExponentialBackoff};
-use yellowstone_grpc_client::{GeyserGrpcClient, GeyserGrpcClientError};
-use log::{error, info};
-use futures::{future::TryFutureExt, sink::SinkExt, stream::StreamExt};
-use yellowstone_grpc_proto::{
-    prelude::{
-        subscribe_request_filter_accounts_filter::Filter as AccountsFilterDataOneof,
-        subscribe_request_filter_accounts_filter_memcmp::Data as AccountsFilterMemcmpOneof,
-        subscribe_update::UpdateOneof, CommitmentLevel, SubscribeRequest,
-        SubscribeRequestAccountsDataSlice, SubscribeRequestFilterAccounts,
-        SubscribeRequestFilterAccountsFilter, SubscribeRequestFilterAccountsFilterMemcmp,
-        SubscribeRequestFilterBlocks, SubscribeRequestFilterBlocksMeta,
-        SubscribeRequestFilterEntry, SubscribeRequestFilterSlots,
-        SubscribeRequestFilterTransactions, SubscribeUpdateAccount, SubscribeUpdateTransaction,
-    }
-};
-use std::{
-    collections::HashMap,
-    env, fmt,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use std::{env, fmt};
 
+use backoff::future::retry;
+use backoff::ExponentialBackoff;
 use da_client::hash_solana_account;
+use futures::future::TryFutureExt;
+use futures::sink::SinkExt;
+use futures::stream::StreamExt;
+use log::{error, info};
+use yellowstone_grpc_client::{GeyserGrpcClient, GeyserGrpcClientError};
+use yellowstone_grpc_proto::prelude::subscribe_request_filter_accounts_filter::Filter as AccountsFilterDataOneof;
+use yellowstone_grpc_proto::prelude::subscribe_request_filter_accounts_filter_memcmp::Data as AccountsFilterMemcmpOneof;
+use yellowstone_grpc_proto::prelude::subscribe_update::UpdateOneof;
+use yellowstone_grpc_proto::prelude::{
+    CommitmentLevel, SubscribeRequest, SubscribeRequestAccountsDataSlice,
+    SubscribeRequestFilterAccounts, SubscribeRequestFilterAccountsFilter,
+    SubscribeRequestFilterAccountsFilterMemcmp, SubscribeRequestFilterBlocks,
+    SubscribeRequestFilterBlocksMeta, SubscribeRequestFilterEntry, SubscribeRequestFilterSlots,
+    SubscribeRequestFilterTransactions, SubscribeUpdateAccount, SubscribeUpdateTransaction,
+};
 
 type SlotsFilterMap = HashMap<String, SubscribeRequestFilterSlots>;
 type AccountFilterMap = HashMap<String, SubscribeRequestFilterAccounts>;
@@ -36,7 +35,6 @@ type TransactionsFilterMap = HashMap<String, SubscribeRequestFilterTransactions>
 type EntryFilterMap = HashMap<String, SubscribeRequestFilterEntry>;
 type BlocksFilterMap = HashMap<String, SubscribeRequestFilterBlocks>;
 type BlocksMetaFilterMap = HashMap<String, SubscribeRequestFilterBlocksMeta>;
-
 
 fn get_subscribe_request() -> SubscribeRequest {
     let mut accounts: AccountFilterMap = HashMap::new();
@@ -72,11 +70,19 @@ fn print_account(sub_account: SubscribeUpdateAccount) {
     let account = sub_account.account.unwrap();
     let pub_key = account.pubkey.clone();
     let account_hash = hash_solana_account(
-        account.lamports, &account.owner, account.executable, account.rent_epoch,
-        &account.data, &pub_key);
-    println!("slot:{:?}, pubkey:{:?}, hash:{:?}",slot_num,
-             bs58::encode(pub_key).into_string(),
-             bs58::encode(account_hash).into_string());
+        account.lamports,
+        &account.owner,
+        account.executable,
+        account.rent_epoch,
+        &account.data,
+        &pub_key,
+    );
+    println!(
+        "slot:{:?}, pubkey:{:?}, hash:{:?}",
+        slot_num,
+        bs58::encode(pub_key).into_string(),
+        bs58::encode(account_hash).into_string()
+    );
 }
 
 #[tokio::main]
@@ -104,21 +110,27 @@ async fn main() -> anyhow::Result<()> {
                 Some(Duration::from_secs(10)),
                 false,
             )
-                .await
-                .map_err(|e| backoff::Error::transient(anyhow::Error::new(e)))?;
+            .await
+            .map_err(|e| backoff::Error::transient(anyhow::Error::new(e)))?;
 
-            let (mut subscribe_tx, mut stream) = client.subscribe()
+            let (mut subscribe_tx, mut stream) = client
+                .subscribe()
                 .await
                 .map_err(|e| backoff::Error::Permanent(anyhow::Error::from(e)))?;
 
             subscribe_tx
                 .send(get_subscribe_request())
                 .await
-                .map_err(|e| backoff::Error::Permanent(anyhow::Error::from(GeyserGrpcClientError::SubscribeSendError(e))))?;
+                .map_err(|e| {
+                    backoff::Error::Permanent(anyhow::Error::from(
+                        GeyserGrpcClientError::SubscribeSendError(e),
+                    ))
+                })?;
 
             while let Some(message) = stream.next().await {
                 match message {
-                    Ok(msg) => {
+                    Ok(msg) =>
+                    {
                         #[allow(clippy::single_match)]
                         match msg.update_oneof {
                             Some(UpdateOneof::Account(account)) => {
@@ -136,8 +148,8 @@ async fn main() -> anyhow::Result<()> {
             }
             Ok::<(), backoff::Error<anyhow::Error>>(())
         }
-            .inspect_err(|error| error!("failed to connect: {error}"))
+        .inspect_err(|error| error!("failed to connect: {error}"))
     })
-        .await
-        .map_err(Into::into)
+    .await
+    .map_err(Into::into)
 }
