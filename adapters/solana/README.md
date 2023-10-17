@@ -272,7 +272,7 @@ Chunk1 Chunk2  Chunk3     Chunk4
 * Run the block processor binary, which streams geyser updates from the `solana-test-validator`
 ```bash
 cd sovereign/adapters/solana/da_client
-cargo run --bin da_block_processor
+cargo run --bin account_delta_processor
 ```
 * The above should print a stream of slots, modified accounts and their hashes
 ```

@@ -8,25 +8,21 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use std::{env, fmt};
 
 use backoff::future::retry;
 use backoff::ExponentialBackoff;
+use clap::Parser;
 use da_client::hash_solana_account;
 use futures::future::TryFutureExt;
 use futures::sink::SinkExt;
 use futures::stream::StreamExt;
 use log::{error, info};
 use yellowstone_grpc_client::{GeyserGrpcClient, GeyserGrpcClientError};
-use yellowstone_grpc_proto::prelude::subscribe_request_filter_accounts_filter::Filter as AccountsFilterDataOneof;
-use yellowstone_grpc_proto::prelude::subscribe_request_filter_accounts_filter_memcmp::Data as AccountsFilterMemcmpOneof;
 use yellowstone_grpc_proto::prelude::subscribe_update::UpdateOneof;
 use yellowstone_grpc_proto::prelude::{
-    CommitmentLevel, SubscribeRequest, SubscribeRequestAccountsDataSlice,
-    SubscribeRequestFilterAccounts, SubscribeRequestFilterAccountsFilter,
-    SubscribeRequestFilterAccountsFilterMemcmp, SubscribeRequestFilterBlocks,
+    SubscribeRequest, SubscribeRequestFilterAccounts, SubscribeRequestFilterBlocks,
     SubscribeRequestFilterBlocksMeta, SubscribeRequestFilterEntry, SubscribeRequestFilterSlots,
-    SubscribeRequestFilterTransactions, SubscribeUpdateAccount, SubscribeUpdateTransaction,
+    SubscribeRequestFilterTransactions, SubscribeUpdateAccount,
 };
 
 type SlotsFilterMap = HashMap<String, SubscribeRequestFilterSlots>;
@@ -36,14 +32,24 @@ type EntryFilterMap = HashMap<String, SubscribeRequestFilterEntry>;
 type BlocksFilterMap = HashMap<String, SubscribeRequestFilterBlocks>;
 type BlocksMetaFilterMap = HashMap<String, SubscribeRequestFilterBlocksMeta>;
 
+const DEFAULT_GRPC_URL: &str = "http://127.0.0.1:10000";
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[arg(short, long, default_value_t=DEFAULT_GRPC_URL.to_string())]
+    /// URL for solana RPC
+    grpc_url: String,
+}
+
 fn get_subscribe_request() -> SubscribeRequest {
     let mut accounts: AccountFilterMap = HashMap::new();
-    let mut slots: SlotsFilterMap = HashMap::new();
-    let mut transactions: TransactionsFilterMap = HashMap::new();
-    let mut entry: EntryFilterMap = HashMap::new();
-    let mut blocks: BlocksFilterMap = HashMap::new();
-    let mut blocks_meta: BlocksMetaFilterMap = HashMap::new();
-    let mut accounts_data_slice = Vec::new();
+    let slots: SlotsFilterMap = HashMap::new();
+    let transactions: TransactionsFilterMap = HashMap::new();
+    let entry: EntryFilterMap = HashMap::new();
+    let blocks: BlocksFilterMap = HashMap::new();
+    let blocks_meta: BlocksMetaFilterMap = HashMap::new();
+    let accounts_data_slice = Vec::new();
 
     accounts.insert(
         "client".to_owned(),
@@ -91,6 +97,10 @@ async fn main() -> anyhow::Result<()> {
     let zero_attempts = Arc::new(Mutex::new(true));
     info!("Starting");
 
+    let cli = Cli::parse();
+    // optional overrides
+    let grpc_url = &cli.grpc_url;
+
     retry(ExponentialBackoff::default(), move || {
         let zero_attempts = Arc::clone(&zero_attempts);
 
@@ -103,7 +113,7 @@ async fn main() -> anyhow::Result<()> {
             }
 
             let mut client = GeyserGrpcClient::connect_with_timeout(
-                "http://127.0.0.1:10000",
+                grpc_url.to_string(),
                 Option::<String>::None,
                 None,
                 Some(Duration::from_secs(10)),
