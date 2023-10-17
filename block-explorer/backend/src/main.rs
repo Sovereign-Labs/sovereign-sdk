@@ -37,7 +37,7 @@ pub struct AppStateInner {
 
 impl AppStateInner {
     /// Helps greatly with type inference when calling
-    /// [`sov_rpc::client::RpcClient`] methods.
+    /// [`sov_ledger_rpc::client::RpcClient`] methods.
     fn rpc(
         &self,
     ) -> Arc<
