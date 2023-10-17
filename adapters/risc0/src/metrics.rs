@@ -1,3 +1,4 @@
+//! Defines utilities for collecting runtime metrics from inside a Risc0 VM
 use std::collections::HashMap;
 
 use anyhow::Context;
@@ -5,10 +6,13 @@ use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use risc0_zkvm::Bytes;
 
+/// A global hashmap mapping metric names to their values.
 pub static GLOBAL_HASHMAP: Lazy<Mutex<HashMap<String, (u64, u64)>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
-pub fn add_value(metric: String, value: u64) {
+/// Increments the requested metric by the given value, creating a
+/// new entry in the global map if necessary.
+fn add_value(metric: String, value: u64) {
     let mut hashmap = GLOBAL_HASHMAP.lock();
     hashmap
         .entry(metric)
@@ -19,7 +23,9 @@ pub fn add_value(metric: String, value: u64) {
         .or_insert((value, 1));
 }
 
-pub fn deserialize_custom(serialized: Bytes) -> Result<(String, u64), anyhow::Error> {
+/// Deserialize a `Bytes` into a null-separated `(String, u64)` tuple. This function
+/// expects its arguments to match the format of arguments to Risc0's io callbacks.
+fn deserialize_custom(serialized: Bytes) -> Result<(String, u64), anyhow::Error> {
     let null_pos = serialized
         .iter()
         .position(|&b| b == 0)
@@ -31,6 +37,11 @@ pub fn deserialize_custom(serialized: Bytes) -> Result<(String, u64), anyhow::Er
     Ok((string, size))
 }
 
+/// A custom callback for extracting metrics from the Risc0 zkvm.
+///
+/// When the "bench" feature is enabled, this callback is registered as a syscall
+/// in the Risc0 VM and invoked whenever a function annotated with the [`sov-zk-cycle-utils::cycle_tracker`]
+/// macro is invoked.
 pub fn metrics_callback(input: risc0_zkvm::Bytes) -> Result<Bytes, anyhow::Error> {
     let met_tuple = deserialize_custom(input)?;
     add_value(met_tuple.0, met_tuple.1);

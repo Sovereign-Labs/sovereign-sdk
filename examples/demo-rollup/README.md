@@ -54,7 +54,7 @@ package instead.
 
 By swapping out or modifying the imported state transition function, you can customize
 this example full-node to run arbitrary logic.
-This particular example relies on the state transition exported by [`demo-stf`](../demo-stf/). If you want to
+This particular example relies on the state transition exported by [`demo-stf`](../demo-rollup/stf/). If you want to
 understand how to build your own state transition function, check out at the docs in that package.
 
 ## Getting Started
@@ -63,17 +63,26 @@ understand how to build your own state transition function, check out at the doc
 
 1. Install Docker: <https://www.docker.com>.
 
-2. Switch to the `examples/demo-rollup` directory (which is where this `README.md` is located!).
+2. Follow [this guide](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic)
+to authorize yourself in github's container registry. (we use original celestia images which they publish in ghcr)
+
+```shell
+# this has to be ran only once, unless your token expires
+$ echo $MY_PERSONAL_GITHUB_TOKEN | docker login ghcr.io -u $MY_GITHUB_USERNAME --password-stdin
+```
+
+3. Switch to the `examples/demo-rollup` directory (which is where this `README.md` is located!).
 
 ```shell,test-ci
 $ cd examples/demo-rollup/
 ```
 
-3. Spin up a local Celestia instance as your DA layer. We've built a small Makefile to simplify that process:
+4. Spin up a local Celestia instance as your DA layer. We've built a small Makefile to simplify that process:
 
-```sh,test-ci
+```sh,test-ci,bashtestmd:long-running
 $ make clean
-$ make start   # Make sure to run `make stop` when you're done with this demo!
+# Make sure to run `make stop` or `make clean` when you're done with this demo!
+$ make start
 ```
 
 If interested, you can check out what the Makefile does [here](#Makefile).  
@@ -298,32 +307,23 @@ $ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method"
 
 `demo-rollup/Makefile` automates a number of things for convenience:
 
-- Pull a docker container that runs a single instance of a Celestia full node for a local setup
-- The docker container is built with Celestia 0.7.1 at present and is compatible with Sovereign's Celestia adapter)
+- Starts docker compose with a Celestia network for a local setup
+- `make start`:
+  - Performs a number of checks to ensure services are not already running
+  - Starts the docker compose setup
+  - Exposes the RPC port `26658`
+  - Waits until the container is started
+  - Sets up the config
+    - `examples/demo-rollup/rollup_config.toml` is modified -
+      - `start_height` is set to `3`, which is the block in which sequencers are funded with credits
+      - `celestia_rpc_auth_token` is set to the auth token exposed by sequencer (in <repo_root>/docker/credentials directory)
+      - `celestia_rpc_address` is set to point to `127.0.0.1` and the `RPC_PORT`
+- `make stop`:
+  - Shuts down the Celestia docker compose setup, if running.
+  - Deletes all contents of the demo-rollup database.
 - `make clean`:
   - Stops any running containers with the name `sov-celestia-local` and also removes them
   - Removes `demo-data` (or the configured path of the rollup database from rollup_config.toml)
-- `make start`:
-  - Pulls the `sov-celestia-local:genesis-v0.7.1` docker image
-  - Performs a number of checks to ensure container is not already running
-  - Starts the container with the name `sov-celestia-local`
-  - Exposes the RPC port `26658` (as configured in the Makefile)
-  - Waits until the container is started
-    - It polls the running service inside the container for a specific RPC call, so there will be some errors printed while the container is starting up. This is ok
-  - Creates a key inside the docker container using `celestia-appd` that is bundled inside the container - the key is named `sequencer-da-address`
-  - The `sequencer-da-address` key is then funded with `10000000utia` configured by the `AMOUNT` variable in the Makefile
-  - The validator itself runs with the key name `validator` and is also accessible inside the container but this shouldn't be necessary
-  - Sets up the config
-    - `examples/const-rollup-config/src/lib.rs` is modified by the `make` command so that `pub const SEQUENCER_DA_ADDRESS` is set to the address of the key ``sov-celestia-local` that was created and funded in the previous steps
-    - `examples/demo-rollup/rollup_config.toml` is modified -
-      - `start_height` is set to `1` since this is a fresh start
-      - `celestia_rpc_auth_token` is set to the auth token retrieved by running the container bundled `celestia-appd`
-        - `/celestia bridge auth admin --node.store /bridge` is the command that is run inside the container to get the token
-      - `celestia_rpc_address` is set to point to `127.0.0.1` and the `RPC_PORT` configured in the Makefile (default 26658)
-      - The config is stashed and the changes are visible once you do a `git status` after running `make start`
-- `make stop`:
-  - Stops the Celestia Docker image, if running.
-  - Deletes all contents of the demo-rollup database.
 
 ### Remote setup
 

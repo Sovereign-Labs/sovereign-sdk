@@ -6,16 +6,17 @@ members = [
     "adapters/risc0",
     "adapters/celestia",
     "examples/const-rollup-config",
-    "examples/demo-stf",
     "examples/demo-simple-stf",
     "examples/demo-rollup",
     "examples/simple-nft-module",
-    "examples/demo-prover",
 
     "full-node/db/sov-db",
     "full-node/sov-sequencer",
     "full-node/sov-ethereum",
+    "full-node/sov-ledger-rpc",
     "full-node/sov-stf-runner",
+
+    "sov-rollup-starter",
 
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
@@ -57,18 +58,18 @@ rust-version = "1.66"
 
 [workspace.dependencies]
 # Dependencies maintained by Sovereign
-jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "199ae1c185e74ee2133db773efacff56706085aa" }
+jmt = "0.8.0"
 
 # External dependencies
 async-trait = "0.1.71"
 anyhow = "1.0.68"
-arbitrary = { version = "1.3.0", features = ["derive"] }
+arbitrary = { version = "1.3.1", features = ["derive"] }
 borsh = { version = "0.10.3", features = ["rc", "bytes"] }
 # TODO: Consider replacing this serialization format
 #     https://github.com/Sovereign-Labs/sovereign-sdk/issues/283
 bincode = "1.3.3"
 bcs = "0.1.5"
-byteorder = "1.4.3"
+byteorder = "1.5.0"
 bytes = "1.2.1"
 futures = "0.3"
 hex = "0.4.3"
@@ -90,7 +91,7 @@ bech32 = "0.9.1"
 derive_more = "0.99.11"
 clap = { version = "4.2.7", features = ["derive"] }
 toml = "0.8.0"
-jsonrpsee = { version = "0.18.2", features = ["jsonrpsee-types"] }
+jsonrpsee = { version = "0.20.1", features = ["jsonrpsee-types"] }
 schemars = { version = "0.8.12", features = ["derive"] }
 tempfile = "3.5"
 tokio = { version = "1", features = ["full"] }
@@ -124,3 +125,14 @@ secp256k1 = { version = "0.27.0", default-features = false, features = [
     "rand-std",
     "recovery",
 ] }
+
+[patch.'https://github.com/eigerco/celestia-node-rs.git']
+# Uncomment to apply local changes
+# celestia-proto = { path = "../celestia-node-rs/proto" }
+# celestia-rpc = { path = "../celestia-node-rs/rpc" }
+# celestia-types = { path = "../celestia-node-rs/types" }
+
+[patch.'https://github.com/eigerco/celestia-tendermint-rs.git']
+# Uncomment to apply local changes
+# tendermint = { path = "../celestia-tendermint-rs/tendermint" }
+# tendermint-proto = { path = "../celestia-tendermint-rs/proto" }

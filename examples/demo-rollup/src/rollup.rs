@@ -5,8 +5,9 @@ use std::str::FromStr;
 use anyhow::Context;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::genesis_config::{get_genesis_config, GenesisPaths, StorageConfig};
-use demo_stf::runtime::{get_rpc_methods, GenesisConfig, Runtime};
+use demo_stf::runtime::{GenesisConfig, Runtime};
 use demo_stf::{create_zk_app_template, App, AppVerifier};
+use jsonrpsee::RpcModule;
 #[cfg(feature = "experimental")]
 use secp256k1::SecretKey;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
@@ -22,7 +23,9 @@ use sov_ethereum::GasPriceOracleConfig;
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 #[cfg(feature = "experimental")]
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_stf_template::AppTemplate;
+use sov_modules_api::Spec;
+use sov_modules_stf_template::{AppTemplate, SequencerOutcome, TxEffect};
+use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::mocks::{
     MockAddress, MockDaConfig, MockDaService, MOCK_SEQUENCER_DA_ADDRESS,
 };
@@ -36,7 +39,7 @@ use tracing::debug;
 
 #[cfg(feature = "experimental")]
 use crate::register_rpc::register_ethereum;
-use crate::register_rpc::{register_ledger, register_sequencer};
+use crate::register_rpc::register_sequencer;
 use crate::{initialize_ledger, ROLLUP_NAMESPACE};
 
 #[cfg(feature = "experimental")]
@@ -46,22 +49,22 @@ type ZkStf<Da, Vm> = AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultCont
 
 /// Dependencies needed to run the rollup.
 pub struct Rollup<Vm: ZkvmHost, Da: DaService + Clone> {
-    /// Implementation of the STF.
-    pub app: App<Vm, Da::Spec>,
-    /// Data availability service.
-    pub da_service: Da,
-    /// Ledger db.
-    pub ledger_db: LedgerDB,
-    /// Runner configuration.
-    pub runner_config: RunnerConfig,
-    /// Initial rollup configuration.
-    pub genesis_config: GenesisConfig<DefaultContext, Da::Spec>,
+    // Implementation of the STF.
+    pub(crate) app: App<Vm, Da::Spec>,
+    // Data availability service.
+    pub(crate) da_service: Da,
+    // Ledger db.
+    pub(crate) ledger_db: LedgerDB,
+    // Runner configuration.
+    pub(crate) runner_config: RunnerConfig,
+    // Initial rollup configuration.
+    pub(crate) genesis_config: GenesisConfig<DefaultContext, Da::Spec>,
     #[cfg(feature = "experimental")]
-    /// Configuration for the Ethereum RPC.
-    pub eth_rpc_config: EthRpcConfig,
-    /// Prover for the rollup.
+    // Configuration for the Ethereum RPC.
+    pub(crate) eth_rpc_config: EthRpcConfig,
+    // Prover for the rollup.
     #[allow(clippy::type_complexity)]
-    pub prover: Option<Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm>>,
+    pub(crate) prover: Option<Prover<ZkStf<Da::Spec, Vm::Guest>, Da, Vm>>,
 }
 
 pub fn configure_prover<Vm: ZkvmHost, Da: DaService>(
@@ -100,6 +103,7 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost, P: AsRef<Path>>(
         "Starting demo celestia rollup with config {}",
         rollup_config_path
     );
+
     let rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
 
@@ -247,20 +251,8 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
         let prev_root = last_slot_opt
             .map(|(number, _)| storage.get_root_hash(number.0))
             .transpose()?;
-        let mut methods = get_rpc_methods::<DefaultContext, Da::Spec>(storage.clone());
 
-        // register rpc methods
-        {
-            register_ledger(self.ledger_db.clone(), &mut methods)?;
-            register_sequencer(self.da_service.clone(), &mut self.app, &mut methods)?;
-            #[cfg(feature = "experimental")]
-            register_ethereum::<DefaultContext, Da>(
-                self.da_service.clone(),
-                self.eth_rpc_config,
-                storage,
-                &mut methods,
-            )?;
-        }
+        let rpc_module = self.rpc_module(storage)?;
 
         let mut runner = StateTransitionRunner::new(
             self.runner_config,
@@ -272,9 +264,41 @@ impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> 
             self.prover,
         )?;
 
-        runner.start_rpc_server(methods, channel).await;
+        runner.start_rpc_server(rpc_module, channel).await;
         runner.run_in_process().await?;
 
         Ok(())
+    }
+
+    /// Creates a new [`jsonrpsee::RpcModule`] and registers all RPC methods
+    /// exposed by the node.
+    fn rpc_module(
+        &mut self,
+        storage: <DefaultContext as Spec>::Storage,
+    ) -> anyhow::Result<RpcModule<()>> {
+        let mut module =
+            demo_stf::runtime::get_rpc_methods::<DefaultContext, Da::Spec>(storage.clone());
+
+        module.merge(
+            sov_ledger_rpc::server::rpc_module::<
+                LedgerDB,
+                SequencerOutcome<<<Da as DaService>::Spec as DaSpec>::Address>,
+                TxEffect,
+            >(self.ledger_db.clone())?
+            .remove_context(),
+        )?;
+        register_sequencer(self.da_service.clone(), &mut self.app, &mut module)?;
+        #[cfg(feature = "experimental")]
+        {
+            register_ethereum::<DefaultContext, Da>(
+                self.da_service.clone(),
+                self.eth_rpc_config.clone(),
+                storage,
+                &mut module,
+            )?;
+            println!("Registered ethereum rpc");
+        }
+
+        Ok(module)
     }
 }

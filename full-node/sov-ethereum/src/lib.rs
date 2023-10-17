@@ -12,7 +12,7 @@ pub use sov_evm::DevSigner;
 #[cfg(feature = "experimental")]
 pub mod experimental {
     use std::array::TryFromSliceError;
-    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{Arc, Mutex};
 
     use borsh::ser::BorshSerialize;
@@ -20,9 +20,7 @@ pub mod experimental {
     use ethers::types::{Bytes, H256};
     use jsonrpsee::types::ErrorObjectOwned;
     use jsonrpsee::RpcModule;
-    use reth_primitives::{
-        Address as RethAddress, TransactionSignedNoHash as RethTransactionSignedNoHash, U128, U256,
-    };
+    use reth_primitives::{TransactionSignedNoHash as RethTransactionSignedNoHash, U128, U256};
     use reth_rpc_types::{CallRequest, TransactionRequest, TypedTransactionRequest};
     use sov_evm::{CallMessage, Evm, RlpEvmTransaction};
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
@@ -40,6 +38,7 @@ pub mod experimental {
 
     const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
 
+    #[derive(Clone)]
     pub struct EthRpcConfig {
         pub min_blob_size: Option<usize>,
         pub sov_tx_signer_priv_key: DefaultPrivateKey,
@@ -66,7 +65,7 @@ pub mod experimental {
     }
 
     pub struct Ethereum<C: sov_modules_api::Context, Da: DaService> {
-        nonces: Mutex<HashMap<RethAddress, u64>>,
+        nonce: AtomicU64,
         da_service: Da,
         batch_builder: Arc<Mutex<EthBatchBuilder>>,
         gas_price_oracle: GasPriceOracle<C>,
@@ -76,7 +75,7 @@ pub mod experimental {
 
     impl<C: sov_modules_api::Context, Da: DaService> Ethereum<C, Da> {
         fn new(
-            nonces: Mutex<HashMap<RethAddress, u64>>,
+            nonce: AtomicU64,
             da_service: Da,
             batch_builder: Arc<Mutex<EthBatchBuilder>>,
             eth_rpc_config: EthRpcConfig,
@@ -86,7 +85,7 @@ pub mod experimental {
             let gas_price_oracle_config = eth_rpc_config.gas_price_oracle_config.clone();
             let gas_price_oracle = GasPriceOracle::new(evm, gas_price_oracle_config);
             Self {
-                nonces,
+                nonce,
                 da_service,
                 batch_builder,
                 gas_price_oracle,
@@ -104,12 +103,8 @@ pub mod experimental {
             let signed_transaction: RethTransactionSignedNoHash = raw_tx.clone().try_into()?;
 
             let tx_hash = signed_transaction.hash();
-            let sender = signed_transaction
-                .recover_signer()
-                .ok_or(sov_evm::EthApiError::InvalidTransactionSignature)?;
 
-            let mut nonces = self.nonces.lock().unwrap();
-            let nonce = *nonces.entry(sender).and_modify(|n| *n += 1).or_insert(0);
+            let nonce = self.nonce.load(Ordering::SeqCst);
 
             let tx = CallMessage { tx: raw_tx };
             let message = <Runtime<DefaultContext, Da::Spec> as EncodeCall<
@@ -121,6 +116,9 @@ pub mod experimental {
                 message,
                 nonce,
             );
+
+            self.nonce.store(nonce + 1, Ordering::SeqCst);
+
             Ok((H256::from(tx_hash), tx.try_to_vec()?))
         }
 

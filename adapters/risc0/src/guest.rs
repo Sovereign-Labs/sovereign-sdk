@@ -1,3 +1,4 @@
+//! This module implements the `ZkvmGuest` trait for the RISC0 VM.
 #[cfg(not(target_os = "zkvm"))]
 use std::ops::DerefMut;
 
@@ -64,6 +65,10 @@ impl WordRead for Hints {
     }
 }
 
+/// A guest for the RISC0 VM. When running in the Risc0 environment, this struct
+/// implements the `ZkvmGuest` trait in terms of Risc0's env::read and env::commit functions.
+/// When running in any other environment, the struct uses interior mutability to emulate
+/// the same functionality.
 #[derive(Default)]
 pub struct Risc0Guest {
     #[cfg(not(target_os = "zkvm"))]
@@ -73,10 +78,14 @@ pub struct Risc0Guest {
 }
 
 impl Risc0Guest {
+    /// Constructs a new Risc0 Guest
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Constructs a new Risc0 Guest with the provided hints.
+    ///
+    /// This function is only available outside of Risc0's environment.
     #[cfg(not(target_os = "zkvm"))]
     pub fn with_hints(hints: Vec<u32>) -> Self {
         Self {

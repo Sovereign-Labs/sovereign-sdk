@@ -80,6 +80,8 @@ pub use sov_modules_macros::ModuleInfo;
 /// Procedural macros to assist with creating new modules.
 #[cfg(feature = "macros")]
 pub mod macros {
+    /// Sets the value of a constant at compile time by reading from the Manifest file.
+    pub use sov_modules_macros::config_constant;
     /// The macro exposes RPC endpoints from all modules in the runtime.
     /// It gets storage from the Context generic
     /// and utilizes output of [`#[rpc_gen]`] macro to generate RPC methods.

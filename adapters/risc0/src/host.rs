@@ -1,3 +1,4 @@
+//! This module implements the `ZkvmHost` trait for the RISC0 VM.
 use std::sync::Mutex;
 
 use risc0_zkvm::serde::to_vec;
@@ -13,6 +14,8 @@ use crate::guest::Risc0Guest;
 use crate::metrics::metrics_callback;
 use crate::Risc0MethodId;
 
+/// A Risc0Host stores a binary to execute in the Risc0 VM, and accumulates hints to be
+/// provided to its execution.
 pub struct Risc0Host<'a> {
     env: Mutex<Vec<u32>>,
     elf: &'a [u8],
@@ -36,6 +39,7 @@ fn add_benchmarking_callbacks(mut env: ExecutorEnvBuilder<'_>) -> ExecutorEnvBui
 }
 
 impl<'a> Risc0Host<'a> {
+    /// Create a new Risc0Host to prove the given binary.
     pub fn new(elf: &'a [u8]) -> Self {
         Self {
             env: Default::default(),
@@ -107,6 +111,7 @@ impl<'host> Zkvm for Risc0Host<'host> {
     }
 }
 
+/// A verifier for Risc0 proofs.
 pub struct Risc0Verifier;
 
 impl Zkvm for Risc0Verifier {
@@ -150,6 +155,8 @@ fn verify_from_slice<'a>(
 /// data. This allows us to avoid one unnecessary copy during proof verification.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Risc0Proof<'a> {
+    /// The cryptographic data certifying the execution of the program.
     pub receipt: InnerReceipt,
+    /// The public outputs produced by the program execution.
     pub journal: &'a [u8],
 }
