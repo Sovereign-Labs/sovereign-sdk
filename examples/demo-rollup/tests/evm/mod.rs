@@ -145,13 +145,8 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
 
     // Create a blob with multiple transactions.
     let mut requests = Vec::default();
-<<<<<<< HEAD
-    for value in 100..103 {
-        let set_value_req = client.set_value(contract_address, value, None, None).await;
-=======
     for value in 150..153 {
-        let set_value_req = client.set_value(contract_address, value).await;
->>>>>>> nightly
+        let set_value_req = client.set_value(contract_address, value, None, None).await;
         requests.push(set_value_req);
     }
 
@@ -207,7 +202,7 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
         // TODO: emulate gas price oracle here to have exact value
         assert!(latest_gas_price > initial_gas_price);
     }
-    
+
     let first_block = client.eth_get_block_by_number(Some("0".to_owned())).await;
     let second_block = client.eth_get_block_by_number(Some("1".to_owned())).await;
 
