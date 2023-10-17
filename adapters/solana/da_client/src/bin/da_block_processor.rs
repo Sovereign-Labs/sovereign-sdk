@@ -1,3 +1,10 @@
+// ----------------------------------------------------------------------------
+// This file includes code adapted from the "yellowstone-grpc" project's example client:
+// https://github.com/rpcpool/yellowstone-grpc/blob/master/examples/rust/src/bin/client.rs
+//
+// Credit to the original authors and contributors of the "yellowstone-grpc" project for their work.
+// ----------------------------------------------------------------------------
+
 use backoff::{future::retry, ExponentialBackoff};
 use yellowstone_grpc_client::{GeyserGrpcClient, GeyserGrpcClientError};
 use log::{error, info};
