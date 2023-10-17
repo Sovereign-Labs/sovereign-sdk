@@ -17,6 +17,7 @@ members = [
     "full-node/sov-stf-runner",
 
     "sov-rollup-starter",
+    "block-explorer/backend",
 
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",

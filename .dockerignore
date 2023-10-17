@@ -1,0 +1,7 @@
+.git/
+.idea/
+**/target/
+**/assets/
+**/target-path
+**/demo_data/
+.vscode/

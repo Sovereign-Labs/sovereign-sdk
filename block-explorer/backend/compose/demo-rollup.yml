@@ -1,0 +1,72 @@
+version: "3"
+services:
+  celestia:
+    image: dubbelosix/sov-celestia-local:genesis-v0.7.1
+    restart: on-failure
+    ports:
+      - "36657:26657"
+      - "36658:26658"
+      - "36659:26659"
+
+  #demo-rollup:
+  #  image: sovereign-labs/demo-rollup-block-explorer
+  #  restart: on-failure
+  #  build:
+  #    context: ../../..
+  #    dockerfile: utils/block-explorer/demo-rollup/demo-rollup.dockerfile
+  #    args:
+  #      CARGO_PROFILE: dev
+  #  depends_on:
+  #    celestia:
+  #      condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus
+    restart: always
+    entrypoint:
+      - /bin/prometheus
+      - --log.level=warn
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/:/etc/prometheus/
+
+  block-explorer-backend:
+    image: sovereign-labs/block-explorer-backend
+    restart: on-failure
+    build:
+      context: ../../..
+      dockerfile: utils/block-explorer-backend/Dockerfile
+      args:
+        CARGO_PROFILE: dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      RUST_LOG: block-explorer-backend=debug
+    ports:
+      - "3010:3010"
+
+  postgres:
+    image: postgres
+    restart: on-failure
+    ports:
+      - "5435:5432"
+    environment:
+      POSTGRES_USER: block-explorer
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: block-explorer
+      # Supposedly helps as a workaround for https://github.com/docker/for-mac/issues/6270.
+      # TODO: check if it's really needed and if it's not, remove it.
+      PGDATA: "/var/lib/postgresql/data"
+    healthcheck:
+      test: psql -U block-explorer -c '\q' || exit 1
+      interval: 1s
+      timeout: 1s
+      retries: 1000
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data

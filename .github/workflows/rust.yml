@@ -156,7 +156,10 @@ jobs:
         run: cargo risczero install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: cargo nextest run --workspace --all-features
+      - name: Run unit & integration tests
+        run: cargo nextest run --workspace --all-features
+      - name: Run expensive tests (--ignored)
+        run: cargo nextest run --workspace --all-features -- --ignored
   test:
     name: test
     runs-on: buildjet-4vcpu-ubuntu-2204

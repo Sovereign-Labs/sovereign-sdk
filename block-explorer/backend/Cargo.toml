@@ -1,0 +1,59 @@
+[package]
+name = "block-explorer-backend"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+resolver = "2"
+publish = false
+
+[dependencies]
+anyhow = { version = "1" }
+async-trait = { workspace = true }
+axum = { version = "0.6" }
+clap = { workspace = true, features = ["derive", "env"] }
+hex = "0.4"
+indoc = "2"
+jsonrpsee = { version = "0.20", features = ["client", "client-ws-transport-native-tls"] }
+prometheus = "0.13"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }
+serde_urlencoded = "0.7"
+serde_with = "3"
+sov-celestia-adapter = { path = "../../adapters/celestia", features = ["native"], version = "0.2" }
+sov-db = { path = "../../full-node/db/sov-db", version = "0.2" }
+sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", version = "0.2" }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
+sov-ledger-rpc = { path = "../../full-node/sov-ledger-rpc", features = ["server"] }
+sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-native-tls", "json"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.4", features = ["trace", "propagate-header", "compression-gzip"] }
+tower-request-id = "0.2"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+url = "2"
+
+[dev-dependencies]
+axum-test = "12"
+demo-stf = { path = "../../examples/demo-rollup/stf", features = ["native", "experimental"] }
+futures = "0.3"
+lazy_static = "1"
+proptest = "1"
+proptest-derive = "0.4"
+sov-bank = { path = "../../module-system/module-implementations/sov-bank" }
+sov-cli = { path = "../../module-system/sov-cli" }
+sov-ledger-rpc = { path = "../../full-node/sov-ledger-rpc", features = ["server"] }
+sov-modules-api = { path = "../../module-system/sov-modules-api" }
+sov-risc0-adapter = { path = "../../adapters/risc0", features = ["native"] }
+sov-rng-da-service = { path = "../../utils/rng-da-service" }
+sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry" }
+sov-state = { path = "../../module-system/sov-state" }
+sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
+tempfile = "3"
+testcontainers = "0.15"
+testcontainers-modules = { version = "0.1.2", features = ["postgres"] }
+toml = { workspace = true }
