@@ -119,14 +119,14 @@ pub fn upsert_query_pair_in_url(url: &mut Url, key: &str, value: &str) {
     let mut modified = false;
     for (k, v) in original_query_pairs {
         if k == key {
-            query_pairs.append_pair(&key, &value);
+            query_pairs.append_pair(key, value);
             modified = true;
         } else {
             query_pairs.append_pair(&k, &v);
         }
     }
     if !modified {
-        query_pairs.append_pair(&key, &value);
+        query_pairs.append_pair(key, value);
     }
 
     query_pairs.finish();
@@ -175,7 +175,7 @@ mod tests {
         #[test]
         fn any_query_param_can_be_serialized(key: String, value: String) {
             // As long as it doesn't crash, we're good and the test succeeds.
-            uri_with_query_params(&[(key, value)]);
+            uri_with_query_params([(key, value)]);
         }
     }
 }

@@ -177,14 +177,13 @@ impl EventsQuery {
 
 impl QueryValidation for EventsQuery {
     fn validate(&self) -> anyhow::Result<()> {
-        if self.id.is_some() {
-            if self.offset.is_some()
+        if self.id.is_some()
+            && (self.offset.is_some()
                 || self.tx_hash.is_some()
                 || self.tx_height.is_some()
-                || self.key.is_some()
-            {
-                anyhow::bail!("Cannot filter by both id and other fields");
-            }
+                || self.key.is_some())
+        {
+            anyhow::bail!("Cannot filter by both id and other fields");
         }
 
         self.pagination.validate()?;

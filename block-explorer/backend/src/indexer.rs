@@ -21,13 +21,12 @@ fn get_txs_from_slot_response(
         .batches
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no batches in slot response"))?
-        .into_iter()
+        .iter()
         .map(|x| match x {
             ItemOrHash::Hash(_) => panic!("query mode is not full"),
             ItemOrHash::Full(item) => item,
         })
-        .map(|batch| batch.txs.clone().unwrap_or_default())
-        .flatten()
+        .flat_map(|batch| batch.txs.clone().unwrap_or_default())
         .map(|x| match x {
             ItemOrHash::Hash(_) => panic!("query mode is not full"),
             ItemOrHash::Full(item) => item,
@@ -110,7 +109,7 @@ async fn index_block(app_state: AppState, block_num: u64) -> anyhow::Result<()> 
         return Ok(());
     };
 
-    let txs = get_txs_from_slot_response(&block)?;
+    let txs = get_txs_from_slot_response(block)?;
     let block_json = serde_json::to_value(block).expect("block is not serializable, this is a bug");
     let txs_json = txs
         .iter()
@@ -130,15 +129,14 @@ async fn index_block(app_state: AppState, block_num: u64) -> anyhow::Result<()> 
         let event_ids = tx
             .event_range
             .clone()
-            .into_iter()
-            .map(|i| EventIdentifier::Number(i))
+            .map(EventIdentifier::Number)
             .collect();
         let events = app_state
             .rpc()
             .get_events(event_ids)
             .await?
             .into_iter()
-            .zip(tx.event_range.clone().into_iter())
+            .zip(tx.event_range.clone())
             .map(|event_opt| Event {
                 id: event_opt.1 as _,
                 key: event_opt.0.as_ref().unwrap().key().inner().clone(),

@@ -40,7 +40,7 @@ fn populate_ledger_db() -> LedgerDB {
 
     let ledger_db = LedgerDB::with_path(&rollup_config.path).expect("Ledger DB failed to open");
 
-    let da_service = Arc::new(RngDaService::default());
+    let da_service = Arc::new(RngDaService);
 
     let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(rollup_config);
 
@@ -135,7 +135,7 @@ async fn create_test_server(
         postgres_container.get_host_port_ipv4(5432)
     );
     let app_state = Arc::new(AppStateInner {
-        db: Db::new(&connection_string).await.unwrap(),
+        db: Db::new(connection_string).await.unwrap(),
         rpc,
         base_url: "http://localhost:3010".to_string(),
     });

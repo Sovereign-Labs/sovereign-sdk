@@ -72,10 +72,11 @@ impl<T> QueryValidation for Pagination<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "camelCase")]
 pub enum PageSelection {
+    #[default]
     Next,
     Prev,
     First,
@@ -95,12 +96,6 @@ impl ToString for PageSelection {
             .as_str()
             .unwrap()
             .to_string()
-    }
-}
-
-impl Default for PageSelection {
-    fn default() -> Self {
-        PageSelection::Next
     }
 }
 

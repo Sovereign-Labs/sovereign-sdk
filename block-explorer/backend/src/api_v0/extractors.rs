@@ -189,7 +189,7 @@ mod tests {
 
         #[test]
         fn query_serde_error() {
-            let uri = uri_with_query_params(&[("integer", "foo")]);
+            let uri = uri_with_query_params([("integer", "foo")]);
             let result = ValidatedQuery::<TestQuery>::try_from_uri(&uri);
             let err = result.unwrap_err();
 
@@ -208,7 +208,7 @@ mod tests {
 
         #[test]
         fn query_validation_error() {
-            let uri = uri_with_query_params(&[("integer", 0)]);
+            let uri = uri_with_query_params([("integer", 0)]);
             let result = ValidatedQuery::<TestQuery>::try_from_uri(&uri);
             let err = result.unwrap_err();
 
@@ -227,7 +227,7 @@ mod tests {
 
         #[test]
         fn query_ok() {
-            let uri = uri_with_query_params(&[("integer", 42)]);
+            let uri = uri_with_query_params([("integer", 42)]);
             let result = ValidatedQuery::<TestQuery>::try_from_uri(&uri);
             assert!(result.is_ok());
         }

@@ -21,7 +21,7 @@ impl Db {
         info!(url = db_connection_url, "Connecting to database...");
 
         let db = Self {
-            conn: PgPool::connect(&db_connection_url).await?,
+            conn: PgPool::connect(db_connection_url).await?,
         };
 
         info!("Running migrations...");
