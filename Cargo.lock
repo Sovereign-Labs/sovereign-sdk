@@ -8626,6 +8626,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-db",
+ "sov-ledger-rpc",
  "sov-modules-api",
  "sov-rollup-interface",
  "tempfile",
