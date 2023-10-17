@@ -98,6 +98,8 @@ log4rs = "1.0"
 regex = "1.10"
 
 [features]
+default = [
+] # Deviate from convention by making the "native" feature active by default. This aligns with how this package is meant to be used (as a binary first, library second).
 experimental = [
 	"default",
 	"sov-ethereum/experimental",
@@ -106,29 +108,15 @@ experimental = [
 	"demo-stf/experimental",
 	"sov-ethereum/local",
 ]
-native = [
-	"anyhow",
-	"jsonrpsee",
-	"serde",
-	"serde_json",
-	"tracing",
-	"tokio",
-	"tracing-subscriber",
-	"demo-stf/native",
-	"sov-modules-stf-template/native",
-	"sov-risc0-adapter/native",
-	"sov-modules-api/native",
-	"sov-state/native",
-	"sov-cli",
-	"clap",
-	"sov-celestia-adapter/native",
-	"sov-db",
-	"sov-sequencer",
-	"sov-stf-runner/native",
-	"sov-modules-api/native",
-	"sov-rollup-interface/native",
+
+bench = [
+	"async-trait",
+	"hex",
+	"sov-risc0-adapter/bench",
+	"sov-zk-cycle-macros/bench",
+	"risc0/bench",
 ]
-bench = ["native", "async-trait", "hex"]
+offchain = ["demo-stf/offchain"]
 
 [[bench]]
 name = "rollup_bench"
