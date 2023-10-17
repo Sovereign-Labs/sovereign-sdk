@@ -29,12 +29,11 @@ pub mod experimental {
     use sov_modules_api::{EncodeCall, WorkingSet};
     use sov_rollup_interface::services::da::DaService;
 
-    use crate::gas_price::gas_oracle::GasPriceOracle;
-    use crate::GasPriceOracleConfig;
-
     use super::batch_builder::EthBatchBuilder;
     #[cfg(feature = "local")]
     use super::DevSigner;
+    use crate::gas_price::gas_oracle::GasPriceOracle;
+    use crate::GasPriceOracleConfig;
 
     const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
 
