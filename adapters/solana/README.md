@@ -274,6 +274,20 @@ Chunk1 Chunk2  Chunk3     Chunk4
 cd sovereign/adapters/solana/da_client
 cargo run --bin da_block_processor
 ```
+* The above should print a stream of slots, modified accounts and their hashes
+```
+slot:30638, pubkey:"SysvarS1otHashes111111111111111111111111111", hash:"E4NFvB38MnE5LPPPcQB5LUfoMGMhKDMiZs4mQzJ8qCcG"
+slot:30638, pubkey:"SysvarC1ock11111111111111111111111111111111", hash:"EUgR9BNdKjrnwZTMqwJ2CD3fdTkRn82axLAeCokx7NK5"
+slot:30638, pubkey:"5Pmg4aiLg3WYzns5FCpbs5bxxNRzdb6YwKJemykPbZBD", hash:"G8LNAUrjhdGhX5npczHJT8j2hR5qTvvKnKnvZS4jesgD"
+slot:30638, pubkey:"SysvarRecentB1ockHashes11111111111111111111", hash:"2d3xmQ1ueKR3Jk2cQsN9uEFsMfjDZmohHESpHz3MBfiC"
+slot:30638, pubkey:"5MgKRwYGsa9S7Shtch7UAjXhzGUaze5u2dx1NuP4oskH", hash:"txi5QmUUCbXMkcD5CPTpyin3X4Ky1gvRKGyzJpc2UB5"
+slot:30638, pubkey:"SysvarS1otHistory11111111111111111111111111", hash:"GSGN4DcEBN49rFaMLDCTmMkXuh1yKfT4z9R4mZJHFD34"
+slot:30639, pubkey:"SysvarS1otHashes111111111111111111111111111", hash:"Dmc2WP9psnKG476ahjwTHgnFaimpXNSkJQcTG7zoYTXQ"
+slot:30639, pubkey:"SysvarC1ock11111111111111111111111111111111", hash:"GZev34FK7jn5X7Du3joegLb4YuKxaMAByy7JcVXzj3w3"
+slot:30639, pubkey:"5Pmg4aiLg3WYzns5FCpbs5bxxNRzdb6YwKJemykPbZBD", hash:"2rLWZfTBhpiHWmg8n3w737By9Bcvs6N4zbRKZZaN2KDB"
+slot:30639, pubkey:"SysvarRecentB1ockHashes11111111111111111111", hash:"C5gqC6mZdDH3Lr33GLusDstSqX4ftTbWd34nTrgBppnh"
+slot:30639, pubkey:"5MgKRwYGsa9S7Shtch7UAjXhzGUaze5u2dx1NuP4oskH", hash:"AYVKX9n4Gs9zRLpW4Nsu5o68k7ijE2VitDLT2HAwi8jz"
+```
 
 ### TBD
 * The logic to fetch the bank hash and verify availability still needs to be written into the da_client
