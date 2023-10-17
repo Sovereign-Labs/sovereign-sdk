@@ -33,15 +33,19 @@ impl<T> Clone for ReadOnlyLock<T> {
     }
 }
 
-pub struct TreeQuery<S: MerkleProofSpec, Q: QuerySnapshotLayers> {
+/// A storage implementation that uses a [`QuerySnapshotLayers`] before checking [`StateDB`].
+/// Other naming variants:
+/// SnapshotCascadeProverStorage: "Cascade" implies that there's a sequence or chain of events or checks. This name gives an indication of the step-by-step checking process through different snapshot layers.
+/// LayeredProverStorage: The word "sequential" implies an ordered or step-by-step process. This could represent the fact that the storage checks layers in sequence.
+pub struct HierarchicalProverStorage<S: MerkleProofSpec, Q: QuerySnapshotLayers> {
     id: SnapshotId,
     db: StateDB,
     native_db: NativeDB,
-    manager: ReadOnlyLock<Q>,
+    parent: ReadOnlyLock<Q>,
     _phantom_hasher: PhantomData<S::Hasher>,
 }
 
-impl<S: MerkleProofSpec, Q: QuerySnapshotLayers> TreeQuery<S, Q> {
+impl<S: MerkleProofSpec, Q: QuerySnapshotLayers> HierarchicalProverStorage<S, Q> {
     #[allow(dead_code)]
     pub fn new_from_db(
         id: SnapshotId,
@@ -53,7 +57,7 @@ impl<S: MerkleProofSpec, Q: QuerySnapshotLayers> TreeQuery<S, Q> {
             id,
             db: state_db,
             native_db,
-            manager,
+            parent: manager,
             _phantom_hasher: Default::default(),
         }
     }
@@ -70,19 +74,19 @@ impl<S: MerkleProofSpec, Q: QuerySnapshotLayers> TreeQuery<S, Q> {
     }
 }
 
-impl<S: MerkleProofSpec, Q: QuerySnapshotLayers> Clone for TreeQuery<S, Q> {
+impl<S: MerkleProofSpec, Q: QuerySnapshotLayers> Clone for HierarchicalProverStorage<S, Q> {
     fn clone(&self) -> Self {
         Self {
             id: self.id,
             db: self.db.clone(),
             native_db: self.native_db.clone(),
-            manager: self.manager.clone(),
+            parent: self.parent.clone(),
             _phantom_hasher: Default::default(),
         }
     }
 }
 
-impl<Q: QuerySnapshotLayers, S: MerkleProofSpec> Storage for TreeQuery<S, Q> {
+impl<Q: QuerySnapshotLayers, S: MerkleProofSpec> Storage for HierarchicalProverStorage<S, Q> {
     type Witness = S::Witness;
     type RuntimeConfig = Config;
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
@@ -94,8 +98,8 @@ impl<Q: QuerySnapshotLayers, S: MerkleProofSpec> Storage for TreeQuery<S, Q> {
     }
 
     fn get(&self, key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
-        let manager = self.manager.read().unwrap();
-        let val = match manager.fetch_value(&self.id, key) {
+        let parent_snapshot_manager = self.parent.read().unwrap();
+        let val = match parent_snapshot_manager.fetch_value(&self.id, key) {
             Some(val) => Some(val),
             None => self.read_value(key),
         };
@@ -106,10 +110,15 @@ impl<Q: QuerySnapshotLayers, S: MerkleProofSpec> Storage for TreeQuery<S, Q> {
 
     #[cfg(feature = "native")]
     fn get_accessory(&self, key: &StorageKey) -> Option<StorageValue> {
-        self.native_db
-            .get_value_option(key.as_ref())
-            .unwrap()
-            .map(Into::into)
+        let parent_snapshot_manager = self.parent.read().unwrap();
+        match parent_snapshot_manager.fetch_accessory_value(&self.id, key) {
+            Some(val) => Some(val),
+            None => self
+                .native_db
+                .get_value_option(key.as_ref())
+                .unwrap()
+                .map(Into::into),
+        }
     }
 
     fn compute_state_update(

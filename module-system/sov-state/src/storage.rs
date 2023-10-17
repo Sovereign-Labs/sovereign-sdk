@@ -288,15 +288,29 @@ pub trait Snapshot {
 /// Trait that allows to query snapshot layers in correct order.
 /// If value is not found in any of the snapshots, [`None`] is returned.
 pub trait QuerySnapshotLayers {
-    /// fetches value from parent cache layers.
+    /// Fetches value from parent cache layers.
     fn fetch_value(&self, snapshot_id: &SnapshotId, key: &StorageKey) -> Option<StorageValue>;
+    /// Fetches accessory value from parent cache layers.
+    fn fetch_accessory_value(
+        &self,
+        snapshot_id: &SnapshotId,
+        key: &StorageKey,
+    ) -> Option<StorageValue>;
 }
 
 /// Snapshot manager that stores nothing.
-pub struct EmptySnapshotsManager;
+pub struct EmptySnapshotManager;
 
-impl QuerySnapshotLayers for EmptySnapshotsManager {
+impl QuerySnapshotLayers for EmptySnapshotManager {
     fn fetch_value(&self, _snapshot_id: &SnapshotId, _key: &StorageKey) -> Option<StorageValue> {
+        None
+    }
+
+    fn fetch_accessory_value(
+        &self,
+        _snapshot_id: &SnapshotId,
+        _key: &StorageKey,
+    ) -> Option<StorageValue> {
         None
     }
 }
