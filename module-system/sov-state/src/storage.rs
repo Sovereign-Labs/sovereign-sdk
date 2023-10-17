@@ -291,3 +291,12 @@ pub trait QuerySnapshotLayers {
     /// fetches value from parent cache layers.
     fn fetch_value(&self, snapshot_id: &SnapshotId, key: &StorageKey) -> Option<StorageValue>;
 }
+
+/// Snapshot manager that stores nothing.
+pub struct EmptySnapshotsManager;
+
+impl QuerySnapshotLayers for EmptySnapshotsManager {
+    fn fetch_value(&self, _snapshot_id: &SnapshotId, _key: &StorageKey) -> Option<StorageValue> {
+        None
+    }
+}

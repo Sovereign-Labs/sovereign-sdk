@@ -8616,6 +8616,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-fork-manager"
+version = "0.2.0"
+dependencies = [
+ "sov-db",
+ "sov-rollup-interface",
+ "sov-state",
+]
+
+[[package]]
 name = "sov-ledger-rpc"
 version = "0.2.0"
 dependencies = [

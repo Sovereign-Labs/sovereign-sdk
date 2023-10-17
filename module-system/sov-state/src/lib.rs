@@ -22,6 +22,7 @@ pub use storage::Storage;
 pub use zk_storage::ZkStorage;
 
 pub mod config;
+#[cfg(feature = "native")]
 mod layered_prover_storage;
 
 use std::fmt::Display;

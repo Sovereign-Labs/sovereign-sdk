@@ -1,62 +1,17 @@
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::sync::{Arc, LockResult, RwLock, RwLockReadGuard};
+use std::sync::{Arc, RwLock};
 
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_state::storage::{QuerySnapshotLayers, Snapshot, SnapshotId, StorageKey, StorageValue};
-
-pub struct ReadOnlyLock<T> {
-    lock: Arc<RwLock<T>>,
-}
-
-impl<T> ReadOnlyLock<T> {
-    pub fn new(lock: Arc<RwLock<T>>) -> Self {
-        Self { lock }
-    }
-
-    pub fn read(&self) -> LockResult<RwLockReadGuard<'_, T>> {
-        self.lock.read()
-    }
-}
-
-pub struct TreeQuery<S: sov_state::Storage, Q: QuerySnapshotLayers> {
-    id: SnapshotId,
-    storage: S,
-    manager: ReadOnlyLock<Q>,
-}
-
-impl<S: sov_state::Storage, Q: QuerySnapshotLayers> TreeQuery<S, Q> {
-    pub fn new(id: SnapshotId, storage: S, manager: ReadOnlyLock<Q>) -> Self {
-        Self {
-            id,
-            storage,
-            manager,
-        }
-    }
-
-    pub fn get_id(&self) -> SnapshotId {
-        self.id
-    }
-}
-
-impl<S: sov_state::Storage, Q: QuerySnapshotLayers> TreeQuery<S, Q> {
-    pub fn query_value(&self, key: &StorageKey) -> Option<StorageValue> {
-        let manager = self.manager.read().unwrap();
-        let value_from_cache = manager.get_value_recursively(&self.id, key);
-        if value_from_cache.is_some() {
-            return value_from_cache;
-        }
-
-        // TODO: What about witness
-        self.storage.get(key, &Default::default())
-    }
-}
 
 #[derive(Debug)]
 pub struct ForkManager<S: Snapshot, Da: DaSpec> {
     // Storage actually needed only to commit data to the database.
     // So technically we can extract it and "finalize" method here will just
+    #[allow(dead_code)]
     db: sov_db::state_db::StateDB,
+    #[allow(dead_code)]
     native_db: sov_db::native_db::NativeDB,
 
     // TODO: Ugly, fix this with higher lever struct
@@ -168,7 +123,7 @@ where
         self.latest_snapshot_id
     }
 
-    pub fn add_snapshot(&mut self, snapshot: S::Snapshot) {
+    pub fn add_snapshot(&mut self, snapshot: S) {
         let snapshot_block_hash = self
             .snapshot_id_to_block_hash
             .get(&snapshot.get_id())
@@ -176,10 +131,10 @@ where
         self.snapshots.insert(snapshot_block_hash.clone(), snapshot);
     }
 
-    fn remove_snapshot(&mut self, block_hash: &Da::SlotHash) -> S::Snapshot {
+    fn remove_snapshot(&mut self, block_hash: &Da::SlotHash) -> S {
         let snapshot = self
             .snapshots
-            .remove(&block_hash)
+            .remove(block_hash)
             .expect("Tried to remove non-existing snapshot: self.snapshots");
         let _removed_block_hash = self
             .snapshot_id_to_block_hash
@@ -205,12 +160,11 @@ where
                 .into_iter()
                 .filter(|bh| bh != block_hash)
                 .collect();
-            while !to_discard.is_empty() {
-                let next_to_discard = to_discard.pop().unwrap();
+            while let Some(next_to_discard) = to_discard.pop() {
                 let next_children_to_discard = self
                     .chain_forks
                     .remove(&next_to_discard)
-                    .unwrap_or(Default::default());
+                    .unwrap_or_default();
                 to_discard.extend(next_children_to_discard);
 
                 self.blocks_to_parent.remove(&next_to_discard).unwrap();
