@@ -86,6 +86,13 @@ pub struct Address {
     addr: [u8; 32],
 }
 
+impl Address {
+    /// Creates a new address containing the given bytes
+    pub const fn new(addr: [u8; 32]) -> Self {
+        Self { addr }
+    }
+}
+
 impl<'a> TryFrom<&'a [u8]> for Address {
     type Error = anyhow::Error;
 
