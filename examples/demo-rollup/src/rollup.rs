@@ -76,24 +76,28 @@ pub trait RollupSpec: Sized {
         Condition = <Self::DaSpec as DaSpec>::ValidityCondition,
     >;
 
-    fn _get_genesis_config<P: AsRef<Path>>(
+    //
+    fn get_genesis_config<P: AsRef<Path>>(
+        &self,
         genesis_paths: &GenesisPaths<P>,
     ) -> <Self::NativeRuntime as RuntimeTrait<Self::DefaultContext, Self::DaSpec>>::GenesisConfig;
 
-    fn _get_sequencer_da_address() -> <Self::DaSpec as DaSpec>::Address;
+    //
+    fn get_sequencer_da_address(&self) -> <Self::DaSpec as DaSpec>::Address;
 
-    fn _get_sequencer_da_service() -> Self::DaService;
+    fn get_sequencer_da_service(&self) -> Self::DaService;
 
-    fn _get_prover() -> Prover<Self::ZkSTF, Self::DaService, Self::Vm>;
+    fn get_prover(&self) -> Prover<Self::ZkSTF, Self::DaService, Self::Vm>;
 
-    fn _get_ledger_db(rollup_config: RollupConfig<Self::DaConfig>) -> LedgerDB {
+    fn get_ledger_db(&self, rollup_config: RollupConfig<Self::DaConfig>) -> LedgerDB {
         initialize_ledger(&rollup_config.storage.path)
     }
 
     fn create_new_rollup<P: AsRef<Path>>(
-        enesis_paths: &GenesisPaths<P>,
+        &self,
+        genesis_paths: &GenesisPaths<P>,
         rollup_config: RollupConfig<Self::DaConfig>,
-    ) -> NewRollup<Self>;
+    ) -> Result<NewRollup<Self>, anyhow::Error>;
 }
 
 pub struct DempRollupSpec {}
@@ -117,11 +121,12 @@ impl RollupSpec for DempRollupSpec {
     type NativeRuntime = Runtime<Self::DefaultContext, Self::DaSpec>;
     type NativeSTF = AppTemplate<Self::DefaultContext, Self::DaSpec, Self::Vm, Self::NativeRuntime>;
 
-    fn _get_genesis_config<P: AsRef<Path>>(
+    fn get_genesis_config<P: AsRef<Path>>(
+        &self,
         genesis_paths: &GenesisPaths<P>,
     ) -> <Self::NativeRuntime as RuntimeTrait<Self::DefaultContext, Self::DaSpec>>::GenesisConfig
     {
-        let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
+        let sequencer_da_address = MockAddress::from(self.get_sequencer_da_address());
 
         #[cfg(feature = "experimental")]
         let eth_signer = read_eth_tx_signers();
@@ -134,25 +139,24 @@ impl RollupSpec for DempRollupSpec {
         )
     }
 
-    fn _get_sequencer_da_address() -> <Self::DaSpec as DaSpec>::Address {
+    fn get_sequencer_da_address(&self) -> <Self::DaSpec as DaSpec>::Address {
         MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS)
     }
 
-    fn _get_sequencer_da_service() -> Self::DaService {
-        //MockDaService::new(sequencer_da_address)
-        todo!()
+    fn get_sequencer_da_service(&self) -> Self::DaService {
+        MockDaService::new(self.get_sequencer_da_address())
     }
 
     // TODO change it to get vm & prover_config and assemble Prover in create_new_rollup
-    fn _get_prover() -> Prover<Self::ZkSTF, Self::DaService, Self::Vm> {
+    fn get_prover(&self) -> Prover<Self::ZkSTF, Self::DaService, Self::Vm> {
         let vm = Risc0Host::new(risc0::MOCK_DA_ELF);
-        //let prover_config = ProofGenConfig::Execute;
-
-        let prover_config = ProofGenConfig::Simulate(AppVerifier::new(
-            create_zk_app_template::<<<DempRollupSpec as RollupSpec>::Vm as ZkvmHost>::Guest, _>(),
-            Default::default(),
-        ));
-
+        let prover_config = ProofGenConfig::Execute;
+        /*
+                let prover_config = ProofGenConfig::Simulate(AppVerifier::new(
+                    create_zk_app_template::<<<DempRollupSpec as RollupSpec>::Vm as ZkvmHost>::Guest, _>(),
+                    Default::default(),
+                ));
+        */
         Prover {
             vm,
             config: prover_config,
@@ -160,10 +164,46 @@ impl RollupSpec for DempRollupSpec {
     }
 
     fn create_new_rollup<P: AsRef<Path>>(
-        enesis_paths: &GenesisPaths<P>,
+        &self,
+        genesis_paths: &GenesisPaths<P>,
         rollup_config: RollupConfig<MockDaConfig>,
-    ) -> NewRollup<Self> {
-        todo!()
+    ) -> Result<NewRollup<Self>, anyhow::Error> {
+        let ledger_db = self.get_ledger_db(rollup_config.clone());
+        let genesis_config = self.get_genesis_config(genesis_paths);
+
+        let storage_config = StorageConfig {
+            path: rollup_config.storage.path,
+        };
+
+        let prover = self.get_prover();
+        let da_service = self.get_sequencer_da_service();
+
+        let storage = get_storage(storage_config);
+        let native_stf = create_native_app_template(storage.clone());
+
+        let last_slot_opt = ledger_db.get_head_slot()?;
+
+        let prev_root = last_slot_opt
+            .map(|(number, _)| storage.get_root_hash(number.0))
+            .transpose()?;
+
+        //====
+        let mut runner = StateTransitionRunner::new(
+            rollup_config.runner,
+            da_service.clone(),
+            ledger_db.clone(),
+            native_stf,
+            prev_root,
+            genesis_config,
+            Some(prover),
+        )?;
+
+        Ok(NewRollup {
+            storage: todo!(),
+            runner,
+            ledger_db,
+            da_service,
+        })
     }
 }
 
@@ -466,12 +506,14 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost, P: AsRef<Path>>(
     let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
     let da_service = MockDaService::new(sequencer_da_address);
 
-    #[cfg(feature = "experimental")]
-    let eth_signer = read_eth_tx_signers();
     let storage_config = StorageConfig {
         path: rollup_config.storage.path,
     };
     let app = App::new(storage_config);
+
+    #[cfg(feature = "experimental")]
+    let eth_signer = read_eth_tx_signers();
+
     let genesis_config = get_genesis_config(
         sequencer_da_address,
         genesis_paths,
