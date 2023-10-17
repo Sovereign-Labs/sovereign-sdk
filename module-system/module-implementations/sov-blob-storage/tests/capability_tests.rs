@@ -88,7 +88,7 @@ fn priority_sequencer_flow_general() {
         vec![false, false],
     ];
     let blobs_by_slot: Vec<_> = make_blobs_by_slot(&is_from_preferred_by_slot);
-    let mut expected_blobs = blobs_by_slot.iter().cloned().flatten().collect::<Vec<_>>();
+    let mut expected_blobs = blobs_by_slot.iter().flatten().cloned().collect::<Vec<_>>();
     expected_blobs.sort_by_key(|b| b.should_get_processed_in());
     let mut expected_blobs = expected_blobs.into_iter();
     let mut slots_iterator = blobs_by_slot
