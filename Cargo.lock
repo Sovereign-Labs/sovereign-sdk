@@ -8562,6 +8562,7 @@ dependencies = [
  "schnellru",
  "serde",
  "serde_json",
+ "sov-accounts",
  "sov-evm",
  "sov-modules-api",
  "sov-rollup-interface",
