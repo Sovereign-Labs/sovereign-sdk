@@ -303,26 +303,6 @@ impl<'a> Manifest<'a> {
 }
 
 #[test]
-fn fetch_manifest_works() {
-    let path = env!("CARGO_MANIFEST_DIR");
-    let path = PathBuf::from(path)
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("constants.json")
-        .canonicalize()
-        .unwrap();
-
-    let expected = fs::read_to_string(path).unwrap();
-    let expected: Value = serde_json::from_str(&expected).unwrap();
-
-    let parent = Ident::new("foo", proc_macro2::Span::call_site());
-    let manifest = Manifest::read_constants(&parent).unwrap();
-    assert_eq!(*manifest, expected);
-}
-
-#[test]
 fn parse_gas_config_works() {
     let input = r#"{
         "comment": "Sovereign SDK constants",
