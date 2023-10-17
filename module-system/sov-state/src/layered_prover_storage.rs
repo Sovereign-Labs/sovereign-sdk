@@ -1,9 +1,8 @@
 use std::marker::PhantomData;
-use std::path::Path;
 use std::sync::{Arc, LockResult, RwLock, RwLockReadGuard};
 
-use anyhow::Error;
 use jmt::storage::NodeBatch;
+use jmt::{JellyfishMerkleTree, KeyHash};
 use sov_db::native_db::NativeDB;
 use sov_db::state_db::StateDB;
 
@@ -44,21 +43,19 @@ pub struct TreeQuery<S: MerkleProofSpec, Q: QuerySnapshotLayers> {
 
 impl<S: MerkleProofSpec, Q: QuerySnapshotLayers> TreeQuery<S, Q> {
     #[allow(dead_code)]
-    pub fn new(
+    pub fn new_from_db(
         id: SnapshotId,
-        path: impl AsRef<Path>,
+        state_db: StateDB,
+        native_db: NativeDB,
         manager: ReadOnlyLock<Q>,
-    ) -> Result<Self, anyhow::Error> {
-        let state_db = StateDB::with_path(&path)?;
-        let native_db = NativeDB::with_path(&path)?;
-
-        Ok(Self {
+    ) -> Self {
+        Self {
             id,
             db: state_db,
             native_db,
             manager,
             _phantom_hasher: Default::default(),
-        })
+        }
     }
 
     fn read_value(&self, key: &StorageKey) -> Option<StorageValue> {
@@ -92,8 +89,8 @@ impl<Q: QuerySnapshotLayers, S: MerkleProofSpec> Storage for TreeQuery<S, Q> {
     type Root = jmt::RootHash;
     type StateUpdate = NodeBatch;
 
-    fn with_config(_config: Self::RuntimeConfig) -> Result<Self, Error> {
-        todo!()
+    fn with_config(_config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
+        todo!("Won't be implemented. ForkManager will be creating its storage instead")
     }
 
     fn get(&self, key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
@@ -107,12 +104,57 @@ impl<Q: QuerySnapshotLayers, S: MerkleProofSpec> Storage for TreeQuery<S, Q> {
         val
     }
 
+    #[cfg(feature = "native")]
+    fn get_accessory(&self, key: &StorageKey) -> Option<StorageValue> {
+        self.native_db
+            .get_value_option(key.as_ref())
+            .unwrap()
+            .map(Into::into)
+    }
+
     fn compute_state_update(
         &self,
-        _state_accesses: OrderedReadsAndWrites,
-        _witness: &Self::Witness,
-    ) -> Result<(Self::Root, Self::StateUpdate), Error> {
-        todo!()
+        state_accesses: OrderedReadsAndWrites,
+        witness: &Self::Witness,
+    ) -> Result<(Self::Root, Self::StateUpdate), anyhow::Error> {
+        // THIS IS INCREMENT...
+        let latest_version = self.db.get_next_version() - 1;
+        let jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&self.db);
+
+        assert!(
+            jmt.get_root_hash_option(latest_version)?.is_some(),
+            "underlying db was not setup"
+        );
+
+        let prev_root = jmt
+            .get_root_hash(latest_version)
+            .expect("Previous root hash was just populated");
+        witness.add_hint(prev_root.0);
+
+        let batch = state_accesses
+            .ordered_writes
+            .into_iter()
+            .map(|(key, value)| {
+                let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
+                // NOTE: SKIP PRE_IMAGE
+                (
+                    key_hash,
+                    value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
+                )
+            });
+
+        // TODO: IS THIS WRITE TO DB??
+        let next_version = self.db.get_next_version();
+
+        // TODO: IS THIS WRITE TO DB??
+        let (new_root, update_proof, tree_update) = jmt
+            .put_value_set_with_proof(batch, next_version)
+            .expect("JMT update must succeed");
+
+        witness.add_hint(update_proof);
+        witness.add_hint(new_root.0);
+
+        Ok((new_root, tree_update.node_batch))
     }
 
     fn commit(&self, _node_batch: &Self::StateUpdate, _accessory_update: &OrderedReadsAndWrites) {
@@ -120,13 +162,17 @@ impl<Q: QuerySnapshotLayers, S: MerkleProofSpec> Storage for TreeQuery<S, Q> {
     }
 
     fn open_proof(
-        _state_root: Self::Root,
-        _proof: StorageProof<Self::Proof>,
-    ) -> Result<(StorageKey, Option<StorageValue>), Error> {
-        todo!()
+        state_root: Self::Root,
+        proof: StorageProof<Self::Proof>,
+    ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error> {
+        let StorageProof { key, value, proof } = proof;
+        let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
+
+        proof.verify(state_root, key_hash, value.as_ref().map(|v| v.value()))?;
+        Ok((key, value))
     }
 
     fn is_empty(&self) -> bool {
-        todo!()
+        self.db.get_next_version() <= 1
     }
 }

@@ -18,6 +18,7 @@ use crate::MerkleProofSpec;
 pub struct ProverStorage<S: MerkleProofSpec> {
     db: StateDB,
     native_db: NativeDB,
+    /// TODO: Why <S::Hasher> and not just <S>?
     _phantom_hasher: PhantomData<S::Hasher>,
 }
 
