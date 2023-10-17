@@ -37,6 +37,7 @@ sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"
 sov-blob-storage = { path = ".", features = ["native"] }
 sov-bank = { path = "../sov-bank" }
 tempfile = { workspace = true }
+jmt = { workspace = true }
 
 [features]
 default = []

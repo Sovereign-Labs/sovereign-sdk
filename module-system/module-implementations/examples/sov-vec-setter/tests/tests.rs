@@ -27,7 +27,6 @@ fn test_cases() -> Vec<(Address, CallMessage, Option<Vec<u32>>)> {
 }
 
 #[test]
-#[cfg(feature = "native")]
 fn test_vec_setter_calls() {
     let tmpdir = tempfile::tempdir().unwrap();
 

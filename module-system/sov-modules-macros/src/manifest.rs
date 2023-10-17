@@ -2,7 +2,8 @@ use std::path::{Path, PathBuf};
 use std::{env, fmt, fs, ops};
 
 use proc_macro2::{Ident, TokenStream};
-use serde_json::Value;
+use quote::format_ident;
+use serde_json::{Map, Value};
 use syn::{PathArguments, Type, TypePath};
 
 #[derive(Debug, Clone)]
@@ -47,69 +48,63 @@ impl<'a> Manifest<'a> {
     ///
     /// The `parent` is used to report the errors to the correct span location.
     pub fn read_constants(parent: &'a Ident) -> Result<Self, syn::Error> {
-        let manifest = "constants.json";
-        let initial_path = match env::var("CONSTANTS_MANIFEST") {
-            Ok(p) => PathBuf::from(&p).canonicalize().map_err(|e| {
+        let target_path_pointer = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .canonicalize()
+            .map_err(|e| {
                 Self::err(
-                    &p,
+                    "target-path",
                     parent,
-                    format!("failed access base dir for sovereign manifest file `{p}`: {e}"),
+                    format!("failed access base dir for sovereign manifest file: {e}"),
                 )
-            }),
-            Err(_) => {
-                // read the target directory set via build script since `OUT_DIR` is available only at build
-                let initial_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .canonicalize()
-                    .map_err(|e| {
-                        Self::err(
-                            manifest,
-                            parent,
-                            format!("failed access base dir for sovereign manifest file: {e}"),
-                        )
-                    })?
-                    .join("target-path");
+            })?
+            .join("target-path");
 
-                let initial_path = fs::read_to_string(&initial_path).map_err(|e| {
-                    Self::err(
-                        &initial_path,
-                        parent,
-                        format!("failed to read target path for sovereign manifest file: {e}"),
-                    )
-                })?;
+        let manifest_path = fs::read_to_string(&target_path_pointer).map_err(|e| {
+            Self::err(
+                &target_path_pointer,
+                parent,
+                format!("failed to read target path for sovereign manifest file: {e}"),
+            )
+        })?;
 
-                PathBuf::from(initial_path.trim())
-                    .canonicalize()
-                    .map_err(|e| {
-                        Self::err(
-                            &initial_path,
-                            parent,
-                            format!("failed access base dir for sovereign manifest file: {e}"),
-                        )
-                    })
-            }
-        }?;
-
-        let path: PathBuf;
-        let mut current_path = initial_path.as_path();
-        loop {
-            if current_path.join(manifest).exists() {
-                path = current_path.join(manifest);
-                break;
-            }
-
-            current_path = current_path.parent().ok_or_else(|| {
+        let manifest_path = PathBuf::from(manifest_path.trim())
+            .canonicalize()
+            .map_err(|e| {
                 Self::err(
-                    current_path,
+                    &manifest_path,
                     parent,
-                    format!("Could not find a parent `{manifest}`"),
+                    format!("failed access base dir for sovereign manifest file: {e}"),
                 )
-            })?;
-        }
+            })?
+            .join("constants.json");
 
-        let manifest = fs::read_to_string(&path)
-            .map_err(|e| Self::err(current_path, parent, format!("failed to read file: {e}")))?;
+        let manifest = fs::read_to_string(&manifest_path)
+            .map_err(|e| Self::err(&manifest_path, parent, format!("failed to read file: {e}")))?;
 
-        Self::read_str(manifest, path, parent)
+        Self::read_str(manifest, manifest_path, parent)
+    }
+
+    /// Gets the requested object from the manifest by key
+    fn get_object(&self, field: &Ident, key: &str) -> Result<&Map<String, Value>, syn::Error> {
+        self.value
+            .as_object()
+            .ok_or_else(|| Self::err(&self.path, field, "manifest is not an object"))?
+            .get(key)
+            .ok_or_else(|| {
+                Self::err(
+                    &self.path,
+                    field,
+                    format!("manifest does not contain a `{key}` attribute"),
+                )
+            })?
+            .as_object()
+            .ok_or_else(|| {
+                Self::err(
+                    &self.path,
+                    field,
+                    format!("`{key}` attribute of `{field}` is not an object"),
+                )
+            })
     }
 
     /// Parses a gas config constant from the manifest file. Returns a `TokenStream` with the
@@ -127,28 +122,7 @@ impl<'a> Manifest<'a> {
     /// The `gas` field resolution will first attempt to query `gas.parent`, and then fallback to
     /// `gas`. They must be objects with arrays of integers as fields.
     pub fn parse_gas_config(&self, ty: &Type, field: &Ident) -> Result<TokenStream, syn::Error> {
-        let map = self
-            .value
-            .as_object()
-            .ok_or_else(|| Self::err(&self.path, field, "manifest is not an object"))?;
-
-        let root = map
-            .get("gas")
-            .ok_or_else(|| {
-                Self::err(
-                    &self.path,
-                    field,
-                    "manifest does not contain a `gas` attribute",
-                )
-            })?
-            .as_object()
-            .ok_or_else(|| {
-                Self::err(
-                    &self.path,
-                    field,
-                    format!("`gas` attribute of `{}` is not an object", field),
-                )
-            })?;
+        let root = self.get_object(field, "gas")?;
 
         let root = match root.get(&self.parent.to_string()) {
             Some(Value::Object(m)) => m,
@@ -168,7 +142,7 @@ impl<'a> Manifest<'a> {
                 Self::err(
                     &self.path,
                     field,
-                    format!("failed to parse key attribyte `{}`: {}", k, e),
+                    format!("failed to parse key attribute `{}`: {}", k, e),
                 )
             })?;
 
@@ -236,6 +210,81 @@ impl<'a> Manifest<'a> {
         })
     }
 
+    pub fn parse_constant(
+        &self,
+        ty: &Type,
+        field: &Ident,
+        vis: syn::Visibility,
+        attrs: &[syn::Attribute],
+    ) -> Result<TokenStream, syn::Error> {
+        let root = self.get_object(field, "constants")?;
+        let value = root.get(&field.to_string()).ok_or_else(|| {
+            Self::err(
+                &self.path,
+                field,
+                format!("manifest does not contain a `{}` attribute", field),
+            )
+        })?;
+        let value = self.value_to_tokens(field, value, ty)?;
+        let output = quote::quote! {
+            #(#attrs)*
+            #vis const #field: #ty = #value;
+        };
+        Ok(output)
+    }
+
+    fn value_to_tokens(
+        &self,
+        field: &Ident,
+        value: &serde_json::Value,
+        ty: &Type,
+    ) -> Result<TokenStream, syn::Error> {
+        match value {
+            Value::Null => Err(Self::err(
+                &self.path,
+                field,
+                format!("`{}` is `null`", field),
+            )),
+            Value::Bool(b) => Ok(quote::quote!(#b)),
+            Value::Number(n) => {
+                if n.is_u64() {
+                    let n = n.as_u64().unwrap();
+                    Ok(quote::quote!(#n as #ty))
+                } else if n.is_i64() {
+                    let n = n.as_i64().unwrap();
+                    Ok(quote::quote!(#n as #ty))
+                } else {
+                    Err(Self::err(&self.path, field, "All numeric values must be representable as 64 bit integers during parsing.".to_string()))
+                }
+            }
+            Value::String(s) => Ok(quote::quote!(#s)),
+            Value::Array(arr) => {
+                let mut values = Vec::with_capacity(arr.len());
+                let ty = if let Type::Array(ty) = ty {
+                    &ty.elem
+                } else {
+                    return Err(Self::err(
+                        &self.path,
+                        field,
+                        format!(
+                            "Found value of type {:?} while parsing `{}` but expected an array type ",
+                            ty, field
+                        ),
+                    ));
+                };
+                for (idx, value) in arr.iter().enumerate() {
+                    values.push(self.value_to_tokens(
+                        &format_ident!("{field}_{idx}"),
+                        value,
+                        ty,
+                    )?);
+                }
+                Ok(quote::quote!([#(#values,)*]))
+            }
+            Value::Object(_) => todo!(),
+        }
+    }
+
     fn err<P, T>(path: P, ident: &syn::Ident, msg: T) -> syn::Error
     where
         P: AsRef<Path>,
@@ -251,26 +300,6 @@ impl<'a> Manifest<'a> {
             ),
         )
     }
-}
-
-#[test]
-fn fetch_manifest_works() {
-    let path = env!("CARGO_MANIFEST_DIR");
-    let path = PathBuf::from(path)
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("constants.json")
-        .canonicalize()
-        .unwrap();
-
-    let expected = fs::read_to_string(path).unwrap();
-    let expected: Value = serde_json::from_str(&expected).unwrap();
-
-    let parent = Ident::new("foo", proc_macro2::Span::call_site());
-    let manifest = Manifest::read_constants(&parent).unwrap();
-    assert_eq!(*manifest, expected);
 }
 
 #[test]

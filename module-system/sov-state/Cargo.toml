@@ -16,6 +16,8 @@ anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
 borsh = { workspace = true }
 bcs = { workspace = true }
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -35,6 +37,11 @@ tempfile = { workspace = true }
 proptest = { workspace = true }
 
 [features]
+arbitrary = [
+    "dep:arbitrary",
+    "dep:proptest",
+    "dep:proptest-derive"
+]
 bench = ["sov-zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
 default = []
 native = ["sov-db"]

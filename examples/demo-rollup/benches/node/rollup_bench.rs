@@ -1,4 +1,3 @@
-mod rng_xfers;
 use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -8,9 +7,9 @@ use anyhow::Context;
 use criterion::{criterion_group, criterion_main, Criterion};
 use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
 use demo_stf::App;
-use rng_xfers::{RngDaService, RngDaSpec};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_risc0_adapter::host::Risc0Verifier;
+use sov_rng_da_service::{RngDaService, RngDaSpec};
 use sov_rollup_interface::mocks::{
     MockAddress, MockBlock, MockBlockHeader, MOCK_SEQUENCER_DA_ADDRESS,
 };

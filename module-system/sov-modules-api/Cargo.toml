@@ -21,6 +21,8 @@ sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
 sov-modules-macros = { path = "../sov-modules-macros", version = "0.2", optional = true }
 serde = { workspace = true }
 borsh = { workspace = true }
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
 thiserror = { workspace = true }
 sha2 = { workspace = true }
 bech32 = { workspace = true }
@@ -45,7 +47,12 @@ sov-bank = { path = "../module-implementations/sov-bank", features = ["native"] 
 tempfile = { workspace = true }
 
 [features]
-arbitrary = ["dep:arbitrary", "sov-state/arbitrary"]
+arbitrary = [
+    "dep:arbitrary",
+    "dep:proptest",
+    "dep:proptest-derive",
+    "sov-state/arbitrary",
+]
 bench = ["sov-zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
 default = ["macros"]
 native = [

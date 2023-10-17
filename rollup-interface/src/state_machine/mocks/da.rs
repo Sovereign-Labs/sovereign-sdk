@@ -32,6 +32,13 @@ pub struct MockAddress {
     pub addr: [u8; 32],
 }
 
+impl MockAddress {
+    /// Creates a new mock address containing the given bytes.
+    pub const fn new(addr: [u8; 32]) -> Self {
+        Self { addr }
+    }
+}
+
 impl serde::Serialize for MockAddress {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

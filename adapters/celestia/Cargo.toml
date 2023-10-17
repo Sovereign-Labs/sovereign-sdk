@@ -14,9 +14,9 @@ prost = "0.12"
 # I keep this commented as a reminder to opportunity to optimze this crate for non native compilation
 #tendermint = { version = "0.32", default-features = false, features = ["std"] }
 
-celestia-proto = { git = "https://github.com/eigerco/celestia-node-rs.git", rev = "925836a" }
-celestia-rpc = { git = "https://github.com/eigerco/celestia-node-rs.git", rev = "925836a", default-features = false, optional = true }
-celestia-types = { git = "https://github.com/eigerco/celestia-node-rs.git", rev = "925836a", default-features = false }
+celestia-proto = { git = "https://github.com/eigerco/celestia-node-rs.git", rev = "1fa61eb" }
+celestia-rpc = { git = "https://github.com/eigerco/celestia-node-rs.git", rev = "1fa61eb", default-features = false, optional = true }
+celestia-types = { git = "https://github.com/eigerco/celestia-node-rs.git", rev = "1fa61eb", default-features = false }
 tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "1f8b574", default-features = false }
 tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "1f8b574" }
 nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "d821332", features = [
@@ -37,9 +37,7 @@ tokio = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", version = "0.2", optional = true }
-risc0-zkvm = { workspace = true, default-features = false, features = [
-  "std",
-], optional = true }
+risc0-zkvm = { workspace = true, default-features = false, features = ["std"], optional = true }
 risc0-zkvm-platform = { workspace = true, optional = true }
 
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
@@ -61,5 +59,12 @@ native = [
   "tendermint/default",
   "sov-rollup-interface/native",
 ]
-bench = ["sov-zk-cycle-macros/bench", "risc0-zkvm", "risc0-zkvm-platform"]
+risc0 = [
+  "dep:risc0-zkvm",
+  "dep:risc0-zkvm-platform"
+]
+bench = [
+    "sov-zk-cycle-macros/bench",
+    "risc0"
+]
 verifier = []

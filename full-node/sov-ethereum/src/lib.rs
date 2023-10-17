@@ -8,21 +8,18 @@ pub use sov_evm::DevSigner;
 #[cfg(feature = "experimental")]
 pub mod experimental {
     use std::array::TryFromSliceError;
-    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{Arc, Mutex};
 
     use borsh::ser::BorshSerialize;
-    use demo_stf::runtime::{DefaultContext, Runtime};
+    use demo_stf::runtime::Runtime;
     use ethers::types::{Bytes, H256};
     use jsonrpsee::types::ErrorObjectOwned;
     use jsonrpsee::RpcModule;
     use reth_primitives::{TransactionSignedNoHash as RethTransactionSignedNoHash, U128, U256};
     use reth_rpc_types::{CallRequest, TransactionRequest, TypedTransactionRequest};
     use sov_evm::{CallMessage, Evm, RlpEvmTransaction};
-    use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-    use sov_modules_api::transaction::Transaction;
     use sov_modules_api::utils::to_jsonrpsee_error_object;
-    use sov_modules_api::{EncodeCall, WorkingSet};
+    use sov_modules_api::{EncodeCall, PrivateKey, WorkingSet};
     use sov_rollup_interface::services::da::DaService;
 
     use super::batch_builder::EthBatchBuilder;
@@ -31,23 +28,49 @@ pub mod experimental {
 
     const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
 
-    pub struct EthRpcConfig {
+    #[derive(Clone)]
+    pub struct EthRpcConfig<C: sov_modules_api::Context> {
         pub min_blob_size: Option<usize>,
-        pub sov_tx_signer_priv_key: DefaultPrivateKey,
+        pub sov_tx_signer_priv_key: C::PrivateKey,
         #[cfg(feature = "local")]
         pub eth_signer: DevSigner,
     }
 
     pub fn get_ethereum_rpc<C: sov_modules_api::Context, Da: DaService>(
         da_service: Da,
-        eth_rpc_config: EthRpcConfig,
+        eth_rpc_config: EthRpcConfig<C>,
         storage: C::Storage,
     ) -> RpcModule<Ethereum<C, Da>> {
+        // Unpack config
+        let EthRpcConfig {
+            min_blob_size,
+            sov_tx_signer_priv_key,
+            #[cfg(feature = "local")]
+            eth_signer,
+        } = eth_rpc_config;
+
+        // Fetch nonce from storage
+        let accounts = sov_accounts::Accounts::<C>::default();
+        let sov_tx_signer_account = accounts
+            .get_account(
+                sov_tx_signer_priv_key.pub_key(),
+                &mut WorkingSet::<C>::new(storage.clone()),
+            )
+            .unwrap();
+        let sov_tx_signer_nonce: u64 = match sov_tx_signer_account {
+            sov_accounts::Response::AccountExists { nonce, .. } => nonce,
+            sov_accounts::Response::AccountEmpty { .. } => 0,
+        };
+
         let mut rpc = RpcModule::new(Ethereum::new(
-            Default::default(),
             da_service,
-            Arc::new(Mutex::new(EthBatchBuilder::default())),
-            eth_rpc_config,
+            Arc::new(Mutex::new(EthBatchBuilder::new(
+                sov_tx_signer_priv_key,
+                sov_tx_signer_nonce,
+                min_blob_size,
+            ))),
+            #[cfg(feature = "local")]
+            eth_signer,
             storage,
         ));
 
@@ -56,26 +79,25 @@ pub mod experimental {
     }
 
     pub struct Ethereum<C: sov_modules_api::Context, Da: DaService> {
-        nonce: AtomicU64,
         da_service: Da,
-        batch_builder: Arc<Mutex<EthBatchBuilder>>,
-        eth_rpc_config: EthRpcConfig,
+        batch_builder: Arc<Mutex<EthBatchBuilder<C>>>,
+        #[cfg(feature = "local")]
+        eth_signer: DevSigner,
         storage: C::Storage,
     }
 
     impl<C: sov_modules_api::Context, Da: DaService> Ethereum<C, Da> {
         fn new(
-            nonce: AtomicU64,
             da_service: Da,
-            batch_builder: Arc<Mutex<EthBatchBuilder>>,
-            eth_rpc_config: EthRpcConfig,
+            batch_builder: Arc<Mutex<EthBatchBuilder<C>>>,
+            #[cfg(feature = "local")] eth_signer: DevSigner,
             storage: C::Storage,
         ) -> Self {
             Self {
-                nonce,
                 da_service,
                 batch_builder,
-                eth_rpc_config,
+                #[cfg(feature = "local")]
+                eth_signer,
                 storage,
             }
         }
@@ -90,47 +112,32 @@ pub mod experimental {
 
             let tx_hash = signed_transaction.hash();
 
-            let nonce = self.nonce.load(Ordering::SeqCst);
-
             let tx = CallMessage { tx: raw_tx };
-            let message = <Runtime<DefaultContext, Da::Spec> as EncodeCall<
-                sov_evm::Evm<DefaultContext>,
-            >>::encode_call(tx);
+            let message = <Runtime<C, Da::Spec> as EncodeCall<sov_evm::Evm<C>>>::encode_call(tx);
 
-            let tx = Transaction::<DefaultContext>::new_signed_tx(
-                &self.eth_rpc_config.sov_tx_signer_priv_key,
-                message,
-                nonce,
-            );
-
-            self.nonce.store(nonce + 1, Ordering::SeqCst);
-
-            Ok((H256::from(tx_hash), tx.try_to_vec()?))
+            Ok((H256::from(tx_hash), message))
         }
 
         async fn build_and_submit_batch(
             &self,
-            txs: Vec<Vec<u8>>,
+            messages: Vec<Vec<u8>>,
             min_blob_size: Option<usize>,
         ) -> Result<(), jsonrpsee::core::Error> {
-            let min_blob_size = min_blob_size.or(self.eth_rpc_config.min_blob_size);
+            let batch = self.build_batch(messages, min_blob_size)?;
 
-            let batch = self
-                .batch_builder
-                .lock()
-                .unwrap()
-                .add_transactions_and_get_next_blob(min_blob_size, txs);
+            self.submit_batch(batch)
+                .await
+                .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
-            if !batch.is_empty() {
-                self.submit_batch(batch)
-                    .await
-                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
-            }
             Ok(())
         }
 
-        async fn submit_batch(&self, raw_txs: Vec<Vec<u8>>) -> Result<(), jsonrpsee::core::Error> {
-            let blob = raw_txs
+        async fn submit_batch(&self, batch: Vec<Vec<u8>>) -> Result<(), jsonrpsee::core::Error> {
+            if batch.is_empty() {
+                return Ok(());
+            }
+
+            let blob = batch
                 .try_to_vec()
                 .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
@@ -140,6 +147,24 @@ pub mod experimental {
                 .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
             Ok(())
+        }
+
+        fn build_batch(
+            &self,
+            messages: Vec<Vec<u8>>,
+            min_blob_size: Option<usize>,
+        ) -> Result<Vec<Vec<u8>>, jsonrpsee::core::Error> {
+            let batch = self
+                .batch_builder
+                .lock()
+                .unwrap()
+                .add_messages_and_get_next_blob(min_blob_size, messages);
+
+            Ok(batch)
+        }
+
+        fn add_messages(&self, messages: Vec<Vec<u8>>) {
+            self.batch_builder.lock().unwrap().add_messages(messages);
         }
     }
 
@@ -169,14 +194,11 @@ pub mod experimental {
 
                 let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
 
-                let (tx_hash, raw_tx) = ethereum
+                let (tx_hash, raw_message) = ethereum
                     .make_raw_tx(raw_evm_tx)
                     .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
-                ethereum
-                    .build_and_submit_batch(vec![raw_tx], None)
-                    .await
-                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+                ethereum.add_messages(vec![raw_message]);
 
                 Ok::<_, ErrorObjectOwned>(tx_hash)
             },
@@ -184,7 +206,7 @@ pub mod experimental {
 
         #[cfg(feature = "local")]
         rpc.register_async_method("eth_accounts", |_parameters, ethereum| async move {
-            Ok::<_, ErrorObjectOwned>(ethereum.eth_rpc_config.eth_signer.signers())
+            Ok::<_, ErrorObjectOwned>(ethereum.eth_signer.signers())
         })?;
 
         #[cfg(feature = "local")]
@@ -199,7 +221,7 @@ pub mod experimental {
                 .ok_or(to_jsonrpsee_error_object("No from address", ETH_RPC_ERROR))?;
 
             // return error if not in signers
-            if !ethereum.eth_rpc_config.eth_signer.signers().contains(&from) {
+            if !ethereum.eth_signer.signers().contains(&from) {
                 return Err(to_jsonrpsee_error_object(
                     "From address not in signers",
                     ETH_RPC_ERROR,
@@ -273,7 +295,6 @@ pub mod experimental {
 
                 // sign transaction
                 let signed_tx = ethereum
-                    .eth_rpc_config
                     .eth_signer
                     .sign_transaction(transaction, from)
                     .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
@@ -282,14 +303,11 @@ pub mod experimental {
                     rlp: signed_tx.envelope_encoded().to_vec(),
                 }
             };
-            let (tx_hash, raw_tx) = ethereum
+            let (tx_hash, raw_message) = ethereum
                 .make_raw_tx(raw_evm_tx)
                 .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
-            ethereum
-                .build_and_submit_batch(vec![raw_tx], None)
-                .await
-                .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+            ethereum.add_messages(vec![raw_message]);
 
             Ok::<_, ErrorObjectOwned>(tx_hash)
         })?;

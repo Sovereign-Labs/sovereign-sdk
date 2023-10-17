@@ -10,10 +10,12 @@ mod query;
 #[cfg(feature = "native")]
 pub use query::*;
 use sov_chain_state::TransitionHeight;
-use sov_modules_api::{Module, ModuleInfo, StateMap, StateValue, WorkingSet};
+use sov_modules_api::macros::config_constant;
+use sov_modules_api::{Module, ModuleInfo, StateMap, WorkingSet};
 
 /// For how many slots deferred blobs are stored before being executed
-const DEFERRED_SLOTS_COUNT: u64 = 5;
+#[config_constant]
+pub const DEFERRED_SLOTS_COUNT: u64;
 
 /// Blob storage contains only address and vector of blobs
 #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]

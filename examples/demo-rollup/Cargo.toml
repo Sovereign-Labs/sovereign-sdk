@@ -13,43 +13,45 @@ default-run = "sov-demo-rollup"
 
 [dependencies]
 # non-optional dependencies
-sov-celestia-adapter = { path = "../../adapters/celestia" }
+sov-celestia-adapter = { path = "../../adapters/celestia", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
-sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
-sov-rollup-interface = { path = "../../rollup-interface" }
-sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" }
-sov-modules-api = { path = "../../module-system/sov-modules-api" }
+sov-stf-runner = { path = "../../full-node/sov-stf-runner", features = ["native"] }
+sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
+sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
+sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module" }
-demo-stf = { path = "../demo-stf" }
+demo-stf = { path = "./stf", features = ["native"] }
+sov-ledger-rpc = { path = "../../full-node/sov-ledger-rpc", features = ["server"] }
 risc0 = { path = "./provers/risc0" }
-borsh = { workspace = true, features = ["bytes"]}
+borsh = { workspace = true, features = ["bytes"] }
 async-trait = { workspace = true, optional = true }
-anyhow = { workspace = true, optional = true }
-jsonrpsee = { workspace = true, features = ["http-client", "server"], optional = true }
-serde = { workspace = true, features = ["derive"], optional = true }
-serde_json = { workspace = true, optional = true }
-tracing = { workspace = true, optional = true }
+anyhow = { workspace = true }
+jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
 hex = { workspace = true, optional = true }
 secp256k1 = { workspace = true, optional = true }
 
-tokio = { workspace = true, optional = true }
-reth-primitives = { workspace = true, optional = true }
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"], optional = true }
 
-sov-db = { path = "../../full-node/db/sov-db", optional = true }
+tokio = { workspace = true }
+reth-primitives = { workspace = true, optional = true }
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+
+sov-db = { path = "../../full-node/db/sov-db" }
 sov-ethereum = { path = "../../full-node/sov-ethereum", optional = true }
-sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true  }
-sov-risc0-adapter = { path = "../../adapters/risc0" }
-sov-state = { path = "../../module-system/sov-state" }
-sov-cli = { path = "../../module-system/sov-cli", optional = true }
-clap = { workspace = true, optional = true}
+sov-sequencer = { path = "../../full-node/sov-sequencer" }
+sov-risc0-adapter = { path = "../../adapters/risc0", features = ["native"] }
+sov-state = { path = "../../module-system/sov-state", features = ["native"] }
+sov-cli = { path = "../../module-system/sov-cli" }
+clap = { workspace = true }
 
 [dev-dependencies]
+sov-rng-da-service = { path = "../../utils/rng-da-service" }
 sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }
-sov-demo-rollup = { path = ".", features = ["native"] }
 sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["smart_contracts"] }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
-sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros"}
+sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros" }
 
 borsh = { workspace = true }
 bincode = { workspace = true }
@@ -76,17 +78,14 @@ prettytable-rs = "^0.10"
 criterion = "0.5.1"
 log = "0.4"
 log4rs = "1.0"
-regex = "1.5"
+regex = "1.10"
 
 [features]
-default = ["native"] # Deviate from convention by making the "native" feature active by default. This aligns with how this package is meant to be used (as a binary first, library second).
+default = [
+] # Deviate from convention by making the "native" feature active by default. This aligns with how this package is meant to be used (as a binary first, library second).
 experimental = ["default", "sov-ethereum/experimental", "reth-primitives", "secp256k1", "demo-stf/experimental", "sov-ethereum/local"]
-native = ["anyhow", "jsonrpsee", "serde", "serde_json", "tracing", "tokio", "tracing-subscriber",
-	"demo-stf/native", "sov-modules-stf-template/native", "sov-risc0-adapter/native", "sov-modules-api/native",
-	"sov-state/native", "sov-cli", "clap", "sov-celestia-adapter/native", "sov-db", "sov-sequencer", "sov-stf-runner/native",
-	"sov-modules-api/native", "sov-rollup-interface/native"]
 
-bench = ["native", "async-trait", "hex", "sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "risc0/bench"]
+bench = ["async-trait", "hex", "sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "risc0/bench"]
 offchain = ["demo-stf/offchain"]
 
 [[bench]]
@@ -102,12 +101,6 @@ harness = false
 required-features = ["bench"]
 
 [[bench]]
-name = "rng_xfers"
-path = "benches/node/rng_xfers.rs"
-required-features = ["bench"]
-
-
-[[bench]]
 name = "prover_bench"
 path = "benches/prover/prover_bench.rs"
 harness = false
@@ -117,14 +110,11 @@ required-features = ["bench"]
 [[bin]]
 name = "sov-cli"
 path = "src/sov-cli/main.rs"
-required-features = ["native"]
 
 [[bin]]
 name = "sov-nft-script"
 path = "src/bin/sov_nft_script.rs"
-required-features = ["native"]
 
 [[bin]]
 name = "sov-demo-rollup"
 path = "src/main.rs"
-required-features = ["native"]
