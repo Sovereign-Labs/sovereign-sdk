@@ -13,7 +13,7 @@ resolver = "2"
 publish = false
 
 [dev-dependencies]
-sov-modules-api = { path = "../../../sov-modules-api" }
+sov-modules-api = { path = "../../../sov-modules-api", features = ["native", "macros"] }
 tempfile = { workspace = true }
 
 [dependencies]
