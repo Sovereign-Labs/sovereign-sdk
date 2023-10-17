@@ -15,6 +15,7 @@ rust-version.workspace = true
 sov-state = { path = "../sov-state", version = "0.2", features = ["native"] }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
 sov-db = { path = "../../full-node/db/sov-db", version = "0.2" }
+jmt = { workspace = true }
 
 
 [dev-dependencies]
