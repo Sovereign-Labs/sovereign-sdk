@@ -44,22 +44,25 @@ where
         }
     }
 
+    /// Gives storage key for given address
+    pub fn get_attester_storage_key(&self, address: C::Address) -> StorageKey {
+        let prefix = self.bonded_attesters.prefix();
+        let codec = self.bonded_attesters.codec();
+        StorageKey::new(prefix, &address, codec)
+    }
+
     /// Used by attesters to get a proof that they were bonded before starting to produce attestations.
     /// A bonding proof is valid for `max_finality_period` blocks, the attester can only produce transition
     /// attestations for this specific amount of time.
     pub fn get_bond_proof(
         &self,
         address: C::Address,
-        witness: &<<C as Spec>::Storage as Storage>::Witness,
         working_set: &mut WorkingSet<C>,
     ) -> StorageProof<<C::Storage as Storage>::Proof>
     where
         C::Storage: NativeStorage,
     {
-        let prefix = self.bonded_attesters.prefix();
-        let codec = self.bonded_attesters.codec();
-        let storage = working_set.backing();
-        storage.get_with_proof(StorageKey::new(prefix, &address, codec), witness)
+        working_set.get_with_proof(self.get_attester_storage_key(address))
     }
 
     /// TODO: Make the unbonding amount queryable:
