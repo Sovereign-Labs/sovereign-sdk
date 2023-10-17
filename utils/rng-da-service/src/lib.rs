@@ -16,6 +16,8 @@ use sov_rollup_interface::mocks::{
 use sov_rollup_interface::services::da::DaService;
 
 pub fn sender_address_with_pkey() -> (Address, DefaultPrivateKey) {
+    // TODO: maybe generate address and private key randomly, instead of
+    // hardcoding them?
     let addr_bytes = "sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6".to_string();
     let addr = Address::from(
         AddressBech32::try_from(addr_bytes)
