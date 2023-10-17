@@ -16,7 +16,7 @@ use sov_rollup_interface::mocks::{
 use sov_rollup_interface::services::da::DaService;
 
 pub fn sender_address_with_pkey() -> (Address, DefaultPrivateKey) {
-    let addr_bytes = b"sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6";
+    let addr_bytes = "sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6".to_string();
     let addr = Address::from(
         AddressBech32::try_from(addr_bytes as &[u8])
             .unwrap_or_else(|e| panic!("Failed generating sender address: {:?}", e)),
