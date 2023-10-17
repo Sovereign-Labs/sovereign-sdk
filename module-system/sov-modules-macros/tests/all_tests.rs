@@ -1,7 +1,18 @@
 use std::path::PathBuf;
 
+fn set_constants_manifest() {
+    let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR").unwrap();
+    std::env::set_var(
+        "CONSTANTS_MANIFEST",
+        PathBuf::from(manifest_dir)
+            .join("tests")
+            .join("constants.json"),
+    );
+}
+
 #[test]
 fn module_info_tests() {
+    set_constants_manifest();
     let t = trybuild::TestCases::new();
     t.pass("tests/module_info/parse.rs");
     t.pass("tests/module_info/mod_and_state.rs");
@@ -19,6 +30,7 @@ fn module_info_tests() {
 
 #[test]
 fn module_dispatch_tests() {
+    set_constants_manifest();
     let t = trybuild::TestCases::new();
     t.pass("tests/dispatch/derive_genesis.rs");
     t.pass("tests/dispatch/derive_dispatch.rs");
@@ -27,6 +39,7 @@ fn module_dispatch_tests() {
 
 #[test]
 fn rpc_tests() {
+    set_constants_manifest();
     let t = trybuild::TestCases::new();
     t.pass("tests/rpc/derive_rpc.rs");
     t.pass("tests/rpc/derive_rpc_with_where.rs");
@@ -40,7 +53,9 @@ fn rpc_tests() {
 
 #[test]
 fn cli_wallet_arg_tests() {
+    set_constants_manifest();
     let t: trybuild::TestCases = trybuild::TestCases::new();
+
     t.pass("tests/cli_wallet_arg/derive_enum_named_fields.rs");
     t.pass("tests/cli_wallet_arg/derive_struct_unnamed_fields.rs");
     t.pass("tests/cli_wallet_arg/derive_struct_named_fields.rs");
@@ -51,11 +66,8 @@ fn cli_wallet_arg_tests() {
 
 #[test]
 fn constants_from_manifests_test() {
+    set_constants_manifest();
     let t: trybuild::TestCases = trybuild::TestCases::new();
-    let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR").unwrap();
-    std::env::set_var(
-        "CONSTANTS_MANIFEST",
-        PathBuf::from(manifest_dir).join("tests"),
-    );
+
     t.pass("tests/constants/create_constant.rs");
 }
