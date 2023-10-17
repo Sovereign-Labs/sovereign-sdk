@@ -18,7 +18,7 @@ use sov_rollup_interface::services::da::DaService;
 pub fn sender_address_with_pkey() -> (Address, DefaultPrivateKey) {
     let addr_bytes = "sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6".to_string();
     let addr = Address::from(
-        AddressBech32::try_from(addr_bytes as &[u8])
+        AddressBech32::try_from(addr_bytes)
             .unwrap_or_else(|e| panic!("Failed generating sender address: {:?}", e)),
     );
 
@@ -188,4 +188,15 @@ pub fn generate_create(start_nonce: u64) -> Vec<u8> {
     let ser_tx = tx.try_to_vec().unwrap();
     message_vec.push(ser_tx);
     message_vec.try_to_vec().unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sender_address_with_pkey_okay() {
+        // Checks that it doesn't crash.
+        sender_address_with_pkey();
+    }
 }
