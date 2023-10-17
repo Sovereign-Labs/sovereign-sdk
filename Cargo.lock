@@ -8564,6 +8564,7 @@ dependencies = [
  "reth-primitives",
  "reth-rpc-types",
  "serde_json",
+ "sov-accounts",
  "sov-evm",
  "sov-modules-api",
  "sov-rollup-interface",

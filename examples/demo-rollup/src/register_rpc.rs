@@ -29,7 +29,7 @@ where
 // register ethereum methods.
 pub(crate) fn register_ethereum<C: sov_modules_api::Context, Da: DaService>(
     da_service: Da,
-    eth_rpc_config: EthRpcConfig,
+    eth_rpc_config: EthRpcConfig<C>,
     storage: C::Storage,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error> {
