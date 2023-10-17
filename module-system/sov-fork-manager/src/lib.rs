@@ -52,6 +52,14 @@ where
         }
         None
     }
+
+    fn fetch_accessory_value(
+        &self,
+        _snapshot_id: &SnapshotId,
+        _key: &StorageKey,
+    ) -> Option<StorageValue> {
+        todo!()
+    }
 }
 
 impl<S, Da> ForkManager<S, Da>

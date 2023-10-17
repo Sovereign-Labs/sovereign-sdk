@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use std::sync::{Arc, LockResult, RwLock, RwLockReadGuard};
 
 use jmt::storage::NodeBatch;
-use jmt::{JellyfishMerkleTree, KeyHash};
+use jmt::{JellyfishMerkleTree, KeyHash, Version};
 use sov_db::native_db::NativeDB;
 use sov_db::state_db::StateDB;
 
@@ -10,16 +10,19 @@ use crate::config::Config;
 use crate::storage::{QuerySnapshotLayers, SnapshotId, StorageKey, StorageProof, StorageValue};
 use crate::{MerkleProofSpec, OrderedReadsAndWrites, Storage, Witness};
 
+/// Simple wrapper around `RwLock` that only allows read access.
 pub struct ReadOnlyLock<T> {
     lock: Arc<RwLock<T>>,
 }
 
 impl<T> ReadOnlyLock<T> {
     #[allow(dead_code)]
+    /// Create new [`ReadOnlyLock`] from [`Arc<RwLock<T>>`].
     pub fn new(lock: Arc<RwLock<T>>) -> Self {
         Self { lock }
     }
 
+    /// Acquires a read lock on the underlying `RwLock`.
     pub fn read(&self) -> LockResult<RwLockReadGuard<'_, T>> {
         self.lock.read()
     }
@@ -47,6 +50,7 @@ pub struct HierarchicalProverStorage<S: MerkleProofSpec, Q: QuerySnapshotLayers>
 
 impl<S: MerkleProofSpec, Q: QuerySnapshotLayers> HierarchicalProverStorage<S, Q> {
     #[allow(dead_code)]
+    /// TBD
     pub fn new_from_db(
         id: SnapshotId,
         state_db: StateDB,
@@ -86,12 +90,45 @@ impl<S: MerkleProofSpec, Q: QuerySnapshotLayers> Clone for HierarchicalProverSto
     }
 }
 
+/// Wrapper around [`NodeBatch`] that stores the snapshot id and the latest version.
+/// So it is possible to use this struct to build something that can implement [`Snapshot`] trait.
+pub struct OwnedNodeBatch<S: MerkleProofSpec> {
+    snapshot_id: SnapshotId,
+    latest_version: Version,
+    node_batch: NodeBatch,
+    _phantom_hasher: PhantomData<S::Hasher>,
+}
+
+/// TODO: It is not snapshot yet, because accessory thing...
+impl<S: MerkleProofSpec> OwnedNodeBatch<S> {
+    #[allow(dead_code)]
+    /// Get snapshot_id of the storage this batch was created.
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        self.snapshot_id
+    }
+
+    #[allow(dead_code)]
+    /// Get value from current node batch
+    pub fn get_value(&self, key: &StorageKey) -> Option<StorageValue> {
+        let key_hash = KeyHash::with::<S::Hasher>(key.key().as_ref());
+        let values = self.node_batch.values();
+
+        // Why Option<&Option<Vec<u8>>> ?
+        if let Some(value) = values.get(&(self.latest_version, key_hash)) {
+            // TODO: This unwrap?
+            let val = StorageValue::from(value.clone().unwrap());
+            return Some(val);
+        }
+        None
+    }
+}
+
 impl<Q: QuerySnapshotLayers, S: MerkleProofSpec> Storage for HierarchicalProverStorage<S, Q> {
     type Witness = S::Witness;
     type RuntimeConfig = Config;
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
     type Root = jmt::RootHash;
-    type StateUpdate = NodeBatch;
+    type StateUpdate = OwnedNodeBatch<S>;
 
     fn with_config(_config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         todo!("Won't be implemented. ForkManager will be creating its storage instead")
@@ -121,6 +158,7 @@ impl<Q: QuerySnapshotLayers, S: MerkleProofSpec> Storage for HierarchicalProverS
         }
     }
 
+    /// TODO: Should it consume storage?
     fn compute_state_update(
         &self,
         state_accesses: OrderedReadsAndWrites,
@@ -148,6 +186,7 @@ impl<Q: QuerySnapshotLayers, S: MerkleProofSpec> Storage for HierarchicalProverS
                 // NOTE: SKIP PRE_IMAGE
                 (
                     key_hash,
+                    // Get underlying `Vec<u8>` from `Arc`
                     value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
                 )
             });
@@ -155,7 +194,7 @@ impl<Q: QuerySnapshotLayers, S: MerkleProofSpec> Storage for HierarchicalProverS
         // TODO: IS THIS WRITE TO DB??
         let next_version = self.db.get_next_version();
 
-        // TODO: IS THIS WRITE TO DB??
+        // TODO: IS THIS WRITE TO DB?? I suppose jmt is a reader around "db"
         let (new_root, update_proof, tree_update) = jmt
             .put_value_set_with_proof(batch, next_version)
             .expect("JMT update must succeed");
@@ -163,7 +202,14 @@ impl<Q: QuerySnapshotLayers, S: MerkleProofSpec> Storage for HierarchicalProverS
         witness.add_hint(update_proof);
         witness.add_hint(new_root.0);
 
-        Ok((new_root, tree_update.node_batch))
+        let node_batch = OwnedNodeBatch {
+            snapshot_id: self.id,
+            latest_version,
+            node_batch: tree_update.node_batch,
+            _phantom_hasher: Default::default(),
+        };
+
+        Ok((new_root, node_batch))
     }
 
     fn commit(&self, _node_batch: &Self::StateUpdate, _accessory_update: &OrderedReadsAndWrites) {

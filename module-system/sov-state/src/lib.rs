@@ -24,10 +24,11 @@ pub use zk_storage::ZkStorage;
 pub mod config;
 #[cfg(feature = "native")]
 mod hierarchical_prover_storage;
-
 use std::fmt::Display;
 use std::str;
 
+#[cfg(feature = "native")]
+pub use hierarchical_prover_storage::{HierarchicalProverStorage, OwnedNodeBatch, ReadOnlyLock};
 pub use sov_first_read_last_write_cache::cache::CacheLog;
 use sov_rollup_interface::digest::Digest;
 pub use utils::AlignedVec;
