@@ -27,8 +27,8 @@ pub mod experimental {
     use super::DevSigner;
 
     const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
-  
-   #[derive(Clone)]
+
+    #[derive(Clone)]
     pub struct EthRpcConfig<C: sov_modules_api::Context> {
         pub min_blob_size: Option<usize>,
         pub sov_tx_signer_priv_key: C::PrivateKey,

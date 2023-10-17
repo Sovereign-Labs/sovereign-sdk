@@ -158,7 +158,7 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
     {
         let get_arg = client.query_contract(contract_address).await?.as_u32();
         // should be one of three values sent in a single block. 150, 151, or 152
-        assert!(150 <= get_arg && get_arg <= 152);
+        assert!((150..=152).contains(&get_arg));
     }
 
     {
