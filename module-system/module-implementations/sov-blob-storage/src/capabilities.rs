@@ -8,6 +8,10 @@ use crate::BlobStorage;
 impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
     type Context = C;
 
+    // This implementation returns three categories of blobs:
+    // 1. Any blobs sent by the preferred sequencer ("prority blobs")
+    // 2. Any non-priority blobs which were sent `DEFERRED_SLOTS_COUNT` slots ago ("expiring deferred blobs")
+    // 3. Some additional deferred blobs needed to fill the total requested by the sequencer, if applicable. ("bonus blobs")
     fn get_blobs_for_this_slot<'a, I>(
         &self,
         current_blobs: I,
@@ -16,40 +20,84 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
     {
+        // Calculate any expiring deferred blobs first, since these have to be processed no matter what.
         let current_slot: TransitionHeight = self.get_current_slot_height(working_set);
-        let mut slot_for_next_blobs =
+        let slot_for_expiring_blobs =
             current_slot.saturating_sub(self.get_deferred_slots_count(working_set));
-        let mut past_deferred: Vec<Da::BlobTransaction> =
-            if current_slot > self.get_deferred_slots_count(working_set) {
-                Default::default()
-            } else {
-                self.take_blobs_for_slot_height(slot_for_next_blobs, working_set)
-            };
-        let preferred_sequencer = self.get_preferred_sequencer(working_set);
+        let expiring_deferred_blobs: Vec<Da::BlobTransaction> =
+            self.take_blobs_for_slot_height(slot_for_expiring_blobs, working_set);
 
-        let preferred_sequencer = if let Some(sequencer) = preferred_sequencer {
+        // If there is no preferred sequencer, that's all we need to do
+        let preferred_sequencer = if let Some(sequencer) = self.get_preferred_sequencer(working_set)
+        {
             sequencer
         } else {
             // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/654
             // Prevent double number of blobs being executed
-            return Ok(past_deferred
+            return Ok(expiring_deferred_blobs
                 .into_iter()
                 .map(Into::into)
                 .chain(current_blobs.into_iter().map(Into::into))
                 .collect());
         };
 
+        // If we reach this point, there is a preferred sequencer. First, compute any "bonus blobs" he's requested
+        // to have prcessed early.
+
+        let num_blobs_requested = self
+            .deferred_blobs_requested_for_execution_next_slot
+            .get(working_set)
+            .unwrap_or_default();
+        self.deferred_blobs_requested_for_execution_next_slot
+            .set(&0, working_set);
+
+        let mut remaining_blobs_requested =
+            (num_blobs_requested as usize).saturating_sub(expiring_deferred_blobs.len());
+        let mut bonus_blobs: Vec<BlobRefOrOwned<Da::BlobTransaction>> =
+            Vec::with_capacity(remaining_blobs_requested);
+        let mut next_slot_to_check = slot_for_expiring_blobs + 1;
+        while remaining_blobs_requested > 0 && next_slot_to_check < current_slot {
+            let mut blobs_from_next_slot =
+                self.take_blobs_for_slot_height(next_slot_to_check, working_set);
+
+            // If the set of deferred blobs from the next slot in line contains more than the remainder needed to fill the request,
+            //  we split that group and save the unused portion back into state
+            if blobs_from_next_slot.len() > remaining_blobs_requested {
+                let blobs_to_process = blobs_from_next_slot.split_off(remaining_blobs_requested);
+                bonus_blobs.extend(blobs_to_process.into_iter().map(Into::into));
+                self.store_blobs(
+                    next_slot_to_check,
+                    &blobs_from_next_slot.iter().collect::<Vec<_>>(),
+                    working_set,
+                )?;
+                remaining_blobs_requested = 0;
+                break;
+            } else {
+                remaining_blobs_requested -= blobs_from_next_slot.len();
+                bonus_blobs.extend(blobs_from_next_slot.into_iter().map(Into::into));
+            }
+            next_slot_to_check += 1;
+        }
+
+        // Finally handle any new blobs which appeared on the DA layer in this slot
         let mut priority_blobs = Vec::new();
         let mut to_defer: Vec<&mut Da::BlobTransaction> = Vec::new();
-
         for blob in current_blobs {
+            // Blobs from the preferred sequencer get priority
             if blob.sender() == preferred_sequencer {
                 priority_blobs.push(blob);
             } else {
-                to_defer.push(blob);
+                // Other blobs get deferred unless the sequencer has requested otherwise
+                if remaining_blobs_requested != 0 {
+                    remaining_blobs_requested -= 1;
+                    bonus_blobs.push(blob.into())
+                } else {
+                    to_defer.push(blob);
+                }
             }
         }
 
+        // Save any blobs that need deferring
         if !to_defer.is_empty() {
             // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/655
             // Gas metering suppose to prevent saving blobs from not allowed senders if they exit mid-slot
@@ -76,54 +124,11 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
             self.store_blobs(current_slot, &to_defer, working_set)?
         }
 
-        let num_blobs_requested = self
-            .deferred_blobs_requested_for_execution_next_slot
-            .get(working_set)
-            .unwrap_or_default() as usize;
-        let mut num_additional_blobs_to_process =
-            num_blobs_requested.saturating_sub(past_deferred.len());
-
-        // Continue running until we've either fulfilled the sequencer's request
-        // or we've run out of deferred blobs
-        while past_deferred.len() < num_additional_blobs_to_process
-            && slot_for_next_blobs < current_slot
-        {
-            slot_for_next_blobs += 1;
-            let mut blobs_from_next_slot =
-                self.take_blobs_for_slot_height(slot_for_next_blobs, working_set);
-
-            let num_blobs_from_next_slot = blobs_from_next_slot.len();
-
-            // If the set of deferred blobs from the next slot in line contains more than the remainder needed to fill the request,
-            //  we split that group and save the unused portion back into state
-            if num_blobs_from_next_slot > num_additional_blobs_to_process {
-                let blobs_to_process =
-                    blobs_from_next_slot.split_off(num_additional_blobs_to_process as usize);
-                past_deferred.extend(blobs_to_process.into_iter());
-                self.store_blobs(
-                    slot_for_next_blobs,
-                    &blobs_from_next_slot.iter().collect::<Vec<_>>(),
-                    working_set,
-                )?;
-            } else {
-                past_deferred.extend(blobs_from_next_slot.into_iter())
-            }
-
-            // Update the count with the number of blobs processed
-            num_additional_blobs_to_process =
-                num_additional_blobs_to_process.saturating_sub(num_blobs_from_next_slot);
-        }
-
-        let non_priority_blobs = past_deferred.into_iter().map(Into::into);
-        if !priority_blobs.is_empty() {
-            Ok(priority_blobs
-                .into_iter()
-                .map(Into::into)
-                .chain(non_priority_blobs)
-                .collect())
-        } else {
-            // No blobs from preferred sequencer, nothing to save, older blobs have priority
-            Ok(non_priority_blobs.collect())
-        }
+        Ok(priority_blobs
+            .into_iter()
+            .map(Into::into)
+            .chain(expiring_deferred_blobs.into_iter().map(Into::into))
+            .chain(bonus_blobs.into_iter())
+            .collect())
     }
 }
