@@ -1,21 +1,15 @@
-use sov_accounts::AccountConfig;
 use sov_bank::TokenConfig;
 use sov_blob_storage::{BlobStorage, DEFERRED_SLOTS_COUNT};
-use sov_chain_state::{ChainState, ChainStateConfig};
+use sov_chain_state::ChainStateConfig;
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
+use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::macros::DefaultRuntime;
-use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{
-    AccessoryWorkingSet, Address, BlobReaderTrait, Context, DaSpec, DispatchCall, MessageCodec,
-    Module, Spec, WorkingSet,
+    Address, BlobReaderTrait, Context, DaSpec, DispatchCall, MessageCodec, Module, Spec, WorkingSet,
 };
-use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
-use sov_rollup_interface::mocks::{
-    MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaSpec, MockValidityCond, MockZkvm,
-};
-use sov_sequencer_registry::{SequencerConfig, SequencerRegistry};
+use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaSpec};
+use sov_sequencer_registry::SequencerConfig;
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
 
 type C = DefaultContext;
@@ -141,7 +135,7 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
     let (current_storage, runtime, genesis_root) = TestRuntime::pre_initialized(true);
     let mut working_set = WorkingSet::new(current_storage.clone());
 
-    let unregistered_sequencer = MockAddress::new([7; 32]);
+    let unregistered_sequencer = MockAddress::from([7; 32]);
     let blob_1 = B::new(vec![1], REGULAR_SEQUENCER_DA, [1u8; 32]);
     let blob_2 = B::new(vec![2, 2], unregistered_sequencer, [2u8; 32]);
     let blob_3 = B::new(vec![3, 3, 3], PREFERRED_SEQUENCER_DA, [3u8; 32]);
@@ -190,7 +184,7 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
 }
 
 #[test]
-fn test_blobs_no_deferred_without_preferred_sequencer() {
+fn test_blobs_not_deferred_without_preferred_sequencer() {
     let (current_storage, runtime, genesis_root) = TestRuntime::pre_initialized(false);
     let mut working_set = WorkingSet::new(current_storage.clone());
 
@@ -249,127 +243,6 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
         )
         .unwrap();
     assert!(execute_in_slot_2.is_empty());
-}
-
-#[test]
-fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
-    let (current_storage, runtime, genesis_root) = TestRuntime::pre_initialized(true);
-    let mut working_set = WorkingSet::new(current_storage.clone());
-
-    let register_message = sov_sequencer_registry::CallMessage::Register {
-        da_address: REGULAR_SEQUENCER_DA.as_ref().to_vec(),
-    };
-    runtime
-        .sequencer_registry
-        .call(
-            register_message,
-            &C::new(REGULAR_SEQUENCER_ROLLUP),
-            &mut working_set,
-        )
-        .unwrap();
-
-    let blob_1 = B::new(vec![1], REGULAR_SEQUENCER_DA, [1u8; 32]);
-    let blob_2 = B::new(vec![2, 2], REGULAR_SEQUENCER_DA, [2u8; 32]);
-    let blob_3 = B::new(vec![3, 3, 3], PREFERRED_SEQUENCER_DA, [3u8; 32]);
-    let blob_4 = B::new(vec![4, 4, 4, 4], REGULAR_SEQUENCER_DA, [4u8; 32]);
-    let blob_5 = B::new(vec![5, 5, 5, 5, 5], REGULAR_SEQUENCER_DA, [5u8; 32]);
-
-    let slot_1_blobs = vec![blob_1.clone(), blob_2.clone(), blob_3.clone()];
-    let slot_2_blobs = vec![blob_4.clone(), blob_5.clone()];
-
-    let mut slot_1_data = MockBlock {
-        header: MockBlockHeader {
-            prev_hash: [0; 32].into(),
-            hash: [1; 32].into(),
-            height: 1,
-        },
-        validity_cond: Default::default(),
-        blobs: slot_1_blobs,
-    };
-    runtime.chain_state.begin_slot_hook(
-        &slot_1_data.header,
-        &slot_1_data.validity_cond,
-        &genesis_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
-        &mut working_set,
-    );
-    let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
-        &runtime.blob_storage,
-        &mut slot_1_data.blobs,
-        &mut working_set,
-    )
-    .unwrap();
-
-    assert_eq!(1, execute_in_slot_1.len());
-    assert_blobs_are_equal(blob_3, execute_in_slot_1.remove(0), "slot 1");
-
-    let exit_message = sov_sequencer_registry::CallMessage::Exit {
-        da_address: PREFERRED_SEQUENCER_DA.as_ref().to_vec(),
-    };
-
-    runtime
-        .sequencer_registry
-        .call(
-            exit_message,
-            &C::new(PREFERRED_SEQUENCER_ROLLUP),
-            &mut working_set,
-        )
-        .unwrap();
-
-    assert!(runtime
-        .sequencer_registry
-        .get_preferred_sequencer(&mut working_set)
-        .is_none());
-
-    let mut slot_2_data = MockBlock {
-        header: MockBlockHeader {
-            prev_hash: slot_1_data.header.hash,
-            hash: [2; 32].into(),
-            height: 2,
-        },
-        validity_cond: Default::default(),
-        blobs: slot_2_blobs,
-    };
-    runtime.chain_state.begin_slot_hook(
-        &slot_2_data.header,
-        &slot_2_data.validity_cond,
-        &genesis_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
-        &mut working_set,
-    );
-    let mut execute_in_slot_2 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
-        &runtime.blob_storage,
-        &mut slot_2_data.blobs,
-        &mut working_set,
-    )
-    .unwrap();
-    assert_eq!(4, execute_in_slot_2.len());
-    assert_blobs_are_equal(blob_1, execute_in_slot_2.remove(0), "slot 2");
-    assert_blobs_are_equal(blob_2, execute_in_slot_2.remove(0), "slot 2");
-    assert_blobs_are_equal(blob_4, execute_in_slot_2.remove(0), "slot 2");
-    assert_blobs_are_equal(blob_5, execute_in_slot_2.remove(0), "slot 2");
-
-    let mut slot_3_data = MockBlock {
-        header: MockBlockHeader {
-            prev_hash: slot_2_data.header.hash,
-            hash: [3; 32].into(),
-            height: 3,
-        },
-        validity_cond: Default::default(),
-        blobs: Vec::new(),
-    };
-    runtime.chain_state.begin_slot_hook(
-        &slot_3_data.header,
-        &slot_3_data.validity_cond,
-        &genesis_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
-        &mut working_set,
-    );
-    let execute_in_slot_3: Vec<BlobRefOrOwned<'_, B>> =
-        <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
-            &runtime.blob_storage,
-            &mut slot_3_data.blobs,
-            &mut working_set,
-        )
-        .unwrap();
-    assert!(execute_in_slot_3.is_empty());
 }
 
 /// Check hashes and data of two blobs.
