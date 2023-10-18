@@ -41,217 +41,6 @@ fn get_bank_config(
     }
 }
 
-// #[test]
-// fn test_early_processing_deferred_blobs() {
-//     let tmpdir = tempfile::tempdir().unwrap();
-//     let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
-//     let mut working_set = WorkingSet::new(storage.clone());
-
-//     let preferred_sequencer_da = MockAddress::from([10u8; 32]);
-//     let preferred_sequencer_rollup = generate_address(PREFERRED_SEQUENCER_KEY);
-//     let regular_sequencer_da = MockAddress::from([30u8; 32]);
-//     let regular_sequencer_rollup = generate_address(REGULAR_SEQUENCER_KEY);
-
-//     let bank_config = get_bank_config(preferred_sequencer_rollup, regular_sequencer_rollup);
-
-//     let token_address = sov_bank::get_genesis_token_address::<C>(
-//         &bank_config.tokens[0].token_name,
-//         bank_config.tokens[0].salt,
-//     );
-
-//     let sequencer_registry_config = SequencerConfig {
-//         seq_rollup_address: preferred_sequencer_rollup,
-//         seq_da_address: preferred_sequencer_da,
-//         coins_to_lock: sov_bank::Coins {
-//             amount: LOCKED_AMOUNT,
-//             token_address,
-//         },
-//         is_preferred_sequencer: true,
-//     };
-
-//     let initial_slot_height = 0;
-//     let chain_state_config = ChainStateConfig {
-//         initial_slot_height,
-//         current_time: Default::default(),
-//     };
-//     let valid_condition = MockValidityCond { is_valid: true };
-
-//     let bank = sov_bank::Bank::<C>::default();
-//     let sequencer_registry = SequencerRegistry::<C, Da>::default();
-//     let chain_state = ChainState::<C, Da>::default();
-//     let blob_storage = BlobStorage::<C, Da>::default();
-
-//     bank.genesis(&bank_config, &mut working_set).unwrap();
-//     sequencer_registry
-//         .genesis(&sequencer_registry_config, &mut working_set)
-//         .unwrap();
-//     chain_state
-//         .genesis(&chain_state_config, &mut working_set)
-//         .unwrap();
-
-//     let (reads_writes, witness) = working_set.checkpoint().freeze();
-//     let current_root = storage.validate_and_commit(reads_writes, &witness).unwrap();
-//     let mut working_set = WorkingSet::new(storage);
-
-//     let register_message = sov_sequencer_registry::CallMessage::Register {
-//         da_address: regular_sequencer_da.as_ref().to_vec(),
-//     };
-//     sequencer_registry
-//         .call(
-//             register_message,
-//             &C::new(regular_sequencer_rollup),
-//             &mut working_set,
-//         )
-//         .unwrap();
-
-//     let preferred_sequencer_da = MockAddress::from([10u8; 32]);
-//     let preferred_sequencer_rollup = generate_address(PREFERRED_SEQUENCER_KEY);
-//     let regular_sequencer_da = MockAddress::from([30u8; 32]);
-//     let regular_sequencer_rollup = generate_address(REGULAR_SEQUENCER_KEY);
-
-//     blob_storage
-//         .call(
-//             sov_blob_storage::CallMessage::ProcessDeferredBlobsEarly { number: 3 },
-//             &C::new(preferred_sequencer_rollup),
-//             &mut working_set,
-//         )
-//         .unwrap();
-
-//     // Build 5 slots each with 10 blobs each
-//     // Blocks 1, 8, 15, 22, 29, 36, and 43, are from the preferred sequencer
-//     let mut slots = vec![];
-//     for i in 0..50 {
-//         if i % 10 == 0 {
-//             blobs.push(Vec::with_capacity(10));
-//         }
-//         let sequencer = if i % 7 == 1 {
-//             preferred_sequencer_da
-//         } else {
-//             regular_sequencer_da
-//         };
-//         let blob = B::new(vec![i; 10], regular_sequencer_da, [i; 32]);
-//         slots.last_mut().unwrap().push(blob);
-//     }
-
-//     // Slot 1: 3rd blob is from preferred sequencer, only it should be executed
-//     let mut slot_1_data = MockBlock {
-//         header: MockBlockHeader {
-//             prev_hash: [0; 32].into(),
-//             hash: [1; 32].into(),
-//             height: 1,
-//         },
-//         validity_cond: valid_condition,
-//         blobs: slot_1_blobs,
-//     };
-//     chain_state.begin_slot_hook(
-//         &slot_1_data.header,
-//         &slot_1_data.validity_cond,
-//         &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
-//         &mut working_set,
-//     );
-//     let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
-//         &blob_storage,
-//         &mut slot_1_data.blobs,
-//         &mut working_set,
-//     )
-//     .unwrap();
-//     assert_eq!(1, execute_in_slot_1.len());
-//     blobs_are_equal(blob_3.clone(), execute_in_slot_1.remove(0), "slot 1");
-//     // Second attempt to get blobs for slot return existing slots as is.
-//     let mut execute_in_slot_1_attempt_2 =
-//         <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
-//             &blob_storage,
-//             &mut slot_1_data.blobs,
-//             &mut working_set,
-//         )
-//         .unwrap();
-
-//     // Same as before
-//     assert_eq!(1, execute_in_slot_1_attempt_2.len());
-//     // But blob is consumed by previous read comparison, so we compare hash only
-//     blob_hashes_are_equal(blob_3, execute_in_slot_1_attempt_2.remove(0), "slot 1");
-
-//     // Slot 2: 5th blob is from preferred sequencer + 2nd and 3rd that were deferred previously
-//     let mut slot_2_data = MockBlock {
-//         header: MockBlockHeader {
-//             prev_hash: slot_1_data.header.hash,
-//             hash: [2; 32].into(),
-//             height: 2,
-//         },
-//         validity_cond: valid_condition,
-//         blobs: slot_2_blobs,
-//     };
-//     chain_state.begin_slot_hook(
-//         &slot_2_data.header,
-//         &slot_2_data.validity_cond,
-//         &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
-//         &mut working_set,
-//     );
-//     let mut execute_in_slot_2 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
-//         &blob_storage,
-//         &mut slot_2_data.blobs,
-//         &mut working_set,
-//     )
-//     .unwrap();
-//     assert_eq!(3, execute_in_slot_2.len());
-//     blobs_are_equal(blob_5, execute_in_slot_2.remove(0), "slot 2");
-//     blobs_are_equal(blob_1, execute_in_slot_2.remove(0), "slot 2");
-//     blobs_are_equal(blob_2, execute_in_slot_2.remove(0), "slot 2");
-
-//     // Slot 3: no blobs from preferred sequencer, so deferred executed first and then current
-//     let mut slot_3_data = MockBlock {
-//         header: MockBlockHeader {
-//             prev_hash: slot_2_data.header.hash,
-//             hash: [3; 32].into(),
-//             height: 3,
-//         },
-//         validity_cond: valid_condition,
-//         blobs: slot_3_blobs,
-//     };
-//     chain_state.begin_slot_hook(
-//         &slot_3_data.header,
-//         &slot_3_data.validity_cond,
-//         &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
-//         &mut working_set,
-//     );
-//     let mut execute_in_slot_3 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
-//         &blob_storage,
-//         &mut slot_3_data.blobs,
-//         &mut working_set,
-//     )
-//     .unwrap();
-//     assert_eq!(2, execute_in_slot_3.len());
-//     blobs_are_equal(blob_4, execute_in_slot_3.remove(0), "slot 3");
-//     blobs_are_equal(blob_6, execute_in_slot_3.remove(0), "slot 3");
-
-//     // Slot 4: no blobs at all
-//     let mut slot_4_data = MockBlock {
-//         header: MockBlockHeader {
-//             prev_hash: slot_3_data.header.hash,
-//             hash: [4; 32].into(),
-//             height: 4,
-//         },
-//         validity_cond: valid_condition,
-//         blobs: Vec::new(),
-//     };
-//     chain_state.begin_slot_hook(
-//         &slot_4_data.header,
-//         &slot_4_data.validity_cond,
-//         &current_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
-//         &mut working_set,
-//     );
-//     let mut execute_in_slot_4 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
-//         &blob_storage,
-//         &mut slot_4_data.blobs,
-//         &mut working_set,
-//     )
-//     .unwrap();
-
-//     assert_eq!(2, execute_in_slot_4.len());
-//     blobs_are_equal(blob_7, execute_in_slot_4.remove(0), "slot 4");
-//     blobs_are_equal(blob_8, execute_in_slot_4.remove(0), "slot 4");
-// }
-
 fn make_blobs(
     blob_num: &mut u8,
     slot: u64,
@@ -334,6 +123,412 @@ fn priority_sequencer_flow_general() {
         for blob in blobs_to_execute {
             let expected = expected_blobs.next().unwrap();
             assert!(expected.should_get_processed_in() == slot_number);
+            assert_blobs_are_equal(expected.blob, blob, &format!("slot {:?}", slot_number));
+        }
+    }
+    // Ensure that all blobs have been processed
+    assert!(expected_blobs.next().is_none());
+}
+
+// cases to handle:
+// 1. Happy flow (with some bonus blobs)
+// 2. Preferred sequencer exits
+// 3. Too many bonus blobs requested
+// 4. Bonus blobs requested just once
+// 5. Bonus blob requests ignored if not preferred seq
+#[test]
+fn bonus_blobs_are_delivered_on_request() {
+    // If blobs are deferred for less than two slots, "early processing" is not possible
+    if DEFERRED_SLOTS_COUNT < 2 {
+        return;
+    }
+    let (current_storage, runtime, genesis_root) = TestRuntime::pre_initialized(true);
+    let mut working_set = WorkingSet::new(current_storage.clone());
+
+    let is_from_preferred_by_slot = [
+        vec![false, false, true, false, false],
+        vec![false, true, false],
+        vec![false, false],
+    ];
+    let blobs_by_slot: Vec<_> = make_blobs_by_slot(&is_from_preferred_by_slot);
+    let mut expected_blobs = blobs_by_slot.iter().flatten().cloned().collect::<Vec<_>>();
+    expected_blobs.sort_by_key(|b| b.should_get_processed_in());
+    let mut expected_blobs = expected_blobs.into_iter();
+    let mut slots_iterator = blobs_by_slot
+        .into_iter()
+        .map(|blobs| blobs.into_iter().map(|b| b.blob).collect())
+        .chain(std::iter::repeat(Vec::new()));
+
+    for slot_number in 0..DEFERRED_SLOTS_COUNT + 3 {
+        let slot_number_u8 = slot_number as u8;
+        let mut slot_data = MockBlock {
+            header: MockBlockHeader {
+                prev_hash: [slot_number_u8; 32].into(),
+                hash: [slot_number_u8 + 1; 32].into(),
+                height: slot_number,
+            },
+            validity_cond: Default::default(),
+            blobs: slots_iterator.next().unwrap(),
+        };
+        runtime.chain_state.begin_slot_hook(
+            &slot_data.header,
+            &slot_data.validity_cond,
+            &genesis_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
+            &mut working_set,
+        );
+        let blobs_to_execute = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
+            &runtime.blob_storage,
+            &mut slot_data.blobs,
+            &mut working_set,
+        )
+        .unwrap();
+
+        // In the first slot, request early processing of the next blobs
+        if slot_number == 0 {
+            runtime
+                .blob_storage
+                .call(
+                    sov_blob_storage::CallMessage::ProcessDeferredBlobsEarly { number: 4 },
+                    &DefaultContext::new(PREFERRED_SEQUENCER_ROLLUP),
+                    &mut working_set,
+                )
+                .unwrap();
+            // The first slot will process the one blob from the preferred sequencer
+            assert_eq!(blobs_to_execute.len(), 1);
+        } else if slot_number == 1 {
+            // The second slot will process four bonus blobs plus the one from the preferred sequencer
+            assert_eq!(blobs_to_execute.len(), 5);
+        } else if slot_number < DEFERRED_SLOTS_COUNT + 1 {
+            // No more preferred/bonus blobs, so the last blobs need to wait DEFERRED_SLOTS_COUNT to be processed
+            assert_eq!(blobs_to_execute.len(), 0)
+        }
+
+        for blob in blobs_to_execute {
+            let expected: BlobWithAppearance<MockBlob> = expected_blobs.next().unwrap();
+            assert_blobs_are_equal(expected.blob, blob, &format!("slot {:?}", slot_number));
+        }
+    }
+    // Ensure that all blobs have been processed
+    assert!(expected_blobs.next().is_none());
+}
+
+// cases to handle:
+// 1. Happy flow (with some bonus blobs)
+// 2. Preferred sequencer exits
+// 3. Too many bonus blobs requested
+// 4. Bonus blobs requested just once
+// 5. Bonus blob requests ignored if not preferred seq
+#[test]
+fn sequencer_requests_more_bonus_blobs_than_possible() {
+    // If blobs are deferred for less than two slots, "early processing" is not possible
+    if DEFERRED_SLOTS_COUNT < 2 {
+        return;
+    }
+    let (current_storage, runtime, genesis_root) = TestRuntime::pre_initialized(true);
+    let mut working_set = WorkingSet::new(current_storage.clone());
+
+    let is_from_preferred_by_slot = [
+        vec![false, false, true, false, false],
+        vec![false, true, false],
+        vec![false, false],
+    ];
+    let blobs_by_slot: Vec<_> = make_blobs_by_slot(&is_from_preferred_by_slot);
+    let mut expected_blobs = blobs_by_slot.iter().flatten().cloned().collect::<Vec<_>>();
+    expected_blobs.sort_by_key(|b| b.should_get_processed_in());
+    let mut expected_blobs = expected_blobs.into_iter();
+    let mut slots_iterator = blobs_by_slot
+        .into_iter()
+        .map(|blobs| blobs.into_iter().map(|b| b.blob).collect())
+        .chain(std::iter::repeat(Vec::new()));
+
+    for slot_number in 0..DEFERRED_SLOTS_COUNT + 3 {
+        let slot_number_u8 = slot_number as u8;
+        let mut slot_data = MockBlock {
+            header: MockBlockHeader {
+                prev_hash: [slot_number_u8; 32].into(),
+                hash: [slot_number_u8 + 1; 32].into(),
+                height: slot_number,
+            },
+            validity_cond: Default::default(),
+            blobs: slots_iterator.next().unwrap(),
+        };
+        runtime.chain_state.begin_slot_hook(
+            &slot_data.header,
+            &slot_data.validity_cond,
+            &genesis_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
+            &mut working_set,
+        );
+        let blobs_to_execute = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
+            &runtime.blob_storage,
+            &mut slot_data.blobs,
+            &mut working_set,
+        )
+        .unwrap();
+
+        // In the first slot, request early processing of the next blobs
+        if slot_number == 0 {
+            runtime
+                .blob_storage
+                .call(
+                    sov_blob_storage::CallMessage::ProcessDeferredBlobsEarly { number: 1000 },
+                    &DefaultContext::new(PREFERRED_SEQUENCER_ROLLUP),
+                    &mut working_set,
+                )
+                .unwrap();
+            // The first slot will process the one blob from the preferred sequencer
+            assert_eq!(blobs_to_execute.len(), 1);
+        } else if slot_number == 1 {
+            // The second slot will process all 7 available blobs
+            assert_eq!(blobs_to_execute.len(), 7);
+        } else if slot_number < DEFERRED_SLOTS_COUNT + 1 {
+            // No more preferred/bonus blobs, so the last blobs need to wait DEFERRED_SLOTS_COUNT to be processed
+            assert_eq!(blobs_to_execute.len(), 0)
+        }
+
+        for blob in blobs_to_execute {
+            let expected: BlobWithAppearance<MockBlob> = expected_blobs.next().unwrap();
+            assert_blobs_are_equal(expected.blob, blob, &format!("slot {:?}", slot_number));
+        }
+    }
+    // Ensure that all blobs have been processed
+    assert!(expected_blobs.next().is_none());
+}
+
+// cases to handle:
+// 1. Happy flow (with some bonus blobs)
+// 2. Preferred sequencer exits
+// 3. Too many bonus blobs requested
+// 4. Bonus blobs requested just once
+// 5. Bonus blob requests ignored if not preferred seq
+#[test]
+fn only_half_bonus_blobs_processed() {
+    // If blobs are deferred for less than two slots, "early processing" is not possible
+    if DEFERRED_SLOTS_COUNT < 2 {
+        return;
+    }
+    let (current_storage, runtime, genesis_root) = TestRuntime::pre_initialized(true);
+    let mut working_set = WorkingSet::new(current_storage.clone());
+
+    let is_from_preferred_by_slot = [
+        vec![false, false, true, false, false],
+        vec![false, true, false],
+        vec![false, false],
+    ];
+    let blobs_by_slot: Vec<_> = make_blobs_by_slot(&is_from_preferred_by_slot);
+    let mut expected_blobs = blobs_by_slot.iter().flatten().cloned().collect::<Vec<_>>();
+    expected_blobs.sort_by_key(|b| b.should_get_processed_in());
+    let mut expected_blobs = expected_blobs.into_iter();
+    let mut slots_iterator = blobs_by_slot
+        .into_iter()
+        .map(|blobs| blobs.into_iter().map(|b| b.blob).collect())
+        .chain(std::iter::repeat(Vec::new()));
+
+    for slot_number in 0..DEFERRED_SLOTS_COUNT + 3 {
+        let slot_number_u8 = slot_number as u8;
+        let mut slot_data = MockBlock {
+            header: MockBlockHeader {
+                prev_hash: [slot_number_u8; 32].into(),
+                hash: [slot_number_u8 + 1; 32].into(),
+                height: slot_number,
+            },
+            validity_cond: Default::default(),
+            blobs: slots_iterator.next().unwrap(),
+        };
+        runtime.chain_state.begin_slot_hook(
+            &slot_data.header,
+            &slot_data.validity_cond,
+            &genesis_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
+            &mut working_set,
+        );
+        let blobs_to_execute = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
+            &runtime.blob_storage,
+            &mut slot_data.blobs,
+            &mut working_set,
+        )
+        .unwrap();
+
+        // In the first slot, request early processing of the next blobs
+        if slot_number == 0 {
+            runtime
+                .blob_storage
+                .call(
+                    sov_blob_storage::CallMessage::ProcessDeferredBlobsEarly { number: 5 },
+                    &DefaultContext::new(PREFERRED_SEQUENCER_ROLLUP),
+                    &mut working_set,
+                )
+                .unwrap();
+            // The first slot will process the one blob from the preferred sequencer
+            assert_eq!(blobs_to_execute.len(), 1);
+        } else if slot_number == 1 {
+            // The second slot will process 5 bonus blobs
+            assert_eq!(blobs_to_execute.len(), 6);
+        } else if slot_number < DEFERRED_SLOTS_COUNT + 1 {
+            // No more preferred/bonus blobs, so the last blobs need to wait DEFERRED_SLOTS_COUNT to be processed
+            assert_eq!(blobs_to_execute.len(), 0)
+        }
+
+        for blob in blobs_to_execute {
+            let expected: BlobWithAppearance<MockBlob> = expected_blobs.next().unwrap();
+            assert_blobs_are_equal(expected.blob, blob, &format!("slot {:?}", slot_number));
+        }
+    }
+    // Ensure that all blobs have been processed
+    assert!(expected_blobs.next().is_none());
+}
+
+// cases to handle:
+// 1. Happy flow (with some bonus blobs)
+// 2. Preferred sequencer exits
+// 3. Too many bonus blobs requested
+// 4. Bonus blobs requested just once
+// 5. Bonus blob requests ignored if not preferred seq
+#[test]
+fn split_requests_in_blob() {
+    // If blobs are deferred for less than two slots, "early processing" is not possible
+    if DEFERRED_SLOTS_COUNT < 2 {
+        return;
+    }
+    let (current_storage, runtime, genesis_root) = TestRuntime::pre_initialized(true);
+    let mut working_set = WorkingSet::new(current_storage.clone());
+
+    let is_from_preferred_by_slot = [
+        vec![false, false, true, false, false],
+        vec![false, true, false],
+        vec![false, false],
+    ];
+    let blobs_by_slot: Vec<_> = make_blobs_by_slot(&is_from_preferred_by_slot);
+    let mut expected_blobs = blobs_by_slot.iter().flatten().cloned().collect::<Vec<_>>();
+    expected_blobs.sort_by_key(|b| b.should_get_processed_in());
+    let mut expected_blobs = expected_blobs.into_iter();
+    let mut slots_iterator = blobs_by_slot
+        .into_iter()
+        .map(|blobs| blobs.into_iter().map(|b| b.blob).collect())
+        .chain(std::iter::repeat(Vec::new()));
+
+    for slot_number in 0..DEFERRED_SLOTS_COUNT + 3 {
+        let slot_number_u8 = slot_number as u8;
+        let mut slot_data = MockBlock {
+            header: MockBlockHeader {
+                prev_hash: [slot_number_u8; 32].into(),
+                hash: [slot_number_u8 + 1; 32].into(),
+                height: slot_number,
+            },
+            validity_cond: Default::default(),
+            blobs: slots_iterator.next().unwrap(),
+        };
+        runtime.chain_state.begin_slot_hook(
+            &slot_data.header,
+            &slot_data.validity_cond,
+            &genesis_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
+            &mut working_set,
+        );
+        let blobs_to_execute = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
+            &runtime.blob_storage,
+            &mut slot_data.blobs,
+            &mut working_set,
+        )
+        .unwrap();
+
+        // In the first slot, request early processing of the next blobs
+        if slot_number == 0 {
+            // The first slot will process the one blob from the preferred sequencer
+            runtime
+                .blob_storage
+                .call(
+                    sov_blob_storage::CallMessage::ProcessDeferredBlobsEarly { number: 1 },
+                    &DefaultContext::new(PREFERRED_SEQUENCER_ROLLUP),
+                    &mut working_set,
+                )
+                .unwrap();
+            assert_eq!(blobs_to_execute.len(), 1);
+        } else if slot_number == 1 {
+            // The second slot will process 1 bonus blobs and one from the preferred sequencer
+            assert_eq!(blobs_to_execute.len(), 2);
+        } else if slot_number < DEFERRED_SLOTS_COUNT {
+            // No more preferred/bonus blobs, so the last blobs need to wait DEFERRED_SLOTS_COUNT to be processed
+            assert_eq!(blobs_to_execute.len(), 0)
+        }
+
+        for blob in blobs_to_execute {
+            let expected: BlobWithAppearance<MockBlob> = expected_blobs.next().unwrap();
+            assert_blobs_are_equal(expected.blob, blob, &format!("slot {:?}", slot_number));
+        }
+    }
+    // Ensure that all blobs have been processed
+    assert!(expected_blobs.next().is_none());
+}
+
+// cases to handle:
+// 3. Too many bonus blobs requested
+// 4. Bonus blobs requested just once
+// 5. Bonus blob requests ignored if not preferred seq
+#[test]
+fn bonus_blobs_request_ignored_if_not_from_preferred_seq() {
+    // If blobs are deferred for less than two slots, "early processing" is not possible
+    if DEFERRED_SLOTS_COUNT < 2 {
+        return;
+    }
+    let (current_storage, runtime, genesis_root) = TestRuntime::pre_initialized(true);
+    let mut working_set = WorkingSet::new(current_storage.clone());
+
+    let is_from_preferred_by_slot = [
+        vec![false, false, true, false, false],
+        vec![false, true, false],
+        vec![false, false],
+    ];
+    let blobs_by_slot: Vec<_> = make_blobs_by_slot(&is_from_preferred_by_slot);
+    let mut expected_blobs = blobs_by_slot.iter().flatten().cloned().collect::<Vec<_>>();
+    expected_blobs.sort_by_key(|b| b.should_get_processed_in());
+    let mut expected_blobs = expected_blobs.into_iter();
+    let mut slots_iterator = blobs_by_slot
+        .into_iter()
+        .map(|blobs| blobs.into_iter().map(|b| b.blob).collect())
+        .chain(std::iter::repeat(Vec::new()));
+
+    for slot_number in 0..DEFERRED_SLOTS_COUNT + 3 {
+        let slot_number_u8 = slot_number as u8;
+        let mut slot_data = MockBlock {
+            header: MockBlockHeader {
+                prev_hash: [slot_number_u8; 32].into(),
+                hash: [slot_number_u8 + 1; 32].into(),
+                height: slot_number,
+            },
+            validity_cond: Default::default(),
+            blobs: slots_iterator.next().unwrap(),
+        };
+        runtime.chain_state.begin_slot_hook(
+            &slot_data.header,
+            &slot_data.validity_cond,
+            &genesis_root, // For this test, we don't actually execute blocks - so keep reusing the genesis root hash as a placeholder
+            &mut working_set,
+        );
+        let blobs_to_execute = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
+            &runtime.blob_storage,
+            &mut slot_data.blobs,
+            &mut working_set,
+        )
+        .unwrap();
+
+        // In the first slot, request early processing of the next blobs
+        if slot_number == 0 {
+            runtime
+                .blob_storage
+                .call(
+                    sov_blob_storage::CallMessage::ProcessDeferredBlobsEarly { number: 4 },
+                    &DefaultContext::new(REGULAR_SEQUENCER_ROLLUP),
+                    &mut working_set,
+                )
+                .unwrap();
+            // The first slot will process the one blob from the preferred sequencer
+            assert_eq!(blobs_to_execute.len(), 1);
+        } else if slot_number == 1 {
+            // The second slot will process four bonus blobs plus the one from the preferred sequencer
+            assert_eq!(blobs_to_execute.len(), 1);
+        }
+
+        for blob in blobs_to_execute {
+            let expected: BlobWithAppearance<MockBlob> = expected_blobs.next().unwrap();
+            assert_eq!(expected.should_get_processed_in(), slot_number);
             assert_blobs_are_equal(expected.blob, blob, &format!("slot {:?}", slot_number));
         }
     }
