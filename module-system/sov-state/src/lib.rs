@@ -113,7 +113,7 @@ impl Extend<u8> for Prefix {
 /// merkle proofs for storage access
 pub trait MerkleProofSpec {
     /// The structure that accumulates the witness data
-    type Witness: Witness;
+    type Witness: Witness + Send + Sync;
     /// The hash function used to compute the merkle root
     type Hasher: Digest<OutputSize = sha2::digest::typenum::U32>;
 }

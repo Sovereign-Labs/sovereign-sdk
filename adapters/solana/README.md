@@ -56,9 +56,18 @@ WebSocket URL: ws://localhost:8900/ (computed)
 Keypair Path: ~/.solw/test.json 
 Commitment: confirmed 
 ```
-* Start the `solana-test-validator`
+* We also need to build the geyser plugin that streams account updates, so that a listener can calculate 
+  * A merkle proof of rollup block existence
+  * A non inclusion merkle proof of a rollup block being absent
+* Build the geyser plugin
 ```bash
-$ solana-test-validator
+cd sovereign/adapters/solana/
+make
+```
+* Start the `solana-test-validator` with the plugin config
+```bash
+$ cd sovereign
+$ solana-test-validator --geyser-plugin-config adapters/solana/config.json
 Ledger location: test-ledger
 Log: test-ledger/validator.log
 ⠴ Initializing...                                                                                                                
@@ -258,6 +267,27 @@ Chunk1 Chunk2  Chunk3     Chunk4
 * The Solana Bank hash providing a commitment to the value of `BlocksRoot` account is ultimately what enables DA
 * The accounts delta root is also calculated by sorting the leaves, which means we can also prove non-inclusion
   * Showing that the `BlocksRoot` PDA doesn't exist between two adjacent leaves tells us that there are no rollup blobs in a specific Solana block
+
+### Block Processor
+* Run the block processor binary, which streams geyser updates from the `solana-test-validator`
+```bash
+cd sovereign/adapters/solana/da_client
+cargo run --bin account_delta_processor
+```
+* The above should print a stream of slots, modified accounts and their hashes
+```
+slot:30638, pubkey:"SysvarS1otHashes111111111111111111111111111", hash:"E4NFvB38MnE5LPPPcQB5LUfoMGMhKDMiZs4mQzJ8qCcG"
+slot:30638, pubkey:"SysvarC1ock11111111111111111111111111111111", hash:"EUgR9BNdKjrnwZTMqwJ2CD3fdTkRn82axLAeCokx7NK5"
+slot:30638, pubkey:"5Pmg4aiLg3WYzns5FCpbs5bxxNRzdb6YwKJemykPbZBD", hash:"G8LNAUrjhdGhX5npczHJT8j2hR5qTvvKnKnvZS4jesgD"
+slot:30638, pubkey:"SysvarRecentB1ockHashes11111111111111111111", hash:"2d3xmQ1ueKR3Jk2cQsN9uEFsMfjDZmohHESpHz3MBfiC"
+slot:30638, pubkey:"5MgKRwYGsa9S7Shtch7UAjXhzGUaze5u2dx1NuP4oskH", hash:"txi5QmUUCbXMkcD5CPTpyin3X4Ky1gvRKGyzJpc2UB5"
+slot:30638, pubkey:"SysvarS1otHistory11111111111111111111111111", hash:"GSGN4DcEBN49rFaMLDCTmMkXuh1yKfT4z9R4mZJHFD34"
+slot:30639, pubkey:"SysvarS1otHashes111111111111111111111111111", hash:"Dmc2WP9psnKG476ahjwTHgnFaimpXNSkJQcTG7zoYTXQ"
+slot:30639, pubkey:"SysvarC1ock11111111111111111111111111111111", hash:"GZev34FK7jn5X7Du3joegLb4YuKxaMAByy7JcVXzj3w3"
+slot:30639, pubkey:"5Pmg4aiLg3WYzns5FCpbs5bxxNRzdb6YwKJemykPbZBD", hash:"2rLWZfTBhpiHWmg8n3w737By9Bcvs6N4zbRKZZaN2KDB"
+slot:30639, pubkey:"SysvarRecentB1ockHashes11111111111111111111", hash:"C5gqC6mZdDH3Lr33GLusDstSqX4ftTbWd34nTrgBppnh"
+slot:30639, pubkey:"5MgKRwYGsa9S7Shtch7UAjXhzGUaze5u2dx1NuP4oskH", hash:"AYVKX9n4Gs9zRLpW4Nsu5o68k7ijE2VitDLT2HAwi8jz"
+```
 
 ### TBD
 * The logic to fetch the bank hash and verify availability still needs to be written into the da_client

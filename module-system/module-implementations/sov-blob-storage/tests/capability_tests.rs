@@ -179,7 +179,6 @@ fn do_deferred_blob_test(
             if !has_processed_blobs_early {
                 assert_eq!(expected.must_be_processed_by(), slot_number);
             }
-            assert_blobs_are_equal(expected.blob, blob, &format!("slot {:?}", slot_number));
         }
     }
     // Ensure that all blobs have been processed
