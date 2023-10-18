@@ -330,10 +330,10 @@ async fn get_batches(
 mod api_utils {
     use std::collections::HashMap;
 
-    use super::*;
-
     use axum::Json;
     use tracing::error;
+
+    use super::*;
 
     pub async fn not_implemented_501() -> (StatusCode, Json<ResponseObject<()>>) {
         (

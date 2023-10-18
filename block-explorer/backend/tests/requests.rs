@@ -5,6 +5,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum_test::TestServer;
+use block_explorer_backend::api_v0::{self, default_pagination_size};
+use block_explorer_backend::indexer::index_blocks;
+use block_explorer_backend::{AppStateInner, Db};
 use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
 use demo_stf::App;
 use jsonrpsee::ws_client::WsClientBuilder;
@@ -19,11 +22,6 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 use testcontainers::clients::Cli;
 use testcontainers::Container;
 use testcontainers_modules::postgres::Postgres as PostgresImage;
-
-use block_explorer_backend::api_v0::{self, default_pagination_size};
-use block_explorer_backend::indexer::index_blocks;
-use block_explorer_backend::AppStateInner;
-use block_explorer_backend::Db;
 
 type PostgresContainer<'a> = Container<'a, PostgresImage>;
 
