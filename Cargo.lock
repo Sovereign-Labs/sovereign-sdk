@@ -8372,7 +8372,7 @@ dependencies = [
  "clap 4.4.6",
  "hex",
  "jmt",
- "jsonrpsee 0.20.1",
+ "jsonrpsee 0.20.2",
  "schemars",
  "serde",
  "serde_json",
