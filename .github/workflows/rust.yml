@@ -300,7 +300,7 @@ jobs:
         # up to date.
         run: git diff --exit-code
   check-demo-rollup-bash-commands:
-    runs-on: ubuntu-latest
+    runs-on: buildjet-2vcpu-ubuntu-2204
     # `test` has already built dependencies, so we can share
     # caches (the profile is `dev` in both cases).
     needs: test
