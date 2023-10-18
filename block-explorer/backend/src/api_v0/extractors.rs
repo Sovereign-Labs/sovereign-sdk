@@ -2,6 +2,8 @@
 //!
 //! See also: <https://docs.rs/axum/latest/axum/extract/index.html#customizing-extractor-responses>.
 
+#![deny(missing_docs)]
+
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -117,6 +119,9 @@ where
     }
 }
 
+/// An alternative to the built-in Axum extractor [`axum::extract::Path`], which
+/// handles errors gracefully and returns error responses in a `JSON:API`-like
+/// format.
 #[derive(Debug)]
 pub struct PathWithErrorHandling<T>(pub T);
 

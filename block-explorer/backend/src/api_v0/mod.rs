@@ -31,6 +31,7 @@ use crate::AppState;
 
 type AxumState = State<AppState>;
 
+/// The [`axum::Router`] for the v0 API exposed by the block explorer.
 pub fn router(app_state: AppState) -> Router {
     let trace_layer = TraceLayer::new_for_http().make_span_with(|request: &Request<Body>| {
         // We get the request id from the extensions
