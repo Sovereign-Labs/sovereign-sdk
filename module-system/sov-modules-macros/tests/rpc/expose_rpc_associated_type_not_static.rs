@@ -15,7 +15,7 @@ pub trait Data:
     Clone
     + Eq
     + PartialEq
-    + std::fmt::Debug
+    + core::fmt::Debug
     + serde::Serialize
     + serde::de::DeserializeOwned
     + borsh::BorshSerialize

@@ -1,29 +1,42 @@
+#[cfg(feature = "std")]
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 
+#[cfg(feature = "std")]
 use serde::Serialize;
+#[cfg(feature = "std")]
+use sov_rollup_interface::maybestd::sync::{Arc, Mutex};
+use sov_rollup_interface::maybestd::vec;
+use sov_rollup_interface::maybestd::vec::Vec;
 use sov_rollup_interface::services::da::SlotData;
-use sov_rollup_interface::stf::{BatchReceipt, Event};
-use sov_schema_db::{Schema, SchemaBatch, SeekKeyEncoder, DB};
+use sov_rollup_interface::stf::BatchReceipt;
+#[cfg(feature = "std")]
+use sov_schema_db::{Schema, SeekKeyEncoder};
+#[cfg(feature = "std")]
+use sov_schema_db::{SchemaBatch, DB};
 
+#[cfg(feature = "std")]
 use crate::rocks_db_config::gen_rocksdb_options;
+#[cfg(feature = "std")]
 use crate::schema::tables::{
     BatchByHash, BatchByNumber, EventByKey, EventByNumber, SlotByHash, SlotByNumber, TxByHash,
     TxByNumber, LEDGER_TABLES,
 };
+#[cfg(feature = "std")]
 use crate::schema::types::{
-    split_tx_for_storage, BatchNumber, EventNumber, SlotNumber, StoredBatch, StoredSlot,
-    StoredTransaction, TxNumber,
+    BatchNumber, EventNumber, SlotNumber, StoredBatch, StoredSlot, StoredTransaction, TxNumber,
 };
 
+#[cfg(feature = "std")]
 mod rpc;
 
+#[cfg(feature = "std")]
 const LEDGER_DB_PATH_SUFFIX: &str = "ledger";
 
 #[derive(Clone, Debug)]
 /// A database which stores the ledger history (slots, transactions, events, etc).
 /// Ledger data is first ingested into an in-memory map before being fed to the state-transition function.
 /// Once the state-transition function has been executed and finalized, the results are committed to the final db
+#[cfg(feature = "std")]
 pub struct LedgerDB {
     /// The database which stores the committed ledger. Uses an optimized layout which
     /// requires transactions to be executed before being committed.
@@ -85,6 +98,7 @@ impl<S: SlotData, B, T> SlotCommit<S, B, T> {
     }
 }
 
+#[cfg(feature = "std")]
 impl LedgerDB {
     /// Open a [`LedgerDB`] (backed by RocksDB) at the specified path.
     /// The returned instance will be at the path `{path}/ledger-db`.
@@ -204,7 +218,7 @@ impl LedgerDB {
 
     fn put_event(
         &self,
-        event: &Event,
+        event: &sov_rollup_interface::stf::Event,
         event_number: &EventNumber,
         tx_number: TxNumber,
         schema_batch: &mut SchemaBatch,
@@ -241,8 +255,10 @@ impl LedgerDB {
             let last_tx_number = first_tx_number + batch_receipt.tx_receipts.len() as u64;
             // Insert transactions and events from each batch before inserting the batch
             for tx in batch_receipt.tx_receipts.into_iter() {
-                let (tx_to_store, events) =
-                    split_tx_for_storage(tx, current_item_numbers.event_number);
+                let (tx_to_store, events) = crate::schema::types::split_tx_for_storage(
+                    tx,
+                    current_item_numbers.event_number,
+                );
                 for event in events.into_iter() {
                     self.put_event(
                         &event,
@@ -326,7 +342,7 @@ impl LedgerDB {
     }
 }
 
-#[cfg(feature = "arbitrary")]
+#[cfg(all(feature = "arbitrary", feature = "std"))]
 pub mod arbitrary {
     //! Arbitrary definitions for the [`LedgerDB`].
 

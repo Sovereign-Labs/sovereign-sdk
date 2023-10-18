@@ -15,33 +15,53 @@ resolver = "2"
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
 borsh = { workspace = true }
-bcs = { workspace = true }
+bcs = { workspace = true, optional = true }
+hex = { workspace = true }
+jmt = { workspace = true }
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
+risc0-zkvm = { workspace = true, optional = true }
+risc0-zkvm-platform = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
-sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
-sov-db = { path = "../../full-node/db/sov-db", version = "0.2", optional = true }
-sov-first-read-last-write-cache = { path = "../utils/sov-first-read-last-write-cache", version = "0.2" }
-jmt = { workspace = true }
-hex = { workspace = true }
 sha2 = { workspace = true }
+thiserror = { workspace = true, optional = true }
 
-sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", version = "0.2", optional = true }
-risc0-zkvm = { workspace = true, default-features = false, features = ["std"], optional = true }
-risc0-zkvm-platform = { workspace = true, optional = true }
+sov-db = { path = "../../full-node/db/sov-db", default-features = false, optional = true }
+sov-first-read-last-write-cache = { path = "../utils/sov-first-read-last-write-cache", default-features = false }
+sov-rollup-interface = { path = "../../rollup-interface", default-features = false }
+sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", optional = true }
+
 
 [dev-dependencies]
 tempfile = { workspace = true }
 proptest = { workspace = true }
 
 [features]
+default = ["std"]
 arbitrary = [
     "dep:arbitrary",
     "dep:proptest",
     "dep:proptest-derive"
 ]
-bench = ["sov-zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
-default = []
+bench = [
+    "sov-zk-cycle-macros",
+    "risc0-zkvm",
+    "risc0-zkvm-platform"
+]
 native = ["sov-db"]
+std = [
+    "anyhow/default",
+    "bcs",
+    "borsh/default",
+    "hex/default",
+    "jmt/default",
+    "risc0-zkvm?/std",
+    "serde/default",
+    "serde_json/default",
+    "sha2/default",
+    "sov-db/default",
+    "sov-first-read-last-write-cache/default",
+    "sov-rollup-interface/default",
+    "thiserror"
+]

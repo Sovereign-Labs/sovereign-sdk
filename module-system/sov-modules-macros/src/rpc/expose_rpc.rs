@@ -52,15 +52,15 @@ impl ExposeRpcMacro {
                 // whether the return type is. The alternative would be to
                 // `unsafe impl Send/Sync` for `RpcStorage`, but this seems
                 // better (and safer).
-                _phantom: ::std::marker::PhantomData<fn() -> #input_ident #ty_generics >,
+                _phantom: ::core::marker::PhantomData<fn() -> #input_ident #ty_generics >,
             }
 
             // Manually implementing clone, as in reality only cloning storage
-            impl #impl_generics ::std::clone::Clone for RpcStorage #ty_generics #where_clause {
+            impl #impl_generics ::core::clone::Clone for RpcStorage #ty_generics #where_clause {
                 fn clone(&self) -> Self {
                     Self {
                         storage: self.storage.clone(),
-                        _phantom: ::std::marker::PhantomData,
+                        _phantom: ::core::marker::PhantomData,
                     }
                  }
             }
@@ -120,7 +120,7 @@ impl ExposeRpcMacro {
                 let mut module = ::jsonrpsee::RpcModule::new(());
                 let r = RpcStorage:: #ty_generics  {
                     storage: storage.clone(),
-                    _phantom: ::std::marker::PhantomData
+                    _phantom: ::core::marker::PhantomData
                 };
 
                 #merge_operations

@@ -13,7 +13,13 @@ resolver = "2"
 
 
 [dependencies]
-thiserror = { workspace = true }
+thiserror = { workspace = true, optional = true }
+
+sov-rollup-interface = { path = "../../../rollup-interface", default-features = false }
 
 [dev-dependencies]
 proptest = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["sov-rollup-interface/default", "thiserror"]

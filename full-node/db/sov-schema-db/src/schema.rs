@@ -5,7 +5,7 @@
 
 //! A type-safe interface over [`DB`](crate::DB) column families.
 
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 use crate::CodecError;
 

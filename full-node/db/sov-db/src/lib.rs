@@ -6,6 +6,7 @@
 //! - The default db configuration is generated in the [`rocks_db_config`] module
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 /// Implements a wrapper around RocksDB meant for storing rollup history ("the ledger").
 /// This wrapper implements helper traits for writing blocks to the ledger, and for
@@ -17,9 +18,11 @@ pub mod rocks_db_config;
 pub mod schema;
 /// Implements a wrapper around RocksDB meant for storing rollup state. This is primarily used
 /// as the backing store for the JMT.
+#[cfg(feature = "std")]
 pub mod state_db;
 
 /// Implements a wrapper around RocksDB meant for storing state only accessible
 /// outside of the zkVM execution environment, as this data is not included in
 /// the JMT and does not contribute to proofs of execution.
+#[cfg(feature = "std")]
 pub mod native_db;

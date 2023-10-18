@@ -23,7 +23,7 @@ impl<'a> StructDef<'a> {
             quote::quote! {
             impl #impl_generics sov_modules_api::EncodeCall<#ty> for #original_ident #ty_generics #where_clause {
                 #[doc = #call_doc]
-                fn encode_call(data: <#ty as sov_modules_api::Module>::CallMessage) -> std::vec::Vec<u8> {
+                fn encode_call(data: <#ty as sov_modules_api::Module>::CallMessage) -> ::sov_rollup_interface::maybestd::vec::Vec<u8> {
                     let call = #call_enum:: #ty_generics ::#variant(data);
                     ::borsh::BorshSerialize::try_to_vec(&call).unwrap()
                 }

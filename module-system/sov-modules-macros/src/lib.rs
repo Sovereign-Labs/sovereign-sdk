@@ -219,7 +219,7 @@ pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
 /// ## Example
 /// ```
 ///use sov_modules_macros::address_type;
-///use std::fmt;
+///use core::fmt;
 ///use sov_modules_api::Context;
 ///#[address_type]
 ///pub struct UserAddress;
@@ -228,7 +228,7 @@ pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
 /// This is exactly equivalent to hand-writing
 ///
 /// ```
-/// use std::fmt;
+/// use core::fmt;
 /// use sov_modules_api::Context;
 ///#[cfg(feature = "native")]
 ///#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]

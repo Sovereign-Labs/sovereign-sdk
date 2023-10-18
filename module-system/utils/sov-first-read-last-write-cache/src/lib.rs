@@ -1,34 +1,35 @@
-use thiserror::Error;
-
 pub mod cache;
 
 mod access;
 mod utils;
 
-use std::fmt::Display;
-use std::sync::Arc;
+use core::fmt::Display;
+
+use sov_rollup_interface::maybestd::sync::Arc;
 
 pub use access::MergeError;
 
-#[derive(Error, Debug, Eq, PartialEq, Clone, Hash, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub struct CacheKey {
     pub key: Arc<Vec<u8>>,
 }
 
 impl Display for CacheKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         // TODO revisit how we display keys
         write!(f, "{:?}", self.key)
     }
 }
 
-#[derive(Error, Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub struct CacheValue {
     pub value: Arc<Vec<u8>>,
 }
 
 impl Display for CacheValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         // TODO revisit how we display values
         write!(f, "{:?}", self.value)
     }

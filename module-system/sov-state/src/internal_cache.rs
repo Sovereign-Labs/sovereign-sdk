@@ -1,5 +1,6 @@
 use sov_first_read_last_write_cache::cache::{self, CacheLog, ValueExists};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
+use sov_rollup_interface::maybestd::vec::Vec;
 
 use crate::storage::{Storage, StorageKey, StorageValue};
 

@@ -1,11 +1,12 @@
-use std::fmt::Display;
-use std::sync::Arc;
+use core::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use hex;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
+use sov_rollup_interface::maybestd::sync::Arc;
+use sov_rollup_interface::maybestd::vec::Vec;
 
 use crate::codec::{EncodeKeyLike, StateValueCodec};
 use crate::internal_cache::OrderedReadsAndWrites;
@@ -52,7 +53,7 @@ impl AsRef<Vec<u8>> for StorageKey {
 }
 
 impl Display for StorageKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{:x?}", hex::encode(self.key().as_ref()))
     }
 }

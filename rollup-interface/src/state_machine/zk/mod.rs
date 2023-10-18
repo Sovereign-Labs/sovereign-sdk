@@ -14,6 +14,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::da::DaSpec;
+use crate::maybestd::io;
 use crate::RollupAddress;
 
 /// A trait implemented by the prover ("host") of a zkVM program.
@@ -48,7 +49,7 @@ pub trait Zkvm {
         + DeserializeOwned;
 
     /// The error type which is returned when a proof fails to verify
-    type Error: Debug + From<std::io::Error>;
+    type Error: Debug + From<io::Error>;
 
     /// Interpret a sequence of a bytes as a proof and attempt to verify it against the code commitment.
     /// If the proof is valid, return a reference to the public outputs of the proof.

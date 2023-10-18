@@ -58,8 +58,8 @@ impl<'a> StructDef<'a> {
                 type Context = #generic_param;
                 type Decodable = #call_enum #ty_generics;
 
-                fn decode_call(serialized_message: &[u8]) -> ::core::result::Result<Self::Decodable, std::io::Error> {
-                    let mut data = ::std::io::Cursor::new(serialized_message);
+                fn decode_call(serialized_message: &[u8]) -> ::core::result::Result<Self::Decodable, ::sov_rollup_interface::maybestd::io::Error> {
+                    let mut data = ::sov_rollup_interface::maybestd::io::Cursor::new(serialized_message);
                     <#call_enum #ty_generics as ::borsh::BorshDeserialize>::deserialize_reader(&mut data)
                 }
 

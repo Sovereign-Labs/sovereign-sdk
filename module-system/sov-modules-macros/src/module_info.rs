@@ -97,7 +97,7 @@ fn impl_module_info(struct_def: &StructDef) -> Result<proc_macro2::TokenStream, 
     let fn_prefix = make_module_prefix_fn(ident);
 
     Ok(quote::quote! {
-        impl #impl_generics ::std::default::Default for #ident #type_generics #where_clause{
+        impl #impl_generics ::core::default::Default for #ident #type_generics #where_clause{
             fn default() -> Self {
                 #(#impl_self_init)*
 
@@ -165,8 +165,8 @@ fn make_fn_dependencies(modules: Vec<&proc_macro2::Ident>) -> proc_macro2::Token
     });
 
     quote::quote! {
-        fn dependencies(&self) -> ::std::vec::Vec<&<Self::Context as sov_modules_api::Spec>::Address> {
-            ::std::vec![#(#address_tokens),*]
+        fn dependencies(&self) -> ::sov_rollup_interface::maybestd::vec::Vec<&<Self::Context as sov_modules_api::Spec>::Address> {
+            ::sov_rollup_interface::maybestd::vec![#(#address_tokens),*]
         }
     }
 }
@@ -213,7 +213,7 @@ fn make_init_module(field: &ModuleField) -> Result<proc_macro2::TokenStream, syn
     let ty = &field.ty;
 
     Ok(quote::quote! {
-        let #field_ident = <#ty as ::std::default::Default>::default();
+        let #field_ident = <#ty as ::core::default::Default>::default();
     })
 }
 

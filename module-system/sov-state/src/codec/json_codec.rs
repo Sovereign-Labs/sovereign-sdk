@@ -1,4 +1,5 @@
 use serde_json;
+use sov_rollup_interface::maybestd::vec::Vec;
 
 use super::{StateCodec, StateKeyCodec};
 use crate::codec::StateValueCodec;

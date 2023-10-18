@@ -1,11 +1,10 @@
-use std::io::Write;
-
 use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::zk::{Matches, Zkvm};
+use crate::maybestd::io;
+use crate::maybestd::vec::Vec;
+use crate::zk::Matches;
 
 /// A mock commitment to a particular zkVM program.
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
@@ -30,7 +29,7 @@ pub struct MockProof<'a> {
 
 impl<'a> MockProof<'a> {
     /// Serializes a proof into a writer.
-    pub fn encode(&self, mut writer: impl Write) {
+    pub fn encode(&self, mut writer: impl io::Write) {
         writer.write_all(&self.program_id.0).unwrap();
         let is_valid_byte = if self.is_valid { 1 } else { 0 };
         writer.write_all(&[is_valid_byte]).unwrap();
@@ -61,7 +60,8 @@ impl<'a> MockProof<'a> {
 /// A mock implementing the zkVM trait.
 pub struct MockZkvm;
 
-impl Zkvm for MockZkvm {
+#[cfg(feature = "std")]
+impl crate::zk::Zkvm for MockZkvm {
     type CodeCommitment = MockCodeCommitment;
 
     type Error = anyhow::Error;
@@ -82,7 +82,7 @@ impl Zkvm for MockZkvm {
     fn verify_and_extract_output<
         Add: crate::RollupAddress,
         Da: crate::da::DaSpec,
-        Root: Serialize + DeserializeOwned,
+        Root: Serialize + serde::de::DeserializeOwned,
     >(
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,

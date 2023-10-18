@@ -1,7 +1,8 @@
-use std::str::FromStr;
+use core::str::FromStr;
 
 use bech32::{Error, FromBase32, ToBase32};
-use derive_more::{Display, Into};
+use sov_rollup_interface::maybestd::string::{String, ToString};
+use sov_rollup_interface::maybestd::vec::Vec;
 
 use crate::Address;
 
@@ -28,17 +29,26 @@ const HRP: &str = "sov";
     PartialEq,
     Clone,
     Eq,
-    Into,
-    Display,
 )]
 #[cfg_attr(
     feature = "arbitrary",
     derive(arbitrary::Arbitrary, proptest_derive::Arbitrary)
 )]
-#[serde(try_from = "String", into = "String")]
-#[display(fmt = "{}", "value")]
+#[cfg_attr(
+    feature = "std",
+    serde(try_from = "String", into = "String"),
+    derive(derive_more::Display, derive_more::Into),
+    display(fmt = "{}", "value")
+)]
 pub struct AddressBech32 {
     value: String,
+}
+
+#[cfg(not(feature = "std"))]
+impl core::fmt::Display for AddressBech32 {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        <AddressBech32 as core::fmt::Debug>::fmt(self, f)
+    }
 }
 
 impl AddressBech32 {
@@ -82,12 +92,34 @@ impl From<Address> for AddressBech32 {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum Bech32ParseError {
-    #[error("Bech32 error: {0}")]
-    Bech32(#[from] bech32::Error),
-    #[error("Wrong HRP: {0}")]
+    #[cfg_attr(feature = "std", error("Bech32 error: {0}"))]
+    Bech32(#[cfg_attr(feature = "std", from)] bech32::Error),
+    #[cfg_attr(feature = "std", error("Wrong HRP: {0}"))]
     WrongHPR(String),
+}
+
+#[cfg(not(feature = "std"))]
+impl From<bech32::Error> for Bech32ParseError {
+    fn from(e: bech32::Error) -> Self {
+        Bech32ParseError::Bech32(e)
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl core::fmt::Display for Bech32ParseError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        <Bech32ParseError as core::fmt::Debug>::fmt(self, f)
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl From<Bech32ParseError> for anyhow::Error {
+    fn from(e: Bech32ParseError) -> Self {
+        anyhow::Error::msg(e)
+    }
 }
 
 impl TryFrom<String> for AddressBech32 {

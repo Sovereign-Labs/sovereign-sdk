@@ -8,7 +8,7 @@ use sov_modules_api::{
 use sov_state::ZkStorage;
 
 pub trait Message: 'static {
-    type Caller: std::fmt::Display;
+    type Caller: core::fmt::Display;
     type Data: Data;
 }
 pub trait TestSpec: 'static {
@@ -19,7 +19,7 @@ pub trait Data:
     Clone
     + Eq
     + PartialEq
-    + std::fmt::Debug
+    + core::fmt::Debug
     + serde::Serialize
     + serde::de::DeserializeOwned
     + borsh::BorshSerialize

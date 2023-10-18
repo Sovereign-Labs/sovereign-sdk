@@ -1,9 +1,10 @@
-use std::sync::atomic::AtomicUsize;
-use std::sync::Mutex;
+use sov_rollup_interface::maybestd::sync::atomic::AtomicUsize;
+use sov_rollup_interface::maybestd::sync::Mutex;
+use sov_rollup_interface::maybestd::vec::Vec;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 /// A witness is a value produced during native execution that is then used by
 /// the zkVM circuit to produce proofs.
@@ -45,23 +46,28 @@ pub trait Witness: Default + Serialize + DeserializeOwned {
 /// assert_eq!(witness.get_hint::<u64>(), 1u64);
 /// assert_eq!(witness.get_hint::<u64>(), 2u64);
 /// ```
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug)]
+#[cfg_attr(feature = "std", derive(Serialize, serde::Deserialize))]
+#[cfg_attr(not(feature = "std"), allow(dead_code))]
 pub struct ArrayWitness {
     next_idx: AtomicUsize,
     hints: Mutex<Vec<Vec<u8>>>,
 }
 
+#[cfg(feature = "std")]
 impl Witness for ArrayWitness {
     fn add_hint<T: BorshSerialize>(&self, hint: T) {
         self.hints.lock().unwrap().push(hint.try_to_vec().unwrap())
     }
 
     fn get_hint<T: BorshDeserialize>(&self) -> T {
+        use sov_rollup_interface::maybestd::io;
+
         let idx = self
             .next_idx
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let hints_lock = self.hints.lock().unwrap();
-        T::deserialize_reader(&mut std::io::Cursor::new(&hints_lock[idx]))
+        T::deserialize_reader(&mut io::Cursor::new(&hints_lock[idx]))
             .expect("Hint deserialization should never fail")
     }
 

@@ -39,7 +39,7 @@ mod second_test_module {
 fn main() {
     type C = ZkDefaultContext;
     let second_test_struct =
-        <second_test_module::SecondTestStruct<C> as std::default::Default>::default();
+        <second_test_module::SecondTestStruct<C> as core::default::Default>::default();
 
     let prefix2 = second_test_struct.state_in_second_struct_1.prefix();
     assert_eq!(

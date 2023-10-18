@@ -180,7 +180,7 @@ impl CliParserMacro {
                 #( #module_json_parser_arms, )*
                 #[clap(skip)]
                 #[doc(hidden)]
-                ____phantom(::std::marker::PhantomData<#ident #ty_generics>)
+                ____phantom(::core::marker::PhantomData<#ident #ty_generics>)
             }
 
             impl #impl_generics_with_inner ::sov_modules_api::cli::CliFrontEnd<#ident #ty_generics> for RuntimeSubcommand #ty_generics_with_inner #where_clause_with_deserialize_bounds, __Inner: ::clap::Args {
@@ -193,7 +193,7 @@ impl CliParserMacro {
             pub enum RuntimeMessage #impl_generics_with_inner #where_clause {
                 #( #module_message_arms, )*
                 #[doc(hidden)]
-                ____phantom(::std::marker::PhantomData<#ident #ty_generics>)
+                ____phantom(::core::marker::PhantomData<#ident #ty_generics>)
             }
 
             use ::sov_modules_api::cli::JsonStringArg as __JsonStringArg;

@@ -1,10 +1,11 @@
 //! Storage and state management interfaces for Sovereign SDK modules.
 
 #![deny(missing_docs)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 pub mod codec;
 
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "std"))]
 mod prover_storage;
 
 mod internal_cache;
@@ -16,18 +17,20 @@ mod witness;
 mod zk_storage;
 
 pub use internal_cache::{OrderedReadsAndWrites, StorageInternalCache};
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "std"))]
 pub use prover_storage::ProverStorage;
 pub use storage::Storage;
 pub use zk_storage::ZkStorage;
 
+#[cfg(feature = "std")]
 pub mod config;
 
-use std::fmt::Display;
-use std::str;
+use core::fmt::Display;
+use core::str;
 
 pub use sov_first_read_last_write_cache::cache::CacheLog;
 use sov_rollup_interface::digest::Digest;
+use sov_rollup_interface::maybestd::vec::Vec;
 pub use utils::AlignedVec;
 
 pub use crate::witness::{ArrayWitness, Witness};
@@ -56,7 +59,7 @@ pub struct Prefix {
 }
 
 impl Display for Prefix {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let buf = self.prefix.as_ref();
         match str::from_utf8(buf) {
             Ok(s) => {
@@ -118,16 +121,15 @@ pub trait MerkleProofSpec {
     type Hasher: Digest<OutputSize = sha2::digest::typenum::U32>;
 }
 
-use sha2::Sha256;
-
 /// The default [`MerkleProofSpec`] implementation.
 ///
 /// This type is typically found as a type parameter for [`ProverStorage`].
 #[derive(Clone)]
 pub struct DefaultStorageSpec;
 
+#[cfg(feature = "std")]
 impl MerkleProofSpec for DefaultStorageSpec {
     type Witness = ArrayWitness;
 
-    type Hasher = Sha256;
+    type Hasher = sha2::Sha256;
 }

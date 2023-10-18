@@ -23,10 +23,10 @@ pub trait BasicAddress:
     + Send
     + Sync
     + Clone
-    + std::hash::Hash
+    + core::hash::Hash
     + AsRef<[u8]>
     + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
-    + std::str::FromStr
+    + core::str::FromStr
     + Serialize
     + DeserializeOwned
     + 'static

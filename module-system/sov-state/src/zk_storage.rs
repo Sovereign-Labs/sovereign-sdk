@@ -1,7 +1,8 @@
-use std::marker::PhantomData;
-use std::sync::Arc;
+use core::marker::PhantomData;
 
 use jmt::KeyHash;
+use sov_rollup_interface::maybestd::sync::Arc;
+use sov_rollup_interface::maybestd::vec::Vec;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use sov_zk_cycle_macros::cycle_tracker;
 

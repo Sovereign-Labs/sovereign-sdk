@@ -1,6 +1,8 @@
 #![doc = include_str!("../README.md")]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 mod bech32;
+/*
 pub mod capabilities;
 #[cfg(feature = "native")]
 pub mod cli;
@@ -33,12 +35,13 @@ pub use pub_key_hex::PublicKeyHex;
 pub use state::*;
 #[cfg(feature = "macros")]
 extern crate sov_modules_macros;
+*/
 
 use core::fmt::{self, Debug, Display};
-use std::collections::{HashMap, HashSet};
-use std::hash::Hash;
-use std::str::FromStr;
+use core::hash::Hash;
+use core::str::FromStr;
 
+/*
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use clap;
@@ -51,18 +54,25 @@ pub use error::Error;
 pub use gas::{GasUnit, TupleGasUnit};
 pub use prefix::Prefix;
 pub use response::CallResponse;
+*/
 #[cfg(feature = "native")]
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+/*
+use sov_rollup_interface::maybestd::collections::{HashMap, HashSet};
+*/
+use sov_rollup_interface::maybestd::string::String;
+use sov_rollup_interface::maybestd::vec::Vec;
+/*
 pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 pub use sov_rollup_interface::services::da::SlotData;
 pub use sov_rollup_interface::stf::Event;
 pub use sov_rollup_interface::zk::{
     StateTransition, ValidityCondition, ValidityConditionChecker, Zkvm,
 };
+*/
 pub use sov_rollup_interface::{digest, BasicAddress, RollupAddress};
 use sov_state::{Storage, Witness};
-use thiserror::Error;
 
 pub use crate::bech32::AddressBech32;
 
@@ -76,8 +86,10 @@ impl AsRef<[u8]> for Address {
     }
 }
 
+/*
 impl BasicAddress for Address {}
 impl RollupAddress for Address {}
+*/
 
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
@@ -142,9 +154,10 @@ impl From<AddressBech32> for Address {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum SigVerificationError {
-    #[error("Bad signature {0}")]
+    #[cfg_attr(feature = "std", error("Bad signature {0}"))]
     BadSignature(String),
 }
 
@@ -159,9 +172,13 @@ pub trait Signature:
 
 /// A type that can't be instantiated.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    all(feature = "native", feature = "schemars"),
+    derive(schemars::JsonSchema)
+)]
 pub enum NonInstantiable {}
 
+/*
 /// PublicKey used in the Module System.
 pub trait PublicKey:
     borsh::BorshDeserialize
@@ -367,7 +384,7 @@ pub trait ModuleInfo {
 struct ModuleVisitor<'a, C: Context> {
     visited: HashSet<&'a <C as Spec>::Address>,
     visited_on_this_path: Vec<&'a <C as Spec>::Address>,
-    sorted_modules: std::vec::Vec<&'a dyn ModuleInfo<Context = C>>,
+    sorted_modules: Vec<&'a dyn ModuleInfo<Context = C>>,
 }
 
 impl<'a, C: Context> ModuleVisitor<'a, C> {
@@ -490,3 +507,4 @@ pub trait CliWalletArg: From<Self::CliStringRepr> {
     /// this type implements the clap::Subcommand trait.
     type CliStringRepr;
 }
+*/

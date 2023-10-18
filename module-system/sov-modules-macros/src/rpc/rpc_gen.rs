@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use core::str::FromStr;
 
 use proc_macro2::Ident;
 use quote::{format_ident, quote};
@@ -128,7 +128,7 @@ impl RpcImplBlock {
                 quote! {
                     #( #docs )*
                     #signature {
-                        <#type_name #ty_generics as ::std::default::Default>::default().#method_name(#(#pre_working_set_args,)* &mut Self::get_working_set(self), #(#post_working_set_args),* )
+                        <#type_name #ty_generics as ::core::default::Default>::default().#method_name(#(#pre_working_set_args,)* &mut Self::get_working_set(self), #(#post_working_set_args),* )
                     }
                 }
             } else {
@@ -138,7 +138,7 @@ impl RpcImplBlock {
                     .filter(|arg| arg.to_string() != quote! { self }.to_string());
                 quote! {
                     #signature {
-                        <#type_name  #ty_generics as ::std::default::Default>::default().#method_name(#(#arg_values),*)
+                        <#type_name  #ty_generics as ::core::default::Default>::default().#method_name(#(#arg_values),*)
                     }
                 }
             };

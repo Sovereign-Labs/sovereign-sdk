@@ -14,7 +14,7 @@ pub(crate) struct StructNamedField {
 impl StructNamedField {
     #[cfg_attr(not(feature = "native"), allow(unused))]
     pub(crate) fn filter_attrs(&mut self, filter: impl FnMut(&syn::Attribute) -> bool) {
-        self.attrs = std::mem::take(&mut self.attrs)
+        self.attrs = core::mem::take(&mut self.attrs)
             .into_iter()
             .filter(filter)
             .collect();

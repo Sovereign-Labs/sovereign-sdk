@@ -8,6 +8,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::da::DaSpec;
+use crate::maybestd::vec::Vec;
 use crate::zk::{ValidityCondition, Zkvm};
 
 #[cfg(any(all(test, feature = "sha2"), feature = "fuzzing"))]

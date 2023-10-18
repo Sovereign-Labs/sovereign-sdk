@@ -1,10 +1,6 @@
-use std::iter::FusedIterator;
-use std::marker::PhantomData;
-
-use anyhow::Result;
-
+#[cfg(feature = "std")]
 use crate::metrics::{SCHEMADB_ITER_BYTES, SCHEMADB_ITER_LATENCY_SECONDS};
-use crate::schema::{KeyDecoder, Schema, ValueCodec};
+use crate::schema::Schema;
 
 /// This defines a type that can be used to seek a [`SchemaIterator`], via
 /// interfaces like [`SchemaIterator::seek`]. Mind you, not all
@@ -28,6 +24,7 @@ pub trait SeekKeyEncoder<S: Schema + ?Sized>: Sized {
     fn encode_seek_key(&self) -> crate::schema::Result<Vec<u8>>;
 }
 
+#[cfg(feature = "std")]
 pub(crate) enum ScanDirection {
     Forward,
     Backward,
@@ -35,12 +32,14 @@ pub(crate) enum ScanDirection {
 
 /// DB Iterator parameterized on [`Schema`] that seeks with [`Schema::Key`] and yields
 /// [`Schema::Key`] and [`Schema::Value`] pairs.
+#[cfg(feature = "std")]
 pub struct SchemaIterator<'a, S> {
     db_iter: rocksdb::DBRawIterator<'a>,
     direction: ScanDirection,
-    phantom: PhantomData<S>,
+    phantom: core::marker::PhantomData<S>,
 }
 
+#[cfg(feature = "std")]
 impl<'a, S> SchemaIterator<'a, S>
 where
     S: Schema,
@@ -49,7 +48,7 @@ where
         SchemaIterator {
             db_iter,
             direction,
-            phantom: PhantomData,
+            phantom: core::marker::PhantomData,
         }
     }
 
@@ -65,7 +64,7 @@ where
 
     /// Seeks to the first key whose binary representation is equal to or greater than that of the
     /// `seek_key`.
-    pub fn seek(&mut self, seek_key: &impl SeekKeyEncoder<S>) -> Result<()> {
+    pub fn seek(&mut self, seek_key: &impl SeekKeyEncoder<S>) -> anyhow::Result<()> {
         let key = seek_key.encode_seek_key()?;
         self.db_iter.seek(&key);
         Ok(())
@@ -75,13 +74,14 @@ where
     /// `seek_key`.
     ///
     /// See example in [`RocksDB doc`](https://github.com/facebook/rocksdb/wiki/SeekForPrev).
-    pub fn seek_for_prev(&mut self, seek_key: &impl SeekKeyEncoder<S>) -> Result<()> {
+    pub fn seek_for_prev(&mut self, seek_key: &impl SeekKeyEncoder<S>) -> anyhow::Result<()> {
         let key = seek_key.encode_seek_key()?;
         self.db_iter.seek_for_prev(&key);
         Ok(())
     }
 
-    fn next_impl(&mut self) -> Result<Option<(S::Key, S::Value)>> {
+    fn next_impl(&mut self) -> anyhow::Result<Option<(S::Key, S::Value)>> {
+        #[cfg(feature = "std")]
         let _timer = SCHEMADB_ITER_LATENCY_SECONDS
             .with_label_values(&[S::COLUMN_FAMILY_NAME])
             .start_timer();
@@ -93,12 +93,14 @@ where
 
         let raw_key = self.db_iter.key().expect("db_iter.key() failed.");
         let raw_value = self.db_iter.value().expect("db_iter.value() failed.");
+
+        #[cfg(feature = "std")]
         SCHEMADB_ITER_BYTES
             .with_label_values(&[S::COLUMN_FAMILY_NAME])
             .observe((raw_key.len() + raw_value.len()) as f64);
 
-        let key = <S::Key as KeyDecoder<S>>::decode_key(raw_key)?;
-        let value = <S::Value as ValueCodec<S>>::decode_value(raw_value)?;
+        let key = <S::Key as crate::schema::KeyDecoder<S>>::decode_key(raw_key)?;
+        let value = <S::Value as crate::schema::ValueCodec<S>>::decode_value(raw_value)?;
 
         match self.direction {
             ScanDirection::Forward => self.db_iter.next(),
@@ -109,15 +111,17 @@ where
     }
 }
 
+#[cfg(feature = "std")]
 impl<'a, S> Iterator for SchemaIterator<'a, S>
 where
     S: Schema,
 {
-    type Item = Result<(S::Key, S::Value)>;
+    type Item = anyhow::Result<(S::Key, S::Value)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.next_impl().transpose()
     }
 }
 
-impl<'a, S> FusedIterator for SchemaIterator<'a, S> where S: Schema {}
+#[cfg(feature = "std")]
+impl<'a, S> core::iter::FusedIterator for SchemaIterator<'a, S> where S: Schema {}
