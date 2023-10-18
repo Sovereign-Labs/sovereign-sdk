@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use axum::body::Body;
 use axum::extract::{OriginalUri, Query, State};
-use axum::http::{HeaderName, Request, StatusCode};
+use axum::http::{HeaderName, Request, StatusCode, Uri};
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
@@ -22,8 +22,8 @@ use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::error_span;
 
 use self::api_utils::{
-    gateway_timeout_response_504, not_found_404, Links, ResourceObject, ResponseObject,
-    ResponseObjectData,
+    gateway_timeout_response_504, not_found_404, pagination_links, Links, ResourceObject,
+    ResponseObject, ResponseObjectData,
 };
 use self::extractors::PathWithErrorHandling;
 use crate::utils::HexString;
@@ -170,11 +170,7 @@ async fn get_events(
         Err(err) => return gateway_timeout_response_504(err),
     };
 
-    let full_url = format!("{}{}", state.base_url, uri);
-    let mut links = Links::new(state.base_url.clone());
-    links.add("self", uri.to_string());
-    links.add_pagination_links(&params.pagination.links(&full_url, "FIXME"));
-
+    let links = pagination_links(&state, &uri, &params.pagination, "FIXME");
     let response_obj = ResponseObject {
         data: Some(ResponseObjectData::Many(
             events
@@ -187,7 +183,7 @@ async fn get_events(
                 .collect(),
         )),
         errors: vec![],
-        links: links.links(),
+        links,
     };
     (StatusCode::OK, Json(response_obj))
 }
@@ -204,11 +200,7 @@ async fn get_blocks(
         }
     };
 
-    let full_url = format!("{}{}", state.base_url, uri);
-    let mut links = Links::new(state.base_url.clone());
-    links.add("self", uri.to_string());
-    links.add_pagination_links(&params.pagination.links(&full_url, "FIXME"));
-
+    let links = pagination_links(&state, &uri, &params.pagination, "FIXME");
     let response_obj = ResponseObject {
         data: Some(ResponseObjectData::Many(
             blocks
@@ -221,7 +213,7 @@ async fn get_blocks(
                 .collect(),
         )),
         errors: vec![],
-        links: links.links(),
+        links,
     };
     (StatusCode::OK, Json(response_obj))
 }
@@ -238,11 +230,7 @@ async fn get_transactions(
         }
     };
 
-    let full_url = format!("{}{}", state.base_url, uri);
-    let mut links = Links::new(state.base_url.clone());
-    links.add("self", uri.to_string());
-    links.add_pagination_links(&params.pagination.links(&full_url, "FIXME"));
-
+    let links = pagination_links(&state, &uri, &params.pagination, "FIXME");
     let response_obj = ResponseObject {
         data: Some(ResponseObjectData::Many(
             txs.into_iter()
@@ -254,7 +242,7 @@ async fn get_transactions(
                 .collect(),
         )),
         errors: vec![],
-        links: links.links(),
+        links,
     };
     (StatusCode::OK, Json(response_obj))
 }
@@ -319,11 +307,7 @@ async fn get_batches(
         Err(err) => return gateway_timeout_response_504(err),
     };
 
-    let full_url = format!("{}{}", state.base_url, uri);
-    let mut links = Links::new(state.base_url.clone());
-    links.add("self", uri.to_string());
-    links.add_pagination_links(&params.pagination.links(&full_url, "FIXME"));
-
+    let links = pagination_links(&state, &uri, &params.pagination, "FIXME");
     let response_obj = ResponseObject {
         data: Some(ResponseObjectData::Many(
             batches
@@ -336,7 +320,7 @@ async fn get_batches(
                 .collect(),
         )),
         errors: vec![],
-        links: links.links(),
+        links,
     };
     (StatusCode::OK, Json(response_obj))
 }
@@ -346,7 +330,8 @@ async fn get_batches(
 mod api_utils {
     use std::collections::HashMap;
 
-    use axum::http::StatusCode;
+    use super::*;
+
     use axum::Json;
     use tracing::error;
 
@@ -423,6 +408,19 @@ mod api_utils {
                 links: HashMap::new(),
             }),
         )
+    }
+
+    pub fn pagination_links(
+        state: &AppState,
+        uri: &Uri,
+        pagination: &Pagination<i64>,
+        new_cursor_value: &str,
+    ) -> HashMap<String, String> {
+        let full_url = format!("{}{}", state.base_url, uri);
+        let mut links = Links::new(state.base_url.clone());
+        links.add("self", uri.to_string());
+        links.add_pagination_links(&pagination.links(&full_url, new_cursor_value));
+        links.links()
     }
 
     #[derive(Debug, serde::Serialize)]
