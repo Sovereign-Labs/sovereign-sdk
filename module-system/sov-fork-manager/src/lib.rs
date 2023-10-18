@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use jmt::storage::TreeWriter;
+use jmt::storage::{LeafNode, Node, NodeKey, TreeReader, TreeWriter};
+use jmt::{KeyHash, OwnedValue, Version};
 // use std::sync::{Arc, RwLock};
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
-use sov_state::storage::{QuerySnapshotLayers, Snapshot, SnapshotId, StorageKey, StorageValue};
+use sov_state::storage::{Snapshot, SnapshotId, SnapshotLayers, StorageKey, StorageValue};
 
 #[derive(Debug)]
 pub struct ForkManager<S: Snapshot, Da: DaSpec> {
@@ -28,35 +29,62 @@ pub struct ForkManager<S: Snapshot, Da: DaSpec> {
     snapshot_id_to_block_hash: HashMap<SnapshotId, Da::SlotHash>,
 }
 
-impl<S, Da> QuerySnapshotLayers for ForkManager<S, Da>
+pub struct SnapshotParentIterator<'a, S, Da>
+where
+    S: Snapshot,
+    Da: DaSpec,
+{
+    manager: &'a ForkManager<S, Da>,
+    current_block_hash: Option<Da::SlotHash>,
+}
+
+impl<'a, S, Da> Iterator for SnapshotParentIterator<'a, S, Da>
+where
+    S: Snapshot,
+    Da: DaSpec,
+    Da::SlotHash: Hash,
+{
+    type Item = &'a S;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let current_hash = self.current_block_hash.as_ref()?;
+
+        let snapshot = self.manager.snapshots.get(current_hash)?;
+
+        self.current_block_hash = self.manager.blocks_to_parent.get(current_hash).cloned();
+
+        Some(snapshot)
+    }
+}
+
+impl<S, Da> SnapshotLayers for ForkManager<S, Da>
 where
     S: Snapshot,
     Da: DaSpec,
     Da::SlotHash: Hash,
 {
     fn fetch_value(&self, snapshot_id: &SnapshotId, key: &StorageKey) -> Option<StorageValue> {
-        let snapshot_block_hash = self.snapshot_id_to_block_hash.get(snapshot_id)?;
-        let parent_block_hash = self.blocks_to_parent.get(snapshot_block_hash)?;
-        let mut parent_snapshot = self.snapshots.get(parent_block_hash);
-        while parent_snapshot.is_some() {
-            let snapshot = parent_snapshot.unwrap();
+        for snapshot in self.parent_iterator(snapshot_id) {
             let value = snapshot.get_value(key);
             if value.is_some() {
                 return value;
             }
-            let current_block_hash = self.snapshot_id_to_block_hash.get(&snapshot.get_id())?;
-            let parent_block_hash = self.blocks_to_parent.get(current_block_hash)?;
-            parent_snapshot = self.snapshots.get(parent_block_hash);
         }
         None
     }
 
     fn fetch_accessory_value(
         &self,
-        _snapshot_id: &SnapshotId,
-        _key: &StorageKey,
+        snapshot_id: &SnapshotId,
+        key: &StorageKey,
     ) -> Option<StorageValue> {
-        todo!()
+        for snapshot in self.parent_iterator(snapshot_id) {
+            let value = snapshot.get_accessory_value(key);
+            if value.is_some() {
+                return value;
+            }
+        }
+        None
     }
 }
 
@@ -83,6 +111,14 @@ where
             && self.blocks_to_parent.is_empty()
             && self.snapshots.is_empty()
             && self.snapshot_id_to_block_hash.is_empty()
+    }
+
+    pub fn parent_iterator(&self, snapshot_id: &SnapshotId) -> SnapshotParentIterator<S, Da> {
+        let current_block_hash = self.snapshot_id_to_block_hash.get(snapshot_id).cloned();
+        SnapshotParentIterator {
+            manager: self,
+            current_block_hash,
+        }
     }
 
     pub fn get_new_ref(&mut self, block_header: &Da::BlockHeader) -> SnapshotId {

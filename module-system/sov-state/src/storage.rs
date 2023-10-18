@@ -3,6 +3,8 @@ use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use hex;
+use jmt::storage::{Node, NodeKey, TreeReader};
+use jmt::{KeyHash, OwnedValue, Version};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
@@ -277,7 +279,7 @@ pub type SnapshotId = u64;
 
 /// Snapshot of the state
 /// It can give a value that has been written/created during given state transition
-pub trait Snapshot {
+pub trait Snapshot: TreeReader {
     /// Get own value, value from its own cache
     fn get_value(&self, key: &StorageKey) -> Option<StorageValue>;
 
@@ -290,7 +292,7 @@ pub trait Snapshot {
 
 /// Trait that allows to query snapshot layers in correct order.
 /// If value is not found in any of the snapshots, [`None`] is returned.
-pub trait QuerySnapshotLayers {
+pub trait SnapshotLayers<S: Snapshot> {
     /// Fetches value from parent cache layers.
     fn fetch_value(&self, snapshot_id: &SnapshotId, key: &StorageKey) -> Option<StorageValue>;
     /// Fetches accessory value from parent cache layers.
@@ -304,7 +306,7 @@ pub trait QuerySnapshotLayers {
 /// Snapshot manager that stores nothing.
 pub struct EmptySnapshotManager;
 
-impl QuerySnapshotLayers for EmptySnapshotManager {
+impl SnapshotLayers for EmptySnapshotManager {
     fn fetch_value(&self, _snapshot_id: &SnapshotId, _key: &StorageKey) -> Option<StorageValue> {
         None
     }
