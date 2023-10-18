@@ -15,78 +15,28 @@ use sov_rollup_interface::mocks::{
 };
 use sov_rollup_interface::services::da::DaService;
 
-#[derive(Clone)]
-/// A simple DaService for a random number generator.
-pub struct RngDaService;
-
-fn generate_transfers(n: usize, start_nonce: u64) -> Vec<u8> {
-    let sender_address =
-        "sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6".to_string();
-    let token_name = "sov-test-token";
-    let sa = Address::from(
-        AddressBech32::try_from(sender_address)
-            .unwrap_or_else(|_e| panic!("Failed generating transfers")),
+pub fn sender_address_with_pkey() -> (Address, DefaultPrivateKey) {
+    // TODO: maybe generate address and private key randomly, instead of
+    // hardcoding them?
+    let addr_bytes = "sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6".to_string();
+    let addr = Address::from(
+        AddressBech32::try_from(addr_bytes)
+            .unwrap_or_else(|e| panic!("Failed generating sender address: {:?}", e)),
     );
-    let token_address = sov_bank::get_token_address::<DefaultContext>(token_name, sa.as_ref(), 11);
-    let mut message_vec = vec![];
-    for i in 1..(n + 1) {
-        let priv_key = DefaultPrivateKey::generate();
-        let address: <DefaultContext as Spec>::Address = priv_key.pub_key().to_address();
-        let pk = DefaultPrivateKey::from_hex("236e80cb222c4ed0431b093b3ac53e6aa7a2273fe1f4351cd354989a823432a27b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe6").unwrap();
-        let msg: sov_bank::CallMessage<DefaultContext> = CallMessage::<DefaultContext>::Transfer {
-            to: address,
-            coins: Coins {
-                amount: 1,
-                token_address,
-            },
-        };
-        let enc_msg =
-            <Runtime<DefaultContext, RngDaSpec> as EncodeCall<Bank<DefaultContext>>>::encode_call(
-                msg,
-            );
-        let tx =
-            Transaction::<DefaultContext>::new_signed_tx(&pk, enc_msg, start_nonce + (i as u64));
-        let ser_tx = tx.try_to_vec().unwrap();
-        message_vec.push(ser_tx)
-    }
-    message_vec.try_to_vec().unwrap()
-}
-
-fn generate_create(start_nonce: u64) -> Vec<u8> {
-    let sender_address =
-        "sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6".to_string();
-    let mut message_vec = vec![];
 
     let pk = DefaultPrivateKey::from_hex("236e80cb222c4ed0431b093b3ac53e6aa7a2273fe1f4351cd354989a823432a27b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe6").unwrap();
-    let minter_address = Address::from(
-        AddressBech32::try_from(sender_address)
-            .unwrap_or_else(|_e| panic!("Failed generating token create transaction")),
-    );
-    let msg: sov_bank::CallMessage<DefaultContext> = CallMessage::<DefaultContext>::CreateToken {
-        salt: 11,
-        token_name: "sov-test-token".to_string(),
-        initial_balance: 100000000,
-        minter_address,
-        authorized_minters: vec![minter_address],
-    };
-    let enc_msg =
-        <Runtime<DefaultContext, RngDaSpec> as EncodeCall<Bank<DefaultContext>>>::encode_call(msg);
-    let tx = Transaction::<DefaultContext>::new_signed_tx(&pk, enc_msg, start_nonce);
-    let ser_tx = tx.try_to_vec().unwrap();
-    message_vec.push(ser_tx);
-    message_vec.try_to_vec().unwrap()
+
+    (addr, pk)
 }
+
+#[derive(Clone, Default)]
+/// A simple [`DaService`] for a random number generator.
+pub struct RngDaService;
 
 impl RngDaService {
-    /// Instantiate a new [`RngDaService`]
+    /// Instantiates a new [`RngDaService`].
     pub fn new() -> Self {
         RngDaService
-    }
-}
-
-impl Default for RngDaService {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -193,5 +143,62 @@ impl DaVerifier for RngDaVerifier {
         _completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
     ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error> {
         Ok(MockValidityCond { is_valid: true })
+    }
+}
+
+pub fn generate_transfers(n: usize, start_nonce: u64) -> Vec<u8> {
+    let token_name = "sov-test-token";
+    let (sa, pk) = sender_address_with_pkey();
+    let token_address = sov_bank::get_token_address::<DefaultContext>(token_name, sa.as_ref(), 11);
+    let mut message_vec = vec![];
+    for i in 1..(n + 1) {
+        let priv_key = DefaultPrivateKey::generate();
+        let address: <DefaultContext as Spec>::Address = priv_key.pub_key().to_address();
+        let msg: sov_bank::CallMessage<DefaultContext> = CallMessage::<DefaultContext>::Transfer {
+            to: address,
+            coins: Coins {
+                amount: 1,
+                token_address,
+            },
+        };
+        let enc_msg =
+            <Runtime<DefaultContext, RngDaSpec> as EncodeCall<Bank<DefaultContext>>>::encode_call(
+                msg,
+            );
+        let tx =
+            Transaction::<DefaultContext>::new_signed_tx(&pk, enc_msg, start_nonce + (i as u64));
+        let ser_tx = tx.try_to_vec().unwrap();
+        message_vec.push(ser_tx)
+    }
+    message_vec.try_to_vec().unwrap()
+}
+
+pub fn generate_create(start_nonce: u64) -> Vec<u8> {
+    let mut message_vec = vec![];
+
+    let (minter_address, pk) = sender_address_with_pkey();
+    let msg: sov_bank::CallMessage<DefaultContext> = CallMessage::<DefaultContext>::CreateToken {
+        salt: 11,
+        token_name: "sov-test-token".to_string(),
+        initial_balance: 100000000,
+        minter_address,
+        authorized_minters: vec![minter_address],
+    };
+    let enc_msg =
+        <Runtime<DefaultContext, RngDaSpec> as EncodeCall<Bank<DefaultContext>>>::encode_call(msg);
+    let tx = Transaction::<DefaultContext>::new_signed_tx(&pk, enc_msg, start_nonce);
+    let ser_tx = tx.try_to_vec().unwrap();
+    message_vec.push(ser_tx);
+    message_vec.try_to_vec().unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sender_address_with_pkey_okay() {
+        // Checks that it doesn't crash.
+        sender_address_with_pkey();
     }
 }

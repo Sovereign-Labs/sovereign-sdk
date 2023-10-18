@@ -59,15 +59,10 @@ sov-cli = { path = "../../module-system/sov-cli" }
 clap = { workspace = true }
 
 [dev-dependencies]
-sov-rollup-interface = { path = "../../rollup-interface", features = [
-	"fuzzing",
-] }
-sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = [
-	"smart_contracts",
-] }
-sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = [
-	"native",
-] }
+sov-rng-da-service = { path = "../../utils/rng-da-service" }
+sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }
+sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["smart_contracts"] }
+sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros" }
 
 borsh = { workspace = true }
@@ -100,22 +95,9 @@ regex = "1.10"
 [features]
 default = [
 ] # Deviate from convention by making the "native" feature active by default. This aligns with how this package is meant to be used (as a binary first, library second).
-experimental = [
-	"default",
-	"sov-ethereum/experimental",
-	"reth-primitives",
-	"secp256k1",
-	"demo-stf/experimental",
-	"sov-ethereum/local",
-]
+experimental = ["default", "sov-ethereum/experimental", "reth-primitives", "secp256k1", "demo-stf/experimental", "sov-ethereum/local"]
 
-bench = [
-	"async-trait",
-	"hex",
-	"sov-risc0-adapter/bench",
-	"sov-zk-cycle-macros/bench",
-	"risc0/bench",
-]
+bench = ["async-trait", "hex", "sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "risc0/bench"]
 offchain = ["demo-stf/offchain"]
 
 [[bench]]
@@ -129,12 +111,6 @@ name = "rollup_coarse_measure"
 path = "benches/node/rollup_coarse_measure.rs"
 harness = false
 required-features = ["bench"]
-
-[[bench]]
-name = "rng_xfers"
-path = "benches/node/rng_xfers.rs"
-required-features = ["bench"]
-
 
 [[bench]]
 name = "prover_bench"

@@ -8371,7 +8371,8 @@ dependencies = [
  "borsh",
  "clap 4.4.6",
  "hex",
- "jsonrpsee 0.20.2",
+ "jmt",
+ "jsonrpsee 0.20.1",
  "schemars",
  "serde",
  "serde_json",
@@ -8536,6 +8537,7 @@ dependencies = [
  "sov-modules-stf-template",
  "sov-nft-module",
  "sov-risc0-adapter",
+ "sov-rng-da-service",
  "sov-rollup-interface",
  "sov-sequencer",
  "sov-state",
@@ -8779,6 +8781,20 @@ dependencies = [
  "serde",
  "sov-rollup-interface",
  "sov-zk-cycle-utils",
+]
+
+[[package]]
+name = "sov-rng-da-service"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "borsh",
+ "demo-stf",
+ "serde",
+ "sov-bank",
+ "sov-modules-api",
+ "sov-rollup-interface",
 ]
 
 [[package]]
