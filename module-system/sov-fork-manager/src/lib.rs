@@ -5,7 +5,7 @@ use jmt::storage::{LeafNode, Node, NodeKey, TreeReader, TreeWriter};
 use jmt::{KeyHash, OwnedValue, Version};
 // use std::sync::{Arc, RwLock};
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
-use sov_state::storage::{Snapshot, SnapshotId, SnapshotLayers, StorageKey, StorageValue};
+use sov_state::storage::{Snapshot, SnapshotId, SnapshotQuery, StorageKey, StorageValue};
 
 #[derive(Debug)]
 pub struct ForkManager<S: Snapshot, Da: DaSpec> {
@@ -57,15 +57,19 @@ where
     }
 }
 
-impl<S, Da> SnapshotLayers for ForkManager<S, Da>
+impl<S, Da> SnapshotQuery for ForkManager<S, Da>
 where
     S: Snapshot,
     Da: DaSpec,
     Da::SlotHash: Hash,
 {
-    fn fetch_value(&self, snapshot_id: &SnapshotId, key: &StorageKey) -> Option<StorageValue> {
+    fn query_storage_value(
+        &self,
+        snapshot_id: &SnapshotId,
+        key: &StorageKey,
+    ) -> Option<StorageValue> {
         for snapshot in self.parent_iterator(snapshot_id) {
-            let value = snapshot.get_value(key);
+            let value = snapshot.get_storage_value(key);
             if value.is_some() {
                 return value;
             }
@@ -73,7 +77,7 @@ where
         None
     }
 
-    fn fetch_accessory_value(
+    fn query_accessory_value(
         &self,
         snapshot_id: &SnapshotId,
         key: &StorageKey,
@@ -85,6 +89,35 @@ where
             }
         }
         None
+    }
+
+    fn query_node_option(
+        &self,
+        snapshot_id: &SnapshotId,
+        node_key: &NodeKey,
+    ) -> anyhow::Result<Option<Node>> {
+        for snapshot in self.parent_iterator(snapshot_id) {
+            let node = snapshot.get_node_option(node_key)?;
+            if node.is_some() {
+                return Ok(node);
+            }
+        }
+        Ok(None)
+    }
+
+    fn query_value_option(
+        &self,
+        snapshot_id: &SnapshotId,
+        max_version: Version,
+        key_hash: KeyHash,
+    ) -> anyhow::Result<Option<OwnedValue>> {
+        for snapshot in self.parent_iterator(snapshot_id) {
+            let value = snapshot.get_value_option(max_version, key_hash)?;
+            if value.is_some() {
+                return Ok(value);
+            }
+        }
+        Ok(None)
     }
 }
 
@@ -246,8 +279,26 @@ mod tests {
         accessory_cache: HashMap<Vec<u8>, Vec<u8>>,
     }
 
+    impl TreeReader for MockSnapshot {
+        fn get_node_option(&self, node_key: &NodeKey) -> anyhow::Result<Option<Node>> {
+            todo!()
+        }
+
+        fn get_value_option(
+            &self,
+            max_version: Version,
+            key_hash: KeyHash,
+        ) -> anyhow::Result<Option<OwnedValue>> {
+            todo!()
+        }
+
+        fn get_rightmost_leaf(&self) -> anyhow::Result<Option<(NodeKey, LeafNode)>> {
+            todo!()
+        }
+    }
+
     impl Snapshot for MockSnapshot {
-        fn get_value(&self, key: &StorageKey) -> Option<StorageValue> {
+        fn get_storage_value(&self, key: &StorageKey) -> Option<StorageValue> {
             let key = (*key.key()).clone();
             self.cache.get(&key).cloned().map(|v| StorageValue::from(v))
         }

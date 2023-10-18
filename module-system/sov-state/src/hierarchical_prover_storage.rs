@@ -7,7 +7,7 @@ use sov_db::native_db::NativeDB;
 use sov_db::state_db::StateDB;
 
 use crate::config::Config;
-use crate::storage::{SnapshotId, SnapshotLayers, StorageKey, StorageProof, StorageValue};
+use crate::storage::{SnapshotId, SnapshotQuery, StorageKey, StorageProof, StorageValue};
 use crate::{MerkleProofSpec, OrderedReadsAndWrites, Storage, Witness};
 
 /// Simple wrapper around `RwLock` that only allows read access.
@@ -36,11 +36,11 @@ impl<T> Clone for ReadOnlyLock<T> {
     }
 }
 
-/// A storage implementation that uses a [`SnapshotLayers`] before checking [`StateDB`].
+/// A storage implementation that uses a [`SnapshotQuery`] before checking [`StateDB`].
 /// Other naming variants:
 /// SnapshotCascadeProverStorage: "Cascade" implies that there's a sequence or chain of events or checks. This name gives an indication of the step-by-step checking process through different snapshot layers.
 /// LayeredProverStorage: The word "sequential" implies an ordered or step-by-step process. This could represent the fact that the storage checks layers in sequence.
-pub struct HierarchicalProverStorage<S: MerkleProofSpec, Q: SnapshotLayers> {
+pub struct HierarchicalProverStorage<S: MerkleProofSpec, Q: SnapshotQuery> {
     id: SnapshotId,
     db: StateDB,
     native_db: NativeDB,
@@ -48,7 +48,7 @@ pub struct HierarchicalProverStorage<S: MerkleProofSpec, Q: SnapshotLayers> {
     _phantom_hasher: PhantomData<S::Hasher>,
 }
 
-impl<S: MerkleProofSpec, Q: SnapshotLayers> HierarchicalProverStorage<S, Q> {
+impl<S: MerkleProofSpec, Q: SnapshotQuery> HierarchicalProverStorage<S, Q> {
     #[allow(dead_code)]
     /// TBD
     pub fn new_from_db(
@@ -78,7 +78,7 @@ impl<S: MerkleProofSpec, Q: SnapshotLayers> HierarchicalProverStorage<S, Q> {
     }
 }
 
-impl<S: MerkleProofSpec, Q: SnapshotLayers> Clone for HierarchicalProverStorage<S, Q> {
+impl<S: MerkleProofSpec, Q: SnapshotQuery> Clone for HierarchicalProverStorage<S, Q> {
     fn clone(&self) -> Self {
         Self {
             id: self.id,
@@ -123,7 +123,7 @@ impl<S: MerkleProofSpec> OwnedNodeBatch<S> {
     }
 }
 
-impl<Q: SnapshotLayers, S: MerkleProofSpec> Storage for HierarchicalProverStorage<S, Q> {
+impl<Q: SnapshotQuery, S: MerkleProofSpec> Storage for HierarchicalProverStorage<S, Q> {
     type Witness = S::Witness;
     type RuntimeConfig = Config;
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
@@ -136,7 +136,7 @@ impl<Q: SnapshotLayers, S: MerkleProofSpec> Storage for HierarchicalProverStorag
 
     fn get(&self, key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
         let parent_snapshot_manager = self.parent.read().unwrap();
-        let val = match parent_snapshot_manager.fetch_value(&self.id, key) {
+        let val = match parent_snapshot_manager.query_storage_value(&self.id, key) {
             Some(val) => Some(val),
             None => self.read_value(key),
         };
@@ -148,7 +148,7 @@ impl<Q: SnapshotLayers, S: MerkleProofSpec> Storage for HierarchicalProverStorag
     #[cfg(feature = "native")]
     fn get_accessory(&self, key: &StorageKey) -> Option<StorageValue> {
         let parent_snapshot_manager = self.parent.read().unwrap();
-        match parent_snapshot_manager.fetch_accessory_value(&self.id, key) {
+        match parent_snapshot_manager.query_accessory_value(&self.id, key) {
             Some(val) => Some(val),
             None => self
                 .native_db

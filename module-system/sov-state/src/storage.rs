@@ -281,7 +281,7 @@ pub type SnapshotId = u64;
 /// It can give a value that has been written/created during given state transition
 pub trait Snapshot: TreeReader {
     /// Get own value, value from its own cache
-    fn get_value(&self, key: &StorageKey) -> Option<StorageValue>;
+    fn get_storage_value(&self, key: &StorageKey) -> Option<StorageValue>;
 
     /// Get own accessory value, value from its own cache
     fn get_accessory_value(&self, key: &StorageKey) -> Option<StorageValue>;
@@ -292,30 +292,70 @@ pub trait Snapshot: TreeReader {
 
 /// Trait that allows to query snapshot layers in correct order.
 /// If value is not found in any of the snapshots, [`None`] is returned.
-pub trait SnapshotLayers<S: Snapshot> {
+pub trait SnapshotQuery {
     /// Fetches value from parent cache layers.
-    fn fetch_value(&self, snapshot_id: &SnapshotId, key: &StorageKey) -> Option<StorageValue>;
-    /// Fetches accessory value from parent cache layers.
-    fn fetch_accessory_value(
+    fn query_storage_value(
         &self,
         snapshot_id: &SnapshotId,
         key: &StorageKey,
     ) -> Option<StorageValue>;
+    /// Fetches accessory value from parent cache layers.
+    fn query_accessory_value(
+        &self,
+        snapshot_id: &SnapshotId,
+        key: &StorageKey,
+    ) -> Option<StorageValue>;
+
+    /// It is wrapper for [`TreeReader::get_node_option`] with provided snapshot id
+    fn query_node_option(
+        &self,
+        snapshot_id: &SnapshotId,
+        node_key: &NodeKey,
+    ) -> anyhow::Result<Option<Node>>;
+
+    /// It is wrapper for [`TreeReader::get_value_option`] with provided snapshot id
+    fn query_value_option(
+        &self,
+        snapshot_id: &SnapshotId,
+        max_version: Version,
+        key_hash: KeyHash,
+    ) -> anyhow::Result<Option<OwnedValue>>;
 }
 
 /// Snapshot manager that stores nothing.
 pub struct EmptySnapshotManager;
 
-impl SnapshotLayers for EmptySnapshotManager {
-    fn fetch_value(&self, _snapshot_id: &SnapshotId, _key: &StorageKey) -> Option<StorageValue> {
-        None
-    }
-
-    fn fetch_accessory_value(
+impl SnapshotQuery for EmptySnapshotManager {
+    fn query_storage_value(
         &self,
         _snapshot_id: &SnapshotId,
         _key: &StorageKey,
     ) -> Option<StorageValue> {
         None
+    }
+
+    fn query_accessory_value(
+        &self,
+        _snapshot_id: &SnapshotId,
+        _key: &StorageKey,
+    ) -> Option<StorageValue> {
+        None
+    }
+
+    fn query_node_option(
+        &self,
+        _snapshot_id: &SnapshotId,
+        _node_key: &NodeKey,
+    ) -> anyhow::Result<Option<Node>> {
+        Ok(None)
+    }
+
+    fn query_value_option(
+        &self,
+        _snapshot_id: &SnapshotId,
+        _max_version: Version,
+        _key_hash: KeyHash,
+    ) -> anyhow::Result<Option<OwnedValue>> {
+        Ok(None)
     }
 }
