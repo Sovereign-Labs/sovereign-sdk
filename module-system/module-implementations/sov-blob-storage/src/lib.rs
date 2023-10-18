@@ -34,7 +34,7 @@ pub struct BlobStorage<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec>
 
     /// The number of deferred blobs which the preferred sequencer has asked to have executed during the next slot.
     /// This request will be honored unless:
-    /// 1. More blobs have readched the maximum deferral period than the sequencer requests. In that case, all of those blobs will still be executed
+    /// 1. More blobs have reached the maximum deferral period than the sequencer requests. In that case, all of those blobs will still be executed
     /// 2. The sequencer requests more blobs than are in the deferred queue. In that case, all of the blobs in the deferred queue will be executed.
     #[state]
     pub(crate) deferred_blobs_requested_for_execution_next_slot: StateValue<u16>,
