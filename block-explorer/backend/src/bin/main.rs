@@ -1,26 +1,20 @@
-mod api_v0;
-mod db;
-mod indexer;
-mod metrics;
-pub mod utils;
+#[path = "../lib.rs"]
+pub mod backend;
 
-#[cfg(test)]
-mod tests;
-
+use backend::*;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
 use clap::Parser;
-use db::Db;
 use jsonrpsee::ws_client::WsClient;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_modules_stf_template::{SequencerOutcome, TxEffect};
 use sov_rollup_interface::rpc::{BatchResponse, SlotResponse, TxResponse};
 use tracing::info;
 
-use crate::indexer::index_blocks_loop;
+use backend::indexer::index_blocks_loop;
 
 type B = SequencerOutcome<CelestiaAddress>;
 type Tx = TxEffect;

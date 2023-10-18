@@ -11,10 +11,10 @@ use tracing::{debug, error, warn};
 use crate::api_v0::models::Event;
 use crate::AppState;
 
-type B = SequencerOutcome<CelestiaAddress>;
-type Tx = TxEffect;
+pub type B = SequencerOutcome<CelestiaAddress>;
+pub type Tx = TxEffect;
 
-fn get_txs_from_slot_response(
+pub fn get_txs_from_slot_response(
     slot: &SlotResponse<SequencerOutcome<CelestiaAddress>, TxEffect>,
 ) -> anyhow::Result<Vec<TxResponse<TxEffect>>> {
     Ok(slot
@@ -95,7 +95,7 @@ pub async fn index_blocks(app_state: AppState, polling_interval: Duration) -> an
     Ok(())
 }
 
-async fn index_block(app_state: AppState, block_num: u64) -> anyhow::Result<()> {
+pub async fn index_block(app_state: AppState, block_num: u64) -> anyhow::Result<()> {
     let blocks = app_state
         .rpc()
         .get_slots(vec![SlotIdentifier::Number(block_num)], QueryMode::Full)

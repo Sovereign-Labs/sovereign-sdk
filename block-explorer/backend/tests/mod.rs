@@ -20,10 +20,10 @@ use testcontainers::clients::Cli;
 use testcontainers::Container;
 use testcontainers_modules::postgres::Postgres as PostgresImage;
 
-use crate::api_v0::default_pagination_size;
-use crate::db::Db;
-use crate::indexer::index_blocks;
-use crate::AppStateInner;
+use block_explorer_backend::api_v0::{self, default_pagination_size};
+use block_explorer_backend::indexer::index_blocks;
+use block_explorer_backend::AppStateInner;
+use block_explorer_backend::Db;
 
 type PostgresContainer<'a> = Container<'a, PostgresImage>;
 
@@ -142,7 +142,7 @@ async fn create_test_server(
     index_blocks(app_state.clone(), Duration::default())
         .await
         .unwrap();
-    let service = crate::api_v0::router(app_state).into_make_service();
+    let service = api_v0::router(app_state).into_make_service();
     (
         postgres_container,
         server_handle,
