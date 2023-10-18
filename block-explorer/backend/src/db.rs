@@ -248,8 +248,12 @@ impl Db<sqlx::Transaction<'static, Postgres>> {
         Ok(())
     }
 
-    pub async fn upsert_blocks(&mut self, blocks: &[Value]) -> anyhow::Result<()> {
-        if blocks.is_empty() {
+    pub async fn upsert_blocks(
+        &mut self,
+        blocks: impl Iterator<Item = Value>,
+    ) -> anyhow::Result<()> {
+        let mut blocks = blocks.peekable();
+        if blocks.peek().is_none() {
             return Ok(());
         }
 
@@ -264,8 +268,12 @@ impl Db<sqlx::Transaction<'static, Postgres>> {
         Ok(())
     }
 
-    pub async fn upsert_transactions(&mut self, txs: &[Value]) -> anyhow::Result<()> {
-        if txs.is_empty() {
+    pub async fn upsert_transactions(
+        &mut self,
+        txs: impl Iterator<Item = Value>,
+    ) -> anyhow::Result<()> {
+        let mut txs = txs.peekable();
+        if txs.peek().is_none() {
             return Ok(());
         }
 
@@ -280,8 +288,12 @@ impl Db<sqlx::Transaction<'static, Postgres>> {
         Ok(())
     }
 
-    pub async fn upsert_events(&mut self, events: &[m::Event]) -> anyhow::Result<()> {
-        if events.is_empty() {
+    pub async fn upsert_events(
+        &mut self,
+        events: impl Iterator<Item = m::Event>,
+    ) -> anyhow::Result<()> {
+        let mut events = events.peekable();
+        if events.peek().is_none() {
             return Ok(());
         }
 
@@ -289,8 +301,8 @@ impl Db<sqlx::Transaction<'static, Postgres>> {
 
         query.push_values(events, |mut builder, event| {
             builder.push_bind(event.id);
-            builder.push_bind(&event.key);
-            builder.push_bind(&event.value);
+            builder.push_bind(event.key);
+            builder.push_bind(event.value);
         });
         query.push(" ON CONFLICT ((id)) DO UPDATE SET value = EXCLUDED.value");
 
@@ -298,8 +310,12 @@ impl Db<sqlx::Transaction<'static, Postgres>> {
         Ok(())
     }
 
-    pub async fn upsert_batches(&mut self, batches: &[Value]) -> anyhow::Result<()> {
-        if batches.is_empty() {
+    pub async fn upsert_batches(
+        &mut self,
+        batches: impl Iterator<Item = Value>,
+    ) -> anyhow::Result<()> {
+        let mut batches = batches.peekable();
+        if batches.peek().is_none() {
             return Ok(());
         }
 

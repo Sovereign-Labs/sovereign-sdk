@@ -1,3 +1,4 @@
+use std::iter;
 use std::time::Duration;
 
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
@@ -31,7 +32,7 @@ pub fn get_txs_from_slot_response(
             ItemOrHash::Hash(_) => panic!("query mode is not full"),
             ItemOrHash::Full(item) => item,
         })
-        .collect::<Vec<_>>())
+        .collect())
 }
 
 /// Indexing workflow:
@@ -89,7 +90,7 @@ pub async fn index_blocks(app_state: AppState, polling_interval: Duration) -> an
         .db
         .begin_transaction()
         .await?
-        .upsert_blocks(&[chain_head_json])
+        .upsert_blocks(iter::once(chain_head_json))
         .await?;
 
     Ok(())
@@ -121,8 +122,7 @@ pub async fn index_block(app_state: AppState, block_num: u64) -> anyhow::Result<
         .get_batches_range(batch_range.start, batch_range.end, QueryMode::Standard)
         .await?
         .into_iter()
-        .map(|batch_opt| serde_json::to_value(batch_opt.expect("No batch")).unwrap())
-        .collect::<Vec<_>>();
+        .map(|batch_opt| serde_json::to_value(batch_opt.expect("No batch")).unwrap());
 
     let mut all_events = vec![];
     for tx in txs {
@@ -141,18 +141,18 @@ pub async fn index_block(app_state: AppState, block_num: u64) -> anyhow::Result<
                 id: event_opt.1 as _,
                 key: event_opt.0.as_ref().unwrap().key().inner().clone(),
                 value: event_opt.0.as_ref().unwrap().value().inner().clone(),
-            })
-            .collect::<Vec<_>>();
+            });
+        //.collect::<Vec<_>>();
         all_events.push(events);
     }
 
     let mut db = app_state.db.begin_transaction().await?;
-    db.upsert_blocks(&[block_json]).await?;
-    db.upsert_transactions(&txs_json).await?;
+    db.upsert_blocks(iter::once(block_json)).await?;
+    db.upsert_transactions(txs_json.into_iter()).await?;
     for events in all_events {
-        db.upsert_events(&events).await?;
+        db.upsert_events(events).await?;
     }
-    db.upsert_batches(&batches).await?;
+    db.upsert_batches(batches).await?;
     db.commit().await?;
 
     Ok(())
