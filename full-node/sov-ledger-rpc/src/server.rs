@@ -71,7 +71,7 @@ where
             .map_err(|e| to_jsonrpsee_error_object(e, LEDGER_RPC_ERROR))
     })?;
     rpc.register_method("ledger_getEvents", move |params, db| {
-        let ids: Vec<EventIdentifier> = params.parse()?;
+        let ids: Vec<EventIdentifier> = params.parse().or_else(|_| params.one())?;
         db.get_events(&ids)
             .map_err(|e| to_jsonrpsee_error_object(e, LEDGER_RPC_ERROR))
     })?;
