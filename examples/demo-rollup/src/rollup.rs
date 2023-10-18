@@ -18,6 +18,8 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::experimental::EthRpcConfig;
+#[cfg(feature = "experimental")]
+use sov_ethereum::GasPriceOracleConfig;
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 #[cfg(feature = "experimental")]
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
@@ -129,6 +131,7 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost, P: AsRef<Path>>(
         #[cfg(feature = "experimental")]
         eth_signer.signers(),
     );
+
     let prover = prover.map(|(vm, config)| {
         configure_prover(
             vm,
@@ -150,6 +153,7 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost, P: AsRef<Path>>(
             min_blob_size: Some(1),
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
             eth_signer,
+            gas_price_oracle_config: GasPriceOracleConfig::default(),
         },
         prover,
     })
@@ -204,6 +208,7 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost, P: AsRef<Path>>(
             min_blob_size: Some(1),
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
             eth_signer,
+            gas_price_oracle_config: GasPriceOracleConfig::default(),
         },
         prover,
     })

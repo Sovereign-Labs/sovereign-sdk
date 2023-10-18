@@ -55,6 +55,25 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(Some(chain_id))
     }
 
+    /// Handler for `eth_getBlockByHash`
+    #[rpc_method(name = "eth_getBlockByHash")]
+    pub fn get_block_by_hash(
+        &self,
+        block_hash: reth_primitives::H256,
+        details: Option<bool>,
+        working_set: &mut WorkingSet<C>,
+    ) -> RpcResult<Option<reth_rpc_types::RichBlock>> {
+        info!("evm module: eth_getBlockByHash");
+
+        let block_number_hex = self
+            .block_hashes
+            .get(&block_hash, &mut working_set.accessory_state())
+            .map(|number| hex::encode(number.to_be_bytes()))
+            .expect("Block number for known block hash must be set");
+
+        self.get_block_by_number(Some(block_number_hex), details, working_set)
+    }
+
     /// Handler for: `eth_getBlockByNumber`
     #[rpc_method(name = "eth_getBlockByNumber")]
     pub fn get_block_by_number(
@@ -532,13 +551,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
         }
 
         Ok(U64::from(highest_gas_limit))
-    }
-
-    /// Handler for: `eth_gasPrice`
-    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
-    #[rpc_method(name = "eth_gasPrice")]
-    pub fn gas_price(&self, _working_set: &mut WorkingSet<C>) -> RpcResult<reth_primitives::U256> {
-        unimplemented!("eth_gasPrice not implemented")
     }
 
     fn get_sealed_block_by_number(
