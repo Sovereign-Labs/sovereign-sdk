@@ -123,7 +123,7 @@ where
         // - query for Key
         // - be saved to the database
 
-        // Option 2: Make NodeBatch queriable
+        // Option 2: Make NodeBatch queryable
         //      a end_slots does clone of cache_log, returns cache_log and node_batch
         //      b return NodeBatch, and it is stored inside ForkManager, and we query it using `.values()`
         // Option 3:

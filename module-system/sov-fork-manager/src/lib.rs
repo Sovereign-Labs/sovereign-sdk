@@ -141,6 +141,7 @@ where
     fn commit_snapshot(&self, snapshot: S) {
         let (node_batch, accessory_writes) = snapshot.into();
         {
+            // TODO: Populate pre-image for keys here.
             self.db
                 .write_node_batch(&node_batch)
                 .expect("db write must succeed");
