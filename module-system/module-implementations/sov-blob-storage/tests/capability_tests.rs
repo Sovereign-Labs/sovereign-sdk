@@ -156,20 +156,18 @@ fn do_deferred_blob_test(
             if next_slot_info.slot_number == slot_number {
                 let next_slot_info = test_info.next().unwrap();
                 // If applicable, assert that the expected number of blobs was processed
-                next_slot_info
-                    .expected_blobs_to_process
-                    .map(|expected| assert_eq!(expected, blobs_to_execute.len()));
+                if let Some(expected) = next_slot_info.expected_blobs_to_process {
+                    assert_eq!(expected, blobs_to_execute.len())
+                }
 
                 // If applicable, send the requested callmessage to the blob_storage module
-                next_slot_info
-                    .early_processing_request_with_sender
-                    .map(|(msg, sender)| {
-                        runtime
-                            .blob_storage
-                            .call(msg, &DefaultContext::new(sender), &mut working_set)
-                            .unwrap();
-                        has_processed_blobs_early = true;
-                    });
+                if let Some((msg, sender)) = next_slot_info.early_processing_request_with_sender {
+                    runtime
+                        .blob_storage
+                        .call(msg, &DefaultContext::new(sender), &mut working_set)
+                        .unwrap();
+                    has_processed_blobs_early = true;
+                }
             }
         }
 
@@ -179,6 +177,7 @@ fn do_deferred_blob_test(
             if !has_processed_blobs_early {
                 assert_eq!(expected.must_be_processed_by(), slot_number);
             }
+            assert_blobs_are_equal(expected.blob, blob, &format!("Slot {}", slot_number));
         }
     }
     // Ensure that all blobs have been processed

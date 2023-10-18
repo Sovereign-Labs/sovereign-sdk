@@ -132,7 +132,7 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
             .into_iter()
             .map(Into::into)
             .chain(expiring_deferred_blobs.into_iter().map(Into::into))
-            .chain(bonus_blobs.into_iter())
+            .chain(bonus_blobs)
             .collect())
     }
 }
