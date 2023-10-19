@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 
+use crate::test_helpers::start_rollup;
 use borsh::BorshSerialize;
 use demo_stf::genesis_config::GenesisPaths;
 use demo_stf::runtime::RuntimeCall;
@@ -63,8 +64,6 @@ async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow
     assert_eq!(balance_response.amount.unwrap_or_default(), 1000);
     Ok(())
 }
-
-use crate::test_helpers::start_rollup;
 
 #[tokio::test]
 async fn bank_tx_tests() -> Result<(), anyhow::Error> {
