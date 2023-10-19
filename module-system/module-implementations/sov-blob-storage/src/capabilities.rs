@@ -3,7 +3,28 @@ use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::{BlobReaderTrait, Context, DaSpec, WorkingSet};
 use tracing::info;
 
-use crate::BlobStorage;
+use crate::{BlobStorage, DEFERRED_SLOTS_COUNT};
+
+impl<C: Context, Da: DaSpec> BlobStorage<C, Da> {
+    fn filter_by_sender(&self, b: &Da::BlobTransaction, working_set: &mut WorkingSet<C>) -> bool {
+        {
+            let is_allowed = self
+                .sequencer_registry
+                .is_sender_allowed(&b.sender(), working_set);
+            // This is the best effort approach for making sure,
+            // that blobs do not disappear silently
+            // TODO: Add issue for that
+            if !is_allowed {
+                info!(
+                    "Blob hash=0x{} from sender {} is going to be discarded",
+                    hex::encode(b.hash()),
+                    b.sender()
+                );
+            }
+            is_allowed
+        }
+    }
+}
 
 impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
     type Context = C;
@@ -20,9 +41,25 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
     {
+        // If `DEFERRED_SLOTS_COUNT` is 0, we don't never to do any deferred blob processing and this
+        // function just sorts and filters the current blobs before returning
+        if DEFERRED_SLOTS_COUNT == 0 {
+            let mut blobs = current_blobs
+                .into_iter()
+                .filter(|b| self.filter_by_sender(b, working_set))
+                .map(Into::into)
+                .collect::<Vec<_>>();
+            if let Some(sequencer) = self.get_preferred_sequencer(working_set) {
+                blobs.sort_by_key(|b: &BlobRefOrOwned<Da::BlobTransaction>| {
+                    b.as_ref().sender() != sequencer
+                });
+            }
+            return Ok(blobs.into_iter().map(Into::into).collect());
+        }
+
         // Calculate any expiring deferred blobs first, since these have to be processed no matter what (Case 2 above).
         // Note that we have to handle this case even if there is no preferred sequencer, since that sequencer might have
-        // exited while there were defferred blobs waiting to be processed
+        // exited while there were deferred blobs waiting to be processed
         let current_slot: TransitionHeight = self.get_current_slot_height(working_set);
         let slot_for_expiring_blobs =
             current_slot.saturating_sub(self.get_deferred_slots_count(working_set));
@@ -59,6 +96,8 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
         let mut bonus_blobs: Vec<BlobRefOrOwned<Da::BlobTransaction>> =
             Vec::with_capacity(remaining_blobs_requested);
         let mut next_slot_to_check = slot_for_expiring_blobs + 1;
+        // We only need to check slots up to the current slot, since deferred blobs from the current
+        // slot haven't been stored yet. We'll handle those later.
         while remaining_blobs_requested > 0 && next_slot_to_check < current_slot {
             let mut blobs_from_next_slot =
                 self.take_blobs_for_slot_height(next_slot_to_check, working_set);
@@ -92,7 +131,7 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
                 priority_blobs.push(blob);
             } else {
                 // Other blobs get deferred unless the sequencer has requested otherwise
-                if remaining_blobs_requested != 0 {
+                if remaining_blobs_requested > 0 {
                     remaining_blobs_requested -= 1;
                     bonus_blobs.push(blob.into())
                 } else {
@@ -107,22 +146,7 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
             // Gas metering suppose to prevent saving blobs from not allowed senders if they exit mid-slot
             let to_defer: Vec<&Da::BlobTransaction> = to_defer
                 .iter()
-                .filter(|b| {
-                    let is_allowed = self
-                        .sequencer_registry
-                        .is_sender_allowed(&b.sender(), working_set);
-                    // This is the best effort approach for making sure,
-                    // that blobs do not disappear silently
-                    // TODO: Add issue for that
-                    if !is_allowed {
-                        info!(
-                            "Blob hash=0x{} from sender {} is going to be discarded",
-                            hex::encode(b.hash()),
-                            b.sender()
-                        );
-                    }
-                    is_allowed
-                })
+                .filter(|b| self.filter_by_sender(b, working_set))
                 .map(|b| &**b)
                 .collect();
             self.store_blobs(current_slot, &to_defer, working_set)?

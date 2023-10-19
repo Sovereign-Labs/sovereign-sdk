@@ -20,6 +20,15 @@ pub enum BlobRefOrOwned<'a, B: BlobReaderTrait> {
     Owned(B),
 }
 
+impl<'a, B: BlobReaderTrait> AsRef<B> for BlobRefOrOwned<'a, B> {
+    fn as_ref(&self) -> &B {
+        match self {
+            BlobRefOrOwned::Ref(r) => r,
+            BlobRefOrOwned::Owned(blob) => blob,
+        }
+    }
+}
+
 impl<'a, B: BlobReaderTrait> BlobRefOrOwned<'a, B> {
     /// Convenience method to get mutable reference to the blob
     pub fn as_mut_ref(&mut self) -> &mut B {

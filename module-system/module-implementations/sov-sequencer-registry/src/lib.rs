@@ -136,7 +136,7 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> SequencerRegistry
         self.preferred_sequencer.get(working_set)
     }
 
-    /// Returns the preferred sequencer, or [`None`] it wasn't set.
+    /// Returns the rollup address of the preferred sequencer, or [`None`] it wasn't set.
     ///
     /// Read about [`SequencerConfig::is_preferred_sequencer`] to learn about
     /// preferred sequencers.
