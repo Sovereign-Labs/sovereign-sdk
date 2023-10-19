@@ -1,14 +1,14 @@
 //! Defines traits and types used by the rollup to verify claims about the
 //! DA layer.
+use core::cmp::min;
 use core::fmt::Debug;
-use std::cmp::min;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Buf;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
+use crate::maybestd::vec::Vec;
 use crate::zk::ValidityCondition;
 use crate::BasicAddress;
 
@@ -212,8 +212,12 @@ pub struct Time {
     nanos: u32,
 }
 
-#[derive(Debug, Error)]
-#[error("Only intervals less than one second may be represented as nanoseconds")]
+#[derive(Debug)]
+#[cfg_attr(
+    feature = "std",
+    derive(thiserror::Error),
+    error("Only intervals less than one second may be represented as nanoseconds")
+)]
 /// An error that occurs when trying to create a `NanoSeconds` representing more than one second
 pub struct ErrTooManyNanos;
 

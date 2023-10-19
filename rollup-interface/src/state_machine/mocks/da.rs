@@ -1,9 +1,11 @@
-use std::fmt::Display;
-use std::str::FromStr;
-#[cfg(feature = "native")]
-use std::sync::Arc;
+use core::fmt::Display;
+use core::str::FromStr;
 
-#[cfg(feature = "native")]
+use crate::maybestd::string::String;
+#[cfg(all(feature = "native", feature = "tokio"))]
+use crate::maybestd::sync::Arc;
+use crate::maybestd::vec::Vec;
+#[cfg(all(feature = "native", feature = "tokio"))]
 use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Bytes;
@@ -13,7 +15,7 @@ use crate::da::{
     BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec, DaVerifier, Time,
 };
 use crate::mocks::MockValidityCond;
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "tokio"))]
 use crate::services::da::DaService;
 use crate::services::da::SlotData;
 use crate::{BasicAddress, RollupAddress};
@@ -71,7 +73,7 @@ impl FromStr for MockAddress {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let addr = hex::decode(s)?;
+        let addr = hex::decode(s).map_err(anyhow::Error::msg)?;
         if addr.len() != 32 {
             return Err(anyhow::anyhow!("Invalid address length"));
         }
@@ -108,7 +110,7 @@ impl From<[u8; 32]> for MockAddress {
 }
 
 impl Display for MockAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", hex::encode(self.addr))
     }
 }
@@ -302,12 +304,12 @@ impl DaSpec for MockDaSpec {
     type ChainParams = ();
 }
 
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "tokio"))]
 use tokio::sync::mpsc::{self, Receiver, Sender};
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "tokio"))]
 use tokio::sync::Mutex;
 
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "tokio"))]
 #[derive(Clone)]
 /// DaService used in tests.
 pub struct MockDaService {
@@ -316,7 +318,7 @@ pub struct MockDaService {
     sequencer_da_address: MockAddress,
 }
 
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "tokio"))]
 impl MockDaService {
     /// Creates a new MockDaService.
     pub fn new(sequencer_da_address: MockAddress) -> Self {
@@ -329,7 +331,7 @@ impl MockDaService {
     }
 }
 
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "tokio"))]
 #[async_trait]
 impl DaService for MockDaService {
     type Spec = MockDaSpec;

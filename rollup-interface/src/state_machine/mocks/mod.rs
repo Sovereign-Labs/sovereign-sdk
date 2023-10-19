@@ -4,7 +4,7 @@
 mod da;
 mod validity_condition;
 mod zk_vm;
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "tokio"))]
 pub use da::MockDaService;
 pub use da::{
     MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaConfig, MockDaSpec, MockDaVerifier,
