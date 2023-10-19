@@ -46,7 +46,7 @@ impl NativeDB {
     /// Sets a sequence of key-value pairs in the [`NativeDB`]. The write is atomic.
     pub fn set_values(
         &self,
-        key_value_pairs: Vec<(Vec<u8>, Option<Vec<u8>>)>,
+        key_value_pairs: impl IntoIterator<Item = (Vec<u8>, Option<Vec<u8>>)>,
     ) -> anyhow::Result<()> {
         let batch = SchemaBatch::default();
         for (key, value) in key_value_pairs {
