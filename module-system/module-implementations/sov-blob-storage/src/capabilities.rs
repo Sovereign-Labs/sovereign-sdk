@@ -6,7 +6,11 @@ use tracing::info;
 use crate::{BlobStorage, DEFERRED_SLOTS_COUNT};
 
 impl<C: Context, Da: DaSpec> BlobStorage<C, Da> {
-    fn filter_by_sender(&self, b: &Da::BlobTransaction, working_set: &mut WorkingSet<C>) -> bool {
+    fn filter_by_allowed_sender(
+        &self,
+        b: &Da::BlobTransaction,
+        working_set: &mut WorkingSet<C>,
+    ) -> bool {
         {
             let is_allowed = self
                 .sequencer_registry
@@ -46,7 +50,7 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
         if DEFERRED_SLOTS_COUNT == 0 {
             let mut blobs = current_blobs
                 .into_iter()
-                .filter(|b| self.filter_by_sender(b, working_set))
+                .filter(|b| self.filter_by_allowed_sender(b, working_set))
                 .map(Into::into)
                 .collect::<Vec<_>>();
             if let Some(sequencer) = self.get_preferred_sequencer(working_set) {
@@ -146,7 +150,7 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
             // Gas metering suppose to prevent saving blobs from not allowed senders if they exit mid-slot
             let to_defer: Vec<&Da::BlobTransaction> = to_defer
                 .iter()
-                .filter(|b| self.filter_by_sender(b, working_set))
+                .filter(|b| self.filter_by_allowed_sender(b, working_set))
                 .map(|b| &**b)
                 .collect();
             self.store_blobs(current_slot, &to_defer, working_set)?
