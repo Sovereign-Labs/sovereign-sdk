@@ -22,7 +22,7 @@ pub use tx_verifier::RawTx;
 /// This trait has to be implemented by a runtime in order to be used in `AppTemplate`.
 pub trait Runtime<C: Context, Da: DaSpec>:
     DispatchCall<Context = C>
-    + Genesis<Context = C>
+    + Genesis<Context = C, Config = Self::GenesisConfig>
     + TxHooks<Context = C>
     + SlotHooks<Da, Context = C>
     + FinalizeHook<Da, Context = C>
@@ -33,7 +33,10 @@ pub trait Runtime<C: Context, Da: DaSpec>:
             <<Da as DaSpec>::BlobTransaction as BlobReaderTrait>::Address,
         >,
     > + BlobSelector<Da, Context = C>
+    + Default
 {
+    /// GenesisConfig type.
+    type GenesisConfig: Send + Sync;
 }
 
 /// The receipts of all the transactions in a batch.

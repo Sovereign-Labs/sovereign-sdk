@@ -25,6 +25,6 @@
         }
     },
     "constants": {
-        "TEST_U32": 42
+        "DEFERRED_SLOTS_COUNT": 2
     }
 }

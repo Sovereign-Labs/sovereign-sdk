@@ -75,9 +75,9 @@ where
     RT: Runtime<C, Da>,
 {
     /// [`AppTemplate`] constructor.
-    pub fn new(storage: C::Storage, runtime: RT) -> Self {
+    pub fn new(storage: C::Storage) -> Self {
         Self {
-            runtime,
+            runtime: RT::default(),
             current_storage: storage,
             checkpoint: None,
             phantom_vm: PhantomData,

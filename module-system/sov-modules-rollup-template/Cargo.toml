@@ -1,0 +1,27 @@
+[package]
+name = "sov-modules-rollup-template"
+description = "Defines a generic rollup for use with the Sovereign SDK module system"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+resolver = "2"
+
+
+[dependencies]
+sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
+sov-stf-runner = { path = "../../full-node/sov-stf-runner", features = ["native"] }
+sov-state = { path = "../sov-state", version = "0.2" }
+
+sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
+sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
+sov-db = { path = "../../full-node/db/sov-db" }
+
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+tokio = { workspace = true }

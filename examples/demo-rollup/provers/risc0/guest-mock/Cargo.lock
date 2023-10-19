@@ -925,8 +925,11 @@ dependencies = [
  "demo-stf",
  "risc0-zkvm",
  "risc0-zkvm-platform",
+ "sov-modules-api",
+ "sov-modules-stf-template",
  "sov-risc0-adapter",
  "sov-rollup-interface",
+ "sov-state",
 ]
 
 [[package]]

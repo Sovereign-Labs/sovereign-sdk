@@ -1,17 +1,17 @@
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::PathBuf;
 
 use demo_stf::genesis_config::GenesisPaths;
-use sov_demo_rollup::{new_rollup_with_mock_da_from_config, DemoProverConfig};
+use sov_demo_rollup::MockDemoRollup;
+use sov_modules_rollup_template::{RollupProverConfig, RollupTemplate};
 use sov_rollup_interface::mocks::{MockAddress, MockDaConfig};
-use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
 use tokio::sync::oneshot;
 
-pub async fn start_rollup<Vm: ZkvmHost, P: AsRef<Path>>(
+pub async fn start_rollup(
     rpc_reporting_channel: oneshot::Sender<SocketAddr>,
-    prover: Option<(Vm, DemoProverConfig)>,
-    genesis_paths: &GenesisPaths<P>,
+    genesis_paths: GenesisPaths<PathBuf>,
+    rollup_prover_config: Option<RollupProverConfig>,
 ) {
     let temp_dir = tempfile::tempdir().unwrap();
     let temp_path = temp_dir.path();
@@ -32,8 +32,13 @@ pub async fn start_rollup<Vm: ZkvmHost, P: AsRef<Path>>(
         },
     };
 
-    let rollup = new_rollup_with_mock_da_from_config(rollup_config, prover, genesis_paths)
-        .expect("Rollup config is valid");
+    let mock_demo_rollup = MockDemoRollup {};
+
+    let rollup = mock_demo_rollup
+        .create_new_rollup(&genesis_paths, rollup_config, rollup_prover_config)
+        .await
+        .unwrap();
+
     rollup
         .run_and_report_rpc_port(Some(rpc_reporting_channel))
         .await

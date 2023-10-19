@@ -7,10 +7,9 @@ use demo_stf::genesis_config::GenesisPaths;
 use ethers_core::abi::Address;
 use ethers_signers::{LocalWallet, Signer};
 use sov_evm::SimpleStorageContract;
-use sov_risc0_adapter::host::Risc0Host;
 use test_client::TestClient;
 
-use super::test_helpers::start_rollup;
+use crate::test_helpers::start_rollup;
 
 #[cfg(feature = "experimental")]
 #[tokio::test]
@@ -19,10 +18,10 @@ async fn evm_tx_tests() -> Result<(), anyhow::Error> {
 
     let rollup_task = tokio::spawn(async {
         // Don't provide a prover since the EVM is not currently provable
-        start_rollup::<Risc0Host<'static>, _>(
+        start_rollup(
             port_tx,
+            GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
             None,
-            &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
         )
         .await;
     });
@@ -108,7 +107,9 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
 
     let set_arg = 923;
     let tx_hash = {
-        let set_value_req = client.set_value(contract_address, set_arg).await;
+        let set_value_req = client
+            .set_value(contract_address, set_arg, None, None)
+            .await;
         client.send_publish_batch_request().await;
         set_value_req.await.unwrap().unwrap().transaction_hash
     };
@@ -143,33 +144,22 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
 
     // Create a blob with multiple transactions.
     let mut requests = Vec::default();
-    for value in 100..103 {
-        let set_value_req = client.set_value(contract_address, value).await;
+    for value in 150..153 {
+        let set_value_req = client.set_value(contract_address, value, None, None).await;
         requests.push(set_value_req);
     }
 
     client.send_publish_batch_request().await;
-
-    // second block
     client.send_publish_batch_request().await;
-
-    let first_block = client.eth_get_block_by_number(Some("0".to_owned())).await;
-    let second_block = client.eth_get_block_by_number(Some("1".to_owned())).await;
-
-    // assert parent hash
-    assert_eq!(
-        first_block.hash.unwrap(),
-        second_block.parent_hash,
-        "Parent hash should be the hash of the previous block"
-    );
 
     for req in requests {
         req.await.unwrap();
     }
 
     {
-        let get_arg = client.query_contract(contract_address).await?;
-        assert_eq!(102, get_arg.as_u32());
+        let get_arg = client.query_contract(contract_address).await?.as_u32();
+        // should be one of three values sent in a single block. 150, 151, or 152
+        assert!((150..=152).contains(&get_arg));
     }
 
     {
@@ -188,6 +178,40 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
         let get_arg = client.query_contract(contract_address).await?;
         assert_eq!(value, get_arg.as_u32());
     }
+
+    {
+        // get initial gas price
+        let initial_gas_price = client.eth_gas_price().await;
+
+        // send 100 set transaction with high gas fee in a four batch to increase gas price
+        for _ in 0..4 {
+            let mut requests = Vec::default();
+            for value in 0..25 {
+                let set_value_req = client
+                    .set_value(contract_address, value, Some(20u64), Some(21u64))
+                    .await;
+                requests.push(set_value_req);
+            }
+            client.send_publish_batch_request().await;
+        }
+
+        // get gas price
+        let latest_gas_price = client.eth_gas_price().await;
+
+        // assert gas price is higher
+        // TODO: emulate gas price oracle here to have exact value
+        assert!(latest_gas_price > initial_gas_price);
+    }
+
+    let first_block = client.eth_get_block_by_number(Some("0".to_owned())).await;
+    let second_block = client.eth_get_block_by_number(Some("1".to_owned())).await;
+
+    // assert parent hash works correctly
+    assert_eq!(
+        first_block.hash.unwrap(),
+        second_block.parent_hash,
+        "Parent hash should be the hash of the previous block"
+    );
 
     Ok(())
 }

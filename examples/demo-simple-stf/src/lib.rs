@@ -27,7 +27,7 @@ impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, 
     for CheckHashPreimageStf<Cond>
 {
     // Since our rollup is stateless, we don't need to consider the StateRoot.
-    type StateRoot = ();
+    type StateRoot = [u8; 0];
 
     // This represents the initial configuration of the rollup, but it is not supported in this tutorial.
     type InitialState = ();
@@ -45,13 +45,13 @@ impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, 
     type Condition = Cond;
 
     // Perform one-time initialization for the genesis block.
-    fn init_chain(&mut self, _params: Self::InitialState) {
-        // Do nothing
+    fn init_chain(&mut self, _params: Self::InitialState) -> [u8; 0] {
+        []
     }
 
     fn apply_slot<'a, I>(
         &mut self,
-        _pre_state_root: &(),
+        _pre_state_root: &[u8; 0],
         _witness: Self::Witness,
         _slot_header: &Da::BlockHeader,
         _validity_condition: &Da::ValidityCondition,
@@ -91,7 +91,7 @@ impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, 
         }
 
         SlotResult {
-            state_root: (),
+            state_root: [],
             batch_receipts: receipts,
             witness: (),
         }

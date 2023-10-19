@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use hex;
+use jmt::Version;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
@@ -147,7 +148,7 @@ pub struct StorageProof<P> {
 /// An interface for storing and retrieving values in the storage.
 pub trait Storage: Clone {
     /// The witness type for this storage instance.
-    type Witness: Witness;
+    type Witness: Witness + Send + Sync;
 
     /// The runtime config for this storage instance.
     type RuntimeConfig;
@@ -168,6 +169,7 @@ pub trait Storage: Clone {
         + BorshSerialize
         + BorshDeserialize
         + Eq
+        + AsRef<[u8]>
         + Into<[u8; 32]>; // Require a one-way conversion from the state root to a 32-byte array. This can always be
                           // implemented by hashing the state root even if the root itself is not 32 bytes.
 
@@ -237,7 +239,6 @@ pub trait Storage: Clone {
     /// Opens a storage access proof and validates it against a state root.
     /// It returns a result with the opened leaf (key, value) pair in case of success.
     fn open_proof(
-        &self,
         state_root: Self::Root,
         proof: StorageProof<Self::Proof>,
     ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error>;
@@ -270,6 +271,8 @@ impl From<&str> for StorageValue {
 pub trait NativeStorage: Storage {
     /// Returns the value corresponding to the key or None if key is absent and a proof to
     /// get the value.
-    fn get_with_proof(&self, key: StorageKey, witness: &Self::Witness)
-        -> StorageProof<Self::Proof>;
+    fn get_with_proof(&self, key: StorageKey) -> StorageProof<Self::Proof>;
+
+    /// Get the root hash of the tree at the requested version
+    fn get_root_hash(&self, version: Version) -> Result<Self::Root, anyhow::Error>;
 }

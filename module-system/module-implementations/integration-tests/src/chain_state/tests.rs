@@ -22,7 +22,6 @@ type C = DefaultContext;
 #[test]
 fn test_simple_value_setter_with_chain_state() {
     // Build an app template with the module configurations
-    let runtime = TestRuntime::default();
 
     let tmpdir = tempfile::tempdir().unwrap();
 
@@ -30,7 +29,7 @@ fn test_simple_value_setter_with_chain_state() {
         ProverStorage::with_path(tmpdir.path()).unwrap();
 
     let mut app_template =
-        AppTemplate::<C, MockDaSpec, MockZkvm, TestRuntime<C, MockDaSpec>>::new(storage, runtime);
+        AppTemplate::<C, MockDaSpec, MockZkvm, TestRuntime<C, MockDaSpec>>::new(storage);
 
     let value_setter_messages = ValueSetterMessages::default();
     let value_setter = value_setter_messages.create_raw_txs::<TestRuntime<C, MockDaSpec>>();

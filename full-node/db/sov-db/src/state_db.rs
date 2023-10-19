@@ -74,19 +74,6 @@ impl StateDB {
         }
     }
 
-    /// Store an item in the database, given a key, a key hash, a version, and a value
-    pub fn update_db(
-        &self,
-        key: StateKey,
-        key_hash: KeyHash,
-        value: Option<Vec<u8>>,
-        next_version: Version,
-    ) -> anyhow::Result<()> {
-        self.put_preimage(key_hash, &key)?;
-        self.db.put::<JmtValues>(&(key, next_version), &value)?;
-        Ok(())
-    }
-
     /// Increment the `next_version` counter by 1.
     pub fn inc_next_version(&self) {
         let mut version = self.next_version.lock().unwrap();
@@ -134,7 +121,7 @@ impl TreeReader for StateDB {
     fn get_rightmost_leaf(
         &self,
     ) -> anyhow::Result<Option<(jmt::storage::NodeKey, jmt::storage::LeafNode)>> {
-        todo!()
+        todo!("StateDB does not support [`TreeReader::get_rightmost_leaf`] yet")
     }
 }
 
@@ -149,7 +136,7 @@ impl TreeWriter for StateDB {
                 self.db
                     .get::<KeyHashToKey>(&key_hash.0)?
                     .ok_or(anyhow::format_err!(
-                        "Could not find preimage for key hash {key_hash:?}"
+                        "Could not find preimage for key hash {key_hash:?}. Has `StateDB::put_preimage` been called for this key?"
                     ))?;
             self.db.put::<JmtValues>(&(key_preimage, *version), value)?;
         }
@@ -214,8 +201,6 @@ pub mod arbitrary {
 
     impl proptest::arbitrary::Arbitrary for FallibleArbitraryStateDB {
         type Parameters = ();
-        type Strategy = LazyJust<Self, fn() -> FallibleArbitraryStateDB>;
-
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
             fn gen() -> FallibleArbitraryStateDB {
                 FallibleArbitraryStateDB {
@@ -231,6 +216,8 @@ pub mod arbitrary {
             }
             LazyJust::new(gen)
         }
+
+        type Strategy = LazyJust<Self, fn() -> FallibleArbitraryStateDB>;
     }
 }
 

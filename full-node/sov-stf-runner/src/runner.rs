@@ -62,15 +62,7 @@ where
     Da: DaService<Error = anyhow::Error> + Clone + Send + Sync + 'static,
     Vm: ZkvmHost,
     V: StateTransitionFunction<Vm::Guest, Da::Spec, StateRoot = Root, Witness = Witness>,
-    ST: StateTransitionFunction<
-        Vm,
-        Da::Spec,
-        StateRoot = Root,
-        Condition = <Da::Spec as DaSpec>::ValidityCondition,
-        Witness = Witness,
-    >,
-    Witness: Default,
-    Root: Clone + AsRef<[u8]>,
+    ST: StateTransitionFunction<Vm, Da::Spec, Condition = <Da::Spec as DaSpec>::ValidityCondition>,
 {
     /// Creates a new `StateTransitionRunner`.
     ///
@@ -82,7 +74,7 @@ where
         da_service: Da,
         ledger_db: LedgerDB,
         mut app: ST,
-        prev_state_root: Option<Root>,
+        prev_state_root: Option<StateRoot<ST, Vm, Da::Spec>>,
         genesis_config: InitialState<ST, Vm, Da::Spec>,
         prover: Option<Prover<V, Da, Vm>>,
     ) -> Result<Self, anyhow::Error> {
@@ -185,7 +177,7 @@ where
                     .get_extraction_proof(&filtered_block, &blobs)
                     .await;
 
-                let transition_data: StateTransitionData<V, Da::Spec, Vm::Guest> =
+                let transition_data: StateTransitionData<ST::StateRoot, ST::Witness, Da::Spec> =
                     StateTransitionData {
                         pre_state_root: self.state_root.clone(),
                         da_block_header: filtered_block.header().clone(),

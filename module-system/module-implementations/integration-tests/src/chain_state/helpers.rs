@@ -112,7 +112,9 @@ where
     }
 }
 
-impl<C: Context, Da: DaSpec> Runtime<C, Da> for TestRuntime<C, Da> {}
+impl<C: Context, Da: DaSpec> Runtime<C, Da> for TestRuntime<C, Da> {
+    type GenesisConfig = GenesisConfig<C, Da>;
+}
 
 pub(crate) fn create_chain_state_genesis_config<C: Context, Da: DaSpec>(
     admin: <C as Spec>::Address,
