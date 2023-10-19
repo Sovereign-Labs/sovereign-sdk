@@ -31,7 +31,7 @@ const HRP: &str = "sov";
     Eq,
 )]
 #[cfg_attr(
-    feature = "arbitrary",
+    all(feature = "arbitrary", feature = "std"),
     derive(arbitrary::Arbitrary, proptest_derive::Arbitrary)
 )]
 #[cfg_attr(

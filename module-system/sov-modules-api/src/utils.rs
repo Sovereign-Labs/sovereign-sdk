@@ -5,7 +5,7 @@ pub fn generate_address<C: Context>(key: &str) -> <C as Spec>::Address {
     C::Address::from(hash)
 }
 
-#[cfg(feature = "dep:jsonrpsee")]
+#[cfg(feature = "jsonrpsee")]
 pub fn to_jsonrpsee_error_object(
     err: impl ToString,
     message: &str,

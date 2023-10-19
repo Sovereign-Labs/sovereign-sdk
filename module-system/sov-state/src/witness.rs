@@ -1,10 +1,9 @@
-use sov_rollup_interface::maybestd::sync::atomic::AtomicUsize;
-use sov_rollup_interface::maybestd::sync::Mutex;
-use sov_rollup_interface::maybestd::vec::Vec;
-
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use sov_rollup_interface::maybestd::sync::atomic::AtomicUsize;
+use sov_rollup_interface::maybestd::sync::Mutex;
+use sov_rollup_interface::maybestd::vec::Vec;
 
 /// A witness is a value produced during native execution that is then used by
 /// the zkVM circuit to produce proofs.

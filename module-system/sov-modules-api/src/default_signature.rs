@@ -15,7 +15,7 @@ use crate::{SigVerificationError, Signature};
 pub mod private_key {
     use ed25519_dalek::{SigningKey, KEYPAIR_LENGTH, SECRET_KEY_LENGTH};
 
-    #[cfg(feature = "dep:schemars")]
+    #[cfg(feature = "schemars")]
     use crate::{Address, PrivateKey, PublicKey};
 
     #[derive(Debug)]
@@ -121,7 +121,7 @@ pub mod private_key {
         }
     }
 
-    #[cfg(feature = "dep:schemars")]
+    #[cfg(feature = "schemars")]
     impl PrivateKey for DefaultPrivateKey {
         type PublicKey = super::DefaultPublicKey;
 
@@ -142,13 +142,14 @@ pub mod private_key {
         }
 
         fn sign(&self, msg: &[u8]) -> Self::Signature {
+            use ed25519_dalek::Signer;
             super::DefaultSignature {
                 msg_sig: self.key_pair.sign(msg),
             }
         }
     }
 
-    #[cfg(feature = "dep:schemars")]
+    #[cfg(feature = "schemars")]
     impl DefaultPrivateKey {
         pub fn as_hex(&self) -> String {
             hex::encode(self.key_pair.to_bytes())
@@ -181,14 +182,14 @@ pub mod private_key {
         }
     }
 
-    #[cfg(all(feature = "arbitrary", feature = "dep:schemars"))]
+    #[cfg(all(feature = "arbitrary", feature = "schemars"))]
     impl<'a> arbitrary::Arbitrary<'a> for super::DefaultPublicKey {
         fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
             DefaultPrivateKey::arbitrary(u).map(|p| p.pub_key())
         }
     }
 
-    #[cfg(all(feature = "arbitrary", feature = "dep:schemars"))]
+    #[cfg(all(feature = "arbitrary", feature = "schemars"))]
     impl<'a> arbitrary::Arbitrary<'a> for super::DefaultSignature {
         fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
             // the secret/public pair is lost; it is impossible to verify this signature
@@ -201,13 +202,13 @@ pub mod private_key {
 }
 
 #[cfg_attr(
-    all(feature = "native", feature = "dep:schemars"),
+    all(feature = "native", feature = "schemars"),
     derive(schemars::JsonSchema)
 )]
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct DefaultPublicKey {
     #[cfg_attr(
-        all(feature = "native", feature = "dep:schemars"),
+        all(feature = "native", feature = "schemars"),
         schemars(with = "&[u8]", length(equal = "ed25519_dalek::PUBLIC_KEY_LENGTH"))
     )]
     pub(crate) pub_key: DalekPublicKey,
@@ -237,13 +238,13 @@ impl BorshSerialize for DefaultPublicKey {
 }
 
 #[cfg_attr(
-    all(feature = "native", feature = "dep:schemars"),
+    all(feature = "native", feature = "schemars"),
     derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)
 )]
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct DefaultSignature {
     #[cfg_attr(
-        all(feature = "native", feature = "dep:schemars"),
+        all(feature = "native", feature = "schemars"),
         schemars(with = "&[u8]", length(equal = "ed25519_dalek::Signature::BYTE_SIZE"))
     )]
     pub msg_sig: DalekSignature,

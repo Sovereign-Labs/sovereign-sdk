@@ -29,7 +29,6 @@ pub use iterator::SeekKeyEncoder;
 #[cfg(feature = "std")]
 pub use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 pub use schema::Schema;
-
 use sov_rollup_interface::maybestd::io;
 
 /// An error that occurred during (de)serialization of a [`Schema`]'s keys or

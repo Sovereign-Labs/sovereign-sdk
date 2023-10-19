@@ -185,7 +185,7 @@ where
     }
 }
 
-#[cfg(feature = "arbitrary")]
+#[cfg(all(feature = "arbitrary", feature = "std"))]
 impl<'a, K, V, Codec> AccessoryStateMap<K, V, Codec>
 where
     K: arbitrary::Arbitrary<'a>,

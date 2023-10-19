@@ -20,11 +20,10 @@ pub mod maybestd {
 
     /// A facade for the `sync` std module.
     pub mod sync {
-        pub use borsh::maybestd::sync::*;
-
         #[cfg(feature = "std")]
         pub use std::sync::Mutex;
 
+        pub use borsh::maybestd::sync::*;
         #[cfg(not(feature = "std"))]
         pub use spin::Mutex;
     }

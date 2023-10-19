@@ -51,7 +51,7 @@ pub use crate::witness::{ArrayWitness, Witness};
     serde::Deserialize,
 )]
 #[cfg_attr(
-    feature = "arbitrary",
+    all(feature = "arbitrary", feature = "std"),
     derive(arbitrary::Arbitrary, proptest_derive::Arbitrary)
 )]
 pub struct Prefix {

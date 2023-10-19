@@ -5,9 +5,8 @@ mod utils;
 
 use core::fmt::Display;
 
-use sov_rollup_interface::maybestd::sync::Arc;
-
 pub use access::MergeError;
+use sov_rollup_interface::maybestd::sync::Arc;
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]

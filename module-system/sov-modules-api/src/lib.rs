@@ -40,7 +40,7 @@ use core::hash::Hash;
 use core::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-#[cfg(all(feature = "native", feature = "dep:clap"))]
+#[cfg(all(feature = "native", feature = "clap"))]
 pub use clap;
 use digest::typenum::U32;
 use digest::Digest;
@@ -83,10 +83,13 @@ impl BasicAddress for Address {}
 impl RollupAddress for Address {}
 
 #[cfg_attr(
-    all(feature = "native", feature = "dep:schemars"),
+    all(feature = "native", feature = "schemars"),
     derive(schemars::JsonSchema)
 )]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[cfg_attr(
+    all(feature = "arbitrary", feature = "std"),
+    derive(arbitrary::Arbitrary)
+)]
 #[derive(PartialEq, Clone, Copy, Eq, borsh::BorshDeserialize, borsh::BorshSerialize, Hash)]
 pub struct Address {
     addr: [u8; 32],
@@ -181,7 +184,7 @@ pub trait Signature:
 /// A type that can't be instantiated.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(
-    all(feature = "native", feature = "dep:schemars"),
+    all(feature = "native", feature = "schemars"),
     derive(schemars::JsonSchema)
 )]
 pub enum NonInstantiable {}
@@ -233,7 +236,7 @@ pub trait PrivateKey:
 /// code for either (or both!) of these environments without touching their module implementations.
 pub trait Spec {
     /// The Address type used on the rollup. Typically calculated as the hash of a public key.
-    #[cfg(all(feature = "native", feature = "dep:schemars"))]
+    #[cfg(all(feature = "native", feature = "schemars"))]
     type Address: RollupAddress
         + BorshSerialize
         + BorshDeserialize
@@ -246,7 +249,7 @@ pub trait Spec {
         + FromStr<Err = anyhow::Error>;
 
     /// The Address type used on the rollup. Typically calculated as the hash of a public key.
-    #[cfg(not(all(feature = "native", feature = "dep:schemars")))]
+    #[cfg(all(feature = "native", not(feature = "schemars")))]
     type Address: RollupAddress
         + BorshSerialize
         + BorshDeserialize
@@ -267,11 +270,11 @@ pub trait Spec {
     type PrivateKey: PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
 
     /// The public key used for digital signatures
-    #[cfg(all(feature = "native", feature = "dep:schemars"))]
+    #[cfg(all(feature = "native", feature = "schemars"))]
     type PublicKey: PublicKey + ::schemars::JsonSchema + FromStr<Err = anyhow::Error>;
 
     /// The public key used for digital signatures
-    #[cfg(not(all(feature = "native", feature = "dep:schemars")))]
+    #[cfg(all(feature = "native", not(feature = "schemars")))]
     type PublicKey: PublicKey + FromStr<Err = anyhow::Error>;
 
     #[cfg(not(feature = "native"))]
@@ -281,19 +284,19 @@ pub trait Spec {
     type Hasher: Digest<OutputSize = U32>;
 
     /// The digital signature scheme used by the rollup
-    #[cfg(not(all(feature = "native", feature = "dep:schemars")))]
-    type Signature: Signature<PublicKey = Self::PublicKey>
-        + FromStr<Err = anyhow::Error>
-        + Serialize
-        + for<'a> Deserialize<'a>;
-
-    /// The digital signature scheme used by the rollup
-    #[cfg(all(feature = "native", feature = "dep:schemars"))]
+    #[cfg(all(feature = "native", feature = "schemars"))]
     type Signature: Signature<PublicKey = Self::PublicKey>
         + FromStr<Err = anyhow::Error>
         + Serialize
         + for<'a> Deserialize<'a>
         + schemars::JsonSchema;
+
+    /// The digital signature scheme used by the rollup
+    #[cfg(all(feature = "native", not(feature = "schemars")))]
+    type Signature: Signature<PublicKey = Self::PublicKey>
+        + FromStr<Err = anyhow::Error>
+        + Serialize
+        + for<'a> Deserialize<'a>;
 
     /// The digital signature scheme used by the rollup
     #[cfg(not(feature = "native"))]

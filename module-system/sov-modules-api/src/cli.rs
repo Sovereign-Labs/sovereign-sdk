@@ -4,25 +4,19 @@ use crate::CliWallet;
 
 /// An argument to the cli containing a json string
 #[derive(PartialEq, core::fmt::Debug, Clone, PartialOrd, Ord, Eq, Hash)]
-#[cfg_attr(feature = "dep:clap", clap::Args)]
+#[cfg_attr(feature = "clap", derive(clap::Args))]
 pub struct JsonStringArg {
     /// The json formatted transaction data
-    #[cfg_attr(
-        feature = "dep:clap",
-        arg(long, help = "The JSON formatted transaction")
-    )]
+    #[cfg_attr(feature = "clap", arg(long, help = "The JSON formatted transaction"))]
     pub json: String,
 }
 
 /// An argument to the cli containing a path to a file
 #[derive(PartialEq, core::fmt::Debug, Clone, PartialOrd, Ord, Eq, Hash)]
-#[cfg_attr(feature = "dep:clap", clap::Args)]
+#[cfg_attr(feature = "clap", derive(clap::Args))]
 pub struct FileNameArg {
     /// The json formatted transaction data
-    #[cfg_attr(
-        feature = "dep:clap",
-        arg(long, help = "The JSON formatted transaction")
-    )]
+    #[cfg_attr(feature = "clap", arg(long, help = "The JSON formatted transaction"))]
     pub path: String,
 }
 
