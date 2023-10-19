@@ -414,6 +414,7 @@ impl DaVerifier for MockDaVerifier {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::maybestd::string::ToString;
 
     #[test]
     fn test_mock_address_string() {
