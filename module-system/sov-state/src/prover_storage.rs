@@ -160,8 +160,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
                 accessory_writes
                     .ordered_writes
                     .iter()
-                    .map(|(k, v_opt)| (k.key.to_vec(), v_opt.as_ref().map(|v| v.value.to_vec())))
-                    .collect(),
+                    .map(|(k, v_opt)| (k.key.to_vec(), v_opt.as_ref().map(|v| v.value.to_vec()))),
             )
             .expect("native db write must succeed");
 
