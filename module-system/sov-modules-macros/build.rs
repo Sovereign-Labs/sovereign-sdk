@@ -32,6 +32,11 @@ fn resolve_manifest_path(out_dir: &Path) -> anyhow::Result<PathBuf> {
     }
 }
 
+// problem is: when you're in the workspace, you can find constants.json by
+// going up and up from OUT_DIR (because constants.json is at the root, and
+// OUT_DIR is inside target). When you use this is a dependency outside the
+// workspace, however, constants.json and OUT_DIR are in two separate
+// (sibling) directories.
 fn main() -> anyhow::Result<()> {
     // writes the target output dir into the manifest path so it can be later read for the
     // resolution of the sovereign.toml manifest file
