@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
 
-use anyhow::{format_err, Result};
+use anyhow::format_err;
 use iterator::ScanDirection;
 pub use iterator::{SchemaIterator, SeekKeyEncoder};
 use metrics::{
@@ -30,8 +30,8 @@ use metrics::{
     SCHEMADB_BATCH_PUT_LATENCY_SECONDS, SCHEMADB_DELETES, SCHEMADB_GET_BYTES,
     SCHEMADB_GET_LATENCY_SECONDS, SCHEMADB_PUT_BYTES,
 };
+use rocksdb::ReadOptions;
 pub use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
-use rocksdb::{ColumnFamilyDescriptor, ReadOptions};
 use thiserror::Error;
 use tracing::info;
 
@@ -54,7 +54,7 @@ impl DB {
         name: &'static str,
         column_families: impl IntoIterator<Item = impl Into<String>>,
         db_opts: &rocksdb::Options,
-    ) -> Result<Self> {
+    ) -> anyhow::Result<Self> {
         let db = DB::open_cf(
             db_opts,
             path,
@@ -69,12 +69,12 @@ impl DB {
     }
 
     /// Open RocksDB with the provided column family descriptors.
-    pub fn open_cf(
+    fn open_cf(
         db_opts: &rocksdb::Options,
         path: impl AsRef<Path>,
         name: &'static str,
-        cfds: impl IntoIterator<Item = ColumnFamilyDescriptor>,
-    ) -> Result<DB> {
+        cfds: impl IntoIterator<Item = rocksdb::ColumnFamilyDescriptor>,
+    ) -> anyhow::Result<DB> {
         let inner = rocksdb::DB::open_cf_descriptors(db_opts, path, cfds)?;
         Ok(Self::log_construct(name, inner))
     }
@@ -86,7 +86,7 @@ impl DB {
         path: impl AsRef<Path>,
         name: &'static str,
         cfs: Vec<ColumnFamilyName>,
-    ) -> Result<DB> {
+    ) -> anyhow::Result<DB> {
         let error_if_log_file_exists = false;
         let inner = rocksdb::DB::open_cf_for_read_only(opts, path, cfs, error_if_log_file_exists)?;
 
@@ -102,7 +102,7 @@ impl DB {
         secondary_path: P,
         name: &'static str,
         cfs: Vec<ColumnFamilyName>,
-    ) -> Result<DB> {
+    ) -> anyhow::Result<DB> {
         let inner = rocksdb::DB::open_cf_as_secondary(opts, primary_path, secondary_path, cfs)?;
         Ok(Self::log_construct(name, inner))
     }
@@ -113,7 +113,10 @@ impl DB {
     }
 
     /// Reads single record by key.
-    pub fn get<S: Schema>(&self, schema_key: &impl KeyCodec<S>) -> Result<Option<S::Value>> {
+    pub fn get<S: Schema>(
+        &self,
+        schema_key: &impl KeyCodec<S>,
+    ) -> anyhow::Result<Option<S::Value>> {
         let _timer = SCHEMADB_GET_LATENCY_SECONDS
             .with_label_values(&[S::COLUMN_FAMILY_NAME])
             .start_timer();
@@ -133,7 +136,11 @@ impl DB {
     }
 
     /// Writes single record.
-    pub fn put<S: Schema>(&self, key: &impl KeyCodec<S>, value: &impl ValueCodec<S>) -> Result<()> {
+    pub fn put<S: Schema>(
+        &self,
+        key: &impl KeyCodec<S>,
+        value: &impl ValueCodec<S>,
+    ) -> anyhow::Result<()> {
         // Not necessary to use a batch, but we'd like a central place to bump counters.
         // Used in tests only anyway.
         let batch = SchemaBatch::new();
@@ -145,7 +152,7 @@ impl DB {
         &self,
         opts: ReadOptions,
         direction: ScanDirection,
-    ) -> Result<SchemaIterator<S>> {
+    ) -> anyhow::Result<SchemaIterator<S>> {
         let cf_handle = self.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
         Ok(SchemaIterator::new(
             self.inner.raw_iterator_cf_opt(cf_handle, opts),
@@ -154,27 +161,33 @@ impl DB {
     }
 
     /// Returns a forward [`SchemaIterator`] on a certain schema with the default read options.
-    pub fn iter<S: Schema>(&self) -> Result<SchemaIterator<S>> {
+    pub fn iter<S: Schema>(&self) -> anyhow::Result<SchemaIterator<S>> {
         self.iter_with_direction::<S>(Default::default(), ScanDirection::Forward)
     }
 
     /// Returns a forward [`SchemaIterator`] on a certain schema with the provided read options.
-    pub fn iter_with_opts<S: Schema>(&self, opts: ReadOptions) -> Result<SchemaIterator<S>> {
+    pub fn iter_with_opts<S: Schema>(
+        &self,
+        opts: ReadOptions,
+    ) -> anyhow::Result<SchemaIterator<S>> {
         self.iter_with_direction::<S>(opts, ScanDirection::Forward)
     }
 
     /// Returns a backward [`SchemaIterator`] on a certain schema with the default read options.
-    pub fn rev_iter<S: Schema>(&self) -> Result<SchemaIterator<S>> {
+    pub fn rev_iter<S: Schema>(&self) -> anyhow::Result<SchemaIterator<S>> {
         self.iter_with_direction::<S>(Default::default(), ScanDirection::Backward)
     }
 
     /// Returns a backward [`SchemaIterator`] on a certain schema with the provided read options.
-    pub fn rev_iter_with_opts<S: Schema>(&self, opts: ReadOptions) -> Result<SchemaIterator<S>> {
+    pub fn rev_iter_with_opts<S: Schema>(
+        &self,
+        opts: ReadOptions,
+    ) -> anyhow::Result<SchemaIterator<S>> {
         self.iter_with_direction::<S>(opts, ScanDirection::Backward)
     }
 
     /// Writes a group of records wrapped in a [`SchemaBatch`].
-    pub fn write_schemas(&self, batch: SchemaBatch) -> Result<()> {
+    pub fn write_schemas(&self, batch: SchemaBatch) -> anyhow::Result<()> {
         let _timer = SCHEMADB_BATCH_COMMIT_LATENCY_SECONDS
             .with_label_values(&[self.name])
             .start_timer();
@@ -216,7 +229,7 @@ impl DB {
         Ok(())
     }
 
-    fn get_cf_handle(&self, cf_name: &str) -> Result<&rocksdb::ColumnFamily> {
+    fn get_cf_handle(&self, cf_name: &str) -> anyhow::Result<&rocksdb::ColumnFamily> {
         self.inner.cf_handle(cf_name).ok_or_else(|| {
             format_err!(
                 "DB::cf_handle not found for column family name: {}",
@@ -225,15 +238,15 @@ impl DB {
         })
     }
 
-    /// Flushes memtable data. This is only used for testing `get_approximate_sizes_cf` in unit
-    /// tests.
-    pub fn flush_cf(&self, cf_name: &str) -> Result<()> {
+    /// Flushes [MemTable](https://github.com/facebook/rocksdb/wiki/MemTable) data.
+    /// This is only used for testing `get_approximate_sizes_cf` in unit tests.
+    pub fn flush_cf(&self, cf_name: &str) -> anyhow::Result<()> {
         Ok(self.inner.flush_cf(self.get_cf_handle(cf_name)?)?)
     }
 
     /// Returns the current RocksDB property value for the provided column family name
     /// and property name.
-    pub fn get_property(&self, cf_name: &str, property_name: &str) -> Result<u64> {
+    pub fn get_property(&self, cf_name: &str, property_name: &str) -> anyhow::Result<u64> {
         self.inner
             .property_int_value_cf(self.get_cf_handle(cf_name)?, property_name)?
             .ok_or_else(|| {
@@ -246,7 +259,7 @@ impl DB {
     }
 
     /// Creates new physical DB checkpoint in directory specified by `path`.
-    pub fn create_checkpoint<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+    pub fn create_checkpoint<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()> {
         rocksdb::checkpoint::Checkpoint::new(&self.inner)?.create_checkpoint(path)?;
         Ok(())
     }
@@ -273,7 +286,11 @@ impl SchemaBatch {
     }
 
     /// Adds an insert/update operation to the batch.
-    pub fn put<S: Schema>(&self, key: &impl KeyCodec<S>, value: &impl ValueCodec<S>) -> Result<()> {
+    pub fn put<S: Schema>(
+        &self,
+        key: &impl KeyCodec<S>,
+        value: &impl ValueCodec<S>,
+    ) -> anyhow::Result<()> {
         let _timer = SCHEMADB_BATCH_PUT_LATENCY_SECONDS
             .with_label_values(&["unknown"])
             .start_timer();
@@ -290,7 +307,7 @@ impl SchemaBatch {
     }
 
     /// Adds a delete operation to the batch.
-    pub fn delete<S: Schema>(&self, key: &impl KeyCodec<S>) -> Result<()> {
+    pub fn delete<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<()> {
         let key = key.encode_key()?;
         self.rows
             .lock()

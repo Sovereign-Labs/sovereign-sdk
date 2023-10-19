@@ -43,11 +43,6 @@ impl NativeDB {
             .map(Option::flatten)
     }
 
-    /// Sets a key-value pair in the [`NativeDB`].
-    pub fn set_value(&self, key: Vec<u8>, value: Option<Vec<u8>>) -> anyhow::Result<()> {
-        self.set_values(vec![(key, value)])
-    }
-
     /// Sets a sequence of key-value pairs in the [`NativeDB`]. The write is atomic.
     pub fn set_values(
         &self,
@@ -160,7 +155,7 @@ mod tests {
         let db = NativeDB::with_path(tmpdir.path()).unwrap();
 
         let key = b"deleted".to_vec();
-        db.set_value(key.clone(), None).unwrap();
+        db.set_values(vec![(key.clone(), None)]).unwrap();
         assert_eq!(db.get_value_option(&key).unwrap(), None);
     }
 
