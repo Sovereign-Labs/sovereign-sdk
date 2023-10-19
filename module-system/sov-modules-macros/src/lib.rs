@@ -20,6 +20,7 @@ mod module_call_json_schema;
 mod module_info;
 mod new_types;
 mod offchain;
+mod event;
 #[cfg(feature = "native")]
 mod rpc;
 
@@ -29,6 +30,7 @@ use default_runtime::DefaultRuntimeMacro;
 use dispatch::dispatch_call::DispatchCallMacro;
 use dispatch::genesis::GenesisMacro;
 use dispatch::message_codec::MessageCodec;
+use event::EventMacro;
 use make_constants::{make_const, PartialItemConst};
 use module_call_json_schema::derive_module_call_json_schema;
 use new_types::address_type_helper;
@@ -68,6 +70,15 @@ pub fn dispatch_call(input: TokenStream) -> TokenStream {
 
     handle_macro_error(call_macro.derive_dispatch_call(input))
 }
+
+#[proc_macro_derive(Event, attributes(serialization))]
+pub fn event(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input);
+    let event_macro = EventMacro::new("Event");
+
+    handle_macro_error(event_macro.derive_event_enum(input))
+}
+
 
 #[proc_macro_derive(ModuleCallJsonSchema)]
 pub fn module_call_json_schema(input: TokenStream) -> TokenStream {
