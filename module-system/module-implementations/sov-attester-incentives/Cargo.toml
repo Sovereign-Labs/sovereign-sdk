@@ -13,8 +13,8 @@ resolver = "2"
 publish = false
 
 [dev-dependencies]
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.2", features = ["mocks"] }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3", features = ["mocks"] }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.3" }
 sov-attester-incentives = { path = ".", features = ["native"] }
 tempfile = { workspace = true }
 
@@ -27,10 +27,10 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 
-sov-bank = { path = "../sov-bank", version = "0.2" }
-sov-chain-state = { path = "../sov-chain-state", version = "0.2" }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
-sov-state = { path = "../../sov-state", version = "0.2" }
+sov-bank = { path = "../sov-bank", version = "0.3" }
+sov-chain-state = { path = "../sov-chain-state", version = "0.3" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.3" }
+sov-state = { path = "../../sov-state", version = "0.3" }
 
 
 [features]

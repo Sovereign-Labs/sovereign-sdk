@@ -21,14 +21,14 @@ proptest-derive = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
-sov-db = { path = "../../full-node/db/sov-db", version = "0.2", optional = true }
-sov-first-read-last-write-cache = { path = "../utils/sov-first-read-last-write-cache", version = "0.2" }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
+sov-db = { path = "../../full-node/db/sov-db", version = "0.3", optional = true }
+sov-first-read-last-write-cache = { path = "../utils/sov-first-read-last-write-cache", version = "0.3" }
 jmt = { workspace = true }
 hex = { workspace = true }
 sha2 = { workspace = true }
 
-sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", version = "0.2", optional = true }
+sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", version = "0.3", optional = true }
 risc0-zkvm = { workspace = true, default-features = false, features = ["std"], optional = true }
 risc0-zkvm-platform = { workspace = true, optional = true }
 
