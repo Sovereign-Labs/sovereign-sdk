@@ -14,7 +14,7 @@ readme = "README.md"
 
 [dependencies]
 # External dependencies 
-anyhow = { workspace = true }
+anyhow = { workspace = true, default-features = true }
 once_cell = { workspace = true }
 prometheus = { workspace = true }
 rocksdb = { workspace = true }
