@@ -15,6 +15,7 @@ publish = false
 [dependencies]
 
 sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.2" }
 sov-state = { path = "../../sov-state", version = "0.2" }
 
 anyhow = { workspace = true }

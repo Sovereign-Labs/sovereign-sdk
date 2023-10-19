@@ -25,6 +25,7 @@ clap = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
 sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.2" }
 sov-state = { path = "../../sov-state", version = "0.2" }
 
 
@@ -42,4 +43,12 @@ arbitrary = [
     "sov-modules-api/arbitrary",
     "sov-state/arbitrary"
 ]
-native = ["serde_json", "jsonrpsee", "schemars", "clap", "sov-state/native", "sov-modules-api/native"]
+native = [
+    "serde_json",
+    "jsonrpsee",
+    "schemars",
+    "clap",
+    "sov-modules-api/native",
+    "sov-rollup-interface/native",
+    "sov-state/native",
+]

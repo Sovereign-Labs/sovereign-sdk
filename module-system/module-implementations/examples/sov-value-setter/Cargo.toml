@@ -21,6 +21,7 @@ tempfile = { workspace = true }
 [dependencies]
 anyhow = { workspace = true }
 sov-modules-api = { path = "../../../sov-modules-api" }
+sov-rollup-interface = { path = "../../../../rollup-interface" }
 sov-state = { path = "../../../sov-state" }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }

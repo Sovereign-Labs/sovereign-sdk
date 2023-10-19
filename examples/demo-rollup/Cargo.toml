@@ -14,25 +14,25 @@ default-run = "sov-demo-rollup"
 [dependencies]
 # non-optional dependencies
 sov-celestia-adapter = { path = "../../adapters/celestia", features = [
-	"native",
+    "native",
 ] }
 const-rollup-config = { path = "../const-rollup-config" }
 sov-stf-runner = { path = "../../full-node/sov-stf-runner", features = [
-	"native",
+    "native",
 ] }
 sov-rollup-interface = { path = "../../rollup-interface", features = [
-	"native",
+    "native",
 ] }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = [
-	"native",
+    "native",
 ] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = [
-	"native",
+    "native",
 ] }
 sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module" }
 demo-stf = { path = "./stf", features = ["native"] }
 sov-ledger-rpc = { path = "../../full-node/sov-ledger-rpc", features = [
-	"server",
+    "server",
 ] }
 risc0 = { path = "./provers/risc0" }
 borsh = { workspace = true, features = ["bytes"] }

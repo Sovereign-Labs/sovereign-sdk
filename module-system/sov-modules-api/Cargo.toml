@@ -48,7 +48,6 @@ tempfile = { workspace = true }
 
 [features]
 default = [
-    "clap",
     "jsonrpsee",
     "macros",
     "schemars",

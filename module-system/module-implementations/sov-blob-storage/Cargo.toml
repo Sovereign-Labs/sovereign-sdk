@@ -21,6 +21,7 @@ tracing = { workspace = true }
 hex = { workspace = true }
 
 sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.2" }
 sov-state = { path = "../../sov-state", version = "0.2" }
 sov-sequencer-registry = { path = "../sov-sequencer-registry", version = "0.2" }
 sov-chain-state = { path = "../sov-chain-state", version = "0.2" }

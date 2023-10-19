@@ -1,12 +1,12 @@
 #[cfg(feature = "native")]
 use serde::{Deserialize, Serialize};
 
-#[cfg(all(feature = "std", feature = "schemars"))]
+#[cfg(all(feature = "std", feature = "native", feature = "schemars"))]
 use crate::default_signature::private_key::DefaultPrivateKey;
-#[cfg(all(feature = "std", feature = "schemars"))]
+#[cfg(all(feature = "std", feature = "native", feature = "schemars"))]
 use crate::default_signature::{DefaultPublicKey, DefaultSignature};
 use crate::Address;
-#[cfg(all(feature = "std", feature = "schemars"))]
+#[cfg(all(feature = "std", feature = "native", feature = "schemars"))]
 use crate::{Spec, TupleGasUnit};
 
 #[cfg(feature = "native")]
@@ -49,7 +49,7 @@ pub struct ZkDefaultContext {
     pub sender: Address,
 }
 
-#[cfg(all(feature = "std", feature = "schemars"))]
+#[cfg(all(feature = "std", feature = "native", feature = "schemars"))]
 impl Spec for ZkDefaultContext {
     type Address = Address;
     type Storage = sov_state::ZkStorage<sov_state::DefaultStorageSpec>;
@@ -61,7 +61,7 @@ impl Spec for ZkDefaultContext {
     type Witness = sov_state::ArrayWitness;
 }
 
-#[cfg(all(feature = "std", feature = "schemars"))]
+#[cfg(all(feature = "std", feature = "native", feature = "schemars"))]
 impl crate::Context for ZkDefaultContext {
     type GasUnit = TupleGasUnit<2>;
 
@@ -74,7 +74,7 @@ impl crate::Context for ZkDefaultContext {
     }
 }
 
-#[cfg(all(feature = "std", feature = "schemars"))]
+#[cfg(all(feature = "std", feature = "native", feature = "schemars"))]
 impl crate::PublicKey for DefaultPublicKey {
     fn to_address<A: sov_rollup_interface::RollupAddress>(&self) -> A {
         use sha2::Digest;
