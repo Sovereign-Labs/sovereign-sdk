@@ -30,10 +30,10 @@ impl RollupTemplate for MockDemoRollup {
     type Vm = Risc0Host<'static>;
 
     type ZkContext = ZkDefaultContext;
-    type DefaultContext = DefaultContext;
+    type NativeContext = DefaultContext;
 
     type ZkRuntime = Runtime<Self::ZkContext, Self::DaSpec>;
-    type NativeRuntime = Runtime<Self::DefaultContext, Self::DaSpec>;
+    type NativeRuntime = Runtime<Self::NativeContext, Self::DaSpec>;
 
     type DaSpec = MockDaSpec;
     type DaConfig = MockDaConfig;
@@ -41,7 +41,7 @@ impl RollupTemplate for MockDemoRollup {
     fn create_genesis_config(
         &self,
         genesis_paths: &Self::GenesisPaths,
-    ) -> <Self::NativeRuntime as RuntimeTrait<Self::DefaultContext, Self::DaSpec>>::GenesisConfig
+    ) -> <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig
     {
         let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
 
@@ -81,7 +81,7 @@ impl RollupTemplate for MockDemoRollup {
     fn create_native_storage(
         &self,
         rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> <Self::DefaultContext as Spec>::Storage {
+    ) -> <Self::NativeContext as Spec>::Storage {
         let storage_config = StorageConfig {
             path: rollup_config.storage.path.clone(),
         };
@@ -90,7 +90,7 @@ impl RollupTemplate for MockDemoRollup {
 
     fn create_rpc_methods(
         &self,
-        storage: &<Self::DefaultContext as Spec>::Storage,
+        storage: &<Self::NativeContext as Spec>::Storage,
         ledger_db: &LedgerDB,
         da_service: &Self::DaService,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {

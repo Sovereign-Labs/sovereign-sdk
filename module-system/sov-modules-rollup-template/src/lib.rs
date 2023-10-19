@@ -33,17 +33,17 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Context for Zero Knowledge environment.
     type ZkContext: Context;
     /// Context for Native environment.
-    type DefaultContext: Context;
+    type NativeContext: Context;
 
     /// Runtime for Zero Knowledge environment.
     type ZkRuntime: RuntimeTrait<Self::ZkContext, Self::DaSpec> + Default;
     /// Runtime for Native environment.
-    type NativeRuntime: RuntimeTrait<Self::DefaultContext, Self::DaSpec> + Default + Default;
+    type NativeRuntime: RuntimeTrait<Self::NativeContext, Self::DaSpec> + Default + Default;
 
     /// Creates RPC methods for the rollup.
     fn create_rpc_methods(
         &self,
-        storage: &<Self::DefaultContext as Spec>::Storage,
+        storage: &<Self::NativeContext as Spec>::Storage,
         ledger_db: &LedgerDB,
         da_service: &Self::DaService,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error>;
@@ -52,7 +52,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
     fn create_genesis_config(
         &self,
         genesis_paths: &Self::GenesisPaths,
-    ) -> <Self::NativeRuntime as RuntimeTrait<Self::DefaultContext, Self::DaSpec>>::GenesisConfig;
+    ) -> <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig;
 
     /// Creates instance of DA Service.
     async fn create_da_service(
@@ -70,7 +70,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
     fn create_native_storage(
         &self,
         rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> <Self::DefaultContext as Spec>::Storage;
+    ) -> <Self::NativeContext as Spec>::Storage;
 
     /// Creates instance of ZkVm.
     fn create_vm(&self) -> Self::Vm;
@@ -91,7 +91,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
         prover_config: Option<RollupProverConfig>,
     ) -> Result<Rollup<Self>, anyhow::Error>
     where
-        <Self::DefaultContext as Spec>::Storage: NativeStorage,
+        <Self::NativeContext as Spec>::Storage: NativeStorage,
     {
         let da_service = self.create_da_service(&rollup_config).await;
         let ledger_db = self.create_ledger_db(&rollup_config);
@@ -149,7 +149,7 @@ pub struct Rollup<S: RollupTemplate> {
     /// The State Transition Runner.
     #[allow(clippy::type_complexity)]
     pub runner: StateTransitionRunner<
-        AppTemplate<S::DefaultContext, S::DaSpec, S::Vm, S::NativeRuntime>,
+        AppTemplate<S::NativeContext, S::DaSpec, S::Vm, S::NativeRuntime>,
         S::DaService,
         S::Vm,
         AppTemplate<S::ZkContext, S::DaSpec, <S::Vm as ZkvmHost>::Guest, S::ZkRuntime>,

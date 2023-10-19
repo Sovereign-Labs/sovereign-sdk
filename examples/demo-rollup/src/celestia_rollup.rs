@@ -31,10 +31,10 @@ impl RollupTemplate for CelestiaDemoRollup {
     type Vm = Risc0Host<'static>;
 
     type ZkContext = ZkDefaultContext;
-    type DefaultContext = DefaultContext;
+    type NativeContext = DefaultContext;
 
     type ZkRuntime = Runtime<Self::ZkContext, Self::DaSpec>;
-    type NativeRuntime = Runtime<Self::DefaultContext, Self::DaSpec>;
+    type NativeRuntime = Runtime<Self::NativeContext, Self::DaSpec>;
 
     type DaSpec = CelestiaSpec;
     type DaConfig = DaServiceConfig;
@@ -43,7 +43,7 @@ impl RollupTemplate for CelestiaDemoRollup {
         &self,
         genesis_paths: &Self::GenesisPaths,
     ) -> <Self::NativeRuntime as sov_modules_stf_template::Runtime<
-        Self::DefaultContext,
+        Self::NativeContext,
         Self::DaSpec,
     >>::GenesisConfig {
         let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
@@ -92,7 +92,7 @@ impl RollupTemplate for CelestiaDemoRollup {
     fn create_native_storage(
         &self,
         rollup_config: &sov_stf_runner::RollupConfig<Self::DaConfig>,
-    ) -> <Self::DefaultContext as sov_modules_api::Spec>::Storage {
+    ) -> <Self::NativeContext as sov_modules_api::Spec>::Storage {
         let storage_config = StorageConfig {
             path: rollup_config.storage.path.clone(),
         };
@@ -101,7 +101,7 @@ impl RollupTemplate for CelestiaDemoRollup {
 
     fn create_rpc_methods(
         &self,
-        storage: &<Self::DefaultContext as sov_modules_api::Spec>::Storage,
+        storage: &<Self::NativeContext as sov_modules_api::Spec>::Storage,
         ledger_db: &sov_db::ledger_db::LedgerDB,
         da_service: &Self::DaService,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
