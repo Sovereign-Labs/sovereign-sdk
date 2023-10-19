@@ -1,22 +1,19 @@
 use std::iter;
 use std::time::Duration;
 
-use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_ledger_rpc::client::RpcClient;
-use sov_modules_stf_template::{SequencerOutcome, TxEffect};
+use sov_modules_api::DaSpec;
+use sov_modules_stf_template::TxEffect;
 use sov_rollup_interface::rpc::{
     EventIdentifier, ItemOrHash, QueryMode, SlotIdentifier, SlotResponse, TxResponse,
 };
 use tracing::{debug, error, warn};
 
 use crate::api_v0::models::Event;
-use crate::AppState;
+use crate::{AppState, BatchReceipt, TxReceipt};
 
-pub type B = SequencerOutcome<CelestiaAddress>;
-pub type Tx = TxEffect;
-
-pub fn get_txs_from_slot_response(
-    slot: &SlotResponse<SequencerOutcome<CelestiaAddress>, TxEffect>,
+pub fn get_txs_from_slot_response<S: DaSpec>(
+    slot: &SlotResponse<BatchReceipt<S>, TxReceipt>,
 ) -> anyhow::Result<Vec<TxResponse<TxEffect>>> {
     Ok(slot
         .batches
@@ -41,7 +38,7 @@ pub fn get_txs_from_slot_response(
 /// - For each block, insert it into the database.
 /// - For each transaction, insert it into the database.
 /// Repeat.
-pub async fn index_blocks_loop(app_state: AppState, polling_interval: Duration) {
+pub async fn index_blocks_loop<S: DaSpec>(app_state: AppState<S>, polling_interval: Duration) {
     loop {
         // Errors are logged but otherwise ignored. We wouldn't want want to crash the
         // indexer if e.g. the node is down.
@@ -51,7 +48,10 @@ pub async fn index_blocks_loop(app_state: AppState, polling_interval: Duration) 
     }
 }
 
-pub async fn index_blocks(app_state: AppState, polling_interval: Duration) -> anyhow::Result<()> {
+pub async fn index_blocks<S: DaSpec>(
+    app_state: AppState<S>,
+    polling_interval: Duration,
+) -> anyhow::Result<()> {
     debug!(
         polling_interval_in_msecs = polling_interval.as_millis(),
         "Going to sleep before new polling cycle"
@@ -60,13 +60,12 @@ pub async fn index_blocks(app_state: AppState, polling_interval: Duration) -> an
     tokio::time::sleep(polling_interval).await;
 
     // TODO: retry and error handling.
-    let chain_head: SlotResponse<B, Tx> =
-        if let Some(head) = app_state.rpc().get_head(QueryMode::Full).await? {
-            head
-        } else {
-            warn!("`get_head` returned no data, can't index blocks.");
-            return Ok(());
-        };
+    let chain_head = if let Some(head) = app_state.rpc().get_head(QueryMode::Full).await? {
+        head
+    } else {
+        warn!("`get_head` returned no data, can't index blocks.");
+        return Ok(());
+    };
 
     app_state
         .db
@@ -96,7 +95,7 @@ pub async fn index_blocks(app_state: AppState, polling_interval: Duration) -> an
     Ok(())
 }
 
-pub async fn index_block(app_state: AppState, block_num: u64) -> anyhow::Result<()> {
+pub async fn index_block<S: DaSpec>(app_state: AppState<S>, block_num: u64) -> anyhow::Result<()> {
     let blocks = app_state
         .rpc()
         .get_slots(vec![SlotIdentifier::Number(block_num)], QueryMode::Full)
@@ -110,7 +109,7 @@ pub async fn index_block(app_state: AppState, block_num: u64) -> anyhow::Result<
         return Ok(());
     };
 
-    let txs = get_txs_from_slot_response(block)?;
+    let txs = get_txs_from_slot_response::<S>(block)?;
     let block_json = serde_json::to_value(block).expect("block is not serializable, this is a bug");
     let txs_json = txs
         .iter()

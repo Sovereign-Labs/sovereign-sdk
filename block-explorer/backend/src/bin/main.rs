@@ -9,40 +9,10 @@ use axum::Router;
 use backend::indexer::index_blocks_loop;
 use backend::*;
 use clap::Parser;
-use jsonrpsee::ws_client::WsClient;
-use sov_celestia_adapter::verifier::address::CelestiaAddress;
-use sov_modules_stf_template::{SequencerOutcome, TxEffect};
-use sov_rollup_interface::rpc::{BatchResponse, SlotResponse, TxResponse};
+use sov_celestia_adapter::verifier::CelestiaSpec;
+use sov_modules_api::DaSpec;
+use sov_rollup_interface::mocks::MockDaSpec;
 use tracing::info;
-
-type B = SequencerOutcome<CelestiaAddress>;
-type Tx = TxEffect;
-
-type AppState = Arc<AppStateInner>;
-
-/// The application state, to which every request handler has access.
-#[derive(Clone)]
-pub struct AppStateInner {
-    db: Db,
-    rpc: Arc<WsClient>,
-    base_url: String,
-}
-
-impl AppStateInner {
-    /// Helps greatly with type inference when calling
-    /// [`sov_ledger_rpc::client::RpcClient`] methods.
-    fn rpc(
-        &self,
-    ) -> Arc<
-        impl sov_ledger_rpc::client::RpcClient<
-            SlotResponse<B, Tx>,
-            BatchResponse<B, Tx>,
-            TxResponse<Tx>,
-        >,
-    > {
-        self.rpc.clone()
-    }
-}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -59,12 +29,30 @@ async fn main() -> anyhow::Result<()> {
             .await?,
     );
 
-    let app_state = Arc::new(AppStateInner {
-        db,
-        rpc,
-        base_url: config.base_url.clone(),
-    });
+    match config.da_layer {
+        SupportedDaLayer::Celestia => {
+            let app_state = Arc::new(AppStateInner::<CelestiaSpec>::new(
+                db,
+                rpc,
+                config.base_url.clone(),
+            ));
+            inner_main(config, app_state).await
+        }
+        SupportedDaLayer::Mock => {
+            let app_state = Arc::new(AppStateInner::<MockDaSpec>::new(
+                db,
+                rpc,
+                config.base_url.clone(),
+            ));
+            inner_main(config, app_state).await
+        }
+    }
+}
 
+async fn inner_main<S>(config: Arc<Config>, app_state: AppState<S>) -> anyhow::Result<()>
+where
+    S: DaSpec + Send + Sync,
+{
     let app = Router::new()
         .nest("/api/v0", api_v0::router(app_state.clone()))
         .nest("/metrics", metrics::router(metrics::Metrics {}));
@@ -83,18 +71,4 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     Ok(())
-}
-
-#[derive(Debug, Parser)]
-pub struct Config {
-    #[clap(long, default_value = "2")]
-    polling_interval_in_secs: u64,
-    #[clap(long, env)]
-    db_connection_url: String,
-    #[clap(long, default_value = "3010")]
-    port: u16,
-    #[clap(long, env, default_value = "ws://localhost:12345")]
-    ledger_rpc_url: String,
-    #[clap(long, default_value = "http://localhost:3010")]
-    base_url: String,
 }

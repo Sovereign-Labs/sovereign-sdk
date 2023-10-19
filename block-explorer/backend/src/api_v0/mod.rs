@@ -29,10 +29,13 @@ use self::extractors::PathWithErrorHandling;
 use crate::utils::HexString;
 use crate::AppState;
 
-type AxumState = State<AppState>;
+type AxumState<S> = State<AppState<S>>;
 
 /// The [`axum::Router`] for the v0 API exposed by the block explorer.
-pub fn router(app_state: AppState) -> Router {
+pub fn router<S>(app_state: AppState<S>) -> Router
+where
+    S: Send + Sync + 'static,
+{
     let trace_layer = TraceLayer::new_for_http().make_span_with(|request: &Request<Body>| {
         // We get the request id from the extensions
         let request_id = request
@@ -82,7 +85,10 @@ pub fn router(app_state: AppState) -> Router {
         .nest("/extensions/accounts", router_accounts(app_state.clone()))
 }
 
-fn router_bank(app_state: AppState) -> Router {
+fn router_bank<S>(app_state: AppState<S>) -> Router
+where
+    S: Send + Sync + 'static,
+{
     Router::new()
         .route("/", get(api_utils::not_implemented_501))
         .route("/tokens", get(api_utils::not_implemented_501))
@@ -90,7 +96,10 @@ fn router_bank(app_state: AppState) -> Router {
         .with_state(app_state)
 }
 
-fn router_accounts(app_state: AppState) -> Router {
+fn router_accounts<S>(app_state: AppState<S>) -> Router
+where
+    S: Send + Sync + 'static,
+{
     Router::new()
         .route("/", get(api_utils::not_implemented_501))
         .route("/accounts", get(api_utils::not_implemented_501))
@@ -102,8 +111,8 @@ fn router_accounts(app_state: AppState) -> Router {
         .with_state(app_state)
 }
 
-async fn get_tx_by_hash(
-    State(state): AxumState,
+async fn get_tx_by_hash<S>(
+    State(state): AxumState<S>,
     PathWithErrorHandling(tx_hash): PathWithErrorHandling<HexString>,
 ) -> impl IntoResponse {
     let tx = match state.db.get_tx_by_hash(&tx_hash).await {
@@ -131,8 +140,8 @@ async fn get_tx_by_hash(
     )
 }
 
-async fn get_block_by_hash(
-    State(state): AxumState,
+async fn get_block_by_hash<S>(
+    State(state): AxumState<S>,
     PathWithErrorHandling(block_hash): PathWithErrorHandling<HexString>,
     OriginalUri(uri): OriginalUri,
 ) -> (StatusCode, Json<ResponseObject<JsonValue>>) {
@@ -160,8 +169,8 @@ async fn get_block_by_hash(
     (StatusCode::OK, Json(response_obj))
 }
 
-async fn get_events(
-    State(state): AxumState,
+async fn get_events<S>(
+    State(state): AxumState<S>,
     ValidatedQuery(params): ValidatedQuery<models::EventsQuery>,
     OriginalUri(uri): OriginalUri,
 ) -> (StatusCode, Json<ResponseObject<models::Event>>) {
@@ -188,8 +197,8 @@ async fn get_events(
     (StatusCode::OK, Json(response_obj))
 }
 
-async fn get_blocks(
-    State(state): AxumState,
+async fn get_blocks<S>(
+    State(state): AxumState<S>,
     Query(params): Query<models::BlocksQuery>,
     OriginalUri(uri): OriginalUri,
 ) -> (StatusCode, Json<ResponseObject<JsonValue>>) {
@@ -218,8 +227,8 @@ async fn get_blocks(
     (StatusCode::OK, Json(response_obj))
 }
 
-async fn get_transactions(
-    State(state): AxumState,
+async fn get_transactions<S>(
+    State(state): AxumState<S>,
     ValidatedQuery(params): ValidatedQuery<models::TransactionsQuery>,
     OriginalUri(uri): OriginalUri,
 ) -> (StatusCode, Json<ResponseObject<JsonValue>>) {
@@ -247,8 +256,8 @@ async fn get_transactions(
     (StatusCode::OK, Json(response_obj))
 }
 
-async fn get_indexing_status(
-    State(state): AxumState,
+async fn get_indexing_status<S>(
+    State(state): AxumState<S>,
 ) -> (StatusCode, Json<ResponseObject<JsonValue>>) {
     let chain_head_opt = match state.db.chain_head().await {
         Ok(chain_head_opt) => chain_head_opt,
@@ -271,8 +280,8 @@ async fn get_indexing_status(
     (StatusCode::OK, Json(response_obj))
 }
 
-async fn get_batch(
-    State(state): AxumState,
+async fn get_batch<S>(
+    State(state): AxumState<S>,
     PathWithErrorHandling(batch_hash): PathWithErrorHandling<HexString>,
 ) -> (StatusCode, Json<ResponseObject<JsonValue>>) {
     let batch_contents = match state.db.get_batch_by_hash(&batch_hash).await {
@@ -297,8 +306,8 @@ async fn get_batch(
     (StatusCode::OK, Json(response_obj))
 }
 
-async fn get_batches(
-    State(state): AxumState,
+async fn get_batches<S>(
+    State(state): AxumState<S>,
     ValidatedQuery(params): ValidatedQuery<models::BatchesQuery>,
     OriginalUri(uri): OriginalUri,
 ) -> (StatusCode, Json<ResponseObject<JsonValue>>) {
@@ -410,8 +419,8 @@ mod api_utils {
         )
     }
 
-    pub fn pagination_links(
-        state: &AppState,
+    pub fn pagination_links<S>(
+        state: &AppState<S>,
         uri: &Uri,
         pagination: &Pagination<i64>,
         new_cursor_value: &str,

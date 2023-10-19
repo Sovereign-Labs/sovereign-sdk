@@ -12,6 +12,7 @@ use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
 use demo_stf::App;
 use jsonrpsee::ws_client::WsClientBuilder;
 use serde_json::Value;
+use sov_celestia_adapter::verifier::CelestiaSpec;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_modules_stf_template::{SequencerOutcome, TxEffect};
 use sov_risc0_adapter::host::Risc0Verifier;
@@ -132,11 +133,12 @@ async fn create_test_server(
         "postgresql://postgres:postgres@127.0.0.1:{}/postgres?sslmode=disable",
         postgres_container.get_host_port_ipv4(5432)
     );
-    let app_state = Arc::new(AppStateInner {
-        db: Db::new(connection_string).await.unwrap(),
+    let db = Db::new(connection_string).await.unwrap();
+    let app_state = Arc::new(AppStateInner::<CelestiaSpec>::new(
+        db,
         rpc,
-        base_url: "http://localhost:3010".to_string(),
-    });
+        "http://localhost:3010".to_string(),
+    ));
     index_blocks(app_state.clone(), Duration::default())
         .await
         .unwrap();
