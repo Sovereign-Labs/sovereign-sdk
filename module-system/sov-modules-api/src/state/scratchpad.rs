@@ -1,7 +1,8 @@
-use std::collections::HashMap;
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
+use sov_rollup_interface::maybestd::collections::HashMap;
+use sov_rollup_interface::maybestd::vec::Vec;
 use sov_rollup_interface::stf::Event;
 use sov_state::codec::{EncodeKeyLike, StateCodec, StateValueCodec};
 use sov_state::storage::{NativeStorage, Storage, StorageKey, StorageValue};
@@ -32,15 +33,15 @@ impl<S: Storage> Delta<S> {
     }
 
     fn freeze(&mut self) -> (OrderedReadsAndWrites, S::Witness) {
-        let cache = std::mem::take(&mut self.cache);
-        let witness = std::mem::take(&mut self.witness);
+        let cache = core::mem::take(&mut self.cache);
+        let witness = core::mem::take(&mut self.witness);
 
         (cache.into(), witness)
     }
 }
 
 impl<S: Storage> Debug for Delta<S> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Delta").finish()
     }
 }
@@ -79,7 +80,7 @@ impl<S: Storage> AccessoryDelta<S> {
 
     fn freeze(&mut self) -> OrderedReadsAndWrites {
         let mut reads_and_writes = OrderedReadsAndWrites::default();
-        let writes = std::mem::take(&mut self.writes);
+        let writes = core::mem::take(&mut self.writes);
 
         for write in writes {
             reads_and_writes.ordered_writes.push((write.0, write.1));
@@ -238,7 +239,7 @@ impl<C: Context> WorkingSet<C> {
 
     /// Extracts all events from this working set.
     pub fn take_events(&mut self) -> Vec<Event> {
-        std::mem::take(&mut self.events)
+        core::mem::take(&mut self.events)
     }
 
     /// Returns an immutable slice of all events that have been previously
@@ -320,7 +321,7 @@ struct RevertableWriter<T> {
 }
 
 impl<T: Debug> Debug for RevertableWriter<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("RevertableWriter")
             .field("inner", &self.inner)
             .finish()

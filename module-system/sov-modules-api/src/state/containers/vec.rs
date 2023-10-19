@@ -1,9 +1,9 @@
-use std::iter::FusedIterator;
-use std::marker::PhantomData;
+use core::iter::FusedIterator;
+use core::marker::PhantomData;
 
+use sov_rollup_interface::maybestd::vec::Vec;
 use sov_state::codec::{BorshCodec, StateCodec, StateKeyCodec, StateValueCodec};
 use sov_state::Prefix;
-use thiserror::Error;
 
 use crate::state::{StateMap, StateValue, WorkingSet};
 use crate::Context;
@@ -26,14 +26,32 @@ pub struct StateVec<V, Codec = BorshCodec> {
 }
 
 /// Error type for `StateVec` get method.
-#[derive(Debug, Error)]
+#[derive(Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum Error {
     /// Operation failed because the index was out of bounds.
-    #[error("Index out of bounds for index: {0}")]
+    #[cfg_attr(feature = "std", error("Index out of bounds for index: {0}"))]
     IndexOutOfBounds(usize),
     /// Value not found.
-    #[error("Value not found for prefix: {0} and index: {1}")]
+    #[cfg_attr(
+        feature = "std",
+        error("Value not found for prefix: {0} and index: {1}")
+    )]
     MissingValue(Prefix, usize),
+}
+
+#[cfg(not(feature = "std"))]
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl From<Error> for anyhow::Error {
+    fn from(e: Error) -> Self {
+        anyhow::Error::msg(e)
+    }
 }
 
 impl<V> StateVec<V>
@@ -272,7 +290,7 @@ where
 
 #[cfg(all(test, feature = "native"))]
 mod test {
-    use std::fmt::Debug;
+    use core::fmt::Debug;
 
     use sov_state::{DefaultStorageSpec, ProverStorage};
 

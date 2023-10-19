@@ -1,15 +1,13 @@
 #[cfg(feature = "native")]
 use serde::{Deserialize, Serialize};
-use sha2::Digest;
-use sov_rollup_interface::RollupAddress;
-#[cfg(feature = "native")]
-use sov_state::ProverStorage;
-use sov_state::{ArrayWitness, DefaultStorageSpec, ZkStorage};
 
-#[cfg(feature = "native")]
+#[cfg(all(feature = "std", feature = "dep:schemars"))]
 use crate::default_signature::private_key::DefaultPrivateKey;
+#[cfg(all(feature = "std", feature = "dep:schemars"))]
 use crate::default_signature::{DefaultPublicKey, DefaultSignature};
-use crate::{Address, Context, PublicKey, Spec, TupleGasUnit};
+use crate::Address;
+#[cfg(all(feature = "std", feature = "dep:schemars"))]
+use crate::{Spec, TupleGasUnit};
 
 #[cfg(feature = "native")]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
@@ -18,19 +16,19 @@ pub struct DefaultContext {
     pub sender: Address,
 }
 
-#[cfg(feature = "native")]
+#[cfg(all(feature = "std", feature = "native", feature = "dep:schemars"))]
 impl Spec for DefaultContext {
     type Address = Address;
-    type Storage = ProverStorage<DefaultStorageSpec>;
+    type Storage = sov_state::ProverStorage<sov_state::DefaultStorageSpec>;
     type PrivateKey = DefaultPrivateKey;
     type PublicKey = DefaultPublicKey;
     type Hasher = sha2::Sha256;
     type Signature = DefaultSignature;
-    type Witness = ArrayWitness;
+    type Witness = sov_state::ArrayWitness;
 }
 
-#[cfg(feature = "native")]
-impl Context for DefaultContext {
+#[cfg(all(feature = "native", feature = "dep:schemars"))]
+impl crate::Context for DefaultContext {
     type GasUnit = TupleGasUnit<2>;
 
     fn sender(&self) -> &Self::Address {
@@ -48,18 +46,20 @@ pub struct ZkDefaultContext {
     pub sender: Address,
 }
 
+#[cfg(all(feature = "std", feature = "dep:schemars"))]
 impl Spec for ZkDefaultContext {
     type Address = Address;
-    type Storage = ZkStorage<DefaultStorageSpec>;
+    type Storage = sov_state::ZkStorage<sov_state::DefaultStorageSpec>;
     #[cfg(feature = "native")]
     type PrivateKey = DefaultPrivateKey;
     type PublicKey = DefaultPublicKey;
     type Hasher = sha2::Sha256;
     type Signature = DefaultSignature;
-    type Witness = ArrayWitness;
+    type Witness = sov_state::ArrayWitness;
 }
 
-impl Context for ZkDefaultContext {
+#[cfg(all(feature = "std", feature = "dep:schemars"))]
+impl crate::Context for ZkDefaultContext {
     type GasUnit = TupleGasUnit<2>;
 
     fn sender(&self) -> &Self::Address {
@@ -71,8 +71,10 @@ impl Context for ZkDefaultContext {
     }
 }
 
-impl PublicKey for DefaultPublicKey {
-    fn to_address<A: RollupAddress>(&self) -> A {
+#[cfg(all(feature = "std", feature = "dep:schemars"))]
+impl crate::PublicKey for DefaultPublicKey {
+    fn to_address<A: sov_rollup_interface::RollupAddress>(&self) -> A {
+        use sha2::Digest;
         let pub_key_hash = {
             let mut hasher = <ZkDefaultContext as Spec>::Hasher::new();
             hasher.update(self.pub_key);

@@ -1,3 +1,6 @@
+use sov_rollup_interface::maybestd::io;
+use sov_rollup_interface::maybestd::vec::Vec;
+
 use crate::{CallResponse, Context, Error, Module, Spec, WorkingSet};
 
 /// Methods from this trait should be called only once during the rollup deployment.
@@ -21,7 +24,7 @@ pub trait DispatchCall {
     type Decodable;
 
     /// Decodes serialized call message
-    fn decode_call(serialized_message: &[u8]) -> Result<Self::Decodable, std::io::Error>;
+    fn decode_call(serialized_message: &[u8]) -> Result<Self::Decodable, io::Error>;
 
     /// Dispatches a call message to the appropriate module.
     fn dispatch_call(

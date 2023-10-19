@@ -1,35 +1,67 @@
-use std::hash::Hash;
+use core::hash::Hash;
 #[cfg(feature = "native")]
-use std::str::FromStr;
+use core::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ed25519_dalek::{
     Signature as DalekSignature, VerifyingKey as DalekPublicKey, PUBLIC_KEY_LENGTH,
 };
+use sov_rollup_interface::maybestd::io;
+use sov_rollup_interface::maybestd::string::ToString;
 
 use crate::{SigVerificationError, Signature};
 
 #[cfg(feature = "native")]
 pub mod private_key {
-    use ed25519_dalek::{Signer, SigningKey, KEYPAIR_LENGTH, SECRET_KEY_LENGTH};
-    use rand::rngs::OsRng;
-    use thiserror::Error;
+    use ed25519_dalek::{SigningKey, KEYPAIR_LENGTH, SECRET_KEY_LENGTH};
 
-    use super::{DefaultPublicKey, DefaultSignature};
+    #[cfg(feature = "dep:schemars")]
     use crate::{Address, PrivateKey, PublicKey};
 
-    #[derive(Error, Debug)]
+    #[derive(Debug)]
+    #[cfg_attr(feature = "std", derive(thiserror::Error))]
     pub enum DefaultPrivateKeyDeserializationError {
-        #[error("Hex deserialization error")]
-        FromHexError(#[from] hex::FromHexError),
-        #[error("KeyPairError deserialization error")]
-        KeyPairError(#[from] ed25519_dalek::SignatureError),
-        #[error("Invalid private key length: {actual}, expected {expected_1} or {expected_2}")]
+        #[cfg_attr(feature = "std", error("Hex deserialization error"))]
+        FromHexError(#[cfg_attr(feature = "std", from)] hex::FromHexError),
+        #[cfg_attr(feature = "std", error("KeyPairError deserialization error"))]
+        KeyPairError(#[cfg_attr(feature = "std", from)] ed25519_dalek::SignatureError),
+        #[cfg_attr(
+            feature = "std",
+            error("Invalid private key length: {actual}, expected {expected_1} or {expected_2}")
+        )]
         InvalidPrivateKeyLength {
             expected_1: usize,
             expected_2: usize,
             actual: usize,
         },
+    }
+
+    #[cfg(not(feature = "std"))]
+    impl core::fmt::Display for DefaultPrivateKeyDeserializationError {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            write!(f, "{:?}", self)
+        }
+    }
+
+    #[cfg(not(feature = "std"))]
+    impl From<DefaultPrivateKeyDeserializationError> for anyhow::Error {
+        fn from(e: DefaultPrivateKeyDeserializationError) -> Self {
+            anyhow::Error::msg(e)
+        }
+    }
+
+    #[cfg(not(feature = "std"))]
+    impl From<hex::FromHexError> for DefaultPrivateKeyDeserializationError {
+        fn from(e: hex::FromHexError) -> Self {
+            Self::FromHexError(e)
+        }
+    }
+
+    #[cfg(not(feature = "std"))]
+    impl From<ed25519_dalek::SignatureError> for DefaultPrivateKeyDeserializationError {
+        fn from(e: ed25519_dalek::SignatureError) -> Self {
+            Self::KeyPairError(e)
+        }
     }
 
     /// A private key for the default signature scheme.
@@ -60,7 +92,7 @@ pub mod private_key {
     }
 
     impl core::fmt::Debug for DefaultPrivateKey {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
             f.debug_struct("DefaultPrivateKey")
                 .field("public_key", &self.key_pair.verifying_key())
                 .field("private_key", &"***REDACTED***")
@@ -89,13 +121,14 @@ pub mod private_key {
         }
     }
 
+    #[cfg(feature = "dep:schemars")]
     impl PrivateKey for DefaultPrivateKey {
-        type PublicKey = DefaultPublicKey;
+        type PublicKey = super::DefaultPublicKey;
 
-        type Signature = DefaultSignature;
+        type Signature = super::DefaultSignature;
 
         fn generate() -> Self {
-            let mut csprng = OsRng;
+            let mut csprng = rand::rngs::OsRng;
 
             Self {
                 key_pair: SigningKey::generate(&mut csprng),
@@ -103,18 +136,19 @@ pub mod private_key {
         }
 
         fn pub_key(&self) -> Self::PublicKey {
-            DefaultPublicKey {
+            super::DefaultPublicKey {
                 pub_key: self.key_pair.verifying_key(),
             }
         }
 
         fn sign(&self, msg: &[u8]) -> Self::Signature {
-            DefaultSignature {
+            super::DefaultSignature {
                 msg_sig: self.key_pair.sign(msg),
             }
         }
     }
 
+    #[cfg(feature = "dep:schemars")]
     impl DefaultPrivateKey {
         pub fn as_hex(&self) -> String {
             hex::encode(self.key_pair.to_bytes())
@@ -147,15 +181,15 @@ pub mod private_key {
         }
     }
 
-    #[cfg(feature = "arbitrary")]
-    impl<'a> arbitrary::Arbitrary<'a> for DefaultPublicKey {
+    #[cfg(all(feature = "arbitrary", feature = "dep:schemars"))]
+    impl<'a> arbitrary::Arbitrary<'a> for super::DefaultPublicKey {
         fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
             DefaultPrivateKey::arbitrary(u).map(|p| p.pub_key())
         }
     }
 
-    #[cfg(feature = "arbitrary")]
-    impl<'a> arbitrary::Arbitrary<'a> for DefaultSignature {
+    #[cfg(all(feature = "arbitrary", feature = "dep:schemars"))]
+    impl<'a> arbitrary::Arbitrary<'a> for super::DefaultSignature {
         fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
             // the secret/public pair is lost; it is impossible to verify this signature
             // to run a verification, generate the keys+payload individually
@@ -166,24 +200,27 @@ pub mod private_key {
     }
 }
 
-#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    all(feature = "native", feature = "dep:schemars"),
+    derive(schemars::JsonSchema)
+)]
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct DefaultPublicKey {
     #[cfg_attr(
-        feature = "native",
+        all(feature = "native", feature = "dep:schemars"),
         schemars(with = "&[u8]", length(equal = "ed25519_dalek::PUBLIC_KEY_LENGTH"))
     )]
     pub(crate) pub_key: DalekPublicKey,
 }
 
 impl Hash for DefaultPublicKey {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.pub_key.as_bytes().hash(state);
     }
 }
 
 impl BorshDeserialize for DefaultPublicKey {
-    fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+    fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
         let mut buffer = [0; PUBLIC_KEY_LENGTH];
         reader.read_exact(&mut buffer)?;
 
@@ -194,26 +231,26 @@ impl BorshDeserialize for DefaultPublicKey {
 }
 
 impl BorshSerialize for DefaultPublicKey {
-    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+    fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
         writer.write_all(self.pub_key.as_bytes())
     }
 }
 
 #[cfg_attr(
-    feature = "native",
+    all(feature = "native", feature = "dep:schemars"),
     derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)
 )]
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct DefaultSignature {
     #[cfg_attr(
-        feature = "native",
+        all(feature = "native", feature = "dep:schemars"),
         schemars(with = "&[u8]", length(equal = "ed25519_dalek::Signature::BYTE_SIZE"))
     )]
     pub msg_sig: DalekSignature,
 }
 
 impl BorshDeserialize for DefaultSignature {
-    fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+    fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
         let mut buffer = [0; DalekSignature::BYTE_SIZE];
         reader.read_exact(&mut buffer)?;
 
@@ -224,7 +261,7 @@ impl BorshDeserialize for DefaultSignature {
 }
 
 impl BorshSerialize for DefaultSignature {
-    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+    fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
         writer.write_all(&self.msg_sig.to_bytes())
     }
 }
@@ -241,12 +278,12 @@ impl Signature for DefaultSignature {
 }
 
 #[cfg(feature = "native")]
-fn map_error(e: ed25519_dalek::SignatureError) -> std::io::Error {
-    std::io::Error::new(std::io::ErrorKind::Other, e)
+fn map_error(e: ed25519_dalek::SignatureError) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, e)
 }
 #[cfg(not(feature = "native"))]
-fn map_error(_e: ed25519_dalek::SignatureError) -> std::io::Error {
-    std::io::Error::new(std::io::ErrorKind::Other, "Signature error")
+fn map_error(_e: ed25519_dalek::SignatureError) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, "Signature error")
 }
 
 #[cfg(feature = "native")]

@@ -1,5 +1,6 @@
-use derive_more::Display;
 use ed25519_dalek::{VerifyingKey as DalekPublicKey, PUBLIC_KEY_LENGTH};
+use sov_rollup_interface::maybestd::borrow::ToOwned;
+use sov_rollup_interface::maybestd::string::String;
 
 /// A hexadecimal representation of a PublicKey.
 use crate::default_signature::DefaultPublicKey;
@@ -12,10 +13,13 @@ use crate::default_signature::DefaultPublicKey;
     PartialEq,
     Clone,
     Eq,
-    Display,
 )]
-#[serde(try_from = "String", into = "String")]
-#[display(fmt = "{}", "hex")]
+#[cfg_attr(
+    feature = "std",
+    serde(try_from = "String", into = "String"),
+    derive(derive_more::Display),
+    display(fmt = "{}", "hex")
+)]
 pub struct PublicKeyHex {
     hex: String,
 }

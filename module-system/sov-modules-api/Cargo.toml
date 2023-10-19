@@ -24,7 +24,7 @@ jmt = { workspace = true }
 jsonrpsee = { workspace = true, optional = true }
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
-rand = { workspace = true, optional = true }
+rand = { workspace = true, optional = true, features = ["getrandom"] }
 risc0-zkvm = { workspace = true, optional = true }
 risc0-zkvm-platform = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true }
@@ -71,7 +71,7 @@ native = [
     "ed25519-dalek/default",
     "ed25519-dalek/rand_core",
     "macros",
-    "sov-modules-macros/native",
+    "sov-modules-macros?/native",
     "sov-state/native",
 ]
 macros = ["sov-modules-macros"]
@@ -90,6 +90,7 @@ std = [
     "serde_json?/default",
     "sha2/default",
     "sov-first-read-last-write-cache/default",
+    "sov-modules-macros?/default",
     "sov-rollup-interface/default",
     "sov-state/default",
     "thiserror",

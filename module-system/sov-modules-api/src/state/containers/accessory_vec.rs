@@ -1,6 +1,7 @@
-use std::iter::FusedIterator;
-use std::marker::PhantomData;
+use core::iter::FusedIterator;
+use core::marker::PhantomData;
 
+use sov_rollup_interface::maybestd::vec::Vec;
 use sov_state::codec::{BorshCodec, StateCodec, StateKeyCodec, StateValueCodec};
 use sov_state::Prefix;
 

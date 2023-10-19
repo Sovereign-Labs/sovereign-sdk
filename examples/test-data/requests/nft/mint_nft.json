@@ -1,9 +1,0 @@
-{
-  "MintNft": {
-    "collection_name": "Test Collection",
-    "token_uri": "https://foo.bar/test_collection/nft/42",
-    "token_id": 42,
-    "owner": "sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqwr57gc",
-    "frozen": false
-  }
-}

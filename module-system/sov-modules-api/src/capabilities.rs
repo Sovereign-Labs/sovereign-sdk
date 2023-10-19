@@ -8,6 +8,7 @@
 //! [See here for docs](https://github.com/Sovereign-Labs/sovereign-sdk/blob/nightly/examples/demo-stf/README.md)
 
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
+use sov_rollup_interface::maybestd::vec::Vec;
 
 use crate::{Context, WorkingSet};
 

@@ -1,8 +1,7 @@
-use std::marker::PhantomData;
+use core::marker::PhantomData;
 
 use sov_state::codec::{BorshCodec, StateCodec, StateValueCodec};
 use sov_state::Prefix;
-use thiserror::Error;
 
 use crate::state::{StateReaderAndWriter, WorkingSet};
 use crate::Context;
@@ -24,11 +23,26 @@ pub struct StateValue<V, Codec = BorshCodec> {
 }
 
 /// Error type for `StateValue` get method.
-#[derive(Debug, Error)]
+#[derive(Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum Error {
     /// Value not found.
-    #[error("Value not found for prefix: {0}")]
+    #[cfg_attr(feature = "std", error("Value not found for prefix: {0}"))]
     MissingValue(Prefix),
+}
+
+#[cfg(not(feature = "std"))]
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl From<Error> for anyhow::Error {
+    fn from(e: Error) -> Self {
+        anyhow::Error::msg(e)
+    }
 }
 
 impl<V> StateValue<V> {

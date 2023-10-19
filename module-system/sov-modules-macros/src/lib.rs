@@ -14,9 +14,12 @@ mod cli_parser;
 mod common;
 mod default_runtime;
 mod dispatch;
+#[cfg(feature = "std")]
 mod make_constants;
+#[cfg(feature = "std")]
 mod manifest;
 mod module_call_json_schema;
+#[cfg(feature = "std")]
 mod module_info;
 mod new_types;
 mod offchain;
@@ -29,6 +32,7 @@ use default_runtime::DefaultRuntimeMacro;
 use dispatch::dispatch_call::DispatchCallMacro;
 use dispatch::genesis::GenesisMacro;
 use dispatch::message_codec::MessageCodec;
+#[cfg(feature = "std")]
 use make_constants::{make_const, PartialItemConst};
 use module_call_json_schema::derive_module_call_json_schema;
 use new_types::address_type_helper;
@@ -38,6 +42,7 @@ use proc_macro::TokenStream;
 use rpc::ExposeRpcMacro;
 use syn::{parse_macro_input, DeriveInput, ItemFn};
 
+#[cfg(feature = "std")]
 #[proc_macro_derive(ModuleInfo, attributes(state, module, address, gas))]
 pub fn module_info(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
@@ -85,6 +90,7 @@ pub fn codec(input: TokenStream) -> TokenStream {
 }
 
 /// Sets a constant from the manifest file instead of hard-coding it inline.
+#[cfg(feature = "std")]
 #[proc_macro_attribute]
 pub fn config_constant(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as PartialItemConst);

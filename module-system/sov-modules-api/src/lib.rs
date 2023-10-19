@@ -2,7 +2,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 mod bech32;
-/*
 pub mod capabilities;
 #[cfg(feature = "native")]
 pub mod cli;
@@ -35,15 +34,13 @@ pub use pub_key_hex::PublicKeyHex;
 pub use state::*;
 #[cfg(feature = "macros")]
 extern crate sov_modules_macros;
-*/
 
 use core::fmt::{self, Debug, Display};
 use core::hash::Hash;
 use core::str::FromStr;
 
-/*
 use borsh::{BorshDeserialize, BorshSerialize};
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "dep:clap"))]
 pub use clap;
 use digest::typenum::U32;
 use digest::Digest;
@@ -54,23 +51,19 @@ pub use error::Error;
 pub use gas::{GasUnit, TupleGasUnit};
 pub use prefix::Prefix;
 pub use response::CallResponse;
-*/
 #[cfg(feature = "native")]
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-/*
+pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::maybestd::collections::{HashMap, HashSet};
-*/
+use sov_rollup_interface::maybestd::format;
 use sov_rollup_interface::maybestd::string::String;
 use sov_rollup_interface::maybestd::vec::Vec;
-/*
-pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 pub use sov_rollup_interface::services::da::SlotData;
 pub use sov_rollup_interface::stf::Event;
 pub use sov_rollup_interface::zk::{
     StateTransition, ValidityCondition, ValidityConditionChecker, Zkvm,
 };
-*/
 pub use sov_rollup_interface::{digest, BasicAddress, RollupAddress};
 use sov_state::{Storage, Witness};
 
@@ -86,12 +79,13 @@ impl AsRef<[u8]> for Address {
     }
 }
 
-/*
 impl BasicAddress for Address {}
 impl RollupAddress for Address {}
-*/
 
-#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    all(feature = "native", feature = "dep:schemars"),
+    derive(schemars::JsonSchema)
+)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(PartialEq, Clone, Copy, Eq, borsh::BorshDeserialize, borsh::BorshSerialize, Hash)]
 pub struct Address {
@@ -161,6 +155,20 @@ pub enum SigVerificationError {
     BadSignature(String),
 }
 
+#[cfg(not(feature = "std"))]
+impl fmt::Display for SigVerificationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl From<SigVerificationError> for anyhow::Error {
+    fn from(e: SigVerificationError) -> Self {
+        anyhow::Error::msg(e)
+    }
+}
+
 /// Signature used in the Module System.
 pub trait Signature:
     borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug + Send + Sync
@@ -173,12 +181,11 @@ pub trait Signature:
 /// A type that can't be instantiated.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(
-    all(feature = "native", feature = "schemars"),
+    all(feature = "native", feature = "dep:schemars"),
     derive(schemars::JsonSchema)
 )]
 pub enum NonInstantiable {}
 
-/*
 /// PublicKey used in the Module System.
 pub trait PublicKey:
     borsh::BorshDeserialize
@@ -226,7 +233,7 @@ pub trait PrivateKey:
 /// code for either (or both!) of these environments without touching their module implementations.
 pub trait Spec {
     /// The Address type used on the rollup. Typically calculated as the hash of a public key.
-    #[cfg(feature = "native")]
+    #[cfg(all(feature = "native", feature = "dep:schemars"))]
     type Address: RollupAddress
         + BorshSerialize
         + BorshDeserialize
@@ -234,6 +241,16 @@ pub trait Spec {
         // Do we always need this, even when the module does not have a JSON
         // Schema? That feels a bit wrong.
         + ::schemars::JsonSchema
+        + Into<AddressBech32>
+        + From<AddressBech32>
+        + FromStr<Err = anyhow::Error>;
+
+    /// The Address type used on the rollup. Typically calculated as the hash of a public key.
+    #[cfg(not(all(feature = "native", feature = "dep:schemars")))]
+    type Address: RollupAddress
+        + BorshSerialize
+        + BorshDeserialize
+        + Sync
         + Into<AddressBech32>
         + From<AddressBech32>
         + FromStr<Err = anyhow::Error>;
@@ -250,8 +267,12 @@ pub trait Spec {
     type PrivateKey: PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
 
     /// The public key used for digital signatures
-    #[cfg(feature = "native")]
+    #[cfg(all(feature = "native", feature = "dep:schemars"))]
     type PublicKey: PublicKey + ::schemars::JsonSchema + FromStr<Err = anyhow::Error>;
+
+    /// The public key used for digital signatures
+    #[cfg(not(all(feature = "native", feature = "dep:schemars")))]
+    type PublicKey: PublicKey + FromStr<Err = anyhow::Error>;
 
     #[cfg(not(feature = "native"))]
     type PublicKey: PublicKey;
@@ -260,7 +281,14 @@ pub trait Spec {
     type Hasher: Digest<OutputSize = U32>;
 
     /// The digital signature scheme used by the rollup
-    #[cfg(feature = "native")]
+    #[cfg(not(all(feature = "native", feature = "dep:schemars")))]
+    type Signature: Signature<PublicKey = Self::PublicKey>
+        + FromStr<Err = anyhow::Error>
+        + Serialize
+        + for<'a> Deserialize<'a>;
+
+    /// The digital signature scheme used by the rollup
+    #[cfg(all(feature = "native", feature = "dep:schemars"))]
     type Signature: Signature<PublicKey = Self::PublicKey>
         + FromStr<Err = anyhow::Error>
         + Serialize
@@ -507,4 +535,3 @@ pub trait CliWalletArg: From<Self::CliStringRepr> {
     /// this type implements the clap::Subcommand trait.
     type CliStringRepr;
 }
-*/

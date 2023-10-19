@@ -1,3 +1,4 @@
+use sov_rollup_interface::maybestd::vec::Vec;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use sov_zk_cycle_macros::cycle_tracker;
 
@@ -37,7 +38,7 @@ impl<C: Context> Transaction<C> {
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     pub fn verify(&self) -> anyhow::Result<()> {
         let mut serialized_tx =
-            Vec::with_capacity(self.runtime_msg().len() + std::mem::size_of::<u64>());
+            Vec::with_capacity(self.runtime_msg().len() + core::mem::size_of::<u64>());
         serialized_tx.extend_from_slice(self.runtime_msg());
         serialized_tx.extend_from_slice(&self.nonce().to_le_bytes());
         self.signature().verify(&self.pub_key, &serialized_tx)?;

@@ -1,9 +1,8 @@
-use std::marker::PhantomData;
+use core::marker::PhantomData;
 
 use sov_state::codec::{BorshCodec, EncodeKeyLike, StateCodec, StateKeyCodec, StateValueCodec};
 use sov_state::storage::StorageKey;
 use sov_state::Prefix;
-use thiserror::Error;
 
 use crate::state::{StateReaderAndWriter, WorkingSet};
 use crate::Context;
@@ -31,11 +30,29 @@ pub struct StateMap<K, V, Codec = BorshCodec> {
 }
 
 /// Error type for the [`StateMap::get`] method.
-#[derive(Debug, Error)]
+#[derive(Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum StateMapError {
     /// Value not found.
-    #[error("Value not found for prefix: {0} and: storage key {1}")]
+    #[cfg_attr(
+        feature = "std",
+        error("Value not found for prefix: {0} and: storage key {1}")
+    )]
     MissingValue(Prefix, StorageKey),
+}
+
+#[cfg(not(feature = "std"))]
+impl core::fmt::Display for StateMapError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl From<StateMapError> for anyhow::Error {
+    fn from(e: StateMapError) -> Self {
+        anyhow::Error::msg(e)
+    }
 }
 
 impl<K, V> StateMap<K, V> {
