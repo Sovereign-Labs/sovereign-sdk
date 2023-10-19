@@ -5,7 +5,7 @@
 - sov-zk-cycle-macros
 - sov-zk-cycle-utils
 - sov-state
-- sov-modules-macros
+- sov-modules-macros  # Requires --no-verify because it writes outside of OUT_DIR.
 - sov-modules-api
 - sov-sequencer
 - sov-modules-stf-template
