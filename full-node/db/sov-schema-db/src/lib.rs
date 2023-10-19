@@ -55,7 +55,7 @@ impl DB {
         column_families: impl IntoIterator<Item = impl Into<String>>,
         db_opts: &rocksdb::Options,
     ) -> anyhow::Result<Self> {
-        let db = DB::open_cf(
+        let db = DB::open_with_cfds(
             db_opts,
             path,
             name,
@@ -69,7 +69,8 @@ impl DB {
     }
 
     /// Open RocksDB with the provided column family descriptors.
-    fn open_cf(
+    /// This allows to configure options for each column family.
+    pub fn open_with_cfds(
         db_opts: &rocksdb::Options,
         path: impl AsRef<Path>,
         name: &'static str,
