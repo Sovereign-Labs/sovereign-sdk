@@ -130,6 +130,8 @@ mod experimental {
 
         type CallMessage = super::call::CallMessage;
 
+        type Event = ();
+
         fn genesis(
             &self,
             config: &Self::Config,

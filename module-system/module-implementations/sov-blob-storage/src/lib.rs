@@ -93,5 +93,6 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> BlobStorage<C, Da
 impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> Module for BlobStorage<C, Da> {
     type Context = C;
     type Config = ();
-    type CallMessage = sov_modules_api::NonInstantiable;
+    type CallMessage = ();
+    type Event = ();
 }

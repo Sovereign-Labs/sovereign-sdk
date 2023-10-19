@@ -203,7 +203,9 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> sov_modules_api::
 
     type Config = ChainStateConfig;
 
-    type CallMessage = sov_modules_api::NonInstantiable;
+    type CallMessage = ();
+
+    type Event = ();
 
     fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         // The initialization logic

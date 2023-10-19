@@ -58,6 +58,8 @@ impl<C: Context> sov_modules_api::Module for Accounts<C> {
 
     type CallMessage = call::CallMessage<C>;
 
+    type Event = ();
+
     fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         Ok(self.init_module(config, working_set)?)
     }
