@@ -28,7 +28,7 @@ impl<Vm: Zkvm, Da: DaSpec> StfWithBuilder<Vm, Da> {
         };
 
         let storage = ProverStorage::with_config(config).expect("Failed to open prover storage");
-        let app = AppTemplate::new(storage.clone(), Runtime::default());
+        let app = AppTemplate::new(storage.clone());
         let batch_size_bytes = 1024 * 100; // 100 KB
         let batch_builder = FiFoStrictBatchBuilder::new(
             batch_size_bytes,

@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
-use demo_stf::App;
+use demo_stf::runtime::Runtime;
 use log4rs::config::{Appender, Config, Root};
 use regex::Regex;
 use risc0::ROLLUP_ELF;
@@ -17,13 +17,25 @@ use sov_celestia_adapter::types::{FilteredCelestiaBlock, Namespace};
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::{CelestiaSpec, RollupParams};
 use sov_celestia_adapter::CelestiaService;
+use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::SlotData;
+use sov_modules_stf_template::AppTemplate;
 use sov_risc0_adapter::host::Risc0Host;
+use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::ZkvmHost;
+use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
+use sov_state::{ProverStorage, Storage};
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
+
+fn new_app<Vm: Zkvm, Da: DaSpec>(
+    storage_config: sov_state::config::Config,
+) -> AppTemplate<DefaultContext, Da, Vm, Runtime<DefaultContext, Da>> {
+    let storage =
+        ProverStorage::with_config(storage_config).expect("Failed to open prover storage");
+    AppTemplate::new(storage.clone())
+}
 
 #[derive(Debug)]
 struct RegexAppender {
@@ -167,7 +179,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let storage_config = sov_state::config::Config {
         path: rollup_config.storage.path,
     };
-    let mut app: App<Risc0Host, CelestiaSpec> = App::new(storage_config);
+
+    let mut demo = new_app::<Risc0Host, CelestiaSpec>(storage_config);
 
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
 
@@ -178,9 +191,7 @@ async fn main() -> Result<(), anyhow::Error> {
         Default::default(),
     );
     println!("Starting from empty storage, initialization chain");
-    let mut prev_state_root = app.stf.init_chain(genesis_config);
-
-    let mut demo = app.stf;
+    let mut prev_state_root = demo.init_chain(genesis_config);
 
     let hex_data = read_to_string("benches/prover/blocks.hex").expect("Failed to read data");
     let bincoded_blocks: Vec<FilteredCelestiaBlock> = hex_data

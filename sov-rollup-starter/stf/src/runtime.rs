@@ -11,12 +11,11 @@ pub use sov_bank::{BankRpcImpl, BankRpcServer};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::DefaultRuntime;
-use sov_modules_api::{Context, DaSpec, DispatchCall, Genesis, MessageCodec, Zkvm};
+use sov_modules_api::{Context, DaSpec, DispatchCall, Genesis, MessageCodec};
 use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::da::DaVerifier;
 #[cfg(feature = "native")]
 pub use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
-use sov_state::ZkStorage;
 use sov_stf_runner::verifier::StateTransitionVerifier;
 
 /// The runtime defines the logic of the rollup.
@@ -74,6 +73,7 @@ where
     C: Context,
     Da: DaSpec,
 {
+    type GenesisConfig = GenesisConfig<C, Da>;
 }
 
 // Select which blobs will be executed in this slot. In this implementation simply execute all
@@ -90,13 +90,6 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for Runtime<C, Da> {
     {
         Ok(current_blobs.into_iter().map(BlobRefOrOwned::Ref).collect())
     }
-}
-
-/// Create the zk version of the STF.
-pub fn zk_stf<Vm: Zkvm, Da: DaSpec>(
-) -> AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>> {
-    let storage = ZkStorage::new();
-    AppTemplate::new(storage, Runtime::default())
 }
 
 /// A verifier for the rollup

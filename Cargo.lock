@@ -8534,6 +8534,7 @@ dependencies = [
  "sov-evm",
  "sov-ledger-rpc",
  "sov-modules-api",
+ "sov-modules-rollup-template",
  "sov-modules-stf-template",
  "sov-nft-module",
  "sov-risc0-adapter",
@@ -8703,6 +8704,22 @@ dependencies = [
  "syn 1.0.109",
  "tempfile",
  "trybuild",
+]
+
+[[package]]
+name = "sov-modules-rollup-template"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "jsonrpsee 0.20.2",
+ "sov-db",
+ "sov-modules-api",
+ "sov-modules-stf-template",
+ "sov-rollup-interface",
+ "sov-state",
+ "sov-stf-runner",
+ "tokio",
 ]
 
 [[package]]

@@ -7,10 +7,9 @@ use demo_stf::genesis_config::GenesisPaths;
 use ethers_core::abi::Address;
 use ethers_signers::{LocalWallet, Signer};
 use sov_evm::SimpleStorageContract;
-use sov_risc0_adapter::host::Risc0Host;
 use test_client::TestClient;
 
-use super::test_helpers::start_rollup;
+use crate::test_helpers::start_rollup;
 
 #[cfg(feature = "experimental")]
 #[tokio::test]
@@ -19,10 +18,10 @@ async fn evm_tx_tests() -> Result<(), anyhow::Error> {
 
     let rollup_task = tokio::spawn(async {
         // Don't provide a prover since the EVM is not currently provable
-        start_rollup::<Risc0Host<'static>, _>(
+        start_rollup(
             port_tx,
+            GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
             None,
-            &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
         )
         .await;
     });

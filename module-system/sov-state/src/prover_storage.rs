@@ -60,13 +60,6 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
             Err(e) => panic!("Unable to read value from db: {e}"),
         }
     }
-
-    /// Get the root hash of the tree at the requested version
-    pub fn get_root_hash(&self, version: Version) -> Result<jmt::RootHash, anyhow::Error> {
-        let temp_merkle: JellyfishMerkleTree<'_, StateDB, S::Hasher> =
-            JellyfishMerkleTree::new(&self.db);
-        temp_merkle.get_root_hash(version)
-    }
 }
 
 impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
@@ -205,5 +198,11 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
             value: val_opt.map(StorageValue::from),
             proof,
         }
+    }
+
+    fn get_root_hash(&self, version: Version) -> Result<jmt::RootHash, anyhow::Error> {
+        let temp_merkle: JellyfishMerkleTree<'_, StateDB, S::Hasher> =
+            JellyfishMerkleTree::new(&self.db);
+        temp_merkle.get_root_hash(version)
     }
 }

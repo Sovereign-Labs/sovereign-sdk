@@ -9,6 +9,7 @@
 - sov-modules-macros
 - sov-modules-api
 - sov-modules-stf-template
+- sov-modules-rollup-template
 - sov-ledger-rpc
 
 # Modules

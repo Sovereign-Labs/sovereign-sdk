@@ -13,6 +13,7 @@ use sov_sequencer::utils::SimpleClient;
 use stf_starter::{GenesisPaths, RuntimeCall};
 
 use super::test_helpers::start_rollup;
+
 const TOKEN_SALT: u64 = 0;
 const TOKEN_NAME: &str = "test_token";
 
