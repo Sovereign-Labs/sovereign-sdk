@@ -71,7 +71,7 @@ pub fn dispatch_call(input: TokenStream) -> TokenStream {
     handle_macro_error(call_macro.derive_dispatch_call(input))
 }
 
-#[proc_macro_derive(EventMacro, attributes(serialization))]
+#[proc_macro_derive(Event, attributes(serialization))]
 pub fn event(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let event_macro = EventMacro::new("Event");
