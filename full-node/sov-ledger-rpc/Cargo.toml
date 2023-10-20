@@ -15,13 +15,13 @@ publish = true
 # Common dependencies
 jsonrpsee = { workspace = true }
 serde = "1"
-sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
+sov-rollup-interface = { path = "../../rollup-interface", features = ["native"], version = "0.3" }
 # Client dependencies
 # (None)
 # Server dependencies
 anyhow = { version = "1", optional = true }
 futures = { version = "0.3", optional = true }
-sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"], optional = true, version = "0.2" }
+sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"], optional = true, version = "0.3" }
 
 [dev-dependencies]
 tempfile = "3"

@@ -19,10 +19,10 @@ bincode = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
 
-sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
-sov-state = { path = "../../sov-state", version = "0.2" }
-sov-sequencer-registry = { path = "../sov-sequencer-registry", version = "0.2" }
-sov-chain-state = { path = "../sov-chain-state", version = "0.2" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.3" }
+sov-state = { path = "../../sov-state", version = "0.3" }
+sov-sequencer-registry = { path = "../sov-sequencer-registry", version = "0.3" }
+sov-chain-state = { path = "../sov-chain-state", version = "0.3" }
 
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
