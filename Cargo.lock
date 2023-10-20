@@ -8839,6 +8839,7 @@ name = "sov-rollup-starter"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "borsh",
  "clap 4.4.6",
  "jsonrpsee 0.20.2",
@@ -8850,6 +8851,7 @@ dependencies = [
  "sov-db",
  "sov-ledger-rpc",
  "sov-modules-api",
+ "sov-modules-rollup-template",
  "sov-modules-stf-template",
  "sov-risc0-adapter",
  "sov-rollup-interface",

@@ -6,9 +6,7 @@ use clap::Parser;
 use demo_stf::genesis_config::GenesisPaths;
 use sov_demo_rollup::{CelestiaDemoRollup, MockDemoRollup};
 use sov_modules_rollup_template::{Rollup, RollupProverConfig, RollupTemplate};
-use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::mocks::MockDaConfig;
-use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tracing::log::debug;
 use tracing_subscriber::prelude::*;
@@ -46,7 +44,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     match args.da_layer.as_str() {
         "mock" => {
-            let rollup = new_rollup_with_mock_da::<Risc0Host<'static>>(
+            let rollup = new_rollup_with_mock_da(
                 &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
                 rollup_config_path,
                 Some(RollupProverConfig::Execute),
@@ -55,7 +53,7 @@ async fn main() -> Result<(), anyhow::Error> {
             rollup.run().await
         }
         "celestia" => {
-            let rollup = new_rollup_with_celestia_da::<Risc0Host<'static>>(
+            let rollup = new_rollup_with_celestia_da(
                 &GenesisPaths::from_dir("../test-data/genesis/demo-tests"),
                 rollup_config_path,
                 Some(RollupProverConfig::Execute),
@@ -67,7 +65,7 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 }
 
-pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
+async fn new_rollup_with_celestia_da(
     genesis_paths: &GenesisPaths<PathBuf>,
     rollup_config_path: &str,
     prover_config: Option<RollupProverConfig>,
@@ -86,7 +84,7 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
         .await
 }
 
-pub async fn new_rollup_with_mock_da<Vm: ZkvmHost>(
+async fn new_rollup_with_mock_da(
     genesis_paths: &GenesisPaths<PathBuf>,
     rollup_config_path: &str,
     prover_config: Option<RollupProverConfig>,

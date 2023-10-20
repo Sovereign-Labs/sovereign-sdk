@@ -1,5 +1,4 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
-pub mod da;
-mod register_rpc;
+mod register_sequencer;
 pub mod rollup;
