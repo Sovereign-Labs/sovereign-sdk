@@ -8,7 +8,6 @@ pub use state_machine::*;
 
 mod node;
 
-pub use anyhow;
 pub use borsh::maybestd;
-pub use digest;
 pub use node::*;
+pub use {anyhow, digest};
