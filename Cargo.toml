@@ -56,7 +56,6 @@ authors = ["Sovereign Labs <info@sovereign.xyz>"]
 homepage = "https://www.sovereign.xyz"
 publish = false
 repository = "https://github.com/sovereign-labs/sovereign-sdk"
-rust-version = "1.66"
 
 [workspace.dependencies]
 # Dependencies maintained by Sovereign
