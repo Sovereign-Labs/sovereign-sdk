@@ -6,17 +6,30 @@ use std::time::Duration;
 use anyhow::Context;
 use criterion::{criterion_group, criterion_main, Criterion};
 use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
-use demo_stf::App;
+use demo_stf::runtime::Runtime;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_stf_template::AppTemplate;
 use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rng_da_service::{RngDaService, RngDaSpec};
+use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::mocks::{
     MockAddress, MockBlock, MockBlockHeader, MOCK_SEQUENCER_DA_ADDRESS,
 };
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_rollup_interface::zk::Zkvm;
+use sov_state::{ProverStorage, Storage};
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
+
+fn new_app<Vm: Zkvm, Da: DaSpec>(
+    storage_config: sov_state::config::Config,
+) -> AppTemplate<DefaultContext, Da, Vm, Runtime<DefaultContext, Da>> {
+    let storage =
+        ProverStorage::with_config(storage_config).expect("Failed to open prover storage");
+    AppTemplate::new(storage.clone())
+}
 
 fn rollup_bench(_bench: &mut Criterion) {
     let start_height: u64 = 0u64;
@@ -44,9 +57,8 @@ fn rollup_bench(_bench: &mut Criterion) {
     let storage_config = sov_state::config::Config {
         path: rollup_config.storage.path,
     };
-    let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(storage_config);
+    let mut demo = new_app::<Risc0Verifier, RngDaSpec>(storage_config);
 
-    let mut demo = demo_runner.stf;
     let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
 
     let demo_genesis_config = get_genesis_config(

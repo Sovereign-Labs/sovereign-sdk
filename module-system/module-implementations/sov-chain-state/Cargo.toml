@@ -6,7 +6,7 @@ edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
@@ -18,9 +18,9 @@ serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
-sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
-sov-state = { path = "../../sov-state", version = "0.2" }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.2" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.3" }
+sov-state = { path = "../../sov-state", version = "0.3" }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3" }
 
 [dev-dependencies]
 tempfile = { workspace = true }

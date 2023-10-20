@@ -23,9 +23,8 @@ pub(crate) fn create_new_app_template_for_tests(
     sov_rollup_interface::mocks::MockZkvm,
     Runtime<DefaultContext, Da>,
 > {
-    let runtime = Runtime::default();
     let storage = ProverStorage::with_path(path).unwrap();
-    AppTemplate::new(storage, runtime)
+    AppTemplate::new(storage)
 }
 
 pub(crate) fn get_genesis_config_for_tests<Da: DaSpec>() -> GenesisConfig<DefaultContext, Da> {

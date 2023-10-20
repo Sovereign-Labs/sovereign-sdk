@@ -34,7 +34,7 @@ where
 
     /// Verify the next block
     pub fn run_block(&mut self, zkvm: Zk) -> Result<ST::StateRoot, Da::Error> {
-        let mut data: StateTransitionData<ST, Da::Spec, Zk> = zkvm.read_from_host();
+        let mut data: StateTransitionData<_, _, Da::Spec> = zkvm.read_from_host();
         let validity_condition = self.da_verifier.verify_relevant_tx_list(
             &data.da_block_header,
             &data.blobs,

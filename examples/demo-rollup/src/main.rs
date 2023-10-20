@@ -1,10 +1,14 @@
+use std::path::PathBuf;
 use std::str::FromStr;
 
+use anyhow::Context as _;
 use clap::Parser;
 use demo_stf::genesis_config::GenesisPaths;
-use risc0::{MOCK_DA_ELF, ROLLUP_ELF};
-use sov_demo_rollup::{new_rollup_with_celestia_da, new_rollup_with_mock_da, DemoProverConfig};
-use sov_risc0_adapter::host::Risc0Host;
+use sov_demo_rollup::{CelestiaDemoRollup, MockDemoRollup};
+use sov_modules_rollup_template::{Rollup, RollupProverConfig, RollupTemplate};
+use sov_rollup_interface::mocks::MockDaConfig;
+use sov_stf_runner::{from_toml_path, RollupConfig};
+use tracing::log::debug;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 
@@ -40,30 +44,58 @@ async fn main() -> Result<(), anyhow::Error> {
 
     match args.da_layer.as_str() {
         "mock" => {
-            let _prover = Risc0Host::new(MOCK_DA_ELF);
-            let _config = DemoProverConfig::Execute;
-
-            let rollup = new_rollup_with_mock_da::<Risc0Host<'static>, _>(
-                rollup_config_path,
-                //Some((prover, config)),
-                None,
+            let rollup = new_rollup_with_mock_da(
                 &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
-            )?;
+                rollup_config_path,
+                Some(RollupProverConfig::Execute),
+            )
+            .await?;
             rollup.run().await
         }
         "celestia" => {
-            let _prover = Risc0Host::new(ROLLUP_ELF);
-            let _config = DemoProverConfig::Execute;
-
-            let rollup = new_rollup_with_celestia_da::<Risc0Host<'static>, _>(
-                rollup_config_path,
-                //Some((prover, config)),
-                None,
+            let rollup = new_rollup_with_celestia_da(
                 &GenesisPaths::from_dir("../test-data/genesis/demo-tests"),
+                rollup_config_path,
+                Some(RollupProverConfig::Execute),
             )
             .await?;
             rollup.run().await
         }
         da => panic!("DA Layer not supported: {}", da),
     }
+}
+
+async fn new_rollup_with_celestia_da(
+    genesis_paths: &GenesisPaths<PathBuf>,
+    rollup_config_path: &str,
+    prover_config: Option<RollupProverConfig>,
+) -> Result<Rollup<CelestiaDemoRollup>, anyhow::Error> {
+    debug!(
+        "Starting celestia rollup with config {}",
+        rollup_config_path
+    );
+
+    let rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
+        from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
+
+    let mock_rollup = CelestiaDemoRollup {};
+    mock_rollup
+        .create_new_rollup(genesis_paths, rollup_config, prover_config)
+        .await
+}
+
+async fn new_rollup_with_mock_da(
+    genesis_paths: &GenesisPaths<PathBuf>,
+    rollup_config_path: &str,
+    prover_config: Option<RollupProverConfig>,
+) -> Result<Rollup<MockDemoRollup>, anyhow::Error> {
+    debug!("Starting mock rollup with config {}", rollup_config_path);
+
+    let rollup_config: RollupConfig<MockDaConfig> =
+        from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
+
+    let mock_rollup = MockDemoRollup {};
+    mock_rollup
+        .create_new_rollup(genesis_paths, rollup_config, prover_config)
+        .await
 }

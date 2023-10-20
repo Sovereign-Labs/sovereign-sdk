@@ -25,6 +25,7 @@ members = [
 
     "module-system/sov-cli",
     "module-system/sov-modules-stf-template",
+    "module-system/sov-modules-rollup-template",
     "module-system/sov-modules-macros",
     "module-system/sov-state",
     "module-system/sov-modules-api",
@@ -48,14 +49,13 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["Sovereign Labs <info@sovereign.xyz>"]
 homepage = "https://www.sovereign.xyz"
 publish = false
 repository = "https://github.com/sovereign-labs/sovereign-sdk"
-rust-version = "1.66"
 
 [workspace.dependencies]
 # Dependencies maintained by Sovereign

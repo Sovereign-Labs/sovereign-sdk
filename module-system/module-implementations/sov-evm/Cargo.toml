@@ -6,7 +6,7 @@ edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
@@ -14,8 +14,8 @@ publish = false
 
 [dependencies]
 
-sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
-sov-state = { path = "../../sov-state", version = "0.2" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.3" }
+sov-state = { path = "../../sov-state", version = "0.3" }
 
 anyhow = { workspace = true }
 thiserror = { workspace = true }

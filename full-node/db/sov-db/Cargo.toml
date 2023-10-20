@@ -6,7 +6,7 @@ edition = { workspace = true }
 authors = { workspace = true }
 homepage = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
@@ -16,8 +16,8 @@ resolver = "2"
 [dependencies]
 # Maintained by sovereign labs
 jmt = { workspace = true }
-sov-schema-db = { path = "../sov-schema-db", version = "0.2" }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.2", features = ["native", "mocks"] }
+sov-schema-db = { path = "../sov-schema-db", version = "0.3" }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3", features = ["native", "mocks"] }
 
 # External
 anyhow = { workspace = true }

@@ -18,12 +18,9 @@ mod runner;
 pub use config::{from_toml_path, RollupConfig, RunnerConfig, StorageConfig};
 #[cfg(feature = "native")]
 pub use runner::*;
-#[cfg(feature = "native")]
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::Zkvm;
 
 /// Implements the `StateTransitionVerifier` type for checking the validity of a state transition
 pub mod verifier;
@@ -31,14 +28,11 @@ pub mod verifier;
 #[derive(Serialize, BorshDeserialize, BorshSerialize, Deserialize)]
 // Prevent serde from generating spurious trait bounds. The correct serde bounds are already enforced by the
 // StateTransitionFunction, DA, and Zkvm traits.
-#[serde(bound = "")]
+#[serde(bound = "StateRoot: Serialize + DeserializeOwned, Witness: Serialize + DeserializeOwned")]
 /// Data required to verify a state transition.
-pub struct StateTransitionData<ST: StateTransitionFunction<Zk, DA>, DA: DaSpec, Zk>
-where
-    Zk: Zkvm,
-{
+pub struct StateTransitionData<StateRoot, Witness, DA: DaSpec> {
     /// The state root before the state transition
-    pub pre_state_root: ST::StateRoot,
+    pub pre_state_root: StateRoot,
     /// The header of the da block that is being processed
     pub da_block_header: DA::BlockHeader,
     /// The proof of inclusion for all blobs
@@ -48,7 +42,7 @@ where
     /// The blobs that are being processed
     pub blobs: Vec<<DA as DaSpec>::BlobTransaction>,
     /// The witness for the state transition
-    pub state_transition_witness: ST::Witness,
+    pub state_transition_witness: Witness,
 }
 
 #[cfg(feature = "native")]

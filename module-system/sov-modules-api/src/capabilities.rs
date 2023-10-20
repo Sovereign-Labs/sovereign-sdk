@@ -12,11 +12,21 @@ use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use crate::{Context, WorkingSet};
 
 /// Container type for mixing borrowed and owned blobs.
+#[derive(Debug)]
 pub enum BlobRefOrOwned<'a, B: BlobReaderTrait> {
     /// Mutable reference
     Ref(&'a mut B),
     /// Owned blob
     Owned(B),
+}
+
+impl<'a, B: BlobReaderTrait> AsRef<B> for BlobRefOrOwned<'a, B> {
+    fn as_ref(&self) -> &B {
+        match self {
+            BlobRefOrOwned::Ref(r) => r,
+            BlobRefOrOwned::Owned(blob) => blob,
+        }
+    }
 }
 
 impl<'a, B: BlobReaderTrait> BlobRefOrOwned<'a, B> {
