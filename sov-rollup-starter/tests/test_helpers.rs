@@ -1,25 +1,20 @@
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::PathBuf;
 
-use sov_rollup_interface::mocks::{
-    MockAddress, MockDaConfig, MockDaService, MOCK_SEQUENCER_DA_ADDRESS,
-};
-use sov_rollup_interface::zk::ZkvmHost;
-use sov_rollup_starter::rollup::Rollup;
+use sov_modules_rollup_template::{RollupProverConfig, RollupTemplate};
+use sov_rollup_interface::mocks::{MockAddress, MockDaConfig};
+use sov_rollup_starter::rollup::StarterRollup;
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
-use stf_starter::{get_genesis_config, GenesisPaths};
+use stf_starter::genesis_config::GenesisPaths;
 use tokio::sync::oneshot;
 
-pub async fn start_rollup<Vm: ZkvmHost, P: AsRef<Path>>(
+pub async fn start_rollup(
     rpc_reporting_channel: oneshot::Sender<SocketAddr>,
-    genesis_paths: &GenesisPaths<P>,
+    genesis_paths: GenesisPaths<PathBuf>,
+    rollup_prover_config: Option<RollupProverConfig>,
 ) {
     let temp_dir = tempfile::tempdir().unwrap();
     let temp_path = temp_dir.path();
-
-    let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
-
-    let genesis_config = get_genesis_config(sequencer_da_address, genesis_paths);
 
     let rollup_config = RollupConfig {
         storage: StorageConfig {
@@ -33,17 +28,16 @@ pub async fn start_rollup<Vm: ZkvmHost, P: AsRef<Path>>(
             },
         },
         da: MockDaConfig {
-            sender_address: genesis_config.sequencer_registry.seq_da_address,
+            sender_address: MockAddress { addr: [0; 32] },
         },
     };
 
-    let rollup = Rollup::<Vm, _>::new(
-        MockDaService::new(genesis_config.sequencer_registry.seq_da_address),
-        genesis_config,
-        rollup_config,
-        None,
-    )
-    .unwrap();
+    let starter_rollup = StarterRollup {};
+
+    let rollup = starter_rollup
+        .create_new_rollup(&genesis_paths, rollup_config, rollup_prover_config)
+        .await
+        .unwrap();
 
     rollup
         .run_and_report_rpc_port(Some(rpc_reporting_channel))
