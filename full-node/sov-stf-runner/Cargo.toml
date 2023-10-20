@@ -33,6 +33,7 @@ sov-bank = { path = "../../module-system/module-implementations/sov-bank", featu
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
 
 sov-accounts = { path = "../../module-system/module-implementations/sov-accounts", features = ["native"] }
+sov-celestia-adapter = { path = "../../adapters/celestia", features = ["native"] }
 sov-sequencer = { path = "../sov-sequencer" }
 
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
