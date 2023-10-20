@@ -20,7 +20,7 @@ pub mod schema;
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, RwLock};
 
 use anyhow::format_err;
 use iterator::ScanDirection;
@@ -278,6 +278,101 @@ enum WriteOp {
 #[derive(Debug, Default)]
 pub struct SchemaBatch {
     rows: Mutex<HashMap<ColumnFamilyName, Vec<WriteOp>>>,
+}
+
+#[allow(dead_code)]
+type EncodedKey = Vec<u8>;
+type EncodedValue = Vec<u8>;
+
+#[allow(dead_code)]
+enum Operation<S> {
+    Write(S),
+    Delete,
+}
+
+#[allow(dead_code)]
+struct QueryableSchemaBatch {
+    id: u64,
+    last_writes: HashMap<ColumnFamilyName, HashMap<EncodedKey, Operation<EncodedValue>>>,
+}
+
+#[allow(dead_code)]
+impl QueryableSchemaBatch {
+    fn new(id: u64) -> Self {
+        Self {
+            id,
+            last_writes: HashMap::new(),
+        }
+    }
+
+    /// TODO: Need to distinguish missing value from deleted value
+    fn get<S: Schema>(
+        &self,
+        key: &impl KeyCodec<S>,
+    ) -> anyhow::Result<Option<Operation<S::Value>>> {
+        let key = key.encode_key()?;
+
+        let column = self.last_writes.get(S::COLUMN_FAMILY_NAME);
+
+        if column.is_none() {
+            return Ok(None);
+        }
+
+        let column = column.unwrap();
+
+        if let Some(encoded_value) = column.get(&key) {
+            let v = match encoded_value {
+                Operation::Write(v) => Operation::Write(S::Value::decode_value(v)?),
+                Operation::Delete => Operation::Delete,
+            };
+            Ok(Some(v))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+#[allow(dead_code)]
+trait QueryManager {
+    fn get<S: Schema>(
+        &self,
+        snapshot_id: u64,
+        key: &impl KeyCodec<S>,
+    ) -> anyhow::Result<Option<Operation<S::Value>>>;
+}
+
+#[allow(dead_code)]
+struct DbLike<Q> {
+    snapshot_id: u64,
+    db_reader: Arc<DB>,
+    current_cache: QueryableSchemaBatch,
+    // Same as in LayeredProverStorage
+    manager: Arc<RwLock<Q>>,
+}
+
+#[allow(dead_code)]
+impl<Q: QueryManager> DbLike<Q> {
+    fn read<S: Schema>(
+        &self,
+        _key: &impl KeyCodec<S>,
+    ) -> anyhow::Result<Option<Operation<S::Value>>> {
+        // check own cache
+
+        // query manager
+
+        // read database
+
+        Ok(None)
+    }
+
+    pub fn put<S: Schema>(
+        &self,
+        _key: &impl KeyCodec<S>,
+        _value: &impl ValueCodec<S>,
+    ) -> anyhow::Result<()> {
+        // store in own cache
+        Ok(())
+    }
 }
 
 impl SchemaBatch {
