@@ -15,7 +15,7 @@ publish = true
 # Common dependencies
 jsonrpsee = { workspace = true }
 serde = "1"
-sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
+sov-rollup-interface = { path = "../../rollup-interface", features = ["native"], version = "0.3" }
 # Client dependencies
 # (None)
 # Server dependencies
