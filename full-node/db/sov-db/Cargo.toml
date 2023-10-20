@@ -38,7 +38,7 @@ tempfile = { workspace = true }
 
 
 [features]
-default = ["std"]
+default = ["std", "tokio"]
 arbitrary = [
     "dep:arbitrary",
     "dep:proptest",
