@@ -1,12 +1,13 @@
 //! This binary runs the rollup full node.
 
+use std::path::PathBuf;
+
 use anyhow::Context;
 use clap::Parser;
 use sov_modules_rollup_template::{Rollup, RollupProverConfig, RollupTemplate};
 use sov_rollup_interface::mocks::MockDaConfig;
 use sov_rollup_starter::rollup::StarterRollup;
 use sov_stf_runner::{from_toml_path, RollupConfig};
-use std::path::PathBuf;
 use stf_starter::genesis_config::GenesisPaths;
 use tracing::info;
 use tracing_subscriber::prelude::*;
