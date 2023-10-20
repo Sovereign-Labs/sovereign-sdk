@@ -1,5 +1,6 @@
 //! This binary runs the rollup full node.
 
+/*
 use std::env;
 use std::path::PathBuf;
 
@@ -12,11 +13,11 @@ use sov_stf_runner::{from_toml_path, RollupConfig};
 use stf_starter::{get_genesis_config, GenesisPaths};
 use tracing::info;
 use tracing_subscriber::filter::LevelFilter;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::EnvFilter;*/
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    // Initialize a logger for the demo
+    /*// Initialize a logger for the demo
     let subscriber = tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::builder()
@@ -47,7 +48,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let rollup: Rollup<Risc0Host, _> =
         Rollup::new(da_service, genesis_config, rollup_config, None)?;
 
-    rollup.run().await?;
+    rollup.run().await?;*/
 
     Ok(())
 }
