@@ -9,6 +9,7 @@
 - sov-modules-api
 - sov-sequencer
 - sov-modules-stf-template
+- sov-modules-rollup-template
 - sov-ledger-rpc
 
 # Modules

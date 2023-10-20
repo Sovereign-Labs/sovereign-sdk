@@ -2011,7 +2011,10 @@ dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "sov-celestia-adapter",
+ "sov-modules-api",
+ "sov-modules-stf-template",
  "sov-risc0-adapter",
+ "sov-state",
 ]
 
 [[package]]

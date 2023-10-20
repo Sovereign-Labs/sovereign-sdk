@@ -41,4 +41,4 @@ jmt = { workspace = true }
 
 [features]
 default = []
-native = ["jsonrpsee", "schemars", "serde", "serde_json", "sov-modules-api/native", "sov-state/native", "sov-sequencer-registry/native"]
+native = ["jsonrpsee", "schemars", "serde", "serde_json", "sov-modules-api/native", "sov-state/native", "sov-sequencer-registry/native", "clap"]

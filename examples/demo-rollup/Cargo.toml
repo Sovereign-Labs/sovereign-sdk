@@ -17,26 +17,18 @@ sov-celestia-adapter = { path = "../../adapters/celestia", features = [
 	"native",
 ] }
 const-rollup-config = { path = "../const-rollup-config" }
-sov-stf-runner = { path = "../../full-node/sov-stf-runner", features = [
-	"native",
-] }
-sov-rollup-interface = { path = "../../rollup-interface", features = [
-	"native",
-] }
-sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = [
-	"native",
-] }
-sov-modules-api = { path = "../../module-system/sov-modules-api", features = [
-	"native",
-] }
+sov-stf-runner = { path = "../../full-node/sov-stf-runner", features = ["native"] }
+sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
+
+sov-modules-rollup-template = { path = "../../module-system/sov-modules-rollup-template" }
+sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
+sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module" }
 demo-stf = { path = "./stf", features = ["native"] }
-sov-ledger-rpc = { path = "../../full-node/sov-ledger-rpc", features = [
-	"server",
-] }
+sov-ledger-rpc = { path = "../../full-node/sov-ledger-rpc", features = ["server",] }
 risc0 = { path = "./provers/risc0" }
 borsh = { workspace = true, features = ["bytes"] }
-async-trait = { workspace = true, optional = true }
+async-trait = { workspace = true }
 anyhow = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
 serde = { workspace = true, features = ["derive"] }
@@ -97,7 +89,7 @@ default = [
 ] # Deviate from convention by making the "native" feature active by default. This aligns with how this package is meant to be used (as a binary first, library second).
 experimental = ["default", "sov-ethereum/experimental", "reth-primitives", "secp256k1", "demo-stf/experimental", "sov-ethereum/local"]
 
-bench = ["async-trait", "hex", "sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "risc0/bench"]
+bench = ["hex", "sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "risc0/bench"]
 offchain = ["demo-stf/offchain"]
 
 [[bench]]
