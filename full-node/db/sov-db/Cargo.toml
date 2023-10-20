@@ -6,7 +6,7 @@ edition = { workspace = true }
 authors = { workspace = true }
 homepage = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"

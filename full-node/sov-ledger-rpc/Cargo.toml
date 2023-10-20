@@ -6,7 +6,7 @@ homepage = { workspace = true }
 license = { workspace = true }
 description = "JSON-RPC server and client implementations for Sovereign SDK rollups"
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 resolver = "2"
 publish = true

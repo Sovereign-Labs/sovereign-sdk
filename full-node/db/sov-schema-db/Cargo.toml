@@ -9,7 +9,7 @@ authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 readme = "README.md"
 
 [dependencies]
