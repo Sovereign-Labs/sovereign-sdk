@@ -23,14 +23,9 @@ no matter which ones you pick.
 
 ## Overview
 
-To get a fully functional rollup, we recommend implementing two traits. First, there's the [State Transition Function
-interface](../../rollup-interface/specs/interfaces/stf.md) ("STF") , which specifies your rollup's abstract logic. Second, there's
-a related trait called `State Transition Runner` ("STR") which tells a full node how to instantiate your abstract STF on a concrete machine.
-
-Strictly speaking, it's sufficient for a rollup to only implement the first interface. If you've done that, it's possible to integrate
-with zkVMs and DA Layers - but you'll have to customize your full node implementation a bit to deal with your particular rollup's
-configuration. By implementing the STR trait, we make it much easier for the full-node implementation to understand how to interact
-with the rollup generically - so we can keep our modifications to the node as minimal as possible. In this demo, we'll implement both traits.
+To get a fully functional rollup, we recommend implementing the [State Transition Function
+interface](../../rollup-interface/specs/interfaces/stf.md) ("STF")  trait, which specifies your rollup's abstract logic. Second, there's
+a related struct called `State Transition Runner` ("STR") which tells a full node how to run your abstract STF on a concrete machine.
 
 ## Implementing State Transition _Function_
 
