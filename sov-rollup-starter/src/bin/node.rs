@@ -1,54 +1,59 @@
 //! This binary runs the rollup full node.
 
-/*
-use std::env;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use anyhow::Context;
-use sov_risc0_adapter::host::Risc0Host;
-use sov_rollup_interface::mocks::{MockAddress, MOCK_SEQUENCER_DA_ADDRESS};
-use sov_rollup_starter::da::{start_da_service, DaConfig};
-use sov_rollup_starter::rollup::Rollup;
+use clap::Parser;
+use sov_modules_rollup_template::{Rollup, RollupProverConfig, RollupTemplate};
+use sov_rollup_interface::mocks::MockDaConfig;
+use sov_rollup_starter::rollup::StarterRollup;
 use sov_stf_runner::{from_toml_path, RollupConfig};
-use stf_starter::{get_genesis_config, GenesisPaths};
+use stf_starter::genesis_config::GenesisPaths;
 use tracing::info;
-use tracing_subscriber::filter::LevelFilter;
-use tracing_subscriber::EnvFilter;*/
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{fmt, EnvFilter};
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// The path to the rollup config.
+    #[arg(long, default_value = "rollup_config.toml")]
+    rollup_config_path: String,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    /*// Initialize a logger for the demo
-    let subscriber = tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into()) // If no logging config is set. default to `info` level logs
-                .from_env_lossy(), // Parse the log level from the RUST_LOG env var if set
-        ) // Try to override logging config from RUST_LOG env var
-        .finish();
-    tracing::subscriber::set_global_default(subscriber)
-        .context("Unable to set global default subscriber")?;
+    // Initializing logging
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::from_str("debug,hyper=info").unwrap())
+        .init();
 
-    // Read the rollup config from a file
-    let rollup_config_path = env::args()
-        .nth(1)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("rollup_config.toml"));
+    let args = Args::parse();
+    let rollup_config_path = args.rollup_config_path.as_str();
+
+    let rollup = new_rollup_with_mock_da(
+        &GenesisPaths::from_dir("test-data/genesis/"),
+        rollup_config_path,
+        Some(RollupProverConfig::Execute),
+    )
+    .await?;
+    rollup.run().await
+}
+
+async fn new_rollup_with_mock_da(
+    genesis_paths: &GenesisPaths<PathBuf>,
+    rollup_config_path: &str,
+    prover_config: Option<RollupProverConfig>,
+) -> Result<Rollup<StarterRollup>, anyhow::Error> {
     info!("Reading rollup config from {rollup_config_path:?}");
 
-    let rollup_config: RollupConfig<DaConfig> =
+    let rollup_config: RollupConfig<MockDaConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
-    info!("Initializing DA service");
-    let da_service = start_da_service(&rollup_config).await;
 
-    let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
-    let genesis_paths = GenesisPaths::from_dir("../../test-data/genesis/");
-    let genesis_config = get_genesis_config(sequencer_da_address, &genesis_paths);
-
-    // Start rollup
-    let rollup: Rollup<Risc0Host, _> =
-        Rollup::new(da_service, genesis_config, rollup_config, None)?;
-
-    rollup.run().await?;*/
-
-    Ok(())
+    let starter_rollup = StarterRollup {};
+    starter_rollup
+        .create_new_rollup(genesis_paths, rollup_config, prover_config)
+        .await
 }

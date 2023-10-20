@@ -42,6 +42,7 @@ impl RollupTemplate for CelestiaDemoRollup {
     fn create_genesis_config(
         &self,
         genesis_paths: &Self::GenesisPaths,
+        _rollup_config: &RollupConfig<Self::DaConfig>,
     ) -> <Self::NativeRuntime as sov_modules_stf_template::Runtime<
         Self::NativeContext,
         Self::DaSpec,

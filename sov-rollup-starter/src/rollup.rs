@@ -1,33 +1,26 @@
 //! Defines the rollup full node implementation, including logic for configuring
 //! and starting the rollup node.
 
+use std::path::PathBuf;
+
 use async_trait::async_trait;
-use jsonrpsee::RpcModule;
-use serde::de::DeserializeOwned;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::Spec;
 use sov_modules_rollup_template::RollupTemplate;
-use sov_modules_stf_template::Runtime as RuntimeTrait;
-use sov_modules_stf_template::{AppTemplate, SequencerOutcome, TxEffect};
+use sov_modules_stf_template::{Runtime as RuntimeTrait, SequencerOutcome, TxEffect};
 use sov_risc0_adapter::host::Risc0Host;
-use sov_rollup_interface::mocks::MockDaConfig;
-use sov_rollup_interface::mocks::MockDaService;
-use sov_rollup_interface::mocks::MockDaSpec;
+use sov_rollup_interface::mocks::{MockDaConfig, MockDaService, MockDaSpec};
 use sov_rollup_interface::services::da::DaService;
-use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::config::Config as StorageConfig;
-use sov_state::storage::NativeStorage;
-use sov_state::ProverStorage;
-use sov_state::Storage;
-use sov_state::ZkStorage;
-use sov_stf_runner::{Prover, RollupConfig, RunnerConfig, StateTransitionRunner};
-use std::path::PathBuf;
-use stf_starter::{get_genesis_config, GenesisPaths};
-use stf_starter::{get_rpc_methods, GenesisConfig, Runtime, StfWithBuilder};
-use tokio::sync::oneshot;
+use sov_state::{ProverStorage, Storage, ZkStorage};
+use sov_stf_runner::RollupConfig;
+use stf_starter::genesis_config::{get_genesis_config, GenesisPaths};
+use stf_starter::{get_rpc_methods, Runtime};
 
-///TODO
+use crate::register_sequencer::register_sequencer;
+
+/// Rollup with MockDa.
 pub struct StarterRollup {}
 
 #[async_trait]
@@ -48,10 +41,10 @@ impl RollupTemplate for StarterRollup {
     fn create_genesis_config(
         &self,
         genesis_paths: &Self::GenesisPaths,
+        rollup_config: &RollupConfig<Self::DaConfig>,
     ) -> <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig
     {
-        let sequencer_da_address = todo!();
-        get_genesis_config(sequencer_da_address, genesis_paths)
+        get_genesis_config(rollup_config.da.sender_address, genesis_paths)
     }
 
     async fn create_da_service(
@@ -62,8 +55,7 @@ impl RollupTemplate for StarterRollup {
     }
 
     fn create_vm(&self) -> Self::Vm {
-        //Risc0Host::new(risc0::MOCK_DA_ELF)
-        todo!()
+        Risc0Host::new(risc0_starter::MOCK_DA_ELF)
     }
 
     fn create_zk_storage(
@@ -93,7 +85,15 @@ impl RollupTemplate for StarterRollup {
         ledger_db: &LedgerDB,
         da_service: &Self::DaService,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
-        //create_rpc_methods(storage, ledger_db, da_service.clone())
-        todo!()
+        let mut module = get_rpc_methods::<DefaultContext, Self::DaSpec>(storage.clone());
+
+        module.merge(sov_ledger_rpc::server::rpc_module::<
+            LedgerDB,
+            SequencerOutcome<<DefaultContext as Spec>::Address>,
+            TxEffect,
+        >(ledger_db.clone())?)?;
+
+        register_sequencer::<Self::DaService>(storage, da_service.clone(), &mut module)?;
+        Ok(module)
     }
 }

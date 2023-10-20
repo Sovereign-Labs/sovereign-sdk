@@ -9,9 +9,7 @@ use sov_modules_api::Spec;
 use sov_modules_rollup_template::RollupTemplate;
 use sov_modules_stf_template::Runtime as RuntimeTrait;
 use sov_risc0_adapter::host::Risc0Host;
-use sov_rollup_interface::mocks::{
-    MockAddress, MockDaConfig, MockDaService, MockDaSpec, MOCK_SEQUENCER_DA_ADDRESS,
-};
+use sov_rollup_interface::mocks::{MockDaConfig, MockDaService, MockDaSpec};
 use sov_rollup_interface::services::da::DaService;
 use sov_state::{ProverStorage, Storage, ZkStorage};
 use sov_stf_runner::RollupConfig;
@@ -41,15 +39,14 @@ impl RollupTemplate for MockDemoRollup {
     fn create_genesis_config(
         &self,
         genesis_paths: &Self::GenesisPaths,
+        rollup_config: &RollupConfig<Self::DaConfig>,
     ) -> <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig
     {
-        let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
-
         #[cfg(feature = "experimental")]
         let eth_signer = read_eth_tx_signers();
 
         get_genesis_config(
-            sequencer_da_address,
+            rollup_config.da.sender_address,
             genesis_paths,
             #[cfg(feature = "experimental")]
             eth_signer.signers(),
@@ -58,9 +55,9 @@ impl RollupTemplate for MockDemoRollup {
 
     async fn create_da_service(
         &self,
-        _rollup_config: &RollupConfig<Self::DaConfig>,
+        rollup_config: &RollupConfig<Self::DaConfig>,
     ) -> Self::DaService {
-        MockDaService::new(MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS))
+        MockDaService::new(rollup_config.da.sender_address)
     }
 
     fn create_vm(&self) -> Self::Vm {
