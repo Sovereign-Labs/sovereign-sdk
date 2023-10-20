@@ -18,6 +18,29 @@ use crate::test_helpers::start_rollup;
 const TOKEN_SALT: u64 = 0;
 const TOKEN_NAME: &str = "test_token";
 
+#[tokio::test]
+async fn bank_tx_tests() -> Result<(), anyhow::Error> {
+    let (port_tx, port_rx) = tokio::sync::oneshot::channel();
+
+    let rollup_task = tokio::spawn(async {
+        start_rollup(
+            port_tx,
+            GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
+            Some(RollupProverConfig::Execute),
+        )
+        .await;
+    });
+
+    let port = port_rx.await.unwrap();
+
+    // If the rollup throws an error, return it and stop trying to send the transaction
+    tokio::select! {
+        err = rollup_task => err?,
+        res = send_test_create_token_tx(port) => res?,
+    };
+    Ok(())
+}
+
 async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow::Error> {
     let key = DefaultPrivateKey::generate();
     let user_address: <DefaultContext as Spec>::Address = key.to_address();
@@ -63,28 +86,5 @@ async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow
     )
     .await?;
     assert_eq!(balance_response.amount.unwrap_or_default(), 1000);
-    Ok(())
-}
-
-#[tokio::test]
-async fn bank_tx_tests() -> Result<(), anyhow::Error> {
-    let (port_tx, port_rx) = tokio::sync::oneshot::channel();
-
-    let rollup_task = tokio::spawn(async {
-        start_rollup(
-            port_tx,
-            GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
-            Some(RollupProverConfig::Execute),
-        )
-        .await;
-    });
-
-    let port = port_rx.await.unwrap();
-
-    // If the rollup throws an error, return it and stop trying to send the transaction
-    tokio::select! {
-        err = rollup_task => err?,
-        res = send_test_create_token_tx(port) => res?,
-    };
     Ok(())
 }

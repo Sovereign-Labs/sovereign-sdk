@@ -3,7 +3,7 @@ sender_address = "01010101010101010101010101010101010101010101010101010101010101
 
 [storage]
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
-path = "demo_data"
+path = "rollup-starter-data"
 
 # We define the rollup's genesis to occur at block number `start_height`. The rollup will ignore
 # any blocks before this height

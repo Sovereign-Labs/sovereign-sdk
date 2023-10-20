@@ -42,6 +42,7 @@ impl RollupTemplate for CelestiaDemoRollup {
     fn create_genesis_config(
         &self,
         genesis_paths: &Self::GenesisPaths,
+        _rollup_config: &RollupConfig<Self::DaConfig>,
     ) -> <Self::NativeRuntime as sov_modules_stf_template::Runtime<
         Self::NativeContext,
         Self::DaSpec,
@@ -92,11 +93,11 @@ impl RollupTemplate for CelestiaDemoRollup {
     fn create_native_storage(
         &self,
         rollup_config: &sov_stf_runner::RollupConfig<Self::DaConfig>,
-    ) -> <Self::NativeContext as sov_modules_api::Spec>::Storage {
+    ) -> Result<<Self::NativeContext as sov_modules_api::Spec>::Storage, anyhow::Error> {
         let storage_config = StorageConfig {
             path: rollup_config.storage.path.clone(),
         };
-        ProverStorage::with_config(storage_config).expect("Failed to open prover storage")
+        ProverStorage::with_config(storage_config)
     }
 
     fn create_rpc_methods(
