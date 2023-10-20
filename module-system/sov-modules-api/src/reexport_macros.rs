@@ -2,6 +2,9 @@
 /// type.
 #[cfg(feature = "macros")]
 pub use sov_modules_macros::DispatchCall;
+// TODO: find correct definition
+#[cfg(feature = "macros")]
+pub use sov_modules_macros::EventMacro;
 /// Derives the [`Genesis`](trait.Genesis.html) trait for the underlying runtime
 /// `struct`.
 #[cfg(feature = "macros")]
