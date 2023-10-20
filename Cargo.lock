@@ -8874,6 +8874,7 @@ dependencies = [
  "once_cell",
  "prometheus 0.13.3",
  "rocksdb",
+ "sov-rollup-interface",
  "tempfile",
  "thiserror",
  "tracing",
