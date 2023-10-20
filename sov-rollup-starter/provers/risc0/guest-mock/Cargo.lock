@@ -387,7 +387,7 @@ dependencies = [
 
 [[package]]
 name = "guest-mock-starter"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "risc0-zkvm",
@@ -974,7 +974,7 @@ checksum = "5e1788eed21689f9cf370582dfc467ef36ed9c707f073528ddafa8d83e3b8500"
 
 [[package]]
 name = "sov-accounts"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -986,7 +986,7 @@ dependencies = [
 
 [[package]]
 name = "sov-bank"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -999,14 +999,14 @@ dependencies = [
 
 [[package]]
 name = "sov-first-read-last-write-cache"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "sov-modules-api"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bech32",
@@ -1026,7 +1026,7 @@ dependencies = [
 
 [[package]]
 name = "sov-modules-macros"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -1039,7 +1039,7 @@ dependencies = [
 
 [[package]]
 name = "sov-modules-stf-template"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -1055,7 +1055,7 @@ dependencies = [
 
 [[package]]
 name = "sov-risc0-adapter"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1069,7 +1069,7 @@ dependencies = [
 
 [[package]]
 name = "sov-rollup-interface"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1087,7 +1087,7 @@ dependencies = [
 
 [[package]]
 name = "sov-sequencer-registry"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -1099,7 +1099,7 @@ dependencies = [
 
 [[package]]
 name = "sov-state"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bcs",
@@ -1116,7 +1116,7 @@ dependencies = [
 
 [[package]]
 name = "sov-stf-runner"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -1128,7 +1128,7 @@ dependencies = [
 
 [[package]]
 name = "sov-zk-cycle-utils"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
@@ -1145,7 +1145,7 @@ dependencies = [
 
 [[package]]
 name = "stf-starter"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",

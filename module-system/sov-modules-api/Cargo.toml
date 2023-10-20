@@ -15,10 +15,10 @@ resolver = "2"
 jsonrpsee = { workspace = true, optional = true }
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
-sov-first-read-last-write-cache = { path = "../utils/sov-first-read-last-write-cache", version = "0.2" }
-sov-state = { path = "../sov-state", version = "0.2" }
-sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
-sov-modules-macros = { path = "../sov-modules-macros", version = "0.2", optional = true }
+sov-first-read-last-write-cache = { path = "../utils/sov-first-read-last-write-cache", version = "0.3" }
+sov-state = { path = "../sov-state", version = "0.3" }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
+sov-modules-macros = { path = "../sov-modules-macros", version = "0.3", optional = true }
 serde = { workspace = true }
 borsh = { workspace = true }
 proptest = { workspace = true, optional = true }
@@ -36,7 +36,7 @@ schemars = { workspace = true, optional = true, features = [] }
 ed25519-dalek = { version = "2.0.0", default-features = false, features = ["serde"] }
 rand = { version = "0.8", optional = true }
 
-sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", version = "0.2", optional = true }
+sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", version = "0.3", optional = true }
 risc0-zkvm = { workspace = true, default-features = false, features = ["std"], optional = true }
 risc0-zkvm-platform = { workspace = true, optional = true }
 

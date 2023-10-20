@@ -49,8 +49,7 @@ This is a demo full node running a simple Sovereign SDK rollup on [Celestia](htt
 
 This demo shows how to integrate a State Transition Function (STF) with a Data Availability (DA) layer and a zkVM to create a full
 zk-rollup. The code in this repository corresponds to running a full-node of the rollup, which executes
-every transaction. If you want to see the logic for _proof generation_, check out the [demo-prover](../demo-prover/)
-package instead.
+every transaction. 
 
 By swapping out or modifying the imported state transition function, you can customize
 this example full-node to run arbitrary logic.
