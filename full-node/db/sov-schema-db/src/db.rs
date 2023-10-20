@@ -9,8 +9,7 @@ use crate::metrics::{
     SCHEMADB_BATCH_COMMIT_BYTES, SCHEMADB_BATCH_COMMIT_LATENCY_SECONDS, SCHEMADB_DELETES,
     SCHEMADB_GET_BYTES, SCHEMADB_GET_LATENCY_SECONDS, SCHEMADB_PUT_BYTES,
 };
-use crate::schema::Schema;
-use crate::schema::{ColumnFamilyName, KeyCodec, ValueCodec};
+use crate::schema::{ColumnFamilyName, KeyCodec, Schema, ValueCodec};
 use crate::{SchemaBatch, WriteOp};
 
 /// This DB is a schematized RocksDB wrapper where all data passed in and out are typed according to
