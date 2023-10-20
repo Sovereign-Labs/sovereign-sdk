@@ -1,3 +1,5 @@
+use sov_rollup_interface::maybestd::vec::Vec;
+
 #[cfg(feature = "std")]
 use crate::metrics::{SCHEMADB_ITER_BYTES, SCHEMADB_ITER_LATENCY_SECONDS};
 use crate::schema::Schema;

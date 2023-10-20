@@ -3,6 +3,7 @@
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 //! This library implements a schematized DB on top of [RocksDB](https://rocksdb.org/). It makes
 //! sure all data passed in and out are structured according to predefined schemas and prevents
