@@ -71,7 +71,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
     fn create_native_storage(
         &self,
         rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> <Self::NativeContext as Spec>::Storage;
+    ) -> Result<<Self::NativeContext as Spec>::Storage, anyhow::Error>;
 
     /// Creates instance of ZkVm.
     fn create_vm(&self) -> Self::Vm;
@@ -107,7 +107,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
             )
         });
 
-        let storage = self.create_native_storage(&rollup_config);
+        let storage = self.create_native_storage(&rollup_config)?;
 
         let prev_root = ledger_db
             .get_head_slot()?

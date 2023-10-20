@@ -78,11 +78,11 @@ impl RollupTemplate for MockDemoRollup {
     fn create_native_storage(
         &self,
         rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> <Self::NativeContext as Spec>::Storage {
+    ) -> Result<<Self::NativeContext as sov_modules_api::Spec>::Storage, anyhow::Error> {
         let storage_config = StorageConfig {
             path: rollup_config.storage.path.clone(),
         };
-        ProverStorage::with_config(storage_config).expect("Failed to open prover storage")
+        ProverStorage::with_config(storage_config)
     }
 
     fn create_rpc_methods(
