@@ -1,10 +1,15 @@
-use std::sync::Arc;
-
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(feature = "std")]
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::rpc::{BatchResponse, TxIdentifier, TxResponse};
-use sov_rollup_interface::stf::{Event, EventKey, TransactionReceipt};
+use sov_rollup_interface::maybestd::sync::Arc;
+use sov_rollup_interface::maybestd::vec::Vec;
+use sov_rollup_interface::rpc::TxIdentifier;
+#[cfg(feature = "std")]
+use sov_rollup_interface::rpc::{BatchResponse, TxResponse};
+use sov_rollup_interface::stf::EventKey;
+#[cfg(feature = "std")]
+use sov_rollup_interface::stf::{Event, TransactionReceipt};
 
 /// A cheaply cloneable bytes abstraction for use within the trust boundary of the node
 /// (i.e. when interfacing with the database). Serializes and deserializes more efficiently,
@@ -64,7 +69,7 @@ pub struct StoredSlot {
     /// Any extra data which the rollup decides to store relating to this slot.
     pub extra_data: DbBytes,
     /// The range of batches which occurred in this slot.
-    pub batches: std::ops::Range<BatchNumber>,
+    pub batches: core::ops::Range<BatchNumber>,
 }
 
 /// The on-disk format for a batch. Stores the hash and identifies the range of transactions
@@ -75,11 +80,13 @@ pub struct StoredBatch {
     /// The hash of the batch, as reported by the DA layer.
     pub hash: DbHash,
     /// The range of transactions which occurred in this batch.
-    pub txs: std::ops::Range<TxNumber>,
+    pub txs: core::ops::Range<TxNumber>,
     /// A customer "receipt" for this batch defined by the rollup.
     pub custom_receipt: DbBytes,
 }
 
+// TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+#[cfg(feature = "std")]
 impl<B: DeserializeOwned, T> TryFrom<StoredBatch> for BatchResponse<B, T> {
     type Error = anyhow::Error;
     fn try_from(value: StoredBatch) -> Result<Self, Self::Error> {
@@ -99,13 +106,15 @@ pub struct StoredTransaction {
     /// The hash of the transaction.
     pub hash: DbHash,
     /// The range of event-numbers emitted by this transaction.
-    pub events: std::ops::Range<EventNumber>,
+    pub events: core::ops::Range<EventNumber>,
     /// The serialized transaction data, if the rollup decides to store it.
     pub body: Option<Vec<u8>>,
     /// A customer "receipt" for this transaction defined by the rollup.
     pub custom_receipt: DbBytes,
 }
 
+// TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+#[cfg(feature = "std")]
 impl<R: DeserializeOwned> TryFrom<StoredTransaction> for TxResponse<R> {
     type Error = anyhow::Error;
     fn try_from(value: StoredTransaction) -> Result<Self, Self::Error> {
@@ -119,6 +128,8 @@ impl<R: DeserializeOwned> TryFrom<StoredTransaction> for TxResponse<R> {
 }
 
 /// Split a `TransactionReceipt` into a `StoredTransaction` and a list of `Event`s for storage in the database.
+// TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+#[cfg(feature = "std")]
 pub fn split_tx_for_storage<R: Serialize>(
     tx: TransactionReceipt<R>,
     event_offset: u64,

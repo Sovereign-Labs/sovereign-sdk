@@ -25,23 +25,27 @@
 //! Module Accessory State Table:
 //! - `(ModuleAddress, Key) -> Value`
 
-use borsh::{maybestd, BorshDeserialize, BorshSerialize};
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use borsh::{BorshDeserialize, BorshSerialize};
 use jmt::storage::{Node, NodeKey};
+#[cfg(feature = "std")]
 use jmt::Version;
-use sov_rollup_interface::stf::{Event, EventKey};
+use sov_rollup_interface::maybestd::vec::Vec;
+use sov_rollup_interface::stf::EventKey;
 use sov_schema_db::schema::{KeyDecoder, KeyEncoder, ValueCodec};
-use sov_schema_db::{CodecError, SeekKeyEncoder};
+use sov_schema_db::CodecError;
 
 use super::types::{
-    AccessoryKey, AccessoryStateValue, BatchNumber, DbHash, EventNumber, JmtValue, SlotNumber,
-    StateKey, StoredBatch, StoredSlot, StoredTransaction, TxNumber,
+    AccessoryKey, AccessoryStateValue, BatchNumber, DbHash, EventNumber, SlotNumber, StateKey,
+    TxNumber,
 };
+#[cfg(feature = "std")]
+use super::types::{JmtValue, StoredBatch, StoredSlot, StoredTransaction};
 
 /// A list of all tables used by the StateDB. These tables store rollup state - meaning
 /// account balances, nonces, etc.
 pub const STATE_TABLES: &[&str] = &[
     KeyHashToKey::table_name(),
+    #[cfg(feature = "std")]
     JmtValues::table_name(),
     JmtNodes::table_name(),
 ];
@@ -49,13 +53,17 @@ pub const STATE_TABLES: &[&str] = &[
 /// A list of all tables used by the LedgerDB. These tables store rollup "history" - meaning
 /// transaction, events, receipts, etc.
 pub const LEDGER_TABLES: &[&str] = &[
+    #[cfg(feature = "std")]
     SlotByNumber::table_name(),
     SlotByHash::table_name(),
     BatchByHash::table_name(),
+    #[cfg(feature = "std")]
     BatchByNumber::table_name(),
     TxByHash::table_name(),
+    #[cfg(feature = "std")]
     TxByNumber::table_name(),
     EventByKey::table_name(),
+    #[cfg(feature = "std")]
     EventByNumber::table_name(),
 ];
 
@@ -104,8 +112,8 @@ macro_rules! define_table_without_codec {
             }
         }
 
-        impl ::std::fmt::Display for $table_name {
-            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        impl ::core::fmt::Display for $table_name {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 ::core::write!(f, "{}", stringify!($table_name))
             }
         }
@@ -117,7 +125,7 @@ macro_rules! impl_borsh_value_codec {
         impl ::sov_schema_db::schema::ValueCodec<$table_name> for $value {
             fn encode_value(
                 &self,
-            ) -> ::std::result::Result<
+            ) -> ::core::result::Result<
                 ::sov_rollup_interface::maybestd::vec::Vec<u8>,
                 ::sov_schema_db::CodecError,
             > {
@@ -126,7 +134,7 @@ macro_rules! impl_borsh_value_codec {
 
             fn decode_value(
                 data: &[u8],
-            ) -> ::std::result::Result<Self, ::sov_schema_db::CodecError> {
+            ) -> ::core::result::Result<Self, ::sov_schema_db::CodecError> {
                 ::borsh::BorshDeserialize::deserialize_reader(&mut &data[..]).map_err(Into::into)
             }
         }
@@ -148,13 +156,13 @@ macro_rules! define_table_with_default_codec {
         define_table_without_codec!($(#[$docs])+ ( $table_name ) $key => $value);
 
         impl ::sov_schema_db::schema::KeyEncoder<$table_name> for $key {
-            fn encode_key(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_schema_db::CodecError> {
+            fn encode_key(&self) -> ::core::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_schema_db::CodecError> {
                 ::borsh::BorshSerialize::try_to_vec(self).map_err(Into::into)
             }
         }
 
         impl ::sov_schema_db::schema::KeyDecoder<$table_name> for $key {
-            fn decode_key(data: &[u8]) -> ::std::result::Result<Self, ::sov_schema_db::CodecError> {
+            fn decode_key(data: &[u8]) -> ::core::result::Result<Self, ::sov_schema_db::CodecError> {
                 ::borsh::BorshDeserialize::deserialize_reader(&mut &data[..]).map_err(Into::into)
             }
         }
@@ -168,12 +176,14 @@ macro_rules! define_table_with_default_codec {
 /// little-endian, but RocksDB uses lexicographic ordering which is only
 /// compatible with big-endian, so we use [`bincode`] with the big-endian option
 /// here.
+// TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+#[cfg(feature = "std")]
 macro_rules! define_table_with_seek_key_codec {
     ($(#[$docs:meta])+ ($table_name:ident) $key:ty => $value:ty) => {
         define_table_without_codec!($(#[$docs])+ ( $table_name ) $key => $value);
 
         impl ::sov_schema_db::schema::KeyEncoder<$table_name> for $key {
-            fn encode_key(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_schema_db::CodecError> {
+            fn encode_key(&self) -> ::core::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_schema_db::CodecError> {
                 use ::anyhow::Context as _;
                 use ::bincode::Options as _;
 
@@ -186,7 +196,7 @@ macro_rules! define_table_with_seek_key_codec {
         }
 
         impl ::sov_schema_db::schema::KeyDecoder<$table_name> for $key {
-            fn decode_key(data: &[u8]) -> ::std::result::Result<Self, ::sov_schema_db::CodecError> {
+            fn decode_key(data: &[u8]) -> ::core::result::Result<Self, ::sov_schema_db::CodecError> {
                 use ::anyhow::Context as _;
                 use ::bincode::Options as _;
 
@@ -199,7 +209,7 @@ macro_rules! define_table_with_seek_key_codec {
         }
 
         impl ::sov_schema_db::SeekKeyEncoder<$table_name> for $key {
-            fn encode_seek_key(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_schema_db::CodecError> {
+            fn encode_seek_key(&self) -> ::core::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_schema_db::CodecError> {
                 <Self as ::sov_schema_db::schema::KeyEncoder<$table_name>>::encode_key(self)
             }
         }
@@ -209,6 +219,8 @@ macro_rules! define_table_with_seek_key_codec {
 }
 
 // fn deser(target: &mut &[u8]) -> Result<Self, DeserializationError>;
+// TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+#[cfg(feature = "std")]
 define_table_with_seek_key_codec!(
     /// The primary source for slot data
     (SlotByNumber) SlotNumber => StoredSlot
@@ -224,6 +236,8 @@ define_table_with_default_codec!(
     (ModuleAccessoryState) AccessoryKey => AccessoryStateValue
 );
 
+// TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+#[cfg(feature = "std")]
 define_table_with_seek_key_codec!(
     /// The primary source for batch data
     (BatchByNumber) BatchNumber => StoredBatch
@@ -234,6 +248,8 @@ define_table_with_default_codec!(
     (BatchByHash) DbHash => BatchNumber
 );
 
+// TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+#[cfg(feature = "std")]
 define_table_with_seek_key_codec!(
     /// The primary source for transaction data
     (TxByNumber) TxNumber => StoredTransaction
@@ -244,9 +260,11 @@ define_table_with_default_codec!(
     (TxByHash) DbHash => TxNumber
 );
 
+// TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+#[cfg(feature = "std")]
 define_table_with_seek_key_codec!(
     /// The primary store for event data
-    (EventByNumber) EventNumber => Event
+    (EventByNumber) EventNumber => sov_rollup_interface::stf::Event
 );
 
 define_table_with_default_codec!(
@@ -280,41 +298,50 @@ impl ValueCodec<JmtNodes> for Node {
     }
 }
 
+#[cfg(feature = "std")]
 define_table_without_codec!(
     /// The source of truth for JMT values by version
     (JmtValues) (StateKey, Version) => JmtValue
 );
 
+#[cfg(feature = "std")]
 impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> KeyEncoder<JmtValues> for (T, Version) {
     fn encode_key(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
+        use byteorder::WriteBytesExt;
         let mut out =
-            Vec::with_capacity(self.0.as_ref().len() + std::mem::size_of::<Version>() + 8);
+            Vec::with_capacity(self.0.as_ref().len() + core::mem::size_of::<Version>() + 8);
         self.0
             .as_ref()
             .serialize(&mut out)
             .map_err(CodecError::from)?;
         // Write the version in big-endian order so that sorting order is based on the most-significant bytes of the key
-        out.write_u64::<BigEndian>(self.1)
+        out.write_u64::<byteorder::BigEndian>(self.1)
             .expect("serialization to vec is infallible");
         Ok(out)
     }
 }
 
-impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> SeekKeyEncoder<JmtValues> for (T, Version) {
+#[cfg(feature = "std")]
+impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> sov_schema_db::SeekKeyEncoder<JmtValues>
+    for (T, Version)
+{
     fn encode_seek_key(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
         self.encode_key()
     }
 }
 
+#[cfg(feature = "std")]
 impl KeyDecoder<JmtValues> for (StateKey, Version) {
     fn decode_key(data: &[u8]) -> sov_schema_db::schema::Result<Self> {
-        let mut cursor = maybestd::io::Cursor::new(data);
+        use byteorder::ReadBytesExt;
+        let mut cursor = std::io::Cursor::new(data);
         let key = Vec::<u8>::deserialize_reader(&mut cursor)?;
-        let version = cursor.read_u64::<BigEndian>()?;
+        let version = cursor.read_u64::<byteorder::BigEndian>()?;
         Ok((key, version))
     }
 }
 
+#[cfg(feature = "std")]
 impl ValueCodec<JmtValues> for JmtValue {
     fn encode_value(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
         self.try_to_vec().map_err(CodecError::from)
