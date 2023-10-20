@@ -36,7 +36,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // Initializing logging
     tracing_subscriber::registry()
         .with(fmt::layer())
-        .with(EnvFilter::from_default_env())
+        .with(EnvFilter::from_str("debug,hyper=info").unwrap())
         .init();
 
     let args = Args::parse();
