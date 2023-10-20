@@ -11,8 +11,8 @@ pub use state_machine::*;
 
 mod node;
 
-pub use digest;
 pub use node::*;
+pub use {anyhow, digest};
 
 /// A facade for the `std` crate.
 pub mod maybestd {
