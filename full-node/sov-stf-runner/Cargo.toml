@@ -1,15 +1,14 @@
 [package]
 name = "sov-stf-runner"
 authors = { workspace = true }
+description = "Runs Sovereign SDK rollups and their verifiers"
 edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
-publish = false
 
 [dependencies]
 anyhow = { workspace = true }
@@ -34,21 +33,15 @@ sov-bank = { path = "../../module-system/module-implementations/sov-bank", featu
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
 
 sov-accounts = { path = "../../module-system/module-implementations/sov-accounts", features = ["native"] }
-sov-celestia-adapter = { path = "../../adapters/celestia", features = ["native"] }
 sov-sequencer = { path = "../sov-sequencer" }
 
-sov-state = { path = "../../module-system/sov-state" }
-sov-modules-api = { path = "../../module-system/sov-modules-api" }
+sov-state = { path = "../../module-system/sov-state", features = ["native"] }
+sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 
 [features]
 default = []
 native = [
     "sov-db",
-    "sov-celestia-adapter/native",
-    "sov-sequencer-registry/native",
-    "sov-bank/native",
-    "sov-state/native",
-    "sov-modules-api/native",
     "jsonrpsee",
     "toml",
     "tokio",

@@ -8961,7 +8961,6 @@ dependencies = [
  "serde_json",
  "sov-accounts",
  "sov-bank",
- "sov-celestia-adapter",
  "sov-db",
  "sov-modules-api",
  "sov-modules-stf-template",
