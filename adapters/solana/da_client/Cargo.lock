@@ -13,6 +13,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "account_proof_geyser"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "blake3",
+ "borsh 0.10.3",
+ "crossbeam",
+ "crossbeam-channel",
+ "log",
+ "lru 0.12.0",
+ "rayon",
+ "solana-geyser-plugin-interface",
+ "solana-logger",
+ "solana-runtime",
+ "solana-sdk",
+ "solana-transaction-status",
+ "tokio",
+]
+
+[[package]]
 name = "addr2line"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -811,7 +831,7 @@ checksum = "8d696c370c750c948ada61c69a0ee2cbbb9c50b1019ddb86d9317157a99c2cae"
 
 [[package]]
 name = "blockroot"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anchor-lang",
 ]
@@ -1368,6 +1388,7 @@ dependencies = [
 name = "da_client"
 version = "0.3.0"
 dependencies = [
+ "account_proof_geyser",
  "anchor-client",
  "anchor-lang",
  "anyhow",
@@ -1375,6 +1396,7 @@ dependencies = [
  "bincode",
  "blake3",
  "blockroot",
+ "borsh 0.10.3",
  "bs58 0.5.0",
  "clap 4.4.6",
  "crossbeam",
@@ -4012,6 +4034,18 @@ dependencies = [
  "quote 1.0.33",
  "rustc_version",
  "syn 2.0.37",
+]
+
+[[package]]
+name = "solana-geyser-plugin-interface"
+version = "1.16.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "268db758cb4193ccf70c85459bfd0e8e5eb7a13b3ee876106d07fada04290a17"
+dependencies = [
+ "log",
+ "solana-sdk",
+ "solana-transaction-status",
+ "thiserror",
 ]
 
 [[package]]

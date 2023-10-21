@@ -3,9 +3,23 @@ use std::collections::HashMap;
 use solana_geyser_plugin_interface::geyser_plugin_interface::{ReplicaBlockInfoV2, SlotStatus};
 use solana_sdk::hash::Hash;
 use solana_sdk::pubkey::Pubkey;
+use borsh::{BorshSerialize, BorshDeserialize};
 
 pub type AccountHashAccumulator = HashMap<u64, HashMap<Pubkey, (u64, Hash)>>;
 pub type TransactionSigAccumulator = HashMap<u64, u64>;
+
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct Proof {
+    pub path: Vec<usize>, // Position in the chunk (between 0 and 15) for each level.
+    pub siblings: Vec<Vec<Hash>>, // Sibling hashes at each level.
+}
+
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct Update {
+    pub slot: u64,
+    pub root: Hash,
+    pub proofs: Vec<(Pubkey,Proof)>,
+}
 
 #[derive(Debug, Clone)]
 pub struct AccountInfo {

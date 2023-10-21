@@ -8,6 +8,7 @@ use solana_runtime::accounts_hash::{AccountsHasher, MERKLE_FANOUT};
 use solana_sdk::hash::{hashv, Hash, Hasher};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
+use crate::types::Proof;
 
 /// Util helper function to calculate the hash of a solana account
 /// https://github.com/solana-labs/solana/blob/v1.16.15/runtime/src/accounts_db.rs#L6076-L6118
@@ -46,14 +47,8 @@ pub fn calculate_root(pubkey_hash_vec: Vec<(Pubkey, Hash)>) -> Hash {
     AccountsHasher::accumulate_account_hashes(pubkey_hash_vec)
 }
 
-// Solana MERKLE_FANOUT is 16, so this logic needs to handle more siblings
-#[derive(Clone, Debug)]
-pub struct Proof {
-    pub path: Vec<usize>, // Position in the chunk (between 0 and 15) for each level.
-    pub siblings: Vec<Vec<Hash>>, // Sibling hashes at each level.
-}
 
-pub fn calculate_root_custom(
+pub fn calculate_root_and_proofs(
     pubkey_hash_vec: &mut [(Pubkey, Hash)],
     leaves_for_proof: &[Pubkey],
 ) -> (Hash, Vec<(Pubkey, Proof)>) {
@@ -306,7 +301,7 @@ mod tests {
             .map(|&i| pubkey_hash_vec[i].0.clone())
             .collect();
 
-        let (root, proofs) = calculate_root_custom(&mut pubkey_hash_vec, &proof_leaves);
+        let (root, proofs) = calculate_root_and_proofs(&mut pubkey_hash_vec, &proof_leaves);
 
         for (pubkey, proof) in &proofs {
             let leaf_hash = pubkey_hash_vec
@@ -338,7 +333,7 @@ mod tests {
             .map(|&i| pubkey_hash_vec[i].0.clone())
             .collect();
 
-        let (root, mut proofs) = calculate_root_custom(&mut pubkey_hash_vec, &proof_leaves);
+        let (root, mut proofs) = calculate_root_and_proofs(&mut pubkey_hash_vec, &proof_leaves);
 
         // Keep a copy of the original proof for comparison
         let original_proof = proofs[0].1.clone();

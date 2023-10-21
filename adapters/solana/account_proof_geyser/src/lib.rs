@@ -9,8 +9,10 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use std::thread;
 
+use borsh::BorshSerialize;
 use blake3::traits::digest::Digest;
 use crossbeam_channel::{select, unbounded, Receiver, Sender};
+
 use log::{error, info};
 use lru::LruCache;
 use solana_geyser_plugin_interface::geyser_plugin_interface::{
@@ -23,19 +25,22 @@ use solana_sdk::clock::Slot;
 use solana_sdk::hash::{hashv, Hash};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
+use tokio::net::TcpListener;
+use tokio::sync::broadcast;
+use tokio::io::AsyncWriteExt;
 
 use crate::types::{
     AccountHashAccumulator, AccountInfo, BlockInfo, GeyserMessage, SlotInfo, TransactionInfo,
-    TransactionSigAccumulator,
+    TransactionSigAccumulator, Update
 };
-use crate::utils::{calculate_root, hash_solana_account};
+use crate::utils::{hash_solana_account, calculate_root, calculate_root_and_proofs};
 
 fn handle_confirmed_slot(
     slot: u64,
     block_accumulator: &mut HashMap<u64, BlockInfo>,
     processed_slot_account_accumulator: &mut AccountHashAccumulator,
-    processed_transaction_accumulator: &mut TransactionSigAccumulator,
-) -> anyhow::Result<()> {
+    processed_transaction_accumulator: &mut TransactionSigAccumulator
+) -> anyhow::Result<Update> {
     let Some(block) = block_accumulator.get(&slot) else {
         anyhow::bail!("block not available");
     };
@@ -49,11 +54,10 @@ fn handle_confirmed_slot(
     let parent_bankhash = Hash::from_str(&block.parent_bankhash).unwrap();
     let blockhash = Hash::from_str(&block.blockhash).unwrap();
 
-    let accounts_delta_hash = calculate_root(
-        account_hashes
-            .iter()
-            .map(|(k, (version, v))| (k.clone(), v.clone()))
-            .collect(),
+    let mut account_hashes: Vec<(Pubkey,Hash)> = account_hashes.iter().map(|(k, (version, v))| (k.clone(), v.clone())).collect();
+    let (accounts_delta_hash, account_proofs) = calculate_root_and_proofs(
+        &mut account_hashes,
+        &vec![]
     );
     let bank_hash = hashv(&[
         parent_bankhash.as_ref(),
@@ -62,18 +66,22 @@ fn handle_confirmed_slot(
         blockhash.as_ref(),
     ]);
 
-    info!("=====> CALCULATED: {:?}: {:?} ", slot, bank_hash);
-    info!(
+    error!("=====> CALCULATED: {:?}: {:?} ", slot, &bank_hash);
+    error!(
         "=====> GEYSER DIRECT: {:?}: {:?} ",
         slot - 1,
-        parent_bankhash
+        &parent_bankhash
     );
 
     block_accumulator.remove(&slot);
     processed_slot_account_accumulator.remove(&slot);
     processed_transaction_accumulator.remove(&slot);
 
-    Ok(())
+    Ok(Update{
+        slot,
+        root:bank_hash,
+        proofs:account_proofs
+    })
 }
 
 fn handle_processed_slot(
@@ -102,7 +110,9 @@ fn transfer_slot<V>(slot: u64, raw: &mut HashMap<u64, V>, processed: &mut HashMa
     }
 }
 
-fn process_messages(geyser_receiver: crossbeam::channel::Receiver<GeyserMessage>) {
+fn process_messages(geyser_receiver: crossbeam::channel::Receiver<GeyserMessage>,
+                    tx: broadcast::Sender<Update>
+) {
     let mut raw_slot_account_accumulator: AccountHashAccumulator = HashMap::new();
     let mut processed_slot_account_accumulator: AccountHashAccumulator = HashMap::new();
 
@@ -167,12 +177,22 @@ fn process_messages(geyser_receiver: crossbeam::channel::Receiver<GeyserMessage>
                     );
                 }
                 SlotStatus::Confirmed => {
-                    handle_confirmed_slot(
+                    match handle_confirmed_slot(
                         slot_info.slot,
                         &mut block_accumulator,
                         &mut processed_slot_account_accumulator,
                         &mut processed_transaction_accumulator,
-                    );
+                    ) {
+                        Ok(update) => {
+                            if let Err(e) = tx.send(update) {
+                                error!("No subscribers to receive the update: {:?}", e);
+                            }
+                        },
+                        Err(err) => {
+                            error!("{:?}",err);
+                        }
+                    }
+
                 }
                 _ => {}
             },
@@ -227,8 +247,43 @@ impl GeyserPlugin for Plugin {
         solana_logger::setup_with_default("error");
         let (geyser_sender, geyser_receiver) = unbounded();
 
+        let (tx, _rx) = broadcast::channel(32);
+        let tx_process_messages = tx.clone();
+
         thread::spawn(move || {
-            process_messages(geyser_receiver);
+            process_messages(geyser_receiver, tx_process_messages);
+        });
+
+
+        thread::spawn(move || {
+            let runtime = tokio::runtime::Runtime::new().unwrap();
+            runtime.block_on(async {
+                let listener = TcpListener::bind("127.0.0.1:10000").await.unwrap();
+                loop {
+                    let (mut socket, _) = match listener.accept().await {
+                        Ok(connection) => {
+                            connection
+                        },
+                        Err(e) => {
+                            error!("Failed to accept connection: {:?}", e);
+                            continue;
+                        }
+                    };
+                    let mut rx = tx.subscribe();
+                    tokio::spawn(async move {
+                        loop {
+                            match rx.recv().await {
+                                Ok(update) => {
+                                    let data = update.try_to_vec().unwrap();
+                                    let _ = socket.write_all(&data).await;
+                                },
+                                Err(_) => {
+                                }
+                            }
+                        }
+                    });
+                }
+            });
         });
 
         self.inner = Some(PluginInner {
