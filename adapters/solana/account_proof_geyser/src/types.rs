@@ -1,9 +1,8 @@
 use std::collections::HashMap;
+
+use solana_geyser_plugin_interface::geyser_plugin_interface::{ReplicaBlockInfoV2, SlotStatus};
 use solana_sdk::hash::Hash;
 use solana_sdk::pubkey::Pubkey;
-use solana_geyser_plugin_interface::geyser_plugin_interface::{
-    ReplicaBlockInfoV2,
-    SlotStatus};
 
 pub type AccountHashAccumulator = HashMap<u64, HashMap<Pubkey, (u64, Hash)>>;
 pub type TransactionSigAccumulator = HashMap<u64, u64>;
@@ -50,7 +49,7 @@ pub struct BlockInfo {
     pub slot: u64,
     pub parent_bankhash: String,
     pub blockhash: String,
-    pub executed_transaction_count: u64
+    pub executed_transaction_count: u64,
 }
 
 impl<'a> From<&'a ReplicaBlockInfoV2<'a>> for BlockInfo {
@@ -67,14 +66,13 @@ impl<'a> From<&'a ReplicaBlockInfoV2<'a>> for BlockInfo {
 #[derive(Debug, Clone)]
 pub struct SlotInfo {
     pub slot: u64,
-    pub status: SlotStatus
+    pub status: SlotStatus,
 }
-
 
 #[derive(Debug, Clone)]
 pub enum GeyserMessage {
     AccountMessage(AccountInfo),
     BlockMessage(BlockInfo),
     TransactionMessage(TransactionInfo),
-    SlotMessage(SlotInfo)
+    SlotMessage(SlotInfo),
 }

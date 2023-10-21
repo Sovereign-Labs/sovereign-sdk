@@ -1,13 +1,13 @@
+use std::collections::HashMap;
+use std::str::FromStr;
+
+use blake3::traits::digest::Digest;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::prelude::*;
+use solana_runtime::accounts_hash::{AccountsHasher, MERKLE_FANOUT};
 use solana_sdk::hash::{hashv, Hash, Hasher};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
-use std::collections::HashMap;
-use std::str::FromStr;
-use blake3::traits::digest::Digest;
-use solana_runtime::accounts_hash::{AccountsHasher,MERKLE_FANOUT};
-use rayon::iter::IntoParallelIterator;
-use rayon::iter::ParallelIterator;
-use rayon::prelude::*;
 
 /// Util helper function to calculate the hash of a solana account
 /// https://github.com/solana-labs/solana/blob/v1.16.15/runtime/src/accounts_db.rs#L6076-L6118
@@ -46,13 +46,17 @@ pub fn calculate_root(pubkey_hash_vec: Vec<(Pubkey, Hash)>) -> Hash {
     AccountsHasher::accumulate_account_hashes(pubkey_hash_vec)
 }
 
-#[derive(Clone,Debug)]
+// Solana MERKLE_FANOUT is 16, so this logic needs to handle more siblings
+#[derive(Clone, Debug)]
 pub struct Proof {
-    pub path: Vec<usize>,         // Position in the chunk (between 0 and 15) for each level.
+    pub path: Vec<usize>, // Position in the chunk (between 0 and 15) for each level.
     pub siblings: Vec<Vec<Hash>>, // Sibling hashes at each level.
 }
 
-pub fn calculate_root_custom(pubkey_hash_vec: &mut [(Pubkey, Hash)], leaves_for_proof: &[Pubkey]) -> (Hash, Vec<(Pubkey, Proof)>) {
+pub fn calculate_root_custom(
+    pubkey_hash_vec: &mut [(Pubkey, Hash)],
+    leaves_for_proof: &[Pubkey],
+) -> (Hash, Vec<(Pubkey, Proof)>) {
     pubkey_hash_vec.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
 
     let root = compute_merkle_root_loop(pubkey_hash_vec, MERKLE_FANOUT, |i: &(Pubkey, Hash)| &i.1);
@@ -61,7 +65,10 @@ pub fn calculate_root_custom(pubkey_hash_vec: &mut [(Pubkey, Hash)], leaves_for_
     (root, proofs)
 }
 
-pub fn generate_merkle_proofs(pubkey_hash_vec: &[(Pubkey, Hash)], leaves_for_proof: &[Pubkey]) -> Vec<(Pubkey, Proof)> {
+pub fn generate_merkle_proofs(
+    pubkey_hash_vec: &[(Pubkey, Hash)],
+    leaves_for_proof: &[Pubkey],
+) -> Vec<(Pubkey, Proof)> {
     let mut proofs = Vec::new();
 
     for &key in leaves_for_proof {
@@ -69,9 +76,14 @@ pub fn generate_merkle_proofs(pubkey_hash_vec: &[(Pubkey, Hash)], leaves_for_pro
         let mut siblings = Vec::new();
 
         // Find the position of the key in the sorted pubkey_hash_vec
-        let mut pos = pubkey_hash_vec.binary_search_by(|&(ref k, _)| k.cmp(&key)).unwrap();
+        let mut pos = pubkey_hash_vec
+            .binary_search_by(|&(ref k, _)| k.cmp(&key))
+            .unwrap();
 
-        let mut current_hashes: Vec<_> = pubkey_hash_vec.iter().map(|&(_, ref h)| h.clone()).collect();
+        let mut current_hashes: Vec<_> = pubkey_hash_vec
+            .iter()
+            .map(|&(_, ref h)| h.clone())
+            .collect();
         while current_hashes.len() > 1 {
             let chunk_index = pos / MERKLE_FANOUT;
             let index_in_chunk = pos % MERKLE_FANOUT;
@@ -120,9 +132,9 @@ fn compute_hashes_at_next_level(hashes: &[Hash]) -> Vec<Hash> {
 }
 
 pub fn compute_merkle_root_loop<T, F>(hashes: &[T], fanout: usize, extractor: F) -> Hash
-    where
-        F: Fn(&T) -> &Hash + std::marker::Sync,
-        T: std::marker::Sync,
+where
+    F: Fn(&T) -> &Hash + std::marker::Sync,
+    T: std::marker::Sync,
 {
     if hashes.is_empty() {
         return Hasher::default().result();
@@ -198,12 +210,76 @@ pub fn verify_proof(leaf_hash: &Hash, proof: &Proof, root: &Hash) -> bool {
     &current_hash == root
 }
 
+fn are_adjacent(proof1: &Proof, proof2: &Proof) -> bool {
+    if proof1.path.len() != proof2.path.len() {
+        return false;
+    }
+
+    // Check if proof1 represents the first leaf
+    if proof1.path.iter().all(|&position| position == 0) {
+        // If proof2 is the next leaf after the first one
+        return proof2.path[..proof2.path.len() - 1]
+            .iter()
+            .all(|&position| position == 0)
+            && proof2.path.last().unwrap() == &1;
+    }
+
+    // Check if proof2 represents the first leaf
+    if proof2.path.iter().all(|&position| position == 0) {
+        // If proof1 is the next leaf after the first one
+        return proof1.path[..proof1.path.len() - 1]
+            .iter()
+            .all(|&position| position == 0)
+            && proof1.path.last().unwrap() == &1;
+    }
+
+    // Check if proof1 represents the last leaf
+    if proof1
+        .path
+        .iter()
+        .all(|&position| position == MERKLE_FANOUT - 1)
+    {
+        // If proof2 is the leaf just before the last one
+        return proof2.path[..proof2.path.len() - 1]
+            .iter()
+            .all(|&position| position == MERKLE_FANOUT - 1)
+            && proof2.path.last().unwrap() == &(MERKLE_FANOUT - 2);
+    }
+
+    // Check if proof2 represents the last leaf
+    if proof2
+        .path
+        .iter()
+        .all(|&position| position == MERKLE_FANOUT - 1)
+    {
+        // If proof1 is the leaf just before the last one
+        return proof1.path[..proof1.path.len() - 1]
+            .iter()
+            .all(|&position| position == MERKLE_FANOUT - 1)
+            && proof1.path.last().unwrap() == &(MERKLE_FANOUT - 2);
+    }
+
+    // Check for regular adjacency (neither are first or last leaves)
+    for i in 0..proof1.path.len() {
+        if proof1.path[i] != proof2.path[i] {
+            // If they diverge by more than one position, they are not adjacent
+            if i == proof1.path.len() - 1
+                || (proof1.path[i] as i32 - proof2.path[i] as i32).abs() != 1
+            {
+                return false;
+            }
+        }
+    }
+    true
+}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use rand::Rng;
     use std::convert::TryFrom;
+
+    use rand::Rng;
+
+    use super::*;
 
     fn generate_random_pubkey() -> Pubkey {
         let random_bytes: [u8; 32] = rand::thread_rng().gen();
@@ -222,19 +298,29 @@ mod tests {
             .collect();
 
         let mut rng = rand::thread_rng();
-        let random_indices: Vec<_> = (0..3).map(|_| rng.gen_range(0..pubkey_hash_vec.len())).collect();
-        let proof_leaves: Vec<_> = random_indices.iter().map(|&i| pubkey_hash_vec[i].0.clone()).collect();
+        let random_indices: Vec<_> = (0..3)
+            .map(|_| rng.gen_range(0..pubkey_hash_vec.len()))
+            .collect();
+        let proof_leaves: Vec<_> = random_indices
+            .iter()
+            .map(|&i| pubkey_hash_vec[i].0.clone())
+            .collect();
 
         let (root, proofs) = calculate_root_custom(&mut pubkey_hash_vec, &proof_leaves);
 
         for (pubkey, proof) in &proofs {
-            let leaf_hash = pubkey_hash_vec.iter().find(|(k, _)| k == pubkey).unwrap().1.clone();
+            let leaf_hash = pubkey_hash_vec
+                .iter()
+                .find(|(k, _)| k == pubkey)
+                .unwrap()
+                .1
+                .clone();
             assert!(verify_proof(&leaf_hash, proof, &root));
         }
 
         let solana_root = calculate_root(pubkey_hash_vec);
 
-        assert_eq!(solana_root,root);
+        assert_eq!(solana_root, root);
     }
 
     #[test]
@@ -244,8 +330,13 @@ mod tests {
             .collect();
 
         let mut rng = rand::thread_rng();
-        let random_indices: Vec<_> = (0..3).map(|_| rng.gen_range(0..pubkey_hash_vec.len())).collect();
-        let proof_leaves: Vec<_> = random_indices.iter().map(|&i| pubkey_hash_vec[i].0.clone()).collect();
+        let random_indices: Vec<_> = (0..3)
+            .map(|_| rng.gen_range(0..pubkey_hash_vec.len()))
+            .collect();
+        let proof_leaves: Vec<_> = random_indices
+            .iter()
+            .map(|&i| pubkey_hash_vec[i].0.clone())
+            .collect();
 
         let (root, mut proofs) = calculate_root_custom(&mut pubkey_hash_vec, &proof_leaves);
 
@@ -265,10 +356,18 @@ mod tests {
 
         // Verify the proofs
         for (idx, (pubkey, proof)) in proofs.iter().enumerate() {
-            let leaf_hash = pubkey_hash_vec.iter().find(|(k, _)| k == pubkey).unwrap().1.clone();
+            let leaf_hash = pubkey_hash_vec
+                .iter()
+                .find(|(k, _)| k == pubkey)
+                .unwrap()
+                .1
+                .clone();
 
             // Diagnostic
-            println!("\nVerifying proof for pubkey at index {}: {:?}", random_indices[idx], pubkey);
+            println!(
+                "\nVerifying proof for pubkey at index {}: {:?}",
+                random_indices[idx], pubkey
+            );
 
             let verification_result = verify_proof(&leaf_hash, proof, &root);
 
@@ -287,7 +386,4 @@ mod tests {
             }
         }
     }
-
-
 }
-
