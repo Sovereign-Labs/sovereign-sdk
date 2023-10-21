@@ -22,6 +22,8 @@ dependencies = [
  "crossbeam-channel",
  "log",
  "lru 0.12.0",
+ "rand 0.8.5",
+ "rayon",
  "solana-geyser-plugin-interface",
  "solana-logger",
  "solana-runtime",

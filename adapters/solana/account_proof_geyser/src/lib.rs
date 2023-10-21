@@ -1,3 +1,6 @@
+pub mod types;
+pub mod utils;
+
 use std::fmt::{Debug, Formatter};
 use solana_geyser_plugin_interface::geyser_plugin_interface::{
     GeyserPlugin, GeyserPluginError, ReplicaAccountInfoVersions, ReplicaBlockInfoVersions,
@@ -20,117 +23,9 @@ use solana_runtime::accounts_hash::AccountsHasher;
 use std::sync::{
     atomic::{AtomicU8, Ordering},
     Arc};
-
-type AccountHashAccumulator = HashMap<u64, HashMap<Pubkey, (u64, Hash)>>;
-type TransactionSigAccumulator = HashMap<u64, u64>;
-
-/// Util helper function to calculate the hash of a solana account
-/// https://github.com/solana-labs/solana/blob/v1.16.15/runtime/src/accounts_db.rs#L6076-L6118
-/// We can see as we make the code more resilient to see if we can also make
-/// the structures match and use the function from solana-sdk, but currently it seems a bit more
-/// complicated and lower priority, since getting a stable version working is top priority
-pub fn hash_solana_account(
-    lamports: u64,
-    owner: &[u8],
-    executable: bool,
-    rent_epoch: u64,
-    data: &[u8],
-    pubkey: &[u8],
-) -> [u8; 32] {
-    if lamports == 0 {
-        return [08; 32];
-    }
-    let mut hasher = blake3::Hasher::new();
-
-    hasher.update(&lamports.to_le_bytes());
-    hasher.update(&rent_epoch.to_le_bytes());
-    hasher.update(data);
-
-    if executable {
-        hasher.update(&[1u8; 1]);
-    } else {
-        hasher.update(&[0u8; 1]);
-    }
-    hasher.update(owner.as_ref());
-    hasher.update(pubkey.as_ref());
-
-    hasher.finalize().into()
-}
-
-pub fn calculate_root(pubkey_hash_vec: Vec<(Pubkey, Hash)>) -> Hash {
-    AccountsHasher::accumulate_account_hashes(pubkey_hash_vec)
-}
-
-
-#[derive(Debug, Clone)]
-pub struct AccountInfo {
-    /// The Pubkey for the account
-    pub pubkey: Pubkey,
-
-    /// The lamports for the account
-    pub lamports: u64,
-
-    /// The Pubkey of the owner program account
-    pub owner: Pubkey,
-
-    /// This account's data contains a loaded program (and is now read-only)
-    pub executable: bool,
-
-    /// The epoch at which this account will next owe rent
-    pub rent_epoch: u64,
-
-    /// The data held in this account.
-    pub data: Vec<u8>,
-
-    /// A global monotonically increasing atomic number, which can be used
-    /// to tell the order of the account update. For example, when an
-    /// account is updated in the same slot multiple times, the update
-    /// with higher write_version should supersede the one with lower
-    /// write_version.
-    pub write_version: u64,
-
-    /// Slot number for this update
-    pub slot: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct TransactionInfo {
-    pub slot: u64,
-    pub num_sigs: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct BlockInfo {
-    pub slot: u64,
-    pub parent_bankhash: String,
-    pub blockhash: String,
-    pub executed_transaction_count: u64
-}
-
-impl<'a> From<&'a ReplicaBlockInfoV2<'a>> for BlockInfo {
-    fn from(block: &'a ReplicaBlockInfoV2<'a>) -> Self {
-        Self {
-            slot: block.slot,
-            parent_bankhash: block.parent_blockhash.to_string(),
-            blockhash: block.blockhash.to_string(),
-            executed_transaction_count: block.executed_transaction_count,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct SlotInfo {
-    pub slot: u64,
-    pub status: SlotStatus
-}
-
-#[derive(Debug, Clone)]
-enum GeyserMessage {
-    AccountMessage(AccountInfo),
-    BlockMessage(BlockInfo),
-    TransactionMessage(TransactionInfo),
-    SlotMessage(SlotInfo)
-}
+use crate::types::{TransactionInfo,SlotInfo,AccountInfo,BlockInfo,GeyserMessage};
+use crate::utils::{hash_solana_account, calculate_root};
+use crate::types::{AccountHashAccumulator,TransactionSigAccumulator};
 
 fn handle_confirmed_slot(slot: u64,
                          block_accumulator: &mut HashMap<u64, BlockInfo>,
