@@ -18,7 +18,6 @@ mod test_rpc;
 /// Main demo runner. Initialize a DA chain, and starts a demo-rollup using the config provided
 /// (or a default config if not provided). Then start checking the blocks sent to the DA layer in
 /// the main event loop.
-
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
