@@ -80,7 +80,7 @@ where
     R: DispatchCall<Context = C>,
 {
     /// Attempt to add transaction to the mempool.
-    /// 
+    ///
     /// The transaction is discarded if:
     /// - mempool is full
     /// - transaction is invalid (deserialization, verification or decoding of the runtime message failed)
@@ -98,8 +98,9 @@ where
         tx.verify().context("Failed to verify transaction")?;
 
         // Decode
-        let msg =
-            R::decode_call(tx.runtime_msg()).map_err(anyhow::Error::new).context("Failed to decode message in transaction")?;
+        let msg = R::decode_call(tx.runtime_msg())
+            .map_err(anyhow::Error::new)
+            .context("Failed to decode message in transaction")?;
 
         self.mempool.push_back(PooledTransaction {
             raw,
@@ -117,16 +118,11 @@ where
         let mut current_batch_size = 0;
 
         while let Some(mut pooled) = self.mempool.pop_front() {
-            let tx_len = pooled.raw.len();
-
             // Take the decoded runtime message cached upon accepting transaction
             // into the pool or attempt to decode the message again if
             // the transaction was previously executed,
             // but discarded from the batch due to the batch size.
-            let msg = pooled
-                .msg
-                .take()
-                .unwrap_or_else(|| 
+            let msg = pooled.msg.take().unwrap_or_else(||
                     // SAFETY: The transaction was accepted into the pool,
                     // so we know that the runtime message is valid. 
                     R::decode_call(pooled.tx.runtime_msg()).expect("noop; qed"));
@@ -144,6 +140,7 @@ where
             }
 
             // In order to fill batch as big as possible, we only check if valid tx can fit in the batch.
+            let tx_len = pooled.raw.len();
             if current_batch_size + tx_len > self.max_batch_size_bytes {
                 self.mempool.push_front(pooled);
                 break;
@@ -262,7 +259,7 @@ mod tests {
 
     mod accept_tx {
         use super::*;
-       
+
         #[test]
         fn accept_valid_tx() {
             let tmpdir = tempfile::tempdir().unwrap();
@@ -292,12 +289,15 @@ mod tests {
         fn reject_random_bytes_tx() {
             let tmpdir = tempfile::tempdir().unwrap();
             let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
-            
+
             let tx = generate_random_bytes();
             let accept_result = batch_builder.accept_tx(tx);
 
             assert!(accept_result.is_err());
-            assert!(accept_result.unwrap_err().to_string().starts_with("Failed to deserialize transaction"))
+            assert!(accept_result
+                .unwrap_err()
+                .to_string()
+                .starts_with("Failed to deserialize transaction"))
         }
 
         #[test]
@@ -310,9 +310,11 @@ mod tests {
             let accept_result = batch_builder.accept_tx(tx);
 
             assert!(accept_result.is_err());
-            assert!(accept_result.unwrap_err().to_string().starts_with("Failed to decode message"))
+            assert!(accept_result
+                .unwrap_err()
+                .to_string()
+                .starts_with("Failed to decode message"))
         }
-
 
         #[test]
         fn zero_sized_mempool_cant_accept_tx() {
