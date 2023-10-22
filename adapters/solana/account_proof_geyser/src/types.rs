@@ -15,6 +15,15 @@ pub struct Proof {
 }
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct BankHashProof {
+    pub proofs: Vec<(Pubkey, Hash, Proof)>,
+    pub num_sigs: u64,
+    pub account_delta_root: Hash,
+    pub parent_bankhash: Hash,
+    pub blockhash: Hash
+}
+
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Update {
     pub slot: u64,
     pub root: Hash,

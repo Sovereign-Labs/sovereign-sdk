@@ -69,6 +69,7 @@ fn handle_confirmed_slot(
         blockhash.as_ref(),
     ]);
 
+
     block_accumulator.remove(&slot);
     processed_slot_account_accumulator.remove(&slot);
     processed_transaction_accumulator.remove(&slot);

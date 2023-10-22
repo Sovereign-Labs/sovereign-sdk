@@ -206,67 +206,32 @@ pub fn verify_proof(leaf_hash: &Hash, proof: &Proof, root: &Hash) -> bool {
 }
 
 fn are_adjacent(proof1: &Proof, proof2: &Proof) -> bool {
+    use log::debug;
+
     if proof1.path.len() != proof2.path.len() {
+        println!("Proofs have different path lengths: {} vs {}", proof1.path.len(), proof2.path.len());
         return false;
     }
 
-    // Check if proof1 represents the first leaf
-    if proof1.path.iter().all(|&position| position == 0) {
-        // If proof2 is the next leaf after the first one
-        return proof2.path[..proof2.path.len() - 1]
-            .iter()
-            .all(|&position| position == 0)
-            && proof2.path.last().unwrap() == &1;
-    }
-
-    // Check if proof2 represents the first leaf
-    if proof2.path.iter().all(|&position| position == 0) {
-        // If proof1 is the next leaf after the first one
-        return proof1.path[..proof1.path.len() - 1]
-            .iter()
-            .all(|&position| position == 0)
-            && proof1.path.last().unwrap() == &1;
-    }
-
-    // Check if proof1 represents the last leaf
-    if proof1
-        .path
-        .iter()
-        .all(|&position| position == MERKLE_FANOUT - 1)
-    {
-        // If proof2 is the leaf just before the last one
-        return proof2.path[..proof2.path.len() - 1]
-            .iter()
-            .all(|&position| position == MERKLE_FANOUT - 1)
-            && proof2.path.last().unwrap() == &(MERKLE_FANOUT - 2);
-    }
-
-    // Check if proof2 represents the last leaf
-    if proof2
-        .path
-        .iter()
-        .all(|&position| position == MERKLE_FANOUT - 1)
-    {
-        // If proof1 is the leaf just before the last one
-        return proof1.path[..proof1.path.len() - 1]
-            .iter()
-            .all(|&position| position == MERKLE_FANOUT - 1)
-            && proof1.path.last().unwrap() == &(MERKLE_FANOUT - 2);
-    }
-
-    // Check for regular adjacency (neither are first or last leaves)
     for i in 0..proof1.path.len() {
         if proof1.path[i] != proof2.path[i] {
-            // If they diverge by more than one position, they are not adjacent
-            if i == proof1.path.len() - 1
-                || (proof1.path[i] as i32 - proof2.path[i] as i32).abs() != 1
-            {
+            let divergence = (proof1.path[i] as i32 - proof2.path[i] as i32).abs();
+
+            if divergence != 1 && divergence != ((MERKLE_FANOUT - 1) as i32) {
+                println!("Proofs diverge at position {}: proof1[{}]={}, proof2[{}]={}",
+                        i, i, proof1.path[i], i, proof2.path[i]);
                 return false;
             }
         }
     }
     true
 }
+
+
+fn is_first(proof: &Proof) -> bool {
+    proof.path.iter().all(|&position| position == 0)
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -293,14 +258,19 @@ mod tests {
             .collect();
 
         let mut rng = rand::thread_rng();
-        let random_indices: Vec<_> = (0..3)
-            .map(|_| rng.gen_range(0..pubkey_hash_vec.len()))
-            .collect();
-        let proof_leaves: Vec<_> = random_indices
-            .iter()
-            .map(|&i| pubkey_hash_vec[i].0.clone())
-            .collect();
 
+        pubkey_hash_vec.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
+
+        let random_index = rng.gen_range(2..pubkey_hash_vec.len()-3); // "- 2" to avoid picking the last element.
+        println!("{}",random_index);
+        let mut proof_leaves: Vec<_> = (random_index..random_index+3)
+            .map(|i| pubkey_hash_vec[i].0.clone())
+            .collect();
+        let first_leaf = pubkey_hash_vec[0].0.clone();
+        let last_leaf = pubkey_hash_vec[pubkey_hash_vec.len()-1].0.clone();
+        let inner_leaves = proof_leaves.clone();
+        proof_leaves.push(first_leaf);
+        proof_leaves.push(last_leaf);
         let (root, proofs) = calculate_root_and_proofs(&mut pubkey_hash_vec, &proof_leaves);
 
         for (pubkey, proof) in &proofs {
@@ -316,6 +286,21 @@ mod tests {
         let solana_root = calculate_root(pubkey_hash_vec);
 
         assert_eq!(solana_root, root);
+        let first_leaf_proof = proofs.iter().find(|(k,_)| *k == first_leaf).unwrap().1.clone();
+        let last_leaf_proof = proofs.iter().find(|(k,_)| *k == last_leaf).unwrap().1.clone();
+
+        let inner_1 = proofs.iter().find(|(k,_)| *k == inner_leaves[0]).unwrap().1.clone();
+        let inner_2 = proofs.iter().find(|(k,_)| *k == inner_leaves[1]).unwrap().1.clone();
+        let inner_3 = proofs.iter().find(|(k,_)| *k == inner_leaves[2]).unwrap().1.clone();
+
+        println!("{:?}",inner_leaves);
+
+        assert!(are_adjacent(&inner_1, &inner_2));
+        assert!(are_adjacent(&inner_2, &inner_1));
+        assert!(!are_adjacent(&inner_1, &inner_3));
+        assert!(!are_adjacent(&inner_3, &inner_1));
+
+        assert!(is_first(&first_leaf_proof));
     }
 
     #[test]
