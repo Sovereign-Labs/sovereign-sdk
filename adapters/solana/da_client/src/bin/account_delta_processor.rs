@@ -15,8 +15,7 @@ use backoff::future::retry;
 use backoff::ExponentialBackoff;
 use clap::Parser;
 use crossbeam_channel::{select, unbounded};
-use da_client::hash_solana_account;
-use da_client::calculate_root;
+use da_client::{calculate_root, hash_solana_account};
 use futures::sink::SinkExt;
 use futures::stream::StreamExt;
 use log::{error, info};
@@ -140,15 +139,24 @@ fn process_block(
         if (acc_hashes.len() as u64) != pending_block.updated_account_count {
             continue;
         }
-        let accounts_delta_hash = calculate_root(acc_hashes.iter().map(|(k, v)| (k.clone(), v.clone())).collect());
+        let accounts_delta_hash = calculate_root(
+            acc_hashes
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+        );
         let bank_hash = hashv(&[
             pending_block.parent_bankhash.as_ref(),
             accounts_delta_hash.as_ref(),
             &pending_block.num_sigs.to_le_bytes(),
-            pending_block.blockhash.as_ref()
+            pending_block.blockhash.as_ref(),
         ]);
         info!("CALCULATED: {:?}: {:?} ", pending_slotnum, bank_hash);
-        info!("FROM GEYSER: {:?}: {:?} ", pending_slotnum-1, pending_block.parent_bankhash);
+        info!(
+            "FROM GEYSER: {:?}: {:?} ",
+            pending_slotnum - 1,
+            pending_block.parent_bankhash
+        );
         to_remove.push(*pending_slotnum);
     }
     for slotnum in to_remove {

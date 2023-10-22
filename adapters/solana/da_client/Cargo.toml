@@ -13,6 +13,7 @@ borsh = "0.10.3"
 bs58 = "0.5.0"
 clap = {version="4.4.6", features = ['derive']}
 blockroot = {path = "../solana_da_programs/programs/blockroot", features = ["no-entrypoint"]}
+copy = {path = "../solana_da_programs/programs/copy", features = ["no-entrypoint"]}
 solana-runtime = "=1.16.15"
 solana-rpc-client = "=1.16.15"
 anyhow = "1.0.75"

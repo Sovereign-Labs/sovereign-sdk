@@ -1,5 +1,9 @@
+use std::collections::HashSet;
+use std::net::SocketAddr;
+use std::path::Path;
+use std::{fs, io};
+
 use serde::{de, Deserialize, Deserializer};
-use std::{collections::HashSet, fs, io, net::SocketAddr, path::Path};
 use solana_sdk::pubkey::Pubkey;
 
 #[derive(Debug, Clone, Deserialize)]

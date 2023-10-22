@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
+use borsh::{BorshDeserialize, BorshSerialize};
 use solana_geyser_plugin_interface::geyser_plugin_interface::{ReplicaBlockInfoV2, SlotStatus};
 use solana_sdk::hash::Hash;
 use solana_sdk::pubkey::Pubkey;
-use borsh::{BorshSerialize, BorshDeserialize};
 
 pub type AccountHashAccumulator = HashMap<u64, HashMap<Pubkey, (u64, Hash)>>;
 pub type TransactionSigAccumulator = HashMap<u64, u64>;
@@ -20,14 +20,14 @@ pub struct BankHashProof {
     pub num_sigs: u64,
     pub account_delta_root: Hash,
     pub parent_bankhash: Hash,
-    pub blockhash: Hash
+    pub blockhash: Hash,
 }
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Update {
     pub slot: u64,
     pub root: Hash,
-    pub proofs: Vec<(Pubkey,Proof)>,
+    pub proofs: Vec<(Pubkey, Proof)>,
 }
 
 #[derive(Debug, Clone)]

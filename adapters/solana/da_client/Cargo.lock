@@ -24,6 +24,8 @@ dependencies = [
  "log",
  "lru 0.12.0",
  "rayon",
+ "serde",
+ "serde_json",
  "solana-geyser-plugin-interface",
  "solana-logger",
  "solana-runtime",
@@ -1235,6 +1237,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
 
 [[package]]
+name = "copy"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1399,6 +1408,7 @@ dependencies = [
  "borsh 0.10.3",
  "bs58 0.5.0",
  "clap 4.4.6",
+ "copy",
  "crossbeam",
  "crossbeam-channel",
  "env_logger 0.10.0",

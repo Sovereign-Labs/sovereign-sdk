@@ -1,6 +1,6 @@
+pub mod config;
 pub mod types;
 pub mod utils;
-pub mod config;
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
@@ -10,10 +10,9 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use std::thread;
 
-use borsh::BorshSerialize;
 use blake3::traits::digest::Digest;
+use borsh::BorshSerialize;
 use crossbeam_channel::{select, unbounded, Receiver, Sender};
-
 use log::{error, info};
 use lru::LruCache;
 use solana_geyser_plugin_interface::geyser_plugin_interface::{
@@ -26,23 +25,23 @@ use solana_sdk::clock::Slot;
 use solana_sdk::hash::{hashv, Hash};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
-use tokio::io::AsyncWriteExt;
 
+use crate::config::Config;
 use crate::types::{
     AccountHashAccumulator, AccountInfo, BlockInfo, GeyserMessage, SlotInfo, TransactionInfo,
-    TransactionSigAccumulator, Update
+    TransactionSigAccumulator, Update,
 };
-use crate::utils::{hash_solana_account, calculate_root, calculate_root_and_proofs};
-use crate::config::Config;
+use crate::utils::{calculate_root, calculate_root_and_proofs, hash_solana_account};
 
 fn handle_confirmed_slot(
     slot: u64,
     block_accumulator: &mut HashMap<u64, BlockInfo>,
     processed_slot_account_accumulator: &mut AccountHashAccumulator,
     processed_transaction_accumulator: &mut TransactionSigAccumulator,
-    pubkeys_for_proofs: &[Pubkey]
+    pubkeys_for_proofs: &[Pubkey],
 ) -> anyhow::Result<Update> {
     let Some(block) = block_accumulator.get(&slot) else {
         anyhow::bail!("block not available");
@@ -57,11 +56,12 @@ fn handle_confirmed_slot(
     let parent_bankhash = Hash::from_str(&block.parent_bankhash).unwrap();
     let blockhash = Hash::from_str(&block.blockhash).unwrap();
 
-    let mut account_hashes: Vec<(Pubkey,Hash)> = account_hashes.iter().map(|(k, (version, v))| (k.clone(), v.clone())).collect();
-    let (accounts_delta_hash, account_proofs) = calculate_root_and_proofs(
-        &mut account_hashes,
-        pubkeys_for_proofs
-    );
+    let mut account_hashes: Vec<(Pubkey, Hash)> = account_hashes
+        .iter()
+        .map(|(k, (version, v))| (k.clone(), v.clone()))
+        .collect();
+    let (accounts_delta_hash, account_proofs) =
+        calculate_root_and_proofs(&mut account_hashes, pubkeys_for_proofs);
     let bank_hash = hashv(&[
         parent_bankhash.as_ref(),
         accounts_delta_hash.as_ref(),
@@ -69,15 +69,14 @@ fn handle_confirmed_slot(
         blockhash.as_ref(),
     ]);
 
-
     block_accumulator.remove(&slot);
     processed_slot_account_accumulator.remove(&slot);
     processed_transaction_accumulator.remove(&slot);
 
-    Ok(Update{
+    Ok(Update {
         slot,
-        root:bank_hash,
-        proofs:account_proofs
+        root: bank_hash,
+        proofs: account_proofs,
     })
 }
 
@@ -107,9 +106,10 @@ fn transfer_slot<V>(slot: u64, raw: &mut HashMap<u64, V>, processed: &mut HashMa
     }
 }
 
-fn process_messages(geyser_receiver: crossbeam::channel::Receiver<GeyserMessage>,
-                    tx: broadcast::Sender<Update>,
-                    pubkeys_for_proofs: Vec<Pubkey>
+fn process_messages(
+    geyser_receiver: crossbeam::channel::Receiver<GeyserMessage>,
+    tx: broadcast::Sender<Update>,
+    pubkeys_for_proofs: Vec<Pubkey>,
 ) {
     let mut raw_slot_account_accumulator: AccountHashAccumulator = HashMap::new();
     let mut processed_slot_account_accumulator: AccountHashAccumulator = HashMap::new();
@@ -180,18 +180,17 @@ fn process_messages(geyser_receiver: crossbeam::channel::Receiver<GeyserMessage>
                         &mut block_accumulator,
                         &mut processed_slot_account_accumulator,
                         &mut processed_transaction_accumulator,
-                        &pubkeys_for_proofs
+                        &pubkeys_for_proofs,
                     ) {
                         Ok(update) => {
                             if let Err(e) = tx.send(update) {
                                 error!("No subscribers to receive the update: {:?}", e);
                             }
-                        },
+                        }
                         Err(err) => {
-                            error!("{:?}",err);
+                            error!("{:?}", err);
                         }
                     }
-
                 }
                 _ => {}
             },
@@ -243,9 +242,8 @@ impl GeyserPlugin for Plugin {
     }
 
     fn on_load(&mut self, config_file: &str) -> PluginResult<()> {
-        let config = Config::load_from_file(config_file).map_err(|e| {
-            GeyserPluginError::ConfigFileReadError { msg: e.to_string() }
-        })?;
+        let config = Config::load_from_file(config_file)
+            .map_err(|e| GeyserPluginError::ConfigFileReadError { msg: e.to_string() })?;
         solana_logger::setup_with_default("error");
         let (geyser_sender, geyser_receiver) = unbounded();
         let pubkeys_for_proofs = config.account_list;
@@ -257,16 +255,13 @@ impl GeyserPlugin for Plugin {
             process_messages(geyser_receiver, tx_process_messages, pubkeys_for_proofs);
         });
 
-
         thread::spawn(move || {
             let runtime = tokio::runtime::Runtime::new().unwrap();
             runtime.block_on(async {
                 let listener = TcpListener::bind(&config.bind_address).await.unwrap();
                 loop {
                     let (mut socket, _) = match listener.accept().await {
-                        Ok(connection) => {
-                            connection
-                        },
+                        Ok(connection) => connection,
                         Err(e) => {
                             error!("Failed to accept connection: {:?}", e);
                             continue;
@@ -279,9 +274,8 @@ impl GeyserPlugin for Plugin {
                                 Ok(update) => {
                                     let data = update.try_to_vec().unwrap();
                                     let _ = socket.write_all(&data).await;
-                                },
-                                Err(_) => {
                                 }
+                                Err(_) => {}
                             }
                         }
                     });

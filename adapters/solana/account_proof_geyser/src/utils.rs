@@ -8,6 +8,7 @@ use solana_runtime::accounts_hash::{AccountsHasher, MERKLE_FANOUT};
 use solana_sdk::hash::{hashv, Hash, Hasher};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
+
 use crate::types::Proof;
 
 /// Util helper function to calculate the hash of a solana account
@@ -46,7 +47,6 @@ pub fn hash_solana_account(
 pub fn calculate_root(pubkey_hash_vec: Vec<(Pubkey, Hash)>) -> Hash {
     AccountsHasher::accumulate_account_hashes(pubkey_hash_vec)
 }
-
 
 pub fn calculate_root_and_proofs(
     pubkey_hash_vec: &mut [(Pubkey, Hash)],
@@ -209,7 +209,11 @@ fn are_adjacent(proof1: &Proof, proof2: &Proof) -> bool {
     use log::debug;
 
     if proof1.path.len() != proof2.path.len() {
-        println!("Proofs have different path lengths: {} vs {}", proof1.path.len(), proof2.path.len());
+        println!(
+            "Proofs have different path lengths: {} vs {}",
+            proof1.path.len(),
+            proof2.path.len()
+        );
         return false;
     }
 
@@ -218,8 +222,10 @@ fn are_adjacent(proof1: &Proof, proof2: &Proof) -> bool {
             let divergence = (proof1.path[i] as i32 - proof2.path[i] as i32).abs();
 
             if divergence != 1 && divergence != ((MERKLE_FANOUT - 1) as i32) {
-                println!("Proofs diverge at position {}: proof1[{}]={}, proof2[{}]={}",
-                        i, i, proof1.path[i], i, proof2.path[i]);
+                println!(
+                    "Proofs diverge at position {}: proof1[{}]={}, proof2[{}]={}",
+                    i, i, proof1.path[i], i, proof2.path[i]
+                );
                 return false;
             }
         }
@@ -227,11 +233,9 @@ fn are_adjacent(proof1: &Proof, proof2: &Proof) -> bool {
     true
 }
 
-
 fn is_first(proof: &Proof) -> bool {
     proof.path.iter().all(|&position| position == 0)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -261,13 +265,13 @@ mod tests {
 
         pubkey_hash_vec.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
 
-        let random_index = rng.gen_range(2..pubkey_hash_vec.len()-3); // "- 2" to avoid picking the last element.
-        println!("{}",random_index);
-        let mut proof_leaves: Vec<_> = (random_index..random_index+3)
+        let random_index = rng.gen_range(2..pubkey_hash_vec.len() - 3); // "- 2" to avoid picking the last element.
+        println!("{}", random_index);
+        let mut proof_leaves: Vec<_> = (random_index..random_index + 3)
             .map(|i| pubkey_hash_vec[i].0.clone())
             .collect();
         let first_leaf = pubkey_hash_vec[0].0.clone();
-        let last_leaf = pubkey_hash_vec[pubkey_hash_vec.len()-1].0.clone();
+        let last_leaf = pubkey_hash_vec[pubkey_hash_vec.len() - 1].0.clone();
         let inner_leaves = proof_leaves.clone();
         proof_leaves.push(first_leaf);
         proof_leaves.push(last_leaf);
@@ -286,14 +290,39 @@ mod tests {
         let solana_root = calculate_root(pubkey_hash_vec);
 
         assert_eq!(solana_root, root);
-        let first_leaf_proof = proofs.iter().find(|(k,_)| *k == first_leaf).unwrap().1.clone();
-        let last_leaf_proof = proofs.iter().find(|(k,_)| *k == last_leaf).unwrap().1.clone();
+        let first_leaf_proof = proofs
+            .iter()
+            .find(|(k, _)| *k == first_leaf)
+            .unwrap()
+            .1
+            .clone();
+        let last_leaf_proof = proofs
+            .iter()
+            .find(|(k, _)| *k == last_leaf)
+            .unwrap()
+            .1
+            .clone();
 
-        let inner_1 = proofs.iter().find(|(k,_)| *k == inner_leaves[0]).unwrap().1.clone();
-        let inner_2 = proofs.iter().find(|(k,_)| *k == inner_leaves[1]).unwrap().1.clone();
-        let inner_3 = proofs.iter().find(|(k,_)| *k == inner_leaves[2]).unwrap().1.clone();
+        let inner_1 = proofs
+            .iter()
+            .find(|(k, _)| *k == inner_leaves[0])
+            .unwrap()
+            .1
+            .clone();
+        let inner_2 = proofs
+            .iter()
+            .find(|(k, _)| *k == inner_leaves[1])
+            .unwrap()
+            .1
+            .clone();
+        let inner_3 = proofs
+            .iter()
+            .find(|(k, _)| *k == inner_leaves[2])
+            .unwrap()
+            .1
+            .clone();
 
-        println!("{:?}",inner_leaves);
+        println!("{:?}", inner_leaves);
 
         assert!(are_adjacent(&inner_1, &inner_2));
         assert!(are_adjacent(&inner_2, &inner_1));
