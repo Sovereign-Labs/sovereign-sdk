@@ -1,5 +1,6 @@
 pub mod types;
 pub mod utils;
+pub mod config;
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
@@ -34,12 +35,14 @@ use crate::types::{
     TransactionSigAccumulator, Update
 };
 use crate::utils::{hash_solana_account, calculate_root, calculate_root_and_proofs};
+use crate::config::Config;
 
 fn handle_confirmed_slot(
     slot: u64,
     block_accumulator: &mut HashMap<u64, BlockInfo>,
     processed_slot_account_accumulator: &mut AccountHashAccumulator,
-    processed_transaction_accumulator: &mut TransactionSigAccumulator
+    processed_transaction_accumulator: &mut TransactionSigAccumulator,
+    pubkeys_for_proofs: &[Pubkey]
 ) -> anyhow::Result<Update> {
     let Some(block) = block_accumulator.get(&slot) else {
         anyhow::bail!("block not available");
@@ -57,7 +60,7 @@ fn handle_confirmed_slot(
     let mut account_hashes: Vec<(Pubkey,Hash)> = account_hashes.iter().map(|(k, (version, v))| (k.clone(), v.clone())).collect();
     let (accounts_delta_hash, account_proofs) = calculate_root_and_proofs(
         &mut account_hashes,
-        &vec![]
+        pubkeys_for_proofs
     );
     let bank_hash = hashv(&[
         parent_bankhash.as_ref(),
@@ -65,13 +68,6 @@ fn handle_confirmed_slot(
         &num_sigs.to_le_bytes(),
         blockhash.as_ref(),
     ]);
-
-    error!("=====> CALCULATED: {:?}: {:?} ", slot, &bank_hash);
-    error!(
-        "=====> GEYSER DIRECT: {:?}: {:?} ",
-        slot - 1,
-        &parent_bankhash
-    );
 
     block_accumulator.remove(&slot);
     processed_slot_account_accumulator.remove(&slot);
@@ -111,7 +107,8 @@ fn transfer_slot<V>(slot: u64, raw: &mut HashMap<u64, V>, processed: &mut HashMa
 }
 
 fn process_messages(geyser_receiver: crossbeam::channel::Receiver<GeyserMessage>,
-                    tx: broadcast::Sender<Update>
+                    tx: broadcast::Sender<Update>,
+                    pubkeys_for_proofs: Vec<Pubkey>
 ) {
     let mut raw_slot_account_accumulator: AccountHashAccumulator = HashMap::new();
     let mut processed_slot_account_accumulator: AccountHashAccumulator = HashMap::new();
@@ -182,6 +179,7 @@ fn process_messages(geyser_receiver: crossbeam::channel::Receiver<GeyserMessage>
                         &mut block_accumulator,
                         &mut processed_slot_account_accumulator,
                         &mut processed_transaction_accumulator,
+                        &pubkeys_for_proofs
                     ) {
                         Ok(update) => {
                             if let Err(e) = tx.send(update) {
@@ -243,22 +241,26 @@ impl GeyserPlugin for Plugin {
         "AccountProofGeyserPlugin"
     }
 
-    fn on_load(&mut self, _config_file: &str) -> PluginResult<()> {
+    fn on_load(&mut self, config_file: &str) -> PluginResult<()> {
+        let config = Config::load_from_file(config_file).map_err(|e| {
+            GeyserPluginError::ConfigFileReadError { msg: e.to_string() }
+        })?;
         solana_logger::setup_with_default("error");
         let (geyser_sender, geyser_receiver) = unbounded();
+        let pubkeys_for_proofs = config.account_list;
 
         let (tx, _rx) = broadcast::channel(32);
         let tx_process_messages = tx.clone();
 
         thread::spawn(move || {
-            process_messages(geyser_receiver, tx_process_messages);
+            process_messages(geyser_receiver, tx_process_messages, pubkeys_for_proofs);
         });
 
 
         thread::spawn(move || {
             let runtime = tokio::runtime::Runtime::new().unwrap();
             runtime.block_on(async {
-                let listener = TcpListener::bind("127.0.0.1:10000").await.unwrap();
+                let listener = TcpListener::bind(&config.bind_address).await.unwrap();
                 loop {
                     let (mut socket, _) = match listener.accept().await {
                         Ok(connection) => {
