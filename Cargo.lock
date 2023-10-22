@@ -625,7 +625,7 @@ checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
 
 [[package]]
 name = "bashtestmd"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap 4.4.6",
  "markdown",
@@ -1551,7 +1551,7 @@ checksum = "28c122c3980598d243d63d9a704629a2d748d101f278052ff068be5a4423ab6f"
 
 [[package]]
 name = "const-rollup-config"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "const_format"
@@ -2089,7 +2089,7 @@ dependencies = [
 
 [[package]]
 name = "demo-simple-stf"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "hex",
@@ -2100,7 +2100,7 @@ dependencies = [
 
 [[package]]
 name = "demo-stf"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -4149,7 +4149,7 @@ dependencies = [
 
 [[package]]
 name = "integration-tests"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -5066,7 +5066,7 @@ dependencies = [
 
 [[package]]
 name = "module-template"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -7110,7 +7110,7 @@ dependencies = [
 
 [[package]]
 name = "risc0"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "risc0-build",
 ]
@@ -7199,7 +7199,7 @@ dependencies = [
 
 [[package]]
 name = "risc0-starter"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "risc0-build",
 ]
@@ -8142,7 +8142,7 @@ dependencies = [
 
 [[package]]
 name = "simple-nft-module"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -8267,7 +8267,7 @@ dependencies = [
 
 [[package]]
 name = "sov-accessory-state"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "borsh",
  "jsonrpsee 0.20.2",
@@ -8279,7 +8279,7 @@ dependencies = [
 
 [[package]]
 name = "sov-accounts"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -8300,7 +8300,7 @@ dependencies = [
 
 [[package]]
 name = "sov-attester-incentives"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -8320,7 +8320,7 @@ dependencies = [
 
 [[package]]
 name = "sov-avail-adapter"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8345,7 +8345,7 @@ dependencies = [
 
 [[package]]
 name = "sov-bank"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -8364,7 +8364,7 @@ dependencies = [
 
 [[package]]
 name = "sov-blob-storage"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -8389,7 +8389,7 @@ dependencies = [
 
 [[package]]
 name = "sov-celestia-adapter"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8423,7 +8423,7 @@ dependencies = [
 
 [[package]]
 name = "sov-chain-state"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -8440,7 +8440,7 @@ dependencies = [
 
 [[package]]
 name = "sov-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -8459,7 +8459,7 @@ dependencies = [
 
 [[package]]
 name = "sov-data-generators"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "borsh",
  "proptest",
@@ -8473,7 +8473,7 @@ dependencies = [
 
 [[package]]
 name = "sov-db"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -8493,7 +8493,7 @@ dependencies = [
 
 [[package]]
 name = "sov-demo-rollup"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8553,7 +8553,7 @@ dependencies = [
 
 [[package]]
 name = "sov-ethereum"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -8575,7 +8575,7 @@ dependencies = [
 
 [[package]]
 name = "sov-evm"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -8612,7 +8612,7 @@ dependencies = [
 
 [[package]]
 name = "sov-first-read-last-write-cache"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "proptest",
  "thiserror",
@@ -8620,7 +8620,7 @@ dependencies = [
 
 [[package]]
 name = "sov-ledger-rpc"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "futures",
@@ -8637,7 +8637,7 @@ dependencies = [
 
 [[package]]
 name = "sov-module-schemas"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "sov-accounts",
  "sov-bank",
@@ -8651,7 +8651,7 @@ dependencies = [
 
 [[package]]
 name = "sov-modules-api"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -8686,7 +8686,7 @@ dependencies = [
 
 [[package]]
 name = "sov-modules-macros"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -8708,7 +8708,7 @@ dependencies = [
 
 [[package]]
 name = "sov-modules-rollup-template"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8724,7 +8724,7 @@ dependencies = [
 
 [[package]]
 name = "sov-modules-stf-template"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -8744,7 +8744,7 @@ dependencies = [
 
 [[package]]
 name = "sov-nft-module"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -8766,7 +8766,7 @@ dependencies = [
 
 [[package]]
 name = "sov-prover-incentives"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -8784,7 +8784,7 @@ dependencies = [
 
 [[package]]
 name = "sov-risc0-adapter"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -8802,7 +8802,7 @@ dependencies = [
 
 [[package]]
 name = "sov-rng-da-service"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8816,7 +8816,7 @@ dependencies = [
 
 [[package]]
 name = "sov-rollup-interface"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8836,7 +8836,7 @@ dependencies = [
 
 [[package]]
 name = "sov-rollup-starter"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8868,7 +8868,7 @@ dependencies = [
 
 [[package]]
 name = "sov-schema-db"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -8882,7 +8882,7 @@ dependencies = [
 
 [[package]]
 name = "sov-sequencer"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8902,7 +8902,7 @@ dependencies = [
 
 [[package]]
 name = "sov-sequencer-registry"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -8925,7 +8925,7 @@ dependencies = [
 
 [[package]]
 name = "sov-state"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -8950,7 +8950,7 @@ dependencies = [
 
 [[package]]
 name = "sov-stf-runner"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -8977,7 +8977,7 @@ dependencies = [
 
 [[package]]
 name = "sov-value-setter"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -8995,7 +8995,7 @@ dependencies = [
 
 [[package]]
 name = "sov-vec-setter"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -9013,7 +9013,7 @@ dependencies = [
 
 [[package]]
 name = "sov-zk-cycle-macros"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -9029,7 +9029,7 @@ dependencies = [
 
 [[package]]
 name = "sov-zk-cycle-utils"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
@@ -9596,7 +9596,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "stf-starter"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
