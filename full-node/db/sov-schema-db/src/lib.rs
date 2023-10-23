@@ -30,7 +30,6 @@ use metrics::{
     SCHEMADB_BATCH_PUT_LATENCY_SECONDS, SCHEMADB_DELETES, SCHEMADB_GET_BYTES,
     SCHEMADB_GET_LATENCY_SECONDS, SCHEMADB_PUT_BYTES,
 };
-use proptest::strategy::{BoxedStrategy, LazyJust};
 use rocksdb::ReadOptions;
 pub use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 use thiserror::Error;
@@ -271,7 +270,7 @@ impl DB {
     feature = "arbitrary",
     derive(arbitrary::Arbitrary, proptest_derive::Arbitrary)
 )]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 enum WriteOp {
     Value { key: Vec<u8>, value: Vec<u8> },
     Deletion { key: Vec<u8> },
@@ -329,12 +328,22 @@ impl SchemaBatch {
 #[cfg(feature = "arbitrary")]
 impl proptest::arbitrary::Arbitrary for SchemaBatch {
     type Parameters = &'static [ColumnFamilyName];
-    type Strategy = BoxedStrategy<Self>;
+    type Strategy = proptest::strategy::BoxedStrategy<Self>;
 
     fn arbitrary_with(columns: Self::Parameters) -> Self::Strategy {
-        fn gen() -> Self {
-            proptest::arbitrary::any()
-        }
+        use proptest::{prelude::any, strategy::Strategy};
+
+        proptest::collection::vec(any::<Vec<WriteOp>>(), columns.len())
+            .prop_map::<SchemaBatch, _>(|vec_vec_write_ops| {
+                let mut rows = HashMap::new();
+                for (col, write_ops) in columns.iter().zip(vec_vec_write_ops.into_iter()) {
+                    rows.insert(*col, write_ops);
+                }
+                SchemaBatch {
+                    rows: Mutex::new(rows),
+                }
+            })
+            .boxed()
     }
 }
 
