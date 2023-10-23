@@ -22,7 +22,7 @@ pub struct PooledTransaction<C: Context, R: DispatchCall<Context = C>> {
 impl<C, R> std::fmt::Debug for PooledTransaction<C, R>
 where
     C: Context,
-    R: DispatchCall<Context = C> + Send + Sync,
+    R: DispatchCall<Context = C>,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PooledTransaction")
@@ -44,7 +44,7 @@ where
 
 /// BatchBuilder that creates batches of transactions in the order they were submitted
 /// Only transactions that were successfully dispatched are included.
-pub struct FiFoStrictBatchBuilder<C: Context, R: DispatchCall<Context = C> + Send + Sync> {
+pub struct FiFoStrictBatchBuilder<C: Context, R: DispatchCall<Context = C>> {
     mempool: VecDeque<PooledTransaction<C, R>>,
     mempool_max_txs_count: usize,
     runtime: R,
@@ -55,7 +55,7 @@ pub struct FiFoStrictBatchBuilder<C: Context, R: DispatchCall<Context = C> + Sen
 impl<C, R> FiFoStrictBatchBuilder<C, R>
 where
     C: Context,
-    R: DispatchCall<Context = C> + Send + Sync,
+    R: DispatchCall<Context = C>,
 {
     /// BatchBuilder constructor.
     pub fn new(
