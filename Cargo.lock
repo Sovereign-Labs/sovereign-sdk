@@ -8874,6 +8874,8 @@ dependencies = [
  "byteorder",
  "once_cell",
  "prometheus 0.13.3",
+ "proptest",
+ "proptest-derive",
  "rocksdb",
  "tempfile",
  "thiserror",
@@ -8905,9 +8907,12 @@ name = "sov-sequencer-registry"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "arbitrary",
  "borsh",
  "clap 4.4.6",
  "jsonrpsee 0.20.2",
+ "proptest",
+ "proptest-derive",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "schemars",
