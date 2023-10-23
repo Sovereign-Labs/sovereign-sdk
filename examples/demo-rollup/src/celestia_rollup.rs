@@ -57,7 +57,7 @@ impl RollupTemplate for CelestiaDemoRollup {
         )?;
 
         // TODO
-        // The seq_da_address is updated with the value from the rollup binary.
+        // The sequencer_da_address is updated with the value from the rollup binary.
         // This is necessary because our Celestia deployment generates a new SEQUENCER_DA_ADDRESS
         // every time we launch the Celestia client.
         let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS)?;

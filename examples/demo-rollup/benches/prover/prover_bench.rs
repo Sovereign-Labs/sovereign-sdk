@@ -185,11 +185,11 @@ async fn main() -> Result<(), anyhow::Error> {
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
 
     let genesis_config = get_genesis_config(
-        sequencer_da_address,
         &GenesisPaths::from_dir("../test-data/genesis/demo-tests"),
         #[cfg(feature = "experimental")]
         Default::default(),
-    );
+    )
+    .unwrap();
     println!("Starting from empty storage, initialization chain");
     let mut prev_state_root = demo.init_chain(genesis_config);
 

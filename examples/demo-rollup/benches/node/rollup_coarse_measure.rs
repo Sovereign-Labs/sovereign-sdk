@@ -118,11 +118,11 @@ async fn main() -> Result<(), anyhow::Error> {
     let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
 
     let demo_genesis_config = get_genesis_config(
-        sequencer_da_address,
         &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
         #[cfg(feature = "experimental")]
         Default::default(),
-    );
+    )
+    .unwrap();
 
     let mut current_root = demo.init_chain(demo_genesis_config);
 

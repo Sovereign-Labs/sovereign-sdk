@@ -84,7 +84,6 @@ pub fn get_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
         eth_signers,
     )
     .context("Unable to read genesis configuration")?;
-
     validate_config(genesis_config)
 }
 
