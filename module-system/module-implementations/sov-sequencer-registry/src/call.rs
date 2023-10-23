@@ -14,6 +14,10 @@ use crate::SequencerRegistry;
     derive(schemars::JsonSchema),
     derive(CliWalletArg)
 )]
+#[cfg_attr(
+    feature = "arbitrary",
+    derive(arbitrary::Arbitrary, proptest_derive::Arbitrary)
+)]
 #[derive(Debug, PartialEq, Clone, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub enum CallMessage {
     /// Add a new sequencer to the sequencer registry.
