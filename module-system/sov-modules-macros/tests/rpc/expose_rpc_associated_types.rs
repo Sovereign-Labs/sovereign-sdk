@@ -3,7 +3,7 @@ use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::{expose_rpc, rpc_gen, DefaultRuntime};
 use sov_modules_api::{
     Address, CallResponse, Context, DispatchCall, EncodeCall, Error, Genesis, MessageCodec, Module,
-    ModuleInfo, StateValue, WorkingSet
+    ModuleInfo, StateValue, WorkingSet,
 };
 use sov_state::ZkStorage;
 
@@ -20,6 +20,8 @@ pub trait Data:
     + serde::de::DeserializeOwned
     + borsh::BorshSerialize
     + borsh::BorshDeserialize
+    + Send
+    + Sync
     + 'static
 {
 }
@@ -82,10 +84,7 @@ pub mod my_module {
             C: Context,
         {
             #[rpc_method(name = "queryValue")]
-            pub fn query_value(
-                &self,
-                working_set: &mut WorkingSet<C>,
-            ) -> RpcResult<QueryResponse> {
+            pub fn query_value(&self, working_set: &mut WorkingSet<C>) -> RpcResult<QueryResponse> {
                 let value = self.data.get(working_set).map(|d| format!("{:?}", d));
                 Ok(QueryResponse { value })
             }
