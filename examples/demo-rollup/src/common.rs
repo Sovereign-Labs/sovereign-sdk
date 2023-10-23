@@ -68,7 +68,7 @@ fn register_sequencer<Da: DaService, B: BatchBuilder + Send + Sync + 'static>(
 
 fn create_batch_builder<Da: DaSpec>(
     storage: ProverStorage<sov_state::DefaultStorageSpec>,
-) -> FiFoStrictBatchBuilder<Runtime<DefaultContext, Da>, DefaultContext> {
+) -> FiFoStrictBatchBuilder<DefaultContext, Runtime<DefaultContext, Da>> {
     let batch_size_bytes = 1024 * 100; // 100 KB
     FiFoStrictBatchBuilder::new(
         batch_size_bytes,
