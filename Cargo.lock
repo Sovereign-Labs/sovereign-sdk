@@ -5069,8 +5069,11 @@ name = "module-template"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "arbitrary",
  "borsh",
  "module-template",
+ "proptest",
+ "proptest-derive",
  "schemars",
  "serde",
  "serde_json",
