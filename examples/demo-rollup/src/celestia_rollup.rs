@@ -10,15 +10,12 @@ use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier, RollupParam
 use sov_celestia_adapter::{CelestiaService, DaServiceConfig};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::Spec;
-use sov_modules_rollup_template::RollupTemplate;
+use sov_modules_rollup_template::{RollupTemplate, WalletTemplate};
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
 use sov_state::{ProverStorage, Storage, ZkStorage};
 use sov_stf_runner::RollupConfig;
 
-use crate::common::create_rpc_methods;
-#[cfg(feature = "experimental")]
-use crate::common::read_eth_tx_signers;
 use crate::ROLLUP_NAMESPACE;
 
 /// Rollup with CelestiaDa
@@ -50,7 +47,7 @@ impl RollupTemplate for CelestiaDemoRollup {
         let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
 
         #[cfg(feature = "experimental")]
-        let eth_signer = read_eth_tx_signers();
+        let eth_signer = crate::eth::read_eth_tx_signers();
 
         get_genesis_config(
             sequencer_da_address,
@@ -106,6 +103,22 @@ impl RollupTemplate for CelestiaDemoRollup {
         ledger_db: &sov_db::ledger_db::LedgerDB,
         da_service: &Self::DaService,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
-        create_rpc_methods(storage, ledger_db, da_service.clone())
+        #[allow(unused_mut)]
+        let mut rpc_methods = sov_modules_rollup_template::register_rpc::<
+            Self::NativeRuntime,
+            Self::NativeContext,
+            Self::DaService,
+        >(storage, ledger_db, da_service)?;
+
+        #[cfg(feature = "experimental")]
+        crate::eth::register_ethereum::<Self::DaService>(
+            da_service.clone(),
+            storage.clone(),
+            &mut rpc_methods,
+        )?;
+
+        Ok(rpc_methods)
     }
 }
+
+impl WalletTemplate for CelestiaDemoRollup {}

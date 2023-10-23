@@ -18,6 +18,8 @@ sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-templat
 sov-stf-runner = { path = "../../full-node/sov-stf-runner" } 
 sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true } 
 sov-rollup-interface = { path = "../../rollup-interface" } 
+sov-cli = { path = "../../module-system/sov-cli", optional = true }
+
 tracing = { workspace = true }
 
 serde_json = { workspace = true, optional = true }
@@ -30,6 +32,7 @@ clap = { workspace = true, optional = true }
 [features]
 default = []
 native = [
+	"sov-cli",
 	"sov-modules-api/native", 
 	"sov-accounts/native", 
 	"sov-bank/native", 

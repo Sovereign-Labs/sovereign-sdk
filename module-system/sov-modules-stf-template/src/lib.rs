@@ -37,6 +37,10 @@ pub trait Runtime<C: Context, Da: DaSpec>:
 {
     /// GenesisConfig type.
     type GenesisConfig: Send + Sync;
+
+    #[cfg(feature = "native")]
+    /// Default rpc methods.
+    fn rpc_methods(storage: <C as Spec>::Storage) -> jsonrpsee::RpcModule<()>;
 }
 
 /// The receipts of all the transactions in a batch.

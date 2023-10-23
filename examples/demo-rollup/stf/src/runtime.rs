@@ -48,6 +48,8 @@ pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
+#[cfg(feature = "native")]
+use sov_modules_api::Spec;
 use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec};
 #[cfg(feature = "native")]
 use sov_nft_module::{NonFungibleTokenRpcImpl, NonFungibleTokenRpcServer};
@@ -94,6 +96,11 @@ where
     Da: DaSpec,
 {
     type GenesisConfig = GenesisConfig<C, Da>;
+
+    #[cfg(feature = "native")]
+    fn rpc_methods(storage: <C as Spec>::Storage) -> jsonrpsee::RpcModule<()> {
+        get_rpc_methods::<C, Da>(storage)
+    }
 }
 
 impl<C: Context, Da: DaSpec> BlobSelector<Da> for Runtime<C, Da> {

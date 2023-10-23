@@ -11,6 +11,8 @@ pub use sov_bank::{BankRpcImpl, BankRpcServer};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::DefaultRuntime;
+#[cfg(feature = "native")]
+use sov_modules_api::Spec;
 use sov_modules_api::{Context, DaSpec, DispatchCall, Genesis, MessageCodec};
 use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::da::DaVerifier;
@@ -74,6 +76,11 @@ where
     Da: DaSpec,
 {
     type GenesisConfig = GenesisConfig<C, Da>;
+
+    #[cfg(feature = "native")]
+    fn rpc_methods(storage: <C as Spec>::Storage) -> jsonrpsee::RpcModule<()> {
+        get_rpc_methods::<C, Da>(storage.clone())
+    }
 }
 
 // Select which blobs will be executed in this slot. In this implementation simply execute all
