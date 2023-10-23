@@ -62,6 +62,29 @@ concurrency:
   cancel-in-progress: ${{ (github.ref != 'refs/heads/nightly') && (github.ref != 'refs/heads/stable') }}
 
 jobs:
+  check-aggregate:
+    # Follows the guide at <https://github.com/re-actors/alls-green>.
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - check
+      - hack
+      - nextest
+      - test
+      - coverage
+      - check-licenses
+      - cargo-doc-artifact
+      - deploy-github-pages
+      - check-demo-rollup-table-of-contents
+      - check-demo-rollup-bash-commands
+      - validate-packages-to-publish-yml
+    steps:
+    - name: Compute whether the needed jobs succeeded or failed
+      uses: re-actors/alls-green@release/v1
+      with:
+        allowed-skips: deploy-github-pages
+        jobs: ${{ toJSON(needs) }}
+
   check:
     name: check
     runs-on: buildjet-4vcpu-ubuntu-2204
