@@ -180,12 +180,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let mut demo = new_app::<Risc0Host, CelestiaSpec>(storage_config);
 
-    let genesis_config = get_genesis_config(
-        &GenesisPaths::from_dir("../test-data/genesis/demo-tests"),
-        #[cfg(feature = "experimental")]
-        Default::default(),
-    )
-    .unwrap();
+    let genesis_config =
+        get_genesis_config(&GenesisPaths::from_dir("../test-data/genesis/demo-tests")).unwrap();
     println!("Starting from empty storage, initialization chain");
     let mut prev_state_root = demo.init_chain(genesis_config);
 

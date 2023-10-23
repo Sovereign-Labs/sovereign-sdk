@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use anyhow::Context as _;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_ethereum::experimental::EthRpcConfig;

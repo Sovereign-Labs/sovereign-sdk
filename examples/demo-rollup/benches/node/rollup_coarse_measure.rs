@@ -113,11 +113,9 @@ async fn main() -> Result<(), anyhow::Error> {
     };
     let mut demo = new_app::<Risc0Verifier, RngDaSpec>(storage_config);
 
-    let demo_genesis_config = get_genesis_config(
-        &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
-        #[cfg(feature = "experimental")]
-        Default::default(),
-    )
+    let demo_genesis_config = get_genesis_config(&GenesisPaths::from_dir(
+        "../test-data/genesis/integration-tests",
+    ))
     .unwrap();
 
     let mut current_root = demo.init_chain(demo_genesis_config);
