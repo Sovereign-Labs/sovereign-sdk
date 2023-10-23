@@ -107,7 +107,7 @@ pub mod third_test_module {
     use super::*;
 
     pub trait ModuleThreeStorable:
-        borsh::BorshSerialize + borsh::BorshDeserialize + core::fmt::Debug + Default
+        borsh::BorshSerialize + borsh::BorshDeserialize + core::fmt::Debug + Default + Send + Sync
     {
     }
 
@@ -123,10 +123,7 @@ pub mod third_test_module {
     }
 
     impl<Ctx: Context, OtherGeneric: ModuleThreeStorable> ThirdTestStruct<Ctx, OtherGeneric> {
-        pub fn get_state_value(
-            &self,
-            working_set: &mut WorkingSet<Ctx>,
-        ) -> Option<OtherGeneric> {
+        pub fn get_state_value(&self, working_set: &mut WorkingSet<Ctx>) -> Option<OtherGeneric> {
             self.state_in_third_struct.get(working_set)
         }
     }

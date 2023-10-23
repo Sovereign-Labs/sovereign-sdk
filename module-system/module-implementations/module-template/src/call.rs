@@ -11,6 +11,10 @@ use crate::ExampleModule;
 /// The `derive` for [`schemars::JsonSchema`] is a requirement of
 /// [`sov_modules_api::ModuleCallJsonSchema`].
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "arbitrary",
+    derive(arbitrary::Arbitrary, proptest_derive::Arbitrary)
+)]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage {
     SetValue(u32),

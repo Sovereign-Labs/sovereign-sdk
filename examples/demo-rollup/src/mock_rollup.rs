@@ -14,10 +14,6 @@ use sov_rollup_interface::services::da::DaService;
 use sov_state::{ProverStorage, Storage, ZkStorage};
 use sov_stf_runner::RollupConfig;
 
-use crate::common::create_rpc_methods;
-#[cfg(feature = "experimental")]
-use crate::common::read_eth_tx_signers;
-
 /// Rollup with MockDa
 pub struct MockDemoRollup {}
 
@@ -43,7 +39,7 @@ impl RollupTemplate for MockDemoRollup {
     ) -> <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig
     {
         #[cfg(feature = "experimental")]
-        let eth_signer = read_eth_tx_signers();
+        let eth_signer = crate::eth::read_eth_tx_signers();
 
         get_genesis_config(
             rollup_config.da.sender_address,
@@ -91,6 +87,20 @@ impl RollupTemplate for MockDemoRollup {
         ledger_db: &LedgerDB,
         da_service: &Self::DaService,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
-        create_rpc_methods(storage, ledger_db, da_service.clone())
+        #[allow(unused_mut)]
+        let mut rpc_methods = sov_modules_rollup_template::register_rpc::<
+            Self::NativeRuntime,
+            Self::NativeContext,
+            Self::DaService,
+        >(storage, ledger_db, da_service)?;
+
+        #[cfg(feature = "experimental")]
+        crate::eth::register_ethereum::<Self::DaService>(
+            da_service.clone(),
+            storage.clone(),
+            &mut rpc_methods,
+        )?;
+
+        Ok(rpc_methods)
     }
 }

@@ -17,6 +17,8 @@ pub trait Data:
     + PartialEq
     + std::fmt::Debug
     + serde::Serialize
+    + Send
+    + Sync
     + serde::de::DeserializeOwned
     + borsh::BorshSerialize
     + borsh::BorshDeserialize
@@ -83,10 +85,7 @@ pub mod my_module {
             C: Context,
         {
             #[rpc_method(name = "queryValue")]
-            pub fn query_value(
-                &self,
-                working_set: &mut WorkingSet<C>,
-            ) -> RpcResult<QueryResponse> {
+            pub fn query_value(&self, working_set: &mut WorkingSet<C>) -> RpcResult<QueryResponse> {
                 let value = self.data.get(working_set).map(|d| format!("{:?}", d));
                 Ok(QueryResponse { value })
             }
