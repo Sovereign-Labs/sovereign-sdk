@@ -89,6 +89,13 @@ where
             bail!("Mempool is full")
         }
 
+        if raw.len() > self.max_batch_size_bytes {
+            bail!(
+                "Transaction too big. Max allowed size: {}",
+                self.max_batch_size_bytes
+            )
+        }
+
         // Deserialize
         let mut data = Cursor::new(&raw);
         let tx = Transaction::<C>::deserialize_reader(&mut data)
@@ -262,16 +269,34 @@ mod tests {
 
         #[test]
         fn accept_valid_tx() {
-            let tmpdir = tempfile::tempdir().unwrap();
-            let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
             let tx = generate_random_valid_tx();
+
+            let tmpdir = tempfile::tempdir().unwrap();
+            let (mut batch_builder, _) = create_batch_builder(tx.len(), &tmpdir);
+
             batch_builder.accept_tx(tx).unwrap();
+        }
+
+        #[test]
+        fn reject_tx_too_big() {
+            let tx = generate_random_valid_tx();
+            let batch_size = tx.len().saturating_sub(1);
+
+            let tmpdir = tempfile::tempdir().unwrap();
+            let (mut batch_builder, _) = create_batch_builder(batch_size, &tmpdir);
+
+            let accept_result = batch_builder.accept_tx(tx);
+            assert!(accept_result.is_err());
+            assert_eq!(
+                format!("Transaction too big. Max allowed size: {batch_size}"),
+                accept_result.unwrap_err().to_string()
+            );
         }
 
         #[test]
         fn reject_tx_on_full_mempool() {
             let tmpdir = tempfile::tempdir().unwrap();
-            let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
+            let (mut batch_builder, _) = create_batch_builder(usize::MAX, &tmpdir);
 
             for _ in 0..MAX_TX_POOL_SIZE {
                 let tx = generate_random_valid_tx();
@@ -287,12 +312,12 @@ mod tests {
 
         #[test]
         fn reject_random_bytes_tx() {
-            let tmpdir = tempfile::tempdir().unwrap();
-            let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
-
             let tx = generate_random_bytes();
-            let accept_result = batch_builder.accept_tx(tx);
 
+            let tmpdir = tempfile::tempdir().unwrap();
+            let (mut batch_builder, _) = create_batch_builder(tx.len(), &tmpdir);
+
+            let accept_result = batch_builder.accept_tx(tx);
             assert!(accept_result.is_err());
             assert!(accept_result
                 .unwrap_err()
@@ -302,13 +327,13 @@ mod tests {
 
         #[test]
         fn reject_signed_tx_with_invalid_payload() {
-            let tmpdir = tempfile::tempdir().unwrap();
-            let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
             let private_key = DefaultPrivateKey::generate();
-
             let tx = generate_signed_tx_with_invalid_payload(&private_key);
-            let accept_result = batch_builder.accept_tx(tx);
 
+            let tmpdir = tempfile::tempdir().unwrap();
+            let (mut batch_builder, _) = create_batch_builder(tx.len(), &tmpdir);
+
+            let accept_result = batch_builder.accept_tx(tx);
             assert!(accept_result.is_err());
             assert!(accept_result
                 .unwrap_err()
@@ -318,13 +343,13 @@ mod tests {
 
         #[test]
         fn zero_sized_mempool_cant_accept_tx() {
+            let tx = generate_random_valid_tx();
+
             let tmpdir = tempfile::tempdir().unwrap();
-            let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
+            let (mut batch_builder, _) = create_batch_builder(tx.len(), &tmpdir);
             batch_builder.mempool_max_txs_count = 0;
 
-            let tx = generate_random_valid_tx();
             let accept_result = batch_builder.accept_tx(tx);
-
             assert!(accept_result.is_err());
             assert_eq!("Mempool is full", accept_result.unwrap_err().to_string());
         }
