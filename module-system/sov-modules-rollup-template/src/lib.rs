@@ -58,9 +58,8 @@ pub trait RollupTemplate: Sized + Send + Sync {
         &self,
         genesis_paths: &Self::GenesisPaths,
         rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> Result<
+    ) -> anyhow::Result<
         <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig,
-        anyhow::Error,
     >;
 
     /// Creates instance of DA Service.

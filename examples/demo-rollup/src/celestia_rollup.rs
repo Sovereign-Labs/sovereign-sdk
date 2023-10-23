@@ -47,8 +47,6 @@ impl RollupTemplate for CelestiaDemoRollup {
         >>::GenesisConfig,
         anyhow::Error,
     > {
-        let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS)?;
-
         #[cfg(feature = "experimental")]
         let eth_signer = crate::eth::read_eth_tx_signers();
 
@@ -58,7 +56,11 @@ impl RollupTemplate for CelestiaDemoRollup {
             eth_signer.signers(),
         )?;
 
-        // The `seq_da_address` is overridden with the value from rollup binary.
+        // TODO
+        // The seq_da_address is updated with the value from the rollup binary.
+        // This is necessary because our Celestia deployment generates a new SEQUENCER_DA_ADDRESS
+        // every time we launch the Celestia client.
+        let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS)?;
         genesis_config.sequencer_registry.seq_da_address = sequencer_da_address;
         Ok(genesis_config)
     }

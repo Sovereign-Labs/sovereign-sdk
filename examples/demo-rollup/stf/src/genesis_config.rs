@@ -77,7 +77,7 @@ impl GenesisPaths<PathBuf> {
 pub fn get_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
     genesis_paths: &GenesisPaths<P>,
     #[cfg(feature = "experimental")] eth_signers: Vec<reth_primitives::Address>,
-) -> Result<GenesisConfig<C, Da>, anyhow::Error> {
+) -> Result<<Runtime<C, Da> as RuntimeTrait<C, Da>>::GenesisConfig, anyhow::Error> {
     let genesis_config = create_genesis_config(
         genesis_paths,
         #[cfg(feature = "experimental")]

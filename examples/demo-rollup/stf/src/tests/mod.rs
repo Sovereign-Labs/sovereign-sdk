@@ -3,7 +3,7 @@ use std::path::Path;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::DaSpec;
 use sov_modules_stf_template::AppTemplate;
-use sov_rollup_interface::mocks::{MockDaSpec, MOCK_SEQUENCER_DA_ADDRESS};
+use sov_rollup_interface::mocks::MockDaSpec;
 use sov_state::ProverStorage;
 
 use crate::genesis_config::{get_genesis_config, GenesisPaths};
