@@ -14,13 +14,13 @@ mod cli_parser;
 mod common;
 mod default_runtime;
 mod dispatch;
+mod event;
 mod make_constants;
 mod manifest;
 mod module_call_json_schema;
 mod module_info;
 mod new_types;
 mod offchain;
-mod event;
 #[cfg(feature = "native")]
 mod rpc;
 
@@ -78,7 +78,6 @@ pub fn event(input: TokenStream) -> TokenStream {
 
     handle_macro_error(event_macro.derive_event_enum(input))
 }
-
 
 #[proc_macro_derive(ModuleCallJsonSchema)]
 pub fn module_call_json_schema(input: TokenStream) -> TokenStream {

@@ -1,6 +1,9 @@
 use proc_macro2::Span;
 use syn::DeriveInput;
-use super::common::{get_generics_type_param, get_serialization_attrs, StructDef, StructFieldExtractor};
+
+use super::common::{
+    get_generics_type_param, get_serialization_attrs, StructDef, StructFieldExtractor,
+};
 
 pub(crate) const EVENT: &str = "Event";
 
