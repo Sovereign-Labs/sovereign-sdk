@@ -30,6 +30,7 @@ use metrics::{
     SCHEMADB_BATCH_PUT_LATENCY_SECONDS, SCHEMADB_DELETES, SCHEMADB_GET_BYTES,
     SCHEMADB_GET_LATENCY_SECONDS, SCHEMADB_PUT_BYTES,
 };
+use proptest::strategy::{BoxedStrategy, LazyJust};
 use rocksdb::ReadOptions;
 pub use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 use thiserror::Error;
@@ -266,6 +267,10 @@ impl DB {
     }
 }
 
+#[cfg_attr(
+    feature = "arbitrary",
+    derive(arbitrary::Arbitrary, proptest_derive::Arbitrary)
+)]
 #[derive(Debug)]
 enum WriteOp {
     Value { key: Vec<u8>, value: Vec<u8> },
@@ -318,6 +323,28 @@ impl SchemaBatch {
             .push(WriteOp::Deletion { key });
 
         Ok(())
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl proptest::arbitrary::Arbitrary for SchemaBatch {
+    type Parameters = &'static [ColumnFamilyName];
+    type Strategy = BoxedStrategy<Self>;
+
+    fn arbitrary_with(columns: Self::Parameters) -> Self::Strategy {
+        fn gen() -> Self {
+            FallibleArbitraryNativeDB {
+                result: TempDir::new()
+                    .map_err(|e| {
+                        anyhow::anyhow!(format!("failed to generate path for NativeDB: {e}"))
+                    })
+                    .and_then(|path| {
+                        let db = NativeDB::with_path(&path)?;
+                        Ok(ArbitraryNativeDB { db, path })
+                    }),
+            }
+        }
+        LazyJust::new(gen)
     }
 }
 
