@@ -132,6 +132,8 @@ where
 
     type CallMessage = call::CallMessage<C, Da>;
 
+    type Event = ();
+
     fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         // The initialization logic
         Ok(self.init_module(config, working_set)?)

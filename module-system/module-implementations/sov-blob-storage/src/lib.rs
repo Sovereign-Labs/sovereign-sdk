@@ -103,6 +103,7 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> Module for BlobSt
     type Context = C;
     type Config = ();
     type CallMessage = CallMessage;
+    type Event = ();
 
     fn genesis(
         &self,

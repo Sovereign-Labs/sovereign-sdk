@@ -18,10 +18,18 @@ pub mod first_test_module {
         }
     }
 
+    #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+    pub enum Event {
+        FirstModuleEnum1(u64),
+        FirstModuleEnum2,
+        FirstModuleEnum3(Vec<u8>),
+    }
+
     impl<C: Context> Module for FirstTestStruct<C> {
         type Context = C;
         type Config = ();
         type CallMessage = u8;
+        type Event = Event;
 
         fn genesis(
             &self,
@@ -62,10 +70,17 @@ pub mod second_test_module {
         }
     }
 
+    #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+    pub enum Event {
+        SecondModuleEnum,
+    }
+
+
     impl<Ctx: Context> Module for SecondTestStruct<Ctx> {
         type Context = Ctx;
         type Config = ();
         type CallMessage = u8;
+        type Event = Event;
 
         fn genesis(
             &self,
@@ -119,6 +134,7 @@ pub mod third_test_module {
         type Context = Ctx;
         type Config = ();
         type CallMessage = OtherGeneric;
+        type Event = ();
 
         fn genesis(
             &self,

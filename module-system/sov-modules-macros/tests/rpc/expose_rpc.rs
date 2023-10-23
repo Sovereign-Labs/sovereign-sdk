@@ -16,6 +16,7 @@ impl<C: Context> Module for QueryModule<C> {
     type Context = C;
     type Config = u8;
     type CallMessage = u8;
+    type Event = ();
 
     fn genesis(
         &self,
