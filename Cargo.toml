@@ -85,7 +85,7 @@ serde = { version = "1.0.188", features = ["derive", "rc"] }
 serde_json = { version = "1.0" }
 sha2 = "0.10.6"
 digest = "0.10.6"
-thiserror = "1.0.38"
+thiserror = "1.0.50"
 tiny-keccak = "2.0.2"
 tracing = "0.1.37"
 bech32 = "0.9.1"
