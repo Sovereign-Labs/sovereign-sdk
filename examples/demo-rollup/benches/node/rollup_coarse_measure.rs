@@ -115,8 +115,6 @@ async fn main() -> Result<(), anyhow::Error> {
     };
     let mut demo = new_app::<Risc0Verifier, RngDaSpec>(storage_config);
 
-    let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
-
     let demo_genesis_config = get_genesis_config(
         &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
         #[cfg(feature = "experimental")]

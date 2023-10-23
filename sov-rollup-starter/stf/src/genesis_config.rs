@@ -34,16 +34,14 @@ impl GenesisPaths<PathBuf> {
     }
 }
 
-// Configure our rollup with a centralized sequencer using the SEQUENCER_DA_ADDRESS
-/// address constant. Since the centralize sequencer's address is consensus critical,
-/// it has to be hardcoded as a constant, rather than read from the config at runtime.
+///
 pub fn get_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
     genesis_paths: &GenesisPaths<P>,
 ) -> Result<GenesisConfig<C, Da>, anyhow::Error> {
-    let config =
+    let genesis_config =
         create_genesis_config(genesis_paths).context("Unable to read genesis configuration")?;
 
-    validate(config)
+    validate(genesis_config)
 }
 
 fn validate<C: Context, Da: DaSpec>(
