@@ -333,18 +333,8 @@ impl proptest::arbitrary::Arbitrary for SchemaBatch {
 
     fn arbitrary_with(columns: Self::Parameters) -> Self::Strategy {
         fn gen() -> Self {
-            FallibleArbitraryNativeDB {
-                result: TempDir::new()
-                    .map_err(|e| {
-                        anyhow::anyhow!(format!("failed to generate path for NativeDB: {e}"))
-                    })
-                    .and_then(|path| {
-                        let db = NativeDB::with_path(&path)?;
-                        Ok(ArbitraryNativeDB { db, path })
-                    }),
-            }
+            proptest::arbitrary::any()
         }
-        LazyJust::new(gen)
     }
 }
 
