@@ -36,6 +36,7 @@ pub use sov_modules_macros::MessageCodec;
 ///     type Context = C;
 ///     type Config = PhantomData<C>;
 ///     type CallMessage = CallMessage<C>;
+///     type Event = ();
 /// }
 ///
 /// println!("JSON Schema: {}", TestModule::<ZkDefaultContext>::json_schema());
