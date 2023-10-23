@@ -4,6 +4,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.validator
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
     # uncomment to provide amount of sequencers to provision (default: 1)
     # command: ["/opt/entrypoint.sh", "2"]
     volumes:
@@ -15,6 +19,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.bridge
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
     # uncomment to provide the id of the sequencer (default: 0)
     # command: ["/opt/entrypoint.sh", "0"]
     ports:
