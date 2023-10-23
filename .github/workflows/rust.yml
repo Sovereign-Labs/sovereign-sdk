@@ -67,6 +67,9 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     needs:
+      # If you're modifying this workflow file and you're adding/removing a job
+      # which should be required to pass before merging a PR, don't forget to
+      # update this list!
       - check
       - hack
       - nextest
