@@ -1,13 +1,10 @@
-use std::path::PathBuf;
-
 use async_trait::async_trait;
-use demo_stf::genesis_config::{get_genesis_config, GenesisPaths, StorageConfig};
+use demo_stf::genesis_config::StorageConfig;
 use demo_stf::runtime::Runtime;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::Spec;
 use sov_modules_rollup_template::RollupTemplate;
-use sov_modules_stf_template::Runtime as RuntimeTrait;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::mocks::{MockDaConfig, MockDaService, MockDaSpec};
 use sov_rollup_interface::services::da::DaService;
@@ -20,7 +17,6 @@ pub struct MockDemoRollup {}
 #[async_trait]
 impl RollupTemplate for MockDemoRollup {
     type DaService = MockDaService;
-    type GenesisPaths = GenesisPaths<PathBuf>;
     type Vm = Risc0Host<'static>;
 
     type ZkContext = ZkDefaultContext;
@@ -31,24 +27,6 @@ impl RollupTemplate for MockDemoRollup {
 
     type DaSpec = MockDaSpec;
     type DaConfig = MockDaConfig;
-
-    fn create_genesis_config(
-        &self,
-        genesis_paths: &Self::GenesisPaths,
-        _rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> Result<
-        <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig,
-        anyhow::Error,
-    > {
-        #[cfg(feature = "experimental")]
-        let eth_signer = crate::eth::read_eth_tx_signers();
-
-        get_genesis_config(
-            genesis_paths,
-            #[cfg(feature = "experimental")]
-            eth_signer.signers(),
-        )
-    }
 
     async fn create_da_service(
         &self,

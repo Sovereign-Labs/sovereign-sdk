@@ -22,7 +22,7 @@ tokio = { workspace = true, optional = true }
 hex = { workspace = true }
 tracing = { workspace = true }
 reth-primitives = { workspace = true, optional = true }
-
+secp256k1 = { workspace = true, optional = true }
 
 sov-stf-runner = { path = "../../../full-node/sov-stf-runner" }
 sov-rollup-interface = { path = "../../../rollup-interface" }
@@ -54,7 +54,7 @@ rand = "0.8"
 [features]
 default = []
 offchain = ["sov-nft-module/offchain"]
-experimental = ["sov-evm/experimental", "reth-primitives"]
+experimental = ["sov-evm/experimental", "reth-primitives", "secp256k1"]
 native = [
     "sov-stf-runner/native",
     "sov-bank/native",

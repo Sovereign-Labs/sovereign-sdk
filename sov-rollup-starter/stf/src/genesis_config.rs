@@ -4,22 +4,24 @@ use anyhow::{bail, Context as _};
 use sov_accounts::AccountConfig;
 use sov_bank::BankConfig;
 use sov_modules_api::{Context, DaSpec};
+use sov_modules_stf_template::Runtime as RuntimeTrait;
 use sov_sequencer_registry::SequencerConfig;
 use sov_stf_runner::read_json_file;
 
 use super::GenesisConfig;
+use crate::Runtime;
 
 /// Paths to genesis files.
-pub struct GenesisPaths<P: AsRef<Path>> {
+pub struct GenesisPaths {
     /// Accounts genesis path.
-    pub accounts_genesis_path: P,
+    pub accounts_genesis_path: PathBuf,
     /// Bank genesis path.
-    pub bank_genesis_path: P,
+    pub bank_genesis_path: PathBuf,
     /// Sequencer Registry genesis path.
-    pub sequencer_genesis_path: P,
+    pub sequencer_genesis_path: PathBuf,
 }
 
-impl GenesisPaths<PathBuf> {
+impl GenesisPaths {
     /// Creates a new [`GenesisPaths`] from the files contained in the given
     /// directory.
     ///
@@ -34,21 +36,19 @@ impl GenesisPaths<PathBuf> {
     }
 }
 
-// Configure our rollup with a centralized sequencer using the SEQUENCER_DA_ADDRESS
-/// address constant. Since the centralize sequencer's address is consensus critical,
-/// it has to be hardcoded as a constant, rather than read from the config at runtime.
-pub fn get_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
-    genesis_paths: &GenesisPaths<P>,
-) -> Result<GenesisConfig<C, Da>, anyhow::Error> {
-    let config =
+/// Creates genesis configuration.
+pub(crate) fn get_genesis_config<C: Context, Da: DaSpec>(
+    genesis_paths: &GenesisPaths,
+) -> Result<<Runtime<C, Da> as RuntimeTrait<C, Da>>::GenesisConfig, anyhow::Error> {
+    let genesis_config =
         create_genesis_config(genesis_paths).context("Unable to read genesis configuration")?;
 
-    validate(config)
+    validate_config(genesis_config)
 }
 
-fn validate<C: Context, Da: DaSpec>(
-    genesis_config: GenesisConfig<C, Da>,
-) -> Result<GenesisConfig<C, Da>, anyhow::Error> {
+fn validate_config<C: Context, Da: DaSpec>(
+    genesis_config: <Runtime<C, Da> as RuntimeTrait<C, Da>>::GenesisConfig,
+) -> Result<<Runtime<C, Da> as RuntimeTrait<C, Da>>::GenesisConfig, anyhow::Error> {
     let token_address = &sov_bank::get_genesis_token_address::<C>(
         &genesis_config.bank.tokens[0].token_name,
         genesis_config.bank.tokens[0].salt,
@@ -70,8 +70,8 @@ fn validate<C: Context, Da: DaSpec>(
     Ok(genesis_config)
 }
 
-fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
-    genesis_paths: &GenesisPaths<P>,
+fn create_genesis_config<C: Context, Da: DaSpec>(
+    genesis_paths: &GenesisPaths,
 ) -> anyhow::Result<GenesisConfig<C, Da>> {
     let accounts_config: AccountConfig<C> = read_json_file(&genesis_paths.accounts_genesis_path)?;
     let bank_config: BankConfig<C> = read_json_file(&genesis_paths.bank_genesis_path)?;

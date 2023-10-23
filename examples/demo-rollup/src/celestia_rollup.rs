@@ -1,11 +1,6 @@
-use std::path::PathBuf;
-use std::str::FromStr;
-
 use async_trait::async_trait;
-use const_rollup_config::SEQUENCER_DA_ADDRESS;
-use demo_stf::genesis_config::{get_genesis_config, GenesisPaths, StorageConfig};
+use demo_stf::genesis_config::StorageConfig;
 use demo_stf::runtime::Runtime;
-use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams};
 use sov_celestia_adapter::{CelestiaService, DaServiceConfig};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
@@ -24,7 +19,6 @@ pub struct CelestiaDemoRollup {}
 #[async_trait]
 impl RollupTemplate for CelestiaDemoRollup {
     type DaService = CelestiaService;
-    type GenesisPaths = GenesisPaths<PathBuf>;
     type Vm = Risc0Host<'static>;
 
     type ZkContext = ZkDefaultContext;
@@ -35,33 +29,6 @@ impl RollupTemplate for CelestiaDemoRollup {
 
     type DaSpec = CelestiaSpec;
     type DaConfig = DaServiceConfig;
-
-    fn create_genesis_config(
-        &self,
-        genesis_paths: &Self::GenesisPaths,
-        _rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> Result<
-        <Self::NativeRuntime as sov_modules_stf_template::Runtime<
-            Self::NativeContext,
-            Self::DaSpec,
-        >>::GenesisConfig,
-        anyhow::Error,
-    > {
-        let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS)?;
-
-        #[cfg(feature = "experimental")]
-        let eth_signer = crate::eth::read_eth_tx_signers();
-
-        let mut genesis_config = get_genesis_config(
-            genesis_paths,
-            #[cfg(feature = "experimental")]
-            eth_signer.signers(),
-        )?;
-
-        // The `seq_da_address` is overridden with the value from rollup binary.
-        genesis_config.sequencer_registry.seq_da_address = sequencer_da_address;
-        Ok(genesis_config)
-    }
 
     async fn create_da_service(
         &self,

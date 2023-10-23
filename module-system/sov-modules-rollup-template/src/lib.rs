@@ -32,9 +32,6 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Host of a zkVM program.
     type Vm: ZkvmHost + Send;
 
-    /// Location of the genesis files.
-    type GenesisPaths: Send + Sync;
-
     /// Context for Zero Knowledge environment.
     type ZkContext: Context;
     /// Context for Native environment.
@@ -56,12 +53,15 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Creates GenesisConfig from genesis files.
     fn create_genesis_config(
         &self,
-        genesis_paths: &Self::GenesisPaths,
-        rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> Result<
+        genesis_paths: &<Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisPaths,
+        _rollup_config: &RollupConfig<Self::DaConfig>,
+    ) -> anyhow::Result<
         <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig,
-        anyhow::Error,
-    >;
+    > {
+        <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::genesis_config(
+            genesis_paths,
+        )
+    }
 
     /// Creates instance of DA Service.
     async fn create_da_service(
@@ -95,7 +95,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Creates a new rollup.
     async fn create_new_rollup(
         &self,
-        genesis_paths: &Self::GenesisPaths,
+        genesis_paths: &<Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisPaths,
         rollup_config: RollupConfig<Self::DaConfig>,
         prover_config: Option<RollupProverConfig>,
     ) -> Result<Rollup<Self>, anyhow::Error>

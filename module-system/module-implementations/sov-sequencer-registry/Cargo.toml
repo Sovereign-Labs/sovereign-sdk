@@ -19,7 +19,10 @@ tempfile = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
+arbitrary = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
 sov-bank = { path = "../sov-bank", version = "0.3" }
 sov-modules-api = { path = "../../sov-modules-api", version = "0.3" }
 sov-state = { path = "../../sov-state", version = "0.3" }
@@ -36,6 +39,7 @@ sov-zk-cycle-utils = { path = "../../../utils/zk-cycle-utils", version = "0.3", 
 [features]
 bench = ["sov-zk-cycle-macros/bench", "risc0-zkvm", "risc0-zkvm-platform", "sov-zk-cycle-utils"]
 default = []
+arbitrary = ["dep:arbitrary", "dep:proptest", "dep:proptest-derive"]
 native = [
     "serde_json",
     "jsonrpsee",

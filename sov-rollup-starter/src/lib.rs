@@ -1,21 +1,17 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
 
-use std::path::PathBuf;
-
 use async_trait::async_trait;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::Spec;
 use sov_modules_rollup_template::{register_rpc, RollupTemplate, WalletTemplate};
-use sov_modules_stf_template::Runtime as RuntimeTrait;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::mocks::{MockDaConfig, MockDaService, MockDaSpec};
 use sov_rollup_interface::services::da::DaService;
 use sov_state::config::Config as StorageConfig;
 use sov_state::{ProverStorage, Storage, ZkStorage};
 use sov_stf_runner::RollupConfig;
-use stf_starter::genesis_config::{get_genesis_config, GenesisPaths};
 use stf_starter::Runtime;
 
 /// Rollup with MockDa.
@@ -32,20 +28,8 @@ impl RollupTemplate for StarterRollup {
     type ZkRuntime = Runtime<Self::ZkContext, Self::DaSpec>;
     type NativeRuntime = Runtime<Self::NativeContext, Self::DaSpec>;
 
-    type GenesisPaths = GenesisPaths<PathBuf>;
     type DaSpec = MockDaSpec;
     type DaConfig = MockDaConfig;
-
-    fn create_genesis_config(
-        &self,
-        genesis_paths: &Self::GenesisPaths,
-        _rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> Result<
-        <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig,
-        anyhow::Error,
-    > {
-        get_genesis_config(genesis_paths)
-    }
 
     async fn create_da_service(
         &self,

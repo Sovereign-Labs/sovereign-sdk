@@ -26,25 +26,25 @@ use crate::runtime::GenesisConfig;
 use crate::runtime::Runtime;
 
 /// Paths pointing to genesis files.
-pub struct GenesisPaths<P: AsRef<Path>> {
+pub struct GenesisPaths {
     /// Bank genesis path.
-    pub bank_genesis_path: P,
+    pub bank_genesis_path: PathBuf,
     /// Sequencer Registry genesis path.
-    pub sequencer_genesis_path: P,
+    pub sequencer_genesis_path: PathBuf,
     /// Value Setter genesis path.
-    pub value_setter_genesis_path: P,
+    pub value_setter_genesis_path: PathBuf,
     /// Accounts genesis path.
-    pub accounts_genesis_path: P,
+    pub accounts_genesis_path: PathBuf,
     /// Chain State genesis path.
-    pub chain_state_genesis_path: P,
+    pub chain_state_genesis_path: PathBuf,
     /// NFT genesis path.
-    pub nft_path: P,
+    pub nft_path: PathBuf,
     #[cfg(feature = "experimental")]
     /// EVM genesis path.
-    pub evm_genesis_path: P,
+    pub evm_genesis_path: PathBuf,
 }
 
-impl GenesisPaths<PathBuf> {
+impl GenesisPaths {
     /// Creates a new [`GenesisPaths`] from the files contained in the given
     /// directory.
     ///
@@ -64,27 +64,12 @@ impl GenesisPaths<PathBuf> {
     }
 }
 
-/// Configure our rollup with a centralized sequencer using the SEQUENCER_DA_ADDRESS
-/// address constant. Since the centralize sequencer's address is consensus critical,
-/// it has to be hardcoded as a constant, rather than read from the config at runtime.
-///
-/// If you want to customize the rollup to accept transactions from your own celestia
-/// address, simply change the value of the SEQUENCER_DA_ADDRESS to your own address.
-/// For example:
-/// ```
-/// const SEQUENCER_DA_ADDRESS: &str = "celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208";
-/// ```
-pub fn get_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
-    genesis_paths: &GenesisPaths<P>,
-    #[cfg(feature = "experimental")] eth_signers: Vec<reth_primitives::Address>,
-) -> Result<GenesisConfig<C, Da>, anyhow::Error> {
-    let genesis_config = create_genesis_config(
-        genesis_paths,
-        #[cfg(feature = "experimental")]
-        eth_signers,
-    )
-    .context("Unable to read genesis configuration")?;
-
+/// Creates genesis configuration.
+pub fn get_genesis_config<C: Context, Da: DaSpec>(
+    genesis_paths: &GenesisPaths,
+) -> Result<<Runtime<C, Da> as RuntimeTrait<C, Da>>::GenesisConfig, anyhow::Error> {
+    let genesis_config =
+        create_genesis_config(genesis_paths).context("Unable to read genesis configuration")?;
     validate_config(genesis_config)
 }
 
@@ -112,9 +97,8 @@ pub(crate) fn validate_config<C: Context, Da: DaSpec>(
     Ok(genesis_config)
 }
 
-fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
-    genesis_paths: &GenesisPaths<P>,
-    #[cfg(feature = "experimental")] eth_signers: Vec<reth_primitives::Address>,
+fn create_genesis_config<C: Context, Da: DaSpec>(
+    genesis_paths: &GenesisPaths,
 ) -> anyhow::Result<<Runtime<C, Da> as RuntimeTrait<C, Da>>::GenesisConfig> {
     let bank_config: BankConfig<C> = read_json_file(&genesis_paths.bank_genesis_path)?;
 
@@ -132,7 +116,7 @@ fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
         read_json_file(&genesis_paths.chain_state_genesis_path)?;
 
     #[cfg(feature = "experimental")]
-    let evm_config = get_evm_config(&genesis_paths.evm_genesis_path, eth_signers)?;
+    let evm_config: EvmConfig = read_json_file(&genesis_paths.evm_genesis_path)?;
 
     Ok(GenesisConfig::new(
         bank_config,
@@ -145,21 +129,4 @@ fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
         #[cfg(feature = "experimental")]
         evm_config,
     ))
-}
-
-#[cfg(feature = "experimental")]
-fn get_evm_config<P: AsRef<Path>>(
-    evm_path: P,
-    signers: Vec<reth_primitives::Address>,
-) -> anyhow::Result<EvmConfig> {
-    let config: EvmConfig = read_json_file(evm_path)?;
-    let addresses: std::collections::HashSet<reth_primitives::Address> =
-        config.data.iter().map(|acc| acc.address).collect();
-
-    // check if all the eth signer are in genesis.
-    for signer in signers {
-        assert!(addresses.contains(&signer));
-    }
-
-    Ok(config)
 }

@@ -47,6 +47,8 @@ impl<C: Context> Module for NonFungibleToken<C> {
 
     type CallMessage = CallMessage<C>;
 
+    type Event = ();
+
     fn genesis(
         &self,
         _config: &Self::Config,

@@ -42,6 +42,8 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ExampleModule<C> {
 
     type CallMessage = call::CallMessage;
 
+    type Event = ();
+
     fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         // The initialization logic
         Ok(self.init_module(config, working_set)?)

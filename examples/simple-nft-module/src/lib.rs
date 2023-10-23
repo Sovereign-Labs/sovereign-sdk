@@ -36,6 +36,8 @@ impl<C: Context> Module for NonFungibleToken<C> {
 
     type CallMessage = CallMessage<C>;
 
+    type Event = ();
+
     fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         Ok(self.init_module(config, working_set)?)
     }
