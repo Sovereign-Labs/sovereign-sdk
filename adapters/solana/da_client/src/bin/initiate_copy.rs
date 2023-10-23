@@ -1,20 +1,16 @@
 use alloc::rc::Rc;
-use std::path::Path;
-use std::process;
 use std::str::FromStr;
 
 use anchor_client::{Client, Cluster};
 use anchor_lang::solana_program::sysvar::clock::Clock;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use copy::{accounts as copy_accounts, instruction as copy_instruction, PREFIX};
-use solana_rpc_client::rpc_client::RpcClient;
 use solana_sdk::commitment_config::{CommitmentConfig, CommitmentLevel};
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::{EncodableKey, Keypair, Signature, Signer};
+use solana_sdk::signature::{Keypair, Signature, Signer};
 use solana_sdk::signer::keypair::read_keypair_file;
 use solana_sdk::sysvar::SysvarId;
-use solana_sdk::transaction::Transaction;
-use solana_sdk::{system_instruction, system_program};
+use solana_sdk::system_program;
 extern crate alloc;
 
 const DEFAULT_RPC_URL: &str = "http://localhost:8899";

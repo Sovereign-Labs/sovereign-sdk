@@ -6,7 +6,6 @@
 // ----------------------------------------------------------------------------
 
 use std::collections::HashMap;
-use std::num::NonZeroUsize;
 use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
@@ -19,10 +18,8 @@ use da_client::{calculate_root, hash_solana_account};
 use futures::sink::SinkExt;
 use futures::stream::StreamExt;
 use log::{error, info};
-use lru::LruCache;
 use solana_sdk::hash::{hashv, Hash};
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::slot_hashes::SlotHashes;
 use yellowstone_grpc_client::{GeyserGrpcClient, GeyserGrpcClientError};
 use yellowstone_grpc_proto::prelude::subscribe_update::UpdateOneof;
 use yellowstone_grpc_proto::prelude::{
@@ -39,11 +36,6 @@ type BlocksFilterMap = HashMap<String, SubscribeRequestFilterBlocks>;
 type BlocksMetaFilterMap = HashMap<String, SubscribeRequestFilterBlocksMeta>;
 
 const DEFAULT_GRPC_URL: &str = "http://127.0.0.1:10000";
-// base58 decode of SysvarS1otHashes111111111111111111111111111
-const SLOTHASHES_PUBKEY: [u8; 32] = [
-    6, 167, 213, 23, 25, 47, 10, 175, 198, 242, 101, 227, 251, 119, 204, 122, 218, 130, 197, 41,
-    208, 190, 59, 19, 110, 45, 0, 85, 32, 0, 0, 0,
-];
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -94,35 +86,10 @@ fn get_subscribe_request() -> SubscribeRequest {
 }
 
 struct BlockInfoForBankHash {
-    pub slot_num: u64,
     pub blockhash: Hash,
     pub parent_bankhash: Hash,
     pub num_sigs: u64,
     pub updated_account_count: u64,
-}
-
-#[inline(always)]
-fn get_recent_bankhashes(data: &[u8]) -> Vec<(u64, Hash)> {
-    let sh: SlotHashes = bincode::deserialize(data).unwrap();
-    sh.slot_hashes().to_vec()
-}
-
-#[inline(always)]
-fn is_slothashes_account(pubkey_vec: &[u8]) -> bool {
-    if pubkey_vec == &SLOTHASHES_PUBKEY[..] {
-        true
-    } else {
-        false
-    }
-}
-
-fn update_recent_hashes(
-    sov_bankhashes: &mut LruCache<u64, Hash>,
-    onchain_bankhashes: &[(u64, Hash)],
-) {
-    for &(slot, ref hash) in onchain_bankhashes.iter() {
-        sov_bankhashes.put(slot, hash.clone());
-    }
 }
 
 fn process_block(
@@ -174,7 +141,6 @@ fn generate_proofs(
     let mut slot_accumulator: HashMap<u64, HashMap<Pubkey, Hash>> = HashMap::new();
     let mut block_info: HashMap<u64, BlockInfoForBankHash> = HashMap::new();
 
-    let mut maybe_first_bankhash = Some(());
     loop {
         select! {
             recv(r_account) -> sub_account_msg => {
@@ -204,7 +170,6 @@ fn generate_proofs(
                     .map(|transaction| transaction.signatures.len())
                     .sum();
                 block_info.insert(slot_num, BlockInfoForBankHash {
-                        slot_num,
                         blockhash: Hash::from_str(&blockhash).unwrap(),
                         parent_bankhash: Hash::from_str(&parent_bankhash).unwrap(),
                         num_sigs: num_sigs as u64,

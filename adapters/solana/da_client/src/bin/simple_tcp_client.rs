@@ -1,8 +1,6 @@
 use account_proof_geyser::types::Update;
 use account_proof_geyser::utils::verify_proof;
-use borsh::{BorshDeserialize, BorshSerialize};
-use solana_sdk::hash::Hash;
-use solana_sdk::pubkey::Pubkey;
+use borsh::{BorshDeserialize};
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 
@@ -10,7 +8,9 @@ use tokio::net::TcpStream;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stream = TcpStream::connect("127.0.0.1:10000").await?;
 
-    let mut buffer = vec![0u8; 4096]; // Buffer needs to be raised
+    // Using a large buffer for simplicity.
+    // Replace this with framing or an other alternative
+    let mut buffer = vec![0u8; 65536];
 
     loop {
         let n = stream.read(&mut buffer).await?;

@@ -1,16 +1,14 @@
-use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::{fs, io};
 
-use serde::{de, Deserialize, Deserializer};
-use solana_sdk::pubkey::Pubkey;
+use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub libpath: String,
-    pub account_list: Vec<Pubkey>,
+    pub account_list: Vec<String>,
     pub bind_address: SocketAddr,
 }
 

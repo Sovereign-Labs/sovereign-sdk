@@ -1,15 +1,13 @@
 use std::collections::HashMap;
-use std::str::FromStr;
 
 use blake3::traits::digest::Digest;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rayon::prelude::*;
 use solana_runtime::accounts_hash::{AccountsHasher, MERKLE_FANOUT};
-use solana_sdk::hash::{hashv, Hash, Hasher};
+use solana_sdk::hash::{Hash, Hasher};
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::Signature;
 
-use crate::types::Proof;
+use crate::types::{AccountDeltaProof, AccountHashMap, Data, Proof};
 
 /// Util helper function to calculate the hash of a solana account
 /// https://github.com/solana-labs/solana/blob/v1.16.15/runtime/src/accounts_db.rs#L6076-L6118
@@ -44,10 +42,14 @@ pub fn hash_solana_account(
     hasher.finalize().into()
 }
 
+// Simple wrapper around the solana function
 pub fn calculate_root(pubkey_hash_vec: Vec<(Pubkey, Hash)>) -> Hash {
     AccountsHasher::accumulate_account_hashes(pubkey_hash_vec)
 }
 
+// Originally attempted to calculate the proof while generating the root
+// but logically felt more complex, so the root calculation is separated from proof gen
+// TODO: see if these can be combined
 pub fn calculate_root_and_proofs(
     pubkey_hash_vec: &mut [(Pubkey, Hash)],
     leaves_for_proof: &[Pubkey],
@@ -205,9 +207,7 @@ pub fn verify_proof(leaf_hash: &Hash, proof: &Proof, root: &Hash) -> bool {
     &current_hash == root
 }
 
-fn are_adjacent(proof1: &Proof, proof2: &Proof) -> bool {
-    use log::debug;
-
+pub fn are_adjacent(proof1: &Proof, proof2: &Proof) -> bool {
     if proof1.path.len() != proof2.path.len() {
         println!(
             "Proofs have different path lengths: {} vs {}",
@@ -233,8 +233,167 @@ fn are_adjacent(proof1: &Proof, proof2: &Proof) -> bool {
     true
 }
 
-fn is_first(proof: &Proof) -> bool {
+pub fn is_first(proof: &Proof) -> bool {
     proof.path.iter().all(|&position| position == 0)
+}
+
+pub fn get_proof_pubkeys_required(
+    pubkey_hash_vec: &mut [(Pubkey, Hash)],
+    leaves_for_proof: &[Pubkey],
+) -> (Vec<Pubkey>, Vec<Pubkey>, Vec<Pubkey>, Vec<Pubkey>) {
+    pubkey_hash_vec.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
+
+    let smallest_key_in_hash_vec = pubkey_hash_vec.first().map(|(pubkey, _)| pubkey).unwrap();
+    let largest_key_in_hash_vec = pubkey_hash_vec.last().map(|(pubkey, _)| pubkey).unwrap();
+
+    let mut inclusion = vec![];
+    let mut non_inclusion_left = vec![];
+    let mut non_inclusion_right = vec![];
+    let mut non_inclusion_inner = vec![];
+
+    for &leaf in leaves_for_proof {
+        if pubkey_hash_vec.iter().any(|(pubkey, _)| &leaf == pubkey) {
+            inclusion.push(leaf);
+        } else if leaf < *smallest_key_in_hash_vec {
+            non_inclusion_left.push(leaf);
+        } else if leaf > *largest_key_in_hash_vec {
+            non_inclusion_right.push(leaf);
+        } else {
+            non_inclusion_inner.push(leaf);
+        }
+    }
+
+    (
+        inclusion,
+        non_inclusion_left,
+        non_inclusion_right,
+        non_inclusion_inner,
+    )
+}
+
+pub fn get_keys_for_non_inclusion_inner(
+    non_inclusion_inner: &[Pubkey],
+    pubkey_hash_vec: &mut [(Pubkey, Hash)],
+) -> (Vec<Pubkey>, HashMap<Pubkey, (Pubkey, Pubkey)>) {
+    pubkey_hash_vec.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    let sorted_keys: Vec<&Pubkey> = pubkey_hash_vec.iter().map(|(pubkey, _)| pubkey).collect();
+
+    let mut adjacent_pairs = Vec::new();
+    let mut missing_key_to_adjacent = HashMap::new();
+
+    for &missing_key in non_inclusion_inner {
+        let position = match sorted_keys.binary_search(&&missing_key) {
+            Ok(pos) => pos, // This shouldn't really happen, but in case it does
+            Err(pos) => pos,
+        };
+
+        if position > 0 && position < sorted_keys.len() {
+            let previous_key = sorted_keys[position - 1];
+            let next_key = sorted_keys[position];
+
+            // Add adjacent keys to the result vector
+            if !adjacent_pairs.contains(previous_key) {
+                adjacent_pairs.push(*previous_key);
+            }
+            if !adjacent_pairs.contains(next_key) {
+                adjacent_pairs.push(*next_key);
+            }
+
+            // Associate the missing key with its adjacent keys in the HashMap
+            missing_key_to_adjacent.insert(missing_key, (*previous_key, *next_key));
+        }
+    }
+
+    (adjacent_pairs, missing_key_to_adjacent)
+}
+
+pub fn assemble_account_delta_proof(
+    account_hashes: &[(Pubkey, Hash)],
+    account_data_hashes: &AccountHashMap,
+    account_proofs: &[(Pubkey, Proof)],
+    inclusion: &[Pubkey],
+    non_inclusion_left: &[Pubkey],
+    non_inclusion_right: &[Pubkey],
+    non_inclusion_inner: &[Pubkey],
+    non_inclusion_inner_mapping: &HashMap<Pubkey, (Pubkey, Pubkey)>,
+) -> anyhow::Result<Vec<AccountDeltaProof>> {
+    let account_proofs_map: HashMap<Pubkey, Proof> = account_proofs.iter().cloned().collect();
+
+    let mut proofs = vec![];
+    for incl in inclusion {
+        let data = Data {
+            pubkey: incl.clone(),
+            hash: account_data_hashes.get(&incl).unwrap().1,
+            account: account_data_hashes.get(&incl).unwrap().2.clone(),
+        };
+        let account_proof = AccountDeltaProof::InclusionProof(
+            incl.clone(),
+            (data, account_proofs_map.get(&incl).unwrap().clone()),
+        );
+        proofs.push(account_proof)
+    }
+
+    for nil in non_inclusion_left {
+        let data = Data {
+            pubkey: nil.clone(),
+            hash: account_data_hashes.get(&nil).unwrap().1,
+            account: account_data_hashes.get(&nil).unwrap().2.clone(),
+        };
+        let account_proof = AccountDeltaProof::NonInclusionProofLeft(
+            nil.clone(),
+            (
+                data,
+                account_proofs_map
+                    .get(&account_hashes[0].0)
+                    .unwrap()
+                    .clone(),
+            ),
+        );
+        proofs.push(account_proof)
+    }
+
+    for nii in non_inclusion_inner {
+        let (nii_l, nii_r) = non_inclusion_inner_mapping.get(nii).unwrap();
+        let data_l = Data {
+            pubkey: nii_l.clone(),
+            hash: account_data_hashes.get(&nii_l).unwrap().1,
+            account: account_data_hashes.get(&nii_l).unwrap().2.clone(),
+        };
+        let data_r = Data {
+            pubkey: nii_r.clone(),
+            hash: account_data_hashes.get(&nii_r).unwrap().1,
+            account: account_data_hashes.get(&nii_r).unwrap().2.clone(),
+        };
+        let account_proof = AccountDeltaProof::NonInclusionProofInner(
+            nii.clone(),
+            (
+                (data_l, account_proofs_map.get(nii_l).unwrap().clone()),
+                (data_r, account_proofs_map.get(nii_r).unwrap().clone()),
+            ),
+        );
+        proofs.push(account_proof)
+    }
+
+    for nir in non_inclusion_right {
+        let last_pubkey = account_hashes[account_hashes.len() - 1].0;
+        let all_hashes: Vec<Hash> = account_hashes.iter().map(|x| x.1).collect();
+        let data = Data {
+            pubkey: last_pubkey.clone(),
+            hash: account_data_hashes.get(&last_pubkey).unwrap().1,
+            account: account_data_hashes.get(&last_pubkey).unwrap().2.clone(),
+        };
+        let account_proof = AccountDeltaProof::NonInclusionProofRight(
+            nir.clone(),
+            (
+                data,
+                account_proofs_map.get(&last_pubkey).unwrap().clone(),
+                all_hashes.clone(),
+            ),
+        );
+        proofs.push(account_proof)
+    }
+
+    Ok(proofs)
 }
 
 #[cfg(test)]
@@ -242,6 +401,7 @@ mod tests {
     use std::convert::TryFrom;
 
     use rand::Rng;
+    use solana_sdk::hash::hashv;
 
     use super::*;
 

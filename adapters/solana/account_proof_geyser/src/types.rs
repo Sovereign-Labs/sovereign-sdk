@@ -5,8 +5,9 @@ use solana_geyser_plugin_interface::geyser_plugin_interface::{ReplicaBlockInfoV2
 use solana_sdk::hash::Hash;
 use solana_sdk::pubkey::Pubkey;
 
-pub type AccountHashAccumulator = HashMap<u64, HashMap<Pubkey, (u64, Hash)>>;
+pub type AccountHashAccumulator = HashMap<u64, AccountHashMap>;
 pub type TransactionSigAccumulator = HashMap<u64, u64>;
+pub type AccountHashMap = HashMap<Pubkey, (u64, Hash, AccountInfo)>;
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Proof {
@@ -15,8 +16,27 @@ pub struct Proof {
 }
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct Data {
+    pub pubkey: Pubkey,
+    pub hash: Hash,
+    pub account: AccountInfo,
+}
+
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub enum AccountDeltaProof {
+    /// Simplest proof for inclusion in the account delta hash
+    InclusionProof(Pubkey, (Data, Proof)),
+    /// Adjacency proof for non inclusion A C D E, non-inclusion for B means providing A and C
+    NonInclusionProofInner(Pubkey, ((Data, Proof), (Data, Proof))),
+    /// Left most leaf and proof
+    NonInclusionProofLeft(Pubkey, (Data, Proof)),
+    /// Right most leaf and proof. Also need to include hashes of all leaves to verify tree size
+    NonInclusionProofRight(Pubkey, (Data, Proof, Vec<Hash>)),
+}
+
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct BankHashProof {
-    pub proofs: Vec<(Pubkey, Hash, Proof)>,
+    pub proofs: Vec<AccountDeltaProof>,
     pub num_sigs: u64,
     pub account_delta_root: Hash,
     pub parent_bankhash: Hash,
@@ -27,10 +47,10 @@ pub struct BankHashProof {
 pub struct Update {
     pub slot: u64,
     pub root: Hash,
-    pub proofs: Vec<(Pubkey, Proof)>,
+    pub proof: BankHashProof,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct AccountInfo {
     /// The Pubkey for the account
     pub pubkey: Pubkey,
@@ -59,6 +79,21 @@ pub struct AccountInfo {
 
     /// Slot number for this update
     pub slot: u64,
+}
+
+impl Default for AccountInfo {
+    fn default() -> Self {
+        AccountInfo {
+            pubkey: Pubkey::default(),
+            lamports: 0,
+            owner: Pubkey::default(),
+            executable: false,
+            rent_epoch: 0,
+            data: Vec::new(),
+            write_version: 0,
+            slot: 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
