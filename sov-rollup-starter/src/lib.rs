@@ -39,10 +39,12 @@ impl RollupTemplate for StarterRollup {
     fn create_genesis_config(
         &self,
         genesis_paths: &Self::GenesisPaths,
-        rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig
-    {
-        get_genesis_config(rollup_config.da.sender_address, genesis_paths)
+        _rollup_config: &RollupConfig<Self::DaConfig>,
+    ) -> Result<
+        <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig,
+        anyhow::Error,
+    > {
+        get_genesis_config(genesis_paths)
     }
 
     async fn create_da_service(

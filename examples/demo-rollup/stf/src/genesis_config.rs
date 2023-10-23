@@ -5,7 +5,7 @@
 use std::convert::AsRef;
 use std::path::{Path, PathBuf};
 
-use anyhow::bail;
+use anyhow::{bail, Context as _};
 use sov_accounts::AccountConfig;
 use sov_bank::BankConfig;
 use sov_chain_state::ChainStateConfig;
@@ -13,6 +13,7 @@ use sov_chain_state::ChainStateConfig;
 use sov_evm::EvmConfig;
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Context;
+use sov_modules_stf_template::Runtime as RuntimeTrait;
 use sov_nft_module::NonFungibleTokenConfig;
 use sov_rollup_interface::da::DaSpec;
 use sov_sequencer_registry::SequencerConfig;
@@ -22,6 +23,7 @@ use sov_value_setter::ValueSetterConfig;
 
 /// Creates config for a rollup with some default settings, the config is used in demos and tests.
 use crate::runtime::GenesisConfig;
+use crate::runtime::Runtime;
 
 /// Paths pointing to genesis files.
 pub struct GenesisPaths<P: AsRef<Path>> {
@@ -73,53 +75,57 @@ impl GenesisPaths<PathBuf> {
 /// const SEQUENCER_DA_ADDRESS: &str = "celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208";
 /// ```
 pub fn get_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
-    sequencer_da_address: Da::Address,
     genesis_paths: &GenesisPaths<P>,
     #[cfg(feature = "experimental")] eth_signers: Vec<reth_primitives::Address>,
-) -> GenesisConfig<C, Da> {
-    create_genesis_config(
-        sequencer_da_address,
+) -> Result<GenesisConfig<C, Da>, anyhow::Error> {
+    let genesis_config = create_genesis_config(
         genesis_paths,
         #[cfg(feature = "experimental")]
         eth_signers,
     )
-    .expect("Unable to read genesis configuration")
+    .context("Unable to read genesis configuration")?;
+
+    validate_config(genesis_config)
+}
+
+pub(crate) fn validate_config<C: Context, Da: DaSpec>(
+    genesis_config: <Runtime<C, Da> as RuntimeTrait<C, Da>>::GenesisConfig,
+) -> Result<<Runtime<C, Da> as RuntimeTrait<C, Da>>::GenesisConfig, anyhow::Error> {
+    let token_address = &sov_bank::get_genesis_token_address::<C>(
+        &genesis_config.bank.tokens[0].token_name,
+        genesis_config.bank.tokens[0].salt,
+    );
+
+    let coins_token_addr = &genesis_config
+        .sequencer_registry
+        .coins_to_lock
+        .token_address;
+
+    if coins_token_addr != token_address {
+        bail!(
+            "Wrong token address in `sequencer_registry_config` expected {} but found {}",
+            token_address,
+            coins_token_addr
+        )
+    }
+
+    Ok(genesis_config)
 }
 
 fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
-    seq_da_address: Da::Address,
     genesis_paths: &GenesisPaths<P>,
     #[cfg(feature = "experimental")] eth_signers: Vec<reth_primitives::Address>,
-) -> anyhow::Result<GenesisConfig<C, Da>> {
+) -> anyhow::Result<<Runtime<C, Da> as RuntimeTrait<C, Da>>::GenesisConfig> {
     let bank_config: BankConfig<C> = read_json_file(&genesis_paths.bank_genesis_path)?;
 
-    let mut sequencer_registry_config: SequencerConfig<C, Da> =
+    let sequencer_registry_config: SequencerConfig<C, Da> =
         read_json_file(&genesis_paths.sequencer_genesis_path)?;
-
-    // The `seq_da_address` is overridden with the value from rollup binary.
-    sequencer_registry_config.seq_da_address = seq_da_address;
-
-    // Sanity check: `token_address` in `sequencer_registry_config` match `token_address` from the bank module.
-    {
-        let token_address = &sov_bank::get_genesis_token_address::<C>(
-            &bank_config.tokens[0].token_name,
-            bank_config.tokens[0].salt,
-        );
-
-        let coins_token_addr = &sequencer_registry_config.coins_to_lock.token_address;
-        if coins_token_addr != token_address {
-            bail!(
-                "Wrong token address in `sequencer_registry_config` expected {} but found {}",
-                token_address,
-                coins_token_addr
-            )
-        }
-    }
 
     let value_setter_config: ValueSetterConfig<C> =
         read_json_file(&genesis_paths.value_setter_genesis_path)?;
 
     let accounts_config: AccountConfig<C> = read_json_file(&genesis_paths.accounts_genesis_path)?;
+
     let nft_config: NonFungibleTokenConfig = read_json_file(&genesis_paths.nft_path)?;
 
     let chain_state_config: ChainStateConfig =

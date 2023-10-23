@@ -40,21 +40,27 @@ impl RollupTemplate for CelestiaDemoRollup {
         &self,
         genesis_paths: &Self::GenesisPaths,
         _rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> <Self::NativeRuntime as sov_modules_stf_template::Runtime<
-        Self::NativeContext,
-        Self::DaSpec,
-    >>::GenesisConfig {
-        let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
+    ) -> Result<
+        <Self::NativeRuntime as sov_modules_stf_template::Runtime<
+            Self::NativeContext,
+            Self::DaSpec,
+        >>::GenesisConfig,
+        anyhow::Error,
+    > {
+        let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS)?;
 
         #[cfg(feature = "experimental")]
         let eth_signer = crate::eth::read_eth_tx_signers();
 
-        get_genesis_config(
-            sequencer_da_address,
+        let mut genesis_config = get_genesis_config(
             genesis_paths,
             #[cfg(feature = "experimental")]
             eth_signer.signers(),
-        )
+        )?;
+
+        // The `seq_da_address` is overridden with the value from rollup binary.
+        genesis_config.sequencer_registry.seq_da_address = sequencer_da_address;
+        Ok(genesis_config)
     }
 
     async fn create_da_service(

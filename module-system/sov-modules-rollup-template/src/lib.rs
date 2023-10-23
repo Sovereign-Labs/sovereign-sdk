@@ -58,7 +58,10 @@ pub trait RollupTemplate: Sized + Send + Sync {
         &self,
         genesis_paths: &Self::GenesisPaths,
         rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig;
+    ) -> Result<
+        <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig,
+        anyhow::Error,
+    >;
 
     /// Creates instance of DA Service.
     async fn create_da_service(
@@ -101,7 +104,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
     {
         let da_service = self.create_da_service(&rollup_config).await;
         let ledger_db = self.create_ledger_db(&rollup_config);
-        let genesis_config = self.create_genesis_config(genesis_paths, &rollup_config);
+        let genesis_config = self.create_genesis_config(genesis_paths, &rollup_config)?;
 
         let prover = prover_config.map(|pc| {
             configure_prover(

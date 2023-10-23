@@ -35,14 +35,15 @@ impl RollupTemplate for MockDemoRollup {
     fn create_genesis_config(
         &self,
         genesis_paths: &Self::GenesisPaths,
-        rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig
-    {
+        _rollup_config: &RollupConfig<Self::DaConfig>,
+    ) -> Result<
+        <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig,
+        anyhow::Error,
+    > {
         #[cfg(feature = "experimental")]
         let eth_signer = crate::eth::read_eth_tx_signers();
 
         get_genesis_config(
-            rollup_config.da.sender_address,
             genesis_paths,
             #[cfg(feature = "experimental")]
             eth_signer.signers(),

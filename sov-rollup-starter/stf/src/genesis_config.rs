@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::bail;
+use anyhow::{bail, Context as _};
 use sov_accounts::AccountConfig;
 use sov_bank::BankConfig;
 use sov_modules_api::{Context, DaSpec};
@@ -38,42 +38,45 @@ impl GenesisPaths<PathBuf> {
 /// address constant. Since the centralize sequencer's address is consensus critical,
 /// it has to be hardcoded as a constant, rather than read from the config at runtime.
 pub fn get_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
-    sequencer_da_address: Da::Address,
     genesis_paths: &GenesisPaths<P>,
-) -> GenesisConfig<C, Da> {
-    create_genesis_config(sequencer_da_address, genesis_paths)
-        .expect("Unable to read genesis configuration")
+) -> Result<GenesisConfig<C, Da>, anyhow::Error> {
+    let config =
+        create_genesis_config(genesis_paths).context("Unable to read genesis configuration")?;
+
+    validate(config)
+}
+
+fn validate<C: Context, Da: DaSpec>(
+    genesis_config: GenesisConfig<C, Da>,
+) -> Result<GenesisConfig<C, Da>, anyhow::Error> {
+    let token_address = &sov_bank::get_genesis_token_address::<C>(
+        &genesis_config.bank.tokens[0].token_name,
+        genesis_config.bank.tokens[0].salt,
+    );
+
+    let coins_token_addr = &genesis_config
+        .sequencer_registry
+        .coins_to_lock
+        .token_address;
+
+    if coins_token_addr != token_address {
+        bail!(
+            "Wrong token address in `sequencer_registry_config` expected {} but found {}",
+            token_address,
+            coins_token_addr
+        )
+    }
+
+    Ok(genesis_config)
 }
 
 fn create_genesis_config<C: Context, Da: DaSpec, P: AsRef<Path>>(
-    seq_da_address: Da::Address,
     genesis_paths: &GenesisPaths<P>,
 ) -> anyhow::Result<GenesisConfig<C, Da>> {
     let accounts_config: AccountConfig<C> = read_json_file(&genesis_paths.accounts_genesis_path)?;
     let bank_config: BankConfig<C> = read_json_file(&genesis_paths.bank_genesis_path)?;
-
-    let mut sequencer_registry_config: SequencerConfig<C, Da> =
+    let sequencer_registry_config: SequencerConfig<C, Da> =
         read_json_file(&genesis_paths.sequencer_genesis_path)?;
-
-    // The `seq_da_address` is overridden with the value from rollup binary.
-    sequencer_registry_config.seq_da_address = seq_da_address;
-
-    // Sanity check: `token_address` in `sequencer_registry_config` match `token_address` from the bank module.
-    {
-        let token_address = &sov_bank::get_genesis_token_address::<C>(
-            &bank_config.tokens[0].token_name,
-            bank_config.tokens[0].salt,
-        );
-
-        let coins_token_addr = &sequencer_registry_config.coins_to_lock.token_address;
-        if coins_token_addr != token_address {
-            bail!(
-                "Wrong token address in `sequencer_registry_config` expected {} but found {}",
-                token_address,
-                coins_token_addr
-            )
-        }
-    }
 
     Ok(GenesisConfig::new(
         accounts_config,
