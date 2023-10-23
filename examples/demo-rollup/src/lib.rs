@@ -7,7 +7,8 @@ mod mock_rollup;
 pub use mock_rollup::*;
 mod celestia_rollup;
 pub use celestia_rollup::*;
-mod common;
+#[cfg(feature = "experimental")]
+mod eth;
 
 /// The rollup stores its data in the namespace b"sov-test" on Celestia
 /// You can change this constant to point your rollup at a different namespace

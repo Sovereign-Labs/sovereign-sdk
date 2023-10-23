@@ -1,9 +1,16 @@
 //! This binary defines a cli wallet for interacting
 //! with the rollup.
 
-use sov_rollup_interface::mocks::MockDaService;
-use sov_rollup_interface::services::da::DaService;
+use sov_modules_api::cli::{FileNameArg, JsonStringArg};
+use sov_modules_rollup_template::WalletTemplate;
+use sov_rollup_starter::StarterRollup;
+use stf_starter::runtime::RuntimeSubcommand;
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    stf_starter::cli::run_wallet::<<MockDaService as DaService>::Spec>().await
+    StarterRollup::run_wallet::<
+        RuntimeSubcommand<FileNameArg, _, _>,
+        RuntimeSubcommand<JsonStringArg, _, _>,
+    >()
+    .await
 }

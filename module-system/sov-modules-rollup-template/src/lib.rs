@@ -1,8 +1,12 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
+
+mod runtime_rpc;
+mod wallet;
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
+pub use runtime_rpc::*;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::{Context, DaSpec, Spec};
 use sov_modules_stf_template::{AppTemplate, Runtime as RuntimeTrait};
@@ -13,6 +17,7 @@ use sov_state::storage::NativeStorage;
 use sov_stf_runner::verifier::StateTransitionVerifier;
 use sov_stf_runner::{ProofGenConfig, Prover, RollupConfig, StateTransitionRunner};
 use tokio::sync::oneshot;
+pub use wallet::*;
 
 /// This trait defines how to crate all the necessary dependencies required by a rollup.
 #[async_trait]
@@ -38,7 +43,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Runtime for Zero Knowledge environment.
     type ZkRuntime: RuntimeTrait<Self::ZkContext, Self::DaSpec> + Default;
     /// Runtime for Native environment.
-    type NativeRuntime: RuntimeTrait<Self::NativeContext, Self::DaSpec> + Default + Default;
+    type NativeRuntime: RuntimeTrait<Self::NativeContext, Self::DaSpec> + Default + Send + Sync;
 
     /// Creates RPC methods for the rollup.
     fn create_rpc_methods(

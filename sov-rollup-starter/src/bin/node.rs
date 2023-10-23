@@ -6,9 +6,8 @@ use anyhow::Context;
 use clap::Parser;
 use sov_modules_rollup_template::{Rollup, RollupProverConfig, RollupTemplate};
 use sov_rollup_interface::mocks::MockDaConfig;
-use sov_rollup_starter::rollup::StarterRollup;
+use sov_rollup_starter::StarterRollup;
 use sov_stf_runner::{from_toml_path, RollupConfig};
-use std::str::FromStr;
 use stf_starter::genesis_config::GenesisPaths;
 use tracing::info;
 use tracing_subscriber::prelude::*;
@@ -31,8 +30,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // Initializing logging
     tracing_subscriber::registry()
         .with(fmt::layer())
-        //.with(EnvFilter::from_default_env())
-        .with(EnvFilter::from_str("info").unwrap())
+        .with(EnvFilter::from_default_env())
         .init();
 
     let args = Args::parse();

@@ -1,4 +1,3 @@
-#TEST_PRIVATE_KEY_PATH := $(PROJECT_ROOT)/examples/test-data/keys/minter_private_key.json
 PROJECT_ROOT := $(shell git rev-parse --show-toplevel)
 SOV_CLI_REL_PATH := $(PROJECT_ROOT)/target/debug/starter-cli-wallet
 
