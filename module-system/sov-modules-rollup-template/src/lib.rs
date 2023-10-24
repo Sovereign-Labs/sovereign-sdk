@@ -1,8 +1,12 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
+
+mod runtime_rpc;
+mod wallet;
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
+pub use runtime_rpc::*;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::{Context, DaSpec, Spec};
 use sov_modules_stf_template::{AppTemplate, Runtime as RuntimeTrait};
@@ -13,6 +17,7 @@ use sov_state::storage::NativeStorage;
 use sov_stf_runner::verifier::StateTransitionVerifier;
 use sov_stf_runner::{ProofGenConfig, Prover, RollupConfig, StateTransitionRunner};
 use tokio::sync::oneshot;
+pub use wallet::*;
 
 /// This trait defines how to crate all the necessary dependencies required by a rollup.
 #[async_trait]
@@ -27,9 +32,6 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Host of a zkVM program.
     type Vm: ZkvmHost + Send;
 
-    /// Location of the genesis files.
-    type GenesisPaths: Send + Sync;
-
     /// Context for Zero Knowledge environment.
     type ZkContext: Context;
     /// Context for Native environment.
@@ -38,7 +40,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Runtime for Zero Knowledge environment.
     type ZkRuntime: RuntimeTrait<Self::ZkContext, Self::DaSpec> + Default;
     /// Runtime for Native environment.
-    type NativeRuntime: RuntimeTrait<Self::NativeContext, Self::DaSpec> + Default + Default;
+    type NativeRuntime: RuntimeTrait<Self::NativeContext, Self::DaSpec> + Default + Send + Sync;
 
     /// Creates RPC methods for the rollup.
     fn create_rpc_methods(
@@ -51,9 +53,15 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Creates GenesisConfig from genesis files.
     fn create_genesis_config(
         &self,
-        genesis_paths: &Self::GenesisPaths,
-        rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig;
+        genesis_paths: &<Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisPaths,
+        _rollup_config: &RollupConfig<Self::DaConfig>,
+    ) -> anyhow::Result<
+        <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig,
+    > {
+        <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::genesis_config(
+            genesis_paths,
+        )
+    }
 
     /// Creates instance of DA Service.
     async fn create_da_service(
@@ -87,7 +95,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Creates a new rollup.
     async fn create_new_rollup(
         &self,
-        genesis_paths: &Self::GenesisPaths,
+        genesis_paths: &<Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisPaths,
         rollup_config: RollupConfig<Self::DaConfig>,
         prover_config: Option<RollupProverConfig>,
     ) -> Result<Rollup<Self>, anyhow::Error>
@@ -96,7 +104,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
     {
         let da_service = self.create_da_service(&rollup_config).await;
         let ledger_db = self.create_ledger_db(&rollup_config);
-        let genesis_config = self.create_genesis_config(genesis_paths, &rollup_config);
+        let genesis_config = self.create_genesis_config(genesis_paths, &rollup_config)?;
 
         let prover = prover_config.map(|pc| {
             configure_prover(

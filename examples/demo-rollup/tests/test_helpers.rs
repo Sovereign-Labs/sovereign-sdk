@@ -1,5 +1,4 @@
 use std::net::SocketAddr;
-use std::path::PathBuf;
 
 use demo_stf::genesis_config::GenesisPaths;
 use sov_demo_rollup::MockDemoRollup;
@@ -10,7 +9,7 @@ use tokio::sync::oneshot;
 
 pub async fn start_rollup(
     rpc_reporting_channel: oneshot::Sender<SocketAddr>,
-    genesis_paths: GenesisPaths<PathBuf>,
+    genesis_paths: GenesisPaths,
     rollup_prover_config: Option<RollupProverConfig>,
 ) {
     let temp_dir = tempfile::tempdir().unwrap();

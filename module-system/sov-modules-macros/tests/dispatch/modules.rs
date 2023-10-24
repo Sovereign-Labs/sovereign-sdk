@@ -18,10 +18,18 @@ pub mod first_test_module {
         }
     }
 
+    #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+    pub enum Event {
+        FirstModuleEnum1(u64),
+        FirstModuleEnum2,
+        FirstModuleEnum3(Vec<u8>),
+    }
+
     impl<C: Context> Module for FirstTestStruct<C> {
         type Context = C;
         type Config = ();
         type CallMessage = u8;
+        type Event = Event;
 
         fn genesis(
             &self,
@@ -62,10 +70,17 @@ pub mod second_test_module {
         }
     }
 
+    #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+    pub enum Event {
+        SecondModuleEnum,
+    }
+
+
     impl<Ctx: Context> Module for SecondTestStruct<Ctx> {
         type Context = Ctx;
         type Config = ();
         type CallMessage = u8;
+        type Event = Event;
 
         fn genesis(
             &self,
@@ -92,7 +107,7 @@ pub mod third_test_module {
     use super::*;
 
     pub trait ModuleThreeStorable:
-        borsh::BorshSerialize + borsh::BorshDeserialize + core::fmt::Debug + Default
+        borsh::BorshSerialize + borsh::BorshDeserialize + core::fmt::Debug + Default + Send + Sync
     {
     }
 
@@ -108,10 +123,7 @@ pub mod third_test_module {
     }
 
     impl<Ctx: Context, OtherGeneric: ModuleThreeStorable> ThirdTestStruct<Ctx, OtherGeneric> {
-        pub fn get_state_value(
-            &self,
-            working_set: &mut WorkingSet<Ctx>,
-        ) -> Option<OtherGeneric> {
+        pub fn get_state_value(&self, working_set: &mut WorkingSet<Ctx>) -> Option<OtherGeneric> {
             self.state_in_third_struct.get(working_set)
         }
     }
@@ -122,6 +134,7 @@ pub mod third_test_module {
         type Context = Ctx;
         type Config = ();
         type CallMessage = OtherGeneric;
+        type Event = ();
 
         fn genesis(
             &self,

@@ -4,6 +4,7 @@
 //!   1. Add a new module dependency to your `Cargo.toml` file
 //!   2. Add the module to the `Runtime` below
 //!   3. Update `genesis.json` with any additional data required by your new module
+
 #[cfg(feature = "native")]
 pub use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
@@ -11,12 +12,17 @@ pub use sov_bank::{BankRpcImpl, BankRpcServer};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::DefaultRuntime;
+#[cfg(feature = "native")]
+use sov_modules_api::Spec;
 use sov_modules_api::{Context, DaSpec, DispatchCall, Genesis, MessageCodec};
 use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::da::DaVerifier;
 #[cfg(feature = "native")]
 pub use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 use sov_stf_runner::verifier::StateTransitionVerifier;
+
+#[cfg(feature = "native")]
+use crate::genesis_config::GenesisPaths;
 
 /// The runtime defines the logic of the rollup.
 ///
@@ -74,6 +80,21 @@ where
     Da: DaSpec,
 {
     type GenesisConfig = GenesisConfig<C, Da>;
+
+    #[cfg(feature = "native")]
+    type GenesisPaths = GenesisPaths;
+
+    #[cfg(feature = "native")]
+    fn rpc_methods(storage: <C as Spec>::Storage) -> jsonrpsee::RpcModule<()> {
+        get_rpc_methods::<C, Da>(storage.clone())
+    }
+
+    #[cfg(feature = "native")]
+    fn genesis_config(
+        genesis_paths: &Self::GenesisPaths,
+    ) -> Result<Self::GenesisConfig, anyhow::Error> {
+        crate::genesis_config::get_genesis_config(genesis_paths)
+    }
 }
 
 // Select which blobs will be executed in this slot. In this implementation simply execute all

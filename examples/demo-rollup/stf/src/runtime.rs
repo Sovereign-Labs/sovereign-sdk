@@ -48,6 +48,8 @@ pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
+#[cfg(feature = "native")]
+use sov_modules_api::Spec;
 use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec};
 #[cfg(feature = "native")]
 use sov_nft_module::{NonFungibleTokenRpcImpl, NonFungibleTokenRpcServer};
@@ -56,6 +58,9 @@ use sov_rollup_interface::da::DaSpec;
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 #[cfg(feature = "native")]
 use sov_value_setter::{ValueSetterRpcImpl, ValueSetterRpcServer};
+
+#[cfg(feature = "native")]
+use crate::genesis_config::GenesisPaths;
 
 /// The `demo-stf runtime`.
 #[cfg_attr(feature = "native", derive(CliWallet), expose_rpc)]
@@ -94,6 +99,21 @@ where
     Da: DaSpec,
 {
     type GenesisConfig = GenesisConfig<C, Da>;
+
+    #[cfg(feature = "native")]
+    type GenesisPaths = GenesisPaths;
+
+    #[cfg(feature = "native")]
+    fn rpc_methods(storage: <C as Spec>::Storage) -> jsonrpsee::RpcModule<()> {
+        get_rpc_methods::<C, Da>(storage)
+    }
+
+    #[cfg(feature = "native")]
+    fn genesis_config(
+        genesis_paths: &Self::GenesisPaths,
+    ) -> Result<Self::GenesisConfig, anyhow::Error> {
+        crate::genesis_config::get_genesis_config(genesis_paths)
+    }
 }
 
 impl<C: Context, Da: DaSpec> BlobSelector<Da> for Runtime<C, Da> {

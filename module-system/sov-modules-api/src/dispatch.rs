@@ -16,9 +16,9 @@ pub trait Genesis {
 }
 
 /// A trait that needs to be implemented for any call message.
-pub trait DispatchCall {
+pub trait DispatchCall: Send + Sync {
     type Context: Context;
-    type Decodable;
+    type Decodable: Send + Sync;
 
     /// Decodes serialized call message
     fn decode_call(serialized_message: &[u8]) -> Result<Self::Decodable, std::io::Error>;

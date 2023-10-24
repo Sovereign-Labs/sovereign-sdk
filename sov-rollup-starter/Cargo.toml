@@ -18,9 +18,11 @@ sov-accounts = { path = "../module-system/module-implementations/sov-accounts", 
 sov-bank = { path = "../module-system/module-implementations/sov-bank", features = ["native"] }
 sov-ledger-rpc = { path = "../full-node/sov-ledger-rpc", features = ["server"] }
 sov-sequencer-registry = { path = "../module-system/module-implementations/sov-sequencer-registry", features = ["native"] }
+sov-cli = { path = "../module-system/sov-cli", optional = true }
 sov-modules-rollup-template = { path = "../module-system/sov-modules-rollup-template" }
 sov-modules-stf-template = { path = "../module-system/sov-modules-stf-template/", features = ["native"] }
 sov-stf-runner = { path = "../full-node/sov-stf-runner", features = ["native"] }
+
 async-trait = { workspace = true }
 borsh = { workspace = true }
 clap = { workspace = true }
@@ -55,5 +57,5 @@ name = "node"
 path = "src/bin/node.rs"
 
 [[bin]]
-name = "cli_wallet"
-path = "src/bin/cli_wallet.rs"
+name = "starter-cli-wallet"
+path = "src/bin/starter_cli_wallet.rs"

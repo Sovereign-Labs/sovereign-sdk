@@ -35,8 +35,9 @@ use sov_rollup_interface::maybestd::vec::Vec;
 pub use crate::schema::Schema;
 use crate::schema::{ColumnFamilyName, KeyCodec, ValueCodec};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(not(feature = "std"), allow(dead_code))]
+#[cfg_attr(feature = "arbitrary", derive(proptest_derive::Arbitrary))]
 enum WriteOp {
     Value { key: Vec<u8>, value: Vec<u8> },
     Deletion { key: Vec<u8> },
@@ -108,6 +109,29 @@ impl SchemaBatch {
             .push(WriteOp::Deletion { key });
 
         Ok(())
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl proptest::arbitrary::Arbitrary for SchemaBatch {
+    type Parameters = &'static [ColumnFamilyName];
+    type Strategy = proptest::strategy::BoxedStrategy<Self>;
+
+    fn arbitrary_with(columns: Self::Parameters) -> Self::Strategy {
+        use proptest::prelude::any;
+        use proptest::strategy::Strategy;
+
+        proptest::collection::vec(any::<Vec<WriteOp>>(), columns.len())
+            .prop_map::<SchemaBatch, _>(|vec_vec_write_ops| {
+                let mut rows = HashMap::new();
+                for (col, write_ops) in columns.iter().zip(vec_vec_write_ops.into_iter()) {
+                    rows.insert(*col, write_ops);
+                }
+                SchemaBatch {
+                    rows: Mutex::new(rows),
+                }
+            })
+            .boxed()
     }
 }
 

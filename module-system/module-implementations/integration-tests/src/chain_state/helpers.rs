@@ -114,6 +114,18 @@ where
 
 impl<C: Context, Da: DaSpec> Runtime<C, Da> for TestRuntime<C, Da> {
     type GenesisConfig = GenesisConfig<C, Da>;
+
+    fn rpc_methods(_storage: <C as Spec>::Storage) -> jsonrpsee::RpcModule<()> {
+        todo!()
+    }
+
+    type GenesisPaths = ();
+
+    fn genesis_config(
+        _genesis_paths: &Self::GenesisPaths,
+    ) -> Result<Self::GenesisConfig, anyhow::Error> {
+        todo!()
+    }
 }
 
 pub(crate) fn create_chain_state_genesis_config<C: Context, Da: DaSpec>(

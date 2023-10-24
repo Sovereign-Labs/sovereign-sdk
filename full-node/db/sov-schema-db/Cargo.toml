@@ -13,10 +13,12 @@ repository = { workspace = true }
 readme = "README.md"
 
 [dependencies]
-# External dependencies 
+# External dependencies
 anyhow = { workspace = true }
 once_cell = { workspace = true, optional = true, default-features = true }
 prometheus = { workspace = true, optional = true }
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
 rocksdb = { workspace = true, optional = true }
 tracing = { workspace = true }
 thiserror = { workspace = true, optional = true }
@@ -29,6 +31,7 @@ tempfile = { workspace = true }
 
 [features]
 default = ["std"]
+arbitrary = ["dep:proptest", "dep:proptest-derive"]
 std = [
     "anyhow/default",
     "once_cell",
