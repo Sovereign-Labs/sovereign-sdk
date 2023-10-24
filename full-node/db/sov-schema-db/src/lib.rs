@@ -158,29 +158,30 @@ pub enum CodecError {
 }
 
 #[cfg(not(feature = "std"))]
-impl core::fmt::Display for CodecError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
+mod no_std {
+    use super::*;
 
-#[cfg(not(feature = "std"))]
-impl From<CodecError> for anyhow::Error {
-    fn from(e: CodecError) -> Self {
-        anyhow::Error::msg(e)
+    impl core::fmt::Display for CodecError {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            write!(f, "{:?}", self)
+        }
     }
-}
 
-#[cfg(not(feature = "std"))]
-impl From<anyhow::Error> for CodecError {
-    fn from(e: anyhow::Error) -> Self {
-        CodecError::Wrapped(e)
+    impl From<CodecError> for anyhow::Error {
+        fn from(e: CodecError) -> Self {
+            anyhow::Error::msg(e)
+        }
     }
-}
 
-#[cfg(not(feature = "std"))]
-impl From<io::Error> for CodecError {
-    fn from(e: io::Error) -> Self {
-        CodecError::Io(e)
+    impl From<anyhow::Error> for CodecError {
+        fn from(e: anyhow::Error) -> Self {
+            CodecError::Wrapped(e)
+        }
+    }
+
+    impl From<io::Error> for CodecError {
+        fn from(e: io::Error) -> Self {
+            CodecError::Io(e)
+        }
     }
 }

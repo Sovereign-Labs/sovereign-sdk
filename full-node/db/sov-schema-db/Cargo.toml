@@ -31,7 +31,11 @@ tempfile = { workspace = true }
 
 [features]
 default = ["std"]
-arbitrary = ["dep:proptest", "dep:proptest-derive"]
+arbitrary = [
+    "dep:proptest",
+    "dep:proptest-derive",
+    "std"
+]
 std = [
     "anyhow/default",
     "once_cell",
