@@ -5,9 +5,7 @@
 
 //! A type-safe interface over [`DB`](crate::DB) column families.
 
-use core::fmt::Debug;
-
-use sov_rollup_interface::maybestd::vec::Vec;
+use std::fmt::Debug;
 
 use crate::CodecError;
 

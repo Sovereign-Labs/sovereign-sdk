@@ -78,19 +78,6 @@ impl crate::zk::Zkvm for MockZkvm {
         Ok(proof.log)
     }
 
-    #[cfg(feature = "std")]
-    fn verify_and_extract_output<
-        Add: crate::RollupAddress,
-        Da: crate::da::DaSpec,
-        Root: Serialize + serde::de::DeserializeOwned,
-    >(
-        serialized_proof: &[u8],
-        code_commitment: &Self::CodeCommitment,
-    ) -> Result<crate::zk::StateTransition<Da, Add, Root>, Self::Error> {
-        let output = Self::verify(serialized_proof, code_commitment)?;
-        Ok(bincode::deserialize(output)?)
-    }
-
     fn verify_and_extract_output<
         Add: crate::RollupAddress,
         Da: crate::da::DaSpec,
@@ -106,6 +93,7 @@ impl crate::zk::Zkvm for MockZkvm {
             todo!("the current version of bincode doesn't support no-std; however, the next version is scheduled to")
         }
     }
+}
 
 #[test]
 fn test_mock_proof_roundtrip() {

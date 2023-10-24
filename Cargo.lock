@@ -8891,7 +8891,6 @@ dependencies = [
  "proptest",
  "proptest-derive",
  "rocksdb",
- "sov-rollup-interface",
  "tempfile",
  "thiserror",
  "tracing",

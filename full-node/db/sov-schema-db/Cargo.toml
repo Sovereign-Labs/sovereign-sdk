@@ -15,41 +15,18 @@ readme = "README.md"
 [dependencies]
 # External dependencies
 anyhow = { workspace = true }
-once_cell = { workspace = true, optional = true, default-features = true }
-prometheus = { workspace = true, optional = true }
+once_cell = { workspace = true }
+prometheus = { workspace = true }
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
-rocksdb = { workspace = true, optional = true }
+rocksdb = { workspace = true }
 tracing = { workspace = true }
-thiserror = { workspace = true, optional = true }
-
-sov-rollup-interface = { path = "../../../rollup-interface", default-features = false }
+thiserror = { workspace = true }
 
 [dev-dependencies]
-byteorder = { workspace = true, default-features = true }
+byteorder = { workspace = true }
 tempfile = { workspace = true }
 
 [features]
-default = ["std"]
-arbitrary = [
-    "dep:proptest",
-    "dep:proptest-derive",
-    "std"
-]
-std = [
-    "anyhow/default",
-    "once_cell",
-    "prometheus",
-    "rocksdb",
-    "sov-rollup-interface/default",
-    "thiserror",
-    "tracing/default",
-]
-
-[[test]]
-name = "db_test"
-required-features = ["std"]
-
-[[test]]
-name = "iterator_test"
-required-features = ["std"]
+default = []
+arbitrary = ["dep:proptest", "dep:proptest-derive"]

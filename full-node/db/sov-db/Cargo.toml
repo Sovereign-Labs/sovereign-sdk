@@ -20,17 +20,17 @@ sov-schema-db = { path = "../sov-schema-db", version = "0.3" }
 sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3", features = ["native", "mocks", "tokio"] }
 
 # External
-anyhow = { workspace = true }
+anyhow = { workspace = true, default-features = true }
 arbitrary = { workspace = true, optional = true }
-bincode = { workspace = true, optional = true }
-byteorder = { workspace = true }
-borsh = { workspace = true }
-proptest = { workspace = true, optional = true }
+byteorder = { workspace = true, default-features = true }
+borsh = { workspace = true, default-features = true }
+proptest = { workspace = true, optional = true, default-features = true }
 proptest-derive = { workspace = true, optional = true }
-rocksdb = { workspace = true, optional = true }
-serde = { workspace = true }
+serde = { workspace = true, default-features = true }
 tempfile = { workspace = true, optional = true }
-tokio = { workspace = true, optional = true }
+rocksdb = { workspace = true }
+bincode = { workspace = true }
+tokio = { workspace = true }
 
 
 [dev-dependencies]
@@ -38,23 +38,9 @@ tempfile = { workspace = true }
 
 
 [features]
-default = ["std", "tokio"]
 arbitrary = [
     "dep:arbitrary",
     "dep:proptest",
     "dep:proptest-derive",
-    "dep:tempfile",
-    "std"
+    "dep:tempfile"
 ]
-std = [
-    "anyhow/default",
-    "bincode",
-    "byteorder/default",
-    "borsh/default",
-    "proptest?/default",
-    "rocksdb",
-    "serde/default",
-    "sov-schema-db/default",
-    "sov-rollup-interface/default",
-]
-tokio = ["dep:tokio", "std"]
