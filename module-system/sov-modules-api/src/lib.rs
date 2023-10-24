@@ -305,6 +305,9 @@ pub trait Module {
     /// Module defined argument to the call method.
     type CallMessage: Debug + BorshSerialize + BorshDeserialize;
 
+    /// Module defined event resulting from a call method.
+    type Event: Debug + BorshSerialize + BorshDeserialize;
+
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(
         &self,

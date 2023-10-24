@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::io::Cursor;
 
-use anyhow::bail;
+use anyhow::{bail, Context as ErrorContext};
 use borsh::BorshDeserialize;
 use sov_modules_api::digest::Digest;
 use sov_modules_api::transaction::Transaction;
@@ -9,17 +9,54 @@ use sov_modules_api::{Context, DispatchCall, PublicKey, Spec, WorkingSet};
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use tracing::{info, warn};
 
+/// Transaction stored in the mempool.
+pub struct PooledTransaction<C: Context, R: DispatchCall<Context = C>> {
+    /// Raw transaction bytes.
+    raw: Vec<u8>,
+    /// Deserialized transaction.
+    tx: Transaction<C>,
+    /// The decoded runtime message, cached during initial verification.
+    msg: Option<R::Decodable>,
+}
+
+impl<C, R> std::fmt::Debug for PooledTransaction<C, R>
+where
+    C: Context,
+    R: DispatchCall<Context = C>,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PooledTransaction")
+            .field("raw", &hex::encode(&self.raw))
+            .field("tx", &self.tx)
+            .finish()
+    }
+}
+
+impl<C, R> PooledTransaction<C, R>
+where
+    C: Context,
+    R: DispatchCall<Context = C>,
+{
+    fn calculate_hash(&self) -> [u8; 32] {
+        <C as Spec>::Hasher::digest(&self.raw[..]).into()
+    }
+}
+
 /// BatchBuilder that creates batches of transactions in the order they were submitted
 /// Only transactions that were successfully dispatched are included.
-pub struct FiFoStrictBatchBuilder<R, C: Context> {
-    mempool: VecDeque<Vec<u8>>,
+pub struct FiFoStrictBatchBuilder<C: Context, R: DispatchCall<Context = C>> {
+    mempool: VecDeque<PooledTransaction<C, R>>,
     mempool_max_txs_count: usize,
     runtime: R,
     max_batch_size_bytes: usize,
     current_storage: C::Storage,
 }
 
-impl<R, C: Context> FiFoStrictBatchBuilder<R, C> {
+impl<C, R> FiFoStrictBatchBuilder<C, R>
+where
+    C: Context,
+    R: DispatchCall<Context = C>,
+{
     /// BatchBuilder constructor.
     pub fn new(
         max_batch_size_bytes: usize,
@@ -37,16 +74,46 @@ impl<R, C: Context> FiFoStrictBatchBuilder<R, C> {
     }
 }
 
-impl<R, C: Context> BatchBuilder for FiFoStrictBatchBuilder<R, C>
+impl<C, R> BatchBuilder for FiFoStrictBatchBuilder<C, R>
 where
+    C: Context,
     R: DispatchCall<Context = C>,
 {
-    /// Transaction can only be declined only mempool is full
-    fn accept_tx(&mut self, tx: Vec<u8>) -> anyhow::Result<()> {
+    /// Attempt to add transaction to the mempool.
+    ///
+    /// The transaction is discarded if:
+    /// - mempool is full
+    /// - transaction is invalid (deserialization, verification or decoding of the runtime message failed)
+    fn accept_tx(&mut self, raw: Vec<u8>) -> anyhow::Result<()> {
         if self.mempool.len() >= self.mempool_max_txs_count {
             bail!("Mempool is full")
         }
-        self.mempool.push_back(tx);
+
+        if raw.len() > self.max_batch_size_bytes {
+            bail!(
+                "Transaction too big. Max allowed size: {}",
+                self.max_batch_size_bytes
+            )
+        }
+
+        // Deserialize
+        let mut data = Cursor::new(&raw);
+        let tx = Transaction::<C>::deserialize_reader(&mut data)
+            .context("Failed to deserialize transaction")?;
+
+        // Verify
+        tx.verify().context("Failed to verify transaction")?;
+
+        // Decode
+        let msg = R::decode_call(tx.runtime_msg())
+            .map_err(anyhow::Error::new)
+            .context("Failed to decode message in transaction")?;
+
+        self.mempool.push_back(PooledTransaction {
+            raw,
+            tx,
+            msg: Some(msg),
+        });
         Ok(())
     }
 
@@ -55,78 +122,46 @@ where
     fn get_next_blob(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
         let mut working_set = WorkingSet::new(self.current_storage.clone());
         let mut txs = Vec::new();
-        let mut dismissed: Vec<(Vec<u8>, anyhow::Error)> = Vec::new();
         let mut current_batch_size = 0;
 
-        while let Some(raw_tx) = self.mempool.pop_front() {
-            let tx_len = raw_tx.len();
-
-            // Deserialize
-            let mut data = Cursor::new(&raw_tx);
-            let tx = match Transaction::<C>::deserialize_reader(&mut data) {
-                Ok(tx) => tx,
-                Err(err) => {
-                    let err = anyhow::Error::new(err).context("Failed to deserialize transaction");
-                    dismissed.push((raw_tx, err));
-                    continue;
-                }
-            };
-
-            // Verify
-            if let Err(err) = tx.verify() {
-                dismissed.push((raw_tx, err));
-                continue;
-            }
-
-            // Decode
-            let msg = match R::decode_call(tx.runtime_msg()) {
-                Ok(msg) => msg,
-                Err(err) => {
-                    let err =
-                        anyhow::Error::new(err).context("Failed to decode message in transaction");
-                    dismissed.push((raw_tx, err));
-                    continue;
-                }
-            };
+        while let Some(mut pooled) = self.mempool.pop_front() {
+            // Take the decoded runtime message cached upon accepting transaction
+            // into the pool or attempt to decode the message again if
+            // the transaction was previously executed,
+            // but discarded from the batch due to the batch size.
+            let msg = pooled.msg.take().unwrap_or_else(||
+                    // SAFETY: The transaction was accepted into the pool,
+                    // so we know that the runtime message is valid. 
+                    R::decode_call(pooled.tx.runtime_msg()).expect("noop; qed"));
 
             // Execute
             {
                 // TODO: Bug(!), because potential discrepancy. Should be resolved by https://github.com/Sovereign-Labs/sovereign-sdk/issues/434
-                let sender_address: C::Address = tx.pub_key().to_address();
+                let sender_address: C::Address = pooled.tx.pub_key().to_address();
                 let ctx = C::new(sender_address);
 
-                //
-                match self.runtime.dispatch_call(msg, &mut working_set, &ctx) {
-                    Ok(_) => (),
-                    Err(err) => {
-                        let err = anyhow::Error::new(err)
-                            .context("Transaction dispatch returned an error");
-                        dismissed.push((raw_tx, err));
-                        continue;
-                    }
+                if let Err(error) = self.runtime.dispatch_call(msg, &mut working_set, &ctx) {
+                    warn!(%error, tx = hex::encode(&pooled.raw), "Error during transaction dispatch");
+                    continue;
                 }
             }
 
-            // In order to fill batch as big as possible,
-            // we only check if valid tx can fit in the batch.
-            if current_batch_size + tx_len <= self.max_batch_size_bytes {
-                let tx_hash: [u8; 32] = <C as Spec>::Hasher::digest(&raw_tx[..]).into();
-                info!(
-                    "Tx with hash 0x{} has been included in the batch",
-                    hex::encode(tx_hash)
-                );
-                txs.push(raw_tx);
-            } else {
-                self.mempool.push_front(raw_tx);
+            // In order to fill batch as big as possible, we only check if valid tx can fit in the batch.
+            let tx_len = pooled.raw.len();
+            if current_batch_size + tx_len > self.max_batch_size_bytes {
+                self.mempool.push_front(pooled);
                 break;
             }
 
             // Update size of current batch
             current_batch_size += tx_len;
-        }
 
-        for (tx, err) in dismissed {
-            warn!("Transaction 0x{} was dismissed: {:?}", hex::encode(tx), err);
+            let tx_hash: [u8; 32] = pooled.calculate_hash();
+            info!(
+                hash = hex::encode(tx_hash),
+                "Transaction has been included in the batch",
+            );
+            txs.push(pooled.raw);
         }
 
         if txs.is_empty() {
@@ -198,7 +233,7 @@ mod tests {
         batch_size_bytes: usize,
         tmpdir: &TempDir,
     ) -> (
-        FiFoStrictBatchBuilder<TestRuntime<C>, C>,
+        FiFoStrictBatchBuilder<C, TestRuntime<C>>,
         ProverStorage<DefaultStorageSpec>,
     ) {
         let storage = ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap();
@@ -231,35 +266,37 @@ mod tests {
 
     mod accept_tx {
         use super::*;
-        #[test]
-        fn accept_random_bytes_tx() {
-            let tmpdir = tempfile::tempdir().unwrap();
-            let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
-            let tx = generate_random_bytes();
-            batch_builder.accept_tx(tx).unwrap();
-        }
-
-        #[test]
-        fn accept_signed_tx_with_invalid_payload() {
-            let tmpdir = tempfile::tempdir().unwrap();
-            let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
-            let private_key = DefaultPrivateKey::generate();
-            let tx = generate_signed_tx_with_invalid_payload(&private_key);
-            batch_builder.accept_tx(tx).unwrap();
-        }
 
         #[test]
         fn accept_valid_tx() {
-            let tmpdir = tempfile::tempdir().unwrap();
-            let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
             let tx = generate_random_valid_tx();
+
+            let tmpdir = tempfile::tempdir().unwrap();
+            let (mut batch_builder, _) = create_batch_builder(tx.len(), &tmpdir);
+
             batch_builder.accept_tx(tx).unwrap();
         }
 
         #[test]
-        fn decline_tx_on_full_mempool() {
+        fn reject_tx_too_big() {
+            let tx = generate_random_valid_tx();
+            let batch_size = tx.len().saturating_sub(1);
+
             let tmpdir = tempfile::tempdir().unwrap();
-            let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
+            let (mut batch_builder, _) = create_batch_builder(batch_size, &tmpdir);
+
+            let accept_result = batch_builder.accept_tx(tx);
+            assert!(accept_result.is_err());
+            assert_eq!(
+                format!("Transaction too big. Max allowed size: {batch_size}"),
+                accept_result.unwrap_err().to_string()
+            );
+        }
+
+        #[test]
+        fn reject_tx_on_full_mempool() {
+            let tmpdir = tempfile::tempdir().unwrap();
+            let (mut batch_builder, _) = create_batch_builder(usize::MAX, &tmpdir);
 
             for _ in 0..MAX_TX_POOL_SIZE {
                 let tx = generate_random_valid_tx();
@@ -274,14 +311,45 @@ mod tests {
         }
 
         #[test]
-        fn zero_sized_mempool_cant_accept_tx() {
+        fn reject_random_bytes_tx() {
+            let tx = generate_random_bytes();
+
             let tmpdir = tempfile::tempdir().unwrap();
-            let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
+            let (mut batch_builder, _) = create_batch_builder(tx.len(), &tmpdir);
+
+            let accept_result = batch_builder.accept_tx(tx);
+            assert!(accept_result.is_err());
+            assert!(accept_result
+                .unwrap_err()
+                .to_string()
+                .starts_with("Failed to deserialize transaction"))
+        }
+
+        #[test]
+        fn reject_signed_tx_with_invalid_payload() {
+            let private_key = DefaultPrivateKey::generate();
+            let tx = generate_signed_tx_with_invalid_payload(&private_key);
+
+            let tmpdir = tempfile::tempdir().unwrap();
+            let (mut batch_builder, _) = create_batch_builder(tx.len(), &tmpdir);
+
+            let accept_result = batch_builder.accept_tx(tx);
+            assert!(accept_result.is_err());
+            assert!(accept_result
+                .unwrap_err()
+                .to_string()
+                .starts_with("Failed to decode message"))
+        }
+
+        #[test]
+        fn zero_sized_mempool_cant_accept_tx() {
+            let tx = generate_random_valid_tx();
+
+            let tmpdir = tempfile::tempdir().unwrap();
+            let (mut batch_builder, _) = create_batch_builder(tx.len(), &tmpdir);
             batch_builder.mempool_max_txs_count = 0;
 
-            let tx = generate_random_valid_tx();
             let accept_result = batch_builder.accept_tx(tx);
-
             assert!(accept_result.is_err());
             assert_eq!("Mempool is full", accept_result.unwrap_err().to_string());
         }
@@ -338,12 +406,8 @@ mod tests {
             let txs = [
                 // Should be included: 113 bytes
                 generate_valid_tx(&value_setter_admin, 1),
-                // Should be skipped, not admin
+                // Should be rejected, not admin
                 generate_random_valid_tx(),
-                // Should be skipped, garbage
-                generate_random_bytes(),
-                // Should be skipped, signed garbage
-                generate_signed_tx_with_invalid_payload(&value_setter_admin),
                 // Should be included: 113 bytes
                 generate_valid_tx(&value_setter_admin, 2),
                 // Should be skipped, more than batch size
@@ -351,7 +415,7 @@ mod tests {
             ];
 
             let tmpdir = tempfile::tempdir().unwrap();
-            let batch_size = txs[0].len() + txs[4].len() + 1;
+            let batch_size = txs[0].len() + txs[2].len() + 1;
             let (mut batch_builder, storage) = create_batch_builder(batch_size, &tmpdir);
             setup_runtime(storage, Some(value_setter_admin.pub_key()));
 
@@ -366,8 +430,8 @@ mod tests {
             let blob = build_result.unwrap();
             assert_eq!(2, blob.len());
             assert!(blob.contains(&txs[0]));
-            assert!(blob.contains(&txs[4]));
-            assert!(!blob.contains(&txs[5]));
+            assert!(blob.contains(&txs[2]));
+            assert!(!blob.contains(&txs[3]));
             assert_eq!(1, batch_builder.mempool.len());
         }
     }

@@ -51,6 +51,8 @@ impl<C: Context> Module for AccessorySetter<C> {
 
     type CallMessage = CallMessage;
 
+    type Event = ();
+
     fn call(
         &self,
         msg: Self::CallMessage,
