@@ -118,3 +118,4 @@ Proof verification succeeded for slot 36175
 * `verify_leaves_against_bankhash` needs to updated for Non inclusion proofs using the adjacency checks `are_adjacent` and `is_first`
   * `is_last` is particularly interesting since proving that a leaf is the first leaf is trivial, but proving last leaf is more complicated since we don't have a commitment to the number of leaves in the tree (i.e. the number of accounts updated)
 * The `da_client` PDA needs to be plugged into the `simple_tcp_client` as well as the geyser plugin. This would require non inclusion proofs to work
+* Currently, the geyser plugin has a simple tcp server that does only one thing - stream account deltas and their inclusion or non-inclusion proofs. We need to replace this with a more comprehensive GRPC server
