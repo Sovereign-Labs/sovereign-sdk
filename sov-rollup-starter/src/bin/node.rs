@@ -1,7 +1,5 @@
 //! This binary runs the rollup full node.
 
-use std::path::PathBuf;
-
 use anyhow::Context;
 use clap::Parser;
 use sov_modules_rollup_template::{Rollup, RollupProverConfig, RollupTemplate};
@@ -48,7 +46,7 @@ async fn main() -> Result<(), anyhow::Error> {
 }
 
 async fn new_rollup_with_mock_da(
-    genesis_paths: &GenesisPaths<PathBuf>,
+    genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
     prover_config: Option<RollupProverConfig>,
 ) -> Result<Rollup<StarterRollup>, anyhow::Error> {

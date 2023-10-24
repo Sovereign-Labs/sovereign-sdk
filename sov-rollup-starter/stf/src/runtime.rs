@@ -4,6 +4,7 @@
 //!   1. Add a new module dependency to your `Cargo.toml` file
 //!   2. Add the module to the `Runtime` below
 //!   3. Update `genesis.json` with any additional data required by your new module
+
 #[cfg(feature = "native")]
 pub use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
@@ -19,6 +20,9 @@ use sov_rollup_interface::da::DaVerifier;
 #[cfg(feature = "native")]
 pub use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 use sov_stf_runner::verifier::StateTransitionVerifier;
+
+#[cfg(feature = "native")]
+use crate::genesis_config::GenesisPaths;
 
 /// The runtime defines the logic of the rollup.
 ///
@@ -78,8 +82,18 @@ where
     type GenesisConfig = GenesisConfig<C, Da>;
 
     #[cfg(feature = "native")]
+    type GenesisPaths = GenesisPaths;
+
+    #[cfg(feature = "native")]
     fn rpc_methods(storage: <C as Spec>::Storage) -> jsonrpsee::RpcModule<()> {
         get_rpc_methods::<C, Da>(storage.clone())
+    }
+
+    #[cfg(feature = "native")]
+    fn genesis_config(
+        genesis_paths: &Self::GenesisPaths,
+    ) -> Result<Self::GenesisConfig, anyhow::Error> {
+        crate::genesis_config::get_genesis_config(genesis_paths)
     }
 }
 

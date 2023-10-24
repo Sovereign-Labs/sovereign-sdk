@@ -35,8 +35,6 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true, optional = true }
-secp256k1 = { workspace = true, optional = true }
-
 
 tokio = { workspace = true }
 reth-primitives = { workspace = true, optional = true }
@@ -49,6 +47,7 @@ sov-risc0-adapter = { path = "../../adapters/risc0", features = ["native"] }
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 sov-cli = { path = "../../module-system/sov-cli" }
 clap = { workspace = true }
+secp256k1 = { workspace = true, optional = true }
 
 [dev-dependencies]
 sov-rng-da-service = { path = "../../utils/rng-da-service" }
@@ -87,7 +86,7 @@ regex = "1.10"
 [features]
 default = [
 ] # Deviate from convention by making the "native" feature active by default. This aligns with how this package is meant to be used (as a binary first, library second).
-experimental = ["default", "sov-ethereum/experimental", "reth-primitives", "secp256k1", "demo-stf/experimental", "sov-ethereum/local"]
+experimental = ["default", "sov-ethereum/experimental", "reth-primitives", "demo-stf/experimental", "sov-ethereum/local", "secp256k1"]
 
 bench = ["hex", "sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "risc0/bench"]
 offchain = ["demo-stf/offchain"]

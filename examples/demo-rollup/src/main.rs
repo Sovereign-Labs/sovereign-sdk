@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::Context as _;
@@ -66,7 +65,7 @@ async fn main() -> Result<(), anyhow::Error> {
 }
 
 async fn new_rollup_with_celestia_da(
-    genesis_paths: &GenesisPaths<PathBuf>,
+    genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
     prover_config: Option<RollupProverConfig>,
 ) -> Result<Rollup<CelestiaDemoRollup>, anyhow::Error> {
@@ -85,7 +84,7 @@ async fn new_rollup_with_celestia_da(
 }
 
 async fn new_rollup_with_mock_da(
-    genesis_paths: &GenesisPaths<PathBuf>,
+    genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
     prover_config: Option<RollupProverConfig>,
 ) -> Result<Rollup<MockDemoRollup>, anyhow::Error> {

@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use anyhow::Context as _;
-use secp256k1::SecretKey;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_ethereum::experimental::EthRpcConfig;
 use sov_ethereum::GasPriceOracleConfig;
@@ -23,14 +22,6 @@ fn read_sov_tx_signer_priv_key() -> Result<DefaultPrivateKey, anyhow::Error> {
     Ok(key_and_address.private_key)
 }
 
-// TODO: #840
-pub(crate) fn read_eth_tx_signers() -> sov_ethereum::DevSigner {
-    sov_ethereum::DevSigner::new(vec![SecretKey::from_str(
-        "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-    )
-    .unwrap()])
-}
-
 // register ethereum methods.
 pub(crate) fn register_ethereum<Da: DaService>(
     da_service: Da,
@@ -38,7 +29,7 @@ pub(crate) fn register_ethereum<Da: DaService>(
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error> {
     let eth_rpc_config = {
-        let eth_signer = read_eth_tx_signers();
+        let eth_signer = eth_dev_signer();
         EthRpcConfig::<DefaultContext> {
             min_blob_size: Some(1),
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
@@ -52,4 +43,12 @@ pub(crate) fn register_ethereum<Da: DaService>(
     methods
         .merge(ethereum_rpc)
         .context("Failed to merge Ethereum RPC modules")
+}
+
+// TODO: #840
+fn eth_dev_signer() -> sov_ethereum::DevSigner {
+    sov_ethereum::DevSigner::new(vec![secp256k1::SecretKey::from_str(
+        "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+    )
+    .unwrap()])
 }

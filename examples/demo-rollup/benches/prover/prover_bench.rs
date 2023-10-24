@@ -3,18 +3,16 @@ use std::env;
 use std::fs::{read_to_string, remove_file, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
-use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
+use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
 use demo_stf::runtime::Runtime;
 use log4rs::config::{Appender, Config, Root};
 use regex::Regex;
 use risc0::ROLLUP_ELF;
 use sov_celestia_adapter::types::{FilteredCelestiaBlock, Namespace};
-use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::{CelestiaSpec, RollupParams};
 use sov_celestia_adapter::CelestiaService;
 use sov_modules_api::default_context::DefaultContext;
@@ -182,14 +180,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let mut demo = new_app::<Risc0Host, CelestiaSpec>(storage_config);
 
-    let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
-
-    let genesis_config = get_genesis_config(
-        sequencer_da_address,
-        &GenesisPaths::from_dir("../test-data/genesis/demo-tests"),
-        #[cfg(feature = "experimental")]
-        Default::default(),
-    );
+    let genesis_config =
+        get_genesis_config(&GenesisPaths::from_dir("../test-data/genesis/demo-tests")).unwrap();
     println!("Starting from empty storage, initialization chain");
     let mut prev_state_root = demo.init_chain(genesis_config);
 
