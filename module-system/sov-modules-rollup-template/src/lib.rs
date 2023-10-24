@@ -12,8 +12,10 @@ use sov_modules_api::{Context, DaSpec, Spec};
 use sov_modules_stf_template::{AppTemplate, Runtime as RuntimeTrait};
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::state::StateManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage::NativeStorage;
+use sov_state::Storage;
 use sov_stf_runner::verifier::StateTransitionVerifier;
 use sov_stf_runner::{ProofGenConfig, Prover, RollupConfig, StateTransitionRunner};
 use tokio::sync::oneshot;
@@ -36,6 +38,13 @@ pub trait RollupTemplate: Sized + Send + Sync {
     type ZkContext: Context;
     /// Context for Native environment.
     type NativeContext: Context;
+
+    /// Manager of the state
+    type StateManager: StateManager<
+        NativeState = <Self::NativeContext as Spec>::Storage,
+        NativeChangeSet = <<Self::NativeContext as Spec>::Storage as Storage>::StateUpdate,
+        ZkState = <Self::ZkContext as Spec>::Storage,
+    >;
 
     /// Runtime for Zero Knowledge environment.
     type ZkRuntime: RuntimeTrait<Self::ZkContext, Self::DaSpec> + Default;
@@ -69,17 +78,11 @@ pub trait RollupTemplate: Sized + Send + Sync {
         rollup_config: &RollupConfig<Self::DaConfig>,
     ) -> Self::DaService;
 
-    /// Creates instance of ZK storage.
-    fn create_zk_storage(
-        &self,
-        rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> <Self::ZkContext as Spec>::Storage;
-
     /// Creates instance of Native storage.
-    fn create_native_storage(
+    fn create_state_manager(
         &self,
         rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> Result<<Self::NativeContext as Spec>::Storage, anyhow::Error>;
+    ) -> Result<Self::StateManager, anyhow::Error>;
 
     /// Creates instance of ZkVm.
     fn create_vm(&self) -> Self::Vm;
@@ -106,31 +109,28 @@ pub trait RollupTemplate: Sized + Send + Sync {
         let ledger_db = self.create_ledger_db(&rollup_config);
         let genesis_config = self.create_genesis_config(genesis_paths, &rollup_config)?;
 
-        let prover = prover_config.map(|pc| {
-            configure_prover(
-                self.create_vm(),
-                pc,
-                self.create_verifier(),
-                self.create_zk_storage(&rollup_config),
-            )
-        });
+        let prover =
+            prover_config.map(|pc| configure_prover(self.create_vm(), pc, self.create_verifier()));
 
-        let storage = self.create_native_storage(&rollup_config)?;
+        // let storage = self.create_state_manager(&rollup_config)?;
+        let state_manager = self.create_state_manager(&rollup_config)?;
+        let state = state_manager.get_native_state();
 
         let prev_root = ledger_db
             .get_head_slot()?
-            .map(|(number, _)| storage.get_root_hash(number.0))
+            .map(|(number, _)| state.get_root_hash(number.0))
             .transpose()?;
 
-        let rpc_methods = self.create_rpc_methods(&storage, &ledger_db, &da_service)?;
+        let rpc_methods = self.create_rpc_methods(&state, &ledger_db, &da_service)?;
 
-        let native_stf = AppTemplate::new(storage);
+        let native_stf = AppTemplate::new();
 
         let runner = StateTransitionRunner::new(
             rollup_config.runner,
             da_service,
             ledger_db,
             native_stf,
+            state_manager,
             prev_root,
             genesis_config,
             prover,
@@ -159,6 +159,7 @@ pub struct Rollup<S: RollupTemplate> {
     #[allow(clippy::type_complexity)]
     pub runner: StateTransitionRunner<
         AppTemplate<S::NativeContext, S::DaSpec, S::Vm, S::NativeRuntime>,
+        S::StateManager,
         S::DaService,
         S::Vm,
         AppTemplate<S::ZkContext, S::DaSpec, <S::Vm as ZkvmHost>::Guest, S::ZkRuntime>,
@@ -203,9 +204,8 @@ fn configure_prover<
     vm: Vm,
     cfg: RollupProverConfig,
     da_verifier: Da::Verifier,
-    zk_storage: <ZkContext as Spec>::Storage,
 ) -> ZkProver<ZkContext, Vm, RT, Da> {
-    let app = AppTemplate::new(zk_storage);
+    let app = AppTemplate::new();
     let app_verifier = AppVerifier::<_, _, ZkContext, RT>::new(app, da_verifier);
 
     let config = match cfg {

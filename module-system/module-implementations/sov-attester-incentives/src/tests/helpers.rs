@@ -8,8 +8,8 @@ use sov_rollup_interface::mocks::{
     MockBlock, MockBlockHeader, MockCodeCommitment, MockDaSpec, MockValidityCond,
     MockValidityCondChecker, MockZkvm,
 };
-use sov_state::storage::{NativeStorage, StorageProof};
-use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
+use sov_state::storage::{NativeStorage, Storage, StorageProof};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
 use crate::AttesterIncentives;
 

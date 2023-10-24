@@ -48,12 +48,12 @@ mod test {
         {
             for test in tests.clone() {
                 let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
-                let mut storage: WorkingSet<DefaultContext> =
+                let mut working_set: WorkingSet<DefaultContext> =
                     WorkingSet::new(prover_storage.clone());
                 assert_eq!(prover_storage.db().get_next_version(), test.version);
 
-                storage.set(&test.key, test.value.clone());
-                let (cache, witness) = storage.checkpoint().freeze();
+                working_set.set(&test.key, test.value.clone());
+                let (cache, witness) = working_set.checkpoint().freeze();
                 prover_storage
                     .validate_and_commit(cache, &witness)
                     .expect("storage is valid");

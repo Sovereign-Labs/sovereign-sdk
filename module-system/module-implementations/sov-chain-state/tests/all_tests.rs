@@ -4,7 +4,10 @@ use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::{Genesis, WorkingSet};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockDaSpec, MockValidityCond};
-use sov_state::{ProverStorage, Storage};
+use sov_rollup_interface::state::StateManager;
+use sov_state::config::Config;
+use sov_state::state_manager::SovStateManager;
+use sov_state::{DefaultStorageSpec, Storage};
 
 /// This simply tests that the chain_state reacts properly with the invocation of the `begin_slot`
 /// hook. For more complete integration tests, feel free to have a look at the integration tests folder.
@@ -15,8 +18,12 @@ fn test_simple_chain_state() {
     // Initialize the module.
     let tmpdir = tempfile::tempdir().unwrap();
 
-    let storage: ProverStorage<sov_state::DefaultStorageSpec> =
-        ProverStorage::with_path(tmpdir.path()).unwrap();
+    let state_manager: SovStateManager<DefaultStorageSpec> = SovStateManager::new(Config {
+        path: tmpdir.path().to_path_buf(),
+    })
+    .unwrap();
+
+    let storage = state_manager.get_native_state();
 
     let mut working_set = WorkingSet::new(storage.clone());
 

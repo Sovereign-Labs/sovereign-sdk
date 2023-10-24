@@ -8,7 +8,8 @@ use sov_modules_rollup_template::RollupTemplate;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::mocks::{MockDaConfig, MockDaService, MockDaSpec};
 use sov_rollup_interface::services::da::DaService;
-use sov_state::{ProverStorage, Storage, ZkStorage};
+use sov_state::state_manager::SovStateManager;
+use sov_state::DefaultStorageSpec;
 use sov_stf_runner::RollupConfig;
 
 /// Rollup with MockDa
@@ -18,47 +19,15 @@ pub struct MockDemoRollup {}
 impl RollupTemplate for MockDemoRollup {
     type DaService = MockDaService;
     type Vm = Risc0Host<'static>;
+    type GenesisPaths = GenesisPaths<PathBuf>;
 
     type ZkContext = ZkDefaultContext;
     type NativeContext = DefaultContext;
 
+    type StateManager = SovStateManager<DefaultStorageSpec>;
+
     type ZkRuntime = Runtime<Self::ZkContext, Self::DaSpec>;
     type NativeRuntime = Runtime<Self::NativeContext, Self::DaSpec>;
-
-    type DaSpec = MockDaSpec;
-    type DaConfig = MockDaConfig;
-
-    async fn create_da_service(
-        &self,
-        rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> Self::DaService {
-        MockDaService::new(rollup_config.da.sender_address)
-    }
-
-    fn create_vm(&self) -> Self::Vm {
-        Risc0Host::new(risc0::MOCK_DA_ELF)
-    }
-
-    fn create_zk_storage(
-        &self,
-        _rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> <Self::ZkContext as Spec>::Storage {
-        ZkStorage::new()
-    }
-
-    fn create_verifier(&self) -> <Self::DaService as DaService>::Verifier {
-        Default::default()
-    }
-
-    fn create_native_storage(
-        &self,
-        rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> Result<<Self::NativeContext as sov_modules_api::Spec>::Storage, anyhow::Error> {
-        let storage_config = StorageConfig {
-            path: rollup_config.storage.path.clone(),
-        };
-        ProverStorage::with_config(storage_config)
-    }
 
     fn create_rpc_methods(
         &self,
@@ -81,5 +50,30 @@ impl RollupTemplate for MockDemoRollup {
         )?;
 
         Ok(rpc_methods)
+    }
+
+    async fn create_da_service(
+        &self,
+        rollup_config: &RollupConfig<Self::DaConfig>,
+    ) -> Self::DaService {
+        MockDaService::new(rollup_config.da.sender_address)
+    }
+
+    fn create_state_manager(
+        &self,
+        rollup_config: &RollupConfig<Self::DaConfig>,
+    ) -> anyhow::Result<Self::StateManager> {
+        let storage_config = StorageConfig {
+            path: rollup_config.storage.path.clone(),
+        };
+        SovStateManager::new(storage_config)
+    }
+
+    fn create_vm(&self) -> Self::Vm {
+        Risc0Host::new(risc0::MOCK_DA_ELF)
+    }
+
+    fn create_verifier(&self) -> <Self::DaService as DaService>::Verifier {
+        Default::default()
     }
 }

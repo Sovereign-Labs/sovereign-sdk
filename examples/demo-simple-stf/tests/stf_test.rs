@@ -9,7 +9,7 @@ fn test_stf_success() {
     let address = MockAddress { addr: [1; 32] };
 
     let stf = &mut CheckHashPreimageStf::<MockValidityCond>::default();
-    StateTransitionFunction::<MockZkvm, MockDaSpec>::init_chain(stf, ());
+    StateTransitionFunction::<MockZkvm, MockDaSpec>::init_chain(stf, (), ());
 
     let mut blobs = {
         let incorrect_preimage = vec![1; 32];
@@ -24,6 +24,7 @@ fn test_stf_success() {
     let result = StateTransitionFunction::<MockZkvm, MockDaSpec>::apply_slot(
         stf,
         &[],
+        (),
         (),
         &MockBlockHeader::default(),
         &MockValidityCond::default(),

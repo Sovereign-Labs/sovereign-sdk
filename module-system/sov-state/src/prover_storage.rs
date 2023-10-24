@@ -6,6 +6,7 @@ use jmt::storage::{NodeBatch, TreeWriter};
 use jmt::{JellyfishMerkleTree, KeyHash, Version};
 use sov_db::native_db::NativeDB;
 use sov_db::state_db::StateDB;
+use sov_first_read_last_write_cache::CacheKey;
 
 use crate::config::Config;
 use crate::internal_cache::OrderedReadsAndWrites;
@@ -45,7 +46,16 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         })
     }
 
+    pub(crate) fn with_db_handles(db: StateDB, native_db: NativeDB) -> Self {
+        Self {
+            db,
+            native_db,
+            _phantom_hasher: Default::default(),
+        }
+    }
+
     /// Returns the underlying [`StateDB`] instance.
+    /// TODO: Remove this
     pub fn db(&self) -> &StateDB {
         &self.db
     }
@@ -62,12 +72,18 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
     }
 }
 
+pub struct ProverStateUpdate {
+    pub(crate) node_batch: NodeBatch,
+    pub key_preimages: Vec<(KeyHash, CacheKey)>,
+    // pub accessory_update: OrderedReadsAndWrites,
+}
+
 impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     type Witness = S::Witness;
     type RuntimeConfig = Config;
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
     type Root = jmt::RootHash;
-    type StateUpdate = NodeBatch;
+    type StateUpdate = ProverStateUpdate;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Self::with_path(config.path.as_path())
@@ -96,6 +112,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         let jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&self.db);
 
         // Handle empty jmt
+        // TODO: Fix this!
         if jmt.get_root_hash_option(latest_version)?.is_none() {
             assert_eq!(latest_version, 0);
             let empty_batch = Vec::default().into_iter();
@@ -123,15 +140,15 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             witness.add_hint(proof);
         }
 
+        let mut key_preimages = Vec::with_capacity(state_accesses.ordered_writes.len());
+
         // Compute the jmt update from the write batch
         let batch = state_accesses
             .ordered_writes
             .into_iter()
             .map(|(key, value)| {
                 let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
-                self.db
-                    .put_preimage(key_hash, key.key.as_ref())
-                    .expect("preimage must succeed");
+                key_preimages.push((key_hash, key));
                 (
                     key_hash,
                     value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
@@ -147,12 +164,24 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         witness.add_hint(update_proof);
         witness.add_hint(new_root.0);
 
-        Ok((new_root, tree_update.node_batch))
+        let state_update = ProverStateUpdate {
+            node_batch: tree_update.node_batch,
+            key_preimages,
+        };
+
+        Ok((new_root, state_update))
     }
 
-    fn commit(&self, node_batch: &Self::StateUpdate, accessory_writes: &OrderedReadsAndWrites) {
+    fn commit(&self, state_update: &Self::StateUpdate, accessory_writes: &OrderedReadsAndWrites) {
+        for (key_hash, key) in state_update.key_preimages.iter() {
+            // Clone should be cheap
+            self.db
+                .put_preimage(*key_hash, key.key.as_ref())
+                .expect("preimage must succeed");
+        }
+
         self.db
-            .write_node_batch(node_batch)
+            .write_node_batch(&state_update.node_batch)
             .expect("db write must succeed");
 
         self.native_db

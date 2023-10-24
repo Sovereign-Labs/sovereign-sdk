@@ -12,22 +12,12 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_stf_template::AppTemplate;
 use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rng_da_service::{RngDaService, RngDaSpec};
-use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader};
 use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::state::StateManager;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::Zkvm;
-use sov_state::{ProverStorage, Storage};
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
-
-fn new_app<Vm: Zkvm, Da: DaSpec>(
-    storage_config: sov_state::config::Config,
-) -> AppTemplate<DefaultContext, Da, Vm, Runtime<DefaultContext, Da>> {
-    let storage =
-        ProverStorage::with_config(storage_config).expect("Failed to open prover storage");
-    AppTemplate::new(storage.clone())
-}
 
 fn rollup_bench(_bench: &mut Criterion) {
     let start_height: u64 = 0u64;
@@ -55,14 +45,22 @@ fn rollup_bench(_bench: &mut Criterion) {
     let storage_config = sov_state::config::Config {
         path: rollup_config.storage.path,
     };
-    let mut demo = new_app::<Risc0Verifier, RngDaSpec>(storage_config);
+    let state_manager = sov_state::state_manager::SovStateManager::new(storage_config)
+        .expect("Failed to initialize state manager");
+    let stf = AppTemplate::<
+        DefaultContext,
+        RngDaSpec,
+        Risc0Verifier,
+        Runtime<DefaultContext, RngDaSpec>,
+    >::new();
 
     let demo_genesis_config = get_genesis_config(&GenesisPaths::from_dir(
         "../test-data/genesis/integration-tests",
     ))
     .unwrap();
 
-    let mut current_root = demo.init_chain(demo_genesis_config);
+    let (mut current_root, _) =
+        stf.init_chain(state_manager.get_native_state(), demo_genesis_config);
 
     // data generation
     let mut blobs = vec![];
@@ -92,8 +90,9 @@ fn rollup_bench(_bench: &mut Criterion) {
             let filtered_block = &blocks[height as usize];
 
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
-            let apply_block_result = demo.apply_slot(
+            let apply_block_result = stf.apply_slot(
                 &current_root,
+                state_manager.get_native_state(),
                 Default::default(),
                 &filtered_block.header,
                 &filtered_block.validity_cond,

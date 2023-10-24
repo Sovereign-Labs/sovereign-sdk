@@ -99,13 +99,12 @@ where
 {
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn begin_slot(
-        &mut self,
+        &self,
+        state_checkpoint: StateCheckpoint<C>,
         slot_header: &Da::BlockHeader,
         validity_condition: &Da::ValidityCondition,
         pre_state_root: &<C::Storage as Storage>::Root,
-        witness: <Self as StateTransitionFunction<Vm, Da>>::Witness,
-    ) {
-        let state_checkpoint = StateCheckpoint::with_witness(self.current_storage.clone(), witness);
+    ) -> StateCheckpoint<C> {
         let mut working_set = state_checkpoint.to_revertable();
 
         self.runtime.begin_slot_hook(
@@ -115,18 +114,19 @@ where
             &mut working_set,
         );
 
-        self.checkpoint = Some(working_set.checkpoint());
+        working_set.checkpoint()
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn end_slot(
-        &mut self,
+        &self,
+        storage: C::Storage,
+        checkpoint: StateCheckpoint<C>,
     ) -> (
         <<C as Spec>::Storage as Storage>::Root,
         <<C as Spec>::Storage as Storage>::Witness,
+        <<C as Spec>::Storage as Storage>::StateUpdate,
     ) {
-        let checkpoint = self.checkpoint.take().unwrap();
-
         // Run end end_slot_hook
         let mut working_set = checkpoint.to_revertable();
         self.runtime.end_slot_hook(&mut working_set);
@@ -135,8 +135,7 @@ where
 
         let (cache_log, witness) = checkpoint.freeze();
 
-        let (root_hash, authenticated_node_batch) = self
-            .current_storage
+        let (root_hash, state_update) = storage
             .compute_state_update(cache_log, &witness)
             .expect("jellyfish merkle tree update must succeed");
 
@@ -145,12 +144,12 @@ where
         self.runtime
             .finalize_hook(&root_hash, &mut working_set.accessory_state());
 
-        let accessory_log = working_set.checkpoint().freeze_non_provable();
+        let mut checkpoint = working_set.checkpoint();
+        let accessory_log = checkpoint.freeze_non_provable();
 
-        self.current_storage
-            .commit(&authenticated_node_batch, &accessory_log);
+        storage.commit(&state_update, &accessory_log);
 
-        (root_hash, witness)
+        (root_hash, witness, state_update)
     }
 }
 
@@ -163,7 +162,9 @@ where
 {
     type StateRoot = <C::Storage as Storage>::Root;
 
-    type InitialState = <RT as Genesis>::Config;
+    type GenesisParams = <RT as Genesis>::Config;
+    type PreState = C::Storage;
+    type ChangeSet = <C::Storage as Storage>::StateUpdate;
 
     type TxReceiptContents = TxEffect;
 
@@ -173,8 +174,12 @@ where
 
     type Condition = Da::ValidityCondition;
 
-    fn init_chain(&mut self, params: Self::InitialState) -> Self::StateRoot {
-        let mut working_set = StateCheckpoint::new(self.current_storage.clone()).to_revertable();
+    fn init_chain(
+        &self,
+        pre_state: Self::PreState,
+        params: Self::GenesisParams,
+    ) -> (Self::StateRoot, Self::ChangeSet) {
+        let mut working_set = StateCheckpoint::new(pre_state.clone()).to_revertable();
 
         self.runtime
             .genesis(&params, &mut working_set)
@@ -183,8 +188,7 @@ where
         let mut checkpoint = working_set.checkpoint();
         let (log, witness) = checkpoint.freeze();
 
-        let (genesis_hash, node_batch) = self
-            .current_storage
+        let (genesis_hash, state_update) = pre_state
             .compute_state_update(log, &witness)
             .expect("Storage update must succeed");
 
@@ -195,20 +199,23 @@ where
 
         let accessory_log = working_set.checkpoint().freeze_non_provable();
 
-        self.current_storage.commit(&node_batch, &accessory_log);
+        // TODO: Commit here for now, but probably this can be done outside of STF
+        pre_state.commit(&state_update, &accessory_log);
 
-        genesis_hash
+        (genesis_hash, state_update)
     }
 
     fn apply_slot<'a, I>(
-        &mut self,
+        &self,
         pre_state_root: &Self::StateRoot,
+        pre_state: Self::PreState,
         witness: Self::Witness,
         slot_header: &Da::BlockHeader,
         validity_condition: &Da::ValidityCondition,
         blobs: I,
     ) -> SlotResult<
         Self::StateRoot,
+        Self::ChangeSet,
         Self::BatchReceiptContents,
         Self::TxReceiptContents,
         Self::Witness,
@@ -216,14 +223,12 @@ where
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
     {
-        self.begin_slot(slot_header, validity_condition, pre_state_root, witness);
+        let checkpoint = StateCheckpoint::with_witness(pre_state.clone(), witness);
+        let checkpoint =
+            self.begin_slot(checkpoint, slot_header, validity_condition, pre_state_root);
 
         // Initialize batch workspace
-        let mut batch_workspace = self
-            .checkpoint
-            .take()
-            .expect("Working_set was initialized in begin_slot")
-            .to_revertable();
+        let mut batch_workspace = checkpoint.to_revertable();
         let selected_blobs = self
             .runtime
             .get_blobs_for_this_slot(blobs, &mut batch_workspace)
@@ -234,13 +239,14 @@ where
             selected_blobs.len()
         );
 
-        self.checkpoint = Some(batch_workspace.checkpoint());
+        let mut checkpoint = batch_workspace.checkpoint();
 
         let mut batch_receipts = vec![];
+
         for (blob_idx, mut blob) in selected_blobs.into_iter().enumerate() {
-            let batch_receipt = self
-                .apply_blob(blob.as_mut_ref())
-                .unwrap_or_else(Into::into);
+            let (a, b) = self.apply_blob(checkpoint, blob.as_mut_ref());
+            checkpoint = b;
+            let batch_receipt = a.unwrap_or_else(Into::into);
             info!(
                 "blob #{} from sequencer {} with blob_hash 0x{} has been applied with #{} transactions, sequencer outcome {:?}",
                 blob_idx,
@@ -257,12 +263,14 @@ where
                     tx_receipt.receipt
                 );
             }
-            batch_receipts.push(batch_receipt.clone());
+            batch_receipts.push(batch_receipt);
         }
 
-        let (state_root, witness) = self.end_slot();
+        let (state_root, witness, state_update) = self.end_slot(pre_state, checkpoint);
         SlotResult {
             state_root,
+            // TODO: Fix this
+            change_set: state_update,
             batch_receipts,
             witness,
         }
