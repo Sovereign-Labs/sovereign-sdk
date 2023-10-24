@@ -4,7 +4,7 @@ use blake3::traits::digest::Digest;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rayon::prelude::*;
 use solana_runtime::accounts_hash::{AccountsHasher, MERKLE_FANOUT};
-use solana_sdk::hash::{Hash, Hasher};
+use solana_sdk::hash::{Hash, Hasher, hashv};
 use solana_sdk::pubkey::Pubkey;
 
 use crate::types::{AccountDeltaProof, AccountHashMap, Data, Proof};
@@ -394,6 +394,46 @@ pub fn assemble_account_delta_proof(
     }
 
     Ok(proofs)
+}
+
+pub fn verify_leaves_against_bankhash(account_proof: AccountDeltaProof,
+                                      bankhash: Hash,
+                                      num_sigs: u64,
+                                      account_delta_root: Hash,
+                                      parent_bankhash: Hash,
+                                      blockhash: Hash) -> anyhow::Result<()> {
+
+    match account_proof {
+        AccountDeltaProof::InclusionProof(pubkey, (data, proof)) => {
+            if data.account.pubkey != pubkey {
+                anyhow::bail!("account info pubkey doesn't match pubkey in provided update");
+            }
+            if data.hash.as_ref() != hash_solana_account(
+                data.account.lamports,
+                data.account.owner.as_ref(),
+                data.account.executable,
+                data.account.rent_epoch,
+                &data.account.data,
+                data.account.pubkey.as_ref()) {
+                anyhow::bail!("account data does not match account hash");
+            }
+            if bankhash != hashv(&[
+                parent_bankhash.as_ref(),
+                account_delta_root.as_ref(),
+                &num_sigs.to_le_bytes(),
+                blockhash.as_ref(),
+            ]) {
+                anyhow::bail!("bank hash does not match data");
+            }
+            if !verify_proof(&data.hash, &proof, &account_delta_root) {
+                anyhow::bail!("account merkle proof verification failure");
+            }
+            Ok(())
+        }
+        _ => {
+            anyhow::bail!("Only Inclusion proof");
+        }
+    }
 }
 
 #[cfg(test)]
