@@ -1,5 +1,0 @@
-{
-    "libpath": "~/sovereign/adapters/solana/account_proof_geyser/target/release/libaccount_proof_geyser.dylib",
-    "bind_address": "127.0.0.1:10000",
-    "account_list": ["SysvarS1otHashes111111111111111111111111111"]
-}
