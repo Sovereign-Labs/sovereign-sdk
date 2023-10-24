@@ -27,19 +27,17 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use jmt::storage::{Node, NodeKey};
-#[cfg(feature = "std")]
-use jmt::Version;
 use sov_rollup_interface::maybestd::vec::Vec;
 use sov_rollup_interface::stf::EventKey;
 use sov_schema_db::schema::{KeyDecoder, KeyEncoder, ValueCodec};
 use sov_schema_db::CodecError;
+#[cfg(feature = "std")]
+pub(crate) use use_std::*;
 
 use super::types::{
     AccessoryKey, AccessoryStateValue, BatchNumber, DbHash, EventNumber, SlotNumber, StateKey,
     TxNumber,
 };
-#[cfg(feature = "std")]
-use super::types::{JmtValue, StoredBatch, StoredSlot, StoredTransaction};
 
 /// A list of all tables used by the StateDB. These tables store rollup state - meaning
 /// account balances, nonces, etc.
@@ -171,14 +169,79 @@ macro_rules! define_table_with_default_codec {
     };
 }
 
-/// Macro similar to [`define_table_with_default_codec`], but to be used when
-/// your key type should be [`SeekKeyEncoder`]. Borsh serializes integers as
-/// little-endian, but RocksDB uses lexicographic ordering which is only
-/// compatible with big-endian, so we use [`bincode`] with the big-endian option
-/// here.
-// TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+define_table_with_default_codec!(
+    /// A "secondary index" for slot data by hash
+    (SlotByHash) DbHash => SlotNumber
+);
+
+define_table_with_default_codec!(
+    /// Non-JMT state stored by a module for JSON-RPC use.
+    (ModuleAccessoryState) AccessoryKey => AccessoryStateValue
+);
+
+define_table_with_default_codec!(
+    /// A "secondary index" for batch data by hash
+    (BatchByHash) DbHash => BatchNumber
+);
+
+define_table_with_default_codec!(
+    /// A "secondary index" for transaction data by hash
+    (TxByHash) DbHash => TxNumber
+);
+
+define_table_with_default_codec!(
+    /// A "secondary index" for event data by key
+    (EventByKey) (EventKey, TxNumber, EventNumber) => ()
+);
+
+define_table_without_codec!(
+    /// The source of truth for JMT nodes
+    (JmtNodes) NodeKey => Node
+);
+
+impl KeyEncoder<JmtNodes> for NodeKey {
+    fn encode_key(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
+        self.try_to_vec().map_err(CodecError::from)
+    }
+}
+impl KeyDecoder<JmtNodes> for NodeKey {
+    fn decode_key(data: &[u8]) -> sov_schema_db::schema::Result<Self> {
+        Ok(Self::deserialize_reader(&mut &data[..])?)
+    }
+}
+
+impl ValueCodec<JmtNodes> for Node {
+    fn encode_value(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
+        self.try_to_vec().map_err(CodecError::from)
+    }
+
+    fn decode_value(data: &[u8]) -> sov_schema_db::schema::Result<Self> {
+        Ok(Self::deserialize_reader(&mut &data[..])?)
+    }
+}
+
+define_table_with_default_codec!(
+    /// A mapping from key-hashes to their preimages and latest version. Since we store raw
+    /// key-value pairs instead of keyHash->value pairs,
+    /// this table is required to implement the `jmt::TreeReader` trait,
+    /// which requires the ability to fetch values by hash.
+    (KeyHashToKey) [u8;32] => StateKey
+);
+
 #[cfg(feature = "std")]
-macro_rules! define_table_with_seek_key_codec {
+mod use_std {
+    use jmt::Version;
+
+    use super::super::types::{JmtValue, StoredBatch, StoredSlot, StoredTransaction};
+    use super::*;
+
+    /// Macro similar to [`define_table_with_default_codec`], but to be used when
+    /// your key type should be [`SeekKeyEncoder`]. Borsh serializes integers as
+    /// little-endian, but RocksDB uses lexicographic ordering which is only
+    /// compatible with big-endian, so we use [`bincode`] with the big-endian option
+    /// here.
+    // TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+    macro_rules! define_table_with_seek_key_codec {
     ($(#[$docs:meta])+ ($table_name:ident) $key:ty => $value:ty) => {
         define_table_without_codec!($(#[$docs])+ ( $table_name ) $key => $value);
 
@@ -218,144 +281,77 @@ macro_rules! define_table_with_seek_key_codec {
     };
 }
 
-// fn deser(target: &mut &[u8]) -> Result<Self, DeserializationError>;
-// TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
-#[cfg(feature = "std")]
-define_table_with_seek_key_codec!(
-    /// The primary source for slot data
-    (SlotByNumber) SlotNumber => StoredSlot
-);
+    // fn deser(target: &mut &[u8]) -> Result<Self, DeserializationError>;
+    // TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+    define_table_with_seek_key_codec!(
+        /// The primary source for slot data
+        (SlotByNumber) SlotNumber => StoredSlot
+    );
 
-define_table_with_default_codec!(
-    /// A "secondary index" for slot data by hash
-    (SlotByHash) DbHash => SlotNumber
-);
+    // TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+    define_table_with_seek_key_codec!(
+        /// The primary source for batch data
+        (BatchByNumber) BatchNumber => StoredBatch
+    );
 
-define_table_with_default_codec!(
-    /// Non-JMT state stored by a module for JSON-RPC use.
-    (ModuleAccessoryState) AccessoryKey => AccessoryStateValue
-);
+    // TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+    define_table_with_seek_key_codec!(
+        /// The primary source for transaction data
+        (TxByNumber) TxNumber => StoredTransaction
+    );
 
-// TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
-#[cfg(feature = "std")]
-define_table_with_seek_key_codec!(
-    /// The primary source for batch data
-    (BatchByNumber) BatchNumber => StoredBatch
-);
+    // TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+    define_table_with_seek_key_codec!(
+        /// The primary store for event data
+        (EventByNumber) EventNumber => sov_rollup_interface::stf::Event
+    );
 
-define_table_with_default_codec!(
-    /// A "secondary index" for batch data by hash
-    (BatchByHash) DbHash => BatchNumber
-);
+    define_table_without_codec!(
+        /// The source of truth for JMT values by version
+        (JmtValues) (StateKey, Version) => JmtValue
+    );
 
-// TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
-#[cfg(feature = "std")]
-define_table_with_seek_key_codec!(
-    /// The primary source for transaction data
-    (TxByNumber) TxNumber => StoredTransaction
-);
+    impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> KeyEncoder<JmtValues> for (T, Version) {
+        fn encode_key(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
+            use byteorder::WriteBytesExt;
+            let mut out =
+                Vec::with_capacity(self.0.as_ref().len() + core::mem::size_of::<Version>() + 8);
+            self.0
+                .as_ref()
+                .serialize(&mut out)
+                .map_err(CodecError::from)?;
+            // Write the version in big-endian order so that sorting order is based on the most-significant bytes of the key
+            out.write_u64::<byteorder::BigEndian>(self.1)
+                .expect("serialization to vec is infallible");
+            Ok(out)
+        }
+    }
 
-define_table_with_default_codec!(
-    /// A "secondary index" for transaction data by hash
-    (TxByHash) DbHash => TxNumber
-);
+    impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> sov_schema_db::SeekKeyEncoder<JmtValues>
+        for (T, Version)
+    {
+        fn encode_seek_key(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
+            self.encode_key()
+        }
+    }
 
-// TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
-#[cfg(feature = "std")]
-define_table_with_seek_key_codec!(
-    /// The primary store for event data
-    (EventByNumber) EventNumber => sov_rollup_interface::stf::Event
-);
+    impl KeyDecoder<JmtValues> for (StateKey, Version) {
+        fn decode_key(data: &[u8]) -> sov_schema_db::schema::Result<Self> {
+            use byteorder::ReadBytesExt;
+            let mut cursor = std::io::Cursor::new(data);
+            let key = Vec::<u8>::deserialize_reader(&mut cursor)?;
+            let version = cursor.read_u64::<byteorder::BigEndian>()?;
+            Ok((key, version))
+        }
+    }
 
-define_table_with_default_codec!(
-    /// A "secondary index" for event data by key
-    (EventByKey) (EventKey, TxNumber, EventNumber) => ()
-);
+    impl ValueCodec<JmtValues> for JmtValue {
+        fn encode_value(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
+            self.try_to_vec().map_err(CodecError::from)
+        }
 
-define_table_without_codec!(
-    /// The source of truth for JMT nodes
-    (JmtNodes) NodeKey => Node
-);
-
-impl KeyEncoder<JmtNodes> for NodeKey {
-    fn encode_key(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
-        self.try_to_vec().map_err(CodecError::from)
+        fn decode_value(data: &[u8]) -> sov_schema_db::schema::Result<Self> {
+            Ok(Self::deserialize_reader(&mut &data[..])?)
+        }
     }
 }
-impl KeyDecoder<JmtNodes> for NodeKey {
-    fn decode_key(data: &[u8]) -> sov_schema_db::schema::Result<Self> {
-        Ok(Self::deserialize_reader(&mut &data[..])?)
-    }
-}
-
-impl ValueCodec<JmtNodes> for Node {
-    fn encode_value(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
-        self.try_to_vec().map_err(CodecError::from)
-    }
-
-    fn decode_value(data: &[u8]) -> sov_schema_db::schema::Result<Self> {
-        Ok(Self::deserialize_reader(&mut &data[..])?)
-    }
-}
-
-#[cfg(feature = "std")]
-define_table_without_codec!(
-    /// The source of truth for JMT values by version
-    (JmtValues) (StateKey, Version) => JmtValue
-);
-
-#[cfg(feature = "std")]
-impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> KeyEncoder<JmtValues> for (T, Version) {
-    fn encode_key(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
-        use byteorder::WriteBytesExt;
-        let mut out =
-            Vec::with_capacity(self.0.as_ref().len() + core::mem::size_of::<Version>() + 8);
-        self.0
-            .as_ref()
-            .serialize(&mut out)
-            .map_err(CodecError::from)?;
-        // Write the version in big-endian order so that sorting order is based on the most-significant bytes of the key
-        out.write_u64::<byteorder::BigEndian>(self.1)
-            .expect("serialization to vec is infallible");
-        Ok(out)
-    }
-}
-
-#[cfg(feature = "std")]
-impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> sov_schema_db::SeekKeyEncoder<JmtValues>
-    for (T, Version)
-{
-    fn encode_seek_key(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
-        self.encode_key()
-    }
-}
-
-#[cfg(feature = "std")]
-impl KeyDecoder<JmtValues> for (StateKey, Version) {
-    fn decode_key(data: &[u8]) -> sov_schema_db::schema::Result<Self> {
-        use byteorder::ReadBytesExt;
-        let mut cursor = std::io::Cursor::new(data);
-        let key = Vec::<u8>::deserialize_reader(&mut cursor)?;
-        let version = cursor.read_u64::<byteorder::BigEndian>()?;
-        Ok((key, version))
-    }
-}
-
-#[cfg(feature = "std")]
-impl ValueCodec<JmtValues> for JmtValue {
-    fn encode_value(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
-        self.try_to_vec().map_err(CodecError::from)
-    }
-
-    fn decode_value(data: &[u8]) -> sov_schema_db::schema::Result<Self> {
-        Ok(Self::deserialize_reader(&mut &data[..])?)
-    }
-}
-
-define_table_with_default_codec!(
-    /// A mapping from key-hashes to their preimages and latest version. Since we store raw
-    /// key-value pairs instead of keyHash->value pairs,
-    /// this table is required to implement the `jmt::TreeReader` trait,
-    /// which requires the ability to fetch values by hash.
-    (KeyHashToKey) [u8;32] => StateKey
-);

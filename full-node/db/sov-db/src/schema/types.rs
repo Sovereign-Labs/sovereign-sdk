@@ -1,15 +1,11 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-#[cfg(feature = "std")]
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::maybestd::sync::Arc;
 use sov_rollup_interface::maybestd::vec::Vec;
 use sov_rollup_interface::rpc::TxIdentifier;
-#[cfg(feature = "std")]
-use sov_rollup_interface::rpc::{BatchResponse, TxResponse};
 use sov_rollup_interface::stf::EventKey;
 #[cfg(feature = "std")]
-use sov_rollup_interface::stf::{Event, TransactionReceipt};
+pub use use_std::split_tx_for_storage;
 
 /// A cheaply cloneable bytes abstraction for use within the trust boundary of the node
 /// (i.e. when interfacing with the database). Serializes and deserializes more efficiently,
@@ -85,20 +81,6 @@ pub struct StoredBatch {
     pub custom_receipt: DbBytes,
 }
 
-// TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
-#[cfg(feature = "std")]
-impl<B: DeserializeOwned, T> TryFrom<StoredBatch> for BatchResponse<B, T> {
-    type Error = anyhow::Error;
-    fn try_from(value: StoredBatch) -> Result<Self, Self::Error> {
-        Ok(Self {
-            hash: value.hash,
-            custom_receipt: bincode::deserialize(&value.custom_receipt.0)?,
-            tx_range: value.txs.start.into()..value.txs.end.into(),
-            txs: None,
-        })
-    }
-}
-
 /// The on-disk format of a transaction. Includes the txhash, the serialized tx data,
 /// and identifies the events emitted by this transaction
 #[derive(Debug, PartialEq, BorshSerialize, BorshDeserialize, Clone)]
@@ -111,39 +93,6 @@ pub struct StoredTransaction {
     pub body: Option<Vec<u8>>,
     /// A customer "receipt" for this transaction defined by the rollup.
     pub custom_receipt: DbBytes,
-}
-
-// TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
-#[cfg(feature = "std")]
-impl<R: DeserializeOwned> TryFrom<StoredTransaction> for TxResponse<R> {
-    type Error = anyhow::Error;
-    fn try_from(value: StoredTransaction) -> Result<Self, Self::Error> {
-        Ok(Self {
-            hash: value.hash,
-            event_range: value.events.start.into()..value.events.end.into(),
-            body: value.body,
-            custom_receipt: bincode::deserialize(&value.custom_receipt.0)?,
-        })
-    }
-}
-
-/// Split a `TransactionReceipt` into a `StoredTransaction` and a list of `Event`s for storage in the database.
-// TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
-#[cfg(feature = "std")]
-pub fn split_tx_for_storage<R: Serialize>(
-    tx: TransactionReceipt<R>,
-    event_offset: u64,
-) -> (StoredTransaction, Vec<Event>) {
-    let event_range = EventNumber(event_offset)..EventNumber(event_offset + tx.events.len() as u64);
-    let tx_for_storage = StoredTransaction {
-        hash: tx.tx_hash,
-        events: event_range,
-        body: tx.body_to_save,
-        custom_receipt: DbBytes::new(
-            bincode::serialize(&tx.receipt).expect("Serialization to vec is infallible"),
-        ),
-    };
-    (tx_for_storage, tx.events)
 }
 
 /// An identifier that specifies a single event
@@ -208,6 +157,60 @@ u64_wrapper!(SlotNumber);
 u64_wrapper!(BatchNumber);
 u64_wrapper!(TxNumber);
 u64_wrapper!(EventNumber);
+
+#[cfg(feature = "std")]
+mod use_std {
+    use serde::de::DeserializeOwned;
+    use sov_rollup_interface::rpc::{BatchResponse, TxResponse};
+    use sov_rollup_interface::stf::{Event, TransactionReceipt};
+
+    use super::*;
+
+    // TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+    impl<B: DeserializeOwned, T> TryFrom<StoredBatch> for BatchResponse<B, T> {
+        type Error = anyhow::Error;
+        fn try_from(value: StoredBatch) -> Result<Self, Self::Error> {
+            Ok(Self {
+                hash: value.hash,
+                custom_receipt: bincode::deserialize(&value.custom_receipt.0)?,
+                tx_range: value.txs.start.into()..value.txs.end.into(),
+                txs: None,
+            })
+        }
+    }
+
+    // TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+    impl<R: DeserializeOwned> TryFrom<StoredTransaction> for TxResponse<R> {
+        type Error = anyhow::Error;
+        fn try_from(value: StoredTransaction) -> Result<Self, Self::Error> {
+            Ok(Self {
+                hash: value.hash,
+                event_range: value.events.start.into()..value.events.end.into(),
+                body: value.body,
+                custom_receipt: bincode::deserialize(&value.custom_receipt.0)?,
+            })
+        }
+    }
+
+    /// Split a `TransactionReceipt` into a `StoredTransaction` and a list of `Event`s for storage in the database.
+    // TODO `bincode` is expected to have `no-std` soon; should be usable under `no-std`
+    pub fn split_tx_for_storage<R: Serialize>(
+        tx: TransactionReceipt<R>,
+        event_offset: u64,
+    ) -> (StoredTransaction, Vec<Event>) {
+        let event_range =
+            EventNumber(event_offset)..EventNumber(event_offset + tx.events.len() as u64);
+        let tx_for_storage = StoredTransaction {
+            hash: tx.tx_hash,
+            events: event_range,
+            body: tx.body_to_save,
+            custom_receipt: DbBytes::new(
+                bincode::serialize(&tx.receipt).expect("Serialization to vec is infallible"),
+            ),
+        };
+        (tx_for_storage, tx.events)
+    }
+}
 
 #[cfg(feature = "arbitrary")]
 pub mod arbitrary {

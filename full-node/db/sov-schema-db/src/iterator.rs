@@ -1,9 +1,8 @@
 use sov_rollup_interface::maybestd::vec::Vec;
-
-use crate::schema::Schema;
-
 #[cfg(feature = "std")]
 pub(crate) use use_std::ScanDirection;
+
+use crate::schema::Schema;
 
 /// This defines a type that can be used to seek a [`SchemaIterator`], via
 /// interfaces like [`SchemaIterator::seek`]. Mind you, not all
@@ -39,7 +38,6 @@ pub struct SchemaIterator<'a, S> {
 #[cfg(feature = "std")]
 mod use_std {
     use super::*;
-
     use crate::metrics::{SCHEMADB_ITER_BYTES, SCHEMADB_ITER_LATENCY_SECONDS};
     use crate::schema::{KeyDecoder, ValueCodec};
 
