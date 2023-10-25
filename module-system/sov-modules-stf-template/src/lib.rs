@@ -243,9 +243,10 @@ where
         let mut batch_receipts = vec![];
 
         for (blob_idx, mut blob) in selected_blobs.into_iter().enumerate() {
-            let (a, b) = self.apply_blob(checkpoint, blob.as_mut_ref());
-            checkpoint = b;
-            let batch_receipt = a.unwrap_or_else(Into::into);
+            let (apply_blob_result, checkpoint_after_blob) =
+                self.apply_blob(checkpoint, blob.as_mut_ref());
+            checkpoint = checkpoint_after_blob;
+            let batch_receipt = apply_blob_result.unwrap_or_else(Into::into);
             info!(
                 "blob #{} from sequencer {} with blob_hash 0x{} has been applied with #{} transactions, sequencer outcome {:?}",
                 blob_idx,
