@@ -17,16 +17,16 @@ resolver = "2"
 # Maintained by sovereign labs
 jmt = { workspace = true }
 sov-schema-db = { path = "../sov-schema-db", version = "0.3" }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3", features = ["native", "mocks"] }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3", features = ["native", "mocks", "tokio"] }
 
 # External
-anyhow = { workspace = true }
+anyhow = { workspace = true, default-features = true }
 arbitrary = { workspace = true, optional = true }
-byteorder = { workspace = true }
-borsh = { workspace = true }
-proptest = { workspace = true, optional = true }
+byteorder = { workspace = true, default-features = true }
+borsh = { workspace = true, default-features = true, features = ["bytes", "rc"] }
+proptest = { workspace = true, optional = true, default-features = true }
 proptest-derive = { workspace = true, optional = true }
-serde = { workspace = true, features = ["derive"] }
+serde = { workspace = true, default-features = true, features = ["rc"] }
 tempfile = { workspace = true, optional = true }
 rocksdb = { workspace = true }
 bincode = { workspace = true }

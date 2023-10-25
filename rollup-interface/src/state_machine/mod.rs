@@ -5,6 +5,7 @@ pub mod da;
 pub mod stf;
 pub mod zk;
 
+#[cfg(feature = "std")]
 pub use bytes::{Buf, BufMut, Bytes, BytesMut};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -23,10 +24,10 @@ pub trait BasicAddress:
     + Send
     + Sync
     + Clone
-    + std::hash::Hash
+    + core::hash::Hash
     + AsRef<[u8]>
     + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
-    + std::str::FromStr
+    + core::str::FromStr
     + Serialize
     + DeserializeOwned
     + 'static

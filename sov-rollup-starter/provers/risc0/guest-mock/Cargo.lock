@@ -44,9 +44,9 @@ checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
 name = "bcs"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bd3ffe8b19a604421a5d461d4a70346223e535903fbc3067138bddbebddcf77"
+checksum = "85b6598a2f5d564fb7855dc6b06fd1c38cff5a72bd8b863a4d021938497b440a"
 dependencies = [
  "serde",
  "thiserror",
@@ -235,9 +235,9 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "4.1.0"
+version = "4.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "622178105f911d937a42cdb140730ba4a3ed2becd8ae6ce39c7d28b5d75d4588"
+checksum = "e89b8c6a2e4b1f45971ad09761aafb85514a84744b67a95e32c3cc1352d1f65c"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -258,30 +258,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.37",
-]
-
-[[package]]
-name = "demo-stf"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "borsh",
- "hex",
- "serde",
- "simple-nft-module",
- "sov-accounts",
- "sov-bank",
- "sov-blob-storage",
- "sov-chain-state",
- "sov-modules-api",
- "sov-modules-stf-template",
- "sov-nft-module",
- "sov-rollup-interface",
- "sov-sequencer-registry",
- "sov-state",
- "sov-stf-runner",
- "sov-value-setter",
- "tracing",
 ]
 
 [[package]]
@@ -311,9 +287,9 @@ dependencies = [
 
 [[package]]
 name = "dyn-clone"
-version = "1.0.13"
+version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbfc4744c1b8f2a09adc0e55242f60b1af195d88596bd8700be74418c056c555"
+checksum = "23d2f3407d9a573d666de4b5bdf10569d73ca9478087346697dcbae6244bfbcd"
 
 [[package]]
 name = "ed25519"
@@ -407,6 +383,21 @@ dependencies = [
  "cfg-if",
  "libc",
  "wasi",
+]
+
+[[package]]
+name = "guest-mock-starter"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
+ "sov-modules-api",
+ "sov-modules-stf-template",
+ "sov-risc0-adapter",
+ "sov-rollup-interface",
+ "sov-state",
+ "stf-starter",
 ]
 
 [[package]]
@@ -523,6 +514,16 @@ name = "linux-raw-sys"
 version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a9bad9f94746442c783ca431b22403b519cd7fbeed0533fdd6328b2f2212128"
+
+[[package]]
+name = "lock_api"
+version = "0.4.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c168f8615b12bc01f9c17e2eb0cc07dcae1940121185446edc3744920e8ef45"
+dependencies = [
+ "autocfg",
+ "scopeguard",
+]
 
 [[package]]
 name = "log"
@@ -892,10 +893,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "semver"
-version = "1.0.18"
+name = "scopeguard"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0293b4b29daaf487284529cc2f5675b8e57c61f70167ba415a463651fd6a918"
+checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
+
+[[package]]
+name = "semver"
+version = "1.0.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "836fa6a3e1e547f9a2c4040802ec865b5d85f4014efe00555d7090a3dcaa1090"
 
 [[package]]
 name = "serde"
@@ -966,17 +973,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e1788eed21689f9cf370582dfc467ef36ed9c707f073528ddafa8d83e3b8500"
 
 [[package]]
-name = "simple-nft-module"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "borsh",
- "serde",
- "sov-modules-api",
- "sov-state",
-]
-
-[[package]]
 name = "sov-accounts"
 version = "0.3.0"
 dependencies = [
@@ -999,48 +995,6 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "thiserror",
-]
-
-[[package]]
-name = "sov-blob-storage"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "bincode",
- "borsh",
- "hex",
- "sov-chain-state",
- "sov-modules-api",
- "sov-sequencer-registry",
- "sov-state",
- "tracing",
-]
-
-[[package]]
-name = "sov-chain-state"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "borsh",
- "serde",
- "sov-modules-api",
- "sov-rollup-interface",
- "sov-state",
-]
-
-[[package]]
-name = "sov-demo-prover-guest-mock"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "demo-stf",
- "risc0-zkvm",
- "risc0-zkvm-platform",
- "sov-modules-api",
- "sov-modules-stf-template",
- "sov-risc0-adapter",
- "sov-rollup-interface",
- "sov-state",
 ]
 
 [[package]]
@@ -1100,18 +1054,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-nft-module"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "borsh",
- "serde",
- "sov-modules-api",
- "sov-modules-macros",
- "sov-state",
-]
-
-[[package]]
 name = "sov-risc0-adapter"
 version = "0.3.0"
 dependencies = [
@@ -1139,6 +1081,7 @@ dependencies = [
  "proptest",
  "serde",
  "sha2",
+ "spin",
  "thiserror",
 ]
 
@@ -1184,23 +1127,38 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-value-setter"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "borsh",
- "serde",
- "sov-modules-api",
- "sov-state",
- "thiserror",
-]
-
-[[package]]
 name = "sov-zk-cycle-utils"
 version = "0.3.0"
 dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
+]
+
+[[package]]
+name = "spin"
+version = "0.9.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
+dependencies = [
+ "lock_api",
+]
+
+[[package]]
+name = "stf-starter"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "serde",
+ "sov-accounts",
+ "sov-bank",
+ "sov-modules-api",
+ "sov-modules-stf-template",
+ "sov-rollup-interface",
+ "sov-sequencer-registry",
+ "sov-state",
+ "sov-stf-runner",
+ "tracing",
 ]
 
 [[package]]
