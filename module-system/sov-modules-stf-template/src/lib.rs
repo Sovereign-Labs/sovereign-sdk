@@ -39,8 +39,18 @@ pub trait Runtime<C: Context, Da: DaSpec>:
     type GenesisConfig: Send + Sync;
 
     #[cfg(feature = "native")]
+    /// GenesisPaths type.
+    type GenesisPaths: Send + Sync;
+
+    #[cfg(feature = "native")]
     /// Default rpc methods.
     fn rpc_methods(storage: <C as Spec>::Storage) -> jsonrpsee::RpcModule<()>;
+
+    #[cfg(feature = "native")]
+    /// Reads genesis configs.
+    fn genesis_config(
+        genesis_paths: &Self::GenesisPaths,
+    ) -> Result<Self::GenesisConfig, anyhow::Error>;
 }
 
 /// The receipts of all the transactions in a batch.

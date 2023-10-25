@@ -32,9 +32,6 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Host of a zkVM program.
     type Vm: ZkvmHost + Send;
 
-    /// Location of the genesis files.
-    type GenesisPaths: Send + Sync;
-
     /// Context for Zero Knowledge environment.
     type ZkContext: Context;
     /// Context for Native environment.
@@ -56,9 +53,15 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Creates GenesisConfig from genesis files.
     fn create_genesis_config(
         &self,
-        genesis_paths: &Self::GenesisPaths,
-        rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig;
+        genesis_paths: &<Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisPaths,
+        _rollup_config: &RollupConfig<Self::DaConfig>,
+    ) -> anyhow::Result<
+        <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig,
+    > {
+        <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::genesis_config(
+            genesis_paths,
+        )
+    }
 
     /// Creates instance of DA Service.
     async fn create_da_service(
@@ -92,7 +95,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Creates a new rollup.
     async fn create_new_rollup(
         &self,
-        genesis_paths: &Self::GenesisPaths,
+        genesis_paths: &<Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisPaths,
         rollup_config: RollupConfig<Self::DaConfig>,
         prover_config: Option<RollupProverConfig>,
     ) -> Result<Rollup<Self>, anyhow::Error>
@@ -101,7 +104,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
     {
         let da_service = self.create_da_service(&rollup_config).await;
         let ledger_db = self.create_ledger_db(&rollup_config);
-        let genesis_config = self.create_genesis_config(genesis_paths, &rollup_config);
+        let genesis_config = self.create_genesis_config(genesis_paths, &rollup_config)?;
 
         let prover = prover_config.map(|pc| {
             configure_prover(
