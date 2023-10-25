@@ -181,7 +181,7 @@ impl BlockHeaderTrait for MockBlockHeader {
     }
 }
 
-/// A [`DaSpec`] suitable for testing.
+/// A [`crate::da::DaSpec`] suitable for testing.
 #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq)]
 pub struct MockDaSpec;
 
