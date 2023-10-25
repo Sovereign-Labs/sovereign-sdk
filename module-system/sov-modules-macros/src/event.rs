@@ -26,6 +26,44 @@ impl<'a> StructDef<'a> {
             })
             .collect()
     }
+
+    fn create_get_key_string_impl(&self) -> proc_macro2::TokenStream {
+        let enum_ident = self.enum_ident(EVENT);
+
+        let match_legs: Vec<proc_macro2::TokenStream> = self
+            .fields
+            .iter()
+            .map(|field| {
+                let module_name = &field.ident;
+                let module_name_str = &field.ident.to_string();
+                quote::quote!(
+                    #enum_ident::#module_name(inner)=>{
+                        let enum_name: String = format!("{:?}", inner)
+                        .split('(')
+                        .collect::<Vec<&str>>()[0].to_string();
+                        format!("{}-{}", #module_name_str, enum_name)
+                    },
+                )
+            })
+            .collect();
+
+        let impl_generics = &self.impl_generics;
+        let enum_ident = self.enum_ident(EVENT);
+        let where_clause = &self.where_clause;
+        let ty_generics = &self.type_generics;
+
+        quote::quote! {
+            impl #impl_generics #enum_ident #ty_generics #where_clause {
+
+                /// Returns a string that identifies both the module and the event type
+                pub fn get_key_string(&self) -> String {
+                    match self {
+                       #(#match_legs)*
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl EventMacro {
@@ -62,12 +100,15 @@ impl EventMacro {
             where_clause,
         );
 
-        let event_enum_legs = struct_def.create_event_enum_legs();
-        let event_enum = struct_def.create_enum(&event_enum_legs, EVENT, &serialization_methods);
+        let enum_legs = struct_def.create_event_enum_legs();
+        let event_enum = struct_def.create_enum(&enum_legs, EVENT, &serialization_methods);
+        let get_key_string_impl = struct_def.create_get_key_string_impl();
 
         Ok(quote::quote! {
             #[doc="This enum is generated from the underlying Runtime, the variants correspond to events from the relevant modules"]
             #event_enum
+
+            #get_key_string_impl
         }
             .into())
     }

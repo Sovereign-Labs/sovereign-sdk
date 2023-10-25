@@ -25,6 +25,21 @@ pub enum CallMessage {
     ),
 }
 
+/// This enumeration represents the available events that result from interacting with the `sov-value-setter` module.
+#[cfg_attr(
+    feature = "native",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
+)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
+pub enum Event {
+    /// Value set
+    ValueSet(
+        /// new value
+        u32,
+    ),
+}
+
 /// Example of a custom error.
 #[derive(Debug, Error)]
 enum SetValueError {
@@ -50,6 +65,7 @@ impl<C: sov_modules_api::Context> ValueSetter<C> {
 
         // This is how we set a new value:
         self.value.set(&new_value, working_set);
+        // TODO: replace add event functionality to be similar to self.event.add()
         working_set.add_event("set", &format!("value_set: {new_value:?}"));
 
         Ok(CallResponse::default())
