@@ -54,12 +54,6 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         }
     }
 
-    /// Returns the underlying [`StateDB`] instance.
-    /// TODO: Remove this
-    pub fn db(&self) -> &StateDB {
-        &self.db
-    }
-
     fn read_value(&self, key: &StorageKey) -> Option<StorageValue> {
         match self
             .db
