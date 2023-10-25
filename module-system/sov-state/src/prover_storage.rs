@@ -106,7 +106,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         let jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&self.db);
 
         // Handle empty jmt
-        // TODO: Fix this!
+        // TODO: Fix this before introducing snapshots!
         if jmt.get_root_hash_option(latest_version)?.is_none() {
             assert_eq!(latest_version, 0);
             let empty_batch = Vec::default().into_iter();
