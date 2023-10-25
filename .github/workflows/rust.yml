@@ -71,6 +71,7 @@ jobs:
       # which should be required to pass before merging a PR, don't forget to
       # update this list!
       - check
+      - check_no_std
       - hack
       - nextest
       - test
