@@ -6,6 +6,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![deny(missing_docs)]
 
+extern crate alloc;
+
 mod state_machine;
 pub use state_machine::*;
 
@@ -16,15 +18,9 @@ pub use {anyhow, digest};
 
 /// A facade for the `std` crate.
 pub mod maybestd {
-    pub use borsh::maybestd::{borrow, boxed, collections, format, io, rc, string, vec};
+    // sync will be available only when the target supports atomic operations
+    #[cfg(target_has_atomic = "ptr")]
+    pub use alloc::sync;
 
-    /// A facade for the `sync` std module.
-    pub mod sync {
-        #[cfg(feature = "std")]
-        pub use std::sync::Mutex;
-
-        pub use borsh::maybestd::sync::*;
-        #[cfg(not(feature = "std"))]
-        pub use spin::Mutex;
-    }
+    pub use borsh::maybestd::{borrow, boxed, collections, format, io, string, vec};
 }

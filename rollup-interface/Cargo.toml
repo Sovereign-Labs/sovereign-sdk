@@ -19,12 +19,11 @@ exclude = [
 anyhow = { workspace = true, default-features = false }
 async-trait = { workspace = true }
 borsh = { workspace = true }
-bytes = { workspace = true }
+bytes = { workspace = true, optional = true, default-features = true }
 digest = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true, optional = true }
-spin = { workspace = true }
 thiserror = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 
@@ -45,13 +44,14 @@ proptest-derive = { workspace = true }
 [features]
 default = ["std"]
 native = []
-fuzzing = ["proptest", "proptest-derive", "sha2"]
+fuzzing = ["proptest", "proptest-derive", "sha2", "std"]
 mocks = ["sha2", "bytes/serde"]
 std = [
     "anyhow/default",
     "bincode",
     "borsh/default",
-    "bytes/default",
+    "borsh/bytes",
+    "bytes",
     "digest/default",
     "hex/default",
     "proptest?/default",
