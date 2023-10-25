@@ -18,8 +18,9 @@ pub struct MockDemoRollup {}
 #[async_trait]
 impl RollupTemplate for MockDemoRollup {
     type DaService = MockDaService;
+    type DaSpec = MockDaSpec;
+    type DaConfig = MockDaConfig;
     type Vm = Risc0Host<'static>;
-    type GenesisPaths = GenesisPaths<PathBuf>;
 
     type ZkContext = ZkDefaultContext;
     type NativeContext = DefaultContext;

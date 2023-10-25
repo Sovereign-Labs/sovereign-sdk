@@ -19,8 +19,9 @@ pub struct CelestiaDemoRollup {}
 #[async_trait]
 impl RollupTemplate for CelestiaDemoRollup {
     type DaService = CelestiaService;
+    type DaSpec = CelestiaSpec;
+    type DaConfig = DaServiceConfig;
     type Vm = Risc0Host<'static>;
-    type GenesisPaths = GenesisPaths<PathBuf>;
 
     type ZkContext = ZkDefaultContext;
     type NativeContext = DefaultContext;
