@@ -1,6 +1,5 @@
 //! State manager for Prover and Zk Storage
 
-use crate::prover_storage::ProverStateUpdate;
 use crate::{config, MerkleProofSpec, ProverStorage, ZkStorage};
 
 /// State manager for Prover and Zk Storage
@@ -27,7 +26,7 @@ impl<S: MerkleProofSpec> SovStateManager<S> {
 #[cfg(feature = "native")]
 impl<S: MerkleProofSpec> sov_rollup_interface::state::StateManager for SovStateManager<S> {
     type NativeState = ProverStorage<S>;
-    type NativeChangeSet = ProverStateUpdate;
+    type NativeChangeSet = ();
     type ZkState = ZkStorage<S>;
 
     fn get_native_state(&self) -> Self::NativeState {

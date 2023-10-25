@@ -125,7 +125,6 @@ where
     ) -> (
         <<C as Spec>::Storage as Storage>::Root,
         <<C as Spec>::Storage as Storage>::Witness,
-        <<C as Spec>::Storage as Storage>::StateUpdate,
     ) {
         // Run end end_slot_hook
         let mut working_set = checkpoint.to_revertable();
@@ -149,7 +148,7 @@ where
 
         storage.commit(&state_update, &accessory_log);
 
-        (root_hash, witness, state_update)
+        (root_hash, witness)
     }
 }
 
@@ -164,7 +163,7 @@ where
 
     type GenesisParams = <RT as Genesis>::Config;
     type PreState = C::Storage;
-    type ChangeSet = <C::Storage as Storage>::StateUpdate;
+    type ChangeSet = ();
 
     type TxReceiptContents = TxEffect;
 
@@ -202,7 +201,7 @@ where
         // TODO: Commit here for now, but probably this can be done outside of STF
         pre_state.commit(&state_update, &accessory_log);
 
-        (genesis_hash, state_update)
+        (genesis_hash, ())
     }
 
     fn apply_slot<'a, I>(
@@ -266,11 +265,10 @@ where
             batch_receipts.push(batch_receipt);
         }
 
-        let (state_root, witness, state_update) = self.end_slot(pre_state, checkpoint);
+        let (state_root, witness) = self.end_slot(pre_state, checkpoint);
         SlotResult {
             state_root,
-            // TODO: Fix this
-            change_set: state_update,
+            change_set: (),
             batch_receipts,
             witness,
         }

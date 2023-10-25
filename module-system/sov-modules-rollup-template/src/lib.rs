@@ -15,7 +15,6 @@ use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::state::StateManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage::NativeStorage;
-use sov_state::Storage;
 use sov_stf_runner::verifier::StateTransitionVerifier;
 use sov_stf_runner::{ProofGenConfig, Prover, RollupConfig, StateTransitionRunner};
 use tokio::sync::oneshot;
@@ -42,7 +41,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Manager of the state
     type StateManager: StateManager<
         NativeState = <Self::NativeContext as Spec>::Storage,
-        NativeChangeSet = <<Self::NativeContext as Spec>::Storage as Storage>::StateUpdate,
+        NativeChangeSet = (),
         ZkState = <Self::ZkContext as Spec>::Storage,
     >;
 
