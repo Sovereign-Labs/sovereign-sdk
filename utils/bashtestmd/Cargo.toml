@@ -12,6 +12,6 @@ publish = false
 autotests = false
 
 [dependencies]
-clap = { version = "4.4", features = ["derive"] }
+clap = { workspace = true }
 markdown = "1.0.0-alpha.14"
 shell-escape = "0.1.5"
