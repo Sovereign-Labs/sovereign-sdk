@@ -136,12 +136,7 @@ jobs:
           override: true
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-provider: "buildjet"
-          shared-key: cargo-check-cache
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
-          workspaces: |
-            .
-            fuzz
       - name: Run check
         run: make check-no-std
 
