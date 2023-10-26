@@ -28,4 +28,4 @@ jobs:
       - name: Check sov-rollup-starter conclusion.
         env:
           CI_TRIGGER_ACCESS_TOKEN: ${{ secrets.CI_TRIGGER_ACCESS_TOKEN }}
-        run: .github/scripts/workflow_trigger.sh
+        run: .github/scripts/workflow_conclusion_check.sh
