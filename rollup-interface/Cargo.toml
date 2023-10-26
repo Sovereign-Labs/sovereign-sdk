@@ -45,7 +45,7 @@ proptest-derive = { workspace = true }
 default = ["std"]
 native = []
 fuzzing = ["proptest", "proptest-derive", "sha2", "std"]
-mocks = ["sha2", "bytes/serde"]
+mocks = ["sha2", "bytes/serde", "std"]
 std = [
     "anyhow/default",
     "bincode",

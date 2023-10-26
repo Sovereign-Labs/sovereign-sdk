@@ -5,10 +5,10 @@ help: ## Display this help message
 
 check-no-std: ## Checks that project compiles without std
 	# check no-std with atomic sync
-	cargo check --no-default-features --target wasm32-unknown-unknown
-	cargo check --no-default-features --target wasm32-unknown-unknown --features native
-	cargo check --no-default-features --target wasm32-unknown-unknown --features sync
-	cargo check --no-default-features --target wasm32-unknown-unknown --features native,sync
+	cargo hack check --feature-powerset \
+		--exclude-features default,arbitrary,bench,sov-db,std \
+		--target wasm32-unknown-unknown
 	# check bare metal
-	cargo check --no-default-features --target thumbv6m-none-eabi
-	cargo check --no-default-features --target thumbv6m-none-eabi --features native
+	cargo hack check --feature-powerset \
+		--exclude-features default,arbitrary,bench,sov-db,std,sync \
+		--target thumbv6m-none-eabi

@@ -1,6 +1,7 @@
 #[cfg(test)]
 pub mod test_util {
     use alloc::sync::Arc;
+    use alloc::vec;
 
     use crate::{CacheKey, CacheValue};
 

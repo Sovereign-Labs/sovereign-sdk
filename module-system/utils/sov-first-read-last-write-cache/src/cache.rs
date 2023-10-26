@@ -167,6 +167,8 @@ fn filter_writes(k: CacheKey, access: Access) -> Option<(CacheKey, Option<CacheV
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec;
+
     use proptest::prelude::*;
 
     use super::*;

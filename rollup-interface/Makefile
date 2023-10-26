@@ -5,5 +5,6 @@ help: ## Display this help message
 
 check-no-std: ## Checks that project compiles without std
 	# check bare metal
-	cargo check --no-default-features --target thumbv6m-none-eabi
-	cargo check --no-default-features --target thumbv6m-none-eabi --features native
+	cargo hack check --feature-powerset \
+		--exclude-features default,fuzzing,mocks,std,tokio \
+		--target thumbv6m-none-eabi
