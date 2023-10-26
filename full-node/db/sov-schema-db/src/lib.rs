@@ -21,7 +21,6 @@ pub mod snapshot;
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Mutex;
 
 use anyhow::format_err;
 use iterator::ScanDirection;
@@ -145,7 +144,7 @@ impl DB {
     ) -> anyhow::Result<()> {
         // Not necessary to use a batch, but we'd like a central place to bump counters.
         // Used in tests only anyway.
-        let batch = SchemaBatch::new();
+        let mut batch = SchemaBatch::new();
         batch.put::<S>(key, value)?;
         self.write_schemas(batch)
     }
@@ -193,10 +192,8 @@ impl DB {
         let _timer = SCHEMADB_BATCH_COMMIT_LATENCY_SECONDS
             .with_label_values(&[self.name])
             .start_timer();
-        let rows_locked = batch.last_writes.lock().expect("Lock must not be poisoned");
-
         let mut db_batch = rocksdb::WriteBatch::default();
-        for (cf_name, rows) in rows_locked.iter() {
+        for (cf_name, rows) in batch.last_writes.iter() {
             let cf_handle = self.get_cf_handle(cf_name)?;
             for (key, operation) in rows {
                 match operation {
@@ -210,7 +207,7 @@ impl DB {
         self.inner.write_opt(db_batch, &default_write_options())?;
 
         // Bump counters only after DB write succeeds.
-        for (cf_name, rows) in rows_locked.iter() {
+        for (cf_name, rows) in batch.last_writes.iter() {
             for (key, operation) in rows {
                 match operation {
                     Operation::Put { value } => {
@@ -289,7 +286,7 @@ pub enum Operation {
 #[derive(Debug, Default)]
 pub struct SchemaBatch {
     // TODO: Why do we need a mutex here?
-    last_writes: Mutex<HashMap<ColumnFamilyName, HashMap<SchemaKey, Operation>>>,
+    last_writes: HashMap<ColumnFamilyName, HashMap<SchemaKey, Operation>>,
 }
 
 impl SchemaBatch {
@@ -300,7 +297,7 @@ impl SchemaBatch {
 
     /// Adds an insert/update operation to the batch.
     pub fn put<S: Schema>(
-        &self,
+        &mut self,
         key: &impl KeyCodec<S>,
         value: &impl ValueCodec<S>,
     ) -> anyhow::Result<()> {
@@ -316,16 +313,15 @@ impl SchemaBatch {
     }
 
     /// Adds a delete operation to the batch.
-    pub fn delete<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<()> {
+    pub fn delete<S: Schema>(&mut self, key: &impl KeyCodec<S>) -> anyhow::Result<()> {
         let key = key.encode_key()?;
         self.insert_operation::<S>(key, Operation::Delete);
 
         Ok(())
     }
 
-    fn insert_operation<S: Schema>(&self, key: SchemaKey, operation: Operation) {
-        let mut last_writes = self.last_writes.lock().expect("Lock must not be poisoned");
-        let column_writes = last_writes.entry(S::COLUMN_FAMILY_NAME).or_default();
+    fn insert_operation<S: Schema>(&mut self, key: SchemaKey, operation: Operation) {
+        let column_writes = self.last_writes.entry(S::COLUMN_FAMILY_NAME).or_default();
         column_writes.insert(key, operation);
     }
 
@@ -335,8 +331,7 @@ impl SchemaBatch {
         key: &impl KeyCodec<S>,
     ) -> anyhow::Result<Option<Operation>> {
         let key = key.encode_key()?;
-        let last_writes = self.last_writes.lock().expect("Lock must not be poisoned");
-        let column_writes = last_writes.get(&S::COLUMN_FAMILY_NAME).unwrap();
+        let column_writes = self.last_writes.get(&S::COLUMN_FAMILY_NAME).unwrap();
         Ok(column_writes.get(&key).cloned())
     }
 }
@@ -354,9 +349,7 @@ impl proptest::arbitrary::Arbitrary for SchemaBatch {
                 for (col, write_op) in columns.iter().zip(vec_vec_write_ops.into_iter()) {
                     rows.insert(*col, write_op);
                 }
-                SchemaBatch {
-                    last_writes: Mutex::new(rows),
-                }
+                SchemaBatch { last_writes: rows }
             })
             .boxed()
     }

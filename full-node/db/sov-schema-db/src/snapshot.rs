@@ -1,6 +1,6 @@
 //! Snapshot related logic
 
-use std::sync::{Arc, LockResult, RwLock, RwLockReadGuard};
+use std::sync::{Arc, LockResult, Mutex, RwLock, RwLockReadGuard};
 
 use crate::schema::{KeyCodec, ValueCodec};
 use crate::{Operation, Schema, SchemaBatch, DB};
@@ -40,7 +40,7 @@ impl<T> ReadOnlyLock<T> {
 #[allow(dead_code)]
 pub struct DbSnapshot<Q> {
     id: SnapshotId,
-    cache: SchemaBatch,
+    cache: Mutex<SchemaBatch>,
     manager: ReadOnlyLock<Q>,
     db_reader: Arc<DB>,
 }
@@ -51,7 +51,7 @@ impl<Q: QueryManager> DbSnapshot<Q> {
     pub fn new(id: SnapshotId, manager: ReadOnlyLock<Q>, db_reader: Arc<DB>) -> Self {
         Self {
             id,
-            cache: SchemaBatch::default(),
+            cache: Mutex::new(SchemaBatch::default()),
             manager,
             db_reader,
         }
@@ -65,7 +65,12 @@ impl<Q: QueryManager> DbSnapshot<Q> {
         // we go deeper
 
         // 1. Check in cache
-        if let Some(operation) = self.cache.read(key)? {
+        if let Some(operation) = self
+            .cache
+            .lock()
+            .expect("SchemaBatch lock should not be poisoned")
+            .read(key)?
+        {
             return decode_operation::<S>(operation);
         }
 
@@ -91,8 +96,10 @@ impl<Q: QueryManager> DbSnapshot<Q> {
         key: &impl KeyCodec<S>,
         value: &impl ValueCodec<S>,
     ) -> anyhow::Result<()> {
-        // TODO: Lock here?
-        self.cache.put(key, value)?;
+        self.cache
+            .lock()
+            .expect("SchemaBatch lock must not be poisoned")
+            .put(key, value)?;
         Ok(())
     }
 }
