@@ -38,7 +38,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Context for Native environment.
     type NativeContext: Context;
 
-    /// Manager of the state
+    /// Manager for the native storage lifecycle.
     type StorageManager: StorageManager<
         NativeStorage = <Self::NativeContext as Spec>::Storage,
         NativeChangeSet = (),
@@ -70,13 +70,14 @@ pub trait RollupTemplate: Sized + Send + Sync {
         )
     }
 
-    /// Creates instance of DA Service.
+    /// Creates instance of [`DaService`].
     async fn create_da_service(
         &self,
         rollup_config: &RollupConfig<Self::DaConfig>,
     ) -> Self::DaService;
 
-    /// Creates instance of Native storage.
+    /// Creates instance of [`StorageManager`].
+    /// Panics if initialization fails.
     fn create_storage_manager(
         &self,
         rollup_config: &RollupConfig<Self::DaConfig>,
