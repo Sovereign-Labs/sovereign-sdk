@@ -1,12 +1,12 @@
 #!/bin/bash
 
 RETRIES=10
-WAIT_TIME=300
+WAIT_TIME=180
 REPO="sov-rollup-starter"
 
 while :
 do 
-    echo ""
+    echo " "
     if [[ RETRIES -lt 1 ]]
     then
         echo "Timeout: unable to read workflow_conclusion for ${REPO}"
@@ -23,8 +23,11 @@ do
         "https://api.github.com/repos/Sovereign-Labs/$REPO/actions/workflows/rust.yml/runs"
     )"
 
+    workflow_status=$(echo $workflow_result | jq -r '.workflow_runs[0].status')
+    echo "workflow_status for the ${REPO}: ${workflow_status}"
+
     workflow_conclusion=$(echo $workflow_result | jq -r '.workflow_runs[0].conclusion')
-    echo "workflow_conclusion for ${REPO}: ${workflow_conclusion}"
+    echo "workflow_conclusion for the ${REPO}: ${workflow_conclusion}"
 
     if [[ $workflow_conclusion == "success" ]]
     then
@@ -41,5 +44,5 @@ do
     sleep $WAIT_TIME
     ((RETRIES--))
 
-    echo "Waiting for workflow_conclusion of ${REPO}. Remainaing RETRIES: ${RETRIES}"
+    echo "Waiting for workflow_conclusion of the ${REPO}. Remainaing RETRIES: ${RETRIES}"
 done 
