@@ -31,6 +31,7 @@ fn test_simple_value_setter_with_chain_state() {
     .unwrap();
 
     let app_template = AppTemplate::<C, MockDaSpec, MockZkvm, TestRuntime<C, MockDaSpec>>::new();
+    let test_runtime = TestRuntime::<C, MockDaSpec>::default();
 
     let value_setter_messages = ValueSetterMessages::default();
     let value_setter = value_setter_messages.create_raw_txs::<TestRuntime<C, MockDaSpec>>();
@@ -65,10 +66,7 @@ fn test_simple_value_setter_with_chain_state() {
     let mut working_set = WorkingSet::new(storage_manager.get_native_storage());
 
     // Check the slot height before apply slot
-    let new_height_storage = app_template
-        .runtime
-        .chain_state
-        .get_slot_height(&mut working_set);
+    let new_height_storage = test_runtime.chain_state.get_slot_height(&mut working_set);
 
     assert_eq!(new_height_storage, 0, "The initial height was not computed");
 
@@ -91,7 +89,7 @@ fn test_simple_value_setter_with_chain_state() {
 
     // Computes the new working set after slot application
     let mut working_set = WorkingSet::new(storage_manager.get_native_storage());
-    let chain_state_ref = &app_template.runtime.chain_state;
+    let chain_state_ref = &test_runtime.chain_state;
 
     let new_root_hash = result.state_root;
 
@@ -148,7 +146,7 @@ fn test_simple_value_setter_with_chain_state() {
 
     // Computes the new working set after slot application
     let mut working_set = WorkingSet::new(storage_manager.get_native_storage());
-    let chain_state_ref = &app_template.runtime.chain_state;
+    let chain_state_ref = &test_runtime.chain_state;
 
     // Check that the root hash has been stored correctly
     let stored_root = chain_state_ref.get_genesis_hash(&mut working_set).unwrap();

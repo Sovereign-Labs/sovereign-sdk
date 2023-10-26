@@ -26,8 +26,7 @@ use sov_zk_cycle_macros::cycle_tracker;
 pub struct AppTemplate<C: Context, Da: DaSpec, Vm, RT: Runtime<C, Da>> {
     /// State storage used by the rollup.
     /// The runtime includes all the modules that the rollup supports.
-    /// TODO: Why is it public?
-    pub runtime: RT,
+    pub(crate) runtime: RT,
     phantom_context: PhantomData<C>,
     phantom_vm: PhantomData<Vm>,
     phantom_da: PhantomData<Da>,

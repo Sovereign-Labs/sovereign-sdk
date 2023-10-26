@@ -10,7 +10,7 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::storage::StorageManager;
 use sov_state::ProverStorage;
 
-use super::{create_storage_manager_for_tests, get_genesis_config_for_tests};
+use super::{create_storage_manager_for_tests, get_genesis_config_for_tests, RuntimeTest};
 use crate::runtime::Runtime;
 use crate::tests::da_simulation::{
     simulate_da_with_bad_nonce, simulate_da_with_bad_serialization, simulate_da_with_bad_sig,
@@ -268,17 +268,16 @@ fn test_tx_bad_serialization() {
     let (genesis_root, sequencer_balance_before) = {
         let storage_manager = create_storage_manager_for_tests(path);
         let stf: AppTemplateTest = AppTemplate::new();
+        let runtime: RuntimeTest = Runtime::default();
         let (genesis_root, _) = stf.init_chain(storage_manager.get_native_storage(), config);
 
         let mut working_set = WorkingSet::new(storage_manager.get_native_storage());
-        let coins = stf
-            .runtime
+        let coins = runtime
             .sequencer_registry
             .get_coins_to_lock(&mut working_set)
             .unwrap();
 
-        let balance = stf
-            .runtime
+        let balance = runtime
             .bank
             .get_balance_of(
                 sequencer_rollup_address,

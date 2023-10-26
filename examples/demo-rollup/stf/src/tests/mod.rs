@@ -16,12 +16,9 @@ mod tx_revert_tests;
 pub(crate) type C = DefaultContext;
 pub(crate) type Da = MockDaSpec;
 
-pub(crate) type AppTemplateTest = AppTemplate<
-    DefaultContext,
-    Da,
-    sov_rollup_interface::mocks::MockZkvm,
-    Runtime<DefaultContext, Da>,
->;
+pub(crate) type RuntimeTest = Runtime<DefaultContext, Da>;
+pub(crate) type AppTemplateTest =
+    AppTemplate<DefaultContext, Da, sov_rollup_interface::mocks::MockZkvm, RuntimeTest>;
 
 pub(crate) fn create_storage_manager_for_tests(
     path: impl AsRef<Path>,
