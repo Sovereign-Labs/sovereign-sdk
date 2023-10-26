@@ -1,7 +1,7 @@
 #!/bin/bash
 
 RETRIES=10
-WAIT_TIME=180
+WAIT_TIME=300
 REPO="sov-rollup-starter"
 
 while :
