@@ -1,9 +1,8 @@
-use std::sync::atomic::AtomicUsize;
-use std::sync::Mutex;
-
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
+#[cfg(feature = "std")]
+pub use use_std::ArrayWitness;
 
 /// A witness is a value produced during native execution that is then used by
 /// the zkVM circuit to produce proofs.
@@ -30,45 +29,54 @@ pub trait Witness: Default + Serialize + DeserializeOwned {
     fn merge(&self, rhs: &Self);
 }
 
-/// A [`Vec`]-based implementation of [`Witness`] with no special logic.
-///
-/// # Example
-///
-/// ```
-/// use sov_state::{ArrayWitness, Witness};
-///
-/// let witness = ArrayWitness::default();
-///
-/// witness.add_hint(1u64);
-/// witness.add_hint(2u64);
-///
-/// assert_eq!(witness.get_hint::<u64>(), 1u64);
-/// assert_eq!(witness.get_hint::<u64>(), 2u64);
-/// ```
-#[derive(Default, Debug, Serialize, Deserialize)]
-pub struct ArrayWitness {
-    next_idx: AtomicUsize,
-    hints: Mutex<Vec<Vec<u8>>>,
-}
+#[cfg(feature = "std")]
+mod use_std {
+    use std::io;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
 
-impl Witness for ArrayWitness {
-    fn add_hint<T: BorshSerialize>(&self, hint: T) {
-        self.hints.lock().unwrap().push(hint.try_to_vec().unwrap())
+    use serde::Deserialize;
+
+    use super::*;
+
+    /// A [`Vec`]-based implementation of [`Witness`] with no special logic.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use sov_state::{ArrayWitness, Witness};
+    ///
+    /// let witness = ArrayWitness::default();
+    ///
+    /// witness.add_hint(1u64);
+    /// witness.add_hint(2u64);
+    ///
+    /// assert_eq!(witness.get_hint::<u64>(), 1u64);
+    /// assert_eq!(witness.get_hint::<u64>(), 2u64);
+    /// ```
+    #[derive(Default, Debug, Serialize, Deserialize)]
+    pub struct ArrayWitness {
+        next_idx: AtomicUsize,
+        hints: Mutex<Vec<Vec<u8>>>,
     }
 
-    fn get_hint<T: BorshDeserialize>(&self) -> T {
-        let idx = self
-            .next_idx
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let hints_lock = self.hints.lock().unwrap();
-        T::deserialize_reader(&mut std::io::Cursor::new(&hints_lock[idx]))
-            .expect("Hint deserialization should never fail")
-    }
+    impl Witness for ArrayWitness {
+        fn add_hint<T: BorshSerialize>(&self, hint: T) {
+            self.hints.lock().unwrap().push(hint.try_to_vec().unwrap())
+        }
 
-    fn merge(&self, rhs: &Self) {
-        let rhs_next_idx = rhs.next_idx.load(std::sync::atomic::Ordering::SeqCst);
-        let mut lhs_hints_lock = self.hints.lock().unwrap();
-        let mut rhs_hints_lock = rhs.hints.lock().unwrap();
-        lhs_hints_lock.extend(rhs_hints_lock.drain(rhs_next_idx..))
+        fn get_hint<T: BorshDeserialize>(&self) -> T {
+            let idx = self.next_idx.fetch_add(1, Ordering::SeqCst);
+            let hints_lock = self.hints.lock().unwrap();
+            T::deserialize_reader(&mut io::Cursor::new(&hints_lock[idx]))
+                .expect("Hint deserialization should never fail")
+        }
+
+        fn merge(&self, rhs: &Self) {
+            let rhs_next_idx = rhs.next_idx.load(Ordering::SeqCst);
+            let mut lhs_hints_lock = self.hints.lock().unwrap();
+            let mut rhs_hints_lock = rhs.hints.lock().unwrap();
+            lhs_hints_lock.extend(rhs_hints_lock.drain(rhs_next_idx..))
+        }
     }
 }

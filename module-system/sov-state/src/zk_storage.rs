@@ -1,5 +1,6 @@
-use std::marker::PhantomData;
-use std::sync::Arc;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::marker::PhantomData;
 
 use jmt::KeyHash;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]

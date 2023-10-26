@@ -1,5 +1,7 @@
 //! This module defines a codec which delegates to one codec for keys and one codec for values.
 
+use alloc::vec::Vec;
+
 use super::{StateCodec, StateKeyCodec, StateValueCodec};
 
 /// A [`StateValueCodec`] that uses one pre-existing codec for keys and a different one values.

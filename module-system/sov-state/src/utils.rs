@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 /// A [`Vec`] of bytes whose length is guaranteed to be aligned to 4 bytes.
 /// This makes certain operations cheaper in zk-context (namely, concatenation).
 // TODO: Currently the implementation defaults to `stc::vec::Vec` see:

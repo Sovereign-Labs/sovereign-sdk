@@ -8613,6 +8613,7 @@ name = "sov-first-read-last-write-cache"
 version = "0.3.0"
 dependencies = [
  "proptest",
+ "sov-rollup-interface",
  "thiserror",
 ]
 
@@ -8924,7 +8925,6 @@ dependencies = [
  "sov-rollup-interface",
  "sov-zk-cycle-macros",
  "tempfile",
- "thiserror",
 ]
 
 [[package]]

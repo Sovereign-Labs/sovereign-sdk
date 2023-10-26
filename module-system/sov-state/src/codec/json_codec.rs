@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use serde_json;
 
 use super::{StateCodec, StateKeyCodec};

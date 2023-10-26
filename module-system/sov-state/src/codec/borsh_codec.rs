@@ -1,3 +1,7 @@
+use alloc::vec::Vec;
+
+use sov_rollup_interface::maybestd::io;
+
 use super::{StateCodec, StateKeyCodec};
 use crate::codec::StateValueCodec;
 
@@ -18,7 +22,7 @@ impl<V> StateValueCodec<V> for BorshCodec
 where
     V: borsh::BorshSerialize + borsh::BorshDeserialize,
 {
-    type Error = std::io::Error;
+    type Error = io::Error;
 
     fn encode_value(&self, value: &V) -> Vec<u8> {
         value.try_to_vec().expect("Failed to serialize value")

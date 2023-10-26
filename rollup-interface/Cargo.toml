@@ -16,7 +16,7 @@ exclude = [
 
 
 [dependencies]
-anyhow = { workspace = true, default-features = false }
+anyhow = { workspace = true }
 async-trait = { workspace = true }
 borsh = { workspace = true }
 bytes = { workspace = true, optional = true, default-features = true }

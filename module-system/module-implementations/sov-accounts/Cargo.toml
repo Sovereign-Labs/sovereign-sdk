@@ -42,4 +42,12 @@ arbitrary = [
     "sov-modules-api/arbitrary",
     "sov-state/arbitrary"
 ]
-native = ["serde_json", "jsonrpsee", "schemars", "clap", "sov-state/native", "sov-modules-api/native"]
+native = [
+    "serde_json",
+    "jsonrpsee",
+    "schemars",
+    "clap",
+    "sov-state/native",
+    "sov-state/sov-db",
+    "sov-modules-api/native"
+]

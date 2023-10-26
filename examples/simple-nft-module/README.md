@@ -128,7 +128,7 @@ Before we start implementing the `Module` trait, there are several preparatory s
     [features]
     default = ["native"]
     serde = ["dep:serde", "dep:serde_json"]
-    native = ["serde", "sov-state/native", "sov-modules-api/native"]
+    native = ["serde", "sov-state/native", "sov-state/sov-db", "sov-modules-api/native"]
     ```
 
     This step is necessary to optimize the module for execution in ZK mode, where none of the RPC-related logic is

@@ -1,5 +1,6 @@
-use std::fmt::Display;
-use std::sync::Arc;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::fmt;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use hex;
@@ -52,8 +53,8 @@ impl AsRef<Vec<u8>> for StorageKey {
     }
 }
 
-impl Display for StorageKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for StorageKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:x?}", hex::encode(self.key().as_ref()))
     }
 }

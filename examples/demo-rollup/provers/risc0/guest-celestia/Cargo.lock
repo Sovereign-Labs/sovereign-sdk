@@ -224,9 +224,9 @@ checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
 
 [[package]]
 name = "bcs"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bd3ffe8b19a604421a5d461d4a70346223e535903fbc3067138bddbebddcf77"
+checksum = "85b6598a2f5d564fb7855dc6b06fd1c38cff5a72bd8b863a4d021938497b440a"
 dependencies = [
  "serde",
  "thiserror",
@@ -2064,6 +2064,7 @@ dependencies = [
 name = "sov-first-read-last-write-cache"
 version = "0.3.0"
 dependencies = [
+ "sov-rollup-interface",
  "thiserror",
 ]
 
@@ -2185,7 +2186,6 @@ dependencies = [
  "sha2 0.10.8",
  "sov-first-read-last-write-cache",
  "sov-rollup-interface",
- "thiserror",
 ]
 
 [[package]]

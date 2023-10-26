@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use super::{StateCodec, StateKeyCodec};
 use crate::codec::StateValueCodec;
 

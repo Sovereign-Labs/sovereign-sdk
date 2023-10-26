@@ -57,7 +57,7 @@ repository = "https://github.com/sovereign-labs/sovereign-sdk"
 
 [workspace.dependencies]
 # Dependencies maintained by Sovereign
-jmt = "0.8.0"
+jmt = { version = "0.8.0", default-features = false }
 
 # External dependencies
 async-trait = "0.1.71"

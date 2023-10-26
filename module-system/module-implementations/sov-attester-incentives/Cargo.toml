@@ -41,4 +41,5 @@ native = [
     "sov-bank/native",
     "sov-chain-state/native",
     "sov-state/native",
+    "sov-state/sov-db",
 ]

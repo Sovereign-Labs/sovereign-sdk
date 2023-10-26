@@ -6,7 +6,7 @@ use crate::{config, MerkleProofSpec, ProverStorage};
 pub struct ProverStorageManager<S: MerkleProofSpec> {
     state_db: sov_db::state_db::StateDB,
     native_db: sov_db::native_db::NativeDB,
-    phantom_s: std::marker::PhantomData<S>,
+    phantom_s: core::marker::PhantomData<S>,
 }
 
 impl<S: MerkleProofSpec> ProverStorageManager<S> {

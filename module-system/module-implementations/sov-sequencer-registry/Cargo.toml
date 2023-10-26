@@ -46,6 +46,7 @@ native = [
     "schemars",
     "clap",
     "sov-state/native",
+    "sov-state/sov-db",
     "sov-modules-api/native",
     # This:
     "sov-bank/native",

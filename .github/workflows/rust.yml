@@ -128,11 +128,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Install Rust
+      - name: Install Rust Bare Metal
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           target: thumbv6m-none-eabi
+          override: true
+      - name: Install Rust WASM
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
           override: true
       - uses: Swatinem/rust-cache@v2
         with:

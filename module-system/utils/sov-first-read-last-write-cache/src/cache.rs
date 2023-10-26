@@ -1,14 +1,18 @@
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use alloc::vec::Vec;
 
-use thiserror::Error;
+use sov_rollup_interface::maybestd::collections::hash_map::Entry;
+use sov_rollup_interface::maybestd::collections::HashMap;
 
 use crate::access::{Access, MergeError};
 use crate::{CacheKey, CacheValue};
 
-#[derive(Error, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum ReadError {
-    #[error("inconsistent read, expected: {expected:?}, found: {found:?}")]
+    #[cfg_attr(
+        feature = "std",
+        error("inconsistent read, expected: {expected:?}, found: {found:?}")
+    )]
     InconsistentRead {
         expected: Option<CacheValue>,
         found: Option<CacheValue>,

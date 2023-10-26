@@ -1,15 +1,20 @@
-use thiserror::Error;
-
 use crate::CacheValue;
 
-#[derive(Error, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum MergeError {
-    #[error("consecutive reads are inconsistent: left read: {left:?}, right read: {right:?}")]
+    #[cfg_attr(
+        feature = "std",
+        error("consecutive reads are inconsistent: left read: {left:?}, right read: {right:?}")
+    )]
     ReadThenRead {
         left: Option<CacheValue>,
         right: Option<CacheValue>,
     },
-    #[error("the read: {read:?} is in inconsistent with the previous write: {write:?}")]
+    #[cfg_attr(
+        feature = "std",
+        error("the read: {read:?} is in inconsistent with the previous write: {write:?}")
+    )]
     WriteThenRead {
         write: Option<CacheValue>,
         read: Option<CacheValue>,

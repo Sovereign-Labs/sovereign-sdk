@@ -1,38 +1,51 @@
 //! Storage and state management interfaces for Sovereign SDK modules.
 
 #![deny(missing_docs)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
 
 pub mod codec;
 
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "sov-db"))]
 mod prover_storage;
 
+#[cfg(feature = "sync")]
 mod internal_cache;
 
 /// Trait and type definitions related to the [`Storage`] trait.
+#[cfg(feature = "sync")]
 pub mod storage;
 mod utils;
 mod witness;
+#[cfg(feature = "sync")]
 mod zk_storage;
 
+#[cfg(feature = "sync")]
 pub use internal_cache::{OrderedReadsAndWrites, StorageInternalCache};
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "sov-db"))]
 pub use prover_storage::ProverStorage;
+#[cfg(feature = "sync")]
 pub use storage::Storage;
+#[cfg(feature = "sync")]
 pub use zk_storage::ZkStorage;
 
+#[cfg(feature = "std")]
 pub mod config;
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "sov-db"))]
 pub mod storage_manager;
 
-use std::fmt::Display;
-use std::str;
+use alloc::vec::Vec;
+use core::{fmt, str};
 
+#[cfg(feature = "sync")]
 pub use sov_first_read_last_write_cache::cache::CacheLog;
 use sov_rollup_interface::digest::Digest;
 pub use utils::AlignedVec;
 
-pub use crate::witness::{ArrayWitness, Witness};
+#[cfg(feature = "std")]
+pub use crate::witness::ArrayWitness;
+pub use crate::witness::Witness;
 
 /// A prefix prepended to each key before insertion and retrieval from the storage.
 ///
@@ -57,8 +70,8 @@ pub struct Prefix {
     prefix: AlignedVec,
 }
 
-impl Display for Prefix {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Prefix {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let buf = self.prefix.as_ref();
         match str::from_utf8(buf) {
             Ok(s) => {
@@ -120,16 +133,14 @@ pub trait MerkleProofSpec {
     type Hasher: Digest<OutputSize = sha2::digest::typenum::U32>;
 }
 
-use sha2::Sha256;
-
 /// The default [`MerkleProofSpec`] implementation.
 ///
 /// This type is typically found as a type parameter for [`ProverStorage`].
 #[derive(Clone)]
 pub struct DefaultStorageSpec;
 
+#[cfg(feature = "std")]
 impl MerkleProofSpec for DefaultStorageSpec {
     type Witness = ArrayWitness;
-
-    type Hasher = Sha256;
+    type Hasher = sha2::Sha256;
 }

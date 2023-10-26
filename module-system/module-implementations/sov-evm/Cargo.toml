@@ -71,6 +71,7 @@ native = [
     "schemars",
     "clap",
     "sov-state/native",
+    "sov-state/sov-db",
     "sov-modules-api/native",
 ]
 experimental = ["native"]

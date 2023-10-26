@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use core::marker::PhantomData;
 use std::path::Path;
 use std::sync::Arc;
 

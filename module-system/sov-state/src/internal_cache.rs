@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use sov_first_read_last_write_cache::cache::{self, CacheLog, ValueExists};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 

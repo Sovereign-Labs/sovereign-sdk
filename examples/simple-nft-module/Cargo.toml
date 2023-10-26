@@ -30,5 +30,13 @@ simple-nft-module = { version = "*", features = ["native"], path = "." }
 
 [features]
 default = []
-native = ["sov-state/native", "sov-modules-api/native", "jsonrpsee", "schemars", "serde_json", "clap"]
+native = [
+    "sov-state/native",
+    "sov-state/sov-db",
+    "sov-modules-api/native",
+    "jsonrpsee",
+    "schemars",
+    "serde_json",
+    "clap",
+]
 test = ["native"]

@@ -68,5 +68,6 @@ native = [
     "macros",
     "sov-modules-macros/native",
     "sov-state/native",
+    "sov-state/sov-db",
 ]
 macros = ["sov-modules-macros"]

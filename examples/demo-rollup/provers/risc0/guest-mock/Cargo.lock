@@ -1047,6 +1047,7 @@ dependencies = [
 name = "sov-first-read-last-write-cache"
 version = "0.3.0"
 dependencies = [
+ "sov-rollup-interface",
  "thiserror",
 ]
 
@@ -1168,7 +1169,6 @@ dependencies = [
  "sha2",
  "sov-first-read-last-write-cache",
  "sov-rollup-interface",
- "thiserror",
 ]
 
 [[package]]

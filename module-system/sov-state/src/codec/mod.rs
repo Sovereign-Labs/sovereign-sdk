@@ -1,10 +1,15 @@
 //! Serialization and deserialization -related logic.
 
+use alloc::format;
+use alloc::vec::Vec;
+
+#[cfg(feature = "std")]
 mod bcs_codec;
 mod borsh_codec;
 mod json_codec;
 mod split_codec;
 
+#[cfg(feature = "std")]
 pub use bcs_codec::BcsCodec;
 use borsh::BorshSerialize;
 pub use borsh_codec::BorshCodec;
@@ -14,7 +19,7 @@ pub use json_codec::JsonCodec;
 /// access.
 pub trait StateValueCodec<V> {
     /// Error type that can arise during deserialization.
-    type Error: std::fmt::Debug;
+    type Error: core::fmt::Debug;
 
     /// Serializes a value into a bytes vector.
     ///

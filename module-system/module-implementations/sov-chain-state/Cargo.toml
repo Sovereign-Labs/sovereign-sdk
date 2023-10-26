@@ -31,4 +31,10 @@ sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"
 
 [features]
 default = []
-native = ["serde_json", "jsonrpsee", "sov-state/native", "sov-modules-api/native"]
+native = [
+    "serde_json",
+    "jsonrpsee",
+    "sov-state/native",
+    "sov-state/sov-db",
+    "sov-modules-api/native"
+]

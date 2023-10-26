@@ -14,17 +14,16 @@ resolver = "2"
 [dependencies]
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
-borsh = { workspace = true, features = ["rc", "bytes"] }
-bcs = { workspace = true }
+borsh = { workspace = true }
+bcs = { workspace = true, optional = true }
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
-serde = { workspace = true, features = ["rc"] }
+serde = { workspace = true }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
-sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.3", default-features = false }
 sov-db = { path = "../../full-node/db/sov-db", version = "0.3", optional = true }
-sov-first-read-last-write-cache = { path = "../utils/sov-first-read-last-write-cache", version = "0.3" }
-jmt = { workspace = true }
+sov-first-read-last-write-cache = { path = "../utils/sov-first-read-last-write-cache", version = "0.3", default-features = false, optional = true }
+jmt = { workspace = true, optional = true }
 hex = { workspace = true }
 sha2 = { workspace = true }
 
@@ -37,11 +36,37 @@ tempfile = { workspace = true }
 proptest = { workspace = true }
 
 [features]
+default = ["std"]
 arbitrary = [
     "dep:arbitrary",
     "dep:proptest",
-    "dep:proptest-derive"
+    "dep:proptest-derive",
+    "std"
 ]
-bench = ["sov-zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
-default = []
-native = ["sov-db"]
+bench = [
+    "sov-zk-cycle-macros",
+    "risc0-zkvm",
+    "risc0-zkvm-platform",
+    "std",
+]
+native = []
+sov-db = [
+    "dep:sov-db",
+    "std"
+]
+std = [
+    "anyhow/default",
+    "bcs",
+    "borsh/default",
+    "jmt/default",
+    "serde/default",
+    "sov-rollup-interface/default",
+    "sov-first-read-last-write-cache/default",
+    "sync",
+]
+sync = [
+    "borsh/rc",
+    "jmt",
+    "serde/rc",
+    "sov-first-read-last-write-cache",
+]
