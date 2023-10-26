@@ -6,7 +6,7 @@ use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockDaSpec, MockValidityCond};
 use sov_rollup_interface::storage::StorageManager;
 use sov_state::config::Config;
-use sov_state::state_manager::ProverStorageManager;
+use sov_state::storage_manager::ProverStorageManager;
 use sov_state::{DefaultStorageSpec, Storage};
 
 /// This simply tests that the chain_state reacts properly with the invocation of the `begin_slot`
@@ -18,13 +18,13 @@ fn test_simple_chain_state() {
     // Initialize the module.
     let tmpdir = tempfile::tempdir().unwrap();
 
-    let state_manager: ProverStorageManager<DefaultStorageSpec> =
+    let storage_manager: ProverStorageManager<DefaultStorageSpec> =
         ProverStorageManager::new(Config {
             path: tmpdir.path().to_path_buf(),
         })
         .unwrap();
 
-    let storage = state_manager.get_native_storage();
+    let storage = storage_manager.get_native_storage();
 
     let mut working_set = WorkingSet::new(storage.clone());
 

@@ -39,7 +39,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
     type NativeContext: Context;
 
     /// Manager of the state
-    type StateManager: StorageManager<
+    type StorageManager: StorageManager<
         NativeStorage = <Self::NativeContext as Spec>::Storage,
         NativeChangeSet = (),
     >;
@@ -77,10 +77,10 @@ pub trait RollupTemplate: Sized + Send + Sync {
     ) -> Self::DaService;
 
     /// Creates instance of Native storage.
-    fn create_state_manager(
+    fn create_storage_manager(
         &self,
         rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> Result<Self::StateManager, anyhow::Error>;
+    ) -> Result<Self::StorageManager, anyhow::Error>;
 
     /// Creates instance of ZK storage.
     fn create_zk_storage(
@@ -116,7 +116,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
         let prover =
             prover_config.map(|pc| configure_prover(self.create_vm(), pc, self.create_verifier()));
 
-        let storage_manager = self.create_state_manager(&rollup_config)?;
+        let storage_manager = self.create_storage_manager(&rollup_config)?;
         let native_storage = storage_manager.get_native_storage();
         let zk_storage = self.create_zk_storage(&rollup_config);
 
@@ -164,7 +164,7 @@ pub struct Rollup<S: RollupTemplate> {
     #[allow(clippy::type_complexity)]
     pub runner: StateTransitionRunner<
         AppTemplate<S::NativeContext, S::DaSpec, S::Vm, S::NativeRuntime>,
-        S::StateManager,
+        S::StorageManager,
         S::DaService,
         S::Vm,
         AppTemplate<S::ZkContext, S::DaSpec, <S::Vm as ZkvmHost>::Guest, S::ZkRuntime>,

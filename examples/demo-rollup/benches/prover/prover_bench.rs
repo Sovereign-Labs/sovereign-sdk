@@ -167,9 +167,9 @@ async fn main() -> Result<(), anyhow::Error> {
         path: rollup_config.storage.path,
     };
 
-    let state_manager = sov_state::state_manager::ProverStorageManager::new(storage_config)
-        .expect("Failed to initialize state manager");
-    let demo = AppTemplate::<
+    let storage_manager = sov_state::storage_manager::ProverStorageManager::new(storage_config)
+        .expect("ProverStorageManager initialization has failed");
+    let stf = AppTemplate::<
         DefaultContext,
         CelestiaSpec,
         Risc0Host,
@@ -180,7 +180,7 @@ async fn main() -> Result<(), anyhow::Error> {
         get_genesis_config(&GenesisPaths::from_dir("../test-data/genesis/demo-tests")).unwrap();
     println!("Starting from empty storage, initialization chain");
     let (mut prev_state_root, _) =
-        demo.init_chain(state_manager.get_native_storage(), genesis_config);
+        stf.init_chain(storage_manager.get_native_storage(), genesis_config);
 
     let hex_data = read_to_string("benches/prover/blocks.hex").expect("Failed to read data");
     let bincoded_blocks: Vec<FilteredCelestiaBlock> = hex_data
@@ -215,9 +215,9 @@ async fn main() -> Result<(), anyhow::Error> {
             num_blobs += blob_txs.len();
         }
 
-        let result = demo.apply_slot(
+        let result = stf.apply_slot(
             &prev_state_root,
-            state_manager.get_native_storage(),
+            storage_manager.get_native_storage(),
             Default::default(),
             &filtered_block.header,
             &filtered_block.validity_condition(),

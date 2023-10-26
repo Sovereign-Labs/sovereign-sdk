@@ -23,7 +23,7 @@ pub use zk_storage::ZkStorage;
 
 pub mod config;
 #[cfg(feature = "native")]
-pub mod state_manager;
+pub mod storage_manager;
 
 use std::fmt::Display;
 use std::str;

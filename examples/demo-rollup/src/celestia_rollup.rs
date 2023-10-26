@@ -8,7 +8,7 @@ use sov_modules_api::Spec;
 use sov_modules_rollup_template::{RollupTemplate, WalletTemplate};
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
-use sov_state::state_manager::ProverStorageManager;
+use sov_state::storage_manager::ProverStorageManager;
 use sov_state::{DefaultStorageSpec, ZkStorage};
 use sov_stf_runner::RollupConfig;
 
@@ -27,7 +27,7 @@ impl RollupTemplate for CelestiaDemoRollup {
     type ZkContext = ZkDefaultContext;
     type NativeContext = DefaultContext;
 
-    type StateManager = ProverStorageManager<DefaultStorageSpec>;
+    type StorageManager = ProverStorageManager<DefaultStorageSpec>;
     type ZkRuntime = Runtime<Self::ZkContext, Self::DaSpec>;
 
     type NativeRuntime = Runtime<Self::NativeContext, Self::DaSpec>;
@@ -68,10 +68,10 @@ impl RollupTemplate for CelestiaDemoRollup {
         .await
     }
 
-    fn create_state_manager(
+    fn create_storage_manager(
         &self,
         rollup_config: &sov_stf_runner::RollupConfig<Self::DaConfig>,
-    ) -> Result<Self::StateManager, anyhow::Error> {
+    ) -> Result<Self::StorageManager, anyhow::Error> {
         let storage_config = StorageConfig {
             path: rollup_config.storage.path.clone(),
         };

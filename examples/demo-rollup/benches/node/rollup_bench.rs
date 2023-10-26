@@ -45,8 +45,8 @@ fn rollup_bench(_bench: &mut Criterion) {
     let storage_config = sov_state::config::Config {
         path: rollup_config.storage.path,
     };
-    let state_manager = sov_state::state_manager::ProverStorageManager::new(storage_config)
-        .expect("Failed to initialize state manager");
+    let storage_manager = sov_state::storage_manager::ProverStorageManager::new(storage_config)
+        .expect("Failed to initialize prover storage manager");
     let stf = AppTemplate::<
         DefaultContext,
         RngDaSpec,
@@ -60,7 +60,7 @@ fn rollup_bench(_bench: &mut Criterion) {
     .unwrap();
 
     let (mut current_root, _) =
-        stf.init_chain(state_manager.get_native_storage(), demo_genesis_config);
+        stf.init_chain(storage_manager.get_native_storage(), demo_genesis_config);
 
     // data generation
     let mut blobs = vec![];
@@ -92,7 +92,7 @@ fn rollup_bench(_bench: &mut Criterion) {
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
             let apply_block_result = stf.apply_slot(
                 &current_root,
-                state_manager.get_native_storage(),
+                storage_manager.get_native_storage(),
                 Default::default(),
                 &filtered_block.header,
                 &filtered_block.validity_cond,

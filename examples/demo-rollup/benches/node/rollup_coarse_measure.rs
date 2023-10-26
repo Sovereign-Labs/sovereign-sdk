@@ -100,8 +100,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let storage_config = sov_state::config::Config {
         path: rollup_config.storage.path,
     };
-    let state_manager = sov_state::state_manager::ProverStorageManager::new(storage_config)
-        .expect("State manager initialization has failed");
+    let storage_manager = sov_state::storage_manager::ProverStorageManager::new(storage_config)
+        .expect("ProverStorageManager initialization has failed");
     let stf = AppTemplate::<
         DefaultContext,
         RngDaSpec,
@@ -115,7 +115,7 @@ async fn main() -> Result<(), anyhow::Error> {
     .unwrap();
 
     let (mut current_root, _) =
-        stf.init_chain(state_manager.get_native_storage(), demo_genesis_config);
+        stf.init_chain(storage_manager.get_native_storage(), demo_genesis_config);
 
     // data generation
     let mut blobs = vec![];
@@ -144,7 +144,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut data_to_commit = SlotCommit::new(filtered_block.clone());
     let apply_block_results = stf.apply_slot(
         &current_root,
-        state_manager.get_native_storage(),
+        storage_manager.get_native_storage(),
         Default::default(),
         &filtered_block.header,
         &filtered_block.validity_cond,
@@ -167,7 +167,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
         let apply_block_results = stf.apply_slot(
             &current_root,
-            state_manager.get_native_storage(),
+            storage_manager.get_native_storage(),
             Default::default(),
             &filtered_block.header,
             &filtered_block.validity_cond,
