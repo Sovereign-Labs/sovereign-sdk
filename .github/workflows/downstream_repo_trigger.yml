@@ -18,8 +18,9 @@ jobs:
           github_token: ${{ secrets.CI_TRIGGER_ACCESS_TOKEN }}
           workflow_file_name: rust.yml
           ref: main
-          wait_interval: 180
+          wait_interval: 20
           propagate_failure: true
           trigger_workflow: true
           wait_workflow: true
           comment_downstream_url: ${{ github.event.pull_request.comments_url }}
+          github_token: ${{ secrets.CI_TRIGGER_ACCESS_TOKEN }}
