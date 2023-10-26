@@ -6,13 +6,6 @@ on:
   pull_request:
     branches: ["nightly", "stable"]
 
-# Automatically cancels a job if a new commit if pushed to the same PR, branch, or tag.
-# Source: <https://stackoverflow.com/a/72408109/5148606>
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  # Except in `nightly` and `stable` branches! Any cancelled job will cause the
-  # CI run to fail, and we want to keep a clean history for major branches.
-  cancel-in-progress: ${{ (github.ref != 'refs/heads/nightly') && (github.ref != 'refs/heads/stable') 
 
 jobs:
   trigger_workflow:
