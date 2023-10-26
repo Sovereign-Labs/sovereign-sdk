@@ -1,0 +1,31 @@
+name: 'Downstream Repo Checks'
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  trigger_workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger sov-rollup-starter CI.
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.CI_TRIGGER_ACCESS_TOKEN }}
+          script: |
+            const result = await github.rest.actions.createWorkflowDispatch({
+              owner: 'bkolad',
+              repo: 'sov-rollup-starter',
+              workflow_id: 'rust.yml',
+              ref: 'main'
+            })
+            console.log(result)
+    
+      - name: Wait for sov-rollup-starter CI.
+        run: sleep 30s
+      
+      - uses: actions/checkout@v3
+      - name: Check sov-rollup-starter conclusion.
+        env:
+          CI_TRIGGER_ACCESS_TOKEN: ${{ secrets.CI_TRIGGER_ACCESS_TOKEN }}
+        run: .github/scripts/workflow_trigger.sh
