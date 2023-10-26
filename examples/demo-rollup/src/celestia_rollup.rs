@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use demo_stf::genesis_config::StorageConfig;
 use demo_stf::runtime::Runtime;
 use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams};
-use sov_celestia_adapter::{CelestiaService, DaServiceConfig};
+use sov_celestia_adapter::{CelestiaConfig, CelestiaService};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::Spec;
 use sov_modules_rollup_template::{RollupTemplate, WalletTemplate};
@@ -21,7 +21,7 @@ pub struct CelestiaDemoRollup {}
 impl RollupTemplate for CelestiaDemoRollup {
     type DaService = CelestiaService;
     type DaSpec = CelestiaSpec;
-    type DaConfig = DaServiceConfig;
+    type DaConfig = CelestiaConfig;
     type Vm = Risc0Host<'static>;
 
     type ZkContext = ZkDefaultContext;
