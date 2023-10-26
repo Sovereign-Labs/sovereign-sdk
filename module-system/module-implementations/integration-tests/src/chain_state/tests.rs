@@ -2,17 +2,17 @@ use sov_chain_state::{StateTransitionId, TransitionInProgress};
 use sov_data_generators::value_setter_data::ValueSetterMessages;
 use sov_data_generators::{has_tx_events, new_test_blob_from_batch, MessageGenerator};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::Spec;
+use sov_modules_api::{Spec, WorkingSet};
 use sov_modules_stf_template::{AppTemplate, SequencerOutcome};
 use sov_rollup_interface::mocks::{
     MockBlock, MockBlockHeader, MockDaSpec, MockHash, MockValidityCond, MockZkvm,
 };
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_state::{ProverStorage, Storage};
+use sov_rollup_interface::storage::StorageManager;
+use sov_state::storage_manager::ProverStorageManager;
+use sov_state::Storage;
 
-use crate::chain_state::helpers::{
-    create_chain_state_genesis_config, get_working_set, TestRuntime,
-};
+use crate::chain_state::helpers::{create_chain_state_genesis_config, TestRuntime};
 
 type C = DefaultContext;
 
@@ -25,11 +25,13 @@ fn test_simple_value_setter_with_chain_state() {
 
     let tmpdir = tempfile::tempdir().unwrap();
 
-    let storage: ProverStorage<sov_state::DefaultStorageSpec> =
-        ProverStorage::with_path(tmpdir.path()).unwrap();
+    let storage_manager = ProverStorageManager::new(sov_state::config::Config {
+        path: tmpdir.path().to_path_buf(),
+    })
+    .unwrap();
 
-    let mut app_template =
-        AppTemplate::<C, MockDaSpec, MockZkvm, TestRuntime<C, MockDaSpec>>::new(storage);
+    let app_template = AppTemplate::<C, MockDaSpec, MockZkvm, TestRuntime<C, MockDaSpec>>::new();
+    let test_runtime = TestRuntime::<C, MockDaSpec>::default();
 
     let value_setter_messages = ValueSetterMessages::default();
     let value_setter = value_setter_messages.create_raw_txs::<TestRuntime<C, MockDaSpec>>();
@@ -37,7 +39,10 @@ fn test_simple_value_setter_with_chain_state() {
     let admin_pub_key = value_setter_messages.messages[0].admin.default_address();
 
     // Genesis
-    let init_root_hash = app_template.init_chain(create_chain_state_genesis_config(admin_pub_key));
+    let (init_root_hash, _) = app_template.init_chain(
+        storage_manager.get_native_storage(),
+        create_chain_state_genesis_config(admin_pub_key),
+    );
 
     const MOCK_SEQUENCER_DA_ADDRESS: [u8; 32] = [1_u8; 32];
 
@@ -58,18 +63,16 @@ fn test_simple_value_setter_with_chain_state() {
     };
 
     // Computes the initial working set
-    let mut working_set = get_working_set(&app_template);
+    let mut working_set = WorkingSet::new(storage_manager.get_native_storage());
 
     // Check the slot height before apply slot
-    let new_height_storage = app_template
-        .runtime
-        .chain_state
-        .get_slot_height(&mut working_set);
+    let new_height_storage = test_runtime.chain_state.get_slot_height(&mut working_set);
 
     assert_eq!(new_height_storage, 0, "The initial height was not computed");
 
     let result = app_template.apply_slot(
         &init_root_hash,
+        storage_manager.get_native_storage(),
         Default::default(),
         &slot_data.header,
         &slot_data.validity_cond,
@@ -85,8 +88,8 @@ fn test_simple_value_setter_with_chain_state() {
     );
 
     // Computes the new working set after slot application
-    let mut working_set = get_working_set(&app_template);
-    let chain_state_ref = &app_template.runtime.chain_state;
+    let mut working_set = WorkingSet::new(storage_manager.get_native_storage());
+    let chain_state_ref = &test_runtime.chain_state;
 
     let new_root_hash = result.state_root;
 
@@ -126,6 +129,7 @@ fn test_simple_value_setter_with_chain_state() {
 
     let result = app_template.apply_slot(
         &result.state_root,
+        storage_manager.get_native_storage(),
         Default::default(),
         &new_slot_data.header,
         &new_slot_data.validity_cond,
@@ -141,8 +145,8 @@ fn test_simple_value_setter_with_chain_state() {
     );
 
     // Computes the new working set after slot application
-    let mut working_set = get_working_set(&app_template);
-    let chain_state_ref = &app_template.runtime.chain_state;
+    let mut working_set = WorkingSet::new(storage_manager.get_native_storage());
+    let chain_state_ref = &test_runtime.chain_state;
 
     // Check that the root hash has been stored correctly
     let stored_root = chain_state_ref.get_genesis_hash(&mut working_set).unwrap();

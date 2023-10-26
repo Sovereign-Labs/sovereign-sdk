@@ -8672,6 +8672,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.8",
  "sov-bank",
+ "sov-db",
  "sov-first-read-last-write-cache",
  "sov-modules-api",
  "sov-modules-macros",

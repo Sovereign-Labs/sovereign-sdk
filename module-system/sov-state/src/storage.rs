@@ -203,7 +203,7 @@ pub trait Storage: Clone {
         witness: &Self::Witness,
     ) -> Result<(Self::Root, Self::StateUpdate), anyhow::Error>;
 
-    /// Commits state changes to the database.
+    /// Commits state changes to the underlying storage.
     fn commit(&self, node_batch: &Self::StateUpdate, accessory_update: &OrderedReadsAndWrites);
 
     /// Validate all of the storage accesses in a particular cache log,
@@ -224,7 +224,7 @@ pub trait Storage: Clone {
     }
 
     /// A version of [`Storage::validate_and_commit`] that allows for
-    /// "accessory" non-JMT updates. See `sov_db::NativeDB` for more information
+    /// "accessory" non-JMT updates. See [`sov_db::native_db::NativeDB`] for more information
     /// about accessory state.
     fn validate_and_commit_with_accessory_update(
         &self,

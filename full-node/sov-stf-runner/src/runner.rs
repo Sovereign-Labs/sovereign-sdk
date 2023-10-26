@@ -5,6 +5,7 @@ use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_rollup_interface::storage::StorageManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use tokio::sync::oneshot;
 use tracing::{debug, info};
@@ -13,32 +14,35 @@ use crate::verifier::StateTransitionVerifier;
 use crate::{RunnerConfig, StateTransitionData};
 
 type StateRoot<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::StateRoot;
-type InitialState<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::InitialState;
+type InitialState<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::GenesisParams;
 
 /// Combines `DaService` with `StateTransitionFunction` and "runs" the rollup.
-pub struct StateTransitionRunner<ST, Da, Vm, V>
+pub struct StateTransitionRunner<Stf, Sm, Da, Vm, V>
 where
     Da: DaService,
     Vm: ZkvmHost,
-    ST: StateTransitionFunction<Vm, Da::Spec, Condition = <Da::Spec as DaSpec>::ValidityCondition>,
+    Sm: StorageManager,
+    Stf: StateTransitionFunction<Vm, Da::Spec, Condition = <Da::Spec as DaSpec>::ValidityCondition>,
     V: StateTransitionFunction<Vm::Guest, Da::Spec>,
 {
     start_height: u64,
     da_service: Da,
-    app: ST,
+    stf: Stf,
+    storage_manager: Sm,
     ledger_db: LedgerDB,
-    state_root: StateRoot<ST, Vm, Da::Spec>,
+    state_root: StateRoot<Stf, Vm, Da::Spec>,
     listen_address: SocketAddr,
     prover: Option<Prover<V, Da, Vm>>,
+    zk_storage: V::PreState,
 }
 
 /// Represents the possible modes of execution for a zkVM program
-pub enum ProofGenConfig<ST, Da: DaService, Vm: ZkvmHost>
+pub enum ProofGenConfig<Stf, Da: DaService, Vm: ZkvmHost>
 where
-    ST: StateTransitionFunction<Vm::Guest, Da::Spec>,
+    Stf: StateTransitionFunction<Vm::Guest, Da::Spec>,
 {
     /// The simulator runs the rollup verifier logic without even emulating the zkVM
-    Simulate(StateTransitionVerifier<ST, Da::Verifier, Vm::Guest>),
+    Simulate(StateTransitionVerifier<Stf, Da::Verifier, Vm::Guest>),
     /// The executor runs the rollup verification logic in the zkVM, but does not actually
     /// produce a zk proof
     Execute,
@@ -47,36 +51,47 @@ where
 }
 
 /// A prover for the demo rollup. Consists of a VM and a config
-pub struct Prover<ST, Da: DaService, Vm: ZkvmHost>
+pub struct Prover<Stf, Da: DaService, Vm: ZkvmHost>
 where
-    ST: StateTransitionFunction<Vm::Guest, Da::Spec>,
+    Stf: StateTransitionFunction<Vm::Guest, Da::Spec>,
 {
     /// The Zkvm Host to use
     pub vm: Vm,
     /// The prover configuration
-    pub config: ProofGenConfig<ST, Da, Vm>,
+    pub config: ProofGenConfig<Stf, Da, Vm>,
 }
 
-impl<ST, Da, Vm, V, Root, Witness> StateTransitionRunner<ST, Da, Vm, V>
+impl<Stf, Sm, Da, Vm, V, Root, Witness> StateTransitionRunner<Stf, Sm, Da, Vm, V>
 where
     Da: DaService<Error = anyhow::Error> + Clone + Send + Sync + 'static,
     Vm: ZkvmHost,
+    Sm: StorageManager,
+    Stf: StateTransitionFunction<
+        Vm,
+        Da::Spec,
+        Condition = <Da::Spec as DaSpec>::ValidityCondition,
+        PreState = Sm::NativeStorage,
+        ChangeSet = Sm::NativeChangeSet,
+    >,
     V: StateTransitionFunction<Vm::Guest, Da::Spec, StateRoot = Root, Witness = Witness>,
-    ST: StateTransitionFunction<Vm, Da::Spec, Condition = <Da::Spec as DaSpec>::ValidityCondition>,
+    V::PreState: Clone,
 {
     /// Creates a new `StateTransitionRunner`.
     ///
     /// If a previous state root is provided, uses that as the starting point
     /// for execution. Otherwise, initializes the chain using the provided
     /// genesis config.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         runner_config: RunnerConfig,
         da_service: Da,
         ledger_db: LedgerDB,
-        mut app: ST,
-        prev_state_root: Option<StateRoot<ST, Vm, Da::Spec>>,
-        genesis_config: InitialState<ST, Vm, Da::Spec>,
+        stf: Stf,
+        storage_manager: Sm,
+        prev_state_root: Option<StateRoot<Stf, Vm, Da::Spec>>,
+        genesis_config: InitialState<Stf, Vm, Da::Spec>,
         prover: Option<Prover<V, Da, Vm>>,
+        zk_storage: V::PreState,
     ) -> Result<Self, anyhow::Error> {
         let rpc_config = runner_config.rpc_config;
 
@@ -86,7 +101,8 @@ where
             prev_state_root
         } else {
             info!("No history detected. Initializing chain...");
-            let genesis_root = app.init_chain(genesis_config);
+            let genesis_state = storage_manager.get_native_storage();
+            let (genesis_root, _) = stf.init_chain(genesis_state, genesis_config);
             info!(
                 "Chain initialization is done. Genesis root: 0x{}",
                 hex::encode(genesis_root.as_ref())
@@ -104,11 +120,13 @@ where
         Ok(Self {
             start_height,
             da_service,
-            app,
+            stf,
+            storage_manager,
             ledger_db,
             state_root: prev_state_root,
             listen_address,
             prover,
+            zk_storage,
         })
     }
 
@@ -160,13 +178,16 @@ where
 
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
 
-            let slot_result = self.app.apply_slot(
+            let pre_state = self.storage_manager.get_native_storage();
+            let slot_result = self.stf.apply_slot(
                 &self.state_root,
+                pre_state,
                 Default::default(),
                 filtered_block.header(),
                 &filtered_block.validity_condition(),
                 &mut blobs,
             );
+
             for receipt in slot_result.batch_receipts {
                 data_to_commit.add_batch(receipt);
             }
@@ -177,7 +198,7 @@ where
                     .get_extraction_proof(&filtered_block, &blobs)
                     .await;
 
-                let transition_data: StateTransitionData<ST::StateRoot, ST::Witness, Da::Spec> =
+                let transition_data: StateTransitionData<Stf::StateRoot, Stf::Witness, Da::Spec> =
                     StateTransitionData {
                         pre_state_root: self.state_root.clone(),
                         da_block_header: filtered_block.header().clone(),
@@ -189,7 +210,7 @@ where
                 vm.add_hint(transition_data);
                 tracing::info_span!("guest_execution").in_scope(|| match config {
                     ProofGenConfig::Simulate(verifier) => verifier
-                        .run_block(vm.simulate_with_hints())
+                        .run_block(vm.simulate_with_hints(), self.zk_storage.clone())
                         .map_err(|e| {
                             anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)
                         })

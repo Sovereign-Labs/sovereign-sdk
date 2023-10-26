@@ -14,6 +14,7 @@ use serde::Serialize;
 pub mod mocks;
 
 pub mod optimistic;
+pub mod storage;
 
 /// A marker trait for general addresses.
 pub trait BasicAddress:

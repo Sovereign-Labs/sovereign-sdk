@@ -72,6 +72,6 @@ pub trait FinalizeHook<Da: DaSpec> {
     fn finalize_hook(
         &self,
         root_hash: &<<Self::Context as Spec>::Storage as Storage>::Root,
-        accesorry_working_set: &mut AccessoryWorkingSet<Self::Context>,
+        accessory_working_set: &mut AccessoryWorkingSet<Self::Context>,
     );
 }
