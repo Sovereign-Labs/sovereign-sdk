@@ -23,4 +23,4 @@ jobs:
           trigger_workflow: true
           wait_workflow: true
           comment_downstream_url: ${{ github.event.pull_request.comments_url }}
-          github_token: ${{ secrets.CI_TRIGGER_ACCESS_TOKEN }}
+          comment_github_token: ${{ secrets.CI_TRIGGER_ACCESS_TOKEN }}
