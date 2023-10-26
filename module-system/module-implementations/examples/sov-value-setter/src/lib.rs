@@ -42,7 +42,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
 
     type CallMessage = call::CallMessage;
 
-    type Event = call::Event;
+    type Event = call::ValueSetterEvent;
 
     fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         // The initialization logic

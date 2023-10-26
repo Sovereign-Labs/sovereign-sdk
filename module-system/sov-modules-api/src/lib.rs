@@ -56,7 +56,6 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 pub use sov_rollup_interface::services::da::SlotData;
-pub use sov_rollup_interface::stf::Event;
 pub use sov_rollup_interface::zk::{
     StateTransition, ValidityCondition, ValidityConditionChecker, Zkvm,
 };
@@ -306,7 +305,7 @@ pub trait Module {
     type CallMessage: Debug + BorshSerialize + BorshDeserialize;
 
     /// Module defined event resulting from a call method.
-    type Event: Debug + BorshSerialize + BorshDeserialize;
+    type Event: Event;
 
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(
@@ -338,6 +337,18 @@ pub trait Module {
     ) -> anyhow::Result<()> {
         working_set.charge_gas(gas)
     }
+}
+
+impl Event for () {
+    fn event_key(&self) -> &'static str {
+        unimplemented!("Event type for this module does not exist.")
+    }
+}
+
+/// TODO: add doc
+pub trait Event: Debug + BorshSerialize + BorshDeserialize {
+    // TODO: add doc
+    fn event_key(&self) -> &'static str;
 }
 
 /// A [`Module`] that has a well-defined and known [JSON

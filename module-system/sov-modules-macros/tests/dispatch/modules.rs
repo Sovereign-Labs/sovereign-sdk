@@ -1,4 +1,4 @@
-use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, StateValue, WorkingSet};
+use sov_modules_api::{CallResponse, EventMacro, Context, Error, Module, ModuleInfo, StateValue, WorkingSet};
 
 pub mod first_test_module {
     use super::*;
@@ -18,18 +18,18 @@ pub mod first_test_module {
         }
     }
 
-    #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
-    pub enum Event {
-        FirstModuleEnum1(u64),
-        FirstModuleEnum2,
-        FirstModuleEnum3(Vec<u8>),
+    #[derive(EventMacro, borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+    pub enum MyEvent {
+        Variant1(u64),
+        Variant2,
+        Variant3(Vec<u8>),
     }
 
     impl<C: Context> Module for FirstTestStruct<C> {
         type Context = C;
         type Config = ();
         type CallMessage = u8;
-        type Event = Event;
+        type Event = MyEvent;
 
         fn genesis(
             &self,
@@ -70,9 +70,9 @@ pub mod second_test_module {
         }
     }
 
-    #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
-    pub enum Event {
-        SecondModuleEnum,
+    #[derive(EventMacro, borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+    pub enum MyEvent {
+        Variant,
     }
 
 
@@ -80,7 +80,7 @@ pub mod second_test_module {
         type Context = Ctx;
         type Config = ();
         type CallMessage = u8;
-        type Event = Event;
+        type Event = MyEvent;
 
         fn genesis(
             &self,
@@ -153,6 +153,75 @@ pub mod third_test_module {
             working_set: &mut WorkingSet<Ctx>,
         ) -> Result<CallResponse, Error> {
             self.state_in_third_struct.set(&msg, working_set);
+            Ok(CallResponse::default())
+        }
+    }
+}
+
+pub mod fourth_test_module {
+    use super::*;
+
+    #[derive(ModuleInfo)]
+    pub struct FourthTestStruct<C: Context> {
+        #[address]
+        pub address: C::Address,
+
+        #[state]
+        pub state_in_fourth_struct: StateValue<u8>,
+    }
+
+    impl<C: Context> FourthTestStruct<C> {
+        pub fn get_state_value(&self, working_set: &mut WorkingSet<C>) -> u8 {
+            self.state_in_fourth_struct.get(working_set).unwrap()
+        }
+    }
+
+    #[derive(EventMacro, borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+    pub enum MyEvent {
+        Variant1,
+        Variant2WithStruct(MyStruct),
+        Variant3WithNewTypeStruct(MyNewStruct),
+        Variant4WithUnnamedStruct { a: u32, b: String },
+        Variant5WithNestedEnum(NestedEnum)
+    }
+
+    #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+    pub struct MyStruct {
+        pub a: u32,
+        pub b: String
+    }
+
+    #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+    pub struct MyNewStruct(pub u64);
+
+    #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+    pub enum NestedEnum {
+        Variant1,
+        Variant2
+    }
+
+    impl<Ctx: Context> Module for FourthTestStruct<Ctx> {
+        type Context = Ctx;
+        type Config = ();
+        type CallMessage = u8;
+        type Event = MyEvent;
+
+        fn genesis(
+            &self,
+            _config: &Self::Config,
+            working_set: &mut WorkingSet<Ctx>,
+        ) -> Result<(), Error> {
+            self.state_in_fourth_struct.set(&2, working_set);
+            Ok(())
+        }
+
+        fn call(
+            &self,
+            msg: Self::CallMessage,
+            _context: &Self::Context,
+            working_set: &mut WorkingSet<Ctx>,
+        ) -> Result<CallResponse, Error> {
+            self.state_in_fourth_struct.set(&msg, working_set);
             Ok(CallResponse::default())
         }
     }

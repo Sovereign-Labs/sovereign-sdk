@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use anyhow::Result;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::CliWalletArg;
-use sov_modules_api::{CallResponse, WorkingSet};
+use sov_modules_api::{CallResponse, Event, WorkingSet};
 use thiserror::Error;
 
 use super::ValueSetter;
@@ -32,12 +32,20 @@ pub enum CallMessage {
     derive(serde::Deserialize)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub enum Event {
+pub enum ValueSetterEvent {
     /// Value set
     ValueSet(
         /// new value
         u32,
     ),
+}
+
+impl Event for ValueSetterEvent {
+    fn event_key(&self) -> &'static str {
+        match self {
+            Self::ValueSet(_) => "ValueSet",
+        }
+    }
 }
 
 /// Example of a custom error.

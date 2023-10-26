@@ -23,6 +23,7 @@ mod new_types;
 mod offchain;
 #[cfg(feature = "native")]
 mod rpc;
+mod runtime_event;
 
 #[cfg(feature = "native")]
 use cli_parser::{derive_cli_wallet_arg, CliParserMacro};
@@ -30,7 +31,7 @@ use default_runtime::DefaultRuntimeMacro;
 use dispatch::dispatch_call::DispatchCallMacro;
 use dispatch::genesis::GenesisMacro;
 use dispatch::message_codec::MessageCodec;
-use event::EventMacro;
+use event::derive_event;
 use make_constants::{make_const, PartialItemConst};
 use module_call_json_schema::derive_module_call_json_schema;
 use new_types::address_type_helper;
@@ -38,6 +39,7 @@ use offchain::offchain_generator;
 use proc_macro::TokenStream;
 #[cfg(feature = "native")]
 use rpc::ExposeRpcMacro;
+use runtime_event::RuntimeEventMacro;
 use syn::{parse_macro_input, DeriveInput, ItemFn};
 
 #[proc_macro_derive(ModuleInfo, attributes(state, module, address, gas))]
@@ -71,12 +73,19 @@ pub fn dispatch_call(input: TokenStream) -> TokenStream {
     handle_macro_error(call_macro.derive_dispatch_call(input))
 }
 
-#[proc_macro_derive(Event, attributes(serialization))]
+#[proc_macro_derive(RuntimeEvent, attributes(serialization))]
+pub fn runtime_event(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input);
+    let runtime_event_macro = RuntimeEventMacro::new("RuntimeEvent");
+
+    handle_macro_error(runtime_event_macro.derive_runtime_event(input))
+}
+
+#[proc_macro_derive(EventMacro, attributes(serialization))]
 pub fn event(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
-    let event_macro = EventMacro::new("Event");
 
-    handle_macro_error(event_macro.derive_event_enum(input))
+    handle_macro_error(derive_event(input))
 }
 
 #[proc_macro_derive(ModuleCallJsonSchema)]
