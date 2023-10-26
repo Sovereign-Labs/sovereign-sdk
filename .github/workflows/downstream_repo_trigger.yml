@@ -21,7 +21,7 @@ jobs:
             })
             console.log(result)
     
-      - name: WWait for the sov-rollup-starter CI.
+      - name: Wait for the sov-rollup-starter CI.
         run: sleep 30s
       
       - uses: actions/checkout@v3
