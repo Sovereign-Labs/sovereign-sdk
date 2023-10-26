@@ -17,6 +17,7 @@
 mod iterator;
 mod metrics;
 pub mod schema;
+pub mod snapshot;
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -270,9 +271,15 @@ type SchemaKey = Vec<u8>;
 type SchemaValue = Vec<u8>;
 
 #[cfg_attr(feature = "arbitrary", derive(proptest_derive::Arbitrary))]
-#[derive(Debug, PartialEq, Eq, Hash)]
-enum Operation {
-    Put { value: SchemaValue },
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+/// Represents operation written to the database
+pub enum Operation {
+    /// Writing a value to the DB.
+    Put {
+        /// Value to write
+        value: SchemaValue,
+    },
+    /// Deleting a value
     Delete,
 }
 
@@ -281,6 +288,7 @@ enum Operation {
 /// they are added to the [`SchemaBatch`].
 #[derive(Debug, Default)]
 pub struct SchemaBatch {
+    // TODO: Why do we need a mutex here?
     last_writes: Mutex<HashMap<ColumnFamilyName, HashMap<SchemaKey, Operation>>>,
 }
 
@@ -319,6 +327,17 @@ impl SchemaBatch {
         let mut last_writes = self.last_writes.lock().expect("Lock must not be poisoned");
         let column_writes = last_writes.entry(S::COLUMN_FAMILY_NAME).or_default();
         column_writes.insert(key, operation);
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn read<S: Schema>(
+        &self,
+        key: &impl KeyCodec<S>,
+    ) -> anyhow::Result<Option<Operation>> {
+        let key = key.encode_key()?;
+        let last_writes = self.last_writes.lock().expect("Lock must not be poisoned");
+        let column_writes = last_writes.get(&S::COLUMN_FAMILY_NAME).unwrap();
+        Ok(column_writes.get(&key).cloned())
     }
 }
 
