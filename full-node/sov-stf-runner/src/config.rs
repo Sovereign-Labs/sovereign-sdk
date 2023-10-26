@@ -89,7 +89,7 @@ mod tests {
 
         let config_file = create_config_from(config);
 
-        let config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
+        let config: RollupConfig<sov_celestia_adapter::CelestiaConfig> =
             from_toml_path(config_file.path()).unwrap();
         let expected = RollupConfig {
             runner: RunnerConfig {
@@ -100,7 +100,7 @@ mod tests {
                 },
             },
 
-            da: sov_celestia_adapter::DaServiceConfig {
+            da: sov_celestia_adapter::CelestiaConfig {
                 celestia_rpc_auth_token: "SECRET_RPC_TOKEN".to_string(),
                 celestia_rpc_address: "http://localhost:11111/".into(),
                 max_celestia_response_body_size: 980,
