@@ -33,6 +33,7 @@ where
     state_root: StateRoot<Stf, Vm, Da::Spec>,
     listen_address: SocketAddr,
     prover: Option<Prover<V, Da, Vm>>,
+    zk_storage: V::PreState,
 }
 
 /// Represents the possible modes of execution for a zkVM program
@@ -90,6 +91,7 @@ where
         prev_state_root: Option<StateRoot<Stf, Vm, Da::Spec>>,
         genesis_config: InitialState<Stf, Vm, Da::Spec>,
         prover: Option<Prover<V, Da, Vm>>,
+        zk_storage: V::PreState,
     ) -> Result<Self, anyhow::Error> {
         let rpc_config = runner_config.rpc_config;
 
@@ -124,6 +126,7 @@ where
             state_root: prev_state_root,
             listen_address,
             prover,
+            zk_storage,
         })
     }
 
@@ -152,7 +155,7 @@ where
     }
 
     /// Runs the rollup.
-    pub async fn run_in_process(&mut self, zk_storage: V::PreState) -> Result<(), anyhow::Error> {
+    pub async fn run_in_process(&mut self) -> Result<(), anyhow::Error> {
         for height in self.start_height.. {
             debug!("Requesting data for height {}", height,);
 
@@ -207,7 +210,7 @@ where
                 vm.add_hint(transition_data);
                 tracing::info_span!("guest_execution").in_scope(|| match config {
                     ProofGenConfig::Simulate(verifier) => verifier
-                        .run_block(vm.simulate_with_hints(), zk_storage.clone())
+                        .run_block(vm.simulate_with_hints(), self.zk_storage.clone())
                         .map_err(|e| {
                             anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)
                         })

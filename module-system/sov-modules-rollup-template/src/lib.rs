@@ -139,12 +139,12 @@ pub trait RollupTemplate: Sized + Send + Sync {
             prev_root,
             genesis_config,
             prover,
+            zk_storage,
         )?;
 
         Ok(Rollup {
             runner,
             rpc_methods,
-            zk_storage,
         })
     }
 }
@@ -172,7 +172,6 @@ pub struct Rollup<S: RollupTemplate> {
     >,
     /// Rpc methods for the rollup.
     pub rpc_methods: jsonrpsee::RpcModule<()>,
-    zk_storage: <S::ZkContext as Spec>::Storage,
 }
 
 impl<S: RollupTemplate> Rollup<S> {
@@ -186,10 +185,9 @@ impl<S: RollupTemplate> Rollup<S> {
         self,
         channel: Option<oneshot::Sender<SocketAddr>>,
     ) -> Result<(), anyhow::Error> {
-        let zk_storage = self.zk_storage.clone();
         let mut runner = self.runner;
         runner.start_rpc_server(self.rpc_methods, channel).await;
-        runner.run_in_process(zk_storage).await?;
+        runner.run_in_process().await?;
         Ok(())
     }
 }
