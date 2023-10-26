@@ -141,7 +141,7 @@ impl TestDB {
     }
 
     fn rev_iter(&self) -> SchemaIterator<TestSchema> {
-        self.db.rev_iter().expect("Failed to create iterator.")
+        self.db.iter().expect("Failed to create iterator.").rev()
     }
 }
 

@@ -174,19 +174,6 @@ impl DB {
         self.iter_with_direction::<S>(opts, ScanDirection::Forward)
     }
 
-    /// Returns a backward [`SchemaIterator`] on a certain schema with the default read options.
-    pub fn rev_iter<S: Schema>(&self) -> anyhow::Result<SchemaIterator<S>> {
-        self.iter_with_direction::<S>(Default::default(), ScanDirection::Backward)
-    }
-
-    /// Returns a backward [`SchemaIterator`] on a certain schema with the provided read options.
-    pub fn rev_iter_with_opts<S: Schema>(
-        &self,
-        opts: ReadOptions,
-    ) -> anyhow::Result<SchemaIterator<S>> {
-        self.iter_with_direction::<S>(opts, ScanDirection::Backward)
-    }
-
     /// Writes a group of records wrapped in a [`SchemaBatch`].
     pub fn write_schemas(&self, batch: SchemaBatch) -> anyhow::Result<()> {
         let _timer = SCHEMADB_BATCH_COMMIT_LATENCY_SECONDS
