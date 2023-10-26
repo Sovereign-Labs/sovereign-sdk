@@ -104,6 +104,46 @@ impl<Q: QueryManager> DbSnapshot<Q> {
     }
 }
 
+/// Read only version of [`DbSnapshot`], for usage inside [`QueryManager`]
+pub struct FrozenDbSnapshot {
+    id: SnapshotId,
+    cache: SchemaBatch,
+}
+
+impl FrozenDbSnapshot {
+    /// Get value from its own cache
+    pub fn get<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<Option<S::Value>> {
+        if let Some(operation) = self.cache.read(key)? {
+            return decode_operation::<S>(operation);
+        }
+
+        Ok(None)
+    }
+
+    /// Get id of this Snapshot
+    pub fn get_id(&self) -> SnapshotId {
+        self.id
+    }
+}
+
+impl<Q> From<DbSnapshot<Q>> for FrozenDbSnapshot {
+    fn from(snapshot: DbSnapshot<Q>) -> Self {
+        Self {
+            id: snapshot.id,
+            cache: snapshot
+                .cache
+                .into_inner()
+                .expect("SchemaBatch lock must not be poisoned"),
+        }
+    }
+}
+
+impl From<FrozenDbSnapshot> for SchemaBatch {
+    fn from(value: FrozenDbSnapshot) -> Self {
+        value.cache
+    }
+}
+
 fn decode_operation<S: Schema>(operation: Operation) -> anyhow::Result<Option<S::Value>> {
     match operation {
         Operation::Put { value } => {
