@@ -6,29 +6,19 @@ on:
   pull_request:
     branches: ["nightly", "stable"]
 
-
 jobs:
   trigger_workflow:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger sov-rollup-starter CI.
-        uses: actions/github-script@v6
+      - name: Trigger child repo workflow
+        uses: convictional/trigger-workflow-and-wait@v1.6.1
         with:
-          github-token: ${{ secrets.CI_TRIGGER_ACCESS_TOKEN }}
-          script: |
-            const result = await github.rest.actions.createWorkflowDispatch({
-              owner: 'Sovereign-Labs',
-              repo: 'sov-rollup-starter',
-              workflow_id: 'rust.yml',
-              ref: 'main'
-            })
-            console.log(result)
-    
-      - name: Wait for the sov-rollup-starter CI.
-        run: sleep 30s
-      
-      - uses: actions/checkout@v3
-      - name: Check workflow conclusion for the sov-rollup-starter.
-        env:
-          CI_TRIGGER_ACCESS_TOKEN: ${{ secrets.CI_TRIGGER_ACCESS_TOKEN }}
-        run: .github/scripts/workflow_conclusion_check.sh
+          owner: Sovereign-Labs
+          repo: sov-rollup-starter
+          github_token: ${{ secrets.CI_TRIGGER_ACCESS_TOKEN }}
+          workflow_file_name: rust.yml
+          ref: main
+          wait_interval: 10
+          propagate_failure: true
+          trigger_workflow: true
+          wait_workflow: true
