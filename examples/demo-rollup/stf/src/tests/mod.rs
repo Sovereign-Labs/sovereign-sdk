@@ -4,7 +4,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::DaSpec;
 use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::mocks::MockDaSpec;
-use sov_state::state_manager::SovStateManager;
+use sov_state::state_manager::ProverStorageManager;
 use sov_state::DefaultStorageSpec;
 
 use crate::genesis_config::{get_genesis_config, GenesisPaths};
@@ -25,11 +25,11 @@ pub(crate) type AppTemplateTest = AppTemplate<
 
 pub(crate) fn create_state_manager_for_tests(
     path: impl AsRef<Path>,
-) -> SovStateManager<DefaultStorageSpec> {
+) -> ProverStorageManager<DefaultStorageSpec> {
     let config = sov_state::config::Config {
         path: path.as_ref().to_path_buf(),
     };
-    SovStateManager::new(config).unwrap()
+    ProverStorageManager::new(config).unwrap()
 }
 
 pub(crate) fn get_genesis_config_for_tests<Da: DaSpec>() -> GenesisConfig<DefaultContext, Da> {

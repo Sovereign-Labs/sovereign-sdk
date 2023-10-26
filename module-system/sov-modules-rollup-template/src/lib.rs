@@ -12,7 +12,7 @@ use sov_modules_api::{Context, DaSpec, Spec};
 use sov_modules_stf_template::{AppTemplate, Runtime as RuntimeTrait};
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::services::da::DaService;
-use sov_rollup_interface::state::StateManager;
+use sov_rollup_interface::storage::StorageManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage::NativeStorage;
 use sov_stf_runner::verifier::StateTransitionVerifier;
@@ -39,10 +39,9 @@ pub trait RollupTemplate: Sized + Send + Sync {
     type NativeContext: Context;
 
     /// Manager of the state
-    type StateManager: StateManager<
-        NativeState = <Self::NativeContext as Spec>::Storage,
+    type StateManager: StorageManager<
+        NativeStorage = <Self::NativeContext as Spec>::Storage,
         NativeChangeSet = (),
-        ZkState = <Self::ZkContext as Spec>::Storage,
     >;
 
     /// Runtime for Zero Knowledge environment.
@@ -83,6 +82,12 @@ pub trait RollupTemplate: Sized + Send + Sync {
         rollup_config: &RollupConfig<Self::DaConfig>,
     ) -> Result<Self::StateManager, anyhow::Error>;
 
+    /// Creates instance of ZK storage.
+    fn create_zk_storage(
+        &self,
+        rollup_config: &RollupConfig<Self::DaConfig>,
+    ) -> <Self::ZkContext as Spec>::Storage;
+
     /// Creates instance of ZkVm.
     fn create_vm(&self) -> Self::Vm;
 
@@ -111,16 +116,16 @@ pub trait RollupTemplate: Sized + Send + Sync {
         let prover =
             prover_config.map(|pc| configure_prover(self.create_vm(), pc, self.create_verifier()));
 
-        // let storage = self.create_state_manager(&rollup_config)?;
-        let state_manager = self.create_state_manager(&rollup_config)?;
-        let state = state_manager.get_native_state();
+        let storage_manager = self.create_state_manager(&rollup_config)?;
+        let native_storage = storage_manager.get_native_storage();
+        let zk_storage = self.create_zk_storage(&rollup_config);
 
         let prev_root = ledger_db
             .get_head_slot()?
-            .map(|(number, _)| state.get_root_hash(number.0))
+            .map(|(number, _)| native_storage.get_root_hash(number.0))
             .transpose()?;
 
-        let rpc_methods = self.create_rpc_methods(&state, &ledger_db, &da_service)?;
+        let rpc_methods = self.create_rpc_methods(&native_storage, &ledger_db, &da_service)?;
 
         let native_stf = AppTemplate::new();
 
@@ -129,7 +134,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
             da_service,
             ledger_db,
             native_stf,
-            state_manager,
+            storage_manager,
             prev_root,
             genesis_config,
             prover,
@@ -138,6 +143,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
         Ok(Rollup {
             runner,
             rpc_methods,
+            zk_storage,
         })
     }
 }
@@ -165,6 +171,7 @@ pub struct Rollup<S: RollupTemplate> {
     >,
     /// Rpc methods for the rollup.
     pub rpc_methods: jsonrpsee::RpcModule<()>,
+    zk_storage: <S::ZkContext as Spec>::Storage,
 }
 
 impl<S: RollupTemplate> Rollup<S> {
@@ -178,9 +185,10 @@ impl<S: RollupTemplate> Rollup<S> {
         self,
         channel: Option<oneshot::Sender<SocketAddr>>,
     ) -> Result<(), anyhow::Error> {
+        let zk_storage = self.zk_storage.clone();
         let mut runner = self.runner;
         runner.start_rpc_server(self.rpc_methods, channel).await;
-        runner.run_in_process().await?;
+        runner.run_in_process(zk_storage).await?;
         Ok(())
     }
 }

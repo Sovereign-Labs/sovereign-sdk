@@ -14,8 +14,8 @@ use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rng_da_service::{RngDaService, RngDaSpec};
 use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader};
 use sov_rollup_interface::services::da::DaService;
-use sov_rollup_interface::state::StateManager;
 use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_rollup_interface::storage::StorageManager;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
 
@@ -45,7 +45,7 @@ fn rollup_bench(_bench: &mut Criterion) {
     let storage_config = sov_state::config::Config {
         path: rollup_config.storage.path,
     };
-    let state_manager = sov_state::state_manager::SovStateManager::new(storage_config)
+    let state_manager = sov_state::state_manager::ProverStorageManager::new(storage_config)
         .expect("Failed to initialize state manager");
     let stf = AppTemplate::<
         DefaultContext,
@@ -60,7 +60,7 @@ fn rollup_bench(_bench: &mut Criterion) {
     .unwrap();
 
     let (mut current_root, _) =
-        stf.init_chain(state_manager.get_native_state(), demo_genesis_config);
+        stf.init_chain(state_manager.get_native_storage(), demo_genesis_config);
 
     // data generation
     let mut blobs = vec![];
@@ -92,7 +92,7 @@ fn rollup_bench(_bench: &mut Criterion) {
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
             let apply_block_result = stf.apply_slot(
                 &current_root,
-                state_manager.get_native_state(),
+                state_manager.get_native_storage(),
                 Default::default(),
                 &filtered_block.header,
                 &filtered_block.validity_cond,

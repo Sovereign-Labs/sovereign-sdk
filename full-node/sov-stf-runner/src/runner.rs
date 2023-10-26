@@ -4,8 +4,8 @@ use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::services::da::{DaService, SlotData};
-use sov_rollup_interface::state::StateManager;
 use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_rollup_interface::storage::StorageManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use tokio::sync::oneshot;
 use tracing::{debug, info};
@@ -21,14 +21,14 @@ pub struct StateTransitionRunner<Stf, Sm, Da, Vm, V>
 where
     Da: DaService,
     Vm: ZkvmHost,
-    Sm: StateManager,
+    Sm: StorageManager,
     Stf: StateTransitionFunction<Vm, Da::Spec, Condition = <Da::Spec as DaSpec>::ValidityCondition>,
     V: StateTransitionFunction<Vm::Guest, Da::Spec>,
 {
     start_height: u64,
     da_service: Da,
     stf: Stf,
-    state_manager: Sm,
+    storage_manager: Sm,
     ledger_db: LedgerDB,
     state_root: StateRoot<Stf, Vm, Da::Spec>,
     listen_address: SocketAddr,
@@ -64,21 +64,16 @@ impl<Stf, Sm, Da, Vm, V, Root, Witness> StateTransitionRunner<Stf, Sm, Da, Vm, V
 where
     Da: DaService<Error = anyhow::Error> + Clone + Send + Sync + 'static,
     Vm: ZkvmHost,
-    Sm: StateManager,
+    Sm: StorageManager,
     Stf: StateTransitionFunction<
         Vm,
         Da::Spec,
         Condition = <Da::Spec as DaSpec>::ValidityCondition,
-        PreState = Sm::NativeState,
+        PreState = Sm::NativeStorage,
         ChangeSet = Sm::NativeChangeSet,
     >,
-    V: StateTransitionFunction<
-        Vm::Guest,
-        Da::Spec,
-        StateRoot = Root,
-        Witness = Witness,
-        PreState = Sm::ZkState,
-    >,
+    V: StateTransitionFunction<Vm::Guest, Da::Spec, StateRoot = Root, Witness = Witness>,
+    V::PreState: Clone,
 {
     /// Creates a new `StateTransitionRunner`.
     ///
@@ -91,7 +86,7 @@ where
         da_service: Da,
         ledger_db: LedgerDB,
         stf: Stf,
-        state_manager: Sm,
+        storage_manager: Sm,
         prev_state_root: Option<StateRoot<Stf, Vm, Da::Spec>>,
         genesis_config: InitialState<Stf, Vm, Da::Spec>,
         prover: Option<Prover<V, Da, Vm>>,
@@ -104,7 +99,7 @@ where
             prev_state_root
         } else {
             info!("No history detected. Initializing chain...");
-            let genesis_state = state_manager.get_native_state();
+            let genesis_state = storage_manager.get_native_storage();
             let (genesis_root, _) = stf.init_chain(genesis_state, genesis_config);
             info!(
                 "Chain initialization is done. Genesis root: 0x{}",
@@ -124,7 +119,7 @@ where
             start_height,
             da_service,
             stf,
-            state_manager,
+            storage_manager,
             ledger_db,
             state_root: prev_state_root,
             listen_address,
@@ -157,7 +152,7 @@ where
     }
 
     /// Runs the rollup.
-    pub async fn run_in_process(&mut self) -> Result<(), anyhow::Error> {
+    pub async fn run_in_process(&mut self, zk_storage: V::PreState) -> Result<(), anyhow::Error> {
         for height in self.start_height.. {
             debug!("Requesting data for height {}", height,);
 
@@ -180,7 +175,7 @@ where
 
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
 
-            let pre_state = self.state_manager.get_native_state();
+            let pre_state = self.storage_manager.get_native_storage();
             let slot_result = self.stf.apply_slot(
                 &self.state_root,
                 pre_state,
@@ -210,10 +205,9 @@ where
                         state_transition_witness: slot_result.witness,
                     };
                 vm.add_hint(transition_data);
-                let zk_state = self.state_manager.get_zk_state();
                 tracing::info_span!("guest_execution").in_scope(|| match config {
                     ProofGenConfig::Simulate(verifier) => verifier
-                        .run_block(vm.simulate_with_hints(), zk_state)
+                        .run_block(vm.simulate_with_hints(), zk_storage.clone())
                         .map_err(|e| {
                             anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)
                         })

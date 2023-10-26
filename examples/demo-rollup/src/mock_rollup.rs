@@ -8,8 +8,8 @@ use sov_modules_rollup_template::RollupTemplate;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::mocks::{MockDaConfig, MockDaService, MockDaSpec};
 use sov_rollup_interface::services::da::DaService;
-use sov_state::state_manager::SovStateManager;
-use sov_state::DefaultStorageSpec;
+use sov_state::state_manager::ProverStorageManager;
+use sov_state::{DefaultStorageSpec, ZkStorage};
 use sov_stf_runner::RollupConfig;
 
 /// Rollup with MockDa
@@ -25,7 +25,7 @@ impl RollupTemplate for MockDemoRollup {
     type ZkContext = ZkDefaultContext;
     type NativeContext = DefaultContext;
 
-    type StateManager = SovStateManager<DefaultStorageSpec>;
+    type StateManager = ProverStorageManager<DefaultStorageSpec>;
 
     type ZkRuntime = Runtime<Self::ZkContext, Self::DaSpec>;
     type NativeRuntime = Runtime<Self::NativeContext, Self::DaSpec>;
@@ -67,7 +67,14 @@ impl RollupTemplate for MockDemoRollup {
         let storage_config = StorageConfig {
             path: rollup_config.storage.path.clone(),
         };
-        SovStateManager::new(storage_config)
+        ProverStorageManager::new(storage_config)
+    }
+
+    fn create_zk_storage(
+        &self,
+        _rollup_config: &RollupConfig<Self::DaConfig>,
+    ) -> <Self::ZkContext as Spec>::Storage {
+        ZkStorage::new()
     }
 
     fn create_vm(&self) -> Self::Vm {

@@ -26,8 +26,8 @@ use sov_risc0_adapter::host::Risc0Host;
 #[cfg(feature = "bench")]
 use sov_risc0_adapter::metrics::GLOBAL_HASHMAP;
 use sov_rollup_interface::services::da::DaService;
-use sov_rollup_interface::state::StateManager;
 use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_rollup_interface::storage::StorageManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
@@ -167,7 +167,7 @@ async fn main() -> Result<(), anyhow::Error> {
         path: rollup_config.storage.path,
     };
 
-    let state_manager = sov_state::state_manager::SovStateManager::new(storage_config)
+    let state_manager = sov_state::state_manager::ProverStorageManager::new(storage_config)
         .expect("Failed to initialize state manager");
     let demo = AppTemplate::<
         DefaultContext,
@@ -180,7 +180,7 @@ async fn main() -> Result<(), anyhow::Error> {
         get_genesis_config(&GenesisPaths::from_dir("../test-data/genesis/demo-tests")).unwrap();
     println!("Starting from empty storage, initialization chain");
     let (mut prev_state_root, _) =
-        demo.init_chain(state_manager.get_native_state(), genesis_config);
+        demo.init_chain(state_manager.get_native_storage(), genesis_config);
 
     let hex_data = read_to_string("benches/prover/blocks.hex").expect("Failed to read data");
     let bincoded_blocks: Vec<FilteredCelestiaBlock> = hex_data
@@ -217,7 +217,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
         let result = demo.apply_slot(
             &prev_state_root,
-            state_manager.get_native_state(),
+            state_manager.get_native_storage(),
             Default::default(),
             &filtered_block.header,
             &filtered_block.validity_condition(),

@@ -7,9 +7,9 @@ use sov_modules_stf_template::{AppTemplate, SequencerOutcome};
 use sov_rollup_interface::mocks::{
     MockBlock, MockBlockHeader, MockDaSpec, MockHash, MockValidityCond, MockZkvm,
 };
-use sov_rollup_interface::state::StateManager;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_state::state_manager::SovStateManager;
+use sov_rollup_interface::storage::StorageManager;
+use sov_state::state_manager::ProverStorageManager;
 use sov_state::Storage;
 
 use crate::chain_state::helpers::{create_chain_state_genesis_config, TestRuntime};
@@ -25,7 +25,7 @@ fn test_simple_value_setter_with_chain_state() {
 
     let tmpdir = tempfile::tempdir().unwrap();
 
-    let state_manager = SovStateManager::new(sov_state::config::Config {
+    let state_manager = ProverStorageManager::new(sov_state::config::Config {
         path: tmpdir.path().to_path_buf(),
     })
     .unwrap();
@@ -39,7 +39,7 @@ fn test_simple_value_setter_with_chain_state() {
 
     // Genesis
     let (init_root_hash, _) = app_template.init_chain(
-        state_manager.get_native_state(),
+        state_manager.get_native_storage(),
         create_chain_state_genesis_config(admin_pub_key),
     );
 
@@ -62,7 +62,7 @@ fn test_simple_value_setter_with_chain_state() {
     };
 
     // Computes the initial working set
-    let mut working_set = WorkingSet::new(state_manager.get_native_state());
+    let mut working_set = WorkingSet::new(state_manager.get_native_storage());
 
     // Check the slot height before apply slot
     let new_height_storage = app_template
@@ -74,7 +74,7 @@ fn test_simple_value_setter_with_chain_state() {
 
     let result = app_template.apply_slot(
         &init_root_hash,
-        state_manager.get_native_state(),
+        state_manager.get_native_storage(),
         Default::default(),
         &slot_data.header,
         &slot_data.validity_cond,
@@ -90,7 +90,7 @@ fn test_simple_value_setter_with_chain_state() {
     );
 
     // Computes the new working set after slot application
-    let mut working_set = WorkingSet::new(state_manager.get_native_state());
+    let mut working_set = WorkingSet::new(state_manager.get_native_storage());
     let chain_state_ref = &app_template.runtime.chain_state;
 
     let new_root_hash = result.state_root;
@@ -131,7 +131,7 @@ fn test_simple_value_setter_with_chain_state() {
 
     let result = app_template.apply_slot(
         &result.state_root,
-        state_manager.get_native_state(),
+        state_manager.get_native_storage(),
         Default::default(),
         &new_slot_data.header,
         &new_slot_data.validity_cond,
@@ -147,7 +147,7 @@ fn test_simple_value_setter_with_chain_state() {
     );
 
     // Computes the new working set after slot application
-    let mut working_set = WorkingSet::new(state_manager.get_native_state());
+    let mut working_set = WorkingSet::new(state_manager.get_native_storage());
     let chain_state_ref = &app_template.runtime.chain_state;
 
     // Check that the root hash has been stored correctly

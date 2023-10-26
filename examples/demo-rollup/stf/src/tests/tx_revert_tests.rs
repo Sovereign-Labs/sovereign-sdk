@@ -6,8 +6,8 @@ use sov_modules_api::{PrivateKey, WorkingSet};
 use sov_modules_stf_template::{AppTemplate, Batch, SequencerOutcome, SlashingReason, TxEffect};
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::mocks::{MockAddress, MockBlock, MockDaSpec, MOCK_SEQUENCER_DA_ADDRESS};
-use sov_rollup_interface::state::StateManager;
 use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_rollup_interface::storage::StorageManager;
 use sov_state::ProverStorage;
 
 use super::{create_state_manager_for_tests, get_genesis_config_for_tests};
@@ -34,7 +34,7 @@ fn test_tx_revert() {
         let stf: AppTemplateTest = AppTemplate::new();
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        let (genesis_root, _) = stf.init_chain(state_manager.get_native_state(), config);
+        let (genesis_root, _) = stf.init_chain(state_manager.get_native_storage(), config);
 
         let txs = simulate_da_with_revert_msg();
         let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
@@ -43,7 +43,7 @@ fn test_tx_revert() {
 
         let apply_block_result = stf.apply_slot(
             &genesis_root,
-            state_manager.get_native_state(),
+            state_manager.get_native_storage(),
             Default::default(),
             &data.header,
             &data.validity_cond,
@@ -108,7 +108,7 @@ fn test_nonce_incremented_on_revert() {
         let stf: AppTemplateTest = AppTemplate::new();
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        let (genesis_root, _) = stf.init_chain(state_manager.get_native_state(), config);
+        let (genesis_root, _) = stf.init_chain(state_manager.get_native_storage(), config);
 
         let txs = simulate_da_with_revert_msg();
         let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
@@ -117,7 +117,7 @@ fn test_nonce_incremented_on_revert() {
 
         let apply_block_result = stf.apply_slot(
             &genesis_root,
-            state_manager.get_native_state(),
+            state_manager.get_native_storage(),
             Default::default(),
             &data.header,
             &data.validity_cond,
@@ -177,7 +177,7 @@ fn test_tx_bad_sig() {
         let stf: AppTemplateTest = AppTemplate::new();
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        let (genesis_root, _) = stf.init_chain(state_manager.get_native_state(), config);
+        let (genesis_root, _) = stf.init_chain(state_manager.get_native_storage(), config);
 
         let txs = simulate_da_with_bad_sig();
 
@@ -188,7 +188,7 @@ fn test_tx_bad_sig() {
         let data = MockBlock::default();
         let apply_block_result = stf.apply_slot(
             &genesis_root,
-            state_manager.get_native_state(),
+            state_manager.get_native_storage(),
             Default::default(),
             &data.header,
             &data.validity_cond,
@@ -224,7 +224,7 @@ fn test_tx_bad_nonce() {
         let stf: AppTemplateTest = AppTemplate::new();
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        let (genesis_root, _) = stf.init_chain(state_manager.get_native_state(), config);
+        let (genesis_root, _) = stf.init_chain(state_manager.get_native_storage(), config);
 
         let txs = simulate_da_with_bad_nonce();
 
@@ -234,7 +234,7 @@ fn test_tx_bad_nonce() {
         let data = MockBlock::default();
         let apply_block_result = stf.apply_slot(
             &genesis_root,
-            state_manager.get_native_state(),
+            state_manager.get_native_storage(),
             Default::default(),
             &data.header,
             &data.validity_cond,
@@ -268,9 +268,9 @@ fn test_tx_bad_serialization() {
     let (genesis_root, sequencer_balance_before) = {
         let state_manager = create_state_manager_for_tests(path);
         let stf: AppTemplateTest = AppTemplate::new();
-        let (genesis_root, _) = stf.init_chain(state_manager.get_native_state(), config);
+        let (genesis_root, _) = stf.init_chain(state_manager.get_native_storage(), config);
 
-        let mut working_set = WorkingSet::new(state_manager.get_native_state());
+        let mut working_set = WorkingSet::new(state_manager.get_native_storage());
         let coins = stf
             .runtime
             .sequencer_registry
@@ -304,7 +304,7 @@ fn test_tx_bad_serialization() {
         let data = MockBlock::default();
         let apply_block_result = stf.apply_slot(
             &genesis_root,
-            state_manager.get_native_state(),
+            state_manager.get_native_storage(),
             Default::default(),
             &data.header,
             &data.validity_cond,

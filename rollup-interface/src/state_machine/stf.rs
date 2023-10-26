@@ -77,11 +77,11 @@ pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
 ///  - B - generic for batch receipt contents
 ///  - T - generic for transaction receipt contents
 ///  - W - generic for witness
-pub struct SlotResult<S, C, B, T, W> {
+pub struct SlotResult<S, Cs, B, T, W> {
     /// Final state root after all blobs were applied
     pub state_root: S,
     /// Container for all state alterations that happened during slot execution
-    pub change_set: C,
+    pub change_set: Cs,
     /// Receipt for each applied batch
     pub batch_receipts: Vec<BatchReceipt<B, T>>,
     /// Witness after applying the whole block
