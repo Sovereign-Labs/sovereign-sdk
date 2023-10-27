@@ -2,7 +2,7 @@
 //! for testing, fuzzing, and benchmarking.
 
 mod da;
-#[cfg(all(feature = "native", feature = "tokio"))]
+#[cfg(feature = "native")]
 mod service;
 #[cfg(feature = "std")]
 mod use_std;
@@ -12,7 +12,7 @@ pub use da::{
     MockAddress, MockBlockHeader, MockDaConfig, MockDaSpec, MockDaVerifier, MockHash,
     MOCK_SEQUENCER_DA_ADDRESS,
 };
-#[cfg(all(feature = "native", feature = "tokio"))]
+#[cfg(feature = "native")]
 pub use service::MockDaService;
 #[cfg(feature = "std")]
 pub use use_std::{MockBlob, MockBlock};

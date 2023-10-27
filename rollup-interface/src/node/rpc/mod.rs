@@ -302,7 +302,6 @@ pub trait LedgerRpcProvider {
     ) -> Result<Vec<Option<TxResponse<T>>>, anyhow::Error>;
 
     /// Get a notification each time a slot is processed
-    #[cfg(feature = "tokio")]
     fn subscribe_slots(&self) -> Result<tokio::sync::broadcast::Receiver<u64>, anyhow::Error>;
 }
 
