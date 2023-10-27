@@ -56,6 +56,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 pub use sov_rollup_interface::services::da::SlotData;
+pub use sov_rollup_interface::stf::LegacyEvent;
 pub use sov_rollup_interface::zk::{
     StateTransition, ValidityCondition, ValidityConditionChecker, Zkvm,
 };

@@ -50,7 +50,7 @@ pub struct TransactionReceipt<R> {
     /// in the database
     pub body_to_save: Option<Vec<u8>>,
     /// The events output by this transaction
-    pub events: Vec<Event>,
+    pub events: Vec<LegacyEvent>,
     /// Any additional structured data to be saved in the database and served over RPC
     /// For example, this might contain a status code.
     pub receipt: R,
@@ -149,12 +149,12 @@ pub trait StateTransitionFunction<Vm: Zkvm, Da: DaSpec> {
 /// A key-value pair representing a change to the rollup state
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
-pub struct Event {
+pub struct LegacyEvent {
     key: EventKey,
     value: EventValue,
 }
 
-impl Event {
+impl LegacyEvent {
     /// Create a new event with the given key and value
     pub fn new(key: &str, value: &str) -> Self {
         Self {

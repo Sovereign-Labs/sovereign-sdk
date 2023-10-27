@@ -2,7 +2,7 @@ use simple_nft_module::{CallMessage, NonFungibleToken, NonFungibleTokenConfig, O
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address as gen_addr_generic;
 use sov_modules_api::{Address, Context, Module, WorkingSet};
-use sov_rollup_interface::stf::Event;
+use sov_rollup_interface::stf::LegacyEvent;
 use sov_state::{DefaultStorageSpec, ProverStorage};
 
 pub type C = DefaultContext;
@@ -44,7 +44,7 @@ fn genesis_and_mint() {
 
     assert_eq!(
         working_set.events()[0],
-        Event::new("NFT mint", "A token with id 1 was minted")
+        LegacyEvent::new("NFT mint", "A token with id 1 was minted")
     );
     let query3: OwnerResponse<C> = nft.get_owner(1, &mut working_set).unwrap();
     assert_eq!(query3.owner, Some(owner2));
@@ -97,7 +97,7 @@ fn transfer() {
 
     assert_eq!(
         working_set.events()[0],
-        Event::new("NFT transfer", "A token with id 1 was transferred")
+        LegacyEvent::new("NFT transfer", "A token with id 1 was transferred")
     );
 
     let token1_owner = query_token_owner(1, &mut working_set);
@@ -147,7 +147,7 @@ fn burn() {
 
     assert_eq!(
         working_set.events()[0],
-        Event::new("NFT burn", "A token with id 0 was burned")
+        LegacyEvent::new("NFT burn", "A token with id 0 was burned")
     );
     let query: OwnerResponse<C> = nft.get_owner(0, &mut working_set).unwrap();
 

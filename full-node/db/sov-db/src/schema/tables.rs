@@ -29,7 +29,7 @@ use borsh::{maybestd, BorshDeserialize, BorshSerialize};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use jmt::storage::{Node, NodeKey};
 use jmt::Version;
-use sov_rollup_interface::stf::{Event, EventKey};
+use sov_rollup_interface::stf::{EventKey, LegacyEvent};
 use sov_schema_db::schema::{KeyDecoder, KeyEncoder, ValueCodec};
 use sov_schema_db::{CodecError, SeekKeyEncoder};
 
@@ -246,7 +246,7 @@ define_table_with_default_codec!(
 
 define_table_with_seek_key_codec!(
     /// The primary store for event data
-    (EventByNumber) EventNumber => Event
+    (EventByNumber) EventNumber => LegacyEvent
 );
 
 define_table_with_default_codec!(

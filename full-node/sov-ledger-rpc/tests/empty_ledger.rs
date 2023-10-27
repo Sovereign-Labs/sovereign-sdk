@@ -7,7 +7,7 @@ use sov_db::ledger_db::LedgerDB;
 use sov_ledger_rpc::client::RpcClient;
 use sov_ledger_rpc::server::rpc_module;
 use sov_ledger_rpc::HexHash;
-use sov_modules_api::Event;
+use sov_modules_api::LegacyEvent;
 use sov_rollup_interface::rpc::{
     BatchResponse, EventIdentifier, QueryMode, SlotResponse, TxIdAndOffset, TxIdentifier,
     TxResponse,
@@ -155,15 +155,15 @@ async fn get_events_patterns() {
         .await
         .unwrap();
     rpc_client
-        .request::<Vec<Option<Event>>, _>("ledger_getEvents", vec![vec![2]])
+        .request::<Vec<Option<LegacyEvent>>, _>("ledger_getEvents", vec![vec![2]])
         .await
         .unwrap();
     rpc_client
-        .request::<Vec<Option<Event>>, _>("ledger_getEvents", vec![2])
+        .request::<Vec<Option<LegacyEvent>>, _>("ledger_getEvents", vec![2])
         .await
         .unwrap();
     rpc_client
-        .request::<Vec<Option<Event>>, _>(
+        .request::<Vec<Option<LegacyEvent>>, _>(
             "ledger_getEvents",
             vec![EventIdentifier::TxIdAndOffset(TxIdAndOffset {
                 tx_id: TxIdentifier::Number(1),

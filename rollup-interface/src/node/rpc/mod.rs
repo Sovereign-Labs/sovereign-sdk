@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "native")]
 use tokio::sync::broadcast::Receiver;
 
-#[cfg(feature = "native")]
-use crate::stf::Event;
 use crate::stf::EventKey;
+#[cfg(feature = "native")]
+use crate::stf::LegacyEvent;
 
 /// A struct containing enough information to uniquely specify single batch.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -225,7 +225,7 @@ pub trait LedgerRpcProvider {
     fn get_events(
         &self,
         event_ids: &[EventIdentifier],
-    ) -> Result<Vec<Option<Event>>, anyhow::Error>;
+    ) -> Result<Vec<Option<LegacyEvent>>, anyhow::Error>;
 
     /// Get a single slot by hash.
     fn get_slot_by_hash<B: DeserializeOwned, T: DeserializeOwned>(
@@ -263,7 +263,7 @@ pub trait LedgerRpcProvider {
     ) -> Result<Option<BatchResponse<B, T>>, anyhow::Error>;
 
     /// Get a single event by number.
-    fn get_event_by_number(&self, number: u64) -> Result<Option<Event>, anyhow::Error>;
+    fn get_event_by_number(&self, number: u64) -> Result<Option<LegacyEvent>, anyhow::Error>;
 
     /// Get a single tx by number.
     fn get_tx_by_number<T: DeserializeOwned>(

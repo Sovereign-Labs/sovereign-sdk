@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
-use sov_rollup_interface::stf::Event;
+use sov_rollup_interface::stf::LegacyEvent;
 use sov_state::codec::{EncodeKeyLike, StateCodec, StateValueCodec};
 use sov_state::storage::{NativeStorage, Storage, StorageKey, StorageValue};
 use sov_state::{OrderedReadsAndWrites, Prefix, StorageInternalCache};
@@ -182,7 +182,7 @@ impl<C: Context> StateCheckpoint<C> {
 pub struct WorkingSet<C: Context> {
     delta: RevertableWriter<Delta<C::Storage>>,
     accessory_delta: RevertableWriter<AccessoryDelta<C::Storage>>,
-    events: Vec<Event>,
+    events: Vec<LegacyEvent>,
     gas_meter: GasMeter<C::GasUnit>,
 }
 
@@ -233,17 +233,17 @@ impl<C: Context> WorkingSet<C> {
 
     /// Adds an event to the working set.
     pub fn add_event(&mut self, key: &str, value: &str) {
-        self.events.push(Event::new(key, value));
+        self.events.push(LegacyEvent::new(key, value));
     }
 
     /// Extracts all events from this working set.
-    pub fn take_events(&mut self) -> Vec<Event> {
+    pub fn take_events(&mut self) -> Vec<LegacyEvent> {
         std::mem::take(&mut self.events)
     }
 
     /// Returns an immutable slice of all events that have been previously
     /// written to this working set.
-    pub fn events(&self) -> &[Event] {
+    pub fn events(&self) -> &[LegacyEvent] {
         &self.events
     }
 

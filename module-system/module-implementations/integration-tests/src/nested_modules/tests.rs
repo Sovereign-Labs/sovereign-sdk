@@ -1,5 +1,5 @@
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
-use sov_modules_api::{Context, Event, Prefix, StateMap, WorkingSet};
+use sov_modules_api::{Context, LegacyEvent, Prefix, StateMap, WorkingSet};
 use sov_state::{ProverStorage, Storage, ZkStorage};
 
 use super::helpers::module_c;
@@ -18,11 +18,11 @@ fn nested_module_call_test() {
     assert_eq!(
         working_set.events(),
         &vec![
-            Event::new("module C", "execute"),
-            Event::new("module A", "update"),
-            Event::new("module B", "update"),
-            Event::new("module A", "update"),
-            Event::new("module A", "update"),
+            LegacyEvent::new("module C", "execute"),
+            LegacyEvent::new("module A", "update"),
+            LegacyEvent::new("module B", "update"),
+            LegacyEvent::new("module A", "update"),
+            LegacyEvent::new("module A", "update"),
         ]
     );
 

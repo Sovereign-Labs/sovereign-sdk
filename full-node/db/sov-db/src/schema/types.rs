@@ -4,7 +4,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::rpc::{BatchResponse, TxIdentifier, TxResponse};
-use sov_rollup_interface::stf::{Event, EventKey, TransactionReceipt};
+use sov_rollup_interface::stf::{EventKey, LegacyEvent, TransactionReceipt};
 
 /// A cheaply cloneable bytes abstraction for use within the trust boundary of the node
 /// (i.e. when interfacing with the database). Serializes and deserializes more efficiently,
@@ -122,7 +122,7 @@ impl<R: DeserializeOwned> TryFrom<StoredTransaction> for TxResponse<R> {
 pub fn split_tx_for_storage<R: Serialize>(
     tx: TransactionReceipt<R>,
     event_offset: u64,
-) -> (StoredTransaction, Vec<Event>) {
+) -> (StoredTransaction, Vec<LegacyEvent>) {
     let event_range = EventNumber(event_offset)..EventNumber(event_offset + tx.events.len() as u64);
     let tx_for_storage = StoredTransaction {
         hash: tx.tx_hash,

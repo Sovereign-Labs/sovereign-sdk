@@ -8,7 +8,8 @@ pub fn derive_event(input: DeriveInput) -> Result<proc_macro::TokenStream, syn::
             let event_keys = data_enum.variants.iter().map(|v| {
                 let variant_name = &v.ident;
                 let variant_str = variant_name.to_string();
-                let event_key = match &v.fields {
+                
+                match &v.fields {
                     Fields::Unit => {
                         quote! {
                             #enum_name::#variant_name => #variant_str,
@@ -24,8 +25,7 @@ pub fn derive_event(input: DeriveInput) -> Result<proc_macro::TokenStream, syn::
                             #enum_name::#variant_name { .. } => #variant_str,
                         }
                     }
-                };
-                event_key
+                }
             });
             let gen = quote! {
                 impl ::sov_modules_api::Event for #enum_name {
