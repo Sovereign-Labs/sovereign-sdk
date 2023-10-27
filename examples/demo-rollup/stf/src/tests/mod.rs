@@ -2,6 +2,7 @@ use std::path::Path;
 
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::DaSpec;
+use sov_modules_stf_template::kernels::basic::BasicKernel;
 use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::mocks::MockDaSpec;
 use sov_state::storage_manager::ProverStorageManager;
@@ -17,8 +18,13 @@ pub(crate) type C = DefaultContext;
 pub(crate) type Da = MockDaSpec;
 
 pub(crate) type RuntimeTest = Runtime<DefaultContext, Da>;
-pub(crate) type AppTemplateTest =
-    AppTemplate<DefaultContext, Da, sov_rollup_interface::mocks::MockZkvm, RuntimeTest>;
+pub(crate) type AppTemplateTest = AppTemplate<
+    DefaultContext,
+    Da,
+    sov_rollup_interface::mocks::MockZkvm,
+    RuntimeTest,
+    BasicKernel<C>,
+>;
 
 pub(crate) fn create_storage_manager_for_tests(
     path: impl AsRef<Path>,

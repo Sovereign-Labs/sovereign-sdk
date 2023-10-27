@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
+use sov_modules_api::capabilities::Kernel;
 use sov_modules_api::{
     BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, StateCheckpoint,
 };
@@ -23,10 +24,11 @@ use sov_zk_cycle_macros::cycle_tracker;
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
 /// that is specifically designed to work with the module-system.
-pub struct AppTemplate<C: Context, Da: DaSpec, Vm, RT: Runtime<C, Da>> {
+pub struct AppTemplate<C: Context, Da: DaSpec, Vm, RT: Runtime<C, Da>, K: Kernel<C, Da>> {
     /// State storage used by the rollup.
     /// The runtime includes all the modules that the rollup supports.
     pub(crate) runtime: RT,
+    pub(crate) kernel: K,
     phantom_context: PhantomData<C>,
     phantom_vm: PhantomData<Vm>,
     phantom_da: PhantomData<Da>,
@@ -67,27 +69,30 @@ impl<A: BasicAddress> From<ApplyBatchError<A>> for BatchReceipt<SequencerOutcome
     }
 }
 
-impl<C, Vm, Da, RT> Default for AppTemplate<C, Da, Vm, RT>
+impl<C, Vm, Da, RT, K> Default for AppTemplate<C, Da, Vm, RT, K>
 where
     C: Context,
     Da: DaSpec,
     RT: Runtime<C, Da>,
+    K: Kernel<C, Da>,
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<C, Vm, Da, RT> AppTemplate<C, Da, Vm, RT>
+impl<C, Vm, Da, RT, K> AppTemplate<C, Da, Vm, RT, K>
 where
     C: Context,
     Da: DaSpec,
     RT: Runtime<C, Da>,
+    K: Kernel<C, Da>,
 {
     /// [`AppTemplate`] constructor.
     pub fn new() -> Self {
         Self {
             runtime: RT::default(),
+            kernel: K::default(),
             phantom_context: PhantomData,
             phantom_vm: PhantomData,
             phantom_da: PhantomData,
