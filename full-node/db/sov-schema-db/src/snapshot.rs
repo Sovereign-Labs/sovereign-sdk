@@ -80,7 +80,7 @@ impl<Q: QueryManager> DbSnapshot<Q> {
                 .manager
                 .read()
                 .expect("Parent lock must not be poisoned");
-            if let Some(operation) = parent.get(self.id, key)? {
+            if let Some(operation) = parent.get::<S>(self.id, key)? {
                 return decode_operation::<S>(operation);
             }
         }
@@ -99,8 +99,15 @@ impl<Q: QueryManager> DbSnapshot<Q> {
         self.cache
             .lock()
             .expect("SchemaBatch lock must not be poisoned")
-            .put(key, value)?;
-        Ok(())
+            .put(key, value)
+    }
+
+    /// Delete given key from snapshot
+    pub fn delete<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<()> {
+        self.cache
+            .lock()
+            .expect("SchemaBatch lock must not be poisoned")
+            .delete(key)
     }
 }
 
@@ -112,9 +119,9 @@ pub struct FrozenDbSnapshot {
 
 impl FrozenDbSnapshot {
     /// Get value from its own cache
-    pub fn get<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<Option<S::Value>> {
+    pub fn get<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<Option<Operation>> {
         if let Some(operation) = self.cache.read(key)? {
-            return decode_operation::<S>(operation);
+            return Ok(Some(operation));
         }
 
         Ok(None)

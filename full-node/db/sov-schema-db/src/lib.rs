@@ -331,8 +331,10 @@ impl SchemaBatch {
         key: &impl KeyCodec<S>,
     ) -> anyhow::Result<Option<Operation>> {
         let key = key.encode_key()?;
-        let column_writes = self.last_writes.get(&S::COLUMN_FAMILY_NAME).unwrap();
-        Ok(column_writes.get(&key).cloned())
+        if let Some(column_writes) = self.last_writes.get(&S::COLUMN_FAMILY_NAME) {
+            return Ok(column_writes.get(&key).cloned());
+        }
+        Ok(None)
     }
 }
 
