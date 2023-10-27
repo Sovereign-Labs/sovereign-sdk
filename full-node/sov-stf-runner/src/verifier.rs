@@ -17,14 +17,14 @@ where
     da_verifier: Da,
     phantom: PhantomData<Zk>,
 }
-impl<ST, Da, Zk> StateTransitionVerifier<ST, Da, Zk>
+impl<Stf, Da, Zk> StateTransitionVerifier<Stf, Da, Zk>
 where
     Da: DaVerifier,
     Zk: ZkvmGuest,
-    ST: StateTransitionFunction<Zk, Da::Spec>,
+    Stf: StateTransitionFunction<Zk, Da::Spec>,
 {
     /// Create a [`StateTransitionVerifier`]
-    pub fn new(app: ST, da_verifier: Da) -> Self {
+    pub fn new(app: Stf, da_verifier: Da) -> Self {
         Self {
             app,
             da_verifier,
@@ -33,7 +33,11 @@ where
     }
 
     /// Verify the next block
-    pub fn run_block(&mut self, zkvm: Zk) -> Result<ST::StateRoot, Da::Error> {
+    pub fn run_block(
+        &mut self,
+        zkvm: Zk,
+        pre_state: Stf::PreState,
+    ) -> Result<Stf::StateRoot, Da::Error> {
         let mut data: StateTransitionData<_, _, Da::Spec> = zkvm.read_from_host();
         let validity_condition = self.da_verifier.verify_relevant_tx_list(
             &data.da_block_header,
@@ -44,6 +48,7 @@ where
 
         let result = self.app.apply_slot(
             &data.pre_state_root,
+            pre_state,
             data.state_transition_witness,
             &data.da_block_header,
             &validity_condition,

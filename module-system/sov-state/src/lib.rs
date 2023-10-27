@@ -22,6 +22,8 @@ pub use storage::Storage;
 pub use zk_storage::ZkStorage;
 
 pub mod config;
+#[cfg(feature = "native")]
+pub mod storage_manager;
 
 use std::fmt::Display;
 use std::str;

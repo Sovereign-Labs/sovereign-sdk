@@ -12,6 +12,7 @@ use sov_modules_api::{Context, DaSpec, Spec};
 use sov_modules_stf_template::{AppTemplate, Runtime as RuntimeTrait};
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::storage::StorageManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage::NativeStorage;
 use sov_stf_runner::verifier::StateTransitionVerifier;
@@ -32,13 +33,16 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Host of a zkVM program.
     type Vm: ZkvmHost + Send;
 
-    /// Location of the genesis files.
-    type GenesisPaths: Send + Sync;
-
     /// Context for Zero Knowledge environment.
     type ZkContext: Context;
     /// Context for Native environment.
     type NativeContext: Context;
+
+    /// Manager for the native storage lifecycle.
+    type StorageManager: StorageManager<
+        NativeStorage = <Self::NativeContext as Spec>::Storage,
+        NativeChangeSet = (),
+    >;
 
     /// Runtime for Zero Knowledge environment.
     type ZkRuntime: RuntimeTrait<Self::ZkContext, Self::DaSpec> + Default;
@@ -56,27 +60,34 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Creates GenesisConfig from genesis files.
     fn create_genesis_config(
         &self,
-        genesis_paths: &Self::GenesisPaths,
-        rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig;
+        genesis_paths: &<Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisPaths,
+        _rollup_config: &RollupConfig<Self::DaConfig>,
+    ) -> anyhow::Result<
+        <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisConfig,
+    > {
+        <Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::genesis_config(
+            genesis_paths,
+        )
+    }
 
-    /// Creates instance of DA Service.
+    /// Creates instance of [`DaService`].
     async fn create_da_service(
         &self,
         rollup_config: &RollupConfig<Self::DaConfig>,
     ) -> Self::DaService;
+
+    /// Creates instance of [`StorageManager`].
+    /// Panics if initialization fails.
+    fn create_storage_manager(
+        &self,
+        rollup_config: &RollupConfig<Self::DaConfig>,
+    ) -> Result<Self::StorageManager, anyhow::Error>;
 
     /// Creates instance of ZK storage.
     fn create_zk_storage(
         &self,
         rollup_config: &RollupConfig<Self::DaConfig>,
     ) -> <Self::ZkContext as Spec>::Storage;
-
-    /// Creates instance of Native storage.
-    fn create_native_storage(
-        &self,
-        rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> Result<<Self::NativeContext as Spec>::Storage, anyhow::Error>;
 
     /// Creates instance of ZkVm.
     fn create_vm(&self) -> Self::Vm;
@@ -92,7 +103,7 @@ pub trait RollupTemplate: Sized + Send + Sync {
     /// Creates a new rollup.
     async fn create_new_rollup(
         &self,
-        genesis_paths: &Self::GenesisPaths,
+        genesis_paths: &<Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisPaths,
         rollup_config: RollupConfig<Self::DaConfig>,
         prover_config: Option<RollupProverConfig>,
     ) -> Result<Rollup<Self>, anyhow::Error>
@@ -101,36 +112,34 @@ pub trait RollupTemplate: Sized + Send + Sync {
     {
         let da_service = self.create_da_service(&rollup_config).await;
         let ledger_db = self.create_ledger_db(&rollup_config);
-        let genesis_config = self.create_genesis_config(genesis_paths, &rollup_config);
+        let genesis_config = self.create_genesis_config(genesis_paths, &rollup_config)?;
 
-        let prover = prover_config.map(|pc| {
-            configure_prover(
-                self.create_vm(),
-                pc,
-                self.create_verifier(),
-                self.create_zk_storage(&rollup_config),
-            )
-        });
+        let prover =
+            prover_config.map(|pc| configure_prover(self.create_vm(), pc, self.create_verifier()));
 
-        let storage = self.create_native_storage(&rollup_config)?;
+        let storage_manager = self.create_storage_manager(&rollup_config)?;
+        let native_storage = storage_manager.get_native_storage();
+        let zk_storage = self.create_zk_storage(&rollup_config);
 
         let prev_root = ledger_db
             .get_head_slot()?
-            .map(|(number, _)| storage.get_root_hash(number.0))
+            .map(|(number, _)| native_storage.get_root_hash(number.0))
             .transpose()?;
 
-        let rpc_methods = self.create_rpc_methods(&storage, &ledger_db, &da_service)?;
+        let rpc_methods = self.create_rpc_methods(&native_storage, &ledger_db, &da_service)?;
 
-        let native_stf = AppTemplate::new(storage);
+        let native_stf = AppTemplate::new();
 
         let runner = StateTransitionRunner::new(
             rollup_config.runner,
             da_service,
             ledger_db,
             native_stf,
+            storage_manager,
             prev_root,
             genesis_config,
             prover,
+            zk_storage,
         )?;
 
         Ok(Rollup {
@@ -156,6 +165,7 @@ pub struct Rollup<S: RollupTemplate> {
     #[allow(clippy::type_complexity)]
     pub runner: StateTransitionRunner<
         AppTemplate<S::NativeContext, S::DaSpec, S::Vm, S::NativeRuntime>,
+        S::StorageManager,
         S::DaService,
         S::Vm,
         AppTemplate<S::ZkContext, S::DaSpec, <S::Vm as ZkvmHost>::Guest, S::ZkRuntime>,
@@ -200,9 +210,8 @@ fn configure_prover<
     vm: Vm,
     cfg: RollupProverConfig,
     da_verifier: Da::Verifier,
-    zk_storage: <ZkContext as Spec>::Storage,
 ) -> ZkProver<ZkContext, Vm, RT, Da> {
-    let app = AppTemplate::new(zk_storage);
+    let app = AppTemplate::new();
     let app_verifier = AppVerifier::<_, _, ZkContext, RT>::new(app, da_verifier);
 
     let config = match cfg {

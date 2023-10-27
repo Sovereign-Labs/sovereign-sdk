@@ -3,12 +3,11 @@
 #[cfg(feature = "native")]
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "native")]
-use tokio::sync::broadcast::Receiver;
 
-use crate::stf::EventKey;
+use crate::maybestd::vec::Vec;
 #[cfg(feature = "native")]
 use crate::stf::LegacyEvent;
+use crate::stf::EventKey;
 
 /// A struct containing enough information to uniquely specify single batch.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -143,7 +142,7 @@ pub struct SlotResponse<B, Tx> {
     #[serde(with = "utils::rpc_hex")]
     pub hash: [u8; 32],
     /// The range of batches in this slot.
-    pub batch_range: std::ops::Range<u64>,
+    pub batch_range: core::ops::Range<u64>,
     /// The batches in this slot, if the [`QueryMode`] of the request is not `Compact`
     #[serde(skip_serializing_if = "Option::is_none")]
     pub batches: Option<Vec<ItemOrHash<BatchResponse<B, Tx>>>>,
@@ -156,7 +155,7 @@ pub struct BatchResponse<B, Tx> {
     #[serde(with = "utils::rpc_hex")]
     pub hash: [u8; 32],
     /// The range of transactions in this batch.
-    pub tx_range: std::ops::Range<u64>,
+    pub tx_range: core::ops::Range<u64>,
     /// The transactions in this batch, if the [`QueryMode`] of the request is not `Compact`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub txs: Option<Vec<ItemOrHash<TxResponse<Tx>>>>,
@@ -172,7 +171,7 @@ pub struct TxResponse<Tx> {
     #[serde(with = "utils::rpc_hex")]
     pub hash: [u8; 32],
     /// The range of events occurring in this transaction.
-    pub event_range: std::ops::Range<u64>,
+    pub event_range: core::ops::Range<u64>,
     /// The transaction body, if stored by the rollup.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<Vec<u8>>,
@@ -303,7 +302,8 @@ pub trait LedgerRpcProvider {
     ) -> Result<Vec<Option<TxResponse<T>>>, anyhow::Error>;
 
     /// Get a notification each time a slot is processed
-    fn subscribe_slots(&self) -> Result<Receiver<u64>, anyhow::Error>;
+    #[cfg(feature = "tokio")]
+    fn subscribe_slots(&self) -> Result<tokio::sync::broadcast::Receiver<u64>, anyhow::Error>;
 }
 
 /// JSON-RPC -related utilities. Occasionally useful but unimportant for most
@@ -312,11 +312,14 @@ pub mod utils {
     /// Serialization and deserialization logic for `0x`-prefixed hex strings.
     pub mod rpc_hex {
         use core::fmt;
-        use std::marker::PhantomData;
+        use core::marker::PhantomData;
 
         use hex::{FromHex, ToHex};
         use serde::de::{Error, Visitor};
         use serde::{Deserializer, Serializer};
+
+        use crate::maybestd::format;
+        use crate::maybestd::string::String;
 
         /// Serializes `data` as hex string using lowercase characters and prefixing with '0x'.
         ///
@@ -381,6 +384,9 @@ pub mod utils {
 #[cfg(test)]
 mod rpc_hex_tests {
     use serde::{Deserialize, Serialize};
+
+    use crate::maybestd::vec;
+    use crate::maybestd::vec::Vec;
 
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
     struct TestStruct {

@@ -2110,6 +2110,7 @@ dependencies = [
  "jsonrpsee 0.20.2",
  "rand 0.8.5",
  "reth-primitives",
+ "secp256k1 0.27.0",
  "serde",
  "serde_json",
  "simple-nft-module",
@@ -7202,13 +7203,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "risc0-starter"
-version = "0.3.0"
-dependencies = [
- "risc0-build",
-]
-
-[[package]]
 name = "risc0-sys"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8678,6 +8672,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.8",
  "sov-bank",
+ "sov-db",
  "sov-first-read-last-write-cache",
  "sov-modules-api",
  "sov-modules-macros",
@@ -8843,39 +8838,6 @@ dependencies = [
  "sha2 0.10.8",
  "thiserror",
  "tokio",
-]
-
-[[package]]
-name = "sov-rollup-starter"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "borsh",
- "clap 4.4.6",
- "jsonrpsee 0.20.2",
- "risc0-starter",
- "serde",
- "serde_json",
- "sov-accounts",
- "sov-bank",
- "sov-cli",
- "sov-db",
- "sov-ledger-rpc",
- "sov-modules-api",
- "sov-modules-rollup-template",
- "sov-modules-stf-template",
- "sov-risc0-adapter",
- "sov-rollup-interface",
- "sov-sequencer",
- "sov-sequencer-registry",
- "sov-state",
- "sov-stf-runner",
- "stf-starter",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber 0.3.17",
 ]
 
 [[package]]
@@ -9610,29 +9572,6 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
-name = "stf-starter"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "borsh",
- "clap 4.4.6",
- "jsonrpsee 0.20.2",
- "serde",
- "serde_json",
- "sov-accounts",
- "sov-bank",
- "sov-cli",
- "sov-modules-api",
- "sov-modules-stf-template",
- "sov-rollup-interface",
- "sov-sequencer",
- "sov-sequencer-registry",
- "sov-state",
- "sov-stf-runner",
- "tracing",
-]
 
 [[package]]
 name = "string_cache"

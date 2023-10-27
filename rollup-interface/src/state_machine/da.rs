@@ -1,13 +1,10 @@
 //! Defines traits and types used by the rollup to verify claims about the
 //! DA layer.
 use core::fmt::Debug;
-use std::cmp::min;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use bytes::Buf;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 use crate::zk::ValidityCondition;
 use crate::BasicAddress;
@@ -70,12 +67,13 @@ pub trait DaVerifier {
     ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error>;
 }
 
+#[cfg(feature = "std")]
 #[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize, PartialEq)]
 /// Simple structure that implements the Read trait for a buffer and  counts the number of bytes read from the beginning.
 /// Useful for the partial blob reading optimization: we know for each blob how many bytes have been read from the beginning.
 ///
 /// Because of soundness issues we cannot implement the Buf trait because the prover could get unproved blob data using the chunk method.
-pub struct CountedBufReader<B: Buf> {
+pub struct CountedBufReader<B: bytes::Buf> {
     /// The original blob data.
     inner: B,
 
@@ -84,7 +82,8 @@ pub struct CountedBufReader<B: Buf> {
     accumulator: Vec<u8>,
 }
 
-impl<B: Buf> CountedBufReader<B> {
+#[cfg(feature = "std")]
+impl<B: bytes::Buf> CountedBufReader<B> {
     /// Creates a new buffer reader with counter from an objet that implements the buffer trait
     pub fn new(inner: B) -> Self {
         let buf_size = inner.remaining();
@@ -104,7 +103,7 @@ impl<B: Buf> CountedBufReader<B> {
         }
         // `Buf::advance` would panic if `num_bytes` was greater than the length of the remaining unverified data,
         // but we just advance to the end of the buffer.
-        let num_to_read = min(remaining, requested);
+        let num_to_read = core::cmp::min(remaining, requested);
         // Extend the inner vector with zeros (copy_to_slice requires the vector to have
         // the correct *length* not just capacity)
         self.accumulator
@@ -212,8 +211,12 @@ pub struct Time {
     nanos: u32,
 }
 
-#[derive(Debug, Error)]
-#[error("Only intervals less than one second may be represented as nanoseconds")]
+#[derive(Debug)]
+#[cfg_attr(
+    feature = "std",
+    derive(thiserror::Error),
+    error("Only intervals less than one second may be represented as nanoseconds")
+)]
 /// An error that occurs when trying to create a `NanoSeconds` representing more than one second
 pub struct ErrTooManyNanos;
 

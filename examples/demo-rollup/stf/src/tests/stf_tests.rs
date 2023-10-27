@@ -7,25 +7,28 @@ pub mod test {
     use sov_modules_api::default_context::DefaultContext;
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
     use sov_modules_api::{Context, PrivateKey, WorkingSet};
-    use sov_modules_stf_template::{Batch, SequencerOutcome};
+    use sov_modules_stf_template::{AppTemplate, Batch, SequencerOutcome};
     use sov_rollup_interface::mocks::{MockBlock, MockDaSpec, MOCK_SEQUENCER_DA_ADDRESS};
     use sov_rollup_interface::stf::StateTransitionFunction;
-    use sov_state::ProverStorage;
+    use sov_rollup_interface::storage::StorageManager;
 
     use crate::runtime::Runtime;
     use crate::tests::da_simulation::simulate_da;
-    use crate::tests::{create_new_app_template_for_tests, get_genesis_config_for_tests, C};
+    use crate::tests::{
+        create_storage_manager_for_tests, get_genesis_config_for_tests, AppTemplateTest, C,
+    };
 
     #[test]
     fn test_demo_values_in_db() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
+        let storage_manager = create_storage_manager_for_tests(path);
 
         let config = get_genesis_config_for_tests();
         {
-            let mut demo = create_new_app_template_for_tests(path);
+            let stf: AppTemplateTest = AppTemplate::new();
 
-            let genesis_root = demo.init_chain(config);
+            let (genesis_root, _) = stf.init_chain(storage_manager.get_native_storage(), config);
 
             let priv_key = read_private_key::<DefaultContext>().private_key;
             let txs = simulate_da(priv_key);
@@ -35,8 +38,9 @@ pub mod test {
 
             let data = MockBlock::default();
 
-            let result = demo.apply_slot(
+            let result = stf.apply_slot(
                 &genesis_root,
+                storage_manager.get_native_storage(),
                 Default::default(),
                 &data.header,
                 &data.validity_cond,
@@ -60,7 +64,7 @@ pub mod test {
         // Generate a new storage instance after dumping data to the db.
         {
             let runtime = &mut Runtime::<DefaultContext, MockDaSpec>::default();
-            let storage = ProverStorage::with_path(path).unwrap();
+            let storage = storage_manager.get_native_storage();
             let mut working_set = WorkingSet::new(storage);
             let resp = runtime
                 .bank
@@ -78,11 +82,13 @@ pub mod test {
     fn test_demo_values_in_cache() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
-        let mut demo = create_new_app_template_for_tests(path);
+        let storage_manager = create_storage_manager_for_tests(path);
+
+        let stf: AppTemplateTest = AppTemplate::new();
 
         let config = get_genesis_config_for_tests();
 
-        let genesis_root = demo.init_chain(config);
+        let (genesis_root, _) = stf.init_chain(storage_manager.get_native_storage(), config);
 
         let private_key = read_private_key::<DefaultContext>().private_key;
         let txs = simulate_da(private_key);
@@ -91,8 +97,9 @@ pub mod test {
         let mut blobs = [blob];
         let data = MockBlock::default();
 
-        let apply_block_result = demo.apply_slot(
+        let apply_block_result = stf.apply_slot(
             &genesis_root,
+            storage_manager.get_native_storage(),
             Default::default(),
             &data.header,
             &data.validity_cond,
@@ -111,7 +118,7 @@ pub mod test {
         assert!(has_tx_events(&apply_blob_outcome),);
 
         let runtime = &mut Runtime::<DefaultContext, MockDaSpec>::default();
-        let mut working_set = WorkingSet::new(demo.current_storage.clone());
+        let mut working_set = WorkingSet::new(storage_manager.get_native_storage());
 
         let resp = runtime
             .bank
@@ -129,21 +136,23 @@ pub mod test {
     fn test_demo_values_not_in_db() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
+        let storage_manager = create_storage_manager_for_tests(path);
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
 
         let config = get_genesis_config_for_tests();
         {
-            let mut demo = create_new_app_template_for_tests(path);
-            let genesis_root = demo.init_chain(config);
+            let stf: AppTemplateTest = AppTemplate::new();
+            let (genesis_root, _) = stf.init_chain(storage_manager.get_native_storage(), config);
 
             let txs = simulate_da(value_setter_admin_private_key);
             let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
             let mut blobs = [blob];
             let data = MockBlock::default();
 
-            let apply_block_result = demo.apply_slot(
+            let apply_block_result = stf.apply_slot(
                 &genesis_root,
+                storage_manager.get_native_storage(),
                 Default::default(),
                 &data.header,
                 &data.validity_cond,
@@ -163,7 +172,7 @@ pub mod test {
         // Generate a new storage instance, values are missing because we didn't call `end_slot()`;
         {
             let runtime = &mut Runtime::<C, MockDaSpec>::default();
-            let storage = ProverStorage::with_path(path).unwrap();
+            let storage = storage_manager.get_native_storage();
             let mut working_set = WorkingSet::new(storage);
 
             let resp = runtime
@@ -186,8 +195,9 @@ pub mod test {
         let mut config = get_genesis_config_for_tests();
         config.sequencer_registry.is_preferred_sequencer = false;
 
-        let mut demo = create_new_app_template_for_tests(path);
-        let genesis_root = demo.init_chain(config);
+        let storage_manager = create_storage_manager_for_tests(path);
+        let stf: AppTemplateTest = AppTemplate::new();
+        let (genesis_root, _) = stf.init_chain(storage_manager.get_native_storage(), config);
 
         let some_sequencer: [u8; 32] = [121; 32];
 
@@ -197,8 +207,9 @@ pub mod test {
         let mut blobs = [blob];
         let data = MockBlock::default();
 
-        let apply_block_result = demo.apply_slot(
+        let apply_block_result = stf.apply_slot(
             &genesis_root,
+            storage_manager.get_native_storage(),
             Default::default(),
             &data.header,
             &data.validity_cond,

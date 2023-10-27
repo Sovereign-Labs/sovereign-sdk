@@ -71,6 +71,7 @@ jobs:
       # which should be required to pass before merging a PR, don't forget to
       # update this list!
       - check
+      - check_no_std
       - hack
       - nextest
       - test
@@ -122,6 +123,23 @@ jobs:
             echo "Linting or formatting errors detected, please run 'make lint-fix' to fix it";
             exit 1
           fi
+
+  check_no_std:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: thumbv6m-none-eabi
+          override: true
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
+      - name: Run check
+        run: make check-no-std
+
   # Check that every combination of features is working properly.
   hack:
     name: features

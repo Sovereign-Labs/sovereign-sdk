@@ -14,11 +14,11 @@ resolver = "2"
 [dependencies]
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
-borsh = { workspace = true }
+borsh = { workspace = true, features = ["rc", "bytes"] }
 bcs = { workspace = true }
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
-serde = { workspace = true }
+serde = { workspace = true, features = ["rc"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }

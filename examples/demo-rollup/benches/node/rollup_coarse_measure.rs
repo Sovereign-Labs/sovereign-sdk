@@ -3,38 +3,25 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::Context;
-use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
-use demo_stf::runtime::Runtime;
-use prometheus::{Histogram, HistogramOpts, Registry};
-use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_modules_api::default_context::DefaultContext;
-use sov_modules_stf_template::AppTemplate;
-use sov_risc0_adapter::host::Risc0Verifier;
-use sov_rng_da_service::{RngDaService, RngDaSpec};
-use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::mocks::{
-    MockAddress, MockBlock, MockBlockHeader, MOCK_SEQUENCER_DA_ADDRESS,
-};
-use sov_rollup_interface::services::da::DaService;
-use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::Zkvm;
-use sov_state::{ProverStorage, Storage};
-use sov_stf_runner::{from_toml_path, RollupConfig};
-use tempfile::TempDir;
 #[macro_use]
 extern crate prettytable;
 
+use anyhow::Context;
+use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
+use demo_stf::runtime::Runtime;
 use prettytable::Table;
-use sov_modules_stf_template::TxEffect;
-
-fn new_app<Vm: Zkvm, Da: DaSpec>(
-    storage_config: sov_state::config::Config,
-) -> AppTemplate<DefaultContext, Da, Vm, Runtime<DefaultContext, Da>> {
-    let storage =
-        ProverStorage::with_config(storage_config).expect("Failed to open prover storage");
-    AppTemplate::new(storage.clone())
-}
+use prometheus::{Histogram, HistogramOpts, Registry};
+use sov_db::ledger_db::{LedgerDB, SlotCommit};
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_stf_template::{AppTemplate, TxEffect};
+use sov_risc0_adapter::host::Risc0Verifier;
+use sov_rng_da_service::{RngDaService, RngDaSpec};
+use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader};
+use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_rollup_interface::storage::StorageManager;
+use sov_stf_runner::{from_toml_path, RollupConfig};
+use tempfile::TempDir;
 
 fn print_times(
     total: Duration,
@@ -98,7 +85,7 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     let rollup_config_path = "benches/node/rollup_config.toml".to_string();
-    let mut rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
+    let mut rollup_config: RollupConfig<sov_celestia_adapter::CelestiaConfig> =
         from_toml_path(&rollup_config_path)
             .context("Failed to read rollup configuration")
             .unwrap();
@@ -113,18 +100,22 @@ async fn main() -> Result<(), anyhow::Error> {
     let storage_config = sov_state::config::Config {
         path: rollup_config.storage.path,
     };
-    let mut demo = new_app::<Risc0Verifier, RngDaSpec>(storage_config);
+    let storage_manager = sov_state::storage_manager::ProverStorageManager::new(storage_config)
+        .expect("ProverStorageManager initialization has failed");
+    let stf = AppTemplate::<
+        DefaultContext,
+        RngDaSpec,
+        Risc0Verifier,
+        Runtime<DefaultContext, RngDaSpec>,
+    >::new();
 
-    let sequencer_da_address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
+    let demo_genesis_config = get_genesis_config(&GenesisPaths::from_dir(
+        "../test-data/genesis/integration-tests",
+    ))
+    .unwrap();
 
-    let demo_genesis_config = get_genesis_config(
-        sequencer_da_address,
-        &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
-        #[cfg(feature = "experimental")]
-        Default::default(),
-    );
-
-    let mut current_root = demo.init_chain(demo_genesis_config);
+    let (mut current_root, _) =
+        stf.init_chain(storage_manager.get_native_storage(), demo_genesis_config);
 
     // data generation
     let mut blobs = vec![];
@@ -151,8 +142,9 @@ async fn main() -> Result<(), anyhow::Error> {
     // Setup. Block 0 has a single txn that creates the token. Exclude from timers
     let filtered_block = &blocks[0usize];
     let mut data_to_commit = SlotCommit::new(filtered_block.clone());
-    let apply_block_results = demo.apply_slot(
+    let apply_block_results = stf.apply_slot(
         &current_root,
+        storage_manager.get_native_storage(),
         Default::default(),
         &filtered_block.header,
         &filtered_block.validity_cond,
@@ -173,8 +165,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
         let now = Instant::now();
 
-        let apply_block_results = demo.apply_slot(
+        let apply_block_results = stf.apply_slot(
             &current_root,
+            storage_manager.get_native_storage(),
             Default::default(),
             &filtered_block.header,
             &filtered_block.validity_cond,

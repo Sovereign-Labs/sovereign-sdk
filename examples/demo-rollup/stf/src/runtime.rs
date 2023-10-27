@@ -59,6 +59,9 @@ use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServe
 #[cfg(feature = "native")]
 use sov_value_setter::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
+#[cfg(feature = "native")]
+use crate::genesis_config::GenesisPaths;
+
 /// The `demo-stf runtime`.
 #[cfg_attr(feature = "native", derive(CliWallet), expose_rpc)]
 #[derive(Genesis, DispatchCall, RuntimeEvent, MessageCodec, DefaultRuntime)]
@@ -98,8 +101,18 @@ where
     type GenesisConfig = GenesisConfig<C, Da>;
 
     #[cfg(feature = "native")]
+    type GenesisPaths = GenesisPaths;
+
+    #[cfg(feature = "native")]
     fn rpc_methods(storage: <C as Spec>::Storage) -> jsonrpsee::RpcModule<()> {
         get_rpc_methods::<C, Da>(storage)
+    }
+
+    #[cfg(feature = "native")]
+    fn genesis_config(
+        genesis_paths: &Self::GenesisPaths,
+    ) -> Result<Self::GenesisConfig, anyhow::Error> {
+        crate::genesis_config::get_genesis_config(genesis_paths)
     }
 }
 
