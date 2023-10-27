@@ -398,7 +398,7 @@ mod tests {
         db_opts.create_if_missing(true);
         db_opts.create_missing_column_families(true);
 
-        let db = DB::open(&tmpdir.path(), "test_db_debug", column_families, &db_opts)
+        let db = DB::open(tmpdir.path(), "test_db_debug", column_families, &db_opts)
             .expect("Failed to open DB.");
 
         let db_debug = format!("{:?}", db);
