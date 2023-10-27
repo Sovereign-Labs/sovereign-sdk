@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - nightly
+      
 
 jobs:
   trigger_workflow:
