@@ -61,13 +61,14 @@ impl<Q: QueryManager> DbSnapshot<Q> {
         // Only in case of not finding operation for key,
         // we go deeper
 
-        // 1. Check in cache
-        if let Some(operation) = self
+        // Hold local cache lock explicitly, so reads are atomic
+        let local_cache = self
             .cache
             .lock()
-            .expect("SchemaBatch lock should not be poisoned")
-            .read(key)?
-        {
+            .expect("SchemaBatch lock should not be poisoned");
+
+        // 1. Check in cache
+        if let Some(operation) = local_cache.read(key)? {
             return decode_operation::<S>(operation);
         }
 
@@ -116,7 +117,7 @@ pub struct FrozenDbSnapshot {
 impl FrozenDbSnapshot {
     /// Get value from its own cache
     pub fn get<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<Option<Operation>> {
-        Ok(self.cache.read(key)?)
+        self.cache.read(key)
     }
 
     /// Get id of this Snapshot
