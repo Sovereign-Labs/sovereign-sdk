@@ -15,6 +15,7 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 borsh = { workspace = true }
 serde = { workspace = true }
+tokio = { workspace = true }
 # Sovereign dependencies
 demo-stf = { path = "../../examples/demo-rollup/stf" }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank" }

@@ -12,6 +12,8 @@ use sp_core::crypto::Pair as PairTrait;
 use sp_keyring::sr25519::sr25519::Pair;
 use subxt::tx::PairSigner;
 use subxt::OnlineClient;
+use tokio::sync::broadcast::{Receiver, Sender};
+use tokio_stream::StreamExt;
 use tracing::info;
 
 use crate::avail::{Confidence, ExtrinsicsData};
@@ -44,6 +46,7 @@ pub struct DaProvider {
     polling_timeout: Duration,
     polling_interval: Duration,
     app_id: u32,
+    header_sender: Option<Sender<AvailHeader>>,
 }
 
 impl DaProvider {
@@ -61,10 +64,10 @@ impl DaProvider {
         let pair = Pair::from_string_with_seed(&config.seed, None).unwrap();
         let signer = PairSigner::<AvailConfig, Pair>::new(pair.0.clone());
 
+        let light_client_url = config.light_client_url;
         let node_client = avail_subxt::build_client(config.node_client_url.to_string(), false)
             .await
             .unwrap();
-        let light_client_url = config.light_client_url;
 
         DaProvider {
             node_client,
@@ -79,6 +82,7 @@ impl DaProvider {
                 None => DEFAULT_POLLING_INTERVAL,
             },
             app_id: config.app_id,
+            header_sender: None,
         }
     }
 }
@@ -157,15 +161,15 @@ async fn wait_for_appdata(
 impl DaService for DaProvider {
     type Spec = DaLayerSpec;
 
-    type FilteredBlock = AvailBlock;
-
     type Verifier = Verifier;
+
+    type FilteredBlock = AvailBlock;
 
     type Error = anyhow::Error;
 
-    // Make an RPC call to the node to get the finalized block at the given height, if one exists.
+    // Make an RPC call to the node to get the block at the given height, if one exists.
     // If no such block exists, block until one does.
-    async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
+    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let node_client = self.node_client.clone();
         let confidence_url = self.confidence_url(height);
         let appdata_url = self.appdata_url(height);
@@ -204,10 +208,56 @@ impl DaService for DaProvider {
         })
     }
 
-    // Make an RPC call to the node to get the block at the given height
-    // If no such block exists, block until one does.
-    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        self.get_finalized_at(height).await
+    async fn get_last_finalized_block_header(
+        &self,
+    ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
+        let node_client = self.node_client.clone();
+        let finalized_header_hash = node_client.rpc().finalized_head().await?;
+
+        let header = node_client
+            .rpc()
+            .header(Some(finalized_header_hash))
+            .await?
+            .ok_or(anyhow::anyhow!("No finalized head found"))?;
+        let header = AvailHeader::new(header, finalized_header_hash);
+        Ok(header)
+    }
+
+    fn subscribe_finalized_header(
+        &mut self,
+    ) -> Result<Receiver<<Self::Spec as DaSpec>::BlockHeader>, Self::Error> {
+        if let Some(header_sender) = &self.header_sender {
+            return Ok(header_sender.subscribe());
+        }
+
+        let (header_sender, header_receiver) = tokio::sync::broadcast::channel(10);
+        let actual_header_sender = header_sender.clone();
+        self.header_sender = Some(header_sender);
+        let block_client = self.node_client.blocks();
+        tokio::spawn(async move {
+            // TODO: retry on error
+            let mut block_stream = block_client.subscribe_finalized().await.unwrap();
+            while let Some(block_result) = block_stream.next().await {
+                match block_result {
+                    Ok(block) => {
+                        actual_header_sender.send(block.into()).unwrap();
+                    }
+                    Err(err) => {
+                        tracing::error!("Error receiving finalized header: {:?}", err);
+                    }
+                };
+            }
+        });
+        Ok(header_receiver)
+    }
+
+    async fn get_head_block_header(
+        &self,
+    ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
+        let node_client = self.node_client.clone();
+        let latest_block = node_client.blocks().at_latest().await?;
+
+        Ok(latest_block.into())
     }
 
     // Extract the blob transactions relevant to a particular rollup from a block.
@@ -220,7 +270,7 @@ impl DaService for DaProvider {
         block.transactions.clone()
     }
 
-    // Extract the inclusion and completenss proof for filtered block provided.
+    // Extract the inclusion and completeness proof for filtered block provided.
     // The output of this method will be passed to the verifier.
     // NOTE: The light client here has already completed DA sampling and verification of inclusion and soundness.
     async fn get_extraction_proof(

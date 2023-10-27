@@ -22,6 +22,7 @@ codec = { package = "parity-scale-codec", version = "3.0.0", default-features = 
 
 #Convenience
 tokio = { workspace = true, optional = true }
+tokio-stream = "0.1.14"
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3.17", features = ["fmt"] }
 async-trait = { workspace = true }

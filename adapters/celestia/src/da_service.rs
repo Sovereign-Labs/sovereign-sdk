@@ -8,6 +8,7 @@ use celestia_types::nmt::Namespace;
 use jsonrpsee::http_client::{HeaderMap, HttpClient};
 use sov_rollup_interface::da::CountedBufReader;
 use sov_rollup_interface::services::da::DaService;
+use tokio::sync::broadcast::{Receiver, Sender};
 use tracing::{debug, info, instrument, trace};
 
 use crate::shares::Blob;
@@ -15,7 +16,7 @@ use crate::types::FilteredCelestiaBlock;
 use crate::utils::BoxError;
 use crate::verifier::proofs::{CompletenessProof, CorrectnessProof};
 use crate::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams, PFB_NAMESPACE};
-use crate::BlobWithSender;
+use crate::{BlobWithSender, CelestiaHeader};
 
 // Approximate value, just to make it work.
 const GAS_PER_BYTE: usize = 20;
@@ -25,6 +26,7 @@ const GAS_PRICE: usize = 1;
 pub struct CelestiaService {
     client: HttpClient,
     rollup_namespace: Namespace,
+    header_sender: Option<Sender<CelestiaHeader>>,
 }
 
 impl CelestiaService {
@@ -32,6 +34,7 @@ impl CelestiaService {
         Self {
             client,
             rollup_namespace: nid,
+            header_sender: None,
         }
     }
 }
@@ -100,7 +103,7 @@ impl DaService for CelestiaService {
     type Error = BoxError;
 
     #[instrument(skip(self), err)]
-    async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
+    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let client = self.client.clone();
         let rollup_namespace = self.rollup_namespace;
 
@@ -127,8 +130,53 @@ impl DaService for CelestiaService {
         )
     }
 
-    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        self.get_finalized_at(height).await
+    async fn get_last_finalized_block_header(
+        &self,
+    ) -> Result<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlockHeader, Self::Error> {
+        // Tendermint has instant finality, so head block is the one that finalized
+        // and network is always guaranteed to be secure,
+        // it can work even if the node is still catching up
+        self.get_head_block_header().await
+    }
+
+    fn subscribe_finalized_header(
+        &mut self,
+    ) -> Result<Receiver<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlockHeader>, Self::Error>
+    {
+        // Already subscribed
+        if let Some(header_sender) = &self.header_sender {
+            return Ok(header_sender.subscribe());
+        }
+
+        let (sender, receiver) = tokio::sync::broadcast::channel(10);
+        let active_sender = sender.clone();
+        self.header_sender = Some(sender);
+
+        let subscription_client = self.client.clone();
+
+        // Spawning background task, which is going to poll for next header
+        // and feed it to broadcast channel
+        tokio::spawn(async move {
+            let mut subscription = subscription_client
+                .header_subscribe()
+                .await
+                .expect("Failed to subscribe to headers");
+            while let Some(Ok(header)) = subscription.next().await {
+                let header = CelestiaHeader::from(header);
+                if active_sender.send(header).is_err() {
+                    break;
+                }
+            }
+        });
+
+        Ok(receiver)
+    }
+
+    async fn get_head_block_header(
+        &self,
+    ) -> Result<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlockHeader, Self::Error> {
+        let header = self.client.header_network_head().await?;
+        Ok(CelestiaHeader::from(header))
     }
 
     fn extract_relevant_blobs(

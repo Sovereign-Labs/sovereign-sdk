@@ -1,5 +1,7 @@
 mod address;
 
+use std::fmt::Formatter;
+
 pub use address::{MockAddress, MOCK_SEQUENCER_DA_ADDRESS};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
@@ -63,6 +65,18 @@ impl Default for MockBlockHeader {
             hash: MockHash([1u8; 32]),
             height: 0,
         }
+    }
+}
+
+impl std::fmt::Display for MockBlockHeader {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "MockBlockHeader {{ height: {}, prev_hash: {}, next_hash: {} }}",
+            self.height,
+            hex::encode(self.prev_hash),
+            hex::encode(self.hash)
+        )
     }
 }
 

@@ -1,12 +1,12 @@
 //! The da module defines traits used by the full node to interact with the DA layer.
-use core::fmt::{self, Display};
 
-use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::da::{BlockHeaderTrait, DaSpec, DaVerifier};
-use crate::maybestd::boxed::Box;
+use crate::da::BlockHeaderTrait;
+#[cfg(feature = "native")]
+use crate::da::{DaSpec, DaVerifier};
+#[cfg(feature = "native")]
 use crate::maybestd::vec::Vec;
 use crate::zk::ValidityCondition;
 
@@ -15,7 +15,9 @@ use crate::zk::ValidityCondition;
 ///
 /// The DaService has two responsibilities - fetching data from the DA layer, transforming the
 /// data into a representation that can be efficiently verified in circuit.
-#[async_trait]
+
+#[cfg(feature = "native")]
+#[async_trait::async_trait]
 pub trait DaService: Send + Sync + 'static {
     /// A handle to the types used by the DA layer.
     type Spec: DaSpec;
@@ -30,16 +32,32 @@ pub trait DaService: Send + Sync + 'static {
     >;
 
     /// The error type for fallible methods.
-    type Error: fmt::Debug + Send + Sync + Display;
-
-    /// Retrieve the data for the given height, waiting for it to be
-    /// finalized if necessary. The block, once returned, must not be reverted
-    /// without a consensus violation.
-    async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error>;
+    type Error: core::fmt::Debug + Send + Sync + core::fmt::Display;
 
     /// Fetch the block at the given height, waiting for one to be mined if necessary.
-    /// The returned block may not be final, and can be reverted without a consensus violation
+    /// The returned block may not be final, and can be reverted without a consensus violation.
+    /// Call it for the same height are allowed to return different results.
+    /// Should always returns the block at that height on the best fork.
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error>;
+
+    /// Fetch the [`DaSpec::BlockHeader`] of the last finalized block.
+    async fn get_last_finalized_block_header(
+        &self,
+    ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error>;
+
+    /// Subscribe to finalized headers as they are finalized.
+    /// Optimized version of `get_last_finalized_block_header`.
+    /// For the environments that support [`tokio::sync::broadcast`].
+    fn subscribe_finalized_header(
+        &mut self,
+    ) -> Result<tokio::sync::broadcast::Receiver<<Self::Spec as DaSpec>::BlockHeader>, Self::Error>;
+
+    /// Fetch the head block of the most popular fork.
+    ///
+    /// More like utility method, to provide better user experience
+    async fn get_head_block_header(
+        &self,
+    ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error>;
 
     /// Extract the relevant transactions from a block. For example, this method might return
     /// all of the blob transactions in rollup's namespace on Celestia.

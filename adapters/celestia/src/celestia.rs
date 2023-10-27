@@ -5,7 +5,7 @@ use anyhow::Context;
 use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_proto::celestia::blob::v1::MsgPayForBlobs;
 use celestia_proto::cosmos::tx::v1beta1::Tx;
-use celestia_types::DataAvailabilityHeader;
+use celestia_types::{DataAvailabilityHeader, ExtendedHeader};
 use prost::bytes::Buf;
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -184,6 +184,12 @@ impl CelestiaHeader {
 
     pub fn square_size(&self) -> usize {
         self.dah.row_roots.len()
+    }
+}
+
+impl From<celestia_types::ExtendedHeader> for CelestiaHeader {
+    fn from(extended_header: ExtendedHeader) -> Self {
+        CelestiaHeader::new(extended_header.dah, extended_header.header.into())
     }
 }
 

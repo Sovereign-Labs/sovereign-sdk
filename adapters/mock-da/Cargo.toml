@@ -22,6 +22,8 @@ tokio = { workspace = true, optional = true }
 
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
 
+[dev-dependencies]
+sov-mock-da = { path = ".", features = ["native"] }
 
 [features]
 default = []

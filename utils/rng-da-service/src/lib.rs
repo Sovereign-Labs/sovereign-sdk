@@ -17,7 +17,7 @@ use sov_rollup_interface::services::da::{DaService, SlotData};
 
 pub fn sender_address_with_pkey() -> (Address, DefaultPrivateKey) {
     // TODO: maybe generate address and private key randomly, instead of
-    // hard coding them?
+    // hard-coding them?
     let addr_bytes = "sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6".to_string();
     let addr = Address::from(
         AddressBech32::try_from(addr_bytes)
@@ -62,7 +62,7 @@ impl DaService for RngDaService {
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
 
-    async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
+    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let num_bytes = height.to_le_bytes();
         let mut barray = [0u8; 32];
         barray[..num_bytes.len()].copy_from_slice(&num_bytes);
@@ -80,7 +80,22 @@ impl DaService for RngDaService {
         Ok(block)
     }
 
-    async fn get_block_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
+    async fn get_last_finalized_block_header(
+        &self,
+    ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
+        todo!()
+    }
+
+    fn subscribe_finalized_header(
+        &mut self,
+    ) -> Result<tokio::sync::broadcast::Receiver<<Self::Spec as DaSpec>::BlockHeader>, Self::Error>
+    {
+        unimplemented!()
+    }
+
+    async fn get_head_block_header(
+        &self,
+    ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
         unimplemented!()
     }
 
