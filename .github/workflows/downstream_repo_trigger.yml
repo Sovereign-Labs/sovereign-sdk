@@ -8,7 +8,7 @@ jobs:
   trigger_workflow:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger child repo workflow
+      - name: Trigger sov-rollup-starter workflow
         uses: convictional/trigger-workflow-and-wait@v1.6.1
         with:
           owner: Sovereign-Labs
