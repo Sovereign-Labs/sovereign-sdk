@@ -31,7 +31,7 @@ pub enum CallMessage {
     derive(serde::Serialize),
     derive(serde::Deserialize)
 )]
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
+#[derive(Event, borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum ValueSetterEvent {
     /// Value set
     ValueSet(
@@ -40,13 +40,6 @@ pub enum ValueSetterEvent {
     ),
 }
 
-impl Event for ValueSetterEvent {
-    fn event_key(&self) -> &'static str {
-        match self {
-            Self::ValueSet(_) => "ValueSet",
-        }
-    }
-}
 
 /// Example of a custom error.
 #[derive(Debug, Error)]

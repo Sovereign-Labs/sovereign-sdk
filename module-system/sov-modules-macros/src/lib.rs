@@ -81,7 +81,7 @@ pub fn runtime_event(input: TokenStream) -> TokenStream {
     handle_macro_error(runtime_event_macro.derive_runtime_event(input))
 }
 
-#[proc_macro_derive(EventMacro, attributes(serialization))]
+#[proc_macro_derive(Event, attributes(serialization))]
 pub fn event(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
 

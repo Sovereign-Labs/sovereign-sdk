@@ -4,7 +4,7 @@
 pub use sov_modules_macros::DispatchCall;
 /// Derives the Event trait for a given Event enum.
 #[cfg(feature = "macros")]
-pub use sov_modules_macros::EventMacro;
+pub use sov_modules_macros::Event;
 /// Derives the [`Genesis`](trait.Genesis.html) trait for the underlying runtime
 /// `struct`.
 #[cfg(feature = "macros")]

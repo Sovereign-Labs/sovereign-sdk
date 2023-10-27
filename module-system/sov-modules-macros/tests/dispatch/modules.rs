@@ -1,4 +1,4 @@
-use sov_modules_api::{CallResponse, EventMacro, Context, Error, Module, ModuleInfo, StateValue, WorkingSet};
+use sov_modules_api::{CallResponse, Event, Context, Error, Module, ModuleInfo, StateValue, WorkingSet};
 
 pub mod first_test_module {
     use super::*;
@@ -18,7 +18,7 @@ pub mod first_test_module {
         }
     }
 
-    #[derive(EventMacro, borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+    #[derive(Event, borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
     pub enum MyEvent {
         Variant1(u64),
         Variant2,
@@ -70,7 +70,7 @@ pub mod second_test_module {
         }
     }
 
-    #[derive(EventMacro, borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+    #[derive(Event, borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
     pub enum MyEvent {
         Variant,
     }
@@ -176,7 +176,7 @@ pub mod fourth_test_module {
         }
     }
 
-    #[derive(EventMacro, borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+    #[derive(Event, borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
     pub enum MyEvent {
         Variant1,
         Variant2WithStruct(MyStruct),
