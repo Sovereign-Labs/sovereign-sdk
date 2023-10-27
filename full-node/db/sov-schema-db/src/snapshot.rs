@@ -24,7 +24,6 @@ pub struct ReadOnlyLock<T> {
 }
 
 impl<T> ReadOnlyLock<T> {
-    #[allow(dead_code)]
     /// Create new [`ReadOnlyLock`] from [`Arc<RwLock<T>>`].
     pub fn new(lock: Arc<RwLock<T>>) -> Self {
         Self { lock }
@@ -37,7 +36,6 @@ impl<T> ReadOnlyLock<T> {
 }
 
 /// Wrapper around [`DB`] that allows to read from snapshots
-#[allow(dead_code)]
 pub struct DbSnapshot<Q> {
     id: SnapshotId,
     cache: Mutex<SchemaBatch>,
@@ -45,7 +43,6 @@ pub struct DbSnapshot<Q> {
     db_reader: Arc<DB>,
 }
 
-#[allow(dead_code)]
 impl<Q: QueryManager> DbSnapshot<Q> {
     /// Create new [`DbSnapshot`]
     pub fn new(id: SnapshotId, manager: ReadOnlyLock<Q>, db_reader: Arc<DB>) -> Self {

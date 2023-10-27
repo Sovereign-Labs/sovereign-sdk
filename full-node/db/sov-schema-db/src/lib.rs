@@ -285,7 +285,6 @@ pub enum Operation {
 /// they are added to the [`SchemaBatch`].
 #[derive(Debug, Default)]
 pub struct SchemaBatch {
-    // TODO: Why do we need a mutex here?
     last_writes: HashMap<ColumnFamilyName, HashMap<SchemaKey, Operation>>,
 }
 
