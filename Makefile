@@ -1,6 +1,3 @@
-# no-std packages to be checked
-NO_STD := "sov-rollup-interface"
-
 .PHONY: help
 
 help: ## Display this help message
@@ -47,16 +44,7 @@ check-fuzz: ## Checks that fuzz member compiles
 	$(MAKE) -C fuzz check
 
 check-no-std: ## Checks that project compiles without std
-	@for package in $(NO_STD); do \
-		echo "Checking no-std $${package}..."; \
-		cargo check -p $$package \
-			--target thumbv6m-none-eabi \
-			--no-default-features ; \
-		cargo check -p $$package \
-			--target thumbv6m-none-eabi \
-			--no-default-features \
-			--features native ; \
-	done
+	$(MAKE) -C ./rollup-interface $@
 
 find-unused-deps: ## Prints unused dependencies for project. Note: requires nightly
 	cargo udeps --all-targets --all-features
