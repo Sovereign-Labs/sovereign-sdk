@@ -346,9 +346,14 @@ impl Event for () {
     }
 }
 
-/// TODO: add doc
+/// Every module `Event` has to implement this trait.
+///
+/// You can use `#[derive(Event)]` to automatically implement the trait. If your `Event` is not an enum,
+/// or if your `Event` type is a nested enum and you want to index events based on the nested fields,
+/// you will need to implement the trait manually.
 pub trait Event: Debug + BorshSerialize + BorshDeserialize {
-    // TODO: add doc
+    /// Returns a static string slice that identifies the Event variant.
+    /// This string slice is primarily used to index Events from the DB.
     fn event_key(&self) -> &'static str;
 }
 

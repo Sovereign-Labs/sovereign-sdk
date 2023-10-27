@@ -29,7 +29,6 @@ pub fn derive_event(input: DeriveInput) -> Result<proc_macro::TokenStream, syn::
             });
             let gen = quote! {
                 impl ::sov_modules_api::Event for #enum_name {
-                    /// Returns a static string slice that identifies the Event variant.
                     fn event_key(&self) -> &'static str {
                         match self {
                             #(#event_keys)*
