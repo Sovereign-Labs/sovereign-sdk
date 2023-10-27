@@ -4,7 +4,6 @@ on:
     branches:
       - nightly
       
-
 jobs:
   trigger_workflow:
     runs-on: ubuntu-latest
