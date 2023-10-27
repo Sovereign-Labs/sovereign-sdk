@@ -40,7 +40,6 @@ pub enum ValueSetterEvent {
     ),
 }
 
-
 /// Example of a custom error.
 #[derive(Debug, Error)]
 enum SetValueError {

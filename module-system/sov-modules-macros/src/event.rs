@@ -8,7 +8,7 @@ pub fn derive_event(input: DeriveInput) -> Result<proc_macro::TokenStream, syn::
             let event_keys = data_enum.variants.iter().map(|v| {
                 let variant_name = &v.ident;
                 let variant_str = variant_name.to_string();
-                
+
                 match &v.fields {
                     Fields::Unit => {
                         quote! {
