@@ -1,8 +1,6 @@
 //! The basic kernel provides censorship resistance by processing all blobs immediately in the order they appear on DA
-use sov_modules_api::{
-    capabilities::{BlobSelector, Kernel},
-    Context, DaSpec,
-};
+use sov_modules_api::capabilities::{BlobSelector, Kernel};
+use sov_modules_api::{Context, DaSpec};
 
 /// The simplest imaginable kernel. It does not do any batching or reordering of blobs.
 pub struct BasicKernel<C> {
