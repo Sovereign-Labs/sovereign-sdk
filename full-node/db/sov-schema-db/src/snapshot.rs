@@ -74,7 +74,7 @@ impl<Q: QueryManager> DbSnapshot<Q> {
             return decode_operation::<S>(operation);
         }
 
-        // Check parent
+        // 2. Check parent
         {
             let parent = self
                 .manager
@@ -85,8 +85,7 @@ impl<Q: QueryManager> DbSnapshot<Q> {
             }
         }
 
-        // Check db
-
+        // 3. Check db
         self.db_reader.get(key)
     }
 
