@@ -6,6 +6,7 @@ use sov_celestia_adapter::{CelestiaConfig, CelestiaService};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::Spec;
 use sov_modules_rollup_template::{RollupTemplate, WalletTemplate};
+use sov_modules_stf_template::kernels::basic::BasicKernel;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
 use sov_state::storage_manager::ProverStorageManager;
@@ -31,6 +32,9 @@ impl RollupTemplate for CelestiaDemoRollup {
     type ZkRuntime = Runtime<Self::ZkContext, Self::DaSpec>;
 
     type NativeRuntime = Runtime<Self::NativeContext, Self::DaSpec>;
+
+    type NativeKernel = BasicKernel<Self::NativeContext>;
+    type ZkKernel = BasicKernel<Self::ZkContext>;
 
     fn create_rpc_methods(
         &self,

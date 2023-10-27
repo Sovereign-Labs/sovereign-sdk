@@ -8,7 +8,7 @@ use demo_stf::AppVerifier;
 use sov_celestia_adapter::types::Namespace;
 use sov_celestia_adapter::verifier::CelestiaVerifier;
 use sov_modules_api::default_context::ZkDefaultContext;
-use sov_modules_stf_template::AppTemplate;
+use sov_modules_stf_template::{kernels::basic::BasicKernel, AppTemplate};
 use sov_risc0_adapter::guest::Risc0Guest;
 use sov_state::ZkStorage;
 
@@ -20,7 +20,8 @@ risc0_zkvm::guest::entry!(main);
 pub fn main() {
     let guest = Risc0Guest::new();
     let storage = ZkStorage::new();
-    let app: AppTemplate<ZkDefaultContext, _, _, Runtime<_, _>> = AppTemplate::new();
+    let app: AppTemplate<ZkDefaultContext, _, _, Runtime<_, _>, BasicKernel<_>> =
+        AppTemplate::new();
 
     let mut stf_verifier = AppVerifier::new(
         app,
