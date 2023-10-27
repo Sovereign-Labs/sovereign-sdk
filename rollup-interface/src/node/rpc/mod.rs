@@ -5,9 +5,9 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::maybestd::vec::Vec;
+use crate::stf::EventKey;
 #[cfg(feature = "native")]
 use crate::stf::LegacyEvent;
-use crate::stf::EventKey;
 
 /// A struct containing enough information to uniquely specify single batch.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]

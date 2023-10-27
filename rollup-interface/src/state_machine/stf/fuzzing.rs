@@ -5,9 +5,9 @@ use digest::Digest;
 use proptest::prelude::{any, Arbitrary};
 use proptest::strategy::{BoxedStrategy, Strategy};
 
+use super::{BatchReceipt, LegacyEvent, TransactionReceipt};
 use crate::maybestd::boxed::Box;
 use crate::maybestd::vec::Vec;
-use super::{BatchReceipt, LegacyEvent, TransactionReceipt};
 
 /// An object-safe hashing trait, which is blanket implemented for all
 /// [`digest::Digest`] implementors.
