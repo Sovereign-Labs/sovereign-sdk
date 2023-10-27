@@ -1,6 +1,6 @@
 .PHONY: help
 
-BINARIES := $(shell awk -F' = ' '/^\[\[bin\]\]/,/^$$/{ if ($$1 == "name") { gsub(/"/, "", $$2); print $$2 } }' Cargo.toml)
+BINARIES := $(shell awk -F'=[[:space:]]*"|"[[:space:]]*$$' '/^\[\[bin\]\]/,/^$$/{ if ($$1 ~ /name[[:space:]]*/) { print $$2 } }' Cargo.toml)
 PROFILE ?= debug
 ARGS ?=
 
