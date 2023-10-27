@@ -384,3 +384,25 @@ fn default_write_options() -> rocksdb::WriteOptions {
     opts.set_sync(true);
     opts
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_db_debug_output() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let column_families = vec![DEFAULT_COLUMN_FAMILY_NAME];
+
+        let mut db_opts = rocksdb::Options::default();
+        db_opts.create_if_missing(true);
+        db_opts.create_missing_column_families(true);
+
+        let db = DB::open(&tmpdir.path(), "test_db_debug", column_families, &db_opts)
+            .expect("Failed to open DB.");
+
+        let db_debug = format!("{:?}", db);
+        assert!(db_debug.contains("test_db_debug"));
+        assert!(db_debug.contains(tmpdir.path().to_str().unwrap()));
+    }
+}
