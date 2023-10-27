@@ -116,11 +116,7 @@ pub struct FrozenDbSnapshot {
 impl FrozenDbSnapshot {
     /// Get value from its own cache
     pub fn get<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<Option<Operation>> {
-        if let Some(operation) = self.cache.read(key)? {
-            return Ok(Some(operation));
-        }
-
-        Ok(None)
+        Ok(self.cache.read(key)?)
     }
 
     /// Get id of this Snapshot
