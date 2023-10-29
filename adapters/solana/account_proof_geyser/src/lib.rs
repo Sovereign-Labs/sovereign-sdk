@@ -32,6 +32,53 @@ use crate::utils::{
     get_proof_pubkeys_required, hash_solana_account,
 };
 
+/// The primary goal of this function is to calculate the necessary proofs for accounts that we're interested in monitoring
+/// against the BankHash. This includes both inclusion and non-inclusion proofs, so every confirmed slot results in an Update
+/// being generated, either with inclusion proofs if the accounts we're interested in are modified,
+/// or non-inclusion proofs if the accounts we're interested in are not modified.
+///
+/// This function also recalculates the BankHash to ensure that the proof generation is consistent.
+///
+/// The calculation is done based on accounts, transactions and blocks that are already in the "processed" commitment status.
+/// Data that is in the "processed" commitment status is subject to change due to towerBFT and optimistic execution by solana.
+/// The function "handle_processed_slot" takes care of updating data that is in the "processed" status if it changes.
+/// This function looks at the latest data for a slot in the "processed" status when a slot is marked as "confirmed"
+/// and uses it to generate the proofs required, organize them into an "Update" and return it to the caller
+///
+/// # Arguments
+/// * `slot` - The slot number that has been confirmed.
+/// * `block_accumulator` - A mutable reference to the hashmap maintaining block information.
+/// * `processed_slot_account_accumulator` - A mutable reference to the hashmap tracking accounts in the processed state
+/// * `processed_transaction_accumulator` - A mutable reference to the hashmap tracking transactions in the processed state
+/// * `pubkeys_for_proofs` - A slice of public keys that we need to generate proofs for
+///
+/// # Steps
+/// 1. If the slot we're trying to "confirm" has any data missing in the processed hashmaps, we "bail", because something has gone wrong.
+/// 2. We extract the information from the processed hashmaps necessary for generating the BankHash
+///     * Number of signatures in the block - we get this from the `processed_transaction_accumulator`
+///     * Previous BankHash - This is part of the `block_accumulator`.
+///     * Blockhash - This is the value of the last entry (PoH tick)
+///     * Account Hashes for modified Accounts - This is part of the `processed_slot_account_accumulator`
+/// 3. We extract the pubkeys for which we need to generate the proofs
+///     * If the pubkey's account is modified in the current block, then we need an inclusion proof, so the pubkey is passed as is
+///     * If the pubkey's account is not modified, we need a non-inclusion proof. The kind of non-inclusion proof we need depends on
+///         * Non-inclusion Left (Our pubkey is smaller than the smallest pubkey at index 0)
+///         * Non-inclusion Right (Our pubkey is larger than the largest pubkey at the last index)
+///         * Non-inclusion inner (Our pubkey is in between. This means we need two adjacent pubkeys from the modified set)
+/// 4. The pubkeys for which proofs are needed and the account hashes are passed into the `calculate_root_and_proofs` function. This returns the account_delta_hash (merkle root)
+///     and merkle proofs for each of the pubkeys that we need
+/// 5. Calculate BankHash based on hashing the information from step 4 and step 2.
+/// 6. Assemble the merkle proofs using `assemble_account_delta_proof` to tag them as inclusion, non-inclusion and to provide additional data necessary for verification.
+/// 7. Once a slot is confirmed and the necessary proofs are generated, the data from the `processed` hashmaps can be cleaned up
+/// 8. Construct the "Update" struct which contains an update for a single confirmed block.
+///
+/// # Errors
+/// This function returns an error if any of the required data for the given slot is not present in the accumulators.
+///
+/// # Returns
+/// Returns an `anyhow::Result<Update>` which is Ok if the function succeeds or an error otherwise.
+///
+/// ```
 fn handle_confirmed_slot(
     slot: u64,
     block_accumulator: &mut HashMap<u64, BlockInfo>,
@@ -39,6 +86,7 @@ fn handle_confirmed_slot(
     processed_transaction_accumulator: &mut TransactionSigAccumulator,
     pubkeys_for_proofs: &[Pubkey],
 ) -> anyhow::Result<Update> {
+    // Step 1: Bail if required information is not present
     let Some(block) = block_accumulator.get(&slot) else {
         anyhow::bail!("block not available");
     };
@@ -49,21 +97,23 @@ fn handle_confirmed_slot(
         anyhow::bail!("account hashes not available");
     };
 
+    // Step 2: Extract necessary information for calculating Bankhash
     let num_sigs = num_sigs.clone();
     let parent_bankhash = Hash::from_str(&block.parent_bankhash).unwrap();
     let blockhash = Hash::from_str(&block.blockhash).unwrap();
-
     let mut account_hashes: Vec<(Pubkey, Hash)> = account_hashes_data
         .iter()
         .map(|(k, (_, v, _))| (k.clone(), v.clone()))
         .collect();
 
+    // Step 3: Determine which Pubkeys we need the merkle proofs for
     let (inclusion, non_inclusion_left, non_inclusion_right, non_inclusion_inner) =
         get_proof_pubkeys_required(&mut account_hashes, pubkeys_for_proofs);
 
     let (non_inclusion_inner_adjacent_keys, non_inclusion_inner_mapping) =
         get_keys_for_non_inclusion_inner(&non_inclusion_inner, &mut account_hashes);
 
+    // Based on the above calls, construct a list of pubkeys to pass to `calculate_root_and_proofs`
     let mut amended_leaves = inclusion.clone();
 
     if non_inclusion_left.len() > 0 {
@@ -76,9 +126,11 @@ fn handle_confirmed_slot(
         amended_leaves.extend(non_inclusion_inner_adjacent_keys.iter().cloned());
     }
 
+    // Step 4: Calculate Account Delta Hash (Merkle Root) and Merkle proofs for pubkeys
     let (accounts_delta_hash, account_proofs) =
         calculate_root_and_proofs(&mut account_hashes, &amended_leaves);
 
+    // Step 5: Calculate BankHash based on accounts_delta_hash and information extracted in Step 2
     let bank_hash = hashv(&[
         parent_bankhash.as_ref(),
         accounts_delta_hash.as_ref(),
@@ -86,6 +138,8 @@ fn handle_confirmed_slot(
         blockhash.as_ref(),
     ]);
 
+    // Step 6: Assembled raw merkle proofs into tagged variants for specific inclusion and non inclusion proofs
+    // Include additional data that is needed to verify against the BankHash as well
     let proofs = assemble_account_delta_proof(
         &account_hashes,
         &account_hashes_data,
@@ -98,10 +152,12 @@ fn handle_confirmed_slot(
     )
     .unwrap();
 
+    // Step 7: Clean up data after proofs are generated
     block_accumulator.remove(&slot);
     processed_slot_account_accumulator.remove(&slot);
     processed_transaction_accumulator.remove(&slot);
 
+    // Step 8: Return the `Update` structure which can be borsh serialized and passed to a client
     Ok(Update {
         slot,
         root: bank_hash,
@@ -141,6 +197,47 @@ fn transfer_slot<V>(slot: u64, raw: &mut HashMap<u64, V>, processed: &mut HashMa
     }
 }
 
+/// The goal of this function is to process messages passed through the geyser interface by a solana full node.
+/// The message types are variants of the `GeyserMessage` enum.
+///  ```
+/// pub enum GeyserMessage {
+///     AccountMessage(AccountInfo),
+///     BlockMessage(BlockInfo),
+///     TransactionMessage(TransactionInfo),
+///     SlotMessage(SlotInfo),
+/// }
+/// ```
+/// * AccountMessage: indicates a specific account is updated for a slot number (can be called multiple times for the same slot)
+/// * BlockMessage: indicates a block is updated
+/// * TransactionMessage: indicates a transaction is "executed" for a specific slot number.
+/// * SlotMessage: indicates a change in the status of a slot. we're interested in "processed" and "confirmed"
+///
+///  Logic for handling each message
+/// * AccountMessage
+///     -> we update `raw_slot_account_accumulator` when an account update is received for a specific slot.
+///     -> The hash of the account is also calculated in a way consistent with how solana calculates it
+///     -> Versioning is also handled since the same account can be modified multiple times in the same slot (by multiple transactions)
+/// * TransactionMessage
+///     -> We only need the number of signatures in the block and since this is not directly provided, we accumulate the number of signatures
+///        for each transaction for each slot into `raw_transaction_accumulator`
+/// * BlockMessage
+///     -> We update the `block_accumulator` hashmap with the latest info for each block.
+/// * SlotMessage
+///     -> When a slot is "processed", we move the information from `raw_slot_account_accumulator` and `raw_transaction_accumulator` to
+///     `processed_slot_account_accumulator` and `processed_transaction_accumulator`
+///         -> This is done by calling `handle_processed_slot` which moves the information to the corresponding hashmaps
+///         -> Key thing to note here is that if a slot is re-processed, then the hashmap is updated so it always has the latest information
+///     -> When a slot is "confirmed", we call `handle_confirmed_slot` with the latest information from `processed`
+///
+/// NOTE: This processing is single threaded because we rely on ordering of events. If a slot is re-processed, then
+/// we expect messages in the following order
+/// 1. the transactions in the new block for that slot are sent as  `TransactionMessage`
+/// 2. The new account values are sent as `AccountMessage`
+/// 3. `SlotMessage` is sent with processed status again.
+///
+/// The above 3 steps would ensure that the `processed_slot_account_accumulator` and `processed_transaction_accumulator` would contain
+/// the latest values needed in preparation for when the `confirmed` message is received for a slot
+///
 fn process_messages(
     geyser_receiver: crossbeam::channel::Receiver<GeyserMessage>,
     tx: broadcast::Sender<Update>,
@@ -156,6 +253,7 @@ fn process_messages(
 
     loop {
         match geyser_receiver.recv() {
+            // Handle account update
             Ok(GeyserMessage::AccountMessage(acc)) => {
                 let account_hash = hash_solana_account(
                     acc.lamports,
@@ -166,6 +264,8 @@ fn process_messages(
                     acc.pubkey.as_ref(),
                 );
 
+                // Overwrite an account if it already exists
+                // Overwrite an older version with a newer version of the account data (if account is modified multiple times in the same slot)
                 let write_version = acc.write_version;
                 let slot = acc.slot;
 
@@ -181,10 +281,12 @@ fn process_messages(
                     *account_entry = (write_version, Hash::from(account_hash), acc);
                 }
             }
+            // Handle transaction message. We only require the number of signatures for the purpose of calculating the BankHash
             Ok(GeyserMessage::TransactionMessage(txn)) => {
                 let slot_num = txn.slot;
                 *raw_transaction_accumulator.entry(slot_num).or_insert(0) += txn.num_sigs;
             }
+            // Handle Block updates
             Ok(GeyserMessage::BlockMessage(block)) => {
                 let slot = block.slot;
                 block_accumulator.insert(
@@ -197,8 +299,13 @@ fn process_messages(
                     },
                 );
             }
+            // Handle `processed` and `confirmed` slot messages.
+            // `handle_processed_slot` moves from "working" hashmaps to "processed" hashmaps
+            // `handle_confirmed_slot` gets the necessary proofs when a slot is "confirmed"
             Ok(GeyserMessage::SlotMessage(slot_info)) => match slot_info.status {
                 SlotStatus::Processed => {
+                    // handle a slot being processed.
+                    // move data from raw -> processed
                     if let Err(e) = handle_processed_slot(
                         slot_info.slot,
                         &mut raw_slot_account_accumulator,
@@ -213,6 +320,9 @@ fn process_messages(
                     }
                 }
                 SlotStatus::Confirmed => {
+                    // handle a slot being confirmed
+                    // use latest information in "processed" hashmaps and generate required proofs
+                    // cleanup the processed hashmaps
                     match handle_confirmed_slot(
                         slot_info.slot,
                         &mut block_accumulator,
