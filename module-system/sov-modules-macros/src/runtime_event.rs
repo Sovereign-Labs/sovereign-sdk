@@ -19,8 +19,10 @@ impl<'a> StructDef<'a> {
                 let name = &field.ident;
                 let ty = &field.ty;
 
+                let doc: String = format!("An event emitted by the {} module", name.to_string());
+
                 quote::quote!(
-                    #[doc = "Module event."]
+                    #[doc = #doc]
                     #name(<#ty as ::sov_modules_api::Module>::Event),
                 )
             })
@@ -38,10 +40,7 @@ impl<'a> StructDef<'a> {
                 let module_name_str = &field.ident.to_string();
                 quote::quote!(
                     #enum_ident::#module_name(inner)=>{
-                        let enum_name: String = format!("{:?}", inner)
-                        .split('(')
-                        .collect::<Vec<&str>>()[0].to_string();
-                        format!("{}-{}", #module_name_str, enum_name)
+                        format!("{}-{}", #module_name_str, inner.event_key())
                     },
                 )
             })
@@ -57,6 +56,8 @@ impl<'a> StructDef<'a> {
 
                 /// Returns a string that identifies both the module and the event type
                 pub fn get_key_string(&self) -> String {
+                    use ::sov_modules_api::Event as _;
+
                     match self {
                        #(#match_legs)*
                     }

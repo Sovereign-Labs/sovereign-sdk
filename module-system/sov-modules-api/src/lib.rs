@@ -342,7 +342,8 @@ pub trait Module {
 
 impl Event for () {
     fn event_key(&self) -> &'static str {
-        unimplemented!("Event type for this module does not exist.")
+        tracing::warn!("Trying to get the event_key string for an undefined event.");
+        "NA-Event-Not-Defined"
     }
 }
 
