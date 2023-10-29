@@ -16,7 +16,7 @@ exclude = [
 
 
 [dependencies]
-anyhow = { workspace = true, default-features = false }
+anyhow = { workspace = true }
 async-trait = { workspace = true }
 borsh = { workspace = true }
 bytes = { workspace = true, optional = true, default-features = true }
@@ -43,9 +43,9 @@ proptest-derive = { workspace = true }
 
 [features]
 default = ["std"]
-native = []
+native = ["std", "tokio"]
 fuzzing = ["proptest", "proptest-derive", "sha2", "std"]
-mocks = ["sha2", "bytes/serde"]
+mocks = ["sha2", "bytes/serde", "std"]
 std = [
     "anyhow/default",
     "bincode",
@@ -59,4 +59,3 @@ std = [
     "sha2?/default",
     "thiserror"
 ]
-tokio = ["dep:tokio", "std"]
