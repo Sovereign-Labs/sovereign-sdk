@@ -19,7 +19,7 @@ impl<'a> StructDef<'a> {
                 let name = &field.ident;
                 let ty = &field.ty;
 
-                let doc: String = format!("An event emitted by the {} module", name.to_string());
+                let doc: String = format!("An event emitted by the {} module", name);
 
                 quote::quote!(
                     #[doc = #doc]
