@@ -57,6 +57,8 @@ This particular example relies on the state transition exported by [`demo-stf`](
 understand how to build your own state transition function, check out at the docs in that package.
 
 ## Getting Started
+If you are looking for a simple rollup with minimal dependencies as a starting point, please have a look here: 
+https://github.com/Sovereign-Labs/sov-rollup-starter
 
 ### Run a local DA layer instance
 
