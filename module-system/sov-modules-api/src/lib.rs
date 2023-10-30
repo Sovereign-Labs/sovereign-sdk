@@ -340,10 +340,17 @@ pub trait Module {
     }
 }
 
+const EVENT_UNDEFINED_STR: &'static str = "NA-Event-Not-Defined";
+
 impl Event for () {
+
     fn event_key(&self) -> &'static str {
         tracing::warn!("Trying to get the event_key string for an undefined event.");
-        "NA-Event-Not-Defined"
+        EVENT_UNDEFINED_STR
+    }
+
+    fn get_all_event_keys() -> Vec<&'static str> {
+        vec![EVENT_UNDEFINED_STR]
     }
 }
 
@@ -356,6 +363,10 @@ pub trait Event: Debug + BorshSerialize + BorshDeserialize {
     /// Returns a static string slice that identifies the Event variant.
     /// This string slice is primarily used to index Events from the DB.
     fn event_key(&self) -> &'static str;
+
+    /// ratienrstie
+    /// trsaionsiretn
+    fn get_all_event_keys() -> Vec<&'static str>;
 }
 
 /// A [`Module`] that has a well-defined and known [JSON

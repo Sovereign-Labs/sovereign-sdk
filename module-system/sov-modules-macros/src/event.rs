@@ -5,7 +5,7 @@ pub fn derive_event(input: DeriveInput) -> Result<proc_macro::TokenStream, syn::
     match &input.data {
         Data::Enum(data_enum) => {
             let enum_name = &input.ident;
-            let event_keys = data_enum.variants.iter().map(|v| {
+            let event_keys_match_legs = data_enum.variants.iter().map(|v| {
                 let variant_name = &v.ident;
                 let variant_str = variant_name.to_string();
 
@@ -27,12 +27,25 @@ pub fn derive_event(input: DeriveInput) -> Result<proc_macro::TokenStream, syn::
                     }
                 }
             });
+
+            let event_keys = data_enum.variants.iter().map(|v| {
+                let variant_name = &v.ident;
+                let variant_str = variant_name.to_string();
+                quote::quote! {
+                    #variant_str
+                }
+            });
+
             let gen = quote! {
                 impl ::sov_modules_api::Event for #enum_name {
                     fn event_key(&self) -> &'static str {
                         match self {
-                            #(#event_keys)*
+                            #(#event_keys_match_legs)*
                         }
+                    }
+
+                    fn get_all_event_keys() -> ::std::vec::Vec<&'static str> {
+                        ::std::vec![#(#event_keys),*]
                     }
                 }
             };

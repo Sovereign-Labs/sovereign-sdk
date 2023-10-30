@@ -20,10 +20,18 @@ fn main() {
     assert_eq!(first_test_module::MyEvent::Variant2.event_key(), "Variant2");
     assert_eq!(first_test_module::MyEvent::Variant3(vec![1;3]).event_key(), "Variant3");
     assert_eq!(first_test_module::MyEvent::Variant3(Vec::new()).event_key(), "Variant3");
+
+    assert_eq!(first_test_module::MyEvent::get_all_event_keys(), vec!["Variant1", "Variant2", "Variant3"]);
+
     assert_eq!(second_test_module::MyEvent::Variant.event_key(), "Variant");
+
+    assert_eq!(second_test_module::MyEvent::get_all_event_keys(), vec!["Variant"]);
+
     assert_eq!(fourth_test_module::MyEvent::Variant1.event_key(), "Variant1");
     assert_eq!(fourth_test_module::MyEvent::Variant2WithStruct(MyStruct { a: 10, b: "abc".to_string()}).event_key(), "Variant2WithStruct");
     assert_eq!(fourth_test_module::MyEvent::Variant3WithNewTypeStruct(MyNewStruct(10)).event_key(), "Variant3WithNewTypeStruct");
     assert_eq!(fourth_test_module::MyEvent::Variant4WithUnnamedStruct { a: 10, b: "abc".to_string()}.event_key(), "Variant4WithUnnamedStruct");
     assert_eq!(fourth_test_module::MyEvent::Variant5WithNestedEnum(NestedEnum::Variant1).event_key(), "Variant5WithNestedEnum");
+
+    assert_eq!(fourth_test_module::MyEvent::get_all_event_keys(), vec!["Variant1", "Variant2WithStruct", "Variant3WithNewTypeStruct", "Variant4WithUnnamedStruct", "Variant5WithNestedEnum"]);
 }
