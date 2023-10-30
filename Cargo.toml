@@ -92,7 +92,7 @@ clap = { version = "4.4.5", features = ["derive"] }
 toml = "0.8.0"
 jsonrpsee = { version = "0.20.1", features = ["jsonrpsee-types"] }
 schemars = { version = "0.8.12", features = ["derive"] }
-tempfile = "3.5"
+tempfile = "3.8"
 tokio = { version = "1", features = ["full"] }
 lazy_static = "1.4.0"
 risc0-zkvm = { version = "0.18", default-features = false }
