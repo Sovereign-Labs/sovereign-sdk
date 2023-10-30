@@ -2,11 +2,12 @@
 #![doc = include_str!("../README.md")]
 mod app_template;
 mod batch;
+pub mod kernels;
 mod tx_verifier;
 
 pub use app_template::AppTemplate;
 pub use batch::Batch;
-use sov_modules_api::capabilities::BlobSelector;
+use sov_modules_api::capabilities::Kernel;
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::{
     BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, Spec, StateCheckpoint,
@@ -32,8 +33,7 @@ pub trait Runtime<C: Context, Da: DaSpec>:
         BlobResult = SequencerOutcome<
             <<Da as DaSpec>::BlobTransaction as BlobReaderTrait>::Address,
         >,
-    > + BlobSelector<Da, Context = C>
-    + Default
+    > + Default
 {
     /// GenesisConfig type.
     type GenesisConfig: Send + Sync;
@@ -90,12 +90,13 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
-impl<C, RT, Vm, Da> AppTemplate<C, Da, Vm, RT>
+impl<C, RT, Vm, Da, K> AppTemplate<C, Da, Vm, RT, K>
 where
     C: Context,
     Vm: Zkvm,
     Da: DaSpec,
     RT: Runtime<C, Da>,
+    K: Kernel<C, Da>,
 {
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn begin_slot(
@@ -152,12 +153,13 @@ where
     }
 }
 
-impl<C, RT, Vm, Da> StateTransitionFunction<Vm, Da> for AppTemplate<C, Da, Vm, RT>
+impl<C, RT, Vm, Da, K> StateTransitionFunction<Vm, Da> for AppTemplate<C, Da, Vm, RT, K>
 where
     C: Context,
     Da: DaSpec,
     Vm: Zkvm,
     RT: Runtime<C, Da>,
+    K: Kernel<C, Da>,
 {
     type StateRoot = <C::Storage as Storage>::Root;
 
@@ -229,7 +231,7 @@ where
         // Initialize batch workspace
         let mut batch_workspace = checkpoint.to_revertable();
         let selected_blobs = self
-            .runtime
+            .kernel
             .get_blobs_for_this_slot(blobs, &mut batch_workspace)
             .expect("blob selection must succeed, probably serialization failed");
 

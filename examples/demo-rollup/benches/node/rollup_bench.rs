@@ -9,6 +9,7 @@ use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
 use demo_stf::runtime::Runtime;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_stf_template::kernels::basic::BasicKernel;
 use sov_modules_stf_template::AppTemplate;
 use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rng_da_service::{RngDaService, RngDaSpec};
@@ -52,6 +53,7 @@ fn rollup_bench(_bench: &mut Criterion) {
         RngDaSpec,
         Risc0Verifier,
         Runtime<DefaultContext, RngDaSpec>,
+        BasicKernel<DefaultContext>,
     >::new();
 
     let demo_genesis_config = get_genesis_config(&GenesisPaths::from_dir(

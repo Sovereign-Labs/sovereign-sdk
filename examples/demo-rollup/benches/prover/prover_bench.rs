@@ -21,6 +21,7 @@ use sov_celestia_adapter::verifier::{CelestiaSpec, RollupParams};
 use sov_celestia_adapter::CelestiaService;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::SlotData;
+use sov_modules_stf_template::kernels::basic::BasicKernel;
 use sov_modules_stf_template::AppTemplate;
 use sov_risc0_adapter::host::Risc0Host;
 #[cfg(feature = "bench")]
@@ -174,6 +175,7 @@ async fn main() -> Result<(), anyhow::Error> {
         CelestiaSpec,
         Risc0Host,
         Runtime<DefaultContext, CelestiaSpec>,
+        BasicKernel<DefaultContext>,
     >::new();
 
     let genesis_config =
