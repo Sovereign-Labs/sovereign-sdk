@@ -30,7 +30,7 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BasicKernel<C> {
     {
         Ok(current_blobs
             .into_iter()
-            .map(|b| sov_modules_api::capabilities::BlobRefOrOwned::Ref(b))
+            .map(sov_modules_api::capabilities::BlobRefOrOwned::Ref)
             .collect())
     }
 }
