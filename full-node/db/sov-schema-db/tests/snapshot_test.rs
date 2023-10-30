@@ -1,13 +1,11 @@
-use std::path::Path;
 use std::sync::{Arc, RwLock};
 
 use byteorder::{BigEndian, ReadBytesExt};
-use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
-use sov_schema_db::schema::{ColumnFamilyName, KeyCodec, KeyDecoder, KeyEncoder, ValueCodec};
+use sov_schema_db::schema::{KeyCodec, KeyDecoder, KeyEncoder, ValueCodec};
 use sov_schema_db::snapshot::{
     DbSnapshot, FrozenDbSnapshot, QueryManager, ReadOnlyLock, SnapshotId,
 };
-use sov_schema_db::{define_schema, CodecError, Operation, Schema, DB};
+use sov_schema_db::{define_schema, CodecError, Operation, Schema};
 
 define_schema!(TestSchema1, TestField, TestField, "TestCF1");
 
@@ -67,53 +65,38 @@ impl QueryManager for LinearSnapshotManager {
         &self,
         snapshot_id: SnapshotId,
         key: &impl KeyCodec<S>,
-    ) -> anyhow::Result<Option<Operation>> {
+    ) -> anyhow::Result<Option<S::Value>> {
         for snapshot in self.snapshots[..snapshot_id as usize].iter().rev() {
             if let Some(operation) = snapshot.get(key)? {
-                return Ok(Some(operation));
+                return match operation {
+                    Operation::Put { value } => Ok(Some(S::Value::decode_value(&value)?)),
+                    Operation::Delete => Ok(None),
+                };
             }
         }
         Ok(None)
     }
 }
 
-fn get_column_families() -> Vec<ColumnFamilyName> {
-    vec![DEFAULT_COLUMN_FAMILY_NAME, TestSchema1::COLUMN_FAMILY_NAME]
-}
-
-fn open_db(dir: impl AsRef<Path>) -> DB {
-    let mut db_opts = rocksdb::Options::default();
-    db_opts.create_if_missing(true);
-    db_opts.create_missing_column_families(true);
-
-    DB::open(dir, "test", get_column_families(), &db_opts).expect("Failed to open DB.")
-}
-
 #[test]
 fn snapshot_lifecycle() {
-    let tmpdir = tempfile::tempdir().unwrap();
-    let db = Arc::new(open_db(&tmpdir));
     let manager = Arc::new(RwLock::new(LinearSnapshotManager::default()));
 
-    let key_1 = TestField(1);
-    let value_1 = TestField(1);
-    // 1 => 1 in db
-    db.put::<TestSchema1>(&key_1, &value_1).unwrap();
+    let key = TestField(1);
+    let value = TestField(1);
 
-    // Snapshot 1: reads from DB first, then sets 1 => 2
     let snapshot_1 =
-        DbSnapshot::<LinearSnapshotManager>::new(0, ReadOnlyLock::new(manager.clone()), db.clone());
+        DbSnapshot::<LinearSnapshotManager>::new(0, ReadOnlyLock::new(manager.clone()));
     assert_eq!(
-        Some(value_1.clone()),
-        snapshot_1.read::<TestSchema1>(&key_1).unwrap(),
-        "Incorrect value, should be fetched from DB"
+        None,
+        snapshot_1.read::<TestSchema1>(&key).unwrap(),
+        "Incorrect value, should find nothing"
     );
-    // 1 => 2 in snapshot 1
-    let value_2 = TestField(2);
-    snapshot_1.put(&key_1, &value_2).unwrap();
+
+    snapshot_1.put(&key, &value).unwrap();
     assert_eq!(
-        Some(value_2.clone()),
-        snapshot_1.read::<TestSchema1>(&key_1).unwrap(),
+        Some(value.clone()),
+        snapshot_1.read::<TestSchema1>(&key).unwrap(),
         "Incorrect value, should be fetched from local cache"
     );
     {
@@ -123,20 +106,20 @@ fn snapshot_lifecycle() {
 
     // Snapshot 2: reads value from snapshot 1, then deletes it
     let snapshot_2 =
-        DbSnapshot::<LinearSnapshotManager>::new(1, ReadOnlyLock::new(manager.clone()), db.clone());
+        DbSnapshot::<LinearSnapshotManager>::new(1, ReadOnlyLock::new(manager.clone()));
     assert_eq!(
-        Some(value_2.clone()),
-        snapshot_2.read::<TestSchema1>(&key_1).unwrap()
+        Some(value.clone()),
+        snapshot_2.read::<TestSchema1>(&key).unwrap()
     );
-    snapshot_2.delete(&key_1).unwrap();
-    assert_eq!(None, snapshot_2.read::<TestSchema1>(&key_1).unwrap());
+    snapshot_2.delete(&key).unwrap();
+    assert_eq!(None, snapshot_2.read::<TestSchema1>(&key).unwrap());
     {
         let mut manager = manager.write().unwrap();
         manager.add_snapshot(snapshot_2.into());
     }
 
-    // Snapshot 3: gets empty result, event value is still in DB, but it was deleted in previous snapshot
+    // Snapshot 3: gets empty result, event value is in some previous snapshots
     let snapshot_3 =
-        DbSnapshot::<LinearSnapshotManager>::new(2, ReadOnlyLock::new(manager.clone()), db.clone());
-    assert_eq!(None, snapshot_3.read::<TestSchema1>(&key_1).unwrap());
+        DbSnapshot::<LinearSnapshotManager>::new(2, ReadOnlyLock::new(manager.clone()));
+    assert_eq!(None, snapshot_3.read::<TestSchema1>(&key).unwrap());
 }

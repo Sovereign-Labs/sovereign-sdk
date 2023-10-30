@@ -3,19 +3,19 @@
 use std::sync::{Arc, LockResult, Mutex, RwLock, RwLockReadGuard};
 
 use crate::schema::{KeyCodec, ValueCodec};
-use crate::{Operation, Schema, SchemaBatch, DB};
+use crate::{Operation, Schema, SchemaBatch};
 
 /// Id of database snapshot
 pub type SnapshotId = u64;
 
-/// A trait to make nested calls to several [`Schema`]
+/// A trait to make nested calls to several [`SchemaBatch`]s and eventually [`crate::DB`]
 pub trait QueryManager {
     /// Get a value from snapshot or its parents
     fn get<S: Schema>(
         &self,
         snapshot_id: SnapshotId,
         key: &impl KeyCodec<S>,
-    ) -> anyhow::Result<Option<Operation>>;
+    ) -> anyhow::Result<Option<S::Value>>;
 }
 
 /// Simple wrapper around `RwLock` that only allows read access.
@@ -35,22 +35,20 @@ impl<T> ReadOnlyLock<T> {
     }
 }
 
-/// Wrapper around [`DB`] that allows to read from snapshots
+/// Wrapper around [`QueryManager`] that allows to read from snapshots
 pub struct DbSnapshot<Q> {
     id: SnapshotId,
     cache: Mutex<SchemaBatch>,
-    manager: ReadOnlyLock<Q>,
-    db_reader: Arc<DB>,
+    parents_manager: ReadOnlyLock<Q>,
 }
 
 impl<Q: QueryManager> DbSnapshot<Q> {
     /// Create new [`DbSnapshot`]
-    pub fn new(id: SnapshotId, manager: ReadOnlyLock<Q>, db_reader: Arc<DB>) -> Self {
+    pub fn new(id: SnapshotId, manager: ReadOnlyLock<Q>) -> Self {
         Self {
             id,
             cache: Mutex::new(SchemaBatch::default()),
-            manager,
-            db_reader,
+            parents_manager: manager,
         }
     }
 
@@ -73,18 +71,11 @@ impl<Q: QueryManager> DbSnapshot<Q> {
         }
 
         // 2. Check parent
-        {
-            let parent = self
-                .manager
-                .read()
-                .expect("Parent lock must not be poisoned");
-            if let Some(operation) = parent.get::<S>(self.id, key)? {
-                return decode_operation::<S>(operation);
-            }
-        }
-
-        // 3. Check db
-        self.db_reader.get(key)
+        let parent = self
+            .parents_manager
+            .read()
+            .expect("Parent lock must not be poisoned");
+        parent.get::<S>(self.id, key)
     }
 
     /// Store a value in snapshot
