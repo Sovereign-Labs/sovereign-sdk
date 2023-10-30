@@ -17,10 +17,10 @@
 mod iterator;
 mod metrics;
 pub mod schema;
+pub mod snapshot;
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Mutex;
 
 use anyhow::format_err;
 use iterator::ScanDirection;
@@ -144,7 +144,7 @@ impl DB {
     ) -> anyhow::Result<()> {
         // Not necessary to use a batch, but we'd like a central place to bump counters.
         // Used in tests only anyway.
-        let batch = SchemaBatch::new();
+        let mut batch = SchemaBatch::new();
         batch.put::<S>(key, value)?;
         self.write_schemas(batch)
     }
@@ -179,15 +179,13 @@ impl DB {
         let _timer = SCHEMADB_BATCH_COMMIT_LATENCY_SECONDS
             .with_label_values(&[self.name])
             .start_timer();
-        let rows_locked = batch.rows.lock().expect("Lock must not be poisoned");
-
         let mut db_batch = rocksdb::WriteBatch::default();
-        for (cf_name, rows) in rows_locked.iter() {
+        for (cf_name, rows) in batch.last_writes.iter() {
             let cf_handle = self.get_cf_handle(cf_name)?;
-            for write_op in rows {
-                match write_op {
-                    WriteOp::Value { key, value } => db_batch.put_cf(cf_handle, key, value),
-                    WriteOp::Deletion { key } => db_batch.delete_cf(cf_handle, key),
+            for (key, operation) in rows {
+                match operation {
+                    Operation::Put { value } => db_batch.put_cf(cf_handle, key, value),
+                    Operation::Delete => db_batch.delete_cf(cf_handle, key),
                 }
             }
         }
@@ -196,15 +194,15 @@ impl DB {
         self.inner.write_opt(db_batch, &default_write_options())?;
 
         // Bump counters only after DB write succeeds.
-        for (cf_name, rows) in rows_locked.iter() {
-            for write_op in rows {
-                match write_op {
-                    WriteOp::Value { key, value } => {
+        for (cf_name, rows) in batch.last_writes.iter() {
+            for (key, operation) in rows {
+                match operation {
+                    Operation::Put { value } => {
                         SCHEMADB_PUT_BYTES
                             .with_label_values(&[cf_name])
                             .observe((key.len() + value.len()) as f64);
                     }
-                    WriteOp::Deletion { key: _ } => {
+                    Operation::Delete => {
                         SCHEMADB_DELETES.with_label_values(&[cf_name]).inc();
                     }
                 }
@@ -253,11 +251,20 @@ impl DB {
     }
 }
 
+type SchemaKey = Vec<u8>;
+type SchemaValue = Vec<u8>;
+
 #[cfg_attr(feature = "arbitrary", derive(proptest_derive::Arbitrary))]
-#[derive(Debug, PartialEq, Eq, Hash)]
-enum WriteOp {
-    Value { key: Vec<u8>, value: Vec<u8> },
-    Deletion { key: Vec<u8> },
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+/// Represents operation written to the database
+pub enum Operation {
+    /// Writing a value to the DB.
+    Put {
+        /// Value to write
+        value: SchemaValue,
+    },
+    /// Deleting a value
+    Delete,
 }
 
 /// [`SchemaBatch`] holds a collection of updates that can be applied to a DB
@@ -265,7 +272,7 @@ enum WriteOp {
 /// they are added to the [`SchemaBatch`].
 #[derive(Debug, Default)]
 pub struct SchemaBatch {
-    rows: Mutex<HashMap<ColumnFamilyName, Vec<WriteOp>>>,
+    last_writes: HashMap<ColumnFamilyName, HashMap<SchemaKey, Operation>>,
 }
 
 impl SchemaBatch {
@@ -276,7 +283,7 @@ impl SchemaBatch {
 
     /// Adds an insert/update operation to the batch.
     pub fn put<S: Schema>(
-        &self,
+        &mut self,
         key: &impl KeyCodec<S>,
         value: &impl ValueCodec<S>,
     ) -> anyhow::Result<()> {
@@ -284,52 +291,58 @@ impl SchemaBatch {
             .with_label_values(&["unknown"])
             .start_timer();
         let key = key.encode_key()?;
-        let value = value.encode_value()?;
-        self.rows
-            .lock()
-            .expect("Lock must not be poisoned")
-            .entry(S::COLUMN_FAMILY_NAME)
-            .or_default()
-            .push(WriteOp::Value { key, value });
-
+        let put_operation = Operation::Put {
+            value: value.encode_value()?,
+        };
+        self.insert_operation::<S>(key, put_operation);
         Ok(())
     }
 
     /// Adds a delete operation to the batch.
-    pub fn delete<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<()> {
+    pub fn delete<S: Schema>(&mut self, key: &impl KeyCodec<S>) -> anyhow::Result<()> {
         let key = key.encode_key()?;
-        self.rows
-            .lock()
-            .expect("Lock must not be poisoned")
-            .entry(S::COLUMN_FAMILY_NAME)
-            .or_default()
-            .push(WriteOp::Deletion { key });
+        self.insert_operation::<S>(key, Operation::Delete);
 
         Ok(())
+    }
+
+    fn insert_operation<S: Schema>(&mut self, key: SchemaKey, operation: Operation) {
+        let column_writes = self.last_writes.entry(S::COLUMN_FAMILY_NAME).or_default();
+        column_writes.insert(key, operation);
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn read<S: Schema>(
+        &self,
+        key: &impl KeyCodec<S>,
+    ) -> anyhow::Result<Option<Operation>> {
+        let key = key.encode_key()?;
+        if let Some(column_writes) = self.last_writes.get(&S::COLUMN_FAMILY_NAME) {
+            return Ok(column_writes.get(&key).cloned());
+        }
+        Ok(None)
     }
 }
 
 #[cfg(feature = "arbitrary")]
 impl proptest::arbitrary::Arbitrary for SchemaBatch {
     type Parameters = &'static [ColumnFamilyName];
-    type Strategy = proptest::strategy::BoxedStrategy<Self>;
-
     fn arbitrary_with(columns: Self::Parameters) -> Self::Strategy {
         use proptest::prelude::any;
         use proptest::strategy::Strategy;
 
-        proptest::collection::vec(any::<Vec<WriteOp>>(), columns.len())
+        proptest::collection::vec(any::<HashMap<SchemaKey, Operation>>(), columns.len())
             .prop_map::<SchemaBatch, _>(|vec_vec_write_ops| {
                 let mut rows = HashMap::new();
-                for (col, write_ops) in columns.iter().zip(vec_vec_write_ops.into_iter()) {
-                    rows.insert(*col, write_ops);
+                for (col, write_op) in columns.iter().zip(vec_vec_write_ops.into_iter()) {
+                    rows.insert(*col, write_op);
                 }
-                SchemaBatch {
-                    rows: Mutex::new(rows),
-                }
+                SchemaBatch { last_writes: rows }
             })
             .boxed()
     }
+
+    type Strategy = proptest::strategy::BoxedStrategy<Self>;
 }
 
 /// An error that occurred during (de)serialization of a [`Schema`]'s keys or
@@ -357,4 +370,26 @@ fn default_write_options() -> rocksdb::WriteOptions {
     let mut opts = rocksdb::WriteOptions::default();
     opts.set_sync(true);
     opts
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_db_debug_output() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let column_families = vec![DEFAULT_COLUMN_FAMILY_NAME];
+
+        let mut db_opts = rocksdb::Options::default();
+        db_opts.create_if_missing(true);
+        db_opts.create_missing_column_families(true);
+
+        let db = DB::open(tmpdir.path(), "test_db_debug", column_families, &db_opts)
+            .expect("Failed to open DB.");
+
+        let db_debug = format!("{:?}", db);
+        assert!(db_debug.contains("test_db_debug"));
+        assert!(db_debug.contains(tmpdir.path().to_str().unwrap()));
+    }
 }
