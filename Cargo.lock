@@ -1263,7 +1263,7 @@ source = "git+https://github.com/eigerco/celestia-node-rs.git?rev=1fa61eb#1fa61e
 dependencies = [
  "celestia-types",
  "http",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "serde",
  "thiserror",
  "tracing",
@@ -2107,7 +2107,7 @@ dependencies = [
  "clap 4.4.6",
  "demo-stf",
  "hex",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "rand 0.8.5",
  "reth-primitives",
  "secp256k1 0.27.0",
@@ -4154,7 +4154,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "serde",
  "sov-chain-state",
  "sov-data-generators",
@@ -4283,18 +4283,18 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee"
-version = "0.20.2"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de902baa44bf34a58b1a4906f8b840d7d60dcec5f41fe08b4dbc14cf9efa821c"
+checksum = "affdc52f7596ccb2d7645231fc6163bb314630c989b64998f3699a28b4d5d4dc"
 dependencies = [
- "jsonrpsee-client-transport 0.20.2",
- "jsonrpsee-core 0.20.2",
- "jsonrpsee-http-client 0.20.2",
- "jsonrpsee-proc-macros 0.20.2",
+ "jsonrpsee-client-transport 0.20.3",
+ "jsonrpsee-core 0.20.3",
+ "jsonrpsee-http-client 0.20.3",
+ "jsonrpsee-proc-macros 0.20.3",
  "jsonrpsee-server",
- "jsonrpsee-types 0.20.2",
- "jsonrpsee-wasm-client 0.20.2",
- "jsonrpsee-ws-client 0.20.2",
+ "jsonrpsee-types 0.20.3",
+ "jsonrpsee-wasm-client 0.20.3",
+ "jsonrpsee-ws-client 0.20.3",
  "tokio",
  "tracing",
 ]
@@ -4326,15 +4326,15 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-client-transport"
-version = "0.20.2"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58d9851f8f5653e0433a898e9032bde4910b35d625bd9dcf33ef6e36e7c3d456"
+checksum = "b5b005c793122d03217da09af68ba9383363caa950b90d3436106df8cabce935"
 dependencies = [
  "futures-channel",
  "futures-util",
  "gloo-net 0.4.0",
  "http",
- "jsonrpsee-core 0.20.2",
+ "jsonrpsee-core 0.20.3",
  "pin-project",
  "rustls-native-certs",
  "soketto",
@@ -4373,9 +4373,9 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-core"
-version = "0.20.2"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51f45d37af23707750136379f6799e76ebfcf2d425ec4e36d0deb7921da5e65c"
+checksum = "da2327ba8df2fdbd5e897e2b5ed25ce7f299d345b9736b6828814c3dbd1fd47b"
 dependencies = [
  "anyhow",
  "async-lock",
@@ -4384,7 +4384,7 @@ dependencies = [
  "futures-timer",
  "futures-util",
  "hyper",
- "jsonrpsee-types 0.20.2",
+ "jsonrpsee-types 0.20.3",
  "parking_lot 0.12.1",
  "rand 0.8.5",
  "rustc-hash",
@@ -4418,15 +4418,15 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-http-client"
-version = "0.20.2"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02308562f2e8162a32f8d6c3dc19c29c858d5d478047c886a5c3c25b5f7fa868"
+checksum = "5f80c17f62c7653ce767e3d7288b793dfec920f97067ceb189ebdd3570f2bc20"
 dependencies = [
  "async-trait",
  "hyper",
  "hyper-rustls",
- "jsonrpsee-core 0.20.2",
- "jsonrpsee-types 0.20.2",
+ "jsonrpsee-core 0.20.3",
+ "jsonrpsee-types 0.20.3",
  "serde",
  "serde_json",
  "thiserror",
@@ -4451,9 +4451,9 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-proc-macros"
-version = "0.20.2"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f26b3675a943d083d0bf6e367ec755dccec56c41888afa13b191c1c4ff87c652"
+checksum = "29110019693a4fa2dbda04876499d098fa16d70eba06b1e6e2b3f1b251419515"
 dependencies = [
  "heck 0.4.1",
  "proc-macro-crate 1.1.3",
@@ -4464,15 +4464,15 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-server"
-version = "0.20.2"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ed2bec9c76cee118c27138cc1c877938bcaa01207a5d902b80dbfc60466bc9c"
+checksum = "82c39a00449c9ef3f50b84fc00fc4acba20ef8f559f07902244abf4c15c5ab9c"
 dependencies = [
  "futures-util",
  "http",
  "hyper",
- "jsonrpsee-core 0.20.2",
- "jsonrpsee-types 0.20.2",
+ "jsonrpsee-core 0.20.3",
+ "jsonrpsee-types 0.20.3",
  "route-recognizer",
  "serde",
  "serde_json",
@@ -4501,9 +4501,9 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-types"
-version = "0.20.2"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05eaff23af19f10ba6fbb76519bed6da4d3b9bbaef13d39b7c2b6c14e532d27e"
+checksum = "5be0be325642e850ed0bdff426674d2e66b2b7117c9be23a7caef68a2902b7d9"
 dependencies = [
  "anyhow",
  "beef",
@@ -4526,13 +4526,13 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-wasm-client"
-version = "0.20.2"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7ae1c71afe02a21713e197438f1bcfaa171c3dfe533b9505a0990cb8297779e"
+checksum = "7c7cbb3447cf14fd4d2f407c3cc96e6c9634d5440aa1fbed868a31f3c02b27f0"
 dependencies = [
- "jsonrpsee-client-transport 0.20.2",
- "jsonrpsee-core 0.20.2",
- "jsonrpsee-types 0.20.2",
+ "jsonrpsee-client-transport 0.20.3",
+ "jsonrpsee-core 0.20.3",
+ "jsonrpsee-types 0.20.3",
 ]
 
 [[package]]
@@ -4549,14 +4549,14 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-ws-client"
-version = "0.20.2"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd34d3ab8c09f02fd4c432f256bc8b143b616b222b03050f941ee53f0e8d7b24"
+checksum = "bca9cb3933ccae417eb6b08c3448eb1cb46e39834e5b503e395e5e5bd08546c0"
 dependencies = [
  "http",
- "jsonrpsee-client-transport 0.20.2",
- "jsonrpsee-core 0.20.2",
- "jsonrpsee-types 0.20.2",
+ "jsonrpsee-client-transport 0.20.3",
+ "jsonrpsee-core 0.20.3",
+ "jsonrpsee-types 0.20.3",
  "url",
 ]
 
@@ -6982,7 +6982,7 @@ version = "0.1.0-alpha.8"
 source = "git+https://github.com/paradigmxyz/reth?rev=e83d3aa#e83d3aa704f87825ca8cab6f593ab4d4adbf6792"
 dependencies = [
  "itertools 0.11.0",
- "jsonrpsee-types 0.20.2",
+ "jsonrpsee-types 0.20.3",
  "reth-primitives",
  "reth-rlp",
  "serde",
@@ -8145,7 +8145,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap 4.4.6",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "schemars",
  "serde",
  "serde_json",
@@ -8268,7 +8268,7 @@ name = "sov-accessory-state"
 version = "0.3.0"
 dependencies = [
  "borsh",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "serde",
  "sov-modules-api",
  "sov-state",
@@ -8283,7 +8283,7 @@ dependencies = [
  "arbitrary",
  "borsh",
  "clap 4.4.6",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "proptest",
  "proptest-derive",
  "schemars",
@@ -8348,7 +8348,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap 4.4.6",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "schemars",
  "serde",
  "serde_json",
@@ -8370,7 +8370,7 @@ dependencies = [
  "clap 4.4.6",
  "hex",
  "jmt",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "schemars",
  "serde",
  "serde_json",
@@ -8398,7 +8398,7 @@ dependencies = [
  "celestia-rpc",
  "celestia-types",
  "hex",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "nmt-rs",
  "postcard",
  "proptest",
@@ -8425,7 +8425,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "serde",
  "serde_json",
  "sov-chain-state",
@@ -8445,7 +8445,7 @@ dependencies = [
  "demo-stf",
  "directories",
  "hex",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "serde",
  "serde_json",
  "sov-accounts",
@@ -8509,7 +8509,7 @@ dependencies = [
  "ethers-providers",
  "ethers-signers",
  "hex",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "log",
  "log4rs",
  "prettytable-rs",
@@ -8557,7 +8557,7 @@ dependencies = [
  "borsh",
  "demo-stf",
  "ethers",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "reth-primitives",
  "reth-rpc-types",
  "schnellru",
@@ -8587,7 +8587,7 @@ dependencies = [
  "ethers-middleware",
  "ethers-signers",
  "hex",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "lazy_static",
  "reth-interfaces",
  "reth-primitives",
@@ -8622,7 +8622,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "futures",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "serde",
  "serde_json",
  "sov-db",
@@ -8661,7 +8661,7 @@ dependencies = [
  "ed25519-dalek 2.0.0",
  "hex",
  "jmt",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "proptest",
  "proptest-derive",
  "rand 0.8.5",
@@ -8690,7 +8690,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap 4.4.6",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "proc-macro2 1.0.69",
  "quote 1.0.33",
  "schemars",
@@ -8712,7 +8712,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "borsh",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "serde",
  "serde_json",
  "sov-cli",
@@ -8735,7 +8735,7 @@ dependencies = [
  "borsh",
  "hex",
  "jmt",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",
@@ -8754,7 +8754,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "postgres",
  "schemars",
  "serde",
@@ -8864,7 +8864,7 @@ dependencies = [
  "async-trait",
  "borsh",
  "hex",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "rand 0.8.5",
  "serde",
  "sov-modules-api",
@@ -8884,7 +8884,7 @@ dependencies = [
  "arbitrary",
  "borsh",
  "clap 4.4.6",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "proptest",
  "proptest-derive",
  "risc0-zkvm",
@@ -8935,7 +8935,7 @@ dependencies = [
  "borsh",
  "futures",
  "hex",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "serde",
  "serde_json",
  "sov-accounts",
@@ -8961,7 +8961,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap 4.4.6",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "schemars",
  "serde",
  "serde_json",
@@ -8979,7 +8979,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap 4.4.6",
- "jsonrpsee 0.20.2",
+ "jsonrpsee 0.20.3",
  "schemars",
  "serde",
  "serde_json",
