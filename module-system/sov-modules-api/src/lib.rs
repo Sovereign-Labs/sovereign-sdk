@@ -340,10 +340,9 @@ pub trait Module {
     }
 }
 
-const EVENT_UNDEFINED_STR: &'static str = "NA-Event-Not-Defined";
+const EVENT_UNDEFINED_STR: &str = "NA-Event-Not-Defined";
 
 impl Event for () {
-
     fn event_key(&self) -> &'static str {
         tracing::warn!("Trying to get the event_key string for an undefined event.");
         EVENT_UNDEFINED_STR
