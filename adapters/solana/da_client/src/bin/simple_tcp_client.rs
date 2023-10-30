@@ -4,42 +4,6 @@ use borsh::{BorshDeserialize};
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 
-
-// #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-// pub struct Data {
-//     pub pubkey: Pubkey,
-//     pub hash: Hash,
-//     pub account: AccountInfo,
-// }
-//
-// #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-// pub enum AccountDeltaProof {
-//     /// Simplest proof for inclusion in the account delta hash
-//     InclusionProof(Pubkey, (Data, Proof)),
-//     /// Adjacency proof for non inclusion A C D E, non-inclusion for B means providing A and C
-//     NonInclusionProofInner(Pubkey, ((Data, Proof), (Data, Proof))),
-//     /// Left most leaf and proof
-//     NonInclusionProofLeft(Pubkey, (Data, Proof)),
-//     /// Right most leaf and proof. Also need to include hashes of all leaves to verify tree size
-//     NonInclusionProofRight(Pubkey, (Data, Proof, Vec<Hash>)),
-// }
-//
-// #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-// pub struct BankHashProof {
-//     pub proofs: Vec<AccountDeltaProof>,
-//     pub num_sigs: u64,
-//     pub account_delta_root: Hash,
-//     pub parent_bankhash: Hash,
-//     pub blockhash: Hash,
-// }
-//
-// #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-// pub struct Update {
-//     pub slot: u64,
-//     pub root: Hash,
-//     pub proof: BankHashProof,
-// }
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stream = TcpStream::connect("127.0.0.1:10000").await?;
