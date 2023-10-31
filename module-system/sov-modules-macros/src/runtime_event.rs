@@ -16,20 +16,20 @@ impl<'a> StructDef<'a> {
         self.fields
             .iter()
             .map(|field| {
-                let name = &field.ident;
-                let ty = &field.ty;
+                let module_name = &field.ident;
+                let module_type = &field.ty;
 
-                let doc: String = format!("An event emitted by the {} module", name);
+                let doc: String = format!("An event emitted by the {} module", module_name);
 
                 quote::quote!(
                     #[doc = #doc]
-                    #name(<#ty as ::sov_modules_api::Module>::Event),
+                    #module_name(<#module_type as ::sov_modules_api::Module>::Event),
                 )
             })
             .collect()
     }
 
-    fn create_get_key_string_impl(&self) -> proc_macro2::TokenStream {
+    fn create_key_string_methods(&self) -> proc_macro2::TokenStream {
         let enum_ident = self.enum_ident(EVENT);
 
         let match_legs: Vec<proc_macro2::TokenStream> = self
@@ -46,6 +46,18 @@ impl<'a> StructDef<'a> {
             })
             .collect();
 
+        let module_name_all_event_keys_tuple_list= self
+            .fields
+            .iter()
+            .map(|field| {
+                let module_name_str = &field.ident.to_string();
+                let module_type = &field.ty;
+
+                quote::quote!(
+                    (#module_name_str, <#module_type as ::sov_modules_api::Module>::Event::get_all_event_keys as fn() -> ::std::vec::Vec<&'static str>)
+                )
+            });
+
         let impl_generics = &self.impl_generics;
         let enum_ident = self.enum_ident(EVENT);
         let where_clause = &self.where_clause;
@@ -61,6 +73,18 @@ impl<'a> StructDef<'a> {
                     match self {
                        #(#match_legs)*
                     }
+                }
+
+                /// Returns the key strings for all events in the runtime, spanning across all modules.
+                pub fn get_all_key_strings() -> ::std::vec::Vec<String> {
+                    use sov_modules_api::Event;
+
+                    ::std::vec![#(#module_name_all_event_keys_tuple_list),*]
+                    .iter().map(|(module_name_str, method)| {
+                        method().into_iter().map(|event_key|{
+                            format!("{}-{}", module_name_str.to_string(), event_key.to_string())
+                        })
+                    }).flatten().collect()
                 }
             }
         }
@@ -103,13 +127,13 @@ impl RuntimeEventMacro {
 
         let enum_legs = struct_def.create_event_enum_legs();
         let event_enum = struct_def.create_enum(&enum_legs, EVENT, &serialization_methods);
-        let get_key_string_impl = struct_def.create_get_key_string_impl();
+        let key_string_methods = struct_def.create_key_string_methods();
 
         Ok(quote::quote! {
             #[doc="This enum is generated from the underlying Runtime, the variants correspond to events from the relevant modules"]
             #event_enum
 
-            #get_key_string_impl
+            #key_string_methods
         }
             .into())
     }

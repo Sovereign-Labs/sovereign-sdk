@@ -39,4 +39,12 @@ fn main() {
     assert_eq!(event.get_key_string(), "fourth-Variant4WithUnnamedStruct");
     let event = RuntimeEvent::<DefaultContext>::fourth(fourth_test_module::MyEvent::Variant5WithNestedEnum(NestedEnum::Variant1));
     assert_eq!(event.get_key_string(), "fourth-Variant5WithNestedEnum");
+
+
+    assert_eq!(RuntimeEvent::<DefaultContext>::get_all_key_strings(),
+               vec!["first-Variant1", "first-Variant2", "first-Variant3",
+                    "second-Variant", "third-NA-Event-Not-Defined",
+                    "fourth-Variant1", "fourth-Variant2WithStruct",
+                    "fourth-Variant3WithNewTypeStruct", "fourth-Variant4WithUnnamedStruct",
+                    "fourth-Variant5WithNestedEnum"]);
 }
