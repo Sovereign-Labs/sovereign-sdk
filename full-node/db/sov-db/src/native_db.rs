@@ -48,7 +48,7 @@ impl NativeDB {
         &self,
         key_value_pairs: impl IntoIterator<Item = (Vec<u8>, Option<Vec<u8>>)>,
     ) -> anyhow::Result<()> {
-        let batch = SchemaBatch::default();
+        let mut batch = SchemaBatch::default();
         for (key, value) in key_value_pairs {
             batch.put::<ModuleAccessoryState>(&key, &value)?;
         }

@@ -13,6 +13,7 @@ use prettytable::Table;
 use prometheus::{Histogram, HistogramOpts, Registry};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_stf_template::kernels::basic::BasicKernel;
 use sov_modules_stf_template::{AppTemplate, TxEffect};
 use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rng_da_service::{RngDaService, RngDaSpec};
@@ -107,6 +108,7 @@ async fn main() -> Result<(), anyhow::Error> {
         RngDaSpec,
         Risc0Verifier,
         Runtime<DefaultContext, RngDaSpec>,
+        BasicKernel<DefaultContext>,
     >::new();
 
     let demo_genesis_config = get_genesis_config(&GenesisPaths::from_dir(

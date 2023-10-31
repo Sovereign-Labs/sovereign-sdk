@@ -1,6 +1,6 @@
 .PHONY: help
 
-BINARIES := $(shell sed -n '/^\[\[bin\]\]/,/^$$/ { /name\s*=\s*"\(.*\)"/s//\1/p }' Cargo.toml)
+BINARIES := $(shell awk -F'=[[:space:]]*"|"[[:space:]]*$$' '/^\[\[bin\]\]/,/^$$/{ if ($$1 ~ /name[[:space:]]*/) { print $$2 } }' Cargo.toml)
 PROFILE ?= debug
 ARGS ?=
 
@@ -10,8 +10,9 @@ help: ## Display this help message
 check: ## Checks that fuzz member compiles
 	cargo check
 
+# Needs nightly for `-Z sanitizer=address`
 build-target: ## Build the target fuzz
-	cargo rustc --bin $(TARGET) $(ARGS) -- \
+	cargo +nightly rustc --bin $(TARGET) $(ARGS) -- \
 		-C debuginfo=full \
 		-C debug-assertions \
 		-C passes='sancov-module' \

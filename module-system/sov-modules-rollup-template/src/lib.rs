@@ -8,6 +8,7 @@ use std::net::SocketAddr;
 use async_trait::async_trait;
 pub use runtime_rpc::*;
 use sov_db::ledger_db::LedgerDB;
+use sov_modules_api::capabilities::Kernel;
 use sov_modules_api::{Context, DaSpec, Spec};
 use sov_modules_stf_template::{AppTemplate, Runtime as RuntimeTrait};
 use sov_rollup_interface::da::DaVerifier;
@@ -44,10 +45,15 @@ pub trait RollupTemplate: Sized + Send + Sync {
         NativeChangeSet = (),
     >;
 
-    /// Runtime for Zero Knowledge environment.
+    /// Runtime for the Zero Knowledge environment.
     type ZkRuntime: RuntimeTrait<Self::ZkContext, Self::DaSpec> + Default;
-    /// Runtime for Native environment.
+    /// Runtime for the Native environment.
     type NativeRuntime: RuntimeTrait<Self::NativeContext, Self::DaSpec> + Default + Send + Sync;
+
+    /// The kernel for the native environment.
+    type NativeKernel: Kernel<Self::NativeContext, Self::DaSpec> + Default + Send + Sync;
+    /// The kernel for the Zero Knowledge environment.
+    type ZkKernel: Kernel<Self::ZkContext, Self::DaSpec> + Default;
 
     /// Creates RPC methods for the rollup.
     fn create_rpc_methods(
@@ -164,11 +170,11 @@ pub struct Rollup<S: RollupTemplate> {
     /// The State Transition Runner.
     #[allow(clippy::type_complexity)]
     pub runner: StateTransitionRunner<
-        AppTemplate<S::NativeContext, S::DaSpec, S::Vm, S::NativeRuntime>,
+        AppTemplate<S::NativeContext, S::DaSpec, S::Vm, S::NativeRuntime, S::NativeKernel>,
         S::StorageManager,
         S::DaService,
         S::Vm,
-        AppTemplate<S::ZkContext, S::DaSpec, <S::Vm as ZkvmHost>::Guest, S::ZkRuntime>,
+        AppTemplate<S::ZkContext, S::DaSpec, <S::Vm as ZkvmHost>::Guest, S::ZkRuntime, S::ZkKernel>,
     >,
     /// Rpc methods for the rollup.
     pub rpc_methods: jsonrpsee::RpcModule<()>,
@@ -192,11 +198,11 @@ impl<S: RollupTemplate> Rollup<S> {
     }
 }
 
-type AppVerifier<DA, Zk, ZkContext, RT> =
-    StateTransitionVerifier<AppTemplate<ZkContext, <DA as DaVerifier>::Spec, Zk, RT>, DA, Zk>;
+type AppVerifier<DA, Zk, ZkContext, RT, K> =
+    StateTransitionVerifier<AppTemplate<ZkContext, <DA as DaVerifier>::Spec, Zk, RT, K>, DA, Zk>;
 
-type ZkProver<ZkContext, Vm, ZkRuntime, Da> = Prover<
-    AppTemplate<ZkContext, <Da as DaService>::Spec, <Vm as ZkvmHost>::Guest, ZkRuntime>,
+type ZkProver<ZkContext, Vm, ZkRuntime, Da, K> = Prover<
+    AppTemplate<ZkContext, <Da as DaService>::Spec, <Vm as ZkvmHost>::Guest, ZkRuntime, K>,
     Da,
     Vm,
 >;
@@ -206,13 +212,14 @@ fn configure_prover<
     Vm: ZkvmHost,
     Da: DaService,
     RT: RuntimeTrait<ZkContext, <Da as DaService>::Spec> + Default,
+    K: Kernel<ZkContext, <Da as DaService>::Spec> + Default,
 >(
     vm: Vm,
     cfg: RollupProverConfig,
     da_verifier: Da::Verifier,
-) -> ZkProver<ZkContext, Vm, RT, Da> {
+) -> ZkProver<ZkContext, Vm, RT, Da, K> {
     let app = AppTemplate::new();
-    let app_verifier = AppVerifier::<_, _, ZkContext, RT>::new(app, da_verifier);
+    let app_verifier = AppVerifier::<_, _, ZkContext, RT, K>::new(app, da_verifier);
 
     let config = match cfg {
         RollupProverConfig::Simulate => ProofGenConfig::Simulate(app_verifier),

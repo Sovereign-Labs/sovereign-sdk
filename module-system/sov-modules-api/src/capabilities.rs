@@ -51,6 +51,12 @@ impl<'a, B: BlobReaderTrait> From<&'a mut B> for BlobRefOrOwned<'a, B> {
     }
 }
 
+/// The kernel is responsible for managing the inputs to the `apply_blob` method.
+/// A simple implementation will simply process all blobs in the order that they appear,
+/// while a second will support a "preferred sequencer" with some limited power to reorder blobs
+/// in order to give out soft confirmations.
+pub trait Kernel<C: Context, Da: DaSpec>: BlobSelector<Da, Context = C> + Default {}
+
 /// BlobSelector decides which blobs to process in a current slot.
 pub trait BlobSelector<Da: DaSpec> {
     /// Context type
