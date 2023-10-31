@@ -1,4 +1,4 @@
-use sov_rollup_interface::da::{NanoSeconds, Time};
+use sov_modules_api::da::{NanoSeconds, Time};
 
 use crate::ChainStateConfig;
 

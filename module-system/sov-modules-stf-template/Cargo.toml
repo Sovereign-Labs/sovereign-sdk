@@ -28,6 +28,7 @@ sov-zk-cycle-utils = { path = "../../utils/zk-cycle-utils", version = "0.3", opt
 risc0-zkvm = { workspace = true, default-features = false, features = ["std"], optional = true }
 risc0-zkvm-platform = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["server"], optional = true }
+
 [features]
 bench = ["sov-zk-cycle-macros/bench", "sov-zk-cycle-utils", "risc0-zkvm", "risc0-zkvm-platform"]
 default = []
