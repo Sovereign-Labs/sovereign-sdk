@@ -36,12 +36,12 @@ impl CelestiaService {
     }
 }
 
-/// Runtime configuration for the DA service
+/// Runtime configuration for the [`DaService`] implementation.
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
-pub struct DaServiceConfig {
-    /// The jwt used to authenticate with the Celestia rpc server
+pub struct CelestiaConfig {
+    /// The JWT used to authenticate with the Celestia RPC server
     pub celestia_rpc_auth_token: String,
-    /// The address of the Celestia rpc server
+    /// The address of the Celestia RPC server
     #[serde(default = "default_rpc_addr")]
     pub celestia_rpc_address: String,
     /// The maximum size of a Celestia RPC response, in bytes
@@ -65,7 +65,7 @@ const fn default_request_timeout_seconds() -> u64 {
 }
 
 impl CelestiaService {
-    pub async fn new(config: DaServiceConfig, chain_params: RollupParams) -> Self {
+    pub async fn new(config: CelestiaConfig, chain_params: RollupParams) -> Self {
         let client = {
             let mut headers = HeaderMap::new();
             headers.insert(
@@ -105,7 +105,7 @@ impl DaService for CelestiaService {
         let rollup_namespace = self.rollup_namespace;
 
         // Fetch the header and relevant shares via RPC
-        debug!("Fetching header");
+        debug!("Fetching header at height: {}...", height);
         let header = client.header_get_by_height(height).await?;
         trace!(header_result = ?header);
 
@@ -227,7 +227,7 @@ mod tests {
     use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
     use super::default_request_timeout_seconds;
-    use crate::da_service::{get_gas_limit_for_bytes, CelestiaService, DaServiceConfig, GAS_PRICE};
+    use crate::da_service::{get_gas_limit_for_bytes, CelestiaConfig, CelestiaService, GAS_PRICE};
     use crate::parse_pfb_namespace;
     use crate::shares::NamespaceGroup;
     use crate::types::tests::{with_rollup_data, without_rollup_data};
@@ -268,12 +268,12 @@ mod tests {
     // Last return value is namespace
     async fn setup_service(
         timeout_sec: Option<u64>,
-    ) -> (MockServer, DaServiceConfig, CelestiaService, Namespace) {
+    ) -> (MockServer, CelestiaConfig, CelestiaService, Namespace) {
         // Start a background HTTP server on a random local port
         let mock_server = MockServer::start().await;
 
         let timeout_sec = timeout_sec.unwrap_or_else(default_request_timeout_seconds);
-        let config = DaServiceConfig {
+        let config = CelestiaConfig {
             celestia_rpc_auth_token: "RPC_TOKEN".to_string(),
             celestia_rpc_address: mock_server.uri(),
             max_celestia_response_body_size: 120_000,

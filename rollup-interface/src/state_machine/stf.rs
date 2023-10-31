@@ -8,6 +8,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::da::DaSpec;
+use crate::maybestd::vec::Vec;
 use crate::zk::{ValidityCondition, Zkvm};
 
 #[cfg(any(all(test, feature = "sha2"), feature = "fuzzing"))]
@@ -40,7 +41,7 @@ mod sealed {
 
 /// A receipt for a single transaction. These receipts are stored in the rollup's database
 /// and may be queried via RPC. Receipts are generic over a type `R` which the rollup can use to
-/// store additional data, such as the status code of the transaction or the amout of gas used.s
+/// store additional data, such as the status code of the transaction or the amount of gas used.s
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// A receipt showing the result of a transaction
 pub struct TransactionReceipt<R> {
@@ -77,9 +78,11 @@ pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
 ///  - B - generic for batch receipt contents
 ///  - T - generic for transaction receipt contents
 ///  - W - generic for witness
-pub struct SlotResult<S, B, T, W> {
+pub struct SlotResult<S, Cs, B, T, W> {
     /// Final state root after all blobs were applied
     pub state_root: S,
+    /// Container for all state alterations that happened during slot execution
+    pub change_set: Cs,
     /// Receipt for each applied batch
     pub batch_receipts: Vec<BatchReceipt<B, T>>,
     /// Witness after applying the whole block
@@ -96,8 +99,15 @@ pub struct SlotResult<S, B, T, W> {
 pub trait StateTransitionFunction<Vm: Zkvm, Da: DaSpec> {
     /// Root hash of state merkle tree
     type StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]>;
-    /// The initial state of the rollup.
-    type InitialState;
+
+    /// The initial params of the rollup.
+    type GenesisParams;
+
+    /// State of the rollup before transition.
+    type PreState;
+
+    /// State of the rollup after transition.
+    type ChangeSet;
 
     /// The contents of a transaction receipt. This is the data that is persisted in the database
     type TxReceiptContents: Serialize + DeserializeOwned + Clone;
@@ -112,9 +122,14 @@ pub trait StateTransitionFunction<Vm: Zkvm, Da: DaSpec> {
     /// The validity condition that must be verified outside of the Vm
     type Condition: ValidityCondition;
 
-    /// Perform one-time initialization for the genesis block and returns the resulting root hash wrapped in a result.
+    /// Perform one-time initialization for the genesis block and
+    /// returns the resulting root hash and changeset.
     /// If the init chain fails we panic.
-    fn init_chain(&mut self, params: Self::InitialState) -> Self::StateRoot;
+    fn init_chain(
+        &self,
+        genesis_state: Self::PreState,
+        params: Self::GenesisParams,
+    ) -> (Self::StateRoot, Self::ChangeSet);
 
     /// Called at each **DA-layer block** - whether or not that block contains any
     /// data relevant to the rollup.
@@ -129,15 +144,18 @@ pub trait StateTransitionFunction<Vm: Zkvm, Da: DaSpec> {
     /// which is why we use a generic here instead of an associated type.
     ///
     /// Commits state changes to the database
+    #[allow(clippy::type_complexity)]
     fn apply_slot<'a, I>(
-        &mut self,
+        &self,
         pre_state_root: &Self::StateRoot,
+        pre_state: Self::PreState,
         witness: Self::Witness,
         slot_header: &Da::BlockHeader,
         validity_condition: &Da::ValidityCondition,
         blobs: I,
     ) -> SlotResult<
         Self::StateRoot,
+        Self::ChangeSet,
         Self::BatchReceiptContents,
         Self::TxReceiptContents,
         Self::Witness,

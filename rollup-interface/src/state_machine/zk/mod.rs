@@ -48,7 +48,7 @@ pub trait Zkvm {
         + DeserializeOwned;
 
     /// The error type which is returned when a proof fails to verify
-    type Error: Debug + From<std::io::Error>;
+    type Error: Debug;
 
     /// Interpret a sequence of a bytes as a proof and attempt to verify it against the code commitment.
     /// If the proof is valid, return a reference to the public outputs of the proof.

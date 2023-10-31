@@ -6,6 +6,8 @@ use proptest::prelude::{any, Arbitrary};
 use proptest::strategy::{BoxedStrategy, Strategy};
 
 use super::{BatchReceipt, Event, TransactionReceipt};
+use crate::maybestd::boxed::Box;
+use crate::maybestd::vec::Vec;
 
 /// An object-safe hashing trait, which is blanket implemented for all
 /// [`digest::Digest`] implementors.

@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
+use sov_modules_api::capabilities::Kernel;
 use sov_modules_api::{
     BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, StateCheckpoint,
 };
@@ -23,12 +24,12 @@ use sov_zk_cycle_macros::cycle_tracker;
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
 /// that is specifically designed to work with the module-system.
-pub struct AppTemplate<C: Context, Da: DaSpec, Vm, RT: Runtime<C, Da>> {
+pub struct AppTemplate<C: Context, Da: DaSpec, Vm, RT: Runtime<C, Da>, K: Kernel<C, Da>> {
     /// State storage used by the rollup.
-    pub current_storage: C::Storage,
     /// The runtime includes all the modules that the rollup supports.
-    pub runtime: RT,
-    pub(crate) checkpoint: Option<StateCheckpoint<C>>,
+    pub(crate) runtime: RT,
+    pub(crate) kernel: K,
+    phantom_context: PhantomData<C>,
     phantom_vm: PhantomData<Vm>,
     phantom_da: PhantomData<Da>,
 }
@@ -68,36 +69,48 @@ impl<A: BasicAddress> From<ApplyBatchError<A>> for BatchReceipt<SequencerOutcome
     }
 }
 
-impl<C, Vm, Da, RT> AppTemplate<C, Da, Vm, RT>
+impl<C, Vm, Da, RT, K> Default for AppTemplate<C, Da, Vm, RT, K>
 where
     C: Context,
     Da: DaSpec,
     RT: Runtime<C, Da>,
+    K: Kernel<C, Da>,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<C, Vm, Da, RT, K> AppTemplate<C, Da, Vm, RT, K>
+where
+    C: Context,
+    Da: DaSpec,
+    RT: Runtime<C, Da>,
+    K: Kernel<C, Da>,
 {
     /// [`AppTemplate`] constructor.
-    pub fn new(storage: C::Storage) -> Self {
+    pub fn new() -> Self {
         Self {
             runtime: RT::default(),
-            current_storage: storage,
-            checkpoint: None,
+            kernel: K::default(),
+            phantom_context: PhantomData,
             phantom_vm: PhantomData,
             phantom_da: PhantomData,
         }
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
-    pub(crate) fn apply_blob(&mut self, blob: &mut Da::BlobTransaction) -> ApplyBatch<Da> {
+    pub(crate) fn apply_blob(
+        &self,
+        checkpoint: StateCheckpoint<C>,
+        blob: &mut Da::BlobTransaction,
+    ) -> (ApplyBatch<Da>, StateCheckpoint<C>) {
         debug!(
             "Applying batch from sequencer: 0x{}",
             hex::encode(blob.sender())
         );
 
-        // Initialize batch workspace
-        let mut batch_workspace = self
-            .checkpoint
-            .take()
-            .expect("Working_set was initialized in begin_slot")
-            .to_revertable();
+        let mut batch_workspace = checkpoint.to_revertable();
 
         // ApplyBlobHook: begin
         if let Err(e) = self.runtime.begin_blob_hook(blob, &mut batch_workspace) {
@@ -105,11 +118,14 @@ where
                 "Error: The batch was rejected by the 'begin_blob_hook' hook. Skipping batch without slashing the sequencer: {}",
                 e
             );
-            // TODO: will be covered in https://github.com/Sovereign-Labs/sovereign-sdk/issues/421
-            self.checkpoint = Some(batch_workspace.revert());
 
-            return Err(ApplyBatchError::Ignored(blob.hash()));
+            return (
+                Err(ApplyBatchError::Ignored(blob.hash())),
+                batch_workspace.revert(),
+            );
         }
+
+        // Write changes from begin_blob_hook
         batch_workspace = batch_workspace.checkpoint().to_revertable();
 
         // TODO: don't ignore these events: https://github.com/Sovereign-Labs/sovereign/issues/350
@@ -119,31 +135,34 @@ where
             Ok((txs, messages)) => (txs, messages),
             Err(reason) => {
                 // Explicitly revert on slashing, even though nothing has changed in pre_process.
-                let mut batch_workspace = batch_workspace.revert().to_revertable();
+                let mut batch_workspace = batch_workspace.checkpoint().to_revertable();
                 let sequencer_da_address = blob.sender();
                 let sequencer_outcome = SequencerOutcome::Slashed {
                     reason,
                     sequencer_da_address: sequencer_da_address.clone(),
                 };
-                match self
+                let checkpoint = match self
                     .runtime
                     .end_blob_hook(sequencer_outcome, &mut batch_workspace)
                 {
                     Ok(()) => {
                         // TODO: will be covered in https://github.com/Sovereign-Labs/sovereign-sdk/issues/421
-                        self.checkpoint = Some(batch_workspace.checkpoint());
+                        batch_workspace.checkpoint()
                     }
                     Err(e) => {
                         error!("End blob hook failed: {}", e);
-                        self.checkpoint = Some(batch_workspace.revert());
+                        batch_workspace.revert()
                     }
                 };
 
-                return Err(ApplyBatchError::Slashed {
-                    hash: blob.hash(),
-                    reason,
-                    sequencer_da_address,
-                });
+                return (
+                    Err(ApplyBatchError::Slashed {
+                        hash: blob.hash(),
+                        reason,
+                        sequencer_da_address,
+                    }),
+                    checkpoint,
+                );
             }
         };
 
@@ -229,13 +248,14 @@ where
             error!("Failed on `end_blob_hook`: {}", e);
         };
 
-        self.checkpoint = Some(batch_workspace.checkpoint());
-
-        Ok(BatchReceipt {
-            batch_hash: blob.hash(),
-            tx_receipts,
-            inner: sequencer_outcome,
-        })
+        (
+            Ok(BatchReceipt {
+                batch_hash: blob.hash(),
+                tx_receipts,
+                inner: sequencer_outcome,
+            }),
+            batch_workspace.checkpoint(),
+        )
     }
 
     // Do all stateless checks and data formatting, that can be results in sequencer slashing

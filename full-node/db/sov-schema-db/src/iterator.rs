@@ -81,6 +81,19 @@ where
         Ok(())
     }
 
+    /// Reverses iterator direction.
+    pub fn rev(self) -> Self {
+        let new_direction = match self.direction {
+            ScanDirection::Forward => ScanDirection::Backward,
+            ScanDirection::Backward => ScanDirection::Forward,
+        };
+        SchemaIterator {
+            db_iter: self.db_iter,
+            direction: new_direction,
+            phantom: Default::default(),
+        }
+    }
+
     fn next_impl(&mut self) -> Result<Option<(S::Key, S::Value)>> {
         let _timer = SCHEMADB_ITER_LATENCY_SECONDS
             .with_label_values(&[S::COLUMN_FAMILY_NAME])

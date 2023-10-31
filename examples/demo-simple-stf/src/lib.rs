@@ -30,7 +30,9 @@ impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, 
     type StateRoot = [u8; 0];
 
     // This represents the initial configuration of the rollup, but it is not supported in this tutorial.
-    type InitialState = ();
+    type GenesisParams = ();
+    type PreState = ();
+    type ChangeSet = ();
 
     // We could incorporate the concept of a transaction into the rollup, but we leave it as an exercise for the reader.
     type TxReceiptContents = ();
@@ -45,19 +47,25 @@ impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, 
     type Condition = Cond;
 
     // Perform one-time initialization for the genesis block.
-    fn init_chain(&mut self, _params: Self::InitialState) -> [u8; 0] {
-        []
+    fn init_chain(
+        &self,
+        _base_state: Self::PreState,
+        _params: Self::GenesisParams,
+    ) -> ([u8; 0], ()) {
+        ([], ())
     }
 
     fn apply_slot<'a, I>(
-        &mut self,
+        &self,
         _pre_state_root: &[u8; 0],
+        _base_state: Self::PreState,
         _witness: Self::Witness,
         _slot_header: &Da::BlockHeader,
         _validity_condition: &Da::ValidityCondition,
         blobs: I,
     ) -> SlotResult<
         Self::StateRoot,
+        Self::ChangeSet,
         Self::BatchReceiptContents,
         Self::TxReceiptContents,
         Self::Witness,
@@ -92,6 +100,7 @@ impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, 
 
         SlotResult {
             state_root: [],
+            change_set: (),
             batch_receipts: receipts,
             witness: (),
         }

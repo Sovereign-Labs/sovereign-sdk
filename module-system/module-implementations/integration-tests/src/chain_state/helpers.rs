@@ -7,8 +7,7 @@ use sov_modules_api::{
     AccessoryWorkingSet, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, MessageCodec,
     PublicKey, Spec,
 };
-use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
-use sov_rollup_interface::mocks::MockZkvm;
+use sov_modules_stf_template::{Runtime, SequencerOutcome};
 use sov_state::Storage;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
@@ -137,13 +136,4 @@ pub(crate) fn create_chain_state_genesis_config<C: Context, Da: DaSpec>(
         current_time: Default::default(),
     };
     GenesisConfig::new(value_setter_config, chain_state_config)
-}
-
-/// Clones the [`AppTemplate`]'s [`Storage`] and extract the underlying [`WorkingSet`]
-pub(crate) fn get_working_set<C: Context, Da: DaSpec>(
-    app_template: &AppTemplate<C, Da, MockZkvm, TestRuntime<C, Da>>,
-) -> sov_modules_api::WorkingSet<C>
-where
-{
-    sov_modules_api::WorkingSet::new(app_template.current_storage.clone())
 }

@@ -74,7 +74,7 @@ async fn new_rollup_with_celestia_da(
         rollup_config_path
     );
 
-    let rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
+    let rollup_config: RollupConfig<sov_celestia_adapter::CelestiaConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
 
     let mock_rollup = CelestiaDemoRollup {};

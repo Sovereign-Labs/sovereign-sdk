@@ -20,6 +20,11 @@ mod test {
         version: Version,
     }
 
+    fn get_state_db_version(path: &std::path::Path) -> Version {
+        let state_db = sov_db::state_db::StateDB::with_path(path).unwrap();
+        state_db.get_next_version()
+    }
+
     fn create_tests() -> Vec<TestCase> {
         vec![
             TestCase {
@@ -47,25 +52,30 @@ mod test {
         let tests = create_tests();
         {
             for test in tests.clone() {
-                let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
-                let mut storage: WorkingSet<DefaultContext> =
-                    WorkingSet::new(prover_storage.clone());
-                assert_eq!(prover_storage.db().get_next_version(), test.version);
+                let version_before = get_state_db_version(path);
+                assert_eq!(version_before, test.version);
+                {
+                    let prover_storage =
+                        ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
+                    let mut working_set: WorkingSet<DefaultContext> =
+                        WorkingSet::new(prover_storage.clone());
 
-                storage.set(&test.key, test.value.clone());
-                let (cache, witness) = storage.checkpoint().freeze();
-                prover_storage
-                    .validate_and_commit(cache, &witness)
-                    .expect("storage is valid");
-
-                assert_eq!(test.value, prover_storage.get(&test.key, &witness).unwrap());
-                assert_eq!(prover_storage.db().get_next_version(), test.version + 1)
+                    working_set.set(&test.key, test.value.clone());
+                    let (cache, witness) = working_set.checkpoint().freeze();
+                    prover_storage
+                        .validate_and_commit(cache, &witness)
+                        .expect("storage is valid");
+                    assert_eq!(test.value, prover_storage.get(&test.key, &witness).unwrap());
+                }
+                let version_after = get_state_db_version(path);
+                assert_eq!(version_after, test.version + 1)
             }
         }
 
         {
+            let version_from_db = get_state_db_version(path);
             let storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
-            assert_eq!(storage.db().get_next_version(), (tests.len() + 1) as u64);
+            assert_eq!(version_from_db, (tests.len() + 1) as u64);
             for test in tests {
                 assert_eq!(
                     test.value,

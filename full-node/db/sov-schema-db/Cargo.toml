@@ -14,17 +14,17 @@ readme = "README.md"
 
 [dependencies]
 # External dependencies
-anyhow = { workspace = true }
-once_cell = { workspace = true }
+anyhow = { workspace = true, default-features = true }
+once_cell = { workspace = true, default-features = true }
 prometheus = { workspace = true }
-proptest = { workspace = true, optional = true }
+proptest = { workspace = true, optional = true, default-features = true }
 proptest-derive = { workspace = true, optional = true }
 rocksdb = { workspace = true }
-tracing = { workspace = true }
+tracing = { workspace = true, default-features = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-byteorder = { workspace = true }
+byteorder = { workspace = true, default-features = true }
 tempfile = { workspace = true }
 
 [features]

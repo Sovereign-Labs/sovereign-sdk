@@ -23,6 +23,7 @@ install-dev-tools:  ## Installs all necessary cargo helpers
 	cargo install cargo-nextest --locked
 	cargo install cargo-risczero
 	cargo risczero install
+	rustup target add thumbv6m-none-eabi
 
 lint:  ## cargo check and clippy. Skip clippy on guest code since it's not supported by risc0
 	## fmt first, because it's the cheapest
@@ -41,6 +42,9 @@ check-features: ## Checks that project compiles with all combinations of feature
 
 check-fuzz: ## Checks that fuzz member compiles
 	$(MAKE) -C fuzz check
+
+check-no-std: ## Checks that project compiles without std
+	$(MAKE) -C ./rollup-interface $@
 
 find-unused-deps: ## Prints unused dependencies for project. Note: requires nightly
 	cargo udeps --all-targets --all-features

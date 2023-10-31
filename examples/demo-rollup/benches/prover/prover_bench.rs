@@ -5,11 +5,15 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+#[macro_use]
+extern crate prettytable;
+
 use anyhow::Context;
 use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
 use demo_stf::runtime::Runtime;
 use log4rs::config::{Appender, Config, Root};
+use prettytable::Table;
 use regex::Regex;
 use risc0::ROLLUP_ELF;
 use sov_celestia_adapter::types::{FilteredCelestiaBlock, Namespace};
@@ -17,23 +21,20 @@ use sov_celestia_adapter::verifier::{CelestiaSpec, RollupParams};
 use sov_celestia_adapter::CelestiaService;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::SlotData;
+use sov_modules_stf_template::kernels::basic::BasicKernel;
 use sov_modules_stf_template::AppTemplate;
 use sov_risc0_adapter::host::Risc0Host;
-use sov_rollup_interface::da::DaSpec;
+#[cfg(feature = "bench")]
+use sov_risc0_adapter::metrics::GLOBAL_HASHMAP;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
-use sov_state::{ProverStorage, Storage};
+use sov_rollup_interface::storage::StorageManager;
+use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
 
-fn new_app<Vm: Zkvm, Da: DaSpec>(
-    storage_config: sov_state::config::Config,
-) -> AppTemplate<DefaultContext, Da, Vm, Runtime<DefaultContext, Da>> {
-    let storage =
-        ProverStorage::with_config(storage_config).expect("Failed to open prover storage");
-    AppTemplate::new(storage.clone())
-}
+// The rollup stores its data in the namespace b"sov-test" on Celestia
+const ROLLUP_NAMESPACE: Namespace = Namespace::const_v0(ROLLUP_NAMESPACE_RAW);
 
 #[derive(Debug)]
 struct RegexAppender {
@@ -59,6 +60,10 @@ impl RegexAppender {
 }
 
 impl log::Log for RegexAppender {
+    fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        true
+    }
+
     fn log(&self, record: &log::Record) {
         if let Some(captures) = self.regex.captures(record.args().to_string().as_str()) {
             let mut file_guard = self.file.lock().unwrap();
@@ -73,10 +78,6 @@ impl log::Log for RegexAppender {
                 file_guard.write_all(iname_value.as_bytes()).unwrap();
             }
         }
-    }
-
-    fn enabled(&self, _metadata: &log::Metadata) -> bool {
-        true
     }
 
     fn flush(&self) {}
@@ -97,17 +98,6 @@ fn get_config(rollup_trace: &str) -> Config {
         )
         .unwrap()
 }
-
-#[cfg(feature = "bench")]
-use sov_risc0_adapter::metrics::GLOBAL_HASHMAP;
-
-// The rollup stores its data in the namespace b"sov-test" on Celestia
-const ROLLUP_NAMESPACE: Namespace = Namespace::const_v0(ROLLUP_NAMESPACE_RAW);
-
-#[macro_use]
-extern crate prettytable;
-
-use prettytable::Table;
 
 fn print_cycle_averages(metric_map: HashMap<String, (u64, u64)>) {
     let mut metrics_vec: Vec<(String, (u64, u64))> = metric_map
@@ -152,7 +142,7 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     let rollup_config_path = "benches/prover/rollup_config.toml".to_string();
-    let mut rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
+    let mut rollup_config: RollupConfig<sov_celestia_adapter::CelestiaConfig> =
         from_toml_path(&rollup_config_path)
             .context("Failed to read rollup configuration")
             .unwrap();
@@ -178,12 +168,21 @@ async fn main() -> Result<(), anyhow::Error> {
         path: rollup_config.storage.path,
     };
 
-    let mut demo = new_app::<Risc0Host, CelestiaSpec>(storage_config);
+    let storage_manager = sov_state::storage_manager::ProverStorageManager::new(storage_config)
+        .expect("ProverStorageManager initialization has failed");
+    let stf = AppTemplate::<
+        DefaultContext,
+        CelestiaSpec,
+        Risc0Host,
+        Runtime<DefaultContext, CelestiaSpec>,
+        BasicKernel<DefaultContext>,
+    >::new();
 
     let genesis_config =
         get_genesis_config(&GenesisPaths::from_dir("../test-data/genesis/demo-tests")).unwrap();
     println!("Starting from empty storage, initialization chain");
-    let mut prev_state_root = demo.init_chain(genesis_config);
+    let (mut prev_state_root, _) =
+        stf.init_chain(storage_manager.get_native_storage(), genesis_config);
 
     let hex_data = read_to_string("benches/prover/blocks.hex").expect("Failed to read data");
     let bincoded_blocks: Vec<FilteredCelestiaBlock> = hex_data
@@ -218,8 +217,9 @@ async fn main() -> Result<(), anyhow::Error> {
             num_blobs += blob_txs.len();
         }
 
-        let result = demo.apply_slot(
+        let result = stf.apply_slot(
             &prev_state_root,
+            storage_manager.get_native_storage(),
             Default::default(),
             &filtered_block.header,
             &filtered_block.validity_condition(),

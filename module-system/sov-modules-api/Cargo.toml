@@ -44,6 +44,7 @@ risc0-zkvm-platform = { workspace = true, optional = true }
 bincode = { workspace = true }
 sov-modules-api = { path = ".", features = ["native"] }
 sov-bank = { path = "../module-implementations/sov-bank", features = ["native"] }
+sov-db = { path = "../../full-node/db/sov-db" }
 tempfile = { workspace = true }
 
 [features]
@@ -51,6 +52,7 @@ arbitrary = [
     "dep:arbitrary",
     "dep:proptest",
     "dep:proptest-derive",
+    "proptest/default",
     "sov-state/arbitrary",
 ]
 bench = ["sov-zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
