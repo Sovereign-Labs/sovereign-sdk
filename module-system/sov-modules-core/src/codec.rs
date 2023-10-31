@@ -82,7 +82,7 @@ pub trait StateCodec {
 /// A trait for codecs which know how to serialize a type `Ref` as if it were
 /// some other type `Target`.
 ///
-/// A good example of this is [`BorshCodec`], which knows how to serialize a
+/// A good example of this is BorshCodec, which knows how to serialize a
 /// `[T;N]` as if it were a `Vec<T>` even though the two types have different
 /// encodings by default.
 pub trait EncodeKeyLike<Ref: ?Sized, Target> {

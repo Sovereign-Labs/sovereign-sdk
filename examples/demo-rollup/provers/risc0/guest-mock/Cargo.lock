@@ -1088,6 +1088,7 @@ dependencies = [
  "quote",
  "schemars",
  "serde_json",
+ "sov-modules-core",
  "syn 1.0.109",
 ]
 

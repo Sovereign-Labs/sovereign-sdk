@@ -2,6 +2,9 @@
 
 extern crate alloc;
 
+#[cfg(all(feature = "sync", not(target_has_atomic = "ptr")))]
+compile_error!("The `sync` feature is not supported on this architecture.");
+
 pub mod address;
 pub mod bytes;
 pub mod cache;

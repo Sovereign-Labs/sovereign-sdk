@@ -88,7 +88,7 @@ impl StorageKey {
     }
 }
 
-/// A serialized value suitable for storing. Internally uses an [`Arc<Vec<u8>>`]
+/// A serialized value suitable for storing. Internally uses an [`RefCount<Vec<u8>>`]
 /// for cheap cloning.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 #[cfg_attr(
@@ -214,9 +214,7 @@ pub trait Storage: Clone {
     /// Commits state changes to the underlying storage.
     fn commit(&self, node_batch: &Self::StateUpdate, accessory_update: &OrderedReadsAndWrites);
 
-    /// A version of [`Storage::validate_and_commit`] that allows for
-    /// "accessory" non-JMT updates. See [`sov_db::native_db::NativeDB`] for more information
-    /// about accessory state.
+    /// A version of [`Storage::validate_and_commit`] that allows for "accessory" non-JMT updates.
     fn validate_and_commit_with_accessory_update(
         &self,
         state_accesses: OrderedReadsAndWrites,

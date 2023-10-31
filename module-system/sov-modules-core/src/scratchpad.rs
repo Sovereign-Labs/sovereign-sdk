@@ -317,7 +317,7 @@ impl<C: Context> WorkingSet<C> {
     /// Returns a handler for the accessory state (non-JMT state).
     ///
     /// You can use this method when calling getters and setters on accessory
-    /// state containers, like [`AccessoryStateMap`](crate::AccessoryStateMap).
+    /// state containers, like AccessoryStateMap.
     pub fn accessory_state(&mut self) -> AccessoryWorkingSet<C> {
         AccessoryWorkingSet { ws: self }
     }
