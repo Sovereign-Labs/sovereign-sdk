@@ -8616,14 +8616,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-first-read-last-write-cache"
-version = "0.3.0"
-dependencies = [
- "proptest",
- "thiserror",
-]
-
-[[package]]
 name = "sov-ledger-rpc"
 version = "0.3.0"
 dependencies = [
@@ -8680,13 +8672,34 @@ dependencies = [
  "sha2 0.10.8",
  "sov-bank",
  "sov-db",
- "sov-first-read-last-write-cache",
  "sov-modules-api",
+ "sov-modules-core",
  "sov-modules-macros",
  "sov-rollup-interface",
  "sov-state",
  "sov-zk-cycle-macros",
  "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "sov-modules-core"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arbitrary",
+ "bech32",
+ "borsh",
+ "derive_more",
+ "digest 0.10.7",
+ "hex",
+ "jmt",
+ "proptest",
+ "proptest-derive",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sov-rollup-interface",
  "thiserror",
 ]
 
@@ -8926,7 +8939,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.8",
  "sov-db",
- "sov-first-read-last-write-cache",
+ "sov-modules-core",
  "sov-rollup-interface",
  "sov-zk-cycle-macros",
  "tempfile",

@@ -7,9 +7,8 @@
 //! and write a state transition function from scratch.
 //! [See here for docs](https://github.com/Sovereign-Labs/sovereign-sdk/blob/nightly/examples/demo-stf/README.md)
 
+use sov_modules_core::{Context, WorkingSet};
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
-
-use crate::{Context, WorkingSet};
 
 /// Container type for mixing borrowed and owned blobs.
 #[derive(Debug)]

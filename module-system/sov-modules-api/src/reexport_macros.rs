@@ -91,7 +91,7 @@ pub mod macros {
     /// and utilizes output of [`#[rpc_gen]`] macro to generate RPC methods.
     ///
     /// It has limitations:
-    ///   - First type generic attribute must have bound to [`Context`](crate::Context) trait
+    ///   - First type generic attribute must have bound to [`Context`](sov_modules_core::Context) trait
     ///   - All generic attributes must own the data, thus have bound `'static`
     #[cfg(feature = "native")]
     pub use sov_modules_macros::expose_rpc;

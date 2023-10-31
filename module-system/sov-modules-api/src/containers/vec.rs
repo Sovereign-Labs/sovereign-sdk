@@ -1,12 +1,11 @@
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
 
-use sov_state::codec::{BorshCodec, StateCodec, StateKeyCodec, StateValueCodec};
-use sov_state::Prefix;
+use sov_modules_core::{Context, Prefix, StateCodec, StateKeyCodec, StateValueCodec, WorkingSet};
+use sov_state::codec::BorshCodec;
 use thiserror::Error;
 
-use crate::state::{StateMap, StateValue, WorkingSet};
-use crate::Context;
+use crate::containers::{StateMap, StateValue};
 
 /// A growable array of values stored as JMT-backed state.
 #[derive(

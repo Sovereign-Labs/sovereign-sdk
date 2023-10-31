@@ -1,24 +1,26 @@
-use std::fmt::Display;
-use std::sync::Arc;
+use alloc::vec::Vec;
+use core::fmt;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use hex;
-use jmt::Version;
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use sov_first_read_last_write_cache::{CacheKey, CacheValue};
+use serde::Serialize;
+use sov_rollup_interface::maybestd::RefCount;
 
+use crate::bytes::{AlignedVec, Prefix};
+use crate::cache::{CacheKey, CacheValue, OrderedReadsAndWrites};
 use crate::codec::{EncodeKeyLike, StateValueCodec};
-use crate::internal_cache::OrderedReadsAndWrites;
-use crate::utils::AlignedVec;
+use crate::version::Version;
 use crate::witness::Witness;
-use crate::Prefix;
 
 /// The key type suitable for use in [`Storage::get`] and other getter methods of
 /// [`Storage`]. Cheaply-clonable.
-#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+#[derive(Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(
+    feature = "sync",
+    derive(Serialize, serde::Deserialize, BorshDeserialize, BorshSerialize)
+)]
 pub struct StorageKey {
-    key: Arc<Vec<u8>>,
+    key: RefCount<Vec<u8>>,
 }
 
 impl From<CacheKey> for StorageKey {
@@ -28,8 +30,8 @@ impl From<CacheKey> for StorageKey {
 }
 
 impl StorageKey {
-    /// Returns a new [`Arc`] reference to the bytes of this key.
-    pub fn key(&self) -> Arc<Vec<u8>> {
+    /// Returns a new [`RefCount`] reference to the bytes of this key.
+    pub fn key(&self) -> RefCount<Vec<u8>> {
         self.key.clone()
     }
 
@@ -52,8 +54,8 @@ impl AsRef<Vec<u8>> for StorageKey {
     }
 }
 
-impl Display for StorageKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for StorageKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:x?}", hex::encode(self.key().as_ref()))
     }
 }
@@ -74,25 +76,27 @@ impl StorageKey {
         full_key.extend(&encoded_key);
 
         Self {
-            key: Arc::new(full_key.into_inner()),
+            key: RefCount::new(full_key.into_inner()),
         }
     }
 
     /// Creates a new [`StorageKey`] that combines a prefix and a key.
     pub fn singleton(prefix: &Prefix) -> Self {
         Self {
-            key: Arc::new(prefix.as_aligned_vec().clone().into_inner()),
+            key: RefCount::new(prefix.as_aligned_vec().clone().into_inner()),
         }
     }
 }
 
 /// A serialized value suitable for storing. Internally uses an [`Arc<Vec<u8>>`]
 /// for cheap cloning.
-#[derive(
-    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Default,
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[cfg_attr(
+    feature = "sync",
+    derive(Serialize, serde::Deserialize, BorshDeserialize, BorshSerialize)
 )]
 pub struct StorageValue {
-    value: Arc<Vec<u8>>,
+    value: RefCount<Vec<u8>>,
 }
 
 impl From<CacheValue> for StorageValue {
@@ -106,7 +110,7 @@ impl From<CacheValue> for StorageValue {
 impl From<Vec<u8>> for StorageValue {
     fn from(value: Vec<u8>) -> Self {
         Self {
-            value: Arc::new(value),
+            value: RefCount::new(value),
         }
     }
 }
@@ -119,7 +123,7 @@ impl StorageValue {
     {
         let encoded_value = codec.encode_value(value);
         Self {
-            value: Arc::new(encoded_value),
+            value: RefCount::new(encoded_value),
         }
     }
 
@@ -134,7 +138,11 @@ impl StorageValue {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "sync",
+    derive(Serialize, serde::Deserialize, BorshDeserialize, BorshSerialize)
+)]
 /// A proof that a particular storage key has a particular value, or is absent.
 pub struct StorageProof<P> {
     /// The key which is proven
@@ -156,7 +164,7 @@ pub trait Storage: Clone {
     /// A cryptographic proof that a particular key has a particular value, or is absent.
     type Proof: Serialize
         + DeserializeOwned
-        + core::fmt::Debug
+        + fmt::Debug
         + Clone
         + BorshSerialize
         + BorshDeserialize;
@@ -164,7 +172,7 @@ pub trait Storage: Clone {
     /// A cryptographic commitment to the contents of this storage
     type Root: Serialize
         + DeserializeOwned
-        + core::fmt::Debug
+        + fmt::Debug
         + Clone
         + BorshSerialize
         + BorshDeserialize
@@ -180,7 +188,7 @@ pub trait Storage: Clone {
 
     /// Creates a new instance of this [`Storage`] type, with some configuration
     /// options.
-    fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error>;
+    fn with_config(config: Self::RuntimeConfig) -> anyhow::Result<Self>;
 
     /// Returns the value corresponding to the key or None if key is absent.
     fn get(&self, key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue>;
@@ -206,6 +214,21 @@ pub trait Storage: Clone {
     /// Commits state changes to the underlying storage.
     fn commit(&self, node_batch: &Self::StateUpdate, accessory_update: &OrderedReadsAndWrites);
 
+    /// A version of [`Storage::validate_and_commit`] that allows for
+    /// "accessory" non-JMT updates. See [`sov_db::native_db::NativeDB`] for more information
+    /// about accessory state.
+    fn validate_and_commit_with_accessory_update(
+        &self,
+        state_accesses: OrderedReadsAndWrites,
+        witness: &Self::Witness,
+        accessory_update: &OrderedReadsAndWrites,
+    ) -> Result<Self::Root, anyhow::Error> {
+        let (root_hash, node_batch) = self.compute_state_update(state_accesses, witness)?;
+        self.commit(&node_batch, accessory_update);
+
+        Ok(root_hash)
+    }
+
     /// Validate all of the storage accesses in a particular cache log,
     /// returning the new state root after applying all writes.
     /// This function is equivalent to calling:
@@ -221,21 +244,6 @@ pub trait Storage: Clone {
             witness,
             &Default::default(),
         )
-    }
-
-    /// A version of [`Storage::validate_and_commit`] that allows for
-    /// "accessory" non-JMT updates. See [`sov_db::native_db::NativeDB`] for more information
-    /// about accessory state.
-    fn validate_and_commit_with_accessory_update(
-        &self,
-        state_accesses: OrderedReadsAndWrites,
-        witness: &Self::Witness,
-        accessory_update: &OrderedReadsAndWrites,
-    ) -> Result<Self::Root, anyhow::Error> {
-        let (root_hash, node_batch) = self.compute_state_update(state_accesses, witness)?;
-        self.commit(&node_batch, accessory_update);
-
-        Ok(root_hash)
     }
 
     /// Opens a storage access proof and validates it against a state root.
@@ -254,7 +262,7 @@ pub trait Storage: Clone {
 impl From<&str> for StorageKey {
     fn from(key: &str) -> Self {
         Self {
-            key: Arc::new(key.as_bytes().to_vec()),
+            key: RefCount::new(key.as_bytes().to_vec()),
         }
     }
 }
@@ -263,7 +271,7 @@ impl From<&str> for StorageKey {
 impl From<&str> for StorageValue {
     fn from(value: &str) -> Self {
         Self {
-            value: Arc::new(value.as_bytes().to_vec()),
+            value: RefCount::new(value.as_bytes().to_vec()),
         }
     }
 }

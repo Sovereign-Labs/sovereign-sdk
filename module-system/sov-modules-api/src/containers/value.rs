@@ -1,11 +1,10 @@
 use std::marker::PhantomData;
 
-use sov_state::codec::{BorshCodec, StateCodec, StateValueCodec};
-use sov_state::Prefix;
+use sov_modules_core::{
+    Context, Prefix, StateCodec, StateReaderAndWriter, StateValueCodec, WorkingSet,
+};
+use sov_state::codec::BorshCodec;
 use thiserror::Error;
-
-use crate::state::{StateReaderAndWriter, WorkingSet};
-use crate::Context;
 
 /// Container for a single value.
 #[derive(

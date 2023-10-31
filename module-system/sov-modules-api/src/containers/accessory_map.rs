@@ -1,11 +1,12 @@
 use std::marker::PhantomData;
 
-use sov_state::codec::{BorshCodec, EncodeKeyLike, StateCodec, StateKeyCodec, StateValueCodec};
-use sov_state::storage::StorageKey;
-use sov_state::Prefix;
+use sov_modules_core::{
+    AccessoryWorkingSet, Context, EncodeKeyLike, Prefix, StateCodec, StateKeyCodec,
+    StateReaderAndWriter, StateValueCodec, StorageKey,
+};
+use sov_state::codec::BorshCodec;
 
-use crate::state::{AccessoryWorkingSet, StateMapError, StateReaderAndWriter};
-use crate::Context;
+use super::StateMapError;
 
 /// A container that maps keys to values stored as "accessory" state, outside of
 /// the JMT.

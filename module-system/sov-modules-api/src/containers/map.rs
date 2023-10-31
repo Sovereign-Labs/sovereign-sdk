@@ -1,12 +1,11 @@
 use std::marker::PhantomData;
 
-use sov_state::codec::{BorshCodec, EncodeKeyLike, StateCodec, StateKeyCodec, StateValueCodec};
-use sov_state::storage::StorageKey;
-use sov_state::Prefix;
+use sov_modules_core::{
+    Context, EncodeKeyLike, Prefix, StateCodec, StateKeyCodec, StateReaderAndWriter,
+    StateValueCodec, StorageKey, WorkingSet,
+};
+use sov_state::codec::BorshCodec;
 use thiserror::Error;
-
-use crate::state::{StateReaderAndWriter, WorkingSet};
-use crate::Context;
 
 /// A container that maps keys to values.
 ///

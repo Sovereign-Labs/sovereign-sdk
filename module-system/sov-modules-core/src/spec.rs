@@ -1,0 +1,167 @@
+use core::fmt::Debug;
+
+use borsh::{BorshDeserialize, BorshSerialize};
+use digest::typenum::U32;
+use digest::Digest;
+use sov_rollup_interface::RollupAddress;
+
+use crate::error::ModuleError;
+use crate::gas::GasUnit;
+use crate::key::{PublicKey, Signature};
+use crate::scratchpad::WorkingSet;
+use crate::storage::Storage;
+use crate::witness::Witness;
+
+/// Response type for the `Module::call` method.
+#[derive(Default, Debug)]
+pub struct CallResponse {}
+
+/// The `Spec` trait configures certain key primitives to be used by a by a particular instance of a rollup.
+/// `Spec` is almost always implemented on a Context object; since all Modules are generic
+/// over a Context, rollup developers can easily optimize their code for different environments
+/// by simply swapping out the Context (and by extension, the Spec).
+///
+/// For example, a rollup running in a STARK-based zkVM like Risc0 might pick Sha256 or Poseidon as its preferred hasher,
+/// while a rollup running in an elliptic-curve based SNARK such as `Placeholder` from the =nil; foundation might
+/// prefer a Pedersen hash. By using a generic Context and Spec, a rollup developer can trivially customize their
+/// code for either (or both!) of these environments without touching their module implementations.
+pub trait Spec {
+    /// The Address type used on the rollup. Typically calculated as the hash of a public key.
+    #[cfg(all(feature = "native", feature = "std"))]
+    type Address: RollupAddress
+        + BorshSerialize
+        + BorshDeserialize
+        + Sync
+        // Do we always need this, even when the module does not have a JSON
+        // Schema? That feels a bit wrong.
+        + ::schemars::JsonSchema
+        + Into<crate::address::AddressBech32>
+        + From<crate::address::AddressBech32>
+        + alloc::str::FromStr<Err = anyhow::Error>;
+
+    /// The Address type used on the rollup. Typically calculated as the hash of a public key.
+    #[cfg(all(feature = "native", not(feature = "std")))]
+    type Address: RollupAddress
+        + BorshSerialize
+        + BorshDeserialize
+        + Sync
+        + Into<crate::address::AddressBech32>
+        + From<crate::address::AddressBech32>
+        + alloc::str::FromStr<Err = anyhow::Error>;
+
+    /// The Address type used on the rollup. Typically calculated as the hash of a public key.
+    #[cfg(not(feature = "native"))]
+    type Address: RollupAddress + BorshSerialize + BorshDeserialize;
+
+    /// Authenticated state storage used by the rollup. Typically some variant of a merkle-patricia trie.
+    type Storage: Storage + Send + Sync;
+
+    /// The public key used for digital signatures
+    #[cfg(feature = "native")]
+    type PrivateKey: crate::key::PrivateKey<
+        PublicKey = Self::PublicKey,
+        Signature = Self::Signature,
+    >;
+
+    /// The public key used for digital signatures
+    #[cfg(all(feature = "native", feature = "std"))]
+    type PublicKey: PublicKey + ::schemars::JsonSchema + alloc::str::FromStr<Err = anyhow::Error>;
+
+    #[cfg(not(all(feature = "native", feature = "std")))]
+    type PublicKey: PublicKey;
+
+    /// The hasher preferred by the rollup, such as Sha256 or Poseidon.
+    type Hasher: Digest<OutputSize = U32>;
+
+    /// The digital signature scheme used by the rollup
+    #[cfg(all(feature = "native", feature = "std"))]
+    type Signature: Signature<PublicKey = Self::PublicKey>
+        + alloc::str::FromStr<Err = anyhow::Error>
+        + serde::Serialize
+        + for<'a> serde::Deserialize<'a>
+        + schemars::JsonSchema;
+
+    /// The digital signature scheme used by the rollup
+    #[cfg(not(all(feature = "native", feature = "std")))]
+    type Signature: Signature<PublicKey = Self::PublicKey>;
+
+    /// A structure containing the non-deterministic inputs from the prover to the zk-circuit
+    type Witness: Witness;
+}
+
+/// A context contains information which is passed to modules during
+/// transaction execution. Currently, context includes the sender of the transaction
+/// as recovered from its signature.
+///
+/// Context objects also implement the [`Spec`] trait, which specifies the types to be used in this
+/// instance of the state transition function. By making modules generic over a `Context`, developers
+/// can easily update their cryptography to conform to the needs of different zk-proof systems.
+pub trait Context: Spec + Clone + Debug + PartialEq + 'static {
+    /// Gas unit for the gas price computation.
+    type GasUnit: GasUnit;
+
+    /// Sender of the transaction.
+    fn sender(&self) -> &Self::Address;
+
+    /// Constructor for the Context.
+    fn new(sender: Self::Address) -> Self;
+}
+
+/// All the methods have a default implementation that can't be invoked (because they take `NonInstantiable` parameter).
+/// This allows developers to override only some of the methods in their implementation and safely ignore the others.
+pub trait Module {
+    /// Execution context.
+    type Context: Context;
+
+    /// Configuration for the genesis method.
+    type Config;
+
+    /// Module defined argument to the call method.
+    type CallMessage: Debug + BorshSerialize + BorshDeserialize;
+
+    /// Module defined event resulting from a call method.
+    type Event: Debug + BorshSerialize + BorshDeserialize;
+
+    /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
+    fn genesis(
+        &self,
+        _config: &Self::Config,
+        _working_set: &mut WorkingSet<Self::Context>,
+    ) -> Result<(), ModuleError> {
+        Ok(())
+    }
+
+    /// Call allows interaction with the module and invokes state changes.
+    /// It takes a module defined type and a context as parameters.
+    fn call(
+        &self,
+        _message: Self::CallMessage,
+        _context: &Self::Context,
+        _working_set: &mut WorkingSet<Self::Context>,
+    ) -> Result<CallResponse, ModuleError> {
+        unreachable!()
+    }
+
+    /// Attempts to charge the provided amount of gas from the working set.
+    ///
+    /// The scalar gas value will be computed from the price defined on the working set.
+    fn charge_gas(
+        &self,
+        working_set: &mut WorkingSet<Self::Context>,
+        gas: &<Self::Context as Context>::GasUnit,
+    ) -> anyhow::Result<()> {
+        working_set.charge_gas(gas)
+    }
+}
+
+/// A [`Module`] that has a well-defined and known [JSON
+/// Schema](https://json-schema.org/) for its [`Module::CallMessage`].
+///
+/// This trait is intended to support code generation tools, CLIs, and
+/// documentation. You can derive it with `#[derive(ModuleCallJsonSchema)]`, or
+/// implement it manually if your use case demands more control over the JSON
+/// Schema generation.
+pub trait ModuleCallJsonSchema: Module {
+    /// Returns the JSON schema for [`Module::CallMessage`].
+    fn json_schema() -> String;
+}

@@ -1,5 +1,4 @@
 - sov-rollup-interface
-- sov-first-read-last-write-cache
 - sov-schema-db
 - sov-db
 - sov-zk-cycle-macros

@@ -1,9 +1,10 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+use sov_modules_core::{Address, PrivateKey, Signature};
 
 use crate::default_context::DefaultContext;
 use crate::default_signature::private_key::DefaultPrivateKey;
 use crate::default_signature::{DefaultPublicKey, DefaultSignature};
-use crate::{Address, ModuleInfo, PrivateKey, Signature};
+use crate::ModuleInfo;
 
 #[test]
 fn test_account_bech32m_display() {

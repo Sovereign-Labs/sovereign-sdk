@@ -1,4 +1,4 @@
-use crate::{CallResponse, Context, Error, Module, Spec, WorkingSet};
+use sov_modules_core::{Context, Module, ModuleError, WorkingSet};
 
 /// Methods from this trait should be called only once during the rollup deployment.
 pub trait Genesis {
@@ -12,27 +12,7 @@ pub trait Genesis {
         &self,
         config: &Self::Config,
         working_set: &mut WorkingSet<Self::Context>,
-    ) -> Result<(), Error>;
-}
-
-/// A trait that needs to be implemented for any call message.
-pub trait DispatchCall: Send + Sync {
-    type Context: Context;
-    type Decodable: Send + Sync;
-
-    /// Decodes serialized call message
-    fn decode_call(serialized_message: &[u8]) -> Result<Self::Decodable, std::io::Error>;
-
-    /// Dispatches a call message to the appropriate module.
-    fn dispatch_call(
-        &self,
-        message: Self::Decodable,
-        working_set: &mut WorkingSet<Self::Context>,
-        context: &Self::Context,
-    ) -> Result<CallResponse, Error>;
-
-    /// Returns an address of the dispatched module.
-    fn module_address(&self, message: &Self::Decodable) -> &<Self::Context as Spec>::Address;
+    ) -> Result<(), ModuleError>;
 }
 
 /// A trait that specifies how a runtime should encode the data for each module
@@ -43,10 +23,27 @@ pub trait EncodeCall<M: Module> {
 
 /// A trait that needs to be implemented for a *runtime* to be used with the CLI wallet
 #[cfg(feature = "native")]
-pub trait CliWallet: DispatchCall {
+pub trait CliWallet: sov_modules_core::DispatchCall {
     /// The type that is used to represent this type in the CLI. Typically,
     /// this type implements the clap::Subcommand trait. This type is generic to
     /// allow for different representations of the same type in the interface; a
     /// typical end-usage will impl traits only in the case where `CliStringRepr<T>: Into::RuntimeCall`
     type CliStringRepr<T>;
+}
+
+impl<T> Genesis for T
+where
+    T: Module,
+{
+    type Context = <Self as Module>::Context;
+
+    type Config = <Self as Module>::Config;
+
+    fn genesis(
+        &self,
+        config: &Self::Config,
+        working_set: &mut WorkingSet<Self::Context>,
+    ) -> Result<(), ModuleError> {
+        <Self as Module>::genesis(self, config, working_set)
+    }
 }

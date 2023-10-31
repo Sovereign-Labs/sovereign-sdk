@@ -1,6 +1,5 @@
 use sha2::Digest;
-
-use crate::Context;
+use sov_modules_core::Context;
 
 // separator == "/"
 const DOMAIN_SEPARATOR: [u8; 1] = [47];

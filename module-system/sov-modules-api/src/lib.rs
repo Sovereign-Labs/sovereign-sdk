@@ -1,15 +1,13 @@
 #![doc = include_str!("../README.md")]
 
-mod bech32;
 pub mod capabilities;
 #[cfg(feature = "native")]
 pub mod cli;
+mod containers;
 pub mod default_context;
 pub mod default_signature;
 mod dispatch;
 mod encode;
-mod error;
-mod gas;
 pub mod hooks;
 mod pub_key_hex;
 
@@ -19,41 +17,34 @@ mod reexport_macros;
 pub use reexport_macros::*;
 
 mod prefix;
-mod response;
-mod serde_address;
 mod serde_pub_key;
-mod state;
 #[cfg(test)]
 mod tests;
 pub mod transaction;
 #[cfg(feature = "native")]
 pub mod utils;
 
+pub use containers::*;
 pub use pub_key_hex::PublicKeyHex;
-pub use state::*;
 #[cfg(feature = "macros")]
 extern crate sov_modules_macros;
 
-use core::fmt::{self, Debug, Display};
 use std::collections::{HashMap, HashSet};
-use std::hash::Hash;
-use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use clap;
-use digest::typenum::U32;
-use digest::Digest;
 #[cfg(feature = "native")]
 pub use dispatch::CliWallet;
-pub use dispatch::{DispatchCall, EncodeCall, Genesis};
-pub use error::Error;
-pub use gas::{GasUnit, TupleGasUnit};
+pub use dispatch::{EncodeCall, Genesis};
 pub use prefix::Prefix;
-pub use response::CallResponse;
-#[cfg(feature = "native")]
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "native")]
+pub use sov_modules_core::PrivateKey;
+pub use sov_modules_core::{
+    AccessoryWorkingSet, Address, AddressBech32, CallResponse, Context, DispatchCall, GasUnit,
+    Module, ModuleCallJsonSchema, ModuleError, ModuleError as Error, PublicKey, Signature, Spec,
+    StateCheckpoint, WorkingSet,
+};
 pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 pub use sov_rollup_interface::services::da::SlotData;
 pub use sov_rollup_interface::stf::Event;
@@ -61,10 +52,6 @@ pub use sov_rollup_interface::zk::{
     StateTransition, ValidityCondition, ValidityConditionChecker, Zkvm,
 };
 pub use sov_rollup_interface::{digest, BasicAddress, RollupAddress};
-use sov_state::{Storage, Witness};
-use thiserror::Error;
-
-pub use crate::bech32::AddressBech32;
 
 pub mod optimistic {
     pub use sov_rollup_interface::optimistic::{Attestation, ProofOfBond};
@@ -74,287 +61,10 @@ pub mod da {
     pub use sov_rollup_interface::da::{BlockHeaderTrait, NanoSeconds, Time};
 }
 
-impl AsRef<[u8]> for Address {
-    fn as_ref(&self) -> &[u8] {
-        &self.addr
-    }
-}
-
-impl BasicAddress for Address {}
-impl RollupAddress for Address {}
-
-#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(PartialEq, Clone, Copy, Eq, borsh::BorshDeserialize, borsh::BorshSerialize, Hash)]
-pub struct Address {
-    addr: [u8; 32],
-}
-
-impl Address {
-    /// Creates a new address containing the given bytes
-    pub const fn new(addr: [u8; 32]) -> Self {
-        Self { addr }
-    }
-}
-
-impl<'a> TryFrom<&'a [u8]> for Address {
-    type Error = anyhow::Error;
-
-    fn try_from(addr: &'a [u8]) -> Result<Self, Self::Error> {
-        if addr.len() != 32 {
-            anyhow::bail!("Address must be 32 bytes long");
-        }
-        let mut addr_bytes = [0u8; 32];
-        addr_bytes.copy_from_slice(addr);
-        Ok(Self { addr: addr_bytes })
-    }
-}
-
-impl FromStr for Address {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        AddressBech32::from_str(s)
-            .map_err(|e| anyhow::anyhow!(e))
-            .map(|addr_bech32| addr_bech32.into())
-    }
-}
-
-impl From<[u8; 32]> for Address {
-    fn from(addr: [u8; 32]) -> Self {
-        Self { addr }
-    }
-}
-
-impl Display for Address {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", AddressBech32::from(self))
-    }
-}
-
-impl Debug for Address {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", AddressBech32::from(self))
-    }
-}
-
-impl From<AddressBech32> for Address {
-    fn from(addr: AddressBech32) -> Self {
-        Self {
-            addr: addr.to_byte_array(),
-        }
-    }
-}
-
-#[derive(Error, Debug)]
-pub enum SigVerificationError {
-    #[error("Bad signature {0}")]
-    BadSignature(String),
-}
-
-/// Signature used in the Module System.
-pub trait Signature:
-    borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug + Send + Sync
-{
-    type PublicKey;
-
-    fn verify(&self, pub_key: &Self::PublicKey, msg: &[u8]) -> Result<(), SigVerificationError>;
-}
-
 /// A type that can't be instantiated.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
 pub enum NonInstantiable {}
-
-/// PublicKey used in the Module System.
-pub trait PublicKey:
-    borsh::BorshDeserialize
-    + borsh::BorshSerialize
-    + Eq
-    + Hash
-    + Clone
-    + Debug
-    + Send
-    + Sync
-    + Serialize
-    + for<'a> Deserialize<'a>
-{
-    fn to_address<A: RollupAddress>(&self) -> A;
-}
-
-/// A PrivateKey used in the Module System.
-#[cfg(feature = "native")]
-pub trait PrivateKey:
-    Debug
-    + Send
-    + Sync
-    + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
-    + Serialize
-    + DeserializeOwned
-{
-    type PublicKey: PublicKey;
-    type Signature: Signature<PublicKey = Self::PublicKey>;
-    fn generate() -> Self;
-    fn pub_key(&self) -> Self::PublicKey;
-    fn sign(&self, msg: &[u8]) -> Self::Signature;
-    fn to_address<A: RollupAddress>(&self) -> A {
-        self.pub_key().to_address::<A>()
-    }
-}
-
-/// The `Spec` trait configures certain key primitives to be used by a by a particular instance of a rollup.
-/// `Spec` is almost always implemented on a Context object; since all Modules are generic
-/// over a Context, rollup developers can easily optimize their code for different environments
-/// by simply swapping out the Context (and by extension, the Spec).
-///
-/// For example, a rollup running in a STARK-based zkVM like Risc0 might pick Sha256 or Poseidon as its preferred hasher,
-/// while a rollup running in an elliptic-curve based SNARK such as `Placeholder` from the =nil; foundation might
-/// prefer a Pedersen hash. By using a generic Context and Spec, a rollup developer can trivially customize their
-/// code for either (or both!) of these environments without touching their module implementations.
-pub trait Spec {
-    /// The Address type used on the rollup. Typically calculated as the hash of a public key.
-    #[cfg(feature = "native")]
-    type Address: RollupAddress
-        + BorshSerialize
-        + BorshDeserialize
-        + Sync
-        // Do we always need this, even when the module does not have a JSON
-        // Schema? That feels a bit wrong.
-        + ::schemars::JsonSchema
-        + Into<AddressBech32>
-        + From<AddressBech32>
-        + FromStr<Err = anyhow::Error>;
-
-    /// The Address type used on the rollup. Typically calculated as the hash of a public key.
-    #[cfg(not(feature = "native"))]
-    type Address: RollupAddress + BorshSerialize + BorshDeserialize;
-
-    /// Authenticated state storage used by the rollup. Typically some variant of a merkle-patricia trie.
-    type Storage: Storage + Send + Sync;
-
-    /// The public key used for digital signatures
-    #[cfg(feature = "native")]
-    type PrivateKey: PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
-
-    /// The public key used for digital signatures
-    #[cfg(feature = "native")]
-    type PublicKey: PublicKey + ::schemars::JsonSchema + FromStr<Err = anyhow::Error>;
-
-    #[cfg(not(feature = "native"))]
-    type PublicKey: PublicKey;
-
-    /// The hasher preferred by the rollup, such as Sha256 or Poseidon.
-    type Hasher: Digest<OutputSize = U32>;
-
-    /// The digital signature scheme used by the rollup
-    #[cfg(feature = "native")]
-    type Signature: Signature<PublicKey = Self::PublicKey>
-        + FromStr<Err = anyhow::Error>
-        + Serialize
-        + for<'a> Deserialize<'a>
-        + schemars::JsonSchema;
-
-    /// The digital signature scheme used by the rollup
-    #[cfg(not(feature = "native"))]
-    type Signature: Signature<PublicKey = Self::PublicKey>;
-
-    /// A structure containing the non-deterministic inputs from the prover to the zk-circuit
-    type Witness: Witness;
-}
-
-/// A context contains information which is passed to modules during
-/// transaction execution. Currently, context includes the sender of the transaction
-/// as recovered from its signature.
-///
-/// Context objects also implement the [`Spec`] trait, which specifies the types to be used in this
-/// instance of the state transition function. By making modules generic over a `Context`, developers
-/// can easily update their cryptography to conform to the needs of different zk-proof systems.
-pub trait Context: Spec + Clone + Debug + PartialEq + 'static {
-    /// Gas unit for the gas price computation.
-    type GasUnit: GasUnit;
-
-    /// Sender of the transaction.
-    fn sender(&self) -> &Self::Address;
-
-    /// Constructor for the Context.
-    fn new(sender: Self::Address) -> Self;
-}
-
-impl<T> Genesis for T
-where
-    T: Module,
-{
-    type Context = <Self as Module>::Context;
-
-    type Config = <Self as Module>::Config;
-
-    fn genesis(
-        &self,
-        config: &Self::Config,
-        working_set: &mut WorkingSet<Self::Context>,
-    ) -> Result<(), Error> {
-        <Self as Module>::genesis(self, config, working_set)
-    }
-}
-
-/// All the methods have a default implementation that can't be invoked (because they take `NonInstantiable` parameter).
-/// This allows developers to override only some of the methods in their implementation and safely ignore the others.
-pub trait Module {
-    /// Execution context.
-    type Context: Context;
-
-    /// Configuration for the genesis method.
-    type Config;
-
-    /// Module defined argument to the call method.
-    type CallMessage: Debug + BorshSerialize + BorshDeserialize;
-
-    /// Module defined event resulting from a call method.
-    type Event: Debug + BorshSerialize + BorshDeserialize;
-
-    /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
-    fn genesis(
-        &self,
-        _config: &Self::Config,
-        _working_set: &mut WorkingSet<Self::Context>,
-    ) -> Result<(), Error> {
-        Ok(())
-    }
-
-    /// Call allows interaction with the module and invokes state changes.
-    /// It takes a module defined type and a context as parameters.
-    fn call(
-        &self,
-        _message: Self::CallMessage,
-        _context: &Self::Context,
-        _working_set: &mut WorkingSet<Self::Context>,
-    ) -> Result<CallResponse, Error> {
-        unreachable!()
-    }
-
-    /// Attempts to charge the provided amount of gas from the working set.
-    ///
-    /// The scalar gas value will be computed from the price defined on the working set.
-    fn charge_gas(
-        &self,
-        working_set: &mut WorkingSet<Self::Context>,
-        gas: &<Self::Context as Context>::GasUnit,
-    ) -> anyhow::Result<()> {
-        working_set.charge_gas(gas)
-    }
-}
-
-/// A [`Module`] that has a well-defined and known [JSON
-/// Schema](https://json-schema.org/) for its [`Module::CallMessage`].
-///
-/// This trait is intended to support code generation tools, CLIs, and
-/// documentation. You can derive it with `#[derive(ModuleCallJsonSchema)]`, or
-/// implement it manually if your use case demands more control over the JSON
-/// Schema generation.
-pub trait ModuleCallJsonSchema: Module {
-    /// Returns the JSON schema for [`Module::CallMessage`].
-    fn json_schema() -> String;
-}
 
 /// Every module has to implement this trait.
 pub trait ModuleInfo {
