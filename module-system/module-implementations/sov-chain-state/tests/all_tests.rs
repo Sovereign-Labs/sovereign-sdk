@@ -1,8 +1,8 @@
 use sov_chain_state::{ChainState, ChainStateConfig, StateTransitionId, TransitionInProgress};
+use sov_modules_api::da::BlockHeaderTrait;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::{Genesis, WorkingSet};
-use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockDaSpec, MockValidityCond};
 use sov_rollup_interface::storage::StorageManager;
 use sov_state::config::Config;

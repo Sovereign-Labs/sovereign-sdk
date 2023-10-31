@@ -23,7 +23,6 @@ thiserror = { workspace = true }
 
 sov-modules-api = { path = "../../sov-modules-api", version = "0.3" }
 sov-state = { path = "../../sov-state", version = "0.3" }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3" }
 
 
 [dev-dependencies]

@@ -20,7 +20,7 @@ jsonrpsee =  { workspace = true }
 
 sov-modules-api = { path = "../../sov-modules-api", features = ["native"] }
 sov-state = { path = "../../sov-state", features = ["native"] }
-sov-rollup-interface = { path = "../../../rollup-interface" }
+sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"] }
 sov-schema-db = { path = "../../../full-node/db/sov-schema-db" }
 sov-data-generators = { path = "../../utils/sov-data-generators" }
 sov-modules-stf-template = { path = "../../sov-modules-stf-template", features = ["native"] }

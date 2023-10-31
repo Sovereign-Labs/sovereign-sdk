@@ -25,7 +25,6 @@ thiserror = { workspace = true }
 sov-bank = { path = "../sov-bank" }
 sov-modules-api = { path = "../../sov-modules-api" }
 sov-state = { path = "../../sov-state" }
-sov-rollup-interface = { path = "../../../rollup-interface" }
 
 
 [dev-dependencies]
