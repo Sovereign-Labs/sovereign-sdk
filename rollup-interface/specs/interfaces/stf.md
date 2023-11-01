@@ -93,7 +93,7 @@ state of a particular instance of the state transition function.
 | Name           | Type           | Description                                                                                                                                                             |
 | -------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | state_root     | STATE_ROOT     | The current state root of the rollup, calculated after applying the state transition function to the data from this slot.                                               |
-| batch_receipts | BATCH_RECEIPTs | A list of receipt indicating whether each blob was applied succesfully. Each receipt an array of `TX_RECEIPT`s, indicating the result of each transaction from the blob |
+| batch_receipts | BATCH_RECEIPTs | A list of receipt indicating whether each blob was applied successfully. Each receipt an array of `TX_RECEIPT`s, indicating the result of each transaction from the blob |
 | witness        | WITNESS        | The witness generated from this execution of the state transition function                                                                                              |
 
 ### BatchReceipt

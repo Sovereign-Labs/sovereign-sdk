@@ -162,7 +162,7 @@ Ok(2GX1fTkufWZJVn88TiMbBEkn46NAc8acqguVAbVMhowZiJEZvNppJVWi2opC4xVoT31pcqhiaCKSj
 .
 Ok(44CoVzXpXyYKS8ucjsebuaRjwpf6bvuEzEPpaXNY85LUbT62kLc58Z21TJ6ceLfE2XU9GJevEw5k4okMaRGd1rTV)
 ```
-* Simulatenously, you can see the chunk accumulation working on the terminal that's running `solana logs`
+* Simultaneously, you can see the chunk accumulation working on the terminal that's running `solana logs`
 ```bash
 Transaction executed in slot 9290:
   Signature: 3bgUwqNPvKCG3yz5AXCAVhg9TbBBJqtbzsurJUXRzDLb4UMGT7d3T2pgC1kBQyT1dFmVbXfVT22dn8Uv3vJUPidZ

@@ -204,7 +204,7 @@ impl BlockHeader for CelestiaHeader {
         }
 
         // We special case the block following genesis, since genesis has a `None` hash, which
-        // we don't want to deal with. In this case, we return a specail placeholder for the
+        // we don't want to deal with. In this case, we return a special placeholder for the
         // block "hash"
         if Height::decode_vec(&self.header.height)
             .expect("header must be validly encoded")

@@ -47,7 +47,7 @@ psql postgres -f sovereign/module-system/module-implementations/sov-nft-module/s
 rm -rf demo_data; POSTGRES_CONNECTION_STRING="postgresql://username:password@localhost/postgres" cargo run --features offchain -- --da-layer mock
 ```
 * Explanation of the above command
-  * `rm -rf demo_data` is to wipe the rollup state. For testing its better to start with clean state
+  * `rm -rf demo_data` is to wipe the rollup state. For testing it's better to start with clean state
   * `POSTGRES_CONNECTION_STRING` is to allow the offchain component of the `sov-nft-module` to connect to postgres instance
   * `--features offchain` is necessary to enable offchain processing. Without the feature, the functions are no-ops
   * `--da-layer mock` is used to run an in-memory local DA layer
