@@ -8,8 +8,8 @@ publish = false
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-borsh = { workspace = true }
-bytes = { workspace = true }
+borsh = { workspace = true, features = ["bytes"] }
+bytes = { workspace = true, features = ["serde"] }
 serde = { workspace = true }
 hex = { workspace = true }
 sha2 = { workspace = true }

@@ -1,11 +1,12 @@
 use std::rc::Rc;
 
 use borsh::ser::BorshSerialize;
-use sov_mock_da::{MockAddress, MockBlob, MockDaSpec};
+use sov_mock_da::verifier::MockDaSpec;
+use sov_mock_da::{MockAddress, MockBlob};
 use sov_modules_api::transaction::Transaction;
 pub use sov_modules_api::EncodeCall;
-use sov_modules_api::{Context, DaSpec, Module, RollupAddress, Spec};
-use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, TxEffect};
+use sov_modules_api::{Context, DaSpec, Module, Spec};
+use sov_modules_stf_template::{Batch, RawTx};
 
 pub mod bank_data;
 pub mod value_setter_data;
@@ -20,6 +21,7 @@ pub fn new_test_blob_from_batch(
     MockBlob::new(data, address, hash)
 }
 
+// TODO: Fix this
 // pub fn has_tx_events<A: RollupAddress>(
 //     apply_blob_outcome: &BatchReceipt<SequencerOutcome<A>, TxEffect>,
 //     a: &[TransactionReceipt<A>],

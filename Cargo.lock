@@ -2096,6 +2096,7 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "sov-mock-da",
+ "sov-mock-zkvm",
  "sov-rollup-interface",
 ]
 

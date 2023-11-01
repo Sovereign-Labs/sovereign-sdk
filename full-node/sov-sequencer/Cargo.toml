@@ -28,6 +28,6 @@ tempfile = { workspace = true }
 rand = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
-
 sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", features = ["native"] }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.3", features = ["native"] }
 sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }

@@ -15,7 +15,7 @@ publish = false
 anyhow = { workspace = true }
 tracing = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
-sov-rollup-interface = { path = "../../rollup-interface" }
+sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
 
 sov-evm = { path = "../../module-system/module-implementations/sov-evm" }
 demo-stf = { path = "../../examples/demo-rollup/stf", features = ["native"] }
@@ -34,7 +34,7 @@ tokio = { workspace = true }
 schnellru = "0.2.1"
 
 [dev-dependencies]
-sov-mock-da = { path = "../../adapters/mock-da" }
+sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
 tokio = { workspace = true }
 
 

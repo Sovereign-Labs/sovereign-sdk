@@ -69,6 +69,7 @@ native = [
     "sov-value-setter/native",
     "sov-modules-api/native",
     "sov-rollup-interface/native",
+    "sov-mock-da/native",
     "sov-modules-stf-template/native",
     "sov-sequencer",
     "clap",

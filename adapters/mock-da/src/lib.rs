@@ -8,3 +8,4 @@ pub mod verifier;
 pub use service::*;
 pub use types::*;
 pub use validity_condition::*;
+pub use verifier::MockDaSpec;

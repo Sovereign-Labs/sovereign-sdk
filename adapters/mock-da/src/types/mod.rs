@@ -2,10 +2,10 @@ mod address;
 
 pub use address::{MockAddress, MOCK_SEQUENCER_DA_ADDRESS};
 use borsh::{BorshDeserialize, BorshSerialize};
-use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlockHashTrait, BlockHeaderTrait, CountedBufReader, Time};
 use sov_rollup_interface::services::da::SlotData;
+use sov_rollup_interface::Bytes;
 
 use crate::validity_condition::MockValidityCond;
 
