@@ -21,6 +21,11 @@ fn test_stf_success() {
         ]
     };
 
+    // Pretend we are in native code and progress the blobs to the verified state.
+    for blob in &mut blobs {
+        blob.data.advance(blob.data.total_len());
+    }
+
     let result = StateTransitionFunction::<MockZkvm, MockDaSpec>::apply_slot(
         stf,
         &[],

@@ -110,7 +110,8 @@ pub struct MockDaVerifier {}
 pub struct MockBlob {
     pub(crate) address: MockAddress,
     pub(crate) hash: [u8; 32],
-    pub(crate) data: CountedBufReader<Bytes>,
+    /// Actual data from the blob. Public for testing purposes.
+    pub data: CountedBufReader<Bytes>,
 }
 
 impl MockBlob {
