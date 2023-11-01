@@ -31,7 +31,6 @@ sov-sequencer-registry = { path = "../../../module-system/module-implementations
 sov-blob-storage = { path = "../../../module-system/module-implementations/sov-blob-storage" }
 sov-bank = { path = "../../../module-system/module-implementations/sov-bank" }
 sov-nft-module = { path = "../../../module-system/module-implementations/sov-nft-module" }
-simple-nft-module = { path = "../../simple-nft-module" }
 
 sov-mock-da = { path = "../../../adapters/mock-da" }
 sov-chain-state = { path = "../../../module-system/module-implementations/sov-chain-state" }
@@ -40,7 +39,6 @@ sov-value-setter = { path = "../../../module-system/module-implementations/examp
 sov-accounts = { path = "../../../module-system/module-implementations/sov-accounts" }
 sov-state = { path = "../../../module-system/sov-state" }
 sov-modules-api = { path = "../../../module-system/sov-modules-api" }
-sov-sequencer = { path = "../../../full-node/sov-sequencer", optional = true }
 # Only enable the evm on "experimental" feature
 sov-evm = { path = "../../../module-system/module-implementations/sov-evm", optional = true }
 
@@ -60,7 +58,6 @@ native = [
     "sov-stf-runner/native",
     "sov-bank/native",
     "sov-nft-module/native",
-    "simple-nft-module/native",
     "sov-cli",
     "sov-accounts/native",
     "sov-sequencer-registry/native",
@@ -71,7 +68,6 @@ native = [
     "sov-rollup-interface/native",
     "sov-mock-da/native",
     "sov-modules-stf-template/native",
-    "sov-sequencer",
     "clap",
     "serde_json",
     "jsonrpsee",
