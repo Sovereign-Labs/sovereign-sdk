@@ -5,12 +5,12 @@ use demo_stf::genesis_config::GenesisPaths;
 use demo_stf::runtime::RuntimeCall;
 use jsonrpsee::core::client::{Subscription, SubscriptionClientT};
 use jsonrpsee::rpc_params;
+use sov_mock_da::MockDaSpec;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{PrivateKey, Spec};
 use sov_modules_rollup_template::RollupProverConfig;
-use sov_rollup_interface::mocks::MockDaSpec;
 use sov_sequencer::utils::SimpleClient;
 
 use crate::test_helpers::start_rollup;
