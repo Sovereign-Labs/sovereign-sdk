@@ -457,13 +457,13 @@ mod tests {
 
     pub fn create_key(key: u8) -> CacheKey {
         CacheKey {
-            key: RefCount::new(vec![key]),
+            key: RefCount::new(alloc::vec![key]),
         }
     }
 
     pub fn create_value(v: u8) -> Option<CacheValue> {
         Some(CacheValue {
-            value: RefCount::new(vec![v]),
+            value: RefCount::new(alloc::vec![v]),
         })
     }
 
@@ -603,7 +603,7 @@ mod tests {
 
     #[test]
     fn test_merge_ok() {
-        let test_cases = vec![
+        let test_cases = alloc::vec![
             TestCase {
                 left: Some(ReadWrite::Read(new_cache_entry(1, 11))),
                 right: Some(ReadWrite::Read(new_cache_entry(1, 11))),
@@ -639,7 +639,7 @@ mod tests {
 
     #[test]
     fn test_merge_fail() {
-        let test_cases = vec![
+        let test_cases = alloc::vec![
             TestCase {
                 left: Some(ReadWrite::Read(new_cache_entry(1, 11))),
                 // The read is inconsistent with the previous read.
@@ -666,7 +666,7 @@ mod tests {
                 testvec.push( s.wrapping_add(i as u8));
             }
 
-            let test_cases = vec![
+            let test_cases = alloc::vec![
                 TestCase {
                     left: Some(ReadWrite::Read(new_cache_entry(testvec[0], testvec[1]))),
                     right: Some(ReadWrite::Read(new_cache_entry(testvec[0], testvec[1]))),
