@@ -2095,6 +2095,7 @@ dependencies = [
  "hex",
  "serde",
  "sha2 0.10.8",
+ "sov-mock-da",
  "sov-rollup-interface",
 ]
 
@@ -2121,6 +2122,7 @@ dependencies = [
  "sov-cli",
  "sov-data-generators",
  "sov-evm",
+ "sov-mock-da",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-nft-module",
@@ -4158,6 +4160,8 @@ dependencies = [
  "serde",
  "sov-chain-state",
  "sov-data-generators",
+ "sov-mock-da",
+ "sov-mock-zkvm",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-rollup-interface",
@@ -8317,8 +8321,9 @@ dependencies = [
  "sov-attester-incentives",
  "sov-bank",
  "sov-chain-state",
+ "sov-mock-da",
+ "sov-mock-zkvm",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-state",
  "tempfile",
  "thiserror",
@@ -8384,8 +8389,8 @@ dependencies = [
  "sov-bank",
  "sov-blob-storage",
  "sov-chain-state",
+ "sov-mock-da",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
  "tempfile",
@@ -8437,8 +8442,8 @@ dependencies = [
  "serde_json",
  "sov-chain-state",
  "sov-data-generators",
+ "sov-mock-da",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-state",
  "tempfile",
 ]
@@ -8457,8 +8462,8 @@ dependencies = [
  "serde_json",
  "sov-accounts",
  "sov-bank",
+ "sov-mock-da",
  "sov-modules-api",
- "sov-rollup-interface",
  "tempfile",
 ]
 
@@ -8469,9 +8474,9 @@ dependencies = [
  "borsh",
  "proptest",
  "sov-bank",
+ "sov-mock-da",
  "sov-modules-api",
  "sov-modules-stf-template",
- "sov-rollup-interface",
  "sov-state",
  "sov-value-setter",
 ]
@@ -8490,6 +8495,7 @@ dependencies = [
  "proptest-derive",
  "rocksdb",
  "serde",
+ "sov-mock-da",
  "sov-rollup-interface",
  "sov-schema-db",
  "tempfile",
@@ -8538,6 +8544,7 @@ dependencies = [
  "sov-ethereum",
  "sov-evm",
  "sov-ledger-rpc",
+ "sov-mock-da",
  "sov-modules-api",
  "sov-modules-rollup-template",
  "sov-modules-stf-template",
@@ -8572,6 +8579,7 @@ dependencies = [
  "serde_json",
  "sov-accounts",
  "sov-evm",
+ "sov-mock-da",
  "sov-modules-api",
  "sov-rollup-interface",
  "tokio",
@@ -8641,15 +8649,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-mock-da"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "borsh",
+ "bytes",
+ "hex",
+ "serde",
+ "sha2 0.10.8",
+ "sov-rollup-interface",
+ "tokio",
+]
+
+[[package]]
+name = "sov-mock-zkvm"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "borsh",
+ "serde",
+ "sov-rollup-interface",
+]
+
+[[package]]
 name = "sov-module-schemas"
 version = "0.3.0"
 dependencies = [
  "sov-accounts",
  "sov-bank",
  "sov-evm",
+ "sov-mock-da",
+ "sov-mock-zkvm",
  "sov-modules-api",
  "sov-prover-incentives",
- "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-value-setter",
 ]
@@ -8787,9 +8822,9 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-bank",
+ "sov-mock-da",
  "sov-modules-api",
  "sov-prover-incentives",
- "sov-rollup-interface",
  "sov-state",
  "tempfile",
 ]
@@ -8822,6 +8857,7 @@ dependencies = [
  "demo-stf",
  "serde",
  "sov-bank",
+ "sov-mock-da",
  "sov-modules-api",
  "sov-rollup-interface",
 ]
@@ -8873,6 +8909,7 @@ dependencies = [
  "jsonrpsee 0.20.2",
  "rand 0.8.5",
  "serde",
+ "sov-mock-da",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
@@ -8899,8 +8936,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-bank",
+ "sov-mock-da",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
  "sov-zk-cycle-macros",

@@ -1,14 +1,6 @@
-use core::fmt::Display;
-use core::str::FromStr;
+use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Serialize};
-
-use crate::da::{BlockHashTrait, BlockHeaderTrait, Time};
-use crate::maybestd::string::String;
-use crate::{BasicAddress, RollupAddress};
-
-const JAN_1_2023: i64 = 1672531200;
+use sov_rollup_interface::{BasicAddress, RollupAddress};
 
 /// Sequencer DA address used in tests.
 pub const MOCK_SEQUENCER_DA_ADDRESS: [u8; 32] = [0u8; 32];
@@ -97,7 +89,7 @@ impl From<[u8; 32]> for MockAddress {
     }
 }
 
-impl Display for MockAddress {
+impl std::fmt::Display for MockAddress {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", hex::encode(self.addr))
     }
@@ -106,100 +98,11 @@ impl Display for MockAddress {
 impl BasicAddress for MockAddress {}
 impl RollupAddress for MockAddress {}
 
-/// A mock hash digest.
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    serde::Serialize,
-    serde::Deserialize,
-    BorshDeserialize,
-    BorshSerialize,
-)]
-pub struct MockHash(pub [u8; 32]);
-
-impl AsRef<[u8]> for MockHash {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl From<[u8; 32]> for MockHash {
-    fn from(value: [u8; 32]) -> Self {
-        Self(value)
-    }
-}
-
-impl From<MockHash> for [u8; 32] {
-    fn from(value: MockHash) -> Self {
-        value.0
-    }
-}
-
-impl BlockHashTrait for MockHash {}
-
-/// A mock block header used for testing.
-#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone, Copy)]
-pub struct MockBlockHeader {
-    /// The hash of the previous block.
-    pub prev_hash: MockHash,
-    /// The hash of this block.
-    pub hash: MockHash,
-    /// The height of this block
-    pub height: u64,
-}
-
-impl Default for MockBlockHeader {
-    fn default() -> Self {
-        Self {
-            prev_hash: MockHash([0u8; 32]),
-            hash: MockHash([1u8; 32]),
-            height: 0,
-        }
-    }
-}
-
-impl BlockHeaderTrait for MockBlockHeader {
-    type Hash = MockHash;
-
-    fn prev_hash(&self) -> Self::Hash {
-        self.prev_hash
-    }
-
-    fn hash(&self) -> Self::Hash {
-        self.hash
-    }
-
-    fn height(&self) -> u64 {
-        self.height
-    }
-
-    fn time(&self) -> crate::da::Time {
-        Time::from_secs(JAN_1_2023 + (self.height as i64) * 15)
-    }
-}
-
-/// A [`crate::da::DaSpec`] suitable for testing.
-#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq)]
-pub struct MockDaSpec;
-
-/// The configuration for mock da
-#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
-pub struct MockDaConfig {
-    /// The address to use to "submit" blobs on the mock da layer
-    pub sender_address: MockAddress,
-}
-
-#[derive(Clone, Default)]
-/// DaVerifier used in tests.
-pub struct MockDaVerifier {}
-
 #[cfg(test)]
 mod tests {
+    use sov_rollup_interface::maybestd::string::ToString;
+
     use super::*;
-    use crate::maybestd::string::ToString;
 
     #[test]
     fn test_mock_address_string() {

@@ -8,7 +8,6 @@ license = { workspace = true }
 repository = { workspace = true }
 
 version = { workspace = true }
-readme = "README.md"
 resolver = "2"
 publish = false
 
@@ -19,7 +18,7 @@ sov-modules-stf-template = { path = "../../sov-modules-stf-template", features =
 sov-value-setter = { path = "../../module-implementations/examples/sov-value-setter", features = ["native"] }
 sov-bank = { path = "../../module-implementations/sov-bank", features = ["native"] }
 sov-state = { path = "../../sov-state" }
-sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"] }
+sov-mock-da = { path = "../../../adapters/mock-da" }
 
 borsh = { workspace = true }
 

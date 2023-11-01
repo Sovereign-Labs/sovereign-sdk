@@ -1,11 +1,11 @@
 use async_trait::async_trait;
+use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::maybestd::sync::Arc;
+use sov_rollup_interface::services::da::DaService;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::Mutex;
 
-use crate::da::DaSpec;
-use crate::maybestd::sync::Arc;
-use crate::mocks::{MockAddress, MockBlob, MockBlock, MockDaSpec, MockDaVerifier};
-use crate::services::da::DaService;
+use crate::types::{MockAddress, MockBlob, MockBlock, MockDaSpec, MockDaVerifier};
 
 #[derive(Clone)]
 /// DaService used in tests.

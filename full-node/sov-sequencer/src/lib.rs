@@ -137,8 +137,8 @@ pub enum SubmitTransactionResponse {
 #[cfg(test)]
 mod tests {
 
+    use sov_mock_da::{MockAddress, MockDaService};
     use sov_rollup_interface::da::BlobReaderTrait;
-    use sov_rollup_interface::mocks::{MockAddress, MockDaService};
 
     use super::*;
 

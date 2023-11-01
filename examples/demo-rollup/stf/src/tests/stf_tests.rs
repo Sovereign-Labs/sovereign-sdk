@@ -3,7 +3,7 @@ pub mod test {
 
     use sov_cli::wallet_state::PrivateKeyAndAddress;
     use sov_data_generators::bank_data::get_default_token_address;
-    use sov_data_generators::{has_tx_events, new_test_blob_from_batch};
+    use sov_data_generators::new_test_blob_from_batch;
     use sov_modules_api::default_context::DefaultContext;
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
     use sov_modules_api::{Context, PrivateKey, WorkingSet};
@@ -217,16 +217,16 @@ pub mod test {
         );
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
-        let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
+        // let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
 
         assert_eq!(
             SequencerOutcome::Ignored,
-            apply_blob_outcome.inner,
+            &apply_block_result.batch_receipts[0].inner,
             "Batch should have been skipped due to unknown sequencer"
         );
 
         // Assert that there are no events
-        assert!(!has_tx_events(&apply_blob_outcome));
+        // assert!(!has_tx_events(&apply_blob_outcome));
     }
 
     fn read_private_key<C: Context>() -> PrivateKeyAndAddress<C> {

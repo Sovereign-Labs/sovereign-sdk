@@ -428,7 +428,7 @@ impl LedgerDB {
 
 #[cfg(test)]
 mod tests {
-    use sov_rollup_interface::mocks::{MockBlob, MockBlock};
+    use sov_mock_da::{MockBlob, MockBlock};
     use sov_rollup_interface::rpc::LedgerRpcProvider;
 
     use crate::ledger_db::{LedgerDB, SlotCommit};

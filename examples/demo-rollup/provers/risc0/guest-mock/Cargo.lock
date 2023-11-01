@@ -183,9 +183,6 @@ name = "bytes"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2bd12c1caf447e69cd4528f47f94d203fd2582878ecb9e9465484c4148a8223"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "cc"
@@ -273,6 +270,7 @@ dependencies = [
  "sov-bank",
  "sov-blob-storage",
  "sov-chain-state",
+ "sov-mock-da",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-nft-module",
@@ -1034,10 +1032,10 @@ dependencies = [
  "demo-stf",
  "risc0-zkvm",
  "risc0-zkvm-platform",
+ "sov-mock-da",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-risc0-adapter",
- "sov-rollup-interface",
  "sov-state",
 ]
 
@@ -1046,6 +1044,20 @@ name = "sov-first-read-last-write-cache"
 version = "0.3.0"
 dependencies = [
  "thiserror",
+]
+
+[[package]]
+name = "sov-mock-da"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "borsh",
+ "bytes",
+ "hex",
+ "serde",
+ "sha2",
+ "sov-rollup-interface",
 ]
 
 [[package]]

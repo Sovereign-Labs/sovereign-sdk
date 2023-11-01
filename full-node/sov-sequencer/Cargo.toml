@@ -29,5 +29,5 @@ rand = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 
-sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks", "native"] }
 sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", features = ["native"] }
+sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }

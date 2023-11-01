@@ -34,7 +34,7 @@ tokio = { workspace = true }
 schnellru = "0.2.1"
 
 [dev-dependencies]
-sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
+sov-mock-da = { path = "../../adapters/mock-da" }
 tokio = { workspace = true }
 
 

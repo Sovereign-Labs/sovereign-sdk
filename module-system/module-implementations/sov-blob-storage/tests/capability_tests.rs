@@ -1,6 +1,7 @@
 use sov_bank::TokenConfig;
 use sov_blob_storage::{BlobStorage, DEFERRED_SLOTS_COUNT};
 use sov_chain_state::ChainStateConfig;
+use sov_mock_da::{MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaSpec};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
@@ -8,7 +9,6 @@ use sov_modules_api::macros::DefaultRuntime;
 use sov_modules_api::{
     Address, BlobReaderTrait, Context, DaSpec, DispatchCall, MessageCodec, Module, Spec, WorkingSet,
 };
-use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaSpec};
 use sov_sequencer_registry::SequencerConfig;
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
 

@@ -14,7 +14,9 @@ publish = false
 
 [build-dependencies]
 sov-modules-api = { path = "../sov-modules-api" }
-sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
+# Remove when mock-zkvm
+sov-mock-da = { path = "../../adapters/mock-da" }
+sov-mock-zkvm = { path = "../../adapters/mock-zkvm" }
 
 # Modules
 sov-accounts = { path = "../module-implementations/sov-accounts", features = ["native"] }

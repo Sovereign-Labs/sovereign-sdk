@@ -1,9 +1,10 @@
 use std::fs::File;
 use std::io::{self, Write};
 
+use sov_mock_da::MockDaSpec;
+use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::default_context::DefaultContext as C;
 use sov_modules_api::ModuleCallJsonSchema;
-use sov_rollup_interface::mocks::{MockDaSpec, MockZkvm};
 
 fn main() -> io::Result<()> {
     store_json_schema::<sov_bank::Bank<C>>("sov-bank.json")?;

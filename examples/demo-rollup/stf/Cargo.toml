@@ -33,6 +33,7 @@ sov-bank = { path = "../../../module-system/module-implementations/sov-bank" }
 sov-nft-module = { path = "../../../module-system/module-implementations/sov-nft-module" }
 simple-nft-module = { path = "../../simple-nft-module" }
 
+sov-mock-da = { path = "../../../adapters/mock-da" }
 sov-chain-state = { path = "../../../module-system/module-implementations/sov-chain-state" }
 sov-modules-stf-template = { path = "../../../module-system/sov-modules-stf-template" }
 sov-value-setter = { path = "../../../module-system/module-implementations/examples/sov-value-setter" }
@@ -45,7 +46,7 @@ sov-evm = { path = "../../../module-system/module-implementations/sov-evm", opti
 
 
 [dev-dependencies]
-sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"] }
+
 sov-data-generators = { path = "../../../module-system/utils/sov-data-generators" }
 demo-stf = { path = ".", features = ["native"] }
 tempfile = { workspace = true }
@@ -67,7 +68,6 @@ native = [
     "sov-chain-state/native",
     "sov-value-setter/native",
     "sov-modules-api/native",
-    "sov-rollup-interface/mocks",
     "sov-rollup-interface/native",
     "sov-modules-stf-template/native",
     "sov-sequencer",

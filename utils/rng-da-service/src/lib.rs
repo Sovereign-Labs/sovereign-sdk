@@ -4,15 +4,15 @@ use async_trait::async_trait;
 use borsh::ser::BorshSerialize;
 use demo_stf::runtime::Runtime;
 use sov_bank::{Bank, CallMessage, Coins};
+use sov_mock_da::{
+    MockAddress, MockBlob, MockBlock, MockBlockHeader, MockHash, MockValidityCond,
+    MOCK_SEQUENCER_DA_ADDRESS,
+};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Address, AddressBech32, EncodeCall, PrivateKey, PublicKey, Spec};
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
-use sov_rollup_interface::mocks::{
-    MockAddress, MockBlob, MockBlock, MockBlockHeader, MockHash, MockValidityCond,
-    MOCK_SEQUENCER_DA_ADDRESS,
-};
 use sov_rollup_interface::services::da::DaService;
 
 pub fn sender_address_with_pkey() -> (Address, DefaultPrivateKey) {

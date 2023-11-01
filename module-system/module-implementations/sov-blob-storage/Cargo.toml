@@ -32,7 +32,7 @@ clap = { workspace = true, optional = true }
 
 
 [dev-dependencies]
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3", features = ["mocks"] }
+sov-mock-da = { path = "../../../adapters/mock-da" }
 sov-blob-storage = { path = ".", features = ["native"] }
 sov-bank = { path = "../sov-bank" }
 tempfile = { workspace = true }

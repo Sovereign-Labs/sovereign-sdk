@@ -12,7 +12,7 @@ readme = "README.md"
 resolver = "2"
 
 [dev-dependencies]
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3", features = ["mocks"] }
+sov-mock-da = { path = "../../../adapters/mock-da" }
 sov-modules-api = { path = "../../sov-modules-api", version = "0.3", features = ["native"] }
 tempfile = { workspace = true }
 sov-prover-incentives = { features = ["native"], path = "." }

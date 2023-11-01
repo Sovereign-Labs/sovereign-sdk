@@ -17,7 +17,7 @@ resolver = "2"
 # Maintained by sovereign labs
 jmt = { workspace = true }
 sov-schema-db = { path = "../sov-schema-db", version = "0.3" }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3", features = ["native", "mocks"] }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3", features = ["native"] }
 
 # External
 anyhow = { workspace = true, default-features = true }
@@ -34,6 +34,7 @@ tokio = { workspace = true }
 
 
 [dev-dependencies]
+sov-mock-da = { path = "../../../adapters/mock-da" }
 tempfile = { workspace = true }
 
 
