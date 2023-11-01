@@ -1,6 +1,6 @@
 use sov_accounts::Response;
 use sov_data_generators::bank_data::{get_default_private_key, get_default_token_address};
-use sov_data_generators::new_test_blob_from_batch;
+use sov_data_generators::{has_tx_events, new_test_blob_from_batch};
 use sov_mock_da::{MockAddress, MockBlock, MockDaSpec, MOCK_SEQUENCER_DA_ADDRESS};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{PrivateKey, WorkingSet};
@@ -208,7 +208,7 @@ fn test_tx_bad_sig() {
         );
 
         // The batch receipt contains no events.
-        // assert!(!has_tx_events(&apply_blob_outcome));
+        assert!(!has_tx_events(&apply_blob_outcome));
     }
 }
 
@@ -323,7 +323,7 @@ fn test_tx_bad_serialization() {
         );
 
         // The batch receipt contains no events.
-        // assert!(!has_tx_events(&apply_blob_outcome));
+        assert!(!has_tx_events(&apply_blob_outcome));
     }
 
     {

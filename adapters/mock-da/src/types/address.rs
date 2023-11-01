@@ -11,7 +11,7 @@ pub const MOCK_SEQUENCER_DA_ADDRESS: [u8; 32] = [0u8; 32];
 )]
 pub struct MockAddress {
     /// Underlying mock address.
-    pub addr: [u8; 32],
+    addr: [u8; 32],
 }
 
 impl MockAddress {

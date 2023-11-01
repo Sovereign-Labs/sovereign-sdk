@@ -6,7 +6,7 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 
 #[test]
 fn test_stf_success() {
-    let address = MockAddress { addr: [1; 32] };
+    let address = MockAddress::from([1; 32]);
 
     let stf = &mut CheckHashPreimageStf::<MockValidityCond>::default();
     StateTransitionFunction::<MockZkvm, MockDaSpec>::init_chain(stf, (), ());

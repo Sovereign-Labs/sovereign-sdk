@@ -111,7 +111,10 @@ fn test_simple_value_setter_with_chain_state() {
 
     assert_eq!(
         new_tx_in_progress,
-        TransitionInProgress::<MockDaSpec>::new(MockHash([10; 32]), MockValidityCond::default()),
+        TransitionInProgress::<MockDaSpec>::new(
+            MockHash::from([10; 32]),
+            MockValidityCond::default()
+        ),
         "The new transition has not been correctly stored"
     );
 

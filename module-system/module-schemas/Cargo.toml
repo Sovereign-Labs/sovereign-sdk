@@ -14,7 +14,6 @@ publish = false
 
 [build-dependencies]
 sov-modules-api = { path = "../sov-modules-api" }
-# Remove when mock-zkvm
 sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
 sov-mock-zkvm = { path = "../../adapters/mock-zkvm" }
 

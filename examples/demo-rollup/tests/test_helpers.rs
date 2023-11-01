@@ -27,7 +27,7 @@ pub async fn start_rollup(
             },
         },
         da: MockDaConfig {
-            sender_address: MockAddress { addr: [0; 32] },
+            sender_address: MockAddress::from([0; 32]),
         },
     };
 

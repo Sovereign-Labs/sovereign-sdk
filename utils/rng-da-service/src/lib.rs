@@ -3,7 +3,7 @@ use std::env;
 use async_trait::async_trait;
 use borsh::ser::BorshSerialize;
 use demo_stf::runtime::Runtime;
-use sov_bank::{Bank, CallMessage, Coins};
+use sov_bank::{Bank, Coins};
 use sov_mock_da::{
     MockAddress, MockBlob, MockBlock, MockBlockHeader, MockHash, MockValidityCond,
     MOCK_SEQUENCER_DA_ADDRESS,
@@ -12,12 +12,12 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Address, AddressBech32, EncodeCall, PrivateKey, PublicKey, Spec};
-use sov_rollup_interface::da::{DaSpec, DaVerifier};
-use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
+use sov_rollup_interface::services::da::{DaService, SlotData};
 
 pub fn sender_address_with_pkey() -> (Address, DefaultPrivateKey) {
     // TODO: maybe generate address and private key randomly, instead of
-    // hardcoding them?
+    // hard coding them?
     let addr_bytes = "sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6".to_string();
     let addr = Address::from(
         AddressBech32::try_from(addr_bytes)
@@ -47,8 +47,8 @@ pub struct RngDaSpec;
 impl DaSpec for RngDaSpec {
     type SlotHash = MockHash;
     type BlockHeader = MockBlockHeader;
-    type Address = MockAddress;
     type BlobTransaction = MockBlob;
+    type Address = MockAddress;
     type ValidityCondition = MockValidityCond;
     type InclusionMultiProof = [u8; 32];
     type CompletenessProof = ();
@@ -95,12 +95,12 @@ impl DaService for RngDaService {
                 .expect("TXNS_PER_BLOCK var should be a +ve number");
         }
 
-        let data = if block.header.height == 0 {
+        let data = if block.header().height() == 0 {
             // creating the token
             generate_create(0)
         } else {
             // generating the transfer transactions
-            generate_transfers(num_txns, (block.header.height - 1) * (num_txns as u64))
+            generate_transfers(num_txns, (block.header.height() - 1) * (num_txns as u64))
         };
 
         let address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
@@ -154,13 +154,14 @@ pub fn generate_transfers(n: usize, start_nonce: u64) -> Vec<u8> {
     for i in 1..(n + 1) {
         let priv_key = DefaultPrivateKey::generate();
         let address: <DefaultContext as Spec>::Address = priv_key.pub_key().to_address();
-        let msg: sov_bank::CallMessage<DefaultContext> = CallMessage::<DefaultContext>::Transfer {
-            to: address,
-            coins: Coins {
-                amount: 1,
-                token_address,
-            },
-        };
+        let msg: sov_bank::CallMessage<DefaultContext> =
+            sov_bank::CallMessage::<DefaultContext>::Transfer {
+                to: address,
+                coins: Coins {
+                    amount: 1,
+                    token_address,
+                },
+            };
         let enc_msg =
             <Runtime<DefaultContext, RngDaSpec> as EncodeCall<Bank<DefaultContext>>>::encode_call(
                 msg,
@@ -177,13 +178,14 @@ pub fn generate_create(start_nonce: u64) -> Vec<u8> {
     let mut message_vec = vec![];
 
     let (minter_address, pk) = sender_address_with_pkey();
-    let msg: sov_bank::CallMessage<DefaultContext> = CallMessage::<DefaultContext>::CreateToken {
-        salt: 11,
-        token_name: "sov-test-token".to_string(),
-        initial_balance: 100000000,
-        minter_address,
-        authorized_minters: vec![minter_address],
-    };
+    let msg: sov_bank::CallMessage<DefaultContext> =
+        sov_bank::CallMessage::<DefaultContext>::CreateToken {
+            salt: 11,
+            token_name: "sov-test-token".to_string(),
+            initial_balance: 100000000,
+            minter_address,
+            authorized_minters: vec![minter_address],
+        };
     let enc_msg =
         <Runtime<DefaultContext, RngDaSpec> as EncodeCall<Bank<DefaultContext>>>::encode_call(msg);
     let tx = Transaction::<DefaultContext>::new_signed_tx(&pk, enc_msg, start_nonce);

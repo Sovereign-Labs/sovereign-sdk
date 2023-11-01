@@ -160,7 +160,7 @@ fn do_deferred_blob_test(
                     assert_eq!(expected, blobs_to_execute.len())
                 }
 
-                // If applicable, send the requested callmessage to the blob_storage module
+                // If applicable, send the requested call message to the blob_storage module
                 if let Some((msg, sender)) = next_slot_info.early_processing_request_with_sender {
                     runtime
                         .blob_storage
@@ -222,7 +222,7 @@ fn bonus_blobs_are_delivered_on_request() {
 }
 
 #[test]
-fn test_deferrabl_with_small_count() {
+fn test_deferrable_with_small_count() {
     // If blobs are deferred for less than two slots ensure that "early" processing requests do not alter
     // the order of blob processing
     if DEFERRED_SLOTS_COUNT > 1 {
@@ -653,7 +653,7 @@ struct TestRuntime<C: Context, Da: DaSpec> {
     pub bank: sov_bank::Bank<C>,
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C, Da>,
     pub chain_state: sov_chain_state::ChainState<C, Da>,
-    pub blob_storage: sov_blob_storage::BlobStorage<C, Da>,
+    pub blob_storage: BlobStorage<C, Da>,
 }
 
 impl TestRuntime<DefaultContext, MockDaSpec> {

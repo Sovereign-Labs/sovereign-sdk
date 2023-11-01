@@ -23,7 +23,7 @@ const JAN_1_2023: i64 = 1672531200;
     BorshDeserialize,
     BorshSerialize,
 )]
-pub struct MockHash(pub [u8; 32]);
+pub struct MockHash([u8; 32]);
 
 impl AsRef<[u8]> for MockHash {
     fn as_ref(&self) -> &[u8] {

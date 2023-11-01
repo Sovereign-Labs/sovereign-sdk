@@ -289,7 +289,7 @@ prop_compose! {
 
         let mut total_num_batches = 1;
 
-        let mut prev_hash = MockHash([0;32]);
+        let mut prev_hash = MockHash::from([0;32]);
 
         let mut curr_tx_id = 1;
         let mut curr_event_id = 1;
@@ -323,7 +323,7 @@ prop_compose! {
 
             slots.push(new_slot);
 
-            prev_hash = MockHash(hash);
+            prev_hash = MockHash::from(hash);
         }
 
         (slots, tx_id_to_event_range, total_num_batches)
