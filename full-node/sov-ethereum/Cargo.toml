@@ -34,7 +34,6 @@ tokio = { workspace = true }
 schnellru = "0.2.1"
 
 [dev-dependencies]
-sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
 tokio = { workspace = true }
 
 

@@ -8580,7 +8580,6 @@ dependencies = [
  "serde_json",
  "sov-accounts",
  "sov-evm",
- "sov-mock-da",
  "sov-modules-api",
  "sov-rollup-interface",
  "tokio",

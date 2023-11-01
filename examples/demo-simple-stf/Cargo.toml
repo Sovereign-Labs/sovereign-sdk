@@ -14,8 +14,8 @@ serde = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
 
-sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
+sov-rollup-interface = { path = "../../rollup-interface" }
 
 [dev-dependencies]
-sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
+sov-mock-da = { path = "../../adapters/mock-da" }
 sov-mock-zkvm = { path = "../../adapters/mock-zkvm" }
