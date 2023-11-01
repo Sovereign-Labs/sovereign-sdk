@@ -1,6 +1,5 @@
 #![deny(missing_docs)]
-
-//! Mock implementation of DaService, DaSpec and DaVerifier for testing.
+#![doc = include_str!("../README.md")]
 
 #[cfg(feature = "native")]
 mod service;

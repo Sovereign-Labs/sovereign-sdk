@@ -28,7 +28,7 @@ impl BlobReaderTrait for MockBlob {
     }
 }
 
-/// A [`crate::da::DaSpec`] suitable for testing.
+/// A [`sov_rollup_interface::da::DaSpec`] suitable for testing.
 #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq)]
 pub struct MockDaSpec;
 

@@ -1,6 +1,5 @@
 #![deny(missing_docs)]
-
-//! Mock implementation of zkVM for testing.
+#![doc = include_str!("../README.md")]
 
 use std::io::Write;
 
