@@ -18,7 +18,7 @@ sov-modules-stf-template = { path = "../../sov-modules-stf-template", features =
 sov-value-setter = { path = "../../module-implementations/examples/sov-value-setter", features = ["native"] }
 sov-bank = { path = "../../module-implementations/sov-bank", features = ["native"] }
 sov-state = { path = "../../sov-state" }
-sov-mock-da = { path = "../../../adapters/mock-da" }
+sov-mock-da = { path = "../../../adapters/mock-da", features = ["native"] }
 
 borsh = { workspace = true }
 

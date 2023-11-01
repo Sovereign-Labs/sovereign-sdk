@@ -25,7 +25,7 @@ sov-state = { path = "../../sov-state", version = "0.3" }
 tempfile = { workspace = true }
 sov-data-generators = { path = "../../utils/sov-data-generators" }
 sov-chain-state = { path = ".", features = ["native"] }
-sov-mock-da = { path = "../../../adapters/mock-da" }
+sov-mock-da = { path = "../../../adapters/mock-da", features = ["native"] }
 
 
 [features]

@@ -12,7 +12,8 @@ readme = "README.md"
 resolver = "2"
 
 [dev-dependencies]
-sov-mock-da = { path = "../../../adapters/mock-da" }
+sov-mock-da = { path = "../../../adapters/mock-da", features = ["native"] }
+sov-mock-zkvm = { path = "../../../adapters/mock-zkvm" }
 sov-modules-api = { path = "../../sov-modules-api", version = "0.3", features = ["native"] }
 tempfile = { workspace = true }
 sov-prover-incentives = { features = ["native"], path = "." }

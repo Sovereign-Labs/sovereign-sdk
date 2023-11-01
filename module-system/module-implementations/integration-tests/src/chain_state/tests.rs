@@ -1,6 +1,6 @@
 use sov_chain_state::{StateTransitionId, TransitionInProgress};
 use sov_data_generators::value_setter_data::ValueSetterMessages;
-use sov_data_generators::{new_test_blob_from_batch, MessageGenerator};
+use sov_data_generators::{has_tx_events, new_test_blob_from_batch, MessageGenerator};
 use sov_mock_da::{MockBlock, MockBlockHeader, MockDaSpec, MockHash, MockValidityCond};
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::default_context::DefaultContext;

@@ -46,9 +46,9 @@ sov-evm = { path = "../../../module-system/module-implementations/sov-evm", opti
 
 
 [dev-dependencies]
-
 sov-data-generators = { path = "../../../module-system/utils/sov-data-generators" }
 demo-stf = { path = ".", features = ["native"] }
+sov-mock-zkvm = { path = "../../../adapters/mock-zkvm" }
 tempfile = { workspace = true }
 rand = "0.8"
 

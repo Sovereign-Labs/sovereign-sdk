@@ -7,7 +7,7 @@ use reqwest::header::CONTENT_TYPE;
 use serde_json::json;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 #[cfg(test)]
-use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash};
+use sov_mock_da::{MockBlock, MockBlockHeader, MockHash};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::fuzzing::BatchReceiptStrategyArgs;
 use sov_rollup_interface::stf::{BatchReceipt, Event, TransactionReceipt};

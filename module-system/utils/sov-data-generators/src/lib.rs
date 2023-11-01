@@ -5,8 +5,8 @@ use sov_mock_da::verifier::MockDaSpec;
 use sov_mock_da::{MockAddress, MockBlob};
 use sov_modules_api::transaction::Transaction;
 pub use sov_modules_api::EncodeCall;
-use sov_modules_api::{Context, DaSpec, Module, Spec};
-use sov_modules_stf_template::{Batch, RawTx};
+use sov_modules_api::{Context, DaSpec, Module, RollupAddress, Spec};
+use sov_modules_stf_template::{Batch, BatchReceipt, RawTx, TxEffect};
 
 pub mod bank_data;
 pub mod value_setter_data;
@@ -21,18 +21,16 @@ pub fn new_test_blob_from_batch(
     MockBlob::new(data, address, hash)
 }
 
-// TODO: Fix this
-// pub fn has_tx_events<A: RollupAddress>(
-//     apply_blob_outcome: &BatchReceipt<SequencerOutcome<A>, TxEffect>,
-//     a: &[TransactionReceipt<A>],
-// ) -> bool {
-//     let events = apply_blob_outcome
-//         .tx_receipts
-//         .iter()
-//         .flat_map(|receipts| receipts.events.iter());
-//
-//     events.peekable().peek().is_some()
-// }
+pub fn has_tx_events<A: RollupAddress>(
+    apply_blob_outcome: &BatchReceipt<sov_modules_stf_template::SequencerOutcome<A>, TxEffect>,
+) -> bool {
+    let events = apply_blob_outcome
+        .tx_receipts
+        .iter()
+        .flat_map(|receipts| receipts.events.iter());
+
+    events.peekable().peek().is_some()
+}
 
 /// A generic message object used to create transactions.
 pub struct Message<C: Context, Mod: Module> {
