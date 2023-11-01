@@ -4,9 +4,7 @@ pub use address::{MockAddress, MOCK_SEQUENCER_DA_ADDRESS};
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::da::{
-    BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec, DaVerifier, Time,
-};
+use sov_rollup_interface::da::{BlockHashTrait, BlockHeaderTrait, CountedBufReader, Time};
 use sov_rollup_interface::services::da::SlotData;
 
 use crate::validity_condition::MockValidityCond;
@@ -88,10 +86,6 @@ impl BlockHeaderTrait for MockBlockHeader {
     }
 }
 
-/// A [`crate::da::DaSpec`] suitable for testing.
-#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq)]
-pub struct MockDaSpec;
-
 /// The configuration for mock da
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct MockDaConfig {
@@ -114,9 +108,9 @@ pub struct MockDaVerifier {}
 )]
 /// A mock BlobTransaction from a DA layer used for testing.
 pub struct MockBlob {
-    address: MockAddress,
-    hash: [u8; 32],
-    data: CountedBufReader<Bytes>,
+    pub(crate) address: MockAddress,
+    pub(crate) hash: [u8; 32],
+    pub(crate) data: CountedBufReader<Bytes>,
 }
 
 impl MockBlob {
@@ -127,32 +121,6 @@ impl MockBlob {
             data: CountedBufReader::new(Bytes::from(data)),
             hash,
         }
-    }
-}
-
-impl BlobReaderTrait for MockBlob {
-    type Address = MockAddress;
-
-    fn sender(&self) -> Self::Address {
-        self.address
-    }
-
-    fn hash(&self) -> [u8; 32] {
-        self.hash
-    }
-
-    fn verified_data(&self) -> &[u8] {
-        self.data.accumulator()
-    }
-
-    fn total_len(&self) -> usize {
-        self.data.total_len()
-    }
-
-    #[cfg(feature = "native")]
-    fn advance(&mut self, num_bytes: usize) -> &[u8] {
-        self.data.advance(num_bytes);
-        self.verified_data()
     }
 }
 
@@ -195,36 +163,5 @@ impl SlotData for MockBlock {
 
     fn validity_condition(&self) -> MockValidityCond {
         self.validity_cond
-    }
-}
-
-impl DaSpec for MockDaSpec {
-    type SlotHash = MockHash;
-    type BlockHeader = MockBlockHeader;
-    type BlobTransaction = MockBlob;
-    type Address = MockAddress;
-    type ValidityCondition = MockValidityCond;
-    type InclusionMultiProof = [u8; 32];
-    type CompletenessProof = ();
-    type ChainParams = ();
-}
-
-impl DaVerifier for MockDaVerifier {
-    type Spec = MockDaSpec;
-
-    type Error = anyhow::Error;
-
-    fn new(_params: <Self::Spec as DaSpec>::ChainParams) -> Self {
-        Self {}
-    }
-
-    fn verify_relevant_tx_list(
-        &self,
-        _block_header: &<Self::Spec as DaSpec>::BlockHeader,
-        _txs: &[<Self::Spec as DaSpec>::BlobTransaction],
-        _inclusion_proof: <Self::Spec as DaSpec>::InclusionMultiProof,
-        _completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
-    ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error> {
-        Ok(Default::default())
     }
 }

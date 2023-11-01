@@ -24,3 +24,5 @@ native = [
     "dep:tokio",
     "sov-rollup-interface/native"
 ]
+# TODO: Why this feature is needed?
+verifier = []

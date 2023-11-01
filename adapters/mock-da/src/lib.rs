@@ -2,6 +2,7 @@
 mod service;
 mod types;
 mod validity_condition;
+pub mod verifier;
 
 #[cfg(feature = "native")]
 pub use service::*;

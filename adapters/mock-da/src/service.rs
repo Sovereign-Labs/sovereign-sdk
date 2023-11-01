@@ -5,7 +5,8 @@ use sov_rollup_interface::services::da::DaService;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::Mutex;
 
-use crate::types::{MockAddress, MockBlob, MockBlock, MockDaSpec, MockDaVerifier};
+use crate::types::{MockAddress, MockBlob, MockBlock, MockDaVerifier};
+use crate::verifier::MockDaSpec;
 
 #[derive(Clone)]
 /// DaService used in tests.
