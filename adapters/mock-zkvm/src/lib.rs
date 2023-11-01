@@ -1,3 +1,7 @@
+#![deny(missing_docs)]
+
+//! Mock implementation of zkVM for testing.
+
 use std::io::Write;
 
 use anyhow::ensure;
@@ -91,7 +95,7 @@ impl sov_rollup_interface::zk::Zkvm for MockZkvm {
 }
 
 #[test]
-fn test_mock_proof_roundtrip() {
+fn test_mock_proof_round_trip() {
     let proof = MockProof {
         program_id: MockCodeCommitment([1; 32]),
         is_valid: true,
