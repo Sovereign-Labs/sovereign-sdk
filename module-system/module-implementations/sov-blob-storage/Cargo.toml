@@ -32,7 +32,7 @@ clap = { workspace = true, optional = true }
 
 
 [dev-dependencies]
-sov-mock-da = { path = "../../../adapters/mock-da", features = ["native"] }
+sov-mock-da = { path = "../../../adapters/mock-da" }
 sov-blob-storage = { path = ".", features = ["native"] }
 sov-bank = { path = "../sov-bank" }
 tempfile = { workspace = true }

@@ -13,11 +13,11 @@ resolver = "2"
 publish = false
 
 [dev-dependencies]
-sov-mock-da = { path = "../../../adapters/mock-da", features = ["native"] }
+sov-mock-da = { path = "../../../adapters/mock-da" }
 sov-mock-zkvm = { path = "../../../adapters/mock-zkvm" }
 sov-modules-api = { path = "../../sov-modules-api", version = "0.3" }
 sov-attester-incentives = { path = ".", features = ["native"] }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3", features = ["native"] }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3" }
 tempfile = { workspace = true }
 
 [dependencies]
