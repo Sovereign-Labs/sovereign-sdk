@@ -84,7 +84,7 @@ with the current block. The transactions are serialized using `protobuf` and enc
 [compact share format](https://github.com/celestiaorg/celestia-app/blob/main/specs/src/specs/shares.md#transaction-shares).
 
 In order to prove that, we use a proofs called `EtxProof` which consist of the merkle proofs for all the shares contaniing transaction
-as well the offset to the beggining of the cosmos transaction in first of those shares.
+as well the offset to the beginning of the cosmos transaction in first of those shares.
 
 To venify them, we first iterate over rollup's blobs re-created from _completeness_ verification. We associate each blob
 with its `EtxProof`. Then we verify that the etx proof holds the contiguous range of shares and verify the merkle proofs
@@ -106,7 +106,7 @@ If all proofs and all blobs were verified successfully, that means the data is c
 ### The DaService Trait
 
 The `DaService` trait is slightly more complicated than the `DaVerifier`. Thankfully, it exists entirely outside of the
-rollup's state machine - so it never has to be proven in zk. This means that its perfomance is less critical, and that
+rollup's state machine - so it never has to be proven in zk. This means that its performance is less critical, and that
 upgrading it in response to a vulnerability is much easier.
 
 The job of the `DAService` is to allow the Sovereign SDK's node software to communicate with a DA layer. It has two related
