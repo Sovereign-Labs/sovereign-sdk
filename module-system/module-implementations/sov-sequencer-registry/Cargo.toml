@@ -14,7 +14,7 @@ resolver = "2"
 
 [dev-dependencies]
 sov-sequencer-registry = { path = ".", features = ["native"] }
-sov-mock-da = { path = "../../../adapters/mock-da", features = ["native"] }
+sov-mock-da = { path = "../../../adapters/mock-da" }
 tempfile = { workspace = true }
 
 [dependencies]
