@@ -90,9 +90,9 @@ impl<C: sov_modules_api::Context + Serialize + DeserializeOwned + Send + Sync> R
         if let RpcWorkflows::SetUrl { rpc_url } = self {
             let _client = HttpClientBuilder::default()
                 .build(rpc_url)
-                .context("Invalid rpc url: ")?;
+                .context("Invalid RPC url: ")?;
             wallet_state.rpc_url = Some(rpc_url.clone());
-            println!("Set rpc url to {}", rpc_url);
+            println!("Set RPC url to {}", rpc_url);
             return Ok(());
         }
 
@@ -181,7 +181,7 @@ async fn get_nonce_for_account<C: sov_modules_api::Context + Send + Sync + Seria
     )
     .await
     .context(
-        "Unable to connect to provided rpc. You can change to a different rpc url with the `rpc set-url` subcommand ",
+        "Unable to connect to provided RPC. You can change to a different RPC url with the `rpc set-url` subcommand ",
     )? {
         sov_accounts::Response::AccountExists { addr: _, nonce } => nonce,
         _ => 0,
