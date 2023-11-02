@@ -1074,6 +1074,7 @@ dependencies = [
  "jmt",
  "schemars",
  "serde",
+ "sha2",
  "sov-rollup-interface",
  "thiserror",
 ]

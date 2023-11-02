@@ -30,7 +30,7 @@ fn main() {
 
     assert_eq!(
         *prefix1,
-        sov_modules_api::Prefix::new_storage(
+        sov_modules_api::ModulePrefix::new_storage(
             // The tests compile inside trybuild.
             "trybuild000::test_module",
             "TestStruct",
@@ -42,7 +42,7 @@ fn main() {
     let prefix2 = test_struct.test_state2.prefix();
     assert_eq!(
         *prefix2,
-        sov_modules_api::Prefix::new_storage(
+        sov_modules_api::ModulePrefix::new_storage(
             // The tests compile inside trybuild.
             "trybuild000::test_module",
             "TestStruct",
@@ -54,7 +54,7 @@ fn main() {
     let prefix2 = test_struct.test_state3.prefix();
     assert_eq!(
         *prefix2,
-        sov_modules_api::Prefix::new_storage(
+        sov_modules_api::ModulePrefix::new_storage(
             // The tests compile inside trybuild.
             "trybuild000::test_module",
             "TestStruct",

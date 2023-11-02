@@ -6,7 +6,6 @@ pub mod cli;
 mod containers;
 pub mod default_context;
 pub mod default_signature;
-mod dispatch;
 mod encode;
 pub mod hooks;
 mod pub_key_hex;
@@ -16,7 +15,6 @@ mod reexport_macros;
 #[cfg(feature = "macros")]
 pub use reexport_macros::*;
 
-mod prefix;
 mod serde_pub_key;
 #[cfg(test)]
 mod tests;
@@ -33,17 +31,13 @@ use std::collections::{HashMap, HashSet};
 
 #[cfg(feature = "native")]
 pub use clap;
-#[cfg(feature = "native")]
-pub use dispatch::CliWallet;
-pub use dispatch::{EncodeCall, Genesis};
-pub use prefix::Prefix;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "native")]
 pub use sov_modules_core::PrivateKey;
 pub use sov_modules_core::{
-    AccessoryWorkingSet, Address, AddressBech32, CallResponse, Context, DispatchCall, GasUnit,
-    Module, ModuleCallJsonSchema, ModuleError, ModuleError as Error, PublicKey, Signature, Spec,
-    StateCheckpoint, WorkingSet,
+    AccessoryWorkingSet, Address, AddressBech32, CallResponse, Context, DispatchCall, EncodeCall,
+    GasUnit, Genesis, Module, ModuleCallJsonSchema, ModuleError, ModuleError as Error, ModuleInfo,
+    ModulePrefix, PublicKey, Signature, Spec, StateCheckpoint, WorkingSet,
 };
 pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 pub use sov_rollup_interface::services::da::SlotData;
@@ -65,21 +59,6 @@ pub mod da {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
 pub enum NonInstantiable {}
-
-/// Every module has to implement this trait.
-pub trait ModuleInfo {
-    /// Execution context.
-    type Context: Context;
-
-    /// Returns address of the module.
-    fn address(&self) -> &<Self::Context as Spec>::Address;
-
-    /// Returns the prefix of the module.
-    fn prefix(&self) -> Prefix;
-
-    /// Returns addresses of all the other modules this module is dependent on
-    fn dependencies(&self) -> Vec<&<Self::Context as Spec>::Address>;
-}
 
 struct ModuleVisitor<'a, C: Context> {
     visited: HashSet<&'a <C as Spec>::Address>,
@@ -206,4 +185,14 @@ pub trait CliWalletArg: From<Self::CliStringRepr> {
     /// The type that is used to represent this type in the CLI. Typically,
     /// this type implements the clap::Subcommand trait.
     type CliStringRepr;
+}
+
+/// A trait that needs to be implemented for a *runtime* to be used with the CLI wallet
+#[cfg(feature = "native")]
+pub trait CliWallet: sov_modules_core::DispatchCall {
+    /// The type that is used to represent this type in the CLI. Typically,
+    /// this type implements the clap::Subcommand trait. This type is generic to
+    /// allow for different representations of the same type in the interface; a
+    /// typical end-usage will impl traits only in the case where `CliStringRepr<T>: Into::RuntimeCall`
+    type CliStringRepr<T>;
 }

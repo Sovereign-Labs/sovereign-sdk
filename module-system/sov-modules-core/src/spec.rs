@@ -1,4 +1,3 @@
-use alloc::string::String;
 use core::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -6,16 +5,10 @@ use digest::typenum::U32;
 use digest::Digest;
 use sov_rollup_interface::RollupAddress;
 
-use crate::error::ModuleError;
 use crate::gas::GasUnit;
 use crate::key::{PublicKey, Signature};
-use crate::scratchpad::WorkingSet;
 use crate::storage::Storage;
 use crate::witness::Witness;
-
-/// Response type for the `Module::call` method.
-#[derive(Default, Debug)]
-pub struct CallResponse {}
 
 /// The `Spec` trait configures certain key primitives to be used by a by a particular instance of a rollup.
 /// `Spec` is almost always implemented on a Context object; since all Modules are generic
@@ -106,63 +99,4 @@ pub trait Context: Spec + Clone + Debug + PartialEq + 'static {
 
     /// Constructor for the Context.
     fn new(sender: Self::Address) -> Self;
-}
-
-/// All the methods have a default implementation that can't be invoked (because they take `NonInstantiable` parameter).
-/// This allows developers to override only some of the methods in their implementation and safely ignore the others.
-pub trait Module {
-    /// Execution context.
-    type Context: Context;
-
-    /// Configuration for the genesis method.
-    type Config;
-
-    /// Module defined argument to the call method.
-    type CallMessage: Debug + BorshSerialize + BorshDeserialize;
-
-    /// Module defined event resulting from a call method.
-    type Event: Debug + BorshSerialize + BorshDeserialize;
-
-    /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
-    fn genesis(
-        &self,
-        _config: &Self::Config,
-        _working_set: &mut WorkingSet<Self::Context>,
-    ) -> Result<(), ModuleError> {
-        Ok(())
-    }
-
-    /// Call allows interaction with the module and invokes state changes.
-    /// It takes a module defined type and a context as parameters.
-    fn call(
-        &self,
-        _message: Self::CallMessage,
-        _context: &Self::Context,
-        _working_set: &mut WorkingSet<Self::Context>,
-    ) -> Result<CallResponse, ModuleError> {
-        unreachable!()
-    }
-
-    /// Attempts to charge the provided amount of gas from the working set.
-    ///
-    /// The scalar gas value will be computed from the price defined on the working set.
-    fn charge_gas(
-        &self,
-        working_set: &mut WorkingSet<Self::Context>,
-        gas: &<Self::Context as Context>::GasUnit,
-    ) -> anyhow::Result<()> {
-        working_set.charge_gas(gas)
-    }
-}
-
-/// A [`Module`] that has a well-defined and known [JSON
-/// Schema](https://json-schema.org/) for its [`Module::CallMessage`].
-///
-/// This trait is intended to support code generation tools, CLIs, and
-/// documentation. You can derive it with `#[derive(ModuleCallJsonSchema)]`, or
-/// implement it manually if your use case demands more control over the JSON
-/// Schema generation.
-pub trait ModuleCallJsonSchema: Module {
-    /// Returns the JSON schema for [`Module::CallMessage`].
-    fn json_schema() -> String;
 }
