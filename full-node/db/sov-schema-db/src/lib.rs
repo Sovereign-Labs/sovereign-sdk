@@ -311,14 +311,13 @@ impl SchemaBatch {
         column_writes.insert(key, operation);
     }
 
-    #[allow(dead_code)]
     pub(crate) fn read<S: Schema>(
         &self,
         key: &impl KeyCodec<S>,
-    ) -> anyhow::Result<Option<Operation>> {
+    ) -> anyhow::Result<Option<&Operation>> {
         let key = key.encode_key()?;
         if let Some(column_writes) = self.last_writes.get(&S::COLUMN_FAMILY_NAME) {
-            return Ok(column_writes.get(&key).cloned());
+            return Ok(column_writes.get(&key));
         }
         Ok(None)
     }

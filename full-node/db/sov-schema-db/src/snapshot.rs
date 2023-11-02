@@ -107,7 +107,7 @@ pub struct FrozenDbSnapshot {
 
 impl FrozenDbSnapshot {
     /// Get value from its own cache
-    pub fn get<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<Option<Operation>> {
+    pub fn get<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<Option<&Operation>> {
         self.cache.read(key)
     }
 
@@ -135,10 +135,10 @@ impl From<FrozenDbSnapshot> for SchemaBatch {
     }
 }
 
-fn decode_operation<S: Schema>(operation: Operation) -> anyhow::Result<Option<S::Value>> {
+fn decode_operation<S: Schema>(operation: &Operation) -> anyhow::Result<Option<S::Value>> {
     match operation {
         Operation::Put { value } => {
-            let value = S::Value::decode_value(&value)?;
+            let value = S::Value::decode_value(value)?;
             Ok(Some(value))
         }
         Operation::Delete => Ok(None),

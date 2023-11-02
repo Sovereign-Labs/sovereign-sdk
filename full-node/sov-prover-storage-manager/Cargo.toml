@@ -1,0 +1,25 @@
+[package]
+name = "sov-prover-storage-manager"
+description = "Storage manager for prover storage"
+license = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+resolver = "2"
+
+[dependencies]
+anyhow = { workspace = true }
+sov-rollup-interface = { path = "../../rollup-interface" }
+sov-db = { path = "../db/sov-db" }
+sov-schema-db = { path = "../db/sov-schema-db" }
+sov-state = { path = "../../module-system/sov-state", features = ["native"] }
+# TODO: Remove this after integrated with `sov-db` fully
+byteorder = { workspace = true, default-features = true }
+
+[dev-dependencies]
+sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
+tempfile = { workspace = true }

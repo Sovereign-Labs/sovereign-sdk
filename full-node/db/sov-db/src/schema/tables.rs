@@ -208,7 +208,6 @@ macro_rules! define_table_with_seek_key_codec {
     };
 }
 
-// fn deser(target: &mut &[u8]) -> Result<Self, DeserializationError>;
 define_table_with_seek_key_codec!(
     /// The primary source for slot data
     (SlotByNumber) SlotNumber => StoredSlot
