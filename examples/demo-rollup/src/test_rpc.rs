@@ -10,7 +10,7 @@ use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_mock_da::{MockBlock, MockBlockHeader, MockHash};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::fuzzing::BatchReceiptStrategyArgs;
-use sov_rollup_interface::stf::{BatchReceipt, Event, TransactionReceipt};
+use sov_rollup_interface::stf::{BatchReceipt, LegacyEvent, TransactionReceipt};
 #[cfg(test)]
 use sov_stf_runner::RpcConfig;
 use tendermint::crypto::Sha256;
@@ -116,8 +116,8 @@ fn regular_test_helper(payload: serde_json::Value, expected: &serde_json::Value)
                     tx_hash: ::sha2::Sha256::digest(b"tx2"),
                     body_to_save: Some(b"tx2 body".to_vec()),
                     events: vec![
-                        Event::new("event1_key", "event1_value"),
-                        Event::new("event2_key", "event2_value"),
+                        LegacyEvent::new("event1_key", "event1_value"),
+                        LegacyEvent::new("event2_key", "event2_value"),
                     ],
                     receipt: 1,
                 },
@@ -541,7 +541,7 @@ proptest!(
 
                     if random_event_num_usize < *end_event_range {
                         let event_index = random_event_num_usize - *start_event_range;
-                        let event: &Event = tx.events.get(event_index).unwrap();
+                        let event: &LegacyEvent = tx.events.get(event_index).unwrap();
                         let event_json = json!({
                             "key": event.key().inner(),
                             "value": event.value().inner(),

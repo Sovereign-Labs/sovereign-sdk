@@ -4,7 +4,7 @@ use sov_rollup_interface::rpc::{
     LedgerRpcProvider, QueryMode, SlotIdAndOffset, SlotIdentifier, SlotResponse, TxIdAndOffset,
     TxIdentifier, TxResponse,
 };
-use sov_rollup_interface::stf::Event;
+use sov_rollup_interface::stf::LegacyEvent;
 use tokio::sync::broadcast::Receiver;
 
 use crate::schema::tables::{
@@ -119,7 +119,7 @@ impl LedgerRpcProvider for LedgerDB {
     fn get_events(
         &self,
         event_ids: &[sov_rollup_interface::rpc::EventIdentifier],
-    ) -> Result<Vec<Option<Event>>, anyhow::Error> {
+    ) -> Result<Vec<Option<LegacyEvent>>, anyhow::Error> {
         anyhow::ensure!(
             event_ids.len() <= MAX_EVENTS_PER_REQUEST as usize,
             "requested too many events. Requested: {}. Max: {}",
@@ -217,7 +217,7 @@ impl LedgerRpcProvider for LedgerDB {
             .map(|mut txs| txs.pop().unwrap_or(None))
     }
 
-    fn get_event_by_number(&self, number: u64) -> Result<Option<Event>, anyhow::Error> {
+    fn get_event_by_number(&self, number: u64) -> Result<Option<LegacyEvent>, anyhow::Error> {
         self.get_events(&[EventIdentifier::Number(number)])
             .map(|mut events| events.pop().unwrap_or(None))
     }

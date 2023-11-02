@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use anyhow::Result;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::CliWalletArg;
-use sov_modules_api::{CallResponse, WorkingSet};
+use sov_modules_api::{CallResponse, Event, WorkingSet};
 use thiserror::Error;
 
 use super::ValueSetter;
@@ -20,6 +20,21 @@ use super::ValueSetter;
 pub enum CallMessage {
     /// value to set
     SetValue(
+        /// new value
+        u32,
+    ),
+}
+
+/// This enumeration represents the available events that result from interacting with the `sov-value-setter` module.
+#[cfg_attr(
+    feature = "native",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
+)]
+#[derive(Event, borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
+pub enum ValueSetterEvent {
+    /// Value set
+    ValueSet(
         /// new value
         u32,
     ),
@@ -50,6 +65,7 @@ impl<C: sov_modules_api::Context> ValueSetter<C> {
 
         // This is how we set a new value:
         self.value.set(&new_value, working_set);
+        // TODO: replace add event functionality to be similar to self.event.add()
         working_set.add_event("set", &format!("value_set: {new_value:?}"));
 
         Ok(CallResponse::default())

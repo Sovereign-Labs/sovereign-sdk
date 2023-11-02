@@ -50,7 +50,7 @@ use sov_modules_api::macros::DefaultRuntime;
 use sov_modules_api::macros::{expose_rpc, CliWallet};
 #[cfg(feature = "native")]
 use sov_modules_api::Spec;
-use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec};
+use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec, RuntimeEvent};
 #[cfg(feature = "native")]
 use sov_nft_module::{NonFungibleTokenRpcImpl, NonFungibleTokenRpcServer};
 use sov_rollup_interface::da::DaSpec;
@@ -64,7 +64,7 @@ use crate::genesis_config::GenesisPaths;
 
 /// The `demo-stf runtime`.
 #[cfg_attr(feature = "native", derive(CliWallet), expose_rpc)]
-#[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
+#[derive(Genesis, DispatchCall, RuntimeEvent, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 #[cfg_attr(
     feature = "native",

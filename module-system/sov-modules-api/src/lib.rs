@@ -56,7 +56,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 pub use sov_rollup_interface::services::da::SlotData;
-pub use sov_rollup_interface::stf::Event;
+pub use sov_rollup_interface::stf::LegacyEvent;
 pub use sov_rollup_interface::zk::{
     StateTransition, ValidityCondition, ValidityConditionChecker, Zkvm,
 };
@@ -314,7 +314,7 @@ pub trait Module {
     type CallMessage: Debug + BorshSerialize + BorshDeserialize;
 
     /// Module defined event resulting from a call method.
-    type Event: Debug + BorshSerialize + BorshDeserialize;
+    type Event: Event;
 
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(
@@ -346,6 +346,34 @@ pub trait Module {
     ) -> anyhow::Result<()> {
         working_set.charge_gas(gas)
     }
+}
+
+const EVENT_UNDEFINED_STR: &str = "NA-Event-Not-Defined";
+
+impl Event for () {
+    fn event_key(&self) -> &'static str {
+        tracing::warn!("Trying to get the event_key string for an undefined event.");
+        EVENT_UNDEFINED_STR
+    }
+
+    fn get_all_event_keys() -> Vec<&'static str> {
+        vec![EVENT_UNDEFINED_STR]
+    }
+}
+
+/// Every module `Event` has to implement this trait.
+///
+/// You can use `#[derive(Event)]` to automatically implement the trait. If your `Event` is not an enum,
+/// or if your `Event` type is a nested enum and you want to index events based on their nested fields,
+/// you will need to implement the trait manually.
+pub trait Event: Debug + BorshSerialize + BorshDeserialize {
+    /// Returns a static string slice that identifies the Event variant.
+    /// This string slice is primarily used to index Events from the DB.
+    fn event_key(&self) -> &'static str;
+
+    /// ratienrstie
+    /// trsaionsiretn
+    fn get_all_event_keys() -> Vec<&'static str>;
 }
 
 /// A [`Module`] that has a well-defined and known [JSON

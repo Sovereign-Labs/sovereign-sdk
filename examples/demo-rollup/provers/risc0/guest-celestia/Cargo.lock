@@ -2086,6 +2086,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]

@@ -2,7 +2,7 @@ use module_template::{CallMessage, ExampleModule, ExampleModuleConfig, Response}
 #[cfg(feature = "native")]
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_context::ZkDefaultContext;
-use sov_modules_api::{Address, Context, Event, Module, WorkingSet};
+use sov_modules_api::{Address, Context, LegacyEvent, Module, WorkingSet};
 use sov_state::{DefaultStorageSpec, ProverStorage, ZkStorage};
 
 #[test]
@@ -48,7 +48,7 @@ fn test_value_setter_helper<C: Context>(
     {
         module.call(call_msg, &context, working_set).unwrap();
         let event = &working_set.events()[0];
-        assert_eq!(event, &Event::new("set", "value_set: 99"));
+        assert_eq!(event, &LegacyEvent::new("set", "value_set: 99"));
     }
 
     // Test query

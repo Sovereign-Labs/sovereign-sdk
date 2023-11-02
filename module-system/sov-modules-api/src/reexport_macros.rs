@@ -2,7 +2,7 @@
 /// type.
 #[cfg(feature = "macros")]
 pub use sov_modules_macros::DispatchCall;
-/// Derives the <runtime_name>Event enum for a given runtime.
+/// Derives the Event trait for a given Event enum.
 #[cfg(feature = "macros")]
 pub use sov_modules_macros::Event;
 /// Derives the [`Genesis`](trait.Genesis.html) trait for the underlying runtime
@@ -80,6 +80,9 @@ pub use sov_modules_macros::ModuleCallJsonSchema;
 /// ```
 #[cfg(feature = "macros")]
 pub use sov_modules_macros::ModuleInfo;
+/// Derives the <runtime_name>Event enum for a given runtime.
+#[cfg(feature = "macros")]
+pub use sov_modules_macros::RuntimeEvent;
 
 /// Procedural macros to assist with creating new modules.
 #[cfg(feature = "macros")]

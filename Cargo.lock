@@ -8721,6 +8721,7 @@ dependencies = [
  "sov-zk-cycle-macros",
  "tempfile",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]

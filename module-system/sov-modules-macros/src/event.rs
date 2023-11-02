@@ -1,74 +1,63 @@
-use proc_macro2::Span;
-use syn::DeriveInput;
+use quote::quote;
+use syn::{Data, DeriveInput, Fields};
 
-use super::common::{
-    get_generics_type_param, get_serialization_attrs, StructDef, StructFieldExtractor,
-};
+pub fn derive_event(input: DeriveInput) -> Result<proc_macro::TokenStream, syn::Error> {
+    match &input.data {
+        Data::Enum(data_enum) => {
+            let enum_name = &input.ident;
+            let event_keys_match_legs = data_enum.variants.iter().map(|v| {
+                let variant_name = &v.ident;
+                let variant_str = variant_name.to_string();
 
-pub(crate) const EVENT: &str = "Event";
+                match &v.fields {
+                    Fields::Unit => {
+                        quote! {
+                            #enum_name::#variant_name => #variant_str,
+                        }
+                    }
+                    Fields::Unnamed(_) => {
+                        quote! {
+                            #enum_name::#variant_name(_) => #variant_str,
+                        }
+                    }
+                    Fields::Named(_) => {
+                        quote! {
+                            #enum_name::#variant_name { .. } => #variant_str,
+                        }
+                    }
+                }
+            });
 
-pub(crate) struct EventMacro {
-    field_extractor: StructFieldExtractor,
-}
+            let event_keys = data_enum.variants.iter().map(|v| {
+                let variant_name = &v.ident;
+                let variant_str = variant_name.to_string();
+                quote::quote! {
+                    #variant_str
+                }
+            });
 
-impl<'a> StructDef<'a> {
-    fn create_event_enum_legs(&self) -> Vec<proc_macro2::TokenStream> {
-        self.fields
-            .iter()
-            .map(|field| {
-                let name = &field.ident;
-                let ty = &field.ty;
+            let gen = quote! {
+                impl ::sov_modules_api::Event for #enum_name {
+                    fn event_key(&self) -> &'static str {
+                        match self {
+                            #(#event_keys_match_legs)*
+                        }
+                    }
 
-                quote::quote!(
-                    #[doc = "Module event."]
-                    #name(<#ty as ::sov_modules_api::Module>::Event),
-                )
-            })
-            .collect()
-    }
-}
-
-impl EventMacro {
-    pub(crate) fn new(name: &'static str) -> Self {
-        Self {
-            field_extractor: StructFieldExtractor::new(name),
+                    fn get_all_event_keys() -> ::std::vec::Vec<&'static str> {
+                        ::std::vec![#(#event_keys),*]
+                    }
+                }
+            };
+            Ok(gen.into())
         }
-    }
-
-    pub(crate) fn derive_event_enum(
-        &self,
-        input: DeriveInput,
-    ) -> Result<proc_macro::TokenStream, syn::Error> {
-        let serialization_methods = get_serialization_attrs(&input)?;
-
-        let DeriveInput {
-            data,
-            ident,
-            generics,
-            ..
-        } = input;
-
-        let generic_param = get_generics_type_param(&generics, Span::call_site())?;
-
-        let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
-        let fields = self.field_extractor.get_fields_from_struct(&data)?;
-
-        let struct_def = StructDef::new(
-            ident,
-            fields,
-            impl_generics,
-            type_generics,
-            &generic_param,
-            where_clause,
-        );
-
-        let event_enum_legs = struct_def.create_event_enum_legs();
-        let event_enum = struct_def.create_enum(&event_enum_legs, EVENT, &serialization_methods);
-
-        Ok(quote::quote! {
-            #[doc="This enum is generated from the underlying Runtime, the variants correspond to events from the relevant modules"]
-            #event_enum
-        }
-            .into())
+        Data::Struct(st) => Err(syn::Error::new_spanned(
+            st.struct_token,
+            "The Event macro supports enums only.",
+        )),
+        Data::Union(un) => Err(syn::Error::new_spanned(
+            un.union_token,
+            "The Event macro supports enums only.",
+        )),
     }
 }

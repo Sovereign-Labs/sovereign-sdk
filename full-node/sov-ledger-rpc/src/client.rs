@@ -7,7 +7,7 @@ use jsonrpsee::proc_macros::rpc;
 use sov_rollup_interface::rpc::{
     BatchIdentifier, EventIdentifier, QueryMode, SlotIdentifier, TxIdentifier,
 };
-use sov_rollup_interface::stf::Event;
+use sov_rollup_interface::stf::LegacyEvent;
 
 use crate::HexHash;
 
@@ -55,7 +55,10 @@ where
 
     /// Gets a list of events by ID. The IDs need not be ordered.
     #[method(name = "getEvents")]
-    async fn get_events(&self, event_ids: Vec<EventIdentifier>) -> RpcResult<Vec<Option<Event>>>;
+    async fn get_events(
+        &self,
+        event_ids: Vec<EventIdentifier>,
+    ) -> RpcResult<Vec<Option<LegacyEvent>>>;
 
     /// Gets a single slot by hash.
     #[method(name = "getSlotByHash")]
@@ -99,7 +102,7 @@ where
 
     /// Gets a single event by number.
     #[method(name = "getEventByNumber")]
-    async fn get_event_by_number(&self, number: u64) -> RpcResult<Option<Event>>;
+    async fn get_event_by_number(&self, number: u64) -> RpcResult<Option<LegacyEvent>>;
 
     /// Gets a single tx by number.
     #[method(name = "getTransactionByNumber")]
