@@ -8,11 +8,15 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::maybestd::RefCount;
 
-use crate::bytes::{AlignedVec, Prefix};
-use crate::cache::{CacheKey, CacheValue, OrderedReadsAndWrites};
-use crate::codec::{EncodeKeyLike, StateValueCodec};
-use crate::version::Version;
-use crate::witness::Witness;
+use crate::common::{AlignedVec, Prefix, Version, Witness};
+
+mod cache;
+mod codec;
+mod scratchpad;
+
+pub use cache::*;
+pub use codec::*;
+pub use scratchpad::*;
 
 /// The key type suitable for use in [`Storage::get`] and other getter methods of
 /// [`Storage`]. Cheaply-clonable.

@@ -7,7 +7,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::RollupAddress;
 
-use crate::error::SigVerificationError;
+use crate::common::SigVerificationError;
 
 /// Signature used in the Module System.
 pub trait Signature: BorshDeserialize + BorshSerialize + Eq + Clone + Debug + Send + Sync {

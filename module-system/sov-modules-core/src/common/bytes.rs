@@ -5,7 +5,7 @@ use core::{fmt, str};
 
 use sha2::Digest;
 
-use crate::spec::Context;
+use crate::module::Context;
 
 /// A [`Vec`] of bytes whose length is guaranteed to be aligned to 4 bytes.
 /// This makes certain operations cheaper in zk-context (namely, concatenation).

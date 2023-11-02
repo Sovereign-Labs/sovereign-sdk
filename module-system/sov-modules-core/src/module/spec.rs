@@ -7,10 +7,8 @@ use digest::typenum::U32;
 use digest::Digest;
 use sov_rollup_interface::RollupAddress;
 
-use crate::gas::GasUnit;
-use crate::key::{PublicKey, Signature};
+use crate::common::{GasUnit, PublicKey, Signature, Witness};
 use crate::storage::Storage;
-use crate::witness::Witness;
 
 /// The `Spec` trait configures certain key primitives to be used by a by a particular instance of a rollup.
 /// `Spec` is almost always implemented on a Context object; since all Modules are generic
@@ -31,8 +29,8 @@ pub trait Spec {
         // Do we always need this, even when the module does not have a JSON
         // Schema? That feels a bit wrong.
         + ::schemars::JsonSchema
-        + Into<crate::address::AddressBech32>
-        + From<crate::address::AddressBech32>
+        + Into<crate::common::AddressBech32>
+        + From<crate::common::AddressBech32>
         + alloc::str::FromStr<Err = anyhow::Error>;
 
     /// The Address type used on the rollup. Typically calculated as the hash of a public key.
@@ -41,8 +39,8 @@ pub trait Spec {
         + BorshSerialize
         + BorshDeserialize
         + Sync
-        + Into<crate::address::AddressBech32>
-        + From<crate::address::AddressBech32>
+        + Into<crate::common::AddressBech32>
+        + From<crate::common::AddressBech32>
         + alloc::str::FromStr<Err = anyhow::Error>;
 
     /// The Address type used on the rollup. Typically calculated as the hash of a public key.
@@ -54,7 +52,7 @@ pub trait Spec {
 
     /// The public key used for digital signatures
     #[cfg(feature = "native")]
-    type PrivateKey: crate::key::PrivateKey<
+    type PrivateKey: crate::common::PrivateKey<
         PublicKey = Self::PublicKey,
         Signature = Self::Signature,
     >;

@@ -7,7 +7,7 @@ use sov_rollup_interface::maybestd::collections::hash_map::Entry;
 use sov_rollup_interface::maybestd::collections::HashMap;
 use sov_rollup_interface::maybestd::RefCount;
 
-use crate::error::{MergeError, ReadError};
+use crate::common::{MergeError, ReadError};
 use crate::storage::{Storage, StorageKey, StorageValue};
 
 /// A key for a cache set.

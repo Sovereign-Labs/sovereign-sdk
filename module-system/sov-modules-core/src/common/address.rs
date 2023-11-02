@@ -10,7 +10,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use derive_more::{Display, Into};
 use sov_rollup_interface::{BasicAddress, RollupAddress};
 
-use crate::error::Bech32ParseError;
+use crate::common::Bech32ParseError;
 
 /// Segwit address concrete implementation.
 #[derive(

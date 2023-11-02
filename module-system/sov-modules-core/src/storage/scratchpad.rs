@@ -6,12 +6,12 @@ use core::{fmt, mem};
 use sov_rollup_interface::maybestd::collections::HashMap;
 use sov_rollup_interface::stf::Event;
 
-use crate::bytes::Prefix;
-use crate::cache::{CacheKey, CacheValue, OrderedReadsAndWrites, StorageInternalCache};
-use crate::codec::{EncodeKeyLike, StateCodec, StateValueCodec};
-use crate::gas::GasMeter;
-use crate::spec::{Context, Spec};
-use crate::storage::{NativeStorage, Storage, StorageKey, StorageProof, StorageValue};
+use crate::common::{GasMeter, Prefix};
+use crate::module::{Context, Spec};
+use crate::storage::{
+    CacheKey, CacheValue, EncodeKeyLike, NativeStorage, OrderedReadsAndWrites, StateCodec,
+    StateValueCodec, Storage, StorageInternalCache, StorageKey, StorageProof, StorageValue,
+};
 
 /// A storage reader and writer
 pub trait StateReaderAndWriter {

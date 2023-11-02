@@ -2,7 +2,7 @@
 
 use alloc::string::String;
 
-use crate::cache::CacheValue;
+use crate::storage::CacheValue;
 
 /// Representation of a signature verification error.
 #[derive(Debug)]

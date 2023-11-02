@@ -6,10 +6,14 @@ use core::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use crate::bytes::ModulePrefix;
-use crate::error::ModuleError;
-use crate::scratchpad::WorkingSet;
-use crate::spec::{Context, Spec};
+use crate::common::{ModuleError, ModulePrefix};
+use crate::storage::WorkingSet;
+
+mod dispatch;
+mod spec;
+
+pub use dispatch::*;
+pub use spec::*;
 
 /// Response type for the `Module::call` method.
 #[derive(Default, Debug)]
