@@ -7,7 +7,7 @@ use reqwest::header::CONTENT_TYPE;
 use serde_json::json;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 #[cfg(test)]
-use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash};
+use sov_mock_da::{MockBlock, MockBlockHeader, MockHash};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::fuzzing::BatchReceiptStrategyArgs;
 use sov_rollup_interface::stf::{BatchReceipt, Event, TransactionReceipt};
@@ -289,7 +289,7 @@ prop_compose! {
 
         let mut total_num_batches = 1;
 
-        let mut prev_hash = MockHash([0;32]);
+        let mut prev_hash = MockHash::from([0;32]);
 
         let mut curr_tx_id = 1;
         let mut curr_event_id = 1;
@@ -323,7 +323,7 @@ prop_compose! {
 
             slots.push(new_slot);
 
-            prev_hash = MockHash(hash);
+            prev_hash = MockHash::from(hash);
         }
 
         (slots, tx_id_to_event_range, total_num_batches)

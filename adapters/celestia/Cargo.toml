@@ -67,4 +67,3 @@ bench = [
     "sov-zk-cycle-macros/bench",
     "risc0"
 ]
-verifier = []

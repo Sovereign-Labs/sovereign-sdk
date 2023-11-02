@@ -61,9 +61,9 @@ mod tests {
     use std::str::FromStr;
 
     use sov_bank::Coins;
+    use sov_mock_da::{MockAddress, MockDaSpec};
     use sov_modules_api::default_context::DefaultContext;
     use sov_modules_api::{AddressBech32, Spec};
-    use sov_rollup_interface::mocks::{MockAddress, MockDaSpec};
 
     use crate::SequencerConfig;
 

@@ -4,8 +4,7 @@ use anyhow::Error;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-
-use crate::zk::{ValidityCondition, ValidityConditionChecker};
+use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
 
 /// A trivial test validity condition structure that only contains a boolean
 #[derive(

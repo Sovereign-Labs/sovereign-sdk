@@ -1,4 +1,6 @@
 - sov-rollup-interface
+- sov-mock-da
+- sov-mock-zkvm
 - sov-schema-db
 - sov-db
 - sov-zk-cycle-macros

@@ -5,7 +5,7 @@ use sov_state::ProverStorage;
 mod helpers;
 
 use helpers::*;
-use sov_rollup_interface::mocks::MockAddress;
+use sov_mock_da::MockAddress;
 use sov_sequencer_registry::SequencerRegistry;
 
 // Happy path for registration and exit

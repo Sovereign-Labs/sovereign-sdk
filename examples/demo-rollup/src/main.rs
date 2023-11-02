@@ -4,8 +4,8 @@ use anyhow::Context as _;
 use clap::Parser;
 use demo_stf::genesis_config::GenesisPaths;
 use sov_demo_rollup::{CelestiaDemoRollup, MockDemoRollup};
+use sov_mock_da::MockDaConfig;
 use sov_modules_rollup_template::{Rollup, RollupProverConfig, RollupTemplate};
-use sov_rollup_interface::mocks::MockDaConfig;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tracing::log::debug;
 use tracing_subscriber::prelude::*;
@@ -35,7 +35,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // Initializing logging
     tracing_subscriber::registry()
         .with(fmt::layer())
-        .with(EnvFilter::from_str("debug,hyper=info").unwrap())
+        .with(EnvFilter::from_str("debug,hyper=info,risc0_zkvm=info").unwrap())
         .init();
 
     let args = Args::parse();

@@ -268,11 +268,11 @@ dependencies = [
  "borsh",
  "hex",
  "serde",
- "simple-nft-module",
  "sov-accounts",
  "sov-bank",
  "sov-blob-storage",
  "sov-chain-state",
+ "sov-mock-da",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-nft-module",
@@ -966,17 +966,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e1788eed21689f9cf370582dfc467ef36ed9c707f073528ddafa8d83e3b8500"
 
 [[package]]
-name = "simple-nft-module"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "borsh",
- "serde",
- "sov-modules-api",
- "sov-state",
-]
-
-[[package]]
 name = "sov-accounts"
 version = "0.3.0"
 dependencies = [
@@ -1034,11 +1023,25 @@ dependencies = [
  "demo-stf",
  "risc0-zkvm",
  "risc0-zkvm-platform",
+ "sov-mock-da",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-risc0-adapter",
- "sov-rollup-interface",
  "sov-state",
+]
+
+[[package]]
+name = "sov-mock-da"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "borsh",
+ "bytes",
+ "hex",
+ "serde",
+ "sha2",
+ "sov-rollup-interface",
 ]
 
 [[package]]
@@ -1141,7 +1144,6 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "bincode",
  "borsh",
  "bytes",
  "digest",

@@ -13,6 +13,7 @@ use sov_modules_api::{
     BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, Spec, StateCheckpoint,
     Zkvm,
 };
+pub use sov_rollup_interface::stf::BatchReceipt;
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
 use sov_state::Storage;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]

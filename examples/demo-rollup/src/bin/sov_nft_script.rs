@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use borsh::ser::BorshSerialize;
 use demo_stf::runtime::RuntimeCall;
+use sov_mock_da::MockDaSpec;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
@@ -12,7 +13,6 @@ use sov_nft_module::utils::{
     get_transfer_nft_message,
 };
 use sov_nft_module::{CallMessage, CollectionAddress};
-use sov_rollup_interface::mocks::MockDaSpec;
 use sov_sequencer::utils::SimpleClient;
 
 const COLLECTION_1: &str = "Sovereign Squirrel Syndicate";
