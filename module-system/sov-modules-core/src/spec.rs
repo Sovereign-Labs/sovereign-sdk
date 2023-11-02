@@ -1,3 +1,5 @@
+//! Module specification definitions.
+
 use core::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -61,6 +63,7 @@ pub trait Spec {
     #[cfg(all(feature = "native", feature = "std"))]
     type PublicKey: PublicKey + ::schemars::JsonSchema + alloc::str::FromStr<Err = anyhow::Error>;
 
+    /// The public key used for digital signatures
     #[cfg(not(all(feature = "native", feature = "std")))]
     type PublicKey: PublicKey;
 

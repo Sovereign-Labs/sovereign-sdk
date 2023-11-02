@@ -1,3 +1,5 @@
+//! Bytes prefix definition.
+
 use alloc::vec::Vec;
 use core::{fmt, str};
 
@@ -156,6 +158,7 @@ pub struct ModulePrefix {
 }
 
 impl ModulePrefix {
+    /// Creates a new instance of a module prefix with the provided static definitions.
     pub fn new_storage(
         module_path: &'static str,
         module_name: &'static str,
@@ -168,6 +171,7 @@ impl ModulePrefix {
         }
     }
 
+    /// Creates a new instance without a storage name.
     pub fn new_module(module_path: &'static str, module_name: &'static str) -> Self {
         Self {
             module_path,
@@ -200,6 +204,7 @@ impl ModulePrefix {
         combined_prefix
     }
 
+    /// Returns the hash of the combined prefix.
     pub fn hash<C: Context>(&self) -> [u8; 32] {
         let combined_prefix = self.combine_prefix();
         let mut hasher = C::Hasher::new();

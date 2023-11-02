@@ -1,10 +1,14 @@
+//! Module error definitions.
+
 use alloc::string::String;
 
 use crate::cache::CacheValue;
 
+/// Representation of a signature verification error.
 #[derive(Debug)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum SigVerificationError {
+    /// The signature is invalid for the provided public key.
     #[cfg_attr(feature = "std", error("Bad signature {0}"))]
     BadSignature(String),
 }
@@ -23,11 +27,14 @@ impl From<SigVerificationError> for anyhow::Error {
     }
 }
 
+/// A bech32 address parse error.
 #[derive(Debug)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum Bech32ParseError {
+    /// Bech32 decoding error represented via [bech32::Error].
     #[cfg_attr(feature = "std", error("Bech32 error: {0}"))]
     Bech32(#[cfg_attr(feature = "std", from)] bech32::Error),
+    /// The provided "Human-Readable Part" is invalid.
     #[cfg_attr(feature = "std", error("Wrong HRP: {0}"))]
     WrongHPR(String),
 }
@@ -53,23 +60,30 @@ impl From<bech32::Error> for Bech32ParseError {
     }
 }
 
+/// An error when merging two cache values.
 #[derive(Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum MergeError {
+    /// Consecutive reads error.
     #[cfg_attr(
         feature = "std",
         error("consecutive reads are inconsistent: left read: {left:?}, right read: {right:?}")
     )]
     ReadThenRead {
+        /// Left-read associated cache value.
         left: Option<CacheValue>,
+        /// Right-read associated cache value.
         right: Option<CacheValue>,
     },
+    /// A read operation is inconsistent with the previous write operation.
     #[cfg_attr(
         feature = "std",
         error("the read: {read:?} is in inconsistent with the previous write: {write:?}")
     )]
     WriteThenRead {
+        /// The associated write operation.
         write: Option<CacheValue>,
+        /// The associated read operation.
         read: Option<CacheValue>,
     },
 }
@@ -88,15 +102,19 @@ impl From<MergeError> for anyhow::Error {
     }
 }
 
+/// An error when reading from the cache.
 #[derive(Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum ReadError {
+    /// The value returned from the cache is not expected.
     #[cfg_attr(
         feature = "std",
         error("inconsistent read, expected: {expected:?}, found: {found:?}")
     )]
     InconsistentRead {
+        /// Expected value.
         expected: Option<CacheValue>,
+        /// Found value.
         found: Option<CacheValue>,
     },
 }

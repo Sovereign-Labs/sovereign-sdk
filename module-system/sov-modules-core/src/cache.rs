@@ -1,3 +1,5 @@
+//! Cache key/value definitions
+
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -8,8 +10,10 @@ use sov_rollup_interface::maybestd::RefCount;
 use crate::error::{MergeError, ReadError};
 use crate::storage::{Storage, StorageKey, StorageValue};
 
+/// A key for a cache set.
 #[derive(Debug, Eq, PartialEq, Clone, Hash, PartialOrd, Ord)]
 pub struct CacheKey {
+    /// The key of the cache entry.
     pub key: RefCount<Vec<u8>>,
 }
 
@@ -20,8 +24,10 @@ impl fmt::Display for CacheKey {
     }
 }
 
+/// A value stored in the cache.
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct CacheValue {
+    /// The value of the cache entry.
     pub value: RefCount<Vec<u8>>,
 }
 
@@ -210,7 +216,9 @@ impl Access {
 /// - Exists and contains a value:
 ///     ValueExists::Yes(Some(value))
 pub enum ValueExists {
+    /// The key exists in the cache.
     Yes(Option<CacheValue>),
+    /// The key does not exist in the cache.
     No,
 }
 
@@ -223,6 +231,7 @@ pub struct CacheLog {
 }
 
 impl CacheLog {
+    /// Creates a cache log with the provided map capacity.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             log: HashMap::with_capacity(capacity),
@@ -231,6 +240,7 @@ impl CacheLog {
 }
 
 impl CacheLog {
+    /// Returns the owned set of key/value pairs of the cache.
     pub fn take_writes(self) -> Vec<(CacheKey, Option<CacheValue>)> {
         self.log
             .into_iter()
@@ -303,6 +313,7 @@ impl CacheLog {
         self.merge_left_with_filter_map(rhs, Some)
     }
 
+    /// Merges two cache logs in a way that preserves the first read (from self) and the last write (from rhs).
     pub fn merge_writes_left(&mut self, rhs: Self) -> Result<(), MergeError> {
         self.merge_left_with_filter_map(rhs, |(key, access)| match access {
             Access::Read(_) => None,
@@ -311,6 +322,7 @@ impl CacheLog {
         })
     }
 
+    /// Merges two cache logs in a way that preserves the first read (from self) and the last write (from rhs).
     pub fn merge_reads_left(&mut self, rhs: Self) -> Result<(), MergeError> {
         self.merge_left_with_filter_map(rhs, |(key, access)| match access {
             Access::Read(read) => Some((key, Access::Read(read))),
@@ -335,10 +347,12 @@ impl CacheLog {
         Ok(())
     }
 
+    /// Returns the number of entries in the cache.
     pub fn len(&self) -> usize {
         self.log.len()
     }
 
+    /// Returns `true` if the cache is empty, `false` otherwise.
     pub fn is_empty(&self) -> bool {
         self.log.is_empty()
     }

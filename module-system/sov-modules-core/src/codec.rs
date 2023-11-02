@@ -1,3 +1,5 @@
+//! Encoding codec definitions
+
 use alloc::format;
 use alloc::vec::Vec;
 use core::fmt;

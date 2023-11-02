@@ -181,6 +181,7 @@
   ],
   "definitions": {
     "Address": {
+      "description": "Module address representation",
       "type": "object",
       "required": [
         "addr"

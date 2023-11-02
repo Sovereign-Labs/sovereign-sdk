@@ -1,3 +1,5 @@
+//! Runtime state machine definitions.
+
 use alloc::vec::Vec;
 use core::{fmt, mem};
 
@@ -11,13 +13,18 @@ use crate::gas::GasMeter;
 use crate::spec::{Context, Spec};
 use crate::storage::{NativeStorage, Storage, StorageKey, StorageProof, StorageValue};
 
+/// A storage reader and writer
 pub trait StateReaderAndWriter {
+    /// Get a value from the storage.
     fn get(&mut self, key: &StorageKey) -> Option<StorageValue>;
 
+    /// Replaces a storage value.
     fn set(&mut self, key: &StorageKey, value: StorageValue);
 
+    /// Deletes a storage value.
     fn delete(&mut self, key: &StorageKey);
 
+    /// Replaces a storage value with the provided prefix, using the provided codec.
     fn set_value<Q, K, V, Codec>(
         &mut self,
         prefix: &Prefix,
@@ -35,6 +42,8 @@ pub trait StateReaderAndWriter {
         self.set(&storage_key, storage_value);
     }
 
+    /// Replaces a storage value with a singleton prefix. For more information, check
+    /// [StorageKey::singleton].
     fn set_singleton<V, Codec>(&mut self, prefix: &Prefix, value: &V, codec: &Codec)
     where
         Codec: StateCodec,
@@ -45,6 +54,7 @@ pub trait StateReaderAndWriter {
         self.set(&storage_key, storage_value);
     }
 
+    /// Get a decoded value from the storage.
     fn get_decoded<V, Codec>(&mut self, storage_key: &StorageKey, codec: &Codec) -> Option<V>
     where
         Codec: StateCodec,
@@ -59,6 +69,7 @@ pub trait StateReaderAndWriter {
         )
     }
 
+    /// Get a value from the storage.
     fn get_value<Q, K, V, Codec>(
         &mut self,
         prefix: &Prefix,
@@ -75,6 +86,7 @@ pub trait StateReaderAndWriter {
         self.get_decoded(&storage_key, codec)
     }
 
+    /// Get a singleton value from the storage. For more information, check [StorageKey::singleton].
     fn get_singleton<V, Codec>(&mut self, prefix: &Prefix, codec: &Codec) -> Option<V>
     where
         Codec: StateCodec,
@@ -84,6 +96,7 @@ pub trait StateReaderAndWriter {
         self.get_decoded(&storage_key, codec)
     }
 
+    /// Removes a value from the storage.
     fn remove_value<Q, K, V, Codec>(
         &mut self,
         prefix: &Prefix,
@@ -102,6 +115,7 @@ pub trait StateReaderAndWriter {
         Some(storage_value)
     }
 
+    /// Removes a singleton from the storage. For more information, check [StorageKey::singleton].
     fn remove_singleton<V, Codec>(&mut self, prefix: &Prefix, codec: &Codec) -> Option<V>
     where
         Codec: StateCodec,
@@ -113,6 +127,7 @@ pub trait StateReaderAndWriter {
         Some(storage_value)
     }
 
+    /// Deletes a value from the storage.
     fn delete_value<Q, K, Codec>(&mut self, prefix: &Prefix, storage_key: &Q, codec: &Codec)
     where
         Q: ?Sized,
@@ -123,6 +138,7 @@ pub trait StateReaderAndWriter {
         self.delete(&storage_key);
     }
 
+    /// Deletes a singleton from the storage. For more information, check [StorageKey::singleton].
     fn delete_singleton(&mut self, prefix: &Prefix) {
         let storage_key = StorageKey::singleton(prefix);
         self.delete(&storage_key);

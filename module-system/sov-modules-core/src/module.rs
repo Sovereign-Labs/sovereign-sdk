@@ -1,3 +1,5 @@
+//! Runtime module definitions.
+
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Debug;
@@ -95,6 +97,7 @@ pub trait EncodeCall<M: Module> {
 
 /// Methods from this trait should be called only once during the rollup deployment.
 pub trait Genesis {
+    /// Execution context of the module.
     type Context: Context;
 
     /// Initial configuration for the module.

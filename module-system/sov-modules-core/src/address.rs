@@ -1,3 +1,5 @@
+//! Module address definitions
+
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt;
@@ -10,6 +12,7 @@ use sov_rollup_interface::{BasicAddress, RollupAddress};
 
 use crate::error::Bech32ParseError;
 
+/// Segwit address concrete implementation.
 #[derive(
     serde::Serialize,
     serde::Deserialize,
@@ -32,6 +35,7 @@ pub struct AddressBech32 {
     value: String,
 }
 
+/// Module address representation
 #[cfg_attr(all(feature = "native", feature = "std"), derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(PartialEq, Clone, Copy, Eq, BorshDeserialize, BorshSerialize, Hash)]
@@ -132,12 +136,14 @@ impl<'de> serde::Deserialize<'de> for Address {
 impl BasicAddress for Address {}
 impl RollupAddress for Address {}
 
+/// Converts bytes into a bech32m address, using the provided "Human-Readable Part".
 pub fn vec_to_bech32m(vec: &[u8], hrp: &str) -> Result<String, Error> {
     let data = vec.to_base32();
     let bech32_addr = bech32::encode(hrp, data, bech32::Variant::Bech32m)?;
     Ok(bech32_addr)
 }
 
+/// Converts a bech32m address into bytes, also returning the "Human-Readable Part".
 pub fn bech32m_to_decoded_vec(bech32_addr: &str) -> Result<(String, Vec<u8>), Error> {
     let (hrp, data, _) = bech32::decode(bech32_addr)?;
     let vec = Vec::<u8>::from_base32(&data)?;

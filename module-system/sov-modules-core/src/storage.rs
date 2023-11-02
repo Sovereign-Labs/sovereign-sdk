@@ -1,3 +1,5 @@
+//! Module storage definitions.
+
 use alloc::vec::Vec;
 use core::fmt;
 

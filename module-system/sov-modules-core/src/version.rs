@@ -1,3 +1,5 @@
+//! Tree version definitions
+
 #[cfg(feature = "std")]
 pub use jmt::Version;
 

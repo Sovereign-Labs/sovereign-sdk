@@ -1,3 +1,5 @@
+//! Runtime witness definitions.
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
