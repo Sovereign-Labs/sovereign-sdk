@@ -15,7 +15,8 @@ autotests = false
 [dependencies]
 risc0-zkvm = { workspace = true, default-features = false, features = ['std'] }
 risc0-zkvm-platform = { workspace = true }
+bytes = "1.5.0"
 
 [features]
 default = []
-native = ["risc0-zkvm/prove"]
+native = ["risc0-zkvm/client"]

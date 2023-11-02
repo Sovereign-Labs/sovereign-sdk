@@ -2,9 +2,9 @@
 use std::collections::HashMap;
 
 use anyhow::Context;
+use bytes::Bytes;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use risc0_zkvm::Bytes;
 
 /// A global hashmap mapping metric names to their values.
 pub static GLOBAL_HASHMAP: Lazy<Mutex<HashMap<String, (u64, u64)>>> =
@@ -42,7 +42,7 @@ fn deserialize_custom(serialized: Bytes) -> Result<(String, u64), anyhow::Error>
 /// When the "bench" feature is enabled, this callback is registered as a syscall
 /// in the Risc0 VM and invoked whenever a function annotated with the [`sov-zk-cycle-utils::cycle_tracker`]
 /// macro is invoked.
-pub fn metrics_callback(input: risc0_zkvm::Bytes) -> Result<Bytes, anyhow::Error> {
+pub fn metrics_callback(input: Bytes) -> Result<Bytes, anyhow::Error> {
     let met_tuple = deserialize_custom(input)?;
     add_value(met_tuple.0, met_tuple.1);
     Ok(Bytes::new())

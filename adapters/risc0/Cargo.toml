@@ -20,6 +20,7 @@ risc0-zkp = { workspace = true, optional = true }
 risc0-circuit-rv32im = { workspace = true, optional = true }
 serde = { workspace = true }
 bytemuck = "1.13.1"
+bytes = "1.5.0"
 once_cell = { version = "1.7.2", optional = true }
 parking_lot = { version = "0.12.1", optional = true }
 sov-zk-cycle-utils = { path = "../../utils/zk-cycle-utils", version = "0.3" }
@@ -28,7 +29,7 @@ sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
 [features]
 default = []
 native = ["risc0-zkvm/prove", "dep:risc0-zkp", "dep:risc0-circuit-rv32im"]
-bench = ["once_cell", "parking_lot", "native", "sov-zk-cycle-utils/native"]
+bench = ["once_cell", "parking_lot", "sov-zk-cycle-utils/native"]
 
 [[test]]
 name = "native"
