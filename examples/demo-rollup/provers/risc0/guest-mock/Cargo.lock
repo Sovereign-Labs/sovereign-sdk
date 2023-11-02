@@ -1031,13 +1031,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-first-read-last-write-cache"
-version = "0.3.0"
-dependencies = [
- "thiserror",
-]
-
-[[package]]
 name = "sov-mock-da"
 version = "0.3.0"
 dependencies = [
@@ -1064,10 +1057,28 @@ dependencies = [
  "jmt",
  "serde",
  "sha2",
- "sov-first-read-last-write-cache",
+ "sov-modules-core",
  "sov-modules-macros",
  "sov-rollup-interface",
  "sov-state",
+ "thiserror",
+]
+
+[[package]]
+name = "sov-modules-core"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "bech32",
+ "borsh",
+ "derive_more",
+ "digest",
+ "hex",
+ "jmt",
+ "schemars",
+ "serde",
+ "sha2",
+ "sov-rollup-interface",
  "thiserror",
 ]
 
@@ -1081,6 +1092,7 @@ dependencies = [
  "quote",
  "schemars",
  "serde_json",
+ "sov-modules-core",
  "syn 1.0.109",
 ]
 
@@ -1166,7 +1178,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "sov-first-read-last-write-cache",
+ "sov-modules-core",
  "sov-rollup-interface",
  "thiserror",
 ]

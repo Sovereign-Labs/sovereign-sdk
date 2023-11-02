@@ -31,7 +31,7 @@ jsonrpsee = { workspace = true, features = [
     "server",
 ], optional = true }
 tracing = { workspace = true }
-derive_more = { workspace = true }
+derive_more = { workspace = true, default-features = true }
 lazy_static = "1.4.0"
 
 

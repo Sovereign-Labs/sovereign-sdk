@@ -1,17 +1,25 @@
-mod containers;
-mod scratchpad;
+mod accessory_map;
+mod accessory_value;
+mod accessory_vec;
 
-pub use containers::*;
-pub use scratchpad::*;
+mod map;
+mod value;
+mod vec;
+
+pub use accessory_map::AccessoryStateMap;
+pub use accessory_value::AccessoryStateValue;
+pub use accessory_vec::AccessoryStateVec;
+pub use map::{StateMap, StateMapError};
+pub use value::StateValue;
+pub use vec::{Error as StateVecError, StateVec};
 
 #[cfg(test)]
 mod test {
     use jmt::Version;
-    use sov_state::storage::{Storage, StorageKey, StorageValue};
+    use sov_modules_core::{StateReaderAndWriter, Storage, StorageKey, StorageValue, WorkingSet};
     use sov_state::{DefaultStorageSpec, ProverStorage};
 
     use crate::default_context::DefaultContext;
-    use crate::{StateReaderAndWriter, WorkingSet};
 
     #[derive(Clone)]
     struct TestCase {

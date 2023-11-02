@@ -1,11 +1,12 @@
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
 
-use sov_state::codec::{BorshCodec, StateCodec, StateKeyCodec, StateValueCodec};
-use sov_state::Prefix;
+use sov_modules_core::{
+    AccessoryWorkingSet, Context, Prefix, StateCodec, StateKeyCodec, StateValueCodec,
+};
+use sov_state::codec::BorshCodec;
 
-use crate::state::{AccessoryStateMap, AccessoryStateValue, AccessoryWorkingSet, StateVecError};
-use crate::Context;
+use super::{AccessoryStateMap, AccessoryStateValue, StateVecError};
 
 /// A variant of [`StateVec`](crate::StateVec) that stores its elements as
 /// "accessory" state, instead of in the JMT.
@@ -270,11 +271,11 @@ where
 mod test {
     use std::fmt::Debug;
 
+    use sov_modules_core::WorkingSet;
     use sov_state::{DefaultStorageSpec, ProverStorage};
 
     use super::*;
     use crate::default_context::DefaultContext;
-    use crate::state::WorkingSet;
 
     enum TestCaseAction<T> {
         Push(T),
