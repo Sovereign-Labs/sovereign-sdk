@@ -47,7 +47,7 @@ check-no-std: ## Checks that project compiles without std
 	$(MAKE) -C ./rollup-interface $@
 
 find-unused-deps: ## Prints unused dependencies for project. Note: requires nightly
-	cargo udeps --all-targets --all-features
+	cargo +nightly udeps --all-targets --all-features
 
 find-flaky-tests:  ## Runs tests over and over to find if there's flaky tests
 	flaky-finder -j16 -r320 --continue "cargo test -- --nocapture"

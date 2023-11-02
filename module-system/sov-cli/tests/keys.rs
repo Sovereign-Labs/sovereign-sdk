@@ -1,9 +1,9 @@
 use demo_stf::runtime::RuntimeCall;
 use sov_cli::wallet_state::{KeyIdentifier, PrivateKeyAndAddress, WalletState};
 use sov_cli::workflows::keys::KeyWorkflow;
+use sov_mock_da::MockDaSpec;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{PrivateKey, PublicKey, Spec};
-use sov_rollup_interface::mocks::MockDaSpec;
 
 type Da = MockDaSpec;
 

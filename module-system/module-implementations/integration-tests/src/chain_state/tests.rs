@@ -1,15 +1,14 @@
 use sov_chain_state::{StateTransitionId, TransitionInProgress};
 use sov_data_generators::value_setter_data::ValueSetterMessages;
 use sov_data_generators::{has_tx_events, new_test_blob_from_batch, MessageGenerator};
+use sov_mock_da::{MockBlock, MockBlockHeader, MockDaSpec, MockHash, MockValidityCond};
+use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::storage::StorageManager;
 use sov_modules_api::{Spec, WorkingSet};
 use sov_modules_stf_template::kernels::basic::BasicKernel;
 use sov_modules_stf_template::{AppTemplate, SequencerOutcome};
-use sov_rollup_interface::mocks::{
-    MockBlock, MockBlockHeader, MockDaSpec, MockHash, MockValidityCond, MockZkvm,
-};
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::storage::StorageManager;
 use sov_state::storage_manager::ProverStorageManager;
 use sov_state::Storage;
 
@@ -112,7 +111,10 @@ fn test_simple_value_setter_with_chain_state() {
 
     assert_eq!(
         new_tx_in_progress,
-        TransitionInProgress::<MockDaSpec>::new(MockHash([10; 32]), MockValidityCond::default()),
+        TransitionInProgress::<MockDaSpec>::new(
+            MockHash::from([10; 32]),
+            MockValidityCond::default()
+        ),
         "The new transition has not been correctly stored"
     );
 

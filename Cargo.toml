@@ -5,22 +5,25 @@ members = [
     "adapters/avail",
     "adapters/risc0",
     "adapters/celestia",
+    "adapters/mock-da",
+    "adapters/mock-zkvm",
+    # Examples
     "examples/const-rollup-config",
     "examples/demo-simple-stf",
     "examples/demo-rollup",
     "examples/simple-nft-module",
-
+    # Full Node
     "full-node/db/sov-db",
     "full-node/sov-sequencer",
     "full-node/sov-ethereum",
     "full-node/sov-ledger-rpc",
     "full-node/sov-stf-runner",
-
+    # Utils
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
     "utils/bashtestmd",
     "utils/rng-da-service",
-
+    # Module System
     "module-system/sov-cli",
     "module-system/sov-modules-stf-template",
     "module-system/sov-modules-rollup-template",

@@ -1,5 +1,6 @@
 [package]
 name = "sov-modules-rollup-template"
+description = "This crate contains abstractions needed to create a new rollup"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }

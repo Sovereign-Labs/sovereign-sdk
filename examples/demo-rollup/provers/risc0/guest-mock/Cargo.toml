@@ -10,7 +10,7 @@ resolver = "2"
 anyhow = "1.0.68"
 risc0-zkvm = { version = "0.18", default-features = false, features = ["std"] }
 risc0-zkvm-platform = "0.18"
-sov-rollup-interface = { path = "../../../../../rollup-interface", features = ["mocks"] }
+sov-mock-da = { path = "../../../../../adapters/mock-da" }
 demo-stf = { path = "../../../stf" }
 sov-risc0-adapter = { path = "../../../../../adapters/risc0" }
 sov-modules-api = { path = "../../../../../module-system/sov-modules-api" }

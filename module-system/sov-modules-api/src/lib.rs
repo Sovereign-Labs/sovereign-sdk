@@ -74,6 +74,10 @@ pub mod da {
     pub use sov_rollup_interface::da::{BlockHeaderTrait, NanoSeconds, Time};
 }
 
+pub mod storage {
+    pub use sov_rollup_interface::storage::StorageManager;
+}
+
 impl AsRef<[u8]> for Address {
     fn as_ref(&self) -> &[u8] {
         &self.addr

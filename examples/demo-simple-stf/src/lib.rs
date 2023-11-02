@@ -75,7 +75,7 @@ impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, 
     {
         let mut receipts = vec![];
         for blob in blobs {
-            let data = blob.full_data();
+            let data = blob.verified_data();
 
             // Check if the sender submitted the preimage of the hash.
             let hash = sha2::Sha256::digest(data).into();

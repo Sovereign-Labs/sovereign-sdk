@@ -23,7 +23,7 @@ enum Workflows<File: clap::Subcommand, Json: clap::Subcommand, C: Context> {
 }
 
 #[derive(clap::Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about = None, long_about = None)]
 struct CliApp<File: clap::Subcommand, Json: clap::Subcommand, C: Context> {
     #[clap(subcommand)]
     workflow: Workflows<File, Json, C>,

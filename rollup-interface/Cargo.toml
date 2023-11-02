@@ -27,10 +27,6 @@ sha2 = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 
-# TODO: Replace with serde-compatible borsh implementation when it becomes availabile 
-#    see https://github.com/Sovereign-Labs/sovereign-sdk/issues/215
-bincode = { workspace = true, optional = true }
-
 # Proptest should be a dev-dependency, but those can't be optional
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
@@ -45,10 +41,8 @@ proptest-derive = { workspace = true }
 default = ["std"]
 native = ["std", "tokio"]
 fuzzing = ["proptest", "proptest-derive", "sha2", "std"]
-mocks = ["sha2", "bytes/serde", "std"]
 std = [
     "anyhow/default",
-    "bincode",
     "borsh/default",
     "borsh/bytes",
     "bytes",
