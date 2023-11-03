@@ -19,4 +19,4 @@ bytes = "1.5.0"
 
 [features]
 default = []
-native = ["risc0-zkvm/client"]
+native = ["risc0-zkvm/prove"]
