@@ -51,8 +51,10 @@ secp256k1 = { workspace = true, optional = true }
 [dev-dependencies]
 sov-rng-da-service = { path = "../../utils/rng-da-service" }
 sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }
+sov-mock-da = { path = "../../adapters/mock-da" }
 sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["smart_contracts"] }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
+sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module", features = ["native"] }
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros" }
 
 borsh = { workspace = true }
@@ -107,7 +109,6 @@ name = "prover_bench"
 path = "benches/prover/prover_bench.rs"
 harness = false
 required-features = ["bench"]
-
 
 [[bin]]
 name = "sov-cli"

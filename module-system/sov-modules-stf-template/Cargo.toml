@@ -30,6 +30,6 @@ risc0-zkvm-platform = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["server"], optional = true }
 
 [features]
-bench = ["sov-zk-cycle-macros/bench", "sov-zk-cycle-utils", "risc0-zkvm", "risc0-zkvm-platform"]
+bench = ["sov-zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
 default = []
 native = ["sov-state/native", "sov-modules-api/native", "jsonrpsee"]
