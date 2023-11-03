@@ -2148,7 +2148,6 @@ dependencies = [
  "anyhow",
  "bincode",
  "bytemuck",
- "bytes",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",

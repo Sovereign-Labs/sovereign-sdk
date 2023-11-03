@@ -2,9 +2,9 @@
 use std::collections::HashMap;
 
 use anyhow::Context;
-use bytes::Bytes;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
+use risc0_zkvm::Bytes;
 
 /// A global hashmap mapping metric names to their values.
 pub static GLOBAL_HASHMAP: Lazy<Mutex<HashMap<String, (u64, u64)>>> =

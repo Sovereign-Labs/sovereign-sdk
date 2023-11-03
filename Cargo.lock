@@ -8928,7 +8928,6 @@ dependencies = [
  "anyhow",
  "bincode",
  "bytemuck",
- "bytes",
  "once_cell",
  "parking_lot 0.12.1",
  "risc0-circuit-rv32im",

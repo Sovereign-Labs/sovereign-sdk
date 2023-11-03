@@ -34,5 +34,5 @@ lto = true
 opt-level = 3
 
 [features]
-bench = ["sov-risc0-adapter/bench","sov-modules-api/bench","sov-state/bench", "sov-modules-stf-template/bench"]
+bench = ["sov-modules-api/bench","sov-state/bench", "sov-modules-stf-template/bench"]
 
