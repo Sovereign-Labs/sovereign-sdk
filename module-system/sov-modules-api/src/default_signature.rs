@@ -6,17 +6,16 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use ed25519_dalek::{
     Signature as DalekSignature, VerifyingKey as DalekPublicKey, PUBLIC_KEY_LENGTH,
 };
-
-use crate::{SigVerificationError, Signature};
+use sov_modules_core::{SigVerificationError, Signature};
 
 #[cfg(feature = "native")]
 pub mod private_key {
     use ed25519_dalek::{Signer, SigningKey, KEYPAIR_LENGTH, SECRET_KEY_LENGTH};
     use rand::rngs::OsRng;
+    use sov_modules_core::{Address, PrivateKey, PublicKey};
     use thiserror::Error;
 
     use super::{DefaultPublicKey, DefaultSignature};
-    use crate::{Address, PrivateKey, PublicKey};
 
     #[derive(Error, Debug)]
     pub enum DefaultPrivateKeyDeserializationError {

@@ -1,24 +1,24 @@
+mod datagen;
+
 use std::collections::HashMap;
 use std::env;
-use std::fs::{read_to_string, remove_file, File, OpenOptions};
+use std::fs::{remove_file, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+
+use sov_mock_da::{MockAddress, MockDaConfig, MockDaService, MockDaSpec};
 
 #[macro_use]
 extern crate prettytable;
 
 use anyhow::Context;
-use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 use demo_stf::genesis_config::{get_genesis_config, GenesisPaths};
 use demo_stf::runtime::Runtime;
 use log4rs::config::{Appender, Config, Root};
 use prettytable::Table;
 use regex::Regex;
-use risc0::ROLLUP_ELF;
-use sov_celestia_adapter::types::{FilteredCelestiaBlock, Namespace};
-use sov_celestia_adapter::verifier::{CelestiaSpec, RollupParams};
-use sov_celestia_adapter::CelestiaService;
+use risc0::MOCK_DA_ELF;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::SlotData;
 use sov_modules_stf_template::kernels::basic::BasicKernel;
@@ -33,8 +33,7 @@ use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
 
-// The rollup stores its data in the namespace b"sov-test" on Celestia
-const ROLLUP_NAMESPACE: Namespace = Namespace::const_v0(ROLLUP_NAMESPACE_RAW);
+use crate::datagen::get_bench_blocks;
 
 #[derive(Debug)]
 struct RegexAppender {
@@ -142,10 +141,9 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     let rollup_config_path = "benches/prover/rollup_config.toml".to_string();
-    let mut rollup_config: RollupConfig<sov_celestia_adapter::CelestiaConfig> =
-        from_toml_path(&rollup_config_path)
-            .context("Failed to read rollup configuration")
-            .unwrap();
+    let mut rollup_config: RollupConfig<MockDaConfig> = from_toml_path(&rollup_config_path)
+        .context("Failed to read rollup configuration")
+        .unwrap();
 
     let mut num_blocks = 0;
     let mut num_blobs = 0;
@@ -153,17 +151,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut num_total_transactions = 0;
 
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
-
     rollup_config.storage.path = PathBuf::from(temp_dir.path());
-
-    let da_service = CelestiaService::new(
-        rollup_config.da.clone(),
-        RollupParams {
-            namespace: ROLLUP_NAMESPACE,
-        },
-    )
-    .await;
-
+    let da_service = MockDaService::new(MockAddress::default());
     let storage_config = sov_state::config::Config {
         path: rollup_config.storage.path,
     };
@@ -172,46 +161,39 @@ async fn main() -> Result<(), anyhow::Error> {
         .expect("ProverStorageManager initialization has failed");
     let stf = AppTemplate::<
         DefaultContext,
-        CelestiaSpec,
+        MockDaSpec,
         Risc0Host,
-        Runtime<DefaultContext, CelestiaSpec>,
+        Runtime<DefaultContext, MockDaSpec>,
         BasicKernel<DefaultContext>,
     >::new();
 
-    let genesis_config =
-        get_genesis_config(&GenesisPaths::from_dir("../test-data/genesis/demo-tests")).unwrap();
+    let genesis_config = get_genesis_config(&GenesisPaths::from_dir(
+        "../test-data/genesis/integration-tests",
+    ))
+    .unwrap();
     println!("Starting from empty storage, initialization chain");
     let (mut prev_state_root, _) =
         stf.init_chain(storage_manager.get_native_storage(), genesis_config);
 
-    let hex_data = read_to_string("benches/prover/blocks.hex").expect("Failed to read data");
-    let bincoded_blocks: Vec<FilteredCelestiaBlock> = hex_data
-        .lines()
-        .map(|line| {
-            let bytes = hex::decode(line).expect("Failed to decode hex data");
-            bincode::deserialize(&bytes).expect("Failed to deserialize data")
-        })
-        .collect();
+    let blocks = get_bench_blocks().await;
 
-    for height in 2..(bincoded_blocks.len() as u64) {
+    for height in 0..(blocks.len() as u64) {
         num_blocks += 1;
-        let mut host = Risc0Host::new(ROLLUP_ELF);
+        let mut host = Risc0Host::new(MOCK_DA_ELF);
         host.add_hint(prev_state_root);
         println!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
             hex::encode(prev_state_root.0)
         );
-        let filtered_block = &bincoded_blocks[height as usize];
-        let _header_hash = hex::encode(filtered_block.header.header.hash());
-        host.add_hint(&filtered_block.header);
+        let filtered_block = &blocks[height as usize];
+        host.add_hint(filtered_block.header);
         let (mut blob_txs, inclusion_proof, completeness_proof) = da_service
             .extract_relevant_blobs_with_proof(filtered_block)
             .await;
 
-        host.add_hint(&inclusion_proof);
-        host.add_hint(&completeness_proof);
-        host.add_hint(&blob_txs);
+        host.add_hint(inclusion_proof);
+        host.add_hint(completeness_proof);
 
         if !blob_txs.is_empty() {
             num_blobs += blob_txs.len();
@@ -225,6 +207,7 @@ async fn main() -> Result<(), anyhow::Error> {
             &filtered_block.validity_condition(),
             &mut blob_txs,
         );
+        host.add_hint(&blob_txs);
         for r in result.batch_receipts {
             let num_tx = r.tx_receipts.len();
             num_total_transactions += num_tx;
@@ -232,7 +215,6 @@ async fn main() -> Result<(), anyhow::Error> {
                 num_blocks_with_txns += 1;
             }
         }
-        // println!("{:?}",result.batch_receipts);
 
         host.add_hint(&result.witness);
 

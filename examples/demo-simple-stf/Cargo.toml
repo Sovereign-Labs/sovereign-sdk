@@ -1,20 +1,21 @@
 [package]
 name = "demo-simple-stf"
-version = { workspace = true } 
-edition = { workspace = true } 
+version = { workspace = true }
+edition = { workspace = true }
 resolver = "2"
-authors = { workspace = true } 
-license = { workspace = true } 
+authors = { workspace = true }
+license = { workspace = true }
 homepage = "sovereign.xyz"
 publish = false
 
 [dependencies]
-anyhow = { workspace = true}
+anyhow = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
 
-sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
+sov-rollup-interface = { path = "../../rollup-interface" }
 
 [dev-dependencies]
-sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
+sov-mock-da = { path = "../../adapters/mock-da" }
+sov-mock-zkvm = { path = "../../adapters/mock-zkvm" }

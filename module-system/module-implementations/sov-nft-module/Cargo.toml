@@ -27,7 +27,6 @@ tokio = { version = "1.33.0", features=["full"], optional = true }
 tracing = { workspace = true, optional = true }
 
 [dev-dependencies]
-sov-rollup-interface = { path = "../../../rollup-interface" }
 sov-data-generators = { path = "../../utils/sov-data-generators" }
 tempfile = { workspace = true }
 sov-nft-module = { version = "*", features = ["native"], path = "." }

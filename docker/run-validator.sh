@@ -94,7 +94,7 @@ provision_bridge_nodes() {
 
     bridge_address=$(node_address "$bridge_name")
 
-    echo "Transfering $BRIDGE_COINS coins to the $bridge_name"
+    echo "Transferring $BRIDGE_COINS coins to the $bridge_name"
     echo "y" | celestia-appd tx bank send \
       "$NODE_NAME" \
       "$bridge_address" \

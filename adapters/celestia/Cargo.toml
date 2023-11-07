@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 borsh = { workspace = true, features = ["bytes"] }
-bech32 = { workspace = true }
+bech32 = { workspace = true, default-features = true }
 prost = "0.12"
 # I keep this commented as a reminder to opportunity to optimze this crate for non native compilation
 #tendermint = { version = "0.32", default-features = false, features = ["std"] }
@@ -67,4 +67,3 @@ bench = [
     "sov-zk-cycle-macros/bench",
     "risc0"
 ]
-verifier = []

@@ -1,8 +1,8 @@
 use jsonrpsee::core::RpcResult;
+use sov_mock_da::{MockAddress, MockDaSpec};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::digest::Digest;
 use sov_modules_api::{Address, Module, Spec, WorkingSet};
-use sov_rollup_interface::mocks::{MockAddress, MockDaSpec};
 use sov_sequencer_registry::{SequencerConfig, SequencerRegistry};
 
 pub type C = DefaultContext;

@@ -82,9 +82,10 @@ impl TryFrom<&PublicKeyHex> for DefaultPublicKey {
 
 #[cfg(test)]
 mod tests {
+    use sov_modules_core::PrivateKey;
+
     use super::*;
     use crate::default_signature::private_key::DefaultPrivateKey;
-    use crate::PrivateKey;
 
     #[test]
     fn test_pub_key_hex() {

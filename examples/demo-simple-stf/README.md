@@ -152,10 +152,10 @@ The first transaction that finds the correct hash would break the loop and retur
 
 ## Testing
 
-The `sov_rollup_interface::mocks` crate provides two utilities that are useful for testing:
+The `sov-mock-da` and `sov-mock-zkvm` crates provide two utilities that are useful for testing:
 
-1. The `MockZkvm` is an implementation of the `Zkvm` trait that can be used in tests.
-1. The `MockBlob` is an implementation of the `BlobTransactionTrait` trait that can be used in tests. It accepts an `A: BasicAddress` as a generic parameter. For testing purposes, we use `MockAddress` struct from the same `mocks` module
+1. The `sov_mock_zkvm::MockZkvm` is an implementation of the `Zkvm` trait that can be used in tests.
+2. The `sov_mock_da::MockBlob` is an implementation of the `BlobTransactionTrait` trait that can be used in tests. It accepts an `A: BasicAddress` as a generic parameter. For testing purposes, we use `MockAddress` struct from the same module 
 
 You can find more details in the `stf_test.rs` file.
 
@@ -163,7 +163,8 @@ The following test checks the rollup logic. In the test, we call `init_chain, be
 
 ```rust
 use demo_simple_stf::{ApplySlotResult, CheckHashPreimageStf};
-use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockBlock, MockValidityCond, MockZkvm};
+use sov_mock_da::{MockAddress, MockBlob, MockBlock, MockValidityCond};
+use sov_mock_zkvm::MockZkvm;
 use sov_rollup_interface::stf::StateTransitionFunction;
 
 #[test]
@@ -171,8 +172,11 @@ fn test_stf() {
     let address = MockAddress { addr: [1; 32] };
     let preimage = vec![0; 32];
 
-    let test_blob = MockBlob::new(preimage, address, [0; 32]);
+    let mut test_blob = MockBlob::new(preimage, address, [0; 32]);
+    // Work around for https://github.com/Sovereign-Labs/sovereign-sdk/issues/1129
+    test_blob.data.advance(test_blob.data.total_len());
     let stf = &mut CheckHashPreimageStf::<MockValidityCond>::default();
+    StateTransitionFunction::<MockZkvm, MockDaSpec>::init_chain(stf, (), ());
 
     let data = MockBlock::default();
     let mut blobs = [test_blob];
@@ -181,8 +185,11 @@ fn test_stf() {
 
     let result = StateTransitionFunction::<MockZkvm, MockDaSpec>::apply_slot(
         stf,
+        &[],
         (),
-        &data,
+        (),
+        &MockBlockHeader::default(),
+        &MockValidityCond::default(),
         &mut blobs,
     );
 

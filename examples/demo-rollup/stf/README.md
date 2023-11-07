@@ -57,7 +57,6 @@ module to your app, just add an additional field to the runtime.
 ```rust
 use sov_modules_api::{Genesis, DispatchCall, MessageCodec, Context};
 use sov_modules_api::macros::expose_rpc;
-use sov_sequencer::Sequencer;
 use sov_rollup_interface::da::DaSpec;
 #[cfg(feature = "native")]
 use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};

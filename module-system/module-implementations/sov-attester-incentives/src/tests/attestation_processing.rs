@@ -168,7 +168,7 @@ fn test_burn_on_invalid_attestation() {
         BOND_AMOUNT
     );
 
-    // Now proccess a valid attestation for genesis.
+    // Now process a valid attestation for genesis.
     {
         let attestation = Attestation {
             initial_state_root: initial_transition.state_root,

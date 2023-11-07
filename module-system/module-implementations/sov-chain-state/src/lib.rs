@@ -21,8 +21,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub use query::*;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use sov_modules_api::da::Time;
 use sov_modules_api::{DaSpec, Error, ModuleInfo, ValidityConditionChecker, WorkingSet};
-use sov_rollup_interface::da::Time;
 use sov_state::codec::BcsCodec;
 use sov_state::Storage;
 

@@ -16,13 +16,16 @@ anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 tempfile = { workspace = true }
 serde = { workspace = true }
-jsonrpsee =  { workspace = true }
+jsonrpsee = { workspace = true }
 
 sov-modules-api = { path = "../../sov-modules-api", features = ["native"] }
 sov-state = { path = "../../sov-state", features = ["native"] }
-sov-rollup-interface = { path = "../../../rollup-interface" }
+
+sov-mock-zkvm = { path = "../../../adapters/mock-zkvm" }
 sov-schema-db = { path = "../../../full-node/db/sov-schema-db" }
 sov-data-generators = { path = "../../utils/sov-data-generators" }
+sov-rollup-interface = { path = "../../../rollup-interface", features = ["native"] }
+sov-mock-da = { path = "../../../adapters/mock-da", features = ["native"] }
 sov-modules-stf-template = { path = "../../sov-modules-stf-template", features = ["native"] }
 
 sov-chain-state = { path = "../sov-chain-state", features = ["native"] }

@@ -6,10 +6,10 @@ use sov_data_generators::bank_data::{
 };
 use sov_data_generators::value_setter_data::{ValueSetterMessage, ValueSetterMessages};
 use sov_data_generators::MessageGenerator;
+use sov_mock_da::MockDaSpec;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_stf_template::RawTx;
-use sov_rollup_interface::mocks::MockDaSpec;
 
 use crate::runtime::Runtime;
 
