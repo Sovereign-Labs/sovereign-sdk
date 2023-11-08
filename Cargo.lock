@@ -8647,7 +8647,7 @@ dependencies = [
  "sov-ledger-rpc",
  "sov-mock-da",
  "sov-modules-api",
- "sov-modules-rollup-template",
+ "sov-modules-rollup-blueprint",
  "sov-modules-stf-template",
  "sov-nft-module",
  "sov-risc0-adapter",
@@ -8861,7 +8861,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-modules-rollup-template"
+name = "sov-modules-rollup-blueprint"
 version = "0.3.0"
 dependencies = [
  "anyhow",

@@ -23,7 +23,7 @@ pub use wallet::*;
 
 /// This trait defines how to crate all the necessary dependencies required by a rollup.
 #[async_trait]
-pub trait RollupTemplate: Sized + Send + Sync {
+pub trait RollupBlueprint: Sized + Send + Sync {
     /// Data Availability service.
     type DaService: DaService<Spec = Self::DaSpec, Error = anyhow::Error> + Clone + Send + Sync;
     /// A specification for the types used by a DA layer.
@@ -166,7 +166,7 @@ pub enum RollupProverConfig {
 }
 
 /// Dependencies needed to run the rollup.
-pub struct Rollup<S: RollupTemplate> {
+pub struct Rollup<S: RollupBlueprint> {
     /// The State Transition Runner.
     #[allow(clippy::type_complexity)]
     pub runner: StateTransitionRunner<
@@ -180,7 +180,7 @@ pub struct Rollup<S: RollupTemplate> {
     pub rpc_methods: jsonrpsee::RpcModule<()>,
 }
 
-impl<S: RollupTemplate> Rollup<S> {
+impl<S: RollupBlueprint> Rollup<S> {
     /// Runs the rollup.
     pub async fn run(self) -> Result<(), anyhow::Error> {
         self.run_and_report_rpc_port(None).await
