@@ -8,7 +8,7 @@ ENV CELESTIA_HOME=/root
 RUN apk update && apk add --no-cache bash jq
 
 # Copy in the binary
-COPY --from=ghcr.io/celestiaorg/celestia-app:v1.0.0 /bin/celestia-appd /bin/celestia-appd
+COPY --from=ghcr.io/celestiaorg/celestia-app:v1.3.0 /bin/celestia-appd /bin/celestia-appd
 
 COPY ./run-validator.sh /opt/entrypoint.sh
 
