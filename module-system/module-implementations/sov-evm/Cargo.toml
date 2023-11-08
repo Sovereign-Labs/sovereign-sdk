@@ -71,4 +71,5 @@ native = [
     "sov-modules-api/native",
 ]
 experimental = ["native"]
+serde = ["dep:serde"]
 smart_contracts = ["experimental"]

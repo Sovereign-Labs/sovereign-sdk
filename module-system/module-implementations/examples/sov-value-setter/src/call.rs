@@ -9,12 +9,11 @@ use thiserror::Error;
 use super::ValueSetter;
 
 /// This enumeration represents the available call messages for interacting with the `sov-value-setter` module.
+#[cfg_attr(feature = "native", derive(CliWalletArg), derive(schemars::JsonSchema))]
 #[cfg_attr(
-    feature = "native",
+    feature = "serde",
     derive(serde::Serialize),
-    derive(serde::Deserialize),
-    derive(CliWalletArg),
-    derive(schemars::JsonSchema)
+    derive(serde::Deserialize)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage {

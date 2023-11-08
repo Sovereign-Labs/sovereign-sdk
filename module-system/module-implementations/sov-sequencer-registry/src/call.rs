@@ -7,12 +7,11 @@ use crate::SequencerRegistry;
 
 /// This enumeration represents the available call messages for interacting with
 /// the `sov-sequencer-registry` module.
+#[cfg_attr(feature = "native", derive(schemars::JsonSchema), derive(CliWalletArg))]
 #[cfg_attr(
-    feature = "native",
+    feature = "serde",
     derive(serde::Serialize),
-    derive(serde::Deserialize),
-    derive(schemars::JsonSchema),
-    derive(CliWalletArg)
+    derive(serde::Deserialize)
 )]
 #[cfg_attr(
     feature = "arbitrary",

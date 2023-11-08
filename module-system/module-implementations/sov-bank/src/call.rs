@@ -8,11 +8,14 @@ use crate::{Amount, Bank, Coins, Token};
 /// This enumeration represents the available call messages for interacting with the sov-bank module.
 #[cfg_attr(
     feature = "native",
-    derive(serde::Serialize),
-    derive(serde::Deserialize),
     derive(CliWalletArg),
     derive(schemars::JsonSchema),
     schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "CallMessage")
+)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: sov_modules_api::Context> {

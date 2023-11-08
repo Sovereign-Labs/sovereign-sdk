@@ -61,6 +61,7 @@ std = [
     "sync",
     "thiserror",
 ]
+serde = []
 sync = [
     "borsh/rc",
     "serde/rc",
