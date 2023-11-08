@@ -5,7 +5,7 @@ use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier, RollupParam
 use sov_celestia_adapter::{CelestiaConfig, CelestiaService};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::Spec;
-use sov_modules_rollup_template::{RollupTemplate, WalletTemplate};
+use sov_modules_rollup_template::{RollupBlueprint, WalletBlueprint};
 use sov_modules_stf_template::kernels::basic::BasicKernel;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
@@ -19,7 +19,7 @@ use crate::ROLLUP_NAMESPACE;
 pub struct CelestiaDemoRollup {}
 
 #[async_trait]
-impl RollupTemplate for CelestiaDemoRollup {
+impl RollupBlueprint for CelestiaDemoRollup {
     type DaService = CelestiaService;
     type DaSpec = CelestiaSpec;
     type DaConfig = CelestiaConfig;
@@ -100,4 +100,4 @@ impl RollupTemplate for CelestiaDemoRollup {
     }
 }
 
-impl WalletTemplate for CelestiaDemoRollup {}
+impl WalletBlueprint for CelestiaDemoRollup {}

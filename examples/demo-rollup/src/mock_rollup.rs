@@ -5,7 +5,7 @@ use sov_db::ledger_db::LedgerDB;
 use sov_mock_da::{MockDaConfig, MockDaService, MockDaSpec};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::Spec;
-use sov_modules_rollup_template::RollupTemplate;
+use sov_modules_rollup_template::RollupBlueprint;
 use sov_modules_stf_template::kernels::basic::BasicKernel;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
@@ -17,7 +17,7 @@ use sov_stf_runner::RollupConfig;
 pub struct MockDemoRollup {}
 
 #[async_trait]
-impl RollupTemplate for MockDemoRollup {
+impl RollupBlueprint for MockDemoRollup {
     type DaService = MockDaService;
     type DaSpec = MockDaSpec;
     type DaConfig = MockDaConfig;

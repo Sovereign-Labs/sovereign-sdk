@@ -5,7 +5,7 @@ use clap::Parser;
 use demo_stf::genesis_config::GenesisPaths;
 use sov_demo_rollup::{CelestiaDemoRollup, MockDemoRollup};
 use sov_mock_da::MockDaConfig;
-use sov_modules_rollup_template::{Rollup, RollupProverConfig, RollupTemplate};
+use sov_modules_rollup_template::{Rollup, RollupBlueprint, RollupProverConfig};
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tracing::log::debug;
 use tracing_subscriber::prelude::*;
