@@ -32,6 +32,8 @@ impl<'a> StructDef<'a> {
                 #enum_ident::#name(message)=>{
                     ::sov_modules_api::Module::call(&self.#name, message, context, working_set)
                 },
+
+
             )
         });
 

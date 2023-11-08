@@ -1,6 +1,7 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
 
+mod prover_service;
 mod runtime_rpc;
 mod wallet;
 use std::net::SocketAddr;
