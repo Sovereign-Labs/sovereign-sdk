@@ -12,7 +12,7 @@ use crate::experimental::PendingTransaction;
 use crate::Evm;
 
 #[cfg_attr(
-    feature = "native",
+    feature = "serde",
     derive(serde::Serialize),
     derive(serde::Deserialize)
 )]

@@ -198,10 +198,8 @@ impl BorshSerialize for DefaultPublicKey {
     }
 }
 
-#[cfg_attr(
-    feature = "native",
-    derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)
-)]
+#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct DefaultSignature {
     #[cfg_attr(

@@ -34,5 +34,6 @@ sov-nft-module = { version = "*", features = ["native"], path = "." }
 [features]
 default = []
 offchain = ["postgres","tokio","tracing"]
-native = ["serde_json", "jsonrpsee", "schemars", "sov-state/native", "sov-modules-api/native", ]
+native = ["serde", "serde_json", "jsonrpsee", "schemars", "sov-state/native", "sov-modules-api/native", ]
+serde = []
 test = ["native"]
