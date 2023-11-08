@@ -5,7 +5,7 @@ use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier, RollupParam
 use sov_celestia_adapter::{CelestiaConfig, CelestiaService};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::Spec;
-use sov_modules_rollup_template::{RollupBlueprint, WalletBlueprint};
+use sov_modules_rollup_blueprint::{RollupBlueprint, WalletBlueprint};
 use sov_modules_stf_template::kernels::basic::BasicKernel;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
@@ -43,7 +43,7 @@ impl RollupBlueprint for CelestiaDemoRollup {
         da_service: &Self::DaService,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
         #[allow(unused_mut)]
-        let mut rpc_methods = sov_modules_rollup_template::register_rpc::<
+        let mut rpc_methods = sov_modules_rollup_blueprint::register_rpc::<
             Self::NativeRuntime,
             Self::NativeContext,
             Self::DaService,

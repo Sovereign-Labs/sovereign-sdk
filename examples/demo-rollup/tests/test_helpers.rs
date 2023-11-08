@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use demo_stf::genesis_config::GenesisPaths;
 use sov_demo_rollup::MockDemoRollup;
 use sov_mock_da::{MockAddress, MockDaConfig};
-use sov_modules_rollup_template::{RollupBlueprint, RollupProverConfig};
+use sov_modules_rollup_blueprint::{RollupBlueprint, RollupProverConfig};
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
 use tokio::sync::oneshot;
 

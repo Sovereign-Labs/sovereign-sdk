@@ -5,7 +5,7 @@ use sov_db::ledger_db::LedgerDB;
 use sov_mock_da::{MockDaConfig, MockDaService, MockDaSpec};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::Spec;
-use sov_modules_rollup_template::RollupBlueprint;
+use sov_modules_rollup_blueprint::RollupBlueprint;
 use sov_modules_stf_template::kernels::basic::BasicKernel;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
@@ -41,7 +41,7 @@ impl RollupBlueprint for MockDemoRollup {
         da_service: &Self::DaService,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
         #[allow(unused_mut)]
-        let mut rpc_methods = sov_modules_rollup_template::register_rpc::<
+        let mut rpc_methods = sov_modules_rollup_blueprint::register_rpc::<
             Self::NativeRuntime,
             Self::NativeContext,
             Self::DaService,

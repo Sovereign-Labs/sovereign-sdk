@@ -19,7 +19,7 @@ const-rollup-config = { path = "../const-rollup-config" }
 sov-stf-runner = { path = "../../full-node/sov-stf-runner", features = ["native"] }
 sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
 
-sov-modules-rollup-template = { path = "../../module-system/sov-modules-rollup-template" }
+sov-modules-rollup-blueprint = { path = "../../module-system/sov-modules-rollup-blueprint" }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module" }
