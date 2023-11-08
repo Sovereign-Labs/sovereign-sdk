@@ -66,10 +66,7 @@ use crate::genesis_config::GenesisPaths;
 #[cfg_attr(feature = "native", derive(CliWallet), expose_rpc)]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-#[cfg_attr(
-    feature = "native",
-    serialization(serde::Serialize, serde::Deserialize)
-)]
+#[cfg_attr(feature = "serde", serialization(serde::Serialize, serde::Deserialize))]
 pub struct Runtime<C: Context, Da: DaSpec> {
     /// The Bank module.
     pub bank: sov_bank::Bank<C>,

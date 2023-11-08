@@ -1,4 +1,4 @@
-#[cfg(feature = "native")]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use sov_modules_core::{Address, Context, PublicKey, Spec, TupleGasUnit};
@@ -43,7 +43,7 @@ impl Context for DefaultContext {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "native", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ZkDefaultContext {
     pub sender: Address,
 }
