@@ -77,8 +77,14 @@ pub trait Spec {
         + schemars::JsonSchema;
 
     /// The digital signature scheme used by the rollup
-    #[cfg(not(all(feature = "native", feature = "std")))]
+    #[cfg(all(not(all(feature = "native", feature = "std")), not(feature = "serde")))]
     type Signature: Signature<PublicKey = Self::PublicKey>;
+
+    /// The digital signature scheme used by the rollup
+    #[cfg(all(not(all(feature = "native", feature = "std")), feature = "serde"))]
+    type Signature: Signature<PublicKey = Self::PublicKey>
+        + serde::Serialize
+        + for<'a> serde::Deserialize<'a>;
 
     /// A structure containing the non-deterministic inputs from the prover to the zk-circuit
     type Witness: Witness;

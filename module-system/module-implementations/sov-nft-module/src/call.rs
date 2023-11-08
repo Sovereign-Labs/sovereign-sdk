@@ -7,10 +7,13 @@ use crate::{Collection, CollectionAddress, Nft, NftIdentifier, NonFungibleToken,
 
 #[cfg_attr(
     feature = "native",
-    derive(serde::Serialize),
-    derive(serde::Deserialize),
     derive(schemars::JsonSchema),
     schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "CallMessage")
+)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 /// A transaction handled by the NFT module. Mints, Transfers, or Burns an NFT by id

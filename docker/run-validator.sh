@@ -157,7 +157,7 @@ main() {
   provision_bridge_nodes &
   # Start the celestia-app
   echo "Configuration finished. Running a validator node..."
-  celestia-appd start --api.enable
+  celestia-appd start --api.enable --grpc.enable
 }
 
 main
