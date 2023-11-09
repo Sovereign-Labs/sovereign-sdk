@@ -36,10 +36,10 @@ pub fn main() {
     #[cfg(feature = "bench")]
     let start_cycles = env::get_cycle_count();
 
-    let app: StfBlueprint<ZkDefaultContext, _, _, Runtime<_, _>, BasicKernel<_>> =
+    let stf: StfBlueprint<ZkDefaultContext, _, _, Runtime<_, _>, BasicKernel<_>> =
         StfBlueprint::new();
 
-    let mut stf_verifier = AppVerifier::new(app, MockDaVerifier {});
+    let mut stf_verifier = AppVerifier::new(stf, MockDaVerifier {});
 
     stf_verifier
         .run_block(guest, storage)

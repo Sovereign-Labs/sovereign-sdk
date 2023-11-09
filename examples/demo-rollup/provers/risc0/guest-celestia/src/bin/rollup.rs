@@ -20,11 +20,11 @@ risc0_zkvm::guest::entry!(main);
 pub fn main() {
     let guest = Risc0Guest::new();
     let storage = ZkStorage::new();
-    let app: StfBlueprint<ZkDefaultContext, _, _, Runtime<_, _>, BasicKernel<_>> =
+    let stf: StfBlueprint<ZkDefaultContext, _, _, Runtime<_, _>, BasicKernel<_>> =
         StfBlueprint::new();
 
     let mut stf_verifier = AppVerifier::new(
-        app,
+        stf,
         CelestiaVerifier {
             rollup_namespace: ROLLUP_NAMESPACE,
         },
