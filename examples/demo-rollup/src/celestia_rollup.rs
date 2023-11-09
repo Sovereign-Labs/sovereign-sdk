@@ -6,7 +6,7 @@ use sov_celestia_adapter::{CelestiaConfig, CelestiaService};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::Spec;
 use sov_modules_rollup_blueprint::{RollupBlueprint, WalletBlueprint};
-use sov_modules_stf_template::kernels::basic::BasicKernel;
+use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
 use sov_state::storage_manager::ProverStorageManager;

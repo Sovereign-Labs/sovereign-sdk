@@ -6,8 +6,8 @@ use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::storage::StorageManager;
 use sov_modules_api::{Spec, WorkingSet};
-use sov_modules_stf_template::kernels::basic::BasicKernel;
-use sov_modules_stf_template::{AppTemplate, SequencerOutcome};
+use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
+use sov_modules_stf_blueprint::{SequencerOutcome, StfBlueprint};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::storage_manager::ProverStorageManager;
 use sov_state::Storage;
@@ -21,7 +21,7 @@ type C = DefaultContext;
 /// and the state transitions are correctly stored and updated.
 #[test]
 fn test_simple_value_setter_with_chain_state() {
-    // Build an app template with the module configurations
+    // Build an stf blueprint with the module configurations
 
     let tmpdir = tempfile::tempdir().unwrap();
 
@@ -30,8 +30,8 @@ fn test_simple_value_setter_with_chain_state() {
     })
     .unwrap();
 
-    let app_template =
-        AppTemplate::<C, MockDaSpec, MockZkvm, TestRuntime<C, MockDaSpec>, BasicKernel<C>>::new();
+    let stf =
+        StfBlueprint::<C, MockDaSpec, MockZkvm, TestRuntime<C, MockDaSpec>, BasicKernel<C>>::new();
     let test_runtime = TestRuntime::<C, MockDaSpec>::default();
 
     let value_setter_messages = ValueSetterMessages::default();
@@ -40,7 +40,7 @@ fn test_simple_value_setter_with_chain_state() {
     let admin_pub_key = value_setter_messages.messages[0].admin.default_address();
 
     // Genesis
-    let (init_root_hash, _) = app_template.init_chain(
+    let (init_root_hash, _) = stf.init_chain(
         storage_manager.get_native_storage(),
         create_chain_state_genesis_config(admin_pub_key),
     );
@@ -48,7 +48,7 @@ fn test_simple_value_setter_with_chain_state() {
     const MOCK_SEQUENCER_DA_ADDRESS: [u8; 32] = [1_u8; 32];
 
     let blob = new_test_blob_from_batch(
-        sov_modules_stf_template::Batch { txs: value_setter },
+        sov_modules_stf_blueprint::Batch { txs: value_setter },
         &MOCK_SEQUENCER_DA_ADDRESS,
         [2; 32],
     );
@@ -71,7 +71,7 @@ fn test_simple_value_setter_with_chain_state() {
 
     assert_eq!(new_height_storage, 0, "The initial height was not computed");
 
-    let result = app_template.apply_slot(
+    let result = stf.apply_slot(
         &init_root_hash,
         storage_manager.get_native_storage(),
         Default::default(),
@@ -131,7 +131,7 @@ fn test_simple_value_setter_with_chain_state() {
         blobs: Default::default(),
     };
 
-    let result = app_template.apply_slot(
+    let result = stf.apply_slot(
         &result.state_root,
         storage_manager.get_native_storage(),
         Default::default(),

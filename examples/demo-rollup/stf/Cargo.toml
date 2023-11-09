@@ -34,7 +34,7 @@ sov-nft-module = { path = "../../../module-system/module-implementations/sov-nft
 
 sov-mock-da = { path = "../../../adapters/mock-da" }
 sov-chain-state = { path = "../../../module-system/module-implementations/sov-chain-state" }
-sov-modules-stf-template = { path = "../../../module-system/sov-modules-stf-template" }
+sov-modules-stf-blueprint = { path = "../../../module-system/sov-modules-stf-blueprint" }
 sov-value-setter = { path = "../../../module-system/module-implementations/examples/sov-value-setter" }
 sov-accounts = { path = "../../../module-system/module-implementations/sov-accounts" }
 sov-state = { path = "../../../module-system/sov-state" }
@@ -67,7 +67,7 @@ native = [
     "sov-modules-api/native",
     "sov-rollup-interface/native",
     "sov-mock-da/native",
-    "sov-modules-stf-template/native",
+    "sov-modules-stf-blueprint/native",
     "clap",
     "serde",
     "serde_json",

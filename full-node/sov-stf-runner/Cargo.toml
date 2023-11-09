@@ -30,7 +30,7 @@ tempfile = { workspace = true }
 
 sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry", features = ["native"] }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
-sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
+sov-modules-stf-blueprint = { path = "../../module-system/sov-modules-stf-blueprint", features = ["native"] }
 
 sov-accounts = { path = "../../module-system/module-implementations/sov-accounts", features = ["native"] }
 sov-celestia-adapter = { path = "../../adapters/celestia", features = ["native"] }

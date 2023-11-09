@@ -1,7 +1,7 @@
 use anyhow::Context as _;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::{Context, Spec};
-use sov_modules_stf_template::{Runtime as RuntimeTrait, SequencerOutcome, TxEffect};
+use sov_modules_stf_blueprint::{Runtime as RuntimeTrait, SequencerOutcome, TxEffect};
 use sov_rollup_interface::services::da::DaService;
 use sov_sequencer::batch_builder::FiFoStrictBatchBuilder;
 

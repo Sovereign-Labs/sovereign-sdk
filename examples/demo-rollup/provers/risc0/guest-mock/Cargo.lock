@@ -266,7 +266,7 @@ dependencies = [
  "sov-chain-state",
  "sov-mock-da",
  "sov-modules-api",
- "sov-modules-stf-template",
+ "sov-modules-stf-blueprint",
  "sov-nft-module",
  "sov-rollup-interface",
  "sov-sequencer-registry",
@@ -1006,7 +1006,7 @@ dependencies = [
  "risc0-zkvm-platform",
  "sov-mock-da",
  "sov-modules-api",
- "sov-modules-stf-template",
+ "sov-modules-stf-blueprint",
  "sov-risc0-adapter",
  "sov-state",
 ]
@@ -1081,7 +1081,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-modules-stf-template"
+name = "sov-modules-stf-blueprint"
 version = "0.3.0"
 dependencies = [
  "anyhow",
