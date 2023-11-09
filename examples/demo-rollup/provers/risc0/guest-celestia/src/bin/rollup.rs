@@ -4,7 +4,7 @@
 
 use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 use demo_stf::runtime::Runtime;
-use demo_stf::AppVerifier;
+use demo_stf::StfVerifier;
 use sov_celestia_adapter::types::Namespace;
 use sov_celestia_adapter::verifier::CelestiaVerifier;
 use sov_modules_api::default_context::ZkDefaultContext;
@@ -23,7 +23,7 @@ pub fn main() {
     let stf: StfBlueprint<ZkDefaultContext, _, _, Runtime<_, _>, BasicKernel<_>> =
         StfBlueprint::new();
 
-    let mut stf_verifier = AppVerifier::new(
+    let mut stf_verifier = StfVerifier::new(
         stf,
         CelestiaVerifier {
             rollup_namespace: ROLLUP_NAMESPACE,

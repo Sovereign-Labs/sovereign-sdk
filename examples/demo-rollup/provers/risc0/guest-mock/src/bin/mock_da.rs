@@ -1,6 +1,6 @@
 #![no_main]
 use demo_stf::runtime::Runtime;
-use demo_stf::AppVerifier;
+use demo_stf::StfVerifier;
 #[cfg(feature = "bench")]
 use risc0_zkvm::guest::env;
 use sov_mock_da::MockDaVerifier;
@@ -39,7 +39,7 @@ pub fn main() {
     let stf: StfBlueprint<ZkDefaultContext, _, _, Runtime<_, _>, BasicKernel<_>> =
         StfBlueprint::new();
 
-    let mut stf_verifier = AppVerifier::new(stf, MockDaVerifier {});
+    let mut stf_verifier = StfVerifier::new(stf, MockDaVerifier {});
 
     stf_verifier
         .run_block(guest, storage)

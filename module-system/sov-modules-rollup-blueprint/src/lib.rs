@@ -204,7 +204,7 @@ impl<S: RollupBlueprint> Rollup<S> {
     }
 }
 
-type AppVerifier<DA, Zk, ZkContext, RT, K> =
+type StfVerifier<DA, Zk, ZkContext, RT, K> =
     StateTransitionVerifier<StfBlueprint<ZkContext, <DA as DaVerifier>::Spec, Zk, RT, K>, DA, Zk>;
 
 type ZkProver<ZkContext, Vm, ZkRuntime, Da, K> = Prover<
@@ -225,7 +225,7 @@ fn configure_prover<
     da_verifier: Da::Verifier,
 ) -> ZkProver<ZkContext, Vm, RT, Da, K> {
     let app = StfBlueprint::new();
-    let app_verifier = AppVerifier::<_, _, ZkContext, RT, K>::new(app, da_verifier);
+    let app_verifier = StfVerifier::<_, _, ZkContext, RT, K>::new(app, da_verifier);
 
     let config = match cfg {
         RollupProverConfig::Simulate => ProofGenConfig::Simulate(app_verifier),
