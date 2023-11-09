@@ -1312,7 +1312,7 @@ dependencies = [
 [[package]]
 name = "celestia-proto"
 version = "0.1.0"
-source = "git+https://github.com/eigerco/celestia-node-rs.git?rev=1fa61eb#1fa61ebd6be6a3663f12e61cf23618342e3a910f"
+source = "git+https://github.com/eigerco/celestia-node-rs.git?rev=66b7c6c#66b7c6cd58213c0cbf79207ba549cef82764ddca"
 dependencies = [
  "anyhow",
  "prost 0.12.1",
@@ -1325,8 +1325,9 @@ dependencies = [
 [[package]]
 name = "celestia-rpc"
 version = "0.1.0"
-source = "git+https://github.com/eigerco/celestia-node-rs.git?rev=1fa61eb#1fa61ebd6be6a3663f12e61cf23618342e3a910f"
+source = "git+https://github.com/eigerco/celestia-node-rs.git?rev=66b7c6c#66b7c6cd58213c0cbf79207ba549cef82764ddca"
 dependencies = [
+ "async-trait",
  "celestia-types",
  "http",
  "jsonrpsee 0.20.3",
@@ -1338,7 +1339,7 @@ dependencies = [
 [[package]]
 name = "celestia-types"
 version = "0.1.0"
-source = "git+https://github.com/eigerco/celestia-node-rs.git?rev=1fa61eb#1fa61ebd6be6a3663f12e61cf23618342e3a910f"
+source = "git+https://github.com/eigerco/celestia-node-rs.git?rev=66b7c6c#66b7c6cd58213c0cbf79207ba549cef82764ddca"
 dependencies = [
  "base64 0.21.5",
  "bech32",
@@ -1347,6 +1348,7 @@ dependencies = [
  "cid",
  "const_format",
  "enum_dispatch",
+ "getrandom 0.2.10",
  "nmt-rs",
  "ruint",
  "serde",
@@ -1354,6 +1356,7 @@ dependencies = [
  "tendermint 0.32.0",
  "tendermint-proto 0.32.0",
  "thiserror",
+ "wasm-bindgen-test",
 ]
 
 [[package]]
@@ -1595,6 +1598,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f057a694a54f12365049b0958a1685bb52d567f5593b355fbf685838e873d400"
 dependencies = [
  "crossbeam-utils",
+]
+
+[[package]]
+name = "console_error_panic_hook"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
+dependencies = [
+ "cfg-if",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -4212,6 +4225,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if",
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -7806,6 +7822,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "scoped-tls"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1cf6437eb19a8f4a6cc0f7dca544973b0b78843adbfeb3683d1a94a0024a294"
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8424,7 +8446,7 @@ dependencies = [
  "serde_json",
  "sov-rollup-interface",
  "sp-core 21.0.0",
- "sp-core-hashing 12.0.0",
+ "sp-core-hashing 13.0.0",
  "sp-keyring",
  "subxt",
  "thiserror",
@@ -8625,7 +8647,7 @@ dependencies = [
  "sov-ledger-rpc",
  "sov-mock-da",
  "sov-modules-api",
- "sov-modules-rollup-template",
+ "sov-modules-rollup-blueprint",
  "sov-modules-stf-template",
  "sov-nft-module",
  "sov-risc0-adapter",
@@ -8839,7 +8861,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-modules-rollup-template"
+name = "sov-modules-rollup-blueprint"
 version = "0.3.0"
 dependencies = [
  "anyhow",
@@ -9281,20 +9303,6 @@ dependencies = [
  "sha2 0.10.8",
  "sha3",
  "sp-std 8.0.0",
- "twox-hash",
-]
-
-[[package]]
-name = "sp-core-hashing"
-version = "12.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7cb5c31aa385d6997a5b73fdc9837c1c0145559205198555c3000739a474767"
-dependencies = [
- "blake2b_simd",
- "byteorder",
- "digest 0.10.7",
- "sha2 0.10.8",
- "sha3",
  "twox-hash",
 ]
 
@@ -10093,7 +10101,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.32.0"
-source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=1f8b574#1f8b574809a43b892f4beb59b887919b484fe232"
+source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=ef58b85#ef58b85e3e8b35b0f94b822d3996613539dcddd7"
 dependencies = [
  "bytes",
  "digest 0.10.7",
@@ -10101,6 +10109,7 @@ dependencies = [
  "ed25519-consensus",
  "flex-error",
  "futures",
+ "instant",
  "num-traits",
  "once_cell",
  "prost 0.12.1",
@@ -10150,7 +10159,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.32.0"
-source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=1f8b574#1f8b574809a43b892f4beb59b887919b484fe232"
+source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=ef58b85#ef58b85e3e8b35b0f94b822d3996613539dcddd7"
 dependencies = [
  "bytes",
  "flex-error",
@@ -10807,7 +10816,7 @@ checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
  "cfg-if",
  "digest 0.10.7",
- "rand 0.8.5",
+ "rand 0.7.3",
  "static_assertions",
 ]
 
@@ -11178,6 +11187,31 @@ name = "wasm-bindgen-shared"
 version = "0.2.88"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d046c5d029ba91a1ed14da14dca44b68bf2f124cfbaf741c54151fdb3e0750b"
+
+[[package]]
+name = "wasm-bindgen-test"
+version = "0.3.38"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6433b7c56db97397842c46b67e11873eda263170afeb3a2dc74a7cb370fee0d"
+dependencies = [
+ "console_error_panic_hook",
+ "js-sys",
+ "scoped-tls",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-bindgen-test-macro",
+]
+
+[[package]]
+name = "wasm-bindgen-test-macro"
+version = "0.3.38"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "493fcbab756bb764fa37e6bee8cec2dd709eb4273d06d0c282a5e74275ded735"
+dependencies = [
+ "proc-macro2 1.0.69",
+ "quote 1.0.33",
+ "syn 2.0.38",
+]
 
 [[package]]
 name = "wasmparser"

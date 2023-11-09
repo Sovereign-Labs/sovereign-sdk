@@ -69,8 +69,18 @@ native = [
     "sov-mock-da/native",
     "sov-modules-stf-template/native",
     "clap",
+    "serde",
     "serde_json",
     "jsonrpsee",
     "tokio",
     "toml",
+]
+serde = [
+    "sov-bank/serde",
+    "sov-sequencer-registry/serde",
+    "sov-blob-storage/serde",
+    "sov-value-setter/serde",
+    "sov-accounts/serde",
+    "sov-nft-module/serde",
+    "sov-evm?/serde",
 ]

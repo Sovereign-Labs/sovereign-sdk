@@ -41,6 +41,7 @@ bench = ["sov-zk-cycle-macros/bench", "risc0-zkvm", "risc0-zkvm-platform", "sov-
 default = []
 arbitrary = ["dep:arbitrary", "dep:proptest", "dep:proptest-derive"]
 native = [
+    "serde",
     "serde_json",
     "jsonrpsee",
     "schemars",
@@ -50,3 +51,4 @@ native = [
     # This:
     "sov-bank/native",
 ]
+serde = []

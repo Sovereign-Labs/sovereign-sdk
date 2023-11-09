@@ -61,6 +61,7 @@ native = [
     "serde_json",
     "rand",
     "schemars",
+    "serde",
     "ed25519-dalek/default",
     "ed25519-dalek/rand_core",
     "clap",
@@ -71,3 +72,4 @@ native = [
     "sov-state/native",
 ]
 macros = ["sov-modules-macros"]
+serde = ["sov-modules-core/serde"]

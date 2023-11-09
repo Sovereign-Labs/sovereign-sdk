@@ -7,10 +7,13 @@ use crate::BlobStorage;
 /// A call message for the blob storage module
 #[cfg_attr(
     feature = "native",
-    derive(serde::Serialize),
-    derive(serde::Deserialize),
     derive(sov_modules_api::macros::CliWalletArg),
     derive(schemars::JsonSchema)
+)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage {
