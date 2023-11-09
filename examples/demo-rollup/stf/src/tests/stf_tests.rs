@@ -8,7 +8,7 @@ pub mod test {
     use sov_modules_api::default_context::DefaultContext;
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
     use sov_modules_api::{Context, PrivateKey, WorkingSet};
-    use sov_modules_stf_template::{Batch, SequencerOutcome, StfBlueprint};
+    use sov_modules_stf_blueprint::{Batch, SequencerOutcome, StfBlueprint};
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_rollup_interface::storage::StorageManager;
 

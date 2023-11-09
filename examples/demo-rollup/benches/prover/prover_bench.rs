@@ -21,8 +21,8 @@ use regex::Regex;
 use risc0::MOCK_DA_ELF;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::SlotData;
-use sov_modules_stf_template::kernels::basic::BasicKernel;
-use sov_modules_stf_template::StfBlueprint;
+use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
+use sov_modules_stf_blueprint::StfBlueprint;
 use sov_risc0_adapter::host::Risc0Host;
 #[cfg(feature = "bench")]
 use sov_risc0_adapter::metrics::GLOBAL_HASHMAP;

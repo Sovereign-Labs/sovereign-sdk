@@ -4,7 +4,7 @@ use sov_data_generators::{has_tx_events, new_test_blob_from_batch};
 use sov_mock_da::{MockAddress, MockBlock, MockDaSpec, MOCK_SEQUENCER_DA_ADDRESS};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{PrivateKey, WorkingSet};
-use sov_modules_stf_template::{Batch, SequencerOutcome, SlashingReason, StfBlueprint, TxEffect};
+use sov_modules_stf_blueprint::{Batch, SequencerOutcome, SlashingReason, StfBlueprint, TxEffect};
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::storage::StorageManager;

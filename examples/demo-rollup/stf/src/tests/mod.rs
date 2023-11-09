@@ -3,8 +3,8 @@ use std::path::Path;
 use sov_mock_da::MockDaSpec;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::DaSpec;
-use sov_modules_stf_template::kernels::basic::BasicKernel;
-use sov_modules_stf_template::StfBlueprint;
+use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
+use sov_modules_stf_blueprint::StfBlueprint;
 use sov_state::storage_manager::ProverStorageManager;
 use sov_state::DefaultStorageSpec;
 

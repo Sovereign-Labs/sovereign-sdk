@@ -37,7 +37,7 @@ that it surfaces is that of a `blob` of rollup data. In the Module System, we wo
 transactions signed by particular private keys. To fill the gap, there's a system called an `StfBlueprint`, which
 bridges between the two layers of abstraction.
 
-The reason the `StfBlueprint` is called a "template" is that it's generic. It allows you, the developer, to pass in
+The reason the `StfBlueprint` is called a "blueprint" is that it's generic. It allows you, the developer, to pass in
 several parameters that specify its exact behavior. In order, these generics are:
 
 1. `Context`: a per-transaction struct containing the message's sender. This also provides specs for storage access, so we use different `Context`
@@ -189,5 +189,5 @@ The State Transition Runner struct contains logic related to initialization and 
 ## Wrapping Up
 
 Whew, that was a lot of information. To recap, implementing your own state transition function is as simple as plugging  
-a Runtime, a Transaction Verifier, and some Transaction Hooks into the pre-built app template. Once you've done that,
+a Runtime, a Transaction Verifier, and some Transaction Hooks into the pre-built app blueprint. Once you've done that,
 you can integrate with any DA layer and zkVM to create a Sovereign Rollup.

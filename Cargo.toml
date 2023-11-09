@@ -25,7 +25,7 @@ members = [
     "utils/rng-da-service",
     # Module System
     "module-system/sov-cli",
-    "module-system/sov-modules-stf-template",
+    "module-system/sov-modules-stf-blueprint",
     "module-system/sov-modules-rollup-blueprint",
     "module-system/sov-modules-macros",
     "module-system/sov-modules-core",

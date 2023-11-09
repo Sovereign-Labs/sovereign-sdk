@@ -26,7 +26,7 @@ sov-schema-db = { path = "../../../full-node/db/sov-schema-db" }
 sov-data-generators = { path = "../../utils/sov-data-generators" }
 sov-rollup-interface = { path = "../../../rollup-interface", features = ["native"] }
 sov-mock-da = { path = "../../../adapters/mock-da", features = ["native"] }
-sov-modules-stf-template = { path = "../../sov-modules-stf-template", features = ["native"] }
+sov-modules-stf-blueprint = { path = "../../sov-modules-stf-blueprint", features = ["native"] }
 
 sov-chain-state = { path = "../sov-chain-state", features = ["native"] }
 sov-value-setter = { path = "../examples/sov-value-setter", features = ["native"] }

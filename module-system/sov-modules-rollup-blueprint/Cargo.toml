@@ -19,7 +19,7 @@ sov-state = { path = "../sov-state", version = "0.3" }
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"], version = "0.3" }
 sov-cli = { path = "../../module-system/sov-cli" }
 
-sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"], version = "0.3" }
+sov-modules-stf-blueprint = { path = "../../module-system/sov-modules-stf-blueprint", features = ["native"], version = "0.3" }
 sov-db = { path = "../../full-node/db/sov-db", version = "0.3" }
 
 sov-sequencer = { path = "../../full-node/sov-sequencer" }

@@ -10,7 +10,7 @@ pub use runtime_rpc::*;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::capabilities::Kernel;
 use sov_modules_api::{Context, DaSpec, Spec};
-use sov_modules_stf_template::{Runtime as RuntimeTrait, StfBlueprint};
+use sov_modules_stf_blueprint::{Runtime as RuntimeTrait, StfBlueprint};
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::storage::StorageManager;

@@ -7,7 +7,7 @@ use sov_modules_api::{
     AccessoryWorkingSet, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, MessageCodec,
     PublicKey, Spec,
 };
-use sov_modules_stf_template::{Runtime, SequencerOutcome};
+use sov_modules_stf_blueprint::{Runtime, SequencerOutcome};
 use sov_state::Storage;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
