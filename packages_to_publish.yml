@@ -10,7 +10,7 @@
 - sov-modules-macros # Requires --no-verify because it writes outside of OUT_DIR.
 - sov-modules-api
 - sov-sequencer
-- sov-modules-stf-template
+- sov-modules-stf-blueprint
 - sov-stf-runner
 - sov-modules-rollup-blueprint
 - sov-ledger-rpc
