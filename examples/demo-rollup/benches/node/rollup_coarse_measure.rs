@@ -15,7 +15,7 @@ use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_mock_da::{MockBlock, MockBlockHeader};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_stf_template::kernels::basic::BasicKernel;
-use sov_modules_stf_template::{AppTemplate, TxEffect};
+use sov_modules_stf_template::{StfBlueprint, TxEffect};
 use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rng_da_service::{RngDaService, RngDaSpec};
 use sov_rollup_interface::services::da::DaService;
@@ -103,7 +103,7 @@ async fn main() -> Result<(), anyhow::Error> {
     };
     let storage_manager = sov_state::storage_manager::ProverStorageManager::new(storage_config)
         .expect("ProverStorageManager initialization has failed");
-    let stf = AppTemplate::<
+    let stf = StfBlueprint::<
         DefaultContext,
         RngDaSpec,
         Risc0Verifier,

@@ -34,10 +34,10 @@ interface](../../rollup-interface/specs/interfaces/stf.md).
 
 That interface is quite high-level - the only notion
 that it surfaces is that of a `blob` of rollup data. In the Module System, we work at a much lower level - with
-transactions signed by particular private keys. To fill the gap, there's a system called an `AppTemplate`, which
+transactions signed by particular private keys. To fill the gap, there's a system called an `StfBlueprint`, which
 bridges between the two layers of abstraction.
 
-The reason the `AppTemplate` is called a "template" is that it's generic. It allows you, the developer, to pass in
+The reason the `StfBlueprint` is called a "template" is that it's generic. It allows you, the developer, to pass in
 several parameters that specify its exact behavior. In order, these generics are:
 
 1. `Context`: a per-transaction struct containing the message's sender. This also provides specs for storage access, so we use different `Context`
@@ -105,7 +105,7 @@ There are two kind of hooks:
 1. `begin_blob_hook `Invoked at the beginning of the `apply_blob` function, before the blob is deserialized into a group of transactions. This is a good time to ensure that the sequencer is properly bonded.
 2. `end_blob_hook` invoked at the end of the `apply_blob` function. This is a good place to reward sequencers.
 
-To use the `AppTemplate`, the runtime needs to provide implementation of these hooks which specifies what needs to happen at each of these four stages.
+To use the `StfBlueprint`, the runtime needs to provide implementation of these hooks which specifies what needs to happen at each of these four stages.
 
 In this demo, we only rely on two modules which need access to the hooks - `sov-accounts` and `sequencer-registry`.
 
@@ -158,7 +158,7 @@ impl<C: Context> ApplyBlobHooks for Runtime<C> {
 }
 ```
 
-That's it - with those three structs implemented, you can plug them into your `AppTemplate` and get a
+That's it - with those three structs implemented, you can plug them into your `StfBlueprint` and get a
 complete State Transition Function!
 
 ### Exposing RPC

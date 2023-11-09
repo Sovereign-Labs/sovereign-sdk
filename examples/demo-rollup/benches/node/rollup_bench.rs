@@ -11,7 +11,7 @@ use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_mock_da::{MockBlock, MockBlockHeader};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_stf_template::kernels::basic::BasicKernel;
-use sov_modules_stf_template::AppTemplate;
+use sov_modules_stf_template::StfBlueprint;
 use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rng_da_service::{RngDaService, RngDaSpec};
 use sov_rollup_interface::services::da::DaService;
@@ -48,7 +48,7 @@ fn rollup_bench(_bench: &mut Criterion) {
     };
     let storage_manager = sov_state::storage_manager::ProverStorageManager::new(storage_config)
         .expect("Failed to initialize prover storage manager");
-    let stf = AppTemplate::<
+    let stf = StfBlueprint::<
         DefaultContext,
         RngDaSpec,
         Risc0Verifier,

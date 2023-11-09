@@ -10,7 +10,7 @@ pub use runtime_rpc::*;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::capabilities::Kernel;
 use sov_modules_api::{Context, DaSpec, Spec};
-use sov_modules_stf_template::{AppTemplate, Runtime as RuntimeTrait};
+use sov_modules_stf_template::{Runtime as RuntimeTrait, StfBlueprint};
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::storage::StorageManager;
@@ -134,7 +134,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
 
         let rpc_methods = self.create_rpc_methods(&native_storage, &ledger_db, &da_service)?;
 
-        let native_stf = AppTemplate::new();
+        let native_stf = StfBlueprint::new();
 
         let runner = StateTransitionRunner::new(
             rollup_config.runner,
@@ -170,11 +170,17 @@ pub struct Rollup<S: RollupBlueprint> {
     /// The State Transition Runner.
     #[allow(clippy::type_complexity)]
     pub runner: StateTransitionRunner<
-        AppTemplate<S::NativeContext, S::DaSpec, S::Vm, S::NativeRuntime, S::NativeKernel>,
+        StfBlueprint<S::NativeContext, S::DaSpec, S::Vm, S::NativeRuntime, S::NativeKernel>,
         S::StorageManager,
         S::DaService,
         S::Vm,
-        AppTemplate<S::ZkContext, S::DaSpec, <S::Vm as ZkvmHost>::Guest, S::ZkRuntime, S::ZkKernel>,
+        StfBlueprint<
+            S::ZkContext,
+            S::DaSpec,
+            <S::Vm as ZkvmHost>::Guest,
+            S::ZkRuntime,
+            S::ZkKernel,
+        >,
     >,
     /// Rpc methods for the rollup.
     pub rpc_methods: jsonrpsee::RpcModule<()>,
@@ -199,10 +205,10 @@ impl<S: RollupBlueprint> Rollup<S> {
 }
 
 type AppVerifier<DA, Zk, ZkContext, RT, K> =
-    StateTransitionVerifier<AppTemplate<ZkContext, <DA as DaVerifier>::Spec, Zk, RT, K>, DA, Zk>;
+    StateTransitionVerifier<StfBlueprint<ZkContext, <DA as DaVerifier>::Spec, Zk, RT, K>, DA, Zk>;
 
 type ZkProver<ZkContext, Vm, ZkRuntime, Da, K> = Prover<
-    AppTemplate<ZkContext, <Da as DaService>::Spec, <Vm as ZkvmHost>::Guest, ZkRuntime, K>,
+    StfBlueprint<ZkContext, <Da as DaService>::Spec, <Vm as ZkvmHost>::Guest, ZkRuntime, K>,
     Da,
     Vm,
 >;
@@ -218,7 +224,7 @@ fn configure_prover<
     cfg: RollupProverConfig,
     da_verifier: Da::Verifier,
 ) -> ZkProver<ZkContext, Vm, RT, Da, K> {
-    let app = AppTemplate::new();
+    let app = StfBlueprint::new();
     let app_verifier = AppVerifier::<_, _, ZkContext, RT, K>::new(app, da_verifier);
 
     let config = match cfg {

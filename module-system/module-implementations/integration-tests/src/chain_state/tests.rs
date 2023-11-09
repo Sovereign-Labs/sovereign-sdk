@@ -7,7 +7,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::storage::StorageManager;
 use sov_modules_api::{Spec, WorkingSet};
 use sov_modules_stf_template::kernels::basic::BasicKernel;
-use sov_modules_stf_template::{AppTemplate, SequencerOutcome};
+use sov_modules_stf_template::{SequencerOutcome, StfBlueprint};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::storage_manager::ProverStorageManager;
 use sov_state::Storage;
@@ -31,7 +31,7 @@ fn test_simple_value_setter_with_chain_state() {
     .unwrap();
 
     let app_template =
-        AppTemplate::<C, MockDaSpec, MockZkvm, TestRuntime<C, MockDaSpec>, BasicKernel<C>>::new();
+        StfBlueprint::<C, MockDaSpec, MockZkvm, TestRuntime<C, MockDaSpec>, BasicKernel<C>>::new();
     let test_runtime = TestRuntime::<C, MockDaSpec>::default();
 
     let value_setter_messages = ValueSetterMessages::default();

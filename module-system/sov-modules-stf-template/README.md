@@ -1,8 +1,8 @@
 # `sov-default-stf`
 
-### `AppTemplate`
+### `StfBlueprint`
 
-This crate contains an implementation of a `StateTransitionFunction` called `AppTemplate` that is specifically designed to work with the Module System. The `AppTemplate` relies on a set of traits that, when combined, define the logic for transitioning the rollup state.
+This crate contains an implementation of a `StateTransitionFunction` called `StfBlueprint` that is specifically designed to work with the Module System. The `StfBlueprint` relies on a set of traits that, when combined, define the logic for transitioning the rollup state.
 
 
 1. The `DispatchCall` trait is responsible for decoding serialized messages and forwarding them to the appropriate module.
@@ -27,4 +27,4 @@ pub struct Runtime<C: Context> {
 
 The `Runtime` struct acts as the entry point where all the rollup modules are assembled together. The `#[derive]` macro generates the necessary implementations for the `Genesis and DispatchCall` traits from the `sov-module-api` crate.
 
-To obtain an instance of the `StateTransitionFunction`, you can pass a`Runtime`, to the `AppTemplate::new(..)` method. This ensures that the implementation of the `StateTransitionFunction` is straightforward and does not require manual integration or complex setup steps.
+To obtain an instance of the `StateTransitionFunction`, you can pass a`Runtime`, to the `StfBlueprint::new(..)` method. This ensures that the implementation of the `StateTransitionFunction` is straightforward and does not require manual integration or complex setup steps.

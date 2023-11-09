@@ -5,7 +5,7 @@ mod batch;
 pub mod kernels;
 mod tx_verifier;
 
-pub use app_template::AppTemplate;
+pub use app_template::StfBlueprint;
 pub use batch::Batch;
 use sov_modules_api::capabilities::Kernel;
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
@@ -21,7 +21,7 @@ use sov_zk_cycle_macros::cycle_tracker;
 use tracing::info;
 pub use tx_verifier::RawTx;
 
-/// This trait has to be implemented by a runtime in order to be used in `AppTemplate`.
+/// This trait has to be implemented by a runtime in order to be used in `StfBlueprint`.
 pub trait Runtime<C: Context, Da: DaSpec>:
     DispatchCall<Context = C>
     + Genesis<Context = C, Config = Self::GenesisConfig>
@@ -91,7 +91,7 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
-impl<C, RT, Vm, Da, K> AppTemplate<C, Da, Vm, RT, K>
+impl<C, RT, Vm, Da, K> StfBlueprint<C, Da, Vm, RT, K>
 where
     C: Context,
     Vm: Zkvm,
@@ -154,7 +154,7 @@ where
     }
 }
 
-impl<C, RT, Vm, Da, K> StateTransitionFunction<Vm, Da> for AppTemplate<C, Da, Vm, RT, K>
+impl<C, RT, Vm, Da, K> StateTransitionFunction<Vm, Da> for StfBlueprint<C, Da, Vm, RT, K>
 where
     C: Context,
     Da: DaSpec,
