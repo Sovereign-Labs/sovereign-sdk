@@ -1,11 +1,10 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
-mod app_template;
 mod batch;
 pub mod kernels;
+mod stf_blueprint;
 mod tx_verifier;
 
-pub use app_template::StfBlueprint;
 pub use batch::Batch;
 use sov_modules_api::capabilities::Kernel;
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
@@ -18,6 +17,7 @@ use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
 use sov_state::Storage;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use sov_zk_cycle_macros::cycle_tracker;
+pub use stf_blueprint::StfBlueprint;
 use tracing::info;
 pub use tx_verifier::RawTx;
 
