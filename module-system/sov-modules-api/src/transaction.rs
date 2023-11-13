@@ -43,6 +43,21 @@ impl<C: Context> Transaction<C> {
 
         Ok(())
     }
+
+    /// New transaction.
+    pub fn new(
+        pub_key: C::PublicKey,
+        message: Vec<u8>,
+        signature: C::Signature,
+        nonce: u64,
+    ) -> Self {
+        Self {
+            signature,
+            runtime_msg: message,
+            pub_key,
+            nonce,
+        }
+    }
 }
 
 #[cfg(feature = "native")]
@@ -60,21 +75,6 @@ impl<C: Context> Transaction<C> {
         // Don't forget to truncate the message back to its original length!
         message.truncate(original_length);
 
-        Self {
-            signature,
-            runtime_msg: message,
-            pub_key,
-            nonce,
-        }
-    }
-
-    /// New transaction.
-    pub fn new(
-        pub_key: C::PublicKey,
-        message: Vec<u8>,
-        signature: C::Signature,
-        nonce: u64,
-    ) -> Self {
         Self {
             signature,
             runtime_msg: message,
