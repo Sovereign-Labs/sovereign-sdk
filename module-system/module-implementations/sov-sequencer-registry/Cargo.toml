@@ -14,7 +14,7 @@ resolver = "2"
 
 [dev-dependencies]
 sov-sequencer-registry = { path = ".", features = ["native"] }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3", features = ["mocks"] }
+sov-mock-da = { path = "../../../adapters/mock-da", features = ["native"] }
 tempfile = { workspace = true }
 
 [dependencies]
@@ -41,6 +41,7 @@ bench = ["sov-zk-cycle-macros/bench", "risc0-zkvm", "risc0-zkvm-platform", "sov-
 default = []
 arbitrary = ["dep:arbitrary", "dep:proptest", "dep:proptest-derive"]
 native = [
+    "serde",
     "serde_json",
     "jsonrpsee",
     "schemars",
@@ -50,3 +51,4 @@ native = [
     # This:
     "sov-bank/native",
 ]
+serde = []

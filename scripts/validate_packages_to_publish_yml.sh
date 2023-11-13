@@ -38,7 +38,7 @@ echo ""
 echo "Validating the present of package metadata for all packages_to_publish.yml entries..."
 
 while read -r pkg; do
-	# Capture both stdour and stderr.
+	# Capture both stdout and stderr.
 	output=$(cargo package --allow-dirty -p $pkg --list 2>&1)
     if echo "$output" | grep -q "warning:"; then
         printf "%40s | ERR warnings found:\n" "$pkg"

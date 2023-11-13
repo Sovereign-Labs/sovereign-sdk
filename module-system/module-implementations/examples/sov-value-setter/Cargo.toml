@@ -32,4 +32,5 @@ clap = { workspace = true, optional = true }
 
 [features]
 default = []
-native = ["serde_json", "jsonrpsee", "schemars", "clap", "sov-modules-api/native", "sov-state/native"]
+native = ["serde", "serde_json", "jsonrpsee", "schemars", "clap", "sov-modules-api/native", "sov-state/native"]
+serde = []

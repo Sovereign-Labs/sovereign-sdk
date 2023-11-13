@@ -1,0 +1,31 @@
+[package]
+name = "sov-mock-da"
+description = "Mock impelemntation of Data Availability layer for testing purposes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+publish.workspace = true
+repository.workspace = true
+readme = "README.md"
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+borsh = { workspace = true, features = ["bytes"] }
+bytes = { workspace = true, features = ["serde"] }
+serde = { workspace = true }
+hex = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true, optional = true }
+
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
+
+
+[features]
+default = []
+native = [
+    "dep:tokio",
+    "sov-rollup-interface/native"
+]

@@ -1,5 +1,5 @@
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
-use sov_modules_api::{Context, Event, Prefix, StateMap, WorkingSet};
+use sov_modules_api::{Context, Event, ModulePrefix, StateMap, WorkingSet};
 use sov_state::{ProverStorage, Storage, ZkStorage};
 
 use super::helpers::module_c;
@@ -51,7 +51,7 @@ fn test_state_update<C: Context>(working_set: &mut WorkingSet<C>) {
     let expected_value = "some_value".to_owned();
 
     {
-        let prefix = Prefix::new_storage(
+        let prefix = ModulePrefix::new_storage(
             "integration_tests::nested_modules::helpers::module_a",
             "ModuleA",
             "state_1_a",
@@ -63,7 +63,7 @@ fn test_state_update<C: Context>(working_set: &mut WorkingSet<C>) {
     }
 
     {
-        let prefix = Prefix::new_storage(
+        let prefix = ModulePrefix::new_storage(
             "integration_tests::nested_modules::helpers::module_b",
             "ModuleB",
             "state_1_b",
@@ -75,7 +75,7 @@ fn test_state_update<C: Context>(working_set: &mut WorkingSet<C>) {
     }
 
     {
-        let prefix = Prefix::new_storage(
+        let prefix = ModulePrefix::new_storage(
             "integration_tests::nested_modules::helpers::module_a",
             "ModuleA",
             "state_1_a",

@@ -39,7 +39,7 @@ Total instructions in trace: 16154861
 +--------------------------------------------------------------------------------------------+-------------------+
 | sov_modules_stf_template::<impl                                                            | 15350436          |
 | sov_rollup_interface::state_machine::stf::StateTransitionFunction<Vm,B> for                |                   |
-| sov_modules_stf_template::app_template::AppTemplate<C,Cond,Vm,RT,B>>::apply_slot::h820293d |                   |
+| sov_modules_stf_template::app_template::StfBlueprint<C,Cond,Vm,RT,B>>::apply_slot::h820293d |                   |
 | c8d744201                                                                                  |                   |
 +--------------------------------------------------------------------------------------------+-------------------+
 | ed25519_dalek::public::PublicKey::verify_strict::hfad17f99efbd2cd0                         | 13528566          |

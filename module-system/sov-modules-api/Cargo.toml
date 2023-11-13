@@ -15,8 +15,8 @@ resolver = "2"
 jsonrpsee = { workspace = true, optional = true }
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
-sov-first-read-last-write-cache = { path = "../utils/sov-first-read-last-write-cache", version = "0.3" }
 sov-state = { path = "../sov-state", version = "0.3" }
+sov-modules-core = { path = "../sov-modules-core", version = "0.3" }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
 sov-modules-macros = { path = "../sov-modules-macros", version = "0.3", optional = true }
 serde = { workspace = true }
@@ -25,8 +25,8 @@ proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
 thiserror = { workspace = true }
 sha2 = { workspace = true }
-bech32 = { workspace = true }
-derive_more = { workspace = true }
+bech32 = { workspace = true, default-features = true }
+derive_more = { workspace = true, default-features = true }
 jmt = { workspace = true }
 serde_json = { workspace = true, optional = true }
 hex = { workspace = true }
@@ -61,12 +61,15 @@ native = [
     "serde_json",
     "rand",
     "schemars",
+    "serde",
     "ed25519-dalek/default",
     "ed25519-dalek/rand_core",
     "clap",
     "jsonrpsee",
     "macros",
+    "sov-modules-core/native",
     "sov-modules-macros/native",
     "sov-state/native",
 ]
 macros = ["sov-modules-macros"]
+serde = ["sov-modules-core/serde"]

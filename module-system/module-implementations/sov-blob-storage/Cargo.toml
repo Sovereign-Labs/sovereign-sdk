@@ -32,7 +32,7 @@ clap = { workspace = true, optional = true }
 
 
 [dev-dependencies]
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3", features = ["mocks"] }
+sov-mock-da = { path = "../../../adapters/mock-da", features = ["native"] }
 sov-blob-storage = { path = ".", features = ["native"] }
 sov-bank = { path = "../sov-bank" }
 tempfile = { workspace = true }
@@ -41,3 +41,4 @@ jmt = { workspace = true }
 [features]
 default = []
 native = ["jsonrpsee", "schemars", "serde", "serde_json", "sov-modules-api/native", "sov-state/native", "sov-sequencer-registry/native", "clap"]
+serde = ["dep:serde"]

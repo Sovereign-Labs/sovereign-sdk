@@ -360,6 +360,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bumpalo"
+version = "3.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f30e7476521f6f8af1a1c4c0b8cc94f0bee37d91763d0ca2665f299b6cd8aec"
+
+[[package]]
 name = "byte-slice-cast"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -412,7 +418,7 @@ dependencies = [
 [[package]]
 name = "celestia-proto"
 version = "0.1.0"
-source = "git+https://github.com/eigerco/celestia-node-rs.git?rev=1fa61eb#1fa61ebd6be6a3663f12e61cf23618342e3a910f"
+source = "git+https://github.com/eigerco/celestia-node-rs.git?rev=66b7c6c#66b7c6cd58213c0cbf79207ba549cef82764ddca"
 dependencies = [
  "anyhow",
  "prost 0.12.1",
@@ -425,7 +431,7 @@ dependencies = [
 [[package]]
 name = "celestia-types"
 version = "0.1.0"
-source = "git+https://github.com/eigerco/celestia-node-rs.git?rev=1fa61eb#1fa61ebd6be6a3663f12e61cf23618342e3a910f"
+source = "git+https://github.com/eigerco/celestia-node-rs.git?rev=66b7c6c#66b7c6cd58213c0cbf79207ba549cef82764ddca"
 dependencies = [
  "base64 0.21.5",
  "bech32",
@@ -434,6 +440,7 @@ dependencies = [
  "cid",
  "const_format",
  "enum_dispatch",
+ "getrandom",
  "nmt-rs",
  "ruint",
  "serde",
@@ -441,6 +448,7 @@ dependencies = [
  "tendermint",
  "tendermint-proto",
  "thiserror",
+ "wasm-bindgen-test",
 ]
 
 [[package]]
@@ -460,6 +468,16 @@ dependencies = [
  "multihash",
  "serde",
  "unsigned-varint",
+]
+
+[[package]]
+name = "console_error_panic_hook"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
+dependencies = [
+ "cfg-if",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -606,13 +624,13 @@ dependencies = [
  "borsh",
  "hex",
  "serde",
- "simple-nft-module",
  "sov-accounts",
  "sov-bank",
  "sov-blob-storage",
  "sov-chain-state",
+ "sov-mock-da",
  "sov-modules-api",
- "sov-modules-stf-template",
+ "sov-modules-stf-blueprint",
  "sov-nft-module",
  "sov-rollup-interface",
  "sov-sequencer-registry",
@@ -927,8 +945,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be4136b2a15dd319360be1c07d9933517ccf0be8f16bf62a3bee4f0d618df427"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "wasi",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1034,6 +1054,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "instant"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
+dependencies = [
+ "cfg-if",
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "itertools"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1077,6 +1109,15 @@ dependencies = [
  "sha2 0.10.8",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "js-sys"
+version = "0.3.65"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54c0c35952f67de54bb584e9fd912b3023117cbafc0a77d8f3dee1fb5f572fe8"
+dependencies = [
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1821,6 +1862,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "scoped-tls"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1cf6437eb19a8f4a6cc0f7dca544973b0b78843adbfeb3683d1a94a0024a294"
+
+[[package]]
 name = "semver"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1947,17 +1994,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e1788eed21689f9cf370582dfc467ef36ed9c707f073528ddafa8d83e3b8500"
 
 [[package]]
-name = "simple-nft-module"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "borsh",
- "serde",
- "sov-modules-api",
- "sov-state",
-]
-
-[[package]]
 name = "smol_str"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2053,16 +2089,23 @@ dependencies = [
  "risc0-zkvm-platform",
  "sov-celestia-adapter",
  "sov-modules-api",
- "sov-modules-stf-template",
+ "sov-modules-stf-blueprint",
  "sov-risc0-adapter",
  "sov-state",
 ]
 
 [[package]]
-name = "sov-first-read-last-write-cache"
+name = "sov-mock-da"
 version = "0.3.0"
 dependencies = [
- "thiserror",
+ "anyhow",
+ "async-trait",
+ "borsh",
+ "bytes",
+ "hex",
+ "serde",
+ "sha2 0.10.8",
+ "sov-rollup-interface",
 ]
 
 [[package]]
@@ -2078,10 +2121,28 @@ dependencies = [
  "jmt",
  "serde",
  "sha2 0.10.8",
- "sov-first-read-last-write-cache",
+ "sov-modules-core",
  "sov-modules-macros",
  "sov-rollup-interface",
  "sov-state",
+ "thiserror",
+]
+
+[[package]]
+name = "sov-modules-core"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "bech32",
+ "borsh",
+ "derive_more",
+ "digest 0.10.7",
+ "hex",
+ "jmt",
+ "schemars",
+ "serde",
+ "sha2 0.10.8",
+ "sov-rollup-interface",
  "thiserror",
 ]
 
@@ -2095,11 +2156,12 @@ dependencies = [
  "quote",
  "schemars",
  "serde_json",
+ "sov-modules-core",
  "syn 1.0.109",
 ]
 
 [[package]]
-name = "sov-modules-stf-template"
+name = "sov-modules-stf-blueprint"
 version = "0.3.0"
 dependencies = [
  "anyhow",
@@ -2146,7 +2208,6 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "bincode",
  "borsh",
  "bytes",
  "digest 0.10.7",
@@ -2181,7 +2242,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.8",
- "sov-first-read-last-write-cache",
+ "sov-modules-core",
  "sov-rollup-interface",
  "thiserror",
 ]
@@ -2225,6 +2286,7 @@ dependencies = [
 name = "sov-zk-cycle-utils"
 version = "0.3.0"
 dependencies = [
+ "bytes",
  "risc0-zkvm",
  "risc0-zkvm-platform",
 ]
@@ -2322,7 +2384,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.32.0"
-source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=1f8b574#1f8b574809a43b892f4beb59b887919b484fe232"
+source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=ef58b85#ef58b85e3e8b35b0f94b822d3996613539dcddd7"
 dependencies = [
  "bytes",
  "digest 0.10.7",
@@ -2330,6 +2392,7 @@ dependencies = [
  "ed25519-consensus",
  "flex-error",
  "futures",
+ "instant",
  "num-traits",
  "once_cell",
  "prost 0.12.1",
@@ -2350,7 +2413,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.32.0"
-source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=1f8b574#1f8b574809a43b892f4beb59b887919b484fe232"
+source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=ef58b85#ef58b85e3e8b35b0f94b822d3996613539dcddd7"
 dependencies = [
  "bytes",
  "flex-error",
@@ -2527,6 +2590,107 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 
 [[package]]
+name = "wasm-bindgen"
+version = "0.2.88"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7daec296f25a1bae309c0cd5c29c4b260e510e6d813c286b19eaadf409d40fce"
+dependencies = [
+ "cfg-if",
+ "wasm-bindgen-macro",
+]
+
+[[package]]
+name = "wasm-bindgen-backend"
+version = "0.2.88"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e397f4664c0e4e428e8313a469aaa58310d302159845980fd23b0f22a847f217"
+dependencies = [
+ "bumpalo",
+ "log",
+ "once_cell",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.38",
+ "wasm-bindgen-shared",
+]
+
+[[package]]
+name = "wasm-bindgen-futures"
+version = "0.4.38"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9afec9963e3d0994cac82455b2b3502b81a7f40f9a0d32181f7528d9f4b43e02"
+dependencies = [
+ "cfg-if",
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "wasm-bindgen-macro"
+version = "0.2.88"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5961017b3b08ad5f3fe39f1e79877f8ee7c23c5e5fd5eb80de95abc41f1f16b2"
+dependencies = [
+ "quote",
+ "wasm-bindgen-macro-support",
+]
+
+[[package]]
+name = "wasm-bindgen-macro-support"
+version = "0.2.88"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5353b8dab669f5e10f5bd76df26a9360c748f054f862ff5f3f8aae0c7fb3907"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.38",
+ "wasm-bindgen-backend",
+ "wasm-bindgen-shared",
+]
+
+[[package]]
+name = "wasm-bindgen-shared"
+version = "0.2.88"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d046c5d029ba91a1ed14da14dca44b68bf2f124cfbaf741c54151fdb3e0750b"
+
+[[package]]
+name = "wasm-bindgen-test"
+version = "0.3.38"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6433b7c56db97397842c46b67e11873eda263170afeb3a2dc74a7cb370fee0d"
+dependencies = [
+ "console_error_panic_hook",
+ "js-sys",
+ "scoped-tls",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-bindgen-test-macro",
+]
+
+[[package]]
+name = "wasm-bindgen-test-macro"
+version = "0.3.38"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "493fcbab756bb764fa37e6bee8cec2dd709eb4273d06d0c282a5e74275ded735"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.38",
+]
+
+[[package]]
+name = "web-sys"
+version = "0.3.65"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5db499c5f66323272151db0e666cd34f78617522fb0c1604d31a27c50c206a85"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "which"
 version = "4.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2632,11 +2796,6 @@ dependencies = [
  "quote",
  "syn 2.0.38",
 ]
-
-[[patch.unused]]
-name = "cc"
-version = "1.0.79"
-source = "git+https://github.com/rust-lang/cc-rs?rev=e5bbdfa#e5bbdfa1fa468c028cb38fee6c35a3cf2e5a2736"
 
 [[patch.unused]]
 name = "sha2"

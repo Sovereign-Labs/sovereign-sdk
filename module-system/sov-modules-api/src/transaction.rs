@@ -1,9 +1,8 @@
+#[cfg(feature = "native")]
+use sov_modules_core::PrivateKey;
+use sov_modules_core::{Context, Signature};
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use sov_zk_cycle_macros::cycle_tracker;
-
-#[cfg(feature = "native")]
-use crate::PrivateKey;
-use crate::{Context, Signature};
 
 /// A Transaction object that is compatible with the module-system/sov-default-stf.
 #[derive(

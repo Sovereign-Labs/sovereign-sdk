@@ -13,19 +13,18 @@ default-run = "sov-demo-rollup"
 
 [dependencies]
 # non-optional dependencies
-sov-celestia-adapter = { path = "../../adapters/celestia", features = [
-	"native",
-] }
+sov-celestia-adapter = { path = "../../adapters/celestia", features = ["native"] }
+sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
 sov-stf-runner = { path = "../../full-node/sov-stf-runner", features = ["native"] }
 sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
 
-sov-modules-rollup-template = { path = "../../module-system/sov-modules-rollup-template" }
-sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
+sov-modules-rollup-blueprint = { path = "../../module-system/sov-modules-rollup-blueprint" }
+sov-modules-stf-blueprint = { path = "../../module-system/sov-modules-stf-blueprint", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module" }
 demo-stf = { path = "./stf", features = ["native"] }
-sov-ledger-rpc = { path = "../../full-node/sov-ledger-rpc", features = ["server",] }
+sov-ledger-rpc = { path = "../../full-node/sov-ledger-rpc", features = ["server", ] }
 risc0 = { path = "./provers/risc0" }
 borsh = { workspace = true, features = ["bytes"] }
 async-trait = { workspace = true }
@@ -52,8 +51,10 @@ secp256k1 = { workspace = true, optional = true }
 [dev-dependencies]
 sov-rng-da-service = { path = "../../utils/rng-da-service" }
 sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }
+sov-mock-da = { path = "../../adapters/mock-da" }
 sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["smart_contracts"] }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
+sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module", features = ["native"] }
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros" }
 
 borsh = { workspace = true }
@@ -108,7 +109,6 @@ name = "prover_bench"
 path = "benches/prover/prover_bench.rs"
 harness = false
 required-features = ["bench"]
-
 
 [[bin]]
 name = "sov-cli"

@@ -2,12 +2,12 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use jmt::KeyHash;
+use sov_modules_core::{
+    OrderedReadsAndWrites, Storage, StorageKey, StorageProof, StorageValue, Witness,
+};
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use sov_zk_cycle_macros::cycle_tracker;
 
-use crate::internal_cache::OrderedReadsAndWrites;
-use crate::storage::{Storage, StorageKey, StorageProof, StorageValue};
-use crate::witness::Witness;
 use crate::MerkleProofSpec;
 
 #[cfg(all(target_os = "zkvm", feature = "bench"))]

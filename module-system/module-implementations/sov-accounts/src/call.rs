@@ -9,14 +9,17 @@ pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
 /// Represents the available call messages for interacting with the sov-accounts module.
 #[cfg_attr(
     feature = "native",
-    derive(serde::Serialize),
-    derive(serde::Deserialize),
     derive(schemars::JsonSchema),
     derive(sov_modules_api::macros::CliWalletArg),
     schemars(
         bound = "C::PublicKey: ::schemars::JsonSchema, C::Signature: ::schemars::JsonSchema",
         rename = "CallMessage"
     )
+)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: Context> {

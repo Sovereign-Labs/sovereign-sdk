@@ -6,12 +6,12 @@ use jmt::storage::{NodeBatch, TreeWriter};
 use jmt::{JellyfishMerkleTree, KeyHash, Version};
 use sov_db::native_db::NativeDB;
 use sov_db::state_db::StateDB;
-use sov_first_read_last_write_cache::CacheKey;
+use sov_modules_core::{
+    CacheKey, NativeStorage, OrderedReadsAndWrites, Storage, StorageKey, StorageProof,
+    StorageValue, Witness,
+};
 
 use crate::config::Config;
-use crate::internal_cache::OrderedReadsAndWrites;
-use crate::storage::{NativeStorage, Storage, StorageKey, StorageProof, StorageValue};
-use crate::witness::Witness;
 use crate::MerkleProofSpec;
 
 /// A [`Storage`] implementation to be used by the prover in a native execution

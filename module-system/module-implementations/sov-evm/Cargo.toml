@@ -13,7 +13,6 @@ resolver = "2"
 publish = false
 
 [dependencies]
-
 sov-modules-api = { path = "../../sov-modules-api", version = "0.3" }
 sov-state = { path = "../../sov-state", version = "0.3" }
 
@@ -32,16 +31,14 @@ jsonrpsee = { workspace = true, features = [
     "server",
 ], optional = true }
 tracing = { workspace = true }
-derive_more = { workspace = true }
+derive_more = { workspace = true, default-features = true }
 lazy_static = "1.4.0"
 
 
 ethereum-types = { workspace = true }
 ethers-core = { workspace = true }
 ethers-contract = { workspace = true }
-ethers-middleware = { workspace = true }
 ethers-signers = { workspace = true }
-ethers = { workspace = true }
 
 revm = { workspace = true, features = [
     "optional_block_gas_limit",
@@ -74,4 +71,5 @@ native = [
     "sov-modules-api/native",
 ]
 experimental = ["native"]
+serde = ["dep:serde"]
 smart_contracts = ["experimental"]

@@ -1,0 +1,34 @@
+[package]
+name = "sov-modules-rollup-blueprint"
+description = "This crate contains abstractions needed to create a new rollup"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+resolver = "2"
+publish = true
+
+[dependencies]
+sov-rollup-interface = { path = "../../rollup-interface", features = ["native"], version = "0.3" }
+sov-stf-runner = { path = "../../full-node/sov-stf-runner", features = ["native"], version = "0.3" }
+sov-state = { path = "../sov-state", version = "0.3" }
+
+sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"], version = "0.3" }
+sov-cli = { path = "../../module-system/sov-cli" }
+
+sov-modules-stf-blueprint = { path = "../../module-system/sov-modules-stf-blueprint", features = ["native"], version = "0.3" }
+sov-db = { path = "../../full-node/db/sov-db", version = "0.3" }
+
+sov-sequencer = { path = "../../full-node/sov-sequencer" }
+sov-ledger-rpc = { path = "../../full-node/sov-ledger-rpc", features = ["server"] }
+
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+tokio = { workspace = true }
+borsh = { workspace = true }

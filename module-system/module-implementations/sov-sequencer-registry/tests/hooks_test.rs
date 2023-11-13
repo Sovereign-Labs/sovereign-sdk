@@ -5,7 +5,7 @@ use sov_state::ProverStorage;
 mod helpers;
 
 use helpers::*;
-use sov_rollup_interface::mocks::{MockAddress, MockBlob};
+use sov_mock_da::{MockAddress, MockBlob};
 use sov_sequencer_registry::{SequencerOutcome, SequencerRegistry};
 
 #[test]

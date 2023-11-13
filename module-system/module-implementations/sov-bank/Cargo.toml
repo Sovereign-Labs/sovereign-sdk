@@ -31,5 +31,6 @@ tempfile = { workspace = true }
 
 [features]
 default = []
-native = ["serde_json", "jsonrpsee", "clap", "schemars", "sov-state/native", "sov-modules-api/native", ]
+native = ["serde", "serde_json", "jsonrpsee", "clap", "schemars", "sov-state/native", "sov-modules-api/native", ]
 cli = ["native"]
+serde = []

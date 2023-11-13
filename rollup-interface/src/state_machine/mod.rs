@@ -10,9 +10,6 @@ pub use bytes::{Buf, BufMut, Bytes, BytesMut};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-#[cfg(feature = "mocks")]
-pub mod mocks;
-
 pub mod optimistic;
 pub mod storage;
 

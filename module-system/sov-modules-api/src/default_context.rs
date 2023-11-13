@@ -1,6 +1,7 @@
-#[cfg(feature = "native")]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
+use sov_modules_core::{Address, Context, PublicKey, Spec, TupleGasUnit};
 use sov_rollup_interface::RollupAddress;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
@@ -9,7 +10,6 @@ use sov_state::{ArrayWitness, DefaultStorageSpec, ZkStorage};
 #[cfg(feature = "native")]
 use crate::default_signature::private_key::DefaultPrivateKey;
 use crate::default_signature::{DefaultPublicKey, DefaultSignature};
-use crate::{Address, Context, PublicKey, Spec, TupleGasUnit};
 
 #[cfg(feature = "native")]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
@@ -43,7 +43,7 @@ impl Context for DefaultContext {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "native", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ZkDefaultContext {
     pub sender: Address,
 }

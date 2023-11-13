@@ -4,18 +4,18 @@ pub mod test {
     use sov_cli::wallet_state::PrivateKeyAndAddress;
     use sov_data_generators::bank_data::get_default_token_address;
     use sov_data_generators::{has_tx_events, new_test_blob_from_batch};
+    use sov_mock_da::{MockBlock, MockDaSpec, MOCK_SEQUENCER_DA_ADDRESS};
     use sov_modules_api::default_context::DefaultContext;
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
     use sov_modules_api::{Context, PrivateKey, WorkingSet};
-    use sov_modules_stf_template::{AppTemplate, Batch, SequencerOutcome};
-    use sov_rollup_interface::mocks::{MockBlock, MockDaSpec, MOCK_SEQUENCER_DA_ADDRESS};
+    use sov_modules_stf_blueprint::{Batch, SequencerOutcome, StfBlueprint};
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_rollup_interface::storage::StorageManager;
 
     use crate::runtime::Runtime;
     use crate::tests::da_simulation::simulate_da;
     use crate::tests::{
-        create_storage_manager_for_tests, get_genesis_config_for_tests, AppTemplateTest, C,
+        create_storage_manager_for_tests, get_genesis_config_for_tests, StfBlueprintTest, C,
     };
 
     #[test]
@@ -26,7 +26,7 @@ pub mod test {
 
         let config = get_genesis_config_for_tests();
         {
-            let stf: AppTemplateTest = AppTemplate::new();
+            let stf: StfBlueprintTest = StfBlueprint::new();
 
             let (genesis_root, _) = stf.init_chain(storage_manager.get_native_storage(), config);
 
@@ -84,7 +84,7 @@ pub mod test {
         let path = tempdir.path();
         let storage_manager = create_storage_manager_for_tests(path);
 
-        let stf: AppTemplateTest = AppTemplate::new();
+        let stf: StfBlueprintTest = StfBlueprint::new();
 
         let config = get_genesis_config_for_tests();
 
@@ -142,7 +142,7 @@ pub mod test {
 
         let config = get_genesis_config_for_tests();
         {
-            let stf: AppTemplateTest = AppTemplate::new();
+            let stf: StfBlueprintTest = StfBlueprint::new();
             let (genesis_root, _) = stf.init_chain(storage_manager.get_native_storage(), config);
 
             let txs = simulate_da(value_setter_admin_private_key);
@@ -196,7 +196,7 @@ pub mod test {
         config.sequencer_registry.is_preferred_sequencer = false;
 
         let storage_manager = create_storage_manager_for_tests(path);
-        let stf: AppTemplateTest = AppTemplate::new();
+        let stf: StfBlueprintTest = StfBlueprint::new();
         let (genesis_root, _) = stf.init_chain(storage_manager.get_native_storage(), config);
 
         let some_sequencer: [u8; 32] = [121; 32];
