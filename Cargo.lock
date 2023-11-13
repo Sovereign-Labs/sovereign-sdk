@@ -9106,6 +9106,7 @@ dependencies = [
  "sov-sequencer-registry",
  "sov-state",
  "tempfile",
+ "thiserror",
  "tokio",
  "toml 0.8.6",
  "tracing",

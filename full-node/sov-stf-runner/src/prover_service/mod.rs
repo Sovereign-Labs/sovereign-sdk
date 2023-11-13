@@ -4,10 +4,16 @@ use crate::StateTransitionData;
 use async_trait::async_trait;
 use serde::Serialize;
 use sov_rollup_interface::{da::DaSpec, services::da::DaService};
+use thiserror::Error;
 
+pub(crate) type Hash = [u8; 32];
+
+#[derive(Error, Debug)]
 pub enum ProverServiceError {
+    #[error("ProverBusy error")]
     ProverBusy,
-    Other,
+    #[error("Other error")]
+    Other(#[from] anyhow::Error),
 }
 
 #[async_trait]
@@ -25,5 +31,5 @@ pub trait ProverService {
         >,
     );
 
-    async fn prove(&self, state_root: Self::StateRoot) -> Result<(), ProverServiceError>;
+    async fn prove(&self, block_header_hash: Hash) -> Result<(), ProverServiceError>;
 }

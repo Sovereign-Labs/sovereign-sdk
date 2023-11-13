@@ -39,7 +39,7 @@ pub trait ZkvmHost: Zkvm {
 
 /// A Zk proof system capable of proving and verifying arbitrary Rust code
 /// Must support recursive proofs.
-pub trait Zkvm {
+pub trait Zkvm: Send + Sync {
     /// A commitment to the zkVM program which is being proven
     type CodeCommitment: Matches<Self::CodeCommitment>
         + Clone

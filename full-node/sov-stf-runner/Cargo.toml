@@ -12,6 +12,7 @@ resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
+thiserror = { workspace = true, optional = true }
 borsh = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
@@ -49,4 +50,5 @@ native = [
     "tracing",
     "futures",
     "async-trait",
+    "thiserror",
 ]
