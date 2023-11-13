@@ -3,7 +3,7 @@ use super::{ProverService, ProverServiceError};
 
 use crate::verifier::StateTransitionVerifier;
 use crate::StateTransitionData;
-use crate::{ProofGenConfig, Prover};
+use crate::{ProofGenConfig, Prover, RollupProverConfig};
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -12,16 +12,6 @@ use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 use std::{collections::HashMap, sync::Mutex};
-
-/// The possible configurations of the prover.
-pub enum RollupProverConfig {
-    /// Run the rollup verification logic inside the current process
-    Simulate,
-    /// Run the rollup verifier in a zkVM executor
-    Execute,
-    /// Run the rollup verifier and create a SNARK of execution
-    Prove,
-}
 
 pub struct SimpleProver<StateRoot, Witness, Da, Vm, V>
 where
@@ -107,15 +97,15 @@ where
     async fn prove(&self, block_header_hash: Hash) -> Result<(), ProverServiceError> {
         if let Some(Prover { vm, config }) = self.prover.lock().expect("Lock was poisoned").as_mut()
         {
-            let transition_data = self
-                .data
-                .lock()
-                .expect("Lock was poisoned")
-                .remove(&block_header_hash)
-                .unwrap();
+            let transition_data = {
+                self.data
+                    .lock()
+                    .expect("Lock was poisoned")
+                    .remove(&block_header_hash)
+                    .unwrap()
+            };
 
             vm.add_hint(transition_data);
-
             tracing::info_span!("guest_execution").in_scope(|| match config {
                 ProofGenConfig::Simulate(verifier) => verifier
                     .run_block(vm.simulate_with_hints(), self.zk_storage.clone())

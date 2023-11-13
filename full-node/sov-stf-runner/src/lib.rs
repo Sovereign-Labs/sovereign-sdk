@@ -7,6 +7,9 @@ mod config;
 mod prover_service;
 
 #[cfg(feature = "native")]
+pub use prover_service::*;
+
+#[cfg(feature = "native")]
 use std::path::Path;
 
 #[cfg(feature = "native")]

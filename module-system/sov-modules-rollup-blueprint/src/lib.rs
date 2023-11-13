@@ -17,7 +17,9 @@ use sov_rollup_interface::storage::StorageManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage::NativeStorage;
 use sov_stf_runner::verifier::StateTransitionVerifier;
-use sov_stf_runner::{ProofGenConfig, Prover, RollupConfig, StateTransitionRunner};
+use sov_stf_runner::{
+    ProofGenConfig, Prover, RollupConfig, RollupProverConfig, StateTransitionRunner,
+};
 use tokio::sync::oneshot;
 pub use wallet::*;
 
@@ -153,16 +155,6 @@ pub trait RollupBlueprint: Sized + Send + Sync {
             rpc_methods,
         })
     }
-}
-
-/// The possible configurations of the prover.
-pub enum RollupProverConfig {
-    /// Run the rollup verification logic inside the current process
-    Simulate,
-    /// Run the rollup verifier in a zkVM executor
-    Execute,
-    /// Run the rollup verifier and create a SNARK of execution
-    Prove,
 }
 
 /// Dependencies needed to run the rollup.
