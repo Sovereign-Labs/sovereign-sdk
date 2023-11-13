@@ -8,7 +8,6 @@ use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::BlockHeaderTrait;
-use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
@@ -24,51 +23,58 @@ pub enum RollupProverConfig {
     Prove,
 }
 
-pub struct SimpleProver<StateRoot, Witness, Da, Vm, V, Stf>
+pub struct SimpleProver<StateRoot, Witness, Da, Vm, V>
 where
     StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]>,
     Witness: Serialize + DeserializeOwned,
     Da: DaService,
     Vm: ZkvmHost,
     V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync,
-    Stf: StateTransitionFunction<Vm, Da::Spec, Condition = <Da::Spec as DaSpec>::ValidityCondition>,
 {
     prover: Mutex<Option<Prover<V, Da, Vm>>>,
     data: Mutex<HashMap<Hash, StateTransitionData<StateRoot, Witness, Da::Spec>>>,
     zk_storage: V::PreState,
     da_service: Da,
-    stf: Stf,
 }
 
-impl<StateRoot, Witness, Da, Vm, V, Stf> SimpleProver<StateRoot, Witness, Da, Vm, V, Stf>
+impl<StateRoot, Witness, Da, Vm, V> SimpleProver<StateRoot, Witness, Da, Vm, V>
 where
     StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync,
     Witness: Serialize + DeserializeOwned + Send + Sync,
     Da: DaService,
     Vm: ZkvmHost,
     V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync,
-    Stf: StateTransitionFunction<Vm, Da::Spec, Condition = <Da::Spec as DaSpec>::ValidityCondition>,
     V::PreState: Clone + Send + Sync,
 {
     pub fn new(
         vm: Vm,
         v: V,
         da_v: Da::Verifier,
-        config: ProofGenConfig<V, Da, Vm>,
+        config: RollupProverConfig,
         zk_storage: V::PreState,
         da_service: Da,
-        stf: Stf,
     ) -> Self {
-        let x = StateTransitionVerifier::<V, Da::Verifier, Vm::Guest>::new(v, da_v);
+        let stf_verifier = StateTransitionVerifier::<V, Da::Verifier, Vm::Guest>::new(v, da_v);
+
+        let config: ProofGenConfig<V, Da, Vm> = match config {
+            RollupProverConfig::Simulate => ProofGenConfig::Simulate(stf_verifier),
+            RollupProverConfig::Execute => ProofGenConfig::Execute,
+            RollupProverConfig::Prove => ProofGenConfig::Prover,
+        };
 
         let prover = Prover { vm, config };
-        todo!()
+
+        Self {
+            prover: Mutex::new(Some(prover)),
+            data: Mutex::new(HashMap::new()),
+            zk_storage,
+            da_service,
+        }
     }
 }
 
 #[async_trait]
-impl<StateRoot, Witness, Da, Vm, V, Stf> ProverService
-    for SimpleProver<StateRoot, Witness, Da, Vm, V, Stf>
+impl<StateRoot, Witness, Da, Vm, V> ProverService for SimpleProver<StateRoot, Witness, Da, Vm, V>
 where
     StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync,
     Witness: Serialize + DeserializeOwned + Send + Sync,
@@ -76,9 +82,6 @@ where
     Vm: ZkvmHost,
     V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync,
     V::PreState: Clone + Send + Sync,
-    Stf: StateTransitionFunction<Vm, Da::Spec, Condition = <Da::Spec as DaSpec>::ValidityCondition>
-        + Send
-        + Sync,
 {
     type StateRoot = StateRoot;
 
