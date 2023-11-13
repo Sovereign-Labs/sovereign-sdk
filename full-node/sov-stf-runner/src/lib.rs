@@ -3,6 +3,7 @@
 
 #[cfg(feature = "native")]
 mod config;
+mod prover_service;
 
 #[cfg(feature = "native")]
 use std::path::Path;
