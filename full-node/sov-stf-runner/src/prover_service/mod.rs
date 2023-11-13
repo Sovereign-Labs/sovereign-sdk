@@ -1,8 +1,8 @@
 mod single_threaded_prover;
-
 use crate::StateTransitionData;
 use async_trait::async_trait;
 use serde::Serialize;
+pub use single_threaded_prover::SimpleProver;
 use sov_rollup_interface::{da::DaSpec, services::da::DaService};
 use thiserror::Error;
 

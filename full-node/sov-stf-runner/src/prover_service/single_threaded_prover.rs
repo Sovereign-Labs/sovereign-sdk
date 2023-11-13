@@ -13,6 +13,7 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 use std::{collections::HashMap, sync::Mutex};
 
+/// TODO
 pub struct SimpleProver<StateRoot, Witness, Da, Vm, V>
 where
     StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]>,
@@ -36,6 +37,7 @@ where
     V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync,
     V::PreState: Clone + Send + Sync,
 {
+    /// TODO
     pub fn new(
         vm: Vm,
         v: V,

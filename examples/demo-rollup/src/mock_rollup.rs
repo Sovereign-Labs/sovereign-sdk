@@ -7,12 +7,14 @@ use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::Spec;
 use sov_modules_rollup_blueprint::RollupBlueprint;
 use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
+use sov_modules_stf_blueprint::StfBlueprint;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage_manager::ProverStorageManager;
+use sov_state::Storage;
 use sov_state::{DefaultStorageSpec, ZkStorage};
-use sov_stf_runner::RollupConfig;
-
+use sov_stf_runner::{RollupConfig, SimpleProver};
 /// Rollup with MockDa
 pub struct MockDemoRollup {}
 
@@ -33,6 +35,23 @@ impl RollupBlueprint for MockDemoRollup {
 
     type NativeKernel = BasicKernel<Self::NativeContext>;
     type ZkKernel = BasicKernel<Self::ZkContext>;
+
+    type ProverService = SimpleProver<
+        <<Self::NativeContext as Spec>::Storage as Storage>::Root,
+        <<Self::NativeContext as Spec>::Storage as Storage>::Witness,
+        Self::DaService,
+        Self::Vm,
+        StfBlueprint<
+            Self::ZkContext,
+            Self::DaSpec,
+            <Self::Vm as ZkvmHost>::Guest,
+            Self::ZkRuntime,
+            Self::ZkKernel,
+        >,
+    >;
+    fn create_prover_service(&self) -> Self::ProverService {
+        todo!()
+    }
 
     fn create_rpc_methods(
         &self,

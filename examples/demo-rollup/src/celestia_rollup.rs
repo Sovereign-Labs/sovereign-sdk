@@ -1,3 +1,4 @@
+use crate::ROLLUP_NAMESPACE;
 use async_trait::async_trait;
 use demo_stf::genesis_config::StorageConfig;
 use demo_stf::runtime::Runtime;
@@ -7,13 +8,15 @@ use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::Spec;
 use sov_modules_rollup_blueprint::{RollupBlueprint, WalletBlueprint};
 use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
+use sov_modules_stf_blueprint::StfBlueprint;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage_manager::ProverStorageManager;
+use sov_state::Storage;
 use sov_state::{DefaultStorageSpec, ZkStorage};
 use sov_stf_runner::RollupConfig;
-
-use crate::ROLLUP_NAMESPACE;
+use sov_stf_runner::SimpleProver;
 
 /// Rollup with CelestiaDa
 pub struct CelestiaDemoRollup {}
@@ -35,6 +38,31 @@ impl RollupBlueprint for CelestiaDemoRollup {
 
     type NativeKernel = BasicKernel<Self::NativeContext>;
     type ZkKernel = BasicKernel<Self::ZkContext>;
+
+    type ProverService = SimpleProver<
+        <<Self::NativeContext as Spec>::Storage as Storage>::Root,
+        <<Self::NativeContext as Spec>::Storage as Storage>::Witness,
+        Self::DaService,
+        Self::Vm,
+        StfBlueprint<
+            Self::ZkContext,
+            Self::DaSpec,
+            <Self::Vm as ZkvmHost>::Guest,
+            Self::ZkRuntime,
+            Self::ZkKernel,
+        >,
+    >;
+
+    fn create_prover_service(
+        &self,
+        prover_config: Option<RollupProverConfig>,
+        da_service: &Self::DaService,
+    ) -> Self::ProverService {
+        let vm = Risc0Host::new(risc0::ROLLUP_ELF);
+        let v = StfBlueprint::new();
+        let zk_storage = ZkStorage::new();
+        SimpleProver::new(vm, v, da_v, prover_config, zk_storage, da_service)
+    }
 
     fn create_rpc_methods(
         &self,
