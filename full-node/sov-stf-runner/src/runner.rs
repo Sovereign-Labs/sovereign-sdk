@@ -22,7 +22,7 @@ where
     Vm: ZkvmHost,
     Sm: StorageManager,
     Stf: StateTransitionFunction<Vm, Da::Spec, Condition = <Da::Spec as DaSpec>::ValidityCondition>,
-    PS: ProverService,
+    Ps: ProverService,
 {
     start_height: u64,
     da_service: Da,
@@ -72,7 +72,7 @@ where
         ChangeSet = Sm::NativeChangeSet,
     >,
 
-    PS: ProverService<StateRoot = Stf::StateRoot, Witness = Stf::Witness, DaService = Da>,
+    Ps: ProverService<StateRoot = Stf::StateRoot, Witness = Stf::Witness, DaService = Da>,
 {
     /// Creates a new `StateTransitionRunner`.
     ///
