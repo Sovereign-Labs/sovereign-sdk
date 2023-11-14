@@ -4,7 +4,8 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ed25519_dalek::{
-    Signature as DalekSignature, VerifyingKey as DalekPublicKey, PUBLIC_KEY_LENGTH,
+    Signature as DalekSignature, SigningKey, VerifyingKey as DalekPublicKey, KEYPAIR_LENGTH,
+    PUBLIC_KEY_LENGTH,
 };
 use sov_modules_core::{SigVerificationError, Signature};
 
@@ -198,6 +199,29 @@ impl BorshSerialize for DefaultPublicKey {
     }
 }
 
+impl TryFrom<&[u8]> for DefaultPublicKey {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        if value.len() == KEYPAIR_LENGTH {
+            let mut keypair = [0u8; KEYPAIR_LENGTH];
+            keypair.copy_from_slice(value);
+            let keypair = SigningKey::from_keypair_bytes(&keypair).map_err(anyhow::Error::msg)?;
+            Ok(Self {
+                pub_key: keypair.verifying_key(),
+            })
+        } else if value.len() == PUBLIC_KEY_LENGTH {
+            let mut public = [0u8; PUBLIC_KEY_LENGTH];
+            public.copy_from_slice(value);
+            Ok(Self {
+                pub_key: DalekPublicKey::from_bytes(&public).map_err(anyhow::Error::msg)?,
+            })
+        } else {
+            anyhow::bail!("Unexpected public key length")
+        }
+    }
+}
+
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -223,6 +247,16 @@ impl BorshDeserialize for DefaultSignature {
 impl BorshSerialize for DefaultSignature {
     fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
         writer.write_all(&self.msg_sig.to_bytes())
+    }
+}
+
+impl TryFrom<&[u8]> for DefaultSignature {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        Ok(Self {
+            msg_sig: DalekSignature::from_slice(value).map_err(anyhow::Error::msg)?,
+        })
     }
 }
 
