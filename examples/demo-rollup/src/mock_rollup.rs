@@ -12,10 +12,8 @@ use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage_manager::ProverStorageManager;
-use sov_state::Storage;
-use sov_state::{DefaultStorageSpec, ZkStorage};
-use sov_stf_runner::RollupProverConfig;
-use sov_stf_runner::{RollupConfig, SimpleProver};
+use sov_state::{DefaultStorageSpec, Storage, ZkStorage};
+use sov_stf_runner::{RollupConfig, RollupProverConfig, SimpleProver};
 
 /// Rollup with MockDa
 pub struct MockDemoRollup {}

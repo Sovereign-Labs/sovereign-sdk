@@ -1,9 +1,6 @@
-use super::Hash;
-use super::{ProverService, ProverServiceError};
+use std::collections::HashMap;
+use std::sync::Mutex;
 
-use crate::verifier::StateTransitionVerifier;
-use crate::StateTransitionData;
-use crate::{ProofGenConfig, Prover, RollupProverConfig};
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -11,7 +8,10 @@ use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
-use std::{collections::HashMap, sync::Mutex};
+
+use super::{Hash, ProverService, ProverServiceError};
+use crate::verifier::StateTransitionVerifier;
+use crate::{ProofGenConfig, Prover, RollupProverConfig, StateTransitionData};
 
 /// TODO
 pub struct SimpleProver<StateRoot, Witness, Da, Vm, V>
@@ -23,9 +23,10 @@ where
     V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync,
 {
     prover: Mutex<Option<Prover<V, Da, Vm>>>,
+    #[allow(clippy::type_complexity)]
     data: Mutex<HashMap<Hash, StateTransitionData<StateRoot, Witness, Da::Spec>>>,
     zk_storage: V::PreState,
-    da_service: Da,
+    _da_service: Da,
 }
 
 impl<StateRoot, Witness, Da, Vm, V> SimpleProver<StateRoot, Witness, Da, Vm, V>

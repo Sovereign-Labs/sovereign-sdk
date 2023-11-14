@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
+use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::storage::StorageManager;
@@ -12,7 +12,6 @@ use tracing::{debug, info};
 
 use crate::verifier::StateTransitionVerifier;
 use crate::{ProverService, RunnerConfig, StateTransitionData};
-use sov_rollup_interface::da::BlockHeaderTrait;
 type StateRoot<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::StateRoot;
 type InitialState<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::GenesisParams;
 

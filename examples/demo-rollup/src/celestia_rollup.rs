@@ -1,4 +1,3 @@
-use crate::ROLLUP_NAMESPACE;
 use async_trait::async_trait;
 use demo_stf::genesis_config::StorageConfig;
 use demo_stf::runtime::Runtime;
@@ -13,11 +12,10 @@ use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage_manager::ProverStorageManager;
-use sov_state::Storage;
-use sov_state::{DefaultStorageSpec, ZkStorage};
-use sov_stf_runner::RollupConfig;
-use sov_stf_runner::RollupProverConfig;
-use sov_stf_runner::SimpleProver;
+use sov_state::{DefaultStorageSpec, Storage, ZkStorage};
+use sov_stf_runner::{RollupConfig, RollupProverConfig, SimpleProver};
+
+use crate::ROLLUP_NAMESPACE;
 
 /// Rollup with CelestiaDa
 pub struct CelestiaDemoRollup {}
