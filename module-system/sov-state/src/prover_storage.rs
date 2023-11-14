@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::Arc;
+use anyhow::ensure;
 
 use jmt::storage::{NodeBatch, TreeWriter};
 use jmt::{JellyfishMerkleTree, KeyHash, Version};
@@ -19,6 +20,7 @@ use crate::MerkleProofSpec;
 pub struct ProverStorage<S: MerkleProofSpec> {
     db: StateDB,
     native_db: NativeDB,
+    archival_version: Option<u64>,
     _phantom_hasher: PhantomData<S::Hasher>,
 }
 
@@ -27,6 +29,7 @@ impl<S: MerkleProofSpec> Clone for ProverStorage<S> {
         Self {
             db: self.db.clone(),
             native_db: self.native_db.clone(),
+            archival_version: self.archival_version.clone(),
             _phantom_hasher: Default::default(),
         }
     }
@@ -227,5 +230,11 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
         let temp_merkle: JellyfishMerkleTree<'_, StateDB, S::Hasher> =
             JellyfishMerkleTree::new(&self.db);
         temp_merkle.get_root_hash(version)
+    }
+
+    fn set_archival_version(&mut self, version: u64) {
+        ensure!(version < self.db.get_next_version(),
+            "The storage default read version can not be set to a version greater than the next version");
+        self.archival_version = Some(u64)
     }
 }

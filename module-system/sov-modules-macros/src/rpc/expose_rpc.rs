@@ -59,7 +59,7 @@ impl ExposeRpcMacro {
             impl #impl_generics ::std::clone::Clone for RpcStorage #ty_generics #where_clause {
                 fn clone(&self) -> Self {
                     Self {
-                        storage: self.storage.clone(),
+                        storage: ArchivalStorage::new(self.storage.clone()),
                         _phantom: ::std::marker::PhantomData,
                     }
                  }

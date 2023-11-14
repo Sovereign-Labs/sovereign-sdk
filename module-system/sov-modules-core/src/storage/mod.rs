@@ -289,4 +289,7 @@ pub trait NativeStorage: Storage {
 
     /// Get the root hash of the tree at the requested version
     fn get_root_hash(&self, version: Version) -> Result<Self::Root, anyhow::Error>;
+
+    /// From here-on, return values from the given version in `get()` and `get_accessory()`. Used for archival queries.
+    fn set_archival_version(&mut self, version: u64);
 }
