@@ -15,29 +15,29 @@ pub trait DaSpec: 'static + Debug + PartialEq + Eq {
     type SlotHash: BlockHashTrait;
 
     /// The block header type used by the DA layer
-    type BlockHeader: BlockHeaderTrait<Hash = Self::SlotHash>;
+    type BlockHeader: BlockHeaderTrait<Hash = Self::SlotHash> + Send + Sync;
 
     /// The transaction type used by the DA layer.
-    type BlobTransaction: BlobReaderTrait<Address = Self::Address>;
+    type BlobTransaction: BlobReaderTrait<Address = Self::Address> + Send + Sync;
 
     /// The type used to represent addresses on the DA layer.
-    type Address: BasicAddress;
+    type Address: BasicAddress + Send + Sync;
 
     /// Any conditions imposed by the DA layer which need to be checked outside of the SNARK
-    type ValidityCondition: ValidityCondition;
+    type ValidityCondition: ValidityCondition + Send + Sync;
 
     /// A proof that each tx in a set of blob transactions is included in a given block.
-    type InclusionMultiProof: Serialize + DeserializeOwned;
+    type InclusionMultiProof: Serialize + DeserializeOwned + Send + Sync;
 
     /// A proof that a claimed set of transactions is complete.
     /// For example, this could be a range proof demonstrating that
     /// the provided BlobTransactions represent the entire contents
     /// of Celestia namespace in a given block
-    type CompletenessProof: Serialize + DeserializeOwned;
+    type CompletenessProof: Serialize + DeserializeOwned + Send + Sync;
 
     /// The parameters of the rollup which are baked into the state-transition function.
     /// For example, this could include the namespace of the rollup on Celestia.
-    type ChainParams;
+    type ChainParams: Send + Sync;
 }
 
 /// A `DaVerifier` implements the logic required to create a zk proof that some data
@@ -46,7 +46,7 @@ pub trait DaSpec: 'static + Debug + PartialEq + Eq {
 /// This trait implements the required functionality to *verify* claims of the form
 /// "If X is the most recent block in the DA layer, then Y is the ordered set of transactions that must
 /// be processed by the rollup."
-pub trait DaVerifier {
+pub trait DaVerifier: Send + Sync {
     /// The set of types required by the DA layer.
     type Spec: DaSpec;
 

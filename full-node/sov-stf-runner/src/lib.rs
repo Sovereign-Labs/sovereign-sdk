@@ -3,6 +3,8 @@
 
 #[cfg(feature = "native")]
 mod config;
+#[cfg(feature = "native")]
+mod prover_service;
 
 #[cfg(feature = "native")]
 use std::path::Path;
@@ -12,6 +14,8 @@ use anyhow::Context;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use config::RpcConfig;
+#[cfg(feature = "native")]
+pub use prover_service::*;
 #[cfg(feature = "native")]
 mod runner;
 #[cfg(feature = "native")]

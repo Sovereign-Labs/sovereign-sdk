@@ -7,11 +7,12 @@ use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::Spec;
 use sov_modules_rollup_blueprint::{RollupBlueprint, WalletBlueprint};
 use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
+use sov_modules_stf_blueprint::StfBlueprint;
 use sov_risc0_adapter::host::Risc0Host;
-use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage_manager::ProverStorageManager;
-use sov_state::{DefaultStorageSpec, ZkStorage};
-use sov_stf_runner::RollupConfig;
+use sov_state::{DefaultStorageSpec, Storage, ZkStorage};
+use sov_stf_runner::{BlockingProver, RollupConfig, RollupProverConfig};
 
 use crate::ROLLUP_NAMESPACE;
 
@@ -36,6 +37,20 @@ impl RollupBlueprint for CelestiaDemoRollup {
     type NativeKernel = BasicKernel<Self::NativeContext>;
     type ZkKernel = BasicKernel<Self::ZkContext>;
 
+    type ProverService = BlockingProver<
+        <<Self::NativeContext as Spec>::Storage as Storage>::Root,
+        <<Self::NativeContext as Spec>::Storage as Storage>::Witness,
+        Self::DaService,
+        Self::Vm,
+        StfBlueprint<
+            Self::ZkContext,
+            Self::DaSpec,
+            <Self::Vm as ZkvmHost>::Guest,
+            Self::ZkRuntime,
+            Self::ZkKernel,
+        >,
+    >;
+
     fn create_rpc_methods(
         &self,
         storage: &<Self::NativeContext as sov_modules_api::Spec>::Storage,
@@ -59,6 +74,16 @@ impl RollupBlueprint for CelestiaDemoRollup {
         Ok(rpc_methods)
     }
 
+    fn create_storage_manager(
+        &self,
+        rollup_config: &sov_stf_runner::RollupConfig<Self::DaConfig>,
+    ) -> Result<Self::StorageManager, anyhow::Error> {
+        let storage_config = StorageConfig {
+            path: rollup_config.storage.path.clone(),
+        };
+        ProverStorageManager::new(storage_config)
+    }
+
     async fn create_da_service(
         &self,
         rollup_config: &RollupConfig<Self::DaConfig>,
@@ -72,31 +97,20 @@ impl RollupBlueprint for CelestiaDemoRollup {
         .await
     }
 
-    fn create_storage_manager(
+    async fn create_prover_service(
         &self,
-        rollup_config: &sov_stf_runner::RollupConfig<Self::DaConfig>,
-    ) -> Result<Self::StorageManager, anyhow::Error> {
-        let storage_config = StorageConfig {
-            path: rollup_config.storage.path.clone(),
-        };
-        ProverStorageManager::new(storage_config)
-    }
+        prover_config: Option<RollupProverConfig>,
+        _da_service: &Self::DaService,
+    ) -> Self::ProverService {
+        let vm = Risc0Host::new(risc0::ROLLUP_ELF);
+        let zk_stf = StfBlueprint::new();
+        let zk_storage = ZkStorage::new();
 
-    fn create_zk_storage(
-        &self,
-        _rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> <Self::ZkContext as Spec>::Storage {
-        ZkStorage::new()
-    }
-
-    fn create_vm(&self) -> Self::Vm {
-        Risc0Host::new(risc0::ROLLUP_ELF)
-    }
-
-    fn create_verifier(&self) -> <Self::DaService as DaService>::Verifier {
-        CelestiaVerifier {
+        let da_verifier = CelestiaVerifier {
             rollup_namespace: ROLLUP_NAMESPACE,
-        }
+        };
+
+        BlockingProver::new(vm, zk_stf, da_verifier, prover_config, zk_storage)
     }
 }
 
