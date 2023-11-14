@@ -10,7 +10,16 @@ use sov_rollup_interface::RollupAddress;
 use crate::common::SigVerificationError;
 
 /// Signature used in the Module System.
-pub trait Signature: BorshDeserialize + BorshSerialize + Eq + Clone + Debug + Send + Sync {
+pub trait Signature:
+    BorshDeserialize
+    + BorshSerialize
+    + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
+    + Eq
+    + Clone
+    + Debug
+    + Send
+    + Sync
+{
     /// The public key associated with the key pair of the signature.
     type PublicKey;
 
@@ -22,6 +31,7 @@ pub trait Signature: BorshDeserialize + BorshSerialize + Eq + Clone + Debug + Se
 pub trait PublicKey:
     BorshDeserialize
     + BorshSerialize
+    + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
     + Eq
     + Hash
     + Clone
