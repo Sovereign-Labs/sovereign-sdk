@@ -100,7 +100,7 @@ impl RollupBlueprint for CelestiaDemoRollup {
     async fn create_prover_service(
         &self,
         prover_config: Option<RollupProverConfig>,
-        da_service: &Self::DaService,
+        _da_service: &Self::DaService,
     ) -> Self::ProverService {
         let vm = Risc0Host::new(risc0::ROLLUP_ELF);
         let v = StfBlueprint::new();
@@ -110,7 +110,7 @@ impl RollupBlueprint for CelestiaDemoRollup {
             rollup_namespace: ROLLUP_NAMESPACE,
         };
 
-        BlockingProver::new(vm, v, da_v, prover_config, zk_storage, da_service.clone())
+        BlockingProver::new(vm, v, da_v, prover_config, zk_storage)
     }
 }
 

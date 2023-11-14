@@ -99,6 +99,6 @@ impl RollupBlueprint for MockDemoRollup {
         let zk_storage = ZkStorage::new();
         let da_v = Default::default();
 
-        BlockingProver::new(vm, v, da_v, prover_config, zk_storage, da_service.clone())
+        BlockingProver::new(vm, v, da_v, prover_config, zk_storage)
     }
 }

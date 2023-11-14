@@ -24,9 +24,8 @@ where
 {
     prover: Mutex<Option<Prover<V, Da, Vm>>>,
     #[allow(clippy::type_complexity)]
-    data: Mutex<HashMap<Hash, StateTransitionData<StateRoot, Witness, Da::Spec>>>,
+    witness: Mutex<HashMap<Hash, StateTransitionData<StateRoot, Witness, Da::Spec>>>,
     zk_storage: V::PreState,
-    _da_service: Da,
 }
 
 impl<StateRoot, Witness, Da, Vm, V> BlockingProver<StateRoot, Witness, Da, Vm, V>
@@ -38,30 +37,30 @@ where
     V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync,
     V::PreState: Clone + Send + Sync,
 {
-    /// TODO
+    /// Creates a new prover.
     pub fn new(
         vm: Vm,
         v: V,
         da_v: Da::Verifier,
         config: Option<RollupProverConfig>,
         zk_storage: V::PreState,
-        _da_service: Da,
     ) -> Self {
-        let stf_verifier = StateTransitionVerifier::<V, Da::Verifier, Vm::Guest>::new(v, da_v);
+        let prover = config.map(|config| {
+            let stf_verifier = StateTransitionVerifier::<V, Da::Verifier, Vm::Guest>::new(v, da_v);
 
-        let config: ProofGenConfig<V, Da, Vm> = match config.unwrap() {
-            RollupProverConfig::Simulate => ProofGenConfig::Simulate(stf_verifier),
-            RollupProverConfig::Execute => ProofGenConfig::Execute,
-            RollupProverConfig::Prove => ProofGenConfig::Prover,
-        };
+            let config: ProofGenConfig<V, Da, Vm> = match config {
+                RollupProverConfig::Simulate => ProofGenConfig::Simulate(stf_verifier),
+                RollupProverConfig::Execute => ProofGenConfig::Execute,
+                RollupProverConfig::Prove => ProofGenConfig::Prover,
+            };
 
-        let prover = Prover { vm, config };
+            Prover { vm, config }
+        });
 
         Self {
-            prover: Mutex::new(Some(prover)),
-            data: Mutex::new(HashMap::new()),
+            prover: Mutex::new(prover),
+            witness: Mutex::new(HashMap::new()),
             zk_storage,
-            _da_service,
         }
     }
 }
@@ -91,7 +90,7 @@ where
         >,
     ) {
         let header_hash = state_transition_data.da_block_header.hash().into();
-        self.data
+        self.witness
             .lock()
             .expect("Lock was poisoned")
             .insert(header_hash, state_transition_data);
@@ -101,7 +100,7 @@ where
         if let Some(Prover { vm, config }) = self.prover.lock().expect("Lock was poisoned").as_mut()
         {
             let transition_data = {
-                self.data
+                self.witness
                     .lock()
                     .expect("Lock was poisoned")
                     .remove(&block_header_hash)

@@ -1,7 +1,7 @@
-mod single_threaded_prover;
+mod blocking_prover;
 use async_trait::async_trait;
+pub use blocking_prover::BlockingProver;
 use serde::Serialize;
-pub use single_threaded_prover::BlockingProver;
 use sov_rollup_interface::services::da::DaService;
 use thiserror::Error;
 
