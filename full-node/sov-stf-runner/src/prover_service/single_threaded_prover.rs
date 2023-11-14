@@ -61,7 +61,7 @@ where
             prover: Mutex::new(Some(prover)),
             data: Mutex::new(HashMap::new()),
             zk_storage,
-            da_service,
+            _da_service,
         }
     }
 }
