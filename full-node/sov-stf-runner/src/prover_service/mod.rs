@@ -1,7 +1,7 @@
 mod single_threaded_prover;
 use async_trait::async_trait;
 use serde::Serialize;
-pub use single_threaded_prover::SimpleProver;
+pub use single_threaded_prover::BlockingProver;
 use sov_rollup_interface::services::da::DaService;
 use thiserror::Error;
 
@@ -19,29 +19,32 @@ pub enum RollupProverConfig {
     Prove,
 }
 
-///TODO
+/// An error that occurred during ZKP proving.
 #[derive(Error, Debug)]
 pub enum ProverServiceError {
-    ///TODO
-    #[error("ProverBusy error")]
+    /// Prover is too busy.
+    #[error("Prover is too busy")]
     ProverBusy,
-    ///TODO
-    #[error("Other error")]
+    /// Some internal prover error.
+    #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
 
-/// TODO
+/// This service is responsible for ZKP proof generation.
+/// The proof is generated in two stages:
+/// 1. Witness is submitted via `submit_witness` to a prover service.
+/// 2. The proof generation is triggered by the `prove` method.
 #[async_trait]
 pub trait ProverService {
-    /// TODO
+    /// Root hash of state merkle tree.
     type StateRoot: Serialize + Clone + AsRef<[u8]>;
-    /// TODO
+    /// Data that is produced during batch execution.
     type Witness: Serialize;
-    /// TODO
+    /// Data Availability service.
     type DaService: DaService;
 
-    /// TODO
-    fn submit_witness(
+    /// Submit witness for proving.
+    async fn submit_witness(
         &self,
         state_transition_data: StateTransitionData<
             Self::StateRoot,
@@ -50,6 +53,6 @@ pub trait ProverService {
         >,
     );
 
-    /// TODO
+    /// Creates ZKP prove for a block corresponding to `block_header_hash`.
     async fn prove(&self, block_header_hash: Hash) -> Result<(), ProverServiceError>;
 }

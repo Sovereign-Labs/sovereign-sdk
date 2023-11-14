@@ -54,20 +54,12 @@ pub trait RollupBlueprint: Sized + Send + Sync {
     /// The kernel for the Zero Knowledge environment.
     type ZkKernel: Kernel<Self::ZkContext, Self::DaSpec> + Default;
 
-    /// TODO
+    /// Prover service.
     type ProverService: ProverService<
         StateRoot = <<Self::NativeContext as Spec>::Storage as Storage>::Root,
         Witness = <<Self::NativeContext as Spec>::Storage as Storage>::Witness,
         DaService = Self::DaService,
     >;
-
-    /// TODO
-    async fn create_prover_service(
-        &self,
-        rollup_config: &RollupConfig<Self::DaConfig>,
-        prover_config: Option<RollupProverConfig>,
-        da_service: &Self::DaService,
-    ) -> Self::ProverService;
 
     /// Creates RPC methods for the rollup.
     fn create_rpc_methods(
@@ -96,24 +88,19 @@ pub trait RollupBlueprint: Sized + Send + Sync {
         rollup_config: &RollupConfig<Self::DaConfig>,
     ) -> Self::DaService;
 
+    /// Create instance of [`ProverService`].
+    async fn create_prover_service(
+        &self,
+        prover_config: Option<RollupProverConfig>,
+        da_service: &Self::DaService,
+    ) -> Self::ProverService;
+
     /// Creates instance of [`StorageManager`].
     /// Panics if initialization fails.
     fn create_storage_manager(
         &self,
         rollup_config: &RollupConfig<Self::DaConfig>,
     ) -> Result<Self::StorageManager, anyhow::Error>;
-
-    /// Creates instance of ZK storage.
-    fn create_zk_storage(
-        &self,
-        rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> <Self::ZkContext as Spec>::Storage;
-
-    /// Creates instance of ZkVm.
-    fn create_vm(&self) -> Self::Vm;
-
-    /// Creates instance of DA Verifier.
-    fn create_verifier(&self) -> <Self::DaService as DaService>::Verifier;
 
     /// Creates instance of a LedgerDB.
     fn create_ledger_db(&self, rollup_config: &RollupConfig<Self::DaConfig>) -> LedgerDB {
@@ -131,9 +118,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
         <Self::NativeContext as Spec>::Storage: NativeStorage,
     {
         let da_service = self.create_da_service(&rollup_config).await;
-        let prover_service = self
-            .create_prover_service(&rollup_config, prover_config, &da_service)
-            .await;
+        let prover_service = self.create_prover_service(prover_config, &da_service).await;
 
         let ledger_db = self.create_ledger_db(&rollup_config);
         let genesis_config = self.create_genesis_config(genesis_paths, &rollup_config)?;

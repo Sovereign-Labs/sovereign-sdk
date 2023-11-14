@@ -13,8 +13,8 @@ use super::{Hash, ProverService, ProverServiceError};
 use crate::verifier::StateTransitionVerifier;
 use crate::{ProofGenConfig, Prover, RollupProverConfig, StateTransitionData};
 
-/// TODO
-pub struct SimpleProver<StateRoot, Witness, Da, Vm, V>
+/// Prover that blocks the current thread and creates a ZKP proof.
+pub struct BlockingProver<StateRoot, Witness, Da, Vm, V>
 where
     StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]>,
     Witness: Serialize + DeserializeOwned,
@@ -29,7 +29,7 @@ where
     _da_service: Da,
 }
 
-impl<StateRoot, Witness, Da, Vm, V> SimpleProver<StateRoot, Witness, Da, Vm, V>
+impl<StateRoot, Witness, Da, Vm, V> BlockingProver<StateRoot, Witness, Da, Vm, V>
 where
     StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync,
     Witness: Serialize + DeserializeOwned + Send + Sync,
@@ -43,13 +43,13 @@ where
         vm: Vm,
         v: V,
         da_v: Da::Verifier,
-        config: RollupProverConfig,
+        config: Option<RollupProverConfig>,
         zk_storage: V::PreState,
         _da_service: Da,
     ) -> Self {
         let stf_verifier = StateTransitionVerifier::<V, Da::Verifier, Vm::Guest>::new(v, da_v);
 
-        let config: ProofGenConfig<V, Da, Vm> = match config {
+        let config: ProofGenConfig<V, Da, Vm> = match config.unwrap() {
             RollupProverConfig::Simulate => ProofGenConfig::Simulate(stf_verifier),
             RollupProverConfig::Execute => ProofGenConfig::Execute,
             RollupProverConfig::Prove => ProofGenConfig::Prover,
@@ -67,7 +67,7 @@ where
 }
 
 #[async_trait]
-impl<StateRoot, Witness, Da, Vm, V> ProverService for SimpleProver<StateRoot, Witness, Da, Vm, V>
+impl<StateRoot, Witness, Da, Vm, V> ProverService for BlockingProver<StateRoot, Witness, Da, Vm, V>
 where
     StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync,
     Witness: Serialize + DeserializeOwned + Send + Sync,
@@ -82,7 +82,7 @@ where
 
     type DaService = Da;
 
-    fn submit_witness(
+    async fn submit_witness(
         &self,
         state_transition_data: StateTransitionData<
             Self::StateRoot,

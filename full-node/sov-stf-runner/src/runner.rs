@@ -206,7 +206,7 @@ where
             // Proving
             {
                 let header_hash = transition_data.da_block_header.hash().into();
-                self.prover_service.submit_witness(transition_data);
+                self.prover_service.submit_witness(transition_data).await;
                 self.prover_service.prove(header_hash).await.unwrap();
             }
             let next_state_root = slot_result.state_root;
