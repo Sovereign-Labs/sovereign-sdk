@@ -40,13 +40,14 @@ where
     /// Creates a new prover.
     pub fn new(
         vm: Vm,
-        v: V,
-        da_v: Da::Verifier,
+        zk_stf: V,
+        da_verifier: Da::Verifier,
         config: Option<RollupProverConfig>,
         zk_storage: V::PreState,
     ) -> Self {
         let prover = config.map(|config| {
-            let stf_verifier = StateTransitionVerifier::<V, Da::Verifier, Vm::Guest>::new(v, da_v);
+            let stf_verifier =
+                StateTransitionVerifier::<V, Da::Verifier, Vm::Guest>::new(zk_stf, da_verifier);
 
             let config: ProofGenConfig<V, Da, Vm> = match config {
                 RollupProverConfig::Simulate => ProofGenConfig::Simulate(stf_verifier),

@@ -74,6 +74,16 @@ impl RollupBlueprint for CelestiaDemoRollup {
         Ok(rpc_methods)
     }
 
+    fn create_storage_manager(
+        &self,
+        rollup_config: &sov_stf_runner::RollupConfig<Self::DaConfig>,
+    ) -> Result<Self::StorageManager, anyhow::Error> {
+        let storage_config = StorageConfig {
+            path: rollup_config.storage.path.clone(),
+        };
+        ProverStorageManager::new(storage_config)
+    }
+
     async fn create_da_service(
         &self,
         rollup_config: &RollupConfig<Self::DaConfig>,
@@ -87,30 +97,20 @@ impl RollupBlueprint for CelestiaDemoRollup {
         .await
     }
 
-    fn create_storage_manager(
-        &self,
-        rollup_config: &sov_stf_runner::RollupConfig<Self::DaConfig>,
-    ) -> Result<Self::StorageManager, anyhow::Error> {
-        let storage_config = StorageConfig {
-            path: rollup_config.storage.path.clone(),
-        };
-        ProverStorageManager::new(storage_config)
-    }
-
     async fn create_prover_service(
         &self,
         prover_config: Option<RollupProverConfig>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
         let vm = Risc0Host::new(risc0::ROLLUP_ELF);
-        let v = StfBlueprint::new();
+        let zk_stf = StfBlueprint::new();
         let zk_storage = ZkStorage::new();
 
-        let da_v = CelestiaVerifier {
+        let da_verifier = CelestiaVerifier {
             rollup_namespace: ROLLUP_NAMESPACE,
         };
 
-        BlockingProver::new(vm, v, da_v, prover_config, zk_storage)
+        BlockingProver::new(vm, zk_stf, da_verifier, prover_config, zk_storage)
     }
 }
 

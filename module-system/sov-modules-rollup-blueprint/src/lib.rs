@@ -88,7 +88,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
         rollup_config: &RollupConfig<Self::DaConfig>,
     ) -> Self::DaService;
 
-    /// Create instance of [`ProverService`].
+    /// Creates instance of [`ProverService`].
     async fn create_prover_service(
         &self,
         prover_config: Option<RollupProverConfig>,

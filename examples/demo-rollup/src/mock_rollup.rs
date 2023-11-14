@@ -72,13 +72,6 @@ impl RollupBlueprint for MockDemoRollup {
         Ok(rpc_methods)
     }
 
-    async fn create_da_service(
-        &self,
-        rollup_config: &RollupConfig<Self::DaConfig>,
-    ) -> Self::DaService {
-        MockDaService::new(rollup_config.da.sender_address)
-    }
-
     fn create_storage_manager(
         &self,
         rollup_config: &RollupConfig<Self::DaConfig>,
@@ -89,16 +82,23 @@ impl RollupBlueprint for MockDemoRollup {
         ProverStorageManager::new(storage_config)
     }
 
+    async fn create_da_service(
+        &self,
+        rollup_config: &RollupConfig<Self::DaConfig>,
+    ) -> Self::DaService {
+        MockDaService::new(rollup_config.da.sender_address)
+    }
+
     async fn create_prover_service(
         &self,
         prover_config: Option<RollupProverConfig>,
-        da_service: &Self::DaService,
+        _da_service: &Self::DaService,
     ) -> Self::ProverService {
         let vm = Risc0Host::new(risc0::MOCK_DA_ELF);
-        let v = StfBlueprint::new();
+        let zk_stf = StfBlueprint::new();
         let zk_storage = ZkStorage::new();
-        let da_v = Default::default();
+        let da_verifier = Default::default();
 
-        BlockingProver::new(vm, v, da_v, prover_config, zk_storage)
+        BlockingProver::new(vm, zk_stf, da_verifier, prover_config, zk_storage)
     }
 }

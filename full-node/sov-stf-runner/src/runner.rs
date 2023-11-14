@@ -203,11 +203,15 @@ where
                     state_transition_witness: slot_result.witness,
                 };
 
-            // Proving
+            // Create ZKP proof.
             {
                 let header_hash = transition_data.da_block_header.hash().into();
                 self.prover_service.submit_witness(transition_data).await;
-                self.prover_service.prove(header_hash).await.unwrap();
+                // TODO: This section will be moved and called upon block finalization once we have fork management ready.
+                self.prover_service
+                    .prove(header_hash)
+                    .await
+                    .expect("The proof creation should succeed");
             }
             let next_state_root = slot_result.state_root;
 
