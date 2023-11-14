@@ -31,7 +31,7 @@ where
     ledger_db: LedgerDB,
     state_root: StateRoot<Stf, Vm, Da::Spec>,
     listen_address: SocketAddr,
-    prover_service: PS,
+    prover_service: Ps,
 }
 
 /// Represents the possible modes of execution for a zkVM program
@@ -59,7 +59,7 @@ where
     pub config: ProofGenConfig<Stf, Da, Vm>,
 }
 
-impl<Stf, Sm, Da, Vm, PS> StateTransitionRunner<Stf, Sm, Da, Vm, PS>
+impl<Stf, Sm, Da, Vm, Ps> StateTransitionRunner<Stf, Sm, Da, Vm, Ps>
 where
     Da: DaService<Error = anyhow::Error> + Clone + Send + Sync + 'static,
     Vm: ZkvmHost,
@@ -88,7 +88,7 @@ where
         storage_manager: Sm,
         prev_state_root: Option<StateRoot<Stf, Vm, Da::Spec>>,
         genesis_config: InitialState<Stf, Vm, Da::Spec>,
-        prover_service: PS,
+        prover_service: Ps,
     ) -> Result<Self, anyhow::Error> {
         let rpc_config = runner_config.rpc_config;
 
