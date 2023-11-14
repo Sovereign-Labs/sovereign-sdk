@@ -16,7 +16,7 @@ type StateRoot<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::StateRoot;
 type InitialState<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::GenesisParams;
 
 /// Combines `DaService` with `StateTransitionFunction` and "runs" the rollup.
-pub struct StateTransitionRunner<Stf, Sm, Da, Vm, PS>
+pub struct StateTransitionRunner<Stf, Sm, Da, Vm, Ps>
 where
     Da: DaService,
     Vm: ZkvmHost,
