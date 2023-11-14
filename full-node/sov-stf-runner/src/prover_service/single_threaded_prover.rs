@@ -119,6 +119,7 @@ where
                 ProofGenConfig::Prover => vm.run(true),
             })?;
         }
-        todo!()
+
+        Ok(())
     }
 }

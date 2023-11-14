@@ -16,7 +16,6 @@ use sov_rollup_interface::storage::StorageManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage::NativeStorage;
 use sov_state::Storage;
-use sov_stf_runner::SimpleProver;
 use sov_stf_runner::{ProverService, RollupConfig, RollupProverConfig, StateTransitionRunner};
 use tokio::sync::oneshot;
 pub use wallet::*;
@@ -63,7 +62,12 @@ pub trait RollupBlueprint: Sized + Send + Sync {
     >;
 
     /// TODO
-    fn create_prover_service(&self) -> Self::ProverService;
+    async fn create_prover_service(
+        &self,
+        rollup_config: &RollupConfig<Self::DaConfig>,
+        prover_config: Option<RollupProverConfig>,
+        da_service: &Self::DaService,
+    ) -> Self::ProverService;
 
     /// Creates RPC methods for the rollup.
     fn create_rpc_methods(
@@ -127,6 +131,10 @@ pub trait RollupBlueprint: Sized + Send + Sync {
         <Self::NativeContext as Spec>::Storage: NativeStorage,
     {
         let da_service = self.create_da_service(&rollup_config).await;
+        let prover_service = self
+            .create_prover_service(&rollup_config, prover_config, &da_service)
+            .await;
+
         let ledger_db = self.create_ledger_db(&rollup_config);
         let genesis_config = self.create_genesis_config(genesis_paths, &rollup_config)?;
 
@@ -141,7 +149,6 @@ pub trait RollupBlueprint: Sized + Send + Sync {
         let rpc_methods = self.create_rpc_methods(&native_storage, &ledger_db, &da_service)?;
 
         let native_stf = StfBlueprint::new();
-        let prover_service = self.create_prover_service();
 
         let runner = StateTransitionRunner::new(
             rollup_config.runner,

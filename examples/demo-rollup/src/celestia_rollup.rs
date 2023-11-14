@@ -16,6 +16,7 @@ use sov_state::storage_manager::ProverStorageManager;
 use sov_state::Storage;
 use sov_state::{DefaultStorageSpec, ZkStorage};
 use sov_stf_runner::RollupConfig;
+use sov_stf_runner::RollupProverConfig;
 use sov_stf_runner::SimpleProver;
 
 /// Rollup with CelestiaDa
@@ -53,15 +54,28 @@ impl RollupBlueprint for CelestiaDemoRollup {
         >,
     >;
 
-    fn create_prover_service(
+    async fn create_prover_service(
         &self,
+        _rollup_config: &RollupConfig<Self::DaConfig>,
         prover_config: Option<RollupProverConfig>,
         da_service: &Self::DaService,
     ) -> Self::ProverService {
         let vm = Risc0Host::new(risc0::ROLLUP_ELF);
         let v = StfBlueprint::new();
         let zk_storage = ZkStorage::new();
-        SimpleProver::new(vm, v, da_v, prover_config, zk_storage, da_service)
+
+        let da_v = CelestiaVerifier {
+            rollup_namespace: ROLLUP_NAMESPACE,
+        };
+
+        SimpleProver::new(
+            vm,
+            v,
+            da_v,
+            prover_config.unwrap(),
+            zk_storage,
+            da_service.clone(),
+        )
     }
 
     fn create_rpc_methods(
