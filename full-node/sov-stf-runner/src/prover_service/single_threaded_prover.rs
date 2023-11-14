@@ -45,7 +45,7 @@ where
         da_v: Da::Verifier,
         config: RollupProverConfig,
         zk_storage: V::PreState,
-        da_service: Da,
+        _da_service: Da,
     ) -> Self {
         let stf_verifier = StateTransitionVerifier::<V, Da::Verifier, Vm::Guest>::new(v, da_v);
 
