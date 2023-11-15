@@ -1,5 +1,4 @@
 //! This module implements the `ZkvmHost` trait for the RISC0 VM.
-use std::sync::Mutex;
 
 use risc0_zkvm::serde::to_vec;
 use risc0_zkvm::{Executor, ExecutorEnvBuilder, InnerReceipt, Receipt, Session};
@@ -16,8 +15,9 @@ use crate::Risc0MethodId;
 
 /// A Risc0Host stores a binary to execute in the Risc0 VM, and accumulates hints to be
 /// provided to its execution.
+#[derive(Clone)]
 pub struct Risc0Host<'a> {
-    env: Mutex<Vec<u32>>,
+    env: Vec<u32>,
     elf: &'a [u8],
 }
 
@@ -51,7 +51,7 @@ impl<'a> Risc0Host<'a> {
     /// This creates the "Session" trace without invoking the heavy cryptographic machinery.
     pub fn run_without_proving(&mut self) -> anyhow::Result<Session> {
         let env = add_benchmarking_callbacks(ExecutorEnvBuilder::default())
-            .add_input(&self.env.lock().unwrap())
+            .add_input(&self.env)
             .build()
             .unwrap();
         let mut executor = Executor::from_elf(env, self.elf)?;
@@ -65,15 +65,15 @@ impl<'a> Risc0Host<'a> {
 }
 
 impl<'a> ZkvmHost for Risc0Host<'a> {
-    fn add_hint<T: serde::Serialize>(&self, item: T) {
+    fn add_hint<T: serde::Serialize>(&mut self, item: T) {
         let serialized = to_vec(&item).expect("Serialization to vec is infallible");
-        self.env.lock().unwrap().extend_from_slice(&serialized[..]);
+        self.env.extend_from_slice(&serialized[..]);
     }
 
     type Guest = Risc0Guest;
 
     fn simulate_with_hints(&mut self) -> Self::Guest {
-        Risc0Guest::with_hints(std::mem::take(&mut self.env.lock().unwrap()))
+        Risc0Guest::with_hints(std::mem::take(&mut self.env))
     }
 
     fn run(&mut self, with_proof: bool) -> Result<(), anyhow::Error> {

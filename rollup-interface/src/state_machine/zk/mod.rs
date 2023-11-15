@@ -17,11 +17,11 @@ use crate::da::DaSpec;
 use crate::RollupAddress;
 
 /// A trait implemented by the prover ("host") of a zkVM program.
-pub trait ZkvmHost: Zkvm {
+pub trait ZkvmHost: Zkvm + Clone {
     /// The associated guest type
     type Guest: ZkvmGuest;
     /// Give the guest a piece of advice non-deterministically
-    fn add_hint<T: Serialize>(&self, item: T);
+    fn add_hint<T: Serialize>(&mut self, item: T);
 
     /// Simulate running the guest using the provided hints.
     ///
