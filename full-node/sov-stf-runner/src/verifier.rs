@@ -7,6 +7,7 @@ use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 use crate::StateTransitionData;
 
 /// Verifies a state transition
+#[derive(Clone)]
 pub struct StateTransitionVerifier<ST, Da, Zk>
 where
     Da: DaVerifier,

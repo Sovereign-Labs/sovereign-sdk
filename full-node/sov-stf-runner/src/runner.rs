@@ -35,6 +35,7 @@ where
 }
 
 /// Represents the possible modes of execution for a zkVM program
+#[derive(Clone)]
 pub enum ProofGenConfig<Stf, Da: DaService, Vm: ZkvmHost>
 where
     Stf: StateTransitionFunction<Vm::Guest, Da::Spec>,

@@ -1,4 +1,6 @@
 mod blocking_prover;
+mod parallel_prover;
+
 use async_trait::async_trait;
 pub use blocking_prover::BlockingProver;
 use serde::Serialize;

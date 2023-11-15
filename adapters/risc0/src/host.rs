@@ -116,7 +116,6 @@ pub struct Risc0Verifier;
 
 impl Zkvm for Risc0Verifier {
     type CodeCommitment = Risc0MethodId;
-
     type Error = anyhow::Error;
 
     fn verify<'a>(
