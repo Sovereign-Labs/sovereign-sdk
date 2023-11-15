@@ -48,7 +48,8 @@ impl<'a> Manifest<'a> {
     ///
     /// The `parent` is used to report the errors to the correct span location.
     pub fn read_constants(parent: &'a Ident) -> Result<Self, syn::Error> {
-        let target_path_filename = std::env::var("TARGET_PATH_OVERRIDE").unwrap_or("target-path".to_string());
+        let target_path_filename =
+            std::env::var("TARGET_PATH_OVERRIDE").unwrap_or("target-path".to_string());
         let target_path_pointer = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .canonicalize()
             .map_err(|e| {

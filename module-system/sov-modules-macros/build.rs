@@ -35,7 +35,8 @@ fn resolve_manifest_path(out_dir: &Path) -> anyhow::Result<PathBuf> {
 fn main() -> anyhow::Result<()> {
     // writes the target output dir into the manifest path so it can be later read for the
     // resolution of the sovereign.toml manifest file
-    let target_path_filename = std::env::var("TARGET_PATH_OVERRIDE").unwrap_or("target-path".to_string());
+    let target_path_filename =
+        std::env::var("TARGET_PATH_OVERRIDE").unwrap_or("target-path".to_string());
     let out_dir = env::var("OUT_DIR").map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     let out_dir = PathBuf::from(out_dir);
     let out_dir = out_dir
