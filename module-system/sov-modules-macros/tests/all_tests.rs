@@ -8,6 +8,11 @@ fn set_constants_manifest() {
             .join("tests")
             .join("constants.json"),
     );
+    std::env::set_var(
+        "TARGET_PATH_OVERRIDE",
+        "target-path-trybuild",
+    );
+
 }
 
 #[test]
