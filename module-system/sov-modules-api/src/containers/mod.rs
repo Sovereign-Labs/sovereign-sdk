@@ -13,7 +13,7 @@ pub use accessory_vec::AccessoryStateVec;
 pub use map::StateMap;
 pub use traits::{StateMapAccessor, StateValueAccessor, StateVecAccessor};
 pub use value::StateValue;
-pub use vec::{Error as StateVecError, StateVec};
+pub use vec::StateVec;
 
 #[cfg(test)]
 mod test {

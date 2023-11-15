@@ -2,7 +2,6 @@ use std::marker::PhantomData;
 
 use sov_modules_core::{Context, Prefix, StateCodec, StateKeyCodec, StateValueCodec, WorkingSet};
 use sov_state::codec::BorshCodec;
-use thiserror::Error;
 
 use super::traits::{StateValueAccessor, StateVecAccessor, StateVecPrivateAccessor};
 use crate::containers::{StateMap, StateValue};
@@ -22,17 +21,6 @@ pub struct StateVec<V, Codec = BorshCodec> {
     prefix: Prefix,
     len_value: StateValue<usize, Codec>,
     elems: StateMap<usize, V, Codec>,
-}
-
-/// Error type for `StateVec` get method.
-#[derive(Debug, Error)]
-pub enum Error {
-    /// Operation failed because the index was out of bounds.
-    #[error("Index out of bounds for index: {0}")]
-    IndexOutOfBounds(usize),
-    /// Value not found.
-    #[error("Value not found for prefix: {0} and index: {1}")]
-    MissingValue(Prefix, usize),
 }
 
 impl<V, Codec: Clone> StateVec<V, Codec> {

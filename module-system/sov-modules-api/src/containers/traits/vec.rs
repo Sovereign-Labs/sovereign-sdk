@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::{StateMapAccessor, StateValueAccessor};
 
-/// Error type for `StateVec` get method.
+/// An error type for vector getters.
 #[derive(Debug, Error)]
 pub enum StateVecError {
     /// Operation failed because the index was out of bounds.
@@ -44,7 +44,7 @@ where
 
     /// Sets a value in the vector.
     /// If the index is out of bounds, returns an error.
-    /// To push a value to the end of the StateVec, use [`StateVec::push`].
+    /// To push a value to the end of the StateVec, use [`StateVecAccessor::push`].
     fn set(&self, index: usize, value: &V, working_set: &mut W) -> Result<(), StateVecError> {
         let len = self.len(working_set);
 
@@ -89,7 +89,7 @@ where
         self.set_len(len + 1, working_set);
     }
 
-    /// Pops a value from the end of the [`StateVec`] and returns it.
+    /// Pops a value from the end of the vector and returns it.
     fn pop(&self, working_set: &mut W) -> Option<V> {
         let len = self.len(working_set);
         let last_i = len.checked_sub(1)?;
@@ -101,7 +101,7 @@ where
         Some(elem)
     }
 
-    /// Removes all values from this [`StateVec`].
+    /// Removes all values from this vector.
     fn clear(&self, working_set: &mut W) {
         let len = self.len_value().remove(working_set).unwrap_or_default();
 
