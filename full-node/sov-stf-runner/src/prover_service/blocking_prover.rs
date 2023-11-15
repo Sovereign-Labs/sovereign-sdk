@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::ops::Deref;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
@@ -11,7 +12,7 @@ use sov_rollup_interface::zk::ZkvmHost;
 
 use super::{Hash, ProverService, ProverServiceError};
 use crate::verifier::StateTransitionVerifier;
-use crate::{ProofGenConfig, Prover, RollupProverConfig, StateTransitionData};
+use crate::{ProofGenConfig, RollupProverConfig, StateTransitionData};
 
 /// Prover that blocks the current thread and creates a ZKP proof.
 pub struct BlockingProver<StateRoot, Witness, Da, Vm, V>
@@ -22,10 +23,12 @@ where
     Vm: ZkvmHost,
     V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync,
 {
-    prover: Mutex<Option<Prover<V, Da, Vm>>>,
+    vm: Vm,
+    prover_config: Arc<Option<ProofGenConfig<V, Da, Vm>>>,
+    zk_storage: V::PreState,
+
     #[allow(clippy::type_complexity)]
     witness: Mutex<HashMap<Hash, StateTransitionData<StateRoot, Witness, Da::Spec>>>,
-    zk_storage: V::PreState,
 }
 
 impl<StateRoot, Witness, Da, Vm, V> BlockingProver<StateRoot, Witness, Da, Vm, V>
@@ -45,7 +48,7 @@ where
         config: Option<RollupProverConfig>,
         zk_storage: V::PreState,
     ) -> Self {
-        let prover = config.map(|config| {
+        let prover_config = config.map(|config| {
             let stf_verifier =
                 StateTransitionVerifier::<V, Da::Verifier, Vm::Guest>::new(zk_stf, da_verifier);
 
@@ -55,11 +58,12 @@ where
                 RollupProverConfig::Prove => ProofGenConfig::Prover,
             };
 
-            Prover { vm, config }
+            config
         });
 
         Self {
-            prover: Mutex::new(prover),
+            vm,
+            prover_config: Arc::new(prover_config),
             witness: Mutex::new(HashMap::new()),
             zk_storage,
         }
@@ -72,8 +76,8 @@ where
     StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync,
     Witness: Serialize + DeserializeOwned + Send + Sync,
     Da: DaService,
-    Vm: ZkvmHost,
-    V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync,
+    Vm: ZkvmHost + 'static,
+    V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync + 'static,
     V::PreState: Clone + Send + Sync,
 {
     type StateRoot = StateRoot;
@@ -98,8 +102,7 @@ where
     }
 
     async fn prove(&self, block_header_hash: Hash) -> Result<(), ProverServiceError> {
-        if let Some(Prover { vm, config }) = self.prover.lock().expect("Lock was poisoned").as_mut()
-        {
+        if let Some(config) = self.prover_config.clone().deref() {
             let transition_data = {
                 self.witness
                     .lock()
@@ -108,7 +111,9 @@ where
                     .unwrap()
             };
 
+            let mut vm = self.vm.clone();
             vm.add_hint(transition_data);
+
             tracing::info_span!("guest_execution").in_scope(|| match config {
                 ProofGenConfig::Simulate(verifier) => verifier
                     .run_block(vm.simulate_with_hints(), self.zk_storage.clone())
@@ -116,8 +121,14 @@ where
                         anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)
                     })
                     .map(|_| ()),
-                ProofGenConfig::Execute => vm.run(false),
-                ProofGenConfig::Prover => vm.run(true),
+                ProofGenConfig::Execute => {
+                    let _ = vm.run(false)?;
+                    Ok(())
+                }
+                ProofGenConfig::Prover => {
+                    let _ = vm.run(true)?;
+                    Ok(())
+                }
             })?;
         }
 

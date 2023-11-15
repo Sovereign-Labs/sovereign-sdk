@@ -39,7 +39,7 @@ pub fn main() {
     let stf: StfBlueprint<ZkDefaultContext, _, _, Runtime<_, _>, BasicKernel<_>> =
         StfBlueprint::new();
 
-    let mut stf_verifier = StfVerifier::new(stf, MockDaVerifier {});
+    let stf_verifier = StfVerifier::new(stf, MockDaVerifier {});
 
     stf_verifier
         .run_block(guest, storage)
