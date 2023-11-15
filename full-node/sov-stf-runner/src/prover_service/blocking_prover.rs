@@ -121,8 +121,14 @@ where
                         anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)
                     })
                     .map(|_| ()),
-                ProofGenConfig::Execute => vm.run(false),
-                ProofGenConfig::Prover => vm.run(true),
+                ProofGenConfig::Execute => {
+                    let _ = vm.run(false)?;
+                    Ok(())
+                }
+                ProofGenConfig::Prover => {
+                    let _ = vm.run(true)?;
+                    Ok(())
+                }
             })?;
         }
 

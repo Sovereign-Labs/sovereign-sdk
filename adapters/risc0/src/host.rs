@@ -4,7 +4,7 @@ use risc0_zkvm::serde::to_vec;
 use risc0_zkvm::{Executor, ExecutorEnvBuilder, InnerReceipt, Receipt, Session};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
+use sov_rollup_interface::zk::{Proof, Zkvm, ZkvmHost};
 #[cfg(feature = "bench")]
 use sov_zk_cycle_utils::{cycle_count_callback, get_syscall_name, get_syscall_name_cycles};
 
@@ -65,24 +65,25 @@ impl<'a> Risc0Host<'a> {
 }
 
 impl<'a> ZkvmHost for Risc0Host<'a> {
+    type Guest = Risc0Guest;
+
     fn add_hint<T: serde::Serialize>(&mut self, item: T) {
         let serialized = to_vec(&item).expect("Serialization to vec is infallible");
         self.env.extend_from_slice(&serialized[..]);
     }
 
-    type Guest = Risc0Guest;
-
     fn simulate_with_hints(&mut self) -> Self::Guest {
         Risc0Guest::with_hints(std::mem::take(&mut self.env))
     }
 
-    fn run(&mut self, with_proof: bool) -> Result<(), anyhow::Error> {
+    fn run(&mut self, with_proof: bool) -> Result<Proof, anyhow::Error> {
         if with_proof {
-            self.run()?;
+            let jurnal = self.run()?.journal;
+            Ok(Proof::Proof(jurnal))
         } else {
             self.run_without_proving()?;
+            Ok(Proof::Empty)
         }
-        Ok(())
     }
 }
 
