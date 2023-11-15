@@ -49,7 +49,7 @@ fn transfer_initial_token() {
 
     assert_eq!(Some(initial_balance), sender_balance_before);
     assert_eq!(sender_balance_before, receiver_balance_before);
-    let sender_context = C::new(sender_address);
+    let sender_context = C::new(sender_address, 1);
 
     // Transfer happy test
     {
@@ -156,7 +156,7 @@ fn transfer_initial_token() {
     // Sender does not exist
     {
         let unknown_sender = generate_address::<C>("non_existing_sender");
-        let unknown_sender_context = C::new(unknown_sender);
+        let unknown_sender_context = C::new(unknown_sender, 1);
 
         let sender_balance = query_user_balance(unknown_sender, &mut working_set);
         assert!(sender_balance.is_none());
@@ -289,7 +289,7 @@ fn transfer_deployed_token() {
 
     assert!(sender_balance_before.is_none());
     assert!(receiver_balance_before.is_none());
-    let sender_context = C::new(sender_address);
+    let sender_context = C::new(sender_address, 1);
 
     let mint_message = CallMessage::CreateToken {
         salt,

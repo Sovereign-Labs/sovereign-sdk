@@ -1,6 +1,5 @@
 # How to Create a New Module Using the Module System
 
-
 ### Understanding the Module System
 
 The Sovereign Software Development Kit (SDK) includes a [Module System](../../module-system/README.md),
@@ -14,7 +13,7 @@ These modules are the fundamental building blocks of a rollup and include:
 
 ### Creating a Non-Fungible Token (NFT) Module
 
-**Note**: This tutorial focuses on illustrating the usage of the Sovereign SDK by creating a simple NFT module. 
+**Note**: This tutorial focuses on illustrating the usage of the Sovereign SDK by creating a simple NFT module.
 The focus here is on the module system and not the application logic. For a more complete NFT module, please refer
 to [sov-nft-module](../../module-system/module-implementations/sov-nft-module)
 
@@ -220,7 +219,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for NonFungibleToken<C
     type Context = C;
     type Config = NonFungibleTokenConfig<C>;
     type CallMessage = CallMessage<C>;
-    
+
     fn genesis(
         &self,
         config: &Self::Config,
@@ -420,9 +419,9 @@ Here's an example of setting up a module and calling its methods:
 fn transfer() {
     // Preparation
     let admin = generate_address::<C>("admin");
-    let admin_context = C::new(admin.clone());
+    let admin_context = C::new(admin.clone(), 1);
     let owner1 = generate_address::<C>("owner2");
-    let owner1_context = C::new(owner1.clone());
+    let owner1_context = C::new(owner1.clone(), 1);
     let owner2 = generate_address::<C>("owner2");
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
         admin: admin.clone(),
