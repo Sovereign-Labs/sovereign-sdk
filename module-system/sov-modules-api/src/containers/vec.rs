@@ -104,59 +104,12 @@ where
 
 #[cfg(all(test, feature = "native"))]
 mod test {
-    use std::fmt::Debug;
-
+    use sov_modules_core::{Prefix, WorkingSet};
     use sov_state::{DefaultStorageSpec, ProverStorage};
 
-    use super::*;
-    use crate::default_context::DefaultContext;
-
-    enum TestCaseAction<T> {
-        Push(T),
-        Pop(T),
-        Last(T),
-        Set(usize, T),
-        SetAll(Vec<T>),
-        CheckLen(usize),
-        CheckContents(Vec<T>),
-        CheckContentsReverse(Vec<T>),
-        CheckGet(usize, Option<T>),
-        Clear,
-    }
-
-    fn test_cases() -> Vec<TestCaseAction<u32>> {
-        vec![
-            TestCaseAction::Push(1),
-            TestCaseAction::Push(2),
-            TestCaseAction::CheckContents(vec![1, 2]),
-            TestCaseAction::CheckLen(2),
-            TestCaseAction::Pop(2),
-            TestCaseAction::Set(0, 10),
-            TestCaseAction::CheckContents(vec![10]),
-            TestCaseAction::Push(8),
-            TestCaseAction::CheckContents(vec![10, 8]),
-            TestCaseAction::SetAll(vec![10]),
-            TestCaseAction::CheckContents(vec![10]),
-            TestCaseAction::CheckGet(1, None),
-            TestCaseAction::Set(0, u32::MAX),
-            TestCaseAction::Push(8),
-            TestCaseAction::Push(0),
-            TestCaseAction::CheckContents(vec![u32::MAX, 8, 0]),
-            TestCaseAction::SetAll(vec![11, 12]),
-            TestCaseAction::CheckContents(vec![11, 12]),
-            TestCaseAction::SetAll(vec![]),
-            TestCaseAction::CheckLen(0),
-            TestCaseAction::Push(42),
-            TestCaseAction::Push(1337),
-            TestCaseAction::Clear,
-            TestCaseAction::CheckContents(vec![]),
-            TestCaseAction::CheckGet(0, None),
-            TestCaseAction::SetAll(vec![1, 2, 3]),
-            TestCaseAction::CheckContents(vec![1, 2, 3]),
-            TestCaseAction::CheckContentsReverse(vec![3, 2, 1]),
-            TestCaseAction::Last(3),
-        ]
-    }
+    use crate::{
+        containers::traits::vec_tests::Testable, default_context::DefaultContext, StateVec,
+    };
 
     #[test]
     fn test_state_vec() {
@@ -167,57 +120,6 @@ mod test {
         let prefix = Prefix::new("test".as_bytes().to_vec());
         let state_vec = StateVec::<u32>::new(prefix);
 
-        for test_case_action in test_cases() {
-            check_test_case_action(&state_vec, test_case_action, &mut working_set);
-        }
-    }
-
-    fn check_test_case_action<T, C>(
-        state_vec: &StateVec<T>,
-        action: TestCaseAction<T>,
-        ws: &mut WorkingSet<C>,
-    ) where
-        C: Context,
-        BorshCodec: StateValueCodec<T>,
-        T: Eq + Debug,
-    {
-        match action {
-            TestCaseAction::CheckContents(expected) => {
-                let contents: Vec<T> = state_vec.iter(ws).collect();
-                assert_eq!(expected, contents);
-            }
-            TestCaseAction::CheckLen(expected) => {
-                let actual = state_vec.len(ws);
-                assert_eq!(actual, expected);
-            }
-            TestCaseAction::Pop(expected) => {
-                let actual = state_vec.pop(ws);
-                assert_eq!(actual, Some(expected));
-            }
-            TestCaseAction::Push(value) => {
-                state_vec.push(&value, ws);
-            }
-            TestCaseAction::Set(index, value) => {
-                state_vec.set(index, &value, ws).unwrap();
-            }
-            TestCaseAction::SetAll(values) => {
-                state_vec.set_all(values, ws);
-            }
-            TestCaseAction::CheckGet(index, expected) => {
-                let actual = state_vec.get(index, ws);
-                assert_eq!(actual, expected);
-            }
-            TestCaseAction::Clear => {
-                state_vec.clear(ws);
-            }
-            TestCaseAction::Last(expected) => {
-                let actual = state_vec.last(ws);
-                assert_eq!(actual, Some(expected));
-            }
-            TestCaseAction::CheckContentsReverse(expected) => {
-                let contents: Vec<T> = state_vec.iter(ws).rev().collect();
-                assert_eq!(expected, contents);
-            }
-        }
+        state_vec.run_tests(&mut working_set);
     }
 }
