@@ -1,4 +1,3 @@
-use std::iter::FusedIterator;
 use std::marker::PhantomData;
 
 use sov_modules_core::{Context, Prefix, StateCodec, StateKeyCodec, StateValueCodec, WorkingSet};
@@ -7,7 +6,7 @@ use thiserror::Error;
 
 use crate::containers::{StateMap, StateValue};
 
-use super::traits::{StateMapAccessor, StateValueAccessor};
+use super::traits::{StateValueAccessor, StateVecAccessor, StateVecPrivateAccessor};
 
 /// A growable array of values stored as JMT-backed state.
 #[derive(
@@ -37,23 +36,7 @@ pub enum Error {
     MissingValue(Prefix, usize),
 }
 
-impl<V> StateVec<V>
-where
-    BorshCodec: StateValueCodec<V>,
-{
-    /// Crates a new [`StateVec`] with the given prefix and the default
-    /// [`StateValueCodec`] (i.e. [`BorshCodec`]).
-    pub fn new(prefix: Prefix) -> Self {
-        Self::with_codec(prefix, BorshCodec)
-    }
-}
-
-impl<V, Codec> StateVec<V, Codec>
-where
-    Codec: StateCodec + Clone,
-    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
-    Codec::KeyCodec: StateKeyCodec<usize>,
-{
+impl<V, Codec: Clone> StateVec<V, Codec> {
     /// Creates a new [`StateVec`] with the given prefix and codec.
     pub fn with_codec(prefix: Prefix, codec: Codec) -> Self {
         // Differentiating the prefixes for the length and the elements
@@ -69,205 +52,53 @@ where
             elems,
         }
     }
+}
 
-    /// Returns the prefix used when this [`StateVec`] was created.
-    pub fn prefix(&self) -> &Prefix {
-        &self.prefix
+impl<V> StateVec<V>
+where
+    BorshCodec: StateValueCodec<V>,
+{
+    /// Crates a new [`StateVec`] with the given prefix and the default
+    /// [`StateValueCodec`] (i.e. [`BorshCodec`]).
+    pub fn new(prefix: Prefix) -> Self {
+        Self::with_codec(prefix, BorshCodec)
     }
+}
 
-    fn set_len<C: Context>(&self, length: usize, working_set: &mut WorkingSet<C>) {
+impl<V, Codec, C> StateVecPrivateAccessor<V, Codec, WorkingSet<C>> for StateVec<V, Codec>
+where
+    Codec: StateCodec + Clone,
+    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
+    Codec::KeyCodec: StateKeyCodec<usize>,
+    C: Context,
+{
+    type ElemsMap = StateMap<usize, V, Codec>;
+
+    type LenValue = StateValue<usize, Codec>;
+
+    fn set_len(&self, length: usize, working_set: &mut WorkingSet<C>) {
         self.len_value.set(&length, working_set);
     }
 
-    /// Sets a value in the [`StateVec`].
-    /// If the index is out of bounds, returns an error.
-    /// To push a value to the end of the StateVec, use [`StateVec::push`].
-    pub fn set<C: Context>(
-        &self,
-        index: usize,
-        value: &V,
-        working_set: &mut WorkingSet<C>,
-    ) -> Result<(), Error> {
-        let len = self.len(working_set);
-
-        if index < len {
-            self.elems.set(&index, value, working_set);
-            Ok(())
-        } else {
-            Err(Error::IndexOutOfBounds(index))
-        }
+    fn elems(&self) -> &Self::ElemsMap {
+        &self.elems
     }
 
-    /// Returns the value for the given index.
-    pub fn get<C: Context>(&self, index: usize, working_set: &mut WorkingSet<C>) -> Option<V> {
-        self.elems.get(&index, working_set)
-    }
-
-    /// Returns the value for the given index.
-    /// If the index is out of bounds, returns an error.
-    /// If the value is absent, returns an error.
-    pub fn get_or_err<C: Context>(
-        &self,
-        index: usize,
-        working_set: &mut WorkingSet<C>,
-    ) -> Result<V, Error> {
-        let len = self.len(working_set);
-
-        if index < len {
-            self.elems
-                .get(&index, working_set)
-                .ok_or_else(|| Error::MissingValue(self.prefix().clone(), index))
-        } else {
-            Err(Error::IndexOutOfBounds(index))
-        }
-    }
-
-    /// Returns the length of the [`StateVec`].
-    pub fn len<C: Context>(&self, working_set: &mut WorkingSet<C>) -> usize {
-        self.len_value.get(working_set).unwrap_or_default()
-    }
-
-    /// Pushes a value to the end of the [`StateVec`].
-    pub fn push<C: Context>(&self, value: &V, working_set: &mut WorkingSet<C>) {
-        let len = self.len(working_set);
-
-        self.elems.set(&len, value, working_set);
-        self.set_len(len + 1, working_set);
-    }
-
-    /// Pops a value from the end of the [`StateVec`] and returns it.
-    pub fn pop<C: Context>(&self, working_set: &mut WorkingSet<C>) -> Option<V> {
-        let len = self.len(working_set);
-        let last_i = len.checked_sub(1)?;
-        let elem = self.elems.remove(&last_i, working_set)?;
-
-        let new_len = last_i;
-        self.set_len(new_len, working_set);
-
-        Some(elem)
-    }
-
-    /// Removes all values from this [`StateVec`].
-    pub fn clear<C: Context>(&self, working_set: &mut WorkingSet<C>) {
-        let len = self.len_value.remove(working_set).unwrap_or_default();
-
-        for i in 0..len {
-            self.elems.delete(&i, working_set);
-        }
-    }
-
-    /// Sets all values in the [`StateVec`].
-    ///
-    /// If the length of the provided values is less than the length of the
-    /// [`StateVec`], the remaining values will be removed from storage.
-    pub fn set_all<C: Context>(&self, values: Vec<V>, working_set: &mut WorkingSet<C>) {
-        let old_len = self.len(working_set);
-        let new_len = values.len();
-
-        for i in new_len..old_len {
-            self.elems.delete(&i, working_set);
-        }
-
-        for (i, value) in values.into_iter().enumerate() {
-            self.elems.set(&i, &value, working_set);
-        }
-
-        self.set_len(new_len, working_set);
-    }
-
-    /// Returns an iterator over all the values in the [`StateVec`].
-    pub fn iter<'a, 'ws, C: Context>(
-        &'a self,
-        working_set: &'ws mut WorkingSet<C>,
-    ) -> StateVecIter<'a, 'ws, V, Codec, C> {
-        let len = self.len(working_set);
-        StateVecIter {
-            state_vec: self,
-            ws: working_set,
-            len,
-            next_i: 0,
-        }
-    }
-
-    /// Returns the last value in the [`StateVec`], or [`None`] if
-    /// empty.
-    pub fn last<C: Context>(&self, working_set: &mut WorkingSet<C>) -> Option<V> {
-        let len = self.len(working_set);
-        let i = len.checked_sub(1)?;
-        self.elems.get(&i, working_set)
+    fn len_value(&self) -> &Self::LenValue {
+        &self.len_value
     }
 }
 
-/// An [`Iterator`] over a [`StateVec`].
-///
-/// See [`StateVec::iter`] for more details.
-pub struct StateVecIter<'a, 'ws, V, Codec, C>
+impl<V, Codec, C> StateVecAccessor<V, Codec, WorkingSet<C>> for StateVec<V, Codec>
 where
     Codec: StateCodec + Clone,
     Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
     Codec::KeyCodec: StateKeyCodec<usize>,
     C: Context,
 {
-    state_vec: &'a StateVec<V, Codec>,
-    ws: &'ws mut WorkingSet<C>,
-    len: usize,
-    next_i: usize,
-}
-
-impl<'a, 'ws, V, Codec, C> Iterator for StateVecIter<'a, 'ws, V, Codec, C>
-where
-    Codec: StateCodec + Clone,
-    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
-    Codec::KeyCodec: StateKeyCodec<usize>,
-    C: Context,
-{
-    type Item = V;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let elem = self.state_vec.get(self.next_i, self.ws);
-        if elem.is_some() {
-            self.next_i += 1;
-        }
-
-        elem
-    }
-}
-
-impl<'a, 'ws, V, Codec, C> ExactSizeIterator for StateVecIter<'a, 'ws, V, Codec, C>
-where
-    Codec: StateCodec + Clone,
-    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
-    Codec::KeyCodec: StateKeyCodec<usize>,
-    C: Context,
-{
-    fn len(&self) -> usize {
-        self.len - self.next_i
-    }
-}
-
-impl<'a, 'ws, V, Codec, C> FusedIterator for StateVecIter<'a, 'ws, V, Codec, C>
-where
-    Codec: StateCodec + Clone,
-    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
-    Codec::KeyCodec: StateKeyCodec<usize>,
-    C: Context,
-{
-}
-
-impl<'a, 'ws, V, Codec, C> DoubleEndedIterator for StateVecIter<'a, 'ws, V, Codec, C>
-where
-    Codec: StateCodec + Clone,
-    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
-    Codec::KeyCodec: StateKeyCodec<usize>,
-    C: Context,
-{
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.len == 0 {
-            return None;
-        }
-
-        self.len -= 1;
-        self.state_vec.get(self.len, self.ws)
+    /// Returns the prefix used when this [`StateVec`] was created.
+    fn prefix(&self) -> &Prefix {
+        &self.prefix
     }
 }
 

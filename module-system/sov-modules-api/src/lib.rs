@@ -48,7 +48,7 @@ pub use sov_rollup_interface::zk::{
 pub use sov_rollup_interface::{digest, BasicAddress, RollupAddress};
 
 pub mod prelude {
-    pub use super::{StateMapAccessor, StateValueAccessor};
+    pub use super::{StateMapAccessor, StateValueAccessor, StateVecAccessor};
 }
 
 pub mod optimistic {

@@ -1,4 +1,3 @@
-use std::iter::FusedIterator;
 use std::marker::PhantomData;
 
 use sov_modules_core::{
@@ -6,9 +5,9 @@ use sov_modules_core::{
 };
 use sov_state::codec::BorshCodec;
 
-use crate::StateValueAccessor;
+use crate::{StateValueAccessor, StateVecAccessor};
 
-use super::{traits::StateMapAccessor, AccessoryStateMap, AccessoryStateValue, StateVecError};
+use super::{traits::StateVecPrivateAccessor, AccessoryStateMap, AccessoryStateValue};
 
 /// A variant of [`StateVec`](crate::StateVec) that stores its elements as
 /// "accessory" state, instead of in the JMT.
@@ -41,6 +40,45 @@ where
     }
 }
 
+impl<'a, V, Codec, C> StateVecPrivateAccessor<V, Codec, AccessoryWorkingSet<'a, C>>
+    for AccessoryStateVec<V, Codec>
+where
+    Codec: StateCodec + Clone,
+    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
+    Codec::KeyCodec: StateKeyCodec<usize>,
+    C: Context,
+{
+    type ElemsMap = AccessoryStateMap<usize, V, Codec>;
+
+    type LenValue = AccessoryStateValue<usize, Codec>;
+
+    fn set_len(&self, length: usize, working_set: &mut AccessoryWorkingSet<'a, C>) {
+        self.len_value.set(&length, working_set);
+    }
+
+    fn elems(&self) -> &Self::ElemsMap {
+        &self.elems
+    }
+
+    fn len_value(&self) -> &Self::LenValue {
+        &self.len_value
+    }
+}
+
+impl<'a, V, Codec, C> StateVecAccessor<V, Codec, AccessoryWorkingSet<'a, C>>
+    for AccessoryStateVec<V, Codec>
+where
+    Codec: StateCodec + Clone,
+    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
+    Codec::KeyCodec: StateKeyCodec<usize>,
+    C: Context,
+{
+    /// Returns the prefix used when this [`StateVec`] was created.
+    fn prefix(&self) -> &Prefix {
+        &self.prefix
+    }
+}
+
 impl<V, Codec> AccessoryStateVec<V, Codec>
 where
     Codec: StateCodec + Clone,
@@ -62,210 +100,6 @@ where
             len_value,
             elems,
         }
-    }
-
-    /// Returns the prefix used when this [`AccessoryStateVec`] was created.
-    pub fn prefix(&self) -> &Prefix {
-        &self.prefix
-    }
-
-    fn set_len<C: Context>(&self, length: usize, working_set: &mut AccessoryWorkingSet<C>) {
-        self.len_value.set(&length, working_set);
-    }
-
-    /// Sets a value in the [`AccessoryStateVec`].
-    /// If the index is out of bounds, returns an error.
-    /// To push a value to the end of the AccessoryStateVec, use [`AccessoryStateVec::push`].
-    pub fn set<C: Context>(
-        &self,
-        index: usize,
-        value: &V,
-        working_set: &mut AccessoryWorkingSet<C>,
-    ) -> Result<(), StateVecError> {
-        let len = self.len(working_set);
-
-        if index < len {
-            self.elems.set(&index, value, working_set);
-            Ok(())
-        } else {
-            Err(StateVecError::IndexOutOfBounds(index))
-        }
-    }
-
-    /// Returns the value for the given index.
-    pub fn get<C: Context>(
-        &self,
-        index: usize,
-        working_set: &mut AccessoryWorkingSet<C>,
-    ) -> Option<V> {
-        self.elems.get(&index, working_set)
-    }
-
-    /// Returns the value for the given index.
-    /// If the index is out of bounds, returns an error.
-    /// If the value is absent, returns an error.
-    pub fn get_or_err<C: Context>(
-        &self,
-        index: usize,
-        working_set: &mut AccessoryWorkingSet<C>,
-    ) -> Result<V, StateVecError> {
-        let len = self.len(working_set);
-
-        if index < len {
-            self.elems
-                .get(&index, working_set)
-                .ok_or_else(|| StateVecError::MissingValue(self.prefix().clone(), index))
-        } else {
-            Err(StateVecError::IndexOutOfBounds(index))
-        }
-    }
-
-    /// Returns the length of the [`AccessoryStateVec`].
-    pub fn len<C: Context>(&self, working_set: &mut AccessoryWorkingSet<C>) -> usize {
-        self.len_value.get(working_set).unwrap_or_default()
-    }
-
-    /// Pushes a value to the end of the [`AccessoryStateVec`].
-    pub fn push<C: Context>(&self, value: &V, working_set: &mut AccessoryWorkingSet<C>) {
-        let len = self.len(working_set);
-
-        self.elems.set(&len, value, working_set);
-        self.set_len(len + 1, working_set);
-    }
-
-    /// Pops a value from the end of the [`AccessoryStateVec`] and returns it.
-    pub fn pop<C: Context>(&self, working_set: &mut AccessoryWorkingSet<C>) -> Option<V> {
-        let len = self.len(working_set);
-        let last_i = len.checked_sub(1)?;
-        let elem = self.elems.remove(&last_i, working_set)?;
-
-        let new_len = last_i;
-        self.set_len(new_len, working_set);
-
-        Some(elem)
-    }
-
-    /// Removes all values from this [`AccessoryStateVec`].
-    pub fn clear<C: Context>(&self, working_set: &mut AccessoryWorkingSet<C>) {
-        let len = self.len_value.remove(working_set).unwrap_or_default();
-
-        for i in 0..len {
-            self.elems.delete(&i, working_set);
-        }
-    }
-
-    /// Sets all values in the [`AccessoryStateVec`].
-    ///
-    /// If the length of the provided values is less than the length of the
-    /// [`AccessoryStateVec`], the remaining values will be removed from storage.
-    pub fn set_all<C: Context>(&self, values: Vec<V>, working_set: &mut AccessoryWorkingSet<C>) {
-        let old_len = self.len(working_set);
-        let new_len = values.len();
-
-        for i in new_len..old_len {
-            self.elems.delete(&i, working_set);
-        }
-
-        for (i, value) in values.into_iter().enumerate() {
-            self.elems.set(&i, &value, working_set);
-        }
-
-        self.set_len(new_len, working_set);
-    }
-
-    /// Returns an iterator over all the values in the [`AccessoryStateVec`].
-    pub fn iter<'a, 'ws, C: Context>(
-        &'a self,
-        working_set: &'ws mut AccessoryWorkingSet<'ws, C>,
-    ) -> AccessoryStateVecIter<'a, 'ws, V, Codec, C> {
-        let len = self.len(working_set);
-        AccessoryStateVecIter {
-            state_vec: self,
-            ws: working_set,
-            len,
-            next_i: 0,
-        }
-    }
-
-    /// Returns the last value in the [`AccessoryStateVec`], or [`None`] if
-    /// empty.
-    pub fn last<C: Context>(&self, working_set: &mut AccessoryWorkingSet<C>) -> Option<V> {
-        let len = self.len(working_set);
-        let i = len.checked_sub(1)?;
-        self.elems.get(&i, working_set)
-    }
-}
-
-/// An [`Iterator`] over a [`AccessoryStateVec`]
-///
-/// See [`AccessoryStateVec::iter`] for more details.
-pub struct AccessoryStateVecIter<'a, 'ws, V, Codec, C>
-where
-    Codec: StateCodec + Clone,
-    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
-    Codec::KeyCodec: StateKeyCodec<usize>,
-    C: Context,
-{
-    state_vec: &'a AccessoryStateVec<V, Codec>,
-    ws: &'ws mut AccessoryWorkingSet<'ws, C>,
-    len: usize,
-    next_i: usize,
-}
-
-impl<'a, 'ws, V, Codec, C> Iterator for AccessoryStateVecIter<'a, 'ws, V, Codec, C>
-where
-    Codec: StateCodec + Clone,
-    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
-    Codec::KeyCodec: StateKeyCodec<usize>,
-    C: Context,
-{
-    type Item = V;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let elem = self.state_vec.get(self.next_i, self.ws);
-        if elem.is_some() {
-            self.next_i += 1;
-        }
-
-        elem
-    }
-}
-
-impl<'a, 'ws, V, Codec, C> ExactSizeIterator for AccessoryStateVecIter<'a, 'ws, V, Codec, C>
-where
-    Codec: StateCodec + Clone,
-    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
-    Codec::KeyCodec: StateKeyCodec<usize>,
-    C: Context,
-{
-    fn len(&self) -> usize {
-        self.len - self.next_i
-    }
-}
-
-impl<'a, 'ws, V, Codec, C> FusedIterator for AccessoryStateVecIter<'a, 'ws, V, Codec, C>
-where
-    Codec: StateCodec + Clone,
-    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
-    Codec::KeyCodec: StateKeyCodec<usize>,
-    C: Context,
-{
-}
-
-impl<'a, 'ws, V, Codec, C> DoubleEndedIterator for AccessoryStateVecIter<'a, 'ws, V, Codec, C>
-where
-    Codec: StateCodec + Clone,
-    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
-    Codec::KeyCodec: StateKeyCodec<usize>,
-    C: Context,
-{
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.len == 0 {
-            return None;
-        }
-
-        self.len -= 1;
-        self.state_vec.get(self.len, self.ws)
     }
 }
 
