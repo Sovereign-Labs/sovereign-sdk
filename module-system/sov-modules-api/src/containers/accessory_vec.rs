@@ -5,9 +5,9 @@ use sov_modules_core::{
 };
 use sov_state::codec::BorshCodec;
 
+use super::traits::StateVecPrivateAccessor;
+use super::{AccessoryStateMap, AccessoryStateValue};
 use crate::{StateValueAccessor, StateVecAccessor};
-
-use super::{traits::StateVecPrivateAccessor, AccessoryStateMap, AccessoryStateValue};
 
 /// A variant of [`StateVec`](crate::StateVec) that stores its elements as
 /// "accessory" state, instead of in the JMT.

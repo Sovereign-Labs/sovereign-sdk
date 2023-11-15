@@ -3,7 +3,8 @@ use std::fmt::Debug;
 use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_bank::Coins;
-use sov_modules_api::{prelude::*, CallResponse, WorkingSet};
+use sov_modules_api::prelude::*;
+use sov_modules_api::{CallResponse, WorkingSet};
 
 use crate::ProverIncentives;
 

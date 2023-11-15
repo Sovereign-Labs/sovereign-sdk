@@ -1,7 +1,8 @@
 use anyhow::bail;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::CliWalletArg;
-use sov_modules_api::{prelude::*, CallResponse, WorkingSet};
+use sov_modules_api::prelude::*;
+use sov_modules_api::{CallResponse, WorkingSet};
 
 use crate::SequencerRegistry;
 

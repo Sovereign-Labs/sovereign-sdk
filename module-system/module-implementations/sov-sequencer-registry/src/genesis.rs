@@ -1,6 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use sov_modules_api::{prelude::*, WorkingSet};
+use sov_modules_api::prelude::*;
+use sov_modules_api::WorkingSet;
 
 use crate::SequencerRegistry;
 

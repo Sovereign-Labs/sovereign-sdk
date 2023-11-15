@@ -1,6 +1,7 @@
 //! Defines the CallMessages accepted by the blob storage module
 
-use sov_modules_api::{prelude::*, Context, DaSpec, WorkingSet};
+use sov_modules_api::prelude::*;
+use sov_modules_api::{Context, DaSpec, WorkingSet};
 
 use crate::BlobStorage;
 

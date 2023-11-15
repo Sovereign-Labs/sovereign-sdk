@@ -9,7 +9,8 @@ use revm::primitives::{
     EVMError, ExecutionResult, Halt, InvalidTransaction, TransactTo, KECCAK_EMPTY,
 };
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::{prelude::*, WorkingSet};
+use sov_modules_api::prelude::*;
+use sov_modules_api::WorkingSet;
 use tracing::info;
 
 use crate::call::get_cfg_env;

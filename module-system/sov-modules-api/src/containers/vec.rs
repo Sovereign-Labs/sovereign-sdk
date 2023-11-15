@@ -4,9 +4,8 @@ use sov_modules_core::{Context, Prefix, StateCodec, StateKeyCodec, StateValueCod
 use sov_state::codec::BorshCodec;
 use thiserror::Error;
 
-use crate::containers::{StateMap, StateValue};
-
 use super::traits::{StateValueAccessor, StateVecAccessor, StateVecPrivateAccessor};
+use crate::containers::{StateMap, StateValue};
 
 /// A growable array of values stored as JMT-backed state.
 #[derive(
@@ -107,9 +106,9 @@ mod test {
     use sov_modules_core::{Prefix, WorkingSet};
     use sov_state::{DefaultStorageSpec, ProverStorage};
 
-    use crate::{
-        containers::traits::vec_tests::Testable, default_context::DefaultContext, StateVec,
-    };
+    use crate::containers::traits::vec_tests::Testable;
+    use crate::default_context::DefaultContext;
+    use crate::StateVec;
 
     #[test]
     fn test_state_vec() {

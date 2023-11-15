@@ -8,8 +8,9 @@ use serde::{Deserialize, Serialize};
 use sov_bank::{Amount, Coins};
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::optimistic::Attestation;
+use sov_modules_api::prelude::*;
 use sov_modules_api::{
-    prelude::*, CallResponse, DaSpec, Spec, StateTransition, ValidityConditionChecker, WorkingSet,
+    CallResponse, DaSpec, Spec, StateTransition, ValidityConditionChecker, WorkingSet,
 };
 use sov_state::storage::{Storage, StorageKey, StorageProof, StorageValue};
 use thiserror::Error;

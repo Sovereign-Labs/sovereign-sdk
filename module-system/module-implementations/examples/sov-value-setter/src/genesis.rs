@@ -1,5 +1,6 @@
 use anyhow::Result;
-use sov_modules_api::{prelude::*, WorkingSet};
+use sov_modules_api::prelude::*;
+use sov_modules_api::WorkingSet;
 
 use super::ValueSetter;
 

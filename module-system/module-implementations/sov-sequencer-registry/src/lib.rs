@@ -15,9 +15,8 @@ pub use call::*;
 pub use genesis::*;
 #[cfg(feature = "native")]
 pub use query::*;
-use sov_modules_api::{
-    prelude::*, CallResponse, Error, ModuleInfo, StateMap, StateValue, WorkingSet,
-};
+use sov_modules_api::prelude::*;
+use sov_modules_api::{CallResponse, Error, ModuleInfo, StateMap, StateValue, WorkingSet};
 use sov_state::codec::BcsCodec;
 
 /// The `sov-sequencer-registry` module `struct`.
