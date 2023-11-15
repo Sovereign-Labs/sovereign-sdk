@@ -22,7 +22,9 @@ where
     Vm: ZkvmHost,
     V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync,
 {
-    prover: Mutex<Option<Prover<V, Da, Vm>>>,
+    vm: Vm,
+    prover_config: Option<ProofGenConfig<V, Da, Vm>>,
+
     #[allow(clippy::type_complexity)]
     witness: Mutex<HashMap<Hash, StateTransitionData<StateRoot, Witness, Da::Spec>>>,
     zk_storage: V::PreState,
@@ -45,7 +47,7 @@ where
         config: Option<RollupProverConfig>,
         zk_storage: V::PreState,
     ) -> Self {
-        let prover = config.map(|config| {
+        let prover_config = config.map(|config| {
             let stf_verifier =
                 StateTransitionVerifier::<V, Da::Verifier, Vm::Guest>::new(zk_stf, da_verifier);
 
@@ -55,11 +57,12 @@ where
                 RollupProverConfig::Prove => ProofGenConfig::Prover,
             };
 
-            Prover { vm, config }
+            config
         });
 
         Self {
-            prover: Mutex::new(prover),
+            vm,
+            prover_config,
             witness: Mutex::new(HashMap::new()),
             zk_storage,
         }
@@ -98,8 +101,7 @@ where
     }
 
     async fn prove(&self, block_header_hash: Hash) -> Result<(), ProverServiceError> {
-        if let Some(Prover { vm, config }) = self.prover.lock().expect("Lock was poisoned").as_mut()
-        {
+        if let Some(config) = &self.prover_config {
             let transition_data = {
                 self.witness
                     .lock()
@@ -108,7 +110,9 @@ where
                     .unwrap()
             };
 
+            let mut vm = self.vm.clone();
             vm.add_hint(transition_data);
+
             tracing::info_span!("guest_execution").in_scope(|| match config {
                 ProofGenConfig::Simulate(verifier) => verifier
                     .run_block(vm.simulate_with_hints(), self.zk_storage.clone())

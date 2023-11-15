@@ -34,7 +34,7 @@ where
 
     /// Verify the next block
     pub fn run_block(
-        &mut self,
+        &self,
         zkvm: Zk,
         pre_state: Stf::PreState,
     ) -> Result<Stf::StateRoot, Da::Error> {

@@ -71,7 +71,7 @@ pub trait Zkvm: Send + Sync {
 }
 
 /// A trait which is accessible from within a zkVM program.
-pub trait ZkvmGuest: Zkvm + Send {
+pub trait ZkvmGuest: Zkvm + Send + Sync {
     /// Obtain "advice" non-deterministically from the host
     fn read_from_host<T: DeserializeOwned>(&self) -> T;
     /// Add a public output to the zkVM proof
