@@ -2,7 +2,7 @@ mod modules;
 use modules::{first_test_module, second_test_module};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::macros::DefaultRuntime;
-use sov_modules_api::{prelude::*, Context, DispatchCall, Event, Genesis, MessageCodec};
+use sov_modules_api::{Context, DispatchCall, Event, Genesis, MessageCodec};
 
 #[derive(Genesis, DispatchCall, Event, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]

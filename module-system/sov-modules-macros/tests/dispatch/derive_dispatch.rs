@@ -4,7 +4,7 @@ use modules::{first_test_module, second_test_module};
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::DefaultRuntime;
 use sov_modules_api::{
-    prelude::*, Address, Context, DispatchCall, EncodeCall, Genesis, MessageCodec, ModuleInfo,
+    Address, Context, DispatchCall, EncodeCall, Genesis, MessageCodec, ModuleInfo,
 };
 use sov_state::ZkStorage;
 

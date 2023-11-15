@@ -2,7 +2,8 @@
 
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::{prelude::*, WorkingSet};
+use sov_modules_api::prelude::*;
+use sov_modules_api::WorkingSet;
 
 use super::AccessorySetter;
 
