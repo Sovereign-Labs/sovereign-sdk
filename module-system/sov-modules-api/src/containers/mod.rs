@@ -11,7 +11,10 @@ pub use accessory_map::AccessoryStateMap;
 pub use accessory_value::AccessoryStateValue;
 pub use accessory_vec::AccessoryStateVec;
 pub use map::StateMap;
-pub use traits::{StateMapAccessor, StateValueAccessor, StateVecAccessor};
+pub use traits::{
+    StateMapAccessor, StateMapError, StateValueAccessor, StateValueError, StateVecAccessor,
+    StateVecError,
+};
 pub use value::StateValue;
 pub use vec::StateVec;
 
