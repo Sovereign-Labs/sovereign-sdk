@@ -1,5 +1,5 @@
 use sov_modules_api::default_context::ZkDefaultContext;
-use sov_modules_api::{prelude::*, Context, ModuleInfo, StateMap, StateValue};
+use sov_modules_api::{Context, ModuleInfo, StateMap, StateValue};
 
 mod test_module {
     use super::*;
