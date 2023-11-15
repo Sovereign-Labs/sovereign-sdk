@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use crate::containers::{StateMap, StateValue};
 
-use super::traits::StateValueAccessor;
+use super::traits::{StateMapAccessor, StateValueAccessor};
 
 /// A growable array of values stored as JMT-backed state.
 #[derive(

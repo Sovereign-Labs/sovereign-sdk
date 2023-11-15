@@ -1,5 +1,5 @@
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
-use sov_modules_api::{Context, Event, ModulePrefix, StateMap, StateValueAccessor, WorkingSet};
+use sov_modules_api::{prelude::*, Context, Event, ModulePrefix, StateMap, WorkingSet};
 use sov_state::{ProverStorage, Storage, ZkStorage};
 
 use super::helpers::module_c;

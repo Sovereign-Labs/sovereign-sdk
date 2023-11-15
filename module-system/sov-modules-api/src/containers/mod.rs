@@ -7,12 +7,12 @@ mod value;
 mod vec;
 
 mod traits;
-pub use traits::StateValueAccessor;
+pub use traits::{StateMapAccessor, StateValueAccessor};
 
 pub use accessory_map::AccessoryStateMap;
 pub use accessory_value::AccessoryStateValue;
 pub use accessory_vec::AccessoryStateVec;
-pub use map::{StateMap, StateMapError};
+pub use map::StateMap;
 pub use value::StateValue;
 pub use vec::{Error as StateVecError, StateVec};
 

@@ -4,9 +4,7 @@ use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_bank::Amount;
 use sov_chain_state::TransitionHeight;
-use sov_modules_api::{
-    Context, DaSpec, StateValueAccessor, ValidityConditionChecker, WorkingSet, Zkvm,
-};
+use sov_modules_api::{prelude::*, Context, DaSpec, ValidityConditionChecker, WorkingSet, Zkvm};
 use sov_state::Storage;
 
 use crate::{AttesterIncentives, Role};

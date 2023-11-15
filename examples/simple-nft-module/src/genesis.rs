@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
-use sov_modules_api::{Context, StateValueAccessor, WorkingSet};
+use sov_modules_api::{prelude::*, Context, WorkingSet};
 
 use crate::NonFungibleToken;
 

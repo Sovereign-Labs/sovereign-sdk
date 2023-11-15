@@ -1,4 +1,4 @@
-use sov_modules_api::{StateValueAccessor, WorkingSet};
+use sov_modules_api::{prelude::*, WorkingSet};
 use sov_state::Storage;
 
 use crate::{ChainState, StateTransitionId, TransitionHeight};

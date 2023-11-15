@@ -16,7 +16,7 @@ pub use genesis::*;
 #[cfg(feature = "native")]
 pub use query::*;
 use sov_modules_api::{
-    CallResponse, Error, ModuleInfo, StateMap, StateValue, StateValueAccessor, WorkingSet,
+    prelude::*, CallResponse, Error, ModuleInfo, StateMap, StateValue, WorkingSet,
 };
 use sov_state::codec::BcsCodec;
 

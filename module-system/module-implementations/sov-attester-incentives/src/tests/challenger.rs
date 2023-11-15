@@ -2,7 +2,7 @@ use borsh::BorshSerialize;
 use sov_mock_da::{MockDaSpec, MockValidityCond, MockValidityCondChecker};
 use sov_mock_zkvm::{MockCodeCommitment, MockProof, MockZkvm};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Context, StateValueAccessor, WorkingSet};
+use sov_modules_api::{prelude::*, Context, WorkingSet};
 use sov_rollup_interface::zk::StateTransition;
 use sov_state::ProverStorage;
 

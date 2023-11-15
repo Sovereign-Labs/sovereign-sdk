@@ -47,6 +47,10 @@ pub use sov_rollup_interface::zk::{
 };
 pub use sov_rollup_interface::{digest, BasicAddress, RollupAddress};
 
+pub mod prelude {
+    pub use super::{StateMapAccessor, StateValueAccessor};
+}
+
 pub mod optimistic {
     pub use sov_rollup_interface::optimistic::{Attestation, ProofOfBond};
 }

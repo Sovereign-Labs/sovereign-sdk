@@ -9,8 +9,7 @@ use sov_bank::{Amount, Coins};
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::optimistic::Attestation;
 use sov_modules_api::{
-    CallResponse, DaSpec, Spec, StateTransition, StateValueAccessor, ValidityConditionChecker,
-    WorkingSet,
+    prelude::*, CallResponse, DaSpec, Spec, StateTransition, ValidityConditionChecker, WorkingSet,
 };
 use sov_state::storage::{Storage, StorageKey, StorageProof, StorageValue};
 use thiserror::Error;

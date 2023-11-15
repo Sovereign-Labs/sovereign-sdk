@@ -8,7 +8,7 @@ use sov_state::codec::BorshCodec;
 
 use crate::StateValueAccessor;
 
-use super::{AccessoryStateMap, AccessoryStateValue, StateVecError};
+use super::{traits::StateMapAccessor, AccessoryStateMap, AccessoryStateValue, StateVecError};
 
 /// A variant of [`StateVec`](crate::StateVec) that stores its elements as
 /// "accessory" state, instead of in the JMT.

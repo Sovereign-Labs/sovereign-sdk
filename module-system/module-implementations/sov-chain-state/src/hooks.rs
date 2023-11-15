@@ -1,6 +1,6 @@
 use sov_modules_api::da::BlockHeaderTrait;
 use sov_modules_api::hooks::{FinalizeHook, SlotHooks};
-use sov_modules_api::{AccessoryWorkingSet, Context, Spec, StateValueAccessor, WorkingSet};
+use sov_modules_api::{prelude::*, AccessoryWorkingSet, Context, Spec, WorkingSet};
 use sov_state::Storage;
 
 use super::ChainState;
