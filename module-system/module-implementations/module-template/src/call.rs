@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use anyhow::Result;
-use sov_modules_api::{CallResponse, WorkingSet};
+use sov_modules_api::{CallResponse, StateValueAccessor, WorkingSet};
 use thiserror::Error;
 
 use crate::ExampleModule;

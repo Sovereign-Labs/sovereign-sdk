@@ -1,7 +1,7 @@
 use sov_mock_zkvm::{MockCodeCommitment, MockProof, MockZkvm};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::digest::Digest;
-use sov_modules_api::{Address, Context, Module, Spec, WorkingSet};
+use sov_modules_api::{Address, Context, Module, Spec, StateValueAccessor, WorkingSet};
 use sov_state::ProverStorage;
 
 use crate::ProverIncentives;

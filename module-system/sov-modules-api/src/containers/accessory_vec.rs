@@ -6,6 +6,8 @@ use sov_modules_core::{
 };
 use sov_state::codec::BorshCodec;
 
+use crate::StateValueAccessor;
+
 use super::{AccessoryStateMap, AccessoryStateValue, StateVecError};
 
 /// A variant of [`StateVec`](crate::StateVec) that stores its elements as

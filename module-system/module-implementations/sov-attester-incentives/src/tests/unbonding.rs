@@ -1,6 +1,6 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::optimistic::Attestation;
-use sov_modules_api::{Context, WorkingSet};
+use sov_modules_api::{Context, StateValueAccessor, WorkingSet};
 use sov_state::ProverStorage;
 
 use crate::call::AttesterIncentiveErrors;

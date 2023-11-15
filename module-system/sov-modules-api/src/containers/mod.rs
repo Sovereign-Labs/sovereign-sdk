@@ -6,6 +6,9 @@ mod map;
 mod value;
 mod vec;
 
+mod traits;
+pub use traits::StateValueAccessor;
+
 pub use accessory_map::AccessoryStateMap;
 pub use accessory_value::AccessoryStateValue;
 pub use accessory_vec::AccessoryStateVec;

@@ -1,10 +1,9 @@
 use std::marker::PhantomData;
 
-use sov_modules_core::{
-    Context, Prefix, StateCodec, StateReaderAndWriter, StateValueCodec, WorkingSet,
-};
+use sov_modules_core::{Context, Prefix, StateCodec, StateValueCodec, WorkingSet};
 use sov_state::codec::BorshCodec;
-use thiserror::Error;
+
+use super::traits::StateValueAccessor;
 
 /// Container for a single value.
 #[derive(
@@ -20,14 +19,6 @@ pub struct StateValue<V, Codec = BorshCodec> {
     _phantom: PhantomData<V>,
     codec: Codec,
     prefix: Prefix,
-}
-
-/// Error type for `StateValue` get method.
-#[derive(Debug, Error)]
-pub enum Error {
-    /// Value not found.
-    #[error("Value not found for prefix: {0}")]
-    MissingValue(Prefix),
 }
 
 impl<V> StateValue<V> {
@@ -47,47 +38,19 @@ impl<V, Codec> StateValue<V, Codec> {
             prefix,
         }
     }
-
-    /// Returns the prefix used when this [`StateValue`] was created.
-    pub fn prefix(&self) -> &Prefix {
-        &self.prefix
-    }
 }
 
-impl<V, Codec> StateValue<V, Codec>
+impl<V, Codec, C> StateValueAccessor<V, Codec, WorkingSet<C>> for StateValue<V, Codec>
 where
     Codec: StateCodec,
     Codec::ValueCodec: StateValueCodec<V>,
+    C: Context,
 {
-    /// Sets a value in the StateValue.
-    pub fn set<C: Context>(&self, value: &V, working_set: &mut WorkingSet<C>) {
-        working_set.set_singleton(self.prefix(), value, &self.codec)
+    fn prefix(&self) -> &Prefix {
+        &self.prefix
     }
 
-    /// Gets a value from the StateValue or None if the value is absent.
-    pub fn get<C: Context>(&self, working_set: &mut WorkingSet<C>) -> Option<V> {
-        working_set.get_singleton(self.prefix(), &self.codec)
-    }
-
-    /// Gets a value from the StateValue or Error if the value is absent.
-    pub fn get_or_err<C: Context>(&self, working_set: &mut WorkingSet<C>) -> Result<V, Error> {
-        self.get(working_set)
-            .ok_or_else(|| Error::MissingValue(self.prefix().clone()))
-    }
-
-    /// Removes a value from the StateValue, returning the value (or None if the key is absent).
-    pub fn remove<C: Context>(&self, working_set: &mut WorkingSet<C>) -> Option<V> {
-        working_set.remove_singleton(self.prefix(), &self.codec)
-    }
-
-    /// Removes a value and from the StateValue, returning the value (or Error if the key is absent).
-    pub fn remove_or_err<C: Context>(&self, working_set: &mut WorkingSet<C>) -> Result<V, Error> {
-        self.remove(working_set)
-            .ok_or_else(|| Error::MissingValue(self.prefix().clone()))
-    }
-
-    /// Deletes a value from the StateValue.
-    pub fn delete<C: Context>(&self, working_set: &mut WorkingSet<C>) {
-        working_set.delete_singleton(self.prefix());
+    fn codec(&self) -> &Codec {
+        &self.codec
     }
 }

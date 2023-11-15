@@ -7,7 +7,8 @@ mod query;
 #[cfg(feature = "native")]
 pub use query::*;
 use sov_modules_api::{
-    AccessoryStateValue, CallResponse, Context, Error, Module, ModuleInfo, StateValue, WorkingSet,
+    AccessoryStateValue, CallResponse, Context, Error, Module, ModuleInfo, StateValue,
+    StateValueAccessor, WorkingSet,
 };
 
 /// [`AccessorySetter`] is a module that stores data both *inside* the JMT and

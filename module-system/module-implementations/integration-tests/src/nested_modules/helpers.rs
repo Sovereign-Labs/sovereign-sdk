@@ -1,6 +1,8 @@
 use sov_modules_api::{Context, ModuleInfo, StateMap, StateValue, WorkingSet};
 
 pub mod module_a {
+    use sov_modules_api::StateValueAccessor;
+
     use super::*;
 
     #[derive(ModuleInfo)]

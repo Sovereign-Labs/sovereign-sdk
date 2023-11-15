@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use sov_modules_api::{WorkingSet, Zkvm};
+use sov_modules_api::{StateValueAccessor, WorkingSet, Zkvm};
 
 use crate::ProverIncentives;
 

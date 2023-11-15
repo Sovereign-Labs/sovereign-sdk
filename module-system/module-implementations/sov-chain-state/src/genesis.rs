@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use sov_modules_api::da::Time;
 use sov_modules_api::WorkingSet;
+use sov_modules_api::{da::Time, StateValueAccessor};
 
 use crate::{ChainState, TransitionHeight};
 

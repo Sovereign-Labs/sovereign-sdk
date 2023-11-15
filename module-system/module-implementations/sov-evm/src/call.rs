@@ -2,7 +2,7 @@ use anyhow::Result;
 use reth_primitives::TransactionSignedEcRecovered;
 use reth_revm::into_reth_log;
 use revm::primitives::{CfgEnv, EVMError, SpecId};
-use sov_modules_api::{CallResponse, WorkingSet};
+use sov_modules_api::{CallResponse, StateValueAccessor, WorkingSet};
 
 use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};

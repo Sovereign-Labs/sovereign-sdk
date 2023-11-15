@@ -1,6 +1,6 @@
 //! Defines the CallMessages accepted by the blob storage module
 
-use sov_modules_api::{Context, DaSpec, WorkingSet};
+use sov_modules_api::{Context, DaSpec, StateValueAccessor, WorkingSet};
 
 use crate::BlobStorage;
 
