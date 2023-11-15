@@ -17,6 +17,7 @@ where
     da_verifier: Da,
     phantom: PhantomData<Zk>,
 }
+
 impl<Stf, Da, Zk> StateTransitionVerifier<Stf, Da, Zk>
 where
     Da: DaVerifier,
@@ -34,7 +35,7 @@ where
 
     /// Verify the next block
     pub fn run_block(
-        &mut self,
+        &self,
         zkvm: Zk,
         pre_state: Stf::PreState,
     ) -> Result<Stf::StateRoot, Da::Error> {

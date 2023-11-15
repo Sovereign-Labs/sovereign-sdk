@@ -1,5 +1,6 @@
 # See <https://github.com/BuildJet/cache-delete>. Useful for debugging/solving
-# caching issues.
+# caching issues. To identify the name of the cache key to delete, look for the line
+# `Cache restored from key: <cache key>` in the logs of the caching step.
 
 name: Manually delete a BuildJet cache entry
 
@@ -7,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       cache_key:
-        description: 'BuildJet cache key to delete'
+        description: "BuildJet cache key to delete"
         required: true
         type: string
 
