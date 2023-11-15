@@ -1,7 +1,9 @@
 use jsonrpsee::core::RpcResult;
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::macros::{expose_rpc, rpc_gen};
-use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, StateValue, WorkingSet};
+use sov_modules_api::{
+    prelude::*, CallResponse, Context, Error, Module, ModuleInfo, StateValue, WorkingSet,
+};
 
 #[derive(ModuleInfo)]
 pub struct QueryModule<C: Context> {
@@ -18,11 +20,7 @@ impl<C: Context> Module for QueryModule<C> {
     type CallMessage = u8;
     type Event = ();
 
-    fn genesis(
-        &self,
-        config: &Self::Config,
-        working_set: &mut WorkingSet<C>,
-    ) -> Result<(), Error> {
+    fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         self.data.set(config, working_set);
         Ok(())
     }
@@ -46,10 +44,7 @@ pub struct QueryResponse {
 #[rpc_gen(client, server, namespace = "queryModule")]
 impl<C: Context> QueryModule<C> {
     #[rpc_method(name = "queryValue")]
-    pub fn query_value(
-        &self,
-        working_set: &mut WorkingSet<C>,
-    ) -> RpcResult<QueryResponse> {
+    pub fn query_value(&self, working_set: &mut WorkingSet<C>) -> RpcResult<QueryResponse> {
         Ok(QueryResponse {
             value: self.data.get(working_set),
         })

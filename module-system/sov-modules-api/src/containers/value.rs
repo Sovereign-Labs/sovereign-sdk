@@ -38,6 +38,10 @@ impl<V, Codec> StateValue<V, Codec> {
             prefix,
         }
     }
+
+    pub fn prefix(&self) -> &Prefix {
+        &self.prefix
+    }
 }
 
 impl<V, Codec, C> StateValueAccessor<V, Codec, WorkingSet<C>> for StateValue<V, Codec>
