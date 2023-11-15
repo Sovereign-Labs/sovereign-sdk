@@ -78,7 +78,9 @@ fn test_burn_on_invalid_proof() {
 
     // Process an invalid proof
     {
-        let context = DefaultContext::new(prover_address, 1);
+        let context = DefaultContext {
+            sender: prover_address,
+        };
         let proof = MockProof {
             program_id: MOCK_CODE_COMMITMENT,
             is_valid: false,
@@ -114,7 +116,9 @@ fn test_valid_proof() {
 
     // Process a valid proof
     {
-        let context = DefaultContext::new(prover_address, 1);
+        let context = DefaultContext {
+            sender: prover_address,
+        };
         let proof = MockProof {
             program_id: MOCK_CODE_COMMITMENT,
             is_valid: true,
@@ -139,7 +143,9 @@ fn test_unbonding() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let (module, prover_address) = setup(&mut working_set);
-    let context = DefaultContext::new(prover_address, 1);
+    let context = DefaultContext {
+        sender: prover_address,
+    };
     let token_address = module
         .bonding_token_address
         .get(&mut working_set)
@@ -190,7 +196,9 @@ fn test_prover_not_bonded() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let (module, prover_address) = setup(&mut working_set);
-    let context = DefaultContext::new(prover_address, 1);
+    let context = DefaultContext {
+        sender: prover_address,
+    };
 
     // Unbond the prover
     module

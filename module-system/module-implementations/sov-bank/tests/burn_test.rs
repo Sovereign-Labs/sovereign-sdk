@@ -22,9 +22,9 @@ fn burn_deployed_tokens() {
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 
     let sender_address = generate_address("just_sender");
-    let sender_context = C::new(sender_address, 1);
+    let sender_context = C::new(sender_address);
     let minter_address = generate_address("minter");
-    let minter_context = C::new(minter_address, 1);
+    let minter_context = C::new(minter_address);
 
     let salt = 0;
     let token_name = "Token1".to_owned();
@@ -211,7 +211,7 @@ fn burn_initial_tokens() {
         },
     };
 
-    let context = C::new(sender_address, 1);
+    let context = C::new(sender_address);
     bank.call(burn_message, &context, &mut working_set)
         .expect("Failed to burn token");
     assert!(working_set.events().is_empty());

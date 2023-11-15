@@ -200,7 +200,7 @@ where
             // Commit changes after pre_dispatch_tx_hook
             batch_workspace = batch_workspace.checkpoint().to_revertable();
 
-            let ctx = C::new(sender_address.clone(), 1);
+            let ctx = C::new(sender_address.clone());
             let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
 
             let events = batch_workspace.take_events();

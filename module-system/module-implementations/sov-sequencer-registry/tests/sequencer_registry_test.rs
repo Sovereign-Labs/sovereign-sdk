@@ -35,7 +35,7 @@ fn test_registration_lifecycle() {
     let da_address = MockAddress::from(ANOTHER_SEQUENCER_DA_ADDRESS);
 
     let sequencer_address = generate_address(ANOTHER_SEQUENCER_KEY);
-    let sender_context = C::new(sequencer_address, 1);
+    let sender_context = C::new(sequencer_address);
 
     let balance_before = test_sequencer
         .query_balance(sequencer_address, working_set)
@@ -105,7 +105,7 @@ fn test_registration_not_enough_funds() {
     let da_address = MockAddress::from(ANOTHER_SEQUENCER_DA_ADDRESS);
 
     let sequencer_address = generate_address(LOW_FUND_KEY);
-    let sender_context = C::new(sequencer_address, 1);
+    let sender_context = C::new(sequencer_address);
 
     let register_message = CallMessage::Register {
         da_address: da_address.as_ref().to_vec(),
@@ -158,7 +158,7 @@ fn test_registration_second_time() {
     let da_address = MockAddress::from(GENESIS_SEQUENCER_DA_ADDRESS);
 
     let sequencer_address = generate_address(GENESIS_SEQUENCER_KEY);
-    let sender_context = C::new(sequencer_address, 1);
+    let sender_context = C::new(sequencer_address);
 
     let register_message = CallMessage::Register {
         da_address: da_address.as_ref().to_vec(),
@@ -182,9 +182,9 @@ fn test_exit_different_sender() {
     test_sequencer.genesis(working_set);
 
     let sequencer_address = generate_address(ANOTHER_SEQUENCER_KEY);
-    let sender_context = C::new(sequencer_address, 1);
+    let sender_context = C::new(sequencer_address);
     let attacker_address = generate_address("some_random_key");
-    let attacker_context = C::new(attacker_address, 1);
+    let attacker_context = C::new(attacker_address);
 
     let register_message = CallMessage::Register {
         da_address: ANOTHER_SEQUENCER_DA_ADDRESS.to_vec(),
@@ -218,7 +218,7 @@ fn test_allow_exit_last_sequencer() {
     test_sequencer.genesis(working_set);
 
     let sequencer_address = generate_address(GENESIS_SEQUENCER_KEY);
-    let sender_context = C::new(sequencer_address, 1);
+    let sender_context = C::new(sequencer_address);
     let exit_message = CallMessage::Exit {
         da_address: GENESIS_SEQUENCER_DA_ADDRESS.to_vec(),
     };
@@ -260,7 +260,7 @@ fn test_preferred_sequencer_returned_and_removed() {
     );
 
     let sequencer_address = generate_address(GENESIS_SEQUENCER_KEY);
-    let sender_context = C::new(sequencer_address, 1);
+    let sender_context = C::new(sequencer_address);
     let exit_message = CallMessage::Exit {
         da_address: GENESIS_SEQUENCER_DA_ADDRESS.to_vec(),
     };

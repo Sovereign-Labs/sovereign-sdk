@@ -15,11 +15,7 @@ impl<C: Context> Default for BasicKernel<C> {
     }
 }
 
-impl<C: Context, Da: DaSpec> Kernel<C, Da> for BasicKernel<C> {
-    fn height(&self) -> u64 {
-        todo!()
-    }
-}
+impl<C: Context, Da: DaSpec> Kernel<C, Da> for BasicKernel<C> {}
 
 impl<C: Context, Da: DaSpec> BlobSelector<Da> for BasicKernel<C> {
     type Context = C;

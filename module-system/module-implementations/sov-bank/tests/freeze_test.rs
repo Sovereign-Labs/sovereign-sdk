@@ -18,7 +18,7 @@ fn freeze_token() {
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 
     let minter_address = generate_address::<DefaultContext>("minter");
-    let minter_context = C::new(minter_address, 1);
+    let minter_context = C::new(minter_address);
 
     let salt = 0;
     let token_name = "Token1".to_owned();
@@ -91,7 +91,7 @@ fn freeze_token() {
 
     // Try to freeze with a non authorized minter
     let unauthorized_address = generate_address::<C>("unauthorized_address");
-    let unauthorized_context = C::new(unauthorized_address, 1);
+    let unauthorized_context = C::new(unauthorized_address);
     let freeze_message = CallMessage::Freeze {
         token_address: token_address_2,
     };

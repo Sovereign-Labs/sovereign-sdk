@@ -164,11 +164,7 @@ fn do_deferred_blob_test(
                 if let Some((msg, sender)) = next_slot_info.early_processing_request_with_sender {
                     runtime
                         .blob_storage
-                        .call(
-                            msg,
-                            &DefaultContext::new(sender, slot_number),
-                            &mut working_set,
-                        )
+                        .call(msg, &DefaultContext::new(sender), &mut working_set)
                         .unwrap();
                     has_processed_blobs_early = true;
                 }
@@ -682,7 +678,7 @@ impl TestRuntime<DefaultContext, MockDaSpec> {
             .sequencer_registry
             .call(
                 register_message,
-                &C::new(REGULAR_SEQUENCER_ROLLUP, 1),
+                &C::new(REGULAR_SEQUENCER_ROLLUP),
                 &mut working_set,
             )
             .unwrap();

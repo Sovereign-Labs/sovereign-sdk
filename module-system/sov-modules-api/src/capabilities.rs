@@ -54,10 +54,7 @@ impl<'a, B: BlobReaderTrait> From<&'a mut B> for BlobRefOrOwned<'a, B> {
 /// A simple implementation will simply process all blobs in the order that they appear,
 /// while a second will support a "preferred sequencer" with some limited power to reorder blobs
 /// in order to give out soft confirmations.
-pub trait Kernel<C: Context, Da: DaSpec>: BlobSelector<Da, Context = C> + Default {
-    /// Return the height at which transactions currently *appear* to be executing.
-    fn height(&self) -> u64;
-}
+pub trait Kernel<C: Context, Da: DaSpec>: BlobSelector<Da, Context = C> + Default {}
 
 /// BlobSelector decides which blobs to process in a current slot.
 pub trait BlobSelector<Da: DaSpec> {

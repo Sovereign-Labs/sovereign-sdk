@@ -28,7 +28,7 @@ fn main() {
     let mut working_set = &mut sov_modules_api::WorkingSet::new(storage);
     let config = GenesisConfig::new((), (), ());
     runtime.genesis(&config, working_set).unwrap();
-    let context = ZkDefaultContext::new(Address::try_from([0; 32].as_ref()).unwrap(), 1);
+    let context = ZkDefaultContext::new(Address::try_from([0; 32].as_ref()).unwrap());
 
     let value = 11;
     {

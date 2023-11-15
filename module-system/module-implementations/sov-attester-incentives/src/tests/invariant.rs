@@ -33,7 +33,9 @@ fn test_transition_invariant() {
     let (exec_vars, mut working_set) =
         execution_simulation(20, &module, &storage, attester_address, working_set);
 
-    let context = DefaultContext::new(attester_address, INIT_HEIGHT + 2);
+    let context = DefaultContext {
+        sender: attester_address,
+    };
 
     const NEW_LIGHT_CLIENT_FINALIZED_HEIGHT: u64 = DEFAULT_ROLLUP_FINALITY + INIT_HEIGHT + 1;
 
