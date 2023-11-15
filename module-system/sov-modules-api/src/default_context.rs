@@ -16,6 +16,8 @@ use crate::default_signature::{DefaultPublicKey, DefaultSignature};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DefaultContext {
     pub sender: Address,
+    /// The height to report. This is set by the kernel when the context is created
+    visible_height: u64,
 }
 
 #[cfg(feature = "native")]
@@ -37,8 +39,15 @@ impl Context for DefaultContext {
         &self.sender
     }
 
-    fn new(sender: Self::Address) -> Self {
-        Self { sender }
+    fn new(sender: Self::Address, height: u64) -> Self {
+        Self {
+            sender,
+            visible_height: height,
+        }
+    }
+
+    fn slot_height(&self) -> u64 {
+        self.visible_height
     }
 }
 
@@ -46,6 +55,8 @@ impl Context for DefaultContext {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ZkDefaultContext {
     pub sender: Address,
+    /// The height to report. This is set by the kernel when the context is created
+    visible_height: u64,
 }
 
 impl Spec for ZkDefaultContext {
@@ -66,8 +77,15 @@ impl Context for ZkDefaultContext {
         &self.sender
     }
 
-    fn new(sender: Self::Address) -> Self {
-        Self { sender }
+    fn new(sender: Self::Address, height: u64) -> Self {
+        Self {
+            sender,
+            visible_height: height,
+        }
+    }
+
+    fn slot_height(&self) -> u64 {
+        self.visible_height
     }
 }
 

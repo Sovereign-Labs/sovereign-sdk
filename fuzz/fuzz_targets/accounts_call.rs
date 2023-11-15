@@ -51,10 +51,10 @@ fuzz_target!(|input: (u16, [u8; 32], Vec<DefaultPrivateKey>)| -> Corpus {
     let mut state: HashMap<_, _> = keys.into_iter().map(|k| (k.default_address(), k)).collect();
     let addresses: Vec<_> = state.keys().copied().collect();
 
-    for _ in 0..iterations {
+    for i in 0..iterations {
         // we use slices for better select performance
         let sender = addresses.choose(rng).unwrap();
-        let context = C::new(*sender);
+        let context = C::new(*sender, i);
 
         // clear previous state
         let previous = state.get(sender).unwrap().as_hex();

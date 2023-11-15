@@ -1,6 +1,6 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::optimistic::Attestation;
-use sov_modules_api::WorkingSet;
+use sov_modules_api::{Context, WorkingSet};
 use sov_state::ProverStorage;
 
 use crate::call::AttesterIncentiveErrors;
@@ -27,9 +27,7 @@ fn test_two_phase_unbonding() {
         BOND_AMOUNT
     );
 
-    let context = DefaultContext {
-        sender: attester_address,
-    };
+    let context = DefaultContext::new(attester_address, INIT_HEIGHT + 2);
 
     // Try to skip the first phase of the two phase unbonding. Should fail
     {
