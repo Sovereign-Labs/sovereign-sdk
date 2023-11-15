@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::ops::Deref;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
@@ -11,7 +12,7 @@ use sov_rollup_interface::zk::ZkvmHost;
 
 use super::{Hash, ProverService, ProverServiceError};
 use crate::verifier::StateTransitionVerifier;
-use crate::{ProofGenConfig, Prover, RollupProverConfig, StateTransitionData};
+use crate::{ProofGenConfig, RollupProverConfig, StateTransitionData};
 
 /// Prover that blocks the current thread and creates a ZKP proof.
 pub struct BlockingProver<StateRoot, Witness, Da, Vm, V>
@@ -23,11 +24,11 @@ where
     V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync,
 {
     vm: Vm,
-    prover_config: Option<ProofGenConfig<V, Da, Vm>>,
+    prover_config: Arc<Option<ProofGenConfig<V, Da, Vm>>>,
+    zk_storage: V::PreState,
 
     #[allow(clippy::type_complexity)]
     witness: Mutex<HashMap<Hash, StateTransitionData<StateRoot, Witness, Da::Spec>>>,
-    zk_storage: V::PreState,
 }
 
 impl<StateRoot, Witness, Da, Vm, V> BlockingProver<StateRoot, Witness, Da, Vm, V>
@@ -62,7 +63,7 @@ where
 
         Self {
             vm,
-            prover_config,
+            prover_config: Arc::new(prover_config),
             witness: Mutex::new(HashMap::new()),
             zk_storage,
         }
@@ -101,7 +102,7 @@ where
     }
 
     async fn prove(&self, block_header_hash: Hash) -> Result<(), ProverServiceError> {
-        if let Some(config) = &self.prover_config {
+        if let Some(config) = self.prover_config.clone().deref() {
             let transition_data = {
                 self.witness
                     .lock()

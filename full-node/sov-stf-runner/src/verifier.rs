@@ -17,6 +17,7 @@ where
     da_verifier: Da,
     phantom: PhantomData<Zk>,
 }
+
 impl<Stf, Da, Zk> StateTransitionVerifier<Stf, Da, Zk>
 where
     Da: DaVerifier,

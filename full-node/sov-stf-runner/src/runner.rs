@@ -48,17 +48,6 @@ where
     Prover,
 }
 
-/// A prover for the demo rollup. Consists of a VM and a config
-pub struct Prover<Stf, Da: DaService, Vm: ZkvmHost>
-where
-    Stf: StateTransitionFunction<Vm::Guest, Da::Spec>,
-{
-    /// The Zkvm Host to use
-    pub vm: Vm,
-    /// The prover configuration
-    pub config: ProofGenConfig<Stf, Da, Vm>,
-}
-
 impl<Stf, Sm, Da, Vm, Ps> StateTransitionRunner<Stf, Sm, Da, Vm, Ps>
 where
     Da: DaService<Error = anyhow::Error> + Clone + Send + Sync + 'static,

@@ -23,7 +23,7 @@ pub fn main() {
     let stf: StfBlueprint<ZkDefaultContext, _, _, Runtime<_, _>, BasicKernel<_>> =
         StfBlueprint::new();
 
-    let mut stf_verifier = StfVerifier::new(
+    let stf_verifier = StfVerifier::new(
         stf,
         CelestiaVerifier {
             rollup_namespace: ROLLUP_NAMESPACE,
