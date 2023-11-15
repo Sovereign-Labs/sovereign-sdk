@@ -73,7 +73,7 @@ where
     Codec::KeyCodec: StateKeyCodec<usize>,
     C: Context,
 {
-    /// Returns the prefix used when this [`StateVec`] was created.
+    /// Returns the prefix used when this vector was created.
     fn prefix(&self) -> &Prefix {
         &self.prefix
     }
