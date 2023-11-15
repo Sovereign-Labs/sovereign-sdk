@@ -232,7 +232,7 @@ where
     }
 }
 
-#[cfg(all(test))]
+#[cfg(test)]
 pub mod tests {
     use std::fmt::Debug;
 
