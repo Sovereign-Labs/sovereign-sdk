@@ -141,7 +141,7 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     let rollup_config_path = "benches/prover/rollup_config.toml".to_string();
-    let mut rollup_config: RollupConfig<MockDaConfig> = from_toml_path(&rollup_config_path)
+    let mut rollup_config: RollupConfig<MockDaConfig> = from_toml_path(rollup_config_path)
         .context("Failed to read rollup configuration")
         .unwrap();
 
