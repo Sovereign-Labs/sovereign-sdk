@@ -24,7 +24,7 @@ use sov_zk_cycle_macros::cycle_tracker;
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
 /// that is specifically designed to work with the module-system.
-pub struct AppTemplate<C: Context, Da: DaSpec, Vm, RT: Runtime<C, Da>, K: Kernel<C, Da>> {
+pub struct StfBlueprint<C: Context, Da: DaSpec, Vm, RT: Runtime<C, Da>, K: Kernel<C, Da>> {
     /// State storage used by the rollup.
     /// The runtime includes all the modules that the rollup supports.
     pub(crate) runtime: RT,
@@ -69,7 +69,7 @@ impl<A: BasicAddress> From<ApplyBatchError<A>> for BatchReceipt<SequencerOutcome
     }
 }
 
-impl<C, Vm, Da, RT, K> Default for AppTemplate<C, Da, Vm, RT, K>
+impl<C, Vm, Da, RT, K> Default for StfBlueprint<C, Da, Vm, RT, K>
 where
     C: Context,
     Da: DaSpec,
@@ -81,14 +81,14 @@ where
     }
 }
 
-impl<C, Vm, Da, RT, K> AppTemplate<C, Da, Vm, RT, K>
+impl<C, Vm, Da, RT, K> StfBlueprint<C, Da, Vm, RT, K>
 where
     C: Context,
     Da: DaSpec,
     RT: Runtime<C, Da>,
     K: Kernel<C, Da>,
 {
-    /// [`AppTemplate`] constructor.
+    /// [`StfBlueprint`] constructor.
     pub fn new() -> Self {
         Self {
             runtime: RT::default(),

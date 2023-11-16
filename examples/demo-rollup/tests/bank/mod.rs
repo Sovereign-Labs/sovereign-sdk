@@ -10,8 +10,8 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{PrivateKey, Spec};
-use sov_modules_rollup_template::RollupProverConfig;
 use sov_sequencer::utils::SimpleClient;
+use sov_stf_runner::RollupProverConfig;
 
 use crate::test_helpers::start_rollup;
 

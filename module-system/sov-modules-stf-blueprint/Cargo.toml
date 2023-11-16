@@ -1,5 +1,5 @@
 [package]
-name = "sov-modules-stf-template"
+name = "sov-modules-stf-blueprint"
 description = "Defines a generic state transition function for use with the Sovereign SDK module system"
 authors = { workspace = true }
 edition = { workspace = true }

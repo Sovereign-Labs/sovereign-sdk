@@ -1,7 +1,7 @@
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{AccessoryWorkingSet, Context, Spec, WorkingSet};
-use sov_modules_stf_template::SequencerOutcome;
+use sov_modules_stf_blueprint::SequencerOutcome;
 #[cfg(feature = "experimental")]
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};

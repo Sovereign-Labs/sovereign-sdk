@@ -13,7 +13,7 @@ use sov_chain_state::ChainStateConfig;
 use sov_evm::EvmConfig;
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Context;
-use sov_modules_stf_template::Runtime as RuntimeTrait;
+use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_nft_module::NonFungibleTokenConfig;
 use sov_rollup_interface::da::DaSpec;
 use sov_sequencer_registry::SequencerConfig;

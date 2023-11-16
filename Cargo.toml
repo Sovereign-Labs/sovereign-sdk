@@ -25,8 +25,8 @@ members = [
     "utils/rng-da-service",
     # Module System
     "module-system/sov-cli",
-    "module-system/sov-modules-stf-template",
-    "module-system/sov-modules-rollup-template",
+    "module-system/sov-modules-stf-blueprint",
+    "module-system/sov-modules-rollup-blueprint",
     "module-system/sov-modules-macros",
     "module-system/sov-modules-core",
     "module-system/sov-state",
@@ -83,7 +83,7 @@ proptest-derive = "0.3.0"
 rand = "0.8"
 rayon = "1.8.0"
 rocksdb = { version = "0.21.0", features = ["lz4"] }
-serde = { version = "1.0.190", default-features = false, features = ["alloc", "derive"] }
+serde = { version = "1.0.192", default-features = false, features = ["alloc", "derive"] }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 sha2 = { version = "0.10.6", default-features = false }
 thiserror = "1.0.50"
@@ -91,10 +91,10 @@ tiny-keccak = "2.0.2"
 tracing = { version = "0.1.40", default-features = false }
 bech32 = { version = "0.9.1", default-features = false }
 derive_more = { version = "0.99.11", default-features = false }
-clap = { version = "4.4.7", features = ["derive"] }
+clap = { version = "4.4.8", features = ["derive"] }
 toml = "0.8.0"
 jsonrpsee = { version = "0.20.1", features = ["jsonrpsee-types"] }
-schemars = { version = "0.8.12", features = ["derive"] }
+schemars = { version = "0.8.16", features = ["derive"] }
 tempfile = "3.8"
 tokio = { version = "1", features = ["full"] }
 lazy_static = "1.4.0"
