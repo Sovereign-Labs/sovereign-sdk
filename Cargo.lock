@@ -9094,6 +9094,7 @@ dependencies = [
  "futures",
  "hex",
  "jsonrpsee 0.20.3",
+ "rayon",
  "serde",
  "serde_json",
  "sov-accounts",
