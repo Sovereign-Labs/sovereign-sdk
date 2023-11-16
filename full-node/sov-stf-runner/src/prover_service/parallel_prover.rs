@@ -5,8 +5,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use sov_rollup_interface::da::BlockHeaderTrait;
-use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::da::{BlockHeaderTrait};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
@@ -15,12 +14,13 @@ use super::{Hash, ProverService, ProverServiceError};
 use crate::verifier::StateTransitionVerifier;
 use crate::{ProofGenConfig, RollupProverConfig, StateTransitionData};
 
+/*
 enum ProverState<StateRoot, Witness, Da: DaSpec> {
     WitnessSubmitted(StateTransitionData<StateRoot, Witness, Da>),
     Proving,
     Proved(Vec<u8>),
     Err,
-}
+}*/
 
 /// TODO
 pub struct ParallelProver<StateRoot, Witness, Da, Vm, V>
@@ -127,7 +127,7 @@ where
 
             rayon::spawn(move || {
                 tracing::info_span!("guest_execution").in_scope(|| {
-                    let proof = match config.deref() {
+                    let _proof = match config.deref() {
                         ProofGenConfig::Simulate(verifier) => verifier
                             .run_block(vm.simulate_with_hints(), zk_storage)
                             .map_err(|e| {
