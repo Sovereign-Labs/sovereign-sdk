@@ -13,6 +13,7 @@ use crate::storage::{
     StateValueCodec, Storage, StorageInternalCache, StorageKey, StorageProof, StorageValue,
 };
 
+pub use kernel_state::{KernelWorkingSet, VersionedWorkingSet};
 /// A storage reader and writer
 pub trait StateReaderAndWriter {
     /// Get a value from the storage.
@@ -338,6 +339,18 @@ impl<C: Context> WorkingSet<C> {
         AccessoryWorkingSet { ws: self }
     }
 
+    /// Returns a handler for the kernel state (priveleged jmt state)
+    ///
+    /// You can use this method when calling getters and setters on accessory
+    /// state containers, like KernelStateMap.
+    pub fn versioned_state(&mut self, _context: &C) -> VersionedWorkingSet<C> {
+        VersionedWorkingSet {
+            ws: self,
+            // TODO: this will be replaced with the current slot number once it's available in the `Context`
+            slot_num: 0,
+        }
+    }
+
     /// Creates a new [`WorkingSet`] instance backed by the given [`Storage`]
     /// and a custom witness value.
     pub fn with_witness(
@@ -446,6 +459,85 @@ impl<'a, C: Context> StateReaderAndWriter for AccessoryWorkingSet<'a, C> {
 
     fn delete(&mut self, key: &StorageKey) {
         self.ws.accessory_delta.delete(key)
+    }
+}
+
+/// Provides specialized working set wrappers for dealing with protected state.
+pub mod kernel_state {
+    use super::*;
+
+    /// A wrapper over [`WorkingSet`] that allows access to kernel values
+    pub struct VersionedWorkingSet<'a, C: Context> {
+        pub(super) ws: &'a mut WorkingSet<C>,
+        // TODO: Make this member private once the slot number is available in the `Context`
+        /// The slot number
+        pub slot_num: u64,
+    }
+
+    impl<'a, C: Context> VersionedWorkingSet<'a, C> {
+        /// Returns the workign slot number
+        pub fn slot_num(&self) -> u64 {
+            self.slot_num
+        }
+    }
+
+    impl<'a, C: Context> StateReaderAndWriter for VersionedWorkingSet<'a, C> {
+        fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
+            self.ws.delta.get(key)
+        }
+
+        fn set(&mut self, key: &StorageKey, value: StorageValue) {
+            self.ws.delta.set(key, value)
+        }
+
+        fn delete(&mut self, key: &StorageKey) {
+            self.ws.delta.delete(key)
+        }
+    }
+
+    /// A wrapper over [`WorkingSet`] that allows access to kernel values
+    pub struct KernelWorkingSet<'a, C: Context> {
+        pub(super) ws: &'a mut WorkingSet<C>,
+        /// The actual current slot number
+        pub(super) true_slot_num: u64,
+        /// The slot number visible to user-space modules
+        pub(super) virtual_slot_num: u64,
+    }
+
+    impl<'a, C: Context> KernelWorkingSet<'a, C> {
+        /// Creates a new KernelWorkingSet
+        // TODO: only allow creation of KernelWorkingSets during the kernel execution
+        pub fn new(ws: &'a mut WorkingSet<C>, true_slot_num: u64, virtual_slot_num: u64) -> Self {
+            Self {
+                ws,
+                true_slot_num,
+                virtual_slot_num,
+            }
+        }
+
+        /// Returns the true slot number
+        pub fn current_slot(&self) -> u64 {
+            self.true_slot_num
+        }
+
+        /// Returns the slot number visible from user space
+        pub fn virtual_slot(&self) -> u64 {
+            self.virtual_slot_num
+        }
+    }
+
+    impl<'a, C: Context> StateReaderAndWriter for KernelWorkingSet<'a, C> {
+        fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
+            self.ws.delta.get(key)
+        }
+
+        fn set(&mut self, key: &StorageKey, value: StorageValue) {
+            self.ws.delta.set(key, value)
+        }
+
+        fn delete(&mut self, key: &StorageKey) {
+            self.ws.delta.delete(key)
+        }
     }
 }
 
