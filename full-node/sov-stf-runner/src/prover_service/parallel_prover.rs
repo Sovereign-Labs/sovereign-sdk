@@ -14,6 +14,13 @@ use super::{Hash, ProverService, ProverServiceError};
 use crate::verifier::StateTransitionVerifier;
 use crate::{ProofGenConfig, RollupProverConfig, StateTransitionData};
 
+enum ProverState<StateRoot, Witness, Da: DaSpec> {
+    WitnessSubmitted(StateTransitionData<StateRoot, Witness, Da>),
+    Proving,
+    Proved(Vec<u8>),
+    Err,
+}
+
 /// TODO
 pub struct ParallelProver<StateRoot, Witness, Da, Vm, V>
 where
