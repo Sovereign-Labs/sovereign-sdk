@@ -7,6 +7,7 @@ use sov_modules_api::{Address, Context, Error, Module, Spec, WorkingSet};
 use sov_modules_api::utils::generate_address;
 use sov_modules_api::default_context::DefaultContext;
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
+use sov_state::storage::NativeStorage;
 
 
 #[test]
@@ -27,8 +28,8 @@ fn transfer_initial_token() {
     let receiver_address = bank_config.tokens[0].address_and_balances[1].0;
     assert_ne!(sender_address, receiver_address);
 
-    query_sender_receiver_balances(&bank, token_address, sender_address, receiver_address, &mut working_set);
-
+    let (sender_balance, receiver_balance) = query_sender_receiver_balances(&bank, token_address, sender_address, receiver_address, &mut working_set);
+    assert_eq!((sender_balance, receiver_balance), (100,100));
     println!("Starting commit for genesis, i.e. slot 1");
     commit(working_set, prover_storage.clone());
     println!("Genesis commit complete");
@@ -36,8 +37,8 @@ fn transfer_initial_token() {
     let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
 
     transfer(&bank, token_address, sender_address, receiver_address, &mut working_set);
-    query_sender_receiver_balances(&bank, token_address, sender_address, receiver_address, &mut working_set);
-
+    let (sender_balance, receiver_balance) = query_sender_receiver_balances(&bank, token_address, sender_address, receiver_address, &mut working_set);
+    assert_eq!((sender_balance, receiver_balance), (90,110));
 
     println!("Starting commit for slot 2");
     commit(working_set, prover_storage.clone());
@@ -46,20 +47,29 @@ fn transfer_initial_token() {
     let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
 
     transfer(&bank, token_address, sender_address, receiver_address, &mut working_set);
-    query_sender_receiver_balances(&bank, token_address, sender_address, receiver_address, &mut working_set);
-
+    let (sender_balance, receiver_balance) = query_sender_receiver_balances(&bank, token_address, sender_address, receiver_address, &mut working_set);
+    assert_eq!((sender_balance, receiver_balance), (80,120));
     println!("Starting commit for slot 3");
     commit(working_set, prover_storage.clone());
     println!("Commit complete for slot 3");
 
-    // let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
-    //
-    // let archival_slot: u64 = 2;
-    // println!("Starting archival work");
-    // working_set.work_on_slot(archival_slot);
-    // println!("work on slot {} set", archival_slot);
-    //
-    // query_sender_receiver_balances(&bank, token_address, sender_address, receiver_address, &mut working_set);
+
+    let archival_slot: u64 = 2;
+    println!("Archival reads at slot {}",archival_slot);
+    let mut versioned_prover_storage = prover_storage.clone();
+    versioned_prover_storage.set_archival_version(archival_slot).expect("TODO: panic message");
+    let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(versioned_prover_storage.clone());
+    let (sender_balance, receiver_balance) = query_sender_receiver_balances(&bank, token_address, sender_address, receiver_address, &mut working_set);
+    assert_eq!((sender_balance, receiver_balance), (90,110));
+
+    let archival_slot: u64 = 1;
+    println!("Archival archival reads at slot {}",archival_slot);
+    let mut versioned_prover_storage = prover_storage.clone();
+    versioned_prover_storage.set_archival_version(archival_slot).expect("TODO: panic message");
+    let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(versioned_prover_storage.clone());
+    let (sender_balance, receiver_balance) = query_sender_receiver_balances(&bank, token_address, sender_address, receiver_address, &mut working_set);
+    assert_eq!((sender_balance, receiver_balance), (100,100));
+
 }
 
 fn query_sender_receiver_balances(bank: &Bank<DefaultContext>,

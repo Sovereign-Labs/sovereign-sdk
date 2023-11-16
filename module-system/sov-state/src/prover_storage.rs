@@ -45,6 +45,7 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         Ok(Self {
             db: state_db,
             native_db,
+            archival_version: None,
             _phantom_hasher: Default::default(),
         })
     }
@@ -53,14 +54,16 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         Self {
             db,
             native_db,
+            archival_version: None,
             _phantom_hasher: Default::default(),
         }
     }
 
     fn read_value(&self, key: &StorageKey) -> Option<StorageValue> {
+        let version= self.archival_version.unwrap_or(self.db.get_next_version());
         match self
             .db
-            .get_value_option_by_key(self.db.get_next_version(), key.as_ref())
+            .get_value_option_by_key(version, key.as_ref())
         {
             Ok(value) => value.map(Into::into),
             // It is ok to panic here, we assume the db is available and consistent.
@@ -232,9 +235,10 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
         temp_merkle.get_root_hash(version)
     }
 
-    fn set_archival_version(&mut self, version: u64) {
+    fn set_archival_version(&mut self, version: u64) -> anyhow::Result<()> {
         ensure!(version < self.db.get_next_version(),
             "The storage default read version can not be set to a version greater than the next version");
-        self.archival_version = Some(u64)
+        self.archival_version = Some(version);
+        Ok(())
     }
 }
