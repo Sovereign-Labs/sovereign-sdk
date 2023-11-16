@@ -195,12 +195,14 @@ impl DaService for MockDaService {
         if blocks.len() > self.blocks_to_finality as usize {
             let oldest_available_height = blocks[0].header().height();
             let last_finalized_height = self.last_finalized_height.load(Ordering::Acquire);
-
             let last_finalized_index = last_finalized_height
                 .checked_sub(oldest_available_height)
                 .unwrap();
             let next_index_to_finalize = blocks.len() - self.blocks_to_finality as usize - 1;
-            assert_eq!(next_index_to_finalize as u64, last_finalized_index + 1);
+
+            if last_finalized_index > 0 {
+                assert_eq!(next_index_to_finalize as u64, last_finalized_index + 1);
+            }
 
             if let Some(finalized_header_sender) = &self.finalized_header_sender {
                 finalized_header_sender
