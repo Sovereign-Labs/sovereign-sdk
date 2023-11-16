@@ -7,7 +7,7 @@ use std::num::ParseIntError;
 
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
-use sov_modules_api::WorkingSet;
+use sov_modules_api::{StateMapAccessor, WorkingSet};
 use sov_state::Prefix;
 #[cfg(feature = "native")]
 use thiserror::Error;

@@ -1,4 +1,6 @@
-use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, StateValue, WorkingSet};
+use sov_modules_api::{
+    prelude::*, CallResponse, Context, Error, Module, ModuleInfo, StateValue, WorkingSet,
+};
 
 pub mod first_test_module {
     use super::*;
@@ -74,7 +76,6 @@ pub mod second_test_module {
     pub enum Event {
         SecondModuleEnum,
     }
-
 
     impl<Ctx: Context> Module for SecondTestStruct<Ctx> {
         type Context = Ctx;

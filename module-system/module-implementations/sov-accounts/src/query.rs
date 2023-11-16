@@ -1,7 +1,7 @@
 //! Defines rpc queries exposed by the accounts module, along with the relevant types
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::{AddressBech32, WorkingSet};
+use sov_modules_api::{AddressBech32, StateMapAccessor, WorkingSet};
 
 use crate::{Account, Accounts};
 

@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use anyhow::Result;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::CliWalletArg;
+use sov_modules_api::prelude::*;
 use sov_modules_api::{CallResponse, WorkingSet};
 use thiserror::Error;
 

@@ -1,5 +1,5 @@
 use anyhow::{anyhow, bail, Context as _};
-use sov_modules_api::{Context, StateMap, WorkingSet};
+use sov_modules_api::{Context, StateMap, StateMapAccessor, WorkingSet};
 
 use crate::collection::Collection;
 use crate::{CollectionAddress, OwnerAddress, UserAddress};

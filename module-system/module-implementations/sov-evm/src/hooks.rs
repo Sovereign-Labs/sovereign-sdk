@@ -1,4 +1,5 @@
 use reth_primitives::{Bloom, Bytes, H256, U256};
+use sov_modules_api::prelude::*;
 use sov_modules_api::{AccessoryWorkingSet, Spec, WorkingSet};
 use sov_state::Storage;
 
