@@ -35,6 +35,8 @@ fn resolve_manifest_path(out_dir: &Path) -> anyhow::Result<PathBuf> {
 fn main() -> anyhow::Result<()> {
     // writes the target output dir into the manifest path so it can be later read for the
     // resolution of the sovereign.toml manifest file
+    let target_path_filename =
+        std::env::var("TARGET_PATH_OVERRIDE").unwrap_or("target-path".to_string());
     let out_dir = env::var("OUT_DIR").map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     let out_dir = PathBuf::from(out_dir);
     let out_dir = out_dir
@@ -44,7 +46,7 @@ fn main() -> anyhow::Result<()> {
     let target_path_record = PathBuf::from(manifest)
         .canonicalize()
         .with_context(|| anyhow!("could not canonicalize manifest dir path `{manifest:?}`"))?
-        .join("target-path");
+        .join(target_path_filename);
 
     // Write the path "OUT_DIR" to a file in the manifest directory so that it's available to macros
     fs::write(target_path_record, out_dir.display().to_string())?;
