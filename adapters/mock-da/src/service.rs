@@ -5,7 +5,7 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use futures::StreamExt;
+use pin_project::pin_project;
 use sha2::Digest;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::maybestd::sync::Arc;
@@ -77,11 +77,15 @@ impl MockDaService {
     }
 }
 
+#[pin_project]
+/// Stream of finalized headers
 pub struct MockDaBlockHeaderStream {
+    #[pin]
     inner: tokio_stream::wrappers::BroadcastStream<MockBlockHeader>,
 }
 
 impl MockDaBlockHeaderStream {
+    /// Create new stream of finalized headers
     pub fn new(receiver: broadcast::Receiver<MockBlockHeader>) -> Self {
         Self {
             inner: tokio_stream::wrappers::BroadcastStream::new(receiver),
@@ -93,14 +97,10 @@ impl futures::Stream for MockDaBlockHeaderStream {
     type Item = Result<MockBlockHeader, anyhow::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        // self.inner
-        //     .poll_next(cx)
-        //     .map(|option| option.map(|response| response.map_err(Into::into)))
-        match self.inner.poll_next(cx) {
-            Poll::Ready(Some(result)) => Poll::Ready(Some(result.map_err(Into::into))),
-            Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending => Poll::Pending,
-        }
+        let this = self.project(); // Requires the pin-project crate or similar functionality
+        this.inner
+            .poll_next(cx)
+            .map(|opt| opt.map(|res| res.map_err(Into::into)))
     }
 }
 
@@ -294,14 +294,22 @@ mod tests {
         );
     }
 
-    fn get_finalized_headers_collector(da: &mut MockDaService) -> JoinHandle<Vec<MockBlockHeader>> {
-        let mut receiver = da.subscribe_finalized_header().unwrap();
+    async fn get_finalized_headers_collector(
+        da: &mut MockDaService,
+        expected_num_headers: usize,
+    ) -> JoinHandle<Vec<MockBlockHeader>> {
+        let mut receiver: MockDaBlockHeaderStream = da.subscribe_finalized_header().await.unwrap();
+        // All finalized headers should be pushed by that time
+        // This prevents test for freezing in case of a bug
+        let timeout_duration = Duration::from_millis(10);
+
         tokio::spawn(async move {
             let mut received = Vec::with_capacity(10);
-
-            // Read until it's empty
-            while let Ok(header) = receiver.try_recv() {
-                received.push(header);
+            for _ in 0..expected_num_headers {
+                match time::timeout(timeout_duration, receiver.next()).await {
+                    Ok(Some(Ok(header))) => received.push(header),
+                    _ => break,
+                }
             }
             received
         })
@@ -326,9 +334,11 @@ mod tests {
 
     async fn test_push_and_read(finalization: u64, num_blocks: usize) {
         let mut da = MockDaService::with_finality(MockAddress::new([1; 32]), finalization as u32);
-        let collector_handle = get_finalized_headers_collector(&mut da);
+        let number_of_finalized_blocks = num_blocks - finalization as usize;
+        let collector_handle =
+            get_finalized_headers_collector(&mut da, number_of_finalized_blocks).await;
 
-        for i in 0..=num_blocks {
+        for i in 0..num_blocks {
             let published_blob: Vec<u8> = vec![i as u8; i + 1];
             let i = i as u64;
 
@@ -348,15 +358,17 @@ mod tests {
 
         let received = collector_handle.await.unwrap();
         let heights: Vec<u64> = received.iter().map(|h| h.height()).collect();
-        let expected_heights: Vec<u64> = (0..=(num_blocks as u64 - finalization)).collect();
+        let expected_heights: Vec<u64> = (0..number_of_finalized_blocks as u64).collect();
         assert_eq!(expected_heights, heights);
     }
 
     async fn test_push_many_then_read(finalization: u64, num_blocks: usize) {
         let mut da = MockDaService::with_finality(MockAddress::new([1; 32]), finalization as u32);
-        let collector_handle = get_finalized_headers_collector(&mut da);
+        let number_of_finalized_blocks = num_blocks - finalization as usize;
+        let collector_handle =
+            get_finalized_headers_collector(&mut da, number_of_finalized_blocks).await;
 
-        let blobs: Vec<Vec<u8>> = (0..=num_blocks).map(|i| vec![i as u8; i + 1]).collect();
+        let blobs: Vec<Vec<u8>> = (0..num_blocks).map(|i| vec![i as u8; i + 1]).collect();
 
         // Submitting blobs first
         for (i, blob) in blobs.iter().enumerate() {
@@ -370,7 +382,9 @@ mod tests {
             assert_eq!(i, head_block_header.height());
         }
 
-        let expected_finalized_height = blobs.len() as u64 - finalization - 1;
+        // Starts from 0
+        let expected_head_height = num_blocks as u64 - 1;
+        let expected_finalized_height = expected_head_height - finalization;
 
         // Then read
         for (i, blob) in blobs.into_iter().enumerate() {
@@ -385,13 +399,13 @@ mod tests {
             assert_eq!(&blob, fetched_block.blobs[0].full_data());
 
             let head_block_header = da.get_head_block_header().await.unwrap();
-            assert_eq!(num_blocks, head_block_header.height() as usize);
+            assert_eq!(expected_head_height, head_block_header.height());
         }
 
         let received = collector_handle.await.unwrap();
-        let heights: Vec<u64> = received.iter().map(|h| h.height()).collect();
-        let expected_heights: Vec<u64> = (0..=(num_blocks as u64 - finalization)).collect();
-        assert_eq!(expected_heights, heights);
+        let finalized_heights: Vec<u64> = received.iter().map(|h| h.height()).collect();
+        let expected_finalized_heights: Vec<u64> = (0..number_of_finalized_blocks as u64).collect();
+        assert_eq!(expected_finalized_heights, finalized_heights);
     }
 
     mod instant_finality {
