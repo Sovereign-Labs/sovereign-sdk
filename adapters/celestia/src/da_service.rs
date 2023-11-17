@@ -10,8 +10,8 @@ use celestia_types::consts::appconsts::{
 use celestia_types::nmt::Namespace;
 use celestia_types::ExtendedHeader;
 use jsonrpsee::core::client::Subscription;
-use jsonrpsee::core::Error;
 use jsonrpsee::http_client::{HeaderMap, HttpClient};
+use pin_project::pin_project;
 use sov_rollup_interface::da::CountedBufReader;
 use sov_rollup_interface::services::da::DaService;
 use tracing::{debug, info, instrument, trace};
@@ -97,7 +97,9 @@ impl CelestiaService {
 
 /// A Wrapper around [`Subscription`] that converts [`ExtendedHeader`] to [`CelestiaHeader`]
 /// and converts [`Error`] to [`BoxError`]
+#[pin_project]
 pub struct CelestiaBlockHeaderSubscription {
+    #[pin]
     inner: Subscription<ExtendedHeader>,
 }
 
@@ -112,8 +114,8 @@ impl futures::Stream for CelestiaBlockHeaderSubscription {
     type Item = Result<CelestiaHeader, BoxError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        // Option 3: ChatGPT
-        let poll_result = self.inner.poll_next(cx);
+        let this = self.project();
+        let poll_result = this.inner.poll_next(cx);
         Poll::Ready(match poll_result {
             Poll::Ready(Some(Ok(extended_header))) => {
                 Some(Ok(CelestiaHeader::from(extended_header)))

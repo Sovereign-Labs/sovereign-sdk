@@ -55,11 +55,26 @@ impl DaSpec for RngDaSpec {
     type ChainParams = ();
 }
 
+/// Dummy Header Stream
+pub struct RngHeaderStream;
+
+impl futures::Stream for RngHeaderStream {
+    type Item = <RngDaSpec as DaSpec>::BlockHeader;
+
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        unimplemented!()
+    }
+}
+
 #[async_trait]
 impl DaService for RngDaService {
     type Spec = RngDaSpec;
     type Verifier = RngDaVerifier;
     type FilteredBlock = MockBlock;
+    type HeaderStream = RngHeaderStream;
     type Error = anyhow::Error;
 
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
@@ -86,10 +101,7 @@ impl DaService for RngDaService {
         todo!()
     }
 
-    fn subscribe_finalized_header(
-        &mut self,
-    ) -> Result<tokio::sync::broadcast::Receiver<<Self::Spec as DaSpec>::BlockHeader>, Self::Error>
-    {
+    async fn subscribe_finalized_header(&self) -> Result<Self::HeaderStream, Self::Error> {
         unimplemented!()
     }
 

@@ -2063,6 +2063,7 @@ dependencies = [
  "sov-zk-cycle-macros",
  "tendermint",
  "tendermint-proto",
+ "thiserror",
  "tracing",
 ]
 
