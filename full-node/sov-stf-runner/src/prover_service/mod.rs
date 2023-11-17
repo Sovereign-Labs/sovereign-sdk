@@ -21,6 +21,16 @@ pub enum RollupProverConfig {
     Prove,
 }
 
+///
+pub enum ProofSubmissionStatus {
+    ///
+    Sucess,
+    ///
+    ProvingInProgress,
+    ///
+    Err(anyhow::Error),
+}
+
 /// An error that occurred during ZKP proving.
 #[derive(Error, Debug)]
 pub enum ProverServiceError {
@@ -57,4 +67,7 @@ pub trait ProverService {
 
     /// Creates ZKP prove for a block corresponding to `block_header_hash`.
     async fn prove(&self, block_header_hash: Hash) -> Result<(), ProverServiceError>;
+
+    /// TODO
+    async fn send_proof_to_da(&self, block_header_hash: Hash) -> ProofSubmissionStatus;
 }

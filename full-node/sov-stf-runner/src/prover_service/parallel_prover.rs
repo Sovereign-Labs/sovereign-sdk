@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use super::{Hash, ProverService, ProverServiceError};
 use crate::verifier::StateTransitionVerifier;
-use crate::{ProofGenConfig, RollupProverConfig, StateTransitionData};
+use crate::{ProofGenConfig, ProofSubmissionStatus, RollupProverConfig, StateTransitionData};
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -12,18 +12,43 @@ use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::ZkvmHost;
+use sov_rollup_interface::zk::{Proof, ZkvmHost};
 
 enum ProverStatus<StateRoot, Witness, Da: DaSpec> {
     WitnessSubmitted(StateTransitionData<StateRoot, Witness, Da>),
     Proving,
-    Proved(Vec<u8>),
+    Proved(Proof),
     Err(anyhow::Error),
 }
 
 #[derive(Default)]
 struct ProverState<StateRoot, Witness, Da: DaSpec> {
     prover_status: HashMap<Hash, ProverStatus<StateRoot, Witness, Da>>,
+}
+
+impl<StateRoot, Witness, Da: DaSpec> ProverState<StateRoot, Witness, Da> {
+    fn remove(&mut self, hash: &Hash) -> Option<ProverStatus<StateRoot, Witness, Da>> {
+        self.prover_status.remove(hash)
+    }
+
+    fn set_to_proving(&mut self, hash: Hash) -> Option<ProverStatus<StateRoot, Witness, Da>> {
+        self.prover_status.insert(hash, ProverStatus::Proving)
+    }
+
+    fn set_to_proved(
+        &mut self,
+        hash: Hash,
+        proof: Result<Proof, anyhow::Error>,
+    ) -> Option<ProverStatus<StateRoot, Witness, Da>> {
+        match proof {
+            Ok(p) => self.prover_status.insert(hash, ProverStatus::Proved(p)),
+            Err(e) => self.prover_status.insert(hash, ProverStatus::Err(e)),
+        }
+    }
+
+    fn get_proover_status(&self, hash: Hash) -> Option<&ProverStatus<StateRoot, Witness, Da>> {
+        self.prover_status.get(&hash)
+    }
 }
 
 struct Prover<StateRoot, Witness, Da: DaService> {
@@ -44,12 +69,18 @@ where
         }
     }
 
-    fn insert(&self, hash: Hash, prover_state: ProverStatus<StateRoot, Witness, Da::Spec>) {
+    fn submit_witness(
+        &self,
+        state_transition_data: StateTransitionData<StateRoot, Witness, Da::Spec>,
+    ) {
+        let header_hash = state_transition_data.da_block_header.hash().into();
+        let data = ProverStatus::WitnessSubmitted(state_transition_data);
+
         self.prover_state
             .lock()
             .unwrap()
             .prover_status
-            .insert(hash, prover_state);
+            .insert(header_hash, data);
     }
 
     fn start_proving<Vm, V>(
@@ -65,53 +96,34 @@ where
         V::PreState: Send + Sync + 'static,
     {
         let prover_state_clone = self.prover_state.clone();
-        let mut prover_state = self.prover_state.lock().expect("Lock was poisoned");
 
-        let prover_status = prover_state
-            .prover_status
-            .remove(&block_header_hash)
-            .unwrap(); // TODO
+        let mut prover_state = self.prover_state.lock().expect("Lock was poisoned");
+        let prover_status = prover_state.remove(&block_header_hash).unwrap(); // TODO
 
         match prover_status {
             ProverStatus::WitnessSubmitted(state_tranistion_data) => {
+                prover_state.set_to_proving(block_header_hash);
                 vm.add_hint(state_tranistion_data);
 
-                prover_state
-                    .prover_status
-                    .insert(block_header_hash, ProverStatus::Proving);
-
                 rayon::spawn(move || {
+                    let mut prover_state = prover_state_clone.lock().expect("Lock was poisoned");
+
                     tracing::info_span!("guest_execution").in_scope(|| {
-                        match config.deref() {
-                            ProofGenConfig::Simulate(verifier) => {
-                                let p = verifier
-                                    .run_block(vm.simulate_with_hints(), zk_storage)
-                                    .map_err(|e| {
-                                        anyhow::anyhow!(
-                                            "Guest execution must succeed but failed with {:?}",
-                                            e
-                                        )
-                                    });
-
-                                let mut prover_state =
-                                    prover_state_clone.lock().expect("Lock was poisoned");
-
-                                match p {
-                                    Ok(_) => prover_state
-                                        .prover_status
-                                        .insert(block_header_hash, ProverStatus::Proved(vec![])),
-                                    Err(e) => prover_state
-                                        .prover_status
-                                        .insert(block_header_hash, ProverStatus::Err(e)),
-                                };
-                            }
-                            ProofGenConfig::Execute => {
-                                let _ = vm.run(false).unwrap();
-                            }
-                            ProofGenConfig::Prover => {
-                                let _ = vm.run(true).unwrap();
-                            }
+                        let proof = match config.deref() {
+                            ProofGenConfig::Simulate(verifier) => verifier
+                                .run_block(vm.simulate_with_hints(), zk_storage)
+                                .map(|_| Proof::Empty)
+                                .map_err(|e| {
+                                    anyhow::anyhow!(
+                                        "Guest execution must succeed but failed with {:?}",
+                                        e
+                                    )
+                                }),
+                            ProofGenConfig::Execute => vm.run(false),
+                            ProofGenConfig::Prover => vm.run(true),
                         };
+
+                        prover_state.set_to_proved(block_header_hash, proof);
                     })
                 });
 
@@ -120,6 +132,21 @@ where
             ProverStatus::Proving => todo!(),
             ProverStatus::Proved(_) => todo!(),
             ProverStatus::Err(e) => Err(e.into()),
+        }
+    }
+
+    fn get_proof_submission_status(&self, block_header_hash: Hash) -> ProofSubmissionStatus {
+        let prover_state = self.prover_state.lock().unwrap();
+        let status = prover_state.get_proover_status(block_header_hash);
+
+        match status {
+            Some(ProverStatus::Proving) => ProofSubmissionStatus::ProvingInProgress,
+            Some(ProverStatus::Proved(_)) => ProofSubmissionStatus::Sucess,
+            Some(ProverStatus::WitnessSubmitted(_)) => todo!(),
+            Some(ProverStatus::Err(e)) => {
+                ProofSubmissionStatus::Err(anyhow::anyhow!(e.to_string()))
+            }
+            None => todo!(),
         }
     }
 }
@@ -202,9 +229,7 @@ where
             <Self::DaService as DaService>::Spec,
         >,
     ) {
-        let header_hash = state_transition_data.da_block_header.hash().into();
-        let data = ProverStatus::WitnessSubmitted(state_transition_data);
-        self.prover_state.insert(header_hash, data);
+        self.prover_state.submit_witness(state_transition_data);
     }
 
     async fn prove(&self, block_header_hash: Hash) -> Result<(), ProverServiceError> {
@@ -216,5 +241,10 @@ where
                 .start_proving(block_header_hash, config, vm, zk_storage)?;
         }
         Ok(())
+    }
+
+    async fn send_proof_to_da(&self, block_header_hash: Hash) -> ProofSubmissionStatus {
+        self.prover_state
+            .get_proof_submission_status(block_header_hash)
     }
 }

@@ -12,7 +12,7 @@ use sov_rollup_interface::zk::ZkvmHost;
 
 use super::{Hash, ProverService, ProverServiceError};
 use crate::verifier::StateTransitionVerifier;
-use crate::{ProofGenConfig, RollupProverConfig, StateTransitionData};
+use crate::{ProofGenConfig, ProofSubmissionStatus, RollupProverConfig, StateTransitionData};
 
 /// Prover that blocks the current thread and creates a ZKP proof.
 pub struct BlockingProver<StateRoot, Witness, Da, Vm, V>
@@ -133,5 +133,9 @@ where
         }
 
         Ok(())
+    }
+
+    async fn send_proof_to_da(&self, block_header_hash: Hash) -> ProofSubmissionStatus {
+        todo!()
     }
 }
