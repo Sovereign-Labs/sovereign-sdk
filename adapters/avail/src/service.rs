@@ -158,8 +158,8 @@ async fn wait_for_appdata(
 
 /// Convincice copy from [`subxt::blocks::BlocksClient`]
 type BlockStream<T> = Pin<Box<dyn futures::Stream<Item = Result<T, subxt::Error>> + Send>>;
-/// Wrapper Around [`subxt::blocks::BlocksClient::subscribe_finalized`]
-/// that maps Ok to [`AvailHeader`] and error to anyhow::Error
+/// Wrapper around return of [`subxt::blocks::BlocksClient::subscribe_finalized`]
+/// that maps `Ok` variant to [`AvailHeader`] and `Error` variant to [`anyhow::Error`]
 #[pin_project]
 pub struct AvailBlockHeaderStream {
     #[pin]
