@@ -8512,6 +8512,7 @@ dependencies = [
  "celestia-proto",
  "celestia-rpc",
  "celestia-types",
+ "futures",
  "hex",
  "jsonrpsee 0.20.3",
  "nmt-rs",
@@ -8748,12 +8749,15 @@ dependencies = [
  "async-trait",
  "borsh",
  "bytes",
+ "futures",
  "hex",
  "serde",
  "sha2 0.10.8",
  "sov-mock-da",
  "sov-rollup-interface",
  "tokio",
+ "tokio-stream",
+ "tracing",
 ]
 
 [[package]]
@@ -8989,6 +8993,7 @@ dependencies = [
  "borsh",
  "bytes",
  "digest 0.10.7",
+ "futures",
  "hex",
  "proptest",
  "proptest-derive",

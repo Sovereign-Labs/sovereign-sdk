@@ -20,8 +20,8 @@ celestia-types = { git = "https://github.com/eigerco/celestia-node-rs.git", rev 
 tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "ef58b85", default-features = false }
 tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "ef58b85" }
 nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "d821332", features = [
-  "serde",
-  "borsh",
+    "serde",
+    "borsh",
 ] }
 
 # Convenience
@@ -34,7 +34,8 @@ jsonrpsee = { workspace = true, features = ["http-client"], optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
-thiserror = { workspace = true }
+futures = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
 tracing = { workspace = true }
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", version = "0.3", optional = true }
 risc0-zkvm = { workspace = true, default-features = false, features = ["std"], optional = true }
@@ -52,16 +53,17 @@ wiremock = "0.5"
 [features]
 default = []
 native = [
-  "dep:tokio",
-  "dep:jsonrpsee",
-  "dep:serde_json",
-  "dep:celestia-rpc",
-  "tendermint/default",
-  "sov-rollup-interface/native",
+    "dep:tokio",
+    "dep:futures",
+    "dep:jsonrpsee",
+    "dep:serde_json",
+    "dep:celestia-rpc",
+    "tendermint/default",
+    "sov-rollup-interface/native",
 ]
 risc0 = [
-  "dep:risc0-zkvm",
-  "dep:risc0-zkvm-platform"
+    "dep:risc0-zkvm",
+    "dep:risc0-zkvm-platform"
 ]
 bench = [
     "sov-zk-cycle-macros/bench",

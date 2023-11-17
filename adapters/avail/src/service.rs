@@ -164,6 +164,7 @@ impl DaService for DaProvider {
     type Verifier = Verifier;
 
     type FilteredBlock = AvailBlock;
+    type HeaderStream = BlockStream<AvailHeader>;
 
     type Error = anyhow::Error;
 
@@ -223,32 +224,38 @@ impl DaService for DaProvider {
         Ok(header)
     }
 
-    fn subscribe_finalized_header(
-        &mut self,
+    async fn subscribe_finalized_header(
+        &self,
     ) -> Result<Receiver<<Self::Spec as DaSpec>::BlockHeader>, Self::Error> {
-        if let Some(header_sender) = &self.header_sender {
-            return Ok(header_sender.subscribe());
-        }
-
-        let (header_sender, header_receiver) = tokio::sync::broadcast::channel(10);
-        let actual_header_sender = header_sender.clone();
-        self.header_sender = Some(header_sender);
-        let block_client = self.node_client.blocks();
-        tokio::spawn(async move {
-            // TODO: retry on error
-            let mut block_stream = block_client.subscribe_finalized().await.unwrap();
-            while let Some(block_result) = block_stream.next().await {
-                match block_result {
-                    Ok(block) => {
-                        actual_header_sender.send(block.into()).unwrap();
-                    }
-                    Err(err) => {
-                        tracing::error!("Error receiving finalized header: {:?}", err);
-                    }
-                };
-            }
-        });
-        Ok(header_receiver)
+        let mut block_stream = self
+            .node_client
+            .blocks()
+            .subscribe_finalized()
+            .await
+            .unwrap();
+        // if let Some(header_sender) = &self.header_sender {
+        //     return Ok(header_sender.subscribe());
+        // }
+        //
+        // let (header_sender, header_receiver) = tokio::sync::broadcast::channel(10);
+        // let actual_header_sender = header_sender.clone();
+        // self.header_sender = Some(header_sender);
+        // let block_client = self.node_client.blocks();
+        // tokio::spawn(async move {
+        //     // TODO: retry on error
+        //     let mut block_stream = block_client.subscribe_finalized().await.unwrap();
+        //     while let Some(block_result) = block_stream.next().await {
+        //         match block_result {
+        //             Ok(block) => {
+        //                 actual_header_sender.send(block.into()).unwrap();
+        //             }
+        //             Err(err) => {
+        //                 tracing::error!("Error receiving finalized header: {:?}", err);
+        //             }
+        //         };
+        //     }
+        // });
+        // Ok(header_receiver)
     }
 
     async fn get_head_block_header(

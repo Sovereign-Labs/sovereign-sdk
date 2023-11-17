@@ -1,14 +1,16 @@
 use std::collections::VecDeque;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use async_trait::async_trait;
+use futures::StreamExt;
 use sha2::Digest;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::maybestd::sync::Arc;
 use sov_rollup_interface::services::da::{DaService, SlotData};
-use tokio::sync::broadcast::{Receiver, Sender};
-use tokio::sync::RwLock;
+use tokio::sync::{broadcast, RwLock};
 use tokio::time;
 
 use crate::types::{MockAddress, MockBlob, MockBlock, MockDaVerifier};
@@ -23,10 +25,11 @@ use crate::{MockBlockHeader, MockHash};
 pub struct MockDaService {
     sequencer_da_address: MockAddress,
     blocks: Arc<RwLock<VecDeque<MockBlock>>>,
+    /// How many blocks should be submitted, before block is finalized. 0 means instant finality.
     blocks_to_finality: u32,
     /// Used for calculating correct finality from state of `blocks`
     last_finalized_height: Arc<AtomicU64>,
-    finalized_header_sender: Option<Sender<MockBlockHeader>>,
+    finalized_header_sender: broadcast::Sender<MockBlockHeader>,
 }
 
 impl MockDaService {
@@ -37,12 +40,20 @@ impl MockDaService {
 
     /// Create a new [`MockDaService`] with given finality.
     pub fn with_finality(sequencer_da_address: MockAddress, blocks_to_finality: u32) -> Self {
+        let (tx, rx1) = broadcast::channel(16);
+        // Spawn a task, so channel is never closed
+        tokio::spawn(async move {
+            let mut rx = rx1;
+            while let Ok(header) = rx.recv().await {
+                tracing::debug!("Finalized MockHeader: {}", header);
+            }
+        });
         Self {
             sequencer_da_address,
             blocks: Arc::new(Default::default()),
             blocks_to_finality,
             last_finalized_height: Arc::new(AtomicU64::new(0)),
-            finalized_header_sender: None,
+            finalized_header_sender: tx,
         }
     }
 
@@ -66,11 +77,39 @@ impl MockDaService {
     }
 }
 
+pub struct MockDaBlockHeaderStream {
+    inner: tokio_stream::wrappers::BroadcastStream<MockBlockHeader>,
+}
+
+impl MockDaBlockHeaderStream {
+    pub fn new(receiver: broadcast::Receiver<MockBlockHeader>) -> Self {
+        Self {
+            inner: tokio_stream::wrappers::BroadcastStream::new(receiver),
+        }
+    }
+}
+
+impl futures::Stream for MockDaBlockHeaderStream {
+    type Item = Result<MockBlockHeader, anyhow::Error>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        // self.inner
+        //     .poll_next(cx)
+        //     .map(|option| option.map(|response| response.map_err(Into::into)))
+        match self.inner.poll_next(cx) {
+            Poll::Ready(Some(result)) => Poll::Ready(Some(result.map_err(Into::into))),
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
 #[async_trait]
 impl DaService for MockDaService {
     type Spec = MockDaSpec;
     type Verifier = MockDaVerifier;
     type FilteredBlock = MockBlock;
+    type HeaderStream = MockDaBlockHeaderStream;
     type Error = anyhow::Error;
 
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
@@ -95,7 +134,7 @@ impl DaService for MockDaService {
             ))?
             .clone();
 
-        // Block that preceeds last finalized block is evicted at first read.
+        // Block that precedes last finalized block is evicted at first read.
         // Caller can always get last finalized block, or read everything if it is called in order
         // If readers are from multiple threads, then block will be lost.
         // This is optimization for long-running cases
@@ -126,15 +165,9 @@ impl DaService for MockDaService {
         Ok(*blocks[index as usize].header())
     }
 
-    fn subscribe_finalized_header(
-        &mut self,
-    ) -> Result<Receiver<<Self::Spec as DaSpec>::BlockHeader>, Self::Error> {
-        if let Some(sender) = &self.finalized_header_sender {
-            return Ok(sender.subscribe());
-        }
-        let (s, rx) = tokio::sync::broadcast::channel(100);
-        self.finalized_header_sender = Some(s);
-        Ok(rx)
+    async fn subscribe_finalized_header(&self) -> Result<Self::HeaderStream, Self::Error> {
+        let receiver = self.finalized_header_sender.subscribe();
+        Ok(MockDaBlockHeaderStream::new(receiver))
     }
 
     async fn get_head_block_header(
@@ -204,11 +237,9 @@ impl DaService for MockDaService {
                 assert_eq!(next_index_to_finalize as u64, last_finalized_index + 1);
             }
 
-            if let Some(finalized_header_sender) = &self.finalized_header_sender {
-                finalized_header_sender
-                    .send(*blocks[next_index_to_finalize].header())
-                    .unwrap();
-            }
+            self.finalized_header_sender
+                .send(*blocks[next_index_to_finalize].header())
+                .unwrap();
 
             let this_finalized_height = oldest_available_height + next_index_to_finalize as u64;
             self.last_finalized_height
@@ -241,6 +272,7 @@ fn block_hash(height: u64, data_hash: [u8; 32], prev_hash: [u8; 32]) -> MockHash
 mod tests {
     use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait};
     use tokio::task::JoinHandle;
+    use tokio_stream::StreamExt;
 
     use super::*;
 
@@ -266,6 +298,7 @@ mod tests {
         let mut receiver = da.subscribe_finalized_header().unwrap();
         tokio::spawn(async move {
             let mut received = Vec::with_capacity(10);
+
             // Read until it's empty
             while let Ok(header) = receiver.try_recv() {
                 received.push(header);

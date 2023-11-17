@@ -19,15 +19,21 @@ serde = { workspace = true }
 hex = { workspace = true }
 sha2 = { workspace = true }
 tokio = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+tokio-stream = { workspace = true, optional = true }
+tracing = { workspace = true }
 
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
 
 [dev-dependencies]
 sov-mock-da = { path = ".", features = ["native"] }
+futures = { workspace = true }
 
 [features]
 default = []
 native = [
     "dep:tokio",
+    "dep:tokio-stream",
+    "dep:futures",
     "sov-rollup-interface/native"
 ]

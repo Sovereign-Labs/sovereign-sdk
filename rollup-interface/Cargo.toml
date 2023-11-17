@@ -25,6 +25,8 @@ hex = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+# TODO: Remove tokio when TBD is resolved
 tokio = { workspace = true, optional = true }
 
 # Proptest should be a dev-dependency, but those can't be optional
@@ -39,7 +41,7 @@ proptest-derive = { workspace = true }
 
 [features]
 default = ["std"]
-native = ["std", "tokio"]
+native = ["std", "tokio", "futures"]
 fuzzing = ["proptest", "proptest-derive", "sha2", "std"]
 std = [
     "anyhow/default",

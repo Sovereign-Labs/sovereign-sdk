@@ -15,7 +15,6 @@ use crate::zk::ValidityCondition;
 ///
 /// The DaService has two responsibilities - fetching data from the DA layer, transforming the
 /// data into a representation that can be efficiently verified in circuit.
-
 #[cfg(feature = "native")]
 #[async_trait::async_trait]
 pub trait DaService: Send + Sync + 'static {
@@ -29,6 +28,11 @@ pub trait DaService: Send + Sync + 'static {
     type FilteredBlock: SlotData<
         BlockHeader = <Self::Spec as DaSpec>::BlockHeader,
         Cond = <Self::Spec as DaSpec>::ValidityCondition,
+    >;
+
+    /// Type that allow to consume [`futures::Stream`] of BlockHeaders.
+    type HeaderStream: futures::Stream<
+        Item = Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error>,
     >;
 
     /// The error type for fallible methods.
@@ -46,11 +50,9 @@ pub trait DaService: Send + Sync + 'static {
     ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error>;
 
     /// Subscribe to finalized headers as they are finalized.
+    /// Expect only to receive headers which were finalized after subscription
     /// Optimized version of `get_last_finalized_block_header`.
-    /// For the environments that support [`tokio::sync::broadcast`].
-    fn subscribe_finalized_header(
-        &mut self,
-    ) -> Result<tokio::sync::broadcast::Receiver<<Self::Spec as DaSpec>::BlockHeader>, Self::Error>;
+    async fn subscribe_finalized_header(&self) -> Result<Self::HeaderStream, Self::Error>;
 
     /// Fetch the head block of the most popular fork.
     ///

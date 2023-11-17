@@ -1,3 +1,6 @@
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
 use async_trait::async_trait;
 use celestia_rpc::prelude::*;
 use celestia_types::blob::{Blob as JsonBlob, Commitment, SubmitOptions};
@@ -5,10 +8,12 @@ use celestia_types::consts::appconsts::{
     CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE, SHARE_SIZE,
 };
 use celestia_types::nmt::Namespace;
+use celestia_types::ExtendedHeader;
+use jsonrpsee::core::client::Subscription;
+use jsonrpsee::core::Error;
 use jsonrpsee::http_client::{HeaderMap, HttpClient};
 use sov_rollup_interface::da::CountedBufReader;
 use sov_rollup_interface::services::da::DaService;
-use tokio::sync::broadcast::{Receiver, Sender};
 use tracing::{debug, info, instrument, trace};
 
 use crate::shares::Blob;
@@ -26,7 +31,6 @@ const GAS_PRICE: usize = 1;
 pub struct CelestiaService {
     client: HttpClient,
     rollup_namespace: Namespace,
-    header_sender: Option<Sender<CelestiaHeader>>,
 }
 
 impl CelestiaService {
@@ -34,7 +38,6 @@ impl CelestiaService {
         Self {
             client,
             rollup_namespace: nid,
-            header_sender: None,
         }
     }
 }
@@ -92,6 +95,36 @@ impl CelestiaService {
     }
 }
 
+/// A Wrapper around [`Subscription`] that converts [`ExtendedHeader`] to [`CelestiaHeader`]
+/// and converts [`Error`] to [`BoxError`]
+pub struct CelestiaBlockHeaderSubscription {
+    inner: Subscription<ExtendedHeader>,
+}
+
+impl CelestiaBlockHeaderSubscription {
+    /// Create a new [`CelestiaBlockHeaderSubscription`] from [`Subscription`]
+    pub fn new(inner: Subscription<ExtendedHeader>) -> Self {
+        Self { inner }
+    }
+}
+
+impl futures::Stream for CelestiaBlockHeaderSubscription {
+    type Item = Result<CelestiaHeader, BoxError>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        // Option 3: ChatGPT
+        let poll_result = self.inner.poll_next(cx);
+        Poll::Ready(match poll_result {
+            Poll::Ready(Some(Ok(extended_header))) => {
+                Some(Ok(CelestiaHeader::from(extended_header)))
+            }
+            Poll::Ready(Some(Err(e))) => Some(Err(e.into())),
+            Poll::Ready(None) => None,
+            Poll::Pending => return Poll::Pending,
+        })
+    }
+}
+
 #[async_trait]
 impl DaService for CelestiaService {
     type Spec = CelestiaSpec;
@@ -99,6 +132,7 @@ impl DaService for CelestiaService {
     type Verifier = CelestiaVerifier;
 
     type FilteredBlock = FilteredCelestiaBlock;
+    type HeaderStream = CelestiaBlockHeaderSubscription;
 
     type Error = BoxError;
 
@@ -139,37 +173,9 @@ impl DaService for CelestiaService {
         self.get_head_block_header().await
     }
 
-    fn subscribe_finalized_header(
-        &mut self,
-    ) -> Result<Receiver<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlockHeader>, Self::Error>
-    {
-        // Already subscribed
-        if let Some(header_sender) = &self.header_sender {
-            return Ok(header_sender.subscribe());
-        }
-
-        let (sender, receiver) = tokio::sync::broadcast::channel(10);
-        let active_sender = sender.clone();
-        self.header_sender = Some(sender);
-
-        let subscription_client = self.client.clone();
-
-        // Spawning background task, which is going to poll for next header
-        // and feed it to broadcast channel
-        tokio::spawn(async move {
-            let mut subscription = subscription_client
-                .header_subscribe()
-                .await
-                .expect("Failed to subscribe to headers");
-            while let Some(Ok(header)) = subscription.next().await {
-                let header = CelestiaHeader::from(header);
-                if active_sender.send(header).is_err() {
-                    break;
-                }
-            }
-        });
-
-        Ok(receiver)
+    async fn subscribe_finalized_header(&self) -> Result<Self::HeaderStream, Self::Error> {
+        let subscription = self.client.header_subscribe().await?;
+        Ok(CelestiaBlockHeaderSubscription::new(subscription))
     }
 
     async fn get_head_block_header(
