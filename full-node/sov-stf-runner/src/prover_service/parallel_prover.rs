@@ -14,15 +14,97 @@ use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 
-enum ProverState<StateRoot, Witness, Da: DaSpec> {
+enum ProverStatus<StateRoot, Witness, Da: DaSpec> {
     WitnessSubmitted(StateTransitionData<StateRoot, Witness, Da>),
     Proving,
     Proved(Vec<u8>),
     Err(anyhow::Error),
 }
 
-struct ProverS<StateRoot, Witness, Da: DaSpec> {
-    prover_state: HashMap<Hash, ProverState<StateRoot, Witness, Da>>,
+#[derive(Default)]
+struct ProverState<StateRoot, Witness, Da: DaSpec> {
+    prover_status: HashMap<Hash, ProverStatus<StateRoot, Witness, Da>>,
+}
+
+struct Prover<StateRoot, Witness, Da: DaService> {
+    prover_state: Arc<Mutex<ProverState<StateRoot, Witness, Da::Spec>>>,
+}
+
+impl<StateRoot, Witness, Da> Prover<StateRoot, Witness, Da>
+where
+    Da: DaService,
+    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]>,
+    Witness: Serialize + DeserializeOwned,
+{
+    fn new() -> Self {
+        Self {
+            prover_state: Arc::new(Mutex::new(ProverState {
+                prover_status: Default::default(),
+            })),
+        }
+    }
+
+    fn insert(&self, hash: Hash, prover_state: ProverStatus<StateRoot, Witness, Da::Spec>) {
+        self.prover_state
+            .lock()
+            .unwrap()
+            .prover_status
+            .insert(hash, prover_state);
+    }
+
+    fn start_proving<Vm, V>(
+        &self,
+        block_header_hash: &Hash,
+        config: Arc<ProofGenConfig<V, Da, Vm>>,
+        mut vm: Vm,
+        zk_storage: V::PreState,
+    ) where
+        Vm: ZkvmHost + 'static,
+        V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync + 'static,
+        V::PreState: Send + Sync,
+    {
+        let prover_state = self
+            .prover_state
+            .lock()
+            .expect("Lock was poisoned")
+            .prover_status
+            .remove(block_header_hash)
+            .unwrap(); // TODO
+
+        match prover_state {
+            ProverStatus::WitnessSubmitted(state_tranistion_data) => {
+                vm.add_hint(state_tranistion_data);
+                rayon::spawn(move || {
+                    tracing::info_span!("guest_execution").in_scope(|| {
+                        let _proof = match config.deref() {
+                            ProofGenConfig::Simulate(verifier) => verifier
+                                .run_block(vm.simulate_with_hints(), zk_storage)
+                                .map_err(|e| {
+                                    anyhow::anyhow!(
+                                        "Guest execution must succeed but failed with {:?}",
+                                        e
+                                    )
+                                })
+                                .map(|_| ()),
+                            ProofGenConfig::Execute => {
+                                let _ = vm.run(false).unwrap();
+
+                                Ok(())
+                            }
+                            ProofGenConfig::Prover => {
+                                let _ = vm.run(true).unwrap();
+
+                                Ok(())
+                            }
+                        };
+                    })
+                });
+            }
+            ProverStatus::Proving => todo!(),
+            ProverStatus::Proved(_) => todo!(),
+            ProverStatus::Err(e) => todo!(),
+        }
+    }
 }
 
 /// TODO
@@ -37,9 +119,7 @@ where
     vm: Vm,
     prover_config: Option<Arc<ProofGenConfig<V, Da, Vm>>>,
     zk_storage: V::PreState,
-
-    #[allow(clippy::type_complexity)]
-    prover_state: Arc<Mutex<HashMap<Hash, ProverState<StateRoot, Witness, Da::Spec>>>>,
+    prover_state: Prover<StateRoot, Witness, Da>,
 }
 
 impl<StateRoot, Witness, Da, Vm, V> ParallelProver<StateRoot, Witness, Da, Vm, V>
@@ -75,7 +155,7 @@ where
         Self {
             vm,
             prover_config,
-            prover_state: Arc::new(Mutex::new(HashMap::new())),
+            prover_state: Prover::new(),
             zk_storage,
         }
     }
@@ -106,71 +186,18 @@ where
         >,
     ) {
         let header_hash = state_transition_data.da_block_header.hash().into();
-        let data = ProverState::WitnessSubmitted(state_transition_data);
-        self.prover_state
-            .lock()
-            .expect("Lock was poisoned")
-            .insert(header_hash, data);
+        let data = ProverStatus::WitnessSubmitted(state_transition_data);
+        self.prover_state.insert(header_hash, data);
     }
 
     async fn prove(&self, block_header_hash: Hash) -> Result<(), ProverServiceError> {
         if let Some(config) = self.prover_config.clone() {
-            let prover_state = self
-                .prover_state
-                .lock()
-                .expect("Lock was poisoned")
-                .remove(&block_header_hash)
-                .unwrap(); // TODO
+            let vm = self.vm.clone();
+            let zk_storage = self.zk_storage.clone();
 
-            match prover_state {
-                ProverState::WitnessSubmitted(transition_data) => {
-                    let config = config.clone();
-
-                    let mut vm = self.vm.clone();
-                    vm.add_hint(transition_data);
-
-                    let zk_storage = self.zk_storage.clone();
-
-                    start_proving::<Witness, StateRoot, _, _, _>(config, vm, zk_storage);
-                }
-                ProverState::Err(e) => return Err(e.into()),
-                _ => return Err(anyhow::anyhow!("").into()),
-            }
+            self.prover_state
+                .start_proving(&block_header_hash, config, vm, zk_storage);
         }
         Ok(())
     }
-}
-
-fn start_proving<Witness, StateRoot, Da, Vm, V>(
-    config: Arc<ProofGenConfig<V, Da, Vm>>,
-    mut vm: Vm,
-    zk_storage: V::PreState,
-) where
-    Witness: Serialize + DeserializeOwned + Send + Sync,
-    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync,
-    Da: DaService,
-    Vm: ZkvmHost + 'static,
-    V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync + 'static,
-    V::PreState: Send + Sync,
-{
-    rayon::spawn(move || {
-        tracing::info_span!("guest_execution").in_scope(|| {
-            let _proof = match config.deref() {
-                ProofGenConfig::Simulate(verifier) => verifier
-                    .run_block(vm.simulate_with_hints(), zk_storage)
-                    .map_err(|e| {
-                        anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)
-                    })
-                    .map(|_| ()),
-                ProofGenConfig::Execute => {
-                    let _ = vm.run(false).unwrap();
-                    Ok(())
-                }
-                ProofGenConfig::Prover => {
-                    let _ = vm.run(true).unwrap();
-                    Ok(())
-                }
-            };
-        })
-    });
 }
