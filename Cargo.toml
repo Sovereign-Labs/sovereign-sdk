@@ -98,7 +98,6 @@ jsonrpsee = { version = "0.20.1", features = ["jsonrpsee-types"] }
 schemars = { version = "0.8.16", features = ["derive"] }
 tempfile = "3.8"
 tokio = { version = "1", features = ["full"] }
-tokio-stream = { version = "0.1.14", features = ["full"] }
 lazy_static = "1.4.0"
 risc0-zkvm = { version = "0.18", default-features = false }
 risc0-zkvm-platform = { version = "0.18" }

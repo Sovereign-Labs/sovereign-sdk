@@ -20,7 +20,7 @@ hex = { workspace = true }
 sha2 = { workspace = true }
 tokio = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
-tokio-stream = { workspace = true, optional = true }
+tokio-stream = { version = "0.1.14", features = ["full"], optional = true }
 pin-project = { workspace = true, optional = true }
 tracing = { workspace = true }
 

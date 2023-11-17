@@ -64,10 +64,10 @@ impl DaProvider {
         let pair = Pair::from_string_with_seed(&config.seed, None).unwrap();
         let signer = PairSigner::<AvailConfig, Pair>::new(pair.0.clone());
 
-        let light_client_url = config.light_client_url;
         let node_client = avail_subxt::build_client(config.node_client_url.to_string(), false)
             .await
             .unwrap();
+        let light_client_url = config.light_client_url;
 
         DaProvider {
             node_client,
@@ -156,9 +156,10 @@ async fn wait_for_appdata(
     }
 }
 
-// copy from blocks_client
+/// Convincice copy from [`subxt::blocks::BlocksClient`]
 type BlockStream<T> = Pin<Box<dyn futures::Stream<Item = Result<T, subxt::Error>> + Send>>;
-/// TBD
+/// Wrapper Around [`subxt::blocks::BlocksClient::subscribe_finalized`]
+/// that maps Ok to [`AvailHeader`] and error to anyhow::Error
 #[pin_project]
 pub struct AvailBlockHeaderStream {
     #[pin]
@@ -249,34 +250,9 @@ impl DaService for DaProvider {
 
     async fn subscribe_finalized_header(&self) -> Result<Self::HeaderStream, Self::Error> {
         let block_stream = self.node_client.blocks().subscribe_finalized().await?;
-        let x = AvailBlockHeaderStream {
+        Ok(AvailBlockHeaderStream {
             inner: block_stream,
-        };
-        Ok(x)
-
-        // if let Some(header_sender) = &self.header_sender {
-        //     return Ok(header_sender.subscribe());
-        // }
-        //
-        // let (header_sender, header_receiver) = tokio::sync::broadcast::channel(10);
-        // let actual_header_sender = header_sender.clone();
-        // self.header_sender = Some(header_sender);
-        // let block_client = self.node_client.blocks();
-        // tokio::spawn(async move {
-        //     // TODO: retry on error
-        //     let mut block_stream = block_client.subscribe_finalized().await.unwrap();
-        //     while let Some(block_result) = block_stream.next().await {
-        //         match block_result {
-        //             Ok(block) => {
-        //                 actual_header_sender.send(block.into()).unwrap();
-        //             }
-        //             Err(err) => {
-        //                 tracing::error!("Error receiving finalized header: {:?}", err);
-        //             }
-        //         };
-        //     }
-        // });
-        // Ok(header_receiver)
+        })
     }
 
     async fn get_head_block_header(

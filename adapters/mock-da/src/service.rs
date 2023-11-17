@@ -20,8 +20,10 @@ use crate::{MockBlockHeader, MockHash};
 #[derive(Clone)]
 /// DaService used in tests.
 /// Currently only supports single blob per block.
-/// Finalized blocks are removed after being read, except last one
-/// Height of the first submitted block is 0
+/// Finalized blocks are removed after being read, except last one.
+/// Height of the first submitted block is 0.
+/// It can be used in multithreaded environment with single reader and multiple submitters
+/// Multiple consumers produce inconsistent results.
 pub struct MockDaService {
     sequencer_da_address: MockAddress,
     blocks: Arc<RwLock<VecDeque<MockBlock>>>,
@@ -57,7 +59,7 @@ impl MockDaService {
         }
     }
 
-    async fn wait_for_height(&self, height: u64) {
+    async fn wait_for_height(&self, height: u64) -> anyhow::Result<()> {
         // Waits for 100 seconds blob to be submitted
         for _ in 0..100_000 {
             {
@@ -68,12 +70,12 @@ impl MockDaService {
                     .iter()
                     .any(|b| b.header().height() == height)
                 {
-                    return;
+                    return Ok(());
                 }
             }
             time::sleep(Duration::from_millis(10)).await;
         }
-        panic!("No blob at {height} has been sent in time");
+        anyhow::bail!("No blob at {height} has been sent in time")
     }
 }
 
@@ -112,9 +114,13 @@ impl DaService for MockDaService {
     type HeaderStream = MockDaBlockHeaderStream;
     type Error = anyhow::Error;
 
+    /// Gets block at given height
+    /// If block is not available, waits until it is
+    /// It is possible to read non-finalized and last finalized blocks multiple times
+    /// Finalized blocks must be read in order.
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         // Block until there's something
-        self.wait_for_height(height).await;
+        self.wait_for_height(height).await?;
         // Locking blocks here, so submissions has to wait
         let mut blocks = self.blocks.write().await;
         let oldest_available_height = blocks[0].header.height;

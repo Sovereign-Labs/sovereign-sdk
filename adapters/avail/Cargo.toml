@@ -20,7 +20,7 @@ subxt = { version = "0.29", optional = true }
 avail-subxt = { git = "https://github.com/availproject/avail.git", tag = "v1.6.3", features = ["std"], optional = true }
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive", "full", "bit-vec"], optional = true }
 
-#Convenience
+# Convenience
 tokio = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 pin-project = { workspace = true, optional = true }
