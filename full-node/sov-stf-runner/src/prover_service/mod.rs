@@ -1,8 +1,8 @@
 mod blocking_prover;
-mod parallel_prover;
+mod parallel;
 use async_trait::async_trait;
 pub use blocking_prover::BlockingProver;
-pub use parallel_prover::ParallelProver;
+pub use parallel::ParallelProverService;
 use serde::Serialize;
 use sov_rollup_interface::services::da::DaService;
 use thiserror::Error;
