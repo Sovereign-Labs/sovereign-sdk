@@ -21,6 +21,10 @@ enum ProverState<StateRoot, Witness, Da: DaSpec> {
     Err(anyhow::Error),
 }
 
+struct ProverS<StateRoot, Witness, Da: DaSpec> {
+    prover_state: HashMap<Hash, ProverState<StateRoot, Witness, Da>>,
+}
+
 /// TODO
 pub struct ParallelProver<StateRoot, Witness, Da, Vm, V>
 where
@@ -35,7 +39,7 @@ where
     zk_storage: V::PreState,
 
     #[allow(clippy::type_complexity)]
-    prover_state: Mutex<HashMap<Hash, ProverState<StateRoot, Witness, Da::Spec>>>,
+    prover_state: Arc<Mutex<HashMap<Hash, ProverState<StateRoot, Witness, Da::Spec>>>>,
 }
 
 impl<StateRoot, Witness, Da, Vm, V> ParallelProver<StateRoot, Witness, Da, Vm, V>
@@ -71,7 +75,7 @@ where
         Self {
             vm,
             prover_config,
-            prover_state: Mutex::new(HashMap::new()),
+            prover_state: Arc::new(Mutex::new(HashMap::new())),
             zk_storage,
         }
     }
@@ -127,21 +131,23 @@ where
 
                     let zk_storage = self.zk_storage.clone();
 
-                    start_proving(config, vm, zk_storage);
+                    start_proving::<Witness, StateRoot, _, _, _>(config, vm, zk_storage);
                 }
                 ProverState::Err(e) => return Err(e.into()),
-                _ => return Err(anyhow::anyhow!("Proof was already send to the prover").into()),
+                _ => return Err(anyhow::anyhow!("").into()),
             }
         }
         Ok(())
     }
 }
 
-fn start_proving<Da, Vm, V>(
+fn start_proving<Witness, StateRoot, Da, Vm, V>(
     config: Arc<ProofGenConfig<V, Da, Vm>>,
     mut vm: Vm,
     zk_storage: V::PreState,
 ) where
+    Witness: Serialize + DeserializeOwned + Send + Sync,
+    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync,
     Da: DaService,
     Vm: ZkvmHost + 'static,
     V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync + 'static,
