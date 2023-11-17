@@ -2,9 +2,8 @@ mod helpers;
 
 use helpers::*;
 
-use sov_bank::{Bank, BankConfig, CallMessage, Coins, get_genesis_token_address};
-use sov_modules_api::{Address, Context, Error, Module, Spec, WorkingSet};
-use sov_modules_api::utils::generate_address;
+use sov_bank::{Bank, CallMessage, Coins, get_genesis_token_address};
+use sov_modules_api::{Address, Context, Module, WorkingSet};
 use sov_modules_api::default_context::DefaultContext;
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
 use sov_state::storage::NativeStorage;
@@ -69,6 +68,16 @@ fn transfer_initial_token() {
     let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(versioned_prover_storage.clone());
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(&bank, token_address, sender_address, receiver_address, &mut working_set);
     assert_eq!((sender_balance, receiver_balance), (100,100));
+    println!("Transfer on archival");
+    transfer(&bank, token_address, sender_address, receiver_address, &mut working_set);
+    println!("Archival query for modified working set");
+    let (sender_balance, receiver_balance) = query_sender_receiver_balances(&bank, token_address, sender_address, receiver_address, &mut working_set);
+    assert_eq!((sender_balance, receiver_balance), (90,110));
+
+    println!(" Move back from archival to current once again");
+    let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
+    let (sender_balance, receiver_balance) = query_sender_receiver_balances(&bank, token_address, sender_address, receiver_address, &mut working_set);
+    assert_eq!((sender_balance, receiver_balance), (80,120));
 
 }
 
@@ -120,7 +129,7 @@ fn commit(working_set: WorkingSet<DefaultContext>, storage: ProverStorage<Defaul
         .compute_state_update(cache_log, &witness)
         .expect("jellyfish merkle tree update must succeed");
 
-    let mut working_set = checkpoint.to_revertable();
+    let working_set = checkpoint.to_revertable();
 
     let accessory_log = working_set.checkpoint().freeze_non_provable();
 
