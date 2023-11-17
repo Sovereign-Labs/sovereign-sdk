@@ -8451,7 +8451,9 @@ dependencies = [
  "avail-subxt",
  "borsh",
  "bytes",
+ "futures",
  "parity-scale-codec",
+ "pin-project",
  "primitive-types",
  "reqwest",
  "serde",
@@ -8463,7 +8465,6 @@ dependencies = [
  "subxt",
  "thiserror",
  "tokio",
- "tokio-stream",
  "tracing",
  "tracing-subscriber 0.3.18",
 ]

@@ -59,7 +59,7 @@ impl DaSpec for RngDaSpec {
 pub struct RngHeaderStream;
 
 impl futures::Stream for RngHeaderStream {
-    type Item = <RngDaSpec as DaSpec>::BlockHeader;
+    type Item = anyhow::Result<<RngDaSpec as DaSpec>::BlockHeader>;
 
     fn poll_next(
         self: std::pin::Pin<&mut Self>,
