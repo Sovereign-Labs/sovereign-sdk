@@ -22,7 +22,7 @@ pub enum RollupProverConfig {
 ///
 pub enum ProofSubmissionStatus {
     ///
-    Sucess,
+    Success,
     ///
     ProvingInProgress,
     ///

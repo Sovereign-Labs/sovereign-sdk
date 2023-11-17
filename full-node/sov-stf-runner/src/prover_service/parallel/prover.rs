@@ -106,8 +106,6 @@ where
                 vm.add_hint(state_tranistion_data);
 
                 rayon::spawn(move || {
-                    let mut prover_state = prover_state_clone.lock().expect("Lock was poisoned");
-
                     tracing::info_span!("guest_execution").in_scope(|| {
                         let proof = match config.deref() {
                             ProofGenConfig::Simulate(verifier) => verifier
@@ -123,7 +121,10 @@ where
                             ProofGenConfig::Prover => vm.run(true),
                         };
 
-                        prover_state.set_to_proved(block_header_hash, proof);
+                        prover_state_clone
+                            .lock()
+                            .expect("Lock was poisoned")
+                            .set_to_proved(block_header_hash, proof);
                     })
                 });
 
@@ -144,7 +145,7 @@ where
 
         match status {
             Some(ProverStatus::Proving) => ProofSubmissionStatus::ProvingInProgress,
-            Some(ProverStatus::Proved(_)) => ProofSubmissionStatus::Sucess,
+            Some(ProverStatus::Proved(_)) => ProofSubmissionStatus::Success,
             Some(ProverStatus::WitnessSubmitted(_)) => {
                 ProofSubmissionStatus::Err(anyhow::anyhow!(""))
             }
