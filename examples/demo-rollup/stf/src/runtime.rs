@@ -42,12 +42,12 @@ use sov_chain_state::{ChainStateRpcImpl, ChainStateRpcServer};
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
 use sov_evm::{EvmRpcImpl, EvmRpcServer};
-use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
+use sov_modules_api::runtime::capabilities::{BlobRefOrOwned, BlobSelector};
 #[cfg(feature = "native")]
 use sov_modules_api::Spec;
 use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec};

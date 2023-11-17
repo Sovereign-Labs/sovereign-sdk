@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use sov_modules_api::capabilities::Kernel;
 use sov_modules_api::{
-    BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, StateCheckpoint,
+    runtime::capabilities::Kernel, BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall,
+    StateCheckpoint,
 };
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
 use tracing::{debug, error};

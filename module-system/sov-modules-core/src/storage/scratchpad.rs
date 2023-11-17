@@ -343,11 +343,10 @@ impl<C: Context> WorkingSet<C> {
     ///
     /// You can use this method when calling getters and setters on accessory
     /// state containers, like KernelStateMap.
-    pub fn versioned_state(&mut self, _context: &C) -> VersionedWorkingSet<C> {
+    pub fn versioned_state(&mut self, context: &C) -> VersionedWorkingSet<C> {
         VersionedWorkingSet {
             ws: self,
-            // TODO: this will be replaced with the current slot number once it's available in the `Context`
-            slot_num: 0,
+            slot_num: context.slot_height(),
         }
     }
 
@@ -464,18 +463,20 @@ impl<'a, C: Context> StateReaderAndWriter for AccessoryWorkingSet<'a, C> {
 
 /// Provides specialized working set wrappers for dealing with protected state.
 pub mod kernel_state {
+    use sov_rollup_interface::da::DaSpec;
+
+    use crate::capabilities::Kernel;
+
     use super::*;
 
     /// A wrapper over [`WorkingSet`] that allows access to kernel values
     pub struct VersionedWorkingSet<'a, C: Context> {
         pub(super) ws: &'a mut WorkingSet<C>,
-        // TODO: Make this member private once the slot number is available in the `Context`
-        /// The slot number
-        pub slot_num: u64,
+        pub(super) slot_num: u64,
     }
 
     impl<'a, C: Context> VersionedWorkingSet<'a, C> {
-        /// Returns the workign slot number
+        /// Returns the working slot number
         pub fn slot_num(&self) -> u64 {
             self.slot_num
         }
@@ -504,14 +505,39 @@ pub mod kernel_state {
         pub(super) virtual_slot_num: u64,
     }
 
+    // /// A sealed trait allowing kernels to manufacture [`KernelWorkingSet``]s
+    // #[allow(private_bounds)]
+    // pub trait KernelWorkingSetBuilder<C: Context, Da>: Sealed<C, Da> {
+    //     /// Create a new working set from the kernel
+    //     fn get_working_set<'a>(
+    //         &self,
+    //         ws: &'a mut WorkingSet<C>,
+    //         true_slot_num: u64,
+    //         virtual_slot_num: u64,
+    //     ) -> KernelWorkingSet<'a, C> {
+    //         KernelWorkingSet {
+    //             ws,
+    //             true_slot_num,
+    //             virtual_slot_num,
+    //         }
+    //     }
+    // }
+
+    // trait Sealed<C: Context, Da> {}
+    // impl<T: Kernel<C, Da>, C: Context, Da: DaSpec> Sealed<C, Da> for T {}
+
+    // impl<T: Kernel<C, Da>, C: Context, Da: DaSpec> KernelWorkingSetBuilder<C, Da> for T {}
+
     impl<'a, C: Context> KernelWorkingSet<'a, C> {
-        /// Creates a new KernelWorkingSet
-        // TODO: only allow creation of KernelWorkingSets during the kernel execution
-        pub fn new(ws: &'a mut WorkingSet<C>, true_slot_num: u64, virtual_slot_num: u64) -> Self {
+        /// Build a new kernel working set from the associated kernel
+        pub fn from_kernel<K: Kernel<C, Da>, Da: DaSpec>(
+            kernel: &K,
+            ws: &'a mut WorkingSet<C>,
+        ) -> Self {
             Self {
                 ws,
-                true_slot_num,
-                virtual_slot_num,
+                true_slot_num: kernel.true_height(),
+                virtual_slot_num: kernel.visible_height(),
             }
         }
 

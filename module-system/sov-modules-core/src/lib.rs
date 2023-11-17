@@ -9,8 +9,10 @@ compile_error!("The `sync` feature is not supported on this architecture.");
 
 pub mod common;
 pub mod module;
+pub mod runtime;
 pub mod storage;
 
 pub use common::*;
 pub use module::*;
+pub use runtime::*;
 pub use storage::*;

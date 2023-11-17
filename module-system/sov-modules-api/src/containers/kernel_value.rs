@@ -321,7 +321,10 @@ mod as_kernel_map {
 
 #[cfg(test)]
 mod tests {
-    use sov_modules_core::{Address, Context, KernelWorkingSet, Prefix, WorkingSet};
+    use sov_mock_da::MockDaSpec;
+    use sov_modules_core::{
+        capabilities::mocks::MockKernel, Address, Context, KernelWorkingSet, Prefix, WorkingSet,
+    };
     use sov_state::{DefaultStorageSpec, ProverStorage};
 
     use crate::{default_context::DefaultContext, KernelStateValue};
@@ -337,19 +340,23 @@ mod tests {
 
         // Initialize a value in the kernel state during slot 4
         {
-            let mut kernel_state = KernelWorkingSet::new(&mut working_set, 4, 1);
+            let kernel = MockKernel::<DefaultContext, MockDaSpec>::new(4, 1);
+            let mut kernel_state = KernelWorkingSet::from_kernel(&kernel, &mut working_set);
             value.set(&100, &mut kernel_state);
             assert_eq!(value.get(&mut kernel_state), Some(100));
         }
 
         {
-            let mut versioned_state =
-                working_set.versioned_state(&DefaultContext::new(Address::from([1; 32])));
-            // Try to read the value from user space with the slot number set to 1. Should fail.
-            versioned_state.slot_num = 1;
-            assert_eq!(value.get(&mut versioned_state), None);
+            {
+                let mut versioned_state =
+                    working_set.versioned_state(&DefaultContext::new(Address::from([1; 32]), 1));
+                // Try to read the value from user space with the slot number set to 1. Should fail.
+                assert_eq!(value.get(&mut versioned_state), None);
+            }
             // Try to read the value from user space with the slot number set to 4. Should succeed.
-            versioned_state.slot_num = 4;
+            let mut versioned_state =
+                working_set.versioned_state(&DefaultContext::new(Address::from([1; 32]), 4));
+            // Try to read the value from user space with the slot number set to 1. Should fail.
             assert_eq!(value.get(&mut versioned_state), Some(100));
         }
     }
@@ -362,24 +369,28 @@ mod tests {
 
         let prefix = Prefix::new(b"test".to_vec());
         let value = KernelStateValue::<u64>::new(prefix.clone());
+        let kernel = MockKernel::<DefaultContext, MockDaSpec>::new(4, 1);
 
         // Initialize a versioned value in the kernel state to be available starting at slot 2
         {
             use crate::StateMapAccessor;
-            let mut kernel_state = KernelWorkingSet::new(&mut working_set, 4, 1);
+            let mut kernel_state = KernelWorkingSet::from_kernel(&kernel, &mut working_set);
             value.set(&2, &100, &mut kernel_state);
             assert_eq!(value.get(&2, &mut kernel_state), Some(100));
         }
 
         {
             use crate::StateValueAccessor;
-            let mut versioned_state =
-                working_set.versioned_state(&DefaultContext::new(Address::from([1; 32])));
-            // Try to read the value from user space with the slot number set to 1. Should fail.
-            versioned_state.slot_num = 1;
-            assert_eq!(value.get(&mut versioned_state), None);
+            {
+                let mut versioned_state =
+                    working_set.versioned_state(&DefaultContext::new(Address::from([1; 32]), 1));
+                // Try to read the value from user space with the slot number set to 1. Should fail.
+                assert_eq!(value.get(&mut versioned_state), None);
+            }
             // Try to read the value from user space with the slot number set to 2. Should succeed.
-            versioned_state.slot_num = 2;
+            let mut versioned_state =
+                working_set.versioned_state(&DefaultContext::new(Address::from([1; 32]), 2));
+
             assert_eq!(value.get(&mut versioned_state), Some(100));
         }
     }

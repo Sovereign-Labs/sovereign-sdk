@@ -1,6 +1,5 @@
 #![doc = include_str!("../README.md")]
 
-pub mod capabilities;
 #[cfg(feature = "native")]
 pub mod cli;
 mod containers;
@@ -32,6 +31,7 @@ use std::collections::{HashMap, HashSet};
 #[cfg(feature = "native")]
 pub use clap;
 use serde::{Deserialize, Serialize};
+pub use sov_modules_core::runtime;
 #[cfg(feature = "native")]
 pub use sov_modules_core::PrivateKey;
 pub use sov_modules_core::{
