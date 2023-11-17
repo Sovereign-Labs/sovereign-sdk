@@ -34,7 +34,7 @@ pub trait BlobSelector<Da: DaSpec> {
         &self,
         current_blobs: I,
         working_set: &mut WorkingSet<Self::Context>,
-    ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, Da::BlobTransaction>>>
+    ) -> anyhow::Result<alloc::vec::Vec<BlobRefOrOwned<'a, Da::BlobTransaction>>>
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>;
 }
@@ -95,7 +95,7 @@ pub mod mocks {
         pub true_height: u64,
         /// The height at which transactions appear to be eecuting
         pub visible_height: u64,
-        phantom: std::marker::PhantomData<(C, Da)>,
+        phantom: core::marker::PhantomData<(C, Da)>,
     }
 
     impl<C, Da> Default for MockKernel<C, Da> {
@@ -114,7 +114,7 @@ pub mod mocks {
             Self {
                 true_height,
                 visible_height,
-                phantom: std::marker::PhantomData,
+                phantom: core::marker::PhantomData,
             }
         }
     }
@@ -135,7 +135,7 @@ pub mod mocks {
             &self,
             current_blobs: I,
             _working_set: &mut crate::WorkingSet<Self::Context>,
-        ) -> anyhow::Result<Vec<super::BlobRefOrOwned<'a, Da::BlobTransaction>>>
+        ) -> anyhow::Result<alloc::vec::Vec<super::BlobRefOrOwned<'a, Da::BlobTransaction>>>
         where
             I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
         {

@@ -503,29 +503,6 @@ pub mod kernel_state {
         pub(super) virtual_slot_num: u64,
     }
 
-    // /// A sealed trait allowing kernels to manufacture [`KernelWorkingSet``]s
-    // #[allow(private_bounds)]
-    // pub trait KernelWorkingSetBuilder<C: Context, Da>: Sealed<C, Da> {
-    //     /// Create a new working set from the kernel
-    //     fn get_working_set<'a>(
-    //         &self,
-    //         ws: &'a mut WorkingSet<C>,
-    //         true_slot_num: u64,
-    //         virtual_slot_num: u64,
-    //     ) -> KernelWorkingSet<'a, C> {
-    //         KernelWorkingSet {
-    //             ws,
-    //             true_slot_num,
-    //             virtual_slot_num,
-    //         }
-    //     }
-    // }
-
-    // trait Sealed<C: Context, Da> {}
-    // impl<T: Kernel<C, Da>, C: Context, Da: DaSpec> Sealed<C, Da> for T {}
-
-    // impl<T: Kernel<C, Da>, C: Context, Da: DaSpec> KernelWorkingSetBuilder<C, Da> for T {}
-
     impl<'a, C: Context> KernelWorkingSet<'a, C> {
         /// Build a new kernel working set from the associated kernel
         pub fn from_kernel<K: Kernel<C, Da>, Da: DaSpec>(
