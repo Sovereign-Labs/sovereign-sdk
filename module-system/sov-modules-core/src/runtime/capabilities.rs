@@ -85,9 +85,8 @@ pub mod mocks {
 
     use sov_rollup_interface::da::DaSpec;
 
-    use crate::Context;
-
     use super::{BlobRefOrOwned, BlobSelector, Kernel};
+    use crate::Context;
 
     /// A mock kernel for use in tests
     #[derive(Debug, Clone)]

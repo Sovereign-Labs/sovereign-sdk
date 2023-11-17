@@ -3,6 +3,7 @@
 use alloc::vec::Vec;
 use core::{fmt, mem};
 
+pub use kernel_state::{KernelWorkingSet, VersionedWorkingSet};
 use sov_rollup_interface::maybestd::collections::HashMap;
 use sov_rollup_interface::stf::Event;
 
@@ -12,8 +13,6 @@ use crate::storage::{
     CacheKey, CacheValue, EncodeKeyLike, NativeStorage, OrderedReadsAndWrites, StateCodec,
     StateValueCodec, Storage, StorageInternalCache, StorageKey, StorageProof, StorageValue,
 };
-
-pub use kernel_state::{KernelWorkingSet, VersionedWorkingSet};
 /// A storage reader and writer
 pub trait StateReaderAndWriter {
     /// Get a value from the storage.
@@ -465,9 +464,8 @@ impl<'a, C: Context> StateReaderAndWriter for AccessoryWorkingSet<'a, C> {
 pub mod kernel_state {
     use sov_rollup_interface::da::DaSpec;
 
-    use crate::capabilities::Kernel;
-
     use super::*;
+    use crate::capabilities::Kernel;
 
     /// A wrapper over [`WorkingSet`] that allows access to kernel values
     pub struct VersionedWorkingSet<'a, C: Context> {

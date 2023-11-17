@@ -127,9 +127,8 @@ mod as_user_value {
 }
 
 mod as_kernel_value {
-    use crate::StateValueAccessor;
-
     use super::*;
+    use crate::StateValueAccessor;
 
     impl<'a, V, Codec, C: Context> StateValueAccessor<V, Codec, KernelWorkingSet<'a, C>>
         for KernelStateValue<V, Codec>
@@ -322,12 +321,12 @@ mod as_kernel_map {
 #[cfg(test)]
 mod tests {
     use sov_mock_da::MockDaSpec;
-    use sov_modules_core::{
-        capabilities::mocks::MockKernel, Address, Context, KernelWorkingSet, Prefix, WorkingSet,
-    };
+    use sov_modules_core::capabilities::mocks::MockKernel;
+    use sov_modules_core::{Address, Context, KernelWorkingSet, Prefix, WorkingSet};
     use sov_state::{DefaultStorageSpec, ProverStorage};
 
-    use crate::{default_context::DefaultContext, KernelStateValue};
+    use crate::default_context::DefaultContext;
+    use crate::KernelStateValue;
     #[test]
     fn test_kernel_state_value_as_value() {
         use crate::StateValueAccessor;
