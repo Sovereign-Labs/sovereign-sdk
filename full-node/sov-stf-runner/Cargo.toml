@@ -41,6 +41,7 @@ sov-sequencer = { path = "../sov-sequencer" }
 
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
+sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
 
 [features]
 default = []

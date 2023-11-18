@@ -9112,6 +9112,7 @@ dependencies = [
  "sov-bank",
  "sov-celestia-adapter",
  "sov-db",
+ "sov-mock-da",
  "sov-modules-api",
  "sov-modules-stf-blueprint",
  "sov-rollup-interface",

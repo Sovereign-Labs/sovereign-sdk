@@ -14,22 +14,9 @@ use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::{Proof, ZkvmHost};
 
-trait ProofProducer {
-    fn make_proof<V, Vm, Da>(
-        vm: Vm,
-        config: Arc<ProofGenConfig<V, Da, Vm>>,
-        zk_storage: V::PreState,
-    ) -> Result<Proof, anyhow::Error>
-    where
-        Da: DaService,
-        Vm: ZkvmHost + 'static,
-        V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync + 'static,
-        V::PreState: Send + Sync + 'static;
-}
-
 struct ZkProofProducer {}
 
-impl ProofProducer for ZkProofProducer {
+impl ZkProofProducer {
     fn make_proof<V, Vm, Da>(
         mut vm: Vm,
         config: Arc<ProofGenConfig<V, Da, Vm>>,
@@ -115,7 +102,6 @@ where
     ) {
         let header_hash = state_transition_data.da_block_header.hash().into();
         let data = ProverStatus::WitnessSubmitted(state_transition_data);
-
         self.prover_state
             .lock()
             .unwrap()
@@ -181,5 +167,117 @@ where
             }
             None => ProofSubmissionStatus::Err(anyhow::anyhow!("")),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sov_mock_da::{MockDaConfig, MockDaService, MockDaSpec};
+    use sov_modules_api::Zkvm;
+
+    struct C {}
+
+    struct TestStf {}
+
+    impl StateTransitionFunction<TestVm, MockDaSpec> for TestStf {
+        type StateRoot = Vec<u8>;
+
+        type GenesisParams = ();
+
+        type PreState = ();
+
+        type ChangeSet = ();
+
+        type TxReceiptContents = ();
+
+        type BatchReceiptContents = ();
+
+        type Witness = ();
+
+        type Condition = ();
+
+        fn init_chain(
+            &self,
+            genesis_state: Self::PreState,
+            params: Self::GenesisParams,
+        ) -> (Self::StateRoot, Self::ChangeSet) {
+            todo!()
+        }
+
+        fn apply_slot<'a, I>(
+            &self,
+            pre_state_root: &Self::StateRoot,
+            pre_state: Self::PreState,
+            witness: Self::Witness,
+            slot_header: &<MockDaSpec as DaSpec>::BlockHeader,
+            validity_condition: &<MockDaSpec as DaSpec>::ValidityCondition,
+            blobs: I,
+        ) -> sov_rollup_interface::stf::SlotResult<
+            Self::StateRoot,
+            Self::ChangeSet,
+            Self::BatchReceiptContents,
+            Self::TxReceiptContents,
+            Self::Witness,
+        >
+        where
+            I: IntoIterator<Item = &'a mut <MockDaSpec as DaSpec>::BlobTransaction>,
+        {
+            todo!()
+        }
+    }
+
+    #[derive(Clone)]
+    struct TestVm {}
+
+    impl Zkvm for TestVm {
+        type CodeCommitment = Vec<u8>;
+
+        type Error = ();
+
+        fn verify<'a>(
+            serialized_proof: &'a [u8],
+            code_commitment: &Self::CodeCommitment,
+        ) -> Result<&'a [u8], Self::Error> {
+            todo!()
+        }
+
+        fn verify_and_extract_output<
+            Add: sov_rollup_interface::RollupAddress,
+            Da: DaSpec,
+            Root: Serialize + DeserializeOwned,
+        >(
+            serialized_proof: &[u8],
+            code_commitment: &Self::CodeCommitment,
+        ) -> Result<sov_modules_api::StateTransition<Da, Add, Root>, Self::Error> {
+            todo!()
+        }
+    }
+
+    impl ZkvmHost for TestVm {
+        type Guest;
+
+        fn add_hint<T: Serialize>(&mut self, item: T) {
+            todo!()
+        }
+
+        fn simulate_with_hints(&mut self) -> Self::Guest {
+            todo!()
+        }
+
+        fn run(&mut self, with_proof: bool) -> Result<Proof, anyhow::Error> {
+            todo!()
+        }
+    }
+
+    #[tokio::test]
+    async fn test_something_async() {
+        let prover = Prover::<Vec<u8>, Vec<u8>, MockDaService>::new();
+
+        let block_header_hash = [0; 32];
+        let test_vm = TestVm {};
+        let config = Arc::new(ProofGenConfig::Execute);
+
+        prover.start_proving(block_header_hash, config, test_vm, zk_storage);
     }
 }
