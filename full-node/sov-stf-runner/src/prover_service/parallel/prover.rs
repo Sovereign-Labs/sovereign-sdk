@@ -14,6 +14,46 @@ use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::{Proof, ZkvmHost};
 
+trait ProofProducer {
+    fn make_proof<V, Vm, Da>(
+        vm: Vm,
+        config: Arc<ProofGenConfig<V, Da, Vm>>,
+        zk_storage: V::PreState,
+    ) -> Result<Proof, anyhow::Error>
+    where
+        Da: DaService,
+        Vm: ZkvmHost + 'static,
+        V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync + 'static,
+        V::PreState: Send + Sync + 'static;
+}
+
+struct ZkProofProducer {}
+
+impl ProofProducer for ZkProofProducer {
+    fn make_proof<V, Vm, Da>(
+        mut vm: Vm,
+        config: Arc<ProofGenConfig<V, Da, Vm>>,
+        zk_storage: V::PreState,
+    ) -> Result<Proof, anyhow::Error>
+    where
+        Da: DaService,
+        Vm: ZkvmHost + 'static,
+        V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync + 'static,
+        V::PreState: Send + Sync + 'static,
+    {
+        match config.deref() {
+            ProofGenConfig::Simulate(verifier) => verifier
+                .run_block(vm.simulate_with_hints(), zk_storage)
+                .map(|_| Proof::Empty)
+                .map_err(|e| {
+                    anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)
+                }),
+            ProofGenConfig::Execute => vm.run(false),
+            ProofGenConfig::Prover => vm.run(true),
+        }
+    }
+}
+
 enum ProverStatus<StateRoot, Witness, Da: DaSpec> {
     WitnessSubmitted(StateTransitionData<StateRoot, Witness, Da>),
     Proving,
@@ -53,27 +93,6 @@ impl<StateRoot, Witness, Da: DaSpec> ProverState<StateRoot, Witness, Da> {
 
 pub(crate) struct Prover<StateRoot, Witness, Da: DaService> {
     prover_state: Arc<Mutex<ProverState<StateRoot, Witness, Da::Spec>>>,
-}
-
-fn proove<Da, Vm, V>(
-    mut vm: Vm,
-    config: Arc<ProofGenConfig<V, Da, Vm>>,
-    zk_storage: V::PreState,
-) -> Result<Proof, anyhow::Error>
-where
-    Da: DaService,
-    Vm: ZkvmHost + 'static,
-    V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync + 'static,
-    V::PreState: Send + Sync + 'static,
-{
-    match config.deref() {
-        ProofGenConfig::Simulate(verifier) => verifier
-            .run_block(vm.simulate_with_hints(), zk_storage)
-            .map(|_| Proof::Empty)
-            .map_err(|e| anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)),
-        ProofGenConfig::Execute => vm.run(false),
-        ProofGenConfig::Prover => vm.run(true),
-    }
 }
 
 impl<StateRoot, Witness, Da> Prover<StateRoot, Witness, Da>
@@ -128,7 +147,7 @@ where
 
                 rayon::spawn(move || {
                     tracing::info_span!("guest_execution").in_scope(|| {
-                        let proof = proove(vm, config, zk_storage);
+                        let proof = ZkProofProducer::make_proof(vm, config, zk_storage);
                         prover_state_clone
                             .lock()
                             .expect("Lock was poisoned")
