@@ -1,6 +1,6 @@
 use sov_modules_api::hooks::TxHooks;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Context, Spec, WorkingSet};
+use sov_modules_api::{Context, Spec, StateMapAccessor, WorkingSet};
 
 use crate::Accounts;
 

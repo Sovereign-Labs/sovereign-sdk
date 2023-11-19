@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use sov_modules_api::{Context, PublicKey, WorkingSet};
+use sov_modules_api::{Context, PublicKey, StateMapAccessor, WorkingSet};
 
 use crate::{Account, Accounts};
 

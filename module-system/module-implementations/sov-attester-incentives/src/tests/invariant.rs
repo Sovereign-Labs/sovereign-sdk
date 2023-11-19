@@ -1,5 +1,6 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::optimistic::Attestation;
+use sov_modules_api::prelude::*;
 use sov_modules_api::WorkingSet;
 use sov_state::ProverStorage;
 

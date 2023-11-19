@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use anyhow::Result;
+use sov_modules_api::prelude::*;
 use sov_modules_api::{CallResponse, WorkingSet};
 use thiserror::Error;
 

@@ -2,6 +2,7 @@ use reth_primitives::Bytes;
 #[cfg(test)]
 use revm::db::{CacheDB, EmptyDB};
 use revm::primitives::{Address, B256};
+use sov_modules_api::StateMapAccessor;
 
 use super::db::EvmDb;
 use super::{AccountInfo, DbAccount};

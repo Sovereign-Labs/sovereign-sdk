@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use sov_modules_api::WorkingSet;
+use sov_modules_api::{StateMapAccessor, WorkingSet};
 
 use crate::token::Token;
 use crate::Bank;

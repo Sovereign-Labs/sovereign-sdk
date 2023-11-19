@@ -6,12 +6,17 @@ mod map;
 mod value;
 mod vec;
 
+mod traits;
 pub use accessory_map::AccessoryStateMap;
 pub use accessory_value::AccessoryStateValue;
 pub use accessory_vec::AccessoryStateVec;
-pub use map::{StateMap, StateMapError};
+pub use map::StateMap;
+pub use traits::{
+    StateMapAccessor, StateMapError, StateValueAccessor, StateValueError, StateVecAccessor,
+    StateVecError,
+};
 pub use value::StateValue;
-pub use vec::{Error as StateVecError, StateVec};
+pub use vec::StateVec;
 
 #[cfg(test)]
 mod test {

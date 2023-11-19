@@ -1,6 +1,8 @@
 use sov_modules_api::{Context, ModuleInfo, StateMap, StateValue, WorkingSet};
 
 pub mod module_a {
+    use sov_modules_api::{StateMapAccessor, StateValueAccessor};
+
     use super::*;
 
     #[derive(ModuleInfo)]
@@ -26,6 +28,8 @@ pub mod module_a {
 }
 
 pub mod module_b {
+    use sov_modules_api::StateMapAccessor;
+
     use super::*;
 
     #[derive(ModuleInfo)]
