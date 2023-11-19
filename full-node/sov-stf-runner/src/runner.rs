@@ -201,6 +201,19 @@ where
                     .prove(header_hash)
                     .await
                     .expect("The proof creation should succeed");
+
+                loop {
+                    let status = self.prover_service.send_proof_to_da(header_hash).await;
+                    match status {
+                        crate::ProofSubmissionStatus::Success => {
+                            break;
+                        }
+                        crate::ProofSubmissionStatus::ProvingInProgress => {
+                            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await
+                        }
+                        crate::ProofSubmissionStatus::Err(e) => panic!("{:?}", e),
+                    }
+                }
             }
             let next_state_root = slot_result.state_root;
 
