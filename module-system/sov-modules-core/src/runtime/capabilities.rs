@@ -93,7 +93,7 @@ pub mod mocks {
     pub struct MockKernel<C, Da> {
         /// The current slot height
         pub true_height: u64,
-        /// The height at which transactions appear to be eecuting
+        /// The height at which transactions appear to be executing
         pub visible_height: u64,
         phantom: core::marker::PhantomData<(C, Da)>,
     }

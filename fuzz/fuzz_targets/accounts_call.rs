@@ -54,7 +54,7 @@ fuzz_target!(|input: (u16, [u8; 32], Vec<DefaultPrivateKey>)| -> Corpus {
     for i in 0..iterations {
         // we use slices for better select performance
         let sender = addresses.choose(rng).unwrap();
-        let context = C::new(*sender, i);
+        let context = C::new(*sender, i as u64);
 
         // clear previous state
         let previous = state.get(sender).unwrap().as_hex();

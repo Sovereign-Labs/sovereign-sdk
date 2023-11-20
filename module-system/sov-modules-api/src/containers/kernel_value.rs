@@ -13,7 +13,7 @@ use sov_state::codec::BorshCodec;
 /// (where access is mediated by a `KernelWorkingSet`), all versions of this value are accessible.
 ///
 /// Under the hood, a versioned value is implemented as a map from a slot number to a value. From the kernel, any
-/// value can be accessed using the `StateMapAcessor` trait with the slot number as the key. For convenience,
+/// value can be accessed using the `StateMapAccessor` trait with the slot number as the key. For convenience,
 /// the value can also be accessed using the `StateValueAccessor` trait, which will interact with the value for the current
 /// slot number.
 #[derive(

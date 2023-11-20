@@ -37,6 +37,8 @@ serde_json = { workspace = true }
 tempfile = { workspace = true }
 sov-state = { path = "../sov-state", features = ["native"] }
 sov-modules-api = { path = "../sov-modules-api", features = ["native"] }
+sov-mock-da =  { path = "../../adapters/mock-da", features = ["native"]}
+sov-modules-core = { path = ".", features = ["mocks"] }
 
 
 [features]
