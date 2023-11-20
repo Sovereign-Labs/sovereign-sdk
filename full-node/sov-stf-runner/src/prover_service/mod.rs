@@ -68,6 +68,6 @@ pub trait ProverService {
     /// Creates ZKP prove for a block corresponding to `block_header_hash`.
     async fn prove(&self, block_header_hash: Hash) -> Result<(), ProverServiceError>;
 
-    /// Sends the ZK proof to the DA.
+    /// Sends the ZK proof to the DA create by the `prove`.
     async fn send_proof_to_da(&self, block_header_hash: Hash) -> ProofSubmissionStatus;
 }
