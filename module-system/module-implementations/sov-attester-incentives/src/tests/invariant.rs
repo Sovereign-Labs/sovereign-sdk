@@ -1,7 +1,7 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::optimistic::Attestation;
 use sov_modules_api::prelude::*;
-use sov_modules_api::WorkingSet;
+use sov_modules_api::{Context, WorkingSet};
 use sov_state::ProverStorage;
 
 use crate::call::AttesterIncentiveErrors;
@@ -34,9 +34,7 @@ fn test_transition_invariant() {
     let (exec_vars, mut working_set) =
         execution_simulation(20, &module, &storage, attester_address, working_set);
 
-    let context = DefaultContext {
-        sender: attester_address,
-    };
+    let context = DefaultContext::new(attester_address, INIT_HEIGHT + 2);
 
     const NEW_LIGHT_CLIENT_FINALIZED_HEIGHT: u64 = DEFAULT_ROLLUP_FINALITY + INIT_HEIGHT + 1;
 

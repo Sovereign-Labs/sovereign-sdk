@@ -2,10 +2,10 @@ use sov_bank::TokenConfig;
 use sov_blob_storage::{BlobStorage, DEFERRED_SLOTS_COUNT};
 use sov_chain_state::ChainStateConfig;
 use sov_mock_da::{MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaSpec};
-use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::macros::DefaultRuntime;
+use sov_modules_api::runtime::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::{
     Address, BlobReaderTrait, Context, DaSpec, DispatchCall, MessageCodec, Module, Spec, WorkingSet,
 };
@@ -164,7 +164,11 @@ fn do_deferred_blob_test(
                 if let Some((msg, sender)) = next_slot_info.early_processing_request_with_sender {
                     runtime
                         .blob_storage
-                        .call(msg, &DefaultContext::new(sender), &mut working_set)
+                        .call(
+                            msg,
+                            &DefaultContext::new(sender, slot_number),
+                            &mut working_set,
+                        )
                         .unwrap();
                     has_processed_blobs_early = true;
                 }
@@ -678,7 +682,7 @@ impl TestRuntime<DefaultContext, MockDaSpec> {
             .sequencer_registry
             .call(
                 register_message,
-                &C::new(REGULAR_SEQUENCER_ROLLUP),
+                &C::new(REGULAR_SEQUENCER_ROLLUP, 1),
                 &mut working_set,
             )
             .unwrap();

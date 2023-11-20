@@ -315,12 +315,7 @@ where
 
         // Mint tokens and send them
         self.bank
-            .mint_from_eoa(
-                &coins,
-                context.sender(),
-                &C::new(reward_address),
-                working_set,
-            )
+            .mint(&coins, context.sender(), &reward_address, working_set)
             .map_err(|_err| AttesterIncentiveErrors::MintFailure)?;
 
         Ok(CallResponse::default())

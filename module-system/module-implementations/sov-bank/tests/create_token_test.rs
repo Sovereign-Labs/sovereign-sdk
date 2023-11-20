@@ -16,7 +16,7 @@ fn initial_and_deployed_token() {
     bank.genesis(&bank_config, &mut working_set).unwrap();
 
     let sender_address = generate_address::<C>("sender");
-    let sender_context = C::new(sender_address);
+    let sender_context = C::new(sender_address, 1);
     let minter_address = generate_address::<C>("minter");
     let initial_balance = 500;
     let token_name = "Token1".to_owned();

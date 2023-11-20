@@ -6,8 +6,8 @@ mod stf_blueprint;
 mod tx_verifier;
 
 pub use batch::Batch;
-use sov_modules_api::capabilities::Kernel;
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
+use sov_modules_api::runtime::capabilities::Kernel;
 use sov_modules_api::{
     BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, Spec, StateCheckpoint,
     Zkvm,

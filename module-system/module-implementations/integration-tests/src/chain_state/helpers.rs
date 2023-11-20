@@ -1,7 +1,7 @@
 use sov_chain_state::{ChainState, ChainStateConfig};
-use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::macros::DefaultRuntime;
+use sov_modules_api::runtime::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{
     AccessoryWorkingSet, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, MessageCodec,

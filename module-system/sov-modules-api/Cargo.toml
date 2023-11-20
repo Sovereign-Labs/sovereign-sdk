@@ -43,6 +43,8 @@ risc0-zkvm-platform = { workspace = true, optional = true }
 [dev-dependencies]
 bincode = { workspace = true }
 sov-modules-api = { path = ".", features = ["native"] }
+sov-modules-core = { path = "../sov-modules-core", features = ["mocks"] }
+sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
 sov-bank = { path = "../module-implementations/sov-bank", features = ["native"] }
 sov-db = { path = "../../full-node/db/sov-db" }
 tempfile = { workspace = true }
