@@ -35,6 +35,12 @@ impl<T> ReadOnlyLock<T> {
     }
 }
 
+impl<T> From<Arc<RwLock<T>>> for ReadOnlyLock<T> {
+    fn from(value: Arc<RwLock<T>>) -> Self {
+        Self::new(value)
+    }
+}
+
 /// Wrapper around [`QueryManager`] that allows to read from snapshots
 pub struct DbSnapshot<Q> {
     id: SnapshotId,
@@ -142,5 +148,18 @@ fn decode_operation<S: Schema>(operation: &Operation) -> anyhow::Result<Option<S
             Ok(Some(value))
         }
         Operation::Delete => Ok(None),
+    }
+}
+
+/// QueryManager, which never returns any values
+pub struct NoopQueryManager;
+
+impl QueryManager for NoopQueryManager {
+    fn get<S: Schema>(
+        &self,
+        _snapshot_id: SnapshotId,
+        _key: &impl KeyCodec<S>,
+    ) -> anyhow::Result<Option<S::Value>> {
+        Ok(None)
     }
 }
