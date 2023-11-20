@@ -104,7 +104,7 @@ where
         match prover_status {
             ProverStatus::WitnessSubmitted(state_transition_data) => {
                 prover_state.set_to_proving(block_header_hash);
-                vm.add_hint(state_tranistion_data);
+                vm.add_hint(state_transition_data);
 
                 rayon::spawn(move || {
                     tracing::info_span!("guest_execution").in_scope(|| {
@@ -168,6 +168,7 @@ where
     V::PreState: Send + Sync + 'static,
 {
     match config.deref() {
+        ProofGenConfig::Skip => Ok(Proof::Empty),
         ProofGenConfig::Simulate(verifier) => verifier
             .run_block(vm.simulate_with_hints(), zk_storage)
             .map(|_| Proof::Empty)

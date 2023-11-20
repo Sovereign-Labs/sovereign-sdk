@@ -11,6 +11,8 @@ pub(crate) type Hash = [u8; 32];
 
 /// The possible configurations of the prover.
 pub enum RollupProverConfig {
+    /// Skip proving.
+    Skip,
     /// Run the rollup verification logic inside the current process
     Simulate,
     /// Run the rollup verifier in a zkVM executor

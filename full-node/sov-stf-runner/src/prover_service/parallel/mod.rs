@@ -23,7 +23,7 @@ where
     V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync,
 {
     vm: Vm,
-    prover_config: Option<Arc<ProofGenConfig<V, Da, Vm>>>,
+    prover_config: Arc<ProofGenConfig<V, Da, Vm>>,
     zk_storage: V::PreState,
     prover_state: Prover<StateRoot, Witness, Da>,
 }
@@ -42,21 +42,20 @@ where
         vm: Vm,
         zk_stf: V,
         da_verifier: Da::Verifier,
-        config: Option<RollupProverConfig>,
+        config: RollupProverConfig,
         zk_storage: V::PreState,
     ) -> Self {
-        let prover_config = config.map(|config| {
-            let stf_verifier =
-                StateTransitionVerifier::<V, Da::Verifier, Vm::Guest>::new(zk_stf, da_verifier);
+        let stf_verifier =
+            StateTransitionVerifier::<V, Da::Verifier, Vm::Guest>::new(zk_stf, da_verifier);
 
-            let config: ProofGenConfig<V, Da, Vm> = match config {
-                RollupProverConfig::Simulate => ProofGenConfig::Simulate(stf_verifier),
-                RollupProverConfig::Execute => ProofGenConfig::Execute,
-                RollupProverConfig::Prove => ProofGenConfig::Prover,
-            };
+        let config: ProofGenConfig<V, Da, Vm> = match config {
+            RollupProverConfig::Skip => ProofGenConfig::Skip,
+            RollupProverConfig::Simulate => ProofGenConfig::Simulate(stf_verifier),
+            RollupProverConfig::Execute => ProofGenConfig::Execute,
+            RollupProverConfig::Prove => ProofGenConfig::Prover,
+        };
 
-            Arc::new(config)
-        });
+        let prover_config = Arc::new(config);
 
         Self {
             vm,
@@ -96,22 +95,21 @@ where
     }
 
     async fn prove(&self, block_header_hash: Hash) -> Result<(), ProverServiceError> {
-        if let Some(config) = self.prover_config.clone() {
-            let vm = self.vm.clone();
-            let zk_storage = self.zk_storage.clone();
+        let vm = self.vm.clone();
+        let zk_storage = self.zk_storage.clone();
 
-            self.prover_state
-                .start_proving(block_header_hash, config, vm, zk_storage)?;
-        }
+        self.prover_state.start_proving(
+            block_header_hash,
+            self.prover_config.clone(),
+            vm,
+            zk_storage,
+        )?;
+
         Ok(())
     }
 
     async fn send_proof_to_da(&self, block_header_hash: Hash) -> ProofSubmissionStatus {
-        if self.prover_config.is_some() {
-            self.prover_state
-                .get_proof_submission_status_and_remove_on_success(block_header_hash)
-        } else {
-            ProofSubmissionStatus::Success
-        }
+        self.prover_state
+            .get_proof_submission_status_and_remove_on_success(block_header_hash)
     }
 }

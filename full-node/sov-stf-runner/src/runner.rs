@@ -39,6 +39,8 @@ pub enum ProofGenConfig<Stf, Da: DaService, Vm: ZkvmHost>
 where
     Stf: StateTransitionFunction<Vm::Guest, Da::Spec>,
 {
+    /// Skips proving.
+    Skip,
     /// The simulator runs the rollup verifier logic without even emulating the zkVM
     Simulate(StateTransitionVerifier<Stf, Da::Verifier, Vm::Guest>),
     /// The executor runs the rollup verification logic in the zkVM, but does not actually

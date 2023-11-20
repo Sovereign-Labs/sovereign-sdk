@@ -99,7 +99,7 @@ impl RollupBlueprint for CelestiaDemoRollup {
 
     async fn create_prover_service(
         &self,
-        prover_config: Option<RollupProverConfig>,
+        prover_config: RollupProverConfig,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
         let vm = Risc0Host::new(risc0::ROLLUP_ELF);

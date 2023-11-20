@@ -91,7 +91,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
     /// Creates instance of [`ProverService`].
     async fn create_prover_service(
         &self,
-        prover_config: Option<RollupProverConfig>,
+        prover_config: RollupProverConfig,
         da_service: &Self::DaService,
     ) -> Self::ProverService;
 
@@ -112,7 +112,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
         &self,
         genesis_paths: &<Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisPaths,
         rollup_config: RollupConfig<Self::DaConfig>,
-        prover_config: Option<RollupProverConfig>,
+        prover_config: RollupProverConfig,
     ) -> Result<Rollup<Self>, anyhow::Error>
     where
         <Self::NativeContext as Spec>::Storage: NativeStorage,
