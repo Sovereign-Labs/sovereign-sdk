@@ -2,7 +2,7 @@ mod accessory_map;
 mod accessory_value;
 mod accessory_vec;
 
-mod kernel_value;
+mod versioned_value;
 
 mod map;
 mod value;
@@ -12,7 +12,6 @@ mod traits;
 pub use accessory_map::AccessoryStateMap;
 pub use accessory_value::AccessoryStateValue;
 pub use accessory_vec::AccessoryStateVec;
-pub use kernel_value::VersionedStateValue;
 pub use map::StateMap;
 pub use traits::{
     StateMapAccessor, StateMapError, StateValueAccessor, StateValueError, StateVecAccessor,
@@ -20,6 +19,7 @@ pub use traits::{
 };
 pub use value::StateValue;
 pub use vec::StateVec;
+pub use versioned_value::VersionedStateValue;
 
 #[cfg(test)]
 mod test {
