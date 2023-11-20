@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::ops::Deref;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -50,7 +50,7 @@ impl<StateRoot, Witness, Da: DaSpec> ProverState<StateRoot, Witness, Da> {
 }
 
 pub(crate) struct Prover<StateRoot, Witness, Da: DaService> {
-    prover_state: Arc<Mutex<ProverState<StateRoot, Witness, Da::Spec>>>,
+    prover_state: Arc<RwLock<ProverState<StateRoot, Witness, Da::Spec>>>,
 }
 
 impl<StateRoot, Witness, Da> Prover<StateRoot, Witness, Da>
@@ -61,7 +61,7 @@ where
 {
     pub(crate) fn new() -> Self {
         Self {
-            prover_state: Arc::new(Mutex::new(ProverState {
+            prover_state: Arc::new(RwLock::new(ProverState {
                 prover_status: Default::default(),
             })),
         }
@@ -75,7 +75,7 @@ where
         let data = ProverStatus::WitnessSubmitted(state_transition_data);
 
         self.prover_state
-            .lock()
+            .write()
             .expect("Lock was poisoned")
             .prover_status
             .insert(header_hash, data);
@@ -95,7 +95,7 @@ where
     {
         let prover_state_clone = self.prover_state.clone();
 
-        let mut prover_state = self.prover_state.lock().expect("Lock was poisoned");
+        let mut prover_state = self.prover_state.write().expect("Lock was poisoned");
 
         let prover_status = prover_state
             .remove(&block_header_hash)
@@ -110,7 +110,7 @@ where
                     tracing::info_span!("guest_execution").in_scope(|| {
                         let proof = make_proof(vm, config, zk_storage);
                         prover_state_clone
-                            .lock()
+                            .write()
                             .expect("Lock was poisoned")
                             .set_to_proved(block_header_hash, proof);
                     })
@@ -132,7 +132,7 @@ where
         &self,
         block_header_hash: Hash,
     ) -> ProofSubmissionStatus {
-        let mut prover_state = self.prover_state.lock().unwrap();
+        let mut prover_state = self.prover_state.write().unwrap();
         let status = prover_state.get_prover_status(block_header_hash);
 
         match status {
