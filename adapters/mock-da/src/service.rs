@@ -32,6 +32,7 @@ pub struct MockDaService {
     /// Used for calculating correct finality from state of `blocks`
     last_finalized_height: Arc<AtomicU64>,
     finalized_header_sender: broadcast::Sender<MockBlockHeader>,
+    wait_attempts: usize,
 }
 
 impl MockDaService {
@@ -56,12 +57,13 @@ impl MockDaService {
             blocks_to_finality,
             last_finalized_height: Arc::new(AtomicU64::new(0)),
             finalized_header_sender: tx,
+            wait_attempts: 100_0000,
         }
     }
 
     async fn wait_for_height(&self, height: u64) -> anyhow::Result<()> {
-        // Waits for 100 seconds blob to be submitted
-        for _ in 0..100_000 {
+        // Waits self.wait_attempts * 10ms to get finalized header
+        for _ in 0..self.wait_attempts {
             {
                 if self
                     .blocks
@@ -75,7 +77,7 @@ impl MockDaService {
             }
             time::sleep(Duration::from_millis(10)).await;
         }
-        anyhow::bail!("No blob at {height} has been sent in time")
+        anyhow::bail!("No blob at height={height} has been sent in time")
     }
 }
 
@@ -156,14 +158,22 @@ impl DaService for MockDaService {
     async fn get_last_finalized_block_header(
         &self,
     ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
-        let blocks = self.blocks.read().await;
-        if blocks.len() < self.blocks_to_finality as usize + 1 {
-            anyhow::bail!("MockChain hasn't progressed enough to finalize");
+        let (blocks_len, oldest_available_height) = {
+            let blocks = self.blocks.read().await;
+            let blocks_len = blocks.len();
+            let oldest_available_height = blocks.get(0).map(|b| b.header().height()).unwrap_or(0);
+            (blocks_len, oldest_available_height)
+        };
+        let last_finalized_height = self.last_finalized_height.load(Ordering::Acquire);
+        if blocks_len < self.blocks_to_finality as usize + 1 {
+            let earliest_finalized_height = oldest_available_height
+                .checked_add(self.blocks_to_finality as u64)
+                .unwrap_or(0);
+            self.wait_for_height(earliest_finalized_height).await?;
         }
 
+        let blocks = self.blocks.read().await;
         let oldest_available_height = blocks[0].header().height();
-        let last_finalized_height = self.last_finalized_height.load(Ordering::Acquire);
-
         let index = last_finalized_height
             .checked_sub(oldest_available_height)
             .expect("Inconsistent MockDa");
@@ -284,12 +294,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty() {
-        let da = MockDaService::new(MockAddress::new([1; 32]));
+        let mut da = MockDaService::new(MockAddress::new([1; 32]));
+        da.wait_attempts = 10;
 
         let last_finalized_block_response = da.get_last_finalized_block_header().await;
         assert!(last_finalized_block_response.is_err());
         assert_eq!(
-            "MockChain hasn't progressed enough to finalize",
+            "No blob at height=0 has been sent in time",
             last_finalized_block_response.err().unwrap().to_string()
         );
         let head_block_header_response = da.get_head_block_header().await;
@@ -307,10 +318,10 @@ mod tests {
         let mut receiver: MockDaBlockHeaderStream = da.subscribe_finalized_header().await.unwrap();
         // All finalized headers should be pushed by that time
         // This prevents test for freezing in case of a bug
-        let timeout_duration = Duration::from_millis(10);
-
+        // But we need to wait longer, as `MockDa
+        let timeout_duration = Duration::from_millis(1000);
         tokio::spawn(async move {
-            let mut received = Vec::with_capacity(10);
+            let mut received = Vec::with_capacity(expected_num_headers);
             for _ in 0..expected_num_headers {
                 match time::timeout(timeout_duration, receiver.next()).await {
                     Ok(Some(Ok(header))) => received.push(header),
@@ -331,15 +342,17 @@ mod tests {
             assert_eq!(expected_finalized_height, response.unwrap().height());
         } else {
             assert!(response.is_err());
-            assert_eq!(
-                "MockChain hasn't progressed enough to finalize",
-                response.err().unwrap().to_string()
-            );
+            assert!(response
+                .err()
+                .unwrap()
+                .to_string()
+                .starts_with("No blob at height="));
         }
     }
 
     async fn test_push_and_read(finalization: u64, num_blocks: usize) {
         let mut da = MockDaService::with_finality(MockAddress::new([1; 32]), finalization as u32);
+        da.wait_attempts = 2;
         let number_of_finalized_blocks = num_blocks - finalization as usize;
         let collector_handle =
             get_finalized_headers_collector(&mut da, number_of_finalized_blocks).await;
@@ -370,6 +383,7 @@ mod tests {
 
     async fn test_push_many_then_read(finalization: u64, num_blocks: usize) {
         let mut da = MockDaService::with_finality(MockAddress::new([1; 32]), finalization as u32);
+        da.wait_attempts = 2;
         let number_of_finalized_blocks = num_blocks - finalization as usize;
         let collector_handle =
             get_finalized_headers_collector(&mut da, number_of_finalized_blocks).await;

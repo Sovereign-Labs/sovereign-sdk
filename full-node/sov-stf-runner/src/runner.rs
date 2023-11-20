@@ -148,7 +148,7 @@ where
             loop {
                 match self.da_service.get_last_finalized_block_header().await {
                     Ok(header) => {
-                        tracing::debug!("Last finalized height={}", header.height());
+                        tracing::trace!("Last finalized height={}", header.height());
                         if header.height() >= height {
                             break;
                         }
