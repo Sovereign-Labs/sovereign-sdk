@@ -1023,6 +1023,7 @@ dependencies = [
  "serde",
  "sha2",
  "sov-rollup-interface",
+ "tracing",
 ]
 
 [[package]]

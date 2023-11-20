@@ -1,3 +1,6 @@
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
 use async_trait::async_trait;
 use celestia_rpc::prelude::*;
 use celestia_types::blob::{Blob as JsonBlob, Commitment, SubmitOptions};
@@ -5,7 +8,10 @@ use celestia_types::consts::appconsts::{
     CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE, SHARE_SIZE,
 };
 use celestia_types::nmt::Namespace;
+use celestia_types::ExtendedHeader;
+use jsonrpsee::core::client::Subscription;
 use jsonrpsee::http_client::{HeaderMap, HttpClient};
+use pin_project::pin_project;
 use sov_rollup_interface::da::CountedBufReader;
 use sov_rollup_interface::services::da::DaService;
 use tracing::{debug, info, instrument, trace};
@@ -15,7 +21,7 @@ use crate::types::FilteredCelestiaBlock;
 use crate::utils::BoxError;
 use crate::verifier::proofs::{CompletenessProof, CorrectnessProof};
 use crate::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams, PFB_NAMESPACE};
-use crate::BlobWithSender;
+use crate::{BlobWithSender, CelestiaHeader};
 
 // Approximate value, just to make it work.
 const GAS_PER_BYTE: usize = 20;
@@ -89,6 +95,38 @@ impl CelestiaService {
     }
 }
 
+/// A Wrapper around [`Subscription`] that converts [`ExtendedHeader`] to [`CelestiaHeader`]
+/// and converts [`Error`] to [`BoxError`]
+#[pin_project]
+pub struct CelestiaBlockHeaderSubscription {
+    #[pin]
+    inner: Subscription<ExtendedHeader>,
+}
+
+impl CelestiaBlockHeaderSubscription {
+    /// Create a new [`CelestiaBlockHeaderSubscription`] from [`Subscription`]
+    pub fn new(inner: Subscription<ExtendedHeader>) -> Self {
+        Self { inner }
+    }
+}
+
+impl futures::Stream for CelestiaBlockHeaderSubscription {
+    type Item = Result<CelestiaHeader, BoxError>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        let poll_result = this.inner.poll_next(cx);
+        Poll::Ready(match poll_result {
+            Poll::Ready(Some(Ok(extended_header))) => {
+                Some(Ok(CelestiaHeader::from(extended_header)))
+            }
+            Poll::Ready(Some(Err(e))) => Some(Err(e.into())),
+            Poll::Ready(None) => None,
+            Poll::Pending => return Poll::Pending,
+        })
+    }
+}
+
 #[async_trait]
 impl DaService for CelestiaService {
     type Spec = CelestiaSpec;
@@ -96,11 +134,12 @@ impl DaService for CelestiaService {
     type Verifier = CelestiaVerifier;
 
     type FilteredBlock = FilteredCelestiaBlock;
+    type HeaderStream = CelestiaBlockHeaderSubscription;
 
     type Error = BoxError;
 
     #[instrument(skip(self), err)]
-    async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
+    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let client = self.client.clone();
         let rollup_namespace = self.rollup_namespace;
 
@@ -127,8 +166,25 @@ impl DaService for CelestiaService {
         )
     }
 
-    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        self.get_finalized_at(height).await
+    async fn get_last_finalized_block_header(
+        &self,
+    ) -> Result<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlockHeader, Self::Error> {
+        // Tendermint has instant finality, so head block is the one that finalized
+        // and network is always guaranteed to be secure,
+        // it can work even if the node is still catching up
+        self.get_head_block_header().await
+    }
+
+    async fn subscribe_finalized_header(&self) -> Result<Self::HeaderStream, Self::Error> {
+        let subscription = self.client.header_subscribe().await?;
+        Ok(CelestiaBlockHeaderSubscription::new(subscription))
+    }
+
+    async fn get_head_block_header(
+        &self,
+    ) -> Result<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlockHeader, Self::Error> {
+        let header = self.client.header_network_head().await?;
+        Ok(CelestiaHeader::from(header))
     }
 
     fn extract_relevant_blobs(

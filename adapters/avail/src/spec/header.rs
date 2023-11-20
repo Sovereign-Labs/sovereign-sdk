@@ -63,3 +63,22 @@ impl BlockHeaderTrait for AvailHeader {
         )
     }
 }
+
+#[cfg(feature = "native")]
+impl
+    From<
+        subxt::blocks::Block<
+            avail_subxt::AvailConfig,
+            subxt::OnlineClient<avail_subxt::AvailConfig>,
+        >,
+    > for AvailHeader
+{
+    fn from(
+        block: subxt::blocks::Block<
+            avail_subxt::AvailConfig,
+            subxt::OnlineClient<avail_subxt::AvailConfig>,
+        >,
+    ) -> Self {
+        AvailHeader::new(block.header().clone(), block.hash())
+    }
+}

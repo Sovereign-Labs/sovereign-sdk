@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::time::Duration;
 
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
@@ -146,7 +147,26 @@ where
         for height in self.start_height.. {
             debug!("Requesting data for height {}", height,);
 
-            let filtered_block = self.da_service.get_finalized_at(height).await?;
+            loop {
+                match self.da_service.get_last_finalized_block_header().await {
+                    Ok(header) => {
+                        tracing::trace!("Last finalized height={}", header.height());
+                        if header.height() >= height {
+                            break;
+                        }
+                    }
+                    Err(err) => {
+                        tracing::info!("Error receiving last finalized block header: {:?}", err);
+                    }
+                }
+
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            // At this point we sure that the block request is finalized
+
+            // Assumes we are on chains with instant finality
+            let filtered_block = self.da_service.get_block_at(height).await?;
+
             let mut blobs = self.da_service.extract_relevant_blobs(&filtered_block);
 
             info!(
