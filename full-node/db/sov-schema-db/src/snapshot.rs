@@ -10,7 +10,8 @@ pub type SnapshotId = u64;
 
 /// A trait to make nested calls to several [`SchemaBatch`]s and eventually [`crate::DB`]
 pub trait QueryManager {
-    /// Get a value from snapshot or its parents
+    /// Get a value from parents of given [`SnapshotId`]
+    /// In case of unknown [`SnapshotId`] return `Ok(None)`
     fn get<S: Schema>(
         &self,
         snapshot_id: SnapshotId,

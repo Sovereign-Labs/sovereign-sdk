@@ -65,7 +65,7 @@ impl QueryManager for SnapshotManager {
             let parent_snapshot = self
                 .snapshots
                 .get(parent_snapshot_id)
-                .expect("Inconsistent snapshots tree");
+                .expect("Inconsistency between snapshots and to_parent");
 
             // Some operation has been found
             if let Some(operation) = parent_snapshot.get(key)? {
@@ -88,10 +88,13 @@ mod tests {
     use std::sync::{Arc, RwLock};
 
     use sov_db::rocks_db_config::gen_rocksdb_options;
-    use sov_schema_db::snapshot::{DbSnapshot, NoopQueryManager};
+    use sov_schema_db::snapshot::{DbSnapshot, NoopQueryManager, QueryManager};
+    use sov_schema_db::SchemaBatch;
 
-    use crate::dummy_storage::DUMMY_STATE_CF;
+    use crate::dummy_storage::{DummyField, DummyStateSchema, DUMMY_STATE_CF};
     use crate::snapshot_manager::SnapshotManager;
+
+    type Schema = DummyStateSchema;
 
     fn create_test_db(path: &std::path::Path) -> sov_schema_db::DB {
         let tables = vec![DUMMY_STATE_CF.to_string()];
@@ -189,7 +192,51 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "TBD"]
+    fn test_query_unknown_snapshot_id() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db = create_test_db(tempdir.path());
+        let to_parent = Arc::new(RwLock::new(HashMap::new()));
+        let snapshot_manager = SnapshotManager::new(db, to_parent.clone());
+        assert_eq!(
+            None,
+            snapshot_manager.get::<Schema>(1, &DummyField(1)).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_query_genesis_snapshot() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db = create_test_db(tempdir.path());
+        let to_parent = Arc::new(RwLock::new(HashMap::new()));
+
+        let one = DummyField(1);
+        let two = DummyField(2);
+        let three = DummyField(3);
+
+        let mut db_data = SchemaBatch::new();
+        db_data.put::<Schema>(&one, &one).unwrap();
+        db_data.put::<Schema>(&three, &three).unwrap();
+        db.write_schemas(db_data).unwrap();
+
+        let mut snapshot_manager = SnapshotManager::new(db, to_parent.clone());
+        let query_manager = Arc::new(RwLock::new(NoopQueryManager));
+
+        let db_snapshot = DbSnapshot::new(1, query_manager.clone().into());
+        db_snapshot.put::<Schema>(&two, &two).unwrap();
+        db_snapshot.delete::<Schema>(&three).unwrap();
+
+        snapshot_manager.add_snapshot(db_snapshot.into());
+
+        // Effectively querying database:
+        assert_eq!(Some(one), snapshot_manager.get::<Schema>(1, &one).unwrap());
+        assert_eq!(None, snapshot_manager.get::<Schema>(1, &two).unwrap());
+        assert_eq!(
+            Some(three),
+            snapshot_manager.get::<Schema>(1, &three).unwrap()
+        );
+    }
+
+    #[test]
     fn test_query_lifecycle() {
         let tempdir = tempfile::tempdir().unwrap();
         let db = create_test_db(tempdir.path());
@@ -206,30 +253,113 @@ mod tests {
             edit.insert(6, 2);
             edit.insert(7, 6);
         }
-        let _snapshot_manager = SnapshotManager::new(db, to_parent.clone());
-        let _query_manager = Arc::new(RwLock::new(NoopQueryManager));
+
+        let one = DummyField(1);
+        let two = DummyField(2);
+        let three = DummyField(3);
+        let four = DummyField(4);
+        let five = DummyField(5);
+        let six = DummyField(6);
+        let seven = DummyField(7);
+        let eight = DummyField(8);
+
+        let mut db_data = SchemaBatch::new();
+        db_data.put::<Schema>(&one, &one).unwrap();
+        db.write_schemas(db_data).unwrap();
+
+        let mut snapshot_manager = SnapshotManager::new(db, to_parent.clone());
+        let query_manager = Arc::new(RwLock::new(NoopQueryManager));
 
         // Operations:
         // | snapshot_id | key | operation |
         // | DB          |   1 |  write(1) |
-        // | 1           |   1 |  write(2) |
-        // | 1           |   2 |  write(3) |
-        // | 2           |   1 |  delete   |
-        // | 2           |   2 |  write(4) |
-        // | 4           |   1 |  write(5) |
+        // | 1           |   2 |  write(2) |
+        // | 1           |   3 |  write(4) |
+        // | 2           |   1 |  write(5) |
+        // | 2           |   2 |   delete  |
         // | 4           |   3 |  write(6) |
         // | 6           |   1 |  write(7) |
+        // | 6           |   2 |  write(8) |
+
+        // 1
+        let db_snapshot = DbSnapshot::new(1, query_manager.clone().into());
+        db_snapshot.put::<Schema>(&two, &two).unwrap();
+        db_snapshot.put::<Schema>(&three, &four).unwrap();
+        snapshot_manager.add_snapshot(db_snapshot.into());
+
+        // 2
+        let db_snapshot = DbSnapshot::new(2, query_manager.clone().into());
+        db_snapshot.put::<Schema>(&one, &five).unwrap();
+        db_snapshot.delete::<Schema>(&two).unwrap();
+        snapshot_manager.add_snapshot(db_snapshot.into());
+
+        // 3
+        let db_snapshot = DbSnapshot::new(3, query_manager.clone().into());
+        snapshot_manager.add_snapshot(db_snapshot.into());
+
+        // 4
+        let db_snapshot = DbSnapshot::new(4, query_manager.clone().into());
+        db_snapshot.put::<Schema>(&three, &six).unwrap();
+        snapshot_manager.add_snapshot(db_snapshot.into());
+
+        // 5
+        let db_snapshot = DbSnapshot::new(5, query_manager.clone().into());
+        snapshot_manager.add_snapshot(db_snapshot.into());
+
+        // 6
+        let db_snapshot = DbSnapshot::new(6, query_manager.clone().into());
+        db_snapshot.put::<Schema>(&one, &seven).unwrap();
+        db_snapshot.put::<Schema>(&two, &eight).unwrap();
+        snapshot_manager.add_snapshot(db_snapshot.into());
+
+        // 7
+        let db_snapshot = DbSnapshot::new(7, query_manager.clone().into());
+        snapshot_manager.add_snapshot(db_snapshot.into());
 
         // View:
         // | from s_id   | key | value |
-        // | 3           |   1 |  None |
-        // | 3           |   2 |     3 |
-        // | 3           |   3 |  None |
-        // | 5           |   1 |     5 |
-        // | 5           |   2 |     4 |
+        // | 3           |   1 |     5 |
+        // | 3           |   2 |  None |
+        // | 3           |   3 |     4 |
+        // | 5           |   1 |     1 |
+        // | 5           |   2 |     2 |
         // | 5           |   3 |     6 |
         // | 7           |   1 |     7 |
-        // | 7           |   2 |     4 |
-        // | 7           |   3 |  None |
+        // | 7           |   2 |     8 |
+        // | 7           |   3 |     4 |
+        assert_eq!(
+            Some(five.clone()),
+            snapshot_manager.get::<Schema>(3, &one).unwrap()
+        );
+        assert_eq!(None, snapshot_manager.get::<Schema>(3, &two).unwrap());
+        assert_eq!(
+            Some(four.clone()),
+            snapshot_manager.get::<Schema>(3, &three).unwrap()
+        );
+        assert_eq!(
+            Some(one.clone()),
+            snapshot_manager.get::<Schema>(5, &one).unwrap()
+        );
+        assert_eq!(
+            Some(two.clone()),
+            snapshot_manager.get::<Schema>(5, &two).unwrap()
+        );
+        assert_eq!(
+            Some(six.clone()),
+            snapshot_manager.get::<Schema>(5, &three).unwrap()
+        );
+
+        assert_eq!(
+            Some(seven),
+            snapshot_manager.get::<Schema>(7, &one).unwrap()
+        );
+        assert_eq!(
+            Some(eight),
+            snapshot_manager.get::<Schema>(7, &two).unwrap()
+        );
+        assert_eq!(
+            Some(four),
+            snapshot_manager.get::<Schema>(7, &three).unwrap()
+        );
     }
 }
