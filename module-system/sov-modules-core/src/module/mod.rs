@@ -19,8 +19,8 @@ pub use spec::*;
 #[derive(Default, Debug)]
 pub struct CallResponse {}
 
-/// All the methods have a default implementation that can't be invoked (because they take `NonInstantiable` parameter).
-/// This allows developers to override only some of the methods in their implementation and safely ignore the others.
+/// The core trait implemented by all modules. This trait defines how a module is initialized at genesis,
+/// and how it handles user transactions (if applicable).
 pub trait Module {
     /// Execution context.
     type Context: Context;

@@ -5,7 +5,6 @@ pub mod cli;
 mod containers;
 pub mod default_context;
 pub mod default_signature;
-mod encode;
 pub mod hooks;
 mod pub_key_hex;
 
@@ -61,11 +60,6 @@ pub mod da {
 pub mod storage {
     pub use sov_rollup_interface::storage::StorageManager;
 }
-
-/// A type that can't be instantiated.
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
-pub enum NonInstantiable {}
 
 struct ModuleVisitor<'a, C: Context> {
     visited: HashSet<&'a <C as Spec>::Address>,
