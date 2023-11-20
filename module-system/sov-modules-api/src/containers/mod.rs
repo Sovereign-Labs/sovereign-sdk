@@ -12,7 +12,7 @@ mod traits;
 pub use accessory_map::AccessoryStateMap;
 pub use accessory_value::AccessoryStateValue;
 pub use accessory_vec::AccessoryStateVec;
-pub use kernel_value::KernelStateValue;
+pub use kernel_value::VersionedStateValue;
 pub use map::StateMap;
 pub use traits::{
     StateMapAccessor, StateMapError, StateValueAccessor, StateValueError, StateVecAccessor,

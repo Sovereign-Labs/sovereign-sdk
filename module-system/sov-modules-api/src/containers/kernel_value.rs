@@ -26,22 +26,22 @@ use sov_state::codec::BorshCodec;
     serde::Serialize,
     serde::Deserialize,
 )]
-pub struct KernelStateValue<V, Codec = BorshCodec> {
+pub struct VersionedStateValue<V, Codec = BorshCodec> {
     _phantom: PhantomData<V>,
     codec: Codec,
     prefix: Prefix,
 }
 
-impl<V> KernelStateValue<V> {
-    /// Crates a new [`KernelStateValue`] with the given prefix and the default
+impl<V> VersionedStateValue<V> {
+    /// Crates a new [`VersionedStateValue`] with the given prefix and the default
     /// [`StateValueCodec`] (i.e. [`BorshCodec`]).
     pub fn new(prefix: Prefix) -> Self {
         Self::with_codec(prefix, BorshCodec)
     }
 }
 
-impl<V, Codec> KernelStateValue<V, Codec> {
-    /// Creates a new [`KernelStateValue`] with the given prefix and codec.
+impl<V, Codec> VersionedStateValue<V, Codec> {
+    /// Creates a new [`VersionedStateValue`] with the given prefix and codec.
     pub fn with_codec(prefix: Prefix, codec: Codec) -> Self {
         Self {
             _phantom: PhantomData,
@@ -50,7 +50,7 @@ impl<V, Codec> KernelStateValue<V, Codec> {
         }
     }
 
-    /// Returns the prefix used when this [`KernelStateValue`] was created.
+    /// Returns the prefix used when this [`VersionedStateValue`] was created.
     pub fn prefix(&self) -> &Prefix {
         &self.prefix
     }
@@ -61,7 +61,7 @@ mod as_user_value {
     use crate::StateValueAccessor;
 
     impl<'a, V, Codec, C: Context> StateValueAccessor<V, Codec, VersionedWorkingSet<'a, C>>
-        for KernelStateValue<V, Codec>
+        for VersionedStateValue<V, Codec>
     where
         Codec: StateCodec,
         Codec::ValueCodec: StateValueCodec<V>,
@@ -131,7 +131,7 @@ mod as_kernel_value {
     use crate::StateValueAccessor;
 
     impl<'a, V, Codec, C: Context> StateValueAccessor<V, Codec, KernelWorkingSet<'a, C>>
-        for KernelStateValue<V, Codec>
+        for VersionedStateValue<V, Codec>
     where
         Codec: StateCodec,
         Codec::ValueCodec: StateValueCodec<V>,
@@ -200,7 +200,7 @@ mod as_kernel_map {
     use super::*;
     use crate::StateMapAccessor;
     impl<'a, V, Codec, C: Context> StateMapAccessor<u64, V, Codec, KernelWorkingSet<'a, C>>
-        for KernelStateValue<V, Codec>
+        for VersionedStateValue<V, Codec>
     where
         Codec: StateCodec,
         Codec::ValueCodec: StateValueCodec<V>,
@@ -326,7 +326,7 @@ mod tests {
     use sov_state::{DefaultStorageSpec, ProverStorage};
 
     use crate::default_context::DefaultContext;
-    use crate::KernelStateValue;
+    use crate::VersionedStateValue;
     #[test]
     fn test_kernel_state_value_as_value() {
         use crate::StateValueAccessor;
@@ -335,7 +335,7 @@ mod tests {
         let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(storage);
 
         let prefix = Prefix::new(b"test".to_vec());
-        let value = KernelStateValue::<u64>::new(prefix.clone());
+        let value = VersionedStateValue::<u64>::new(prefix.clone());
 
         // Initialize a value in the kernel state during slot 4
         {
@@ -367,7 +367,7 @@ mod tests {
         let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(storage);
 
         let prefix = Prefix::new(b"test".to_vec());
-        let value = KernelStateValue::<u64>::new(prefix.clone());
+        let value = VersionedStateValue::<u64>::new(prefix.clone());
         let kernel = MockKernel::<DefaultContext, MockDaSpec>::new(4, 1);
 
         // Initialize a versioned value in the kernel state to be available starting at slot 2
