@@ -102,7 +102,7 @@ where
             .ok_or_else(|| anyhow::anyhow!("Missing status for {:?}", block_header_hash))?;
 
         match prover_status {
-            ProverStatus::WitnessSubmitted(state_tranistion_data) => {
+            ProverStatus::WitnessSubmitted(state_transition_data) => {
                 prover_state.set_to_proving(block_header_hash);
                 vm.add_hint(state_tranistion_data);
 
