@@ -7,8 +7,9 @@ use demo_stf::genesis_config::GenesisPaths;
 use ethers_core::abi::Address;
 use ethers_signers::{LocalWallet, Signer};
 use sov_evm::SimpleStorageContract;
-use test_client::TestClient;
 use sov_stf_runner::RollupProverConfig;
+use test_client::TestClient;
+
 use crate::test_helpers::start_rollup;
 
 #[cfg(feature = "experimental")]
