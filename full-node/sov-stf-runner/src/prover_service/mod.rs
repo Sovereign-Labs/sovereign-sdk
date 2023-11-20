@@ -1,6 +1,6 @@
-mod blocking_prover;
+mod parallel;
 use async_trait::async_trait;
-pub use blocking_prover::BlockingProver;
+pub use parallel::ParallelProverService;
 use serde::Serialize;
 use sov_rollup_interface::services::da::DaService;
 use thiserror::Error;
@@ -11,12 +11,24 @@ pub(crate) type Hash = [u8; 32];
 
 /// The possible configurations of the prover.
 pub enum RollupProverConfig {
+    /// Skip proving.
+    Skip,
     /// Run the rollup verification logic inside the current process
     Simulate,
     /// Run the rollup verifier in a zkVM executor
     Execute,
     /// Run the rollup verifier and create a SNARK of execution
     Prove,
+}
+
+/// Indicates the status of the DA proof submission.
+pub enum ProofSubmissionStatus {
+    /// Proof was submitted to the DA.
+    Success,
+    /// Proof generation is still in progress.
+    ProvingInProgress,
+    /// Proof submission failed
+    Err(anyhow::Error),
 }
 
 /// An error that occurred during ZKP proving.
@@ -55,4 +67,7 @@ pub trait ProverService {
 
     /// Creates ZKP prove for a block corresponding to `block_header_hash`.
     async fn prove(&self, block_header_hash: Hash) -> Result<(), ProverServiceError>;
+
+    /// Sends the ZK proof to the DA create by the `prove`.
+    async fn send_proof_to_da(&self, block_header_hash: Hash) -> ProofSubmissionStatus;
 }

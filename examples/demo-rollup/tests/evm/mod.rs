@@ -7,6 +7,7 @@ use demo_stf::genesis_config::GenesisPaths;
 use ethers_core::abi::Address;
 use ethers_signers::{LocalWallet, Signer};
 use sov_evm::SimpleStorageContract;
+use sov_stf_runner::RollupProverConfig;
 use test_client::TestClient;
 
 use crate::test_helpers::start_rollup;
@@ -21,7 +22,7 @@ async fn evm_tx_tests() -> Result<(), anyhow::Error> {
         start_rollup(
             port_tx,
             GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
-            None,
+            RollupProverConfig::Skip,
         )
         .await;
     });

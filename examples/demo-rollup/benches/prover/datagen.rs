@@ -8,17 +8,17 @@ pub async fn get_bench_blocks() -> Vec<MockBlock> {
     let mut blocks = vec![];
     let blob = generate_create(0);
     da_service.send_transaction(&blob).await.unwrap();
-    let block1 = da_service.get_finalized_at(0).await.unwrap();
+    let block1 = da_service.get_block_at(0).await.unwrap();
     blocks.push(block1);
 
     let blob = generate_transfers(3, 1);
     da_service.send_transaction(&blob).await.unwrap();
-    let block2 = da_service.get_finalized_at(0).await.unwrap();
+    let block2 = da_service.get_block_at(0).await.unwrap();
     blocks.push(block2);
 
     let blob = generate_transfers(10, 4);
     da_service.send_transaction(&blob).await.unwrap();
-    let block2 = da_service.get_finalized_at(0).await.unwrap();
+    let block2 = da_service.get_block_at(0).await.unwrap();
     blocks.push(block2);
 
     blocks

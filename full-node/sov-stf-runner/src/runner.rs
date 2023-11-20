@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::time::Duration;
 
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
@@ -39,6 +40,8 @@ pub enum ProofGenConfig<Stf, Da: DaService, Vm: ZkvmHost>
 where
     Stf: StateTransitionFunction<Vm::Guest, Da::Spec>,
 {
+    /// Skips proving.
+    Skip,
     /// The simulator runs the rollup verifier logic without even emulating the zkVM
     Simulate(StateTransitionVerifier<Stf, Da::Verifier, Vm::Guest>),
     /// The executor runs the rollup verification logic in the zkVM, but does not actually
@@ -144,7 +147,26 @@ where
         for height in self.start_height.. {
             debug!("Requesting data for height {}", height,);
 
-            let filtered_block = self.da_service.get_finalized_at(height).await?;
+            loop {
+                match self.da_service.get_last_finalized_block_header().await {
+                    Ok(header) => {
+                        tracing::trace!("Last finalized height={}", header.height());
+                        if header.height() >= height {
+                            break;
+                        }
+                    }
+                    Err(err) => {
+                        tracing::info!("Error receiving last finalized block header: {:?}", err);
+                    }
+                }
+
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            // At this point we sure that the block request is finalized
+
+            // Assumes we are on chains with instant finality
+            let filtered_block = self.da_service.get_block_at(height).await?;
+
             let mut blobs = self.da_service.extract_relevant_blobs(&filtered_block);
 
             info!(
@@ -201,6 +223,19 @@ where
                     .prove(header_hash)
                     .await
                     .expect("The proof creation should succeed");
+
+                loop {
+                    let status = self.prover_service.send_proof_to_da(header_hash).await;
+                    match status {
+                        crate::ProofSubmissionStatus::Success => {
+                            break;
+                        }
+                        crate::ProofSubmissionStatus::ProvingInProgress => {
+                            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await
+                        }
+                        crate::ProofSubmissionStatus::Err(e) => panic!("{:?}", e),
+                    }
+                }
             }
             let next_state_root = slot_result.state_root;
 

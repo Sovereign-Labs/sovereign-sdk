@@ -10,7 +10,7 @@ use tokio::sync::oneshot;
 pub async fn start_rollup(
     rpc_reporting_channel: oneshot::Sender<SocketAddr>,
     genesis_paths: GenesisPaths,
-    rollup_prover_config: Option<RollupProverConfig>,
+    rollup_prover_config: RollupProverConfig,
 ) {
     let temp_dir = tempfile::tempdir().unwrap();
     let temp_path = temp_dir.path();
