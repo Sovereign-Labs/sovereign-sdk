@@ -46,7 +46,7 @@ async fn main() -> Result<(), anyhow::Error> {
             let rollup = new_rollup_with_mock_da(
                 &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
                 rollup_config_path,
-                Some(RollupProverConfig::Execute),
+                RollupProverConfig::Execute,
             )
             .await?;
             rollup.run().await
@@ -55,7 +55,7 @@ async fn main() -> Result<(), anyhow::Error> {
             let rollup = new_rollup_with_celestia_da(
                 &GenesisPaths::from_dir("../test-data/genesis/demo-tests"),
                 rollup_config_path,
-                Some(RollupProverConfig::Execute),
+                RollupProverConfig::Execute,
             )
             .await?;
             rollup.run().await
@@ -67,7 +67,7 @@ async fn main() -> Result<(), anyhow::Error> {
 async fn new_rollup_with_celestia_da(
     genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
-    prover_config: Option<RollupProverConfig>,
+    prover_config: RollupProverConfig,
 ) -> Result<Rollup<CelestiaDemoRollup>, anyhow::Error> {
     debug!(
         "Starting celestia rollup with config {}",
@@ -86,7 +86,7 @@ async fn new_rollup_with_celestia_da(
 async fn new_rollup_with_mock_da(
     genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
-    prover_config: Option<RollupProverConfig>,
+    prover_config: RollupProverConfig,
 ) -> Result<Rollup<MockDemoRollup>, anyhow::Error> {
     debug!("Starting mock rollup with config {}", rollup_config_path);
 
