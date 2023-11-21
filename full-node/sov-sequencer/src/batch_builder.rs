@@ -138,7 +138,8 @@ where
             {
                 // TODO: Bug(!), because potential discrepancy. Should be resolved by https://github.com/Sovereign-Labs/sovereign-sdk/issues/434
                 let sender_address: C::Address = pooled.tx.pub_key().to_address();
-                let ctx = C::new(sender_address);
+                // FIXME! This should use the correct height
+                let ctx = C::new(sender_address, 0);
 
                 if let Err(error) = self.runtime.dispatch_call(msg, &mut working_set, &ctx) {
                     warn!(%error, tx = hex::encode(&pooled.raw), "Error during transaction dispatch");

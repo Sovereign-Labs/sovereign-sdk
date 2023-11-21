@@ -1,6 +1,6 @@
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::{Context, WorkingSet};
+use sov_modules_api::{Context, StateMapAccessor, WorkingSet};
 
 use crate::utils::get_collection_address;
 use crate::{

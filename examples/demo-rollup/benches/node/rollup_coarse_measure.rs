@@ -87,7 +87,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let rollup_config_path = "benches/node/rollup_config.toml".to_string();
     let mut rollup_config: RollupConfig<sov_celestia_adapter::CelestiaConfig> =
-        from_toml_path(&rollup_config_path)
+        from_toml_path(rollup_config_path)
             .context("Failed to read rollup configuration")
             .unwrap();
 

@@ -1,5 +1,5 @@
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Context, Module, WorkingSet};
+use sov_modules_api::{Address, Context, Module, StateVecAccessor, WorkingSet};
 use sov_state::ProverStorage;
 use sov_vec_setter::{CallMessage, VecSetter, VecSetterConfig};
 
@@ -40,7 +40,7 @@ fn test_vec_setter_calls() {
     vec_setter.genesis(&config, &mut working_set).unwrap();
 
     for (sender, call, expected_contents) in test_cases().iter().cloned() {
-        let context = DefaultContext::new(sender);
+        let context = DefaultContext::new(sender, 1);
 
         let call_result = vec_setter.call(call, &context, &mut working_set);
 

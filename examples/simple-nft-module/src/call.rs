@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 #[cfg(feature = "native")]
 use sov_modules_api::macros::CliWalletArg;
-use sov_modules_api::{CallResponse, Context, WorkingSet};
+use sov_modules_api::{CallResponse, Context, StateMapAccessor, WorkingSet};
 
 use crate::NonFungibleToken;
 

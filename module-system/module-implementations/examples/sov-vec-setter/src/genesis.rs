@@ -1,4 +1,5 @@
 use anyhow::Result;
+use sov_modules_api::prelude::*;
 use sov_modules_api::WorkingSet;
 
 use super::VecSetter;

@@ -2,8 +2,8 @@ use jsonrpsee::core::RpcResult;
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::{expose_rpc, rpc_gen, DefaultRuntime};
 use sov_modules_api::{
-    Address, CallResponse, Context, DispatchCall, EncodeCall, Error, Genesis, MessageCodec, Module,
-    ModuleInfo, StateValue, WorkingSet,
+    prelude::*, Address, CallResponse, Context, DispatchCall, EncodeCall, Error, Genesis,
+    MessageCodec, Module, ModuleInfo, StateValue, WorkingSet,
 };
 use sov_state::ZkStorage;
 
@@ -132,7 +132,7 @@ fn main() {
     let serialized_message =
         <RT as EncodeCall<my_module::QueryModule<C, u32>>>::encode_call(message);
     let module = RT::decode_call(&serialized_message).unwrap();
-    let context = C::new(Address::try_from([11; 32].as_ref()).unwrap());
+    let context = C::new(Address::try_from([11; 32].as_ref()).unwrap(), 1);
 
     let _ = runtime
         .dispatch_call(module, working_set, &context)

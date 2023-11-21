@@ -2,7 +2,8 @@ use borsh::BorshSerialize;
 use sov_mock_da::{MockDaSpec, MockValidityCond, MockValidityCondChecker};
 use sov_mock_zkvm::{MockCodeCommitment, MockProof, MockZkvm};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::WorkingSet;
+use sov_modules_api::prelude::*;
+use sov_modules_api::{Context, WorkingSet};
 use sov_rollup_interface::zk::StateTransition;
 use sov_state::ProverStorage;
 
@@ -57,10 +58,7 @@ fn test_valid_challenge() {
         .bad_transition_pool
         .set(&(INIT_HEIGHT + 1), &BOND_AMOUNT, &mut working_set);
 
-    // Process a correct challenge
-    let context = DefaultContext {
-        sender: challenger_address,
-    };
+    let context = DefaultContext::new(challenger_address, INIT_HEIGHT + 2);
 
     {
         let transition = StateTransition::<MockDaSpec, _, _> {
@@ -190,11 +188,7 @@ fn test_invalid_challenge() {
         .bad_transition_pool
         .set(&(INIT_HEIGHT + 1), &BOND_AMOUNT, &mut working_set);
 
-    // Process a correct challenge but without a bonded attester
-    let context = DefaultContext {
-        sender: challenger_address,
-    };
-
+    let context = DefaultContext::new(challenger_address, INIT_HEIGHT + 2);
     let transition: StateTransition<MockDaSpec, _, _> = StateTransition {
         initial_state_root: initial_transition.state_root,
         slot_hash: [1; 32].into(),

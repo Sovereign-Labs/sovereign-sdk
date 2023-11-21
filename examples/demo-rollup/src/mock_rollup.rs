@@ -12,7 +12,7 @@ use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage_manager::ProverStorageManager;
 use sov_state::{DefaultStorageSpec, Storage, ZkStorage};
-use sov_stf_runner::{BlockingProver, RollupConfig, RollupProverConfig};
+use sov_stf_runner::{ParallelProverService, RollupConfig, RollupProverConfig};
 
 /// Rollup with MockDa
 pub struct MockDemoRollup {}
@@ -35,7 +35,7 @@ impl RollupBlueprint for MockDemoRollup {
     type NativeKernel = BasicKernel<Self::NativeContext>;
     type ZkKernel = BasicKernel<Self::ZkContext>;
 
-    type ProverService = BlockingProver<
+    type ProverService = ParallelProverService<
         <<Self::NativeContext as Spec>::Storage as Storage>::Root,
         <<Self::NativeContext as Spec>::Storage as Storage>::Witness,
         Self::DaService,
@@ -91,7 +91,7 @@ impl RollupBlueprint for MockDemoRollup {
 
     async fn create_prover_service(
         &self,
-        prover_config: Option<RollupProverConfig>,
+        prover_config: RollupProverConfig,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
         let vm = Risc0Host::new(risc0::MOCK_DA_ELF);
@@ -99,6 +99,6 @@ impl RollupBlueprint for MockDemoRollup {
         let zk_storage = ZkStorage::new();
         let da_verifier = Default::default();
 
-        BlockingProver::new(vm, zk_stf, da_verifier, prover_config, zk_storage)
+        ParallelProverService::new(vm, zk_stf, da_verifier, prover_config, zk_storage)
     }
 }

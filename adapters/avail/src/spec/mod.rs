@@ -12,11 +12,7 @@ pub mod transaction;
 pub struct DaLayerSpec;
 
 impl DaSpec for DaLayerSpec {
-    type ValidityCondition = ChainValidityCondition;
-
     type SlotHash = hash::AvailHash;
-
-    type ChainParams = ();
 
     type BlockHeader = header::AvailHeader;
 
@@ -24,7 +20,11 @@ impl DaSpec for DaLayerSpec {
 
     type Address = address::AvailAddress;
 
+    type ValidityCondition = ChainValidityCondition;
+
     type InclusionMultiProof = ();
 
     type CompletenessProof = ();
+
+    type ChainParams = ();
 }

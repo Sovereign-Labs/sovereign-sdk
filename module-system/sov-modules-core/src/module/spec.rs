@@ -105,5 +105,10 @@ pub trait Context: Spec + Clone + Debug + PartialEq + 'static {
     fn sender(&self) -> &Self::Address;
 
     /// Constructor for the Context.
-    fn new(sender: Self::Address) -> Self;
+    fn new(sender: Self::Address, height: u64) -> Self;
+
+    /// Returns the height of the current slot as reported by the kernel. This value is
+    /// non-decreasing and is guaranteed to be less than or equal to the actual "objective" height of the rollup.
+    /// Kernels should ensure that the reported height never falls too far behind the actual height.
+    fn slot_height(&self) -> u64;
 }

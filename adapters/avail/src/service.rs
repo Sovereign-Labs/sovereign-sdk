@@ -1,10 +1,13 @@
 use core::time::Duration;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use anyhow::anyhow;
 use async_trait::async_trait;
 use avail_subxt::api::runtime_types::sp_core::bounded::bounded_vec::BoundedVec;
 use avail_subxt::primitives::AvailExtrinsicParams;
 use avail_subxt::{api, AvailConfig};
+use pin_project::pin_project;
 use reqwest::StatusCode;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::services::da::DaService;
@@ -153,19 +156,45 @@ async fn wait_for_appdata(
     }
 }
 
+/// Convincice copy from [`subxt::blocks::BlocksClient`]
+type BlockStream<T> = Pin<Box<dyn futures::Stream<Item = Result<T, subxt::Error>> + Send>>;
+/// Wrapper around return of [`subxt::blocks::BlocksClient::subscribe_finalized`]
+/// that maps `Ok` variant to [`AvailHeader`] and `Error` variant to [`anyhow::Error`]
+#[pin_project]
+pub struct AvailBlockHeaderStream {
+    #[pin]
+    inner: BlockStream<subxt::blocks::Block<AvailConfig, OnlineClient<AvailConfig>>>,
+}
+
+impl futures::Stream for AvailBlockHeaderStream {
+    type Item = anyhow::Result<AvailHeader>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        let poll_result = this.inner.poll_next(cx);
+        Poll::Ready(match poll_result {
+            Poll::Ready(Some(Ok(block))) => Some(Ok(AvailHeader::from(block))),
+            Poll::Ready(Some(Err(e))) => Some(Err(e.into())),
+            Poll::Ready(None) => None,
+            Poll::Pending => return Poll::Pending,
+        })
+    }
+}
+
 #[async_trait]
 impl DaService for DaProvider {
     type Spec = DaLayerSpec;
 
-    type FilteredBlock = AvailBlock;
-
     type Verifier = Verifier;
+
+    type FilteredBlock = AvailBlock;
+    type HeaderStream = AvailBlockHeaderStream;
 
     type Error = anyhow::Error;
 
-    // Make an RPC call to the node to get the finalized block at the given height, if one exists.
+    // Make an RPC call to the node to get the block at the given height, if one exists.
     // If no such block exists, block until one does.
-    async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
+    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let node_client = self.node_client.clone();
         let confidence_url = self.confidence_url(height);
         let appdata_url = self.appdata_url(height);
@@ -204,10 +233,35 @@ impl DaService for DaProvider {
         })
     }
 
-    // Make an RPC call to the node to get the block at the given height
-    // If no such block exists, block until one does.
-    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        self.get_finalized_at(height).await
+    async fn get_last_finalized_block_header(
+        &self,
+    ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
+        let node_client = self.node_client.clone();
+        let finalized_header_hash = node_client.rpc().finalized_head().await?;
+
+        let header = node_client
+            .rpc()
+            .header(Some(finalized_header_hash))
+            .await?
+            .ok_or(anyhow::anyhow!("No finalized head found"))?;
+        let header = AvailHeader::new(header, finalized_header_hash);
+        Ok(header)
+    }
+
+    async fn subscribe_finalized_header(&self) -> Result<Self::HeaderStream, Self::Error> {
+        let block_stream = self.node_client.blocks().subscribe_finalized().await?;
+        Ok(AvailBlockHeaderStream {
+            inner: block_stream,
+        })
+    }
+
+    async fn get_head_block_header(
+        &self,
+    ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
+        let node_client = self.node_client.clone();
+        let latest_block = node_client.blocks().at_latest().await?;
+
+        Ok(latest_block.into())
     }
 
     // Extract the blob transactions relevant to a particular rollup from a block.
@@ -220,7 +274,7 @@ impl DaService for DaProvider {
         block.transactions.clone()
     }
 
-    // Extract the inclusion and completenss proof for filtered block provided.
+    // Extract the inclusion and completeness proof for filtered block provided.
     // The output of this method will be passed to the verifier.
     // NOTE: The light client here has already completed DA sampling and verification of inclusion and soundness.
     async fn get_extraction_proof(

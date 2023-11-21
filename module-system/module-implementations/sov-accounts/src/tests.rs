@@ -1,6 +1,8 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::{AddressBech32, Context, Module, PrivateKey, PublicKey, Spec, WorkingSet};
+use sov_modules_api::{
+    AddressBech32, Context, Module, PrivateKey, PublicKey, Spec, StateMapAccessor, WorkingSet,
+};
 use sov_state::ProverStorage;
 
 use crate::query::{self, Response};
@@ -48,7 +50,7 @@ fn test_update_account() {
 
     let sender = priv_key.pub_key();
     let sender_addr = sender.to_address::<<C as Spec>::Address>();
-    let sender_context = C::new(sender_addr);
+    let sender_context = C::new(sender_addr, 1);
 
     // Test new account creation
     {
@@ -109,7 +111,7 @@ fn test_update_account_fails() {
     let accounts = &mut Accounts::<C>::default();
 
     let sender_1 = DefaultPrivateKey::generate().pub_key();
-    let sender_context_1 = C::new(sender_1.to_address());
+    let sender_context_1 = C::new(sender_1.to_address(), 1);
 
     accounts
         .create_default_account(&sender_1, native_working_set)
@@ -141,7 +143,7 @@ fn test_get_account_after_pub_key_update() {
 
     let sender_1 = DefaultPrivateKey::generate().pub_key();
     let sender_1_addr = sender_1.to_address::<<C as Spec>::Address>();
-    let sender_context_1 = C::new(sender_1_addr);
+    let sender_context_1 = C::new(sender_1_addr, 1);
 
     accounts
         .create_default_account(&sender_1, native_working_set)

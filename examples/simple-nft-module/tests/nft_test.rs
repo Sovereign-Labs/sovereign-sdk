@@ -38,7 +38,7 @@ fn genesis_and_mint() {
 
     // Mint, anybody can mint
     let mint_message = CallMessage::Mint { id: 1 };
-    let owner2_context = C::new(owner2);
+    let owner2_context = C::new(owner2, 1);
     nft.call(mint_message.clone(), &owner2_context, &mut working_set)
         .expect("Minting failed");
 
@@ -61,9 +61,9 @@ fn genesis_and_mint() {
 fn transfer() {
     // Preparation
     let admin = generate_address("admin");
-    let admin_context = C::new(admin);
+    let admin_context = C::new(admin, 1);
     let owner1 = generate_address("owner2");
-    let owner1_context = C::new(owner1);
+    let owner1_context = C::new(owner1, 1);
     let owner2 = generate_address("owner2");
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
         admin,
@@ -117,9 +117,9 @@ fn transfer() {
 fn burn() {
     // Preparation
     let admin = generate_address("admin");
-    let admin_context = C::new(admin);
+    let admin_context = C::new(admin, 1);
     let owner1 = generate_address("owner2");
-    let owner1_context = C::new(owner1);
+    let owner1_context = C::new(owner1, 1);
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
         admin,
         owners: vec![(0, owner1)],

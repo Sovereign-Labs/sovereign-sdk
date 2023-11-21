@@ -2,6 +2,7 @@
 
 use sov_accessory_state::{AccessorySetter, CallMessage};
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::prelude::*;
 use sov_modules_api::{Address, Context, Module, WorkingSet};
 use sov_state::{ProverStorage, Storage};
 
@@ -17,7 +18,7 @@ fn test_accessory_value_setter() {
     let mut working_set_for_check: WorkingSet<DefaultContext> = WorkingSet::new(storage.clone());
 
     let admin = Address::from([1; 32]);
-    let context = DefaultContext::new(admin);
+    let context = DefaultContext::new(admin, 1);
 
     let module = AccessorySetter::<DefaultContext>::default();
 

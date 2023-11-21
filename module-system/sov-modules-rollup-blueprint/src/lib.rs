@@ -8,7 +8,7 @@ use std::net::SocketAddr;
 use async_trait::async_trait;
 pub use runtime_rpc::*;
 use sov_db::ledger_db::LedgerDB;
-use sov_modules_api::capabilities::Kernel;
+use sov_modules_api::runtime::capabilities::Kernel;
 use sov_modules_api::{Context, DaSpec, Spec};
 use sov_modules_stf_blueprint::{Runtime as RuntimeTrait, StfBlueprint};
 use sov_rollup_interface::services::da::DaService;
@@ -91,7 +91,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
     /// Creates instance of [`ProverService`].
     async fn create_prover_service(
         &self,
-        prover_config: Option<RollupProverConfig>,
+        prover_config: RollupProverConfig,
         da_service: &Self::DaService,
     ) -> Self::ProverService;
 
@@ -112,7 +112,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
         &self,
         genesis_paths: &<Self::NativeRuntime as RuntimeTrait<Self::NativeContext, Self::DaSpec>>::GenesisPaths,
         rollup_config: RollupConfig<Self::DaConfig>,
-        prover_config: Option<RollupProverConfig>,
+        prover_config: RollupProverConfig,
     ) -> Result<Rollup<Self>, anyhow::Error>
     where
         <Self::NativeContext as Spec>::Storage: NativeStorage,

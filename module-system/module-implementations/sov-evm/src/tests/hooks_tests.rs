@@ -4,6 +4,7 @@ use reth_primitives::{
     Address, Bloom, Bytes, Header, SealedHeader, Signature, TransactionSigned, EMPTY_OMMER_ROOT,
     H256, KECCAK_EMPTY, U256,
 };
+use sov_modules_api::{StateMapAccessor, StateValueAccessor, StateVecAccessor};
 
 use super::genesis_tests::{get_evm, TEST_CONFIG};
 use crate::evm::primitive_types::{

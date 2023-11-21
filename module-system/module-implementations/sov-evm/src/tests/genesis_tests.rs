@@ -6,6 +6,7 @@ use reth_primitives::{
 };
 use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::prelude::*;
 use sov_modules_api::{Module, WorkingSet};
 use sov_state::ProverStorage;
 
