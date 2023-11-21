@@ -167,7 +167,7 @@ fn transfer_initial_token() {
     commit(working_set, prover_storage.clone());
 
     // next block
-    
+
     let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
     transfer(
         &bank,
@@ -193,7 +193,7 @@ fn transfer_initial_token() {
 
     // archival versioned state query
 
-    let archival_slot= 4;
+    let archival_slot = 4;
     let mut versioned_prover_storage = prover_storage.clone();
     versioned_prover_storage
         .set_archival_version(archival_slot)
@@ -206,8 +206,7 @@ fn transfer_initial_token() {
     assert_eq!("v1", String::from_utf8(val.value().to_vec()).unwrap());
 
     commit(working_set, prover_storage.clone());
-    println!("{:?}",val);
-
+    println!("{:?}", val);
 }
 
 fn query_sender_receiver_balances(
@@ -245,7 +244,7 @@ fn transfer(
         },
     };
 
-    let sender_context = C::new(sender_address,1);
+    let sender_context = C::new(sender_address, 1);
 
     bank.call(transfer_message, &sender_context, working_set)
         .expect("Transfer call failed");
