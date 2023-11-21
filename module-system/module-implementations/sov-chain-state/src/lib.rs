@@ -214,9 +214,8 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> sov_modules_api::
         _context: &Self::Context,
         _working_set: &mut WorkingSet<C>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
-        Ok(sov_modules_api::CallResponse{})
+        Ok(sov_modules_api::CallResponse {})
     }
-
 
     fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         // The initialization logic
