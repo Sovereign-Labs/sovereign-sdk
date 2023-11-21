@@ -219,11 +219,6 @@ define_table_with_default_codec!(
     (SlotByHash) DbHash => SlotNumber
 );
 
-define_table_with_default_codec!(
-    /// Non-JMT state stored by a module for JSON-RPC use.
-    (ModuleAccessoryState) AccessoryKey => AccessoryStateValue
-);
-
 define_table_with_seek_key_codec!(
     /// The primary source for batch data
     (BatchByNumber) BatchNumber => StoredBatch
@@ -332,3 +327,47 @@ define_table_with_default_codec!(
     /// which requires the ability to fetch values by hash.
     (KeyHashToKey) [u8;32] => StateKey
 );
+
+define_table_without_codec!(
+    /// Non-JMT state stored by a module for JSON-RPC use.
+    (ModuleAccessoryState) (AccessoryKey, Version) => AccessoryStateValue
+);
+
+impl KeyEncoder<ModuleAccessoryState> for (AccessoryKey, Version) {
+    fn encode_key(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
+        let mut out = Vec::with_capacity(self.0.len() + std::mem::size_of::<Version>() + 8);
+        self.0
+            .as_slice()
+            .serialize(&mut out)
+            .map_err(CodecError::from)?;
+        // Write the version in big-endian order so that sorting order is based on the most-significant bytes of the key
+        out.write_u64::<BigEndian>(self.1)
+            .expect("serialization to vec is infallible");
+        Ok(out)
+    }
+}
+
+impl SeekKeyEncoder<ModuleAccessoryState> for (AccessoryKey, Version) {
+    fn encode_seek_key(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
+        <(Vec<u8>, u64) as KeyEncoder<ModuleAccessoryState>>::encode_key(self)
+    }
+}
+
+impl KeyDecoder<ModuleAccessoryState> for (AccessoryKey, Version) {
+    fn decode_key(data: &[u8]) -> sov_schema_db::schema::Result<Self> {
+        let mut cursor = maybestd::io::Cursor::new(data);
+        let key = Vec::<u8>::deserialize_reader(&mut cursor)?;
+        let version = cursor.read_u64::<BigEndian>()?;
+        Ok((key, version))
+    }
+}
+
+impl ValueCodec<ModuleAccessoryState> for AccessoryStateValue {
+    fn encode_value(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
+        self.try_to_vec().map_err(CodecError::from)
+    }
+
+    fn decode_value(data: &[u8]) -> sov_schema_db::schema::Result<Self> {
+        Ok(Self::deserialize_reader(&mut &data[..])?)
+    }
+}

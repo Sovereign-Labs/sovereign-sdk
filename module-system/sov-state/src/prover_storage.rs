@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::Arc;
-use anyhow::ensure;
 
+use anyhow::ensure;
 use jmt::storage::{NodeBatch, TreeWriter};
 use jmt::{JellyfishMerkleTree, KeyHash, Version};
 use sov_db::native_db::NativeDB;
@@ -29,7 +29,7 @@ impl<S: MerkleProofSpec> Clone for ProverStorage<S> {
         Self {
             db: self.db.clone(),
             native_db: self.native_db.clone(),
-            archival_version: self.archival_version.clone(),
+            archival_version: self.archival_version,
             _phantom_hasher: Default::default(),
         }
     }
@@ -60,11 +60,8 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
     }
 
     fn read_value(&self, key: &StorageKey) -> Option<StorageValue> {
-        let version= self.archival_version.unwrap_or(self.db.get_next_version());
-        match self
-            .db
-            .get_value_option_by_key(version, key.as_ref())
-        {
+        let version = self.archival_version.unwrap_or(self.db.get_next_version());
+        match self.db.get_value_option_by_key(version, key.as_ref()) {
             Ok(value) => value.map(Into::into),
             // It is ok to panic here, we assume the db is available and consistent.
             Err(e) => panic!("Unable to read value from db: {e}"),
@@ -97,8 +94,9 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
 
     #[cfg(feature = "native")]
     fn get_accessory(&self, key: &StorageKey) -> Option<StorageValue> {
+        let version = self.archival_version.unwrap_or(self.db.get_next_version());
         self.native_db
-            .get_value_option(key.as_ref())
+            .get_value_option(key.as_ref(), Some(version))
             .unwrap()
             .map(Into::into)
     }
@@ -194,6 +192,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             .expect("native db write must succeed");
 
         self.db.inc_next_version();
+        self.native_db.inc_next_version();
     }
 
     fn open_proof(
