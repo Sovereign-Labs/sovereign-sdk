@@ -167,16 +167,14 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     }
 
     fn commit(&self, state_update: &Self::StateUpdate, accessory_writes: &OrderedReadsAndWrites) {
-        for (key_hash, key) in state_update.key_preimages.iter() {
-            // Clone should be cheap
-            self.db
-                .put_preimage(*key_hash, key.key.as_ref())
-                .expect("preimage must succeed");
-        }
-
         self.db
-            .write_node_batch(&state_update.node_batch)
-            .expect("db write must succeed");
+            .put_preimages(
+                state_update
+                    .key_preimages
+                    .iter()
+                    .map(|(key_hash, key)| (*key_hash, key.key.as_ref())),
+            )
+            .expect("Preimage put must succeed");
 
         self.native_db
             .set_values(
@@ -187,6 +185,14 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             )
             .expect("native db write must succeed");
 
+        // Write the state values last, since we base our view of what has been touched
+        // on state. If the node crashes between the `native_db` update and this update,
+        // then the whole `commit` will be re-run later so no data can be lost.
+        self.db
+            .write_node_batch(&state_update.node_batch)
+            .expect("db write must succeed");
+
+        // Finally, update our in-memory view of the current item numbers
         self.db.inc_next_version();
     }
 
