@@ -156,13 +156,13 @@ where
     pub fn finalize_hook(
         &self,
         root_hash: &<<C as Spec>::Storage as Storage>::Root,
-        accesorry_working_set: &mut AccessoryWorkingSet<C>,
+        accessory_working_set: &mut AccessoryWorkingSet<C>,
     ) {
-        let expected_block_number = self.blocks.len(accesorry_working_set) as u64;
+        let expected_block_number = self.blocks.len(accessory_working_set) as u64;
 
         let mut block = self
             .pending_head
-            .get(accesorry_working_set)
+            .get(accessory_working_set)
             .unwrap_or_else(|| {
                 panic!(
                     "Pending head must be set to block {}, but was empty",
@@ -181,12 +181,12 @@ where
 
         let sealed_block = block.seal();
 
-        self.blocks.push(&sealed_block, accesorry_working_set);
+        self.blocks.push(&sealed_block, accessory_working_set);
         self.block_hashes.set(
             &sealed_block.header.hash,
             &sealed_block.header.number,
-            accesorry_working_set,
+            accessory_working_set,
         );
-        self.pending_head.delete(accesorry_working_set);
+        self.pending_head.delete(accessory_working_set);
     }
 }

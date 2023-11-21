@@ -37,7 +37,6 @@ impl NativeDB {
         )?;
 
         let next_version = Self::last_version_written(&inner)?.unwrap_or_default() + 1;
-
         Ok(Self {
             db: Arc::new(inner),
             next_version: Arc::new(Mutex::new(next_version)),
