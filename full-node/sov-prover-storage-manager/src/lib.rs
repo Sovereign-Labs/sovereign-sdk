@@ -116,11 +116,6 @@ where
                 new_snapshot_id
             }
         };
-        println!(
-            "BLOCK HEIGHT={} SNAP_ID={}",
-            block_header.height(),
-            new_snapshot_id
-        );
 
         let state_db_snapshot = DbSnapshot::new(
             new_snapshot_id,
@@ -144,7 +139,10 @@ where
         change_set: Self::NativeChangeSet,
     ) -> anyhow::Result<()> {
         if !self.chain_forks.contains_key(&block_header.prev_hash()) {
-            anyhow::bail!("Attempt to save changeset for unknown block header");
+            anyhow::bail!(
+                "Attempt to save changeset for unknown block header {:?}",
+                block_header
+            );
         }
         let (state_db, native_db) = change_set.freeze();
         let state_snapshot: FrozenDbSnapshot = state_db.into();
@@ -159,7 +157,6 @@ where
         }
 
         // Obviously alien
-        println!("L={} S={}", self.latest_snapshot_id, snapshot_id);
         if snapshot_id > self.latest_snapshot_id {
             anyhow::bail!("Attempt to save unknown snapshot with id={}", snapshot_id);
         }
@@ -342,11 +339,6 @@ mod tests {
 
         // We just check, that both storage have same underlying id.
         // This is more tight with implementation.
-        // More black box way to check would be:
-        //   - have some data in db
-        //   - have some parent snapshots
-        //   - make sure that writing to each individual storage do not propagate to another
-        //   - both storage have same view of the previous state, for example they don't look into siblings
         let (state_db_1, native_db_1) = storage_1.freeze();
         let state_snapshot_1 = FrozenDbSnapshot::from(state_db_1);
         let native_snapshot_1 = FrozenDbSnapshot::from(native_db_1);
@@ -356,6 +348,13 @@ mod tests {
 
         assert_eq!(state_snapshot_1.get_id(), state_snapshot_2.get_id());
         assert_eq!(native_snapshot_1.get_id(), native_snapshot_2.get_id());
+
+        // TODO: Do more checks
+        // More black box way to check would be:
+        //   - have some data in db
+        //   - have some parent snapshots
+        //   - make sure that writing to each individual storage do not propagate to another
+        //   - both storage have same view of the previous state, for example they don't look into siblings
     }
 
     #[test]
@@ -375,17 +374,43 @@ mod tests {
             height: 1,
         };
 
-        let _storage_1 = storage_manager
+        storage_manager
             .get_native_storage_on(&block_header)
             .unwrap();
     }
 
     #[test]
-    #[ignore = "TBD"]
-    fn save_change_set() {}
+    fn save_change_set() {
+        let state_tmpdir = tempfile::tempdir().unwrap();
+        let native_tmpdir = tempfile::tempdir().unwrap();
+
+        let (state_db, native_db) = build_dbs(state_tmpdir.path(), native_tmpdir.path());
+
+        let mut storage_manager = NewProverStorageManager::<Da, S>::new(state_db, native_db);
+        assert!(storage_manager.is_empty());
+
+        let block_header = MockBlockHeader {
+            prev_hash: MockHash::from([1; 32]),
+            hash: MockHash::from([2; 32]),
+            height: 1,
+        };
+
+        assert!(storage_manager.is_empty());
+        let storage = storage_manager
+            .get_native_storage_on(&block_header)
+            .unwrap();
+        assert!(!storage_manager.is_empty());
+
+        // We can save empty storage as well
+        storage_manager
+            .save_change_set(&block_header, storage)
+            .unwrap();
+
+        assert!(!storage_manager.is_empty());
+    }
 
     #[test]
-    fn try_save_unknown_changeset() {
+    fn try_save_unknown_block_header() {
         let state_tmpdir_1 = tempfile::tempdir().unwrap();
         let native_tmpdir_1 = tempfile::tempdir().unwrap();
 
@@ -410,17 +435,84 @@ mod tests {
         let (state_db, native_db) = build_dbs(state_tmpdir_2.path(), native_tmpdir_2.path());
         let mut storage_manager = NewProverStorageManager::<Da, S>::new(state_db, native_db);
 
-        let unknown_id = storage_manager.save_change_set(&block_a, snapshot_1);
-        assert!(unknown_id.is_err());
-        assert!(unknown_id
-            .err()
-            .unwrap()
-            .to_string()
-            .starts_with("Attempt to save unknown snapshot with id="));
+        let result = storage_manager.save_change_set(&block_a, snapshot_1);
+        assert!(result.is_err());
+        let expected_error_msg = format!(
+            "Attempt to save changeset for unknown block header {:?}",
+            &block_a
+        );
+        assert_eq!(expected_error_msg, result.err().unwrap().to_string());
+    }
 
-        // TODO: Unknown block
+    #[test]
+    fn try_save_unknown_snapshot() {
+        // This test we create 2 snapshot managers and try to save snapshots from first manager
+        // in another
+        // First it checks for yet unknown id 2. It is larger that last known snapshot 1.
+        // Then we commit own snapshot 1, and then try to save alien snapshot with id 1
+        let state_tmpdir_1 = tempfile::tempdir().unwrap();
+        let native_tmpdir_1 = tempfile::tempdir().unwrap();
 
-        // TODO: Block / snapshot_id mismatch
+        let state_tmpdir_2 = tempfile::tempdir().unwrap();
+        let native_tmpdir_2 = tempfile::tempdir().unwrap();
+
+        let block_a = MockBlockHeader {
+            prev_hash: MockHash::from([0; 32]),
+            hash: MockHash::from([1; 32]),
+            height: 1,
+        };
+
+        let block_b = MockBlockHeader {
+            prev_hash: MockHash::from([2; 32]),
+            hash: MockHash::from([3; 32]),
+            height: 2,
+        };
+
+        let (snapshot_alien_1, snapshot_alien_2) = {
+            let (state_db, native_db) = build_dbs(state_tmpdir_1.path(), native_tmpdir_1.path());
+            let mut storage_manager_temp =
+                NewProverStorageManager::<Da, S>::new(state_db, native_db);
+            // ID = 1
+            let snapshot_a = storage_manager_temp
+                .get_native_storage_on(&block_a)
+                .unwrap();
+            // ID = 2
+            let snapshot_b = storage_manager_temp
+                .get_native_storage_on(&block_b)
+                .unwrap();
+            (snapshot_a, snapshot_b)
+        };
+
+        let (state_db, native_db) = build_dbs(state_tmpdir_2.path(), native_tmpdir_2.path());
+        let mut storage_manager = NewProverStorageManager::<Da, S>::new(state_db, native_db);
+
+        let snapshot_own_a = storage_manager.get_native_storage_on(&block_a).unwrap();
+        let _snapshot_own_b = storage_manager.get_native_storage_on(&block_b).unwrap();
+
+        let result = storage_manager.save_change_set(&block_a, snapshot_alien_2);
+        assert!(result.is_err());
+        let err_msg = result.err().unwrap().to_string();
+        assert_eq!("Attempt to save unknown snapshot with id=2", err_msg);
+
+        storage_manager
+            .save_change_set(&block_a, snapshot_own_a)
+            .unwrap();
+
+        storage_manager.finalize(&block_a).unwrap();
+
+        let result = storage_manager.save_change_set(&block_b, snapshot_alien_1);
+        assert!(result.is_err());
+        let err_msg = result.err().unwrap().to_string();
+        assert_eq!("Attempt to save unknown snapshot with id=1", err_msg);
+    }
+
+    #[test]
+    #[ignore = "TBD"]
+    fn read_state_before_parent_is_added() {
+        // Blocks A -> B
+        // create snapshot A from block A
+        // create snapshot B from block B
+        // query data from block B, before adding snapshot A back to the manager!
     }
 
     #[test]
@@ -431,72 +523,241 @@ mod tests {
         let (state_db, native_db) = build_dbs(state_tmpdir.path(), native_tmpdir.path());
 
         // State DB has following values initially:
-        // x = 1
-        // y = 2
+        // 1 = 1
+        // 2 = 2
+        let one = DummyField(1);
+        let two = DummyField(2);
 
-        let x = DummyField(1);
-        let y = DummyField(2);
-        let _z = DummyField(3);
-
-        state_db
-            .put::<DummyStateSchema>(&x, &DummyField(1))
-            .unwrap();
-        state_db
-            .put::<DummyStateSchema>(&y, &DummyField(2))
-            .unwrap();
+        state_db.put::<DummyStateSchema>(&one, &one).unwrap();
+        state_db.put::<DummyStateSchema>(&two, &two).unwrap();
 
         // Native DB has following values initially
-        // 10 = 10
-        // 20 = 20
+        // 1 = 100
+        // 2 = 200
 
         native_db
-            .put::<DummyNativeSchema>(&x, &DummyField(100))
+            .put::<DummyNativeSchema>(&one, &DummyField(100))
             .unwrap();
         native_db
-            .put::<DummyNativeSchema>(&y, &DummyField(200))
+            .put::<DummyNativeSchema>(&two, &DummyField(200))
             .unwrap();
 
         let mut storage_manager = NewProverStorageManager::<Da, S>::new(state_db, native_db);
         assert!(storage_manager.is_empty());
 
-        //      / -> D
+        // Chains:
+        // 1    2    3    4    5
+        //      / -> L -> M
         // A -> B -> C -> D -> E
         // |    \ -> G -> H
         // \ -> F -> K
-        //
+        // M, E, H, K: Observability snapshots.
 
-        // Block A
         let block_a = MockBlockHeader {
             prev_hash: MockHash::from([0; 32]),
             hash: MockHash::from([1; 32]),
             height: 1,
         };
-
-        let storage_a = storage_manager.get_native_storage_on(&block_a).unwrap();
-
-        let state_x_actual = storage_a.read_state(x.0).unwrap();
-        assert_eq!(Some(1), state_x_actual);
-
-        let native_x_actual = storage_a.read_native(x.0).unwrap();
-        assert_eq!(Some(100), native_x_actual);
-
-        storage_a.write_state(x.0, 2).unwrap();
-        storage_a.write_native(x.0, 20).unwrap();
-
-        storage_manager
-            .save_change_set(&block_a, storage_a)
-            .unwrap();
-
-        // Block B
         let block_b = MockBlockHeader {
             prev_hash: MockHash::from([1; 32]),
             hash: MockHash::from([2; 32]),
-            height: 1,
+            height: 2,
+        };
+        let block_c = MockBlockHeader {
+            prev_hash: MockHash::from([2; 32]),
+            hash: MockHash::from([3; 32]),
+            height: 3,
+        };
+        let block_d = MockBlockHeader {
+            prev_hash: MockHash::from([3; 32]),
+            hash: MockHash::from([4; 32]),
+            height: 4,
+        };
+        let block_e = MockBlockHeader {
+            prev_hash: MockHash::from([4; 32]),
+            hash: MockHash::from([5; 32]),
+            height: 5,
+        };
+        let block_f = MockBlockHeader {
+            prev_hash: MockHash::from([1; 32]),
+            hash: MockHash::from([32; 32]),
+            height: 2,
+        };
+        let block_g = MockBlockHeader {
+            prev_hash: MockHash::from([2; 32]),
+            hash: MockHash::from([23; 32]),
+            height: 3,
+        };
+        let block_h = MockBlockHeader {
+            prev_hash: MockHash::from([23; 32]),
+            hash: MockHash::from([24; 32]),
+            height: 4,
+        };
+        let block_k = MockBlockHeader {
+            prev_hash: MockHash::from([32; 32]),
+            hash: MockHash::from([33; 32]),
+            height: 3,
+        };
+        let block_l = MockBlockHeader {
+            prev_hash: MockHash::from([2; 32]),
+            hash: MockHash::from([13; 32]),
+            height: 3,
+        };
+        let block_m = MockBlockHeader {
+            prev_hash: MockHash::from([13; 32]),
+            hash: MockHash::from([14; 32]),
+            height: 4,
         };
 
-        let storage_b = storage_manager.get_native_storage_on(&block_b).unwrap();
+        // Data
+        // | Block |    DB  | Key |  Operation |
+        // |     A |  state |   1 |   write(3) |
+        // |     A |  state |   3 |   write(4) |
+        // |     A | native |   3 | write(400) |
+        // |     B |  state |   3 |   write(4) |
+        // |     B | native |   3 | write(500) |
+        // |     C |  state |   1 |     delete |
+        // |     C |  state |   4 |   write(5) |
+        // |     C | native |   1 | write(600) |
+        // |     D |  state |   3 |   write(6) |
+        // |     F |  state |   1 |   write(7) |
+        // |     F | native |   3 | write(700) |
+        // |     F |  state |   3 |     delete |
+        // |     F | native |   1 |     delete |
+        // |     G |  state |   1 |   write(8) |
+        // |     G | native |   2 |   write(9) |
+        // |     L |  state |   1 |  write(10) |
 
-        assert_eq!(Some(2), storage_b.read_state(x.0).unwrap());
-        assert_eq!(Some(20), storage_b.read_native(x.0).unwrap());
+        // A
+        let storage_a = storage_manager.get_native_storage_on(&block_a).unwrap();
+        storage_a.write_state(1, 3).unwrap();
+        storage_a.write_state(3, 4).unwrap();
+        storage_a.write_native(3, 400).unwrap();
+        storage_manager
+            .save_change_set(&block_a, storage_a)
+            .unwrap();
+        // B
+        let storage_b = storage_manager.get_native_storage_on(&block_b).unwrap();
+        storage_b.write_state(3, 4).unwrap();
+        storage_b.write_native(3, 500).unwrap();
+        storage_manager
+            .save_change_set(&block_b, storage_b)
+            .unwrap();
+        // C
+        let storage_c = storage_manager.get_native_storage_on(&block_c).unwrap();
+        storage_c.delete_state(1).unwrap();
+        storage_c.write_state(4, 5).unwrap();
+        storage_c.write_native(1, 600).unwrap();
+        storage_manager
+            .save_change_set(&block_c, storage_c)
+            .unwrap();
+        // D
+        let storage_d = storage_manager.get_native_storage_on(&block_d).unwrap();
+        storage_d.write_state(3, 6).unwrap();
+        storage_manager
+            .save_change_set(&block_d, storage_d)
+            .unwrap();
+        // F
+        let storage_f = storage_manager.get_native_storage_on(&block_f).unwrap();
+        storage_f.write_state(1, 7).unwrap();
+        storage_f.write_native(3, 700).unwrap();
+        storage_f.delete_state(3).unwrap();
+        storage_f.delete_native(1).unwrap();
+        storage_manager
+            .save_change_set(&block_f, storage_f)
+            .unwrap();
+        // G
+        let storage_g = storage_manager.get_native_storage_on(&block_g).unwrap();
+        storage_g.write_state(1, 8).unwrap();
+        storage_g.write_native(2, 9).unwrap();
+        storage_manager
+            .save_change_set(&block_g, storage_g)
+            .unwrap();
+        // L
+        let storage_l = storage_manager.get_native_storage_on(&block_l).unwrap();
+        storage_l.write_state(1, 10).unwrap();
+        storage_manager
+            .save_change_set(&block_l, storage_l)
+            .unwrap();
+
+        // VIEW: Before finalization of A
+        // | snapshot |    DB  | Key |  Value |
+        // |        E |  state |   1 |   None |
+        // |        E |  state |   2 |      2 |
+        // |        E |  state |   3 |      6 |
+        // |        E |  state |   4 |      5 |
+        // |        E | native |   1 |    600 |
+        // |        E | native |   2 |    200 |
+        // |        E | native |   3 |    500 |
+        // |        E | native |   4 |   None |
+        // |        M |  state |   1 |     10 |
+        // |        M |  state |   2 |      2 |
+        // |        M |  state |   3 |      4 |
+        // |        M |  state |   4 |   None |
+        // |        M | native |   1 |    100 |
+        // |        M | native |   2 |    200 |
+        // |        M | native |   3 |    500 |
+        // |        M | native |   4 |   None |
+        // |        H |  state |   1 |      8 |
+        // |        H |  state |   2 |      2 |
+        // |        H |  state |   3 |      4 |
+        // |        H |  state |   4 |   None |
+        // |        H | native |   1 |    100 |
+        // |        H | native |   2 |      9 |
+        // |        H | native |   3 |    500 |
+        // |        H | native |   4 |   None |
+        // |        K |  state |   1 |      7 |
+        // |        K |  state |   2 |      2 |
+        // |        K |  state |   3 |   None |
+        // |        K |  state |   4 |   None |
+        // |        K | native |   1 |   None |
+        // |        K | native |   2 |    200 |
+        // |        K | native |   3 |    700 |
+        // |        K | native |   4 |   None |
+
+        let storage_e = storage_manager.get_native_storage_on(&block_e).unwrap();
+        assert_eq!(None, storage_e.read_state(1).unwrap());
+        assert_eq!(Some(2), storage_e.read_state(2).unwrap());
+        assert_eq!(Some(6), storage_e.read_state(3).unwrap());
+        assert_eq!(Some(5), storage_e.read_state(4).unwrap());
+        assert_eq!(Some(600), storage_e.read_native(1).unwrap());
+        assert_eq!(Some(200), storage_e.read_native(2).unwrap());
+        assert_eq!(Some(500), storage_e.read_native(3).unwrap());
+        assert_eq!(None, storage_e.read_native(4).unwrap());
+
+        let storage_m = storage_manager.get_native_storage_on(&block_m).unwrap();
+        assert_eq!(Some(10), storage_m.read_state(1).unwrap());
+        assert_eq!(Some(2), storage_m.read_state(2).unwrap());
+        assert_eq!(Some(4), storage_m.read_state(3).unwrap());
+        assert_eq!(None, storage_m.read_state(4).unwrap());
+        assert_eq!(Some(100), storage_m.read_native(1).unwrap());
+        assert_eq!(Some(200), storage_m.read_native(2).unwrap());
+        assert_eq!(Some(500), storage_m.read_native(3).unwrap());
+        assert_eq!(None, storage_m.read_native(4).unwrap());
+
+        let storage_h = storage_manager.get_native_storage_on(&block_h).unwrap();
+        assert_eq!(Some(8), storage_h.read_state(1).unwrap());
+        assert_eq!(Some(2), storage_h.read_state(2).unwrap());
+        assert_eq!(Some(4), storage_h.read_state(3).unwrap());
+        assert_eq!(None, storage_h.read_state(4).unwrap());
+        assert_eq!(Some(100), storage_h.read_native(1).unwrap());
+        assert_eq!(Some(9), storage_h.read_native(2).unwrap());
+        assert_eq!(Some(500), storage_h.read_native(3).unwrap());
+        assert_eq!(None, storage_h.read_native(4).unwrap());
+
+        let storage_k = storage_manager.get_native_storage_on(&block_k).unwrap();
+        assert_eq!(Some(7), storage_k.read_state(1).unwrap());
+        assert_eq!(Some(2), storage_k.read_state(2).unwrap());
+        assert_eq!(None, storage_k.read_state(3).unwrap());
+        assert_eq!(None, storage_k.read_state(4).unwrap());
+        assert_eq!(None, storage_k.read_native(1).unwrap());
+        assert_eq!(Some(200), storage_k.read_native(2).unwrap());
+        assert_eq!(Some(700), storage_k.read_native(3).unwrap());
+        assert_eq!(None, storage_k.read_native(4).unwrap());
+
+        // After finalization
+        storage_manager.finalize(&block_a).unwrap();
+
+        storage_manager.finalize(&block_b).unwrap();
     }
 }

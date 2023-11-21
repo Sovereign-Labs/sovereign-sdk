@@ -34,7 +34,7 @@ impl<Mps: MerkleProofSpec, Q: QueryManager> NewProverStorage<Mps, Q> {
         (state_db, native_db)
     }
 
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub(crate) fn read_state(&self, key: u64) -> anyhow::Result<Option<u64>> {
         let key = DummyField(key);
         Ok(self
@@ -43,14 +43,20 @@ impl<Mps: MerkleProofSpec, Q: QueryManager> NewProverStorage<Mps, Q> {
             .map(Into::into))
     }
 
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub(crate) fn write_state(&self, key: u64, value: u64) -> anyhow::Result<()> {
         let key = DummyField(key);
         let value = DummyField(value);
         self.state_db.put::<DummyStateSchema>(&key, &value)
     }
 
-    #[allow(dead_code)]
+    #[cfg(test)]
+    pub(crate) fn delete_state(&self, key: u64) -> anyhow::Result<()> {
+        let key = DummyField(key);
+        self.state_db.delete::<DummyStateSchema>(&key)
+    }
+
+    #[cfg(test)]
     pub(crate) fn read_native(&self, key: u64) -> anyhow::Result<Option<u64>> {
         let key = DummyField(key);
         Ok(self
@@ -59,11 +65,16 @@ impl<Mps: MerkleProofSpec, Q: QueryManager> NewProverStorage<Mps, Q> {
             .map(Into::into))
     }
 
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub(crate) fn write_native(&self, key: u64, value: u64) -> anyhow::Result<()> {
         let key = DummyField(key);
         let value = DummyField(value);
         self.native_db.put::<DummyNativeSchema>(&key, &value)
+    }
+
+    pub(crate) fn delete_native(&self, key: u64) -> anyhow::Result<()> {
+        let key = DummyField(key);
+        self.native_db.delete::<DummyNativeSchema>(&key)
     }
 }
 
