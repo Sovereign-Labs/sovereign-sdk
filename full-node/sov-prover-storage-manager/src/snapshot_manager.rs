@@ -51,6 +51,11 @@ impl SnapshotManager {
     pub(crate) fn is_empty(&self) -> bool {
         self.snapshots.is_empty()
     }
+
+    #[cfg(test)]
+    pub(crate) fn contains_snapshot(&self, snapshot_id: &SnapshotId) -> bool {
+        self.snapshots.contains_key(snapshot_id)
+    }
 }
 
 impl QueryManager for SnapshotManager {
