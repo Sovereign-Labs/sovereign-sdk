@@ -50,9 +50,7 @@ pub trait Module {
         _message: Self::CallMessage,
         _context: &Self::Context,
         _working_set: &mut WorkingSet<Self::Context>,
-    ) -> Result<CallResponse, ModuleError> {
-        unreachable!()
-    }
+    ) -> Result<CallResponse, ModuleError>;
 
     /// Attempts to charge the provided amount of gas from the working set.
     ///
