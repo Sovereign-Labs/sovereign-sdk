@@ -50,9 +50,21 @@ impl NativeDB {
         version: Option<Version>,
     ) -> anyhow::Result<Option<Vec<u8>>> {
         let version_to_use = version.unwrap_or_else(|| self.get_next_version());
-        self.db
-            .get::<ModuleAccessoryState>(&(key.clone(), version_to_use))
-            .map(Option::flatten)
+        let mut iter = self.db.iter::<ModuleAccessoryState>()?;
+        iter.seek_for_prev(&(key.to_vec(), version_to_use))?;
+        let found = iter.next();
+        match found {
+            Some(result) => {
+                let ((found_key, found_version), value) = result?;
+                if &found_key == key {
+                    anyhow::ensure!(found_version <= version_to_use, "Bug! iterator isn't returning expected values. expected a version <= {version_to_use:} but found {found_version:}");
+                    Ok(value)
+                } else {
+                    Ok(None)
+                }
+            }
+            None => Ok(None),
+        }
     }
 
     /// Sets a sequence of key-value pairs in the [`NativeDB`]. The write is atomic.

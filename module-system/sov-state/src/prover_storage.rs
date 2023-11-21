@@ -94,7 +94,9 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
 
     #[cfg(feature = "native")]
     fn get_accessory(&self, key: &StorageKey) -> Option<StorageValue> {
-        let version = self.archival_version.unwrap_or(self.db.get_next_version());
+        let version = self
+            .archival_version
+            .unwrap_or(self.native_db.get_next_version() - 1);
         self.native_db
             .get_value_option(key.as_ref(), Some(version))
             .unwrap()
