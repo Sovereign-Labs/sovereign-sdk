@@ -33,8 +33,6 @@ fn initial_and_deployed_token() {
     bank.call(create_token_message, &sender_context, &mut working_set)
         .expect("Failed to create token");
 
-    assert!(working_set.events().is_empty());
-
     let sender_balance = bank.get_balance_of(sender_address, token_address, &mut working_set);
     assert!(sender_balance.is_none());
 

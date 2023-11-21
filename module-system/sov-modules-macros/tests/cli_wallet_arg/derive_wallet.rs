@@ -3,7 +3,8 @@ use sov_modules_api::cli::JsonStringArg;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::macros::{CliWallet, CliWalletArg, DefaultRuntime};
 use sov_modules_api::{
-    CallResponse, Context, DispatchCall, Error, Genesis, MessageCodec, Module, ModuleInfo, StateValue, WorkingSet
+    CallResponse, Context, DispatchCall, Error, Genesis, MessageCodec, Module, ModuleInfo,
+    StateValue, WorkingSet,
 };
 
 pub mod first_test_module {
@@ -140,7 +141,7 @@ fn main() {
             "--json",
             r#"{"Bar": 2}"#,
         ])
-        .expect("parsing must succed")
+        .expect("parsing must succeed")
         .into();
     let bar_ir: RuntimeMessage<JsonStringArg, DefaultContext> = bar_from_cli.try_into().unwrap();
 

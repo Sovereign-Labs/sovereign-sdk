@@ -59,6 +59,12 @@ impl<C: Context> Accounts<C> {
         self.accounts.set(&new_pub_key, &account, working_set);
         self.public_keys
             .set(context.sender(), &new_pub_key, working_set);
+        working_set.add_event(
+            "accounts/update",
+            &hex::encode(
+                borsh::to_vec(&CallMessage::<C>::UpdatePublicKey(new_pub_key, signature)).unwrap(),
+            ),
+        );
         Ok(CallResponse::default())
     }
 

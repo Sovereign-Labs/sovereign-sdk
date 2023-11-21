@@ -178,6 +178,10 @@ where
         for (TransactionAndRawHash { tx, raw_tx_hash }, msg) in
             txs.into_iter().zip(messages.into_iter())
         {
+            let body_to_save = Some(
+                borsh::BorshSerialize::try_to_vec(&tx).expect("Couldn't serialize tx; this ia bug"),
+            );
+
             // Pre dispatch hook
             let sender_address = match self.runtime.pre_dispatch_tx_hook(&tx, &mut batch_workspace)
             {
@@ -188,7 +192,7 @@ where
                     error!("Stateful verification error - the sequencer included an invalid transaction: {}", e);
                     let receipt = TransactionReceipt {
                         tx_hash: raw_tx_hash,
-                        body_to_save: None,
+                        body_to_save,
                         events: batch_workspace.take_events(),
                         receipt: TxEffect::Reverted,
                     };
@@ -222,7 +226,7 @@ where
 
             let receipt = TransactionReceipt {
                 tx_hash: raw_tx_hash,
-                body_to_save: None,
+                body_to_save,
                 events,
                 receipt: tx_effect,
             };

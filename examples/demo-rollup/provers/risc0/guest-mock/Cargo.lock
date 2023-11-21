@@ -952,6 +952,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "hex",
  "serde",
  "sov-modules-api",
  "sov-state",
@@ -964,6 +965,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "hex",
  "serde",
  "sov-modules-api",
  "sov-state",

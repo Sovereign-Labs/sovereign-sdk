@@ -76,6 +76,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
         context: &Self::Context,
         working_set: &mut WorkingSet<C>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
+        working_set.add_event("bank/call", &hex::encode(borsh::to_vec(&msg).unwrap()));
         match msg {
             call::CallMessage::CreateToken {
                 salt,

@@ -15,6 +15,7 @@ resolver = "2"
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["rc"] }
+hex = { workspace = true }
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true }
@@ -40,7 +41,7 @@ arbitrary = [
     "dep:proptest-derive",
     "sov-state/arbitrary",
     "sov-modules-api/arbitrary",
-    "sov-state/arbitrary"
+    "sov-state/arbitrary",
 ]
 native = ["serde", "serde_json", "jsonrpsee", "schemars", "clap", "sov-state/native", "sov-modules-api/native"]
 serde = []
