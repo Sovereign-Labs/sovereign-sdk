@@ -4,7 +4,7 @@ use helpers::*;
 use sov_bank::{get_genesis_token_address, Bank, CallMessage, Coins};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Context, Module, WorkingSet};
-use sov_state::storage::NativeStorage;
+use sov_state::storage::{NativeStorage, StateReaderAndWriter, StorageKey, StorageValue};
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
 
 #[test]
@@ -141,6 +141,73 @@ fn transfer_initial_token() {
         &mut working_set,
     );
     assert_eq!((sender_balance, receiver_balance), (80, 120));
+
+    // Accessory tests
+
+    transfer(
+        &bank,
+        token_address,
+        sender_address,
+        receiver_address,
+        &mut working_set,
+    );
+    let (sender_balance, receiver_balance) = query_sender_receiver_balances(
+        &bank,
+        token_address,
+        sender_address,
+        receiver_address,
+        &mut working_set,
+    );
+    assert_eq!((sender_balance, receiver_balance), (70, 130));
+    let mut accessory_state = working_set.accessory_state();
+    accessory_state.set(&StorageKey::from("k"), StorageValue::from(b"v1".to_vec()));
+    let val = accessory_state.get(&StorageKey::from("k")).unwrap();
+    assert_eq!("v1", String::from_utf8(val.value().to_vec()).unwrap());
+
+    commit(working_set, prover_storage.clone());
+
+    // next block
+    
+    let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
+    transfer(
+        &bank,
+        token_address,
+        sender_address,
+        receiver_address,
+        &mut working_set,
+    );
+    let (sender_balance, receiver_balance) = query_sender_receiver_balances(
+        &bank,
+        token_address,
+        sender_address,
+        receiver_address,
+        &mut working_set,
+    );
+    assert_eq!((sender_balance, receiver_balance), (60, 140));
+    let mut accessory_state = working_set.accessory_state();
+    accessory_state.set(&StorageKey::from("k"), StorageValue::from(b"v2".to_vec()));
+    let val = accessory_state.get(&StorageKey::from("k")).unwrap();
+    assert_eq!("v2", String::from_utf8(val.value().to_vec()).unwrap());
+
+    commit(working_set, prover_storage.clone());
+
+    // archival versioned state query
+
+    let archival_slot= 4;
+    let mut versioned_prover_storage = prover_storage.clone();
+    versioned_prover_storage
+        .set_archival_version(archival_slot)
+        .expect("TODO: panic message");
+    let mut working_set: WorkingSet<DefaultContext> =
+        WorkingSet::new(versioned_prover_storage.clone());
+    let mut accessory_state = working_set.accessory_state();
+    let val = accessory_state.get(&StorageKey::from("k")).unwrap();
+
+    assert_eq!("v1", String::from_utf8(val.value().to_vec()).unwrap());
+
+    commit(working_set, prover_storage.clone());
+    println!("{:?}",val);
+
 }
 
 fn query_sender_receiver_balances(
@@ -178,7 +245,7 @@ fn transfer(
         },
     };
 
-    let sender_context = C::new(sender_address);
+    let sender_context = C::new(sender_address,1);
 
     bank.call(transfer_message, &sender_context, working_set)
         .expect("Transfer call failed");
