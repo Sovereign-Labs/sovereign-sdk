@@ -19,9 +19,8 @@ pub use sov_modules_macros::MessageCodec;
 /// ```
 /// use std::marker::PhantomData;
 ///
-/// use sov_modules_api::{Context, Module, ModuleInfo, ModuleCallJsonSchema, StateMap};
+/// use sov_modules_api::{WorkingSet,Error, CallResponse, Context, Module, ModuleInfo, ModuleCallJsonSchema, StateMap};
 /// use sov_modules_api::default_context::ZkDefaultContext;
-/// use sov_bank::CallMessage;
 ///
 /// #[derive(ModuleInfo, ModuleCallJsonSchema)]
 /// struct TestModule<C: Context> {
@@ -35,8 +34,17 @@ pub use sov_modules_macros::MessageCodec;
 /// impl<C: Context> Module for TestModule<C> {
 ///     type Context = C;
 ///     type Config = PhantomData<C>;
-///     type CallMessage = CallMessage<C>;
+///     type CallMessage = ();
 ///     type Event = ();
+///     
+///     fn call(
+///        &self,
+///        _msg: Self::CallMessage,
+///        _context: &Self::Context,
+///        _working_set: &mut WorkingSet<C>,
+///     ) -> Result<CallResponse, Error> {
+///        Ok(CallResponse {})
+///     }
 /// }
 ///
 /// println!("JSON Schema: {}", TestModule::<ZkDefaultContext>::json_schema());
