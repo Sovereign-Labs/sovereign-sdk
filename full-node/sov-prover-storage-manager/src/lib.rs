@@ -186,6 +186,9 @@ where
         let current_block_hash = block_header.hash();
         let prev_block_hash = block_header.prev_hash();
 
+        self.blocks_to_parent.remove(&prev_block_hash);
+        self.blocks_to_parent.remove(&current_block_hash);
+
         let snapshot_id = self
             .block_hash_to_snapshot_id
             .remove(&current_block_hash)
@@ -193,6 +196,8 @@ where
 
         let mut state_manager = self.state_snapshot_manager.write().unwrap();
         let mut native_manager = self.native_snapshot_manager.write().unwrap();
+        let mut snapshot_id_to_parent = self.snapshot_id_to_parent.write().unwrap();
+        snapshot_id_to_parent.remove(&snapshot_id);
 
         // Return error here, as underlying database can return error
         state_manager.commit_snapshot(&snapshot_id)?;
@@ -210,8 +215,9 @@ where
         while let Some(block_hash) = to_discard.pop() {
             let child_block_hashes = self.chain_forks.remove(&block_hash).unwrap_or_default();
             self.blocks_to_parent.remove(&block_hash).unwrap();
-            let snapshot_id = self.block_hash_to_snapshot_id.remove(&block_hash).unwrap();
 
+            let snapshot_id = self.block_hash_to_snapshot_id.remove(&block_hash).unwrap();
+            snapshot_id_to_parent.remove(&snapshot_id);
             state_manager.discard_snapshot(&snapshot_id);
             native_manager.discard_snapshot(&snapshot_id);
 
@@ -516,6 +522,40 @@ mod tests {
     }
 
     #[test]
+    fn linear_progression() {
+        let state_tmpdir = tempfile::tempdir().unwrap();
+        let native_tmpdir = tempfile::tempdir().unwrap();
+
+        let (state_db, native_db) = build_dbs(state_tmpdir.path(), native_tmpdir.path());
+        let mut storage_manager = NewProverStorageManager::<Da, S>::new(state_db, native_db);
+        assert!(storage_manager.is_empty());
+
+        let block_from_i = |i: u8| MockBlockHeader {
+            prev_hash: MockHash::from([i; 32]),
+            hash: MockHash::from([i + 1; 32]),
+            height: i as u64 + 1,
+        };
+
+        for i in 0u8..10 {
+            let block = block_from_i(i);
+            let storage = storage_manager.get_native_storage_on(&block).unwrap();
+            storage_manager.save_change_set(&block, storage).unwrap();
+        }
+
+        for i in 0u8..10 {
+            let block = block_from_i(i);
+            storage_manager.finalize(&block).unwrap();
+        }
+        assert!(storage_manager.is_empty());
+    }
+
+    #[test]
+    #[ignore = "TBD"]
+    fn finalize_non_earliest_block() {
+        // All previous states should be finalized
+    }
+
+    #[test]
     fn lifecycle_simulation() {
         let state_tmpdir = tempfile::tempdir().unwrap();
         let native_tmpdir = tempfile::tempdir().unwrap();
@@ -716,36 +756,45 @@ mod tests {
         // |        K | native |   4 |   None |
 
         let storage_e = storage_manager.get_native_storage_on(&block_e).unwrap();
-        assert_eq!(None, storage_e.read_state(1).unwrap());
-        assert_eq!(Some(2), storage_e.read_state(2).unwrap());
-        assert_eq!(Some(6), storage_e.read_state(3).unwrap());
-        assert_eq!(Some(5), storage_e.read_state(4).unwrap());
-        assert_eq!(Some(600), storage_e.read_native(1).unwrap());
-        assert_eq!(Some(200), storage_e.read_native(2).unwrap());
-        assert_eq!(Some(500), storage_e.read_native(3).unwrap());
-        assert_eq!(None, storage_e.read_native(4).unwrap());
-
         let storage_m = storage_manager.get_native_storage_on(&block_m).unwrap();
-        assert_eq!(Some(10), storage_m.read_state(1).unwrap());
-        assert_eq!(Some(2), storage_m.read_state(2).unwrap());
-        assert_eq!(Some(4), storage_m.read_state(3).unwrap());
-        assert_eq!(None, storage_m.read_state(4).unwrap());
-        assert_eq!(Some(100), storage_m.read_native(1).unwrap());
-        assert_eq!(Some(200), storage_m.read_native(2).unwrap());
-        assert_eq!(Some(500), storage_m.read_native(3).unwrap());
-        assert_eq!(None, storage_m.read_native(4).unwrap());
-
         let storage_h = storage_manager.get_native_storage_on(&block_h).unwrap();
-        assert_eq!(Some(8), storage_h.read_state(1).unwrap());
-        assert_eq!(Some(2), storage_h.read_state(2).unwrap());
-        assert_eq!(Some(4), storage_h.read_state(3).unwrap());
-        assert_eq!(None, storage_h.read_state(4).unwrap());
-        assert_eq!(Some(100), storage_h.read_native(1).unwrap());
-        assert_eq!(Some(9), storage_h.read_native(2).unwrap());
-        assert_eq!(Some(500), storage_h.read_native(3).unwrap());
-        assert_eq!(None, storage_h.read_native(4).unwrap());
-
         let storage_k = storage_manager.get_native_storage_on(&block_k).unwrap();
+
+        let assert_main_fork = || {
+            println!("E");
+            assert_eq!(None, storage_e.read_state(1).unwrap());
+            println!("1");
+            assert_eq!(Some(2), storage_e.read_state(2).unwrap());
+            println!("2");
+            assert_eq!(Some(6), storage_e.read_state(3).unwrap());
+            assert_eq!(Some(5), storage_e.read_state(4).unwrap());
+            assert_eq!(Some(600), storage_e.read_native(1).unwrap());
+            assert_eq!(Some(200), storage_e.read_native(2).unwrap());
+            assert_eq!(Some(500), storage_e.read_native(3).unwrap());
+            assert_eq!(None, storage_e.read_native(4).unwrap());
+
+            println!("M");
+            assert_eq!(Some(10), storage_m.read_state(1).unwrap());
+            assert_eq!(Some(2), storage_m.read_state(2).unwrap());
+            assert_eq!(Some(4), storage_m.read_state(3).unwrap());
+            assert_eq!(None, storage_m.read_state(4).unwrap());
+            assert_eq!(Some(100), storage_m.read_native(1).unwrap());
+            assert_eq!(Some(200), storage_m.read_native(2).unwrap());
+            assert_eq!(Some(500), storage_m.read_native(3).unwrap());
+            assert_eq!(None, storage_m.read_native(4).unwrap());
+
+            println!("H");
+            assert_eq!(Some(8), storage_h.read_state(1).unwrap());
+            assert_eq!(Some(2), storage_h.read_state(2).unwrap());
+            assert_eq!(Some(4), storage_h.read_state(3).unwrap());
+            assert_eq!(None, storage_h.read_state(4).unwrap());
+            assert_eq!(Some(100), storage_h.read_native(1).unwrap());
+            assert_eq!(Some(9), storage_h.read_native(2).unwrap());
+            assert_eq!(Some(500), storage_h.read_native(3).unwrap());
+            assert_eq!(None, storage_h.read_native(4).unwrap());
+            println!("DONE!");
+        };
+        assert_main_fork();
         assert_eq!(Some(7), storage_k.read_state(1).unwrap());
         assert_eq!(Some(2), storage_k.read_state(2).unwrap());
         assert_eq!(None, storage_k.read_state(3).unwrap());
@@ -755,9 +804,22 @@ mod tests {
         assert_eq!(Some(700), storage_k.read_native(3).unwrap());
         assert_eq!(None, storage_k.read_native(4).unwrap());
 
-        // After finalization
+        // After finalization of A
         storage_manager.finalize(&block_a).unwrap();
+        assert_main_fork();
+        // Storage K is now unknown snapshot, as it was created from block F, which was discarded
+        // assert_eq!(Some(7), storage_k.read_state(1).unwrap());
+        // assert_eq!(Some(2), storage_k.read_state(2).unwrap());
+        // assert_eq!(None, storage_k.read_state(3).unwrap());
+        // assert_eq!(None, storage_k.read_state(4).unwrap());
+        // assert_eq!(None, storage_k.read_native(1).unwrap());
+        // assert_eq!(Some(200), storage_k.read_native(2).unwrap());
+        // assert_eq!(Some(700), storage_k.read_native(3).unwrap());
+        // assert_eq!(None, storage_k.read_native(4).unwrap());
 
+        // Finalizing the rest
         storage_manager.finalize(&block_b).unwrap();
+
+        // TODO: Check that values are in the database
     }
 }

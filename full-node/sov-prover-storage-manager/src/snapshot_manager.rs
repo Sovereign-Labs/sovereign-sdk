@@ -35,9 +35,7 @@ impl SnapshotManager {
     }
 
     pub(crate) fn discard_snapshot(&mut self, snapshot_id: &SnapshotId) {
-        self.snapshots
-            .remove(snapshot_id)
-            .expect("Attempt to discard unknown snapshot");
+        self.snapshots.remove(snapshot_id);
     }
 
     pub(crate) fn commit_snapshot(&mut self, snapshot_id: &SnapshotId) -> anyhow::Result<()> {
@@ -65,7 +63,7 @@ impl QueryManager for SnapshotManager {
             let parent_snapshot = self
                 .snapshots
                 .get(parent_snapshot_id)
-                .expect("Inconsistency between snapshots and to_parent");
+                .expect("Inconsistency between `self.snapshots` and `self.to_parent`");
 
             // Some operation has been found
             if let Some(operation) = parent_snapshot.get(key)? {
@@ -164,8 +162,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Attempt to discard unknown snapshot")]
     fn test_discard_unknown() {
+        // Discarding unknown snapshots are fine.
+        // As it possible that caller didn't save it previously.
         let tempdir = tempfile::tempdir().unwrap();
         let db = create_test_db(tempdir.path());
         let to_parent = Arc::new(RwLock::new(HashMap::new()));
