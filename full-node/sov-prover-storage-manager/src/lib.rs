@@ -83,8 +83,14 @@ where
         let prev_block_hash = block_header.prev_hash();
         assert_ne!(
             current_block_hash, prev_block_hash,
-            "Cannot provide storage for corrupt block"
+            "Cannot provide storage for corrupt block: prev_hash == current_hash"
         );
+        if let Some(prev_snapshot_id) = self.block_hash_to_snapshot_id.get(&prev_block_hash) {
+            let state_snapshot_manager = self.state_snapshot_manager.read().unwrap();
+            if !state_snapshot_manager.contains_snapshot(prev_snapshot_id) {
+                anyhow::bail!("Snapshot for previous block has been saved yet");
+            }
+        }
 
         let new_snapshot_id = match self.block_hash_to_snapshot_id.get(&current_block_hash) {
             // Storage for this block has been requested before
@@ -287,6 +293,11 @@ mod tests {
                     "snapshot id={} is missing in native_snapshot_manager",
                     snapshot_id
                 );
+            } else {
+                assert_eq!(
+                    state_snapshot_manager.contains_snapshot(snapshot_id),
+                    native_snapshot_manager.contains_snapshot(snapshot_id),
+                );
             }
 
             // If there's reference to parent snapshot id, it should be consistent with block hash i
@@ -398,8 +409,8 @@ mod tests {
         assert!(storage_manager.is_empty());
 
         let block_header = MockBlockHeader {
-            prev_hash: MockHash::from([1; 32]),
-            hash: MockHash::from([2; 32]),
+            prev_hash: MockHash::from([0; 32]),
+            hash: MockHash::from([1; 32]),
             height: 1,
         };
 
@@ -451,6 +462,42 @@ mod tests {
         storage_manager
             .get_native_storage_on(&block_header)
             .unwrap();
+    }
+
+    #[test]
+    fn read_state_before_parent_is_added() {
+        // Blocks A -> B
+        // create snapshot A from block A
+        // create snapshot B from block B
+        // query data from block B, before adding snapshot A back to the manager!
+        let state_tmpdir = tempfile::tempdir().unwrap();
+        let native_tmpdir = tempfile::tempdir().unwrap();
+
+        let (state_db, native_db) = build_dbs(state_tmpdir.path(), native_tmpdir.path());
+
+        let mut storage_manager = NewProverStorageManager::<Da, S>::new(state_db, native_db);
+        assert!(storage_manager.is_empty());
+
+        let block_a = MockBlockHeader {
+            prev_hash: MockHash::from([1; 32]),
+            hash: MockHash::from([2; 32]),
+            height: 1,
+        };
+        let block_b = MockBlockHeader {
+            prev_hash: MockHash::from([2; 32]),
+            hash: MockHash::from([1; 32]),
+            height: 2,
+        };
+
+        let _storage_a = storage_manager.get_native_storage_on(&block_a).unwrap();
+
+        // new storage can be crated only on top of saved snapshot.
+        let result = storage_manager.get_native_storage_on(&block_b);
+        assert!(result.is_err());
+        assert_eq!(
+            "Snapshot for previous block has been saved yet",
+            result.err().unwrap().to_string()
+        );
     }
 
     #[test]
@@ -578,15 +625,6 @@ mod tests {
         assert!(result.is_err());
         let err_msg = result.err().unwrap().to_string();
         assert_eq!("Attempt to save unknown snapshot with id=1", err_msg);
-    }
-
-    #[test]
-    #[ignore = "TBD"]
-    fn read_state_before_parent_is_added() {
-        // Blocks A -> B
-        // create snapshot A from block A
-        // create snapshot B from block B
-        // query data from block B, before adding snapshot A back to the manager!
     }
 
     #[test]
@@ -922,6 +960,10 @@ mod tests {
         assert_main_fork();
         // Finalizing the rest
         storage_manager.finalize(&block_b).unwrap();
+        validate_internal_consistency(&storage_manager);
+        storage_manager.finalize(&block_c).unwrap();
+        validate_internal_consistency(&storage_manager);
+        storage_manager.finalize(&block_d).unwrap();
         validate_internal_consistency(&storage_manager);
         // TODO: Check that values are in the database
     }
