@@ -109,7 +109,6 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvm {
 }
 
 /// A mock implementing the Guest.
-
 pub struct MockZkGuest {
     #[allow(dead_code)]
     commits: (),

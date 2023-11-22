@@ -13,12 +13,12 @@ async fn test_prover_prove() {
     let zk_stf = MockStf::<MockValidityCond>::default();
     let da_verifier = MockDaVerifier::default();
 
-    let prover_service: ParallelProverService<[u8; 32], Vec<u8>, MockDaService, _, _> =
+    let prover_service: ParallelProverService<[u8; 0], Vec<u8>, MockDaService, _, _> =
         ParallelProverService::new(vm, zk_stf, da_verifier, prover_config, ());
 
     let header_hash = [0; 32];
     let state_transition_data = StateTransitionData {
-        pre_state_root: [0; 32],
+        pre_state_root: [],
         da_block_header: MockBlockHeader {
             prev_hash: [0; 32].into(),
             hash: header_hash.into(),
