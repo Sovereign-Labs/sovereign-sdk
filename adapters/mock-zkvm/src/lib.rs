@@ -142,7 +142,7 @@ impl sov_rollup_interface::zk::ZkvmGuest for MockZkGuest {
         todo!()
     }
 
-    fn commit<T: Serialize>(&self, item: &T) {}
+    fn commit<T: Serialize>(&self, _item: &T) {}
 }
 
 #[test]
