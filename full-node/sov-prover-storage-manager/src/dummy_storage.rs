@@ -72,6 +72,7 @@ impl<Mps: MerkleProofSpec, Q: QueryManager> NewProverStorage<Mps, Q> {
         self.native_db.put::<DummyNativeSchema>(&key, &value)
     }
 
+    #[cfg(test)]
     pub(crate) fn delete_native(&self, key: u64) -> anyhow::Result<()> {
         let key = DummyField(key);
         self.native_db.delete::<DummyNativeSchema>(&key)

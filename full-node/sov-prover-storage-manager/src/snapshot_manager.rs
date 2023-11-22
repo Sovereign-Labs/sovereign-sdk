@@ -101,14 +101,13 @@ mod tests {
 
     fn create_test_db(path: &std::path::Path) -> sov_schema_db::DB {
         let tables = vec![DUMMY_STATE_CF.to_string()];
-        let db = sov_schema_db::DB::open(
+        sov_schema_db::DB::open(
             path,
             "test_db",
             tables,
             &gen_rocksdb_options(&Default::default(), false),
         )
-        .unwrap();
-        db
+        .unwrap()
     }
 
     #[test]
@@ -258,17 +257,17 @@ mod tests {
             edit.insert(7, 6);
         }
 
-        let one = DummyField(1);
-        let two = DummyField(2);
-        let three = DummyField(3);
-        let four = DummyField(4);
-        let five = DummyField(5);
-        let six = DummyField(6);
-        let seven = DummyField(7);
-        let eight = DummyField(8);
+        let f1 = DummyField(1);
+        let f2 = DummyField(2);
+        let f3 = DummyField(3);
+        let f4 = DummyField(4);
+        let f5 = DummyField(5);
+        let f6 = DummyField(6);
+        let f7 = DummyField(7);
+        let f8 = DummyField(8);
 
         let mut db_data = SchemaBatch::new();
-        db_data.put::<Schema>(&one, &one).unwrap();
+        db_data.put::<Schema>(&f1, &f1).unwrap();
         db.write_schemas(db_data).unwrap();
 
         let mut snapshot_manager = SnapshotManager::new(db, to_parent.clone());
@@ -287,14 +286,14 @@ mod tests {
 
         // 1
         let db_snapshot = DbSnapshot::new(1, query_manager.clone().into());
-        db_snapshot.put::<Schema>(&two, &two).unwrap();
-        db_snapshot.put::<Schema>(&three, &four).unwrap();
+        db_snapshot.put::<Schema>(&f2, &f2).unwrap();
+        db_snapshot.put::<Schema>(&f3, &f4).unwrap();
         snapshot_manager.add_snapshot(db_snapshot.into());
 
         // 2
         let db_snapshot = DbSnapshot::new(2, query_manager.clone().into());
-        db_snapshot.put::<Schema>(&one, &five).unwrap();
-        db_snapshot.delete::<Schema>(&two).unwrap();
+        db_snapshot.put::<Schema>(&f1, &f5).unwrap();
+        db_snapshot.delete::<Schema>(&f2).unwrap();
         snapshot_manager.add_snapshot(db_snapshot.into());
 
         // 3
@@ -303,7 +302,7 @@ mod tests {
 
         // 4
         let db_snapshot = DbSnapshot::new(4, query_manager.clone().into());
-        db_snapshot.put::<Schema>(&three, &six).unwrap();
+        db_snapshot.put::<Schema>(&f3, &f6).unwrap();
         snapshot_manager.add_snapshot(db_snapshot.into());
 
         // 5
@@ -312,8 +311,8 @@ mod tests {
 
         // 6
         let db_snapshot = DbSnapshot::new(6, query_manager.clone().into());
-        db_snapshot.put::<Schema>(&one, &seven).unwrap();
-        db_snapshot.put::<Schema>(&two, &eight).unwrap();
+        db_snapshot.put::<Schema>(&f1, &f7).unwrap();
+        db_snapshot.put::<Schema>(&f2, &f8).unwrap();
         snapshot_manager.add_snapshot(db_snapshot.into());
 
         // 7
@@ -331,39 +330,15 @@ mod tests {
         // | 7           |   1 |     7 |
         // | 7           |   2 |     8 |
         // | 7           |   3 |     4 |
-        assert_eq!(
-            Some(five.clone()),
-            snapshot_manager.get::<Schema>(3, &one).unwrap()
-        );
-        assert_eq!(None, snapshot_manager.get::<Schema>(3, &two).unwrap());
-        assert_eq!(
-            Some(four.clone()),
-            snapshot_manager.get::<Schema>(3, &three).unwrap()
-        );
-        assert_eq!(
-            Some(one.clone()),
-            snapshot_manager.get::<Schema>(5, &one).unwrap()
-        );
-        assert_eq!(
-            Some(two.clone()),
-            snapshot_manager.get::<Schema>(5, &two).unwrap()
-        );
-        assert_eq!(
-            Some(six.clone()),
-            snapshot_manager.get::<Schema>(5, &three).unwrap()
-        );
+        assert_eq!(Some(f5), snapshot_manager.get::<Schema>(3, &f1).unwrap());
+        assert_eq!(None, snapshot_manager.get::<Schema>(3, &f2).unwrap());
+        assert_eq!(Some(f4), snapshot_manager.get::<Schema>(3, &f3).unwrap());
+        assert_eq!(Some(f1), snapshot_manager.get::<Schema>(5, &f1).unwrap());
+        assert_eq!(Some(f2), snapshot_manager.get::<Schema>(5, &f2).unwrap());
+        assert_eq!(Some(f6), snapshot_manager.get::<Schema>(5, &f3).unwrap());
 
-        assert_eq!(
-            Some(seven),
-            snapshot_manager.get::<Schema>(7, &one).unwrap()
-        );
-        assert_eq!(
-            Some(eight),
-            snapshot_manager.get::<Schema>(7, &two).unwrap()
-        );
-        assert_eq!(
-            Some(four),
-            snapshot_manager.get::<Schema>(7, &three).unwrap()
-        );
+        assert_eq!(Some(f7), snapshot_manager.get::<Schema>(7, &f1).unwrap());
+        assert_eq!(Some(f8), snapshot_manager.get::<Schema>(7, &f2).unwrap());
+        assert_eq!(Some(f4), snapshot_manager.get::<Schema>(7, &f3).unwrap());
     }
 }

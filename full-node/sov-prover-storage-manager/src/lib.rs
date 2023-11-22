@@ -65,68 +65,6 @@ where
             && self.state_snapshot_manager.read().unwrap().is_empty()
             && self.native_snapshot_manager.read().unwrap().is_empty()
     }
-
-    #[cfg(test)]
-    fn print_internal_state(&self) {
-        println!("=============================");
-        println!("chain_forks: {:?}", self.chain_forks);
-        println!("blocks_to_parent: {:?}", self.blocks_to_parent);
-        println!(
-            "snapshot_id_to_parent: {:?}",
-            self.snapshot_id_to_parent.read().unwrap()
-        );
-        println!(
-            "block_hash_to_snapshot_id: {:?}",
-            self.block_hash_to_snapshot_id
-        );
-        println!("=============================");
-    }
-
-    #[cfg(test)]
-    fn validate_internal_consistency(&self) {
-        let snapshot_id_to_parent = self.snapshot_id_to_parent.read().unwrap();
-        let state_snapshot_manager = self.state_snapshot_manager.read().unwrap();
-        let native_snapshot_manager = self.state_snapshot_manager.read().unwrap();
-
-        for (block_hash, parent_block_hash) in self.blocks_to_parent.iter() {
-            // For each block hash there should be snapshot id
-            let snapshot_id = self
-                .block_hash_to_snapshot_id
-                .get(block_hash)
-                .expect("Missing snapshot_id");
-            // For each snapshot id there should be snapshot in the manager
-            assert!(
-                state_snapshot_manager.contains_snapshot(snapshot_id),
-                "snapshot id={} is missing in state_snapshot_manager",
-                snapshot_id
-            );
-            assert!(
-                native_snapshot_manager.contains_snapshot(snapshot_id),
-                "snapshot id={} is missing in native_snapshot_manager",
-                snapshot_id
-            );
-
-            // If there's reference to parent snapshot id, it should be consistent
-            match snapshot_id_to_parent.get(snapshot_id) {
-                None => {
-                    assert!(self
-                        .block_hash_to_snapshot_id
-                        .get(parent_block_hash)
-                        .is_none());
-                }
-                Some(parent_snapshot_id) => {
-                    let parent_snapshot_id_from_block_hash = self
-                        .block_hash_to_snapshot_id
-                        .get(parent_block_hash)
-                        .expect(&format!(
-                            "Missing parent snapshot_id for block_hash={:?}, parent_block_hash={:?}, snapshot_id={}, expected_parent_snapshot_id={}",
-                            block_hash, parent_block_hash, snapshot_id, parent_snapshot_id,
-                        ));
-                    assert_eq!(parent_snapshot_id, parent_snapshot_id_from_block_hash);
-                }
-            }
-        }
-    }
 }
 
 impl<Da: DaSpec, S: MerkleProofSpec> HierarchicalStorageManager<Da>
@@ -248,7 +186,6 @@ where
     }
 
     fn finalize(&mut self, block_header: &Da::BlockHeader) -> anyhow::Result<()> {
-        println!("FINALIZING BH: {:?}", block_header);
         let current_block_hash = block_header.hash();
         let prev_block_hash = block_header.prev_hash();
 
@@ -261,7 +198,6 @@ where
             .block_hash_to_snapshot_id
             .remove(&current_block_hash)
             .ok_or(anyhow::anyhow!("Attempt to finalize non existing snapshot"))?;
-        println!("FINALIZING SNAPSHOT ID: {:?}", snapshot_id);
 
         let mut state_manager = self.state_snapshot_manager.write().unwrap();
         let mut native_manager = self.native_snapshot_manager.write().unwrap();
@@ -293,8 +229,14 @@ where
             to_discard.extend(child_block_hashes);
         }
 
-        // TODO: O(n) operation, can be optimized
-        snapshot_id_to_parent.retain(|_, parent_snapshot_id| parent_snapshot_id != snapshot_id);
+        // Removing snapshot id pointers for children of this one
+        for child_block_hash in self.chain_forks.get(&current_block_hash).unwrap_or(&vec![]) {
+            let child_snapshot_id = self
+                .block_hash_to_snapshot_id
+                .get(child_block_hash)
+                .unwrap();
+            snapshot_id_to_parent.remove(child_snapshot_id);
+        }
 
         Ok(())
     }
@@ -315,6 +257,59 @@ mod tests {
 
     type Da = sov_mock_da::MockDaSpec;
     type S = sov_state::DefaultStorageSpec;
+
+    fn validate_internal_consistency(storage_manager: &NewProverStorageManager<Da, S>) {
+        let snapshot_id_to_parent = storage_manager.snapshot_id_to_parent.read().unwrap();
+        let state_snapshot_manager = storage_manager.state_snapshot_manager.read().unwrap();
+        let native_snapshot_manager = storage_manager.state_snapshot_manager.read().unwrap();
+
+        for (block_hash, parent_block_hash) in storage_manager.blocks_to_parent.iter() {
+            // For each block hash there should be snapshot id
+            let snapshot_id = storage_manager
+                .block_hash_to_snapshot_id
+                .get(block_hash)
+                .expect("Missing snapshot_id");
+
+            // For each snapshot id, that is not head, there should be parent snapshot id
+            if !storage_manager
+                .chain_forks
+                .get(block_hash)
+                .unwrap_or(&vec![])
+                .is_empty()
+            {
+                assert!(
+                    state_snapshot_manager.contains_snapshot(snapshot_id),
+                    "snapshot id={} is missing in state_snapshot_manager",
+                    snapshot_id
+                );
+                assert!(
+                    native_snapshot_manager.contains_snapshot(snapshot_id),
+                    "snapshot id={} is missing in native_snapshot_manager",
+                    snapshot_id
+                );
+            }
+
+            // If there's reference to parent snapshot id, it should be consistent with block hash i
+            match snapshot_id_to_parent.get(snapshot_id) {
+                None => {
+                    assert!(storage_manager
+                        .block_hash_to_snapshot_id
+                        .get(parent_block_hash)
+                        .is_none());
+                }
+                Some(parent_snapshot_id) => {
+                    let parent_snapshot_id_from_block_hash = storage_manager
+                        .block_hash_to_snapshot_id
+                        .get(parent_block_hash)
+                        .unwrap_or_else(|| panic!(
+                            "Missing parent snapshot_id for block_hash={:?}, parent_block_hash={:?}, snapshot_id={}, expected_parent_snapshot_id={}",
+                            block_hash, parent_block_hash, snapshot_id, parent_snapshot_id,
+                        ));
+                    assert_eq!(parent_snapshot_id, parent_snapshot_id_from_block_hash);
+                }
+            }
+        }
+    }
 
     fn build_dbs(
         state_path: &path::Path,
@@ -349,6 +344,7 @@ mod tests {
 
         let storage_manager = NewProverStorageManager::<Da, S>::new(state_db, native_db);
         assert!(storage_manager.is_empty());
+        validate_internal_consistency(&storage_manager);
     }
 
     #[test]
@@ -614,14 +610,10 @@ mod tests {
             storage_manager.save_change_set(&block, storage).unwrap();
         }
 
-        storage_manager.print_internal_state();
-        println!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
         for i in 0u8..4 {
             let block = block_from_i(i);
-            println!("Finalizing block {}", block);
             storage_manager.finalize(&block).unwrap();
-            storage_manager.print_internal_state();
-            storage_manager.validate_internal_consistency();
+            validate_internal_consistency(&storage_manager);
         }
         assert!(storage_manager.is_empty());
     }
@@ -668,7 +660,7 @@ mod tests {
                 height: prev_hash as u64 + 1,
             };
             storage_manager.finalize(&block).unwrap();
-            storage_manager.validate_internal_consistency();
+            validate_internal_consistency(&storage_manager);
         }
 
         assert!(storage_manager.is_empty());
@@ -886,11 +878,8 @@ mod tests {
         let storage_k = storage_manager.get_native_storage_on(&block_k).unwrap();
 
         let assert_main_fork = || {
-            println!("E");
             assert_eq!(None, storage_e.read_state(1).unwrap());
-            println!("1");
             assert_eq!(Some(2), storage_e.read_state(2).unwrap());
-            println!("2");
             assert_eq!(Some(6), storage_e.read_state(3).unwrap());
             assert_eq!(Some(5), storage_e.read_state(4).unwrap());
             assert_eq!(Some(600), storage_e.read_native(1).unwrap());
@@ -898,7 +887,6 @@ mod tests {
             assert_eq!(Some(500), storage_e.read_native(3).unwrap());
             assert_eq!(None, storage_e.read_native(4).unwrap());
 
-            println!("M");
             assert_eq!(Some(10), storage_m.read_state(1).unwrap());
             assert_eq!(Some(2), storage_m.read_state(2).unwrap());
             assert_eq!(Some(4), storage_m.read_state(3).unwrap());
@@ -908,7 +896,6 @@ mod tests {
             assert_eq!(Some(500), storage_m.read_native(3).unwrap());
             assert_eq!(None, storage_m.read_native(4).unwrap());
 
-            println!("H");
             assert_eq!(Some(8), storage_h.read_state(1).unwrap());
             assert_eq!(Some(2), storage_h.read_state(2).unwrap());
             assert_eq!(Some(4), storage_h.read_state(3).unwrap());
@@ -917,7 +904,6 @@ mod tests {
             assert_eq!(Some(9), storage_h.read_native(2).unwrap());
             assert_eq!(Some(500), storage_h.read_native(3).unwrap());
             assert_eq!(None, storage_h.read_native(4).unwrap());
-            println!("DONE!");
         };
         assert_main_fork();
         assert_eq!(Some(7), storage_k.read_state(1).unwrap());
@@ -929,26 +915,14 @@ mod tests {
         assert_eq!(Some(700), storage_k.read_native(3).unwrap());
         assert_eq!(None, storage_k.read_native(4).unwrap());
 
+        validate_internal_consistency(&storage_manager);
         // After finalization of A
-        // storage_manager.print_internal_state();
-        // storage_manager.validate_internal_consistency();
         storage_manager.finalize(&block_a).unwrap();
-        storage_manager.print_internal_state();
-        storage_manager.validate_internal_consistency();
+        validate_internal_consistency(&storage_manager);
         assert_main_fork();
-        // Storage K is now unknown snapshot, as it was created from block F, which was discarded
-        // assert_eq!(Some(7), storage_k.read_state(1).unwrap());
-        // assert_eq!(Some(2), storage_k.read_state(2).unwrap());
-        // assert_eq!(None, storage_k.read_state(3).unwrap());
-        // assert_eq!(None, storage_k.read_state(4).unwrap());
-        // assert_eq!(None, storage_k.read_native(1).unwrap());
-        // assert_eq!(Some(200), storage_k.read_native(2).unwrap());
-        // assert_eq!(Some(700), storage_k.read_native(3).unwrap());
-        // assert_eq!(None, storage_k.read_native(4).unwrap());
-
         // Finalizing the rest
         storage_manager.finalize(&block_b).unwrap();
-
+        validate_internal_consistency(&storage_manager);
         // TODO: Check that values are in the database
     }
 }
