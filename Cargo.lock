@@ -3952,15 +3952,15 @@ dependencies = [
 
 [[package]]
 name = "ics23"
-version = "0.10.2"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "442d4bab37956e76f739c864f246c825d87c0bb7f9afa65660c57833c91bf6d4"
+checksum = "661e2d6f79952a65bc92b1c81f639ebd37228dae6ff412a5aba7d474bdc4b957"
 dependencies = [
  "anyhow",
  "bytes",
  "hex",
  "informalsystems-pbjson",
- "prost 0.11.9",
+ "prost 0.12.2",
  "ripemd",
  "serde",
  "sha2 0.10.8",
@@ -4321,9 +4321,8 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 
 [[package]]
 name = "jmt"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23f1cb339f7d5288603665c0ccbef7ad33a782ced36e18b6b207f175479eb3b7"
+version = "0.9.0"
+source = "git+https://github.com/penumbra-zone/jmt.git?rev=1d007e11cb68aa5ca13e9a5af4a12e6439d5f7b6#1d007e11cb68aa5ca13e9a5af4a12e6439d5f7b6"
 dependencies = [
  "anyhow",
  "borsh",
