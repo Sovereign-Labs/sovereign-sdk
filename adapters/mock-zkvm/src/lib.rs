@@ -100,7 +100,7 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvm {
     fn add_hint<T: Serialize>(&mut self, _item: T) {}
 
     fn simulate_with_hints(&mut self) -> Self::Guest {
-        todo!()
+        unimplemented!()
     }
 
     fn run(&mut self, _with_proof: bool) -> Result<sov_rollup_interface::zk::Proof, anyhow::Error> {
@@ -124,7 +124,7 @@ impl sov_rollup_interface::zk::Zkvm for MockZkGuest {
         _serialized_proof: &'a [u8],
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<&'a [u8], Self::Error> {
-        todo!()
+        unimplemented!()
     }
 
     fn verify_and_extract_output<
@@ -135,16 +135,18 @@ impl sov_rollup_interface::zk::Zkvm for MockZkGuest {
         _serialized_proof: &[u8],
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
-        todo!()
+        unimplemented!()
     }
 }
 
 impl sov_rollup_interface::zk::ZkvmGuest for MockZkGuest {
     fn read_from_host<T: serde::de::DeserializeOwned>(&self) -> T {
-        todo!()
+        unimplemented!()
     }
 
-    fn commit<T: Serialize>(&self, _item: &T) {}
+    fn commit<T: Serialize>(&self, _item: &T) {
+        unimplemented!()
+    }
 }
 
 #[test]
