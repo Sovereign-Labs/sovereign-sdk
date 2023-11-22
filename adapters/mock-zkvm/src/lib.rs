@@ -111,6 +111,7 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvm {
 /// A mock implementing the Guest.
 pub struct MockZkGuest {
     #[allow(dead_code)]
+    // We need this unused field here as a workaround for a rustc compiler bug: "error: the compiler unexpectedly panicked. this is a bug"
     commits: (),
 }
 
