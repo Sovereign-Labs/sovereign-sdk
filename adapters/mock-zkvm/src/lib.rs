@@ -60,7 +60,8 @@ impl<'a> MockProof<'a> {
 }
 
 /// A mock implementing the zkVM trait.
-pub struct MockZkvm;
+#[derive(Clone)]
+pub struct MockZkvm {}
 
 impl sov_rollup_interface::zk::Zkvm for MockZkvm {
     type CodeCommitment = MockCodeCommitment;
@@ -90,6 +91,61 @@ impl sov_rollup_interface::zk::Zkvm for MockZkvm {
     ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
         let output = Self::verify(serialized_proof, code_commitment)?;
         Ok(bincode::deserialize(output)?)
+    }
+}
+
+impl sov_rollup_interface::zk::ZkvmHost for MockZkvm {
+    type Guest = MockZkGuest;
+
+    fn add_hint<T: Serialize>(&mut self, _item: T) {}
+
+    fn simulate_with_hints(&mut self) -> Self::Guest {
+        unimplemented!()
+    }
+
+    fn run(&mut self, _with_proof: bool) -> Result<sov_rollup_interface::zk::Proof, anyhow::Error> {
+        Ok(sov_rollup_interface::zk::Proof::Empty)
+    }
+}
+
+/// A mock implementing the Guest.
+pub struct MockZkGuest {
+    #[allow(dead_code)]
+    // We need this unused field here as a workaround for a rustc compiler bug: "error: the compiler unexpectedly panicked. this is a bug"
+    commits: (),
+}
+
+impl sov_rollup_interface::zk::Zkvm for MockZkGuest {
+    type CodeCommitment = MockCodeCommitment;
+
+    type Error = anyhow::Error;
+
+    fn verify<'a>(
+        _serialized_proof: &'a [u8],
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<&'a [u8], Self::Error> {
+        unimplemented!()
+    }
+
+    fn verify_and_extract_output<
+        Add: sov_rollup_interface::RollupAddress,
+        Da: sov_rollup_interface::da::DaSpec,
+        Root: Serialize + serde::de::DeserializeOwned,
+    >(
+        _serialized_proof: &[u8],
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
+        unimplemented!()
+    }
+}
+
+impl sov_rollup_interface::zk::ZkvmGuest for MockZkGuest {
+    fn read_from_host<T: serde::de::DeserializeOwned>(&self) -> T {
+        unimplemented!()
+    }
+
+    fn commit<T: Serialize>(&self, _item: &T) {
+        unimplemented!()
     }
 }
 
