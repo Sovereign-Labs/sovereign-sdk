@@ -27,7 +27,7 @@
 
 use borsh::{maybestd, BorshDeserialize, BorshSerialize};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use jmt::storage::{Node, NodeKey};
+use jmt::storage::{NibblePath, Node, NodeKey};
 use jmt::Version;
 use sov_rollup_interface::stf::{Event, EventKey};
 use sov_schema_db::schema::{KeyDecoder, KeyEncoder, ValueCodec};
@@ -261,12 +261,28 @@ define_table_without_codec!(
 
 impl KeyEncoder<JmtNodes> for NodeKey {
     fn encode_key(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
-        self.try_to_vec().map_err(CodecError::from)
+        // 8 bytes for version, 4 each for the num_nibbles and bytes.len() fields, plus 1 byte per byte of nibllepath
+        let mut output =
+            Vec::with_capacity(8 + 4 + 4 + ((self.nibble_path().num_nibbles() + 1) / 2));
+        let version = self.version().to_be_bytes();
+        output.extend_from_slice(&version);
+        self.nibble_path().serialize(&mut output)?;
+        Ok(output)
     }
 }
 impl KeyDecoder<JmtNodes> for NodeKey {
     fn decode_key(data: &[u8]) -> sov_schema_db::schema::Result<Self> {
-        Ok(Self::deserialize_reader(&mut &data[..])?)
+        if data.len() < 8 {
+            return Err(CodecError::InvalidKeyLength {
+                expected: 9,
+                got: data.len(),
+            });
+        }
+        let mut version = [0u8; 8];
+        version.copy_from_slice(&data[..8]);
+        let version = u64::from_be_bytes(version);
+        let nibble_path = NibblePath::deserialize_reader(&mut &data[8..])?;
+        Ok(Self::new(version, nibble_path))
     }
 }
 

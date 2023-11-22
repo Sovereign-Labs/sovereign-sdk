@@ -1,4 +1,3 @@
-use std::array::IntoIter;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -95,11 +94,11 @@ impl StateDB {
     }
 
     fn last_version_written(db: &DB) -> anyhow::Result<Option<Version>> {
-        let mut iter = db.iter::<JmtValues>()?;
+        let mut iter = db.iter::<JmtNodes>()?;
         iter.seek_to_last();
 
         let version = match iter.next() {
-            Some(Ok(((_, version), _))) => Some(version),
+            Some(Ok((key, _))) => Some(key.version()),
             _ => None,
         };
         Ok(version)

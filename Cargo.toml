@@ -60,7 +60,8 @@ repository = "https://github.com/sovereign-labs/sovereign-sdk"
 
 [workspace.dependencies]
 # Dependencies maintained by Sovereign
-jmt = "0.8.0"
+jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "1d007e11cb68aa5ca13e9a5af4a12e6439d5f7b6" }
+
 
 # External dependencies
 async-trait = "0.1.71"
