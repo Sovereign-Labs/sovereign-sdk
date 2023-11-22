@@ -1,6 +1,6 @@
 [package]
 name = "sov-prover-storage-manager"
-description = "Storage manager for prover storage"
+description = "Hierarchical storage manager for prover storage"
 license = { workspace = true }
 edition = { workspace = true }
 authors = { workspace = true }

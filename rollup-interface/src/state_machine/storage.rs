@@ -31,7 +31,7 @@ pub trait HierarchicalStorageManager<Da: DaSpec> {
     ) -> anyhow::Result<Self::NativeStorage>;
 
     /// Adds [`Self::ChangeSet`] to the storage.
-    /// [`Da::BlockHeader`] must be provided for efficient consistency checking.
+    /// [`DaSpec::BlockHeader`] must be provided for efficient consistency checking.
     fn save_change_set(
         &mut self,
         block_header: &Da::BlockHeader,

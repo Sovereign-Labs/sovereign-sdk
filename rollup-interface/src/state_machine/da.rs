@@ -180,7 +180,7 @@ pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static 
 /// Trait with collection of trait bounds for a block hash.
 pub trait BlockHashTrait:
     // so it is compatible with StorageManager implementation?
-    Serialize + DeserializeOwned + PartialEq + Debug + Send + Sync + Clone + Eq + Into<[u8; 32]> + std::hash::Hash
+    Serialize + DeserializeOwned + PartialEq + Debug + Send + Sync + Clone + Eq + Into<[u8; 32]> + core::hash::Hash
 {
 }
 

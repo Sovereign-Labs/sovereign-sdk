@@ -27,7 +27,7 @@ struct NewProverStorageManager<Da: DaSpec, S: MerkleProofSpec> {
     snapshot_id_to_parent: Arc<RwLock<HashMap<SnapshotId, SnapshotId>>>,
 
     state_snapshot_manager: Arc<RwLock<SnapshotManager>>,
-    native_snapshot_manager: Arc<RwLock<SnapshotManager>>,
+    accessory_snapshot_manager: Arc<RwLock<SnapshotManager>>,
 
     phantom_mp_spec: PhantomData<S>,
 }
@@ -41,7 +41,7 @@ where
         let snapshot_id_to_parent = Arc::new(RwLock::new(HashMap::new()));
 
         let state_snapshot_manager = SnapshotManager::new(state_db, snapshot_id_to_parent.clone());
-        let native_snapshot_manager =
+        let accessory_snapshot_manager =
             SnapshotManager::new(native_db, snapshot_id_to_parent.clone());
 
         Self {
@@ -51,7 +51,7 @@ where
             block_hash_to_snapshot_id: Default::default(),
             snapshot_id_to_parent,
             state_snapshot_manager: Arc::new(RwLock::new(state_snapshot_manager)),
-            native_snapshot_manager: Arc::new(RwLock::new(native_snapshot_manager)),
+            accessory_snapshot_manager: Arc::new(RwLock::new(accessory_snapshot_manager)),
             phantom_mp_spec: Default::default(),
         }
     }
@@ -63,7 +63,7 @@ where
             && self.block_hash_to_snapshot_id.is_empty()
             && self.snapshot_id_to_parent.read().unwrap().is_empty()
             && self.state_snapshot_manager.read().unwrap().is_empty()
-            && self.native_snapshot_manager.read().unwrap().is_empty()
+            && self.accessory_snapshot_manager.read().unwrap().is_empty()
     }
 }
 
@@ -133,7 +133,7 @@ where
 
         let native_db_snapshot = DbSnapshot::new(
             new_snapshot_id,
-            ReadOnlyLock::new(self.native_snapshot_manager.clone()),
+            ReadOnlyLock::new(self.accessory_snapshot_manager.clone()),
         );
 
         Ok(NewProverStorage::with_db_handlers(
@@ -182,7 +182,7 @@ where
 
         {
             let mut state_manager = self.state_snapshot_manager.write().unwrap();
-            let mut native_manager = self.native_snapshot_manager.write().unwrap();
+            let mut native_manager = self.accessory_snapshot_manager.write().unwrap();
 
             state_manager.add_snapshot(state_snapshot);
             native_manager.add_snapshot(native_snapshot);
@@ -206,7 +206,7 @@ where
             .ok_or(anyhow::anyhow!("Attempt to finalize non existing snapshot"))?;
 
         let mut state_manager = self.state_snapshot_manager.write().unwrap();
-        let mut native_manager = self.native_snapshot_manager.write().unwrap();
+        let mut native_manager = self.accessory_snapshot_manager.write().unwrap();
         let mut snapshot_id_to_parent = self.snapshot_id_to_parent.write().unwrap();
         snapshot_id_to_parent.remove(snapshot_id);
 
@@ -392,7 +392,7 @@ mod tests {
             .unwrap()
             .is_empty());
         assert!(storage_manager
-            .native_snapshot_manager
+            .accessory_snapshot_manager
             .read()
             .unwrap()
             .is_empty());
