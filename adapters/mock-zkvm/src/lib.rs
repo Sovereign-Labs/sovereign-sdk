@@ -60,7 +60,8 @@ impl<'a> MockProof<'a> {
 }
 
 /// A mock implementing the zkVM trait.
-pub struct MockZkvm;
+#[derive(Clone)]
+pub struct MockZkvm {}
 
 impl sov_rollup_interface::zk::Zkvm for MockZkvm {
     type CodeCommitment = MockCodeCommitment;
@@ -91,6 +92,57 @@ impl sov_rollup_interface::zk::Zkvm for MockZkvm {
         let output = Self::verify(serialized_proof, code_commitment)?;
         Ok(bincode::deserialize(output)?)
     }
+}
+
+impl sov_rollup_interface::zk::ZkvmHost for MockZkvm {
+    type Guest = MockZkGuest;
+
+    fn add_hint<T: Serialize>(&mut self, item: T) {}
+
+    fn simulate_with_hints(&mut self) -> Self::Guest {
+        todo!()
+    }
+
+    fn run(&mut self, _with_proof: bool) -> Result<sov_rollup_interface::zk::Proof, anyhow::Error> {
+        Ok(sov_rollup_interface::zk::Proof::Empty)
+    }
+}
+
+///TODO
+pub struct MockZkGuest {
+    commits: std::sync::Mutex<Vec<u32>>,
+}
+
+impl sov_rollup_interface::zk::Zkvm for MockZkGuest {
+    type CodeCommitment = MockCodeCommitment;
+
+    type Error = anyhow::Error;
+
+    fn verify<'a>(
+        serialized_proof: &'a [u8],
+        code_commitment: &Self::CodeCommitment,
+    ) -> Result<&'a [u8], Self::Error> {
+        todo!()
+    }
+
+    fn verify_and_extract_output<
+        Add: sov_rollup_interface::RollupAddress,
+        Da: sov_rollup_interface::da::DaSpec,
+        Root: Serialize + serde::de::DeserializeOwned,
+    >(
+        serialized_proof: &[u8],
+        code_commitment: &Self::CodeCommitment,
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
+        todo!()
+    }
+}
+
+impl sov_rollup_interface::zk::ZkvmGuest for MockZkGuest {
+    fn read_from_host<T: serde::de::DeserializeOwned>(&self) -> T {
+        todo!()
+    }
+
+    fn commit<T: Serialize>(&self, item: &T) {}
 }
 
 #[test]

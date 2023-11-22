@@ -3,6 +3,8 @@
 
 #[cfg(feature = "native")]
 mod config;
+/// TODO
+pub mod mock;
 #[cfg(feature = "native")]
 mod prover_service;
 
