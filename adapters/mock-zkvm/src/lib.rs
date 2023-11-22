@@ -110,7 +110,7 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvm {
 
 ///TODO
 pub struct MockZkGuest {
-    commits: std::sync::Mutex<Vec<u32>>,
+    commits: (),
 }
 
 impl sov_rollup_interface::zk::Zkvm for MockZkGuest {
@@ -119,8 +119,8 @@ impl sov_rollup_interface::zk::Zkvm for MockZkGuest {
     type Error = anyhow::Error;
 
     fn verify<'a>(
-        serialized_proof: &'a [u8],
-        code_commitment: &Self::CodeCommitment,
+        _serialized_proof: &'a [u8],
+        _code_commitment: &Self::CodeCommitment,
     ) -> Result<&'a [u8], Self::Error> {
         todo!()
     }
@@ -130,8 +130,8 @@ impl sov_rollup_interface::zk::Zkvm for MockZkGuest {
         Da: sov_rollup_interface::da::DaSpec,
         Root: Serialize + serde::de::DeserializeOwned,
     >(
-        serialized_proof: &[u8],
-        code_commitment: &Self::CodeCommitment,
+        _serialized_proof: &[u8],
+        _code_commitment: &Self::CodeCommitment,
     ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
         todo!()
     }
