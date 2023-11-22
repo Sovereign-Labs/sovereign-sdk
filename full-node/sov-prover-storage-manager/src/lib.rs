@@ -94,11 +94,7 @@ where
 
         let new_snapshot_id = match self.block_hash_to_snapshot_id.get(&current_block_hash) {
             // Storage for this block has been requested before
-            Some(snapshot_id) => {
-                // TODO: Do consistency checks here?
-
-                *snapshot_id
-            }
+            Some(snapshot_id) => *snapshot_id,
             // Storage requested first time
             None => {
                 let new_snapshot_id = self.latest_snapshot_id + 1;
