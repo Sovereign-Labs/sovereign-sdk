@@ -97,7 +97,7 @@ impl sov_rollup_interface::zk::Zkvm for MockZkvm {
 impl sov_rollup_interface::zk::ZkvmHost for MockZkvm {
     type Guest = MockZkGuest;
 
-    fn add_hint<T: Serialize>(&mut self, item: T) {}
+    fn add_hint<T: Serialize>(&mut self, _item: T) {}
 
     fn simulate_with_hints(&mut self) -> Self::Guest {
         todo!()
@@ -108,8 +108,10 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvm {
     }
 }
 
-///TODO
+/// A mock implementing the Guest.
+
 pub struct MockZkGuest {
+    #[allow(dead_code)]
     commits: (),
 }
 

@@ -4,8 +4,7 @@ use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::stf::{BatchReceipt, SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 
-/// An implementation of the [`StateTransitionFunction`]
-/// that is specifically designed to check if someone knows a preimage of a specific hash.
+/// A mock implementation of the [`StateTransitionFunction`]
 #[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub struct MockStf<Cond> {
     phantom_data: PhantomData<Cond>,

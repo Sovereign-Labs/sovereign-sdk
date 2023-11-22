@@ -1,7 +1,8 @@
 use sov_mock_da::{MockBlockHeader, MockDaService, MockDaVerifier, MockValidityCond};
 use sov_mock_zkvm::MockZkvm;
+use sov_stf_runner::mock::MockStf;
 use sov_stf_runner::{
-    mock::MockStf, ParallelProverService, ProofSubmissionStatus, ProverService, RollupProverConfig,
+    ParallelProverService, ProofSubmissionStatus, ProverService, RollupProverConfig,
     StateTransitionData,
 };
 
