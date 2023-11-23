@@ -2,7 +2,7 @@ use primitive_types::H256;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::BlockHashTrait;
 
-#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct AvailHash(H256);
 
 impl AvailHash {

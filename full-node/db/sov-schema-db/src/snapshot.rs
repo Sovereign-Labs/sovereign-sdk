@@ -10,7 +10,8 @@ pub type SnapshotId = u64;
 
 /// A trait to make nested calls to several [`SchemaBatch`]s and eventually [`crate::DB`]
 pub trait QueryManager {
-    /// Get a value from snapshot or its parents
+    /// Get a value from parents of given [`SnapshotId`]
+    /// In case of unknown [`SnapshotId`] return `Ok(None)`
     fn get<S: Schema>(
         &self,
         snapshot_id: SnapshotId,
@@ -32,6 +33,12 @@ impl<T> ReadOnlyLock<T> {
     /// Acquires a read lock on the underlying `RwLock`.
     pub fn read(&self) -> LockResult<RwLockReadGuard<'_, T>> {
         self.lock.read()
+    }
+}
+
+impl<T> From<Arc<RwLock<T>>> for ReadOnlyLock<T> {
+    fn from(value: Arc<RwLock<T>>) -> Self {
+        Self::new(value)
     }
 }
 
@@ -107,7 +114,7 @@ pub struct FrozenDbSnapshot {
 
 impl FrozenDbSnapshot {
     /// Get value from its own cache
-    pub fn get<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<Option<Operation>> {
+    pub fn get<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<Option<&Operation>> {
         self.cache.read(key)
     }
 
@@ -135,12 +142,25 @@ impl From<FrozenDbSnapshot> for SchemaBatch {
     }
 }
 
-fn decode_operation<S: Schema>(operation: Operation) -> anyhow::Result<Option<S::Value>> {
+fn decode_operation<S: Schema>(operation: &Operation) -> anyhow::Result<Option<S::Value>> {
     match operation {
         Operation::Put { value } => {
-            let value = S::Value::decode_value(&value)?;
+            let value = S::Value::decode_value(value)?;
             Ok(Some(value))
         }
         Operation::Delete => Ok(None),
+    }
+}
+
+/// QueryManager, which never returns any values
+pub struct NoopQueryManager;
+
+impl QueryManager for NoopQueryManager {
+    fn get<S: Schema>(
+        &self,
+        _snapshot_id: SnapshotId,
+        _key: &impl KeyCodec<S>,
+    ) -> anyhow::Result<Option<S::Value>> {
+        Ok(None)
     }
 }

@@ -1,6 +1,7 @@
 mod address;
 
 use std::fmt::Formatter;
+use std::hash::Hasher;
 
 pub use address::{MockAddress, MOCK_SEQUENCER_DA_ADDRESS};
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -42,6 +43,13 @@ impl From<[u8; 32]> for MockHash {
 impl From<MockHash> for [u8; 32] {
     fn from(value: MockHash) -> Self {
         value.0
+    }
+}
+
+impl std::hash::Hash for MockHash {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write(&self.0);
+        state.finish();
     }
 }
 
