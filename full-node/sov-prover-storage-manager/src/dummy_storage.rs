@@ -1,3 +1,5 @@
+// This module is used as a temporary filler for `ProverStorage`, until this module is integrated.
+// It is going to be deleted after integration has been completed
 use std::marker::PhantomData;
 
 use byteorder::{BigEndian, ReadBytesExt};
@@ -6,7 +8,7 @@ use sov_schema_db::snapshot::{DbSnapshot, QueryManager};
 use sov_schema_db::{define_schema, CodecError};
 use sov_state::MerkleProofSpec;
 
-/// Oversimplified representation of [`sov_state::ProverStorage`]
+// Oversimplified representation of [`sov_state::ProverStorage`]
 pub struct NewProverStorage<Mps: MerkleProofSpec, Q> {
     state_db: DbSnapshot<Q>,
     native_db: DbSnapshot<Q>,
