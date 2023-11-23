@@ -14,6 +14,7 @@
 - sov-modules-stf-blueprint
 - sov-stf-runner
 - sov-modules-rollup-blueprint
+- sov-modules-wallet-blueprint
 - sov-ledger-rpc
 
 # Modules
