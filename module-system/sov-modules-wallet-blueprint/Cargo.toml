@@ -1,0 +1,42 @@
+[package]
+name = "sov-modules-wallet-blueprint"
+description = "Defines the interface of the Sovereign SDK wallet"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+resolver = "2"
+
+[dependencies]
+anyhow = { workspace = true, optional = true }
+async-trait = { workspace = true, optional = true }
+borsh = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+sov-cli = { path = "../sov-cli", optional = true }
+sov-mock-da = { path = "../../adapters/mock-da", version = "0.3", optional = true }
+sov-modules-api = { path = "../sov-modules-api", version = "0.3" }
+sov-modules-rollup-blueprint = { path = "../sov-modules-rollup-blueprint", optional = true }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
+
+[features]
+default = ["cli", "default-impl"]
+cli = [
+    "anyhow",
+    "async-trait",
+    "borsh",
+    "serde",
+    "serde_json",
+    "sov-cli",
+    "sov-modules-rollup-blueprint",
+]
+default-impl = ["sov-mock-da"]
+native = [
+    "sov-mock-da?/native",
+    "sov-modules-api/native",
+    "sov-rollup-interface/native",
+]

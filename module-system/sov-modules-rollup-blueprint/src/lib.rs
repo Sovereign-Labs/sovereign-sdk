@@ -2,7 +2,6 @@
 #![doc = include_str!("../README.md")]
 
 mod runtime_rpc;
-mod wallet;
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
@@ -18,7 +17,6 @@ use sov_state::storage::NativeStorage;
 use sov_state::Storage;
 use sov_stf_runner::{ProverService, RollupConfig, RollupProverConfig, StateTransitionRunner};
 use tokio::sync::oneshot;
-pub use wallet::*;
 
 /// This trait defines how to crate all the necessary dependencies required by a rollup.
 #[async_trait]

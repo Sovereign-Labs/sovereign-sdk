@@ -1,19 +1,23 @@
+use core::convert::Infallible;
+use std::{fs, io};
+
 use async_trait::async_trait;
 use borsh::BorshSerialize;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use sov_cli::clap::{self, Parser, Subcommand};
+use sov_cli::wallet_dir;
 use sov_cli::wallet_state::WalletState;
 use sov_cli::workflows::keys::KeyWorkflow;
 use sov_cli::workflows::rpc::RpcWorkflows;
 use sov_cli::workflows::transactions::TransactionWorkflow;
-use sov_cli::{clap, wallet_dir};
-use sov_modules_api::clap::Parser;
 use sov_modules_api::cli::{CliFrontEnd, JsonStringArg};
 use sov_modules_api::{CliWallet, Context, DispatchCall};
+use sov_modules_rollup_blueprint::RollupBlueprint;
 
-use crate::RollupBlueprint;
-
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 #[command(author, version, about, long_about = None)]
-enum Workflows<File: clap::Subcommand, Json: clap::Subcommand, C: Context> {
+enum Workflows<File: Subcommand, Json: Subcommand, C: Context> {
     #[clap(subcommand)]
     Transactions(TransactionWorkflow<File, Json>),
     #[clap(subcommand)]
@@ -22,28 +26,27 @@ enum Workflows<File: clap::Subcommand, Json: clap::Subcommand, C: Context> {
     Rpc(RpcWorkflows<C>),
 }
 
-#[derive(clap::Parser)]
+#[derive(Parser)]
 #[command(author, version, about = None, long_about = None)]
-struct CliApp<File: clap::Subcommand, Json: clap::Subcommand, C: Context> {
+struct CliApp<File: Subcommand, Json: Subcommand, C: Context> {
     #[clap(subcommand)]
     workflow: Workflows<File, Json, C>,
 }
 
 /// Generic wallet for any type that implements RollupBlueprint.
 #[async_trait]
-pub trait WalletBlueprint: RollupBlueprint
+pub trait CliWalletBlueprint: RollupBlueprint
 where
     // The types here a quite complicated but they are never exposed to the user
     // as the WalletTemplate is implemented for any types that implements RollupBlueprint.
-    <Self as RollupBlueprint>::NativeContext:
-        serde::Serialize + serde::de::DeserializeOwned + Send + Sync,
+    <Self as RollupBlueprint>::NativeContext: Serialize + DeserializeOwned + Send + Sync,
 
     <Self as RollupBlueprint>::NativeRuntime: CliWallet,
 
-    <Self as RollupBlueprint>::DaSpec: serde::Serialize + serde::de::DeserializeOwned,
+    <Self as RollupBlueprint>::DaSpec: Serialize + DeserializeOwned,
 
     <<Self as RollupBlueprint>::NativeRuntime as DispatchCall>::Decodable:
-        serde::Serialize + serde::de::DeserializeOwned + BorshSerialize + Send + Sync,
+        Serialize + DeserializeOwned + BorshSerialize + Send + Sync,
 
     <<Self as RollupBlueprint>::NativeRuntime as CliWallet>::CliStringRepr<JsonStringArg>: TryInto<
         <<Self as RollupBlueprint>::NativeRuntime as DispatchCall>::Decodable,
@@ -51,24 +54,23 @@ where
     >,
 {
     /// Generates wallet cli for the runtime.
-    async fn run_wallet<File: clap::Subcommand, Json: clap::Subcommand>(
-    ) -> Result<(), anyhow::Error>
+    async fn run_wallet<File: Subcommand, Json: Subcommand>() -> Result<(), anyhow::Error>
     where
         File: CliFrontEnd<<Self as RollupBlueprint>::NativeRuntime> + Send + Sync,
         Json: CliFrontEnd<<Self as RollupBlueprint>::NativeRuntime> + Send + Sync,
 
         File: TryInto<
             <<Self as RollupBlueprint>::NativeRuntime as CliWallet>::CliStringRepr<JsonStringArg>,
-            Error = std::io::Error,
+            Error = io::Error,
         >,
         Json: TryInto<
             <<Self as RollupBlueprint>::NativeRuntime as CliWallet>::CliStringRepr<JsonStringArg>,
-            Error = std::convert::Infallible,
+            Error = Infallible,
         >,
     {
         let app_dir = wallet_dir()?;
 
-        std::fs::create_dir_all(app_dir.as_ref())?;
+        fs::create_dir_all(app_dir.as_ref())?;
         let wallet_state_path = app_dir.as_ref().join("wallet_state.json");
 
         let mut wallet_state: WalletState<

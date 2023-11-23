@@ -1,7 +1,7 @@
 use demo_stf::runtime::RuntimeSubcommand;
 use sov_demo_rollup::CelestiaDemoRollup;
 use sov_modules_api::cli::{FileNameArg, JsonStringArg};
-use sov_modules_rollup_blueprint::WalletBlueprint;
+use sov_modules_wallet_blueprint::cli::CliWalletBlueprint;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {

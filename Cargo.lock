@@ -8664,6 +8664,7 @@ dependencies = [
  "sov-modules-api",
  "sov-modules-rollup-blueprint",
  "sov-modules-stf-blueprint",
+ "sov-modules-wallet-blueprint",
  "sov-nft-module",
  "sov-risc0-adapter",
  "sov-rng-da-service",
@@ -8927,6 +8928,22 @@ dependencies = [
  "sov-zk-cycle-utils",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "sov-modules-wallet-blueprint"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "borsh",
+ "serde",
+ "serde_json",
+ "sov-cli",
+ "sov-mock-da",
+ "sov-modules-api",
+ "sov-modules-rollup-blueprint",
+ "sov-rollup-interface",
 ]
 
 [[package]]

@@ -5,9 +5,10 @@ use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier, RollupParam
 use sov_celestia_adapter::{CelestiaConfig, CelestiaService};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::Spec;
-use sov_modules_rollup_blueprint::{RollupBlueprint, WalletBlueprint};
+use sov_modules_rollup_blueprint::RollupBlueprint;
 use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
 use sov_modules_stf_blueprint::StfBlueprint;
+use sov_modules_wallet_blueprint::cli::CliWalletBlueprint;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage_manager::ProverStorageManager;
@@ -114,4 +115,4 @@ impl RollupBlueprint for CelestiaDemoRollup {
     }
 }
 
-impl WalletBlueprint for CelestiaDemoRollup {}
+impl CliWalletBlueprint for CelestiaDemoRollup {}
