@@ -96,9 +96,9 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     fn get_accessory(&self, key: &StorageKey) -> Option<StorageValue> {
         let version = self
             .archival_version
-            .unwrap_or(self.native_db.get_next_version() - 1);
+            .unwrap_or(self.db.get_next_version() - 1);
         self.native_db
-            .get_value_option(key.as_ref(), Some(version))
+            .get_value_option(key.as_ref(), version)
             .unwrap()
             .map(Into::into)
     }
@@ -173,6 +173,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     }
 
     fn commit(&self, state_update: &Self::StateUpdate, accessory_writes: &OrderedReadsAndWrites) {
+        let latest_version = self.db.get_next_version() - 1;
         for (key_hash, key) in state_update.key_preimages.iter() {
             // Clone should be cheap
             self.db
@@ -190,11 +191,11 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
                     .ordered_writes
                     .iter()
                     .map(|(k, v_opt)| (k.key.to_vec(), v_opt.as_ref().map(|v| v.value.to_vec()))),
+                latest_version,
             )
             .expect("native db write must succeed");
 
         self.db.inc_next_version();
-        self.native_db.inc_next_version();
     }
 
     fn open_proof(

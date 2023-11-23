@@ -193,7 +193,7 @@ fn transfer_initial_token() {
 
     // archival versioned state query
 
-    let archival_slot = 4;
+    let archival_slot = 3;
     let mut versioned_prover_storage = prover_storage.clone();
     versioned_prover_storage
         .set_archival_version(archival_slot)

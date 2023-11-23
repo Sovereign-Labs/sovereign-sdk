@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use sov_schema_db::{SchemaBatch, DB};
 
@@ -17,8 +17,6 @@ pub struct NativeDB {
     /// The underlying RocksDB instance, wrapped in an [`Arc`] for convenience
     /// and [`DB`] for type safety.
     db: Arc<DB>,
-    /// The [`Version`] that will be used for the next batch of writes to the DB.
-    next_version: Arc<Mutex<Version>>,
 }
 
 impl NativeDB {
@@ -36,10 +34,8 @@ impl NativeDB {
             &gen_rocksdb_options(&Default::default(), false),
         )?;
 
-        let next_version = Self::last_version_written(&inner)?.unwrap_or_default() + 1;
         Ok(Self {
             db: Arc::new(inner),
-            next_version: Arc::new(Mutex::new(next_version)),
         })
     }
 
@@ -47,17 +43,16 @@ impl NativeDB {
     pub fn get_value_option(
         &self,
         key: &AccessoryKey,
-        version: Option<Version>,
+        version: Version,
     ) -> anyhow::Result<Option<Vec<u8>>> {
-        let version_to_use = version.unwrap_or_else(|| self.get_next_version());
         let mut iter = self.db.iter::<ModuleAccessoryState>()?;
-        iter.seek_for_prev(&(key.to_vec(), version_to_use))?;
+        iter.seek_for_prev(&(key.to_vec(), version))?;
         let found = iter.next();
         match found {
             Some(result) => {
                 let ((found_key, found_version), value) = result?;
                 if &found_key == key {
-                    anyhow::ensure!(found_version <= version_to_use, "Bug! iterator isn't returning expected values. expected a version <= {version_to_use:} but found {found_version:}");
+                    anyhow::ensure!(found_version <= version, "Bug! iterator isn't returning expected values. expected a version <= {version:} but found {found_version:}");
                     Ok(value)
                 } else {
                     Ok(None)
@@ -71,36 +66,13 @@ impl NativeDB {
     pub fn set_values(
         &self,
         key_value_pairs: impl IntoIterator<Item = (Vec<u8>, Option<Vec<u8>>)>,
+        version: Version,
     ) -> anyhow::Result<()> {
-        let version = self.get_next_version();
         let mut batch = SchemaBatch::default();
         for (key, value) in key_value_pairs {
             batch.put::<ModuleAccessoryState>(&(key, version), &value)?;
         }
         self.db.write_schemas(batch)
-    }
-
-    /// Increment the `next_version` counter by 1.
-    pub fn inc_next_version(&self) {
-        let mut version = self.next_version.lock().unwrap();
-        *version += 1;
-    }
-
-    /// Get the current value of the `next_version` counter
-    pub fn get_next_version(&self) -> Version {
-        let version = self.next_version.lock().unwrap();
-        *version
-    }
-
-    fn last_version_written(db: &DB) -> anyhow::Result<Option<Version>> {
-        let mut iter = db.iter::<ModuleAccessoryState>()?;
-        iter.seek_to_last();
-
-        let version = match iter.next() {
-            Some(Ok(((_, version), _))) => Some(version),
-            _ => None,
-        };
-        Ok(version)
     }
 }
 
@@ -192,9 +164,9 @@ mod tests {
 
         let key = b"foo".to_vec();
         let value = b"bar".to_vec();
-        db.set_values(vec![(key.clone(), Some(value.clone()))])
+        db.set_values(vec![(key.clone(), Some(value.clone()))], 0)
             .unwrap();
-        assert_eq!(db.get_value_option(&key, None).unwrap(), Some(value));
+        assert_eq!(db.get_value_option(&key, 0).unwrap(), Some(value));
     }
 
     #[test]
@@ -203,8 +175,8 @@ mod tests {
         let db = NativeDB::with_path(tmpdir.path()).unwrap();
 
         let key = b"deleted".to_vec();
-        db.set_values(vec![(key.clone(), None)]).unwrap();
-        assert_eq!(db.get_value_option(&key, None).unwrap(), None);
+        db.set_values(vec![(key.clone(), None)], 0).unwrap();
+        assert_eq!(db.get_value_option(&key, 0).unwrap(), None);
     }
 
     #[test]
@@ -213,6 +185,6 @@ mod tests {
         let db = NativeDB::with_path(tmpdir.path()).unwrap();
 
         let key = b"spam".to_vec();
-        assert_eq!(db.get_value_option(&key, None).unwrap(), None);
+        assert_eq!(db.get_value_option(&key, 0).unwrap(), None);
     }
 }
