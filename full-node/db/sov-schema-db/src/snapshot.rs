@@ -20,6 +20,7 @@ pub trait QueryManager {
 }
 
 /// Simple wrapper around `RwLock` that only allows read access.
+#[derive(Debug)]
 pub struct ReadOnlyLock<T> {
     lock: Arc<RwLock<T>>,
 }
@@ -43,6 +44,7 @@ impl<T> From<Arc<RwLock<T>>> for ReadOnlyLock<T> {
 }
 
 /// Wrapper around [`QueryManager`] that allows to read from snapshots
+#[derive(Debug)]
 pub struct DbSnapshot<Q> {
     id: SnapshotId,
     cache: Mutex<SchemaBatch>,
