@@ -29,6 +29,7 @@ cli = [
     "anyhow",
     "async-trait",
     "borsh",
+    "native",
     "serde",
     "serde_json",
     "sov-cli",
