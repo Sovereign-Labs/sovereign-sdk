@@ -184,7 +184,7 @@ mod tests {
     use sov_modules_api::transaction::Transaction;
     use sov_modules_api::{Context, DispatchCall, EncodeCall, Genesis, MessageCodec, PrivateKey};
     use sov_rollup_interface::services::batch_builder::BatchBuilder;
-    use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
+    use sov_state::{DefaultStorageSpec, ProverStorage, Storage, Storages};
     use sov_value_setter::{CallMessage, ValueSetter, ValueSetterConfig};
     use tempfile::TempDir;
 
@@ -235,7 +235,7 @@ mod tests {
         tmpdir: &TempDir,
     ) -> (
         FiFoStrictBatchBuilder<C, TestRuntime<C>>,
-        ProverStorage<DefaultStorageSpec>,
+        Storages<DefaultStorageSpec>,
     ) {
         let storage = ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap();
 
@@ -248,7 +248,7 @@ mod tests {
         (batch_builder, storage)
     }
 
-    fn setup_runtime(storage: ProverStorage<DefaultStorageSpec>, admin: Option<DefaultPublicKey>) {
+    fn setup_runtime(storage: Storages<DefaultStorageSpec>, admin: Option<DefaultPublicKey>) {
         let runtime = TestRuntime::<C>::default();
         let mut working_set = WorkingSet::new(storage.clone());
 

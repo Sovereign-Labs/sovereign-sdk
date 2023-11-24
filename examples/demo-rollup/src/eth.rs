@@ -7,7 +7,7 @@ use sov_ethereum::GasPriceOracleConfig;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_rollup_interface::services::da::DaService;
-use sov_state::ProverStorage;
+use sov_state::Storages;
 
 const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.json";
 
@@ -25,7 +25,7 @@ fn read_sov_tx_signer_priv_key() -> Result<DefaultPrivateKey, anyhow::Error> {
 // register ethereum methods.
 pub(crate) fn register_ethereum<Da: DaService>(
     da_service: Da,
-    storage: ProverStorage<sov_state::DefaultStorageSpec>,
+    storage: Storages<sov_state::DefaultStorageSpec>,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error> {
     let eth_rpc_config = {

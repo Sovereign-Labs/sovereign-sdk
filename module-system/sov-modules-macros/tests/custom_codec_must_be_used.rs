@@ -57,7 +57,7 @@ impl<V> StateValueCodec<V> for CustomCodec {
 
 fn main() {
     let tempdir = tempfile::tempdir().unwrap();
-    let storage: ProverStorage<DefaultStorageSpec> = ProverStorage::with_path(&tempdir).unwrap();
+    let storage = ProverStorage::with_path(&tempdir).unwrap();
     let module: TestModule<DefaultContext> = TestModule::default();
 
     catch_unwind(|| {

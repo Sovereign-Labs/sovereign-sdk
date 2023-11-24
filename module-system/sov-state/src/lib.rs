@@ -11,7 +11,11 @@ mod witness;
 mod zk_storage;
 
 #[cfg(feature = "native")]
+pub use prover_storage::ArchivalStorage;
+#[cfg(feature = "native")]
 pub use prover_storage::ProverStorage;
+#[cfg(feature = "native")]
+pub use prover_storage::Storages;
 pub use zk_storage::ZkStorage;
 
 pub mod config;

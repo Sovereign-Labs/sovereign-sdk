@@ -4,8 +4,8 @@ use helpers::*;
 use sov_bank::{get_genesis_token_address, Bank, CallMessage, Coins};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Context, Module, WorkingSet};
-use sov_state::storage::{NativeStorage, StateReaderAndWriter, StorageKey, StorageValue};
-use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
+use sov_state::storage::{StateReaderAndWriter, StorageKey, StorageValue};
+use sov_state::{DefaultStorageSpec, ProverStorage, Storage, Storages};
 
 #[test]
 fn transfer_initial_token() {
@@ -82,12 +82,9 @@ fn transfer_initial_token() {
 
     let archival_slot: u64 = 2;
     println!("Archival reads at slot {}", archival_slot);
-    let mut versioned_prover_storage = prover_storage.clone();
-    versioned_prover_storage
-        .set_archival_version(archival_slot)
-        .expect("TODO: panic message");
+    let archival_storage = prover_storage.get_archival_storage(archival_slot).unwrap();
     let mut working_set: WorkingSet<DefaultContext> =
-        WorkingSet::new(versioned_prover_storage.clone());
+        WorkingSet::new(archival_storage);
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
         &bank,
         token_address,
@@ -99,12 +96,9 @@ fn transfer_initial_token() {
 
     let archival_slot: u64 = 1;
     println!("Archival archival reads at slot {}", archival_slot);
-    let mut versioned_prover_storage = prover_storage.clone();
-    versioned_prover_storage
-        .set_archival_version(archival_slot)
-        .expect("TODO: panic message");
+    let archival_storage = prover_storage.get_archival_storage(archival_slot).unwrap();
     let mut working_set: WorkingSet<DefaultContext> =
-        WorkingSet::new(versioned_prover_storage.clone());
+        WorkingSet::new(archival_storage);
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
         &bank,
         token_address,
@@ -194,12 +188,8 @@ fn transfer_initial_token() {
     // archival versioned state query
 
     let archival_slot = 3;
-    let mut versioned_prover_storage = prover_storage.clone();
-    versioned_prover_storage
-        .set_archival_version(archival_slot)
-        .expect("TODO: panic message");
-    let mut working_set: WorkingSet<DefaultContext> =
-        WorkingSet::new(versioned_prover_storage.clone());
+    let archival_storage = prover_storage.get_archival_storage(archival_slot).unwrap();
+    let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(archival_storage);
     let mut accessory_state = working_set.accessory_state();
     let val = accessory_state.get(&StorageKey::from("k")).unwrap();
 
@@ -251,7 +241,7 @@ fn transfer(
     println!("Transfer complete");
 }
 
-fn commit(working_set: WorkingSet<DefaultContext>, storage: ProverStorage<DefaultStorageSpec>) {
+fn commit(working_set: WorkingSet<DefaultContext>, storage: Storages<DefaultStorageSpec>) {
     // Save checkpoint
     let mut checkpoint = working_set.checkpoint();
 

@@ -4,7 +4,7 @@ use sha2::Digest;
 use sov_modules_core::{Address, Context, PublicKey, Spec, TupleGasUnit};
 use sov_rollup_interface::RollupAddress;
 #[cfg(feature = "native")]
-use sov_state::ProverStorage;
+use sov_state::Storages;
 use sov_state::{ArrayWitness, DefaultStorageSpec, ZkStorage};
 
 #[cfg(feature = "native")]
@@ -23,7 +23,7 @@ pub struct DefaultContext {
 #[cfg(feature = "native")]
 impl Spec for DefaultContext {
     type Address = Address;
-    type Storage = ProverStorage<DefaultStorageSpec>;
+    type Storage = Storages<DefaultStorageSpec>;
     type PrivateKey = DefaultPrivateKey;
     type PublicKey = DefaultPublicKey;
     type Hasher = sha2::Sha256;

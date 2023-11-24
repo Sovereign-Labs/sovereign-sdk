@@ -10,7 +10,7 @@ use sov_modules_api::{
     Address, BlobReaderTrait, Context, DaSpec, DispatchCall, MessageCodec, Module, Spec, WorkingSet,
 };
 use sov_sequencer_registry::SequencerConfig;
-use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
+use sov_state::{DefaultStorageSpec, ProverStorage, Storage, Storages};
 
 type C = DefaultContext;
 type B = MockBlob;
@@ -663,7 +663,7 @@ struct TestRuntime<C: Context, Da: DaSpec> {
 impl TestRuntime<DefaultContext, MockDaSpec> {
     pub fn pre_initialized(
         with_preferred_sequencer: bool,
-    ) -> (ProverStorage<DefaultStorageSpec>, Self, jmt::RootHash) {
+    ) -> (Storages<DefaultStorageSpec>, Self, jmt::RootHash) {
         use sov_modules_api::Genesis;
         let tmpdir = tempfile::tempdir().unwrap();
         let storage = ProverStorage::with_path(tmpdir.path()).unwrap();

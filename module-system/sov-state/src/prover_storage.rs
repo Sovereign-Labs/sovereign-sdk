@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::ensure;
+use anyhow::{bail, ensure, Error};
 use jmt::storage::{NodeBatch, TreeWriter};
 use jmt::{JellyfishMerkleTree, KeyHash, Version};
 use sov_db::native_db::NativeDB;
@@ -15,12 +15,119 @@ use sov_modules_core::{
 use crate::config::Config;
 use crate::MerkleProofSpec;
 
+/// placeholder
+pub enum Storages<S: MerkleProofSpec> {
+    /// placeholder
+    Prover(ProverStorage<S>),
+    /// placeholder
+    Archival(ArchivalStorage<S>),
+}
+
+impl<S: MerkleProofSpec> Clone for Storages<S> {
+    fn clone(&self) -> Self {
+        match self {
+            Storages::Prover(prover_storage) => Storages::Prover(prover_storage.clone()),
+            Storages::Archival(archival_storage) => Storages::Archival(archival_storage.clone()),
+        }
+    }
+}
+
+impl<S: MerkleProofSpec> Storages<S> {
+    /// placeholder
+    pub fn get_archival_storage(&self, version: u64) -> anyhow::Result<Storages<S>> {
+        match self {
+            Storages::Prover(prover_storage) => Ok(Storages::Archival(prover_storage.get_archival_storage(version)?)),
+            Storages::Archival(archival_storage) => Ok(Storages::Archival(archival_storage.clone().set_archival_version(version)?))
+        }
+    }
+}
+
+impl<S: MerkleProofSpec> Storage for Storages<S> {
+    type Witness = S::Witness;
+    type RuntimeConfig = Config;
+    type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
+    type Root = jmt::RootHash;
+    type StateUpdate = ProverStateUpdate;
+
+    fn with_config(config: Self::RuntimeConfig) -> anyhow::Result<Self> {
+        Ok(Storages::Prover(ProverStorage::with_config(config)?))
+    }
+
+    fn get(&self, key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
+        match self {
+            Storages::Prover(prover_storage) => prover_storage.get(key, witness),
+            Storages::Archival(archival_storage) => archival_storage.get(key, witness),
+        }
+    }
+
+    #[cfg(feature = "native")]
+    fn get_accessory(&self, key: &StorageKey) -> Option<StorageValue> {
+        match self {
+            Storages::Prover(prover_storage) => prover_storage.get_accessory(key),
+            Storages::Archival(archival_storage) => archival_storage.get_accessory(key),
+        }
+    }
+
+    fn compute_state_update(
+        &self,
+        state_accesses: OrderedReadsAndWrites,
+        witness: &Self::Witness,
+    ) -> Result<(Self::Root, Self::StateUpdate), Error> {
+        match self {
+            Storages::Prover(prover_storage) => {
+                prover_storage.compute_state_update(state_accesses, witness)
+            }
+            Storages::Archival(archival_storage) => {
+                archival_storage.compute_state_update(state_accesses, witness)
+            }
+        }
+    }
+
+    fn commit(&self, node_batch: &Self::StateUpdate, accessory_update: &OrderedReadsAndWrites) {
+        match self {
+            Storages::Prover(prover_storage) => prover_storage.commit(node_batch, accessory_update),
+            Storages::Archival(archival_storage) => {
+                archival_storage.commit(node_batch, accessory_update)
+            }
+        }
+    }
+
+    fn open_proof(
+        state_root: Self::Root,
+        proof: StorageProof<Self::Proof>,
+    ) -> Result<(StorageKey, Option<StorageValue>), Error> {
+        ProverStorage::<S>::open_proof(state_root, proof)
+    }
+
+    fn is_empty(&self) -> bool {
+        match self {
+            Storages::Prover(prover_storage) => prover_storage.is_empty(),
+            Storages::Archival(archival_storage) => archival_storage.is_empty(),
+        }
+    }
+}
+
+impl<S: MerkleProofSpec> NativeStorage for Storages<S> {
+    fn get_with_proof(&self, key: StorageKey) -> StorageProof<Self::Proof> {
+        match self {
+            Storages::Prover(prover_storage) => prover_storage.get_with_proof(key),
+            Storages::Archival(archival_storage) => archival_storage.get_with_proof(key),
+        }
+    }
+
+    fn get_root_hash(&self, version: Version) -> Result<Self::Root, Error> {
+        match self {
+            Storages::Prover(prover_storage) => prover_storage.get_root_hash(version),
+            Storages::Archival(archival_storage) => archival_storage.get_root_hash(version),
+        }
+    }
+}
+
 /// A [`Storage`] implementation to be used by the prover in a native execution
 /// environment (outside of the zkVM).
 pub struct ProverStorage<S: MerkleProofSpec> {
     db: StateDB,
     native_db: NativeDB,
-    archival_version: Option<u64>,
     _phantom_hasher: PhantomData<S::Hasher>,
 }
 
@@ -29,7 +136,6 @@ impl<S: MerkleProofSpec> Clone for ProverStorage<S> {
         Self {
             db: self.db.clone(),
             native_db: self.native_db.clone(),
-            archival_version: self.archival_version,
             _phantom_hasher: Default::default(),
         }
     }
@@ -38,41 +144,60 @@ impl<S: MerkleProofSpec> Clone for ProverStorage<S> {
 impl<S: MerkleProofSpec> ProverStorage<S> {
     /// Creates a new [`ProverStorage`] instance at the specified path, opening
     /// or creating the necessary RocksDB database(s) at the specified path.
-    pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
+    pub fn with_path(path: impl AsRef<Path>) -> Result<Storages<S>, anyhow::Error> {
         let state_db = StateDB::with_path(&path)?;
         let native_db = NativeDB::with_path(&path)?;
 
-        Ok(Self {
-            db: state_db,
-            native_db,
-            archival_version: None,
-            _phantom_hasher: Default::default(),
-        })
+        Ok(
+            Storages::Prover(Self {
+                db: state_db,
+                native_db,
+                _phantom_hasher: Default::default(),
+            })
+        )
+    }
+
+    /// Creates a new [`ProverStorage`] instance at the specified path, opening
+    /// or creating the necessary RocksDB database(s) at the specified path.
+    pub fn with_path_prover(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
+        let state_db = StateDB::with_path(&path)?;
+        let native_db = NativeDB::with_path(&path)?;
+
+        Ok(
+            Self {
+                db: state_db,
+                native_db,
+                _phantom_hasher: Default::default(),
+            }
+        )
     }
 
     pub(crate) fn with_db_handles(db: StateDB, native_db: NativeDB) -> Self {
         Self {
             db,
             native_db,
-            archival_version: None,
             _phantom_hasher: Default::default(),
         }
     }
 
     fn read_value(&self, key: &StorageKey) -> Option<StorageValue> {
-        let version = self.archival_version.unwrap_or(self.db.get_next_version());
+        let version = self.db.get_next_version();
         match self.db.get_value_option_by_key(version, key.as_ref()) {
             Ok(value) => value.map(Into::into),
             // It is ok to panic here, we assume the db is available and consistent.
             Err(e) => panic!("Unable to read value from db: {e}"),
         }
     }
+
+    /// placeholder
+    pub fn get_archival_storage(&self, version: Version) -> anyhow::Result<ArchivalStorage<S>> {
+        ArchivalStorage::new(self.clone(), version)
+    }
 }
 
 pub struct ProverStateUpdate {
     pub(crate) node_batch: NodeBatch,
     pub key_preimages: Vec<(KeyHash, CacheKey)>,
-    // pub accessory_update: OrderedReadsAndWrites,
 }
 
 impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
@@ -83,7 +208,15 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     type StateUpdate = ProverStateUpdate;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
-        Self::with_path(config.path.as_path())
+        match Self::with_path(config.path.as_path()) {
+            Ok(storages) => {
+                match storages {
+                    Storages::Prover(prover_storage) => Ok(prover_storage),
+                    _ => bail!("Creating storage failed")
+                }
+            }
+            Err(_) => bail!("Creating storage failed")
+        }
     }
 
     fn get(&self, key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
@@ -94,9 +227,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
 
     #[cfg(feature = "native")]
     fn get_accessory(&self, key: &StorageKey) -> Option<StorageValue> {
-        let version = self
-            .archival_version
-            .unwrap_or(self.db.get_next_version() - 1);
+        let version = self.db.get_next_version() - 1;
         self.native_db
             .get_value_option(key.as_ref(), version)
             .unwrap()
@@ -236,11 +367,123 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
             JellyfishMerkleTree::new(&self.db);
         temp_merkle.get_root_hash(version)
     }
+}
 
-    fn set_archival_version(&mut self, version: u64) -> anyhow::Result<()> {
-        ensure!(version < self.db.get_next_version(),
+/// placeholder
+pub struct ArchivalStorage<S: MerkleProofSpec> {
+    prover_storage: ProverStorage<S>,
+    archival_version: Version,
+}
+
+impl<S: MerkleProofSpec> ArchivalStorage<S> {
+    /// placeholder
+    pub fn new(prover_storage: ProverStorage<S>, version: Version) -> anyhow::Result<Self> {
+        ensure!(version < prover_storage.db.get_next_version(),
             "The storage default read version can not be set to a version greater than the next version");
-        self.archival_version = Some(version);
-        Ok(())
+        Ok(Self {
+            prover_storage,
+            archival_version: version,
+        })
+    }
+
+    /// placeholder
+    pub fn set_archival_version(mut self, version: Version) -> anyhow::Result<Self> {
+        ensure!(version < self.prover_storage.db.get_next_version(),
+            "The storage default read version can not be set to a version greater than the next version");
+        self.archival_version = version;
+        Ok(self)
+    }
+}
+
+impl<S: MerkleProofSpec> Clone for ArchivalStorage<S> {
+    fn clone(&self) -> Self {
+        Self {
+            prover_storage: self.prover_storage.clone(),
+            archival_version: self.archival_version,
+        }
+    }
+}
+
+impl<S: MerkleProofSpec> Storage for ArchivalStorage<S> {
+    type Witness = <ProverStorage<S> as Storage>::Witness;
+    type RuntimeConfig = <ProverStorage<S> as Storage>::RuntimeConfig;
+    type Proof = <ProverStorage<S> as Storage>::Proof;
+    type Root = <ProverStorage<S> as Storage>::Root;
+    type StateUpdate = <ProverStorage<S> as Storage>::StateUpdate;
+
+    fn with_config(config: Self::RuntimeConfig) -> anyhow::Result<Self> {
+        ProverStorage::<S>::with_config(config).map(|prover_storage| {
+            let archival_version = prover_storage.db.get_next_version();
+            ArchivalStorage {
+                prover_storage,
+                archival_version,
+            }
+        })
+    }
+
+    fn get(&self, key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
+        let val = match self
+            .prover_storage
+            .db
+            .get_value_option_by_key(self.archival_version, key.as_ref())
+        {
+            Ok(value) => value.map(Into::into),
+            Err(e) => panic!("Unable to read value from db: {e}"),
+        };
+        witness.add_hint(val.clone());
+        val
+    }
+
+    #[cfg(feature = "native")]
+    fn get_accessory(&self, key: &StorageKey) -> Option<StorageValue> {
+        self.prover_storage
+            .native_db
+            .get_value_option(key.as_ref(), self.archival_version)
+            .unwrap()
+            .map(Into::into)
+    }
+
+    fn compute_state_update(
+        &self,
+        _state_accesses: OrderedReadsAndWrites,
+        _witness: &Self::Witness,
+    ) -> Result<(Self::Root, Self::StateUpdate), Error> {
+        bail!("Archival storage cannot update");
+    }
+
+    fn commit(&self, _node_batch: &Self::StateUpdate, _accessory_update: &OrderedReadsAndWrites) {}
+
+    fn open_proof(
+        state_root: Self::Root,
+        proof: StorageProof<Self::Proof>,
+    ) -> Result<(StorageKey, Option<StorageValue>), Error> {
+        ProverStorage::<S>::open_proof(state_root, proof)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.prover_storage.is_empty()
+    }
+}
+
+impl<S: MerkleProofSpec> NativeStorage for ArchivalStorage<S> {
+    fn get_with_proof(&self, key: StorageKey) -> StorageProof<Self::Proof> {
+        let merkle = JellyfishMerkleTree::<StateDB, S::Hasher>::new(&self.prover_storage.db);
+        let (val_opt, proof) = merkle
+            .get_with_proof(
+                KeyHash::with::<S::Hasher>(key.as_ref()),
+                self.archival_version,
+            )
+            .unwrap();
+        StorageProof {
+            key,
+            value: val_opt.map(StorageValue::from),
+            proof,
+        }
+    }
+
+    fn get_root_hash(&self, version: Version) -> Result<Self::Root, Error> {
+        let temp_merkle: JellyfishMerkleTree<'_, StateDB, S::Hasher> =
+            JellyfishMerkleTree::new(&self.prover_storage.db);
+        temp_merkle.get_root_hash(version)
     }
 }
