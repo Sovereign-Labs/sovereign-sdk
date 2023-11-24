@@ -6,12 +6,14 @@ use serde::{Deserialize, Serialize};
 use super::CelestiaSpec;
 use crate::types::FilteredCelestiaBlock;
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)] // TODO:, BorshDeserialize, BorshSerialize)]
+// TODO: derive borsh Serialize, Deserialize <https://github.com/eigerco/celestia-node-rs/issues/155>
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct EtxProof {
     pub proof: Vec<EtxRangeProof>,
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)] // TODO:, BorshDeserialize, BorshSerialize)]
+// TODO: derive borsh Serialize, Deserialize <https://github.com/eigerco/celestia-node-rs/issues/155>
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct EtxRangeProof {
     pub shares: Vec<Vec<u8>>,
     pub proof: NamespaceProof,
