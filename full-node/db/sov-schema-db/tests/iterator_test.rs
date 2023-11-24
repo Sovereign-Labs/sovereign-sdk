@@ -5,7 +5,7 @@ use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 use sov_schema_db::schema::{KeyDecoder, KeyEncoder, Schema, ValueCodec};
-use sov_schema_db::{define_schema, CodecError, SchemaIterator, SeekKeyEncoder, DB};
+use sov_schema_db::{define_schema, CodecError, SchemaBatch, SchemaIterator, SeekKeyEncoder, DB};
 use tempfile::TempDir;
 
 define_schema!(TestSchema, TestKey, TestValue, "TestCF");
@@ -287,4 +287,29 @@ fn test_seek_for_prev_by_2prefix() {
     let mut iter = db.rev_iter();
     iter.seek_for_prev(&KeyPrefix2(2, 0)).unwrap();
     assert_eq!(collect_values(iter), [114, 112, 110, 104, 102, 100]);
+}
+
+#[test]
+fn test_schema_batch_iteration() {
+    let mut batch = SchemaBatch::new();
+
+    // Operations in expected order
+    let operations = vec![
+        (TestKey(2, 0, 0), TestValue(600)),
+        (TestKey(1, 3, 4), TestValue(500)),
+        (TestKey(1, 3, 3), TestValue(400)),
+        (TestKey(1, 3, 2), TestValue(300)),
+        (TestKey(1, 3, 0), TestValue(200)),
+        (TestKey(1, 2, 0), TestValue(100)),
+    ];
+
+    // Insert them out of order
+    for i in [4, 2, 0, 1, 3, 5] {
+        let (key, value) = &operations[i];
+        batch.put::<TestSchema>(key, value).unwrap();
+    }
+
+    let iter = batch.iter::<TestSchema>();
+    let collected: Vec<_> = iter.filter_map(|row| row.ok()).collect();
+    assert_eq!(operations, collected);
 }

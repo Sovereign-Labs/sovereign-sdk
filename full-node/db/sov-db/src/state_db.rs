@@ -3,7 +3,6 @@ use std::sync::{Arc, Mutex};
 
 use jmt::storage::{TreeReader, TreeWriter};
 use jmt::{KeyHash, Version};
-use sov_schema_db::snapshot::{DbSnapshot, QueryManager};
 use sov_schema_db::{SchemaBatch, DB};
 
 use crate::rocks_db_config::gen_rocksdb_options;
@@ -16,9 +15,9 @@ use crate::schema::types::StateKey;
 /// StateDB implements several convenience functions for state storage -
 /// notably the `TreeReader` and `TreeWriter` traits.
 #[derive(Clone, Debug)]
-pub struct StateDB<Q> {
+pub struct StateDB {
     /// The underlying database instance, wrapped in an [`Arc`] for convenience and [`SchemaDB`] for type safety
-    snapshot: Arc<DbSnapshot<Q>>,
+    db: Arc<DB>,
     /// The [`Version`] that will be used for the next batch of writes to the DB.
     next_version: Arc<Mutex<Version>>,
 }
@@ -28,22 +27,21 @@ const STATE_DB_PATH_SUFFIX: &str = "state";
 impl StateDB {
     /// Open a [`StateDB`] (backed by RocksDB) at the specified path.
     /// The returned instance will be at the path `{path}/state-db`.
-    pub fn with_path(_path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
-        todo!();
-        // let path = path.as_ref().join(STATE_DB_PATH_SUFFIX);
-        // let inner = DB::open(
-        //     path,
-        //     "state-db",
-        //     STATE_TABLES.iter().copied(),
-        //     &gen_rocksdb_options(&Default::default(), false),
-        // )?;
-        //
-        // let next_version = Self::last_version_written(&inner)?.unwrap_or_default() + 1;
-        //
-        // Ok(Self {
-        //     snapshot: Arc::new(inner),
-        //     next_version: Arc::new(Mutex::new(next_version)),
-        // })
+    pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
+        let path = path.as_ref().join(STATE_DB_PATH_SUFFIX);
+        let inner = DB::open(
+            path,
+            "state-db",
+            STATE_TABLES.iter().copied(),
+            &gen_rocksdb_options(&Default::default(), false),
+        )?;
+
+        let next_version = Self::last_version_written(&inner)?.unwrap_or_default() + 1;
+
+        Ok(Self {
+            db: Arc::new(inner),
+            next_version: Arc::new(Mutex::new(next_version)),
+        })
     }
 
     /// Put the preimage of a hashed key into the database. Note that the preimage is not checked for correctness,
@@ -52,10 +50,11 @@ impl StateDB {
         &self,
         items: impl IntoIterator<Item = (KeyHash, &'a Vec<u8>)>,
     ) -> Result<(), anyhow::Error> {
+        let mut batch = SchemaBatch::new();
         for (key_hash, key) in items.into_iter() {
-            self.snapshot.put::<KeyHashToKey>(&key_hash.0, key)?;
+            batch.put::<KeyHashToKey>(&key_hash.0, key)?;
         }
-        Ok(())
+        self.db.write_schemas(batch)
     }
 
     /// Get an optional value from the database, given a version and a key hash.
@@ -64,7 +63,7 @@ impl StateDB {
         version: Version,
         key: &StateKey,
     ) -> anyhow::Result<Option<jmt::OwnedValue>> {
-        let mut iter = self.snapshot.iter::<JmtValues>()?;
+        let mut iter = self.db.iter::<JmtValues>()?;
         // find the latest instance of the key whose version <= target
         iter.seek_for_prev(&(&key, version))?;
         let found = iter.next();
@@ -111,7 +110,7 @@ impl TreeReader for StateDB {
         &self,
         node_key: &jmt::storage::NodeKey,
     ) -> anyhow::Result<Option<jmt::storage::Node>> {
-        self.snapshot.get::<JmtNodes>(node_key)
+        self.db.get::<JmtNodes>(node_key)
     }
 
     fn get_value_option(
@@ -119,7 +118,7 @@ impl TreeReader for StateDB {
         version: Version,
         key_hash: KeyHash,
     ) -> anyhow::Result<Option<jmt::OwnedValue>> {
-        if let Some(key) = self.snapshot.get::<KeyHashToKey>(&key_hash.0)? {
+        if let Some(key) = self.db.get::<KeyHashToKey>(&key_hash.0)? {
             self.get_value_option_by_key(version, &key)
         } else {
             Ok(None)
@@ -142,14 +141,14 @@ impl TreeWriter for StateDB {
 
         for ((version, key_hash), value) in node_batch.values() {
             let key_preimage =
-                self.snapshot
+                self.db
                     .get::<KeyHashToKey>(&key_hash.0)?
                     .ok_or(anyhow::format_err!(
                         "Could not find preimage for key hash {key_hash:?}. Has `StateDB::put_preimage` been called for this key?"
                     ))?;
             batch.put::<JmtValues>(&(key_preimage, *version), value)?;
         }
-        self.snapshot.write_schemas(batch)?;
+        self.db.write_schemas(batch)?;
         Ok(())
     }
 }
@@ -191,13 +190,13 @@ pub mod arbitrary {
         type Target = StateDB;
 
         fn deref(&self) -> &Self::Target {
-            &self.snapshot
+            &self.db
         }
     }
 
     impl DerefMut for ArbitraryDB {
         fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.snapshot
+            &mut self.db
         }
     }
 

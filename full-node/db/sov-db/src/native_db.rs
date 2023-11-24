@@ -1,8 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use sov_schema_db::snapshot::{DbSnapshot, QueryManager};
-use sov_schema_db::DB;
+use sov_schema_db::{SchemaBatch, DB};
 
 use crate::rocks_db_config::gen_rocksdb_options;
 use crate::schema::tables::{ModuleAccessoryState, NATIVE_TABLES};
@@ -11,52 +10,36 @@ use crate::schema::types::StateKey;
 /// A typed wrapper around RocksDB for storing native-only accessory state.
 /// Internally, this is roughly just an [`Arc<SchemaDB>`].
 #[derive(Clone, Debug)]
-pub struct NativeDB<Q> {
+pub struct NativeDB {
     /// The underlying RocksDB instance, wrapped in an [`Arc`] for convenience
     /// and [`DB`] for type safety.
-    snapshot: Arc<DbSnapshot<Q>>,
+    db: Arc<DB>,
 }
 
-const DB_PATH_SUFFIX: &'static str = "native";
-const DB_NAME: &'static str = "native-db";
-/// Opens native DB
-pub fn open_native_db(path: impl AsRef<Path>) -> anyhow::Result<DB> {
-    let path = path.as_ref().join(DB_PATH_SUFFIX);
-    DB::open(
-        path,
-        DB_NAME,
-        NATIVE_TABLES.iter().copied(),
-        &gen_rocksdb_options(&Default::default(), false),
-    )
-}
+impl NativeDB {
+    const DB_PATH_SUFFIX: &'static str = "native";
+    const DB_NAME: &'static str = "native-db";
 
-impl<Q: QueryManager> NativeDB<Q> {
     /// Opens a [`NativeDB`] (backed by RocksDB) at the specified path.
     /// The returned instance will be at the path `{path}/native-db`.
-    pub fn with_path(_path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
-        todo!("Cannot initialize from path")
-        // let path = path.as_ref().join(Self::DB_PATH_SUFFIX);
-        // let inner = DB::open(
-        //     path,
-        //     Self::DB_NAME,
-        //     NATIVE_TABLES.iter().copied(),
-        //     &gen_rocksdb_options(&Default::default(), false),
-        // )?;
-        //
-        // Ok(Self {
-        //     snapshot: Arc::new(inner),
-        // })
-    }
+    pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
+        let path = path.as_ref().join(Self::DB_PATH_SUFFIX);
+        let inner = DB::open(
+            path,
+            Self::DB_NAME,
+            NATIVE_TABLES.iter().copied(),
+            &gen_rocksdb_options(&Default::default(), false),
+        )?;
 
-    /// Initializes a new [`NativeDB`] with given [`DbSnapshot`].
-    pub fn with_snapshot(snapshot: Arc<DbSnapshot<Q>>) -> Self {
-        Self { snapshot }
+        Ok(Self {
+            db: Arc::new(inner),
+        })
     }
 
     /// Queries for a value in the [`NativeDB`], given a key.
     pub fn get_value_option(&self, key: &StateKey) -> anyhow::Result<Option<Vec<u8>>> {
-        self.snapshot
-            .read::<ModuleAccessoryState>(key)
+        self.db
+            .get::<ModuleAccessoryState>(key)
             .map(Option::flatten)
     }
 
@@ -65,10 +48,11 @@ impl<Q: QueryManager> NativeDB<Q> {
         &self,
         key_value_pairs: impl IntoIterator<Item = (Vec<u8>, Option<Vec<u8>>)>,
     ) -> anyhow::Result<()> {
+        let mut batch = SchemaBatch::default();
         for (key, value) in key_value_pairs {
-            self.snapshot.put::<ModuleAccessoryState>(&key, &value)?;
+            batch.put::<ModuleAccessoryState>(&key, &value)?;
         }
-        Ok(())
+        self.db.write_schemas(batch)
     }
 }
 
@@ -109,13 +93,13 @@ pub mod arbitrary {
         type Target = NativeDB;
 
         fn deref(&self) -> &Self::Target {
-            &self.snapshot
+            &self.db
         }
     }
 
     impl DerefMut for ArbitraryNativeDB {
         fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.snapshot
+            &mut self.db
         }
     }
 
