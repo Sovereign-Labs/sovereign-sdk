@@ -36,7 +36,7 @@ use tracing::info;
 
 pub use crate::schema::Schema;
 use crate::schema::{ColumnFamilyName, KeyCodec, ValueCodec};
-pub use crate::schema_batch::SchemaBatch;
+pub use crate::schema_batch::{SchemaBatch, SchemaBatchIterator};
 
 /// This DB is a schematized RocksDB wrapper where all data passed in and out are typed according to
 /// [`Schema`]s.
@@ -251,8 +251,10 @@ impl DB {
     }
 }
 
-type SchemaKey = Vec<u8>;
-type SchemaValue = Vec<u8>;
+/// Readability alias for a key in the DB.
+pub type SchemaKey = Vec<u8>;
+/// Readability alias for a value in the DB.
+pub type SchemaValue = Vec<u8>;
 
 #[cfg_attr(feature = "arbitrary", derive(proptest_derive::Arbitrary))]
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]

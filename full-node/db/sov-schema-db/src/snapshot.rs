@@ -3,6 +3,7 @@
 use std::sync::{Arc, LockResult, Mutex, RwLock, RwLockReadGuard};
 
 use crate::schema::{KeyCodec, ValueCodec};
+use crate::schema_batch::SchemaBatchIterator;
 use crate::{Operation, Schema, SchemaBatch};
 
 /// Id of database snapshot
@@ -123,6 +124,11 @@ impl FrozenDbSnapshot {
     /// Get id of this Snapshot
     pub fn get_id(&self) -> SnapshotId {
         self.id
+    }
+
+    /// Iterate over all operations in snapshot in reversed lexicographic order
+    pub fn iter<S: Schema>(&self) -> SchemaBatchIterator<'_, S> {
+        self.cache.iter::<S>()
     }
 }
 

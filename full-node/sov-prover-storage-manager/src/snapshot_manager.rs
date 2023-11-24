@@ -1,9 +1,10 @@
 use std::collections::HashMap;
+use std::iter::Peekable;
 use std::sync::{Arc, RwLock};
 
 use sov_schema_db::schema::{KeyCodec, ValueCodec};
 use sov_schema_db::snapshot::{FrozenDbSnapshot, QueryManager, SnapshotId};
-use sov_schema_db::{Operation, Schema};
+use sov_schema_db::{Operation, Schema, SchemaBatchIterator, SchemaKey, SchemaValue};
 
 /// Snapshot manager holds snapshots associated with particular DB and can traverse them backwards
 /// down to DB level
@@ -55,6 +56,89 @@ impl SnapshotManager {
     pub(crate) fn contains_snapshot(&self, snapshot_id: &SnapshotId) -> bool {
         self.snapshots.contains_key(snapshot_id)
     }
+
+    pub fn iter<S: Schema>(&self, mut snapshot_id: SnapshotId) -> SnapshotManagerIter<S> {
+        let mut snapshot_iterators = vec![];
+        let to_parent = self.to_parent.read().unwrap();
+        while let Some(parent_snapshot_id) = to_parent.get(&snapshot_id) {
+            let parent_snapshot = self
+                .snapshots
+                .get(parent_snapshot_id)
+                .expect("Inconsistency between `self.snapshots` and `self.to_parent`");
+
+            snapshot_iterators.push(parent_snapshot.iter::<S>());
+
+            snapshot_id = *parent_snapshot_id;
+        }
+
+        SnapshotManagerIter::new(snapshot_iterators)
+    }
+}
+
+/// [`Iterator`] over keys in given [`Schema`] in all snapshots in reverse lexicographical order
+pub struct SnapshotManagerIter<'a, S: Schema> {
+    // TODO: Plug DB iterator HERE.
+    snapshot_iterators: Vec<Peekable<SchemaBatchIterator<'a, S>>>,
+}
+
+impl<'a, S: Schema> SnapshotManagerIter<'a, S> {
+    pub(crate) fn new(snapshot_iterators: Vec<SchemaBatchIterator<'a, S>>) -> Self {
+        Self {
+            snapshot_iterators: snapshot_iterators
+                .into_iter()
+                .map(|iter| iter.peekable())
+                .collect(),
+        }
+    }
+}
+
+impl<'a, S: Schema> Iterator for SnapshotManagerIter<'a, S> {
+    type Item = (&'a SchemaKey, &'a SchemaValue);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Find max value
+        loop {
+            let mut max_values: Vec<(usize, &&SchemaKey)> = vec![];
+            for (idx, iter) in self.snapshot_iterators.iter_mut().enumerate() {
+                if let Some((peeked_key, _)) = iter.peek() {
+                    if max_values.is_empty() {
+                        max_values.push((idx, peeked_key));
+                    } else {
+                        let (_, max_key) = max_values[0];
+                        if peeked_key > max_key {
+                            max_values.clear();
+                            max_values.push((idx, peeked_key));
+                        } else if peeked_key == max_key {
+                            max_values.push((idx, peeked_key));
+                        }
+                    }
+                }
+            }
+
+            if max_values.is_empty() {
+                break;
+            }
+
+            let max_indices = max_values
+                .into_iter()
+                .map(|(idx, _)| idx)
+                .collect::<Vec<_>>();
+
+            let (key, operation) = self.snapshot_iterators[max_indices[0]].next().unwrap();
+
+            // Progress all previous (older) snapshots to the next key
+            for idx in max_indices.into_iter().skip(1) {
+                let _ = self.snapshot_iterators[idx].next().unwrap();
+            }
+
+            match operation {
+                Operation::Put { value } => return Some((key, value)),
+                Operation::Delete => continue,
+            }
+        }
+
+        None
+    }
 }
 
 impl QueryManager for SnapshotManager {
@@ -90,6 +174,7 @@ mod tests {
     use std::sync::{Arc, RwLock};
 
     use sov_db::rocks_db_config::gen_rocksdb_options;
+    use sov_schema_db::schema::{KeyDecoder, ValueCodec};
     use sov_schema_db::snapshot::{DbSnapshot, NoopQueryManager, QueryManager};
     use sov_schema_db::SchemaBatch;
 
@@ -339,5 +424,107 @@ mod tests {
         assert_eq!(Some(f7), snapshot_manager.get::<Schema>(7, &f1).unwrap());
         assert_eq!(Some(f8), snapshot_manager.get::<Schema>(7, &f2).unwrap());
         assert_eq!(Some(f4), snapshot_manager.get::<Schema>(7, &f3).unwrap());
+    }
+
+    #[test]
+    fn test_iterator() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db = create_test_db(tempdir.path());
+        let to_parent = Arc::new(RwLock::new(HashMap::new()));
+        {
+            // DB -> 1 -> 2 -> 3
+            let mut edit = to_parent.write().unwrap();
+            edit.insert(2, 1);
+            edit.insert(3, 2);
+            edit.insert(4, 3);
+        }
+
+        let f1 = DummyField(1);
+        let f2 = DummyField(2);
+        let f3 = DummyField(3);
+        let f4 = DummyField(4);
+        let f5 = DummyField(5);
+        let f6 = DummyField(6);
+        let f7 = DummyField(7);
+        let f8 = DummyField(8);
+        let f9 = DummyField(9);
+        let f10 = DummyField(10);
+        let f12 = DummyField(12);
+
+        let mut db_data = SchemaBatch::new();
+        db_data.put::<Schema>(&f3, &f9).unwrap();
+        db_data.put::<Schema>(&f2, &f1).unwrap();
+        db_data.put::<Schema>(&f4, &f1).unwrap();
+        db.write_schemas(db_data).unwrap();
+
+        let mut snapshot_manager = SnapshotManager::new(db, to_parent.clone());
+        let query_manager = Arc::new(RwLock::new(NoopQueryManager));
+
+        // Operations:
+        // | snapshot_id | key |  operation |
+        // |           1 |   1 |   write(8) |
+        // |           1 |   5 |   write(7) |
+        // |           1 |   8 |   write(3) |
+        // |           1 |   4 |   write(2) |
+        // |           2 |  10 |   write(2) |
+        // |           2 |   9 |   write(4) |
+        // |           2 |   4 |     delete |
+        // |           2 |   2 |   write(6) |
+        // |           3 |   8 |   write(6) |
+        // |           3 |   9 |     delete |
+        // |           3 |  12 |   write(1) |
+        // |           3 |   1 |   write(2) |
+
+        // 1
+        let db_snapshot = DbSnapshot::new(1, query_manager.clone().into());
+        db_snapshot.put::<Schema>(&f1, &f8).unwrap();
+        db_snapshot.put::<Schema>(&f5, &f7).unwrap();
+        db_snapshot.put::<Schema>(&f8, &f3).unwrap();
+        db_snapshot.put::<Schema>(&f4, &f2).unwrap();
+        snapshot_manager.add_snapshot(db_snapshot.into());
+
+        // 2
+        let db_snapshot = DbSnapshot::new(2, query_manager.clone().into());
+        db_snapshot.put::<Schema>(&f10, &f2).unwrap();
+        db_snapshot.put::<Schema>(&f9, &f4).unwrap();
+        db_snapshot.delete::<Schema>(&f4).unwrap();
+        db_snapshot.put::<Schema>(&f2, &f6).unwrap();
+        snapshot_manager.add_snapshot(db_snapshot.into());
+
+        // 3
+        let db_snapshot = DbSnapshot::new(3, query_manager.clone().into());
+        db_snapshot.put::<Schema>(&f8, &f6).unwrap();
+        db_snapshot.delete::<Schema>(&f9).unwrap();
+        db_snapshot.put::<Schema>(&f12, &f1).unwrap();
+        db_snapshot.put::<Schema>(&f1, &f2).unwrap();
+        snapshot_manager.add_snapshot(db_snapshot.into());
+
+        // Expected Order
+        // | key | value |
+        // |  12 |     1 |
+        // |  10 |     2 |
+        // |   8 |     6 |
+        // |   5 |     7 |
+        // |  *4 |     1 |
+        // |  *3 |     1 |
+        // |   2 |     6 |
+        // |   1 |     2 |
+
+        println!("CHECKING VIEW");
+        let i = snapshot_manager.iter::<Schema>(4);
+        let mut v = vec![];
+        for (key, value) in i {
+            v.push((key, value));
+        }
+
+        for (key, value) in v {
+            let key = <<DummyStateSchema as sov_schema_db::Schema>::Key as KeyDecoder<Schema>>::decode_key(&key).unwrap();
+            let value = <<DummyStateSchema as sov_schema_db::Schema>::Value as ValueCodec<
+                Schema,
+            >>::decode_value(&value)
+            .unwrap();
+            // let value = DummyField::decode_value(&value).unwrap();
+            println!("[I]: k={:?}: v={:?}", key, value);
+        }
     }
 }

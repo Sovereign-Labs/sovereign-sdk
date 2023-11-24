@@ -5,7 +5,9 @@ use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 use sov_schema_db::schema::{KeyDecoder, KeyEncoder, Schema, ValueCodec};
-use sov_schema_db::{define_schema, CodecError, SchemaBatch, SchemaIterator, SeekKeyEncoder, DB};
+use sov_schema_db::{
+    define_schema, CodecError, Operation, SchemaBatch, SchemaIterator, SeekKeyEncoder, DB,
+};
 use tempfile::TempDir;
 
 define_schema!(TestSchema, TestKey, TestValue, "TestCF");
@@ -290,7 +292,7 @@ fn test_seek_for_prev_by_2prefix() {
 }
 
 #[test]
-fn test_schema_batch_iteration() {
+fn test_schema_batch_iteration_order() {
     let mut batch = SchemaBatch::new();
 
     // Operations in expected order
@@ -310,6 +312,41 @@ fn test_schema_batch_iteration() {
     }
 
     let iter = batch.iter::<TestSchema>();
-    let collected: Vec<_> = iter.filter_map(|row| row.ok()).collect();
+    let collected: Vec<_> = iter
+        .filter_map(|(key, value)| match value {
+            Operation::Put { value } => Some((
+                TestKey::decode_key(key).unwrap(),
+                TestValue::decode_value(value).unwrap(),
+            )),
+            Operation::Delete => None,
+        })
+        .collect();
     assert_eq!(operations, collected);
+}
+
+#[test]
+fn test_schema_batch_iteration_with_deletions() {
+    let mut batch = SchemaBatch::new();
+
+    batch
+        .put::<TestSchema>(&TestKey(8, 0, 0), &TestValue(6))
+        .unwrap();
+    batch.delete::<TestSchema>(&TestKey(9, 0, 0)).unwrap();
+    batch
+        .put::<TestSchema>(&TestKey(12, 0, 0), &TestValue(1))
+        .unwrap();
+    batch
+        .put::<TestSchema>(&TestKey(1, 0, 0), &TestValue(2))
+        .unwrap();
+    let mut iter = batch.iter::<TestSchema>().peekable();
+    let first1 = iter.peek().unwrap();
+    assert_eq!(first1.0, &TestKey(12, 0, 0).encode_key().unwrap(),);
+    assert_eq!(
+        first1.1,
+        &Operation::Put {
+            value: TestValue(1).encode_value().unwrap()
+        }
+    );
+    let collected: Vec<_> = iter.collect();
+    assert_eq!(4, collected.len());
 }

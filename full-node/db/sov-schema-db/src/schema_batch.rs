@@ -2,7 +2,7 @@ use std::collections::{btree_map, BTreeMap, HashMap};
 use std::iter::Rev;
 
 use crate::metrics::SCHEMADB_BATCH_PUT_LATENCY_SECONDS;
-use crate::schema::{ColumnFamilyName, KeyCodec, KeyDecoder, ValueCodec};
+use crate::schema::{ColumnFamilyName, KeyCodec, ValueCodec};
 use crate::{Operation, Schema, SchemaKey};
 
 // [`SchemaBatch`] holds a collection of updates that can be applied to a DB
@@ -71,7 +71,8 @@ impl SchemaBatch {
     }
 }
 
-pub struct SchemaBatchIterator<'a, S> {
+/// Iterator over [`SchemaBatch`] for a given column family in reversed lexicographic order
+pub struct SchemaBatchIterator<'a, S: Schema> {
     inner: Rev<btree_map::Iter<'a, SchemaKey, Operation>>,
     _phantom: std::marker::PhantomData<S>,
 }
@@ -80,27 +81,10 @@ impl<'a, S> Iterator for SchemaBatchIterator<'a, S>
 where
     S: Schema,
 {
-    type Item = anyhow::Result<(S::Key, S::Value)>;
+    type Item = (&'a SchemaKey, &'a Operation);
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some((key, operation)) = self.inner.next() {
-            if let Operation::Put { value } = operation {
-                let key = match S::Key::decode_key(key) {
-                    Ok(k) => k,
-                    Err(err) => {
-                        return Some(Err(anyhow::Error::from(err)));
-                    }
-                };
-                let value = match S::Value::decode_value(value) {
-                    Ok(v) => v,
-                    Err(err) => {
-                        return Some(Err(anyhow::Error::from(err)));
-                    }
-                };
-                return Some(Ok((key, value)));
-            }
-        }
-        None
+        self.inner.next()
     }
 }
 
