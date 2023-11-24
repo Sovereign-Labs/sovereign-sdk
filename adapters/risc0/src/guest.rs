@@ -38,29 +38,30 @@ impl Hints {
             position: 0,
         }
     }
-    pub fn remaining(&self) -> usize {
-        self.values.len() - self.position
-    }
 }
 
 #[cfg(not(target_os = "zkvm"))]
 impl WordRead for Hints {
     fn read_words(&mut self, words: &mut [u32]) -> risc0_zkvm::serde::Result<()> {
-        if self.remaining() < words.len() {
-            return Err(risc0_zkvm::serde::Error::DeserializeUnexpectedEnd);
+        if let Some(slice) = self.values.get(self.position..self.position + words.len()) {
+            words.copy_from_slice(slice);
+            self.position += words.len();
+            Ok(())
+        } else {
+            Err(risc0_zkvm::serde::Error::DeserializeUnexpectedEnd)
         }
-        words.copy_from_slice(&self.values[self.position..self.position + words.len()]);
-        self.position += words.len();
-        Ok(())
     }
 
     fn read_padded_bytes(&mut self, bytes: &mut [u8]) -> risc0_zkvm::serde::Result<()> {
+        use risc0_zkvm::align_up;
+        use risc0_zkvm_platform::WORD_SIZE;
+
         let remaining_bytes: &[u8] = bytemuck::cast_slice(&self.values[self.position..]);
         if bytes.len() > remaining_bytes.len() {
             return Err(risc0_zkvm::serde::Error::DeserializeUnexpectedEnd);
         }
         bytes.copy_from_slice(&remaining_bytes[..bytes.len()]);
-        self.position += bytes.len() / std::mem::size_of::<u32>();
+        self.position += align_up(bytes.len(), WORD_SIZE) / WORD_SIZE;
         Ok(())
     }
 }
