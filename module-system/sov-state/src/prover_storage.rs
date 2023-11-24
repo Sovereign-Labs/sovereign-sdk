@@ -36,8 +36,12 @@ impl<S: MerkleProofSpec> Storages<S> {
     /// placeholder
     pub fn get_archival_storage(&self, version: u64) -> anyhow::Result<Storages<S>> {
         match self {
-            Storages::Prover(prover_storage) => Ok(Storages::Archival(prover_storage.get_archival_storage(version)?)),
-            Storages::Archival(archival_storage) => Ok(Storages::Archival(archival_storage.clone().set_archival_version(version)?))
+            Storages::Prover(prover_storage) => Ok(Storages::Archival(
+                prover_storage.get_archival_storage(version)?,
+            )),
+            Storages::Archival(archival_storage) => Ok(Storages::Archival(
+                archival_storage.clone().set_archival_version(version)?,
+            )),
         }
     }
 }
@@ -148,13 +152,11 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         let state_db = StateDB::with_path(&path)?;
         let native_db = NativeDB::with_path(&path)?;
 
-        Ok(
-            Storages::Prover(Self {
-                db: state_db,
-                native_db,
-                _phantom_hasher: Default::default(),
-            })
-        )
+        Ok(Storages::Prover(Self {
+            db: state_db,
+            native_db,
+            _phantom_hasher: Default::default(),
+        }))
     }
 
     /// Creates a new [`ProverStorage`] instance at the specified path, opening
@@ -163,13 +165,11 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         let state_db = StateDB::with_path(&path)?;
         let native_db = NativeDB::with_path(&path)?;
 
-        Ok(
-            Self {
-                db: state_db,
-                native_db,
-                _phantom_hasher: Default::default(),
-            }
-        )
+        Ok(Self {
+            db: state_db,
+            native_db,
+            _phantom_hasher: Default::default(),
+        })
     }
 
     pub(crate) fn with_db_handles(db: StateDB, native_db: NativeDB) -> Self {
@@ -209,13 +209,11 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         match Self::with_path(config.path.as_path()) {
-            Ok(storages) => {
-                match storages {
-                    Storages::Prover(prover_storage) => Ok(prover_storage),
-                    _ => bail!("Creating storage failed")
-                }
-            }
-            Err(_) => bail!("Creating storage failed")
+            Ok(storages) => match storages {
+                Storages::Prover(prover_storage) => Ok(prover_storage),
+                _ => bail!("Creating storage failed"),
+            },
+            Err(_) => bail!("Creating storage failed"),
         }
     }
 

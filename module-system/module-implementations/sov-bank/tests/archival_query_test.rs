@@ -83,8 +83,7 @@ fn transfer_initial_token() {
     let archival_slot: u64 = 2;
     println!("Archival reads at slot {}", archival_slot);
     let archival_storage = prover_storage.get_archival_storage(archival_slot).unwrap();
-    let mut working_set: WorkingSet<DefaultContext> =
-        WorkingSet::new(archival_storage);
+    let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(archival_storage);
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
         &bank,
         token_address,
@@ -97,8 +96,7 @@ fn transfer_initial_token() {
     let archival_slot: u64 = 1;
     println!("Archival archival reads at slot {}", archival_slot);
     let archival_storage = prover_storage.get_archival_storage(archival_slot).unwrap();
-    let mut working_set: WorkingSet<DefaultContext> =
-        WorkingSet::new(archival_storage);
+    let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(archival_storage);
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
         &bank,
         token_address,
