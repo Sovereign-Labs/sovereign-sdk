@@ -44,6 +44,11 @@ impl<S: MerkleProofSpec> Storages<S> {
             )),
         }
     }
+
+    /// placeholder
+    pub fn with_path(path: impl AsRef<Path>) -> Result<Storages<S>, anyhow::Error> {
+        ProverStorage::with_path(path)
+    }
 }
 
 impl<S: MerkleProofSpec> Storage for Storages<S> {
@@ -157,19 +162,6 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
             native_db,
             _phantom_hasher: Default::default(),
         }))
-    }
-
-    /// Creates a new [`ProverStorage`] instance at the specified path, opening
-    /// or creating the necessary RocksDB database(s) at the specified path.
-    pub fn with_path_prover(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
-        let state_db = StateDB::with_path(&path)?;
-        let native_db = NativeDB::with_path(&path)?;
-
-        Ok(Self {
-            db: state_db,
-            native_db,
-            _phantom_hasher: Default::default(),
-        })
     }
 
     pub(crate) fn with_db_handles(db: StateDB, native_db: NativeDB) -> Self {

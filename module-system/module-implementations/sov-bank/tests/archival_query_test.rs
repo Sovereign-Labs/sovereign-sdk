@@ -33,9 +33,7 @@ fn transfer_initial_token() {
         &mut working_set,
     );
     assert_eq!((sender_balance, receiver_balance), (100, 100));
-    println!("Starting commit for genesis, i.e. slot 1");
     commit(working_set, prover_storage.clone());
-    println!("Genesis commit complete");
 
     let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
 
@@ -55,9 +53,7 @@ fn transfer_initial_token() {
     );
     assert_eq!((sender_balance, receiver_balance), (90, 110));
 
-    println!("Starting commit for slot 2");
     commit(working_set, prover_storage.clone());
-    println!("Commit complete for slot 2");
 
     let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
 
@@ -76,12 +72,9 @@ fn transfer_initial_token() {
         &mut working_set,
     );
     assert_eq!((sender_balance, receiver_balance), (80, 120));
-    println!("Starting commit for slot 3");
     commit(working_set, prover_storage.clone());
-    println!("Commit complete for slot 3");
 
     let archival_slot: u64 = 2;
-    println!("Archival reads at slot {}", archival_slot);
     let archival_storage = prover_storage.get_archival_storage(archival_slot).unwrap();
     let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(archival_storage);
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
@@ -94,7 +87,6 @@ fn transfer_initial_token() {
     assert_eq!((sender_balance, receiver_balance), (90, 110));
 
     let archival_slot: u64 = 1;
-    println!("Archival archival reads at slot {}", archival_slot);
     let archival_storage = prover_storage.get_archival_storage(archival_slot).unwrap();
     let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(archival_storage);
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
@@ -105,7 +97,6 @@ fn transfer_initial_token() {
         &mut working_set,
     );
     assert_eq!((sender_balance, receiver_balance), (100, 100));
-    println!("Transfer on archival");
     transfer(
         &bank,
         token_address,
@@ -113,7 +104,6 @@ fn transfer_initial_token() {
         receiver_address,
         &mut working_set,
     );
-    println!("Archival query for modified working set");
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
         &bank,
         token_address,
@@ -123,7 +113,6 @@ fn transfer_initial_token() {
     );
     assert_eq!((sender_balance, receiver_balance), (90, 110));
 
-    println!(" Move back from archival to current once again");
     let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
         &bank,
@@ -190,11 +179,8 @@ fn transfer_initial_token() {
     let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(archival_storage);
     let mut accessory_state = working_set.accessory_state();
     let val = accessory_state.get(&StorageKey::from("k")).unwrap();
-
     assert_eq!("v1", String::from_utf8(val.value().to_vec()).unwrap());
-
     commit(working_set, prover_storage.clone());
-    println!("{:?}", val);
 }
 
 fn query_sender_receiver_balances(
