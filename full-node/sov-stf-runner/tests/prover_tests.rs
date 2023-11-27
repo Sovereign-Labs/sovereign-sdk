@@ -139,7 +139,7 @@ fn make_transition_data(
         pre_state_root: [],
         da_block_header: MockBlockHeader {
             prev_hash: [0; 32].into(),
-            hash: header_hash.into(),
+            hash: header_hash,
             height: 0,
         },
         inclusion_proof: [0; 32],

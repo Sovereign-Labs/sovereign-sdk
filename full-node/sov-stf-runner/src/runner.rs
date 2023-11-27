@@ -12,7 +12,7 @@ use tokio::sync::oneshot;
 use tracing::{debug, info};
 
 use crate::verifier::StateTransitionVerifier;
-use crate::{ProverService, RunnerConfig, StateTransitionData};
+use crate::{ProofSubmissionStatus, ProverService, RunnerConfig, StateTransitionData};
 type StateRoot<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::StateRoot;
 type InitialState<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::GenesisParams;
 
@@ -218,7 +218,7 @@ where
             {
                 let header_hash = transition_data.da_block_header.hash();
                 self.prover_service.submit_witness(transition_data).await;
-                // TODO: This section will be moved and called upon block finalization once we have fork management ready.
+                // TODO(#1185): This section will be moved and called upon block finalization once we have fork management ready.
                 self.prover_service
                     .prove(header_hash.clone())
                     .await
@@ -229,13 +229,15 @@ where
                         .prover_service
                         .send_proof_to_da(header_hash.clone())
                         .await;
+
                     match status {
-                        Ok(crate::ProofSubmissionStatus::Success) => {
+                        Ok(ProofSubmissionStatus::Success) => {
                             break;
                         }
-                        Ok(crate::ProofSubmissionStatus::ProofGenerationInProgress) => {
+                        Ok(ProofSubmissionStatus::ProofGenerationInProgress) => {
                             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await
                         }
+                        // TODO(#1185):Add handling for DA errors.
                         Err(e) => panic!("{:?}", e),
                     }
                 }
