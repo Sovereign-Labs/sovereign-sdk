@@ -227,13 +227,13 @@ where
                 loop {
                     let status = self.prover_service.send_proof_to_da(header_hash).await;
                     match status {
-                        crate::ProofSubmissionStatus::Success => {
+                        Ok(crate::ProofSubmissionStatus::Success) => {
                             break;
                         }
-                        crate::ProofSubmissionStatus::ProvingInProgress => {
+                        Ok(crate::ProofSubmissionStatus::ProofGenerationInProgress) => {
                             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await
                         }
-                        crate::ProofSubmissionStatus::Err(e) => panic!("{:?}", e),
+                        Err(e) => panic!("{:?}", e),
                     }
                 }
             }

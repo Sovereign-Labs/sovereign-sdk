@@ -27,9 +27,9 @@ rayon = { workspace = true, optional = true }
 sov-db = { path = "../db/sov-db", version = "0.3", optional = true }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
 
-
 [dev-dependencies]
 tempfile = { workspace = true }
+num_cpus = "1.0"
 
 sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry", features = ["native"] }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }

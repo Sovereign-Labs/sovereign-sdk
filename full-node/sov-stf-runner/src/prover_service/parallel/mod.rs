@@ -11,7 +11,10 @@ use sov_rollup_interface::zk::ZkvmHost;
 
 use super::{Hash, ProverService, ProverServiceError};
 use crate::verifier::StateTransitionVerifier;
-use crate::{ProofGenConfig, ProofSubmissionStatus, RollupProverConfig, StateTransitionData};
+use crate::{
+    ProofGenConfig, ProofProcessingStatus, ProofSubmissionStatus, RollupProverConfig,
+    StateTransitionData,
+};
 
 /// Prover service that generates proofs in parallel.
 pub struct ParallelProverService<StateRoot, Witness, Da, Vm, V>
@@ -44,6 +47,7 @@ where
         da_verifier: Da::Verifier,
         config: RollupProverConfig,
         zk_storage: V::PreState,
+        num_threads: usize,
     ) -> Self {
         let stf_verifier =
             StateTransitionVerifier::<V, Da::Verifier, Vm::Guest>::new(zk_stf, da_verifier);
@@ -60,7 +64,7 @@ where
         Self {
             vm,
             prover_config,
-            prover_state: Prover::new(),
+            prover_state: Prover::new(num_threads),
             zk_storage,
         }
     }
@@ -94,7 +98,10 @@ where
         self.prover_state.submit_witness(state_transition_data);
     }
 
-    async fn prove(&self, block_header_hash: Hash) -> Result<(), ProverServiceError> {
+    async fn prove(
+        &self,
+        block_header_hash: Hash,
+    ) -> Result<ProofProcessingStatus, ProverServiceError> {
         let vm = self.vm.clone();
         let zk_storage = self.zk_storage.clone();
 
@@ -103,12 +110,13 @@ where
             self.prover_config.clone(),
             vm,
             zk_storage,
-        )?;
-
-        Ok(())
+        )
     }
 
-    async fn send_proof_to_da(&self, block_header_hash: Hash) -> ProofSubmissionStatus {
+    async fn send_proof_to_da(
+        &self,
+        block_header_hash: Hash,
+    ) -> Result<ProofSubmissionStatus, anyhow::Error> {
         self.prover_state
             .get_proof_submission_status_and_remove_on_success(block_header_hash)
     }

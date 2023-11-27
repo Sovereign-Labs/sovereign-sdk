@@ -22,13 +22,21 @@ pub enum RollupProverConfig {
 }
 
 /// Indicates the status of the DA proof submission.
+#[derive(Debug, Eq, PartialEq)]
 pub enum ProofSubmissionStatus {
     /// Proof was submitted to the DA.
     Success,
     /// Proof generation is still in progress.
+    ProofGenerationInProgress,
+}
+
+/// TODO
+#[derive(Debug, Eq, PartialEq)]
+pub enum ProofProcessingStatus {
+    /// TODO
     ProvingInProgress,
-    /// Proof submission failed
-    Err(anyhow::Error),
+    /// TODO
+    Busy,
 }
 
 /// An error that occurred during ZKP proving.
@@ -66,8 +74,14 @@ pub trait ProverService {
     );
 
     /// Creates ZKP prove for a block corresponding to `block_header_hash`.
-    async fn prove(&self, block_header_hash: Hash) -> Result<(), ProverServiceError>;
+    async fn prove(
+        &self,
+        block_header_hash: Hash,
+    ) -> Result<ProofProcessingStatus, ProverServiceError>;
 
     /// Sends the ZK proof to the DA create by the `prove`.
-    async fn send_proof_to_da(&self, block_header_hash: Hash) -> ProofSubmissionStatus;
+    async fn send_proof_to_da(
+        &self,
+        block_header_hash: Hash,
+    ) -> Result<ProofSubmissionStatus, anyhow::Error>;
 }

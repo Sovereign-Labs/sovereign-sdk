@@ -110,7 +110,14 @@ impl RollupBlueprint for CelestiaDemoRollup {
             rollup_namespace: ROLLUP_NAMESPACE,
         };
 
-        ParallelProverService::new(vm, zk_stf, da_verifier, prover_config, zk_storage)
+        ParallelProverService::new(
+            vm,
+            zk_stf,
+            da_verifier,
+            prover_config,
+            zk_storage,
+            num_cpus::get(),
+        )
     }
 }
 
