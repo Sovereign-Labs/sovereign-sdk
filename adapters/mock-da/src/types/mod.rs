@@ -1,6 +1,6 @@
 mod address;
 
-use std::fmt::Formatter;
+use std::fmt::{Debug, Formatter};
 use std::hash::Hasher;
 
 pub use address::{MockAddress, MOCK_SEQUENCER_DA_ADDRESS};
@@ -18,7 +18,6 @@ const JAN_1_2023: i64 = 1672531200;
 #[derive(
     Clone,
     Copy,
-    Debug,
     PartialEq,
     Eq,
     serde::Serialize,
@@ -27,6 +26,12 @@ const JAN_1_2023: i64 = 1672531200;
     BorshSerialize,
 )]
 pub struct MockHash([u8; 32]);
+
+impl Debug for MockHash {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{}", hex::encode(self.0))
+    }
+}
 
 impl AsRef<[u8]> for MockHash {
     fn as_ref(&self) -> &[u8] {

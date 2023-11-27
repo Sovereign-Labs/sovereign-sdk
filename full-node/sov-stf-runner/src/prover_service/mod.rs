@@ -2,12 +2,11 @@ mod parallel;
 use async_trait::async_trait;
 pub use parallel::ParallelProverService;
 use serde::Serialize;
+use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::services::da::DaService;
 use thiserror::Error;
 
 use crate::StateTransitionData;
-
-pub(crate) type Hash = [u8; 32];
 
 /// The possible configurations of the prover.
 pub enum RollupProverConfig {
@@ -76,12 +75,12 @@ pub trait ProverService {
     /// Creates ZKP prove for a block corresponding to `block_header_hash`.
     async fn prove(
         &self,
-        block_header_hash: Hash,
+        block_header_hash: <<Self::DaService as DaService>::Spec as DaSpec>::SlotHash,
     ) -> Result<ProofProcessingStatus, ProverServiceError>;
 
     /// Sends the ZK proof to the DA create by the `prove`.
     async fn send_proof_to_da(
         &self,
-        block_header_hash: Hash,
+        block_header_hash: <<Self::DaService as DaService>::Spec as DaSpec>::SlotHash,
     ) -> Result<ProofSubmissionStatus, anyhow::Error>;
 }

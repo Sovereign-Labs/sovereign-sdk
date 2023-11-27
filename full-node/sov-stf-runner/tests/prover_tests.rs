@@ -1,4 +1,6 @@
-use sov_mock_da::{MockBlockHeader, MockDaService, MockDaSpec, MockDaVerifier, MockValidityCond};
+use sov_mock_da::{
+    MockBlockHeader, MockDaService, MockDaSpec, MockDaVerifier, MockHash, MockValidityCond,
+};
 use sov_mock_zkvm::MockZkvm;
 use sov_stf_runner::mock::MockStf;
 use sov_stf_runner::{
@@ -8,11 +10,12 @@ use sov_stf_runner::{
 
 #[tokio::test]
 async fn test_prover_prove() {
-    let num_cpus = num_cpus::get();
-    let vm = MockZkvm::default();
-    let prover_service = make_new_prover(vm.clone(), num_cpus);
+    let TestProver {
+        prover_service, vm, ..
+    } = make_new_prover();
 
-    let header_hash = [0; 32];
+    let header_hash = MockHash::from([0; 32]);
+
     prover_service
         .submit_witness(make_transition_data(header_hash))
         .await;
@@ -32,15 +35,16 @@ async fn test_prover_prove() {
     panic!("Prover timed out")
 }
 
-
 #[tokio::test]
 async fn test_prover_status_busy() -> Result<(), anyhow::Error> {
-    let num_cpus = num_cpus::get();
-    let vm = MockZkvm::default();
-    let prover_service = make_new_prover(vm.clone(), num_cpus);
+    let TestProver {
+        prover_service,
+        num_worker_threads,
+        ..
+    } = make_new_prover();
 
-    for i in 0..num_cpus {
-        let header_hash = [i as u8; 32];
+    for i in 0..num_worker_threads {
+        let header_hash = MockHash::from([i as u8; 32]);
         prover_service
             .submit_witness(make_transition_data(header_hash))
             .await;
@@ -58,7 +62,7 @@ async fn test_prover_status_busy() -> Result<(), anyhow::Error> {
         );
     }
 
-    let header_hash = [(num_cpus + 1) as u8; 32];
+    let header_hash = MockHash::from([(num_worker_threads + 1) as u8; 32]);
     prover_service
         .submit_witness(make_transition_data(header_hash))
         .await;
@@ -66,22 +70,25 @@ async fn test_prover_status_busy() -> Result<(), anyhow::Error> {
     let status = prover_service.prove(header_hash).await?;
     assert_eq!(ProofProcessingStatus::Busy, status);
 
-    let proof_submission_status = prover_service.send_proof_to_da(header_hash).await;
-    // assert_eq!(ProofSubmissionStatus::ProvingInProgress, proof_submission_status);
+    let proof_submission_status = prover_service.send_proof_to_da(header_hash).await.unwrap();
+    assert_eq!(
+        ProofSubmissionStatus::ProofGenerationInProgress,
+        proof_submission_status
+    );
     todo!();
     Ok(())
 }
 
-
 #[tokio::test]
 async fn test_missing_witness() -> Result<(), anyhow::Error> {
-    let num_cpus = num_cpus::get();
-    let vm = MockZkvm::default();
-    let prover_service = make_new_prover(vm.clone(), num_cpus);
+    let TestProver { prover_service, .. } = make_new_prover();
 
-    let header_hash = [0; 32];
-    let status = prover_service.prove(header_hash).await;
-    println!("{:?}", status);
+    let header_hash = MockHash::from([0; 32]);
+    let err = prover_service.prove(header_hash).await.unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "Missing witness for block: 0x0000000000000000000000000000000000000000000000000000000000000000"
+    );
     Ok(())
 }
 
@@ -97,26 +104,36 @@ async fn test_correct_execution() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-
-fn make_new_prover(
+struct TestProver {
+    prover_service:
+        ParallelProverService<[u8; 0], Vec<u8>, MockDaService, MockZkvm, MockStf<MockValidityCond>>,
     vm: MockZkvm,
-    num_threads: usize,
-) -> ParallelProverService<[u8; 0], Vec<u8>, MockDaService, MockZkvm, MockStf<MockValidityCond>> {
+    num_worker_threads: usize,
+}
+
+fn make_new_prover() -> TestProver {
+    let num_threads = num_cpus::get();
+    let vm = MockZkvm::default();
+
     let prover_config = RollupProverConfig::Execute;
     let zk_stf = MockStf::<MockValidityCond>::default();
     let da_verifier = MockDaVerifier::default();
-    ParallelProverService::new(
-        vm.clone(),
-        zk_stf,
-        da_verifier,
-        prover_config,
-        (),
-        num_threads,
-    )
+    TestProver {
+        prover_service: ParallelProverService::new(
+            vm.clone(),
+            zk_stf,
+            da_verifier,
+            prover_config,
+            (),
+            num_threads,
+        ),
+        vm,
+        num_worker_threads: num_threads,
+    }
 }
 
 fn make_transition_data(
-    header_hash: [u8; 32],
+    header_hash: MockHash,
 ) -> StateTransitionData<[u8; 0], Vec<u8>, MockDaSpec> {
     StateTransitionData {
         pre_state_root: [],

@@ -5,11 +5,12 @@ use async_trait::async_trait;
 use prover::Prover;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 
-use super::{Hash, ProverService, ProverServiceError};
+use super::{ProverService, ProverServiceError};
 use crate::verifier::StateTransitionVerifier;
 use crate::{
     ProofGenConfig, ProofProcessingStatus, ProofSubmissionStatus, RollupProverConfig,
@@ -100,7 +101,7 @@ where
 
     async fn prove(
         &self,
-        block_header_hash: Hash,
+        block_header_hash: <Da::Spec as DaSpec>::SlotHash,
     ) -> Result<ProofProcessingStatus, ProverServiceError> {
         let vm = self.vm.clone();
         let zk_storage = self.zk_storage.clone();
@@ -115,7 +116,7 @@ where
 
     async fn send_proof_to_da(
         &self,
-        block_header_hash: Hash,
+        block_header_hash: <Da::Spec as DaSpec>::SlotHash,
     ) -> Result<ProofSubmissionStatus, anyhow::Error> {
         self.prover_state
             .get_proof_submission_status_and_remove_on_success(block_header_hash)

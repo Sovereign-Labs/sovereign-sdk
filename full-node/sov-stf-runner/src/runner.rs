@@ -216,16 +216,19 @@ where
 
             // Create ZKP proof.
             {
-                let header_hash = transition_data.da_block_header.hash().into();
+                let header_hash = transition_data.da_block_header.hash();
                 self.prover_service.submit_witness(transition_data).await;
                 // TODO: This section will be moved and called upon block finalization once we have fork management ready.
                 self.prover_service
-                    .prove(header_hash)
+                    .prove(header_hash.clone())
                     .await
                     .expect("The proof creation should succeed");
 
                 loop {
-                    let status = self.prover_service.send_proof_to_da(header_hash).await;
+                    let status = self
+                        .prover_service
+                        .send_proof_to_da(header_hash.clone())
+                        .await;
                     match status {
                         Ok(crate::ProofSubmissionStatus::Success) => {
                             break;

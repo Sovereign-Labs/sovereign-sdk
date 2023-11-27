@@ -9,7 +9,7 @@ use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::{Proof, ZkvmHost};
 
-use super::{Hash, ProverServiceError};
+use super::ProverServiceError;
 use crate::{ProofGenConfig, ProofProcessingStatus, ProofSubmissionStatus, StateTransitionData};
 
 enum ProverStatus<StateRoot, Witness, Da: DaSpec> {
@@ -20,22 +20,25 @@ enum ProverStatus<StateRoot, Witness, Da: DaSpec> {
 }
 
 struct ProverState<StateRoot, Witness, Da: DaSpec> {
-    prover_status: HashMap<Hash, ProverStatus<StateRoot, Witness, Da>>,
+    prover_status: HashMap<Da::SlotHash, ProverStatus<StateRoot, Witness, Da>>,
     pending_tasks_count: usize,
 }
 
 impl<StateRoot, Witness, Da: DaSpec> ProverState<StateRoot, Witness, Da> {
-    fn remove(&mut self, hash: &Hash) -> Option<ProverStatus<StateRoot, Witness, Da>> {
+    fn remove(&mut self, hash: &Da::SlotHash) -> Option<ProverStatus<StateRoot, Witness, Da>> {
         self.prover_status.remove(hash)
     }
 
-    fn set_to_proving(&mut self, hash: Hash) -> Option<ProverStatus<StateRoot, Witness, Da>> {
+    fn set_to_proving(
+        &mut self,
+        hash: Da::SlotHash,
+    ) -> Option<ProverStatus<StateRoot, Witness, Da>> {
         self.prover_status.insert(hash, ProverStatus::Proving)
     }
 
     fn set_to_proved(
         &mut self,
-        hash: Hash,
+        hash: Da::SlotHash,
         proof: Result<Proof, anyhow::Error>,
     ) -> Option<ProverStatus<StateRoot, Witness, Da>> {
         match proof {
@@ -44,7 +47,10 @@ impl<StateRoot, Witness, Da: DaSpec> ProverState<StateRoot, Witness, Da> {
         }
     }
 
-    fn get_prover_status(&self, hash: Hash) -> Option<&ProverStatus<StateRoot, Witness, Da>> {
+    fn get_prover_status(
+        &self,
+        hash: Da::SlotHash,
+    ) -> Option<&ProverStatus<StateRoot, Witness, Da>> {
         self.prover_status.get(&hash)
     }
 
@@ -96,7 +102,7 @@ where
         &self,
         state_transition_data: StateTransitionData<StateRoot, Witness, Da::Spec>,
     ) {
-        let header_hash = state_transition_data.da_block_header.hash().into();
+        let header_hash = state_transition_data.da_block_header.hash();
         let data = ProverStatus::WitnessSubmitted(state_transition_data);
 
         self.prover_state
@@ -108,7 +114,7 @@ where
 
     pub(crate) fn start_proving<Vm, V>(
         &self,
-        block_header_hash: Hash,
+        block_header_hash: <Da::Spec as DaSpec>::SlotHash,
         config: Arc<ProofGenConfig<V, Da, Vm>>,
         mut vm: Vm,
         zk_storage: V::PreState,
@@ -123,14 +129,14 @@ where
 
         let prover_status = prover_state
             .remove(&block_header_hash)
-            .ok_or_else(|| anyhow::anyhow!("Missing status for {:?}", block_header_hash))?;
+            .ok_or_else(|| anyhow::anyhow!("Missing witness for block: {:?}", block_header_hash))?;
 
         match prover_status {
             ProverStatus::WitnessSubmitted(state_transition_data) => {
                 let start_prover = prover_state.inc_task_count_if_not_busy(self.num_threads);
 
                 if start_prover {
-                    prover_state.set_to_proving(block_header_hash);
+                    prover_state.set_to_proving(block_header_hash.clone());
                     vm.add_hint(state_transition_data);
 
                     self.pool.spawn(move || {
@@ -166,10 +172,10 @@ where
 
     pub(crate) fn get_proof_submission_status_and_remove_on_success(
         &self,
-        block_header_hash: Hash,
+        block_header_hash: <Da::Spec as DaSpec>::SlotHash,
     ) -> Result<ProofSubmissionStatus, anyhow::Error> {
         let mut prover_state = self.prover_state.write().unwrap();
-        let status = prover_state.get_prover_status(block_header_hash);
+        let status = prover_state.get_prover_status(block_header_hash.clone());
 
         match status {
             Some(ProverStatus::Proving) => Ok(ProofSubmissionStatus::ProofGenerationInProgress),
