@@ -18,6 +18,7 @@ members = [
     "full-node/sov-ethereum",
     "full-node/sov-ledger-rpc",
     "full-node/sov-stf-runner",
+    "full-node/sov-prover-storage-manager",
     # Utils
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",

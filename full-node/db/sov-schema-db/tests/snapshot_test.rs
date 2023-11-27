@@ -69,7 +69,7 @@ impl QueryManager for LinearSnapshotManager {
         for snapshot in self.snapshots[..snapshot_id as usize].iter().rev() {
             if let Some(operation) = snapshot.get(key)? {
                 return match operation {
-                    Operation::Put { value } => Ok(Some(S::Value::decode_value(&value)?)),
+                    Operation::Put { value } => Ok(Some(S::Value::decode_value(value)?)),
                     Operation::Delete => Ok(None),
                 };
             }

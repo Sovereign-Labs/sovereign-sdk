@@ -8971,6 +8971,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-prover-storage-manager"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "byteorder",
+ "sov-db",
+ "sov-mock-da",
+ "sov-rollup-interface",
+ "sov-schema-db",
+ "sov-state",
+ "tempfile",
+]
+
+[[package]]
 name = "sov-risc0-adapter"
 version = "0.3.0"
 dependencies = [
