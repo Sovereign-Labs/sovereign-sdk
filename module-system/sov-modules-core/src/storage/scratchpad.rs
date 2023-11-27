@@ -7,6 +7,7 @@ use jmt::Version;
 pub use kernel_state::{KernelWorkingSet, VersionedWorkingSet};
 use sov_rollup_interface::maybestd::collections::HashMap;
 use sov_rollup_interface::stf::Event;
+use crate::archival_state::ArchivalWorkingSet;
 
 use crate::common::{GasMeter, Prefix};
 use crate::module::{Context, Spec};
@@ -339,6 +340,16 @@ impl<C: Context> WorkingSet<C> {
         AccessoryWorkingSet { ws: self }
     }
 
+    /// Returns a handler for the archival state (JMT state).
+    pub fn archival_state(&mut self, version: Version) -> ArchivalWorkingSet<C> {
+        ArchivalWorkingSet::new(&self.delta.inner.inner, version)
+    }
+
+    /// Returns a handler for the archival accessory state (non-JMT state).
+    pub fn archival_accessory_state(&mut self, version: Version) -> ArchivalWorkingSet<C> {
+        ArchivalWorkingSet::new_accessory(&self.accessory_delta.inner.storage, version)
+    }
+
     /// Returns a handler for the kernel state (priveleged jmt state)
     ///
     /// You can use this method when calling getters and setters on accessory
@@ -483,7 +494,7 @@ pub mod archival_state {
     impl<C: Context> ArchivalWorkingSet<C> {
         /// Creates a new [`ArchivalWorkingSet`] instance backed by the given [`Storage`]. and [`Version`]
         /// For jmt state access
-        pub fn new(inner: <C as Spec>::Storage, version: Version) -> Self {
+        pub fn new(inner: &<C as Spec>::Storage, version: Version) -> Self {
             Self {
                 delta: ArchivalStore::Jmt(inner.clone()),
                 archival_version: version,
@@ -493,7 +504,7 @@ pub mod archival_state {
 
         /// Creates a new [`ArchivalWorkingSet`] instance backed by the given [`Storage`]. and [`Version`]
         /// For accestory state access
-        pub fn new_accessory(inner: <C as Spec>::Storage, version: Version) -> Self {
+        pub fn new_accessory(inner: &<C as Spec>::Storage, version: Version) -> Self {
             Self {
                 delta: ArchivalStore::Accessory(inner.clone()),
                 archival_version: version,
