@@ -5,7 +5,7 @@ use sov_schema_db::schema::{KeyCodec, KeyDecoder, KeyEncoder, ValueCodec};
 use sov_schema_db::snapshot::{
     DbSnapshot, FrozenDbSnapshot, QueryManager, ReadOnlyLock, SnapshotId,
 };
-use sov_schema_db::{define_schema, CodecError, Operation, Schema};
+use sov_schema_db::{define_schema, CodecError, Operation, Schema, SchemaKey, SchemaValue};
 
 define_schema!(TestSchema1, TestField, TestField, "TestCF1");
 
@@ -61,6 +61,8 @@ impl LinearSnapshotManager {
 }
 
 impl QueryManager for LinearSnapshotManager {
+    type Iter<'a, S: Schema> = std::vec::IntoIter<(SchemaKey, SchemaValue)>;
+
     fn get<S: Schema>(
         &self,
         snapshot_id: SnapshotId,
@@ -75,6 +77,10 @@ impl QueryManager for LinearSnapshotManager {
             }
         }
         Ok(None)
+    }
+
+    fn iter<S: Schema>(&self, _snapshot_id: SnapshotId) -> anyhow::Result<Self::Iter<'_, S>> {
+        todo!()
     }
 }
 

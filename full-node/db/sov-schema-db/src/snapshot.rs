@@ -4,13 +4,17 @@ use std::sync::{Arc, LockResult, Mutex, RwLock, RwLockReadGuard};
 
 use crate::schema::{KeyCodec, ValueCodec};
 use crate::schema_batch::SchemaBatchIterator;
-use crate::{Operation, Schema, SchemaBatch};
+use crate::{Operation, Schema, SchemaBatch, SchemaKey, SchemaValue};
 
 /// Id of database snapshot
 pub type SnapshotId = u64;
 
 /// A trait to make nested calls to several [`SchemaBatch`]s and eventually [`crate::DB`]
 pub trait QueryManager {
+    /// X
+    type Iter<'a, S: Schema>: Iterator<Item = (SchemaKey, SchemaValue)>
+    where
+        Self: 'a;
     /// Get a value from parents of given [`SnapshotId`]
     /// In case of unknown [`SnapshotId`] return `Ok(None)`
     fn get<S: Schema>(
@@ -18,6 +22,9 @@ pub trait QueryManager {
         snapshot_id: SnapshotId,
         key: &impl KeyCodec<S>,
     ) -> anyhow::Result<Option<S::Value>>;
+
+    /// TBD
+    fn iter<S: Schema>(&self, snapshot_id: SnapshotId) -> anyhow::Result<Self::Iter<'_, S>>;
 }
 
 /// Simple wrapper around `RwLock` that only allows read access.
@@ -164,11 +171,17 @@ fn decode_operation<S: Schema>(operation: &Operation) -> anyhow::Result<Option<S
 pub struct NoopQueryManager;
 
 impl QueryManager for NoopQueryManager {
+    type Iter<'a, S: Schema> = std::iter::Empty<(SchemaKey, SchemaValue)>;
+
     fn get<S: Schema>(
         &self,
         _snapshot_id: SnapshotId,
         _key: &impl KeyCodec<S>,
     ) -> anyhow::Result<Option<S::Value>> {
         Ok(None)
+    }
+
+    fn iter<S: Schema>(&self, _snapshot_id: SnapshotId) -> anyhow::Result<Self::Iter<'_, S>> {
+        todo!()
     }
 }

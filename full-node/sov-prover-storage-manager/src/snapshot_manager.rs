@@ -194,6 +194,8 @@ impl<'a, S: Schema> Iterator for SnapshotManagerIter<'a, S> {
 }
 
 impl QueryManager for SnapshotManager {
+    type Iter<'a, S> = SnapshotManagerIter<'a, S> where S: Sized, S: Schema, Self: 'a;
+
     fn get<S: Schema>(
         &self,
         mut snapshot_id: SnapshotId,
@@ -217,6 +219,10 @@ impl QueryManager for SnapshotManager {
         }
 
         self.db.get(key)
+    }
+
+    fn iter<S: Schema>(&self, snapshot_id: SnapshotId) -> anyhow::Result<Self::Iter<'_, S>> {
+        self.iter::<S>(snapshot_id)
     }
 }
 
