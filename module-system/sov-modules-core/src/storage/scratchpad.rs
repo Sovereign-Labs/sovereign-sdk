@@ -3,6 +3,7 @@
 use alloc::vec::Vec;
 use core::{fmt, mem};
 
+use jmt::Version;
 pub use kernel_state::{KernelWorkingSet, VersionedWorkingSet};
 use sov_rollup_interface::maybestd::collections::HashMap;
 use sov_rollup_interface::stf::Event;
@@ -230,7 +231,7 @@ impl<S: Storage> StateReaderAndWriter for AccessoryDelta<S> {
         if let Some(value) = self.writes.get(&cache_key) {
             return value.clone().map(Into::into);
         }
-        self.storage.get_accessory(key)
+        self.storage.get_accessory(key, None)
     }
 
     fn set(&mut self, key: &StorageKey, value: StorageValue) {
@@ -457,6 +458,69 @@ impl<'a, C: Context> StateReaderAndWriter for AccessoryWorkingSet<'a, C> {
 
     fn delete(&mut self, key: &StorageKey) {
         self.ws.accessory_delta.delete(key)
+    }
+}
+
+/// Module for archival state
+pub mod archival_state {
+    use super::*;
+
+    /// Enum for tagging the specific type of storage.
+    enum ArchivalStore<S: Storage> {
+        /// JMT store
+        Jmt(S),
+        /// Accessory store
+        Accessory(S),
+    }
+
+    /// Archival working set
+    pub struct ArchivalWorkingSet<C: Context> {
+        delta: ArchivalStore<<C as Spec>::Storage>,
+        archival_version: Version,
+        witness: <<C as Spec>::Storage as Storage>::Witness,
+    }
+
+    impl<C: Context> ArchivalWorkingSet<C> {
+        /// Creates a new [`ArchivalWorkingSet`] instance backed by the given [`Storage`]. and [`Version`]
+        /// For jmt state access
+        pub fn new(inner: <C as Spec>::Storage, version: Version) -> Self {
+            Self {
+                delta: ArchivalStore::Jmt(inner.clone()),
+                archival_version: version,
+                witness: Default::default(),
+            }
+        }
+
+        /// Creates a new [`ArchivalWorkingSet`] instance backed by the given [`Storage`]. and [`Version`]
+        /// For accestory state access
+        pub fn new_accessory(inner: <C as Spec>::Storage, version: Version) -> Self {
+            Self {
+                delta: ArchivalStore::Accessory(inner.clone()),
+                archival_version: version,
+                witness: Default::default(),
+            }
+        }
+    }
+
+    impl<C: Context> StateReaderAndWriter for ArchivalWorkingSet<C> {
+        fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
+            match &self.delta {
+                ArchivalStore::Jmt(jmt_store) => {
+                    jmt_store.get(key, Some(self.archival_version.clone()), &self.witness)
+                }
+                ArchivalStore::Accessory(accessory_store) => {
+                    if !cfg!(feature = "native") {
+                        None
+                    } else {
+                        accessory_store.get_accessory(key, Some(self.archival_version.clone()))
+                    }
+                }
+            }
+        }
+
+        fn set(&mut self, _key: &StorageKey, _value: StorageValue) {}
+
+        fn delete(&mut self, _key: &StorageKey) {}
     }
 }
 

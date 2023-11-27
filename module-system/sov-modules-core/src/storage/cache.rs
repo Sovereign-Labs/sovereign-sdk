@@ -384,7 +384,7 @@ impl StorageInternalCache {
             ValueExists::Yes(cache_value_exists) => cache_value_exists.map(Into::into),
             // If the value does not exist in the cache, then fetch it from an external source.
             ValueExists::No => {
-                let storage_value = value_reader.get(key, witness);
+                let storage_value = value_reader.get(key, None, witness);
                 let cache_value = storage_value.as_ref().map(|v| v.clone().into_cache_value());
 
                 self.add_read(cache_key, cache_value);

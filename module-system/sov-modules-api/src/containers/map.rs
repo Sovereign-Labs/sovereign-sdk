@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use sov_modules_core::archival_state::ArchivalWorkingSet;
 use sov_modules_core::{Context, Prefix, StateCodec, StateKeyCodec, StateValueCodec, WorkingSet};
 use sov_state::codec::BorshCodec;
 
@@ -57,6 +58,24 @@ impl<K, V, Codec> StateMap<K, V, Codec> {
 }
 
 impl<K, V, Codec, C: Context> StateMapAccessor<K, V, Codec, WorkingSet<C>> for StateMap<K, V, Codec>
+where
+    Codec: StateCodec,
+    Codec::KeyCodec: StateKeyCodec<K>,
+    Codec::ValueCodec: StateValueCodec<V>,
+{
+    /// Returns a reference to the codec used by this [`StateMap`].
+    fn codec(&self) -> &Codec {
+        &self.codec
+    }
+
+    /// Returns the prefix used when this [`StateMap`] was created.
+    fn prefix(&self) -> &Prefix {
+        &self.prefix
+    }
+}
+
+impl<K, V, Codec, C: Context> StateMapAccessor<K, V, Codec, ArchivalWorkingSet<C>>
+    for StateMap<K, V, Codec>
 where
     Codec: StateCodec,
     Codec::KeyCodec: StateKeyCodec<K>,

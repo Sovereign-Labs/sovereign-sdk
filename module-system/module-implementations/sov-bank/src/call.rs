@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use sov_modules_api::archival_state::ArchivalWorkingSet;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::CliWalletArg;
 use sov_modules_api::{CallResponse, StateMapAccessor, WorkingSet};
@@ -253,6 +254,18 @@ impl<C: sov_modules_api::Context> Bank<C> {
         user_address: C::Address,
         token_address: C::Address,
         working_set: &mut WorkingSet<C>,
+    ) -> Option<u64> {
+        self.tokens
+            .get(&token_address, working_set)
+            .and_then(|token| token.balances.get(&user_address, working_set))
+    }
+
+    /// Helper function with the same logic as `get_balance_of` except with ArchivalWorkingSet
+    pub fn get_archival_balance_of(
+        &self,
+        user_address: C::Address,
+        token_address: C::Address,
+        working_set: &mut ArchivalWorkingSet<C>,
     ) -> Option<u64> {
         self.tokens
             .get(&token_address, working_set)
