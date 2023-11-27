@@ -5,6 +5,7 @@ use anyhow::Result;
 
 use crate::metrics::{SCHEMADB_ITER_BYTES, SCHEMADB_ITER_LATENCY_SECONDS};
 use crate::schema::{KeyDecoder, Schema, ValueCodec};
+use crate::{SchemaKey, SchemaValue};
 
 /// This defines a type that can be used to seek a [`SchemaIterator`], via
 /// interfaces like [`SchemaIterator::seek`]. Mind you, not all
@@ -134,3 +135,36 @@ where
 }
 
 impl<'a, S> FusedIterator for SchemaIterator<'a, S> where S: Schema {}
+
+/// Iterates over given column backwards
+pub struct RawDbReverseIterator<'a> {
+    db_iter: rocksdb::DBRawIterator<'a>,
+}
+
+impl<'a> RawDbReverseIterator<'a> {
+    pub(crate) fn new(mut db_iter: rocksdb::DBRawIterator<'a>) -> Self {
+        db_iter.seek_to_last();
+        RawDbReverseIterator { db_iter }
+    }
+}
+
+// Options:
+// 1. Return owned value:
+
+impl<'a> Iterator for RawDbReverseIterator<'a> {
+    type Item = (SchemaKey, SchemaValue);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.db_iter.valid() {
+            self.db_iter.status().ok()?;
+            return None;
+        }
+
+        let next_item = self.db_iter.item().expect("db_iter.key() failed.");
+        let next_item = (next_item.0.to_vec(), next_item.1.to_vec());
+
+        self.db_iter.prev();
+
+        Some(next_item)
+    }
+}

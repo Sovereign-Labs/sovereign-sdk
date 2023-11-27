@@ -24,7 +24,7 @@ use std::path::Path;
 
 use anyhow::format_err;
 use iterator::ScanDirection;
-pub use iterator::{SchemaIterator, SeekKeyEncoder};
+pub use iterator::{RawDbReverseIterator, SchemaIterator, SeekKeyEncoder};
 use metrics::{
     SCHEMADB_BATCH_COMMIT_BYTES, SCHEMADB_BATCH_COMMIT_LATENCY_SECONDS, SCHEMADB_DELETES,
     SCHEMADB_GET_BYTES, SCHEMADB_GET_LATENCY_SECONDS, SCHEMADB_PUT_BYTES,
@@ -164,6 +164,15 @@ impl DB {
     /// Returns a forward [`SchemaIterator`] on a certain schema with the default read options.
     pub fn iter<S: Schema>(&self) -> anyhow::Result<SchemaIterator<S>> {
         self.iter_with_direction::<S>(Default::default(), ScanDirection::Forward)
+    }
+
+    /// Returns a [`RawDbReverseIterator`] which allows to iterate over raw values, backwards
+    pub fn raw_iter<S: Schema>(&self) -> anyhow::Result<RawDbReverseIterator> {
+        let cf_handle = self.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
+        Ok(RawDbReverseIterator::new(
+            self.inner
+                .raw_iterator_cf_opt(cf_handle, Default::default()),
+        ))
     }
 
     /// Returns a forward [`SchemaIterator`] on a certain schema with the provided read options.

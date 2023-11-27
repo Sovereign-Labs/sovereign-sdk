@@ -64,6 +64,7 @@ impl StateDB {
         key: &StateKey,
     ) -> anyhow::Result<Option<jmt::OwnedValue>> {
         let mut iter = self.db.iter::<JmtValues>()?;
+
         // find the latest instance of the key whose version <= target
         iter.seek_for_prev(&(&key, version))?;
         let found = iter.next();
