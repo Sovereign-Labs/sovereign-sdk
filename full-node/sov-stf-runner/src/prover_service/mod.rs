@@ -20,21 +20,21 @@ pub enum RollupProverConfig {
     Prove,
 }
 
-/// Indicates the status of the DA proof submission.
+/// Represents the status of a DA proof submission.
 #[derive(Debug, Eq, PartialEq)]
 pub enum ProofSubmissionStatus {
-    /// Proof was submitted to the DA.
+    /// Indicates successful submission of the proof to the DA.
     Success,
-    /// Proof generation is still in progress.
+    /// Indicates that proof generation is currently in progress.
     ProofGenerationInProgress,
 }
 
-/// TODO
+/// Represents the current status of proof generation.
 #[derive(Debug, Eq, PartialEq)]
 pub enum ProofProcessingStatus {
-    /// TODO
+    /// Indicates that proof generation is currently in progress.
     ProvingInProgress,
-    /// TODO
+    /// Indicates that the prover is busy and will not initiate a new proving process.
     Busy,
 }
 
@@ -50,19 +50,20 @@ pub enum ProverServiceError {
 }
 
 /// This service is responsible for ZKP proof generation.
-/// The proof is generated in two stages:
-/// 1. Witness is submitted via `submit_witness` to a prover service.
-/// 2. The proof generation is triggered by the `prove` method.
+/// The proof generation process involves two stages:
+/// 1. Submitting a witness using the `submit_witness` method to a prover service.
+/// 2. Triggering proof generation with the `prove` method.
+
 #[async_trait]
 pub trait ProverService {
-    /// Root hash of state merkle tree.
+    /// Ths root hash of state merkle tree.
     type StateRoot: Serialize + Clone + AsRef<[u8]>;
     /// Data that is produced during batch execution.
     type Witness: Serialize;
     /// Data Availability service.
     type DaService: DaService;
 
-    /// Submit witness for proving.
+    /// Submit a witness for proving.
     async fn submit_witness(
         &self,
         state_transition_data: StateTransitionData<
@@ -78,7 +79,7 @@ pub trait ProverService {
         block_header_hash: <<Self::DaService as DaService>::Spec as DaSpec>::SlotHash,
     ) -> Result<ProofProcessingStatus, ProverServiceError>;
 
-    /// Sends the ZK proof to the DA create by the `prove`.
+    /// Sends the ZK proof to the DA.
     async fn send_proof_to_da(
         &self,
         block_header_hash: <<Self::DaService as DaService>::Spec as DaSpec>::SlotHash,

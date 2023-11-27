@@ -108,7 +108,6 @@ risc0-zkp = "0.18"
 risc0-circuit-rv32im = "0.18"
 risc0-build = "0.18"
 
-
 # EVM dependencies
 ethereum-types = "0.14.1"
 ethers = "=2.0.10"

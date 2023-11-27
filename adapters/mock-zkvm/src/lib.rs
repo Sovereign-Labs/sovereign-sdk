@@ -97,12 +97,7 @@ pub struct MockZkvm {
 }
 
 impl MockZkvm {
-    /// TODO
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    /// TODO
+    /// Simulates zk proof generation.
     pub fn make_proof(&self) {
         self.notifier.notify()
     }

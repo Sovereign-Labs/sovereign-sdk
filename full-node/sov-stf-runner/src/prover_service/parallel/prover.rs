@@ -64,10 +64,7 @@ impl<StateRoot, Witness, Da: DaSpec> ProverState<StateRoot, Witness, Da> {
     }
 
     fn dec_task_count(&mut self) {
-        if self.pending_tasks_count == 0 {
-            panic!("")
-        }
-
+        assert!(self.pending_tasks_count > 0);
         self.pending_tasks_count -= 1;
     }
 }
