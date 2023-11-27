@@ -69,20 +69,6 @@ impl SchemaBatch {
             _phantom: std::marker::PhantomData,
         }
     }
-    //
-    // pub fn min<S: Schema>(&self) -> Option<(&SchemaKey, &Operation)> {
-    //     self.last_writes
-    //         .get(&S::COLUMN_FAMILY_NAME)
-    //         .unwrap()
-    //         .first_key_value()
-    // }
-    //
-    // pub fn max<S: Schema>(&self) -> Option<(&SchemaKey, &Operation)> {
-    //     self.last_writes
-    //         .get(&S::COLUMN_FAMILY_NAME)
-    //         .unwrap()
-    //         .last_key_value()
-    // }
 }
 
 /// Iterator over [`SchemaBatch`] for a given column family in reversed lexicographic order

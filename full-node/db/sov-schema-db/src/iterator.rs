@@ -148,9 +148,6 @@ impl<'a> RawDbReverseIterator<'a> {
     }
 }
 
-// Options:
-// 1. Return owned value:
-
 impl<'a> Iterator for RawDbReverseIterator<'a> {
     type Item = (SchemaKey, SchemaValue);
 
@@ -161,6 +158,7 @@ impl<'a> Iterator for RawDbReverseIterator<'a> {
         }
 
         let next_item = self.db_iter.item().expect("db_iter.key() failed.");
+        // Have to allocate to fix lifetime issue
         let next_item = (next_item.0.to_vec(), next_item.1.to_vec());
 
         self.db_iter.prev();
