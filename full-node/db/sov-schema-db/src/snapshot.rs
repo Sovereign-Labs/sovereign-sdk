@@ -4,7 +4,7 @@ use std::sync::{Arc, LockResult, Mutex, RwLock, RwLockReadGuard};
 
 use crate::schema::{KeyCodec, ValueCodec};
 use crate::schema_batch::SchemaBatchIterator;
-use crate::{Operation, Schema, SchemaBatch, SchemaKey, SchemaValue};
+use crate::{Operation, Schema, SchemaBatch, SchemaKey, SchemaValue, SeekKeyEncoder};
 
 /// Id of database snapshot
 pub type SnapshotId = u64;
@@ -113,6 +113,116 @@ impl<Q: QueryManager> DbSnapshot<Q> {
             .lock()
             .expect("SchemaBatch lock must not be poisoned")
             .delete(key)
+    }
+
+    /// Get last written value for given [`Schema`]
+    pub fn get_last<S: Schema>(&self) -> anyhow::Result<Option<S::Value>> {
+        let local_cache = self
+            .cache
+            .lock()
+            .expect("SchemaBatch lock must not be poisoned");
+        let mut local_cache_iter = local_cache.iter::<S>().filter_map(|(_key, op)| match op {
+            Operation::Put { value } => Some(value),
+            Operation::Delete => None,
+        });
+
+        if let Some(last_written_value) = local_cache_iter.next() {
+            let value = S::Value::decode_value(last_written_value)?;
+            return Ok(Some(value));
+        }
+
+        let parent = self
+            .parents_manager
+            .read()
+            .expect("Parent lock must not be poisoned");
+
+        let mut parent_iter = parent.iter::<S>(self.id)?.map(|(_key, value)| value);
+
+        if let Some(last_written_value) = parent_iter.next() {
+            let value = S::Value::decode_value(&last_written_value)?;
+            return Ok(Some(value));
+        }
+
+        Ok(None)
+    }
+
+    /// Get value in [`Schema`] that is smaller or equal than give `seek_key`
+    pub fn find_prev<S: Schema>(
+        &mut self,
+        seek_key: &impl SeekKeyEncoder<S>,
+    ) -> anyhow::Result<Option<S::Value>> {
+        let seek_key = seek_key.encode_seek_key()?;
+
+        let local_cache = self
+            .cache
+            .lock()
+            .expect("Local cache lock must not be poisoned");
+
+        let mut local_cache_iter = local_cache.iter::<S>().peekable();
+
+        let parent = self
+            .parents_manager
+            .read()
+            .expect("Parent snapshots lock must not be poisoned");
+
+        let mut parent_iter = parent.iter::<S>(self.id)?.peekable();
+
+        let handle_key_match =
+            |key: &SchemaKey, value: &SchemaValue| -> anyhow::Result<Option<S::Value>> {
+                if key <= &seek_key {
+                    return Ok(Some(S::Value::decode_value(value)?));
+                }
+                Ok(None)
+            };
+
+        loop {
+            let local_cache_peeked = local_cache_iter.peek();
+            let parent_peeked = parent_iter.peek();
+
+            match (local_cache_peeked, parent_peeked) {
+                // Both iterators exhausted
+                (None, None) => break,
+                // Parent exhausted (just like me on friday)
+                (Some(&(key, operation)), None) => {
+                    local_cache_iter.next();
+                    if let Operation::Put { value } = operation {
+                        if let Some(value) = handle_key_match(key, value)? {
+                            return Ok(Some(value));
+                        }
+                    }
+                }
+                // Local exhausted
+                (None, Some((key, value))) => {
+                    if let Some(value) = handle_key_match(key, value)? {
+                        return Ok(Some(value));
+                    }
+                    parent_iter.next();
+                }
+                // Both are active, need to compare keys
+                (Some(&(local_key, local_operation)), Some((parent_key, parent_value))) => {
+                    if local_key < parent_key {
+                        if let Some(value) = handle_key_match(parent_key, parent_value)? {
+                            return Ok(Some(value));
+                        }
+                        parent_iter.next();
+                    } else {
+                        // Local is preferable, as it is the latest
+                        // But both operators must succeed
+                        if local_key == parent_key {
+                            parent_iter.next();
+                        }
+                        local_cache_iter.next();
+                        if let Operation::Put { value: local_value } = local_operation {
+                            if let Some(value) = handle_key_match(local_key, local_value)? {
+                                return Ok(Some(value));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(None)
     }
 }
 
