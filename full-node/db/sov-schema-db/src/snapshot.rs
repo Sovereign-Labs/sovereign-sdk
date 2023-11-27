@@ -11,7 +11,7 @@ pub type SnapshotId = u64;
 
 /// A trait to make nested calls to several [`SchemaBatch`]s and eventually [`crate::DB`]
 pub trait QueryManager {
-    /// X
+    /// Iterator over key-value pairs in reverse lexicographic order in given [`Schema`]
     type Iter<'a, S: Schema>: Iterator<Item = (SchemaKey, SchemaValue)>
     where
         Self: 'a;
@@ -23,7 +23,8 @@ pub trait QueryManager {
         key: &impl KeyCodec<S>,
     ) -> anyhow::Result<Option<S::Value>>;
 
-    /// TBD
+    /// Returns an iterator over all key-value pairs in given [`Schema`] in reverse lexicographic order
+    /// Starting from given [`SnapshotId`]
     fn iter<S: Schema>(&self, snapshot_id: SnapshotId) -> anyhow::Result<Self::Iter<'_, S>>;
 }
 

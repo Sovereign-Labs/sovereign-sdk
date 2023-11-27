@@ -62,7 +62,6 @@ impl SnapshotManager {
         self.snapshots.contains_key(snapshot_id)
     }
 
-    #[allow(dead_code)]
     /// Returns iterator over keys in given [`Schema`] among all snapshots and DB in reverse lexicographical order
     pub fn iter<S: Schema>(
         &self,
