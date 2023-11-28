@@ -88,7 +88,7 @@ jobs:
       with:
         allowed-skips: deploy-github-pages
         jobs: ${{ toJSON(needs) }}
-
+ 
   check:
     name: check
     runs-on: buildjet-4vcpu-ubuntu-2204
@@ -362,7 +362,7 @@ jobs:
         # up to date.
         run: git diff --exit-code
   check-demo-rollup-bash-commands:
-    runs-on: buildjet-2vcpu-ubuntu-2204
+    runs-on: buildjet-4vcpu-ubuntu-2204
     needs: nextest
     steps:
       - uses: actions/checkout@v3

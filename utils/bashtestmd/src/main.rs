@@ -57,7 +57,7 @@ impl Command {
 
         if self.long_running {
             writeln!(w, "{} &", self.cmd)?;
-            writeln!(w, "sleep 20")?;
+            writeln!(w, "sleep 60")?;
             return Ok(());
         }
 
