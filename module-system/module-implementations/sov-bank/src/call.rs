@@ -1,7 +1,7 @@
 use anyhow::{bail, Context, Result};
 #[cfg(feature = "native")]
 use sov_modules_api::macros::CliWalletArg;
-use sov_modules_api::{CallResponse, StateMapAccessor, StateReaderAndWriter, WorkingSet};
+use sov_modules_api::{CallResponse, StateMapAccessor, StateMapWorkingSet, WorkingSet};
 
 use crate::{Amount, Bank, Coins, Token};
 
@@ -252,7 +252,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         &self,
         user_address: C::Address,
         token_address: C::Address,
-        working_set: &mut impl StateReaderAndWriter,
+        working_set: &mut impl StateMapWorkingSet,
     ) -> Option<u64> {
         self.tokens
             .get(&token_address, working_set)
@@ -263,7 +263,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
     pub fn get_token_name(
         &self,
         token_address: &C::Address,
-        working_set: &mut impl StateReaderAndWriter,
+        working_set: &mut impl StateMapWorkingSet,
     ) -> Option<String> {
         let token = self.tokens.get(token_address, working_set);
         token.map(|token| token.name)

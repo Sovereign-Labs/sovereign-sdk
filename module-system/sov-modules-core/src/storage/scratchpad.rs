@@ -16,6 +16,12 @@ use crate::storage::{
 };
 use crate::Version;
 
+/// Super trait for convenience in macro parsing
+pub trait StateMapWorkingSet: StateReaderAndWriter {}
+
+impl<C: Context> StateMapWorkingSet for WorkingSet<C> {}
+impl<C: Context> StateMapWorkingSet for ArchivalWorkingSet<C> {}
+
 /// A storage reader and writer
 pub trait StateReaderAndWriter {
     /// Get a value from the storage.

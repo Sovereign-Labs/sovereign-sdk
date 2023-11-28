@@ -4,8 +4,8 @@ use archival_state::ArchivalWorkingSet;
 use helpers::*;
 use sov_bank::{get_genesis_token_address, Bank, CallMessage, Coins};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{archival_state, Address, Context, Module, WorkingSet};
-use sov_state::storage::{StateReaderAndWriter, StorageKey, StorageValue};
+use sov_modules_api::{archival_state, Address, Context, Module, StateReaderAndWriter, WorkingSet};
+use sov_state::storage::{StateMapWorkingSet, StorageKey, StorageValue};
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
 
 #[test]
@@ -173,7 +173,7 @@ fn query_sender_receiver_balances(
     token_address: Address,
     sender_address: Address,
     receiver_address: Address,
-    working_set: &mut impl StateReaderAndWriter,
+    working_set: &mut impl StateMapWorkingSet,
 ) -> (u64, u64) {
     let sender_balance = bank
         .get_balance_of(sender_address, token_address, working_set)

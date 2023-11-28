@@ -37,7 +37,7 @@ pub use sov_modules_core::{
     archival_state, runtime, AccessoryWorkingSet, Address, AddressBech32, CallResponse, Context,
     DispatchCall, EncodeCall, GasUnit, Genesis, Module, ModuleCallJsonSchema, ModuleError,
     ModuleError as Error, ModuleInfo, ModulePrefix, PublicKey, Signature, Spec, StateCheckpoint,
-    StateReaderAndWriter, WorkingSet,
+    StateMapWorkingSet, StateReaderAndWriter, WorkingSet,
 };
 pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 pub use sov_rollup_interface::services::da::SlotData;
