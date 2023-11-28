@@ -1,10 +1,10 @@
 mod helpers;
 
+use archival_state::ArchivalWorkingSet;
 use helpers::*;
 use sov_bank::{get_genesis_token_address, Bank, CallMessage, Coins};
-use sov_modules_api::archival_state::ArchivalWorkingSet;
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Context, Module, WorkingSet};
+use sov_modules_api::{archival_state, Address, Context, Module, WorkingSet};
 use sov_state::storage::{StateReaderAndWriter, StorageKey, StorageValue};
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
 
@@ -76,8 +76,9 @@ fn transfer_initial_token() {
     commit(working_set, prover_storage.clone());
 
     let archival_slot: u64 = 2;
-    let mut working_set = ArchivalWorkingSet::new(&prover_storage, archival_slot);
-    let (sender_balance, receiver_balance) = query_sender_receiver_balances_archival(
+    let mut working_set: ArchivalWorkingSet<DefaultContext> =
+        ArchivalWorkingSet::new(&prover_storage, archival_slot);
+    let (sender_balance, receiver_balance) = query_sender_receiver_balances(
         &bank,
         token_address,
         sender_address,
@@ -87,8 +88,9 @@ fn transfer_initial_token() {
     assert_eq!((sender_balance, receiver_balance), (90, 110));
 
     let archival_slot: u64 = 1;
-    let mut working_set = ArchivalWorkingSet::new(&prover_storage, archival_slot);
-    let (sender_balance, receiver_balance) = query_sender_receiver_balances_archival(
+    let mut working_set: ArchivalWorkingSet<DefaultContext> =
+        ArchivalWorkingSet::new(&prover_storage, archival_slot);
+    let (sender_balance, receiver_balance) = query_sender_receiver_balances(
         &bank,
         token_address,
         sender_address,
@@ -171,33 +173,14 @@ fn query_sender_receiver_balances(
     token_address: Address,
     sender_address: Address,
     receiver_address: Address,
-    working_set: &mut WorkingSet<DefaultContext>,
+    working_set: &mut impl StateReaderAndWriter,
 ) -> (u64, u64) {
-    let query_user_balance =
-        |user_address: Address, working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
-            bank.get_balance_of(user_address, token_address, working_set)
-        };
-
-    let sender_balance = query_user_balance(sender_address, working_set).unwrap();
-    let receiver_balance = query_user_balance(receiver_address, working_set).unwrap();
-    (sender_balance, receiver_balance)
-}
-
-fn query_sender_receiver_balances_archival(
-    bank: &Bank<DefaultContext>,
-    token_address: Address,
-    sender_address: Address,
-    receiver_address: Address,
-    working_set: &mut ArchivalWorkingSet<DefaultContext>,
-) -> (u64, u64) {
-    let query_user_balance = |user_address: Address,
-                              working_set: &mut ArchivalWorkingSet<DefaultContext>|
-     -> Option<u64> {
-        bank.get_archival_balance_of(user_address, token_address, working_set)
-    };
-
-    let sender_balance = query_user_balance(sender_address, working_set).unwrap();
-    let receiver_balance = query_user_balance(receiver_address, working_set).unwrap();
+    let sender_balance = bank
+        .get_balance_of(sender_address, token_address, working_set)
+        .unwrap();
+    let receiver_balance = bank
+        .get_balance_of(receiver_address, token_address, working_set)
+        .unwrap();
     (sender_balance, receiver_balance)
 }
 

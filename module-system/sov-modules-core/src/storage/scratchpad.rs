@@ -7,8 +7,8 @@ use jmt::Version;
 pub use kernel_state::{KernelWorkingSet, VersionedWorkingSet};
 use sov_rollup_interface::maybestd::collections::HashMap;
 use sov_rollup_interface::stf::Event;
-use crate::archival_state::ArchivalWorkingSet;
 
+use crate::archival_state::ArchivalWorkingSet;
 use crate::common::{GasMeter, Prefix};
 use crate::module::{Context, Spec};
 use crate::storage::{
@@ -517,13 +517,13 @@ pub mod archival_state {
         fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
             match &self.delta {
                 ArchivalStore::Jmt(jmt_store) => {
-                    jmt_store.get(key, Some(self.archival_version.clone()), &self.witness)
+                    jmt_store.get(key, Some(self.archival_version), &self.witness)
                 }
                 ArchivalStore::Accessory(accessory_store) => {
                     if !cfg!(feature = "native") {
                         None
                     } else {
-                        accessory_store.get_accessory(key, Some(self.archival_version.clone()))
+                        accessory_store.get_accessory(key, Some(self.archival_version))
                     }
                 }
             }
