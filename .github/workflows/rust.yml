@@ -364,6 +364,7 @@ jobs:
   check-demo-rollup-bash-commands:
     runs-on: buildjet-4vcpu-ubuntu-2204
     needs: nextest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
