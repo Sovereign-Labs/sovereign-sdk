@@ -116,31 +116,28 @@ impl<Q: QueryManager> DbSnapshot<Q> {
             .delete(key)
     }
 
-    /// Get last written value for given [`Schema`]
-    pub fn get_last<S: Schema>(&self) -> anyhow::Result<Option<S::Value>> {
+    /// Get value of largest key written value for given [`Schema`]
+    pub fn get_largest<S: Schema>(&self) -> anyhow::Result<Option<S::Value>> {
         let local_cache = self
             .cache
             .lock()
             .expect("SchemaBatch lock must not be poisoned");
-        let mut local_cache_iter = local_cache.iter::<S>().filter_map(|(_key, op)| match op {
-            Operation::Put { value } => Some(value),
-            Operation::Delete => None,
-        });
-
-        if let Some(last_written_value) = local_cache_iter.next() {
-            let value = S::Value::decode_value(last_written_value)?;
-            return Ok(Some(value));
-        }
+        let local_cache_iter = local_cache.iter::<S>();
 
         let parent = self
             .parents_manager
             .read()
             .expect("Parent lock must not be poisoned");
 
-        let mut parent_iter = parent.iter::<S>(self.id)?.map(|(_key, value)| value);
+        let parent_iter = parent.iter::<S>(self.id)?;
 
-        if let Some(last_written_value) = parent_iter.next() {
-            let value = S::Value::decode_value(&last_written_value)?;
+        let mut combined_iter: SnapshotIter<'_, Q, S> = SnapshotIter {
+            local_cache_iter: local_cache_iter.peekable(),
+            parent_iter: parent_iter.peekable(),
+        };
+
+        if let Some((_, value)) = combined_iter.next() {
+            let value = S::Value::decode_value(&value)?;
             return Ok(Some(value));
         }
 
@@ -227,6 +224,60 @@ impl<Q: QueryManager> DbSnapshot<Q> {
     }
 }
 
+struct SnapshotIter<'a, Q: QueryManager + 'a, S: Schema> {
+    local_cache_iter: std::iter::Peekable<SchemaBatchIterator<'a, S>>,
+    parent_iter: std::iter::Peekable<Q::Iter<'a, S>>,
+}
+
+impl<'a, Q: QueryManager + 'a, S: Schema> Iterator for SnapshotIter<'a, Q, S> {
+    type Item = (SchemaKey, SchemaValue);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let local_cache_peeked = self.local_cache_iter.peek();
+            let parent_peeked = self.parent_iter.peek();
+
+            match (local_cache_peeked, parent_peeked) {
+                // Both iterators exhausted
+                (None, None) => break,
+                // Parent exhausted (just like me on friday)
+                (Some(&(key, operation)), None) => {
+                    self.local_cache_iter.next();
+                    let next = put_or_none(key, operation);
+                    if next.is_none() {
+                        continue;
+                    }
+                    return next;
+                }
+                // Local exhausted
+                (None, Some((_key, _value))) => {
+                    return self.parent_iter.next();
+                }
+                // Both are active, need to compare keys
+                (Some(&(local_key, local_operation)), Some((parent_key, _parent_value))) => {
+                    return if local_key < parent_key {
+                        self.parent_iter.next()
+                    } else {
+                        // Local is preferable, as it is the latest
+                        // But both operators must succeed
+                        if local_key == parent_key {
+                            self.parent_iter.next();
+                        }
+                        self.local_cache_iter.next();
+                        let next = put_or_none(local_key, local_operation);
+                        if next.is_none() {
+                            continue;
+                        }
+                        next
+                    };
+                }
+            }
+        }
+
+        None
+    }
+}
+
 /// Read only version of [`DbSnapshot`], for usage inside [`QueryManager`]
 pub struct FrozenDbSnapshot {
     id: SnapshotId,
@@ -278,6 +329,13 @@ fn decode_operation<S: Schema>(operation: &Operation) -> anyhow::Result<Option<S
     }
 }
 
+fn put_or_none(key: &SchemaKey, operation: &Operation) -> Option<(SchemaKey, SchemaValue)> {
+    if let Operation::Put { value } = operation {
+        return Some((key.to_vec(), value.to_vec()));
+    }
+    None
+}
+
 /// QueryManager, which never returns any values
 pub struct NoopQueryManager;
 
@@ -293,6 +351,6 @@ impl QueryManager for NoopQueryManager {
     }
 
     fn iter<S: Schema>(&self, _snapshot_id: SnapshotId) -> anyhow::Result<Self::Iter<'_, S>> {
-        todo!()
+        Ok(std::iter::empty())
     }
 }

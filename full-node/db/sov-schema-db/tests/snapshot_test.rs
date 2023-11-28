@@ -1,11 +1,13 @@
 use std::sync::{Arc, RwLock};
 
 use byteorder::{BigEndian, ReadBytesExt};
-use sov_schema_db::schema::{KeyCodec, KeyDecoder, KeyEncoder, ValueCodec};
-use sov_schema_db::snapshot::{
-    DbSnapshot, FrozenDbSnapshot, QueryManager, ReadOnlyLock, SnapshotId,
-};
-use sov_schema_db::{define_schema, CodecError, Operation, Schema, SchemaKey, SchemaValue};
+use sov_schema_db::schema::{KeyDecoder, KeyEncoder, ValueCodec};
+use sov_schema_db::snapshot::{DbSnapshot, ReadOnlyLock};
+use sov_schema_db::{define_schema, CodecError};
+
+use crate::liner_snapshot_manager::LinearSnapshotManager;
+
+mod liner_snapshot_manager;
 
 define_schema!(TestSchema1, TestField, TestField, "TestCF1");
 
@@ -46,41 +48,6 @@ impl ValueCodec<TestSchema1> for TestField {
 
     fn decode_value(data: &[u8]) -> sov_schema_db::schema::Result<Self> {
         Self::from_bytes(data)
-    }
-}
-
-#[derive(Default)]
-struct LinearSnapshotManager {
-    snapshots: Vec<FrozenDbSnapshot>,
-}
-
-impl LinearSnapshotManager {
-    fn add_snapshot(&mut self, snapshot: FrozenDbSnapshot) {
-        self.snapshots.push(snapshot);
-    }
-}
-
-impl QueryManager for LinearSnapshotManager {
-    type Iter<'a, S: Schema> = std::vec::IntoIter<(SchemaKey, SchemaValue)>;
-
-    fn get<S: Schema>(
-        &self,
-        snapshot_id: SnapshotId,
-        key: &impl KeyCodec<S>,
-    ) -> anyhow::Result<Option<S::Value>> {
-        for snapshot in self.snapshots[..snapshot_id as usize].iter().rev() {
-            if let Some(operation) = snapshot.get(key)? {
-                return match operation {
-                    Operation::Put { value } => Ok(Some(S::Value::decode_value(value)?)),
-                    Operation::Delete => Ok(None),
-                };
-            }
-        }
-        Ok(None)
-    }
-
-    fn iter<S: Schema>(&self, _snapshot_id: SnapshotId) -> anyhow::Result<Self::Iter<'_, S>> {
-        todo!()
     }
 }
 

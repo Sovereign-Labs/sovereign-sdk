@@ -26,6 +26,7 @@ thiserror = { workspace = true }
 [dev-dependencies]
 byteorder = { workspace = true, default-features = true }
 tempfile = { workspace = true }
+itertools = { version = "0.12.0" }
 
 [features]
 default = []

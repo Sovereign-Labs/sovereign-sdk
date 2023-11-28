@@ -1,14 +1,21 @@
 // Copyright (c) Aptos
 // SPDX-License-Identifier: Apache-2.0
 
+use std::sync::{Arc, RwLock};
+
 use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 use sov_schema_db::schema::{KeyDecoder, KeyEncoder, Schema, ValueCodec};
+use sov_schema_db::snapshot::{DbSnapshot, ReadOnlyLock};
 use sov_schema_db::{
     define_schema, CodecError, Operation, SchemaBatch, SchemaIterator, SeekKeyEncoder, DB,
 };
 use tempfile::TempDir;
+
+use crate::liner_snapshot_manager::LinearSnapshotManager;
+
+mod liner_snapshot_manager;
 
 define_schema!(TestSchema, TestKey, TestValue, "TestCF");
 
@@ -350,3 +357,52 @@ fn test_schema_batch_iteration_with_deletions() {
     let collected: Vec<_> = iter.collect();
     assert_eq!(4, collected.len());
 }
+
+#[test]
+fn test_db_snapshot_iteration() {}
+
+#[test]
+fn test_db_snapshot_get_last_value() {
+    let manager = Arc::new(RwLock::new(LinearSnapshotManager::default()));
+
+    let snapshot_1 =
+        DbSnapshot::<LinearSnapshotManager>::new(0, ReadOnlyLock::new(manager.clone()));
+
+    assert!(snapshot_1.get_largest::<TestSchema>().unwrap().is_none());
+
+    snapshot_1
+        .put::<TestSchema>(&TestKey(8, 2, 3), &TestValue(6))
+        .unwrap();
+
+    {
+        let latest = snapshot_1.get_largest::<TestSchema>().unwrap();
+        assert_eq!(Some(TestValue(6)), latest);
+    }
+
+    {
+        let mut manager = manager.write().unwrap();
+        manager.add_snapshot(snapshot_1.into());
+    }
+
+    let snapshot_2 =
+        DbSnapshot::<LinearSnapshotManager>::new(1, ReadOnlyLock::new(manager.clone()));
+
+    {
+        let latest = snapshot_2.get_largest::<TestSchema>().unwrap();
+        assert_eq!(Some(TestValue(6)), latest);
+    }
+
+    snapshot_2.put(&TestKey(8, 1, 3), &TestValue(7)).unwrap();
+    {
+        let latest = snapshot_2.get_largest::<TestSchema>().unwrap();
+        assert_eq!(Some(TestValue(6)), latest);
+    }
+    snapshot_2.put(&TestKey(8, 3, 1), &TestValue(8)).unwrap();
+    {
+        let latest = snapshot_2.get_largest::<TestSchema>().unwrap();
+        assert_eq!(Some(TestValue(8)), latest);
+    }
+}
+
+#[test]
+fn test_db_snapshot_get_prev_value() {}

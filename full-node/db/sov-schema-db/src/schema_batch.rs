@@ -62,19 +62,20 @@ impl SchemaBatch {
     }
 
     /// Iterate over all the writes in the batch for a given column family in reversed lexicographic order
+    /// Returns None column family name does not have any writes
     pub fn iter<S: Schema>(&self) -> SchemaBatchIterator<'_, S> {
-        let rows = self.last_writes.get(&S::COLUMN_FAMILY_NAME).unwrap();
+        let some_rows = self.last_writes.get(&S::COLUMN_FAMILY_NAME);
         SchemaBatchIterator {
-            inner: rows.iter().rev(),
-            _phantom: std::marker::PhantomData,
+            inner: some_rows.map(|rows| rows.iter().rev()),
+            _phantom_schema: std::marker::PhantomData,
         }
     }
 }
 
 /// Iterator over [`SchemaBatch`] for a given column family in reversed lexicographic order
 pub struct SchemaBatchIterator<'a, S: Schema> {
-    inner: Rev<btree_map::Iter<'a, SchemaKey, Operation>>,
-    _phantom: std::marker::PhantomData<S>,
+    inner: Option<Rev<btree_map::Iter<'a, SchemaKey, Operation>>>,
+    _phantom_schema: std::marker::PhantomData<S>,
 }
 
 impl<'a, S> Iterator for SchemaBatchIterator<'a, S>
@@ -84,7 +85,7 @@ where
     type Item = (&'a SchemaKey, &'a Operation);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
+        self.inner.as_mut().and_then(|inner| inner.next())
     }
 }
 
