@@ -45,7 +45,7 @@ async fn test_prover_status_busy() -> Result<(), anyhow::Error> {
         ..
     } = make_new_prover();
 
-    let header_hashes = (0..num_worker_threads).map(|hash| MockHash::from([hash as u8; 32]));
+    let header_hashes = (1..num_worker_threads + 1).map(|hash| MockHash::from([hash as u8; 32]));
 
     // Saturate the prover
     for header_hash in header_hashes.clone() {
@@ -68,7 +68,7 @@ async fn test_prover_status_busy() -> Result<(), anyhow::Error> {
 
     // Attempt to crate another proof when the prover is busy.
     {
-        let header_hash = MockHash::from([(num_worker_threads + 1) as u8; 32]);
+        let header_hash = MockHash::from([0; 32]);
         prover_service
             .submit_witness(make_transition_data(header_hash))
             .await;
@@ -85,7 +85,7 @@ async fn test_prover_status_busy() -> Result<(), anyhow::Error> {
         // The proving obs wasn't accpeted.
         assert_eq!(
         proof_submission_status.to_string(),
-        "Missing witness for: 0x0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b");
+        "Missing witness for: 0x0000000000000000000000000000000000000000000000000000000000000000");
     }
 
     vm.make_proof();
