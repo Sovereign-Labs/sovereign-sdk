@@ -35,6 +35,9 @@ pub trait DaService: Send + Sync + 'static {
         Item = Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error>,
     >;
 
+    /// A transaction ID, used to identify the transaction in the DA layer.
+    type TransactionId: PartialEq + Eq + PartialOrd + Ord + core::hash::Hash;
+
     /// The error type for fallible methods.
     type Error: core::fmt::Debug + Send + Sync + core::fmt::Display;
 
@@ -105,7 +108,7 @@ pub trait DaService: Send + Sync + 'static {
     /// Send a transaction directly to the DA layer.
     /// blob is the serialized and signed transaction.
     /// Returns nothing if the transaction was successfully sent.
-    async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error>;
+    async fn send_transaction(&self, blob: &[u8]) -> Result<Self::TransactionId, Self::Error>;
 }
 
 /// `SlotData` is the subset of a DA layer block which is stored in the rollup's database.

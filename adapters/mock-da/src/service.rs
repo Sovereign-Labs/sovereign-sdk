@@ -114,6 +114,7 @@ impl DaService for MockDaService {
     type Verifier = MockDaVerifier;
     type FilteredBlock = MockBlock;
     type HeaderStream = MockDaBlockHeaderStream;
+    type TransactionId = ();
     type Error = anyhow::Error;
 
     /// Gets block at given height
