@@ -93,13 +93,14 @@ impl Notifier {
 /// A mock implementing the zkVM trait.
 #[derive(Clone, Default)]
 pub struct MockZkvm {
-    notifier: Notifier,
+    worker_thread_notifier: Notifier,
 }
 
 impl MockZkvm {
     /// Simulates zk proof generation.
     pub fn make_proof(&self) {
-        self.notifier.notify()
+        // We notify the worket thread.
+        self.worker_thread_notifier.notify();
     }
 }
 
@@ -144,7 +145,7 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvm {
     }
 
     fn run(&mut self, _with_proof: bool) -> Result<sov_rollup_interface::zk::Proof, anyhow::Error> {
-        self.notifier.wait();
+        self.worker_thread_notifier.wait();
         Ok(sov_rollup_interface::zk::Proof::Empty)
     }
 }

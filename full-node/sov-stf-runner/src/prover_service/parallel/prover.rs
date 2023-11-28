@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
@@ -10,7 +11,10 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::{Proof, ZkvmHost};
 
 use super::ProverServiceError;
-use crate::{ProofGenConfig, ProofProcessingStatus, ProofSubmissionStatus, StateTransitionData};
+use crate::{
+    ProofGenConfig, ProofProcessingStatus, ProofSubmissionStatus, StateTransitionData,
+    WitnessSubmissionStatus,
+};
 
 enum ProverStatus<StateRoot, Witness, Da: DaSpec> {
     WitnessSubmitted(StateTransitionData<StateRoot, Witness, Da>),
@@ -71,6 +75,7 @@ impl<StateRoot, Witness, Da: DaSpec> ProverState<StateRoot, Witness, Da> {
 
 pub(crate) struct Prover<StateRoot, Witness, Da: DaService> {
     prover_state: Arc<RwLock<ProverState<StateRoot, Witness, Da::Spec>>>,
+
     num_threads: usize,
     pool: rayon::ThreadPool,
 }
@@ -88,6 +93,7 @@ where
                 .num_threads(num_threads)
                 .build()
                 .unwrap(),
+
             prover_state: Arc::new(RwLock::new(ProverState {
                 prover_status: Default::default(),
                 pending_tasks_count: Default::default(),
@@ -98,15 +104,20 @@ where
     pub(crate) fn submit_witness(
         &self,
         state_transition_data: StateTransitionData<StateRoot, Witness, Da::Spec>,
-    ) {
+    ) -> WitnessSubmissionStatus {
         let header_hash = state_transition_data.da_block_header.hash();
         let data = ProverStatus::WitnessSubmitted(state_transition_data);
 
-        self.prover_state
-            .write()
-            .expect("Lock was poisoned")
-            .prover_status
-            .insert(header_hash, data);
+        let mut prover_state = self.prover_state.write().expect("Lock was poisoned");
+        let entry = prover_state.prover_status.entry(header_hash);
+
+        match entry {
+            Entry::Occupied(_) => WitnessSubmissionStatus::WitnessExist,
+            Entry::Vacant(v) => {
+                v.insert(data);
+                WitnessSubmissionStatus::SubmittedForProving
+            }
+        }
     }
 
     pub(crate) fn start_proving<Vm, V>(
@@ -181,7 +192,7 @@ where
                 Ok(ProofSubmissionStatus::Success)
             }
             Some(ProverStatus::WitnessSubmitted(_)) => Err(anyhow::anyhow!(
-                "Witness for {:?} was submitted but the proof generation is not triggered.",
+                "Witness for {:?} was submitted, but the proof generation is not triggered.",
                 block_header_hash
             )),
             Some(ProverStatus::Err(e)) => Err(anyhow::anyhow!(e.to_string())),

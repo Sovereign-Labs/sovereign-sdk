@@ -5,46 +5,50 @@ use sov_mock_zkvm::MockZkvm;
 use sov_stf_runner::mock::MockStf;
 use sov_stf_runner::{
     ParallelProverService, ProofProcessingStatus, ProofSubmissionStatus, ProverService,
-    RollupProverConfig, StateTransitionData,
+    ProverServiceError, RollupProverConfig, StateTransitionData, WitnessSubmissionStatus,
 };
 
 #[tokio::test]
-async fn test_prover_prove() {
+async fn test_sucesfull_prover_execution() -> Result<(), ProverServiceError> {
     let TestProver {
         prover_service, vm, ..
     } = make_new_prover();
 
     let header_hash = MockHash::from([0; 32]);
-
     prover_service
         .submit_witness(make_transition_data(header_hash))
         .await;
-
-    prover_service.prove(header_hash).await.unwrap();
+    prover_service.prove(header_hash).await?;
     vm.make_proof();
+    wait_for_proof_and_send_to_da(header_hash, &prover_service).await;
 
-    for _ in 0..10 {
-        let status = prover_service.send_proof_to_da(header_hash).await;
-        if let Ok(ProofSubmissionStatus::Success) = status {
-            return;
-        }
+    // Proof was already send and prover_service doesn't have a reference to it anymore
+    let err = prover_service
+        .send_proof_to_da(header_hash)
+        .await
+        .unwrap_err();
 
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await
-    }
+    assert_eq!(
+        err.to_string(),
+        "Missing witness for: 0x0000000000000000000000000000000000000000000000000000000000000000"
+    );
 
-    panic!("Prover timed out")
+    Ok(())
 }
 
 #[tokio::test]
 async fn test_prover_status_busy() -> Result<(), anyhow::Error> {
     let TestProver {
         prover_service,
+        vm,
         num_worker_threads,
         ..
     } = make_new_prover();
 
-    for i in 0..num_worker_threads {
-        let header_hash = MockHash::from([i as u8; 32]);
+    let header_hashes = (0..num_worker_threads).map(|hash| MockHash::from([hash as u8; 32]));
+
+    // Saturate the prover
+    for header_hash in header_hashes.clone() {
         prover_service
             .submit_witness(make_transition_data(header_hash))
             .await;
@@ -62,29 +66,53 @@ async fn test_prover_status_busy() -> Result<(), anyhow::Error> {
         );
     }
 
-    let header_hash = MockHash::from([(num_worker_threads + 1) as u8; 32]);
-    prover_service
-        .submit_witness(make_transition_data(header_hash))
-        .await;
+    // Attempt to crate another proof when the prover is busy.
+    {
+        let header_hash = MockHash::from([(num_worker_threads + 1) as u8; 32]);
+        prover_service
+            .submit_witness(make_transition_data(header_hash))
+            .await;
 
-    let status = prover_service.prove(header_hash).await?;
-    assert_eq!(ProofProcessingStatus::Busy, status);
+        let status = prover_service.prove(header_hash).await?;
+        // Prover is busy and won't accept any ne job.
+        assert_eq!(ProofProcessingStatus::Busy, status);
 
-    let proof_submission_status = prover_service.send_proof_to_da(header_hash).await.unwrap();
-    assert_eq!(
-        ProofSubmissionStatus::ProofGenerationInProgress,
-        proof_submission_status
-    );
-    //todo!();
+        let proof_submission_status = prover_service
+            .send_proof_to_da(header_hash)
+            .await
+            .unwrap_err();
+
+        // The proving obs wasn't accpeted.
+        assert_eq!(
+        proof_submission_status.to_string(),
+        "Missing witness for: 0x0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b");
+    }
+
+    vm.make_proof();
+    for header_hash in header_hashes.clone() {
+        wait_for_proof_and_send_to_da(header_hash, &prover_service).await;
+    }
+
+    // Try again after prover is free to process new proofs.
+    {
+        let header_hash = MockHash::from([(num_worker_threads + 1) as u8; 32]);
+        prover_service
+            .submit_witness(make_transition_data(header_hash))
+            .await;
+
+        let status = prover_service.prove(header_hash).await?;
+        assert_eq!(ProofProcessingStatus::ProvingInProgress, status);
+    }
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_missing_witness() -> Result<(), anyhow::Error> {
     let TestProver { prover_service, .. } = make_new_prover();
-
     let header_hash = MockHash::from([0; 32]);
     let err = prover_service.prove(header_hash).await.unwrap_err();
+
     assert_eq!(
         err.to_string(),
         "Missing witness for block: 0x0000000000000000000000000000000000000000000000000000000000000000"
@@ -93,14 +121,42 @@ async fn test_missing_witness() -> Result<(), anyhow::Error> {
 }
 
 #[tokio::test]
-async fn test_multiple_submissions() -> Result<(), anyhow::Error> {
-    //todo!();
+async fn test_multiple_witness_submissions() -> Result<(), anyhow::Error> {
+    let TestProver { prover_service, .. } = make_new_prover();
+
+    let header_hash = MockHash::from([0; 32]);
+    let submission_status = prover_service
+        .submit_witness(make_transition_data(header_hash))
+        .await;
+
+    assert_eq!(
+        WitnessSubmissionStatus::SubmittedForProving,
+        submission_status
+    );
+
+    let submission_status = prover_service
+        .submit_witness(make_transition_data(header_hash))
+        .await;
+
+    assert_eq!(WitnessSubmissionStatus::WitnessExist, submission_status);
+
     Ok(())
 }
 
 #[tokio::test]
-async fn test_correct_execution() -> Result<(), anyhow::Error> {
-    //todo!();
+async fn test_generate_multiple_proofs_for_the_same_witness() -> Result<(), anyhow::Error> {
+    let TestProver { prover_service, .. } = make_new_prover();
+
+    let header_hash = MockHash::from([0; 32]);
+    prover_service
+        .submit_witness(make_transition_data(header_hash))
+        .await;
+
+    let status = prover_service.prove(header_hash).await?;
+    assert_eq!(ProofProcessingStatus::ProvingInProgress, status);
+
+    let err = prover_service.prove(header_hash).await.unwrap_err();
+    assert_eq!(err.to_string(), "Proof generation for 0x0000000000000000000000000000000000000000000000000000000000000000 still in progress");
     Ok(())
 }
 
@@ -109,6 +165,25 @@ struct TestProver {
         ParallelProverService<[u8; 0], Vec<u8>, MockDaService, MockZkvm, MockStf<MockValidityCond>>,
     vm: MockZkvm,
     num_worker_threads: usize,
+}
+
+async fn wait_for_proof_and_send_to_da(
+    header_hash: MockHash,
+    prover_service: &ParallelProverService<
+        [u8; 0],
+        Vec<u8>,
+        MockDaService,
+        MockZkvm,
+        MockStf<MockValidityCond>,
+    >,
+) {
+    for _ in 0..10 {
+        let status = prover_service.send_proof_to_da(header_hash).await;
+        if let Ok(ProofSubmissionStatus::Success) = status {
+            return;
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await
+    }
 }
 
 fn make_new_prover() -> TestProver {

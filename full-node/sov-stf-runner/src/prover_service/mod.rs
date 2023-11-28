@@ -20,6 +20,15 @@ pub enum RollupProverConfig {
     Prove,
 }
 
+/// Represents the status of a witness submission.
+#[derive(Debug, Eq, PartialEq)]
+pub enum WitnessSubmissionStatus {
+    ///
+    SubmittedForProving,
+    ///
+    WitnessExist,
+}
+
 /// Represents the status of a DA proof submission.
 #[derive(Debug, Eq, PartialEq)]
 pub enum ProofSubmissionStatus {
@@ -71,7 +80,7 @@ pub trait ProverService {
             Self::Witness,
             <Self::DaService as DaService>::Spec,
         >,
-    );
+    ) -> WitnessSubmissionStatus;
 
     /// Creates ZKP prove for a block corresponding to `block_header_hash`.
     async fn prove(

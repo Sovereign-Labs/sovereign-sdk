@@ -14,7 +14,7 @@ use super::{ProverService, ProverServiceError};
 use crate::verifier::StateTransitionVerifier;
 use crate::{
     ProofGenConfig, ProofProcessingStatus, ProofSubmissionStatus, RollupProverConfig,
-    StateTransitionData,
+    StateTransitionData, WitnessSubmissionStatus,
 };
 
 /// Prover service that generates proofs in parallel.
@@ -95,8 +95,8 @@ where
             Self::Witness,
             <Self::DaService as DaService>::Spec,
         >,
-    ) {
-        self.prover_state.submit_witness(state_transition_data);
+    ) -> WitnessSubmissionStatus {
+        self.prover_state.submit_witness(state_transition_data)
     }
 
     async fn prove(
