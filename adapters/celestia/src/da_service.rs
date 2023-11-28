@@ -239,7 +239,7 @@ impl DaService for CelestiaService {
         let fee = gas_limit * GAS_PRICE as u64;
 
         let blob = JsonBlob::new(self.rollup_namespace, blob.to_vec())?;
-        info!("Submiting: {:?}", blob.commitment);
+        info!("Submitting: {:?}", blob.commitment);
 
         let height = self
             .client
