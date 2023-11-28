@@ -3,7 +3,6 @@
 use alloc::vec::Vec;
 use core::{fmt, mem};
 
-use jmt::Version;
 pub use kernel_state::{KernelWorkingSet, VersionedWorkingSet};
 use sov_rollup_interface::maybestd::collections::HashMap;
 use sov_rollup_interface::stf::Event;
@@ -15,6 +14,8 @@ use crate::storage::{
     CacheKey, CacheValue, EncodeKeyLike, NativeStorage, OrderedReadsAndWrites, StateCodec,
     StateValueCodec, Storage, StorageInternalCache, StorageKey, StorageProof, StorageValue,
 };
+use crate::Version;
+
 /// A storage reader and writer
 pub trait StateReaderAndWriter {
     /// Get a value from the storage.
