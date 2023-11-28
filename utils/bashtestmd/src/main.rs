@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::io::{self, Write};
 
 use clap::Parser;
+use indoc::indoc;
 use markdown::mdast;
 
 #[derive(Debug, Parser)]
@@ -35,6 +36,7 @@ struct Command {
     cmd: String,
     long_running: bool,
     expected_output: Option<String>,
+    wait_until: Option<String>,
     exit_code: Option<i32>,
 }
 
@@ -44,6 +46,7 @@ impl Command {
             cmd: cmd.to_string(),
             long_running: false,
             expected_output: None,
+            wait_until: None,
             exit_code: Some(0),
         }
     }
@@ -56,25 +59,55 @@ impl Command {
         )?;
 
         if self.long_running {
-            writeln!(w, "{} &", self.cmd)?;
-            writeln!(w, "sleep 60")?;
+            if let Some(wait_until) = &self.wait_until {
+                writeln!(
+                    w,
+                    indoc!(
+                        r#"
+                        output=$(mktemp)
+                        {} &> $output &
+                        background_process_pid=$!
+                        echo "Waiting for process with PID: $background_process_pid"
+                        until grep -q -i {} $output
+                        do       
+                          if ! ps $background_process_pid > /dev/null 
+                          then
+                            echo "The background process died died" >&2
+                            exit 1
+                          fi
+                          echo -n "."
+                          sleep 5
+                        done
+                        "#
+                    ),
+                    self.cmd,
+                    shell_escape::escape(wait_until.into())
+                )?;
+            } else {
+                // No expected output, just run the command and wait two
+                // minutes. Very, very hackish.
+                writeln!(w, "{} &", self.cmd)?;
+                writeln!(w, "sleep 120")?;
+            }
             return Ok(());
         }
 
         if let Some(output) = &self.expected_output {
             writeln!(
                 w,
-                r#"
-output=$({})
-expected={}
-# Either of the two must be a substring of the other. This kinda protects us
-# against whitespace differences, trimming, etc.
-if ! [[ $output == *"$expected"* || $expected == *"$output"* ]]; then
-    echo "'$expected' not found in text:"
-    echo "'$output'"
-    exit 1
-fi
-"#,
+                indoc!(
+                    r#"
+                    output=$({})
+                    expected={}
+                    # Either of the two must be a substring of the other. This kinda protects us
+                    # against whitespace differences, trimming, etc.
+                    if ! [[ $output == *"$expected"* || $expected == *"$output"* ]]; then
+                        echo "'$expected' not found in text:"
+                        echo "'$output'"
+                        exit 1
+                    fi
+                    "#
+                ),
                 self.cmd,
                 shell_escape::escape(output.into())
             )?;
@@ -83,10 +116,18 @@ fi
         }
 
         if let Some(exit_code) = self.exit_code {
-            writeln!(w, "if [ $? -ne {} ]; then", exit_code)?;
-            writeln!(w, "    echo \"Expected exit code {}, got $?\"", exit_code)?;
-            writeln!(w, "    exit 1")?;
-            writeln!(w, "fi")?;
+            writeln!(
+                w,
+                indoc!(
+                    r#"
+                    if [ $? -ne {0} ]; then
+                        echo "Expected exit code {0}, got $?"
+                        exit 1
+                    fi
+                    "#,
+                ),
+                exit_code
+            )?;
         }
 
         Ok(())
@@ -110,6 +151,7 @@ struct CodeBlockTags {
     long_running: bool,
     compare_output: bool,
     exit_code: Option<i32>,
+    wait_until: Option<String>,
 }
 
 impl CodeBlockTags {
@@ -126,6 +168,7 @@ impl CodeBlockTags {
             long_running: false,
             compare_output: false,
             exit_code: Some(0),
+            wait_until: None,
         };
 
         for lang in langs {
@@ -138,6 +181,11 @@ impl CodeBlockTags {
             } else if lang.starts_with("bashtestmd:exit-code=") {
                 let exit_code = lang.split_once('=').unwrap().1.parse().unwrap();
                 tags.exit_code = Some(exit_code);
+            } else if lang.starts_with("bashtestmd:wait-until=") {
+                let wait_until = lang.split_once('=').unwrap().1.to_string();
+                tags.wait_until = Some(wait_until);
+            } else {
+                println!("Unknown bashtestmd tag, ignoring: {}", lang);
             }
         }
 
@@ -181,6 +229,7 @@ fn convert_code_blocks_into_commands(
         if let Some(cmd) = cmd {
             let mut cmd = Command::new(&cmd);
             cmd.long_running = tags.long_running;
+            cmd.wait_until = tags.wait_until;
             cmd.expected_output = if tags.compare_output {
                 Some(output)
             } else {
