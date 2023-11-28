@@ -20,9 +20,9 @@ async fn test_sucesfull_prover_execution() -> Result<(), ProverServiceError> {
         .await;
     prover_service.prove(header_hash).await?;
     vm.make_proof();
-    wait_for_proof_and_send_to_da(header_hash, &prover_service).await;
+    wait_for_proof_proof_da_submission(header_hash, &prover_service).await;
 
-    // Proof was already send and prover_service doesn't have a reference to it anymore
+    // The proof has already been sent, and the prover_service no longer has a reference to it.
     let err = prover_service
         .send_proof_to_da(header_hash)
         .await
@@ -47,7 +47,7 @@ async fn test_prover_status_busy() -> Result<(), anyhow::Error> {
 
     let header_hashes = (1..num_worker_threads + 1).map(|hash| MockHash::from([hash as u8; 32]));
 
-    // Saturate the prover
+    // Saturate the prover.
     for header_hash in header_hashes.clone() {
         prover_service
             .submit_witness(make_transition_data(header_hash))
@@ -66,7 +66,7 @@ async fn test_prover_status_busy() -> Result<(), anyhow::Error> {
         );
     }
 
-    // Attempt to crate another proof when the prover is busy.
+    // Attempting to create another proof while the prover is busy.
     {
         let header_hash = MockHash::from([0; 32]);
         prover_service
@@ -74,7 +74,7 @@ async fn test_prover_status_busy() -> Result<(), anyhow::Error> {
             .await;
 
         let status = prover_service.prove(header_hash).await?;
-        // Prover is busy and won't accept any ne job.
+        // The prover is busy and won't accept any new jobs.
         assert_eq!(ProofProcessingStatus::Busy, status);
 
         let proof_submission_status = prover_service
@@ -82,7 +82,7 @@ async fn test_prover_status_busy() -> Result<(), anyhow::Error> {
             .await
             .unwrap_err();
 
-        // The proving obs wasn't accpeted.
+        // The new job wasn't accepted.
         assert_eq!(
         proof_submission_status.to_string(),
         "Missing witness for: 0x0000000000000000000000000000000000000000000000000000000000000000");
@@ -90,10 +90,10 @@ async fn test_prover_status_busy() -> Result<(), anyhow::Error> {
 
     vm.make_proof();
     for header_hash in header_hashes.clone() {
-        wait_for_proof_and_send_to_da(header_hash, &prover_service).await;
+        wait_for_proof_proof_da_submission(header_hash, &prover_service).await;
     }
 
-    // Try again after prover is free to process new proofs.
+    // Retry once the prover is available to process new proofs.
     {
         let header_hash = MockHash::from([(num_worker_threads + 1) as u8; 32]);
         prover_service
@@ -167,7 +167,7 @@ struct TestProver {
     num_worker_threads: usize,
 }
 
-async fn wait_for_proof_and_send_to_da(
+async fn wait_for_proof_proof_da_submission(
     header_hash: MockHash,
     prover_service: &ParallelProverService<
         [u8; 0],

@@ -234,10 +234,11 @@ where
                         Ok(ProofSubmissionStatus::Success) => {
                             break;
                         }
+                        // TODO(#1185): Add timeout handling.
                         Ok(ProofSubmissionStatus::ProofGenerationInProgress) => {
                             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await
                         }
-                        // TODO(#1185):Add handling for DA errors.
+                        // TODO(#1185): Add handling for DA submission errors.
                         Err(e) => panic!("{:?}", e),
                     }
                 }

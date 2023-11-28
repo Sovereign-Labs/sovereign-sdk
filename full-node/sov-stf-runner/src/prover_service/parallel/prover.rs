@@ -18,7 +18,7 @@ use crate::{
 
 enum ProverStatus<StateRoot, Witness, Da: DaSpec> {
     WitnessSubmitted(StateTransitionData<StateRoot, Witness, Da>),
-    Proving,
+    ProvingInProgress,
     Proved(Proof),
     Err(anyhow::Error),
 }
@@ -37,7 +37,8 @@ impl<StateRoot, Witness, Da: DaSpec> ProverState<StateRoot, Witness, Da> {
         &mut self,
         hash: Da::SlotHash,
     ) -> Option<ProverStatus<StateRoot, Witness, Da>> {
-        self.prover_status.insert(hash, ProverStatus::Proving)
+        self.prover_status
+            .insert(hash, ProverStatus::ProvingInProgress)
     }
 
     fn set_to_proved(
@@ -73,9 +74,10 @@ impl<StateRoot, Witness, Da: DaSpec> ProverState<StateRoot, Witness, Da> {
     }
 }
 
+// A prover that generates proofs in parallel using a thread pool. If the pool is saturated,
+// the prover will reject new jobs.
 pub(crate) struct Prover<StateRoot, Witness, Da: DaService> {
     prover_state: Arc<RwLock<ProverState<StateRoot, Witness, Da::Spec>>>,
-
     num_threads: usize,
     pool: rayon::ThreadPool,
 }
@@ -143,6 +145,7 @@ where
             ProverStatus::WitnessSubmitted(state_transition_data) => {
                 let start_prover = prover_state.inc_task_count_if_not_busy(self.num_threads);
 
+                // Initiate a new proving job only if the prover is not busy.
                 if start_prover {
                     prover_state.set_to_proving(block_header_hash.clone());
                     vm.add_hint(state_transition_data);
@@ -164,7 +167,7 @@ where
                     Ok(ProofProcessingStatus::Busy)
                 }
             }
-            ProverStatus::Proving => Err(anyhow::anyhow!(
+            ProverStatus::ProvingInProgress => Err(anyhow::anyhow!(
                 "Proof generation for {:?} still in progress",
                 block_header_hash
             )
@@ -186,7 +189,9 @@ where
         let status = prover_state.get_prover_status(block_header_hash.clone());
 
         match status {
-            Some(ProverStatus::Proving) => Ok(ProofSubmissionStatus::ProofGenerationInProgress),
+            Some(ProverStatus::ProvingInProgress) => {
+                Ok(ProofSubmissionStatus::ProofGenerationInProgress)
+            }
             Some(ProverStatus::Proved(_)) => {
                 prover_state.remove(&block_header_hash);
                 Ok(ProofSubmissionStatus::Success)

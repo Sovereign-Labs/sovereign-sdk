@@ -12,20 +12,20 @@ use crate::StateTransitionData;
 pub enum RollupProverConfig {
     /// Skip proving.
     Skip,
-    /// Run the rollup verification logic inside the current process
+    /// Run the rollup verification logic inside the current process.
     Simulate,
-    /// Run the rollup verifier in a zkVM executor
+    /// Run the rollup verifier in a zkVM executor.
     Execute,
-    /// Run the rollup verifier and create a SNARK of execution
+    /// Run the rollup verifier and create a SNARK of execution.
     Prove,
 }
 
 /// Represents the status of a witness submission.
 #[derive(Debug, Eq, PartialEq)]
 pub enum WitnessSubmissionStatus {
-    ///
+    /// The witness has been submitted to the prover.
     SubmittedForProving,
-    ///
+    /// The witness is already present in the prover.
     WitnessExist,
 }
 
@@ -58,11 +58,13 @@ pub enum ProverServiceError {
     Other(#[from] anyhow::Error),
 }
 
-/// This service is responsible for ZKP proof generation.
-/// The proof generation process involves two stages:
-/// 1. Submitting a witness using the `submit_witness` method to a prover service.
-/// 2. Triggering proof generation with the `prove` method.
-
+/// This service is responsible for ZK proof generation.
+/// The proof generation process involves the following stages:
+///     1. Submitting a witness using the `submit_witness` method to a prover service.
+///     2. Initiating proof generation with the `prove` method.
+/// Once the proof is ready, it can be sent to the DA with `send_proof_to_da` method.
+/// Currently, the cancellation of proving jobs for submitted witnesses is not supported,
+/// but this functionality will be added in the future (#1185).
 #[async_trait]
 pub trait ProverService {
     /// Ths root hash of state merkle tree.
@@ -89,6 +91,7 @@ pub trait ProverService {
     ) -> Result<ProofProcessingStatus, ProverServiceError>;
 
     /// Sends the ZK proof to the DA.
+    /// This method is noy yet fully implemented: see #1185
     async fn send_proof_to_da(
         &self,
         block_header_hash: <<Self::DaService as DaService>::Spec as DaSpec>::SlotHash,
