@@ -8641,7 +8641,6 @@ dependencies = [
  "jsonrpsee 0.20.3",
  "log",
  "log4rs",
- "num_cpus",
  "prettytable-rs",
  "prometheus 0.11.0",
  "proptest",

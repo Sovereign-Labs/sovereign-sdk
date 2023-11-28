@@ -69,6 +69,20 @@ where
             zk_storage,
         }
     }
+
+    /// Creates a new prover.
+    pub fn new_with_default_workers(
+        vm: Vm,
+        zk_stf: V,
+        da_verifier: Da::Verifier,
+        config: RollupProverConfig,
+        zk_storage: V::PreState,
+    ) -> Self {
+        let num_cpus = num_cpus::get();
+        assert!(num_cpus > 2, "Unable to create parallel prover service");
+
+        Self::new(vm, zk_stf, da_verifier, config, zk_storage, num_cpus - 1)
+    }
 }
 
 #[async_trait]

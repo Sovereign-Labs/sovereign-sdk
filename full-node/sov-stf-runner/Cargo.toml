@@ -12,6 +12,7 @@ resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
+num_cpus = { workspace = true }
 thiserror = { workspace = true, optional = true }
 borsh = { workspace = true }
 serde_json = { workspace = true }
@@ -29,7 +30,6 @@ sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-num_cpus = { workspace = true }
 
 sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry", features = ["native"] }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
