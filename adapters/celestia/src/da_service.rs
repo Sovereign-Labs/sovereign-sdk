@@ -135,6 +135,7 @@ impl DaService for CelestiaService {
 
     type FilteredBlock = FilteredCelestiaBlock;
     type HeaderStream = CelestiaBlockHeaderSubscription;
+    type TransactionId = ();
 
     type Error = BoxError;
 
