@@ -1,3 +1,4 @@
+use std::env;
 use std::str::FromStr;
 
 use anyhow::Context as _;
@@ -35,7 +36,13 @@ async fn main() -> Result<(), anyhow::Error> {
     // Initializing logging
     tracing_subscriber::registry()
         .with(fmt::layer())
-        .with(EnvFilter::from_str("debug,hyper=info,risc0_zkvm=info").unwrap())
+        .with(
+            EnvFilter::from_str(
+                &env::var("RUST_LOG")
+                    .unwrap_or_else(|_| "debug,hyper=info,risc0_zkvm=info".to_string()),
+            )
+            .unwrap(),
+        )
         .init();
 
     let args = Args::parse();
