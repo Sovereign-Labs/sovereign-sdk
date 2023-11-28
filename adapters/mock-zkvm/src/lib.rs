@@ -2,6 +2,7 @@
 #![doc = include_str!("../README.md")]
 
 use std::io::Write;
+use std::sync::{Arc, Condvar, Mutex};
 
 use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -59,9 +60,49 @@ impl<'a> MockProof<'a> {
     }
 }
 
-/// A mock implementing the zkVM trait.
 #[derive(Clone)]
-pub struct MockZkvm {}
+struct Notifier {
+    notified: Arc<Mutex<bool>>,
+    cond: Arc<Condvar>,
+}
+
+impl Default for Notifier {
+    fn default() -> Self {
+        Self {
+            notified: Arc::new(Mutex::new(false)),
+            cond: Default::default(),
+        }
+    }
+}
+
+impl Notifier {
+    fn wait(&self) {
+        let mut notified = self.notified.lock().unwrap();
+        while !*notified {
+            notified = self.cond.wait(notified).unwrap();
+        }
+    }
+
+    fn notify(&self) {
+        let mut notified = self.notified.lock().unwrap();
+        *notified = true;
+        self.cond.notify_all();
+    }
+}
+
+/// A mock implementing the zkVM trait.
+#[derive(Clone, Default)]
+pub struct MockZkvm {
+    worker_thread_notifier: Notifier,
+}
+
+impl MockZkvm {
+    /// Simulates zk proof generation.
+    pub fn make_proof(&self) {
+        // We notify the worket thread.
+        self.worker_thread_notifier.notify();
+    }
+}
 
 impl sov_rollup_interface::zk::Zkvm for MockZkvm {
     type CodeCommitment = MockCodeCommitment;
@@ -100,20 +141,17 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvm {
     fn add_hint<T: Serialize>(&mut self, _item: T) {}
 
     fn simulate_with_hints(&mut self) -> Self::Guest {
-        unimplemented!()
+        MockZkGuest {}
     }
 
     fn run(&mut self, _with_proof: bool) -> Result<sov_rollup_interface::zk::Proof, anyhow::Error> {
+        self.worker_thread_notifier.wait();
         Ok(sov_rollup_interface::zk::Proof::Empty)
     }
 }
 
 /// A mock implementing the Guest.
-pub struct MockZkGuest {
-    #[allow(dead_code)]
-    // We need this unused field here as a workaround for a rustc compiler bug: "error: the compiler unexpectedly panicked. this is a bug"
-    commits: (),
-}
+pub struct MockZkGuest {}
 
 impl sov_rollup_interface::zk::Zkvm for MockZkGuest {
     type CodeCommitment = MockCodeCommitment;

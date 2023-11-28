@@ -8,8 +8,8 @@ resolver = "2"
 
 [dependencies]
 anyhow = "1.0.68"
-risc0-zkvm = { version = "0.18", default-features = false, features = ["std"] }
-risc0-zkvm-platform = "0.18"
+risc0-zkvm = { version = "0.19", default-features = false, features = ["std"] }
+risc0-zkvm-platform = "0.19"
 demo-stf = { path = "../../../stf" }
 sov-risc0-adapter = { path = "../../../../../adapters/risc0" }
 const-rollup-config = { path = "../../../../const-rollup-config" }
@@ -35,6 +35,4 @@ lto = true
 opt-level = 3
 
 [features]
-bench = [
-	"sov-celestia-adapter/bench",
-]
+bench = ["sov-celestia-adapter/bench"]

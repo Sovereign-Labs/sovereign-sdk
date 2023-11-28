@@ -101,11 +101,12 @@ schemars = { version = "0.8.16", features = ["derive"] }
 tempfile = "3.8"
 tokio = { version = "1", features = ["full"] }
 lazy_static = "1.4.0"
-risc0-zkvm = { version = "0.18", default-features = false }
-risc0-zkvm-platform = { version = "0.18" }
-risc0-zkp = "0.18"
-risc0-circuit-rv32im = "0.18"
-risc0-build = "0.18"
+num_cpus = "1.0"
+risc0-zkvm = { version = "0.19", default-features = false }
+risc0-zkvm-platform = { version = "0.19" }
+risc0-zkp = "0.19"
+risc0-circuit-rv32im = "0.19"
+risc0-build = "0.19"
 
 # EVM dependencies
 ethereum-types = "0.14.1"
@@ -125,11 +126,7 @@ reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
 revm = { git = "https://github.com/bluealloy/revm", rev = "516f62cc" }
 revm-primitives = { git = "https://github.com/bluealloy/revm", rev = "516f62cc" }
 
-secp256k1 = { version = "0.27.0", default-features = false, features = [
-    "global-context",
-    "rand-std",
-    "recovery",
-] }
+secp256k1 = { version = "0.27.0", default-features = false, features = ["global-context", "rand-std", "recovery"] }
 
 [patch.'https://github.com/eigerco/celestia-node-rs.git']
 # Uncomment to apply local changes
