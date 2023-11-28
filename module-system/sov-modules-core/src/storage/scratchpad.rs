@@ -16,7 +16,7 @@ use crate::storage::{
 };
 use crate::Version;
 
-/// Super trait for convenience in macro parsing
+/// Super trait for convenience in macro parsing and identifying Working sets that need StateMap implementation of StateMapAccessor
 pub trait StateMapWorkingSet: StateReaderAndWriter {}
 
 impl<C: Context> StateMapWorkingSet for WorkingSet<C> {}
