@@ -9136,6 +9136,7 @@ dependencies = [
  "futures",
  "hex",
  "jsonrpsee 0.20.3",
+ "num_cpus",
  "rayon",
  "serde",
  "serde_json",
