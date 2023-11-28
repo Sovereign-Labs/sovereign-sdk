@@ -12,7 +12,7 @@ use tokio::sync::oneshot;
 use tracing::{debug, info};
 
 use crate::verifier::StateTransitionVerifier;
-use crate::{ProverService, RunnerConfig, StateTransitionData};
+use crate::{ProofSubmissionStatus, ProverService, RunnerConfig, StateTransitionData};
 type StateRoot<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::StateRoot;
 type InitialState<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::GenesisParams;
 
@@ -216,24 +216,30 @@ where
 
             // Create ZKP proof.
             {
-                let header_hash = transition_data.da_block_header.hash().into();
+                let header_hash = transition_data.da_block_header.hash();
                 self.prover_service.submit_witness(transition_data).await;
-                // TODO: This section will be moved and called upon block finalization once we have fork management ready.
+                // TODO(#1185): This section will be moved and called upon block finalization once we have fork management ready.
                 self.prover_service
-                    .prove(header_hash)
+                    .prove(header_hash.clone())
                     .await
                     .expect("The proof creation should succeed");
 
                 loop {
-                    let status = self.prover_service.send_proof_to_da(header_hash).await;
+                    let status = self
+                        .prover_service
+                        .send_proof_to_da(header_hash.clone())
+                        .await;
+
                     match status {
-                        crate::ProofSubmissionStatus::Success => {
+                        Ok(ProofSubmissionStatus::Success) => {
                             break;
                         }
-                        crate::ProofSubmissionStatus::ProvingInProgress => {
+                        // TODO(#1185): Add timeout handling.
+                        Ok(ProofSubmissionStatus::ProofGenerationInProgress) => {
                             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await
                         }
-                        crate::ProofSubmissionStatus::Err(e) => panic!("{:?}", e),
+                        // TODO(#1185): Add handling for DA submission errors.
+                        Err(e) => panic!("{:?}", e),
                     }
                 }
             }
