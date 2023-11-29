@@ -23,11 +23,11 @@ mod test_rpc;
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// The data layer type.
-    #[arg(long, default_value = "celestia")]
+    #[arg(long, default_value = "mock")]
     da_layer: SupportedDaLayer,
 
     /// The path to the rollup config.
-    #[arg(long, default_value = "rollup_config.toml")]
+    #[arg(long, default_value = "mock_rollup_config.toml")]
     rollup_config_path: String,
 }
 
