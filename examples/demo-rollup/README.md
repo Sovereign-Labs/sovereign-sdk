@@ -72,10 +72,11 @@ to authorize yourself in github's container registry. (we use original celestia 
 $ echo $MY_PERSONAL_GITHUB_TOKEN | docker login ghcr.io -u $MY_GITHUB_USERNAME --password-stdin
 ```
 
-3. Switch to the `examples/demo-rollup` directory (which is where this `README.md` is located!).
+3. Switch to the `examples/demo-rollup` directory (which is where this `README.md` is located!), and compile the application:
 
 ```shell,test-ci
 $ cd examples/demo-rollup/
+$ cargo build --bins
 ```
 
 4. Spin up a local Celestia instance as your DA layer. We've built a small Makefile to simplify that process:
