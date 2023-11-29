@@ -27,4 +27,6 @@
 
 # Adapters
 - sov-risc0-adapter
-# TODO: sov-celestia-adapter (https://github.com/Sovereign-Labs/nmt-rs/issues/17)
+- sov-celestia-adapter
+- sov-mock-da
+- sov-mock-zkvm
