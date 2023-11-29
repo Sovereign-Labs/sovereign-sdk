@@ -10,6 +10,11 @@ use sov_rollup_interface::RollupAddress;
 use crate::common::{GasUnit, PublicKey, Signature, Witness};
 use crate::storage::Storage;
 
+/// The chain ID of the rollup.
+// TODO: This might be an associated type of `Spec` and a `&'static [u8]` defined via
+// `constants.json`. However, deserialize isn't implemented for such static types.
+pub type ChainId = [u8; 32];
+
 /// The `Spec` trait configures certain key primitives to be used by a by a particular instance of a rollup.
 /// `Spec` is almost always implemented on a Context object; since all Modules are generic
 /// over a Context, rollup developers can easily optimize their code for different environments

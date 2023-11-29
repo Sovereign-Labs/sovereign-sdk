@@ -13,7 +13,7 @@ use sov_bank::{BalanceResponse, BankRpcClient};
 use sov_modules_api::clap;
 use sov_modules_api::transaction::Transaction;
 
-use crate::wallet_state::{AddressEntry, KeyIdentifier, WalletState};
+use crate::wallet_state::{AddressEntry, KeyIdentifier, UnsentTransaction, WalletState};
 use crate::workflows::keys::load_key;
 const NO_ACCOUNTS_FOUND: &str =
     "No accounts found. You can generate one with the `keys generate` subcommand";
@@ -144,15 +144,26 @@ impl<C: sov_modules_api::Context + Serialize + DeserializeOwned + Send + Sync> R
                 let txs = std::mem::take(&mut wallet_state.unsent_transactions)
                     .into_iter()
                     .enumerate()
-                    .map(|(offset, tx)| {
-                        Transaction::<C>::new_signed_tx(
-                            &private_key,
-                            tx.try_to_vec().unwrap(),
-                            nonce + offset as u64,
-                        )
-                        .try_to_vec()
-                        .unwrap()
-                    })
+                    .map(
+                        |(
+                            offset,
+                            UnsentTransaction {
+                                tx,
+                                chain_id,
+                                gas_tip,
+                            },
+                        )| {
+                            Transaction::<C>::new_signed_tx(
+                                &private_key,
+                                tx.try_to_vec().unwrap(),
+                                chain_id,
+                                gas_tip,
+                                nonce + offset as u64,
+                            )
+                            .try_to_vec()
+                            .unwrap()
+                        },
+                    )
                     .collect::<Vec<_>>();
 
                 let response: String = client

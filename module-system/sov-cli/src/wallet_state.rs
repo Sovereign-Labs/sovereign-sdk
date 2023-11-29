@@ -1,17 +1,25 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::{fmt, fs};
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use sov_modules_api::{clap, PrivateKey};
+use sov_modules_api::{clap, ChainId, PrivateKey};
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "Tx: Serialize + DeserializeOwned")]
+pub struct UnsentTransaction<Tx> {
+    pub tx: Tx,
+    pub chain_id: ChainId,
+    pub gas_tip: u64,
+}
 
 /// A struct representing the current state of the CLI wallet
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "Ctx::Address: Serialize + DeserializeOwned, Tx: Serialize + DeserializeOwned")]
 pub struct WalletState<Tx, Ctx: sov_modules_api::Context> {
     /// The accumulated transactions to be submitted to the DA layer
-    pub unsent_transactions: Vec<Tx>,
+    pub unsent_transactions: Vec<UnsentTransaction<Tx>>,
     /// The addresses in the wallet
     pub addresses: AddressList<Ctx>,
     /// The addresses in the wallet

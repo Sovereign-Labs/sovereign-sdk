@@ -1,6 +1,6 @@
 #[cfg(feature = "native")]
 use sov_modules_core::PrivateKey;
-use sov_modules_core::{Context, Signature};
+use sov_modules_core::{ChainId, Context, Signature};
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use sov_zk_cycle_macros::cycle_tracker;
 
@@ -12,6 +12,8 @@ pub struct Transaction<C: Context> {
     signature: C::Signature,
     pub_key: C::PublicKey,
     runtime_msg: Vec<u8>,
+    chain_id: ChainId,
+    gas_tip: u64,
     nonce: u64,
 }
 
@@ -26,6 +28,14 @@ impl<C: Context> Transaction<C> {
 
     pub fn runtime_msg(&self) -> &[u8] {
         &self.runtime_msg
+    }
+
+    pub const fn chain_id(&self) -> &ChainId {
+        &self.chain_id
+    }
+
+    pub const fn gas_tip(&self) -> u64 {
+        self.gas_tip
     }
 
     pub fn nonce(&self) -> u64 {
@@ -49,12 +59,16 @@ impl<C: Context> Transaction<C> {
         pub_key: C::PublicKey,
         message: Vec<u8>,
         signature: C::Signature,
+        chain_id: ChainId,
+        gas_tip: u64,
         nonce: u64,
     ) -> Self {
         Self {
             signature,
             runtime_msg: message,
             pub_key,
+            chain_id,
+            gas_tip,
             nonce,
         }
     }
@@ -63,22 +77,38 @@ impl<C: Context> Transaction<C> {
 #[cfg(feature = "native")]
 impl<C: Context> Transaction<C> {
     /// New signed transaction.
-    pub fn new_signed_tx(priv_key: &C::PrivateKey, mut message: Vec<u8>, nonce: u64) -> Self {
+    pub fn new_signed_tx(
+        priv_key: &C::PrivateKey,
+        mut message: Vec<u8>,
+        chain_id: ChainId,
+        gas_tip: u64,
+        nonce: u64,
+    ) -> Self {
         // Since we own the message already, try to add the serialized nonce in-place.
         // This lets us avoid a copy if the message vec has at least 8 bytes of extra capacity.
-        let original_length = message.len();
-        message.extend_from_slice(&nonce.to_le_bytes());
+        let len = message.len();
+
+        // resizes once to avoid potential multiple realloc
+        message.resize(chain_id.len() + 16, 0);
+
+        message[len..len + chain_id.len()].copy_from_slice(&chain_id);
+        message[len + chain_id.len()..len + chain_id.len() + 8]
+            .copy_from_slice(&gas_tip.to_le_bytes());
+        message[len + chain_id.len() + 8..len + chain_id.len() + 16]
+            .copy_from_slice(&nonce.to_le_bytes());
 
         let pub_key = priv_key.pub_key();
         let signature = priv_key.sign(&message);
 
         // Don't forget to truncate the message back to its original length!
-        message.truncate(original_length);
+        message.truncate(len);
 
         Self {
             signature,
             runtime_msg: message,
             pub_key,
+            chain_id,
+            gas_tip,
             nonce,
         }
     }
