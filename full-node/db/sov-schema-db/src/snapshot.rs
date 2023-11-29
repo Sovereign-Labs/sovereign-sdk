@@ -316,3 +316,116 @@ impl QueryManager for NoopQueryManager {
         Ok(std::iter::empty())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::define_schema;
+    use crate::schema::KeyEncoder;
+    use crate::test::{TestCompositeField, TestField};
+
+    define_schema!(TestSchema, TestCompositeField, TestField, "TestCF");
+
+    struct SingleSnapshotQueryManager {
+        cache: SchemaBatch,
+    }
+
+    impl QueryManager for SingleSnapshotQueryManager {
+        type Iter<'a, S: Schema> = std::vec::IntoIter<(SchemaKey, SchemaValue)>;
+
+        fn get<S: Schema>(
+            &self,
+            _snapshot_id: SnapshotId,
+            key: &impl KeyCodec<S>,
+        ) -> anyhow::Result<Option<S::Value>> {
+            if let Some(Operation::Put { value }) = self.cache.read(key)? {
+                let value = S::Value::decode_value(value)?;
+                return Ok(Some(value));
+            }
+            Ok(None)
+        }
+
+        fn iter<S: Schema>(&self, _snapshot_id: SnapshotId) -> anyhow::Result<Self::Iter<'_, S>> {
+            let collected: Vec<(SchemaKey, SchemaValue)> = self
+                .cache
+                .iter::<S>()
+                .filter_map(|(k, op)| match op {
+                    Operation::Put { value } => Some((k.to_vec(), value.to_vec())),
+                    Operation::Delete => None,
+                })
+                .collect();
+
+            Ok(collected.into_iter())
+        }
+    }
+
+    fn encode_key(key: &TestCompositeField) -> Vec<u8> {
+        <TestCompositeField as KeyEncoder<TestSchema>>::encode_key(key).unwrap()
+    }
+
+    fn encode_value(value: &TestField) -> Vec<u8> {
+        <TestField as ValueCodec<TestSchema>>::encode_value(value).unwrap()
+    }
+
+    #[test]
+    fn test_db_snapshot_iterator_empty() {
+        let local_cache = SchemaBatch::new();
+        let parent_values = SchemaBatch::new();
+
+        let manager = SingleSnapshotQueryManager {
+            cache: parent_values,
+        };
+
+        let local_cache_iter = local_cache.iter::<TestSchema>().peekable();
+        let manager_iter = manager.iter::<TestSchema>(0).unwrap().peekable();
+
+        let snapshot_iter = SnapshotIter::<'_, SingleSnapshotQueryManager, TestSchema> {
+            local_cache_iter,
+            parent_iter: manager_iter,
+        };
+
+        let values: Vec<(SchemaKey, SchemaValue)> = snapshot_iter.collect();
+
+        assert!(values.is_empty());
+    }
+
+    #[test]
+    fn test_db_snapshot_iterator_values() {
+        let k1 = TestCompositeField(0, 1, 0);
+        let k2 = TestCompositeField(0, 1, 2);
+        let k3 = TestCompositeField(3, 1, 0);
+        let k4 = TestCompositeField(3, 2, 0);
+
+        let mut parent_values = SchemaBatch::new();
+        parent_values.put::<TestSchema>(&k2, &TestField(2)).unwrap();
+        parent_values.put::<TestSchema>(&k1, &TestField(1)).unwrap();
+        parent_values.put::<TestSchema>(&k4, &TestField(4)).unwrap();
+        parent_values.put::<TestSchema>(&k3, &TestField(3)).unwrap();
+
+        let mut local_cache = SchemaBatch::new();
+        local_cache.delete::<TestSchema>(&k3).unwrap();
+        local_cache.put::<TestSchema>(&k1, &TestField(10)).unwrap();
+        local_cache.put::<TestSchema>(&k2, &TestField(20)).unwrap();
+
+        let manager = SingleSnapshotQueryManager {
+            cache: parent_values,
+        };
+
+        let local_cache_iter = local_cache.iter::<TestSchema>().peekable();
+        let manager_iter = manager.iter::<TestSchema>(0).unwrap().peekable();
+
+        let snapshot_iter = SnapshotIter::<'_, SingleSnapshotQueryManager, TestSchema> {
+            local_cache_iter,
+            parent_iter: manager_iter,
+        };
+
+        let actual_values: Vec<(SchemaKey, SchemaValue)> = snapshot_iter.collect();
+        let expected_values = vec![
+            (encode_key(&k4), encode_value(&TestField(4))),
+            (encode_key(&k2), encode_value(&TestField(20))),
+            (encode_key(&k1), encode_value(&TestField(10))),
+        ];
+
+        assert_eq!(expected_values, actual_values);
+    }
+}
