@@ -145,8 +145,8 @@ impl<Q: QueryManager> DbSnapshot<Q> {
     }
 
     /// Get value in [`Schema`] that is smaller or equal than give `seek_key`
-    pub fn find_prev<S: Schema>(
-        &mut self,
+    pub fn get_prev<S: Schema>(
+        &self,
         seek_key: &impl SeekKeyEncoder<S>,
     ) -> anyhow::Result<Option<S::Value>> {
         let seek_key = seek_key.encode_seek_key()?;
@@ -156,68 +156,30 @@ impl<Q: QueryManager> DbSnapshot<Q> {
             .lock()
             .expect("Local cache lock must not be poisoned");
 
-        let mut local_cache_iter = local_cache.iter::<S>().peekable();
+        let local_cache_iter = local_cache.iter::<S>();
 
         let parent = self
             .parents_manager
             .read()
             .expect("Parent snapshots lock must not be poisoned");
 
-        let mut parent_iter = parent.iter::<S>(self.id)?.peekable();
+        let parent_iter = parent.iter::<S>(self.id)?;
 
-        let handle_key_match =
-            |key: &SchemaKey, value: &SchemaValue| -> anyhow::Result<Option<S::Value>> {
-                if key <= &seek_key {
-                    return Ok(Some(S::Value::decode_value(value)?));
-                }
-                Ok(None)
-            };
+        let combined_iter: SnapshotIter<'_, Q, S> = SnapshotIter {
+            local_cache_iter: local_cache_iter.peekable(),
+            parent_iter: parent_iter.peekable(),
+        };
 
-        loop {
-            let local_cache_peeked = local_cache_iter.peek();
-            let parent_peeked = parent_iter.peek();
-
-            match (local_cache_peeked, parent_peeked) {
-                // Both iterators exhausted
-                (None, None) => break,
-                // Parent exhausted (just like me on friday)
-                (Some(&(key, operation)), None) => {
-                    local_cache_iter.next();
-                    if let Operation::Put { value } = operation {
-                        if let Some(value) = handle_key_match(key, value)? {
-                            return Ok(Some(value));
-                        }
-                    }
+        if let Some((_, value)) = combined_iter
+            .filter_map(|(key, value)| {
+                if key <= seek_key {
+                    return Some((key, value));
                 }
-                // Local exhausted
-                (None, Some((key, value))) => {
-                    if let Some(value) = handle_key_match(key, value)? {
-                        return Ok(Some(value));
-                    }
-                    parent_iter.next();
-                }
-                // Both are active, need to compare keys
-                (Some(&(local_key, local_operation)), Some((parent_key, parent_value))) => {
-                    if local_key < parent_key {
-                        if let Some(value) = handle_key_match(parent_key, parent_value)? {
-                            return Ok(Some(value));
-                        }
-                        parent_iter.next();
-                    } else {
-                        // Local is preferable, as it is the latest
-                        // But both operators must succeed
-                        if local_key == parent_key {
-                            parent_iter.next();
-                        }
-                        local_cache_iter.next();
-                        if let Operation::Put { value: local_value } = local_operation {
-                            if let Some(value) = handle_key_match(local_key, local_value)? {
-                                return Ok(Some(value));
-                            }
-                        }
-                    }
-                }
-            }
+                None
+            })
+            .next()
+        {
+            return Ok(Some(S::Value::decode_value(&value)?));
         }
 
         Ok(None)

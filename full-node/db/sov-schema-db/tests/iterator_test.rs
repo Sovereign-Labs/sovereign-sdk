@@ -103,7 +103,7 @@ impl SeekKeyEncoder<TestSchema> for KeyPrefix2 {
 }
 
 fn collect_values(iter: SchemaIterator<TestSchema>) -> Vec<u32> {
-    iter.map(|row| (row.unwrap().1).0).collect()
+    iter.map(|row| row.unwrap().1 .0).collect()
 }
 
 struct TestDB {
@@ -397,12 +397,98 @@ fn test_db_snapshot_get_last_value() {
         let latest = snapshot_2.get_largest::<TestSchema>().unwrap();
         assert_eq!(Some(TestValue(6)), latest);
     }
+    // Largest value from local is picked up
     snapshot_2.put(&TestKey(8, 3, 1), &TestValue(8)).unwrap();
     {
         let latest = snapshot_2.get_largest::<TestSchema>().unwrap();
         assert_eq!(Some(TestValue(8)), latest);
     }
+
+    // Deletion: Previous "largest" value is returned
+    snapshot_2.delete(&TestKey(8, 3, 1)).unwrap();
+    {
+        let latest = snapshot_2.get_largest::<TestSchema>().unwrap();
+        assert_eq!(Some(TestValue(6)), latest);
+    }
 }
 
 #[test]
-fn test_db_snapshot_get_prev_value() {}
+fn test_db_snapshot_get_prev_value() {
+    let manager = Arc::new(RwLock::new(LinearSnapshotManager::default()));
+
+    // Snapshots 1 and 2 are to black box usages of parents iterator
+    let snapshot_1 =
+        DbSnapshot::<LinearSnapshotManager>::new(0, ReadOnlyLock::new(manager.clone()));
+
+    assert!(snapshot_1.get_prev(&TestKey(8, 2, 3)).unwrap().is_none());
+
+    snapshot_1.put(&TestKey(8, 2, 0), &TestValue(10)).unwrap();
+    snapshot_1.put(&TestKey(8, 2, 3), &TestValue(1)).unwrap();
+    snapshot_1.put(&TestKey(8, 1, 3), &TestValue(11)).unwrap();
+    snapshot_1.put(&TestKey(7, 2, 3), &TestValue(12)).unwrap();
+    snapshot_1.put(&TestKey(8, 2, 5), &TestValue(13)).unwrap();
+    snapshot_1.put(&TestKey(8, 3, 2), &TestValue(14)).unwrap();
+
+    // Equal:
+    assert_eq!(
+        Some(TestValue(1)),
+        snapshot_1.get_prev(&TestKey(8, 2, 3)).unwrap()
+    );
+    // Previous: value from 8.2.0
+    assert_eq!(
+        Some(TestValue(10)),
+        snapshot_1.get_prev(&TestKey(8, 2, 1)).unwrap()
+    );
+
+    {
+        let mut manager = manager.write().unwrap();
+        manager.add_snapshot(snapshot_1.into());
+    }
+
+    let snapshot_2 =
+        DbSnapshot::<LinearSnapshotManager>::new(1, ReadOnlyLock::new(manager.clone()));
+    // Equal:
+    assert_eq!(
+        Some(TestValue(1)),
+        snapshot_2.get_prev(&TestKey(8, 2, 3)).unwrap()
+    );
+    // Previous: value from 8.2.0
+    assert_eq!(
+        Some(TestValue(10)),
+        snapshot_2.get_prev(&TestKey(8, 2, 1)).unwrap()
+    );
+    snapshot_2.put(&TestKey(8, 2, 0), &TestValue(20)).unwrap();
+    snapshot_2.put(&TestKey(8, 2, 3), &TestValue(2)).unwrap();
+    // Updated values are higher priority
+    assert_eq!(
+        Some(TestValue(2)),
+        snapshot_2.get_prev(&TestKey(8, 2, 3)).unwrap()
+    );
+    assert_eq!(
+        Some(TestValue(20)),
+        snapshot_2.get_prev(&TestKey(8, 2, 1)).unwrap()
+    );
+    snapshot_2.delete(&TestKey(8, 2, 3)).unwrap();
+    assert_eq!(
+        Some(TestValue(20)),
+        snapshot_2.get_prev(&TestKey(8, 2, 3)).unwrap()
+    );
+    {
+        let mut manager = manager.write().unwrap();
+        manager.add_snapshot(snapshot_2.into());
+    }
+    let snapshot_3 =
+        DbSnapshot::<LinearSnapshotManager>::new(2, ReadOnlyLock::new(manager.clone()));
+    assert_eq!(
+        Some(TestValue(20)),
+        snapshot_3.get_prev(&TestKey(8, 2, 1)).unwrap()
+    );
+    assert_eq!(
+        Some(TestValue(20)),
+        snapshot_3.get_prev(&TestKey(8, 2, 3)).unwrap()
+    );
+    assert_eq!(
+        Some(TestValue(14)),
+        snapshot_3.get_prev(&TestKey(8, 3, 4)).unwrap()
+    );
+}
