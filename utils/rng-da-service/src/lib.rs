@@ -75,6 +75,7 @@ impl DaService for RngDaService {
     type Verifier = RngDaVerifier;
     type FilteredBlock = MockBlock;
     type HeaderStream = RngHeaderStream;
+    type TransactionId = ();
     type Error = anyhow::Error;
 
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
