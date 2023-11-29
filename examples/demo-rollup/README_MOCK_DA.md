@@ -6,8 +6,8 @@ $ cargo build --bins
 ```
 
 2.
-```sh,test-ci,bashtestmd:long-running,bashtestmd:wait-until=genesis.json
-$ make clean-rollup-db
+```sh,test-ci
+$ make clean-rollup-db2
 ```
 
 

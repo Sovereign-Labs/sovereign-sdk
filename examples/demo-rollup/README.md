@@ -103,7 +103,7 @@ Now run the demo-rollup full node, as shown below. You will see it consuming blo
 
 ```sh,test-ci,bashtestmd:long-running
 # Make sure you're still in the examples/demo-rollup directory.
-$ cargo run
+$  cargo run -- --da-layer celestia --rollup-config-path rollup_config.toml
 2023-06-07T10:03:25.473920Z  INFO sov_celestia_adapter::da_service: Fetching header at height=1...
 2023-06-07T10:03:25.496853Z  INFO sov_demo_rollup: Received 0 blobs
 2023-06-07T10:03:25.497700Z  INFO sov_demo_rollup: Requesting data for height 2 and prev_state_root 0xa96745d3184e54d098982daf44923d84c358800bd22c1864734ccb978027a670
