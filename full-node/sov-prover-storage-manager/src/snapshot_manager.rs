@@ -91,6 +91,7 @@ impl SnapshotManager {
 pub struct SnapshotManagerIter<'a, S: Schema> {
     db_iter: Peekable<RawDbReverseIterator<'a>>,
     snapshot_iterators: Vec<Peekable<SchemaBatchIterator<'a, S>>>,
+    max_value_locations: Vec<DataLocation>,
 }
 
 impl<'a, S: Schema> SnapshotManagerIter<'a, S> {
@@ -98,12 +99,14 @@ impl<'a, S: Schema> SnapshotManagerIter<'a, S> {
         db_iter: RawDbReverseIterator<'a>,
         snapshot_iterators: Vec<SchemaBatchIterator<'a, S>>,
     ) -> Self {
+        let max_values_size = snapshot_iterators.len().checked_add(1).unwrap_or_default();
         Self {
             db_iter: db_iter.peekable(),
             snapshot_iterators: snapshot_iterators
                 .into_iter()
                 .map(|iter| iter.peekable())
                 .collect(),
+            max_value_locations: Vec::with_capacity(max_values_size),
         }
     }
 }
@@ -122,10 +125,10 @@ impl<'a, S: Schema> Iterator for SnapshotManagerIter<'a, S> {
         // Find max value
         loop {
             let mut max_value: Option<&SchemaKey> = None;
-            let mut max_value_locations: Vec<DataLocation> = vec![];
+            self.max_value_locations.clear();
             let max_db_value = self.db_iter.peek();
             if let Some((db_key, _)) = max_db_value {
-                max_value_locations.push(DataLocation::Db);
+                self.max_value_locations.push(DataLocation::Db);
                 max_value = Some(db_key);
             };
 
@@ -133,17 +136,17 @@ impl<'a, S: Schema> Iterator for SnapshotManagerIter<'a, S> {
                 if let Some(&(peeked_key, _)) = iter.peek() {
                     match max_value {
                         None => {
-                            max_value_locations.push(DataLocation::Snapshot(idx));
+                            self.max_value_locations.push(DataLocation::Snapshot(idx));
                             max_value = Some(peeked_key);
                         }
                         Some(max_key) => match peeked_key.cmp(max_key) {
                             Ordering::Greater => {
                                 max_value = Some(peeked_key);
-                                max_value_locations.clear();
-                                max_value_locations.push(DataLocation::Snapshot(idx));
+                                self.max_value_locations.clear();
+                                self.max_value_locations.push(DataLocation::Snapshot(idx));
                             }
                             Ordering::Equal => {
-                                max_value_locations.push(DataLocation::Snapshot(idx));
+                                self.max_value_locations.push(DataLocation::Snapshot(idx));
                             }
                             Ordering::Less => {}
                         },
@@ -151,38 +154,38 @@ impl<'a, S: Schema> Iterator for SnapshotManagerIter<'a, S> {
                 }
             }
 
-            if max_value_locations.is_empty() {
-                break;
-            }
+            if let Some(last_max_location) = self.max_value_locations.pop() {
+                // Move all iterators to next value
+                for location in &self.max_value_locations {
+                    match location {
+                        DataLocation::Db => {
+                            let _ = self.db_iter.next().unwrap();
+                        }
+                        Snapshot(idx) => {
+                            let _ = self.snapshot_iterators[*idx].next().unwrap();
+                        }
+                    }
+                }
 
-            let last_max_location = max_value_locations.pop().unwrap();
-
-            // Move all iterators to next value
-            for location in max_value_locations {
-                match location {
+                // Handle next value
+                match last_max_location {
                     DataLocation::Db => {
-                        let _ = self.db_iter.next().unwrap();
+                        let (key, value) = self.db_iter.next().unwrap();
+                        return Some((key, value));
                     }
                     Snapshot(idx) => {
-                        let _ = self.snapshot_iterators[idx].next().unwrap();
+                        let (key, operation) = self.snapshot_iterators[idx].next().unwrap();
+                        match operation {
+                            Operation::Put { value } => {
+                                return Some((key.to_vec(), value.to_vec()))
+                            }
+                            Operation::Delete => continue,
+                        }
                     }
-                }
+                };
+            } else {
+                break;
             }
-
-            // Handle next value
-            match last_max_location {
-                DataLocation::Db => {
-                    let (key, value) = self.db_iter.next().unwrap();
-                    return Some((key, value));
-                }
-                Snapshot(idx) => {
-                    let (key, operation) = self.snapshot_iterators[idx].next().unwrap();
-                    match operation {
-                        Operation::Put { value } => return Some((key.to_vec(), value.to_vec())),
-                        Operation::Delete => continue,
-                    }
-                }
-            };
         }
 
         None

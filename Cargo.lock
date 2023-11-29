@@ -9049,6 +9049,7 @@ dependencies = [
  "proptest",
  "proptest-derive",
  "rocksdb",
+ "sov-schema-db",
  "tempfile",
  "thiserror",
  "tracing",
