@@ -391,6 +391,38 @@ jobs:
         run: cargo run --bin bashtestmd -- --input examples/demo-rollup/README.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
+
+  check-demo-rollup-bash-commands-mock-da:
+    runs-on: buildjet-4vcpu-ubuntu-2204
+    needs: nextest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v3
+      - uses: rui314/setup-mold@v1
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+        with:
+          version: "23.2"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install cargo-risczero
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-risczero@0.19
+      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
+        run: cargo risczero install
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Rust
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-provider: "buildjet"
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
+      - name: Compile README.md to Bash
+        run: cargo run --bin bashtestmd -- --input examples/demo-rollup/README_MOCK_DA.md --output demo-rollup-readme.sh --tag test-ci
+      - run: cat demo-rollup-readme.sh
+      - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
+    
   validate-packages-to-publish-yml:
     runs-on: ubuntu-latest
     steps:
