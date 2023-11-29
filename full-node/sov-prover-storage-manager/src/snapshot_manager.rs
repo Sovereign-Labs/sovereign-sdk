@@ -121,47 +121,44 @@ impl<'a, S: Schema> Iterator for SnapshotManagerIter<'a, S> {
     fn next(&mut self) -> Option<Self::Item> {
         // Find max value
         loop {
-            let mut max_values: Vec<(DataLocation, &SchemaKey)> = vec![];
+            let mut max_value: Option<&SchemaKey> = None;
+            let mut max_value_locations: Vec<DataLocation> = vec![];
             let max_db_value = self.db_iter.peek();
             if let Some((db_key, _)) = max_db_value {
-                max_values.push((DataLocation::Db, db_key));
+                max_value_locations.push(DataLocation::Db);
+                max_value = Some(db_key);
             };
 
             for (idx, iter) in self.snapshot_iterators.iter_mut().enumerate() {
                 if let Some(&(peeked_key, _)) = iter.peek() {
-                    if max_values.is_empty() {
-                        max_values.push((DataLocation::Snapshot(idx), peeked_key));
-                    } else {
-                        let (_, max_key) = &max_values[0];
-                        match peeked_key.cmp(max_key) {
+                    match max_value {
+                        None => {
+                            max_value_locations.push(DataLocation::Snapshot(idx));
+                            max_value = Some(peeked_key);
+                        }
+                        Some(max_key) => match peeked_key.cmp(max_key) {
                             Ordering::Greater => {
-                                max_values.clear();
-                                max_values.push((DataLocation::Snapshot(idx), peeked_key));
+                                max_value = Some(peeked_key);
+                                max_value_locations.clear();
+                                max_value_locations.push(DataLocation::Snapshot(idx));
                             }
                             Ordering::Equal => {
-                                max_values.push((DataLocation::Snapshot(idx), peeked_key));
+                                max_value_locations.push(DataLocation::Snapshot(idx));
                             }
                             Ordering::Less => {}
-                        }
-                    }
+                        },
+                    };
                 }
             }
 
-            if max_values.is_empty() {
+            if max_value_locations.is_empty() {
                 break;
             }
 
-            // We don't need key anymore
-            let mut max_values: Vec<DataLocation> = max_values
-                .into_iter()
-                .map(|(location, _)| location)
-                .collect();
-
-            // Save location of max value to be probably returned
-            let last_max_location = max_values.pop().unwrap();
+            let last_max_location = max_value_locations.pop().unwrap();
 
             // Move all iterators to next value
-            for location in max_values {
+            for location in max_value_locations {
                 match location {
                     DataLocation::Db => {
                         let _ = self.db_iter.next().unwrap();
