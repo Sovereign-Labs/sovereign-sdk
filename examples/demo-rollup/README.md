@@ -45,7 +45,7 @@ If you are looking for a simple rollup with minimal dependencies as a starting p
 
 
 ### Run a local DA layer instance
-This setup works with in memory DA that is easy to setup for testing prupose.
+This setup works with an in-memory DA that is easy to set up for testing purposes.
 
 
 ### Start the Rollup Full Node
@@ -56,7 +56,7 @@ $ cd examples/demo-rollup/
 $ cargo build --bins
 ```
 
-4. Clean up existisng db. 
+2. Clean up existisng db. 
 Makefile to simplify that process:
 ```sh,test-ci
 $ make clean-mock-rollup-db
@@ -80,11 +80,9 @@ $ make test-create-token
 The `make test-create-token` command above was useful to test if everything is running correctly. Now let's get a better understanding of how to create and submit a transaction
 
 ### How to Submit Transactions
-
 The `make test-create-token` command above was useful to test if everything is running correctly. Now let's get a better understanding of how to create and submit a transaction.
 
 #### 1. Build `sov-cli`
-
 You'll need the `sov-cli` binary in order to create transactions. Build it with these commands:
 
 ```bash,test-ci,bashtestmd:compare-output

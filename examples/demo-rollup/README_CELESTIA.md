@@ -10,6 +10,9 @@ This is a demo full node running a simple Sovereign SDK rollup on [Celestia](htt
   <i>Join our <a href="https://discord.gg/kbykCcPrcA">Discord</a> and ask your questions in <code>#support</code>!</i>
 </p>
 
+You can follow the steps below to run the demo rollup on a local Celestia devnet instance. However, due to numerous users encountering failures because of basic local setup or Docker issues, we strongly suggest using the plain demo rollup with mock Data Availability (DA) for testing.
+We are developing more robust tooling to enable seamless deployment of rollups on any DA layer. Until this tooling is available, we will only support our early partners in deploying on devnets.
+
 #### Table of Contents
 
 <!-- https://github.com/thlorenz/doctoc -->
