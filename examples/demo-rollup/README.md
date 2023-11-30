@@ -371,7 +371,7 @@ $ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method"
 This response indicates that event `1` has not been emitted yet.
 
 ## Testing with specific DA layers
-Check [here](./README_CELESTIA.md) if you want to run with dockerized local celestia.
+Check [here](./README_CELESTIA.md) if you want to run with dockerized local Celestia instance.
 
 
 ## License
