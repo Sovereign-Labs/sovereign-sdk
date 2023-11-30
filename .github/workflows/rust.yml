@@ -364,7 +364,7 @@ jobs:
         # Exit status 0 means no changes were made, so the table of contents is
         # up to date.
         run: git diff --exit-code
-  check-demo-rollup-bash-commands-celestia:
+  check-demo-rollup-bash-commands:
     runs-on: buildjet-4vcpu-ubuntu-2204
     needs: nextest
     timeout-minutes: 60

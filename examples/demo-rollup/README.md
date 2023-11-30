@@ -56,7 +56,7 @@ $ cd examples/demo-rollup/
 $ cargo build --bins
 ```
 
-2. Clean up existisng db. 
+2. Clean up the existing database.
 Makefile to simplify that process:
 ```sh,test-ci
 $ make clean-mock-rollup-db
