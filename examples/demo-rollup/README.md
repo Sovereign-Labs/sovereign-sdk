@@ -8,6 +8,27 @@
   <i>Join our <a href="https://discord.gg/kbykCcPrcA">Discord</a> and ask your questions in <code>#support</code>!</i>
 </p>
 
+#### Table of Contents
+
+<!-- https://github.com/thlorenz/doctoc -->
+<!-- $ doctoc README.md --github --notitle -->
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [What is This?](#what-is-this)
+- [Getting Started](#getting-started)
+  - [Run a local DA layer instance](#run-a-local-da-layer-instance)
+  - [Start the Rollup Full Node](#start-the-rollup-full-node)
+  - [Sanity Check: Creating a Token](#sanity-check-creating-a-token)
+  - [How to Submit Transactions](#how-to-submit-transactions)
+  - [How to Submit Transactions](#how-to-submit-transactions-1)
+    - [1. Build `sov-cli`](#1-build-sov-cli)
+    - [2. Generate the Transaction](#2-generate-the-transaction)
+    - [Submit the Transaction(s)](#submit-the-transactions)
+    - [Verify the Token Supply](#verify-the-token-supply)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 ## What is This?
 This demo shows how to integrate a State Transition Function (STF) with a Data Availability (DA) layer and a zkVM to create a full
 zk-rollup. The code in this repository corresponds to running a full-node of the rollup, which executes
