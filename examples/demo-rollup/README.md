@@ -56,7 +56,6 @@ If you are looking for a simple rollup with minimal dependencies as a starting p
 
 ### Run a local DA layer instance
 This setup works with an in-memory DA that is easy to set up for testing purposes.
-Check [here](./README_CELESTIA.md) if you want to run with dockerized local celestia
 
 ### Start the Rollup Full Node
 1. Switch to the `examples/demo-rollup` and compile the application:
@@ -370,6 +369,10 @@ $ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method"
 ```
 
 This response indicates that event `1` has not been emitted yet.
+
+## Testing with specific DA layers
+Check [here](./README_CELESTIA.md) if you want to run with dockerized local celestia.
+
 
 ## License
 
