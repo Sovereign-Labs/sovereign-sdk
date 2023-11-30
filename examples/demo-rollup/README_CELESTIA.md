@@ -35,16 +35,6 @@ We are developing more robust tooling to enable seamless deployment of rollups o
 - [How to Customize This Example](#how-to-customize-this-example)
   - [1. Initialize the DA Service](#1-initialize-the-da-service)
   - [2. Run the Main Loop](#2-run-the-main-loop)
-- [Disclaimer](#disclaimer)
-- [Interacting with your Node via RPC](#interacting-with-your-node-via-rpc)
-  - [Key Concepts](#key-concepts)
-  - [RPC Methods](#rpc-methods)
-    - [`ledger_getHead`](#ledger_gethead)
-    - [`ledger_getSlots`](#ledger_getslots)
-    - [`ledger_getBatches`](#ledger_getbatches)
-    - [`ledger_getTransactions`](#ledger_gettransactions)
-    - [`ledger_getEvents`](#ledger_getevents)
-- [License](#license)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
