@@ -3,7 +3,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::digest::Digest;
 use sov_modules_api::prelude::*;
 use sov_modules_api::{Address, Context, Module, Spec, WorkingSet};
-use sov_state::ProverStorage;
+use sov_prover_storage_manager::new_orphan_storage;
 
 use crate::ProverIncentives;
 
@@ -72,7 +72,7 @@ fn setup(working_set: &mut WorkingSet<C>) -> (ProverIncentives<C, MockZkvm>, Add
 #[test]
 fn test_burn_on_invalid_proof() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let (module, prover_address, sequencer) = setup(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
@@ -108,7 +108,7 @@ fn test_burn_on_invalid_proof() {
 #[test]
 fn test_valid_proof() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let (module, prover_address, sequencer) = setup(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
@@ -144,7 +144,7 @@ fn test_valid_proof() {
 #[test]
 fn test_unbonding() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let (module, prover_address, sequencer) = setup(&mut working_set);
     let context = DefaultContext::new(prover_address, sequencer, 1);
     let token_address = module
@@ -195,7 +195,7 @@ fn test_unbonding() {
 #[test]
 fn test_prover_not_bonded() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let (module, prover_address, sequencer) = setup(&mut working_set);
     let context = DefaultContext::new(prover_address, sequencer, 1);
 

@@ -127,12 +127,12 @@ impl DaService for RngDaService {
                 .expect("TXNS_PER_BLOCK var should be a +ve number");
         }
 
-        let data = if block.header().height() == 0 {
+        let data = if block.header().height() == 1 {
             // creating the token
-            generate_create(0)
+            generate_create_token_payload(0)
         } else {
             // generating the transfer transactions
-            generate_transfers(num_txns, (block.header.height() - 1) * (num_txns as u64))
+            generate_transfers(num_txns, (block.header.height() - 2) * (num_txns as u64))
         };
 
         let address = MockAddress::from(MOCK_SEQUENCER_DA_ADDRESS);
@@ -219,7 +219,7 @@ pub fn generate_transfers(n: usize, start_nonce: u64) -> Vec<u8> {
     message_vec.try_to_vec().unwrap()
 }
 
-pub fn generate_create(start_nonce: u64) -> Vec<u8> {
+pub fn generate_create_token_payload(start_nonce: u64) -> Vec<u8> {
     let mut message_vec = vec![];
 
     let (minter_address, pk) = sender_address_with_pkey();

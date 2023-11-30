@@ -15,8 +15,6 @@ pub use prover_storage::ProverStorage;
 pub use zk_storage::ZkStorage;
 
 pub mod config;
-#[cfg(feature = "native")]
-pub mod storage_manager;
 
 pub use sov_modules_core::{
     storage, AlignedVec, CacheLog, OrderedReadsAndWrites, Prefix, Storage, StorageInternalCache,

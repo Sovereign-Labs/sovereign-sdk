@@ -59,10 +59,6 @@ pub mod da {
     pub use sov_rollup_interface::da::{BlockHeaderTrait, NanoSeconds, Time};
 }
 
-pub mod storage {
-    pub use sov_rollup_interface::storage::StorageManager;
-}
-
 /// A type that can't be instantiated.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]

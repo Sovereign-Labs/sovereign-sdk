@@ -1,7 +1,8 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::*;
-use sov_state::{ArrayWitness, DefaultStorageSpec, Prefix, ProverStorage, Storage, ZkStorage};
+use sov_prover_storage_manager::new_orphan_storage;
+use sov_state::{ArrayWitness, DefaultStorageSpec, Prefix, Storage, ZkStorage};
 
 enum Operation {
     Merge,
@@ -89,9 +90,8 @@ fn create_state_map(
 
 #[test]
 fn test_state_map_with_remove() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
-    let storage = ProverStorage::with_path(path).unwrap();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     for (before_remove, after_remove) in create_storage_operations() {
         let key = 1;
         let value = 11;
@@ -108,9 +108,8 @@ fn test_state_map_with_remove() {
 
 #[test]
 fn test_state_map_with_delete() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
-    let storage = ProverStorage::with_path(path).unwrap();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     for (before_delete, after_delete) in create_storage_operations() {
         let key = 1;
         let value = 11;
@@ -133,9 +132,8 @@ fn create_state_value(value: u32, working_set: &mut WorkingSet<DefaultContext>) 
 
 #[test]
 fn test_state_value_with_remove() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
-    let storage = ProverStorage::with_path(path).unwrap();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     for (before_remove, after_remove) in create_storage_operations() {
         let value = 11;
         let mut working_set = WorkingSet::new(storage.clone());
@@ -151,9 +149,8 @@ fn test_state_value_with_remove() {
 
 #[test]
 fn test_state_value_with_delete() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
-    let storage = ProverStorage::with_path(path).unwrap();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     for (before_delete, after_delete) in create_storage_operations() {
         let value = 11;
         let mut working_set = WorkingSet::new(storage.clone());
@@ -170,12 +167,12 @@ fn test_state_value_with_delete() {
 #[test]
 fn test_witness_round_trip() {
     let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
     let state_value = StateValue::new(Prefix::new(vec![0]));
 
     // Native execution
     let witness: ArrayWitness = {
-        let storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
+        let storage = new_orphan_storage::<DefaultStorageSpec>(tempdir.path()).unwrap();
+        // let storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
         let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(storage.clone());
         state_value.set(&11, &mut working_set);
         let _ = state_value.get(&mut working_set);
@@ -214,9 +211,8 @@ fn create_state_vec<T: BorshDeserialize + BorshSerialize>(
 
 #[test]
 fn test_state_vec_len() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
-    let storage = ProverStorage::with_path(path).unwrap();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     for (before_len, after_len) in create_storage_operations() {
         let values = vec![11, 22, 33];
         let mut working_set = WorkingSet::new(storage.clone());
@@ -232,9 +228,8 @@ fn test_state_vec_len() {
 
 #[test]
 fn test_state_vec_get() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
-    let storage = ProverStorage::with_path(path).unwrap();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     for (before_get, after_get) in create_storage_operations() {
         let values = vec![56, 55, 54];
         let mut working_set = WorkingSet::new(storage.clone());
@@ -263,9 +258,8 @@ fn test_state_vec_get() {
 
 #[test]
 fn test_state_vec_set() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
-    let storage = ProverStorage::with_path(path).unwrap();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     for (before_set, after_set) in create_storage_operations() {
         let values = vec![56, 55, 54];
         let mut working_set = WorkingSet::new(storage.clone());
@@ -293,9 +287,8 @@ fn test_state_vec_set() {
 
 #[test]
 fn test_state_vec_push() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
-    let storage = ProverStorage::with_path(path).unwrap();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     for (before_push, after_push) in create_storage_operations() {
         let values = vec![56, 55, 54];
         let mut working_set = WorkingSet::new(storage.clone());
@@ -320,9 +313,8 @@ fn test_state_vec_push() {
 
 #[test]
 fn test_state_vec_pop() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
-    let storage = ProverStorage::with_path(path).unwrap();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     for (before_pop, after_pop) in create_storage_operations() {
         let values = vec![56, 55, 54];
         let mut working_set = WorkingSet::new(storage.clone());
@@ -349,9 +341,8 @@ fn test_state_vec_pop() {
 
 #[test]
 fn test_state_vec_set_all() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
-    let storage = ProverStorage::with_path(path).unwrap();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     for (before_set_all, after_set_all) in create_storage_operations() {
         let values = vec![56, 55, 54];
         let mut working_set = WorkingSet::new(storage.clone());
@@ -382,9 +373,8 @@ fn test_state_vec_set_all() {
 
 #[test]
 fn test_state_vec_diff_type() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
-    let storage = ProverStorage::with_path(path).unwrap();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     for (before_ops, after_ops) in create_storage_operations() {
         let values = vec![String::from("Hello"), String::from("World")];
         let mut working_set = WorkingSet::new(storage.clone());

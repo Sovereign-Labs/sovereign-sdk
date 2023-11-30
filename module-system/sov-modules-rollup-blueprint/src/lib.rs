@@ -12,11 +12,13 @@ use sov_modules_api::runtime::capabilities::Kernel;
 use sov_modules_api::{Context, DaSpec, Spec};
 use sov_modules_stf_blueprint::{Runtime as RuntimeTrait, StfBlueprint};
 use sov_rollup_interface::services::da::DaService;
-use sov_rollup_interface::storage::StorageManager;
+use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage::NativeStorage;
 use sov_state::Storage;
-use sov_stf_runner::{ProverService, RollupConfig, RollupProverConfig, StateTransitionRunner};
+use sov_stf_runner::{
+    InitVariant, ProverService, RollupConfig, RollupProverConfig, StateTransitionRunner,
+};
 use tokio::sync::oneshot;
 pub use wallet::*;
 
@@ -39,9 +41,10 @@ pub trait RollupBlueprint: Sized + Send + Sync {
     type NativeContext: Context;
 
     /// Manager for the native storage lifecycle.
-    type StorageManager: StorageManager<
+    type StorageManager: HierarchicalStorageManager<
+        Self::DaSpec,
         NativeStorage = <Self::NativeContext as Spec>::Storage,
-        NativeChangeSet = (),
+        NativeChangeSet = <Self::NativeContext as Spec>::Storage,
     >;
 
     /// Runtime for the Zero Knowledge environment.
@@ -95,7 +98,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
         da_service: &Self::DaService,
     ) -> Self::ProverService;
 
-    /// Creates instance of [`StorageManager`].
+    /// Creates instance of [`Self::StorageManager`].
     /// Panics if initialization fails.
     fn create_storage_manager(
         &self,
@@ -118,22 +121,34 @@ pub trait RollupBlueprint: Sized + Send + Sync {
         <Self::NativeContext as Spec>::Storage: NativeStorage,
     {
         let da_service = self.create_da_service(&rollup_config).await;
+        // TODO: Double check what kind of storage needed here.
+        // Maybe whole "prev_root" can be initialized inside runner
+        // Getting block here, so prover_service doesn't have to be `Send`
+        let last_finalized_block_header = da_service.get_last_finalized_block_header().await?;
         let prover_service = self.create_prover_service(prover_config, &da_service).await;
 
         let ledger_db = self.create_ledger_db(&rollup_config);
         let genesis_config = self.create_genesis_config(genesis_paths, &rollup_config)?;
 
-        let storage_manager = self.create_storage_manager(&rollup_config)?;
-        let native_storage = storage_manager.get_native_storage();
+        let mut storage_manager = self.create_storage_manager(&rollup_config)?;
+        let prover_storage = storage_manager.create_finalized_storage()?;
 
         let prev_root = ledger_db
             .get_head_slot()?
-            .map(|(number, _)| native_storage.get_root_hash(number.0))
+            .map(|(number, _)| prover_storage.get_root_hash(number.0))
             .transpose()?;
 
-        let rpc_methods = self.create_rpc_methods(&native_storage, &ledger_db, &da_service)?;
+        // TODO(https://github.com/Sovereign-Labs/sovereign-sdk/issues/1218)
+        let rpc_methods = self.create_rpc_methods(&prover_storage, &ledger_db, &da_service)?;
 
         let native_stf = StfBlueprint::new();
+
+        let init_variant = match prev_root {
+            Some(root_hash) => InitVariant::Initialized(root_hash),
+            None => InitVariant::Genesis {
+                genesis_block_header: last_finalized_block_header.clone(),
+            },
+        };
 
         let runner = StateTransitionRunner::new(
             rollup_config.runner,
@@ -141,7 +156,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
             ledger_db,
             native_stf,
             storage_manager,
-            prev_root,
+            init_variant,
             genesis_config,
             prover_service,
         )?;

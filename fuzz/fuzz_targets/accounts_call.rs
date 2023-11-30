@@ -10,7 +10,8 @@ use rand::{RngCore, SeedableRng};
 use sov_accounts::{AccountConfig, Accounts, CallMessage, UPDATE_ACCOUNT_MSG};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::{Context, Module, PrivateKey, Spec, WorkingSet};
+use sov_modules_api::{Context, Module, PrivateKey, WorkingSet};
+use sov_prover_storage_manager::new_orphan_storage;
 
 type C = DefaultContext;
 
@@ -39,7 +40,7 @@ fuzz_target!(|input: (u16, [u8; 32], [u8; 32], Vec<DefaultPrivateKey>)| -> Corpu
     let rng = &mut StdRng::from_seed(seed);
     let mut seed = [0u8; 32];
     let tmpdir = tempfile::tempdir().unwrap();
-    let storage = <C as Spec>::Storage::with_path(tmpdir.path()).unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     let working_set = &mut WorkingSet::new(storage);
 
     let sequencer = <C as Spec>::Address::from(sequencer);

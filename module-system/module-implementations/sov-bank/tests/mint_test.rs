@@ -3,17 +3,18 @@ use sov_bank::{get_token_address, Bank, BankConfig, CallMessage, Coins, TotalSup
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Address, Context, Error, Module, WorkingSet};
+use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
 use sov_state::{DefaultStorageSpec, ProverStorage};
 
 mod helpers;
 
-pub type Storage = ProverStorage<DefaultStorageSpec>;
+pub type Storage = ProverStorage<DefaultStorageSpec, SnapshotManager>;
 
 #[test]
 fn mint_token() {
     let bank = Bank::<C>::default();
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let empty_bank_config = BankConfig::<C> { tokens: vec![] };
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 

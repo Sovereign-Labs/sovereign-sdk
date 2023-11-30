@@ -19,6 +19,7 @@ sov-modules-api = { path = "../module-system/sov-modules-api", features = ["arbi
 sov-accounts = { path = "../module-system/module-implementations/sov-accounts", features = ["arbitrary", "native"] }
 sov-bank = { path = "../module-system/module-implementations/sov-bank", features = ["native"] }
 sov-state = { path = "../module-system/sov-state" }
+sov-prover-storage-manager = { path = "../full-node/sov-prover-storage-manager", features = ["test-utils"] }
 
 # Prevent this from interfering with workspaces.
 [workspace]

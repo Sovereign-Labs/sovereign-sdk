@@ -57,6 +57,7 @@ sov-evm = { path = ".", features = ["smart_contracts"] }
 tokio = { workspace = true }
 tempfile = { workspace = true }
 bytes = { workspace = true }
+sov-prover-storage-manager = { path = "../../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
 
 
 [features]

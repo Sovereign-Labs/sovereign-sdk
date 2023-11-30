@@ -4,8 +4,8 @@ use sov_mock_zkvm::{MockCodeCommitment, MockProof, MockZkvm};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::prelude::*;
 use sov_modules_api::{Context, WorkingSet};
+use sov_prover_storage_manager::new_orphan_storage;
 use sov_rollup_interface::zk::StateTransition;
-use sov_state::ProverStorage;
 
 use crate::call::{AttesterIncentiveErrors, SlashingReason};
 use crate::tests::helpers::{
@@ -17,7 +17,7 @@ use crate::tests::helpers::{
 #[test]
 fn test_valid_challenge() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(storage.clone());
     let (module, token_address, attester_address, challenger_address, sequencer) =
         setup(&mut working_set);
@@ -169,7 +169,7 @@ fn invalid_proof_helper(
 #[test]
 fn test_invalid_challenge() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(storage.clone());
     let (module, _token_address, attester_address, challenger_address, sequencer) =
         setup(&mut working_set);

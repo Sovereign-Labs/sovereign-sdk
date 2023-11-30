@@ -27,9 +27,9 @@ thiserror = { workspace = true }
 [dev-dependencies]
 byteorder = { workspace = true, default-features = true }
 tempfile = { workspace = true }
-sov-schema-db = { path = ".", features = ["test_helpers"] }
+sov-schema-db = { path = ".", features = ["test-utils"] }
 
 [features]
 default = []
-test_helpers = ["dep:byteorder"]
+test-utils = ["dep:byteorder"]
 arbitrary = ["dep:proptest", "dep:proptest-derive"]

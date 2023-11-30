@@ -30,3 +30,4 @@ sov-modules-stf-blueprint = { path = "../../sov-modules-stf-blueprint", features
 
 sov-chain-state = { path = "../sov-chain-state", features = ["native"] }
 sov-value-setter = { path = "../examples/sov-value-setter", features = ["native"] }
+sov-prover-storage-manager = { path = "../../../full-node/sov-prover-storage-manager", features = ["test-utils"] }

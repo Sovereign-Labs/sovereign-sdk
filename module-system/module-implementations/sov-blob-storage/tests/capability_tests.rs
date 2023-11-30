@@ -10,6 +10,7 @@ use sov_modules_api::runtime::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::{
     Address, BlobReaderTrait, Context, DaSpec, DispatchCall, MessageCodec, Module, Spec, WorkingSet,
 };
+use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
 use sov_sequencer_registry::SequencerConfig;
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
 
@@ -679,10 +680,14 @@ struct TestRuntime<C: Context, Da: DaSpec> {
 impl TestRuntime<DefaultContext, MockDaSpec> {
     pub fn pre_initialized(
         with_preferred_sequencer: bool,
-    ) -> (ProverStorage<DefaultStorageSpec>, Self, jmt::RootHash) {
+    ) -> (
+        ProverStorage<DefaultStorageSpec, SnapshotManager>,
+        Self,
+        jmt::RootHash,
+    ) {
         use sov_modules_api::Genesis;
         let tmpdir = tempfile::tempdir().unwrap();
-        let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
+        let storage = new_orphan_storage(tmpdir.path()).unwrap();
 
         let genesis_config = Self::build_genesis_config(with_preferred_sequencer);
         let runtime: Self = Default::default();

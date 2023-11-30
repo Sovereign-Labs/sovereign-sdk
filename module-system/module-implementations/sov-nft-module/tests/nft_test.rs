@@ -3,7 +3,8 @@ use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::{Context, Module, WorkingSet};
 use sov_nft_module::utils::get_collection_address;
 use sov_nft_module::{CallMessage, NonFungibleToken, OwnerAddress, UserAddress};
-use sov_state::{DefaultStorageSpec, ProverStorage};
+use sov_prover_storage_manager::new_orphan_storage;
+use sov_state::DefaultStorageSpec;
 
 const PK1: [u8; 32] = [
     199, 23, 116, 41, 227, 173, 69, 178, 7, 24, 164, 151, 88, 149, 52, 187, 102, 167, 163, 248, 38,
@@ -37,8 +38,8 @@ fn mints_and_transfers() {
         get_collection_address::<DefaultContext>(collection_name, creator_address.as_ref());
 
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set =
-        WorkingSet::new(ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap());
+    let storage = new_orphan_storage::<DefaultStorageSpec>(tmpdir.path()).unwrap();
+    let mut working_set = WorkingSet::new(storage);
     let nft = NonFungibleToken::default();
 
     let create_collection_message = CallMessage::CreateCollection {

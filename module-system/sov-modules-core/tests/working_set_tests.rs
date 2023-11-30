@@ -4,15 +4,14 @@ use sov_modules_core::capabilities::mocks::MockKernel;
 use sov_modules_core::{
     Address, Context, KernelWorkingSet, StateReaderAndWriter, StorageKey, StorageValue, WorkingSet,
 };
+use sov_prover_storage_manager::new_orphan_storage;
 use sov_state::codec::BcsCodec;
-use sov_state::ProverStorage;
 
 #[test]
 fn test_workingset_get() {
     let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
     let codec = BcsCodec {};
-    let storage = ProverStorage::<sov_state::DefaultStorageSpec>::with_path(path).unwrap();
+    let storage = new_orphan_storage(tempdir.path()).unwrap();
 
     let prefix = sov_modules_core::Prefix::new(vec![1, 2, 3]);
     let storage_key = StorageKey::new(&prefix, &vec![4, 5, 6], &codec);
@@ -27,9 +26,8 @@ fn test_workingset_get() {
 #[test]
 fn test_versioned_workingset_get() {
     let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
     let codec = BcsCodec {};
-    let storage = ProverStorage::<sov_state::DefaultStorageSpec>::with_path(path).unwrap();
+    let storage = new_orphan_storage(tempdir.path()).unwrap();
 
     let prefix = sov_modules_core::Prefix::new(vec![1, 2, 3]);
     let storage_key = StorageKey::new(&prefix, &vec![4, 5, 6], &codec);
@@ -47,9 +45,8 @@ fn test_versioned_workingset_get() {
 #[test]
 fn test_kernel_workingset_get() {
     let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
     let codec = BcsCodec {};
-    let storage = ProverStorage::<sov_state::DefaultStorageSpec>::with_path(path).unwrap();
+    let storage = new_orphan_storage(tempdir.path()).unwrap();
 
     let prefix = sov_modules_core::Prefix::new(vec![1, 2, 3]);
     let storage_key = StorageKey::new(&prefix, &vec![4, 5, 6], &codec);

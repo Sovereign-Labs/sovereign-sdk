@@ -3,11 +3,9 @@ use sov_mock_da::{MockBlock, MockBlockHeader, MockDaSpec, MockValidityCond};
 use sov_modules_api::da::{BlockHeaderTrait, Time};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
-use sov_modules_api::storage::StorageManager;
 use sov_modules_api::{Genesis, WorkingSet};
-use sov_state::config::Config;
-use sov_state::storage_manager::ProverStorageManager;
-use sov_state::{DefaultStorageSpec, Storage};
+use sov_prover_storage_manager::new_orphan_storage;
+use sov_state::Storage;
 
 /// This simply tests that the chain_state reacts properly with the invocation of the `begin_slot`
 /// hook. For more complete integration tests, feel free to have a look at the integration tests folder.
@@ -18,13 +16,7 @@ fn test_simple_chain_state() {
     // Initialize the module.
     let tmpdir = tempfile::tempdir().unwrap();
 
-    let storage_manager: ProverStorageManager<DefaultStorageSpec> =
-        ProverStorageManager::new(Config {
-            path: tmpdir.path().to_path_buf(),
-        })
-        .unwrap();
-
-    let storage = storage_manager.get_native_storage();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
 
     let mut working_set = WorkingSet::new(storage.clone());
 

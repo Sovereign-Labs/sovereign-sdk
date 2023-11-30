@@ -2,11 +2,12 @@ use simple_nft_module::{CallMessage, NonFungibleToken, NonFungibleTokenConfig, O
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address as gen_addr_generic;
 use sov_modules_api::{Address, Context, Module, WorkingSet};
+use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
 use sov_rollup_interface::stf::Event;
 use sov_state::{DefaultStorageSpec, ProverStorage};
 
 pub type C = DefaultContext;
-pub type Storage = ProverStorage<DefaultStorageSpec>;
+pub type Storage = ProverStorage<DefaultStorageSpec, SnapshotManager>;
 fn generate_address(name: &str) -> Address {
     gen_addr_generic::<DefaultContext>(name)
 }
@@ -24,7 +25,7 @@ fn genesis_and_mint() {
     };
 
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let nft = NonFungibleToken::default();
 
     // Genesis
@@ -72,8 +73,7 @@ fn transfer() {
         owners: vec![(0, admin), (1, owner1), (2, owner2)],
     };
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set: WorkingSet<C> =
-        WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let nft = NonFungibleToken::default();
     nft.genesis(&config, &mut working_set).unwrap();
 
@@ -129,8 +129,7 @@ fn burn() {
     };
 
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set: WorkingSet<C> =
-        WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let nft = NonFungibleToken::default();
     nft.genesis(&config, &mut working_set).unwrap();
 

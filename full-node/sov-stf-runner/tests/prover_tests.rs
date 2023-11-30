@@ -10,7 +10,7 @@ use sov_stf_runner::{
 };
 
 #[tokio::test]
-async fn test_sucesfull_prover_execution() -> Result<(), ProverServiceError> {
+async fn test_successful_prover_execution() -> Result<(), ProverServiceError> {
     let TestProver {
         prover_service, vm, ..
     } = make_new_prover();

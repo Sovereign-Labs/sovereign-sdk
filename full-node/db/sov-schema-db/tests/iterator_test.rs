@@ -5,14 +5,12 @@ use std::sync::{Arc, RwLock};
 
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 use sov_schema_db::schema::{KeyDecoder, KeyEncoder, ValueCodec};
-use sov_schema_db::snapshot::{DbSnapshot, ReadOnlyLock};
+use sov_schema_db::snapshot::{DbSnapshot, ReadOnlyLock, SingleSnapshotQueryManager};
 use sov_schema_db::test::{KeyPrefix1, KeyPrefix2, TestCompositeField, TestField};
-use sov_schema_db::{define_schema, Operation, Schema, SchemaBatch, SchemaIterator, DB};
+use sov_schema_db::{
+    define_schema, Operation, Schema, SchemaBatch, SchemaIterator, SeekKeyEncoder, DB,
+};
 use tempfile::TempDir;
-
-use crate::liner_snapshot_manager::LinearSnapshotManager;
-
-mod liner_snapshot_manager;
 
 define_schema!(TestSchema, TestCompositeField, TestField, "TestCF");
 
@@ -287,21 +285,90 @@ fn test_schema_batch_iteration_with_deletions() {
 }
 
 #[test]
-fn test_db_snapshot_get_last_value() {
-    let manager = Arc::new(RwLock::new(LinearSnapshotManager::default()));
+fn test_schema_batch_iter_range() {
+    let mut batch = SchemaBatch::new();
 
-    let snapshot_1 =
-        DbSnapshot::<LinearSnapshotManager>::new(0, ReadOnlyLock::new(manager.clone()));
+    batch
+        .put::<S>(&TestCompositeField(8, 0, 0), &TestField(5))
+        .unwrap();
+    batch.delete::<S>(&TestCompositeField(9, 0, 0)).unwrap();
+    batch
+        .put::<S>(&TestCompositeField(8, 1, 0), &TestField(3))
+        .unwrap();
+
+    batch
+        .put::<S>(&TestCompositeField(11, 0, 0), &TestField(6))
+        .unwrap();
+    batch
+        .put::<S>(&TestCompositeField(13, 0, 0), &TestField(2))
+        .unwrap();
+    batch
+        .put::<S>(&TestCompositeField(12, 0, 0), &TestField(1))
+        .unwrap();
+
+    let seek_key =
+        <TestCompositeField as SeekKeyEncoder<S>>::encode_seek_key(&TestCompositeField(11, 0, 0))
+            .unwrap();
+
+    let mut iter = batch.iter_range::<S>(seek_key);
+
+    assert_eq!(
+        Some((
+            &encode_key(&TestCompositeField(11, 0, 0)),
+            &Operation::Put {
+                value: encode_value(&TestField(6))
+            }
+        )),
+        iter.next()
+    );
+    assert_eq!(
+        Some((
+            &encode_key(&TestCompositeField(9, 0, 0)),
+            &Operation::Delete
+        )),
+        iter.next()
+    );
+    assert_eq!(
+        Some((
+            &encode_key(&TestCompositeField(8, 1, 0)),
+            &Operation::Put {
+                value: encode_value(&TestField(3))
+            }
+        )),
+        iter.next()
+    );
+    assert_eq!(
+        Some((
+            &encode_key(&TestCompositeField(8, 0, 0)),
+            &Operation::Put {
+                value: encode_value(&TestField(5))
+            }
+        )),
+        iter.next()
+    );
+    assert_eq!(None, iter.next());
+}
+
+#[test]
+fn test_db_snapshot_get_last_value() {
+    let manager = Arc::new(RwLock::new(SingleSnapshotQueryManager::default()));
+
+    let snapshot_1 = DbSnapshot::new(0, ReadOnlyLock::new(manager.clone()));
 
     assert!(snapshot_1.get_largest::<S>().unwrap().is_none());
 
-    snapshot_1
-        .put::<S>(&TestCompositeField(8, 2, 3), &TestField(6))
-        .unwrap();
+    let key_1 = TestCompositeField(8, 2, 3);
+    let value_1 = TestField(6);
+
+    snapshot_1.put::<S>(&key_1, &value_1).unwrap();
 
     {
-        let latest = snapshot_1.get_largest::<S>().unwrap();
-        assert_eq!(Some(TestField(6)), latest);
+        let (latest_key, latest_value) = snapshot_1
+            .get_largest::<S>()
+            .unwrap()
+            .expect("largest key-value pair should be found");
+        assert_eq!(key_1, latest_key);
+        assert_eq!(value_1, latest_value);
     }
 
     {
@@ -309,59 +376,69 @@ fn test_db_snapshot_get_last_value() {
         manager.add_snapshot(snapshot_1.into());
     }
 
-    let snapshot_2 =
-        DbSnapshot::<LinearSnapshotManager>::new(1, ReadOnlyLock::new(manager.clone()));
+    let snapshot_2 = DbSnapshot::new(1, ReadOnlyLock::new(manager.clone()));
 
     {
-        let latest = snapshot_2.get_largest::<S>().unwrap();
-        assert_eq!(Some(TestField(6)), latest);
+        let (latest_key, latest_value) = snapshot_2
+            .get_largest::<S>()
+            .unwrap()
+            .expect("largest key-value pair should be found");
+        assert_eq!(key_1, latest_key);
+        assert_eq!(value_1, latest_value);
     }
 
-    snapshot_2
-        .put::<S>(&TestCompositeField(8, 1, 3), &TestField(7))
-        .unwrap();
+    let key_2 = TestCompositeField(8, 1, 3);
+    let value_2 = TestField(7);
+    snapshot_2.put::<S>(&key_2, &value_2).unwrap();
     {
-        let latest = snapshot_2.get_largest::<S>().unwrap();
-        assert_eq!(Some(TestField(6)), latest);
+        let (latest_key, latest_value) = snapshot_2
+            .get_largest::<S>()
+            .unwrap()
+            .expect("largest key-value pair should be found");
+        assert_eq!(key_1, latest_key);
+        assert_eq!(value_1, latest_value);
     }
+
     // Largest value from local is picked up
-    snapshot_2
-        .put::<S>(&TestCompositeField(8, 3, 1), &TestField(8))
-        .unwrap();
+    let key_3 = TestCompositeField(8, 3, 1);
+    let value_3 = TestField(8);
+    snapshot_2.put::<S>(&key_3, &value_3).unwrap();
     {
-        let latest = snapshot_2.get_largest::<S>().unwrap();
-        assert_eq!(Some(TestField(8)), latest);
+        let (latest_key, latest_value) = snapshot_2
+            .get_largest::<S>()
+            .unwrap()
+            .expect("largest key-value pair should be found");
+        assert_eq!(key_3, latest_key);
+        assert_eq!(value_3, latest_value);
     }
 
     // Deletion: Previous "largest" value is returned
-    snapshot_2
-        .delete::<S>(&TestCompositeField(8, 3, 1))
-        .unwrap();
+    snapshot_2.delete::<S>(&key_3).unwrap();
     {
-        let latest = snapshot_2.get_largest::<S>().unwrap();
-        assert_eq!(Some(TestField(6)), latest);
+        let (latest_key, latest_value) = snapshot_2
+            .get_largest::<S>()
+            .unwrap()
+            .expect("large key-value pair should be found");
+        assert_eq!(key_1, latest_key);
+        assert_eq!(value_1, latest_value);
     }
 }
 
 #[test]
 fn test_db_snapshot_get_prev_value() {
-    let manager = Arc::new(RwLock::new(LinearSnapshotManager::default()));
+    let manager = Arc::new(RwLock::new(SingleSnapshotQueryManager::default()));
 
     // Snapshots 1 and 2 are to black box usages of parents iterator
-    let snapshot_1 =
-        DbSnapshot::<LinearSnapshotManager>::new(0, ReadOnlyLock::new(manager.clone()));
+    let snapshot_1 = DbSnapshot::new(0, ReadOnlyLock::new(manager.clone()));
 
-    assert!(snapshot_1
-        .get_prev::<S>(&TestCompositeField(8, 2, 3))
-        .unwrap()
-        .is_none());
+    let key_1 = TestCompositeField(8, 2, 3);
+    let key_2 = TestCompositeField(8, 2, 0);
+    let key_3 = TestCompositeField(8, 3, 2);
 
-    snapshot_1
-        .put::<S>(&TestCompositeField(8, 2, 0), &TestField(10))
-        .unwrap();
-    snapshot_1
-        .put::<S>(&TestCompositeField(8, 2, 3), &TestField(1))
-        .unwrap();
+    assert!(snapshot_1.get_prev::<S>(&key_1).unwrap().is_none());
+
+    snapshot_1.put::<S>(&key_2, &TestField(10)).unwrap();
+    snapshot_1.put::<S>(&key_1, &TestField(1)).unwrap();
     snapshot_1
         .put::<S>(&TestCompositeField(8, 1, 3), &TestField(11))
         .unwrap();
@@ -371,22 +448,19 @@ fn test_db_snapshot_get_prev_value() {
     snapshot_1
         .put::<S>(&TestCompositeField(8, 2, 5), &TestField(13))
         .unwrap();
-    snapshot_1
-        .put::<S>(&TestCompositeField(8, 3, 2), &TestField(14))
-        .unwrap();
+    snapshot_1.put::<S>(&key_3, &TestField(14)).unwrap();
 
     // Equal:
     assert_eq!(
-        Some(TestField(1)),
-        snapshot_1
-            .get_prev::<S>(&TestCompositeField(8, 2, 3))
-            .unwrap()
+        (key_1.clone(), TestField(1)),
+        snapshot_1.get_prev::<S>(&key_1).unwrap().unwrap()
     );
     // Previous: value from 8.2.0
     assert_eq!(
-        Some(TestField(10)),
+        (key_2.clone(), TestField(10)),
         snapshot_1
             .get_prev::<S>(&TestCompositeField(8, 2, 1))
+            .unwrap()
             .unwrap()
     );
 
@@ -395,72 +469,60 @@ fn test_db_snapshot_get_prev_value() {
         manager.add_snapshot(snapshot_1.into());
     }
 
-    let snapshot_2 =
-        DbSnapshot::<LinearSnapshotManager>::new(1, ReadOnlyLock::new(manager.clone()));
+    let snapshot_2 = DbSnapshot::new(1, ReadOnlyLock::new(manager.clone()));
     // Equal:
     assert_eq!(
-        Some(TestField(1)),
-        snapshot_2
-            .get_prev::<S>(&TestCompositeField(8, 2, 3))
-            .unwrap()
+        (key_1.clone(), TestField(1)),
+        snapshot_2.get_prev::<S>(&key_1).unwrap().unwrap()
     );
     // Previous: value from 8.2.0
     assert_eq!(
-        Some(TestField(10)),
+        (key_2.clone(), TestField(10)),
         snapshot_2
             .get_prev::<S>(&TestCompositeField(8, 2, 1))
             .unwrap()
+            .unwrap()
     );
-    snapshot_2
-        .put::<S>(&TestCompositeField(8, 2, 0), &TestField(20))
-        .unwrap();
-    snapshot_2
-        .put::<S>(&TestCompositeField(8, 2, 3), &TestField(2))
-        .unwrap();
+    snapshot_2.put::<S>(&key_2, &TestField(20)).unwrap();
+    snapshot_2.put::<S>(&key_1, &TestField(2)).unwrap();
     // Updated values are higher priority
     assert_eq!(
-        Some(TestField(2)),
-        snapshot_2
-            .get_prev::<S>(&TestCompositeField(8, 2, 3))
-            .unwrap()
+        (key_1.clone(), TestField(2)),
+        snapshot_2.get_prev::<S>(&key_1).unwrap().unwrap()
     );
     assert_eq!(
-        Some(TestField(20)),
+        (key_2.clone(), TestField(20)),
         snapshot_2
             .get_prev::<S>(&TestCompositeField(8, 2, 1))
             .unwrap()
-    );
-    snapshot_2
-        .delete::<S>(&TestCompositeField(8, 2, 3))
-        .unwrap();
-    assert_eq!(
-        Some(TestField(20)),
-        snapshot_2
-            .get_prev::<S>(&TestCompositeField(8, 2, 3))
             .unwrap()
+    );
+    snapshot_2.delete::<S>(&key_1).unwrap();
+    assert_eq!(
+        (key_2.clone(), TestField(20)),
+        snapshot_2.get_prev::<S>(&key_1).unwrap().unwrap()
     );
     {
         let mut manager = manager.write().unwrap();
         manager.add_snapshot(snapshot_2.into());
     }
-    let snapshot_3 =
-        DbSnapshot::<LinearSnapshotManager>::new(2, ReadOnlyLock::new(manager.clone()));
+    let snapshot_3 = DbSnapshot::new(2, ReadOnlyLock::new(manager.clone()));
     assert_eq!(
-        Some(TestField(20)),
+        (key_2.clone(), TestField(20)),
         snapshot_3
             .get_prev::<S>(&TestCompositeField(8, 2, 1))
             .unwrap()
-    );
-    assert_eq!(
-        Some(TestField(20)),
-        snapshot_3
-            .get_prev::<S>(&TestCompositeField(8, 2, 3))
             .unwrap()
     );
     assert_eq!(
-        Some(TestField(14)),
+        (key_2.clone(), TestField(20)),
+        snapshot_3.get_prev::<S>(&key_1).unwrap().unwrap()
+    );
+    assert_eq!(
+        (key_3, TestField(14)),
         snapshot_3
             .get_prev::<S>(&TestCompositeField(8, 3, 4))
+            .unwrap()
             .unwrap()
     );
 }

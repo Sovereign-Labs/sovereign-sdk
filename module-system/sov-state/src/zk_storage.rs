@@ -43,10 +43,6 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     type Root = jmt::RootHash;
     type StateUpdate = ();
 
-    fn with_config(_config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
-        Ok(Self::new())
-    }
-
     fn get(
         &self,
         _key: &StorageKey,

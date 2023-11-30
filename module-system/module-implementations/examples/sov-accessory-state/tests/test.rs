@@ -4,7 +4,8 @@ use sov_accessory_state::{AccessorySetter, CallMessage};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::prelude::*;
 use sov_modules_api::{Address, Context, Module, WorkingSet};
-use sov_state::{ProverStorage, Storage};
+use sov_prover_storage_manager::new_orphan_storage;
+use sov_state::Storage;
 
 #[test]
 /// Check that:
@@ -12,7 +13,7 @@ use sov_state::{ProverStorage, Storage};
 /// 2. Accessory state is saved to underlying the database
 fn test_accessory_value_setter() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     let mut working_set_for_state = WorkingSet::new(storage.clone());
     let mut working_set_for_accessory = WorkingSet::new(storage.clone());
     let mut working_set_for_check: WorkingSet<DefaultContext> = WorkingSet::new(storage.clone());

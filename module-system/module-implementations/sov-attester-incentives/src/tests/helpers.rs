@@ -8,6 +8,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Address, Genesis, Spec, ValidityConditionChecker, WorkingSet};
+use sov_prover_storage_manager::SnapshotManager;
 use sov_rollup_interface::da::Time;
 use sov_state::storage::{NativeStorage, Storage, StorageProof};
 use sov_state::{DefaultStorageSpec, ProverStorage};
@@ -26,7 +27,7 @@ pub const INIT_HEIGHT: u64 = 0;
 /// Consumes and commit the existing working set on the underlying storage
 /// `storage` must be the underlying storage defined on the working set for this method to work.
 pub(crate) fn commit_get_new_working_set(
-    storage: &ProverStorage<DefaultStorageSpec>,
+    storage: &ProverStorage<DefaultStorageSpec, SnapshotManager>,
     working_set: WorkingSet<C>,
 ) -> (jmt::RootHash, WorkingSet<C>) {
     let (reads_writes, witness) = working_set.checkpoint().freeze();
@@ -151,7 +152,7 @@ pub(crate) struct ExecutionSimulationVars {
 pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidityCond>>(
     rounds: u8,
     module: &AttesterIncentives<C, MockZkvm, MockDaSpec, Checker>,
-    storage: &ProverStorage<DefaultStorageSpec>,
+    storage: &ProverStorage<DefaultStorageSpec, SnapshotManager>,
     attester_address: <C as Spec>::Address,
     mut working_set: WorkingSet<C>,
 ) -> (

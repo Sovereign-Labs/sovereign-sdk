@@ -17,6 +17,14 @@ use crate::types::{MockAddress, MockBlob, MockBlock, MockDaVerifier};
 use crate::verifier::MockDaSpec;
 use crate::{MockBlockHeader, MockHash};
 
+const GENESIS_HEADER: MockBlockHeader = MockBlockHeader {
+    prev_hash: MockHash([0; 32]),
+    hash: MockHash([1; 32]),
+    height: 0,
+    // 2023-01-01T00:00:00Z
+    time: Time::from_secs(1672531200),
+};
+
 #[derive(Clone)]
 /// DaService used in tests.
 /// Currently only supports single blob per block.
@@ -84,7 +92,7 @@ impl MockDaService {
         let mut blocks = self.blocks.write().await;
 
         let (previous_block_hash, height) = match blocks.iter().last().map(|b| b.header().clone()) {
-            None => (MockHash::from([0; 32]), 0),
+            None => (GENESIS_HEADER.hash(), GENESIS_HEADER.height() + 1),
             Some(block_header) => (block_header.hash(), block_header.height + 1),
         };
 
@@ -114,24 +122,13 @@ impl MockDaService {
 
         // Enough blocks to finalize block
         if blocks.len() > self.blocks_to_finality as usize {
-            let oldest_available_height = blocks[0].header().height();
-            let last_finalized_height = self.last_finalized_height.load(Ordering::Acquire);
-            let last_finalized_index = last_finalized_height
-                .checked_sub(oldest_available_height)
-                .unwrap();
             let next_index_to_finalize = blocks.len() - self.blocks_to_finality as usize - 1;
-
-            if last_finalized_index > 0 {
-                assert_eq!(next_index_to_finalize as u64, last_finalized_index + 1);
-            }
-
-            self.finalized_header_sender
-                .send(blocks[next_index_to_finalize].header().clone())
-                .unwrap();
-
-            let this_finalized_height = oldest_available_height + next_index_to_finalize as u64;
+            let next_finalized_header = blocks[next_index_to_finalize].header().clone();
             self.last_finalized_height
-                .store(this_finalized_height, Ordering::Release);
+                .store(next_finalized_header.height(), Ordering::Release);
+            self.finalized_header_sender
+                .send(next_finalized_header)
+                .unwrap();
         }
 
         Ok(height)
@@ -179,6 +176,9 @@ impl DaService for MockDaService {
     /// It is possible to read non-finalized and last finalized blocks multiple times
     /// Finalized blocks must be read in order.
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
+        if height == 0 {
+            anyhow::bail!("The lowest queryable block should be > 0");
+        }
         // Block until there's something
         self.wait_for_height(height).await?;
         // Locking blocks here, so submissions has to wait
@@ -216,18 +216,10 @@ impl DaService for MockDaService {
     async fn get_last_finalized_block_header(
         &self,
     ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
-        let (blocks_len, oldest_available_height) = {
-            let blocks = self.blocks.read().await;
-            let blocks_len = blocks.len();
-            let oldest_available_height = blocks.get(0).map(|b| b.header().height()).unwrap_or(0);
-            (blocks_len, oldest_available_height)
-        };
+        let blocks_len = { self.blocks.read().await.len() };
         let last_finalized_height = self.last_finalized_height.load(Ordering::Acquire);
         if blocks_len < self.blocks_to_finality as usize + 1 {
-            let earliest_finalized_height = oldest_available_height
-                .checked_add(self.blocks_to_finality as u64)
-                .unwrap_or(0);
-            self.wait_for_height(earliest_finalized_height).await?;
+            return Ok(GENESIS_HEADER);
         }
 
         let blocks = self.blocks.read().await;
@@ -249,11 +241,11 @@ impl DaService for MockDaService {
     ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
         let blocks = self.blocks.read().await;
 
-        blocks
+        Ok(blocks
             .iter()
             .last()
             .map(|b| b.header().clone())
-            .ok_or(anyhow::anyhow!("MockChain is empty"))
+            .unwrap_or(GENESIS_HEADER))
     }
 
     fn extract_relevant_blobs(
@@ -326,17 +318,17 @@ mod tests {
         let mut da = MockDaService::new(MockAddress::new([1; 32]));
         da.wait_attempts = 10;
 
-        let last_finalized_block_response = da.get_last_finalized_block_header().await;
-        assert!(last_finalized_block_response.is_err());
+        let last_finalized_header = da.get_last_finalized_block_header().await.unwrap();
+        assert_eq!(GENESIS_HEADER, last_finalized_header);
+
+        let head_header = da.get_head_block_header().await.unwrap();
+        assert_eq!(GENESIS_HEADER, head_header);
+
+        let zero_block = da.get_block_at(0).await;
+        assert!(zero_block.is_err());
         assert_eq!(
-            "No blob at height=0 has been sent in time",
-            last_finalized_block_response.err().unwrap().to_string()
-        );
-        let head_block_header_response = da.get_head_block_header().await;
-        assert!(head_block_header_response.is_err());
-        assert_eq!(
-            "MockChain is empty",
-            head_block_header_response.err().unwrap().to_string()
+            "The lowest queryable block should be > 0",
+            zero_block.unwrap_err().to_string()
         );
     }
 
@@ -367,15 +359,11 @@ mod tests {
         blocks_to_finalization: u64,
         response: anyhow::Result<MockBlockHeader>,
     ) {
+        let finalized_header = response.unwrap();
         if let Some(expected_finalized_height) = submit_height.checked_sub(blocks_to_finalization) {
-            assert_eq!(expected_finalized_height, response.unwrap().height());
+            assert_eq!(expected_finalized_height, finalized_header.height());
         } else {
-            assert!(response.is_err());
-            assert!(response
-                .err()
-                .unwrap()
-                .to_string()
-                .starts_with("No blob at height="));
+            assert_eq!(GENESIS_HEADER, finalized_header);
         }
     }
 
@@ -388,25 +376,29 @@ mod tests {
 
         for i in 0..num_blocks {
             let published_blob: Vec<u8> = vec![i as u8; i + 1];
-            let i = i as u64;
+            let height = (i + 1) as u64;
 
             da.send_transaction(&published_blob).await.unwrap();
 
-            let mut block = da.get_block_at(i).await.unwrap();
+            let mut block = da.get_block_at(height).await.unwrap();
 
-            assert_eq!(i, block.header.height());
+            assert_eq!(height, block.header.height());
             assert_eq!(1, block.blobs.len());
             let blob = &mut block.blobs[0];
             let retrieved_data = blob.full_data().to_vec();
             assert_eq!(published_blob, retrieved_data);
 
             let last_finalized_block_response = da.get_last_finalized_block_header().await;
-            validate_get_finalized_header_response(i, finalization, last_finalized_block_response);
+            validate_get_finalized_header_response(
+                height,
+                finalization,
+                last_finalized_block_response,
+            );
         }
 
         let received = collector_handle.await.unwrap();
         let heights: Vec<u64> = received.iter().map(|h| h.height()).collect();
-        let expected_heights: Vec<u64> = (0..number_of_finalized_blocks as u64).collect();
+        let expected_heights: Vec<u64> = (1..=number_of_finalized_blocks as u64).collect();
         assert_eq!(expected_heights, heights);
     }
 
@@ -421,23 +413,27 @@ mod tests {
 
         // Submitting blobs first
         for (i, blob) in blobs.iter().enumerate() {
-            let i = i as u64;
+            let height = (i + 1) as u64;
             // Send transaction should pass
             da.send_transaction(blob).await.unwrap();
             let last_finalized_block_response = da.get_last_finalized_block_header().await;
-            validate_get_finalized_header_response(i, finalization, last_finalized_block_response);
+            validate_get_finalized_header_response(
+                height,
+                finalization,
+                last_finalized_block_response,
+            );
 
             let head_block_header = da.get_head_block_header().await.unwrap();
-            assert_eq!(i, head_block_header.height());
+            assert_eq!(height, head_block_header.height());
         }
 
         // Starts from 0
-        let expected_head_height = num_blocks as u64 - 1;
+        let expected_head_height = num_blocks as u64;
         let expected_finalized_height = expected_head_height - finalization;
 
         // Then read
         for (i, blob) in blobs.into_iter().enumerate() {
-            let i = i as u64;
+            let i = (i + 1) as u64;
 
             let mut fetched_block = da.get_block_at(i).await.unwrap();
             assert_eq!(i, fetched_block.header().height());
@@ -453,7 +449,8 @@ mod tests {
 
         let received = collector_handle.await.unwrap();
         let finalized_heights: Vec<u64> = received.iter().map(|h| h.height()).collect();
-        let expected_finalized_heights: Vec<u64> = (0..number_of_finalized_blocks as u64).collect();
+        let expected_finalized_heights: Vec<u64> =
+            (1..=number_of_finalized_blocks as u64).collect();
         assert_eq!(expected_finalized_heights, finalized_heights);
     }
 

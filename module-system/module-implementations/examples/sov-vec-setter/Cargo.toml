@@ -13,8 +13,9 @@ resolver = "2"
 publish = false
 
 [dev-dependencies]
-sov-modules-api = { path = "../../../sov-modules-api", features = ["native", "macros"] }
 tempfile = { workspace = true }
+sov-modules-api = { path = "../../../sov-modules-api", features = ["native", "macros"] }
+sov-prover-storage-manager = { path = "../../../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
 
 [dependencies]
 anyhow = { workspace = true }

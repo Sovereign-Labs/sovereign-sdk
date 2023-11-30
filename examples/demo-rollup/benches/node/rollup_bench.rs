@@ -12,12 +12,13 @@ use sov_mock_da::{MockBlock, MockBlockHeader};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
 use sov_modules_stf_blueprint::StfBlueprint;
+use sov_prover_storage_manager::new_orphan_storage;
 use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rng_da_service::{RngDaService, RngDaSpec};
 use sov_rollup_interface::da::Time;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::storage::StorageManager;
+use sov_state::DefaultStorageSpec;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
 
@@ -47,8 +48,8 @@ fn rollup_bench(_bench: &mut Criterion) {
     let storage_config = sov_state::config::Config {
         path: rollup_config.storage.path,
     };
-    let storage_manager = sov_state::storage_manager::ProverStorageManager::new(storage_config)
-        .expect("Failed to initialize prover storage manager");
+    let storage = new_orphan_storage::<DefaultStorageSpec>(&storage_config.path)
+        .expect("Failed to initialize orphan ProverStorage");
     let stf = StfBlueprint::<
         DefaultContext,
         RngDaSpec,
@@ -62,8 +63,7 @@ fn rollup_bench(_bench: &mut Criterion) {
     ))
     .unwrap();
 
-    let (mut current_root, _) =
-        stf.init_chain(storage_manager.get_native_storage(), demo_genesis_config);
+    let (mut current_root, storage) = stf.init_chain(storage, demo_genesis_config);
 
     // data generation
     let mut blobs = vec![];
@@ -96,7 +96,7 @@ fn rollup_bench(_bench: &mut Criterion) {
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
             let apply_block_result = stf.apply_slot(
                 &current_root,
-                storage_manager.get_native_storage(),
+                storage.clone(),
                 Default::default(),
                 &filtered_block.header,
                 &filtered_block.validity_cond,

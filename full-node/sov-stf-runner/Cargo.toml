@@ -41,10 +41,11 @@ sov-sequencer = { path = "../sov-sequencer" }
 
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
-sov-stf-runner = {path = ".", features = ["mock"] }
+sov-stf-runner = { path = ".", features = ["mock"] }
 
 sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
 sov-mock-zkvm = { path = "../../adapters/mock-zkvm" }
+sov-prover-storage-manager = { path = "../sov-prover-storage-manager" }
 
 
 [features]

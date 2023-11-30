@@ -63,26 +63,55 @@ impl SchemaBatch {
 
     /// Iterate over all the writes in the batch for a given column family in reversed lexicographic order
     /// Returns None column family name does not have any writes
-    pub fn iter<S: Schema>(&self) -> SchemaBatchIterator<'_, S> {
+    pub fn iter<S: Schema>(
+        &self,
+    ) -> SchemaBatchIterator<'_, S, Rev<btree_map::Iter<SchemaKey, Operation>>> {
         let some_rows = self.last_writes.get(&S::COLUMN_FAMILY_NAME);
         SchemaBatchIterator {
             inner: some_rows.map(|rows| rows.iter().rev()),
             _phantom_schema: std::marker::PhantomData,
         }
     }
+
+    /// Return iterator that iterates from operations with largest_key == upper_bound backwards
+    pub fn iter_range<S: Schema>(
+        &self,
+        upper_bound: SchemaKey,
+    ) -> SchemaBatchIterator<'_, S, Rev<btree_map::Range<SchemaKey, Operation>>> {
+        let some_rows = self.last_writes.get(&S::COLUMN_FAMILY_NAME);
+        SchemaBatchIterator {
+            inner: some_rows.map(|rows| rows.range(..=upper_bound).rev()),
+            _phantom_schema: std::marker::PhantomData,
+        }
+    }
+
+    pub(crate) fn merge(&mut self, other: SchemaBatch) {
+        for (cf_name, other_cf_map) in other.last_writes {
+            let self_cf_map = self.last_writes.entry(cf_name).or_default();
+
+            for (key, operation) in other_cf_map {
+                self_cf_map.insert(key, operation);
+            }
+        }
+    }
 }
 
 /// Iterator over [`SchemaBatch`] for a given column family in reversed lexicographic order
-pub struct SchemaBatchIterator<'a, S: Schema> {
-    inner: Option<Rev<btree_map::Iter<'a, SchemaKey, Operation>>>,
+pub struct SchemaBatchIterator<'a, S, I>
+where
+    S: Schema,
+    I: Iterator<Item = (&'a SchemaKey, &'a Operation)>,
+{
+    inner: Option<I>,
     _phantom_schema: std::marker::PhantomData<S>,
 }
 
-impl<'a, S> Iterator for SchemaBatchIterator<'a, S>
+impl<'a, S, I> Iterator for SchemaBatchIterator<'a, S, I>
 where
     S: Schema,
+    I: Iterator<Item = (&'a SchemaKey, &'a Operation)>,
 {
-    type Item = (&'a SchemaKey, &'a Operation);
+    type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.as_mut().and_then(|inner| inner.next())
