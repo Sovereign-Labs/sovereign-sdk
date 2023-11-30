@@ -1,9 +1,15 @@
+use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::iter::Peekable;
 use std::sync::{Arc, RwLock};
 
 use sov_schema_db::schema::{KeyCodec, ValueCodec};
 use sov_schema_db::snapshot::{FrozenDbSnapshot, QueryManager, SnapshotId};
-use sov_schema_db::{Operation, Schema};
+use sov_schema_db::{
+    Operation, RawDbReverseIterator, Schema, SchemaBatchIterator, SchemaKey, SchemaValue,
+};
+
+use crate::snapshot_manager::DataLocation::Snapshot;
 
 /// Snapshot manager holds snapshots associated with particular DB and can traverse them backwards
 /// down to DB level
@@ -55,9 +61,140 @@ impl SnapshotManager {
     pub(crate) fn contains_snapshot(&self, snapshot_id: &SnapshotId) -> bool {
         self.snapshots.contains_key(snapshot_id)
     }
+
+    /// Returns iterator over keys in given [`Schema`] among all snapshots and DB in reverse lexicographical order
+    pub fn iter<S: Schema>(
+        &self,
+        mut snapshot_id: SnapshotId,
+    ) -> anyhow::Result<SnapshotManagerIter<S>> {
+        let mut snapshot_iterators = vec![];
+        let to_parent = self.to_parent.read().unwrap();
+        while let Some(parent_snapshot_id) = to_parent.get(&snapshot_id) {
+            let parent_snapshot = self
+                .snapshots
+                .get(parent_snapshot_id)
+                .expect("Inconsistency between `self.snapshots` and `self.to_parent`");
+
+            snapshot_iterators.push(parent_snapshot.iter::<S>());
+
+            snapshot_id = *parent_snapshot_id;
+        }
+
+        snapshot_iterators.reverse();
+        let db_iter = self.db.raw_iter::<S>()?;
+
+        Ok(SnapshotManagerIter::new(db_iter, snapshot_iterators))
+    }
+}
+
+/// [`Iterator`] over keys in given [`Schema`] in all snapshots in reverse lexicographical order
+pub struct SnapshotManagerIter<'a, S: Schema> {
+    db_iter: Peekable<RawDbReverseIterator<'a>>,
+    snapshot_iterators: Vec<Peekable<SchemaBatchIterator<'a, S>>>,
+    max_value_locations: Vec<DataLocation>,
+}
+
+impl<'a, S: Schema> SnapshotManagerIter<'a, S> {
+    fn new(
+        db_iter: RawDbReverseIterator<'a>,
+        snapshot_iterators: Vec<SchemaBatchIterator<'a, S>>,
+    ) -> Self {
+        let max_values_size = snapshot_iterators.len().checked_add(1).unwrap_or_default();
+        Self {
+            db_iter: db_iter.peekable(),
+            snapshot_iterators: snapshot_iterators
+                .into_iter()
+                .map(|iter| iter.peekable())
+                .collect(),
+            max_value_locations: Vec::with_capacity(max_values_size),
+        }
+    }
+}
+
+#[derive(Debug)]
+enum DataLocation {
+    Db,
+    // Index inside `snapshot_iterators`
+    Snapshot(usize),
+}
+
+impl<'a, S: Schema> Iterator for SnapshotManagerIter<'a, S> {
+    type Item = (SchemaKey, SchemaValue);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Find max value
+        loop {
+            let mut max_value: Option<&SchemaKey> = None;
+            self.max_value_locations.clear();
+            let max_db_value = self.db_iter.peek();
+            if let Some((db_key, _)) = max_db_value {
+                self.max_value_locations.push(DataLocation::Db);
+                max_value = Some(db_key);
+            };
+
+            for (idx, iter) in self.snapshot_iterators.iter_mut().enumerate() {
+                if let Some(&(peeked_key, _)) = iter.peek() {
+                    match max_value {
+                        None => {
+                            self.max_value_locations.push(DataLocation::Snapshot(idx));
+                            max_value = Some(peeked_key);
+                        }
+                        Some(max_key) => match peeked_key.cmp(max_key) {
+                            Ordering::Greater => {
+                                max_value = Some(peeked_key);
+                                self.max_value_locations.clear();
+                                self.max_value_locations.push(DataLocation::Snapshot(idx));
+                            }
+                            Ordering::Equal => {
+                                self.max_value_locations.push(DataLocation::Snapshot(idx));
+                            }
+                            Ordering::Less => {}
+                        },
+                    };
+                }
+            }
+
+            if let Some(last_max_location) = self.max_value_locations.pop() {
+                // Move all iterators to next value
+                for location in &self.max_value_locations {
+                    match location {
+                        DataLocation::Db => {
+                            let _ = self.db_iter.next().unwrap();
+                        }
+                        Snapshot(idx) => {
+                            let _ = self.snapshot_iterators[*idx].next().unwrap();
+                        }
+                    }
+                }
+
+                // Handle next value
+                match last_max_location {
+                    DataLocation::Db => {
+                        let (key, value) = self.db_iter.next().unwrap();
+                        return Some((key, value));
+                    }
+                    Snapshot(idx) => {
+                        let (key, operation) = self.snapshot_iterators[idx].next().unwrap();
+                        match operation {
+                            Operation::Put { value } => {
+                                return Some((key.to_vec(), value.to_vec()))
+                            }
+                            Operation::Delete => continue,
+                        }
+                    }
+                };
+            } else {
+                break;
+            }
+        }
+
+        None
+    }
 }
 
 impl QueryManager for SnapshotManager {
+    type Iter<'a, S> = SnapshotManagerIter<'a, S> where S: Sized, S: Schema, Self: 'a;
+
     fn get<S: Schema>(
         &self,
         mut snapshot_id: SnapshotId,
@@ -82,6 +219,10 @@ impl QueryManager for SnapshotManager {
 
         self.db.get(key)
     }
+
+    fn iter<S: Schema>(&self, snapshot_id: SnapshotId) -> anyhow::Result<Self::Iter<'_, S>> {
+        self.iter::<S>(snapshot_id)
+    }
 }
 
 #[cfg(test)]
@@ -90,6 +231,7 @@ mod tests {
     use std::sync::{Arc, RwLock};
 
     use sov_db::rocks_db_config::gen_rocksdb_options;
+    use sov_schema_db::schema::{KeyDecoder, ValueCodec};
     use sov_schema_db::snapshot::{DbSnapshot, NoopQueryManager, QueryManager};
     use sov_schema_db::SchemaBatch;
 
@@ -339,5 +481,117 @@ mod tests {
         assert_eq!(Some(f7), snapshot_manager.get::<Schema>(7, &f1).unwrap());
         assert_eq!(Some(f8), snapshot_manager.get::<Schema>(7, &f2).unwrap());
         assert_eq!(Some(f4), snapshot_manager.get::<Schema>(7, &f3).unwrap());
+    }
+
+    #[test]
+    fn test_iterator() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db = create_test_db(tempdir.path());
+        let to_parent = Arc::new(RwLock::new(HashMap::new()));
+        {
+            // DB -> 1 -> 2 -> 3
+            let mut edit = to_parent.write().unwrap();
+            edit.insert(2, 1);
+            edit.insert(3, 2);
+            edit.insert(4, 3);
+        }
+
+        let f1 = DummyField(1);
+        let f2 = DummyField(2);
+        let f3 = DummyField(3);
+        let f4 = DummyField(4);
+        let f5 = DummyField(5);
+        let f6 = DummyField(6);
+        let f7 = DummyField(7);
+        let f8 = DummyField(8);
+        let f9 = DummyField(9);
+        let f10 = DummyField(10);
+        let f12 = DummyField(12);
+
+        let mut db_data = SchemaBatch::new();
+        db_data.put::<Schema>(&f3, &f9).unwrap();
+        db_data.put::<Schema>(&f2, &f1).unwrap();
+        db_data.put::<Schema>(&f4, &f1).unwrap();
+        db.write_schemas(db_data).unwrap();
+
+        let mut snapshot_manager = SnapshotManager::new(db, to_parent.clone());
+        let query_manager = Arc::new(RwLock::new(NoopQueryManager));
+
+        // Operations:
+        // | snapshot_id | key |  operation |
+        // |           1 |   1 |   write(8) |
+        // |           1 |   5 |   write(7) |
+        // |           1 |   8 |   write(3) |
+        // |           1 |   4 |   write(2) |
+        // |           2 |  10 |   write(2) |
+        // |           2 |   9 |   write(4) |
+        // |           2 |   4 |     delete |
+        // |           2 |   2 |   write(6) |
+        // |           3 |   8 |   write(6) |
+        // |           3 |   9 |     delete |
+        // |           3 |  12 |   write(1) |
+        // |           3 |   1 |   write(2) |
+
+        // 1
+        let db_snapshot = DbSnapshot::new(1, query_manager.clone().into());
+        db_snapshot.put::<Schema>(&f1, &f8).unwrap();
+        db_snapshot.put::<Schema>(&f5, &f7).unwrap();
+        db_snapshot.put::<Schema>(&f8, &f3).unwrap();
+        db_snapshot.put::<Schema>(&f4, &f2).unwrap();
+        snapshot_manager.add_snapshot(db_snapshot.into());
+
+        // 2
+        let db_snapshot = DbSnapshot::new(2, query_manager.clone().into());
+        db_snapshot.put::<Schema>(&f10, &f2).unwrap();
+        db_snapshot.put::<Schema>(&f9, &f4).unwrap();
+        db_snapshot.delete::<Schema>(&f4).unwrap();
+        db_snapshot.put::<Schema>(&f2, &f6).unwrap();
+        snapshot_manager.add_snapshot(db_snapshot.into());
+
+        // 3
+        let db_snapshot = DbSnapshot::new(3, query_manager.clone().into());
+        db_snapshot.put::<Schema>(&f8, &f6).unwrap();
+        db_snapshot.delete::<Schema>(&f9).unwrap();
+        db_snapshot.put::<Schema>(&f12, &f1).unwrap();
+        db_snapshot.put::<Schema>(&f1, &f2).unwrap();
+        snapshot_manager.add_snapshot(db_snapshot.into());
+
+        // Expected Order
+        // | key | value |
+        // |  12 |     1 |
+        // |  10 |     2 |
+        // |   8 |     6 |
+        // |   5 |     7 |
+        // |   3 |     9 |
+        // |   2 |     6 |
+        // |   1 |     2 |
+
+        let expected_fields = vec![
+            (f12, f1),
+            (f10, f2),
+            (f8, f6),
+            (f5, f7),
+            (f3, f9),
+            (f2, f6),
+            (f1, f2),
+        ];
+
+        let i = snapshot_manager.iter::<Schema>(4).unwrap();
+        let actual_fields: Vec<_> = i
+            .into_iter()
+            .map(|(k, v)| {
+                let key = <<DummyStateSchema as sov_schema_db::Schema>::Key as KeyDecoder<
+                    Schema,
+                >>::decode_key(&k)
+                .unwrap();
+                let value = <<DummyStateSchema as sov_schema_db::Schema>::Value as ValueCodec<
+                    Schema,
+                >>::decode_value(&v)
+                .unwrap();
+                (key, value)
+            })
+            .collect();
+
+        assert_eq!(actual_fields, expected_fields);
     }
 }
