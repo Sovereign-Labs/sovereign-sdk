@@ -1,10 +1,22 @@
 use std::marker::PhantomData;
 
-use sov_rollup_interface::da::DaVerifier;
+use serde::{Deserialize, Serialize};
+use sov_rollup_interface::da::{BlockHeaderTrait, DaVerifier};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
 use crate::StateTransitionData;
+
+#[derive(Serialize, Deserialize)]
+/// Output of the verifier.
+pub struct StateTransitionOutput<StateRoot, SlotHash> {
+    /// The state root before the state transition
+    pub pre_state_root: StateRoot,
+    /// The state root after the state transition
+    pub post_state_root: StateRoot,
+    /// Da block hash
+    pub da_block_hash: SlotHash,
+}
 
 /// Verifies a state transition
 pub struct StateTransitionVerifier<ST, Da, Zk>
@@ -34,11 +46,7 @@ where
     }
 
     /// Verify the next block
-    pub fn run_block(
-        &self,
-        zkvm: Zk,
-        pre_state: Stf::PreState,
-    ) -> Result<Stf::StateRoot, Da::Error> {
+    pub fn run_block(&self, zkvm: Zk, pre_state: Stf::PreState) -> Result<(), Da::Error> {
         let mut data: StateTransitionData<_, _, Da::Spec> = zkvm.read_from_host();
         let validity_condition = self.da_verifier.verify_relevant_tx_list(
             &data.da_block_header,
@@ -56,7 +64,13 @@ where
             &mut data.blobs,
         );
 
-        zkvm.commit(&result.state_root);
-        Ok(result.state_root)
+        let out = StateTransitionOutput {
+            pre_state_root: data.pre_state_root,
+            post_state_root: result.state_root,
+            da_block_hash: data.da_block_header.hash(),
+        };
+
+        zkvm.commit(&out);
+        Ok(())
     }
 }
