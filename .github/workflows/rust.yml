@@ -361,7 +361,7 @@ jobs:
         # Exit status 0 means no changes were made, so the table of contents is
         # up to date.
         run: git diff --exit-code
-  check-demo-rollup-bash-commands-celestia-da:
+  check-demo-rollup-bash-commands:
     runs-on: buildjet-4vcpu-ubuntu-2204
     needs: nextest
     timeout-minutes: 60
@@ -391,7 +391,6 @@ jobs:
         run: cargo run --bin bashtestmd -- --input examples/demo-rollup/README.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
-
   check-demo-rollup-bash-commands-mock-da:
     runs-on: buildjet-4vcpu-ubuntu-2204
     needs: nextest
