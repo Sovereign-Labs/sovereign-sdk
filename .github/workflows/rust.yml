@@ -388,7 +388,7 @@ jobs:
           cache-provider: "buildjet"
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
       - name: Compile README.md to Bash
-        run: cargo run --bin bashtestmd -- --input examples/demo-rollup/README.md --output demo-rollup-readme.sh --tag test-ci
+        run: cargo run --bin bashtestmd -- --input examples/demo-rollup/README_CELESTIA.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
   check-demo-rollup-bash-commands-mock-da:
@@ -418,7 +418,7 @@ jobs:
           cache-provider: "buildjet"
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
       - name: Compile README.md to Bash
-        run: cargo run --bin bashtestmd -- --input examples/demo-rollup/README_MOCK_DA.md --output demo-rollup-readme.sh --tag test-ci
+        run: cargo run --bin bashtestmd -- --input examples/demo-rollup/README.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
     
