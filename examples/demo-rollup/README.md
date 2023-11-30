@@ -35,6 +35,7 @@
     - [`ledger_getBatches`](#ledger_getbatches)
     - [`ledger_getTransactions`](#ledger_gettransactions)
     - [`ledger_getEvents`](#ledger_getevents)
+- [Testing with specific DA layers](#testing-with-specific-da-layers)
 - [License](#license)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
