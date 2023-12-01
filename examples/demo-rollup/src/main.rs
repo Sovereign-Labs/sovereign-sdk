@@ -23,11 +23,11 @@ mod test_rpc;
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// The data layer type.
-    #[arg(long, default_value = "celestia")]
+    #[arg(long, default_value = "mock")]
     da_layer: SupportedDaLayer,
 
     /// The path to the rollup config.
-    #[arg(long, default_value = "rollup_config.toml")]
+    #[arg(long, default_value = "mock_rollup_config.toml")]
     rollup_config_path: String,
 }
 
@@ -57,7 +57,7 @@ async fn main() -> Result<(), anyhow::Error> {
     match args.da_layer {
         SupportedDaLayer::Mock => {
             let rollup = new_rollup_with_mock_da(
-                &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
+                &GenesisPaths::from_dir("../test-data/genesis/demo-tests/mock"),
                 rollup_config_path,
                 RollupProverConfig::Execute,
             )
@@ -66,7 +66,7 @@ async fn main() -> Result<(), anyhow::Error> {
         }
         SupportedDaLayer::Celestia => {
             let rollup = new_rollup_with_celestia_da(
-                &GenesisPaths::from_dir("../test-data/genesis/demo-tests"),
+                &GenesisPaths::from_dir("../test-data/genesis/demo-tests/celestia"),
                 rollup_config_path,
                 RollupProverConfig::Execute,
             )
