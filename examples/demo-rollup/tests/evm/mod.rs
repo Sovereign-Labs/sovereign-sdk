@@ -3,14 +3,14 @@ mod test_client;
 use std::net::SocketAddr;
 use std::str::FromStr;
 
+use crate::test_helpers::start_rollup;
 use demo_stf::genesis_config::GenesisPaths;
 use ethers_core::abi::Address;
 use ethers_signers::{LocalWallet, Signer};
 use sov_evm::SimpleStorageContract;
 use sov_stf_runner::RollupProverConfig;
 use test_client::TestClient;
-
-use crate::test_helpers::start_rollup;
+use tokio::time::{sleep, Duration};
 
 #[cfg(feature = "experimental")]
 #[tokio::test]
@@ -195,7 +195,7 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
             }
             client.send_publish_batch_request().await;
         }
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        sleep(Duration::from_millis(2000)).await;
         // get gas price
         let latest_gas_price = client.eth_gas_price().await;
 
