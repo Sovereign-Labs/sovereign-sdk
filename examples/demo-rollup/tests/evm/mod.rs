@@ -9,6 +9,7 @@ use ethers_signers::{LocalWallet, Signer};
 use sov_evm::SimpleStorageContract;
 use sov_stf_runner::RollupProverConfig;
 use test_client::TestClient;
+use tokio::time::{sleep, Duration};
 
 use crate::test_helpers::start_rollup;
 
@@ -195,7 +196,7 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
             }
             client.send_publish_batch_request().await;
         }
-
+        sleep(Duration::from_millis(2000)).await;
         // get gas price
         let latest_gas_price = client.eth_gas_price().await;
 
