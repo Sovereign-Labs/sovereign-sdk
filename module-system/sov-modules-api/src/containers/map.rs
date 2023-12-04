@@ -1,8 +1,6 @@
 use std::marker::PhantomData;
 
-#[cfg(feature = "arbitrary")]
-use sov_modules_core::{Context, WorkingSet};
-use sov_modules_core::{Prefix, StateCodec, StateKeyCodec, StateMapWorkingSet, StateValueCodec};
+use sov_modules_core::{Context, Prefix, StateCodec, StateKeyCodec, StateValueCodec, WorkingSet};
 use sov_state::codec::BorshCodec;
 
 use super::traits::StateMapAccessor;
@@ -57,12 +55,11 @@ impl<K, V, Codec> StateMap<K, V, Codec> {
     }
 }
 
-impl<K, V, Codec, W> StateMapAccessor<K, V, Codec, W> for StateMap<K, V, Codec>
+impl<K, V, Codec, C: Context> StateMapAccessor<K, V, Codec, WorkingSet<C>> for StateMap<K, V, Codec>
 where
     Codec: StateCodec,
     Codec::KeyCodec: StateKeyCodec<K>,
     Codec::ValueCodec: StateValueCodec<V>,
-    W: StateMapWorkingSet,
 {
     /// Returns a reference to the codec used by this [`StateMap`].
     fn codec(&self) -> &Codec {

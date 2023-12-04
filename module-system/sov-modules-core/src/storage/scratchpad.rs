@@ -7,7 +7,7 @@ pub use kernel_state::{KernelWorkingSet, VersionedWorkingSet};
 use sov_rollup_interface::maybestd::collections::HashMap;
 use sov_rollup_interface::stf::Event;
 
-use crate::archival_state::ArchivalWorkingSet;
+use crate::archival_state::{ArchivalAccessoryWorkingSet, ArchivalJmtWorkingSet};
 use crate::common::{GasMeter, Prefix};
 use crate::module::{Context, Spec};
 use crate::storage::{
@@ -15,12 +15,6 @@ use crate::storage::{
     StateValueCodec, Storage, StorageInternalCache, StorageKey, StorageProof, StorageValue,
 };
 use crate::Version;
-
-/// Super trait for convenience in macro parsing and identifying Working sets that need StateMap implementation of StateMapAccessor
-pub trait StateMapWorkingSet: StateReaderAndWriter {}
-
-impl<C: Context> StateMapWorkingSet for WorkingSet<C> {}
-impl<C: Context> StateMapWorkingSet for ArchivalWorkingSet<C> {}
 
 /// A storage reader and writer
 pub trait StateReaderAndWriter {
@@ -291,6 +285,8 @@ impl<C: Context> StateCheckpoint<C> {
             accessory_delta: RevertableWriter::new(self.accessory_delta),
             events: Default::default(),
             gas_meter: GasMeter::default(),
+            archival_working_set: None,
+            archival_accessory_working_set: None,
         }
     }
 
@@ -328,6 +324,8 @@ pub struct WorkingSet<C: Context> {
     accessory_delta: RevertableWriter<AccessoryDelta<C::Storage>>,
     events: Vec<Event>,
     gas_meter: GasMeter<C::GasUnit>,
+    archival_working_set: Option<ArchivalJmtWorkingSet<C>>,
+    archival_accessory_working_set: Option<ArchivalAccessoryWorkingSet<C>>,
 }
 
 impl<C: Context> WorkingSet<C> {
@@ -348,13 +346,25 @@ impl<C: Context> WorkingSet<C> {
     }
 
     /// Returns a handler for the archival state (JMT state).
-    pub fn archival_state(&mut self, version: Version) -> ArchivalWorkingSet<C> {
-        ArchivalWorkingSet::new(&self.delta.inner.inner, version)
+    pub fn archival_state(&mut self, version: Version) -> ArchivalJmtWorkingSet<C> {
+        ArchivalJmtWorkingSet::new(&self.delta.inner.inner, version)
     }
 
     /// Returns a handler for the archival accessory state (non-JMT state).
-    pub fn archival_accessory_state(&mut self, version: Version) -> ArchivalWorkingSet<C> {
-        ArchivalWorkingSet::new_accessory(&self.accessory_delta.inner.storage, version)
+    pub fn archival_accessory_state(&mut self, version: Version) -> ArchivalAccessoryWorkingSet<C> {
+        ArchivalAccessoryWorkingSet::new(&self.accessory_delta.inner.storage, version)
+    }
+
+    /// Sets archival version for a working set
+    pub fn set_archival_version(&mut self, version: Version) {
+        self.archival_working_set = Some(self.archival_state(version));
+        self.archival_accessory_working_set = Some(self.archival_accessory_state(version));
+    }
+
+    /// Unset archival version
+    pub fn unset_archival_version(&mut self) {
+        self.archival_working_set = None;
+        self.archival_accessory_working_set = None;
     }
 
     /// Returns a handler for the kernel state (priveleged jmt state)
@@ -443,7 +453,10 @@ impl<C: Context> WorkingSet<C> {
 
 impl<C: Context> StateReaderAndWriter for WorkingSet<C> {
     fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
-        self.delta.get(key)
+        match &mut self.archival_working_set {
+            None => self.delta.get(key),
+            Some(ref mut archival_working_set) => archival_working_set.get(key),
+        }
     }
 
     fn set(&mut self, key: &StorageKey, value: StorageValue) {
@@ -466,7 +479,10 @@ impl<'a, C: Context> StateReaderAndWriter for AccessoryWorkingSet<'a, C> {
         if !cfg!(feature = "native") {
             None
         } else {
-            self.ws.accessory_delta.get(key)
+            match &mut self.ws.archival_accessory_working_set {
+                None => self.ws.accessory_delta.get(key),
+                Some(ref mut archival_working_set) => archival_working_set.get(key),
+            }
         }
     }
 
@@ -483,56 +499,55 @@ impl<'a, C: Context> StateReaderAndWriter for AccessoryWorkingSet<'a, C> {
 pub mod archival_state {
     use super::*;
 
-    /// Enum for tagging the specific type of storage.
-    enum ArchivalStore<S: Storage> {
-        /// JMT store
-        Jmt(S),
-        /// Accessory store
-        Accessory(S),
-    }
-
-    /// Archival working set
-    pub struct ArchivalWorkingSet<C: Context> {
-        delta: ArchivalStore<<C as Spec>::Storage>,
+    /// Archival JMT
+    pub struct ArchivalJmtWorkingSet<C: Context> {
+        store: <C as Spec>::Storage,
         archival_version: Version,
-        witness: <<C as Spec>::Storage as Storage>::Witness,
     }
 
-    impl<C: Context> ArchivalWorkingSet<C> {
-        /// Creates a new [`ArchivalWorkingSet`] instance backed by the given [`Storage`]. and [`Version`]
-        /// For jmt state access
+    impl<C: Context> ArchivalJmtWorkingSet<C> {
+        /// create a new instance of ArchivalJmtWorkingSet
         pub fn new(inner: &<C as Spec>::Storage, version: Version) -> Self {
             Self {
-                delta: ArchivalStore::Jmt(inner.clone()),
+                store: inner.clone(),
                 archival_version: version,
-                witness: Default::default(),
-            }
-        }
-
-        /// Creates a new [`ArchivalWorkingSet`] instance backed by the given [`Storage`]. and [`Version`]
-        /// For accestory state access
-        pub fn new_accessory(inner: &<C as Spec>::Storage, version: Version) -> Self {
-            Self {
-                delta: ArchivalStore::Accessory(inner.clone()),
-                archival_version: version,
-                witness: Default::default(),
             }
         }
     }
 
-    impl<C: Context> StateReaderAndWriter for ArchivalWorkingSet<C> {
+    impl<C: Context> ArchivalAccessoryWorkingSet<C> {
+        /// create a new instance of ArchivalAccessoryWorkingSet
+        pub fn new(inner: &<C as Spec>::Storage, version: Version) -> Self {
+            Self {
+                store: inner.clone(),
+                archival_version: version,
+            }
+        }
+    }
+
+    /// Archival Accessory
+    pub struct ArchivalAccessoryWorkingSet<C: Context> {
+        store: <C as Spec>::Storage,
+        archival_version: Version,
+    }
+
+    impl<C: Context> StateReaderAndWriter for ArchivalJmtWorkingSet<C> {
         fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
-            match &self.delta {
-                ArchivalStore::Jmt(jmt_store) => {
-                    jmt_store.get(key, Some(self.archival_version), &self.witness)
-                }
-                ArchivalStore::Accessory(accessory_store) => {
-                    if !cfg!(feature = "native") {
-                        None
-                    } else {
-                        accessory_store.get_accessory(key, Some(self.archival_version))
-                    }
-                }
+            self.store
+                .get(key, Some(self.archival_version), &Default::default())
+        }
+
+        fn set(&mut self, _key: &StorageKey, _value: StorageValue) {}
+
+        fn delete(&mut self, _key: &StorageKey) {}
+    }
+
+    impl<C: Context> StateReaderAndWriter for ArchivalAccessoryWorkingSet<C> {
+        fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
+            if !cfg!(feature = "native") {
+                None
+            } else {
+                self.store.get_accessory(key, Some(self.archival_version))
             }
         }
 

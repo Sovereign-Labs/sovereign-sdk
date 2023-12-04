@@ -1,11 +1,10 @@
 mod helpers;
 
-use archival_state::ArchivalWorkingSet;
 use helpers::*;
 use sov_bank::{get_genesis_token_address, Bank, CallMessage, Coins};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{archival_state, Address, Context, Module, StateReaderAndWriter, WorkingSet};
-use sov_state::storage::{StateMapWorkingSet, StorageKey, StorageValue};
+use sov_state::storage::{StorageKey, StorageValue};
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
 
 #[test]
@@ -76,8 +75,9 @@ fn transfer_initial_token() {
     commit(working_set, prover_storage.clone());
 
     let archival_slot: u64 = 2;
-    let mut working_set: ArchivalWorkingSet<DefaultContext> =
-        ArchivalWorkingSet::new(&prover_storage, archival_slot);
+    let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
+    working_set.set_archival_version(archival_slot);
+
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
         &bank,
         token_address,
@@ -88,8 +88,8 @@ fn transfer_initial_token() {
     assert_eq!((sender_balance, receiver_balance), (90, 110));
 
     let archival_slot: u64 = 1;
-    let mut working_set: ArchivalWorkingSet<DefaultContext> =
-        ArchivalWorkingSet::new(&prover_storage, archival_slot);
+    let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
+    working_set.set_archival_version(archival_slot);
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
         &bank,
         token_address,
@@ -99,7 +99,7 @@ fn transfer_initial_token() {
     );
     assert_eq!((sender_balance, receiver_balance), (100, 100));
 
-    let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
+    working_set.unset_archival_version();
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
         &bank,
         token_address,
@@ -162,9 +162,10 @@ fn transfer_initial_token() {
     // archival versioned state query
 
     let archival_slot = 3;
-    let mut working_set: ArchivalWorkingSet<DefaultContext> =
-        ArchivalWorkingSet::new_accessory(&prover_storage, archival_slot);
-    let val = working_set.get(&StorageKey::from("k")).unwrap();
+    let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
+    working_set.set_archival_version(archival_slot);
+    let mut accessory_state = working_set.accessory_state();
+    let val = accessory_state.get(&StorageKey::from("k")).unwrap();
     assert_eq!("v1", String::from_utf8(val.value().to_vec()).unwrap());
 }
 
@@ -173,7 +174,7 @@ fn query_sender_receiver_balances(
     token_address: Address,
     sender_address: Address,
     receiver_address: Address,
-    working_set: &mut impl StateMapWorkingSet,
+    working_set: &mut WorkingSet<DefaultContext>,
 ) -> (u64, u64) {
     let sender_balance = bank
         .get_balance_of(sender_address, token_address, working_set)

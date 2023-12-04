@@ -7,7 +7,7 @@ use std::num::ParseIntError;
 
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
-use sov_modules_api::{StateMapAccessor, StateMapWorkingSet, WorkingSet};
+use sov_modules_api::{StateMapAccessor, WorkingSet};
 use sov_state::Prefix;
 #[cfg(feature = "native")]
 use thiserror::Error;
@@ -226,7 +226,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         &self,
         from: &C::Address,
         amount: Amount,
-        working_set: &mut impl StateMapWorkingSet,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<Amount> {
         let balance = self.balances.get_or_err(from, working_set)?;
         let new_balance = match balance.checked_sub(amount) {
