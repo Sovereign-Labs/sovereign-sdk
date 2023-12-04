@@ -196,7 +196,7 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
             }
             client.send_publish_batch_request().await;
         }
-        sleep(Duration::from_millis(5000)).await;
+        sleep(Duration::from_millis(10000)).await;
         // get gas price
         let latest_gas_price = client.eth_gas_price().await;
 
