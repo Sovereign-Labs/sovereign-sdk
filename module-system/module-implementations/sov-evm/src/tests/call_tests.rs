@@ -2,7 +2,7 @@ use reth_primitives::{Address, Bytes, TransactionKind};
 use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address;
-use sov_modules_api::{Context, Module, StateMapAccessor, StateVecAccessor};
+use sov_modules_api::{Context, Module, StateMapAccessor, StateValueAccessor, StateVecAccessor};
 
 use crate::call::CallMessage;
 use crate::evm::primitive_types::Receipt;
@@ -102,35 +102,23 @@ fn failed_transaction_test() {
     {
         let sender_address = generate_address::<C>("sender");
         let context = C::new(sender_address, 1);
-        let messages = vec![create_contract_message(&dev_signer, 0)];
-
-        for tx in messages {
-            evm.call(tx, &context, working_set).unwrap();
-        }
+        let message = create_contract_message(&dev_signer, 0);
+        evm.call(message, &context, working_set).unwrap();
     }
+
+    // assert no pending transaction
+    let pending_txs = evm.pending_transactions.iter(working_set);
+    assert_eq!(pending_txs.len(), 0);
+
     evm.end_slot_hook(working_set);
 
-    assert_eq!(
-        evm.receipts
-            .iter(&mut working_set.accessory_state())
-            .collect::<Vec<_>>(),
-        [Receipt {
-            receipt: reth_primitives::Receipt {
-                tx_type: reth_primitives::TxType::EIP1559,
-                success: false,
-                cumulative_gas_used: 0,
-                logs: vec![]
-            },
-            gas_used: 0,
-            log_index_start: 0,
-            error: Some(revm::primitives::EVMError::Transaction(
-                revm::primitives::InvalidTransaction::LackOfFundForMaxFee {
-                    fee: 1_000_000u64,
-                    balance: U256::ZERO
-                }
-            ))
-        }]
-    )
+    // Assert block does not have any transaction
+    let block = evm
+        .pending_head
+        .get(&mut working_set.accessory_state())
+        .unwrap();
+    assert_eq!(block.transactions.start, 0);
+    assert_eq!(block.transactions.end, 0);
 }
 
 fn create_contract_message(dev_signer: &TestSigner, nonce: u64) -> CallMessage {
