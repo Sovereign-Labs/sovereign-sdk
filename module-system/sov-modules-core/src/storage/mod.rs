@@ -58,7 +58,7 @@ impl StorageKey {
                 let mut bytes = v.to_be_bytes().to_vec();
                 bytes.extend((*self.key).clone());
                 CacheKey {
-                    key: alloc::sync::Arc::new(bytes),
+                    key: RefCount::new(bytes),
                 }
             }
         }
