@@ -1,9 +1,9 @@
 mod helpers;
 
 use helpers::*;
-use sov_bank::{get_genesis_token_address, Bank, CallMessage, Coins};
+use sov_bank::{get_genesis_token_address, Amount, Bank, CallMessage, Coins};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{archival_state, Address, Context, Module, StateReaderAndWriter, WorkingSet};
+use sov_modules_api::{Address, Context, Module, StateReaderAndWriter, WorkingSet};
 use sov_state::storage::{StorageKey, StorageValue};
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
 
@@ -42,6 +42,7 @@ fn transfer_initial_token() {
         token_address,
         sender_address,
         receiver_address,
+        10,
         &mut working_set,
     );
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
@@ -62,6 +63,7 @@ fn transfer_initial_token() {
         token_address,
         sender_address,
         receiver_address,
+        10,
         &mut working_set,
     );
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
@@ -73,6 +75,8 @@ fn transfer_initial_token() {
     );
     assert_eq!((sender_balance, receiver_balance), (80, 120));
     commit(working_set, prover_storage.clone());
+
+    // Archival tests
 
     let archival_slot: u64 = 2;
     let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
@@ -87,6 +91,25 @@ fn transfer_initial_token() {
     );
     assert_eq!((sender_balance, receiver_balance), (90, 110));
 
+    // modify in archival
+    transfer(
+        &bank,
+        token_address,
+        sender_address,
+        receiver_address,
+        5,
+        &mut working_set,
+    );
+
+    let (sender_balance, receiver_balance) = query_sender_receiver_balances(
+        &bank,
+        token_address,
+        sender_address,
+        receiver_address,
+        &mut working_set,
+    );
+    assert_eq!((sender_balance, receiver_balance), (85, 115));
+
     let archival_slot: u64 = 1;
     let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
     working_set.set_archival_version(archival_slot);
@@ -98,6 +121,24 @@ fn transfer_initial_token() {
         &mut working_set,
     );
     assert_eq!((sender_balance, receiver_balance), (100, 100));
+
+    transfer(
+        &bank,
+        token_address,
+        sender_address,
+        receiver_address,
+        45,
+        &mut working_set,
+    );
+
+    let (sender_balance, receiver_balance) = query_sender_receiver_balances(
+        &bank,
+        token_address,
+        sender_address,
+        receiver_address,
+        &mut working_set,
+    );
+    assert_eq!((sender_balance, receiver_balance), (55, 14g5));
 
     working_set.unset_archival_version();
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
@@ -116,6 +157,7 @@ fn transfer_initial_token() {
         token_address,
         sender_address,
         receiver_address,
+        10,
         &mut working_set,
     );
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
@@ -142,6 +184,7 @@ fn transfer_initial_token() {
         token_address,
         sender_address,
         receiver_address,
+        10,
         &mut working_set,
     );
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
@@ -190,9 +233,9 @@ fn transfer(
     token_address: Address,
     sender_address: Address,
     receiver_address: Address,
+    transfer_amount: Amount,
     working_set: &mut WorkingSet<DefaultContext>,
 ) {
-    let transfer_amount = 10;
     let transfer_message = CallMessage::Transfer {
         to: receiver_address,
         coins: Coins {

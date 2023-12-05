@@ -48,6 +48,22 @@ impl StorageKey {
         }
     }
 
+    /// Converts this key into a [`CacheKey`] via cloning.
+    pub fn to_cache_key_version(&self, version: Option<u64>) -> CacheKey {
+        match version {
+            None => CacheKey {
+                key: self.key.clone(),
+            },
+            Some(v) => {
+                let mut bytes = v.to_be_bytes().to_vec();
+                bytes.extend((*self.key).clone());
+                CacheKey {
+                    key: std::sync::Arc::new(bytes),
+                }
+            }
+        }
+    }
+
     /// Converts this key into a [`CacheKey`].
     pub fn into_cache_key(self) -> CacheKey {
         CacheKey { key: self.key }
