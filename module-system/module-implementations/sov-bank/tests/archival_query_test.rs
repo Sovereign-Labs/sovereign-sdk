@@ -138,7 +138,7 @@ fn transfer_initial_token() {
         receiver_address,
         &mut working_set,
     );
-    assert_eq!((sender_balance, receiver_balance), (55, 14g5));
+    assert_eq!((sender_balance, receiver_balance), (55, 145));
 
     working_set.unset_archival_version();
     let (sender_balance, receiver_balance) = query_sender_receiver_balances(
