@@ -189,6 +189,7 @@ impl DaService for DaProvider {
 
     type FilteredBlock = AvailBlock;
     type HeaderStream = AvailBlockHeaderStream;
+    type TransactionId = ();
 
     type Error = anyhow::Error;
 
