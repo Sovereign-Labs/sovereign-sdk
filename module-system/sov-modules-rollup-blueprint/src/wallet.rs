@@ -6,8 +6,8 @@ use sov_cli::workflows::rpc::RpcWorkflows;
 use sov_cli::workflows::transactions::TransactionWorkflow;
 use sov_cli::{clap, wallet_dir};
 use sov_modules_api::clap::Parser;
-use sov_modules_api::cli::{CliFrontEnd, JsonStringArg};
-use sov_modules_api::{CliWallet, Context, DispatchCall};
+use sov_modules_api::cli::CliWalletArg;
+use sov_modules_api::{Context, DispatchCall};
 
 use crate::RollupBlueprint;
 
@@ -38,33 +38,21 @@ where
     <Self as RollupBlueprint>::NativeContext:
         serde::Serialize + serde::de::DeserializeOwned + Send + Sync,
 
-    <Self as RollupBlueprint>::NativeRuntime: CliWallet,
+    <Self as RollupBlueprint>::NativeRuntime: DispatchCall,
 
     <Self as RollupBlueprint>::DaSpec: serde::Serialize + serde::de::DeserializeOwned,
 
     <<Self as RollupBlueprint>::NativeRuntime as DispatchCall>::Decodable:
         serde::Serialize + serde::de::DeserializeOwned + BorshSerialize + Send + Sync,
-
-    <<Self as RollupBlueprint>::NativeRuntime as CliWallet>::CliStringRepr<JsonStringArg>: TryInto<
-        <<Self as RollupBlueprint>::NativeRuntime as DispatchCall>::Decodable,
-        Error = serde_json::Error,
-    >,
 {
     /// Generates wallet cli for the runtime.
-    async fn run_wallet<File: clap::Subcommand, Json: clap::Subcommand>(
+    async fn run_wallet<File: clap::Subcommand, Json: clap::Subcommand, E1, E2>(
     ) -> Result<(), anyhow::Error>
     where
-        File: CliFrontEnd<<Self as RollupBlueprint>::NativeRuntime> + Send + Sync,
-        Json: CliFrontEnd<<Self as RollupBlueprint>::NativeRuntime> + Send + Sync,
-
-        File: TryInto<
-            <<Self as RollupBlueprint>::NativeRuntime as CliWallet>::CliStringRepr<JsonStringArg>,
-            Error = std::io::Error,
-        >,
-        Json: TryInto<
-            <<Self as RollupBlueprint>::NativeRuntime as CliWallet>::CliStringRepr<JsonStringArg>,
-            Error = std::convert::Infallible,
-        >,
+        E1: Into<anyhow::Error> + Send + Sync,
+        E2: Into<anyhow::Error> + Send + Sync,
+        File: CliWalletArg<<Self as RollupBlueprint>::NativeRuntime, Error = E1> + Send + Sync,
+        Json: CliWalletArg<<Self as RollupBlueprint>::NativeRuntime, Error = E2> + Send + Sync,
     {
         let app_dir = wallet_dir()?;
 
@@ -80,7 +68,7 @@ where
 
         match invocation.workflow {
             Workflows::Transactions(tx) => tx
-                .run::<<Self as RollupBlueprint>::NativeRuntime, <Self as RollupBlueprint>::NativeContext, JsonStringArg, _, _, _>(
+                .run::<<Self as RollupBlueprint>::NativeRuntime, <Self as RollupBlueprint>::NativeContext, _, _>(
                     &mut wallet_state,
                     app_dir,
                 )?,

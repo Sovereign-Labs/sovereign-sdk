@@ -4,7 +4,7 @@ use demo_stf::runtime::{Runtime, RuntimeCall, RuntimeSubcommand};
 use sov_cli::wallet_state::WalletState;
 use sov_cli::workflows::transactions::{ImportTransaction, TransactionWorkflow};
 use sov_mock_da::MockDaSpec;
-use sov_modules_api::cli::{FileNameArg, JsonStringArg};
+use sov_modules_api::cli::{JsonFileNameArg, JsonStringArg};
 use sov_modules_api::default_context::DefaultContext;
 
 type Da = MockDaSpec;
@@ -27,7 +27,7 @@ fn test_import_transaction_from_string() {
         RuntimeSubcommand<JsonStringArg, DefaultContext, Da>,
     >::FromFile(subcommand));
     workflow
-        .run::<Runtime<DefaultContext, Da>, _, _, _, _, _>(&mut wallet_state, app_dir)
+        .run::<Runtime<DefaultContext, Da>, _, _, _>(&mut wallet_state, app_dir)
         .unwrap();
 
     assert_eq!(wallet_state.unsent_transactions.len(), 1);
@@ -40,8 +40,8 @@ fn test_import_transaction_from_file() {
         WalletState::<RuntimeCall<DefaultContext, Da>, DefaultContext>::default();
 
     let test_token_path = make_test_path("requests/create_token.json");
-    let subcommand = RuntimeSubcommand::<FileNameArg, DefaultContext, Da>::bank {
-        contents: FileNameArg {
+    let subcommand = RuntimeSubcommand::<JsonFileNameArg, DefaultContext, Da>::bank {
+        contents: JsonFileNameArg {
             path: test_token_path.to_str().unwrap().into(),
         },
     };
@@ -51,7 +51,7 @@ fn test_import_transaction_from_file() {
         RuntimeSubcommand<JsonStringArg, DefaultContext, Da>,
     >::FromFile(subcommand));
     workflow
-        .run::<Runtime<DefaultContext, Da>, _, _, _, _, _>(&mut wallet_state, app_dir)
+        .run::<Runtime<DefaultContext, Da>, _, _, _>(&mut wallet_state, app_dir)
         .unwrap();
 
     assert_eq!(wallet_state.unsent_transactions.len(), 1);

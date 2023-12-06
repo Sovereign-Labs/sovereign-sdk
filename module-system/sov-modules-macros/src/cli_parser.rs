@@ -31,6 +31,7 @@ impl CliParserMacro {
         let mut module_json_parser_arms = vec![];
         let mut module_message_arms = vec![];
         let mut try_from_subcommand_match_arms = vec![];
+        let mut try_from_readable_match_arms = vec![];
         let mut try_map_match_arms = vec![];
         let mut from_json_match_arms = vec![];
         let mut deserialize_constraints: Vec<syn::WherePredicate> = vec![];
@@ -84,6 +85,10 @@ impl CliParserMacro {
 
                 try_from_subcommand_match_arms.push(quote! {
                     RuntimeSubcommand::#field_name { contents } => RuntimeMessage::#field_name { contents: contents.try_into()? },
+                });
+
+                try_from_readable_match_arms.push(quote! {
+                    RuntimeSubcommand::#field_name { contents } => ::sov_modules_api::cli::CliWalletArg::decode_call_from_readable(contents),
                 });
 
                 // Build a constraint requiring that all call messages support serde deserialization
@@ -183,9 +188,34 @@ impl CliParserMacro {
                 ____phantom(::std::marker::PhantomData<#ident #ty_generics>)
             }
 
+            impl #impl_generics_with_inner ::sov_modules_api::cli::CliWalletArg<#ident #ty_generics> for RuntimeSubcommand #ty_generics_with_inner #where_clause_with_deserialize_bounds, __Inner: ::clap::Args + ::sov_modules_api::cli::CliWalletArg<#ident #ty_generics> {
+                type Error = <__Inner as ::sov_modules_api::cli::CliWalletArg<#ident #ty_generics>>::Error;
+
+                fn decode_call_from_readable(self) -> Result<<#ident #ty_generics as ::sov_modules_api::DispatchCall>::Decodable, Self::Error> {
+                    match self {
+                        #( #try_from_readable_match_arms )*
+                        RuntimeSubcommand::____phantom(_) => unreachable!(),
+                    }
+                }
+            }
+
+            /*
+            impl #impl_generics_with_inner ::core::convert::TryFrom<RuntimeSubcommand #ty_generics_with_inner> for Vec<u8> #where_clause_with_deserialize_bounds, __Inner: ::clap::Args + TryInto<Vec<u8>, Error = ::anyhow::Error> {
+                type Error = ::anyhow::Error;
+
+                fn try_from(item: RuntimeSubcommand #ty_generics_with_inner ) -> Result<Self, Self::Error>
+                 {
+                    match item {
+                        #( #try_from_subcommand_bytes_match_arms )*
+                        RuntimeSubcommand::____phantom(_) => unreachable!(),
+                    }
+                }
+            }
+
             impl #impl_generics_with_inner ::sov_modules_api::cli::CliFrontEnd<#ident #ty_generics> for RuntimeSubcommand #ty_generics_with_inner #where_clause_with_deserialize_bounds, __Inner: ::clap::Args {
                 type CliIntermediateRepr<__Dest> = RuntimeMessage #ty_generics_for_dest;
             }
+            */
 
             /// An intermediate enum between the RuntimeSubcommand (which must implement `clap`) and the
             /// final RT::Decodable type. Like the RuntimeSubcommand, this type contains one variant for each cli-enabled module.
@@ -209,7 +239,7 @@ impl CliParserMacro {
             }
 
             // Allow arbitrary conversions from the `clap`-enabled `RuntimeSubcommand` to the less constrained `RuntimeMessage` enum.
-            // This allows us to (for example), accept a `JsonStringArgs` or a `FileNameArgs` as a CLI argument, and then
+            // This allows us to (for example), accept a `JsonStringArgs` or a `JsonFileNameArgs` as a CLI argument, and then
             // use fallible logic to convert it into the final JSON string to be parsed into a callmessage.
             impl #impl_generics_with_inner_and_dest ::core::convert::TryFrom<RuntimeSubcommand #ty_generics_with_inner> for RuntimeMessage #ty_generics_for_dest #where_clause_with_inner_clap_and_try_from {
                 type Error = <__Dest as ::core::convert::TryFrom<__Inner>>::Error;
@@ -225,11 +255,6 @@ impl CliParserMacro {
                     })
                 }
             }
-
-            impl #impl_generics ::sov_modules_api::CliWallet for #ident #ty_generics #where_clause_with_deserialize_bounds {
-                type CliStringRepr<__Inner> = RuntimeMessage #ty_generics_with_inner;
-            }
-
         };
         Ok(expanded.into())
     }
@@ -391,11 +416,6 @@ pub(crate) fn derive_cli_wallet_arg(
             fn from(item: #subcommand_ident #ty_generics) -> Self {
                 #conversion_logic
             }
-        }
-
-        // Implement the `CliWalletArg` trait for the original type. This is what allows the original type to be used as a CLI arg.
-        impl #impl_generics sov_modules_api::CliWalletArg for #item_name #ty_generics #where_clause {
-            type CliStringRepr = #subcommand_ident #ty_generics;
         }
     };
     Ok(expanded.into())

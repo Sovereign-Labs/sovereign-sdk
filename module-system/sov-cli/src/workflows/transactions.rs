@@ -4,8 +4,8 @@ use std::path::Path;
 
 use serde::Serialize;
 use sov_modules_api::clap::{self, Subcommand};
-use sov_modules_api::cli::CliFrontEnd;
-use sov_modules_api::CliWallet;
+use sov_modules_api::cli::CliWalletArg;
+use sov_modules_api::DispatchCall;
 
 use crate::wallet_state::WalletState;
 
@@ -28,21 +28,17 @@ pub enum TransactionWorkflow<File: Subcommand, Json: Subcommand> {
 
 impl<File: Subcommand, Json: Subcommand> TransactionWorkflow<File, Json> {
     /// Run the transaction workflow
-    pub fn run<RT: CliWallet, C: sov_modules_api::Context, V, E1, E2, E3>(
+    pub fn run<RT: DispatchCall, C: sov_modules_api::Context, E1, E2>(
         self,
         wallet_state: &mut WalletState<RT::Decodable, C>,
         _app_dir: impl AsRef<Path>,
     ) -> Result<(), anyhow::Error>
     where
-        File: CliFrontEnd<RT>,
-        Json: CliFrontEnd<RT>,
-        File: TryInto<RT::CliStringRepr<V>, Error = E1>,
-        Json: TryInto<RT::CliStringRepr<V>, Error = E2>,
-        RT::CliStringRepr<V>: TryInto<RT::Decodable, Error = E3>,
+        File: CliWalletArg<RT, Error = E1>,
+        Json: CliWalletArg<RT, Error = E2>,
         RT::Decodable: Serialize,
         E1: Into<anyhow::Error> + Send + Sync,
         E2: Into<anyhow::Error> + Send + Sync,
-        E3: Into<anyhow::Error> + Send + Sync,
     {
         match self {
             TransactionWorkflow::Import(import_workflow) => import_workflow.run(wallet_state),
@@ -94,36 +90,32 @@ where
     File: Subcommand,
 {
     /// Parse from a file or a json string
-    pub fn run<RT: CliWallet, C: sov_modules_api::Context, U, E1, E2, E3>(
+    pub fn run<RT: DispatchCall, C: sov_modules_api::Context, E1, E2>(
         self,
         wallet_state: &mut WalletState<RT::Decodable, C>,
     ) -> Result<(), anyhow::Error>
     where
-        Json: CliFrontEnd<RT>,
-        File: CliFrontEnd<RT>,
-        Json: TryInto<RT::CliStringRepr<U>, Error = E1>,
-        File: TryInto<RT::CliStringRepr<U>, Error = E2>,
-        RT::CliStringRepr<U>: TryInto<RT::Decodable, Error = E3>,
+        Json: CliWalletArg<RT, Error = E1>,
+        File: CliWalletArg<RT, Error = E2>,
         RT::Decodable: Serialize,
         E1: Into<anyhow::Error> + Send + Sync,
         E2: Into<anyhow::Error> + Send + Sync,
-        E3: Into<anyhow::Error> + Send + Sync,
     {
-        let intermediate_repr: RT::CliStringRepr<U> = match self {
-            ImportTransaction::FromFile(file) => {
-                file.try_into().map_err(Into::<anyhow::Error>::into)?
-            }
-            ImportTransaction::FromString(json) => {
-                json.try_into().map_err(Into::<anyhow::Error>::into)?
-            }
+        let tx = match self {
+            ImportTransaction::FromFile(file) => file
+                .decode_call_from_readable()
+                .map_err(Into::<anyhow::Error>::into)?,
+
+            ImportTransaction::FromString(json) => json
+                .decode_call_from_readable()
+                .map_err(Into::<anyhow::Error>::into)?,
         };
 
-        let tx = intermediate_repr
-            .try_into()
-            .map_err(Into::<anyhow::Error>::into)?;
         println!("Adding the following transaction to batch:");
         println!("{}", serde_json::to_string_pretty(&tx)?);
+
         wallet_state.unsent_transactions.push(tx);
+
         Ok(())
     }
 }
