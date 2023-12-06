@@ -7,12 +7,15 @@ pub use kernel_state::{KernelWorkingSet, VersionedWorkingSet};
 use sov_rollup_interface::maybestd::collections::HashMap;
 use sov_rollup_interface::stf::Event;
 
+use crate::archival_state::{ArchivalAccessoryWorkingSet, ArchivalJmtWorkingSet};
 use crate::common::{GasMeter, Prefix};
 use crate::module::{Context, Spec};
 use crate::storage::{
     CacheKey, CacheValue, EncodeKeyLike, NativeStorage, OrderedReadsAndWrites, StateCodec,
     StateValueCodec, Storage, StorageInternalCache, StorageKey, StorageProof, StorageValue,
 };
+use crate::Version;
+
 /// A storage reader and writer
 pub trait StateReaderAndWriter {
     /// Get a value from the storage.
@@ -154,15 +157,18 @@ pub struct Delta<S: Storage> {
 }
 
 impl<S: Storage> Delta<S> {
-    fn new(inner: S) -> Self {
-        Self::with_witness(inner, Default::default())
+    fn new(inner: S, version: Option<u64>) -> Self {
+        Self::with_witness(inner, Default::default(), version)
     }
 
-    fn with_witness(inner: S, witness: S::Witness) -> Self {
+    fn with_witness(inner: S, witness: S::Witness, version: Option<u64>) -> Self {
         Self {
             inner,
             witness,
-            cache: Default::default(),
+            cache: match version {
+                None => Default::default(),
+                Some(v) => StorageInternalCache::new_with_version(v),
+            },
         }
     }
 
@@ -194,7 +200,13 @@ impl<S: Storage> StateReaderAndWriter for Delta<S> {
     }
 }
 
-type RevertableWrites = HashMap<CacheKey, Option<CacheValue>>;
+// type RevertableWrites = HashMap<CacheKey, Option<CacheValue>>;
+
+#[derive(Default)]
+struct RevertableWrites {
+    pub cache: HashMap<CacheKey, Option<CacheValue>>,
+    pub version: Option<u64>,
+}
 
 struct AccessoryDelta<S: Storage> {
     // This inner storage is never accessed inside the zkVM because reads are
@@ -205,18 +217,22 @@ struct AccessoryDelta<S: Storage> {
 }
 
 impl<S: Storage> AccessoryDelta<S> {
-    fn new(storage: S) -> Self {
-        Self {
-            storage,
-            writes: Default::default(),
-        }
+    fn new(storage: S, version: Option<u64>) -> Self {
+        let writes = match version {
+            None => Default::default(),
+            Some(v) => RevertableWrites {
+                cache: Default::default(),
+                version: Some(v),
+            },
+        };
+        Self { storage, writes }
     }
 
     fn freeze(&mut self) -> OrderedReadsAndWrites {
         let mut reads_and_writes = OrderedReadsAndWrites::default();
         let writes = mem::take(&mut self.writes);
 
-        for write in writes {
+        for write in writes.cache {
             reads_and_writes.ordered_writes.push((write.0, write.1));
         }
 
@@ -226,20 +242,24 @@ impl<S: Storage> AccessoryDelta<S> {
 
 impl<S: Storage> StateReaderAndWriter for AccessoryDelta<S> {
     fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
-        let cache_key = key.to_cache_key();
-        if let Some(value) = self.writes.get(&cache_key) {
+        let cache_key = key.to_cache_key_version(self.writes.version);
+        if let Some(value) = self.writes.cache.get(&cache_key) {
             return value.clone().map(Into::into);
         }
-        self.storage.get_accessory(key)
+        self.storage.get_accessory(key, self.writes.version)
     }
 
     fn set(&mut self, key: &StorageKey, value: StorageValue) {
-        self.writes
-            .insert(key.to_cache_key(), Some(value.into_cache_value()));
+        self.writes.cache.insert(
+            key.to_cache_key_version(self.writes.version),
+            Some(value.into_cache_value()),
+        );
     }
 
     fn delete(&mut self, key: &StorageKey) {
-        self.writes.insert(key.to_cache_key(), None);
+        self.writes
+            .cache
+            .insert(key.to_cache_key_version(self.writes.version), None);
     }
 }
 
@@ -258,8 +278,8 @@ impl<C: Context> StateCheckpoint<C> {
     /// by the given [`Storage`].
     pub fn new(inner: <C as Spec>::Storage) -> Self {
         Self {
-            delta: Delta::new(inner.clone()),
-            accessory_delta: AccessoryDelta::new(inner),
+            delta: Delta::new(inner.clone(), None),
+            accessory_delta: AccessoryDelta::new(inner, None),
         }
     }
 
@@ -270,18 +290,20 @@ impl<C: Context> StateCheckpoint<C> {
         witness: <<C as Spec>::Storage as Storage>::Witness,
     ) -> Self {
         Self {
-            delta: Delta::with_witness(inner.clone(), witness),
-            accessory_delta: AccessoryDelta::new(inner),
+            delta: Delta::with_witness(inner.clone(), witness, None),
+            accessory_delta: AccessoryDelta::new(inner, None),
         }
     }
 
     /// Transforms this [`StateCheckpoint`] back into a [`WorkingSet`].
     pub fn to_revertable(self) -> WorkingSet<C> {
         WorkingSet {
-            delta: RevertableWriter::new(self.delta),
-            accessory_delta: RevertableWriter::new(self.accessory_delta),
+            delta: RevertableWriter::new(self.delta, None),
+            accessory_delta: RevertableWriter::new(self.accessory_delta, None),
             events: Default::default(),
             gas_meter: GasMeter::default(),
+            archival_working_set: None,
+            archival_accessory_working_set: None,
         }
     }
 
@@ -319,6 +341,8 @@ pub struct WorkingSet<C: Context> {
     accessory_delta: RevertableWriter<AccessoryDelta<C::Storage>>,
     events: Vec<Event>,
     gas_meter: GasMeter<C::GasUnit>,
+    archival_working_set: Option<ArchivalJmtWorkingSet<C>>,
+    archival_accessory_working_set: Option<ArchivalAccessoryWorkingSet<C>>,
 }
 
 impl<C: Context> WorkingSet<C> {
@@ -336,6 +360,28 @@ impl<C: Context> WorkingSet<C> {
     /// state containers, like AccessoryStateMap.
     pub fn accessory_state(&mut self) -> AccessoryWorkingSet<C> {
         AccessoryWorkingSet { ws: self }
+    }
+
+    /// Returns a handler for the archival state (JMT state).
+    fn archival_state(&mut self, version: Version) -> ArchivalJmtWorkingSet<C> {
+        ArchivalJmtWorkingSet::new(&self.delta.inner.inner, version)
+    }
+
+    /// Returns a handler for the archival accessory state (non-JMT state).
+    fn archival_accessory_state(&mut self, version: Version) -> ArchivalAccessoryWorkingSet<C> {
+        ArchivalAccessoryWorkingSet::new(&self.accessory_delta.inner.storage, version)
+    }
+
+    /// Sets archival version for a working set
+    pub fn set_archival_version(&mut self, version: Version) {
+        self.archival_working_set = Some(self.archival_state(version));
+        self.archival_accessory_working_set = Some(self.archival_accessory_state(version));
+    }
+
+    /// Unset archival version
+    pub fn unset_archival_version(&mut self) {
+        self.archival_working_set = None;
+        self.archival_accessory_working_set = None;
     }
 
     /// Returns a handler for the kernel state (priveleged jmt state)
@@ -424,15 +470,24 @@ impl<C: Context> WorkingSet<C> {
 
 impl<C: Context> StateReaderAndWriter for WorkingSet<C> {
     fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
-        self.delta.get(key)
+        match &mut self.archival_working_set {
+            None => self.delta.get(key),
+            Some(ref mut archival_working_set) => archival_working_set.get(key),
+        }
     }
 
     fn set(&mut self, key: &StorageKey, value: StorageValue) {
-        self.delta.set(key, value)
+        match &mut self.archival_working_set {
+            None => self.delta.set(key, value),
+            Some(ref mut archival_working_set) => archival_working_set.set(key, value),
+        }
     }
 
     fn delete(&mut self, key: &StorageKey) {
-        self.delta.delete(key)
+        match &mut self.archival_working_set {
+            None => self.delta.delete(key),
+            Some(ref mut archival_working_set) => archival_working_set.delete(key),
+        }
     }
 }
 
@@ -447,16 +502,96 @@ impl<'a, C: Context> StateReaderAndWriter for AccessoryWorkingSet<'a, C> {
         if !cfg!(feature = "native") {
             None
         } else {
-            self.ws.accessory_delta.get(key)
+            match &mut self.ws.archival_accessory_working_set {
+                None => self.ws.accessory_delta.get(key),
+                Some(ref mut archival_working_set) => archival_working_set.get(key),
+            }
         }
     }
 
     fn set(&mut self, key: &StorageKey, value: StorageValue) {
-        self.ws.accessory_delta.set(key, value)
+        match &mut self.ws.archival_accessory_working_set {
+            None => self.ws.accessory_delta.set(key, value),
+            Some(ref mut archival_working_set) => archival_working_set.set(key, value),
+        }
     }
 
     fn delete(&mut self, key: &StorageKey) {
-        self.ws.accessory_delta.delete(key)
+        match &mut self.ws.archival_accessory_working_set {
+            None => self.ws.accessory_delta.delete(key),
+            Some(ref mut archival_working_set) => archival_working_set.delete(key),
+        }
+    }
+}
+
+/// Module for archival state
+pub mod archival_state {
+    use super::*;
+
+    /// Archival JMT
+    pub struct ArchivalJmtWorkingSet<C: Context> {
+        delta: RevertableWriter<Delta<C::Storage>>,
+    }
+
+    impl<C: Context> ArchivalJmtWorkingSet<C> {
+        /// create a new instance of ArchivalJmtWorkingSet
+        pub fn new(inner: &<C as Spec>::Storage, version: Version) -> Self {
+            Self {
+                delta: RevertableWriter::new(
+                    Delta::new(inner.clone(), Some(version)),
+                    Some(version),
+                ),
+            }
+        }
+    }
+
+    /// Archival Accessory
+    pub struct ArchivalAccessoryWorkingSet<C: Context> {
+        delta: RevertableWriter<AccessoryDelta<C::Storage>>,
+    }
+
+    impl<C: Context> ArchivalAccessoryWorkingSet<C> {
+        /// create a new instance of ArchivalAccessoryWorkingSet
+        pub fn new(inner: &<C as Spec>::Storage, version: Version) -> Self {
+            Self {
+                delta: RevertableWriter::new(
+                    AccessoryDelta::new(inner.clone(), Some(version)),
+                    Some(version),
+                ),
+            }
+        }
+    }
+
+    impl<C: Context> StateReaderAndWriter for ArchivalJmtWorkingSet<C> {
+        fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
+            self.delta.get(key)
+        }
+
+        fn set(&mut self, key: &StorageKey, value: StorageValue) {
+            self.delta.set(key, value)
+        }
+
+        fn delete(&mut self, key: &StorageKey) {
+            self.delta.delete(key)
+        }
+    }
+
+    impl<C: Context> StateReaderAndWriter for ArchivalAccessoryWorkingSet<C> {
+        fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
+            if !cfg!(feature = "native") {
+                None
+            } else {
+                self.delta.get(key)
+            }
+        }
+
+        fn set(&mut self, key: &StorageKey, value: StorageValue) {
+            self.delta.set(key, value)
+        }
+
+        fn delete(&mut self, key: &StorageKey) {
+            self.delta.delete(key)
+        }
     }
 }
 
@@ -545,6 +680,7 @@ pub mod kernel_state {
 struct RevertableWriter<T> {
     inner: T,
     writes: HashMap<CacheKey, Option<CacheValue>>,
+    version: Option<u64>,
 }
 
 impl<T: fmt::Debug> fmt::Debug for RevertableWriter<T> {
@@ -559,10 +695,11 @@ impl<T> RevertableWriter<T>
 where
     T: StateReaderAndWriter,
 {
-    fn new(inner: T) -> Self {
+    fn new(inner: T, version: Option<u64>) -> Self {
         Self {
             inner,
             writes: Default::default(),
+            version,
         }
     }
 
@@ -585,7 +722,7 @@ where
 
 impl<T: StateReaderAndWriter> StateReaderAndWriter for RevertableWriter<T> {
     fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
-        if let Some(value) = self.writes.get(&key.to_cache_key()) {
+        if let Some(value) = self.writes.get(&key.to_cache_key_version(self.version)) {
             value.as_ref().cloned().map(Into::into)
         } else {
             self.inner.get(key)
@@ -593,11 +730,14 @@ impl<T: StateReaderAndWriter> StateReaderAndWriter for RevertableWriter<T> {
     }
 
     fn set(&mut self, key: &StorageKey, value: StorageValue) {
-        self.writes
-            .insert(key.to_cache_key(), Some(value.into_cache_value()));
+        self.writes.insert(
+            key.to_cache_key_version(self.version),
+            Some(value.into_cache_value()),
+        );
     }
 
     fn delete(&mut self, key: &StorageKey) {
-        self.writes.insert(key.to_cache_key(), None);
+        self.writes
+            .insert(key.to_cache_key_version(self.version), None);
     }
 }

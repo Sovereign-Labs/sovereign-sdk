@@ -54,10 +54,11 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         }
     }
 
-    fn read_value(&self, key: &StorageKey) -> Option<StorageValue> {
+    fn read_value(&self, key: &StorageKey, version: Option<Version>) -> Option<StorageValue> {
+        let version_to_use = version.unwrap_or_else(|| self.db.get_next_version());
         match self
             .db
-            .get_value_option_by_key(self.db.get_next_version(), key.as_ref())
+            .get_value_option_by_key(version_to_use, key.as_ref())
         {
             Ok(value) => value.map(Into::into),
             // It is ok to panic here, we assume the db is available and consistent.
@@ -69,7 +70,6 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
 pub struct ProverStateUpdate {
     pub(crate) node_batch: NodeBatch,
     pub key_preimages: Vec<(KeyHash, CacheKey)>,
-    // pub accessory_update: OrderedReadsAndWrites,
 }
 
 impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
@@ -83,16 +83,22 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         Self::with_path(config.path.as_path())
     }
 
-    fn get(&self, key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
-        let val = self.read_value(key);
+    fn get(
+        &self,
+        key: &StorageKey,
+        version: Option<Version>,
+        witness: &Self::Witness,
+    ) -> Option<StorageValue> {
+        let val = self.read_value(key, version);
         witness.add_hint(val.clone());
         val
     }
 
     #[cfg(feature = "native")]
-    fn get_accessory(&self, key: &StorageKey) -> Option<StorageValue> {
+    fn get_accessory(&self, key: &StorageKey, version: Option<Version>) -> Option<StorageValue> {
+        let version_to_use = version.unwrap_or_else(|| self.db.get_next_version() - 1);
         self.native_db
-            .get_value_option(key.as_ref())
+            .get_value_option(key.as_ref(), version_to_use)
             .unwrap()
             .map(Into::into)
     }
@@ -167,6 +173,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     }
 
     fn commit(&self, state_update: &Self::StateUpdate, accessory_writes: &OrderedReadsAndWrites) {
+        let latest_version = self.db.get_next_version() - 1;
         self.db
             .put_preimages(
                 state_update
@@ -182,6 +189,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
                     .ordered_writes
                     .iter()
                     .map(|(k, v_opt)| (k.key.to_vec(), v_opt.as_ref().map(|v| v.value.to_vec()))),
+                latest_version,
             )
             .expect("native db write must succeed");
 

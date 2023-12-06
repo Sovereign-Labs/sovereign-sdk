@@ -145,7 +145,6 @@ impl<C: sov_modules_api::Context> Token<C> {
 
         self.balances.set(from, &from_balance, working_set);
         self.balances.set(to, &to_balance, working_set);
-
         Ok(())
     }
     /// Burns a specified `amount` of token from the address `from`. First check that the address has enough token to burn,
