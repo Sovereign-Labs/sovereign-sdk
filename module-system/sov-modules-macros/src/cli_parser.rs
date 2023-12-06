@@ -199,24 +199,6 @@ impl CliParserMacro {
                 }
             }
 
-            /*
-            impl #impl_generics_with_inner ::core::convert::TryFrom<RuntimeSubcommand #ty_generics_with_inner> for Vec<u8> #where_clause_with_deserialize_bounds, __Inner: ::clap::Args + TryInto<Vec<u8>, Error = ::anyhow::Error> {
-                type Error = ::anyhow::Error;
-
-                fn try_from(item: RuntimeSubcommand #ty_generics_with_inner ) -> Result<Self, Self::Error>
-                 {
-                    match item {
-                        #( #try_from_subcommand_bytes_match_arms )*
-                        RuntimeSubcommand::____phantom(_) => unreachable!(),
-                    }
-                }
-            }
-
-            impl #impl_generics_with_inner ::sov_modules_api::cli::CliFrontEnd<#ident #ty_generics> for RuntimeSubcommand #ty_generics_with_inner #where_clause_with_deserialize_bounds, __Inner: ::clap::Args {
-                type CliIntermediateRepr<__Dest> = RuntimeMessage #ty_generics_for_dest;
-            }
-            */
-
             /// An intermediate enum between the RuntimeSubcommand (which must implement `clap`) and the
             /// final RT::Decodable type. Like the RuntimeSubcommand, this type contains one variant for each cli-enabled module.
             #[allow(non_camel_case_types)]
