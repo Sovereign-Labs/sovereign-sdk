@@ -363,12 +363,12 @@ impl<C: Context> WorkingSet<C> {
     }
 
     /// Returns a handler for the archival state (JMT state).
-    pub fn archival_state(&mut self, version: Version) -> ArchivalJmtWorkingSet<C> {
+    fn archival_state(&mut self, version: Version) -> ArchivalJmtWorkingSet<C> {
         ArchivalJmtWorkingSet::new(&self.delta.inner.inner, version)
     }
 
     /// Returns a handler for the archival accessory state (non-JMT state).
-    pub fn archival_accessory_state(&mut self, version: Version) -> ArchivalAccessoryWorkingSet<C> {
+    fn archival_accessory_state(&mut self, version: Version) -> ArchivalAccessoryWorkingSet<C> {
         ArchivalAccessoryWorkingSet::new(&self.accessory_delta.inner.storage, version)
     }
 
