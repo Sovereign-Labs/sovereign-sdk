@@ -510,11 +510,17 @@ impl<'a, C: Context> StateReaderAndWriter for AccessoryWorkingSet<'a, C> {
     }
 
     fn set(&mut self, key: &StorageKey, value: StorageValue) {
-        self.ws.accessory_delta.set(key, value)
+        match &mut self.ws.archival_accessory_working_set {
+            None => self.ws.accessory_delta.set(key, value),
+            Some(ref mut archival_working_set) => archival_working_set.set(key, value),
+        }
     }
 
     fn delete(&mut self, key: &StorageKey) {
-        self.ws.accessory_delta.delete(key)
+        match &mut self.ws.archival_accessory_working_set {
+            None => self.ws.accessory_delta.delete(key),
+            Some(ref mut archival_working_set) => archival_working_set.delete(key),
+        }
     }
 }
 

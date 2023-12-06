@@ -210,6 +210,17 @@ fn transfer_initial_token() {
     let mut accessory_state = working_set.accessory_state();
     let val = accessory_state.get(&StorageKey::from("k")).unwrap();
     assert_eq!("v1", String::from_utf8(val.value().to_vec()).unwrap());
+
+    // archival accessory set
+
+    accessory_state.set(&StorageKey::from("k"), StorageValue::from(b"v3".to_vec()));
+    let val = accessory_state.get(&StorageKey::from("k")).unwrap();
+    assert_eq!("v3", String::from_utf8(val.value().to_vec()).unwrap());
+
+    working_set.unset_archival_version();
+    let mut accessory_state = working_set.accessory_state();
+    let val = accessory_state.get(&StorageKey::from("k")).unwrap();
+    assert_eq!("v2", String::from_utf8(val.value().to_vec()).unwrap());
 }
 
 fn query_sender_receiver_balances(
