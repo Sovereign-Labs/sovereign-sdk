@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use jmt::storage::{TreeReader, TreeWriter};
+use jmt::storage::{HasPreimage, TreeReader, TreeWriter};
 use jmt::{KeyHash, Version};
 use sov_schema_db::{SchemaBatch, DB};
 
@@ -150,6 +150,12 @@ impl TreeWriter for StateDB {
         }
         self.db.write_schemas(batch)?;
         Ok(())
+    }
+}
+
+impl HasPreimage for StateDB {
+    fn preimage(&self, key_hash: KeyHash) -> anyhow::Result<Option<Vec<u8>>> {
+        self.db.get::<KeyHashToKey>(&key_hash.0)
     }
 }
 
