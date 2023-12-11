@@ -684,7 +684,7 @@ checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
 name = "bashtestmd"
 version = "0.3.0"
 dependencies = [
- "clap 4.4.10",
+ "clap 4.4.11",
  "indoc",
  "markdown",
  "shell-escape",
@@ -1468,9 +1468,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.4.10"
+version = "4.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41fffed7514f420abec6d183b1d3acfd9099c79c3a10a06ade4f8203f1411272"
+checksum = "bfaff671f6b22ca62406885ece523383b9b64022e341e53e009a62ebc47a45f2"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1478,9 +1478,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.4.9"
+version = "4.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63361bae7eef3771745f02d8d892bec2fee5f6e34af316ba556e7f97a7069ff1"
+checksum = "a216b506622bb1d316cd51328dce24e07bdff4a6128a47c7e7fad11878d5adbb"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1772,7 +1772,7 @@ dependencies = [
  "anes",
  "cast",
  "ciborium",
- "clap 4.4.10",
+ "clap 4.4.11",
  "criterion-plot",
  "is-terminal",
  "itertools 0.10.5",
@@ -2184,7 +2184,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "clap 4.4.10",
+ "clap 4.4.11",
  "demo-stf",
  "hex",
  "jsonrpsee 0.20.3",
@@ -8318,7 +8318,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "clap 4.4.10",
+ "clap 4.4.11",
  "jsonrpsee 0.20.3",
  "schemars",
  "serde",
@@ -8456,7 +8456,7 @@ dependencies = [
  "anyhow",
  "arbitrary",
  "borsh",
- "clap 4.4.10",
+ "clap 4.4.11",
  "jsonrpsee 0.20.3",
  "proptest",
  "proptest-derive",
@@ -8525,7 +8525,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "clap 4.4.10",
+ "clap 4.4.11",
  "jsonrpsee 0.20.3",
  "schemars",
  "serde",
@@ -8544,7 +8544,7 @@ dependencies = [
  "anyhow",
  "bincode",
  "borsh",
- "clap 4.4.10",
+ "clap 4.4.11",
  "hex",
  "jmt",
  "jsonrpsee 0.20.3",
@@ -8677,7 +8677,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "borsh",
- "clap 4.4.10",
+ "clap 4.4.11",
  "const-rollup-config",
  "criterion",
  "demo-stf",
@@ -8759,7 +8759,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "bytes",
- "clap 4.4.10",
+ "clap 4.4.11",
  "derive_more",
  "ethereum-types",
  "ethers-contract",
@@ -8859,7 +8859,7 @@ dependencies = [
  "bech32",
  "bincode",
  "borsh",
- "clap 4.4.10",
+ "clap 4.4.11",
  "derive_more",
  "ed25519-dalek 2.1.0",
  "hex",
@@ -8920,7 +8920,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "clap 4.4.10",
+ "clap 4.4.11",
  "jsonrpsee 0.20.3",
  "proc-macro2 1.0.69",
  "quote 1.0.33",
@@ -9134,7 +9134,7 @@ dependencies = [
  "anyhow",
  "arbitrary",
  "borsh",
- "clap 4.4.10",
+ "clap 4.4.11",
  "jsonrpsee 0.20.3",
  "proptest",
  "proptest-derive",
@@ -9218,7 +9218,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "clap 4.4.10",
+ "clap 4.4.11",
  "jsonrpsee 0.20.3",
  "schemars",
  "serde",
@@ -9236,7 +9236,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "clap 4.4.10",
+ "clap 4.4.11",
  "jsonrpsee 0.20.3",
  "schemars",
  "serde",
