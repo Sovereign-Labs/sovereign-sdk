@@ -96,7 +96,7 @@ impl From<TmHash> for [u8; 32] {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct CelestiaSpec;
 
 impl DaSpec for CelestiaSpec {
