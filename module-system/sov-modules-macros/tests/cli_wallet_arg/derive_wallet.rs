@@ -126,6 +126,8 @@ fn main() {
             "first",
             "--json",
             r#"{"first_field": 1, "str_field": "hello"}"#,
+            "--chain-id",
+            "0",
         ])
         .expect("parsing must succed")
         .into();
@@ -139,6 +141,8 @@ fn main() {
             "second",
             "--json",
             r#"{"Bar": 2}"#,
+            "--chain-id",
+            "0",
         ])
         .expect("parsing must succed")
         .into();
