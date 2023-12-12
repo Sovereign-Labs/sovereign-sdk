@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use sov_modules_api::transaction::UnsignedTransaction;
 use sov_modules_api::{clap, PrivateKey};
 
 /// A struct representing the current state of the CLI wallet
@@ -11,7 +12,7 @@ use sov_modules_api::{clap, PrivateKey};
 #[serde(bound = "Ctx::Address: Serialize + DeserializeOwned, Tx: Serialize + DeserializeOwned")]
 pub struct WalletState<Tx, Ctx: sov_modules_api::Context> {
     /// The accumulated transactions to be submitted to the DA layer
-    pub unsent_transactions: Vec<Tx>,
+    pub unsent_transactions: Vec<UnsignedTransaction<Tx>>,
     /// The addresses in the wallet
     pub addresses: AddressList<Ctx>,
     /// The addresses in the wallet

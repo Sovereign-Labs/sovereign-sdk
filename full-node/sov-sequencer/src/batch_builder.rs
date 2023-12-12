@@ -209,8 +209,11 @@ mod tests {
     fn generate_valid_tx(private_key: &DefaultPrivateKey, value: u32) -> Vec<u8> {
         let msg = CallMessage::SetValue(value);
         let msg = <TestRuntime<C> as EncodeCall<ValueSetter<DefaultContext>>>::encode_call(msg);
+        let chain_id = 0;
+        let gas_tip = 0;
+        let nonce = 1;
 
-        Transaction::<DefaultContext>::new_signed_tx(private_key, msg, 1)
+        Transaction::<DefaultContext>::new_signed_tx(private_key, msg, chain_id, gas_tip, nonce)
             .try_to_vec()
             .unwrap()
     }
@@ -225,7 +228,11 @@ mod tests {
 
     fn generate_signed_tx_with_invalid_payload(private_key: &DefaultPrivateKey) -> Vec<u8> {
         let msg = generate_random_bytes();
-        Transaction::<DefaultContext>::new_signed_tx(private_key, msg, 1)
+        let chain_id = 0;
+        let gas_tip = 0;
+        let nonce = 1;
+
+        Transaction::<DefaultContext>::new_signed_tx(private_key, msg, chain_id, gas_tip, nonce)
             .try_to_vec()
             .unwrap()
     }

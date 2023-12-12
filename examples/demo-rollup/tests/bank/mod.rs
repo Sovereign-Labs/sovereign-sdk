@@ -60,7 +60,16 @@ async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow
         minter_address: user_address,
         authorized_minters: vec![],
     });
-    let tx = Transaction::<DefaultContext>::new_signed_tx(&key, msg.try_to_vec().unwrap(), 0);
+    let chain_id = 0;
+    let gas_tip = 0;
+    let nonce = 0;
+    let tx = Transaction::<DefaultContext>::new_signed_tx(
+        &key,
+        msg.try_to_vec().unwrap(),
+        chain_id,
+        gas_tip,
+        nonce,
+    );
 
     let port = rpc_address.port();
     let client = SimpleClient::new("localhost", port).await?;

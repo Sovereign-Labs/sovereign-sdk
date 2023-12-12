@@ -141,6 +141,10 @@ impl<C: sov_modules_api::Context + Serialize + DeserializeOwned + Send + Sync> R
                     Some(nonce) => *nonce,
                     None => get_nonce_for_account(&client, account).await?,
                 };
+
+                let chain_id = 0;
+                let gas_tip = 0;
+
                 let txs = std::mem::take(&mut wallet_state.unsent_transactions)
                     .into_iter()
                     .enumerate()
@@ -148,6 +152,8 @@ impl<C: sov_modules_api::Context + Serialize + DeserializeOwned + Send + Sync> R
                         Transaction::<C>::new_signed_tx(
                             &private_key,
                             tx.try_to_vec().unwrap(),
+                            chain_id,
+                            gas_tip,
                             nonce + offset as u64,
                         )
                         .try_to_vec()
