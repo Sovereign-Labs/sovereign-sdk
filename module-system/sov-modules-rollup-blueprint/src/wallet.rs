@@ -1,5 +1,7 @@
 use async_trait::async_trait;
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use sov_cli::wallet_state::WalletState;
 use sov_cli::workflows::keys::KeyWorkflow;
 use sov_cli::workflows::rpc::RpcWorkflows;
@@ -54,6 +56,8 @@ where
     async fn run_wallet<File: clap::Subcommand, Json: clap::Subcommand>(
     ) -> Result<(), anyhow::Error>
     where
+        <<Self as RollupBlueprint>::NativeRuntime as DispatchCall>::Decodable:
+            BorshSerialize + BorshDeserialize + Serialize + DeserializeOwned,
         File: CliFrontEnd<<Self as RollupBlueprint>::NativeRuntime> + CliTxImportArg + Send + Sync,
         Json: CliFrontEnd<<Self as RollupBlueprint>::NativeRuntime> + CliTxImportArg + Send + Sync,
 

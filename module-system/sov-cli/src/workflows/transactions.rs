@@ -2,6 +2,8 @@
 
 use std::path::Path;
 
+use borsh::{BorshDeserialize, BorshSerialize};
+use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_modules_api::clap::{self, Subcommand};
 use sov_modules_api::cli::{CliFrontEnd, CliTxImportArg};
@@ -40,7 +42,7 @@ impl<File: Subcommand, Json: Subcommand> TransactionWorkflow<File, Json> {
         File: TryInto<RT::CliStringRepr<V>, Error = E1>,
         Json: TryInto<RT::CliStringRepr<V>, Error = E2>,
         RT::CliStringRepr<V>: TryInto<RT::Decodable, Error = E3>,
-        RT::Decodable: Serialize,
+        RT::Decodable: BorshSerialize + BorshDeserialize + Serialize + DeserializeOwned,
         E1: Into<anyhow::Error> + Send + Sync,
         E2: Into<anyhow::Error> + Send + Sync,
         E3: Into<anyhow::Error> + Send + Sync,
@@ -105,7 +107,7 @@ where
         Json: TryInto<RT::CliStringRepr<U>, Error = E1>,
         File: TryInto<RT::CliStringRepr<U>, Error = E2>,
         RT::CliStringRepr<U>: TryInto<RT::Decodable, Error = E3>,
-        RT::Decodable: Serialize,
+        RT::Decodable: BorshSerialize + BorshDeserialize + Serialize + DeserializeOwned,
         E1: Into<anyhow::Error> + Send + Sync,
         E2: Into<anyhow::Error> + Send + Sync,
         E3: Into<anyhow::Error> + Send + Sync,
