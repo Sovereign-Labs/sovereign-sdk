@@ -226,15 +226,19 @@ Let's go ahead and import the transaction into the wallet
 $ cargo run --bin sov-cli -- transactions import from-file bank --path ../test-data/requests/transfer.json
 Adding the following transaction to batch:
 {
-  "bank": {
-    "Transfer": {
-      "to": "sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94",
-      "coins": {
-        "amount": 200,
-        "token_address": "sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"
+  "tx": {
+    "bank": {
+      "Transfer": {
+        "to": "sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94",
+        "coins": {
+          "amount": 200,
+          "token_address": "sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"
+        }
       }
     }
-  }
+  },
+  "chain_id": 0,
+  "gas_tip": 0
 }
 ```
 
