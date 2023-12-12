@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::{env, fmt, fs, ops};
+use std::{env, fmt, fs, ops, process};
 
 use proc_macro2::{Ident, TokenStream};
 use quote::format_ident;
@@ -41,49 +41,68 @@ impl<'a> Manifest<'a> {
         })
     }
 
-    /// Reads a `constants.json` manifest file, recursing from the target directory that builds the
-    /// current implementation.
+    /// Reads a `constants.json` manifest file, retrieving it from the workspace root of the
+    /// current working directory.
     ///
     /// If the environment variable `CONSTANTS_MANIFEST` is set, it will use that instead.
     ///
+    /// If the compilation is executed for a directory different than the current working dir
+    /// (example: `cargo build --manifest-path /foo/bar/Cargo.toml`), you should override the
+    /// constants manifest dir with the target path:
+    ///
+    /// ```sh
+    /// CONSTANTS_MANIFEST=/foo/bar/constants.json cargo build --manifest-path /foo/bar/Cargo.toml
+    /// ```
+    ///
     /// The `parent` is used to report the errors to the correct span location.
     pub fn read_constants(parent: &'a Ident) -> Result<Self, syn::Error> {
-        let target_path_filename =
-            std::env::var("TARGET_PATH_OVERRIDE").unwrap_or("target-path".to_string());
-        let target_path_pointer = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .canonicalize()
+        let manifest_path = env!("CARGO_MANIFEST_DIR");
+        let constants_path = env::var_os("CONSTANTS_MANIFEST")
+            .map(PathBuf::from)
+            .map::<anyhow::Result<_>, _>(Ok)
+            .unwrap_or_else(|| {
+                let output = process::Command::new(env!("CARGO"))
+                    .args(["metadata", "--format-version=1", "--no-deps"])
+                    .current_dir(manifest_path)
+                    .env_remove("__CARGO_FIX_PLZ")
+                    .output()?;
+
+                let metadata: Value = serde_json::from_slice(&output.stdout)?;
+                let ws_root = metadata
+                    .get("workspace_root")
+                    .ok_or_else(|| {
+                        anyhow::Error::msg("Failed to read `workspace_root` from cargo metadata")
+                    })?
+                    .as_str()
+                    .ok_or_else(|| {
+                        anyhow::Error::msg(
+                            "The `workspace_root` from cargo metadata is not a valid string",
+                        )
+                    })?;
+
+                let path = PathBuf::from(ws_root)
+                    .join("constants.json")
+                    .canonicalize()
+                    .map_err(|e| anyhow::Error::msg(format!(
+                        "Failed to read `constants.json`. Consider overriding the path with `CONSTANTS_MANIFEST`. {}",
+                        e
+                    )))
+                    ?;
+
+                Ok(path)
+            })
             .map_err(|e| {
                 Self::err(
-                    &target_path_filename,
+                    manifest_path,
                     parent,
-                    format!("failed access base dir for sovereign manifest file: {e}"),
+                    format!("failed to compute the `constants.json` path: {e}"),
                 )
-            })?
-            .join(&target_path_filename);
+            })?;
 
-        let manifest_path = fs::read_to_string(&target_path_pointer).map_err(|e| {
-            Self::err(
-                &target_path_pointer,
-                parent,
-                format!("failed to read target path for sovereign manifest file: {e}"),
-            )
-        })?;
+        let constants = fs::read_to_string(&constants_path)
+            .map_err(|e| Self::err(&constants_path, parent, format!("failed to read file: {e}")))?;
 
-        let manifest_path = PathBuf::from(manifest_path.trim())
-            .canonicalize()
-            .map_err(|e| {
-                Self::err(
-                    &manifest_path,
-                    parent,
-                    format!("failed access base dir for sovereign manifest file: {e}"),
-                )
-            })?
-            .join("constants.json");
-
-        let manifest = fs::read_to_string(&manifest_path)
-            .map_err(|e| Self::err(&manifest_path, parent, format!("failed to read file: {e}")))?;
-
-        Self::read_str(manifest, manifest_path, parent)
+        Self::read_str(constants, constants_path, parent)
     }
 
     /// Gets the requested object from the manifest by key
