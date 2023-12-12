@@ -198,11 +198,12 @@ where
         use serde::de;
 
         #[derive(serde::Deserialize)]
-        #[serde(field_identifier, rename_all = "lowercase")]
+        #[serde(field_identifier)]
+        #[allow(non_camel_case_types)]
         enum Field {
-            Tx,
-            ChainId,
-            GasTip,
+            tx,
+            chain_id,
+            gas_tip,
         }
 
         struct UnsignedTransactionVisitor<Tx>(marker::PhantomData<Tx>);
@@ -244,16 +245,16 @@ where
 
                 while let Some(key) = map.next_key()? {
                     match key {
-                        Field::Tx if tx.is_some() => return Err(de::Error::duplicate_field("tx")),
-                        Field::Tx => tx = Some(map.next_value()?),
-                        Field::ChainId if chain_id.is_some() => {
+                        Field::tx if tx.is_some() => return Err(de::Error::duplicate_field("tx")),
+                        Field::tx => tx = Some(map.next_value()?),
+                        Field::chain_id if chain_id.is_some() => {
                             return Err(de::Error::duplicate_field("chain_id"))
                         }
-                        Field::ChainId => chain_id = Some(map.next_value()?),
-                        Field::GasTip if gas_tip.is_some() => {
+                        Field::chain_id => chain_id = Some(map.next_value()?),
+                        Field::gas_tip if gas_tip.is_some() => {
                             return Err(de::Error::duplicate_field("gas_tip"))
                         }
-                        Field::GasTip => gas_tip = Some(map.next_value()?),
+                        Field::gas_tip => gas_tip = Some(map.next_value()?),
                     }
                 }
 
