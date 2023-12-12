@@ -25,7 +25,7 @@ pub struct JsonStringArg {
     pub json: String,
 
     /// The chain ID of the transaction.
-    #[arg(long, help = "The chain ID of the transaction.", default_value = "0")]
+    #[arg(long, help = "The chain ID of the transaction.")]
     pub chain_id: u64,
 
     /// The gas tip for the sequencer.
@@ -41,7 +41,7 @@ pub struct FileNameArg {
     pub path: String,
 
     /// The chain ID of the transaction.
-    #[arg(long, help = "The chain ID of the transaction.", default_value = "0")]
+    #[arg(long, help = "The chain ID of the transaction.")]
     pub chain_id: u64,
 
     /// The gas tip for the sequencer.

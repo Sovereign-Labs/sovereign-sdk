@@ -223,7 +223,7 @@ Let's go ahead and import the transaction into the wallet
 
 
 ```bash,test-ci,bashtestmd:compare-output
-$ cargo run --bin sov-cli -- transactions import from-file bank --path ../test-data/requests/transfer.json
+$ cargo run --bin sov-cli -- transactions import from-file bank --chain-id 0 --path ../test-data/requests/transfer.json
 Adding the following transaction to batch:
 {
   "tx": {
