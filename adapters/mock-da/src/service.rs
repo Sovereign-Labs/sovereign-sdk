@@ -265,6 +265,15 @@ impl DaService for MockDaService {
 
         Ok(())
     }
+
+    async fn send_proof(&self, proof: &[u8]) -> Result<(), Self::Error> {
+        todo!()
+    }
+
+    ///
+    async fn get_proof(&self, proof: &[u8]) -> Result<(), Self::Error> {
+        todo!()
+    }
 }
 
 fn hash_to_array(bytes: &[u8]) -> [u8; 32] {

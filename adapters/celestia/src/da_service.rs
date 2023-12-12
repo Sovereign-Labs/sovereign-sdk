@@ -30,14 +30,20 @@ const GAS_PRICE: usize = 1;
 #[derive(Debug, Clone)]
 pub struct CelestiaService {
     client: HttpClient,
-    rollup_namespace: Namespace,
+    rollup_batch_namespace: Namespace,
+    rollup_proof_namespace: Namespace,
 }
 
 impl CelestiaService {
-    pub fn with_client(client: HttpClient, nid: Namespace) -> Self {
+    pub fn with_client(
+        client: HttpClient,
+        rollup_batch_namespace: Namespace,
+        rollup_proof_namespace: Namespace,
+    ) -> Self {
         Self {
             client,
-            rollup_namespace: nid,
+            rollup_batch_namespace,
+            rollup_proof_namespace,
         }
     }
 }
@@ -91,7 +97,11 @@ impl CelestiaService {
         }
         .expect("Client initialization is valid");
 
-        Self::with_client(client, chain_params.namespace)
+        Self::with_client(
+            client,
+            chain_params.rollup_batch_namespace,
+            chain_params.rollup_proof_namespace,
+        )
     }
 }
 
@@ -142,7 +152,7 @@ impl DaService for CelestiaService {
     #[instrument(skip(self), err)]
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let client = self.client.clone();
-        let rollup_namespace = self.rollup_namespace;
+        let rollup_namespace = self.rollup_batch_namespace;
 
         // Fetch the header and relevant shares via RPC
         debug!("Fetching header at height: {}...", height);
@@ -159,7 +169,7 @@ impl DaService for CelestiaService {
             tokio::try_join!(rollup_rows_future, etx_rows_future, data_square_future)?;
 
         FilteredCelestiaBlock::new(
-            self.rollup_namespace,
+            self.rollup_batch_namespace,
             header,
             rollup_rows,
             etx_rows,
@@ -194,7 +204,7 @@ impl DaService for CelestiaService {
     ) -> Vec<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction> {
         let mut output = Vec::new();
         for blob_ref in block.rollup_data.blobs() {
-            let commitment = Commitment::from_shares(self.rollup_namespace, blob_ref.0)
+            let commitment = Commitment::from_shares(self.rollup_batch_namespace, blob_ref.0)
                 .expect("blob must be valid");
             info!("Blob: {:?}", commitment);
             let sender = block
@@ -239,7 +249,7 @@ impl DaService for CelestiaService {
         let gas_limit = get_gas_limit_for_bytes(blob.len()) as u64;
         let fee = gas_limit * GAS_PRICE as u64;
 
-        let blob = JsonBlob::new(self.rollup_namespace, blob.to_vec())?;
+        let blob = JsonBlob::new(self.rollup_batch_namespace, blob.to_vec())?;
         info!("Submitting: {:?}", blob.commitment);
 
         let height = self
@@ -257,6 +267,17 @@ impl DaService for CelestiaService {
             height,
         );
         Ok(())
+    }
+
+    async fn send_proof(&self, proof: &[u8]) -> Result<(), Self::Error> {
+        let blob = JsonBlob::new(self.rollup_batch_namespace, proof.to_vec())?;
+
+        todo!()
+    }
+
+    ///
+    async fn get_proof(&self, proof: &[u8]) -> Result<(), Self::Error> {
+        todo!()
     }
 }
 
@@ -337,7 +358,13 @@ mod tests {
             celestia_rpc_timeout_seconds: timeout_sec,
         };
         let namespace = Namespace::new_v0(b"sov-test").unwrap();
-        let da_service = CelestiaService::new(config.clone(), RollupParams { namespace }).await;
+        let da_service = CelestiaService::new(
+            config.clone(),
+            RollupParams {
+                rollup_batch_namespace: namespace,
+            },
+        )
+        .await;
 
         (mock_server, config, da_service, namespace)
     }
@@ -529,7 +556,9 @@ mod tests {
             let (correctness_proof, completeness_proof) =
                 da_service.get_extraction_proof(&block, &txs).await;
 
-            let verifier = CelestiaVerifier::new(RollupParams { namespace });
+            let verifier = CelestiaVerifier::new(RollupParams {
+                rollup_batch_namespace,
+            });
 
             let validity_cond = verifier
                 .verify_relevant_tx_list(&block.header, &txs, correctness_proof, completeness_proof)
@@ -549,7 +578,9 @@ mod tests {
         let (correctness_proof, completeness_proof) =
             da_service.get_extraction_proof(&block, &txs).await;
 
-        let verifier = CelestiaVerifier::new(RollupParams { namespace });
+        let verifier = CelestiaVerifier::new(RollupParams {
+            rollup_batch_namespace,
+        });
 
         // give verifier empty txs list
         let error = verifier
@@ -571,7 +602,9 @@ mod tests {
         // drop the proof for last etx
         correctness_proof.pop();
 
-        let verifier = CelestiaVerifier::new(RollupParams { namespace });
+        let verifier = CelestiaVerifier::new(RollupParams {
+            rollup_batch_namespace,
+        });
 
         let error = verifier
             .verify_relevant_tx_list(&block.header, &txs, correctness_proof, completeness_proof)
@@ -592,7 +625,9 @@ mod tests {
         // push one extra etx proof
         correctness_proof.push(correctness_proof[0].clone());
 
-        let verifier = CelestiaVerifier::new(RollupParams { namespace });
+        let verifier = CelestiaVerifier::new(RollupParams {
+            rollup_batch_namespace,
+        });
 
         let error = verifier
             .verify_relevant_tx_list(&block.header, &txs, correctness_proof, completeness_proof)
@@ -613,7 +648,7 @@ mod tests {
 
         // create a verifier with a different namespace than the da_service
         let verifier = CelestiaVerifier::new(RollupParams {
-            namespace: Namespace::new_v0(b"abc").unwrap(),
+            rollup_batch_namespace: Namespace::new_v0(b"abc").unwrap(),
         });
 
         let _panics = verifier.verify_relevant_tx_list(

@@ -114,6 +114,11 @@ name = "sov-cli"
 path = "src/sov-cli/main.rs"
 
 [[bin]]
+name = "da"
+path = "src/sov-cli/da.rs"
+
+
+[[bin]]
 name = "sov-nft-script"
 path = "src/bin/sov_nft_script.rs"
 

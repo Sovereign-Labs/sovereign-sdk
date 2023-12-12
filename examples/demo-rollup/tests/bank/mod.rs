@@ -26,7 +26,7 @@ async fn bank_tx_tests() -> Result<(), anyhow::Error> {
         start_rollup(
             port_tx,
             GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
-            RollupProverConfig::Execute,
+            RollupProverConfig::Prove,
         )
         .await;
     });

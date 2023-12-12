@@ -151,6 +151,14 @@ impl DaService for RngDaService {
     async fn send_transaction(&self, _blob: &[u8]) -> Result<(), Self::Error> {
         unimplemented!()
     }
+
+    async fn send_proof(&self, proof: &[u8]) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+
+    async fn get_proof(&self, proof: &[u8]) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
 }
 
 pub struct RngDaVerifier;

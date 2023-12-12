@@ -1,12 +1,11 @@
 //! This module implements the [`ZkvmHost`] trait for the RISC0 VM.
 
+use crate::guest::Risc0Guest;
+use crate::Risc0MethodId;
 use risc0_zkvm::{ExecutorEnvBuilder, ExecutorImpl, InnerReceipt, Receipt, Session};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::zk::{Proof, Zkvm, ZkvmHost};
-
-use crate::guest::Risc0Guest;
-use crate::Risc0MethodId;
 
 /// A [`Risc0Host`] stores a binary to execute in the Risc0 VM, and accumulates hints to be
 /// provided to its execution.
@@ -87,8 +86,9 @@ impl<'a> ZkvmHost for Risc0Host<'a> {
 
     fn run(&mut self, with_proof: bool) -> Result<Proof, anyhow::Error> {
         if with_proof {
-            let journal = self.run()?.journal;
-            Ok(Proof::Data(journal.bytes))
+            let receipt = self.run()?;
+            let data = bincode::serialize(&receipt)?;
+            Ok(Proof::Data(data))
         } else {
             self.run_without_proving()?;
             Ok(Proof::Empty)
