@@ -132,7 +132,9 @@ fn test_schema_put_get() {
 fn collect_values<S: Schema>(db: &TestDB) -> Vec<(S::Key, S::Value)> {
     let mut iter = db.iter::<S>().expect("Failed to create iterator.");
     iter.seek_to_first();
-    iter.collect::<Result<Vec<_>, anyhow::Error>>().unwrap()
+    iter.map(|res| res.map(|item| item.to_tuple()))
+        .collect::<Result<Vec<_>, anyhow::Error>>()
+        .unwrap()
 }
 
 fn gen_expected_values(values: &[(u32, u32)]) -> Vec<(TestField, TestField)> {

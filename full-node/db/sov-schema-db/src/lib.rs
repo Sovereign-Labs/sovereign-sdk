@@ -40,6 +40,8 @@ pub use crate::schema::Schema;
 use crate::schema::{ColumnFamilyName, KeyCodec, ValueCodec};
 pub use crate::schema_batch::{SchemaBatch, SchemaBatchIterator};
 
+pub use rocksdb;
+
 /// This DB is a schematized RocksDB wrapper where all data passed in and out are typed according to
 /// [`Schema`]s.
 #[derive(Debug)]
