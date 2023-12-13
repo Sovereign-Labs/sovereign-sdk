@@ -14,5 +14,5 @@ mod eth;
 /// You can change this constant to point your rollup at a different namespace
 pub const ROLLUP_BATCH_NAMESPACE: Namespace = Namespace::const_v0(ROLLUP_BATCH_NAMESPACE_RAW);
 
-///TODO
+/// The rollup stores the zk proofs in the namespace b"sov-test-p" on Celestia.
 pub const ROLLUP_PROOF_NAMESPACE: Namespace = Namespace::const_v0(ROLLUP_PROOF_NAMESPACE_RAW);

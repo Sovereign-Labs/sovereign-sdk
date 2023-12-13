@@ -227,14 +227,6 @@ where
             .map(|_| Proof::Empty)
             .map_err(|e| anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)),
         ProofGenConfig::Execute => vm.run(false),
-        ProofGenConfig::Prover => {
-            let p = vm.run(true);
-            let p = p.unwrap();
-            match &p {
-                Proof::Empty => todo!(),
-                Proof::Data(d) => println!("===== P size {:?}", d.len()),
-            }
-            Ok(p)
-        }
+        ProofGenConfig::Prover => vm.run(true),
     }
 }

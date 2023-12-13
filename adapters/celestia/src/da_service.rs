@@ -284,7 +284,6 @@ impl DaService for CelestiaService {
             )
             .await?;
 
-        println!("Proof submitted at height: {}", height);
         Ok(height)
     }
 
@@ -667,5 +666,50 @@ mod tests {
             correctness_proof,
             completeness_proof,
         );
+    }
+
+    #[tokio::test]
+    async fn test_submit_proof() -> anyhow::Result<()> {
+        let (mock_server, config, da_service, rollup_params) = setup_service(None).await;
+
+        let zk_proof: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
+        let gas_limit = get_gas_limit_for_bytes(zk_proof.len());
+
+        let expected_body = json!({
+            "id": 0,
+            "jsonrpc": "2.0",
+            "method": "blob.Submit",
+            "params": [
+                [JsonBlob::new(rollup_params.rollup_proof_namespace, zk_proof.to_vec()).unwrap()],
+                {
+                    "GasLimit": gas_limit,
+                    "Fee": gas_limit * GAS_PRICE,
+                },
+            ]
+        });
+
+        Mock::given(method("POST"))
+            .and(path("/"))
+            .and(bearer_token(config.celestia_rpc_auth_token))
+            .and(body_json(&expected_body))
+            .respond_with(|req: &Request| {
+                let request: BasicJsonRpcRequest = serde_json::from_slice(&req.body).unwrap();
+                let response_json = json!({
+                    "jsonrpc": "2.0",
+                    "id": request.id,
+                    "result": 14, // just some block-height
+                });
+
+                ResponseTemplate::new(200)
+                    .append_header("Content-Type", "application/json")
+                    .set_body_json(response_json)
+            })
+            .up_to_n_times(1)
+            .mount(&mock_server)
+            .await;
+
+        da_service.send_aggrgated_zk_proof(&zk_proof).await?;
+
+        Ok(())
     }
 }
