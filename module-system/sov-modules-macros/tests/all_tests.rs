@@ -3,11 +3,7 @@ use std::path::PathBuf;
 
 fn set_constants_manifest() {
     let manifest_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
-    let constants = PathBuf::from(manifest_dir)
-        .join("tests")
-        .join("constants.json")
-        .canonicalize()
-        .unwrap();
+    let constants = PathBuf::from(manifest_dir).canonicalize().unwrap();
 
     env::set_var("CONSTANTS_MANIFEST", constants);
 }

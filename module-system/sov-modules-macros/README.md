@@ -60,19 +60,21 @@ Here is an example of a `constants.json` file:
     }
   },
   "constants": {
-      "DEFERRED_SLOTS_COUNT": 2
+    "DEFERRED_SLOTS_COUNT": 2
   }
 }
 ```
 
 The default location of the `constants.json` file is in the root directory of the current workspace. Nonetheless, this can be superseded by setting the environment variable `CONSTANTS_MANIFEST` during compilation.
 
+The following command will assert a `/foo/bar/Cargo.toml` file exists, and will use `/foo/bar/constants.json`.
+
 ```sh
-CONSTANTS_MANIFEST=/foo/bar/constants.json cargo build
+CONSTANTS_MANIFEST=/foo/bar cargo build
 ```
 
 The macro compilation will endeavor to obtain the workspace root of the current working directory. If the execution is taking place from an external location, such as `cargo build --manifest-path /foo/bar/Cargo.toml`, you should adjust the path accordingly.
 
 ```sh
-CONSTANTS_MANIFEST=/foo/bar/constants.json cargo build --manifest-path /foo/bar/Cargo.toml
+CONSTANTS_MANIFEST=/foo/bar cargo build --manifest-path /foo/bar/Cargo.toml
 ```

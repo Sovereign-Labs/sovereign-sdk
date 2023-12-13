@@ -44,63 +44,96 @@ impl<'a> Manifest<'a> {
     /// Reads a `constants.json` manifest file, retrieving it from the workspace root of the
     /// current working directory.
     ///
-    /// If the environment variable `CONSTANTS_MANIFEST` is set, it will use that instead.
+    /// If the environment variable `CONSTANTS_MANIFEST` is set, it will use that path as workspace
+    /// directory.
     ///
     /// If the compilation is executed for a directory different than the current working dir
     /// (example: `cargo build --manifest-path /foo/bar/Cargo.toml`), you should override the
-    /// constants manifest dir with the target path:
+    /// constants manifest dir with the target directory:
     ///
     /// ```sh
-    /// CONSTANTS_MANIFEST=/foo/bar/constants.json cargo build --manifest-path /foo/bar/Cargo.toml
+    /// CONSTANTS_MANIFEST=/foo/bar cargo build --manifest-path /foo/bar/Cargo.toml
     /// ```
     ///
     /// The `parent` is used to report the errors to the correct span location.
     pub fn read_constants(parent: &'a Ident) -> Result<Self, syn::Error> {
-        let manifest_path = env!("CARGO_MANIFEST_DIR");
-        let constants_path = env::var_os("CONSTANTS_MANIFEST")
+        let constants_dir = env::var_os("CONSTANTS_MANIFEST")
             .map(PathBuf::from)
-            .map::<anyhow::Result<_>, _>(Ok)
-            .unwrap_or_else(|| {
-                let output = process::Command::new(env!("CARGO"))
-                    .args(["metadata", "--format-version=1", "--no-deps"])
-                    .current_dir(manifest_path)
-                    .env_remove("__CARGO_FIX_PLZ")
-                    .output()?;
-
-                let metadata: Value = serde_json::from_slice(&output.stdout)?;
-                let ws_root = metadata
-                    .get("workspace_root")
-                    .ok_or_else(|| {
-                        anyhow::Error::msg("Failed to read `workspace_root` from cargo metadata")
-                    })?
-                    .as_str()
-                    .ok_or_else(|| {
-                        anyhow::Error::msg(
-                            "The `workspace_root` from cargo metadata is not a valid string",
-                        )
-                    })?;
-
-                let path = PathBuf::from(ws_root)
-                    .join("constants.json")
-                    .canonicalize()
-                    .map_err(|e| anyhow::Error::msg(format!(
-                        "Failed to read `constants.json`. Consider overriding the path with `CONSTANTS_MANIFEST`. {}",
-                        e
-                    )))
-                    ?;
-
-                Ok(path)
-            })
+            .map(Ok)
+            .unwrap_or_else(env::current_dir)
             .map_err(|e| {
                 Self::err(
-                    manifest_path,
+                    env!("CARGO_MANIFEST_DIR"),
+                    parent,
+                    format!("failed to compute the `constants.json` base path: {e}"),
+                )
+            })?;
+
+        // we remove the __CARGO_FIX due to incompatibility with `cargo metadata`
+        // https://github.com/rust-lang/cargo/issues/9706
+        let output = process::Command::new(env!("CARGO"))
+            .args(["metadata", "--format-version=1", "--no-deps"])
+            .current_dir(&constants_dir)
+            .env_remove("__CARGO_FIX_PLZ")
+            .output()
+            .map_err(|e| {
+                Self::err(
+                    &constants_dir,
                     parent,
                     format!("failed to compute the `constants.json` path: {e}"),
                 )
             })?;
 
-        let constants = fs::read_to_string(&constants_path)
-            .map_err(|e| Self::err(&constants_path, parent, format!("failed to read file: {e}")))?;
+        let metadata: Value = serde_json::from_slice::<Value>(&output.stdout).map_err(|e| {
+            Self::err(
+                &constants_dir,
+                parent,
+                format!("Failed to parse `workspace_root` as json: {}", e),
+            )
+        })?;
+        let ws_root = metadata.get("workspace_root").ok_or_else(|| {
+            Self::err(
+                &constants_dir,
+                parent,
+                "Failed to read `workspace_root` from cargo metadata",
+            )
+        })?;
+        let ws = ws_root
+            .as_str()
+            .ok_or_else(|| {
+                Self::err(
+                    &constants_dir,
+                    parent,
+                    "The `workspace_root` from cargo metadata is not a valid string",
+                )
+            })
+            .map(PathBuf::from)?;
+
+        if !ws.is_dir() {
+            return Err(Self::err(
+                &ws,
+                parent,
+                "the computed `constants.json` path is not a directory",
+            ));
+        }
+
+        // checks if is pointing to a cargo project
+        if !ws.join("Cargo.toml").is_file() {
+            return Err(Self::err(
+                &ws,
+                parent,
+                "the computed `constants.json` path is not a valid workspace: Cargo.toml not found",
+            ));
+        }
+
+        let constants_path = ws.join("constants.json");
+        let constants = fs::read_to_string(&constants_path).map_err(|e| {
+            Self::err(
+                &constants_path,
+                parent,
+                format!("failed to read `{}`: {}", constants_path.display(), e),
+            )
+        })?;
 
         Self::read_str(constants, constants_path, parent)
     }
