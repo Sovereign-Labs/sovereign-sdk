@@ -116,7 +116,7 @@ pub trait DaService: Send + Sync + 'static {
         aggregated_proof_data: &[u8],
     ) -> Result<u64, Self::Error>;
 
-    /// Fetches all aggregated zk proofs at a specified block heigh.
+    /// Fetches all aggregated ZK proofs at a specified block height.
     async fn get_aggregated_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error>;
 }
 
