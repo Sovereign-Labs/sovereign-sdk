@@ -2,6 +2,7 @@ use sov_bank::TokenConfig;
 use sov_blob_storage::{BlobStorage, DEFERRED_SLOTS_COUNT};
 use sov_chain_state::ChainStateConfig;
 use sov_mock_da::{MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaSpec};
+use sov_modules_api::da::Time;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::macros::DefaultRuntime;
@@ -134,6 +135,7 @@ fn do_deferred_blob_test(
                 prev_hash: [slot_number_u8; 32].into(),
                 hash: [slot_number_u8 + 1; 32].into(),
                 height: slot_number,
+                time: Time::now(),
             },
             validity_cond: Default::default(),
             blobs: slots_iterator.next().unwrap(),
@@ -482,6 +484,7 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
                 prev_hash: [slot_number_u8; 32].into(),
                 hash: [slot_number_u8 + 1; 32].into(),
                 height: slot_number,
+                time: Time::now(),
             },
             validity_cond: Default::default(),
             blobs: if slot_number == 0 {
@@ -531,6 +534,7 @@ fn test_blobs_not_deferred_without_preferred_sequencer() {
             prev_hash: [0; 32].into(),
             hash: [1; 32].into(),
             height: 1,
+            time: Time::now(),
         },
         validity_cond: Default::default(),
         blobs: slot_1_blobs,
@@ -557,6 +561,7 @@ fn test_blobs_not_deferred_without_preferred_sequencer() {
             prev_hash: slot_1_data.header.hash,
             hash: [2; 32].into(),
             height: 2,
+            time: Time::now(),
         },
         validity_cond: Default::default(),
         blobs: Vec::new(),

@@ -7,7 +7,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use pin_project::pin_project;
 use sha2::Digest;
-use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
+use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, Time};
 use sov_rollup_interface::maybestd::sync::Arc;
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use tokio::sync::{broadcast, RwLock};
@@ -179,7 +179,7 @@ impl DaService for MockDaService {
             .checked_sub(oldest_available_height)
             .expect("Inconsistent MockDa");
 
-        Ok(*blocks[index as usize].header())
+        Ok(blocks[index as usize].header().clone())
     }
 
     async fn subscribe_finalized_header(&self) -> Result<Self::HeaderStream, Self::Error> {
@@ -195,7 +195,7 @@ impl DaService for MockDaService {
         blocks
             .iter()
             .last()
-            .map(|b| *b.header())
+            .map(|b| b.header().clone())
             .ok_or(anyhow::anyhow!("MockChain is empty"))
     }
 
@@ -220,7 +220,7 @@ impl DaService for MockDaService {
     async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
         let mut blocks = self.blocks.write().await;
 
-        let (previous_block_hash, height) = match blocks.iter().last().map(|b| *b.header()) {
+        let (previous_block_hash, height) = match blocks.iter().last().map(|b| b.header().clone()) {
             None => (MockHash::from([0; 32]), 0),
             Some(block_header) => (block_header.hash(), block_header.height + 1),
         };
@@ -233,6 +233,7 @@ impl DaService for MockDaService {
             prev_hash: previous_block_hash,
             hash: block_hash,
             height,
+            time: Time::now(),
         };
         let block = MockBlock {
             header,
@@ -255,7 +256,7 @@ impl DaService for MockDaService {
             }
 
             self.finalized_header_sender
-                .send(*blocks[next_index_to_finalize].header())
+                .send(blocks[next_index_to_finalize].header().clone())
                 .unwrap();
 
             let this_finalized_height = oldest_available_height + next_index_to_finalize as u64;

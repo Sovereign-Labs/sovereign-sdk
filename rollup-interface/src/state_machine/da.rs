@@ -246,6 +246,18 @@ impl Time {
         }
     }
 
+    #[cfg(feature = "std")]
+    /// Get the current time
+    pub fn now() -> Self {
+        let current_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("Time went backwards");
+        Time {
+            secs: current_time.as_secs() as i64,
+            nanos: current_time.subsec_nanos(),
+        }
+    }
+
     /// Create a time from the specified number of whole seconds.
     pub const fn from_secs(secs: i64) -> Self {
         Time { secs, nanos: 0 }

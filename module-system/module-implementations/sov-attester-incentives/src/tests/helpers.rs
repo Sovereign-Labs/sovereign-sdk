@@ -8,6 +8,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Address, Genesis, Spec, ValidityConditionChecker, WorkingSet};
+use sov_rollup_interface::da::Time;
 use sov_state::storage::{NativeStorage, Storage, StorageProof};
 use sov_state::{DefaultStorageSpec, ProverStorage};
 
@@ -169,6 +170,7 @@ pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidit
                 prev_hash: [i; 32].into(),
                 hash: [i + 1; 32].into(),
                 height: INIT_HEIGHT + u64::from(i + 1),
+                time: Time::now(),
             },
             validity_cond: MockValidityCond { is_valid: true },
             blobs: Default::default(),

@@ -1,6 +1,6 @@
 use sov_chain_state::{ChainState, ChainStateConfig, StateTransitionId, TransitionInProgress};
 use sov_mock_da::{MockBlock, MockBlockHeader, MockDaSpec, MockValidityCond};
-use sov_modules_api::da::BlockHeaderTrait;
+use sov_modules_api::da::{BlockHeaderTrait, Time};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::storage::StorageManager;
@@ -61,6 +61,7 @@ fn test_simple_chain_state() {
             prev_hash: [0; 32].into(),
             hash: [1; 32].into(),
             height: INIT_HEIGHT,
+            time: Time::now(),
         },
         validity_cond: MockValidityCond { is_valid: true },
         blobs: Default::default(),
@@ -119,6 +120,7 @@ fn test_simple_chain_state() {
             prev_hash: [1; 32].into(),
             hash: [2; 32].into(),
             height: INIT_HEIGHT,
+            time: Time::now(),
         },
         validity_cond: MockValidityCond { is_valid: false },
         blobs: Default::default(),
