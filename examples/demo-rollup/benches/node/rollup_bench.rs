@@ -14,6 +14,7 @@ use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
 use sov_modules_stf_blueprint::StfBlueprint;
 use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rng_da_service::{RngDaService, RngDaSpec};
+use sov_rollup_interface::da::Time;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::storage::StorageManager;
@@ -76,6 +77,7 @@ fn rollup_bench(_bench: &mut Criterion) {
                 hash: barray.into(),
                 prev_hash: [0u8; 32].into(),
                 height,
+                time: Time::now(),
             },
             validity_cond: Default::default(),
             blobs: Default::default(),
