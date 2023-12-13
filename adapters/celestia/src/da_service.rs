@@ -146,7 +146,6 @@ impl DaService for CelestiaService {
     type FilteredBlock = FilteredCelestiaBlock;
     type HeaderStream = CelestiaBlockHeaderSubscription;
     type TransactionId = ();
-    type AggregatedProof = Vec<u8>;
     type Error = BoxError;
 
     #[instrument(skip(self), err)]
@@ -269,10 +268,10 @@ impl DaService for CelestiaService {
         Ok(())
     }
 
-    async fn send_proof(&self, proof: Self::AggregatedProof) -> Result<(), Self::Error> {
-        let gas_limit = get_gas_limit_for_bytes(proof.len()) as u64;
+    async fn send_proof(&self, aggregated_proof: &[u8]) -> Result<u64, Self::Error> {
+        let gas_limit = get_gas_limit_for_bytes(aggregated_proof.len()) as u64;
         let fee = gas_limit * GAS_PRICE as u64;
-        let blob = JsonBlob::new(self.rollup_proof_namespace, proof.to_vec())?;
+        let blob = JsonBlob::new(self.rollup_proof_namespace, aggregated_proof.to_vec())?;
 
         let height = self
             .client
@@ -286,19 +285,16 @@ impl DaService for CelestiaService {
             .await?;
 
         println!("Proof submitted at height: {}", height);
-        Ok(())
+        Ok(height)
     }
 
-    async fn get_proofs_at(&self, height: u64) -> Result<Vec<Self::AggregatedProof>, Self::Error> {
+    async fn get_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
         let blobs = self
             .client
-            .blob_get_all(31, &[self.rollup_proof_namespace])
+            .blob_get_all(height, &[self.rollup_proof_namespace])
             .await?;
 
-        println!("BLOB {:?}", blobs);
-
-        //        Ok(())
-        todo!()
+        Ok(blobs.into_iter().map(|blob| blob.data).collect())
     }
 }
 

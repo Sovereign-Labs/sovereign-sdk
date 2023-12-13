@@ -25,7 +25,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     println!("Start");
     let proof: Vec<u8> = vec![1, 2, 3];
-    service.send_proof(proof).await?;
+    service.send_proof(&proof).await?;
     //service.get_proofs_at(&proof).await?;
 
     println!("End");
