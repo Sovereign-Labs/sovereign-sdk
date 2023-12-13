@@ -187,7 +187,7 @@ async fn main() -> Result<(), anyhow::Error> {
             hex::encode(prev_state_root.0)
         );
         let filtered_block = &blocks[height as usize];
-        host.add_hint(filtered_block.header);
+        host.add_hint(filtered_block.header.clone());
         let (mut blob_txs, inclusion_proof, completeness_proof) = da_service
             .extract_relevant_blobs_with_proof(filtered_block)
             .await;
