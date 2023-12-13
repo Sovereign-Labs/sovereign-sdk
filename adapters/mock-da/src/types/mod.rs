@@ -59,7 +59,7 @@ impl std::hash::Hash for MockHash {
 impl BlockHashTrait for MockHash {}
 
 /// A mock block header used for testing.
-#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone)]
 pub struct MockBlockHeader {
     /// The hash of the previous block.
     pub prev_hash: MockHash,
@@ -67,6 +67,8 @@ pub struct MockBlockHeader {
     pub hash: MockHash,
     /// The height of this block
     pub height: u64,
+    /// The time at which this block was created
+    pub time: Time,
 }
 
 impl Default for MockBlockHeader {
@@ -75,6 +77,7 @@ impl Default for MockBlockHeader {
             prev_hash: MockHash([0u8; 32]),
             hash: MockHash([1u8; 32]),
             height: 0,
+            time: Time::now(),
         }
     }
 }
@@ -107,7 +110,7 @@ impl BlockHeaderTrait for MockBlockHeader {
     }
 
     fn time(&self) -> Time {
-        Time::now()
+        self.time.clone()
     }
 }
 
@@ -168,6 +171,7 @@ impl Default for MockBlock {
                 prev_hash: [0; 32].into(),
                 hash: [1; 32].into(),
                 height: 0,
+                time: Default::default(),
             },
             validity_cond: Default::default(),
             blobs: Default::default(),

@@ -250,6 +250,7 @@ mod tests {
 
     use sov_db::rocks_db_config::gen_rocksdb_options;
     use sov_mock_da::{MockBlockHeader, MockHash};
+    use sov_rollup_interface::da::Time;
     use sov_schema_db::snapshot::FrozenDbSnapshot;
 
     use super::*;
@@ -368,6 +369,7 @@ mod tests {
             prev_hash: MockHash::from([1; 32]),
             hash: MockHash::from([2; 32]),
             height: 1,
+            time: Time::now(),
         };
 
         let _storage = storage_manager
@@ -408,6 +410,7 @@ mod tests {
             prev_hash: MockHash::from([0; 32]),
             hash: MockHash::from([1; 32]),
             height: 1,
+            time: Time::now(),
         };
 
         let storage_1 = storage_manager
@@ -453,6 +456,7 @@ mod tests {
             prev_hash: MockHash::from([1; 32]),
             hash: MockHash::from([1; 32]),
             height: 1,
+            time: Time::now(),
         };
 
         storage_manager
@@ -478,11 +482,13 @@ mod tests {
             prev_hash: MockHash::from([1; 32]),
             hash: MockHash::from([2; 32]),
             height: 1,
+            time: Time::now(),
         };
         let block_b = MockBlockHeader {
             prev_hash: MockHash::from([2; 32]),
             hash: MockHash::from([1; 32]),
             height: 2,
+            time: Time::now(),
         };
 
         let _storage_a = storage_manager.get_native_storage_on(&block_a).unwrap();
@@ -510,6 +516,7 @@ mod tests {
             prev_hash: MockHash::from([1; 32]),
             hash: MockHash::from([2; 32]),
             height: 1,
+            time: Time::now(),
         };
 
         assert!(storage_manager.is_empty());
@@ -538,6 +545,7 @@ mod tests {
             prev_hash: MockHash::from([1; 32]),
             hash: MockHash::from([2; 32]),
             height: 1,
+            time: Time::now(),
         };
 
         let snapshot_1 = {
@@ -577,12 +585,14 @@ mod tests {
             prev_hash: MockHash::from([0; 32]),
             hash: MockHash::from([1; 32]),
             height: 1,
+            time: Time::now(),
         };
 
         let block_b = MockBlockHeader {
             prev_hash: MockHash::from([2; 32]),
             hash: MockHash::from([3; 32]),
             height: 2,
+            time: Time::now(),
         };
 
         let (snapshot_alien_1, snapshot_alien_2) = {
@@ -636,6 +646,7 @@ mod tests {
             prev_hash: MockHash::from([i; 32]),
             hash: MockHash::from([i + 1; 32]),
             height: i as u64 + 1,
+            time: Time::now(),
         };
 
         for i in 0u8..4 {
@@ -682,6 +693,7 @@ mod tests {
                 prev_hash: MockHash::from([prev_hash; 32]),
                 hash: MockHash::from([next_hash; 32]),
                 height: height as u64,
+                time: Time::now(),
             };
             let storage = storage_manager.get_native_storage_on(&block).unwrap();
             storage_manager.save_change_set(&block, storage).unwrap();
@@ -692,6 +704,7 @@ mod tests {
                 prev_hash: MockHash::from([prev_hash; 32]),
                 hash: MockHash::from([prev_hash + 1; 32]),
                 height: prev_hash as u64 + 1,
+                time: Time::now(),
             };
             storage_manager.finalize(&block).unwrap();
             validate_internal_consistency(&storage_manager);
@@ -748,56 +761,67 @@ mod tests {
             prev_hash: MockHash::from([0; 32]),
             hash: MockHash::from([1; 32]),
             height: 1,
+            time: Time::now(),
         };
         let block_b = MockBlockHeader {
             prev_hash: MockHash::from([1; 32]),
             hash: MockHash::from([2; 32]),
             height: 2,
+            time: Time::now(),
         };
         let block_c = MockBlockHeader {
             prev_hash: MockHash::from([2; 32]),
             hash: MockHash::from([3; 32]),
             height: 3,
+            time: Time::now(),
         };
         let block_d = MockBlockHeader {
             prev_hash: MockHash::from([3; 32]),
             hash: MockHash::from([4; 32]),
             height: 4,
+            time: Time::now(),
         };
         let block_e = MockBlockHeader {
             prev_hash: MockHash::from([4; 32]),
             hash: MockHash::from([5; 32]),
             height: 5,
+            time: Time::now(),
         };
         let block_f = MockBlockHeader {
             prev_hash: MockHash::from([1; 32]),
             hash: MockHash::from([32; 32]),
             height: 2,
+            time: Time::now(),
         };
         let block_g = MockBlockHeader {
             prev_hash: MockHash::from([2; 32]),
             hash: MockHash::from([23; 32]),
             height: 3,
+            time: Time::now(),
         };
         let block_h = MockBlockHeader {
             prev_hash: MockHash::from([23; 32]),
             hash: MockHash::from([24; 32]),
             height: 4,
+            time: Time::now(),
         };
         let block_k = MockBlockHeader {
             prev_hash: MockHash::from([32; 32]),
             hash: MockHash::from([33; 32]),
             height: 3,
+            time: Time::now(),
         };
         let block_l = MockBlockHeader {
             prev_hash: MockHash::from([2; 32]),
             hash: MockHash::from([13; 32]),
             height: 3,
+            time: Time::now(),
         };
         let block_m = MockBlockHeader {
             prev_hash: MockHash::from([13; 32]),
             hash: MockHash::from([14; 32]),
             height: 4,
+            time: Time::now(),
         };
 
         // Data

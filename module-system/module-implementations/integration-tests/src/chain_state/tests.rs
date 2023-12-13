@@ -8,6 +8,7 @@ use sov_modules_api::storage::StorageManager;
 use sov_modules_api::{Spec, WorkingSet};
 use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
 use sov_modules_stf_blueprint::{SequencerOutcome, StfBlueprint};
+use sov_rollup_interface::da::Time;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::storage_manager::ProverStorageManager;
 use sov_state::Storage;
@@ -58,6 +59,7 @@ fn test_simple_value_setter_with_chain_state() {
             prev_hash: [0; 32].into(),
             hash: [10; 32].into(),
             height: 0,
+            time: Time::now(),
         },
         validity_cond: MockValidityCond::default(),
         blobs: Default::default(),
@@ -126,6 +128,7 @@ fn test_simple_value_setter_with_chain_state() {
             prev_hash: [10; 32].into(),
             hash: [20; 32].into(),
             height: 1,
+            time: Time::now(),
         },
         validity_cond: MockValidityCond::default(),
         blobs: Default::default(),

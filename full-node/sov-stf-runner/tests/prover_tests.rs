@@ -2,6 +2,7 @@ use sov_mock_da::{
     MockBlockHeader, MockDaService, MockDaSpec, MockDaVerifier, MockHash, MockValidityCond,
 };
 use sov_mock_zkvm::MockZkvm;
+use sov_rollup_interface::da::Time;
 use sov_stf_runner::mock::MockStf;
 use sov_stf_runner::{
     ParallelProverService, ProofProcessingStatus, ProofSubmissionStatus, ProverService,
@@ -216,6 +217,7 @@ fn make_transition_data(
             prev_hash: [0; 32].into(),
             hash: header_hash,
             height: 0,
+            time: Time::now(),
         },
         inclusion_proof: [0; 32],
         completeness_proof: (),
