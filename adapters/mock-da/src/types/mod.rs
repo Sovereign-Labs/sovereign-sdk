@@ -109,7 +109,7 @@ impl BlockHeaderTrait for MockBlockHeader {
     }
 
     fn time(&self) -> Time {
-        Time::from_secs(JAN_1_2023 + (self.height as i64) * 15)
+        Time::now()
     }
 }
 
