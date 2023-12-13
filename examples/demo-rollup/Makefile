@@ -77,7 +77,7 @@ build-sov-cli:
 	cargo build --bin sov-cli
 
 test-generate-create-token-tx: wait-compose-ready build-sov-cli
-	$(SOV_CLI_REL_PATH) transactions import from-file bank --path ../test-data/requests/create_token.json
+	$(SOV_CLI_REL_PATH) transactions import from-file bank --chain-id 0 --path ../test-data/requests/create_token.json
 
 set-rpc-url: build-sov-cli
 	$(SOV_CLI_REL_PATH) rpc set-url http://127.0.0.1:12345
