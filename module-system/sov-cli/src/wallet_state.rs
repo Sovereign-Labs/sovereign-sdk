@@ -2,24 +2,31 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use sov_modules_api::{clap, PrivateKey};
+use sov_modules_api::transaction::UnsignedTransaction;
+use sov_modules_api::{clap, Context, PrivateKey};
 
 /// A struct representing the current state of the CLI wallet
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "Ctx::Address: Serialize + DeserializeOwned, Tx: Serialize + DeserializeOwned")]
-pub struct WalletState<Tx, Ctx: sov_modules_api::Context> {
+pub struct WalletState<Tx, Ctx: sov_modules_api::Context>
+where
+    Tx: BorshSerialize + BorshDeserialize,
+{
     /// The accumulated transactions to be submitted to the DA layer
-    pub unsent_transactions: Vec<Tx>,
+    pub unsent_transactions: Vec<UnsignedTransaction<Tx>>,
     /// The addresses in the wallet
     pub addresses: AddressList<Ctx>,
     /// The addresses in the wallet
     pub rpc_url: Option<String>,
 }
 
-impl<Tx: Serialize + DeserializeOwned, Ctx: sov_modules_api::Context> Default
-    for WalletState<Tx, Ctx>
+impl<Tx, Ctx> Default for WalletState<Tx, Ctx>
+where
+    Tx: Serialize + DeserializeOwned + BorshSerialize + BorshDeserialize,
+    Ctx: Context,
 {
     fn default() -> Self {
         Self {
@@ -32,7 +39,11 @@ impl<Tx: Serialize + DeserializeOwned, Ctx: sov_modules_api::Context> Default
     }
 }
 
-impl<Tx: Serialize + DeserializeOwned, Ctx: sov_modules_api::Context> WalletState<Tx, Ctx> {
+impl<Tx, Ctx> WalletState<Tx, Ctx>
+where
+    Tx: Serialize + DeserializeOwned + BorshSerialize + BorshDeserialize,
+    Ctx: Context,
+{
     /// Load the wallet state from the given path on disk
     pub fn load(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
         let path = path.as_ref();

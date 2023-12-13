@@ -19,6 +19,8 @@ fn test_import_transaction_from_string() {
     let subcommand = RuntimeSubcommand::<JsonStringArg, DefaultContext, Da>::bank {
         contents: JsonStringArg {
             json: std::fs::read_to_string(test_token_path).unwrap(),
+            chain_id: 0,
+            gas_tip: 0,
         },
     };
 
@@ -43,6 +45,8 @@ fn test_import_transaction_from_file() {
     let subcommand = RuntimeSubcommand::<FileNameArg, DefaultContext, Da>::bank {
         contents: FileNameArg {
             path: test_token_path.to_str().unwrap().into(),
+            chain_id: 0,
+            gas_tip: 0,
         },
     };
 
