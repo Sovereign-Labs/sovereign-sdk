@@ -12,8 +12,6 @@ use sov_rollup_interface::Bytes;
 
 use crate::validity_condition::MockValidityCond;
 
-const JAN_1_2023: i64 = 1672531200;
-
 /// A mock hash digest.
 #[derive(
     Clone,
