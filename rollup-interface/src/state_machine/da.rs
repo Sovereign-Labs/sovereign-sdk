@@ -246,6 +246,7 @@ impl Time {
         }
     }
 
+    #[cfg(feature = "std")]
     /// Get the current time
     pub fn now() -> Self {
         let current_time = std::time::SystemTime::now()
