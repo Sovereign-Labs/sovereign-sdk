@@ -19,7 +19,7 @@ define_schema!(TestSchema, TestCompositeField, TestField, "TestCF");
 type S = TestSchema;
 
 fn collect_values(iter: SchemaIterator<S>) -> Vec<u32> {
-    iter.map(|row| row.unwrap().1 .0).collect()
+    iter.map(|row| row.unwrap().value.0).collect()
 }
 
 fn decode_key(key: &[u8]) -> TestCompositeField {

@@ -95,7 +95,7 @@ where
         }
     }
 
-    fn next_impl(&mut self) -> Result<Option<(S::Key, S::Value)>> {
+    fn next_impl(&mut self) -> Result<Option<IteratorOutput<S::Key, S::Value>>> {
         let _timer = SCHEMADB_ITER_LATENCY_SECONDS
             .with_label_values(&[S::COLUMN_FAMILY_NAME])
             .start_timer();
@@ -107,6 +107,7 @@ where
 
         let raw_key = self.db_iter.key().expect("db_iter.key() failed.");
         let raw_value = self.db_iter.value().expect("db_iter.value() failed.");
+        let value_size_bytes = raw_value.len();
         SCHEMADB_ITER_BYTES
             .with_label_values(&[S::COLUMN_FAMILY_NAME])
             .observe((raw_key.len() + raw_value.len()) as f64);
@@ -119,7 +120,24 @@ where
             ScanDirection::Backward => self.db_iter.prev(),
         }
 
-        Ok(Some((key, value)))
+        Ok(Some(IteratorOutput {
+            key,
+            value,
+            value_size_bytes,
+        }))
+    }
+}
+
+/// The output of [`SchemaIterator`]'s next_impl
+pub struct IteratorOutput<K, V> {
+    pub key: K,
+    pub value: V,
+    pub value_size_bytes: usize,
+}
+
+impl<K, V> IteratorOutput<K, V> {
+    pub fn to_tuple(self) -> (K, V) {
+        (self.key, self.value)
     }
 }
 
@@ -127,7 +145,7 @@ impl<'a, S> Iterator for SchemaIterator<'a, S>
 where
     S: Schema,
 {
-    type Item = Result<(S::Key, S::Value)>;
+    type Item = Result<IteratorOutput<S::Key, S::Value>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.next_impl().transpose()
