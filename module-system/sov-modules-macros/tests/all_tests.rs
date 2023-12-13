@@ -6,6 +6,7 @@ fn set_constants_manifest() {
     let constants = PathBuf::from(manifest_dir).canonicalize().unwrap();
 
     env::set_var("CONSTANTS_MANIFEST", constants);
+    env::set_var("CONSTANTS_MANIFEST_TRYBUILD", "1");
 }
 
 #[test]

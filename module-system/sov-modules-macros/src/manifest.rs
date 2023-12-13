@@ -57,6 +57,19 @@ impl<'a> Manifest<'a> {
     ///
     /// The `parent` is used to report the errors to the correct span location.
     pub fn read_constants(parent: &'a Ident) -> Result<Self, syn::Error> {
+        #[cfg(not(test))]
+        let mut name = "constants.json";
+
+        #[cfg(test)]
+        let mut name = "constants.test.json";
+
+        // workaround to https://github.com/dtolnay/trybuild/issues/231
+        // despite trybuild being a crate to build tests, it won't set the `test` flag. It isn't
+        // setting the `trybuild` flag properly either.
+        if env::var_os("CONSTANTS_MANIFEST_TRYBUILD").is_some() {
+            name = "constants.test.json";
+        }
+
         let constants_dir = env::var_os("CONSTANTS_MANIFEST")
             .map(PathBuf::from)
             .map(Ok)
@@ -65,11 +78,11 @@ impl<'a> Manifest<'a> {
                 Self::err(
                     env!("CARGO_MANIFEST_DIR"),
                     parent,
-                    format!("failed to compute the `constants.json` base path: {e}"),
+                    format!("failed to compute the `{name}` base path: {e}"),
                 )
             })?;
 
-        // we remove the __CARGO_FIX due to incompatibility with `cargo metadata`
+        // we remove the __CARGO_FIX_PLZ due to incompatibility with `cargo metadata`
         // https://github.com/rust-lang/cargo/issues/9706
         let output = process::Command::new(env!("CARGO"))
             .args(["metadata", "--format-version=1", "--no-deps"])
@@ -80,7 +93,7 @@ impl<'a> Manifest<'a> {
                 Self::err(
                     &constants_dir,
                     parent,
-                    format!("failed to compute the `constants.json` path: {e}"),
+                    format!("failed to compute the `{name}` path: {e}"),
                 )
             })?;
 
@@ -113,7 +126,7 @@ impl<'a> Manifest<'a> {
             return Err(Self::err(
                 &ws,
                 parent,
-                "the computed `constants.json` path is not a directory",
+                format!("the computed `{name}` path is not a directory"),
             ));
         }
 
@@ -122,11 +135,13 @@ impl<'a> Manifest<'a> {
             return Err(Self::err(
                 &ws,
                 parent,
-                "the computed `constants.json` path is not a valid workspace: Cargo.toml not found",
+                format!(
+                    "the computed `{name}` path is not a valid workspace: Cargo.toml not found"
+                ),
             ));
         }
 
-        let constants_path = ws.join("constants.json");
+        let constants_path = ws.join(name);
         let constants = fs::read_to_string(&constants_path).map_err(|e| {
             Self::err(
                 &constants_path,
