@@ -38,6 +38,8 @@ pub trait DaService: Send + Sync + 'static {
     /// A transaction ID, used to identify the transaction in the DA layer.
     type TransactionId: PartialEq + Eq + PartialOrd + Ord + core::hash::Hash;
 
+    ///
+    type AggregatedProof;
     /// The error type for fallible methods.
     type Error: core::fmt::Debug + Send + Sync + core::fmt::Display;
 
@@ -111,10 +113,10 @@ pub trait DaService: Send + Sync + 'static {
     async fn send_transaction(&self, blob: &[u8]) -> Result<Self::TransactionId, Self::Error>;
 
     ///
-    async fn send_proof(&self, proof: &[u8]) -> Result<(), Self::Error>;
+    async fn send_proof(&self, proof: Self::AggregatedProof) -> Result<(), Self::Error>;
 
     ///
-    async fn get_proof(&self, proof: &[u8]) -> Result<(), Self::Error>;
+    async fn get_proofs_at(&self, height: u64) -> Result<Vec<Self::AggregatedProof>, Self::Error>;
 }
 
 /// `SlotData` is the subset of a DA layer block which is stored in the rollup's database.
@@ -141,3 +143,44 @@ pub trait SlotData:
     /// Get the validity condition set associated with the slot
     fn validity_condition(&self) -> Self::Cond;
 }
+
+/*
+
+///
+pub trait AggregatedProof {
+    ///
+    type Hash;
+    ///
+    type Root;
+    ///
+    fn verify(&self, public_input: AggregatedPublicInput<Self::Hash, Self::Root>);
+}
+
+///
+pub struct AggregatedPublicInput<Hash, Root> {
+    ///
+    pub initial_da_block_hash: Hash,
+    ///
+    pub final_da_block_hash: Hash,
+    ///
+    pub initial_state_root: Root,
+    ///
+    pub post_state_root: Root,
+}
+
+///
+pub struct AggregatedProofData<P: AggregatedProof, Hash, Root> {
+    ///
+    pub public_input: AggregatedPublicInput<Hash, Root>,
+    ///
+    pub aggregated_proof: P,
+}
+
+impl<P: AggregatedProof, Hash, Root> AggregatedProofData<P, Hash, Root> {
+    ///
+    pub fn verify(&self) -> bool {
+        todo!()
+    }
+}
+
+*/

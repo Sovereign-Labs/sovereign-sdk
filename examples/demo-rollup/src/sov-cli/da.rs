@@ -1,10 +1,9 @@
 use anyhow::Context;
-use demo_stf::runtime::RuntimeSubcommand;
 use sov_celestia_adapter::verifier::RollupParams;
 use sov_celestia_adapter::CelestiaService;
+use sov_demo_rollup::ROLLUP_BATCH_NAMESPACE;
 use sov_demo_rollup::ROLLUP_PROOF_NAMESPACE;
-use sov_demo_rollup::{CelestiaDemoRollup, ROLLUP_BATCH_NAMESPACE};
-use sov_modules_api::cli::{FileNameArg, JsonStringArg};
+use sov_rollup_interface::services::da::DaService;
 use sov_stf_runner::from_toml_path;
 use sov_stf_runner::RollupConfig;
 
@@ -23,5 +22,12 @@ async fn main() -> Result<(), anyhow::Error> {
         },
     )
     .await;
+
+    println!("Start");
+    let proof: Vec<u8> = vec![1, 2, 3];
+    service.send_proof(proof).await?;
+    //service.get_proofs_at(&proof).await?;
+
+    println!("End");
     Ok(())
 }

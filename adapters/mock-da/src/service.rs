@@ -115,6 +115,7 @@ impl DaService for MockDaService {
     type FilteredBlock = MockBlock;
     type HeaderStream = MockDaBlockHeaderStream;
     type TransactionId = ();
+    type AggregatedProof = Vec<u8>;
     type Error = anyhow::Error;
 
     /// Gets block at given height
@@ -266,12 +267,11 @@ impl DaService for MockDaService {
         Ok(())
     }
 
-    async fn send_proof(&self, proof: &[u8]) -> Result<(), Self::Error> {
+    async fn send_proof(&self, _proof: Self::AggregatedProof) -> Result<(), Self::Error> {
         todo!()
     }
 
-    ///
-    async fn get_proof(&self, proof: &[u8]) -> Result<(), Self::Error> {
+    async fn get_proofs_at(&self, _height: u64) -> Result<Vec<Self::AggregatedProof>, Self::Error> {
         todo!()
     }
 }

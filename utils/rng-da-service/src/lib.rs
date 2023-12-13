@@ -76,6 +76,7 @@ impl DaService for RngDaService {
     type FilteredBlock = MockBlock;
     type HeaderStream = RngHeaderStream;
     type TransactionId = ();
+    type AggregatedProof = ();
     type Error = anyhow::Error;
 
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
@@ -152,11 +153,11 @@ impl DaService for RngDaService {
         unimplemented!()
     }
 
-    async fn send_proof(&self, proof: &[u8]) -> Result<(), Self::Error> {
+    async fn send_proof(&self, _proof: Self::AggregatedProof) -> Result<(), Self::Error> {
         unimplemented!()
     }
 
-    async fn get_proof(&self, proof: &[u8]) -> Result<(), Self::Error> {
+    async fn get_proofs_at(&self, _height: u64) -> Result<Vec<Self::AggregatedProof>, Self::Error> {
         unimplemented!()
     }
 }
