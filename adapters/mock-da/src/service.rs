@@ -265,6 +265,14 @@ impl DaService for MockDaService {
 
         Ok(())
     }
+
+    async fn send_aggrgated_zk_proof(&self, _proof: &[u8]) -> Result<u64, Self::Error> {
+        todo!()
+    }
+
+    async fn get_aggregated_proofs_at(&self, _height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
+        todo!()
+    }
 }
 
 fn hash_to_array(bytes: &[u8]) -> [u8; 32] {

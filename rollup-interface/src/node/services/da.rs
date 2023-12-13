@@ -109,6 +109,15 @@ pub trait DaService: Send + Sync + 'static {
     /// blob is the serialized and signed transaction.
     /// Returns nothing if the transaction was successfully sent.
     async fn send_transaction(&self, blob: &[u8]) -> Result<Self::TransactionId, Self::Error>;
+
+    /// Sends am aggrgated zk proof to the DA.
+    async fn send_aggrgated_zk_proof(
+        &self,
+        aggregated_proof_data: &[u8],
+    ) -> Result<u64, Self::Error>;
+
+    /// Fetches all aggregated ZK proofs at a specified block height.
+    async fn get_aggregated_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error>;
 }
 
 /// `SlotData` is the subset of a DA layer block which is stored in the rollup's database.

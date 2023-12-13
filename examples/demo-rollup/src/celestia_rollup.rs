@@ -14,7 +14,7 @@ use sov_state::storage_manager::ProverStorageManager;
 use sov_state::{DefaultStorageSpec, Storage, ZkStorage};
 use sov_stf_runner::{ParallelProverService, RollupConfig, RollupProverConfig};
 
-use crate::ROLLUP_NAMESPACE;
+use crate::{ROLLUP_BATCH_NAMESPACE, ROLLUP_PROOF_NAMESPACE};
 
 /// Rollup with CelestiaDa
 pub struct CelestiaDemoRollup {}
@@ -91,7 +91,8 @@ impl RollupBlueprint for CelestiaDemoRollup {
         CelestiaService::new(
             rollup_config.da.clone(),
             RollupParams {
-                namespace: ROLLUP_NAMESPACE,
+                rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,
+                rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
             },
         )
         .await
@@ -107,7 +108,7 @@ impl RollupBlueprint for CelestiaDemoRollup {
         let zk_storage = ZkStorage::new();
 
         let da_verifier = CelestiaVerifier {
-            rollup_namespace: ROLLUP_NAMESPACE,
+            rollup_namespace: ROLLUP_BATCH_NAMESPACE,
         };
 
         ParallelProverService::new_with_default_workers(

@@ -87,8 +87,9 @@ impl<'a> ZkvmHost for Risc0Host<'a> {
 
     fn run(&mut self, with_proof: bool) -> Result<Proof, anyhow::Error> {
         if with_proof {
-            let journal = self.run()?.journal;
-            Ok(Proof::Data(journal.bytes))
+            let receipt = self.run()?;
+            let data = bincode::serialize(&receipt)?;
+            Ok(Proof::Data(data))
         } else {
             self.run_without_proving()?;
             Ok(Proof::Empty)
