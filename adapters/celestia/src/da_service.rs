@@ -268,7 +268,7 @@ impl DaService for CelestiaService {
         Ok(())
     }
 
-    async fn send_proof(&self, aggregated_proof: &[u8]) -> Result<u64, Self::Error> {
+    async fn send_aggrgated_zk_proof(&self, aggregated_proof: &[u8]) -> Result<u64, Self::Error> {
         let gas_limit = get_gas_limit_for_bytes(aggregated_proof.len()) as u64;
         let fee = gas_limit * GAS_PRICE as u64;
         let blob = JsonBlob::new(self.rollup_proof_namespace, aggregated_proof.to_vec())?;
@@ -288,7 +288,7 @@ impl DaService for CelestiaService {
         Ok(height)
     }
 
-    async fn get_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
+    async fn get_aggregated_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
         let blobs = self
             .client
             .blob_get_all(height, &[self.rollup_proof_namespace])
