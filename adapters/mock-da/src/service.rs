@@ -79,6 +79,62 @@ impl MockDaService {
         }
         anyhow::bail!("No blob at height={height} has been sent in time")
     }
+
+    async fn add_blob(&self, blob: &[u8], zkp_proof: Vec<u8>) -> Result<u64, anyhow::Error> {
+        let mut blocks = self.blocks.write().await;
+
+        let (previous_block_hash, height) = match blocks.iter().last().map(|b| b.header().clone()) {
+            None => (MockHash::from([0; 32]), 0),
+            Some(block_header) => (block_header.hash(), block_header.height + 1),
+        };
+        let data_hash = hash_to_array(blob);
+        let proof_hash = hash_to_array(&zkp_proof);
+        // Hash only from single blob
+        let block_hash = block_hash(height, data_hash, proof_hash, previous_block_hash.into());
+
+        let blob = MockBlob::new_with_zkp_proof(
+            blob.to_vec(),
+            vec![zkp_proof],
+            self.sequencer_da_address,
+            data_hash,
+        );
+        let header = MockBlockHeader {
+            prev_hash: previous_block_hash,
+            hash: block_hash,
+            height,
+            time: Time::now(),
+        };
+        let block = MockBlock {
+            header,
+            validity_cond: Default::default(),
+            blobs: vec![blob],
+        };
+        blocks.push_back(block);
+
+        // Enough blocks to finalize block
+        if blocks.len() > self.blocks_to_finality as usize {
+            let oldest_available_height = blocks[0].header().height();
+            let last_finalized_height = self.last_finalized_height.load(Ordering::Acquire);
+            let last_finalized_index = last_finalized_height
+                .checked_sub(oldest_available_height)
+                .unwrap();
+            let next_index_to_finalize = blocks.len() - self.blocks_to_finality as usize - 1;
+
+            if last_finalized_index > 0 {
+                assert_eq!(next_index_to_finalize as u64, last_finalized_index + 1);
+            }
+
+            self.finalized_header_sender
+                .send(blocks[next_index_to_finalize].header().clone())
+                .unwrap();
+
+            let this_finalized_height = oldest_available_height + next_index_to_finalize as u64;
+            self.last_finalized_height
+                .store(this_finalized_height, Ordering::Release);
+        }
+
+        Ok(height)
+    }
 }
 
 #[pin_project]
@@ -218,57 +274,12 @@ impl DaService for MockDaService {
     }
 
     async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
-        let mut blocks = self.blocks.write().await;
-
-        let (previous_block_hash, height) = match blocks.iter().last().map(|b| b.header().clone()) {
-            None => (MockHash::from([0; 32]), 0),
-            Some(block_header) => (block_header.hash(), block_header.height + 1),
-        };
-        let data_hash = hash_to_array(blob);
-        // Hash only from single blob
-        let block_hash = block_hash(height, data_hash, previous_block_hash.into());
-
-        let blob = MockBlob::new(blob.to_vec(), self.sequencer_da_address, data_hash);
-        let header = MockBlockHeader {
-            prev_hash: previous_block_hash,
-            hash: block_hash,
-            height,
-            time: Time::now(),
-        };
-        let block = MockBlock {
-            header,
-            validity_cond: Default::default(),
-            blobs: vec![blob],
-        };
-        blocks.push_back(block);
-
-        // Enough blocks to finalize block
-        if blocks.len() > self.blocks_to_finality as usize {
-            let oldest_available_height = blocks[0].header().height();
-            let last_finalized_height = self.last_finalized_height.load(Ordering::Acquire);
-            let last_finalized_index = last_finalized_height
-                .checked_sub(oldest_available_height)
-                .unwrap();
-            let next_index_to_finalize = blocks.len() - self.blocks_to_finality as usize - 1;
-
-            if last_finalized_index > 0 {
-                assert_eq!(next_index_to_finalize as u64, last_finalized_index + 1);
-            }
-
-            self.finalized_header_sender
-                .send(blocks[next_index_to_finalize].header().clone())
-                .unwrap();
-
-            let this_finalized_height = oldest_available_height + next_index_to_finalize as u64;
-            self.last_finalized_height
-                .store(this_finalized_height, Ordering::Release);
-        }
-
+        let _ = self.add_blob(blob, Default::default()).await;
         Ok(())
     }
 
-    async fn send_aggregated_zk_proof(&self, _proof: &[u8]) -> Result<u64, Self::Error> {
-        todo!()
+    async fn send_aggregated_zk_proof(&self, proof: &[u8]) -> Result<u64, Self::Error> {
+        self.add_blob(Default::default(), proof.to_vec()).await
     }
 
     async fn get_aggregated_proofs_at(&self, _height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
@@ -286,9 +297,15 @@ fn hash_to_array(bytes: &[u8]) -> [u8; 32] {
         .expect("SHA256 should be 32 bytes")
 }
 
-fn block_hash(height: u64, data_hash: [u8; 32], prev_hash: [u8; 32]) -> MockHash {
+fn block_hash(
+    height: u64,
+    data_hash: [u8; 32],
+    proof_hash: [u8; 32],
+    prev_hash: [u8; 32],
+) -> MockHash {
     let mut block_to_hash = height.to_be_bytes().to_vec();
     block_to_hash.extend_from_slice(&data_hash[..]);
+    block_to_hash.extend_from_slice(&proof_hash[..]);
     block_to_hash.extend_from_slice(&prev_hash[..]);
 
     MockHash::from(hash_to_array(&block_to_hash))
