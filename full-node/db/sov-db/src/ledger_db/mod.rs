@@ -319,7 +319,7 @@ impl LedgerDB {
         iter.seek_to_last();
 
         match iter.next() {
-            Some(Ok(item)) => Ok(Some(item.to_tuple())),
+            Some(Ok(item)) => Ok(Some(item.into_tuple())),
             Some(Err(e)) => Err(e),
             _ => Ok(None),
         }
