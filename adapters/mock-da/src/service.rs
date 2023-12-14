@@ -87,6 +87,7 @@ impl MockDaService {
             None => (MockHash::from([0; 32]), 0),
             Some(block_header) => (block_header.hash(), block_header.height + 1),
         };
+
         let data_hash = hash_to_array(blob);
         let proof_hash = hash_to_array(&zkp_proof);
         // Hash only from single blob
@@ -274,7 +275,7 @@ impl DaService for MockDaService {
     }
 
     async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
-        let _ = self.add_blob(blob, Default::default()).await;
+        let _ = self.add_blob(blob, Default::default()).await?;
         Ok(())
     }
 

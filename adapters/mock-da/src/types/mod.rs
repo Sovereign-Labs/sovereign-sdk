@@ -140,6 +140,7 @@ pub struct MockBlob {
     pub(crate) hash: [u8; 32],
     /// Actual data from the blob. Public for testing purposes.
     pub data: CountedBufReader<Bytes>,
+    // Data for the aggregated ZK proof.
     pub(crate) zk_proofs_data: Vec<u8>,
 }
 
