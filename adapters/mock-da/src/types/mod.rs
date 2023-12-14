@@ -145,17 +145,27 @@ pub struct MockBlob {
 
 impl MockBlob {
     /// Creates a new mock blob with the given data, claiming to have been published by the provided address.
-    pub fn new(
-        data: Vec<u8>,
-        //  zk_proofs_data: Vec<Vec<u8>>,
-        address: MockAddress,
-        hash: [u8; 32],
-    ) -> Self {
+    pub fn new(data: Vec<u8>, address: MockAddress, hash: [u8; 32]) -> Self {
         Self {
             address,
             data: CountedBufReader::new(Bytes::from(data)),
             zk_proofs_data: Default::default(),
             hash,
+        }
+    }
+
+    /// Creates a new mock blob with the given data and an aggretated zkp proof, claiming to have been published by the provided address.
+    pub fn new_with_zkp_proof(
+        data: Vec<u8>,
+        zk_proofs_data: Vec<Vec<u8>>,
+        address: MockAddress,
+        hash: [u8; 32],
+    ) -> Self {
+        Self {
+            address,
+            hash,
+            data: CountedBufReader::new(Bytes::from(data)),
+            zk_proofs_data,
         }
     }
 }
