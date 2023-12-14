@@ -94,7 +94,7 @@ impl MockDaService {
 
         let blob = MockBlob::new_with_zkp_proof(
             blob.to_vec(),
-            vec![zkp_proof],
+            zkp_proof,
             self.sequencer_da_address,
             data_hash,
         );
