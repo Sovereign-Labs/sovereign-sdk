@@ -31,6 +31,7 @@ use metrics::{
     SCHEMADB_BATCH_COMMIT_BYTES, SCHEMADB_BATCH_COMMIT_LATENCY_SECONDS, SCHEMADB_DELETES,
     SCHEMADB_GET_BYTES, SCHEMADB_GET_LATENCY_SECONDS, SCHEMADB_PUT_BYTES,
 };
+pub use rocksdb;
 use rocksdb::ReadOptions;
 pub use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 use thiserror::Error;
@@ -127,7 +128,7 @@ impl DB {
         let k = schema_key.encode_key()?;
         let cf_handle = self.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
 
-        let result = self.inner.get_cf(cf_handle, k)?;
+        let result = self.inner.get_pinned_cf(cf_handle, k)?;
         SCHEMADB_GET_BYTES
             .with_label_values(&[S::COLUMN_FAMILY_NAME])
             .observe(result.as_ref().map_or(0.0, |v| v.len() as f64));

@@ -69,7 +69,7 @@ impl StateDB {
         let found = iter.next();
         match found {
             Some(result) => {
-                let ((found_key, found_version), value) = result?;
+                let ((found_key, found_version), value) = result?.into_tuple();
                 if &found_key == key {
                     anyhow::ensure!(found_version <= version, "Bug! iterator isn't returning expected values. expected a version <= {version:} but found {found_version:}");
                     Ok(value)
@@ -98,7 +98,7 @@ impl StateDB {
         iter.seek_to_last();
 
         let version = match iter.next() {
-            Some(Ok((key, _))) => Some(key.version()),
+            Some(Ok(item)) => Some(item.key.version()),
             _ => None,
         };
         Ok(version)
