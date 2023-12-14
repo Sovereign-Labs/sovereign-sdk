@@ -282,8 +282,9 @@ impl DaService for MockDaService {
         self.add_blob(Default::default(), proof.to_vec()).await
     }
 
-    async fn get_aggregated_proofs_at(&self, _height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
-        todo!()
+    async fn get_aggregated_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
+        let blobs = self.get_block_at(height).await?.blobs;
+        Ok(blobs.into_iter().map(|b| b.zk_proofs_data).collect())
     }
 }
 
@@ -485,5 +486,16 @@ mod tests {
             test_push_many_then_read(3, 10).await;
             test_push_many_then_read(5, 10).await;
         }
+    }
+
+    #[tokio::test]
+    async fn test_zk_submission() -> Result<(), anyhow::Error> {
+        let da = MockDaService::new(MockAddress::new([1; 32]));
+        let aggregated_proof_data = vec![1, 2, 3];
+        let height = da.send_aggregated_zk_proof(&aggregated_proof_data).await?;
+        let proofs = da.get_aggregated_proofs_at(height).await?;
+
+        assert_eq!(vec![aggregated_proof_data], proofs);
+        Ok(())
     }
 }
