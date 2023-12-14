@@ -140,14 +140,21 @@ pub struct MockBlob {
     pub(crate) hash: [u8; 32],
     /// Actual data from the blob. Public for testing purposes.
     pub data: CountedBufReader<Bytes>,
+    pub(crate) zk_proofs_data: Vec<Vec<u8>>,
 }
 
 impl MockBlob {
     /// Creates a new mock blob with the given data, claiming to have been published by the provided address.
-    pub fn new(data: Vec<u8>, address: MockAddress, hash: [u8; 32]) -> Self {
+    pub fn new(
+        data: Vec<u8>,
+        //  zk_proofs_data: Vec<Vec<u8>>,
+        address: MockAddress,
+        hash: [u8; 32],
+    ) -> Self {
         Self {
             address,
             data: CountedBufReader::new(Bytes::from(data)),
+            zk_proofs_data: Default::default(),
             hash,
         }
     }

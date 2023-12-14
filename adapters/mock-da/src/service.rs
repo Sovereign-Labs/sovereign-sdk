@@ -267,7 +267,7 @@ impl DaService for MockDaService {
         Ok(())
     }
 
-    async fn send_aggrgated_zk_proof(&self, _proof: &[u8]) -> Result<u64, Self::Error> {
+    async fn send_aggregated_zk_proof(&self, _proof: &[u8]) -> Result<u64, Self::Error> {
         todo!()
     }
 

@@ -111,7 +111,7 @@ pub trait DaService: Send + Sync + 'static {
     async fn send_transaction(&self, blob: &[u8]) -> Result<Self::TransactionId, Self::Error>;
 
     /// Sends am aggrgated zk proof to the DA.
-    async fn send_aggrgated_zk_proof(
+    async fn send_aggregated_zk_proof(
         &self,
         aggregated_proof_data: &[u8],
     ) -> Result<u64, Self::Error>;
