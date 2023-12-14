@@ -136,7 +136,7 @@ pub struct IteratorOutput<K, V> {
 }
 
 impl<K, V> IteratorOutput<K, V> {
-    pub fn to_tuple(self) -> (K, V) {
+    pub fn into_tuple(self) -> (K, V) {
         (self.key, self.value)
     }
 }
