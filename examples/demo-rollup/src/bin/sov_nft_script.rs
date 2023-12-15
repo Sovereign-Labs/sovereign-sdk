@@ -42,11 +42,13 @@ pub fn build_transaction(
     let runtime_encoded_message = RuntimeCall::<DefaultContext, MockDaSpec>::nft(message);
     let chain_id = 0;
     let gas_tip = 0;
+    let gas_limit = 0;
     Transaction::<DefaultContext>::new_signed_tx(
         signer,
         runtime_encoded_message.try_to_vec().unwrap(),
         chain_id,
         gas_tip,
+        gas_limit,
         nonce,
     )
 }

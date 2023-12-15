@@ -32,6 +32,7 @@ impl CliParserMacro {
         let mut module_message_arms = vec![];
         let mut tx_args_subcommand_match_arms_chain_id = vec![];
         let mut tx_args_subcommand_match_arms_gas_tip = vec![];
+        let mut tx_args_subcommand_match_arms_gas_limit = vec![];
         let mut try_from_subcommand_match_arms = vec![];
         let mut try_map_match_arms = vec![];
         let mut from_json_match_arms = vec![];
@@ -90,6 +91,10 @@ impl CliParserMacro {
 
                 tx_args_subcommand_match_arms_gas_tip.push(quote! {
                     RuntimeSubcommand::#field_name { contents } => <__Inner as ::sov_modules_api::cli::CliTxImportArg>::gas_tip(&contents),
+                });
+
+                tx_args_subcommand_match_arms_gas_limit.push(quote! {
+                    RuntimeSubcommand::#field_name { contents } => <__Inner as ::sov_modules_api::cli::CliTxImportArg>::gas_limit(&contents),
                 });
 
                 try_from_subcommand_match_arms.push(quote! {
@@ -204,6 +209,13 @@ impl CliParserMacro {
                 fn gas_tip(&self) -> u64 {
                     match self {
                         #( #tx_args_subcommand_match_arms_gas_tip )*
+                        RuntimeSubcommand::____phantom(_) => unreachable!(),
+                    }
+                }
+
+                fn gas_limit(&self) -> u64 {
+                    match self {
+                        #( #tx_args_subcommand_match_arms_gas_limit )*
                         RuntimeSubcommand::____phantom(_) => unreachable!(),
                     }
                 }

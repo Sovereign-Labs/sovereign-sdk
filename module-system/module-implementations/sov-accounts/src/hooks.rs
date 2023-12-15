@@ -25,6 +25,9 @@ impl<C: Context> TxHooks for Accounts<C> {
             account_nonce == tx_nonce,
             "Tx bad nonce, expected: {account_nonce}, but found: {tx_nonce}",
         );
+
+        working_set.add_event("accounts::sender", &account.addr.to_string());
+
         Ok(account.addr)
     }
 

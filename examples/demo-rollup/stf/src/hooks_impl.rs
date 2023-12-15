@@ -21,7 +21,10 @@ impl<C: Context, Da: DaSpec> TxHooks for Runtime<C, Da> {
     ) -> anyhow::Result<<Self::Context as Spec>::Address> {
         // Before executing a transaction, retrieve the sender's address from the accounts module
         // and check the nonce
-        self.accounts.pre_dispatch_tx_hook(tx, working_set)
+        let _sender_address = self.accounts.pre_dispatch_tx_hook(tx, working_set)?;
+        let sender_address = self.bank.pre_dispatch_tx_hook(tx, working_set)?;
+
+        Ok(sender_address)
     }
 
     fn post_dispatch_tx_hook(
@@ -30,7 +33,10 @@ impl<C: Context, Da: DaSpec> TxHooks for Runtime<C, Da> {
         working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
         // After executing each transaction, update the nonce
-        self.accounts.post_dispatch_tx_hook(tx, working_set)
+        self.accounts.post_dispatch_tx_hook(tx, working_set)?;
+        self.bank.post_dispatch_tx_hook(tx, working_set)?;
+
+        Ok(())
     }
 }
 

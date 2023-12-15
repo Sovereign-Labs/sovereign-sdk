@@ -15,6 +15,9 @@ pub trait CliTxImportArg {
 
     /// The gas tip for the sequencer.
     fn gas_tip(&self) -> u64;
+
+    /// The gas limit for the transaction execution.
+    fn gas_limit(&self) -> u64;
 }
 
 /// An argument to the cli containing a json string
@@ -31,6 +34,14 @@ pub struct JsonStringArg {
     /// The gas tip for the sequencer.
     #[arg(long, help = "The gas tip for the sequencer.", default_value = "0")]
     pub gas_tip: u64,
+
+    /// The gas limit for the transaction execution.
+    #[arg(
+        long,
+        help = "The gas limit for the transaction execution.",
+        default_value = "0"
+    )]
+    pub gas_limit: u64,
 }
 
 /// An argument to the cli containing a path to a file
@@ -47,6 +58,14 @@ pub struct FileNameArg {
     /// The gas tip for the sequencer.
     #[arg(long, help = "The gas tip for the sequencer.", default_value = "0")]
     pub gas_tip: u64,
+
+    /// The gas limit for the transaction execution.
+    #[arg(
+        long,
+        help = "The gas limit for the transaction execution.",
+        default_value = "0"
+    )]
+    pub gas_limit: u64,
 }
 
 impl CliTxImportArg for JsonStringArg {
@@ -56,6 +75,10 @@ impl CliTxImportArg for JsonStringArg {
 
     fn gas_tip(&self) -> u64 {
         self.gas_tip
+    }
+
+    fn gas_limit(&self) -> u64 {
+        self.gas_limit
     }
 }
 
@@ -67,6 +90,10 @@ impl CliTxImportArg for FileNameArg {
     fn gas_tip(&self) -> u64 {
         self.gas_tip
     }
+
+    fn gas_limit(&self) -> u64 {
+        self.gas_limit
+    }
 }
 
 impl TryFrom<FileNameArg> for JsonStringArg {
@@ -76,12 +103,14 @@ impl TryFrom<FileNameArg> for JsonStringArg {
             path,
             chain_id,
             gas_tip,
+            gas_limit,
         } = arg;
 
         Ok(JsonStringArg {
             json: fs::read_to_string(path)?,
             chain_id,
             gas_tip,
+            gas_limit,
         })
     }
 }

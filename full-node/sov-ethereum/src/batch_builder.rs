@@ -37,12 +37,14 @@ impl<C: sov_modules_api::Context> EthBatchBuilder<C> {
             // TODO define a strategy to expose chain id and gas tip for ethereum frontend
             let chain_id = 0;
             let gas_tip = 0;
+            let gas_limit = 0;
 
             let raw_tx = Transaction::<C>::new_signed_tx(
                 &self.sov_tx_signer_private_key,
                 raw_message,
                 chain_id,
                 gas_tip,
+                gas_limit,
                 *nonce,
             )
             .try_to_vec()
