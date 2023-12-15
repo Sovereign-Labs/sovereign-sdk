@@ -19,9 +19,9 @@ pub(crate) struct TestRuntime<C: Context, Da: DaSpec> {
 }
 
 impl<C: Context, Da: DaSpec> TxHooks for TestRuntime<C, Da> {
-    type Context = C;
+    type Context = ();
     type PreArg = u64;
-    type PreResult = C;
+    type PreResult = C::Address;
     type PostArg = ();
     type PostResult = ();
 
@@ -29,11 +29,9 @@ impl<C: Context, Da: DaSpec> TxHooks for TestRuntime<C, Da> {
         &self,
         tx: &Transaction<Self::Context>,
         _working_set: &mut sov_modules_api::WorkingSet<C>,
-        height: u64,
-    ) -> anyhow::Result<C> {
-        let sender = tx.pub_key().to_address();
-        let ctx = C::new(sender, height);
-        Ok(ctx)
+        _arg: (),
+    ) -> anyhow::Result<C::Address> {
+        Ok(tx.pub_key().to_address())
     }
 
     fn post_dispatch_tx_hook(

@@ -179,11 +179,11 @@ where
             txs.into_iter().zip(messages.into_iter())
         {
             // Pre dispatch hook
-            let height = 1;
-            let ctx = match self
-                .runtime
-                .pre_dispatch_tx_hook(&tx, &mut batch_workspace, height)
-            {
+            let sender_address = match self.runtime.pre_dispatch_tx_hook(
+                &tx,
+                &mut batch_workspace,
+                (),
+            ) {
                 Ok(verified_tx) => verified_tx,
                 Err(e) => {
                     // Don't revert any state changes made by the pre_dispatch_hook even if the Tx is rejected.
@@ -202,6 +202,9 @@ where
             };
             // Commit changes after pre_dispatch_tx_hook
             batch_workspace = batch_workspace.checkpoint().to_revertable();
+
+            let height = 1;
+            let ctx = C::new(sender_address, height);
 
             let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
 

@@ -28,7 +28,7 @@ pub use tx_verifier::RawTx;
 pub trait Runtime<C: Context, Da: DaSpec>:
     DispatchCall<Context = C>
     + Genesis<Context = C, Config = Self::GenesisConfig>
-    + TxHooks<Context = C, PreArg = u64, PreResult = C, PostArg = ()>
+    + TxHooks<Context = C, PreArg = (), PreResult = C::Address, PostArg = ()>
     + SlotHooks<Da, Context = C>
     + FinalizeHook<Da, Context = C>
     + ApplyBlobHooks<
