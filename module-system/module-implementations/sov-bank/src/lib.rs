@@ -47,7 +47,7 @@ pub struct BankGasConfig<GU: GasUnit> {
 pub struct Bank<C: sov_modules_api::Context> {
     /// The address of the sov-bank module.
     #[address]
-    pub address: C::Address,
+    pub(crate) address: C::Address,
 
     /// The gas configuration of the sov-bank module.
     #[gas]
