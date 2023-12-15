@@ -20,7 +20,13 @@ impl<C: Context> Bank<C> {
             .ok_or_else(|| anyhow::anyhow!("failed to fetch `{}` from working set events", key))?;
 
         let sender = String::from_utf8(sender.clone())?;
-        let sender = C::Address::from_str(&sender)?;
+        let sender = C::Address::from_str(&sender).map_err(|_| {
+            anyhow::anyhow!(
+                "failed to generate address `{}` from from event `{}`",
+                key,
+                sender
+            )
+        })?;
 
         Ok(sender)
     }
