@@ -9,7 +9,7 @@ use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
 use tracing::{debug, error};
 
 use crate::tx_verifier::{verify_txs_stateless, TransactionAndRawHash};
-use crate::{Batch, Runtime, SequencerOutcome, SlashingReason, TxEffect};
+use crate::{Batch, Runtime, RuntimeTxHook, SequencerOutcome, SlashingReason, TxEffect};
 
 type ApplyBatchResult<T, A> = Result<T, ApplyBatchError<A>>;
 
@@ -179,11 +179,15 @@ where
             txs.into_iter().zip(messages.into_iter())
         {
             // Pre dispatch hook
-            let sender_address = match self.runtime.pre_dispatch_tx_hook(
-                &tx,
-                &mut batch_workspace,
-                (),
-            ) {
+            // TODO set the sequencer pubkey
+            let hook = RuntimeTxHook {
+                height: 1,
+                sequencer: tx.pub_key().clone(),
+            };
+            let ctx = match self
+                .runtime
+                .pre_dispatch_tx_hook(&tx, &mut batch_workspace, hook)
+            {
                 Ok(verified_tx) => verified_tx,
                 Err(e) => {
                     // Don't revert any state changes made by the pre_dispatch_hook even if the Tx is rejected.
@@ -202,9 +206,6 @@ where
             };
             // Commit changes after pre_dispatch_tx_hook
             batch_workspace = batch_workspace.checkpoint().to_revertable();
-
-            let height = 1;
-            let ctx = C::new(sender_address, height);
 
             let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
 
@@ -238,8 +239,8 @@ where
 
             // TODO: `panic` will be covered in https://github.com/Sovereign-Labs/sovereign-sdk/issues/421
             self.runtime
-                .post_dispatch_tx_hook(&tx, &mut batch_workspace, ())
-                .expect("Impossible happened: error in post_dispatch_tx_hook");
+                .post_dispatch_tx_hook(&tx, &ctx, &mut batch_workspace)
+                .expect("inconsistent state: error in post_dispatch_tx_hook");
         }
 
         // TODO: calculate the amount based of gas and fees

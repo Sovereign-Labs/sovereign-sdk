@@ -12,8 +12,6 @@ pub trait TxHooks {
     type Context: Context;
     type PreArg;
     type PreResult;
-    type PostArg;
-    type PostResult;
 
     /// Runs just before a transaction is dispatched to an appropriate module.
     fn pre_dispatch_tx_hook(
@@ -28,9 +26,9 @@ pub trait TxHooks {
     fn post_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
+        ctx: &Self::Context,
         working_set: &mut WorkingSet<Self::Context>,
-        arg: Self::PostArg,
-    ) -> anyhow::Result<Self::PostResult>;
+    ) -> anyhow::Result<()>;
 }
 
 /// Hooks related to the Sequencer functionality.

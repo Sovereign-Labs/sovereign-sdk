@@ -47,10 +47,13 @@ fn test_update_account() {
     let accounts = &mut Accounts::<C>::default();
 
     let priv_key = DefaultPrivateKey::generate();
+    let sequencer_priv_key = DefaultPrivateKey::generate();
 
     let sender = priv_key.pub_key();
+    let sequencer = sequencer_priv_key.pub_key();
     let sender_addr = sender.to_address::<<C as Spec>::Address>();
-    let sender_context = C::new(sender_addr, 1);
+    let sequencer_addr = sequencer.to_address::<<C as Spec>::Address>();
+    let sender_context = C::new(sender_addr, sequencer_addr, 1);
 
     // Test new account creation
     {
@@ -111,7 +114,8 @@ fn test_update_account_fails() {
     let accounts = &mut Accounts::<C>::default();
 
     let sender_1 = DefaultPrivateKey::generate().pub_key();
-    let sender_context_1 = C::new(sender_1.to_address(), 1);
+    let sequencer = DefaultPrivateKey::generate().pub_key();
+    let sender_context_1 = C::new(sender_1.to_address(), sequencer.to_address(), 1);
 
     accounts
         .create_default_account(&sender_1, native_working_set)
@@ -142,8 +146,10 @@ fn test_get_account_after_pub_key_update() {
     let accounts = &mut Accounts::<C>::default();
 
     let sender_1 = DefaultPrivateKey::generate().pub_key();
+    let sequencer = DefaultPrivateKey::generate().pub_key();
     let sender_1_addr = sender_1.to_address::<<C as Spec>::Address>();
-    let sender_context_1 = C::new(sender_1_addr, 1);
+    let sequencer_addr = sequencer.to_address::<<C as Spec>::Address>();
+    let sender_context_1 = C::new(sender_1_addr, sequencer_addr, 1);
 
     accounts
         .create_default_account(&sender_1, native_working_set)

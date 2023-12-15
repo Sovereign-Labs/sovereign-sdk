@@ -2,42 +2,62 @@ use sov_modules_api::hooks::TxHooks;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Context, StateMapAccessor, WorkingSet};
 
-use crate::Accounts;
+use crate::{Account, Accounts};
+
+/// The computed addresses of a pre-dispatch tx hook.
+pub struct AccountsTxHook<C: Context> {
+    /// The tx sender address
+    pub sender: C::Address,
+    /// The sequencer address
+    pub sequencer: C::Address,
+}
+
+impl<C: Context> Accounts<C> {
+    fn get_or_create_default(
+        &self,
+        pubkey: &C::PublicKey,
+        working_set: &mut WorkingSet<C>,
+    ) -> anyhow::Result<Account<C>> {
+        self.accounts
+            .get(pubkey, working_set)
+            .map(Ok)
+            .unwrap_or_else(|| self.create_default_account(pubkey, working_set))
+    }
+}
 
 impl<C: Context> TxHooks for Accounts<C> {
     type Context = C;
-    type PreArg = ();
-    type PreResult = C::Address;
-    type PostArg = ();
-    type PostResult = ();
+    type PreArg = C::PublicKey;
+    type PreResult = AccountsTxHook<C>;
 
     fn pre_dispatch_tx_hook(
         &self,
         tx: &Transaction<C>,
         working_set: &mut WorkingSet<C>,
-        _arg: (),
-    ) -> anyhow::Result<C::Address> {
-        let pub_key = tx.pub_key();
-
-        let account = match self.accounts.get(pub_key, working_set) {
-            Some(acc) => Ok(acc),
-            None => self.create_default_account(pub_key, working_set),
-        }?;
-
+        sequencer: C::PublicKey,
+    ) -> anyhow::Result<AccountsTxHook<C>> {
+        let sender = self.get_or_create_default(tx.pub_key(), working_set)?;
+        let sequencer = self.get_or_create_default(&sequencer, working_set)?;
         let tx_nonce = tx.nonce();
-        let account_nonce = account.nonce;
+
         anyhow::ensure!(
-            account_nonce == tx_nonce,
-            "Tx bad nonce, expected: {account_nonce}, but found: {tx_nonce}",
+            sender.nonce == tx_nonce,
+            "Tx bad nonce, expected: {}, but found: {}",
+            tx_nonce,
+            sender.nonce
         );
-        Ok(account.addr)
+
+        Ok(AccountsTxHook {
+            sender: sender.addr,
+            sequencer: sequencer.addr,
+        })
     }
 
     fn post_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
+        _ctx: &C,
         working_set: &mut WorkingSet<C>,
-        _arg: (),
     ) -> anyhow::Result<()> {
         let mut account = self.accounts.get_or_err(tx.pub_key(), working_set)?;
         account.nonce += 1;

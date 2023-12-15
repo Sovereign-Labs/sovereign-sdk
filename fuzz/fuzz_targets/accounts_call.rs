@@ -15,8 +15,8 @@ use sov_modules_api::{Context, Module, PrivateKey, Spec, WorkingSet};
 type C = DefaultContext;
 
 // Check well-formed calls
-fuzz_target!(|input: (u16, [u8; 32], Vec<DefaultPrivateKey>)| -> Corpus {
-    let (iterations, seed, keys) = input;
+fuzz_target!(|input: (u16, [u8; 32], [u8; 32], Vec<DefaultPrivateKey>)| -> Corpus {
+    let (iterations, seed, sequencer, keys) = input;
     if iterations < 1024 {
         // pointless to setup & run a small iterations count
         return Corpus::Reject;
@@ -42,6 +42,7 @@ fuzz_target!(|input: (u16, [u8; 32], Vec<DefaultPrivateKey>)| -> Corpus {
     let storage = <C as Spec>::Storage::with_path(tmpdir.path()).unwrap();
     let working_set = &mut WorkingSet::new(storage);
 
+    let sequencer = <C as Spec>::Address::from(sequencer);
     let config: AccountConfig<C> = keys.iter().map(|k| k.pub_key()).collect();
     let accounts: Accounts<C> = Accounts::default();
     accounts.genesis(&config, working_set).unwrap();
@@ -54,7 +55,7 @@ fuzz_target!(|input: (u16, [u8; 32], Vec<DefaultPrivateKey>)| -> Corpus {
     for i in 0..iterations {
         // we use slices for better select performance
         let sender = addresses.choose(rng).unwrap();
-        let context = C::new(*sender, i as u64);
+        let context = C::new(*sender, sequencer, i as u64);
 
         // clear previous state
         let previous = state.get(sender).unwrap().as_hex();

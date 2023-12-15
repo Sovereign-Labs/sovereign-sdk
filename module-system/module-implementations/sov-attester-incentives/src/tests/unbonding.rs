@@ -14,7 +14,7 @@ fn test_two_phase_unbonding() {
     let tmpdir = tempfile::tempdir().unwrap();
     let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(storage.clone());
-    let (module, token_address, attester_address, _) = setup(&mut working_set);
+    let (module, token_address, attester_address, _, sequencer) = setup(&mut working_set);
 
     // Assert that the attester has the correct bond amount before processing the proof
     assert_eq!(
@@ -28,7 +28,7 @@ fn test_two_phase_unbonding() {
         BOND_AMOUNT
     );
 
-    let context = DefaultContext::new(attester_address, INIT_HEIGHT + 2);
+    let context = DefaultContext::new(attester_address, sequencer, INIT_HEIGHT + 2);
 
     // Try to skip the first phase of the two phase unbonding. Should fail
     {

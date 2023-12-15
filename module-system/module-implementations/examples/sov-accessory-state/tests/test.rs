@@ -18,7 +18,8 @@ fn test_accessory_value_setter() {
     let mut working_set_for_check: WorkingSet<DefaultContext> = WorkingSet::new(storage.clone());
 
     let admin = Address::from([1; 32]);
-    let context = DefaultContext::new(admin, 1);
+    let sequencer = Address::from([2; 32]);
+    let context = DefaultContext::new(admin, sequencer, 1);
 
     let module = AccessorySetter::<DefaultContext>::default();
 

@@ -10,11 +10,12 @@ fn test_value_setter() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let admin = Address::from([1; 32]);
+    let sequencer = Address::from([2; 32]);
     // Test Native-Context
     #[cfg(feature = "native")]
     {
         let config = ValueSetterConfig { admin };
-        let context = DefaultContext::new(admin, 1);
+        let context = DefaultContext::new(admin, sequencer, 1);
         test_value_setter_helper(context, &config, &mut working_set);
     }
 
@@ -23,7 +24,7 @@ fn test_value_setter() {
     // Test Zk-Context
     {
         let config = ValueSetterConfig { admin };
-        let zk_context = ZkDefaultContext::new(admin, 1);
+        let zk_context = ZkDefaultContext::new(admin, sequencer, 1);
         let mut zk_working_set = WorkingSet::with_witness(ZkStorage::new(), witness);
         test_value_setter_helper(zk_context, &config, &mut zk_working_set);
     }
@@ -63,6 +64,7 @@ fn test_value_setter_helper<C: Context>(
 #[test]
 fn test_err_on_sender_is_not_admin() {
     let sender = Address::from([1; 32]);
+    let sequencer = Address::from([2; 32]);
 
     let tmpdir = tempfile::tempdir().unwrap();
     let backing_store = ProverStorage::with_path(tmpdir.path()).unwrap();
@@ -75,7 +77,7 @@ fn test_err_on_sender_is_not_admin() {
         let config = ValueSetterConfig {
             admin: sender_not_admin,
         };
-        let context = DefaultContext::new(sender, 1);
+        let context = DefaultContext::new(sender, sequencer, 1);
         test_err_on_sender_is_not_admin_helper(context, &config, &mut native_working_set);
     }
     let (_, witness) = native_working_set.checkpoint().freeze();
@@ -86,7 +88,7 @@ fn test_err_on_sender_is_not_admin() {
             admin: sender_not_admin,
         };
         let zk_backing_store = ZkStorage::new();
-        let zk_context = ZkDefaultContext::new(sender, 1);
+        let zk_context = ZkDefaultContext::new(sender, sequencer, 1);
         let zk_working_set = &mut WorkingSet::with_witness(zk_backing_store, witness);
         test_err_on_sender_is_not_admin_helper(zk_context, &config, zk_working_set);
     }

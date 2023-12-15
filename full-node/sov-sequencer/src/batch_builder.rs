@@ -50,6 +50,7 @@ pub struct FiFoStrictBatchBuilder<C: Context, R: DispatchCall<Context = C>> {
     runtime: R,
     max_batch_size_bytes: usize,
     current_storage: C::Storage,
+    sequencer: C::Address,
 }
 
 impl<C, R> FiFoStrictBatchBuilder<C, R>
@@ -63,6 +64,7 @@ where
         mempool_max_txs_count: usize,
         runtime: R,
         current_storage: C::Storage,
+        sequencer: C::Address,
     ) -> Self {
         Self {
             mempool: VecDeque::new(),
@@ -70,6 +72,7 @@ where
             max_batch_size_bytes,
             runtime,
             current_storage,
+            sequencer,
         }
     }
 }
@@ -139,7 +142,7 @@ where
                 // TODO: Bug(!), because potential discrepancy. Should be resolved by https://github.com/Sovereign-Labs/sovereign-sdk/issues/434
                 let sender_address: C::Address = pooled.tx.pub_key().to_address();
                 // FIXME! This should use the correct height
-                let ctx = C::new(sender_address, 0);
+                let ctx = C::new(sender_address, self.sequencer.clone(), 0);
 
                 if let Err(error) = self.runtime.dispatch_call(msg, &mut working_set, &ctx) {
                     warn!(%error, tx = hex::encode(&pooled.raw), "Error during transaction dispatch");
@@ -182,7 +185,9 @@ mod tests {
     use sov_modules_api::default_signature::DefaultPublicKey;
     use sov_modules_api::macros::DefaultRuntime;
     use sov_modules_api::transaction::Transaction;
-    use sov_modules_api::{Context, DispatchCall, EncodeCall, Genesis, MessageCodec, PrivateKey};
+    use sov_modules_api::{
+        Address, Context, DispatchCall, EncodeCall, Genesis, MessageCodec, PrivateKey,
+    };
     use sov_rollup_interface::services::batch_builder::BatchBuilder;
     use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
     use sov_value_setter::{CallMessage, ValueSetter, ValueSetterConfig};
@@ -246,11 +251,13 @@ mod tests {
     ) {
         let storage = ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap();
 
+        let sequencer = Address::from([0; 32]);
         let batch_builder = FiFoStrictBatchBuilder::new(
             batch_size_bytes,
             MAX_TX_POOL_SIZE,
             TestRuntime::<C>::default(),
             storage.clone(),
+            sequencer,
         );
         (batch_builder, storage)
     }

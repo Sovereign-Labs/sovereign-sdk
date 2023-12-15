@@ -19,7 +19,8 @@ fn test_valid_challenge() {
     let tmpdir = tempfile::tempdir().unwrap();
     let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(storage.clone());
-    let (module, token_address, attester_address, challenger_address) = setup(&mut working_set);
+    let (module, token_address, attester_address, challenger_address, sequencer) =
+        setup(&mut working_set);
 
     let (_, working_set) = commit_get_new_working_set(&storage, working_set);
 
@@ -58,7 +59,7 @@ fn test_valid_challenge() {
         .bad_transition_pool
         .set(&(INIT_HEIGHT + 1), &BOND_AMOUNT, &mut working_set);
 
-    let context = DefaultContext::new(challenger_address, INIT_HEIGHT + 2);
+    let context = DefaultContext::new(challenger_address, sequencer, INIT_HEIGHT + 2);
 
     {
         let transition = StateTransition::<MockDaSpec, _, _> {
@@ -170,7 +171,8 @@ fn test_invalid_challenge() {
     let tmpdir = tempfile::tempdir().unwrap();
     let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(storage.clone());
-    let (module, _token_address, attester_address, challenger_address) = setup(&mut working_set);
+    let (module, _token_address, attester_address, challenger_address, sequencer) =
+        setup(&mut working_set);
 
     let (_, working_set) = commit_get_new_working_set(&storage, working_set);
 
@@ -188,7 +190,7 @@ fn test_invalid_challenge() {
         .bad_transition_pool
         .set(&(INIT_HEIGHT + 1), &BOND_AMOUNT, &mut working_set);
 
-    let context = DefaultContext::new(challenger_address, INIT_HEIGHT + 2);
+    let context = DefaultContext::new(challenger_address, sequencer, INIT_HEIGHT + 2);
     let transition: StateTransition<MockDaSpec, _, _> = StateTransition {
         initial_state_root: initial_transition.state_root,
         slot_hash: [1; 32].into(),

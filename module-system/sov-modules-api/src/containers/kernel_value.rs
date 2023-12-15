@@ -336,6 +336,8 @@ mod tests {
 
         let prefix = Prefix::new(b"test".to_vec());
         let value = KernelStateValue::<u64>::new(prefix.clone());
+        let sender = Address::from([1; 32]);
+        let sequencer = Address::from([1; 32]);
 
         // Initialize a value in the kernel state during slot 4
         {
@@ -348,13 +350,13 @@ mod tests {
         {
             {
                 let mut versioned_state =
-                    working_set.versioned_state(&DefaultContext::new(Address::from([1; 32]), 1));
+                    working_set.versioned_state(&DefaultContext::new(sender, sequencer, 1));
                 // Try to read the value from user space with the slot number set to 1. Should fail.
                 assert_eq!(value.get(&mut versioned_state), None);
             }
             // Try to read the value from user space with the slot number set to 4. Should succeed.
             let mut versioned_state =
-                working_set.versioned_state(&DefaultContext::new(Address::from([1; 32]), 4));
+                working_set.versioned_state(&DefaultContext::new(sender, sequencer, 4));
             // Try to read the value from user space with the slot number set to 1. Should fail.
             assert_eq!(value.get(&mut versioned_state), Some(100));
         }
@@ -369,6 +371,8 @@ mod tests {
         let prefix = Prefix::new(b"test".to_vec());
         let value = KernelStateValue::<u64>::new(prefix.clone());
         let kernel = MockKernel::<DefaultContext, MockDaSpec>::new(4, 1);
+        let sender = Address::from([1; 32]);
+        let sequencer = Address::from([1; 32]);
 
         // Initialize a versioned value in the kernel state to be available starting at slot 2
         {
@@ -382,13 +386,13 @@ mod tests {
             use crate::StateValueAccessor;
             {
                 let mut versioned_state =
-                    working_set.versioned_state(&DefaultContext::new(Address::from([1; 32]), 1));
+                    working_set.versioned_state(&DefaultContext::new(sender, sequencer, 1));
                 // Try to read the value from user space with the slot number set to 1. Should fail.
                 assert_eq!(value.get(&mut versioned_state), None);
             }
             // Try to read the value from user space with the slot number set to 2. Should succeed.
             let mut versioned_state =
-                working_set.versioned_state(&DefaultContext::new(Address::from([1; 32]), 2));
+                working_set.versioned_state(&DefaultContext::new(sender, sequencer, 2));
 
             assert_eq!(value.get(&mut versioned_state), Some(100));
         }
