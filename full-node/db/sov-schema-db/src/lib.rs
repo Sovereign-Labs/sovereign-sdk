@@ -162,14 +162,18 @@ impl DB {
     }
 
     /// Removes the database entries in the range `["from", "to")` using default write options.
+    ///
+    /// Note that this operation will be done lexicographic on the *encoding* of the seek keys. It is
+    /// up to the table creator to ensure that the lexicographic ordering of the encoded seek keys matches the
+    /// logical ordering of the type.
     pub fn delete_range<S: Schema>(
         &self,
-        from: &impl KeyCodec<S>,
-        to: &impl KeyCodec<S>,
+        from: &impl SeekKeyEncoder<S>,
+        to: &impl SeekKeyEncoder<S>,
     ) -> anyhow::Result<()> {
         let cf_handle = self.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
-        let from = from.encode_key()?;
-        let to = to.encode_key()?;
+        let from = from.encode_seek_key()?;
+        let to = to.encode_seek_key()?;
         self.inner.delete_range_cf(cf_handle, from, to)?;
         Ok(())
     }
