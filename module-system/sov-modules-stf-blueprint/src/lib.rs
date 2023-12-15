@@ -22,10 +22,13 @@ use tracing::info;
 pub use tx_verifier::RawTx;
 
 /// This trait has to be implemented by a runtime in order to be used in `StfBlueprint`.
+///
+/// The `TxHooks` implementation sets up a transaction context based on the height at which it is
+/// to be executed.
 pub trait Runtime<C: Context, Da: DaSpec>:
     DispatchCall<Context = C>
     + Genesis<Context = C, Config = Self::GenesisConfig>
-    + TxHooks<Context = C>
+    + TxHooks<Context = C, PreArg = u64, PreResult = C, PostArg = ()>
     + SlotHooks<Da, Context = C>
     + FinalizeHook<Da, Context = C>
     + ApplyBlobHooks<

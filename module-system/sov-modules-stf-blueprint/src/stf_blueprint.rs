@@ -179,7 +179,10 @@ where
             txs.into_iter().zip(messages.into_iter())
         {
             // Pre dispatch hook
-            let sender_address = match self.runtime.pre_dispatch_tx_hook(&tx, &mut batch_workspace)
+            let height = 1;
+            let ctx = match self
+                .runtime
+                .pre_dispatch_tx_hook(&tx, &mut batch_workspace, height)
             {
                 Ok(verified_tx) => verified_tx,
                 Err(e) => {
@@ -200,7 +203,6 @@ where
             // Commit changes after pre_dispatch_tx_hook
             batch_workspace = batch_workspace.checkpoint().to_revertable();
 
-            let ctx = C::new(sender_address.clone(), 1);
             let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
 
             let events = batch_workspace.take_events();
@@ -233,7 +235,7 @@ where
 
             // TODO: `panic` will be covered in https://github.com/Sovereign-Labs/sovereign-sdk/issues/421
             self.runtime
-                .post_dispatch_tx_hook(&tx, &mut batch_workspace)
+                .post_dispatch_tx_hook(&tx, &mut batch_workspace, ())
                 .expect("Impossible happened: error in post_dispatch_tx_hook");
         }
 

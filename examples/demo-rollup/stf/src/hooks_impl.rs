@@ -13,24 +13,34 @@ use crate::runtime::Runtime;
 
 impl<C: Context, Da: DaSpec> TxHooks for Runtime<C, Da> {
     type Context = C;
+    type PreArg = u64;
+    type PreResult = C;
+    type PostArg = ();
+    type PostResult = ();
 
     fn pre_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
         working_set: &mut WorkingSet<C>,
-    ) -> anyhow::Result<<Self::Context as Spec>::Address> {
+        height: u64,
+    ) -> anyhow::Result<C> {
         // Before executing a transaction, retrieve the sender's address from the accounts module
         // and check the nonce
-        self.accounts.pre_dispatch_tx_hook(tx, working_set)
+        let sender_address = self.accounts.pre_dispatch_tx_hook(tx, working_set, ())?;
+        let ctx = C::new(sender_address, height);
+
+        Ok(ctx)
     }
 
     fn post_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
         working_set: &mut WorkingSet<C>,
+        _arg: (),
     ) -> anyhow::Result<()> {
         // After executing each transaction, update the nonce
-        self.accounts.post_dispatch_tx_hook(tx, working_set)
+        self.accounts.post_dispatch_tx_hook(tx, working_set, ())?;
+        Ok(())
     }
 }
 

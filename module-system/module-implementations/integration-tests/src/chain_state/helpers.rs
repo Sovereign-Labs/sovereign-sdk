@@ -20,19 +20,27 @@ pub(crate) struct TestRuntime<C: Context, Da: DaSpec> {
 
 impl<C: Context, Da: DaSpec> TxHooks for TestRuntime<C, Da> {
     type Context = C;
+    type PreArg = u64;
+    type PreResult = C;
+    type PostArg = ();
+    type PostResult = ();
 
     fn pre_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
         _working_set: &mut sov_modules_api::WorkingSet<C>,
-    ) -> anyhow::Result<<Self::Context as Spec>::Address> {
-        Ok(tx.pub_key().to_address())
+        height: u64,
+    ) -> anyhow::Result<C> {
+        let sender = tx.pub_key().to_address();
+        let ctx = C::new(sender, height);
+        Ok(ctx)
     }
 
     fn post_dispatch_tx_hook(
         &self,
         _tx: &Transaction<Self::Context>,
         _working_set: &mut sov_modules_api::WorkingSet<C>,
+        _arg: (),
     ) -> anyhow::Result<()> {
         Ok(())
     }

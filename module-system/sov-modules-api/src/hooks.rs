@@ -4,18 +4,24 @@ use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use crate::transaction::Transaction;
 
 /// Hooks that execute within the `StateTransitionFunction::apply_blob` function for each processed transaction.
+///
+/// The arguments consist of expected concretely implemented associated types for the hooks. At
+/// runtime, compatible implementations are selected and utilized by the system to construct its
+/// setup procedures and define post-execution routines.
 pub trait TxHooks {
     type Context: Context;
+    type PreArg;
+    type PreResult;
+    type PostArg;
+    type PostResult;
 
     /// Runs just before a transaction is dispatched to an appropriate module.
-    /// TODO: Why does it return address?
-    /// Does it implies that it should do signature verification.
-    /// Can other code rely on that assumption?
     fn pre_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
         working_set: &mut WorkingSet<Self::Context>,
-    ) -> anyhow::Result<<Self::Context as Spec>::Address>;
+        arg: Self::PreArg,
+    ) -> anyhow::Result<Self::PreResult>;
 
     /// Runs after the tx is dispatched to an appropriate module.
     /// IF this hook returns error rollup panics
@@ -23,7 +29,8 @@ pub trait TxHooks {
         &self,
         tx: &Transaction<Self::Context>,
         working_set: &mut WorkingSet<Self::Context>,
-    ) -> anyhow::Result<()>;
+        arg: Self::PostArg,
+    ) -> anyhow::Result<Self::PostResult>;
 }
 
 /// Hooks related to the Sequencer functionality.
