@@ -152,6 +152,28 @@ impl DB {
         self.write_schemas(batch)
     }
 
+    /// Delete a single key from the database.
+    pub fn delete<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<()> {
+        // Not necessary to use a batch, but we'd like a central place to bump counters.
+        // Used in tests only anyway.
+        let mut batch = SchemaBatch::new();
+        batch.delete::<S>(key)?;
+        self.write_schemas(batch)
+    }
+
+    /// Removes the database entries in the range `["from", "to")` using default write options.
+    pub fn delete_range<S: Schema>(
+        &self,
+        from: &impl KeyCodec<S>,
+        to: &impl KeyCodec<S>,
+    ) -> anyhow::Result<()> {
+        let cf_handle = self.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
+        let from = from.encode_key()?;
+        let to = to.encode_key()?;
+        self.inner.delete_range_cf(cf_handle, from, to)?;
+        Ok(())
+    }
+
     fn iter_with_direction<S: Schema>(
         &self,
         opts: ReadOptions,
