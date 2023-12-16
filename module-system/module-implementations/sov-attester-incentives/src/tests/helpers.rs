@@ -84,7 +84,7 @@ pub(crate) fn setup(
 ) {
     // Initialize bank
     let (bank_config, mut addresses) =
-        create_bank_config_with_token(TOKEN_NAME.to_string(), SALT, 4, INITIAL_BOND_AMOUNT);
+        create_bank_config_with_token(TOKEN_NAME.to_string(), SALT, 3, INITIAL_BOND_AMOUNT);
     let bank = sov_bank::Bank::<C>::default();
     bank.genesis(&bank_config, working_set)
         .expect("bank genesis must succeed");
@@ -92,7 +92,7 @@ pub(crate) fn setup(
     let attester_address = addresses.pop().unwrap();
     let challenger_address = addresses.pop().unwrap();
     let reward_supply = addresses.pop().unwrap();
-    let sequencer = addresses.pop().unwrap();
+    let sequencer = reward_supply.clone();
 
     let token_address = sov_bank::get_genesis_token_address::<DefaultContext>(TOKEN_NAME, SALT);
 
