@@ -92,7 +92,7 @@ pub(crate) fn setup(
     let attester_address = addresses.pop().unwrap();
     let challenger_address = addresses.pop().unwrap();
     let reward_supply = addresses.pop().unwrap();
-    let sequencer = reward_supply.clone();
+    let sequencer = generate_address::<C>("sequencer");
 
     let token_address = sov_bank::get_genesis_token_address::<DefaultContext>(TOKEN_NAME, SALT);
 
