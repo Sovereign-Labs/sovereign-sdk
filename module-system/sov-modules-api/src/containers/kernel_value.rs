@@ -23,7 +23,7 @@ pub struct KernelStateValue<V, Codec = BorshCodec> {
 
 impl<V> KernelStateValue<V> {
     /// Crates a new [`KernelStateValue`] with the given prefix and the default
-    /// [`KernelStateValueCodec`] (i.e. [`BorshCodec`]).
+    /// [`StateValueCodec`] (i.e. [`BorshCodec`]).
     pub fn new(prefix: Prefix) -> Self {
         Self::with_codec(prefix, BorshCodec)
     }
