@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use sov_modules_core::{Context, Prefix, StateCodec, StateValueCodec, WorkingSet};
+use sov_modules_core::{Context, KernelWorkingSet, Prefix, StateCodec, StateValueCodec};
 use sov_state::codec::BorshCodec;
 
 use super::traits::StateValueAccessor;
@@ -39,12 +39,14 @@ impl<V, Codec> KernelStateValue<V, Codec> {
         }
     }
 
+    /// Returns the prefix used when this [`KernelStateValue`] was created.
     pub fn prefix(&self) -> &Prefix {
         &self.prefix
     }
 }
 
-impl<V, Codec, C> StateValueAccessor<V, Codec, KernelWorkingSet<C>> for KernelStateValue<V, Codec>
+impl<'a, V, Codec, C> StateValueAccessor<V, Codec, KernelWorkingSet<'a, C>>
+    for KernelStateValue<V, Codec>
 where
     Codec: StateCodec,
     Codec::ValueCodec: StateValueCodec<V>,

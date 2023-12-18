@@ -12,8 +12,11 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Address, AddressBech32, EncodeCall, PrivateKey, PublicKey, Spec};
-use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
+use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier, Time};
 use sov_rollup_interface::services::da::{DaService, SlotData};
+
+const DEFAULT_CHAIN_ID: u64 = 0;
+const DEFAULT_GAS_TIP: u64 = 0;
 
 pub fn sender_address_with_pkey() -> (Address, DefaultPrivateKey) {
     // TODO: maybe generate address and private key randomly, instead of
@@ -75,6 +78,7 @@ impl DaService for RngDaService {
     type Verifier = RngDaVerifier;
     type FilteredBlock = MockBlock;
     type HeaderStream = RngHeaderStream;
+    type TransactionId = ();
     type Error = anyhow::Error;
 
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
@@ -87,6 +91,7 @@ impl DaService for RngDaService {
                 hash: barray.into(),
                 prev_hash: [0u8; 32].into(),
                 height,
+                time: Time::now(),
             },
             validity_cond: MockValidityCond { is_valid: true },
             blobs: Default::default(),
@@ -150,6 +155,14 @@ impl DaService for RngDaService {
     async fn send_transaction(&self, _blob: &[u8]) -> Result<(), Self::Error> {
         unimplemented!()
     }
+
+    async fn send_aggregated_zk_proof(&self, _proof: &[u8]) -> Result<u64, Self::Error> {
+        unimplemented!()
+    }
+
+    async fn get_aggregated_proofs_at(&self, _height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
+        unimplemented!()
+    }
 }
 
 pub struct RngDaVerifier;
@@ -193,8 +206,13 @@ pub fn generate_transfers(n: usize, start_nonce: u64) -> Vec<u8> {
             <Runtime<DefaultContext, RngDaSpec> as EncodeCall<Bank<DefaultContext>>>::encode_call(
                 msg,
             );
-        let tx =
-            Transaction::<DefaultContext>::new_signed_tx(&pk, enc_msg, start_nonce + (i as u64));
+        let tx = Transaction::<DefaultContext>::new_signed_tx(
+            &pk,
+            enc_msg,
+            DEFAULT_CHAIN_ID,
+            DEFAULT_GAS_TIP,
+            start_nonce + (i as u64),
+        );
         let ser_tx = tx.try_to_vec().unwrap();
         message_vec.push(ser_tx)
     }
@@ -215,7 +233,13 @@ pub fn generate_create(start_nonce: u64) -> Vec<u8> {
         };
     let enc_msg =
         <Runtime<DefaultContext, RngDaSpec> as EncodeCall<Bank<DefaultContext>>>::encode_call(msg);
-    let tx = Transaction::<DefaultContext>::new_signed_tx(&pk, enc_msg, start_nonce);
+    let tx = Transaction::<DefaultContext>::new_signed_tx(
+        &pk,
+        enc_msg,
+        DEFAULT_CHAIN_ID,
+        DEFAULT_GAS_TIP,
+        start_nonce,
+    );
     let ser_tx = tx.try_to_vec().unwrap();
     message_vec.push(ser_tx);
     message_vec.try_to_vec().unwrap()

@@ -12,6 +12,7 @@ resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
+num_cpus = { workspace = true }
 thiserror = { workspace = true, optional = true }
 borsh = { workspace = true }
 serde_json = { workspace = true }
@@ -27,7 +28,6 @@ rayon = { workspace = true, optional = true }
 sov-db = { path = "../db/sov-db", version = "0.3", optional = true }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
 
-
 [dev-dependencies]
 tempfile = { workspace = true }
 
@@ -41,9 +41,15 @@ sov-sequencer = { path = "../sov-sequencer" }
 
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
+sov-stf-runner = {path = ".", features = ["mock"] }
+
+sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
+sov-mock-zkvm = { path = "../../adapters/mock-zkvm" }
+
 
 [features]
 default = []
+mock = ["native"]
 native = [
     "sov-db",
     "jsonrpsee",

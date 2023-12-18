@@ -40,7 +40,7 @@ stop: check-docker
 	@$(compose_down)
 
 # clean up rollup data and stop the celestia network
-clean: stop clean-rollup-db
+clean: stop clean-celestia-rollup-db
 
 # listen to celestia network logs
 compose-logs: check-docker
@@ -64,20 +64,20 @@ wait-compose-ready:
 # update the rollup configuration with local network params
 update-config: wait-compose-ready
 ifeq ($(shell uname -s),Darwin)
-	@sed -i '' 's/^\(celestia_rpc_auth_token = \)"[^"]*"/\1"$(get_auth)"/' rollup_config.toml
-	@sed -i '' 's#^\(celestia_rpc_address = \)"[^"]*"#\1"http://127.0.0.1:$(RPC_PORT)"#' rollup_config.toml
-	@sed -i '' 's#^\(start_height = \)[0-9]*#\1$(START_HEIGHT)#' rollup_config.toml
+	@sed -i '' 's/^\(celestia_rpc_auth_token = \)"[^"]*"/\1"$(get_auth)"/' celestia_rollup_config.toml
+	@sed -i '' 's#^\(celestia_rpc_address = \)"[^"]*"#\1"http://127.0.0.1:$(RPC_PORT)"#' celestia_rollup_config.toml
+	@sed -i '' 's#^\(start_height = \)[0-9]*#\1$(START_HEIGHT)#' celestia_rollup_config.toml
 else
-	@sed -i 's/^\(celestia_rpc_auth_token = \)"[^"]*"/\1"$(get_auth)"/' rollup_config.toml
-	@sed -i 's#^\(celestia_rpc_address = \)"[^"]*"#\1"http://127.0.0.1:$(RPC_PORT)"#' rollup_config.toml
-	@sed -i 's#^\(start_height = \)[0-9]*#\1$(START_HEIGHT)#' rollup_config.toml
+	@sed -i 's/^\(celestia_rpc_auth_token = \)"[^"]*"/\1"$(get_auth)"/' celestia_rollup_config.toml
+	@sed -i 's#^\(celestia_rpc_address = \)"[^"]*"#\1"http://127.0.0.1:$(RPC_PORT)"#' celestia_rollup_config.toml
+	@sed -i 's#^\(start_height = \)[0-9]*#\1$(START_HEIGHT)#' celestia_rollup_config.toml
 endif
 
 build-sov-cli:
 	cargo build --bin sov-cli
 
 test-generate-create-token-tx: wait-compose-ready build-sov-cli
-	$(SOV_CLI_REL_PATH) transactions import from-file bank --path ../test-data/requests/create_token.json
+	$(SOV_CLI_REL_PATH) transactions import from-file bank --chain-id 0 --path ../test-data/requests/create_token.json
 
 set-rpc-url: build-sov-cli
 	$(SOV_CLI_REL_PATH) rpc set-url http://127.0.0.1:12345
@@ -91,8 +91,18 @@ test-create-token: set-rpc-url test-generate-create-token-tx import-keys
 remove-insecure-keys: build-sov-cli
 	$(SOV_CLI_REL_PATH) keys remove by-address sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94
 
-clean-rollup-db:
-	$(eval path := ./$(shell awk -F'=' '/^path/ {print $$2}' rollup_config.toml | tr -d '[:space:]"\n'))
+clean-celestia-rollup-db:
+	$(eval path := ./$(shell awk -F'=' '/^path/ {print $$2}' celestia_rollup_config.toml | tr -d '[:space:]"\n'))
+	@if [ -z "${path}" ] || [ "${path}" = "./" ]; then \
+		echo "Path is empty or too short, not safe to remove"; \
+		exit 1; \
+	fi
+	@echo removing rollup database "${path}"
+	rm -rf "${path}"
+
+
+clean-mock-rollup-db:
+	$(eval path := ./$(shell awk -F'=' '/^path/ {print $$2}' mock_rollup_config.toml | tr -d '[:space:]"\n'))
 	@if [ -z "${path}" ] || [ "${path}" = "./" ]; then \
 		echo "Path is empty or too short, not safe to remove"; \
 		exit 1; \

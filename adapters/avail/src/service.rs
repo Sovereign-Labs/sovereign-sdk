@@ -189,7 +189,7 @@ impl DaService for DaProvider {
 
     type FilteredBlock = AvailBlock;
     type HeaderStream = AvailBlockHeaderStream;
-
+    type TransactionId = ();
     type Error = anyhow::Error;
 
     // Make an RPC call to the node to get the block at the given height, if one exists.
@@ -304,5 +304,13 @@ impl DaService for DaProvider {
         info!("Transaction submitted: {:#?}", h.extrinsic_hash());
 
         Ok(())
+    }
+
+    async fn send_aggregated_zk_proof(&self, _proof: &[u8]) -> Result<u64, Self::Error> {
+        unimplemented!()
+    }
+
+    async fn get_aggregated_proofs_at(&self, _height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
+        unimplemented!()
     }
 }

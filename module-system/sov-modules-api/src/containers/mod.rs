@@ -2,6 +2,7 @@ mod accessory_map;
 mod accessory_value;
 mod accessory_vec;
 
+mod kernel_value;
 mod versioned_value;
 
 mod map;
@@ -12,6 +13,7 @@ mod traits;
 pub use accessory_map::AccessoryStateMap;
 pub use accessory_value::AccessoryStateValue;
 pub use accessory_vec::AccessoryStateVec;
+pub use kernel_value::KernelStateValue;
 pub use map::StateMap;
 pub use traits::{
     StateMapAccessor, StateMapError, StateValueAccessor, StateValueError, StateVecAccessor,
@@ -81,7 +83,10 @@ mod test {
                     prover_storage
                         .validate_and_commit(cache, &witness)
                         .expect("storage is valid");
-                    assert_eq!(test.value, prover_storage.get(&test.key, &witness).unwrap());
+                    assert_eq!(
+                        test.value,
+                        prover_storage.get(&test.key, None, &witness).unwrap()
+                    );
                 }
                 let version_after = get_state_db_version(path);
                 assert_eq!(version_after, test.version + 1)
@@ -95,7 +100,7 @@ mod test {
             for test in tests {
                 assert_eq!(
                     test.value,
-                    storage.get(&test.key, &Default::default()).unwrap()
+                    storage.get(&test.key, None, &Default::default()).unwrap()
                 );
             }
         }
@@ -130,7 +135,7 @@ mod test {
             assert!(!prover_storage.is_empty());
             assert_eq!(
                 value,
-                prover_storage.get(&key, &Default::default()).unwrap()
+                prover_storage.get(&key, None, &Default::default()).unwrap()
             );
         }
     }

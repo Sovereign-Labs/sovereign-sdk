@@ -7,6 +7,7 @@
 - sov-zk-cycle-utils
 - sov-modules-core
 - sov-state
+- sov-prover-storage-manager
 - sov-modules-macros # Requires --no-verify because it writes outside of OUT_DIR.
 - sov-modules-api
 - sov-sequencer
@@ -26,4 +27,6 @@
 
 # Adapters
 - sov-risc0-adapter
-# TODO: sov-celestia-adapter (https://github.com/Sovereign-Labs/nmt-rs/issues/17)
+- sov-celestia-adapter
+- sov-mock-da
+- sov-mock-zkvm

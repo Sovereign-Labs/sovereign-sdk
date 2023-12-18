@@ -1,6 +1,7 @@
 //! Key management workflows for the sov CLI wallet
 use std::path::{Path, PathBuf};
 
+use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_modules_api::{clap, PrivateKey, PublicKey, Spec};
@@ -52,11 +53,14 @@ pub enum KeyWorkflow<C: sov_modules_api::Context> {
 
 impl<C: sov_modules_api::Context> KeyWorkflow<C> {
     /// Run the key workflow to import, generate, activate, or list keys
-    pub fn run<Tx: Serialize + DeserializeOwned>(
+    pub fn run<Tx>(
         self,
         wallet_state: &mut WalletState<Tx, C>,
         app_dir: impl AsRef<Path>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), anyhow::Error>
+    where
+        Tx: Serialize + DeserializeOwned + BorshSerialize + BorshDeserialize,
+    {
         match self {
             KeyWorkflow::Generate { nickname } => {
                 generate_and_save_key(nickname, app_dir, wallet_state)?;
@@ -121,7 +125,10 @@ pub fn generate_and_save_key<Tx, C: sov_modules_api::Context>(
     nickname: Option<String>,
     app_dir: impl AsRef<Path>,
     wallet_state: &mut WalletState<Tx, C>,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), anyhow::Error>
+where
+    Tx: Serialize + DeserializeOwned + BorshSerialize + BorshDeserialize,
+{
     let keys = <C as Spec>::PrivateKey::generate();
     let key_and_address = PrivateKeyAndAddress::<C>::from_key(keys);
     let public_key = key_and_address.private_key.pub_key();

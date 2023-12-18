@@ -18,8 +18,13 @@ pub fn generate_address(key: &str) -> <C as Spec>::Address {
     Address::from(hash)
 }
 
-fn create_bank_config() -> (sov_bank::BankConfig<C>, <C as Spec>::Address) {
+fn create_bank_config() -> (
+    sov_bank::BankConfig<C>,
+    <C as Spec>::Address,
+    <C as Spec>::Address,
+) {
     let prover_address = generate_address("prover_pub_key");
+    let sequencer_address = generate_address("sequencer_pub_key");
 
     let token_config = sov_bank::TokenConfig {
         token_name: "InitialToken".to_owned(),
@@ -33,12 +38,13 @@ fn create_bank_config() -> (sov_bank::BankConfig<C>, <C as Spec>::Address) {
             tokens: vec![token_config],
         },
         prover_address,
+        sequencer_address,
     )
 }
 
-fn setup(working_set: &mut WorkingSet<C>) -> (ProverIncentives<C, MockZkvm>, Address) {
+fn setup(working_set: &mut WorkingSet<C>) -> (ProverIncentives<C, MockZkvm>, Address, Address) {
     // Initialize bank
-    let (bank_config, prover_address) = create_bank_config();
+    let (bank_config, prover_address, sequencer) = create_bank_config();
     let bank = sov_bank::Bank::<C>::default();
     bank.genesis(&bank_config, working_set)
         .expect("bank genesis must succeed");
@@ -60,14 +66,14 @@ fn setup(working_set: &mut WorkingSet<C>) -> (ProverIncentives<C, MockZkvm>, Add
     module
         .genesis(&config, working_set)
         .expect("prover incentives genesis must succeed");
-    (module, prover_address)
+    (module, prover_address, sequencer)
 }
 
 #[test]
 fn test_burn_on_invalid_proof() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, prover_address) = setup(&mut working_set);
+    let (module, prover_address, sequencer) = setup(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
     assert_eq!(
@@ -79,7 +85,7 @@ fn test_burn_on_invalid_proof() {
 
     // Process an invalid proof
     {
-        let context = DefaultContext::new(prover_address, 1);
+        let context = DefaultContext::new(prover_address, sequencer, 1);
         let proof = MockProof {
             program_id: MOCK_CODE_COMMITMENT,
             is_valid: false,
@@ -103,7 +109,7 @@ fn test_burn_on_invalid_proof() {
 fn test_valid_proof() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, prover_address) = setup(&mut working_set);
+    let (module, prover_address, sequencer) = setup(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
     assert_eq!(
@@ -115,7 +121,7 @@ fn test_valid_proof() {
 
     // Process a valid proof
     {
-        let context = DefaultContext::new(prover_address, 1);
+        let context = DefaultContext::new(prover_address, sequencer, 1);
         let proof = MockProof {
             program_id: MOCK_CODE_COMMITMENT,
             is_valid: true,
@@ -139,8 +145,8 @@ fn test_valid_proof() {
 fn test_unbonding() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, prover_address) = setup(&mut working_set);
-    let context = DefaultContext::new(prover_address, 1);
+    let (module, prover_address, sequencer) = setup(&mut working_set);
+    let context = DefaultContext::new(prover_address, sequencer, 1);
     let token_address = module
         .bonding_token_address
         .get(&mut working_set)
@@ -190,8 +196,8 @@ fn test_unbonding() {
 fn test_prover_not_bonded() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, prover_address) = setup(&mut working_set);
-    let context = DefaultContext::new(prover_address, 1);
+    let (module, prover_address, sequencer) = setup(&mut working_set);
+    let context = DefaultContext::new(prover_address, sequencer, 1);
 
     // Unbond the prover
     module

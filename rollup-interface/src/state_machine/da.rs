@@ -10,7 +10,7 @@ use crate::zk::ValidityCondition;
 use crate::BasicAddress;
 
 /// A specification for the types used by a DA layer.
-pub trait DaSpec: 'static + Debug + PartialEq + Eq {
+pub trait DaSpec: 'static + Debug + PartialEq + Eq + Clone {
     /// The hash of a DA layer block
     type SlotHash: BlockHashTrait;
 
@@ -179,7 +179,8 @@ pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static 
 
 /// Trait with collection of trait bounds for a block hash.
 pub trait BlockHashTrait:
-    Serialize + DeserializeOwned + PartialEq + Debug + Send + Sync + Clone + Eq + Into<[u8; 32]>
+    // so it is compatible with StorageManager implementation?
+    Serialize + DeserializeOwned + PartialEq + Debug + Send + Sync + Clone + Eq + Into<[u8; 32]> + core::hash::Hash
 {
 }
 
@@ -242,6 +243,18 @@ impl Time {
         Time {
             secs,
             nanos: nanos.0,
+        }
+    }
+
+    #[cfg(feature = "std")]
+    /// Get the current time
+    pub fn now() -> Self {
+        let current_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("Time went backwards");
+        Time {
+            secs: current_time.as_secs() as i64,
+            nanos: current_time.subsec_nanos(),
         }
     }
 

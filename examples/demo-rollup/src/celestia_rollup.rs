@@ -4,7 +4,7 @@ use demo_stf::runtime::Runtime;
 use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams};
 use sov_celestia_adapter::{CelestiaConfig, CelestiaService};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
-use sov_modules_api::Spec;
+use sov_modules_api::{Address, Spec};
 use sov_modules_rollup_blueprint::{RollupBlueprint, WalletBlueprint};
 use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
 use sov_modules_stf_blueprint::StfBlueprint;
@@ -14,7 +14,7 @@ use sov_state::storage_manager::ProverStorageManager;
 use sov_state::{DefaultStorageSpec, Storage, ZkStorage};
 use sov_stf_runner::{ParallelProverService, RollupConfig, RollupProverConfig};
 
-use crate::ROLLUP_NAMESPACE;
+use crate::{ROLLUP_BATCH_NAMESPACE, ROLLUP_PROOF_NAMESPACE};
 
 /// Rollup with CelestiaDa
 pub struct CelestiaDemoRollup {}
@@ -57,12 +57,15 @@ impl RollupBlueprint for CelestiaDemoRollup {
         ledger_db: &sov_db::ledger_db::LedgerDB,
         da_service: &Self::DaService,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
+        // TODO set the sequencer address
+        let sequencer = Address::new([0; 32]);
+
         #[allow(unused_mut)]
         let mut rpc_methods = sov_modules_rollup_blueprint::register_rpc::<
             Self::NativeRuntime,
             Self::NativeContext,
             Self::DaService,
-        >(storage, ledger_db, da_service)?;
+        >(storage, ledger_db, da_service, sequencer)?;
 
         #[cfg(feature = "experimental")]
         crate::eth::register_ethereum::<Self::DaService>(
@@ -91,7 +94,8 @@ impl RollupBlueprint for CelestiaDemoRollup {
         CelestiaService::new(
             rollup_config.da.clone(),
             RollupParams {
-                namespace: ROLLUP_NAMESPACE,
+                rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,
+                rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
             },
         )
         .await
@@ -107,10 +111,16 @@ impl RollupBlueprint for CelestiaDemoRollup {
         let zk_storage = ZkStorage::new();
 
         let da_verifier = CelestiaVerifier {
-            rollup_namespace: ROLLUP_NAMESPACE,
+            rollup_namespace: ROLLUP_BATCH_NAMESPACE,
         };
 
-        ParallelProverService::new(vm, zk_stf, da_verifier, prover_config, zk_storage)
+        ParallelProverService::new_with_default_workers(
+            vm,
+            zk_stf,
+            da_verifier,
+            prover_config,
+            zk_storage,
+        )
     }
 }
 

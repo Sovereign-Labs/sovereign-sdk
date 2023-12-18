@@ -29,13 +29,13 @@ use std::collections::{HashMap, HashSet};
 
 #[cfg(feature = "native")]
 pub use clap;
-use serde::{Deserialize, Serialize};
 #[cfg(feature = "native")]
 pub use sov_modules_core::PrivateKey;
 pub use sov_modules_core::{
-    runtime, AccessoryWorkingSet, Address, AddressBech32, CallResponse, Context, DispatchCall,
-    EncodeCall, GasUnit, Genesis, Module, ModuleCallJsonSchema, ModuleError, ModuleError as Error,
-    ModuleInfo, ModulePrefix, PublicKey, Signature, Spec, StateCheckpoint, WorkingSet,
+    archival_state, runtime, AccessoryWorkingSet, Address, AddressBech32, CallResponse, Context,
+    DispatchCall, EncodeCall, GasUnit, Genesis, Module, ModuleCallJsonSchema, ModuleError,
+    ModuleError as Error, ModuleInfo, ModulePrefix, PublicKey, Signature, Spec, StateCheckpoint,
+    StateReaderAndWriter, WorkingSet,
 };
 pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 pub use sov_rollup_interface::services::da::SlotData;

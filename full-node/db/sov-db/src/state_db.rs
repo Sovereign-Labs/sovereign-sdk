@@ -1,9 +1,9 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use jmt::storage::{TreeReader, TreeWriter};
+use jmt::storage::{HasPreimage, TreeReader, TreeWriter};
 use jmt::{KeyHash, Version};
-use sov_schema_db::DB;
+use sov_schema_db::{SchemaBatch, DB};
 
 use crate::rocks_db_config::gen_rocksdb_options;
 use crate::schema::tables::{JmtNodes, JmtValues, KeyHashToKey, STATE_TABLES};
@@ -46,8 +46,15 @@ impl StateDB {
 
     /// Put the preimage of a hashed key into the database. Note that the preimage is not checked for correctness,
     /// since the DB is unaware of the hash function used by the JMT.
-    pub fn put_preimage(&self, key_hash: KeyHash, key: &Vec<u8>) -> Result<(), anyhow::Error> {
-        self.db.put::<KeyHashToKey>(&key_hash.0, key)
+    pub fn put_preimages<'a>(
+        &self,
+        items: impl IntoIterator<Item = (KeyHash, &'a Vec<u8>)>,
+    ) -> Result<(), anyhow::Error> {
+        let mut batch = SchemaBatch::new();
+        for (key_hash, key) in items.into_iter() {
+            batch.put::<KeyHashToKey>(&key_hash.0, key)?;
+        }
+        self.db.write_schemas(batch)
     }
 
     /// Get an optional value from the database, given a version and a key hash.
@@ -62,7 +69,7 @@ impl StateDB {
         let found = iter.next();
         match found {
             Some(result) => {
-                let ((found_key, found_version), value) = result?;
+                let ((found_key, found_version), value) = result?.into_tuple();
                 if &found_key == key {
                     anyhow::ensure!(found_version <= version, "Bug! iterator isn't returning expected values. expected a version <= {version:} but found {found_version:}");
                     Ok(value)
@@ -87,11 +94,11 @@ impl StateDB {
     }
 
     fn last_version_written(db: &DB) -> anyhow::Result<Option<Version>> {
-        let mut iter = db.iter::<JmtValues>()?;
+        let mut iter = db.iter::<JmtNodes>()?;
         iter.seek_to_last();
 
         let version = match iter.next() {
-            Some(Ok(((_, version), _))) => Some(version),
+            Some(Ok(item)) => Some(item.key.version()),
             _ => None,
         };
         Ok(version)
@@ -127,8 +134,9 @@ impl TreeReader for StateDB {
 
 impl TreeWriter for StateDB {
     fn write_node_batch(&self, node_batch: &jmt::storage::NodeBatch) -> anyhow::Result<()> {
+        let mut batch = SchemaBatch::new();
         for (node_key, node) in node_batch.nodes() {
-            self.db.put::<JmtNodes>(node_key, node)?;
+            batch.put::<JmtNodes>(node_key, node)?;
         }
 
         for ((version, key_hash), value) in node_batch.values() {
@@ -138,9 +146,16 @@ impl TreeWriter for StateDB {
                     .ok_or(anyhow::format_err!(
                         "Could not find preimage for key hash {key_hash:?}. Has `StateDB::put_preimage` been called for this key?"
                     ))?;
-            self.db.put::<JmtValues>(&(key_preimage, *version), value)?;
+            batch.put::<JmtValues>(&(key_preimage, *version), value)?;
         }
+        self.db.write_schemas(batch)?;
         Ok(())
+    }
+}
+
+impl HasPreimage for StateDB {
+    fn preimage(&self, key_hash: KeyHash) -> anyhow::Result<Option<Vec<u8>>> {
+        self.db.get::<KeyHashToKey>(&key_hash.0)
     }
 }
 
@@ -236,7 +251,7 @@ mod state_db_tests {
         let key = vec![2u8; 100];
         let value = [8u8; 150];
 
-        db.put_preimage(key_hash, &key).unwrap();
+        db.put_preimages(vec![(key_hash, &key)]).unwrap();
         let mut batch = NodeBatch::default();
         batch.extend(vec![], vec![((0, key_hash), Some(value.to_vec()))]);
         db.write_node_batch(&batch).unwrap();

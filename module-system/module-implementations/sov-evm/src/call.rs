@@ -68,23 +68,19 @@ impl<C: sov_modules_api::Context> Evm<C> {
                     error: None,
                 }
             }
-            Err(err) => Receipt {
-                receipt: reth_primitives::Receipt {
-                    tx_type: evm_tx_recovered.tx_type(),
-                    success: false,
-                    cumulative_gas_used: previous_transaction_cumulative_gas_used,
-                    logs: vec![],
-                },
-                // TODO: Do we want failed transactions to use all gas?
-                // https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
-                gas_used: 0,
-                log_index_start,
-                error: Some(match err {
-                    EVMError::Transaction(err) => EVMError::Transaction(err),
-                    EVMError::Header(e) => EVMError::Header(e),
-                    EVMError::Database(_) => EVMError::Database(0u8),
-                }),
-            },
+            // Adopted from https://github.com/paradigmxyz/reth/blob/main/crates/payload/basic/src/lib.rs#L884
+            Err(err) => {
+                match err {
+                    EVMError::Transaction(_) => {
+                        // This is a transactional error, so we can skip it without doing anything.
+                        return Ok(CallResponse::default());
+                    }
+                    err => {
+                        // This is a fatal error, so we need to return it.
+                        return Err(err.into());
+                    }
+                }
+            }
         };
 
         let pending_transaction = PendingTransaction {

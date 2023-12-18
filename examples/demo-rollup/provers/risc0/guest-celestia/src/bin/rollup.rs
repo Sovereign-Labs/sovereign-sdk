@@ -2,7 +2,7 @@
 
 #![no_main]
 
-use const_rollup_config::ROLLUP_NAMESPACE_RAW;
+use const_rollup_config::ROLLUP_BATCH_NAMESPACE_RAW;
 use demo_stf::runtime::Runtime;
 use demo_stf::StfVerifier;
 use sov_celestia_adapter::types::Namespace;
@@ -13,7 +13,7 @@ use sov_risc0_adapter::guest::Risc0Guest;
 use sov_state::ZkStorage;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
-const ROLLUP_NAMESPACE: Namespace = Namespace::const_v0(ROLLUP_NAMESPACE_RAW);
+const ROLLUP_NAMESPACE: Namespace = Namespace::const_v0(ROLLUP_BATCH_NAMESPACE_RAW);
 
 risc0_zkvm::guest::entry!(main);
 

@@ -346,16 +346,19 @@ mod tests {
             assert_eq!(value.get(&mut kernel_state), Some(100));
         }
 
+        let signer = Address::from([1; 32]);
+        let sequencer = Address::from([2; 32]);
+
         {
             {
                 let mut versioned_state =
-                    working_set.versioned_state(&DefaultContext::new(Address::from([1; 32]), 1));
+                    working_set.versioned_state(&DefaultContext::new(signer, sequencer, 1));
                 // Try to read the value from user space with the slot number set to 1. Should fail.
                 assert_eq!(value.get(&mut versioned_state), None);
             }
             // Try to read the value from user space with the slot number set to 4. Should succeed.
             let mut versioned_state =
-                working_set.versioned_state(&DefaultContext::new(Address::from([1; 32]), 4));
+                working_set.versioned_state(&DefaultContext::new(signer, sequencer, 4));
             // Try to read the value from user space with the slot number set to 1. Should fail.
             assert_eq!(value.get(&mut versioned_state), Some(100));
         }
@@ -379,17 +382,20 @@ mod tests {
             assert_eq!(value.get(&2, &mut kernel_state), Some(100));
         }
 
+        let signer = Address::from([1; 32]);
+        let sequencer = Address::from([2; 32]);
+
         {
             use crate::StateValueAccessor;
             {
                 let mut versioned_state =
-                    working_set.versioned_state(&DefaultContext::new(Address::from([1; 32]), 1));
+                    working_set.versioned_state(&DefaultContext::new(signer, sequencer, 1));
                 // Try to read the value from user space with the slot number set to 1. Should fail.
                 assert_eq!(value.get(&mut versioned_state), None);
             }
             // Try to read the value from user space with the slot number set to 2. Should succeed.
             let mut versioned_state =
-                working_set.versioned_state(&DefaultContext::new(Address::from([1; 32]), 2));
+                working_set.versioned_state(&DefaultContext::new(signer, sequencer, 2));
 
             assert_eq!(value.get(&mut versioned_state), Some(100));
         }

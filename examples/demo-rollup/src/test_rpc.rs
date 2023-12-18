@@ -8,6 +8,7 @@ use serde_json::json;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 #[cfg(test)]
 use sov_mock_da::{MockBlock, MockBlockHeader, MockHash};
+use sov_rollup_interface::da::Time;
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::fuzzing::BatchReceiptStrategyArgs;
 use sov_rollup_interface::stf::{BatchReceipt, Event, TransactionReceipt};
@@ -97,6 +98,7 @@ fn regular_test_helper(payload: serde_json::Value, expected: &serde_json::Value)
             prev_hash: sha2::Sha256::digest(b"prev_header").into(),
             hash: sha2::Sha256::digest(b"slot_data").into(),
             height: 0,
+            time: Time::now(),
         },
         validity_cond: Default::default(),
         blobs: Default::default(),
@@ -302,6 +304,7 @@ prop_compose! {
                 hash: hash.into(),
                     prev_hash,
                 height: 0,
+                time: Time::now(),
                 },
                 validity_cond: Default::default(),
                 blobs: Default::default()

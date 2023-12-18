@@ -5,7 +5,10 @@ use sov_schema_db::{SchemaBatch, DB};
 
 use crate::rocks_db_config::gen_rocksdb_options;
 use crate::schema::tables::{ModuleAccessoryState, NATIVE_TABLES};
-use crate::schema::types::StateKey;
+use crate::schema::types::AccessoryKey;
+
+/// Specifies a particular version of the Accessory state.
+pub type Version = u64;
 
 /// A typed wrapper around RocksDB for storing native-only accessory state.
 /// Internally, this is roughly just an [`Arc<SchemaDB>`].
@@ -37,20 +40,37 @@ impl NativeDB {
     }
 
     /// Queries for a value in the [`NativeDB`], given a key.
-    pub fn get_value_option(&self, key: &StateKey) -> anyhow::Result<Option<Vec<u8>>> {
-        self.db
-            .get::<ModuleAccessoryState>(key)
-            .map(Option::flatten)
+    pub fn get_value_option(
+        &self,
+        key: &AccessoryKey,
+        version: Version,
+    ) -> anyhow::Result<Option<Vec<u8>>> {
+        let mut iter = self.db.iter::<ModuleAccessoryState>()?;
+        iter.seek_for_prev(&(key.to_vec(), version))?;
+        let found = iter.next();
+        match found {
+            Some(result) => {
+                let ((found_key, found_version), value) = result?.into_tuple();
+                if &found_key == key {
+                    anyhow::ensure!(found_version <= version, "Bug! iterator isn't returning expected values. expected a version <= {version:} but found {found_version:}");
+                    Ok(value)
+                } else {
+                    Ok(None)
+                }
+            }
+            None => Ok(None),
+        }
     }
 
     /// Sets a sequence of key-value pairs in the [`NativeDB`]. The write is atomic.
     pub fn set_values(
         &self,
         key_value_pairs: impl IntoIterator<Item = (Vec<u8>, Option<Vec<u8>>)>,
+        version: Version,
     ) -> anyhow::Result<()> {
         let mut batch = SchemaBatch::default();
         for (key, value) in key_value_pairs {
-            batch.put::<ModuleAccessoryState>(&key, &value)?;
+            batch.put::<ModuleAccessoryState>(&(key, version), &value)?;
         }
         self.db.write_schemas(batch)
     }
@@ -144,9 +164,13 @@ mod tests {
 
         let key = b"foo".to_vec();
         let value = b"bar".to_vec();
-        db.set_values(vec![(key.clone(), Some(value.clone()))])
+        db.set_values(vec![(key.clone(), Some(value.clone()))], 0)
             .unwrap();
-        assert_eq!(db.get_value_option(&key).unwrap(), Some(value));
+        assert_eq!(db.get_value_option(&key, 0).unwrap(), Some(value.clone()));
+        let value2 = b"bar2".to_vec();
+        db.set_values(vec![(key.clone(), Some(value2.clone()))], 1)
+            .unwrap();
+        assert_eq!(db.get_value_option(&key, 0).unwrap(), Some(value));
     }
 
     #[test]
@@ -155,8 +179,8 @@ mod tests {
         let db = NativeDB::with_path(tmpdir.path()).unwrap();
 
         let key = b"deleted".to_vec();
-        db.set_values(vec![(key.clone(), None)]).unwrap();
-        assert_eq!(db.get_value_option(&key).unwrap(), None);
+        db.set_values(vec![(key.clone(), None)], 0).unwrap();
+        assert_eq!(db.get_value_option(&key, 0).unwrap(), None);
     }
 
     #[test]
@@ -165,6 +189,6 @@ mod tests {
         let db = NativeDB::with_path(tmpdir.path()).unwrap();
 
         let key = b"spam".to_vec();
-        assert_eq!(db.get_value_option(&key).unwrap(), None);
+        assert_eq!(db.get_value_option(&key, 0).unwrap(), None);
     }
 }

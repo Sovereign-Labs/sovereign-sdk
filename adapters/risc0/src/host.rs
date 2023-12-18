@@ -1,19 +1,14 @@
-//! This module implements the `ZkvmHost` trait for the RISC0 VM.
+//! This module implements the [`ZkvmHost`] trait for the RISC0 VM.
 
-use risc0_zkvm::serde::to_vec;
-use risc0_zkvm::{Executor, ExecutorEnvBuilder, InnerReceipt, Receipt, Session};
+use risc0_zkvm::{ExecutorEnvBuilder, ExecutorImpl, InnerReceipt, Receipt, Session};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::zk::{Proof, Zkvm, ZkvmHost};
-#[cfg(feature = "bench")]
-use sov_zk_cycle_utils::{cycle_count_callback, get_syscall_name, get_syscall_name_cycles};
 
 use crate::guest::Risc0Guest;
-#[cfg(feature = "bench")]
-use crate::metrics::metrics_callback;
 use crate::Risc0MethodId;
 
-/// A Risc0Host stores a binary to execute in the Risc0 VM, and accumulates hints to be
+/// A [`Risc0Host`] stores a binary to execute in the Risc0 VM, and accumulates hints to be
 /// provided to its execution.
 #[derive(Clone)]
 pub struct Risc0Host<'a> {
@@ -29,6 +24,10 @@ fn add_benchmarking_callbacks(env: ExecutorEnvBuilder<'_>) -> ExecutorEnvBuilder
 
 #[cfg(feature = "bench")]
 fn add_benchmarking_callbacks(mut env: ExecutorEnvBuilder<'_>) -> ExecutorEnvBuilder<'_> {
+    use sov_zk_cycle_utils::{cycle_count_callback, get_syscall_name, get_syscall_name_cycles};
+
+    use crate::metrics::metrics_callback;
+
     let metrics_syscall_name = get_syscall_name();
     env.io_callback(metrics_syscall_name, metrics_callback);
 
@@ -47,15 +46,15 @@ impl<'a> Risc0Host<'a> {
         }
     }
 
-    /// Run a computation in the zkvm without generating a receipt.
+    /// Run a computation in the zkVM without generating a receipt.
     /// This creates the "Session" trace without invoking the heavy cryptographic machinery.
     pub fn run_without_proving(&mut self) -> anyhow::Result<Session> {
         let env = add_benchmarking_callbacks(ExecutorEnvBuilder::default())
-            .add_input(&self.env)
+            .write_slice(&self.env)
             .build()
             .unwrap();
-        let mut executor = Executor::from_elf(env, self.elf)?;
-        executor.run()
+        let mut executor = ExecutorImpl::from_elf(env, self.elf)?;
+        Ok(executor.run()?)
     }
     /// Run a computation in the zkvm and generate a receipt.
     pub fn run(&mut self) -> anyhow::Result<Receipt> {
@@ -68,8 +67,18 @@ impl<'a> ZkvmHost for Risc0Host<'a> {
     type Guest = Risc0Guest;
 
     fn add_hint<T: serde::Serialize>(&mut self, item: T) {
-        let serialized = to_vec(&item).expect("Serialization to vec is infallible");
-        self.env.extend_from_slice(&serialized[..]);
+        // We use the in-memory size of `item` as an indication of how much
+        // space to reserve. This is in no way guaranteed to be exact, but
+        // usually the in-memory size and serialized data size are quite close.
+        //
+        // Note: this is just an optimization to avoid frequent reallocations,
+        // it's not actually required.
+        self.env
+            .reserve(std::mem::size_of::<T>() / std::mem::size_of::<u32>());
+
+        let mut serializer = risc0_zkvm::serde::Serializer::new(&mut self.env);
+        item.serialize(&mut serializer)
+            .expect("Risc0 hint serialization is infallible");
     }
 
     fn simulate_with_hints(&mut self) -> Self::Guest {
@@ -78,8 +87,9 @@ impl<'a> ZkvmHost for Risc0Host<'a> {
 
     fn run(&mut self, with_proof: bool) -> Result<Proof, anyhow::Error> {
         if with_proof {
-            let jurnal = self.run()?.journal;
-            Ok(Proof::Data(jurnal))
+            let receipt = self.run()?;
+            let data = bincode::serialize(&receipt)?;
+            Ok(Proof::Data(data))
         } else {
             self.run_without_proving()?;
             Ok(Proof::Empty)

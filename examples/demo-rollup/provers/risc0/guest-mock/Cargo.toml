@@ -8,8 +8,8 @@ resolver = "2"
 
 [dependencies]
 anyhow = "1.0.68"
-risc0-zkvm = { version = "0.18", default-features = false, features = ["std"] }
-risc0-zkvm-platform = "0.18"
+risc0-zkvm = { version = "0.19", default-features = false, features = ["std"] }
+risc0-zkvm-platform = "0.19"
 sov-mock-da = { path = "../../../../../adapters/mock-da" }
 demo-stf = { path = "../../../stf" }
 sov-risc0-adapter = { path = "../../../../../adapters/risc0" }
@@ -34,5 +34,4 @@ lto = true
 opt-level = 3
 
 [features]
-bench = ["sov-modules-api/bench","sov-state/bench", "sov-modules-stf-blueprint/bench"]
-
+bench = ["sov-modules-api/bench", "sov-state/bench", "sov-modules-stf-blueprint/bench"]

@@ -7,7 +7,7 @@ use sov_modules_api::{
     AccessoryWorkingSet, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, MessageCodec,
     PublicKey, Spec,
 };
-use sov_modules_stf_blueprint::{Runtime, SequencerOutcome};
+use sov_modules_stf_blueprint::{Runtime, RuntimeTxHook, SequencerOutcome};
 use sov_state::Storage;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
@@ -20,18 +20,25 @@ pub(crate) struct TestRuntime<C: Context, Da: DaSpec> {
 
 impl<C: Context, Da: DaSpec> TxHooks for TestRuntime<C, Da> {
     type Context = C;
+    type PreArg = RuntimeTxHook<C>;
+    type PreResult = C;
 
     fn pre_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
         _working_set: &mut sov_modules_api::WorkingSet<C>,
-    ) -> anyhow::Result<<Self::Context as Spec>::Address> {
-        Ok(tx.pub_key().to_address())
+        arg: RuntimeTxHook<C>,
+    ) -> anyhow::Result<C> {
+        let RuntimeTxHook { height, sequencer } = arg;
+        let sender = tx.pub_key().to_address();
+        let sequencer = sequencer.to_address();
+        Ok(C::new(sender, sequencer, height))
     }
 
     fn post_dispatch_tx_hook(
         &self,
         _tx: &Transaction<Self::Context>,
+        _ctx: &C,
         _working_set: &mut sov_modules_api::WorkingSet<C>,
     ) -> anyhow::Result<()> {
         Ok(())

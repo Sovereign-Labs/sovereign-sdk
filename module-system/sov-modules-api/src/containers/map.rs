@@ -4,7 +4,6 @@ use sov_modules_core::{Context, Prefix, StateCodec, StateKeyCodec, StateValueCod
 use sov_state::codec::BorshCodec;
 
 use super::traits::StateMapAccessor;
-
 /// A container that maps keys to values.
 ///
 /// # Type parameters

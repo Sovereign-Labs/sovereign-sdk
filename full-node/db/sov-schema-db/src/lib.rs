@@ -17,19 +17,21 @@
 mod iterator;
 mod metrics;
 pub mod schema;
+mod schema_batch;
 pub mod snapshot;
+#[cfg(feature = "test_helpers")]
+pub mod test;
 
-use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::format_err;
 use iterator::ScanDirection;
-pub use iterator::{SchemaIterator, SeekKeyEncoder};
+pub use iterator::{RawDbReverseIterator, SchemaIterator, SeekKeyEncoder};
 use metrics::{
-    SCHEMADB_BATCH_COMMIT_BYTES, SCHEMADB_BATCH_COMMIT_LATENCY_SECONDS,
-    SCHEMADB_BATCH_PUT_LATENCY_SECONDS, SCHEMADB_DELETES, SCHEMADB_GET_BYTES,
-    SCHEMADB_GET_LATENCY_SECONDS, SCHEMADB_PUT_BYTES,
+    SCHEMADB_BATCH_COMMIT_BYTES, SCHEMADB_BATCH_COMMIT_LATENCY_SECONDS, SCHEMADB_DELETES,
+    SCHEMADB_GET_BYTES, SCHEMADB_GET_LATENCY_SECONDS, SCHEMADB_PUT_BYTES,
 };
+pub use rocksdb;
 use rocksdb::ReadOptions;
 pub use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 use thiserror::Error;
@@ -37,6 +39,7 @@ use tracing::info;
 
 pub use crate::schema::Schema;
 use crate::schema::{ColumnFamilyName, KeyCodec, ValueCodec};
+pub use crate::schema_batch::{SchemaBatch, SchemaBatchIterator};
 
 /// This DB is a schematized RocksDB wrapper where all data passed in and out are typed according to
 /// [`Schema`]s.
@@ -125,7 +128,7 @@ impl DB {
         let k = schema_key.encode_key()?;
         let cf_handle = self.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
 
-        let result = self.inner.get_cf(cf_handle, k)?;
+        let result = self.inner.get_pinned_cf(cf_handle, k)?;
         SCHEMADB_GET_BYTES
             .with_label_values(&[S::COLUMN_FAMILY_NAME])
             .observe(result.as_ref().map_or(0.0, |v| v.len() as f64));
@@ -149,6 +152,32 @@ impl DB {
         self.write_schemas(batch)
     }
 
+    /// Delete a single key from the database.
+    pub fn delete<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<()> {
+        // Not necessary to use a batch, but we'd like a central place to bump counters.
+        // Used in tests only anyway.
+        let mut batch = SchemaBatch::new();
+        batch.delete::<S>(key)?;
+        self.write_schemas(batch)
+    }
+
+    /// Removes the database entries in the range `["from", "to")` using default write options.
+    ///
+    /// Note that this operation will be done lexicographic on the *encoding* of the seek keys. It is
+    /// up to the table creator to ensure that the lexicographic ordering of the encoded seek keys matches the
+    /// logical ordering of the type.
+    pub fn delete_range<S: Schema>(
+        &self,
+        from: &impl SeekKeyEncoder<S>,
+        to: &impl SeekKeyEncoder<S>,
+    ) -> anyhow::Result<()> {
+        let cf_handle = self.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
+        let from = from.encode_seek_key()?;
+        let to = to.encode_seek_key()?;
+        self.inner.delete_range_cf(cf_handle, from, to)?;
+        Ok(())
+    }
+
     fn iter_with_direction<S: Schema>(
         &self,
         opts: ReadOptions,
@@ -164,6 +193,15 @@ impl DB {
     /// Returns a forward [`SchemaIterator`] on a certain schema with the default read options.
     pub fn iter<S: Schema>(&self) -> anyhow::Result<SchemaIterator<S>> {
         self.iter_with_direction::<S>(Default::default(), ScanDirection::Forward)
+    }
+
+    /// Returns a [`RawDbReverseIterator`] which allows to iterate over raw values, backwards
+    pub fn raw_iter<S: Schema>(&self) -> anyhow::Result<RawDbReverseIterator> {
+        let cf_handle = self.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
+        Ok(RawDbReverseIterator::new(
+            self.inner
+                .raw_iterator_cf_opt(cf_handle, Default::default()),
+        ))
     }
 
     /// Returns a forward [`SchemaIterator`] on a certain schema with the provided read options.
@@ -251,8 +289,10 @@ impl DB {
     }
 }
 
-type SchemaKey = Vec<u8>;
-type SchemaValue = Vec<u8>;
+/// Readability alias for a key in the DB.
+pub type SchemaKey = Vec<u8>;
+/// Readability alias for a value in the DB.
+pub type SchemaValue = Vec<u8>;
 
 #[cfg_attr(feature = "arbitrary", derive(proptest_derive::Arbitrary))]
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -265,84 +305,6 @@ pub enum Operation {
     },
     /// Deleting a value
     Delete,
-}
-
-/// [`SchemaBatch`] holds a collection of updates that can be applied to a DB
-/// ([`Schema`]) atomically. The updates will be applied in the order in which
-/// they are added to the [`SchemaBatch`].
-#[derive(Debug, Default)]
-pub struct SchemaBatch {
-    last_writes: HashMap<ColumnFamilyName, HashMap<SchemaKey, Operation>>,
-}
-
-impl SchemaBatch {
-    /// Creates an empty batch.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Adds an insert/update operation to the batch.
-    pub fn put<S: Schema>(
-        &mut self,
-        key: &impl KeyCodec<S>,
-        value: &impl ValueCodec<S>,
-    ) -> anyhow::Result<()> {
-        let _timer = SCHEMADB_BATCH_PUT_LATENCY_SECONDS
-            .with_label_values(&["unknown"])
-            .start_timer();
-        let key = key.encode_key()?;
-        let put_operation = Operation::Put {
-            value: value.encode_value()?,
-        };
-        self.insert_operation::<S>(key, put_operation);
-        Ok(())
-    }
-
-    /// Adds a delete operation to the batch.
-    pub fn delete<S: Schema>(&mut self, key: &impl KeyCodec<S>) -> anyhow::Result<()> {
-        let key = key.encode_key()?;
-        self.insert_operation::<S>(key, Operation::Delete);
-
-        Ok(())
-    }
-
-    fn insert_operation<S: Schema>(&mut self, key: SchemaKey, operation: Operation) {
-        let column_writes = self.last_writes.entry(S::COLUMN_FAMILY_NAME).or_default();
-        column_writes.insert(key, operation);
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn read<S: Schema>(
-        &self,
-        key: &impl KeyCodec<S>,
-    ) -> anyhow::Result<Option<Operation>> {
-        let key = key.encode_key()?;
-        if let Some(column_writes) = self.last_writes.get(&S::COLUMN_FAMILY_NAME) {
-            return Ok(column_writes.get(&key).cloned());
-        }
-        Ok(None)
-    }
-}
-
-#[cfg(feature = "arbitrary")]
-impl proptest::arbitrary::Arbitrary for SchemaBatch {
-    type Parameters = &'static [ColumnFamilyName];
-    fn arbitrary_with(columns: Self::Parameters) -> Self::Strategy {
-        use proptest::prelude::any;
-        use proptest::strategy::Strategy;
-
-        proptest::collection::vec(any::<HashMap<SchemaKey, Operation>>(), columns.len())
-            .prop_map::<SchemaBatch, _>(|vec_vec_write_ops| {
-                let mut rows = HashMap::new();
-                for (col, write_op) in columns.iter().zip(vec_vec_write_ops.into_iter()) {
-                    rows.insert(*col, write_op);
-                }
-                SchemaBatch { last_writes: rows }
-            })
-            .boxed()
-    }
-
-    type Strategy = proptest::strategy::BoxedStrategy<Self>;
 }
 
 /// An error that occurred during (de)serialization of a [`Schema`]'s keys or

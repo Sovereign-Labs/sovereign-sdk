@@ -1,6 +1,7 @@
 mod address;
 
-use std::fmt::Formatter;
+use std::fmt::{Debug, Formatter};
+use std::hash::Hasher;
 
 pub use address::{MockAddress, MOCK_SEQUENCER_DA_ADDRESS};
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -11,13 +12,10 @@ use sov_rollup_interface::Bytes;
 
 use crate::validity_condition::MockValidityCond;
 
-const JAN_1_2023: i64 = 1672531200;
-
 /// A mock hash digest.
 #[derive(
     Clone,
     Copy,
-    Debug,
     PartialEq,
     Eq,
     serde::Serialize,
@@ -26,6 +24,12 @@ const JAN_1_2023: i64 = 1672531200;
     BorshSerialize,
 )]
 pub struct MockHash([u8; 32]);
+
+impl Debug for MockHash {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{}", hex::encode(self.0))
+    }
+}
 
 impl AsRef<[u8]> for MockHash {
     fn as_ref(&self) -> &[u8] {
@@ -45,10 +49,17 @@ impl From<MockHash> for [u8; 32] {
     }
 }
 
+impl std::hash::Hash for MockHash {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write(&self.0);
+        state.finish();
+    }
+}
+
 impl BlockHashTrait for MockHash {}
 
 /// A mock block header used for testing.
-#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone)]
 pub struct MockBlockHeader {
     /// The hash of the previous block.
     pub prev_hash: MockHash,
@@ -56,6 +67,8 @@ pub struct MockBlockHeader {
     pub hash: MockHash,
     /// The height of this block
     pub height: u64,
+    /// The time at which this block was created
+    pub time: Time,
 }
 
 impl Default for MockBlockHeader {
@@ -64,6 +77,7 @@ impl Default for MockBlockHeader {
             prev_hash: MockHash([0u8; 32]),
             hash: MockHash([1u8; 32]),
             height: 0,
+            time: Time::now(),
         }
     }
 }
@@ -96,7 +110,7 @@ impl BlockHeaderTrait for MockBlockHeader {
     }
 
     fn time(&self) -> Time {
-        Time::from_secs(JAN_1_2023 + (self.height as i64) * 15)
+        self.time.clone()
     }
 }
 
@@ -126,6 +140,8 @@ pub struct MockBlob {
     pub(crate) hash: [u8; 32],
     /// Actual data from the blob. Public for testing purposes.
     pub data: CountedBufReader<Bytes>,
+    // Data for the aggregated ZK proof.
+    pub(crate) zk_proofs_data: Vec<u8>,
 }
 
 impl MockBlob {
@@ -134,7 +150,23 @@ impl MockBlob {
         Self {
             address,
             data: CountedBufReader::new(Bytes::from(data)),
+            zk_proofs_data: Default::default(),
             hash,
+        }
+    }
+
+    /// Creates a new mock blob with the given data and an aggretated zkp proof, claiming to have been published by the provided address.
+    pub fn new_with_zkp_proof(
+        data: Vec<u8>,
+        zk_proofs_data: Vec<u8>,
+        address: MockAddress,
+        hash: [u8; 32],
+    ) -> Self {
+        Self {
+            address,
+            hash,
+            data: CountedBufReader::new(Bytes::from(data)),
+            zk_proofs_data,
         }
     }
 }
@@ -157,6 +189,7 @@ impl Default for MockBlock {
                 prev_hash: [0; 32].into(),
                 hash: [1; 32].into(),
                 height: 0,
+                time: Default::default(),
             },
             validity_cond: Default::default(),
             blobs: Default::default(),

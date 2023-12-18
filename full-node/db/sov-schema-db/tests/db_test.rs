@@ -3,10 +3,10 @@
 
 use std::path::Path;
 
-use byteorder::{BigEndian, ReadBytesExt};
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
-use sov_schema_db::schema::{ColumnFamilyName, KeyDecoder, KeyEncoder, Result, ValueCodec};
-use sov_schema_db::{define_schema, CodecError, Schema, SchemaBatch, DB};
+use sov_schema_db::schema::{ColumnFamilyName, Result};
+use sov_schema_db::test::TestField;
+use sov_schema_db::{define_schema, Schema, SchemaBatch, DB};
 use tempfile::TempDir;
 
 // Creating two schemas that share exactly the same structure but are stored in different column
@@ -15,68 +15,6 @@ use tempfile::TempDir;
 // everywhere.
 define_schema!(TestSchema1, TestField, TestField, "TestCF1");
 define_schema!(TestSchema2, TestField, TestField, "TestCF2");
-
-#[derive(Debug, Eq, PartialEq)]
-pub(crate) struct TestField(u32);
-
-impl TestField {
-    fn to_bytes(&self) -> Vec<u8> {
-        self.0.to_be_bytes().to_vec()
-    }
-
-    fn from_bytes(data: &[u8]) -> Result<Self> {
-        let mut reader = std::io::Cursor::new(data);
-        Ok(TestField(
-            reader
-                .read_u32::<BigEndian>()
-                .map_err(|e| CodecError::Wrapped(e.into()))?,
-        ))
-    }
-}
-
-impl KeyEncoder<TestSchema1> for TestField {
-    fn encode_key(&self) -> Result<Vec<u8>> {
-        Ok(self.to_bytes())
-    }
-}
-
-impl KeyDecoder<TestSchema1> for TestField {
-    fn decode_key(data: &[u8]) -> Result<Self> {
-        Self::from_bytes(data)
-    }
-}
-
-impl ValueCodec<TestSchema1> for TestField {
-    fn encode_value(&self) -> Result<Vec<u8>> {
-        Ok(self.to_bytes())
-    }
-
-    fn decode_value(data: &[u8]) -> Result<Self> {
-        Self::from_bytes(data)
-    }
-}
-
-impl KeyEncoder<TestSchema2> for TestField {
-    fn encode_key(&self) -> Result<Vec<u8>> {
-        Ok(self.to_bytes())
-    }
-}
-
-impl KeyDecoder<TestSchema2> for TestField {
-    fn decode_key(data: &[u8]) -> Result<Self> {
-        Self::from_bytes(data)
-    }
-}
-
-impl ValueCodec<TestSchema2> for TestField {
-    fn encode_value(&self) -> Result<Vec<u8>> {
-        Ok(self.to_bytes())
-    }
-
-    fn decode_value(data: &[u8]) -> Result<Self> {
-        Self::from_bytes(data)
-    }
-}
 
 fn get_column_families() -> Vec<ColumnFamilyName> {
     vec![
@@ -194,7 +132,9 @@ fn test_schema_put_get() {
 fn collect_values<S: Schema>(db: &TestDB) -> Vec<(S::Key, S::Value)> {
     let mut iter = db.iter::<S>().expect("Failed to create iterator.");
     iter.seek_to_first();
-    iter.collect::<Result<Vec<_>, anyhow::Error>>().unwrap()
+    iter.map(|res| res.map(|item| item.into_tuple()))
+        .collect::<Result<Vec<_>, anyhow::Error>>()
+        .unwrap()
 }
 
 fn gen_expected_values(values: &[(u32, u32)]) -> Vec<(TestField, TestField)> {

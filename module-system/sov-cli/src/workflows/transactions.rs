@@ -2,9 +2,12 @@
 
 use std::path::Path;
 
+use borsh::{BorshDeserialize, BorshSerialize};
+use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_modules_api::clap::{self, Subcommand};
-use sov_modules_api::cli::CliFrontEnd;
+use sov_modules_api::cli::{CliFrontEnd, CliTxImportArg};
+use sov_modules_api::transaction::UnsignedTransaction;
 use sov_modules_api::CliWallet;
 
 use crate::wallet_state::WalletState;
@@ -34,12 +37,12 @@ impl<File: Subcommand, Json: Subcommand> TransactionWorkflow<File, Json> {
         _app_dir: impl AsRef<Path>,
     ) -> Result<(), anyhow::Error>
     where
-        File: CliFrontEnd<RT>,
-        Json: CliFrontEnd<RT>,
+        File: CliFrontEnd<RT> + CliTxImportArg,
+        Json: CliFrontEnd<RT> + CliTxImportArg,
         File: TryInto<RT::CliStringRepr<V>, Error = E1>,
         Json: TryInto<RT::CliStringRepr<V>, Error = E2>,
         RT::CliStringRepr<V>: TryInto<RT::Decodable, Error = E3>,
-        RT::Decodable: Serialize,
+        RT::Decodable: BorshSerialize + BorshDeserialize + Serialize + DeserializeOwned,
         E1: Into<anyhow::Error> + Send + Sync,
         E2: Into<anyhow::Error> + Send + Sync,
         E3: Into<anyhow::Error> + Send + Sync,
@@ -99,31 +102,43 @@ where
         wallet_state: &mut WalletState<RT::Decodable, C>,
     ) -> Result<(), anyhow::Error>
     where
-        Json: CliFrontEnd<RT>,
-        File: CliFrontEnd<RT>,
+        Json: CliFrontEnd<RT> + CliTxImportArg,
+        File: CliFrontEnd<RT> + CliTxImportArg,
         Json: TryInto<RT::CliStringRepr<U>, Error = E1>,
         File: TryInto<RT::CliStringRepr<U>, Error = E2>,
         RT::CliStringRepr<U>: TryInto<RT::Decodable, Error = E3>,
-        RT::Decodable: Serialize,
+        RT::Decodable: BorshSerialize + BorshDeserialize + Serialize + DeserializeOwned,
         E1: Into<anyhow::Error> + Send + Sync,
         E2: Into<anyhow::Error> + Send + Sync,
         E3: Into<anyhow::Error> + Send + Sync,
     {
+        let chain_id;
+        let gas_tip;
+
         let intermediate_repr: RT::CliStringRepr<U> = match self {
             ImportTransaction::FromFile(file) => {
+                chain_id = file.chain_id();
+                gas_tip = file.gas_tip();
                 file.try_into().map_err(Into::<anyhow::Error>::into)?
             }
             ImportTransaction::FromString(json) => {
+                chain_id = json.chain_id();
+                gas_tip = json.gas_tip();
                 json.try_into().map_err(Into::<anyhow::Error>::into)?
             }
         };
 
-        let tx = intermediate_repr
+        let tx: RT::Decodable = intermediate_repr
             .try_into()
             .map_err(Into::<anyhow::Error>::into)?;
+
+        let tx = UnsignedTransaction::new(tx, chain_id, gas_tip);
+
         println!("Adding the following transaction to batch:");
         println!("{}", serde_json::to_string_pretty(&tx)?);
+
         wallet_state.unsent_transactions.push(tx);
+
         Ok(())
     }
 }

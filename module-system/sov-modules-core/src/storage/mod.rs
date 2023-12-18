@@ -48,6 +48,22 @@ impl StorageKey {
         }
     }
 
+    /// Converts this key into a [`CacheKey`] via cloning.
+    pub fn to_cache_key_version(&self, version: Option<u64>) -> CacheKey {
+        match version {
+            None => CacheKey {
+                key: self.key.clone(),
+            },
+            Some(v) => {
+                let mut bytes = v.to_be_bytes().to_vec();
+                bytes.extend((*self.key).clone());
+                CacheKey {
+                    key: RefCount::new(bytes),
+                }
+            }
+        }
+    }
+
     /// Converts this key into a [`CacheKey`].
     pub fn into_cache_key(self) -> CacheKey {
         CacheKey { key: self.key }
@@ -197,7 +213,12 @@ pub trait Storage: Clone {
     fn with_config(config: Self::RuntimeConfig) -> anyhow::Result<Self>;
 
     /// Returns the value corresponding to the key or None if key is absent.
-    fn get(&self, key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue>;
+    fn get(
+        &self,
+        key: &StorageKey,
+        version: Option<Version>,
+        witness: &Self::Witness,
+    ) -> Option<StorageValue>;
 
     /// Returns the value corresponding to the key or None if key is absent.
     ///
@@ -206,7 +227,7 @@ pub trait Storage: Clone {
     /// execution environments** (i.e. outside of the zmVM) **SHOULD** override
     /// this method to return a value. This is because accessory state **MUST
     /// NOT** be readable from within the zmVM.
-    fn get_accessory(&self, _key: &StorageKey) -> Option<StorageValue> {
+    fn get_accessory(&self, _key: &StorageKey, _version: Option<Version>) -> Option<StorageValue> {
         None
     }
 

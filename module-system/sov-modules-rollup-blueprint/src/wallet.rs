@@ -1,12 +1,14 @@
 use async_trait::async_trait;
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use sov_cli::wallet_state::WalletState;
 use sov_cli::workflows::keys::KeyWorkflow;
 use sov_cli::workflows::rpc::RpcWorkflows;
 use sov_cli::workflows::transactions::TransactionWorkflow;
 use sov_cli::{clap, wallet_dir};
 use sov_modules_api::clap::Parser;
-use sov_modules_api::cli::{CliFrontEnd, JsonStringArg};
+use sov_modules_api::cli::{CliFrontEnd, CliTxImportArg, JsonStringArg};
 use sov_modules_api::{CliWallet, Context, DispatchCall};
 
 use crate::RollupBlueprint;
@@ -54,8 +56,10 @@ where
     async fn run_wallet<File: clap::Subcommand, Json: clap::Subcommand>(
     ) -> Result<(), anyhow::Error>
     where
-        File: CliFrontEnd<<Self as RollupBlueprint>::NativeRuntime> + Send + Sync,
-        Json: CliFrontEnd<<Self as RollupBlueprint>::NativeRuntime> + Send + Sync,
+        <<Self as RollupBlueprint>::NativeRuntime as DispatchCall>::Decodable:
+            BorshSerialize + BorshDeserialize + Serialize + DeserializeOwned,
+        File: CliFrontEnd<<Self as RollupBlueprint>::NativeRuntime> + CliTxImportArg + Send + Sync,
+        Json: CliFrontEnd<<Self as RollupBlueprint>::NativeRuntime> + CliTxImportArg + Send + Sync,
 
         File: TryInto<
             <<Self as RollupBlueprint>::NativeRuntime as CliWallet>::CliStringRepr<JsonStringArg>,

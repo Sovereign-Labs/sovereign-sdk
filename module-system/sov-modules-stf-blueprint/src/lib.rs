@@ -21,11 +21,22 @@ pub use stf_blueprint::StfBlueprint;
 use tracing::info;
 pub use tx_verifier::RawTx;
 
+/// The tx hook for a blueprint runtime
+pub struct RuntimeTxHook<C: Context> {
+    /// Height to initialize the context
+    pub height: u64,
+    /// Sequencer public key
+    pub sequencer: C::PublicKey,
+}
+
 /// This trait has to be implemented by a runtime in order to be used in `StfBlueprint`.
+///
+/// The `TxHooks` implementation sets up a transaction context based on the height at which it is
+/// to be executed.
 pub trait Runtime<C: Context, Da: DaSpec>:
     DispatchCall<Context = C>
     + Genesis<Context = C, Config = Self::GenesisConfig>
-    + TxHooks<Context = C>
+    + TxHooks<Context = C, PreArg = RuntimeTxHook<C>, PreResult = C>
     + SlotHooks<Da, Context = C>
     + FinalizeHook<Da, Context = C>
     + ApplyBlobHooks<

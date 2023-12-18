@@ -166,7 +166,7 @@ impl LedgerDB {
         let iter = raw_iter.take(max_items);
         let mut out = Vec::with_capacity(max_items);
         for res in iter {
-            let (_, batch) = res?;
+            let batch = res?.value;
             out.push(batch)
         }
         Ok(out)
@@ -307,7 +307,7 @@ impl LedgerDB {
         iter.seek_to_last();
 
         match iter.next() {
-            Some(Ok((version, _))) => Ok(Some(version.into())),
+            Some(Ok(item)) => Ok(Some(item.key.into())),
             Some(Err(e)) => Err(e),
             _ => Ok(None),
         }
@@ -319,7 +319,7 @@ impl LedgerDB {
         iter.seek_to_last();
 
         match iter.next() {
-            Some(Ok((slot_number, slot))) => Ok(Some((slot_number, slot))),
+            Some(Ok(item)) => Ok(Some(item.into_tuple())),
             Some(Err(e)) => Err(e),
             _ => Ok(None),
         }
