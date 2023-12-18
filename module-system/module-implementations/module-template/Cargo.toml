@@ -30,6 +30,7 @@ sov-state = { path = "../../sov-state" }
 [dev-dependencies]
 tempfile = { workspace = true }
 module-template = { path = ".", version = "*", features = ["native"] }
+sov-prover-storage-manager = { path = "../../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
 
 [features]
 default = []

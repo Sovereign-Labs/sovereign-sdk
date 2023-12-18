@@ -107,7 +107,7 @@ where
 mod test {
 
     use sov_modules_core::WorkingSet;
-    use sov_state::{DefaultStorageSpec, ProverStorage};
+    use sov_prover_storage_manager::new_orphan_storage;
 
     use super::*;
     use crate::containers::traits::vec_tests::Testable;
@@ -116,7 +116,7 @@ mod test {
     #[test]
     fn test_accessory_state_vec() {
         let tmpdir = tempfile::tempdir().unwrap();
-        let storage = ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap();
+        let storage = new_orphan_storage(tmpdir.path()).unwrap();
         let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(storage);
 
         let prefix = Prefix::new("test".as_bytes().to_vec());

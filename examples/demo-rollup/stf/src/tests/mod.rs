@@ -5,7 +5,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::DaSpec;
 use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
 use sov_modules_stf_blueprint::StfBlueprint;
-use sov_state::storage_manager::ProverStorageManager;
+use sov_prover_storage_manager::ProverStorageManager;
 use sov_state::DefaultStorageSpec;
 
 use crate::genesis_config::{get_genesis_config, GenesisPaths};
@@ -23,7 +23,7 @@ pub(crate) type StfBlueprintTest =
 
 pub(crate) fn create_storage_manager_for_tests(
     path: impl AsRef<Path>,
-) -> ProverStorageManager<DefaultStorageSpec> {
+) -> ProverStorageManager<MockDaSpec, DefaultStorageSpec> {
     let config = sov_state::config::Config {
         path: path.as_ref().to_path_buf(),
     };

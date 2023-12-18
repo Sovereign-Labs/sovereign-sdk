@@ -6,6 +6,7 @@ use std::str::FromStr;
 use demo_stf::genesis_config::GenesisPaths;
 use ethers_core::abi::Address;
 use ethers_signers::{LocalWallet, Signer};
+use sov_demo_rollup::initialize_logging;
 use sov_evm::SimpleStorageContract;
 use sov_stf_runner::RollupProverConfig;
 use test_client::TestClient;
@@ -17,6 +18,7 @@ use crate::test_helpers::start_rollup;
 #[tokio::test]
 async fn evm_tx_tests() -> Result<(), anyhow::Error> {
     let (port_tx, port_rx) = tokio::sync::oneshot::channel();
+    initialize_logging();
 
     let rollup_task = tokio::spawn(async {
         // Don't provide a prover since the EVM is not currently provable

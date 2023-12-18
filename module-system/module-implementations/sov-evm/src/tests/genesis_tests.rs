@@ -8,11 +8,12 @@ use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::prelude::*;
 use sov_modules_api::{Module, WorkingSet};
-use sov_state::ProverStorage;
+use sov_prover_storage_manager::new_orphan_storage;
 
 use crate::evm::primitive_types::{Block, SealedBlock};
 use crate::evm::{AccountInfo, DbAccount, EvmChainConfig};
 use crate::{AccountData, Evm, EvmConfig};
+
 type C = DefaultContext;
 
 lazy_static! {
@@ -213,7 +214,7 @@ fn genesis_head() {
 
 pub(crate) fn get_evm(config: &EvmConfig) -> (Evm<C>, WorkingSet<DefaultContext>) {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let evm = Evm::<C>::default();
     evm.genesis(config, &mut working_set).unwrap();
     evm.finalize_hook(&[10u8; 32].into(), &mut working_set.accessory_state());

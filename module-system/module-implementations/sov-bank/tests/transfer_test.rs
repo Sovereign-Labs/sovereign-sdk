@@ -8,9 +8,10 @@ use sov_bank::{
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Address, Context, Error, Module, WorkingSet};
+use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
 use sov_state::{DefaultStorageSpec, ProverStorage};
 
-pub type Storage = ProverStorage<DefaultStorageSpec>;
+pub type Storage = ProverStorage<DefaultStorageSpec, SnapshotManager>;
 
 #[test]
 fn transfer_initial_token() {
@@ -19,7 +20,7 @@ fn transfer_initial_token() {
     let bank_config = create_bank_config_with_token(4, initial_balance);
     let token_name = bank_config.tokens[0].token_name.clone();
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let bank = Bank::default();
     bank.genesis(&bank_config, &mut working_set).unwrap();
 
@@ -259,7 +260,7 @@ fn transfer_initial_token() {
 fn transfer_deployed_token() {
     let bank = Bank::<C>::default();
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let empty_bank_config = BankConfig::<C> { tokens: vec![] };
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 

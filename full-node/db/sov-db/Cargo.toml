@@ -36,6 +36,10 @@ tokio = { workspace = true }
 [dev-dependencies]
 sov-mock-da = { path = "../../../adapters/mock-da", features = ["native"] }
 tempfile = { workspace = true }
+sov-prover-storage-manager = { path = "../../sov-prover-storage-manager" }
+criterion = "0.5.1"
+rand = { workspace = true }
+sha2 = { workspace = true }
 
 
 [features]
@@ -43,5 +47,10 @@ arbitrary = [
     "dep:arbitrary",
     "dep:proptest",
     "dep:proptest-derive",
-    "dep:tempfile"
+    "dep:tempfile",
 ]
+
+[[bench]]
+name = "state_db_single_snapshot"
+path = "benches/state_db_bench.rs"
+harness = false

@@ -1,7 +1,7 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::optimistic::Attestation;
 use sov_modules_api::{Context, StateMapAccessor, WorkingSet};
-use sov_state::ProverStorage;
+use sov_prover_storage_manager::new_orphan_storage;
 
 use crate::call::AttesterIncentiveErrors;
 use crate::tests::helpers::{
@@ -12,7 +12,7 @@ use crate::tests::helpers::{
 #[test]
 fn test_process_valid_attestation() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(storage.clone());
     let (module, token_address, attester_address, _, sequencer) = setup(&mut working_set);
 
@@ -100,7 +100,7 @@ fn test_process_valid_attestation() {
 #[test]
 fn test_burn_on_invalid_attestation() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(storage.clone());
     let (module, _token_address, attester_address, _, sequencer) = setup(&mut working_set);
 
