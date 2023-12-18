@@ -57,7 +57,9 @@ pub enum InitVariant<Stf: StateTransitionFunction<Vm, Da>, Vm: Zkvm, Da: DaSpec>
     /// From empty state root
     Genesis {
         /// Genesis block header should be finalized at init moment
-        genesis_block_header: Da::BlockHeader,
+        block_header: Da::BlockHeader,
+        /// Genesis params for Stf::init
+        genesis_params: GenesisParams<Stf, Vm, Da>,
     },
 }
 
@@ -89,7 +91,6 @@ where
         stf: Stf,
         mut storage_manager: Sm,
         init_variant: InitVariant<Stf, Vm, Da::Spec>,
-        genesis_config: GenesisParams<Stf, Vm, Da::Spec>,
         prover_service: Ps,
     ) -> Result<Self, anyhow::Error> {
         let rpc_config = runner_config.rpc_config;
@@ -100,16 +101,17 @@ where
                 state_root
             }
             InitVariant::Genesis {
-                genesis_block_header,
+                block_header,
+                genesis_params: params,
             } => {
                 info!(
                     "No history detected. Initializing chain on block_header={:?}...",
-                    genesis_block_header
+                    block_header
                 );
-                let storage = storage_manager.create_storage_on(&genesis_block_header)?;
-                let (genesis_root, initialized_storage) = stf.init_chain(storage, genesis_config);
-                storage_manager.save_change_set(&genesis_block_header, initialized_storage)?;
-                storage_manager.finalize(&genesis_block_header)?;
+                let storage = storage_manager.create_storage_on(&block_header)?;
+                let (genesis_root, initialized_storage) = stf.init_chain(storage, params);
+                storage_manager.save_change_set(&block_header, initialized_storage)?;
+                storage_manager.finalize(&block_header)?;
                 info!(
                     "Chain initialization is done. Genesis root: 0x{}",
                     hex::encode(genesis_root.as_ref()),
@@ -264,5 +266,10 @@ where
         }
 
         Ok(())
+    }
+
+    /// Allows to read current state root
+    pub fn get_state_root(&self) -> &Stf::StateRoot {
+        &self.state_root
     }
 }

@@ -9211,6 +9211,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+ "sha2 0.10.8",
  "sov-accounts",
  "sov-bank",
  "sov-celestia-adapter",

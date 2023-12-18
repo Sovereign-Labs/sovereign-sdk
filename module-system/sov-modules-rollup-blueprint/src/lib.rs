@@ -146,7 +146,8 @@ pub trait RollupBlueprint: Sized + Send + Sync {
         let init_variant = match prev_root {
             Some(root_hash) => InitVariant::Initialized(root_hash),
             None => InitVariant::Genesis {
-                genesis_block_header: last_finalized_block_header.clone(),
+                block_header: last_finalized_block_header.clone(),
+                genesis_params: genesis_config,
             },
         };
 
@@ -157,7 +158,6 @@ pub trait RollupBlueprint: Sized + Send + Sync {
             native_stf,
             storage_manager,
             init_variant,
-            genesis_config,
             prover_service,
         )?;
 
