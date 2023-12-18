@@ -152,6 +152,32 @@ impl DB {
         self.write_schemas(batch)
     }
 
+    /// Delete a single key from the database.
+    pub fn delete<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<()> {
+        // Not necessary to use a batch, but we'd like a central place to bump counters.
+        // Used in tests only anyway.
+        let mut batch = SchemaBatch::new();
+        batch.delete::<S>(key)?;
+        self.write_schemas(batch)
+    }
+
+    /// Removes the database entries in the range `["from", "to")` using default write options.
+    ///
+    /// Note that this operation will be done lexicographic on the *encoding* of the seek keys. It is
+    /// up to the table creator to ensure that the lexicographic ordering of the encoded seek keys matches the
+    /// logical ordering of the type.
+    pub fn delete_range<S: Schema>(
+        &self,
+        from: &impl SeekKeyEncoder<S>,
+        to: &impl SeekKeyEncoder<S>,
+    ) -> anyhow::Result<()> {
+        let cf_handle = self.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
+        let from = from.encode_seek_key()?;
+        let to = to.encode_seek_key()?;
+        self.inner.delete_range_cf(cf_handle, from, to)?;
+        Ok(())
+    }
+
     fn iter_with_direction<S: Schema>(
         &self,
         opts: ReadOptions,
