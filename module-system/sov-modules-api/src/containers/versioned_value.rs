@@ -324,7 +324,7 @@ mod tests {
     use sov_mock_da::MockDaSpec;
     use sov_modules_core::capabilities::mocks::MockKernel;
     use sov_modules_core::{Address, Context, KernelWorkingSet, Prefix, WorkingSet};
-    use sov_state::{DefaultStorageSpec, ProverStorage};
+    use sov_prover_storage_manager::new_orphan_storage;
 
     use crate::default_context::DefaultContext;
     use crate::VersionedStateValue;
@@ -332,7 +332,7 @@ mod tests {
     fn test_kernel_state_value_as_value() {
         use crate::StateValueAccessor;
         let tmpdir = tempfile::tempdir().unwrap();
-        let storage = ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap();
+        let storage = new_orphan_storage(tmpdir.path()).unwrap();
         let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(storage);
 
         let prefix = Prefix::new(b"test".to_vec());
@@ -367,7 +367,7 @@ mod tests {
     #[test]
     fn test_kernel_state_value_as_map() {
         let tmpdir = tempfile::tempdir().unwrap();
-        let storage = ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap();
+        let storage = new_orphan_storage(tmpdir.path()).unwrap();
         let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(storage);
 
         let prefix = Prefix::new(b"test".to_vec());

@@ -19,7 +19,7 @@ mod metrics;
 pub mod schema;
 mod schema_batch;
 pub mod snapshot;
-#[cfg(feature = "test_helpers")]
+#[cfg(feature = "test-utils")]
 pub mod test;
 
 use std::path::Path;

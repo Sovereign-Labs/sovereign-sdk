@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
@@ -24,7 +26,7 @@ pub struct DefaultContext {
 #[cfg(feature = "native")]
 impl Spec for DefaultContext {
     type Address = Address;
-    type Storage = ProverStorage<DefaultStorageSpec>;
+    type Storage = ProverStorage<DefaultStorageSpec, sov_prover_storage_manager::SnapshotManager>;
     type PrivateKey = DefaultPrivateKey;
     type PublicKey = DefaultPublicKey;
     type Hasher = sha2::Sha256;

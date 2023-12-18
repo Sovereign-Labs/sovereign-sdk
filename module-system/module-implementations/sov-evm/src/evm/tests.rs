@@ -5,7 +5,7 @@ use revm::precompile::B160;
 use revm::primitives::{CfgEnv, ExecutionResult, Output, SpecId, KECCAK_EMPTY, U256};
 use revm::{Database, DatabaseCommit};
 use sov_modules_api::WorkingSet;
-use sov_state::ProverStorage;
+use sov_prover_storage_manager::new_orphan_storage;
 
 use super::db::EvmDb;
 use super::db_init::InitEvmDb;
@@ -15,13 +15,14 @@ use crate::evm::AccountInfo;
 use crate::smart_contracts::SimpleStorageContract;
 use crate::tests::test_signer::TestSigner;
 use crate::Evm;
+
 type C = sov_modules_api::default_context::DefaultContext;
 
 #[test]
 fn simple_contract_execution_sov_state() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set: WorkingSet<C> =
-        WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+        WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
 
     let evm = Evm::<C>::default();
     let evm_db: EvmDb<'_, C> = evm.get_db(&mut working_set);

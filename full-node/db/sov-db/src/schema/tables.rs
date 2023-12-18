@@ -312,7 +312,7 @@ impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> KeyEncoder<JmtValues> for (T
 
 impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> SeekKeyEncoder<JmtValues> for (T, Version) {
     fn encode_seek_key(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
-        self.encode_key()
+        <(T, Version) as KeyEncoder<JmtValues>>::encode_key(self)
     }
 }
 

@@ -25,14 +25,14 @@ use crate::{EthApiError, Evm};
 impl<C: sov_modules_api::Context> Evm<C> {
     /// Handler for `net_version`
     #[rpc_method(name = "net_version")]
-    pub fn net_version(&self, _working_set: &mut WorkingSet<C>) -> RpcResult<String> {
+    pub fn net_version(&self, working_set: &mut WorkingSet<C>) -> RpcResult<String> {
         info!("evm module: net_version");
 
         // Network ID is the same as chain ID for most networks
         let chain_id = self
             .cfg
-            .get(_working_set)
-            .expect("Evm config must be set")
+            .get(working_set)
+            .expect("EVM config must be set at genesis")
             .chain_id;
 
         Ok(chain_id.to_string())
@@ -40,18 +40,16 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
     /// Handler for: `eth_chainId`
     #[rpc_method(name = "eth_chainId")]
-    pub fn chain_id(
-        &self,
-        working_set: &mut WorkingSet<C>,
-    ) -> RpcResult<Option<reth_primitives::U64>> {
-        info!("evm module: eth_chainId");
+    pub fn chain_id(&self, working_set: &mut WorkingSet<C>) -> RpcResult<Option<U64>> {
+        tracing::debug!("evm module: eth_chainId");
 
         let chain_id = reth_primitives::U64::from(
             self.cfg
                 .get(working_set)
-                .expect("Evm config must be set")
+                .expect("EVM config must be set at genesis")
                 .chain_id,
         );
+        info!("evm module: eth_chainId() -> {}", chain_id);
 
         Ok(Some(chain_id))
     }
@@ -248,7 +246,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         hash: reth_primitives::H256,
         working_set: &mut WorkingSet<C>,
     ) -> RpcResult<Option<reth_rpc_types::Transaction>> {
-        info!("evm module: eth_getTransactionByHash");
+        info!("evm module: eth_getTransactionByHash({})", hash);
         let mut accessory_state = working_set.accessory_state();
 
         let tx_number = self.transaction_hashes.get(&hash, &mut accessory_state);
@@ -277,6 +275,11 @@ impl<C: sov_modules_api::Context> Evm<C> {
                 U256::from(tx_number.unwrap() - block.transactions.start),
             )
         });
+        tracing::debug!(
+            "evm module: eth_getTransactionByHash({}) -> {:?}",
+            hash,
+            transaction
+        );
 
         Ok(transaction)
     }

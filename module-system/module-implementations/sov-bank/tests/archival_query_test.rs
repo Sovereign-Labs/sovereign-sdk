@@ -4,6 +4,7 @@ use helpers::*;
 use sov_bank::{get_genesis_token_address, Amount, Bank, CallMessage, Coins};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Context, Module, StateReaderAndWriter, WorkingSet};
+use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
 use sov_state::storage::{StorageKey, StorageValue};
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
 
@@ -12,7 +13,7 @@ fn transfer_initial_token() {
     let initial_balance = 100;
     let bank_config = create_bank_config_with_token(4, initial_balance);
     let tmpdir = tempfile::tempdir().unwrap();
-    let prover_storage = ProverStorage::with_path(tmpdir.path()).unwrap();
+    let prover_storage = new_orphan_storage(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(prover_storage.clone());
     let bank = Bank::default();
     bank.genesis(&bank_config, &mut working_set).unwrap();
@@ -269,7 +270,10 @@ fn transfer(
         .expect("Transfer call failed");
 }
 
-fn commit(working_set: WorkingSet<DefaultContext>, storage: ProverStorage<DefaultStorageSpec>) {
+fn commit(
+    working_set: WorkingSet<DefaultContext>,
+    storage: ProverStorage<DefaultStorageSpec, SnapshotManager>,
+) {
     // Save checkpoint
     let mut checkpoint = working_set.checkpoint();
 

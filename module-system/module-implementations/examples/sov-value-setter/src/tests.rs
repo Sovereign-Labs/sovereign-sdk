@@ -1,6 +1,7 @@
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::{Address, Context, Event, Module, WorkingSet};
-use sov_state::{ProverStorage, ZkStorage};
+use sov_prover_storage_manager::new_orphan_storage;
+use sov_state::ZkStorage;
 
 use super::ValueSetter;
 use crate::{call, query, ValueSetterConfig};
@@ -8,7 +9,7 @@ use crate::{call, query, ValueSetterConfig};
 #[test]
 fn test_value_setter() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let admin = Address::from([1; 32]);
     let sequencer = Address::from([2; 32]);
     // Test Native-Context
@@ -67,20 +68,19 @@ fn test_err_on_sender_is_not_admin() {
     let sequencer = Address::from([2; 32]);
 
     let tmpdir = tempfile::tempdir().unwrap();
-    let backing_store = ProverStorage::with_path(tmpdir.path()).unwrap();
-    let mut native_working_set = WorkingSet::new(backing_store);
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
+    let mut prover_working_set = WorkingSet::new(storage);
 
     let sender_not_admin = Address::from([2; 32]);
-    // Test Native-Context
-    #[cfg(feature = "native")]
+    // Test Prover-Context
     {
         let config = ValueSetterConfig {
             admin: sender_not_admin,
         };
         let context = DefaultContext::new(sender, sequencer, 1);
-        test_err_on_sender_is_not_admin_helper(context, &config, &mut native_working_set);
+        test_err_on_sender_is_not_admin_helper(context, &config, &mut prover_working_set);
     }
-    let (_, witness) = native_working_set.checkpoint().freeze();
+    let (_, witness) = prover_working_set.checkpoint().freeze();
 
     // Test Zk-Context
     {

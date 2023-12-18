@@ -26,8 +26,11 @@ pub use versioned_value::VersionedStateValue;
 #[cfg(test)]
 mod test {
     use jmt::Version;
+    use sov_mock_da::{MockBlockHeader, MockDaSpec};
     use sov_modules_core::{StateReaderAndWriter, Storage, StorageKey, StorageValue, WorkingSet};
-    use sov_state::{DefaultStorageSpec, ProverStorage};
+    use sov_prover_storage_manager::ProverStorageManager;
+    use sov_rollup_interface::storage::HierarchicalStorageManager;
+    use sov_state::DefaultStorageSpec;
 
     use crate::default_context::DefaultContext;
 
@@ -36,11 +39,6 @@ mod test {
         key: StorageKey,
         value: StorageValue,
         version: Version,
-    }
-
-    fn get_state_db_version(path: &std::path::Path) -> Version {
-        let state_db = sov_db::state_db::StateDB::with_path(path).unwrap();
-        state_db.get_next_version()
     }
 
     fn create_tests() -> Vec<TestCase> {
@@ -60,21 +58,29 @@ mod test {
                 value: StorageValue::from("value_2"),
                 version: 3,
             },
+            TestCase {
+                key: StorageKey::from("key_1"),
+                value: StorageValue::from("value_3"),
+                version: 4,
+            },
         ]
     }
 
     #[test]
     fn test_jmt_storage() {
         let tempdir = tempfile::tempdir().unwrap();
-        let path = tempdir.path();
         let tests = create_tests();
+        let storage_config = sov_state::config::Config {
+            path: tempdir.path().to_path_buf(),
+        };
         {
+            let mut storage_manager =
+                ProverStorageManager::<MockDaSpec, DefaultStorageSpec>::new(storage_config.clone())
+                    .unwrap();
+            let header = MockBlockHeader::default();
+            let prover_storage = storage_manager.create_storage_on(&header).unwrap();
             for test in tests.clone() {
-                let version_before = get_state_db_version(path);
-                assert_eq!(version_before, test.version);
                 {
-                    let prover_storage =
-                        ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
                     let mut working_set: WorkingSet<DefaultContext> =
                         WorkingSet::new(prover_storage.clone());
 
@@ -88,19 +94,25 @@ mod test {
                         prover_storage.get(&test.key, None, &witness).unwrap()
                     );
                 }
-                let version_after = get_state_db_version(path);
-                assert_eq!(version_after, test.version + 1)
             }
+            storage_manager
+                .save_change_set(&header, prover_storage)
+                .unwrap();
+            storage_manager.finalize(&header).unwrap();
         }
 
         {
-            let version_from_db = get_state_db_version(path);
-            let storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
-            assert_eq!(version_from_db, (tests.len() + 1) as u64);
+            let mut storage_manager =
+                ProverStorageManager::<MockDaSpec, DefaultStorageSpec>::new(storage_config)
+                    .unwrap();
+            let header = MockBlockHeader::default();
+            let storage = storage_manager.create_storage_on(&header).unwrap();
             for test in tests {
                 assert_eq!(
                     test.value,
-                    storage.get(&test.key, None, &Default::default()).unwrap()
+                    storage
+                        .get(&test.key, Some(test.version), &Default::default())
+                        .unwrap()
                 );
             }
         }
@@ -109,9 +121,15 @@ mod test {
     #[test]
     fn test_restart_lifecycle() {
         let tempdir = tempfile::tempdir().unwrap();
-        let path = tempdir.path();
+        let storage_config = sov_state::config::Config {
+            path: tempdir.path().to_path_buf(),
+        };
         {
-            let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
+            let mut storage_manager =
+                ProverStorageManager::<MockDaSpec, DefaultStorageSpec>::new(storage_config.clone())
+                    .unwrap();
+            let header = MockBlockHeader::default();
+            let prover_storage = storage_manager.create_storage_on(&header).unwrap();
             assert!(prover_storage.is_empty());
         }
 
@@ -119,7 +137,11 @@ mod test {
         let value = StorageValue::from("some_value");
         // First restart
         {
-            let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
+            let mut storage_manager =
+                ProverStorageManager::<MockDaSpec, DefaultStorageSpec>::new(storage_config.clone())
+                    .unwrap();
+            let header = MockBlockHeader::default();
+            let prover_storage = storage_manager.create_storage_on(&header).unwrap();
             assert!(prover_storage.is_empty());
             let mut storage: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
             storage.set(&key, value.clone());
@@ -127,11 +149,18 @@ mod test {
             prover_storage
                 .validate_and_commit(cache, &witness)
                 .expect("storage is valid");
+            storage_manager
+                .save_change_set(&header, prover_storage)
+                .unwrap();
+            storage_manager.finalize(&header).unwrap();
         }
 
         // Correctly restart from disk
         {
-            let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
+            let mut storage_manager =
+                ProverStorageManager::<MockDaSpec, DefaultStorageSpec>::new(storage_config.clone())
+                    .unwrap();
+            let prover_storage = storage_manager.create_finalized_storage().unwrap();
             assert!(!prover_storage.is_empty());
             assert_eq!(
                 value,

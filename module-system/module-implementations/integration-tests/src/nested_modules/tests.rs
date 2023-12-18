@@ -1,15 +1,16 @@
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::prelude::*;
 use sov_modules_api::{Context, Event, ModulePrefix, StateMap, WorkingSet};
-use sov_state::{ProverStorage, Storage, ZkStorage};
+use sov_prover_storage_manager::new_orphan_storage;
+use sov_state::{Storage, ZkStorage};
 
 use super::helpers::module_c;
 
 #[test]
 fn nested_module_call_test() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let native_storage = ProverStorage::with_path(tmpdir.path()).unwrap();
-    let mut working_set = WorkingSet::new(native_storage.clone());
+    let prover_storage = new_orphan_storage(tmpdir.path()).unwrap();
+    let mut working_set = WorkingSet::new(prover_storage.clone());
 
     // Test the `native` execution.
     {
@@ -28,7 +29,7 @@ fn nested_module_call_test() {
     );
 
     let (log, witness) = working_set.checkpoint().freeze();
-    native_storage
+    prover_storage
         .validate_and_commit(log, &witness)
         .expect("State update is valid");
 

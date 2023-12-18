@@ -1,6 +1,6 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Context, Module, StateVecAccessor, WorkingSet};
-use sov_state::ProverStorage;
+use sov_prover_storage_manager::new_orphan_storage;
 use sov_vec_setter::{CallMessage, VecSetter, VecSetterConfig};
 
 // rustfmt doesn't like long lines, but it's easier to read in this case.
@@ -31,7 +31,7 @@ fn test_cases() -> Vec<(Address, Address, CallMessage, Option<Vec<u32>>)> {
 fn test_vec_setter_calls() {
     let tmpdir = tempfile::tempdir().unwrap();
 
-    let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(storage);
 
     let admin = Address::from([1; 32]);

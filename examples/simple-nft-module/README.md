@@ -379,11 +379,13 @@ impl<C: sov_modules_api::Context> NonFungibleToken<C> {
 Integration tests are recommended to ensure that the module is implemented correctly. This helps confirm
 that all public APIs function as intended.
 
-Temporary storage is needed for testing, so we enable the `temp` feature of `sov-state` as a `dev-dependency`
+Temporary storage is needed for testing, so we enable the `temp` feature of `sov-state` as a `dev-dependency`.
+Implementation of SnapshotQuery is also needed, so `sov-prover-storage-manager` is also added.
 
 ```toml,text
 [dev-dependencies]
 sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", features = ["temp"] }
+sov-prover-storage-manager = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable" }
 ```
 
 Here is some boilerplate for NFT module integration tests:
@@ -394,9 +396,10 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Context, Module, WorkingSet};
 use sov_rollup_interface::stf::Event;
 use sov_state::{DefaultStorageSpec, ProverStorage};
+use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
 
 pub type C = DefaultContext;
-pub type Storage = ProverStorage<DefaultStorageSpec>;
+pub type Storage = ProverStorage<DefaultStorageSpec, SnapshotManager>;
 
 
 #[test]

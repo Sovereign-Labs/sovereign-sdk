@@ -188,6 +188,7 @@ mod tests {
     use sov_modules_api::{
         Address, Context, DispatchCall, EncodeCall, Genesis, MessageCodec, PrivateKey,
     };
+    use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
     use sov_rollup_interface::services::batch_builder::BatchBuilder;
     use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
     use sov_value_setter::{CallMessage, ValueSetter, ValueSetterConfig};
@@ -247,9 +248,9 @@ mod tests {
         tmpdir: &TempDir,
     ) -> (
         FiFoStrictBatchBuilder<C, TestRuntime<C>>,
-        ProverStorage<DefaultStorageSpec>,
+        ProverStorage<DefaultStorageSpec, SnapshotManager>,
     ) {
-        let storage = ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap();
+        let storage = new_orphan_storage(tmpdir.path()).unwrap();
 
         let sequencer = Address::from([0; 32]);
         let batch_builder = FiFoStrictBatchBuilder::new(
@@ -262,7 +263,10 @@ mod tests {
         (batch_builder, storage)
     }
 
-    fn setup_runtime(storage: ProverStorage<DefaultStorageSpec>, admin: Option<DefaultPublicKey>) {
+    fn setup_runtime(
+        storage: ProverStorage<DefaultStorageSpec, SnapshotManager>,
+        admin: Option<DefaultPublicKey>,
+    ) {
         let runtime = TestRuntime::<C>::default();
         let mut working_set = WorkingSet::new(storage.clone());
 

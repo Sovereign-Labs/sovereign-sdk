@@ -20,6 +20,7 @@ borsh = { workspace = true, features = ["rc"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+sov-prover-storage-manager = { path = "../../../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
 
 [features]
 default = []

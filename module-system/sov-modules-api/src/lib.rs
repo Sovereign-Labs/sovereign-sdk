@@ -58,7 +58,7 @@ pub mod da {
 }
 
 pub mod storage {
-    pub use sov_rollup_interface::storage::StorageManager;
+    pub use sov_rollup_interface::storage::HierarchicalStorageManager;
 }
 
 struct ModuleVisitor<'a, C: Context> {

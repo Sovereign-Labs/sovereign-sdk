@@ -6,9 +6,9 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{PrivateKey, WorkingSet};
 use sov_modules_stf_blueprint::{Batch, SequencerOutcome, SlashingReason, StfBlueprint, TxEffect};
 use sov_rollup_interface::da::BlobReaderTrait;
+use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::storage::StorageManager;
-use sov_state::ProverStorage;
+use sov_rollup_interface::storage::HierarchicalStorageManager;
 
 use super::{create_storage_manager_for_tests, get_genesis_config_for_tests, RuntimeTest};
 use crate::runtime::Runtime;
@@ -23,30 +23,43 @@ const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
 
 #[test]
 fn test_tx_revert() {
+    // Test checks:
+    //  - Batch is successfully applied even with incorrect txs
+    //  - Nonce for bad transactions has increased
+
     let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
 
     let config = get_genesis_config_for_tests();
     let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address;
 
-    {
-        let storage_manager = create_storage_manager_for_tests(path);
+    let genesis_block = MockBlock::default();
+    let block_1 = genesis_block.next_mock();
+
+    let storage = {
+        let mut storage_manager = create_storage_manager_for_tests(tempdir.path());
         let stf: StfBlueprintTest = StfBlueprint::new();
-        // TODO: Maybe complete with actual block data
-        let _data = MockBlock::default();
-        let (genesis_root, _) = stf.init_chain(storage_manager.get_native_storage(), config);
+
+        let (genesis_root, storage) = stf.init_chain(
+            storage_manager
+                .create_storage_on(genesis_block.header())
+                .unwrap(),
+            config,
+        );
+        storage_manager
+            .save_change_set(genesis_block.header(), storage)
+            .unwrap();
 
         let txs = simulate_da_with_revert_msg();
         let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
-        let data = MockBlock::default();
 
+        let storage = storage_manager.create_storage_on(block_1.header()).unwrap();
         let apply_block_result = stf.apply_slot(
             &genesis_root,
-            storage_manager.get_native_storage(),
+            storage,
             Default::default(),
-            &data.header,
-            &data.validity_cond,
+            &block_1.header,
+            &block_1.validity_cond,
             &mut blobs,
         );
 
@@ -67,12 +80,13 @@ fn test_tx_revert() {
         assert_eq!(txn_receipts[0].receipt, TxEffect::Successful);
         assert_eq!(txn_receipts[1].receipt, TxEffect::Successful);
         assert_eq!(txn_receipts[2].receipt, TxEffect::Reverted);
-    }
 
-    // Checks
+        apply_block_result.change_set
+    };
+
+    // Checks on storage after execution
     {
         let runtime = &mut Runtime::<DefaultContext, MockDaSpec>::default();
-        let storage = ProverStorage::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage);
         let resp = runtime
             .bank
@@ -94,63 +108,7 @@ fn test_tx_revert() {
             .unwrap();
         // Sequencer is not excluded from list of allowed!
         assert_eq!(Some(sequencer_rollup_address), resp.address);
-    }
-}
 
-#[test]
-fn test_nonce_incremented_on_revert() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let path = tempdir.path();
-
-    let config = get_genesis_config_for_tests();
-    {
-        let storage_manager = create_storage_manager_for_tests(path);
-        let stf: StfBlueprintTest = StfBlueprint::new();
-        // TODO: Maybe complete with actual block data
-        let _data = MockBlock::default();
-        let (genesis_root, _) = stf.init_chain(storage_manager.get_native_storage(), config);
-
-        let txs = simulate_da_with_revert_msg();
-        let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
-        let mut blobs = [blob];
-        let data = MockBlock::default();
-
-        let apply_block_result = stf.apply_slot(
-            &genesis_root,
-            storage_manager.get_native_storage(),
-            Default::default(),
-            &data.header,
-            &data.validity_cond,
-            &mut blobs,
-        );
-
-        assert_eq!(1, apply_block_result.batch_receipts.len());
-        let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
-
-        assert_eq!(
-            SequencerOutcome::Rewarded(0),
-            apply_blob_outcome.inner,
-            "Unexpected outcome: Batch execution should have succeeded",
-        );
-
-        let txn_receipts = apply_block_result.batch_receipts[0].tx_receipts.clone();
-        // 3 transactions
-        // create 1000 tokens
-        // transfer 15 tokens
-        // transfer 5000 tokens // this should be reverted
-        assert_eq!(txn_receipts[0].receipt, TxEffect::Successful);
-        assert_eq!(txn_receipts[1].receipt, TxEffect::Successful);
-        assert_eq!(txn_receipts[2].receipt, TxEffect::Reverted);
-    }
-
-    // with 3 transactions, the final nonce should be 3
-    // 0 -> 1
-    // 1 -> 2
-    // 2 -> 3
-    {
-        let runtime = &mut Runtime::<DefaultContext, MockDaSpec>::default();
-        let storage = ProverStorage::with_path(path).unwrap();
-        let mut working_set = WorkingSet::new(storage);
         let nonce = match runtime
             .accounts
             .get_account(get_default_private_key().pub_key(), &mut working_set)
@@ -160,24 +118,36 @@ fn test_nonce_incremented_on_revert() {
             Response::AccountEmpty => 0,
         };
 
+        // with 3 transactions, the final nonce should be 3
+        // 0 -> 1
+        // 1 -> 2
+        // 2 -> 3
         // minter account should have its nonce increased for 3 transactions
         assert_eq!(3, nonce);
     }
 }
 
 #[test]
-fn test_tx_bad_sig() {
+fn test_tx_bad_signature() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
 
     let config = get_genesis_config_for_tests();
 
-    {
-        let storage_manager = create_storage_manager_for_tests(path);
+    let genesis_block = MockBlock::default();
+    let block_1 = genesis_block.next_mock();
+    let storage = {
+        let mut storage_manager = create_storage_manager_for_tests(path);
         let stf: StfBlueprintTest = StfBlueprint::new();
-        // TODO: Maybe complete with actual block data
-        let _data = MockBlock::default();
-        let (genesis_root, _) = stf.init_chain(storage_manager.get_native_storage(), config);
+        let (genesis_root, storage) = stf.init_chain(
+            storage_manager
+                .create_storage_on(genesis_block.header())
+                .unwrap(),
+            config,
+        );
+        storage_manager
+            .save_change_set(genesis_block.header(), storage)
+            .unwrap();
 
         let txs = simulate_da_with_bad_sig();
 
@@ -185,13 +155,13 @@ fn test_tx_bad_sig() {
         let blob_sender = blob.sender();
         let mut blobs = [blob];
 
-        let data = MockBlock::default();
+        let storage = storage_manager.create_storage_on(block_1.header()).unwrap();
         let apply_block_result = stf.apply_slot(
             &genesis_root,
-            storage_manager.get_native_storage(),
+            storage,
             Default::default(),
-            &data.header,
-            &data.validity_cond,
+            &block_1.header,
+            &block_1.validity_cond,
             &mut blobs,
         );
 
@@ -209,6 +179,21 @@ fn test_tx_bad_sig() {
 
         // The batch receipt contains no events.
         assert!(!has_tx_events(&apply_blob_outcome));
+        apply_block_result.change_set
+    };
+
+    {
+        let runtime = &mut Runtime::<DefaultContext, MockDaSpec>::default();
+        let mut working_set = WorkingSet::new(storage);
+        let nonce = match runtime
+            .accounts
+            .get_account(get_default_private_key().pub_key(), &mut working_set)
+            .unwrap()
+        {
+            Response::AccountExists { nonce, .. } => nonce,
+            Response::AccountEmpty => 0,
+        };
+        assert_eq!(0, nonce);
     }
 }
 
@@ -218,26 +203,32 @@ fn test_tx_bad_nonce() {
     let path = tempdir.path();
 
     let config = get_genesis_config_for_tests();
-
+    let genesis_block = MockBlock::default();
+    let block_1 = genesis_block.next_mock();
     {
-        let storage_manager = create_storage_manager_for_tests(path);
+        let mut storage_manager = create_storage_manager_for_tests(path);
         let stf: StfBlueprintTest = StfBlueprint::new();
-        // TODO: Maybe complete with actual block data
-        let _data = MockBlock::default();
-        let (genesis_root, _) = stf.init_chain(storage_manager.get_native_storage(), config);
-
+        let (genesis_root, storage) = stf.init_chain(
+            storage_manager
+                .create_storage_on(genesis_block.header())
+                .unwrap(),
+            config,
+        );
+        storage_manager
+            .save_change_set(genesis_block.header(), storage)
+            .unwrap();
         let txs = simulate_da_with_bad_nonce();
 
         let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
 
-        let data = MockBlock::default();
+        let storage = storage_manager.create_storage_on(block_1.header()).unwrap();
         let apply_block_result = stf.apply_slot(
             &genesis_root,
-            storage_manager.get_native_storage(),
+            storage,
             Default::default(),
-            &data.header,
-            &data.validity_cond,
+            &block_1.header,
+            &block_1.validity_cond,
             &mut blobs,
         );
 
@@ -265,34 +256,46 @@ fn test_tx_bad_serialization() {
 
     let config = get_genesis_config_for_tests();
     let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address;
+
+    let genesis_block = MockBlock::default();
+    let block_1 = genesis_block.next_mock();
+    let mut storage_manager = create_storage_manager_for_tests(path);
+
     let (genesis_root, sequencer_balance_before) = {
-        let storage_manager = create_storage_manager_for_tests(path);
         let stf: StfBlueprintTest = StfBlueprint::new();
-        let runtime: RuntimeTest = Runtime::default();
-        let (genesis_root, _) = stf.init_chain(storage_manager.get_native_storage(), config);
 
-        let mut working_set = WorkingSet::new(storage_manager.get_native_storage());
-        let coins = runtime
-            .sequencer_registry
-            .get_coins_to_lock(&mut working_set)
-            .unwrap();
+        let (genesis_root, storage) = stf.init_chain(
+            storage_manager
+                .create_storage_on(genesis_block.header())
+                .unwrap(),
+            config,
+        );
 
-        let balance = runtime
-            .bank
-            .get_balance_of(
-                sequencer_rollup_address,
-                coins.token_address,
-                &mut working_set,
-            )
+        let balance = {
+            let runtime: RuntimeTest = Runtime::default();
+            let mut working_set = WorkingSet::new(storage.clone());
+
+            let coins = runtime
+                .sequencer_registry
+                .get_coins_to_lock(&mut working_set)
+                .unwrap();
+
+            runtime
+                .bank
+                .get_balance_of(
+                    sequencer_rollup_address,
+                    coins.token_address,
+                    &mut working_set,
+                )
+                .unwrap()
+        };
+        storage_manager
+            .save_change_set(genesis_block.header(), storage)
             .unwrap();
         (genesis_root, balance)
     };
 
-    {
-        // TODO: Maybe complete with actual block data
-        let _data = MockBlock::default();
-
-        let storage_manager = create_storage_manager_for_tests(path);
+    let storage = {
         let stf: StfBlueprintTest = StfBlueprint::new();
 
         let txs = simulate_da_with_bad_serialization();
@@ -300,13 +303,13 @@ fn test_tx_bad_serialization() {
         let blob_sender = blob.sender();
         let mut blobs = [blob];
 
-        let data = MockBlock::default();
+        let storage = storage_manager.create_storage_on(block_1.header()).unwrap();
         let apply_block_result = stf.apply_slot(
             &genesis_root,
-            storage_manager.get_native_storage(),
+            storage,
             Default::default(),
-            &data.header,
-            &data.validity_cond,
+            &block_1.header,
+            &block_1.validity_cond,
             &mut blobs,
         );
 
@@ -324,11 +327,11 @@ fn test_tx_bad_serialization() {
 
         // The batch receipt contains no events.
         assert!(!has_tx_events(&apply_blob_outcome));
-    }
+        apply_block_result.change_set
+    };
 
     {
         let runtime = &mut Runtime::<DefaultContext, MockDaSpec>::default();
-        let storage = ProverStorage::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 
         // Sequencer is not in the list of allowed sequencers
