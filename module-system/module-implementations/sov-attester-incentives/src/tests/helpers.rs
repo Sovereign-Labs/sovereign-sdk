@@ -72,10 +72,12 @@ pub(crate) fn create_bank_config_with_token(
 
 /// Creates a bank config with a token, and a prover incentives module.
 /// Returns the prover incentives module and the attester and challenger's addresses.
+#[allow(clippy::type_complexity)]
 pub(crate) fn setup(
     working_set: &mut WorkingSet<C>,
 ) -> (
     AttesterIncentives<C, MockZkvm, MockDaSpec, MockValidityCondChecker<MockValidityCond>>,
+    Address,
     Address,
     Address,
     Address,
@@ -90,6 +92,7 @@ pub(crate) fn setup(
     let attester_address = addresses.pop().unwrap();
     let challenger_address = addresses.pop().unwrap();
     let reward_supply = addresses.pop().unwrap();
+    let sequencer = generate_address::<C>("sequencer");
 
     let token_address = sov_bank::get_genesis_token_address::<DefaultContext>(TOKEN_NAME, SALT);
 
@@ -129,7 +132,13 @@ pub(crate) fn setup(
         .genesis(&config, working_set)
         .expect("prover incentives genesis must succeed");
 
-    (module, token_address, attester_address, challenger_address)
+    (
+        module,
+        token_address,
+        attester_address,
+        challenger_address,
+        sequencer,
+    )
 }
 
 pub(crate) struct ExecutionSimulationVars {

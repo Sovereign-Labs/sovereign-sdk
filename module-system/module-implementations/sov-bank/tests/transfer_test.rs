@@ -16,7 +16,7 @@ pub type Storage = ProverStorage<DefaultStorageSpec>;
 fn transfer_initial_token() {
     let initial_balance = 100;
     let transfer_amount = 10;
-    let bank_config = create_bank_config_with_token(3, initial_balance);
+    let bank_config = create_bank_config_with_token(4, initial_balance);
     let token_name = bank_config.tokens[0].token_name.clone();
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
@@ -29,6 +29,7 @@ fn transfer_initial_token() {
     );
     let sender_address = bank_config.tokens[0].address_and_balances[0].0;
     let receiver_address = bank_config.tokens[0].address_and_balances[1].0;
+    let sequencer_address = bank_config.tokens[0].address_and_balances[3].0;
     assert_ne!(sender_address, receiver_address);
 
     // Preparation
@@ -49,7 +50,7 @@ fn transfer_initial_token() {
 
     assert_eq!(Some(initial_balance), sender_balance_before);
     assert_eq!(sender_balance_before, receiver_balance_before);
-    let sender_context = C::new(sender_address, 1);
+    let sender_context = C::new(sender_address, sequencer_address, 1);
 
     // Transfer happy test
     {
@@ -156,7 +157,8 @@ fn transfer_initial_token() {
     // Sender does not exist
     {
         let unknown_sender = generate_address::<C>("non_existing_sender");
-        let unknown_sender_context = C::new(unknown_sender, 1);
+        let sequencer = generate_address::<C>("sequencer");
+        let unknown_sender_context = C::new(unknown_sender, sequencer, 1);
 
         let sender_balance = query_user_balance(unknown_sender, &mut working_set);
         assert!(sender_balance.is_none());
@@ -263,6 +265,7 @@ fn transfer_deployed_token() {
 
     let sender_address = generate_address::<C>("just_sender");
     let receiver_address = generate_address::<C>("just_receiver");
+    let sequencer_address = generate_address::<C>("just_sequencer");
 
     let salt = 10;
     let token_name = "Token1".to_owned();
@@ -289,7 +292,7 @@ fn transfer_deployed_token() {
 
     assert!(sender_balance_before.is_none());
     assert!(receiver_balance_before.is_none());
-    let sender_context = C::new(sender_address, 1);
+    let sender_context = C::new(sender_address, sequencer_address, 1);
 
     let mint_message = CallMessage::CreateToken {
         salt,

@@ -10,6 +10,7 @@ pub fn register_rpc<RT, C, Da>(
     storage: &<C as Spec>::Storage,
     ledger_db: &LedgerDB,
     da_service: &Da,
+    sequencer: C::Address,
 ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error>
 where
     RT: RuntimeTrait<C, <Da as DaService>::Spec> + Send + Sync + 'static,
@@ -35,6 +36,7 @@ where
             u32::MAX as usize,
             RT::default(),
             storage.clone(),
+            sequencer,
         );
 
         let sequencer_rpc = sov_sequencer::get_sequencer_rpc(batch_builder, da_service.clone());

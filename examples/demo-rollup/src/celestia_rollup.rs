@@ -4,7 +4,7 @@ use demo_stf::runtime::Runtime;
 use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams};
 use sov_celestia_adapter::{CelestiaConfig, CelestiaService};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
-use sov_modules_api::Spec;
+use sov_modules_api::{Address, Spec};
 use sov_modules_rollup_blueprint::{RollupBlueprint, WalletBlueprint};
 use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
 use sov_modules_stf_blueprint::StfBlueprint;
@@ -57,12 +57,15 @@ impl RollupBlueprint for CelestiaDemoRollup {
         ledger_db: &sov_db::ledger_db::LedgerDB,
         da_service: &Self::DaService,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
+        // TODO set the sequencer address
+        let sequencer = Address::new([0; 32]);
+
         #[allow(unused_mut)]
         let mut rpc_methods = sov_modules_rollup_blueprint::register_rpc::<
             Self::NativeRuntime,
             Self::NativeContext,
             Self::DaService,
-        >(storage, ledger_db, da_service)?;
+        >(storage, ledger_db, da_service, sequencer)?;
 
         #[cfg(feature = "experimental")]
         crate::eth::register_ethereum::<Self::DaService>(

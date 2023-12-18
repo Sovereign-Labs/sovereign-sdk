@@ -14,11 +14,13 @@ fn test_value_setter() {
         WorkingSet::new(ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap());
 
     let admin = Address::from([1; 32]);
+    let sequencer = Address::from([2; 32]);
+
     // Test Native-Context
     #[cfg(feature = "native")]
     {
         let config = ExampleModuleConfig {};
-        let context = DefaultContext::new(admin, 1);
+        let context = DefaultContext::new(admin, sequencer, 1);
         test_value_setter_helper(context, &config, &mut working_set);
     }
 
@@ -27,7 +29,7 @@ fn test_value_setter() {
     // Test Zk-Context
     {
         let config = ExampleModuleConfig {};
-        let zk_context = ZkDefaultContext::new(admin, 1);
+        let zk_context = ZkDefaultContext::new(admin, sequencer, 1);
         let mut zk_working_set = WorkingSet::with_witness(ZkStorage::new(), witness);
         test_value_setter_helper(zk_context, &config, &mut zk_working_set);
     }

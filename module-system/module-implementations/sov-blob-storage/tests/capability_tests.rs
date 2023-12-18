@@ -22,6 +22,7 @@ const PREFERRED_SEQUENCER_DA: MockAddress = MockAddress::new([10u8; 32]);
 const PREFERRED_SEQUENCER_ROLLUP: Address = Address::new(*b"preferred_______________________");
 const REGULAR_SEQUENCER_DA: MockAddress = MockAddress::new([30u8; 32]);
 const REGULAR_SEQUENCER_ROLLUP: Address = Address::new(*b"regular_________________________");
+const REGULAR_REWARD_ROLLUP: Address = Address::new(*b"regular_reward__________________");
 
 fn get_bank_config(
     preferred_sequencer: <C as Spec>::Address,
@@ -92,7 +93,8 @@ fn priority_sequencer_flow_general() {
 pub struct SlotTestInfo {
     pub slot_number: u64,
     /// Any "requests for early processing" to be sent during this slot
-    pub early_processing_request_with_sender: Option<(sov_blob_storage::CallMessage, Address)>,
+    pub early_processing_request_with_sender:
+        Option<(sov_blob_storage::CallMessage, Address, Address)>,
     /// The expected number of blobs to process, if known
     pub expected_blobs_to_process: Option<usize>,
 }
@@ -163,12 +165,14 @@ fn do_deferred_blob_test(
                 }
 
                 // If applicable, send the requested call message to the blob_storage module
-                if let Some((msg, sender)) = next_slot_info.early_processing_request_with_sender {
+                if let Some((msg, sender, sequencer)) =
+                    next_slot_info.early_processing_request_with_sender
+                {
                     runtime
                         .blob_storage
                         .call(
                             msg,
-                            &DefaultContext::new(sender, slot_number),
+                            &DefaultContext::new(sender, sequencer, slot_number),
                             &mut working_set,
                         )
                         .unwrap();
@@ -210,6 +214,7 @@ fn bonus_blobs_are_delivered_on_request() {
             early_processing_request_with_sender: Some((
                 sov_blob_storage::CallMessage::ProcessDeferredBlobsEarly { number: 4 },
                 PREFERRED_SEQUENCER_ROLLUP,
+                REGULAR_REWARD_ROLLUP,
             )),
         },
         SlotTestInfo {
@@ -249,6 +254,7 @@ fn test_deferrable_with_small_count() {
                 early_processing_request_with_sender: Some((
                     sov_blob_storage::CallMessage::ProcessDeferredBlobsEarly { number: 8 },
                     PREFERRED_SEQUENCER_ROLLUP,
+                    REGULAR_REWARD_ROLLUP,
                 )),
             },
             SlotTestInfo {
@@ -271,6 +277,7 @@ fn test_deferrable_with_small_count() {
                 early_processing_request_with_sender: Some((
                     sov_blob_storage::CallMessage::ProcessDeferredBlobsEarly { number: 4 },
                     PREFERRED_SEQUENCER_ROLLUP,
+                    REGULAR_REWARD_ROLLUP,
                 )),
             },
             SlotTestInfo {
@@ -315,6 +322,7 @@ fn sequencer_requests_more_bonus_blobs_than_possible() {
             early_processing_request_with_sender: Some((
                 sov_blob_storage::CallMessage::ProcessDeferredBlobsEarly { number: 1000 }, // Request a huge number of blobs
                 PREFERRED_SEQUENCER_ROLLUP,
+                REGULAR_REWARD_ROLLUP,
             )),
         },
         SlotTestInfo {
@@ -355,6 +363,7 @@ fn some_blobs_from_slot_processed_early() {
             early_processing_request_with_sender: Some((
                 sov_blob_storage::CallMessage::ProcessDeferredBlobsEarly { number: 5 }, // Request 5 bonus blobs
                 PREFERRED_SEQUENCER_ROLLUP,
+                REGULAR_REWARD_ROLLUP,
             )),
         },
         SlotTestInfo {
@@ -397,6 +406,7 @@ fn request_one_blob_early() {
             early_processing_request_with_sender: Some((
                 sov_blob_storage::CallMessage::ProcessDeferredBlobsEarly { number: 1 }, // Request 1 bonus blob
                 PREFERRED_SEQUENCER_ROLLUP,
+                REGULAR_REWARD_ROLLUP,
             )),
         },
         SlotTestInfo {
@@ -438,6 +448,7 @@ fn bonus_blobs_request_ignored_if_not_from_preferred_seq() {
             early_processing_request_with_sender: Some((
                 sov_blob_storage::CallMessage::ProcessDeferredBlobsEarly { number: 1 }, // Request 1 bonus blob, but send the request from the *WRONG* address
                 REGULAR_SEQUENCER_ROLLUP,
+                REGULAR_REWARD_ROLLUP,
             )),
         },
         SlotTestInfo {
@@ -687,7 +698,7 @@ impl TestRuntime<DefaultContext, MockDaSpec> {
             .sequencer_registry
             .call(
                 register_message,
-                &C::new(REGULAR_SEQUENCER_ROLLUP, 1),
+                &C::new(REGULAR_SEQUENCER_ROLLUP, REGULAR_REWARD_ROLLUP, 1),
                 &mut working_set,
             )
             .unwrap();

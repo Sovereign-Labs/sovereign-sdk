@@ -14,6 +14,7 @@ pub use query::*;
 mod tests;
 
 pub use call::{CallMessage, UPDATE_ACCOUNT_MSG};
+pub use hooks::AccountsTxHook;
 use sov_modules_api::{Context, Error, ModuleInfo, WorkingSet};
 
 impl<C: Context> FromIterator<C::PublicKey> for AccountConfig<C> {
