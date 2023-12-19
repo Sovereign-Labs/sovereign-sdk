@@ -46,7 +46,7 @@ impl<C: Context> TxHooks for Bank<C> {
 
         if amount > 0 {
             let token_address = C::Address::from_str(GAS_TOKEN_ADDRESS)
-                .map_err(|e| anyhow::anyhow!("failed to parse gas token address: {e}"))?;
+                .map_err(|_| anyhow::anyhow!("failed to parse gas token address"))?;
             let from = &sender;
             let to = &sequencer;
             let coins = Coins {
@@ -69,7 +69,7 @@ impl<C: Context> TxHooks for Bank<C> {
 
         if amount > 0 {
             let token_address = C::Address::from_str(GAS_TOKEN_ADDRESS)
-                .map_err(|e| anyhow::anyhow!("failed to parse gas token address: {e}"))?;
+                .map_err(|_| anyhow::anyhow!("failed to parse gas token address"))?;
             let from = ctx.sequencer();
             let to = ctx.sender();
             let coins = Coins {

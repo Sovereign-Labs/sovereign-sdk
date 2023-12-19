@@ -40,9 +40,9 @@ impl<C: Context, Da: DaSpec> TxHooks for Runtime<C, Da> {
         )?;
 
         let sender =
-            Rc::try_unwrap(sender).map_err(|e| anyhow::anyhow!("failed to fetch sender: {e}"))?;
-        let sequencer = Rc::try_unwrap(sequencer)
-            .map_err(|e| anyhow::anyhow!("failed to fetch ssequencer: {e}"))?;
+            Rc::try_unwrap(sender).map_err(|_| anyhow::anyhow!("failed to fetch sender"))?;
+        let sequencer =
+            Rc::try_unwrap(sequencer).map_err(|_| anyhow::anyhow!("failed to fetch sequencer"))?;
 
         Ok(C::new(sender, sequencer, height))
     }
