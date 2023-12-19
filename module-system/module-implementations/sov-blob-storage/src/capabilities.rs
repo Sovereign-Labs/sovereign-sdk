@@ -1,6 +1,6 @@
 use sov_chain_state::TransitionHeight;
-use sov_modules_api::prelude::*;
 use sov_modules_api::runtime::capabilities::{BlobRefOrOwned, BlobSelector};
+use sov_modules_api::{prelude::*, KernelWorkingSet};
 use sov_modules_api::{BlobReaderTrait, Context, DaSpec, WorkingSet};
 use tracing::info;
 
@@ -38,10 +38,10 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
     // 1. Any blobs sent by the preferred sequencer ("prority blobs")
     // 2. Any non-priority blobs which were sent `DEFERRED_SLOTS_COUNT` slots ago ("expiring deferred blobs")
     // 3. Some additional deferred blobs needed to fill the total requested by the sequencer, if applicable. ("bonus blobs")
-    fn get_blobs_for_this_slot<'a, I>(
+    fn get_blobs_for_this_slot<'a, 'k, I>(
         &self,
         current_blobs: I,
-        working_set: &mut WorkingSet<C>,
+        working_set: &mut KernelWorkingSet<'k, C>,
     ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, Da::BlobTransaction>>>
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
@@ -51,10 +51,11 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
         if DEFERRED_SLOTS_COUNT == 0 {
             let mut blobs = current_blobs
                 .into_iter()
-                .filter(|b| self.filter_by_allowed_sender(b, working_set))
+                .filter(|b| self.filter_by_allowed_sender(b, working_set.inner))
+                
                 .map(Into::into)
                 .collect::<Vec<_>>();
-            if let Some(sequencer) = self.get_preferred_sequencer(working_set) {
+            if let Some(sequencer) = self.get_preferred_sequencer(working_set.inner) {
                 blobs.sort_by_key(|b: &BlobRefOrOwned<Da::BlobTransaction>| {
                     b.as_ref().sender() != sequencer
                 });
@@ -67,12 +68,12 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
         // exited while there were deferred blobs waiting to be processed
         let current_slot: TransitionHeight = self.get_current_slot_height(working_set);
         let slot_for_expiring_blobs =
-            current_slot.saturating_sub(self.get_deferred_slots_count(working_set));
+            current_slot.saturating_sub(self.get_deferred_slots_count(working_set.inner));
         let expiring_deferred_blobs: Vec<Da::BlobTransaction> =
-            self.take_blobs_for_slot_height(slot_for_expiring_blobs, working_set);
+            self.take_blobs_for_slot_height(slot_for_expiring_blobs, working_set.inner);
 
         // If there is no preferred sequencer, that's all we need to do
-        let preferred_sequencer = if let Some(sequencer) = self.get_preferred_sequencer(working_set)
+        let preferred_sequencer = if let Some(sequencer) = self.get_preferred_sequencer(working_set.inner)
         {
             sequencer
         } else {
@@ -91,10 +92,10 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
         // to be processed early.
         let num_bonus_blobs_requested = self
             .deferred_blobs_requested_for_execution_next_slot
-            .get(working_set)
+            .get(working_set.inner)
             .unwrap_or_default();
         self.deferred_blobs_requested_for_execution_next_slot
-            .set(&0, working_set);
+            .set(&0, working_set.inner);
 
         let mut remaining_blobs_requested =
             (num_bonus_blobs_requested as usize).saturating_sub(expiring_deferred_blobs.len());
@@ -105,7 +106,7 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
         // slot haven't been stored yet. We'll handle those later.
         while remaining_blobs_requested > 0 && next_slot_to_check < current_slot {
             let mut blobs_from_next_slot =
-                self.take_blobs_for_slot_height(next_slot_to_check, working_set);
+                self.take_blobs_for_slot_height(next_slot_to_check, working_set.inner);
 
             // If the set of deferred blobs from the next slot in line contains more than the remainder needed to fill the request,
             //  we split that group and save the unused portion back into state
@@ -116,7 +117,7 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
                 self.store_blobs(
                     next_slot_to_check,
                     &blobs_to_save.iter().collect::<Vec<_>>(),
-                    working_set,
+                    working_set.inner,
                 )?;
                 remaining_blobs_requested = 0;
                 break;
@@ -151,10 +152,10 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
             // Gas metering suppose to prevent saving blobs from not allowed senders if they exit mid-slot
             let to_defer: Vec<&Da::BlobTransaction> = to_defer
                 .iter()
-                .filter(|b| self.filter_by_allowed_sender(b, working_set))
+                .filter(|b| self.filter_by_allowed_sender(b, working_set.inner))
                 .map(|b| &**b)
                 .collect();
-            self.store_blobs(current_slot, &to_defer, working_set)?
+            self.store_blobs(current_slot, &to_defer, working_set.inner)?
         }
 
         Ok(priority_blobs

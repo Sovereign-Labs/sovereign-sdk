@@ -12,6 +12,7 @@ pub use query::*;
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::macros::config_constant;
 use sov_modules_api::{Module, ModuleInfo, StateMap, StateMapAccessor, StateValue, WorkingSet};
+use sov_state::storage::kernel_state::VersionReader;
 
 /// For how many slots deferred blobs are stored before being executed
 #[config_constant]
@@ -88,7 +89,7 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> BlobStorage<C, Da
 
     pub(crate) fn get_current_slot_height(
         &self,
-        working_set: &mut WorkingSet<C>,
+        working_set: &mut impl VersionReader,
     ) -> TransitionHeight {
         self.chain_state.get_slot_height(working_set)
     }

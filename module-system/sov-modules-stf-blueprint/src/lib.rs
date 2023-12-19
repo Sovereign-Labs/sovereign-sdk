@@ -7,9 +7,9 @@ mod tx_verifier;
 
 pub use batch::Batch;
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
-use sov_modules_api::runtime::capabilities::Kernel;
+use sov_modules_api::runtime::capabilities::{Kernel, KernelSlotHooks};
 use sov_modules_api::{
-    BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, Spec, StateCheckpoint,
+    BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, KernelWorkingSet, Spec, StateCheckpoint,
     Zkvm,
 };
 pub use sov_rollup_interface::stf::BatchReceipt;
@@ -108,7 +108,7 @@ where
     Vm: Zkvm,
     Da: DaSpec,
     RT: Runtime<C, Da>,
-    K: Kernel<C, Da>,
+    K: KernelSlotHooks<C, Da>,
 {
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn begin_slot(
@@ -119,6 +119,12 @@ where
         pre_state_root: &<C::Storage as Storage>::Root,
     ) -> StateCheckpoint<C> {
         let mut working_set = state_checkpoint.to_revertable();
+        self.kernel.begin_slot_hook(
+            slot_header,
+            validity_condition,
+            pre_state_root,
+            &mut working_set,
+        );
 
         self.runtime.begin_slot_hook(
             slot_header,
@@ -172,7 +178,7 @@ where
     Da: DaSpec,
     Vm: Zkvm,
     RT: Runtime<C, Da>,
-    K: Kernel<C, Da>,
+    K: KernelSlotHooks<C, Da>,
 {
     type StateRoot = <C::Storage as Storage>::Root;
 
@@ -244,9 +250,10 @@ where
 
         // Initialize batch workspace
         let mut batch_workspace = checkpoint.to_revertable();
+        let mut kernel_working_set = KernelWorkingSet::from_kernel(&self.kernel, &mut batch_workspace);
         let selected_blobs = self
             .kernel
-            .get_blobs_for_this_slot(blobs, &mut batch_workspace)
+            .get_blobs_for_this_slot(blobs, &mut kernel_working_set)
             .expect("blob selection must succeed, probably serialization failed");
 
         info!(

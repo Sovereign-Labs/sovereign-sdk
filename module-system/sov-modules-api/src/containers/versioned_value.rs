@@ -2,8 +2,8 @@ use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_core::{
-    Context, KernelWorkingSet, Prefix, StateCodec, StateKeyCodec, StateReaderAndWriter,
-    StateValueCodec, VersionedWorkingSet,
+    kernel_state::VersionReader, Context, KernelWorkingSet, Prefix, StateCodec, StateKeyCodec,
+    StateReaderAndWriter, StateValueCodec,
 };
 use sov_state::codec::BorshCodec;
 
@@ -57,75 +57,132 @@ impl<V, Codec> VersionedStateValue<V, Codec> {
     }
 }
 
-mod as_user_value {
-    use super::*;
-    use crate::StateValueAccessor;
-
-    impl<'a, V, Codec, C: Context> StateValueAccessor<V, Codec, VersionedWorkingSet<'a, C>>
-        for VersionedStateValue<V, Codec>
+impl<V, Codec> VersionedStateValue<V, Codec> {
+    /// Any version_aware working set can read the current contents of a versioned value.
+    pub fn get_current(&self, ws: &mut impl VersionReader) -> Option<V>
     where
         Codec: StateCodec,
         Codec::ValueCodec: StateValueCodec<V>,
         Codec::KeyCodec: StateKeyCodec<u64>,
     {
-        fn prefix(&self) -> &Prefix {
-            &self.prefix
-        }
+        ws.get_value(self.prefix(), &ws.current_version(), &self.codec)
+    }
 
-        fn codec(&self) -> &Codec {
-            &self.codec
-        }
-
-        fn set(&self, value: &V, working_set: &mut VersionedWorkingSet<'a, C>) {
-            working_set.set_value(
-                self.prefix(),
-                &working_set.slot_num(),
-                value,
-                StateValueAccessor::<V, Codec, VersionedWorkingSet<'a, C>>::codec(self),
-            );
-        }
-
-        fn get(&self, working_set: &mut VersionedWorkingSet<'a, C>) -> Option<V> {
-            working_set.get_value(
-                self.prefix(),
-                &working_set.slot_num(),
-                StateValueAccessor::<V, Codec, VersionedWorkingSet<'a, C>>::codec(self),
-            )
-        }
-
-        fn get_or_err(
-            &self,
-            working_set: &mut VersionedWorkingSet<'a, C>,
-        ) -> Result<V, crate::StateValueError> {
-            self.get(working_set)
-                .ok_or_else(|| crate::StateValueError::MissingValue(self.prefix().clone()))
-        }
-
-        fn remove(&self, working_set: &mut VersionedWorkingSet<'a, C>) -> Option<V> {
-            working_set.remove_value(
-                self.prefix(),
-                &working_set.slot_num(),
-                StateValueAccessor::<V, Codec, VersionedWorkingSet<'a, C>>::codec(self),
-            )
-        }
-
-        fn remove_or_err(
-            &self,
-            working_set: &mut VersionedWorkingSet<'a, C>,
-        ) -> Result<V, crate::StateValueError> {
-            self.remove(working_set)
-                .ok_or_else(|| crate::StateValueError::MissingValue(self.prefix().clone()))
-        }
-
-        fn delete(&self, working_set: &mut VersionedWorkingSet<'a, C>) {
-            working_set.delete_value(
-                self.prefix(),
-                &working_set.slot_num(),
-                StateValueAccessor::<V, Codec, VersionedWorkingSet<'a, C>>::codec(self),
-            );
-        }
+    /// Only the kernel working set can write to versioned values
+    pub fn set_current<'a, C: Context>(&self, value: &V, ws: &mut KernelWorkingSet<'a, C>)
+    where
+        Codec: StateCodec,
+        Codec::ValueCodec: StateValueCodec<V>,
+        Codec::KeyCodec: StateKeyCodec<u64>,
+    {
+        ws.set_value(self.prefix(), &ws.current_version(), value, &self.codec)
     }
 }
+//         for VersionedStateValue<V, Codec>
+//     where
+//         Codec: StateCodec,
+//         Codec::ValueCodec: StateValueCodec<V>,
+//         Codec::KeyCodec: StateKeyCodec<u64>,
+//     {
+//         fn prefix(&self) -> &Prefix {
+//             &self.prefix
+//         }
+
+//         fn codec(&self) -> &Codec {
+//             &self.codec
+//         }
+
+//         fn set(&self, value: &V, working_set: &mut VersionedWorkingSet<'a, C>) {
+//             working_set.set_value(
+//                 self.prefix(),
+//                 &working_set.slot_num(),
+//                 value,
+//                 StateValueAccessor::<V, Codec, VersionedWorkingSet<'a, C>>::codec(self),
+//             );
+//         }
+
+// mod as_user_value {
+//     use super::*;
+//     use crate::StateValueAccessor;
+//     impl<V, Codec> VersionedStateValue<V, Codec>
+//     where
+//         Codec: StateCodec,
+//         Codec::ValueCodec: StateValueCodec<V>,
+//         Codec::KeyCodec: StateKeyCodec<u64>,
+//     {
+//         pub fn get_current<'a, C: Context>(
+//             &self,
+//             ws: &mut VersionedWorkingSet<'a, C>,
+//         ) -> Option<V> {
+//             crate::StateValueAccessor::get(self, ws)
+//         }
+//     }
+
+//     impl<'a, V, Codec, C: Context> StateValueAccessor<V, Codec, VersionedWorkingSet<'a, C>>
+//         for VersionedStateValue<V, Codec>
+//     where
+//         Codec: StateCodec,
+//         Codec::ValueCodec: StateValueCodec<V>,
+//         Codec::KeyCodec: StateKeyCodec<u64>,
+//     {
+//         fn prefix(&self) -> &Prefix {
+//             &self.prefix
+//         }
+
+//         fn codec(&self) -> &Codec {
+//             &self.codec
+//         }
+
+//         fn set(&self, value: &V, working_set: &mut VersionedWorkingSet<'a, C>) {
+//             working_set.set_value(
+//                 self.prefix(),
+//                 &working_set.slot_num(),
+//                 value,
+//                 StateValueAccessor::<V, Codec, VersionedWorkingSet<'a, C>>::codec(self),
+//             );
+//         }
+
+//         fn get(&self, working_set: &mut VersionedWorkingSet<'a, C>) -> Option<V> {
+//             working_set.get_value(
+//                 self.prefix(),
+//                 &working_set.slot_num(),
+//                 StateValueAccessor::<V, Codec, VersionedWorkingSet<'a, C>>::codec(self),
+//             )
+//         }
+
+//         fn get_or_err(
+//             &self,
+//             working_set: &mut VersionedWorkingSet<'a, C>,
+//         ) -> Result<V, crate::StateValueError> {
+//             self.get(working_set)
+//                 .ok_or_else(|| crate::StateValueError::MissingValue(self.prefix().clone()))
+//         }
+
+//         fn remove(&self, working_set: &mut VersionedWorkingSet<'a, C>) -> Option<V> {
+//             working_set.remove_value(
+//                 self.prefix(),
+//                 &working_set.slot_num(),
+//                 StateValueAccessor::<V, Codec, VersionedWorkingSet<'a, C>>::codec(self),
+//             )
+//         }
+
+//         fn remove_or_err(
+//             &self,
+//             working_set: &mut VersionedWorkingSet<'a, C>,
+//         ) -> Result<V, crate::StateValueError> {
+//             self.remove(working_set)
+//                 .ok_or_else(|| crate::StateValueError::MissingValue(self.prefix().clone()))
+//         }
+
+//         fn delete(&self, working_set: &mut VersionedWorkingSet<'a, C>) {
+//             working_set.delete_value(
+//                 self.prefix(),
+//                 &working_set.slot_num(),
+//                 StateValueAccessor::<V, Codec, VersionedWorkingSet<'a, C>>::codec(self),
+//             );
+//         }
+//     }
+// }
 
 mod as_kernel_value {
     use super::*;
@@ -151,7 +208,7 @@ mod as_kernel_value {
                 self.prefix(),
                 &working_set.current_slot(),
                 value,
-                StateValueAccessor::<V, Codec, VersionedWorkingSet<'a, C>>::codec(self),
+                &self.codec,
             );
         }
 
@@ -380,24 +437,31 @@ mod tests {
             let mut kernel_state = KernelWorkingSet::from_kernel(&kernel, &mut working_set);
             value.set(&2, &100, &mut kernel_state);
             assert_eq!(value.get(&2, &mut kernel_state), Some(100));
+            value.set_current(17, &mut kernel_state);
         }
 
         let signer = Address::from([1; 32]);
         let sequencer = Address::from([2; 32]);
 
         {
-            use crate::StateValueAccessor;
             {
                 let mut versioned_state =
                     working_set.versioned_state(&DefaultContext::new(signer, sequencer, 1));
                 // Try to read the value from user space with the slot number set to 1. Should fail.
-                assert_eq!(value.get(&mut versioned_state), None);
+                assert_eq!(value.get_current(&mut versioned_state), None);
             }
-            // Try to read the value from user space with the slot number set to 2. Should succeed.
-            let mut versioned_state =
-                working_set.versioned_state(&DefaultContext::new(signer, sequencer, 2));
+            {
+                // Try to read the value from user space with the slot number set to 2. Should succeed.
+                let mut versioned_state =
+                    working_set.versioned_state(&DefaultContext::new(signer, sequencer, 2));
 
-            assert_eq!(value.get(&mut versioned_state), Some(100));
+                assert_eq!(value.get_current(&mut versioned_state), Some(100));
+            }
+
+            // Try to read the value from user space with the slot number set to 4. Should succeed.
+            let mut versioned_state =
+                working_set.versioned_state(&DefaultContext::new(signer, sequencer, 4));
+            assert_eq!(value.get_current(&mut versioned_state), Some(17));
         }
     }
 }

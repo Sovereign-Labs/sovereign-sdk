@@ -72,12 +72,6 @@ pub struct Runtime<C: Context, Da: DaSpec> {
     pub bank: sov_bank::Bank<C>,
     /// The Sequencer Registry module.
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C, Da>,
-    #[cfg_attr(feature = "native", cli_skip)]
-    /// The Blob Storage module.
-    pub blob_storage: sov_blob_storage::BlobStorage<C, Da>,
-    #[cfg_attr(feature = "native", cli_skip)]
-    /// The Chain State module.
-    pub chain_state: sov_chain_state::ChainState<C, Da>,
     /// The Value Setter module.
     pub value_setter: sov_value_setter::ValueSetter<C>,
     /// The Accounts module.
@@ -110,24 +104,5 @@ where
         genesis_paths: &Self::GenesisPaths,
     ) -> Result<Self::GenesisConfig, anyhow::Error> {
         crate::genesis_config::get_genesis_config(genesis_paths)
-    }
-}
-
-impl<C: Context, Da: DaSpec> BlobSelector<Da> for Runtime<C, Da> {
-    type Context = C;
-
-    fn get_blobs_for_this_slot<'a, I>(
-        &self,
-        current_blobs: I,
-        working_set: &mut sov_modules_api::WorkingSet<C>,
-    ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, Da::BlobTransaction>>>
-    where
-        I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
-    {
-        <sov_blob_storage::BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
-            &self.blob_storage,
-            current_blobs,
-            working_set,
-        )
     }
 }

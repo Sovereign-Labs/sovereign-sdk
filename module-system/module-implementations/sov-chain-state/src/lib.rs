@@ -25,6 +25,9 @@ use sov_modules_api::da::Time;
 use sov_modules_api::prelude::*;
 use sov_modules_api::{DaSpec, Error, ModuleInfo, ValidityConditionChecker, WorkingSet};
 use sov_state::codec::BcsCodec;
+use sov_state::storage::kernel_state::VersionReader;
+use sov_state::storage::KernelWorkingSet;
+use sov_state::storage::VersionedWorkingSet;
 use sov_state::Storage;
 
 /// Type alias that contains the height of a given transition
@@ -118,17 +121,21 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
 
     /// The current block height
     #[state]
-    slot_height: sov_modules_api::StateValue<TransitionHeight>,
+    slot_height: sov_modules_api::VersionedStateValue<TransitionHeight>,
 
+    // /// The real slot height of the rollup.
+    // #[state]
+    // true_height: sov_modules_api::KernelStateValue<TransitionHeight>,
     /// The current time, as reported by the DA layer
     #[state]
-    time: sov_modules_api::StateValue<Time>,
+    time: sov_modules_api::VersionedStateValue<Time>,
 
     /// A record of all previous state transitions which are available to the VM.
     /// Currently, this includes *all* historical state transitions, but that may change in the future.
     /// This state map is delayed by one transition. In other words - the transition that happens in time i
     /// is stored during transition i+1. This is mainly due to the fact that this structure depends on the
     /// rollup's root hash which is only stored once the transition has completed.
+    // TODO: This should be a `VersionedStateMap`, so that recent values are not visible to user-space
     #[state]
     historical_transitions: sov_modules_api::StateMap<
         TransitionHeight,
@@ -138,30 +145,32 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
 
     /// The transition that is currently processed
     #[state]
-    in_progress_transition: sov_modules_api::StateValue<TransitionInProgress<Da>, BcsCodec>,
+    in_progress_transition: sov_modules_api::KernelStateValue<TransitionInProgress<Da>, BcsCodec>,
 
     /// The genesis root hash.
     /// Set after the first transaction of the rollup is executed, using the `begin_slot` hook.
+    // TODO: This should be made read-only
     #[state]
     genesis_hash: sov_modules_api::StateValue<<C::Storage as Storage>::Root>,
 
     /// The height of genesis
+    // TODO: This should be made read-only
     #[state]
     genesis_height: sov_modules_api::StateValue<TransitionHeight>,
 }
 
 impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da> {
     /// Returns transition height in the current slot
-    pub fn get_slot_height(&self, working_set: &mut WorkingSet<C>) -> TransitionHeight {
+    pub fn get_slot_height(&self, working_set: &mut impl VersionReader) -> TransitionHeight {
         self.slot_height
-            .get(working_set)
+            .get_current(working_set)
             .expect("Slot height should be set at initialization")
     }
 
     /// Returns the current time, as reported by the DA layer
-    pub fn get_time(&self, working_set: &mut WorkingSet<C>) -> Time {
+    pub fn get_time(&self, working_set: &mut impl VersionReader) -> Time {
         self.time
-            .get(working_set)
+            .get_current(working_set)
             .expect("Time must be set at initialization")
     }
 
@@ -181,7 +190,7 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da>
     /// Returns the transition in progress of the module.
     pub fn get_in_progress_transition(
         &self,
-        working_set: &mut WorkingSet<C>,
+        working_set: &mut KernelWorkingSet<C>,
     ) -> Option<TransitionInProgress<Da>> {
         self.in_progress_transition.get(working_set)
     }
@@ -197,27 +206,18 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da>
     }
 }
 
-impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> sov_modules_api::Module
+impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> sov_modules_api::KernelModule
     for ChainState<C, Da>
 {
     type Context = C;
 
     type Config = ChainStateConfig;
 
-    type CallMessage = ();
-
-    type Event = ();
-
-    fn call(
+    fn genesis<'a>(
         &self,
-        _msg: Self::CallMessage,
-        _context: &Self::Context,
-        _working_set: &mut WorkingSet<C>,
-    ) -> Result<sov_modules_api::CallResponse, Error> {
-        Ok(sov_modules_api::CallResponse {})
-    }
-
-    fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
+        config: &Self::Config,
+        working_set: &mut KernelWorkingSet<'a, C>,
+    ) -> Result<(), Error> {
         // The initialization logic
         Ok(self.init_module(config, working_set)?)
     }

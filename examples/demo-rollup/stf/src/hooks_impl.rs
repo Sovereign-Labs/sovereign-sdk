@@ -101,13 +101,6 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
         #[cfg(feature = "experimental")]
         self.evm
             .begin_slot_hook(slot_header.hash().into(), pre_state_root, working_set);
-
-        self.chain_state.begin_slot_hook(
-            slot_header,
-            validity_condition,
-            pre_state_root,
-            working_set,
-        );
     }
 
     fn end_slot_hook(
@@ -116,8 +109,6 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
     ) {
         #[cfg(feature = "experimental")]
         self.evm.end_slot_hook(working_set);
-
-        self.chain_state.end_slot_hook(working_set);
     }
 }
 
@@ -131,8 +122,5 @@ impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for Runtime<C, Da
     ) {
         #[cfg(feature = "experimental")]
         self.evm.finalize_hook(root_hash, accessory_working_set);
-
-        self.chain_state
-            .finalize_hook(root_hash, accessory_working_set);
     }
 }

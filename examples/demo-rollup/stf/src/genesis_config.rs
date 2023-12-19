@@ -112,17 +112,12 @@ fn create_genesis_config<C: Context, Da: DaSpec>(
 
     let nft_config: NonFungibleTokenConfig = read_json_file(&genesis_paths.nft_path)?;
 
-    let chain_state_config: ChainStateConfig =
-        read_json_file(&genesis_paths.chain_state_genesis_path)?;
-
     #[cfg(feature = "experimental")]
     let evm_config: EvmConfig = read_json_file(&genesis_paths.evm_genesis_path)?;
 
     Ok(GenesisConfig::new(
         bank_config,
         sequencer_registry_config,
-        (),
-        chain_state_config,
         value_setter_config,
         accounts_config,
         nft_config,

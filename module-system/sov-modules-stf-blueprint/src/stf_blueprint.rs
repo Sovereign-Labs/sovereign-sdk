@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use sov_modules_api::runtime::capabilities::Kernel;
+use sov_modules_api::runtime::capabilities::KernelSlotHooks;
 use sov_modules_api::{
     BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, StateCheckpoint,
 };
@@ -24,7 +24,7 @@ use sov_zk_cycle_macros::cycle_tracker;
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
 /// that is specifically designed to work with the module-system.
-pub struct StfBlueprint<C: Context, Da: DaSpec, Vm, RT: Runtime<C, Da>, K: Kernel<C, Da>> {
+pub struct StfBlueprint<C: Context, Da: DaSpec, Vm, RT: Runtime<C, Da>, K: KernelSlotHooks<C, Da>> {
     /// State storage used by the rollup.
     /// The runtime includes all the modules that the rollup supports.
     pub(crate) runtime: RT,
@@ -74,7 +74,7 @@ where
     C: Context,
     Da: DaSpec,
     RT: Runtime<C, Da>,
-    K: Kernel<C, Da>,
+    K: KernelSlotHooks<C, Da>,
 {
     fn default() -> Self {
         Self::new()
@@ -86,7 +86,7 @@ where
     C: Context,
     Da: DaSpec,
     RT: Runtime<C, Da>,
-    K: Kernel<C, Da>,
+    K: KernelSlotHooks<C, Da>,
 {
     /// [`StfBlueprint`] constructor.
     pub fn new() -> Self {
