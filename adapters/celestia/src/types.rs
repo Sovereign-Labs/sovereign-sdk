@@ -22,7 +22,8 @@ use crate::utils::BoxError;
 use crate::verifier::{ChainValidityCondition, PARITY_SHARES_NAMESPACE, PFB_NAMESPACE};
 use crate::{parse_pfb_namespace, CelestiaHeader, TxPosition};
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)] // TODO: , BorshSerialize, BorshDeserialize)]
+// TODO: derive borsh Serialize, Deserialize <https://github.com/eigerco/celestia-node-rs/issues/155>
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct FilteredCelestiaBlock {
     pub header: CelestiaHeader,
     pub rollup_data: NamespaceGroup,
@@ -202,7 +203,8 @@ impl ExtendedDataSquareExt for ExtendedDataSquare {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)] // TODO: , BorshSerialize, BorshDeserialize)]
+// TODO: derive borsh Serialize, Deserialize <https://github.com/eigerco/celestia-node-rs/issues/155>
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Row {
     pub shares: Vec<Vec<u8>>,
     pub root: NamespacedHash,

@@ -84,9 +84,11 @@ provision_bridge_nodes() {
   local start_block=2
 
   for node_idx in $(seq 0 "$last_node_idx"); do
-    # TODO: create an issue in celestia-app and link it here
+    # TODO: <https://github.com/celestiaorg/celestia-app/issues/2869>
     # we need to transfer the coins for each node in separate
-    # block, or the signing of all but the first one will fail
+    # block, or the signing of all but the first one will fail.
+    # Unfortunately multi-send only works with >= 2 bridge nodes,
+    # so we still rely on this hack.
     wait_for_block $((start_block + node_idx))
 
     local bridge_name="bridge-$node_idx"
