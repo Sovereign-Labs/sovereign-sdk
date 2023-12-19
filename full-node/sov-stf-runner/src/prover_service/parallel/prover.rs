@@ -72,12 +72,34 @@ impl<StateRoot, Witness, Da: DaSpec> ProverState<StateRoot, Witness, Da> {
         assert!(self.pending_tasks_count > 0);
         self.pending_tasks_count -= 1;
     }
+
+    fn set_to_witness_submitted(
+        &mut self,
+        header_hash: Da::SlotHash,
+        state_transition_data: StateTransitionData<StateRoot, Witness, Da>,
+    ) -> WitnessSubmissionStatus {
+        let entry = self.prover_status.entry(header_hash);
+        let data = ProverStatus::WitnessSubmitted(state_transition_data);
+
+        match entry {
+            Entry::Occupied(_) => WitnessSubmissionStatus::WitnessExist,
+            Entry::Vacant(v) => {
+                v.insert(data);
+                WitnessSubmissionStatus::SubmittedForProving
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+struct ProverManager<StateRoot, Witness, Da: DaService> {
+    prover_state: Arc<RwLock<ProverState<StateRoot, Witness, Da::Spec>>>,
 }
 
 // A prover that generates proofs in parallel using a thread pool. If the pool is saturated,
 // the prover will reject new jobs.
 pub(crate) struct Prover<StateRoot, Witness, Da: DaService> {
-    prover_state: Arc<RwLock<ProverState<StateRoot, Witness, Da::Spec>>>,
+    prover_manager: Arc<RwLock<ProverState<StateRoot, Witness, Da::Spec>>>,
     num_threads: usize,
     pool: rayon::ThreadPool,
 }
@@ -96,7 +118,7 @@ where
                 .build()
                 .unwrap(),
 
-            prover_state: Arc::new(RwLock::new(ProverState {
+            prover_manager: Arc::new(RwLock::new(ProverState {
                 prover_status: Default::default(),
                 pending_tasks_count: Default::default(),
             })),
@@ -108,18 +130,8 @@ where
         state_transition_data: StateTransitionData<StateRoot, Witness, Da::Spec>,
     ) -> WitnessSubmissionStatus {
         let header_hash = state_transition_data.da_block_header.hash();
-        let data = ProverStatus::WitnessSubmitted(state_transition_data);
-
-        let mut prover_state = self.prover_state.write().expect("Lock was poisoned");
-        let entry = prover_state.prover_status.entry(header_hash);
-
-        match entry {
-            Entry::Occupied(_) => WitnessSubmissionStatus::WitnessExist,
-            Entry::Vacant(v) => {
-                v.insert(data);
-                WitnessSubmissionStatus::SubmittedForProving
-            }
-        }
+        let mut prover_state = self.prover_manager.write().expect("Lock was poisoned");
+        prover_state.set_to_witness_submitted(header_hash, state_transition_data)
     }
 
     pub(crate) fn start_proving<Vm, V>(
@@ -134,8 +146,8 @@ where
         V: StateTransitionFunction<Vm::Guest, Da::Spec> + Send + Sync + 'static,
         V::PreState: Send + Sync + 'static,
     {
-        let prover_state_clone = self.prover_state.clone();
-        let mut prover_state = self.prover_state.write().expect("Lock was poisoned");
+        let prover_state_clone = self.prover_manager.clone();
+        let mut prover_state = self.prover_manager.write().expect("Lock was poisoned");
 
         let prover_status = prover_state
             .remove(&block_header_hash)
@@ -185,7 +197,7 @@ where
         &self,
         block_header_hash: <Da::Spec as DaSpec>::SlotHash,
     ) -> Result<ProofSubmissionStatus, anyhow::Error> {
-        let mut prover_state = self.prover_state.write().unwrap();
+        let mut prover_state = self.prover_manager.write().unwrap();
         let status = prover_state.get_prover_status(block_header_hash.clone());
 
         match status {
