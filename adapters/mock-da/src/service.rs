@@ -59,10 +59,8 @@ impl PlannedFork {
 #[derive(Clone)]
 /// DaService used in tests.
 /// Currently only supports single blob per block.
-/// Finalized blocks are removed after being read, except last one.
-/// Height of the first submitted block is 0.
-/// It can be used in multithreaded environment with single reader and multiple submitters
-/// Multiple consumers produce inconsistent results.
+/// Height of the first submitted block is 1.
+/// Submitted blocks are kept indefinitely in memory.
 pub struct MockDaService {
     sequencer_da_address: MockAddress,
     blocks: Arc<RwLock<VecDeque<MockBlock>>>,
@@ -301,10 +299,7 @@ impl DaService for MockDaService {
                 height
             ))?;
 
-        // We still return error, as it is possible, that block has been consumed between `wait` and locking blocks
-        let block = blocks.get(index as usize).unwrap().clone();
-
-        Ok(block)
+        Ok(blocks.get(index as usize).unwrap().clone())
     }
 
     async fn get_last_finalized_block_header(
