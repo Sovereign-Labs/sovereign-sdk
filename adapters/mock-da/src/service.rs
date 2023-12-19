@@ -70,7 +70,7 @@ impl MockDaService {
     }
 
     async fn wait_for_height(&self, height: u64) -> anyhow::Result<()> {
-        // Waits self.wait_attempts * 10ms to get finalized header
+        // Waits self.wait_attempts * 10ms to get block at height
         for _ in 0..self.wait_attempts {
             {
                 if self
@@ -85,10 +85,29 @@ impl MockDaService {
             }
             time::sleep(Duration::from_millis(10)).await;
         }
-        anyhow::bail!("No blob at height={height} has been sent in time")
+        anyhow::bail!(
+            "No block at height={height} has been sent in {:?}",
+            Duration::from_millis((self.wait_attempts * 10) as u64),
+        );
     }
 
-    async fn add_blob(&self, blob: &[u8], zkp_proof: Vec<u8>) -> Result<u64, anyhow::Error> {
+    /// Rewrites existing non finalized blocks with given blocks
+    /// New blobs will be added **after** specified height,
+    /// meaning that first blob will be in the block of height + 1.
+    pub async fn fork_at(&self, height: u64, blobs: Vec<Vec<u8>>) -> anyhow::Result<()> {
+        {
+            let mut blocks = self.blocks.write().await;
+            blocks.retain(|b| b.header().height <= height);
+        }
+        // TODO: Concurrency issue here, sender might submit blocks in between
+        for blob in blobs {
+            let _ = self.add_blob(&blob, Default::default()).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn add_blob(&self, blob: &[u8], zkp_proof: Vec<u8>) -> anyhow::Result<u64> {
         let mut blocks = self.blocks.write().await;
 
         let (previous_block_hash, height) = match blocks.iter().last().map(|b| b.header().clone()) {
@@ -484,6 +503,37 @@ mod tests {
             test_push_many_then_read(3, 10).await;
             test_push_many_then_read(5, 10).await;
         }
+
+        #[tokio::test]
+        async fn read_multiple_times() {
+            let mut da = MockDaService::with_finality(MockAddress::new([1; 32]), 4);
+            da.wait_attempts = 2;
+
+            // 1 -> 2 -> 3
+
+            da.send_transaction(&[1, 2, 3, 4]).await.unwrap();
+            da.send_transaction(&[4, 5, 6, 7]).await.unwrap();
+            da.send_transaction(&[8, 9, 0, 1]).await.unwrap();
+
+            let block_1_before = da.get_block_at(1).await.unwrap();
+            let block_2_before = da.get_block_at(2).await.unwrap();
+            let block_3_before = da.get_block_at(3).await.unwrap();
+
+            let result = da.get_block_at(4).await;
+            assert!(result.is_err());
+
+            let block_1_after = da.get_block_at(1).await.unwrap();
+            let block_2_after = da.get_block_at(2).await.unwrap();
+            let block_3_after = da.get_block_at(3).await.unwrap();
+
+            assert_eq!(block_1_before, block_1_after);
+            assert_eq!(block_2_before, block_2_after);
+            assert_eq!(block_3_before, block_3_after);
+            // Just some sanity check
+            assert_ne!(block_1_before, block_2_before);
+            assert_ne!(block_3_before, block_1_before);
+            assert_ne!(block_1_before, block_2_after);
+        }
     }
 
     #[tokio::test]
@@ -495,5 +545,40 @@ mod tests {
 
         assert_eq!(vec![aggregated_proof_data], proofs);
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_reorg_control() {
+        let da = MockDaService::with_finality(MockAddress::new([1; 32]), 4);
+
+        // 1 -> 2 -> 3.1 -> 4.1
+        //      \ -> 3.2 -> 4.2
+
+        // 1
+        da.send_transaction(&[1, 2, 3, 4]).await.unwrap();
+        // 2
+        da.send_transaction(&[4, 5, 6, 7]).await.unwrap();
+        // 3.1
+        da.send_transaction(&[8, 9, 0, 1]).await.unwrap();
+        // 4.1
+        da.send_transaction(&[2, 3, 4, 5]).await.unwrap();
+
+        let _block_1 = da.get_block_at(1).await.unwrap();
+        let block_2 = da.get_block_at(2).await.unwrap();
+        let block_3 = da.get_block_at(3).await.unwrap();
+        let head_before = da.get_head_block_header().await.unwrap();
+
+        // Do reorg
+        da.fork_at(2, vec![vec![3, 3, 3, 3], vec![4, 4, 4, 4]])
+            .await
+            .unwrap();
+
+        let block_3_after = da.get_block_at(3).await.unwrap();
+        assert_ne!(block_3, block_3_after);
+
+        assert_eq!(block_2.header().hash(), block_3_after.header().prev_hash());
+
+        let head_after = da.get_head_block_header().await.unwrap();
+        assert_ne!(head_before, head_after);
     }
 }
