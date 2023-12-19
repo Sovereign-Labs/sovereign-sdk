@@ -56,8 +56,6 @@ provision_bridge_nodes() {
   echo "Saving a genesis hash to $GENESIS_HASH_FILE"
   echo "$genesis_hash" > "$GENESIS_HASH_FILE"
 
-  local bridge_nodes=()
-
   # Get or create the keys for bridge nodes
   for node_idx in $(seq 0 "$last_node_idx"); do
     local bridge_name="bridge-$node_idx"
@@ -78,21 +76,31 @@ provision_bridge_nodes() {
       echo "password" | celestia-appd keys import "$bridge_name" "$key_file" \
         --keyring-backend="test"
     fi
-
-    bridge_nodes+=("$(node_address "$bridge_name")")
   done
 
   # Transfer the coins to bridge nodes addresses
   # Coins transfer need to be after validator registers EVM address, which happens in block 2.
   # see `setup_private_validator`
-  wait_for_block 2
+  local start_block=2
 
-  echo "Transferring $BRIDGE_COINS coins to the bridge nodes:" "${bridge_nodes[@]}"
-  echo "y" | celestia-appd tx bank multi-send \
-    "$NODE_NAME" \
-    "${bridge_nodes[@]}" \
-    "$BRIDGE_COINS" \
-    --fees 21000utia
+  for node_idx in $(seq 0 "$last_node_idx"); do
+    # TODO: <https://github.com/celestiaorg/celestia-app/issues/2869>
+    # we need to transfer the coins for each node in separate
+    # block, or the signing of all but the first one will fail
+    wait_for_block $((start_block + node_idx))
+
+    local bridge_name="bridge-$node_idx"
+    local bridge_address
+
+    bridge_address=$(node_address "$bridge_name")
+
+    echo "Transferring $BRIDGE_COINS coins to the $bridge_name"
+    echo "y" | celestia-appd tx bank send \
+      "$NODE_NAME" \
+      "$bridge_address" \
+      "$BRIDGE_COINS" \
+      --fees 21000utia
+  done
 
   # !! This is the last log entry that indicates the setup has finished for all the nodes
   echo "Provisioning finished."
