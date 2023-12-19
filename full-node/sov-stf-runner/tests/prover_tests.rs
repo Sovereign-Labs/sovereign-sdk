@@ -6,7 +6,8 @@ use sov_rollup_interface::da::Time;
 use sov_stf_runner::mock::MockStf;
 use sov_stf_runner::{
     ParallelProverService, ProofProcessingStatus, ProofSubmissionStatus, ProverService,
-    ProverServiceError, RollupProverConfig, StateTransitionData, WitnessSubmissionStatus,
+    ProverServiceConfig, ProverServiceError, RollupProverConfig, StateTransitionData,
+    WitnessSubmissionStatus,
 };
 
 #[tokio::test]
@@ -202,6 +203,9 @@ fn make_new_prover() -> TestProver {
             prover_config,
             (),
             num_threads,
+            ProverServiceConfig {
+                aggregated_proof_block_jump: 1,
+            },
         ),
         vm,
         num_worker_threads: num_threads,

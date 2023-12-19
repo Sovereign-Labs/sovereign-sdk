@@ -14,3 +14,6 @@ start_height = 0
 # the host and port to bind the rpc server for
 bind_host = "127.0.0.1"
 bind_port = 12345
+
+[prover_service]
+aggregated_proof_block_jump = 1

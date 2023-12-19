@@ -30,6 +30,13 @@ pub struct StorageConfig {
     pub path: PathBuf,
 }
 
+///TODO
+#[derive(Debug, Clone, PartialEq, Deserialize, Copy)]
+pub struct ProverServiceConfig {
+    ///TODO
+    pub aggregated_proof_block_jump: u64,
+}
+
 /// Rollup Configuration
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RollupConfig<DaServiceConfig> {
@@ -39,6 +46,8 @@ pub struct RollupConfig<DaServiceConfig> {
     pub runner: RunnerConfig,
     /// Data Availability service configuration.
     pub da: DaServiceConfig,
+    /// Prover service configuration.
+    pub prover_service: ProverServiceConfig,
 }
 
 /// Reads toml file as a specific type.
@@ -85,6 +94,8 @@ mod tests {
             [runner.rpc_config]
             bind_host = "127.0.0.1"
             bind_port = 12345
+            [prover_service]
+            aggregated_proof_block_jump = 22
         "#;
 
         let config_file = create_config_from(config);
@@ -108,6 +119,9 @@ mod tests {
             },
             storage: StorageConfig {
                 path: PathBuf::from("/tmp"),
+            },
+            prover_service: ProverServiceConfig {
+                aggregated_proof_block_jump: 22,
             },
         };
         assert_eq!(config, expected);

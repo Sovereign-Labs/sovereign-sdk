@@ -92,6 +92,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
     async fn create_prover_service(
         &self,
         prover_config: RollupProverConfig,
+        rollup_config: &RollupConfig<Self::DaConfig>,
         da_service: &Self::DaService,
     ) -> Self::ProverService;
 
@@ -118,9 +119,12 @@ pub trait RollupBlueprint: Sized + Send + Sync {
         <Self::NativeContext as Spec>::Storage: NativeStorage,
     {
         let da_service = self.create_da_service(&rollup_config).await;
-        let prover_service = self.create_prover_service(prover_config, &da_service).await;
+        let prover_service = self
+            .create_prover_service(prover_config, &rollup_config, &da_service)
+            .await;
 
         let ledger_db = self.create_ledger_db(&rollup_config);
+
         let genesis_config = self.create_genesis_config(genesis_paths, &rollup_config)?;
 
         let storage_manager = self.create_storage_manager(&rollup_config)?;
