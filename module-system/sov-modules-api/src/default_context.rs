@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
@@ -16,6 +18,7 @@ use crate::default_signature::{DefaultPublicKey, DefaultSignature};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DefaultContext {
     pub sender: Address,
+    pub sequencer: Address,
     /// The height to report. This is set by the kernel when the context is created
     visible_height: u64,
 }
@@ -23,7 +26,7 @@ pub struct DefaultContext {
 #[cfg(feature = "native")]
 impl Spec for DefaultContext {
     type Address = Address;
-    type Storage = ProverStorage<DefaultStorageSpec>;
+    type Storage = ProverStorage<DefaultStorageSpec, sov_prover_storage_manager::SnapshotManager>;
     type PrivateKey = DefaultPrivateKey;
     type PublicKey = DefaultPublicKey;
     type Hasher = sha2::Sha256;
@@ -39,9 +42,14 @@ impl Context for DefaultContext {
         &self.sender
     }
 
-    fn new(sender: Self::Address, height: u64) -> Self {
+    fn sequencer(&self) -> &Self::Address {
+        &self.sequencer
+    }
+
+    fn new(sender: Self::Address, sequencer: Self::Address, height: u64) -> Self {
         Self {
             sender,
+            sequencer,
             visible_height: height,
         }
     }
@@ -55,6 +63,7 @@ impl Context for DefaultContext {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ZkDefaultContext {
     pub sender: Address,
+    pub sequencer: Address,
     /// The height to report. This is set by the kernel when the context is created
     visible_height: u64,
 }
@@ -77,9 +86,14 @@ impl Context for ZkDefaultContext {
         &self.sender
     }
 
-    fn new(sender: Self::Address, height: u64) -> Self {
+    fn sequencer(&self) -> &Self::Address {
+        &self.sequencer
+    }
+
+    fn new(sender: Self::Address, sequencer: Self::Address, height: u64) -> Self {
         Self {
             sender,
+            sequencer,
             visible_height: height,
         }
     }

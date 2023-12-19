@@ -8,7 +8,7 @@ path = "demo_data"
 # We define the rollup's genesis to occur at block number `start_height`. The rollup will ignore
 # any blocks before this height
 [runner]
-start_height = 0
+start_height = 1
 
 [runner.rpc_config]
 # the host and port to bind the rpc server for

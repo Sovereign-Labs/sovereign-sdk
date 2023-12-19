@@ -127,7 +127,7 @@ where
             }
             Some(ProverStatus::Proved(_)) => {
                 //TODO
-                //prover_manager.remove(&block_header_hash);
+                prover_manager.remove(&block_header_hash);
                 Ok(ProofSubmissionStatus::Success)
             }
             Some(ProverStatus::WitnessSubmitted) => Err(anyhow::anyhow!(

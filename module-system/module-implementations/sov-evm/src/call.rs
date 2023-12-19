@@ -55,7 +55,11 @@ impl<C: sov_modules_api::Context> Evm<C> {
             Ok(result) => {
                 let logs: Vec<_> = result.logs().into_iter().map(into_reth_log).collect();
                 let gas_used = result.gas_used();
-
+                tracing::debug!(
+                    "EVM transaction with hash={} has been successfully executed, gas used: {}",
+                    evm_tx_recovered.hash(),
+                    gas_used
+                );
                 Receipt {
                     receipt: reth_primitives::Receipt {
                         tx_type: evm_tx_recovered.tx_type(),
@@ -70,16 +74,16 @@ impl<C: sov_modules_api::Context> Evm<C> {
             }
             // Adopted from https://github.com/paradigmxyz/reth/blob/main/crates/payload/basic/src/lib.rs#L884
             Err(err) => {
-                match err {
+                return match err {
                     EVMError::Transaction(_) => {
                         // This is a transactional error, so we can skip it without doing anything.
-                        return Ok(CallResponse::default());
+                        Ok(CallResponse::default())
                     }
                     err => {
                         // This is a fatal error, so we need to return it.
-                        return Err(err.into());
+                        Err(err.into())
                     }
-                }
+                };
             }
         };
 

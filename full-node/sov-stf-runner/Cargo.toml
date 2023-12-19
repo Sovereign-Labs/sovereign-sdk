@@ -30,6 +30,7 @@ sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+sha2 = { workspace = true }
 
 sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry", features = ["native"] }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
@@ -41,10 +42,11 @@ sov-sequencer = { path = "../sov-sequencer" }
 
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
-sov-stf-runner = {path = ".", features = ["mock"] }
+sov-stf-runner = { path = ".", features = ["mock"] }
 
 sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
 sov-mock-zkvm = { path = "../../adapters/mock-zkvm" }
+sov-prover-storage-manager = { path = "../sov-prover-storage-manager" }
 
 
 [features]

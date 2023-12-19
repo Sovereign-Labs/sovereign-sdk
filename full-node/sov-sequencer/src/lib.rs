@@ -205,7 +205,7 @@ mod tests {
         let arg: &[u8] = &[];
         let _: String = rpc.call("sequencer_publishBatch", arg).await.unwrap();
 
-        let mut submitted_block = da_service.get_block_at(0).await.unwrap();
+        let mut submitted_block = da_service.get_block_at(1).await.unwrap();
         let block_data = submitted_block.blobs[0].full_data();
 
         // First bytes of each tx, flattened
@@ -230,7 +230,7 @@ mod tests {
         let arg: &[u8] = &[];
         let _: String = rpc.call("sequencer_publishBatch", arg).await.unwrap();
 
-        let mut submitted_block = da_service.get_block_at(0).await.unwrap();
+        let mut submitted_block = da_service.get_block_at(1).await.unwrap();
         let block_data = submitted_block.blobs[0].full_data();
 
         // First bytes of each tx, flattened

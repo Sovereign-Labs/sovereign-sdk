@@ -1,22 +1,22 @@
+use helpers::*;
 use sov_bank::{get_token_address, Bank, CallMessage};
 use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Context, Module, WorkingSet};
-use sov_state::ProverStorage;
+use sov_prover_storage_manager::new_orphan_storage;
 
 mod helpers;
-
-use helpers::*;
 
 #[test]
 fn initial_and_deployed_token() {
     let bank_config = create_bank_config_with_token(1, 100);
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let bank = Bank::default();
     bank.genesis(&bank_config, &mut working_set).unwrap();
 
     let sender_address = generate_address::<C>("sender");
-    let sender_context = C::new(sender_address, 1);
+    let sequencer_address = generate_address::<C>("sequencer");
+    let sender_context = C::new(sender_address, sequencer_address, 1);
     let minter_address = generate_address::<C>("minter");
     let initial_balance = 500;
     let token_name = "Token1".to_owned();
@@ -53,7 +53,7 @@ fn initial_and_deployed_token() {
 fn overflow_max_supply() {
     let bank = Bank::<C>::default();
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
 
     let bank_config = create_bank_config_with_token(2, u64::MAX - 2);
 

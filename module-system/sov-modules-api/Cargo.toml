@@ -19,6 +19,7 @@ sov-state = { path = "../sov-state", version = "0.3" }
 sov-modules-core = { path = "../sov-modules-core", version = "0.3" }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
 sov-modules-macros = { path = "../sov-modules-macros", version = "0.3", optional = true }
+sov-prover-storage-manager = { path = "../../full-node/sov-prover-storage-manager", optional = true }
 serde = { workspace = true }
 borsh = { workspace = true }
 proptest = { workspace = true, optional = true }
@@ -34,7 +35,7 @@ clap = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true, features = [] }
 
 ed25519-dalek = { version = "2.0.0", default-features = false, features = ["serde"] }
-rand = { version = "0.8", optional = true }
+rand = { workspace = true, optional = true }
 
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", version = "0.3", optional = true }
 risc0-zkvm = { workspace = true, default-features = false, features = ["std"], optional = true }
@@ -42,12 +43,14 @@ risc0-zkvm-platform = { workspace = true, optional = true }
 
 [dev-dependencies]
 bincode = { workspace = true }
+tempfile = { workspace = true }
 sov-modules-api = { path = ".", features = ["native"] }
 sov-modules-core = { path = "../sov-modules-core", features = ["mocks"] }
 sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
 sov-bank = { path = "../module-implementations/sov-bank", features = ["native"] }
 sov-db = { path = "../../full-node/db/sov-db" }
-tempfile = { workspace = true }
+sov-prover-storage-manager = { path = "../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
+
 
 [features]
 arbitrary = [
@@ -72,6 +75,7 @@ native = [
     "sov-modules-core/native",
     "sov-modules-macros/native",
     "sov-state/native",
+    "sov-prover-storage-manager",
 ]
 macros = ["sov-modules-macros"]
 serde = ["sov-modules-core/serde"]

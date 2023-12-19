@@ -5,26 +5,28 @@ use sov_bank::{
 };
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Context, Error, Module, WorkingSet};
+use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
 use sov_state::{DefaultStorageSpec, ProverStorage};
 
 use crate::helpers::create_bank_config_with_token;
 
 mod helpers;
 
-pub type Storage = ProverStorage<DefaultStorageSpec>;
+pub type Storage = ProverStorage<DefaultStorageSpec, SnapshotManager>;
 
 #[test]
 fn burn_deployed_tokens() {
     let bank = Bank::<C>::default();
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let empty_bank_config = BankConfig::<C> { tokens: vec![] };
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 
     let sender_address = generate_address("just_sender");
-    let sender_context = C::new(sender_address, 1);
+    let sequencer_address = generate_address("sequencer");
+    let sender_context = C::new(sender_address, sequencer_address, 1);
     let minter_address = generate_address("minter");
-    let minter_context = C::new(minter_address, 1);
+    let minter_context = C::new(minter_address, sequencer_address, 1);
 
     let salt = 0;
     let token_name = "Token1".to_owned();
@@ -183,9 +185,9 @@ fn burn_deployed_tokens() {
 #[test]
 fn burn_initial_tokens() {
     let initial_balance = 100;
-    let bank_config = create_bank_config_with_token(1, initial_balance);
+    let bank_config = create_bank_config_with_token(2, initial_balance);
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let bank = Bank::default();
     bank.genesis(&bank_config, &mut working_set).unwrap();
 
@@ -194,6 +196,7 @@ fn burn_initial_tokens() {
         bank_config.tokens[0].salt,
     );
     let sender_address = bank_config.tokens[0].address_and_balances[0].0;
+    let sequencer_address = bank_config.tokens[0].address_and_balances[1].0;
 
     let query_user_balance =
         |user_address: Address, working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
@@ -211,7 +214,7 @@ fn burn_initial_tokens() {
         },
     };
 
-    let context = C::new(sender_address, 1);
+    let context = C::new(sender_address, sequencer_address, 1);
     bank.call(burn_message, &context, &mut working_set)
         .expect("Failed to burn token");
     assert!(working_set.events().is_empty());

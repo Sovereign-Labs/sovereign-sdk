@@ -164,6 +164,12 @@ impl<'a> RawDbReverseIterator<'a> {
         db_iter.seek_to_last();
         RawDbReverseIterator { db_iter }
     }
+
+    /// Navigate iterator go given key
+    pub fn seek(&mut self, seek_key: SchemaKey) -> Result<()> {
+        self.db_iter.seek_for_prev(&seek_key);
+        Ok(())
+    }
 }
 
 impl<'a> Iterator for RawDbReverseIterator<'a> {

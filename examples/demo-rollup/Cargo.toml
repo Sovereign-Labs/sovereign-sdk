@@ -18,6 +18,7 @@ sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
 sov-stf-runner = { path = "../../full-node/sov-stf-runner", features = ["native"] }
 sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
+sov-prover-storage-manager = { path = "../../full-node/sov-prover-storage-manager" }
 
 sov-modules-rollup-blueprint = { path = "../../module-system/sov-modules-rollup-blueprint" }
 sov-modules-stf-blueprint = { path = "../../module-system/sov-modules-stf-blueprint", features = ["native"] }
@@ -50,11 +51,13 @@ secp256k1 = { workspace = true, optional = true }
 [dev-dependencies]
 sov-rng-da-service = { path = "../../utils/rng-da-service" }
 sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }
+sov-prover-storage-manager = { path = "../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
 sov-mock-da = { path = "../../adapters/mock-da" }
 sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["smart_contracts"] }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
 sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module", features = ["native"] }
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros" }
+humantime = "2.1"
 
 borsh = { workspace = true }
 bincode = { workspace = true }

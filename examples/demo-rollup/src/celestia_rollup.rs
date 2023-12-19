@@ -4,13 +4,13 @@ use demo_stf::runtime::Runtime;
 use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams};
 use sov_celestia_adapter::{CelestiaConfig, CelestiaService};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
-use sov_modules_api::Spec;
+use sov_modules_api::{Address, Spec};
 use sov_modules_rollup_blueprint::{RollupBlueprint, WalletBlueprint};
 use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
 use sov_modules_stf_blueprint::StfBlueprint;
+use sov_prover_storage_manager::ProverStorageManager;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::zk::ZkvmHost;
-use sov_state::storage_manager::ProverStorageManager;
 use sov_state::{DefaultStorageSpec, Storage, ZkStorage};
 use sov_stf_runner::{
     ParallelProverService, ProverServiceConfig, RollupConfig, RollupProverConfig,
@@ -31,7 +31,7 @@ impl RollupBlueprint for CelestiaDemoRollup {
     type ZkContext = ZkDefaultContext;
     type NativeContext = DefaultContext;
 
-    type StorageManager = ProverStorageManager<DefaultStorageSpec>;
+    type StorageManager = ProverStorageManager<CelestiaSpec, DefaultStorageSpec>;
     type ZkRuntime = Runtime<Self::ZkContext, Self::DaSpec>;
 
     type NativeRuntime = Runtime<Self::NativeContext, Self::DaSpec>;
@@ -59,12 +59,15 @@ impl RollupBlueprint for CelestiaDemoRollup {
         ledger_db: &sov_db::ledger_db::LedgerDB,
         da_service: &Self::DaService,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
+        // TODO set the sequencer address
+        let sequencer = Address::new([0; 32]);
+
         #[allow(unused_mut)]
         let mut rpc_methods = sov_modules_rollup_blueprint::register_rpc::<
             Self::NativeRuntime,
             Self::NativeContext,
             Self::DaService,
-        >(storage, ledger_db, da_service)?;
+        >(storage, ledger_db, da_service, sequencer)?;
 
         #[cfg(feature = "experimental")]
         crate::eth::register_ethereum::<Self::DaService>(
@@ -74,16 +77,6 @@ impl RollupBlueprint for CelestiaDemoRollup {
         )?;
 
         Ok(rpc_methods)
-    }
-
-    fn create_storage_manager(
-        &self,
-        rollup_config: &sov_stf_runner::RollupConfig<Self::DaConfig>,
-    ) -> Result<Self::StorageManager, anyhow::Error> {
-        let storage_config = StorageConfig {
-            path: rollup_config.storage.path.clone(),
-        };
-        ProverStorageManager::new(storage_config)
     }
 
     async fn create_da_service(
@@ -122,6 +115,16 @@ impl RollupBlueprint for CelestiaDemoRollup {
             zk_storage,
             rollup_config.prover_service,
         )
+    }
+
+    fn create_storage_manager(
+        &self,
+        rollup_config: &sov_stf_runner::RollupConfig<Self::DaConfig>,
+    ) -> Result<Self::StorageManager, anyhow::Error> {
+        let storage_config = StorageConfig {
+            path: rollup_config.storage.path.clone(),
+        };
+        ProverStorageManager::new(storage_config)
     }
 }
 

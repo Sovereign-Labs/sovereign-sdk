@@ -1,18 +1,17 @@
-use sov_modules_api::hooks::ApplyBlobHooks;
-use sov_modules_api::WorkingSet;
-use sov_state::ProverStorage;
-
-mod helpers;
-
 use helpers::*;
 use sov_mock_da::{MockAddress, MockBlob};
+use sov_modules_api::hooks::ApplyBlobHooks;
+use sov_modules_api::WorkingSet;
+use sov_prover_storage_manager::new_orphan_storage;
 use sov_sequencer_registry::{SequencerOutcome, SequencerRegistry};
+
+mod helpers;
 
 #[test]
 fn begin_blob_hook_known_sequencer() {
     let mut test_sequencer = create_test_sequencer();
     let tmpdir = tempfile::tempdir().unwrap();
-    let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let working_set = &mut WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
 
     let balance_after_genesis = {
@@ -43,7 +42,7 @@ fn begin_blob_hook_known_sequencer() {
 fn begin_blob_hook_unknown_sequencer() {
     let mut test_sequencer = create_test_sequencer();
     let tmpdir = tempfile::tempdir().unwrap();
-    let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let working_set = &mut WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
 
     let mut test_blob = MockBlob::new(
@@ -68,7 +67,7 @@ fn begin_blob_hook_unknown_sequencer() {
 fn end_blob_hook_success() {
     let mut test_sequencer = create_test_sequencer();
     let tmpdir = tempfile::tempdir().unwrap();
-    let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let working_set = &mut WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
     let balance_after_genesis = {
         let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
@@ -104,7 +103,7 @@ fn end_blob_hook_success() {
 fn end_blob_hook_slash() {
     let mut test_sequencer = create_test_sequencer();
     let tmpdir = tempfile::tempdir().unwrap();
-    let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let working_set = &mut WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
     let balance_after_genesis = {
         let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
@@ -163,7 +162,7 @@ fn end_blob_hook_slash_preferred_sequencer() {
     };
 
     let tmpdir = tempfile::tempdir().unwrap();
-    let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let working_set = &mut WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
     let balance_after_genesis = {
         let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
@@ -208,7 +207,7 @@ fn end_blob_hook_slash_preferred_sequencer() {
 fn end_blob_hook_slash_unknown_sequencer() {
     let mut test_sequencer = create_test_sequencer();
     let tmpdir = tempfile::tempdir().unwrap();
-    let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let working_set = &mut WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
 
     let mut test_blob = MockBlob::new(

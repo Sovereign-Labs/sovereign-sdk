@@ -50,7 +50,6 @@ compose-logs: check-docker
 # check if docker is installed
 check-docker:
 	@command -v docker > /dev/null 2>&1 || { echo "Docker is not installed"; exit 1; }
-	@# TODO: check docker compose too
 
 # check if celestia network is running
 check-compose-running: check-docker

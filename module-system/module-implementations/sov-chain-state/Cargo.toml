@@ -26,6 +26,7 @@ tempfile = { workspace = true }
 sov-data-generators = { path = "../../utils/sov-data-generators" }
 sov-chain-state = { path = ".", features = ["native"] }
 sov-mock-da = { path = "../../../adapters/mock-da" }
+sov-prover-storage-manager = { path = "../../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
 
 
 [features]

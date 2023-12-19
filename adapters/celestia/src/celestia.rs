@@ -35,7 +35,8 @@ pub const GENESIS_PLACEHOLDER_HASH: &[u8; 32] = &[255; 32];
 /// a tendermint::block::Header from being deserialized in most formats except JSON. However
 /// it also provides a significant efficiency benefit over the standard tendermint type, which
 /// performs a complete protobuf serialization every time `.hash()` is called.
-#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)] // TODO: , BorshDeserialize, BorshSerialize)]
+// TODO: derive borsh Serialize, Deserialize <https://github.com/eigerco/celestia-node-rs/issues/155>
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub struct CompactHeader {
     /// Header version
     pub version: Vec<u8>,
@@ -158,7 +159,8 @@ impl CompactHeader {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)] // TODO:, BorshSerialize, BorshDeserialize)]
+// TODO: derive borsh Serialize, Deserialize <https://github.com/eigerco/celestia-node-rs/issues/155>
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CelestiaHeader {
     pub dah: DataAvailabilityHeader,
     pub header: CompactHeader,
@@ -193,7 +195,8 @@ impl From<celestia_types::ExtendedHeader> for CelestiaHeader {
     }
 }
 
-#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)] // TODO: , BorshDeserialize, BorshSerialize)]
+// TODO: derive borsh Serialize, Deserialize <https://github.com/eigerco/celestia-node-rs/issues/155>
+#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct BlobWithSender {
     pub blob: CountedBufReader<BlobIterator>,
     pub sender: CelestiaAddress,

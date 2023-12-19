@@ -15,8 +15,10 @@ publish = false
 
 [dev-dependencies]
 sov-value-setter = { path = ".", features = ["native"] }
-sov-modules-api = { path = "../../../sov-modules-api", features = ["native"] }
 tempfile = { workspace = true }
+sov-modules-api = { path = "../../../sov-modules-api", features = ["native"] }
+sov-prover-storage-manager = { path = "../../../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
+
 
 [dependencies]
 anyhow = { workspace = true }

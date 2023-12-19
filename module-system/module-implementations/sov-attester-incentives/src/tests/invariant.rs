@@ -2,7 +2,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::optimistic::Attestation;
 use sov_modules_api::prelude::*;
 use sov_modules_api::{Context, WorkingSet};
-use sov_state::ProverStorage;
+use sov_prover_storage_manager::new_orphan_storage;
 
 use crate::call::AttesterIncentiveErrors;
 use crate::tests::helpers::{
@@ -13,9 +13,9 @@ use crate::tests::helpers::{
 #[test]
 fn test_transition_invariant() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(storage.clone());
-    let (module, _token_address, attester_address, _) = setup(&mut working_set);
+    let (module, _token_address, attester_address, _, sequencer) = setup(&mut working_set);
 
     // Assert that the attester has the correct bond amount before processing the proof
     assert_eq!(
@@ -34,7 +34,7 @@ fn test_transition_invariant() {
     let (exec_vars, mut working_set) =
         execution_simulation(20, &module, &storage, attester_address, working_set);
 
-    let context = DefaultContext::new(attester_address, INIT_HEIGHT + 2);
+    let context = DefaultContext::new(attester_address, sequencer, INIT_HEIGHT + 2);
 
     const NEW_LIGHT_CLIENT_FINALIZED_HEIGHT: u64 = DEFAULT_ROLLUP_FINALITY + INIT_HEIGHT + 1;
 

@@ -22,7 +22,7 @@ pub async fn start_rollup(
             path: temp_path.to_path_buf(),
         },
         runner: RunnerConfig {
-            start_height: 0,
+            start_height: 1,
             rpc_config: RpcConfig {
                 bind_host: "127.0.0.1".into(),
                 bind_port: 0,

@@ -1,10 +1,10 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
-use std::iter::Peekable;
+use std::collections::{btree_map, HashMap};
+use std::iter::{Peekable, Rev};
 use std::sync::{Arc, RwLock};
 
 use sov_schema_db::schema::{KeyCodec, ValueCodec};
-use sov_schema_db::snapshot::{FrozenDbSnapshot, QueryManager, SnapshotId};
+use sov_schema_db::snapshot::{QueryManager, ReadOnlyDbSnapshot, SnapshotId};
 use sov_schema_db::{
     Operation, RawDbReverseIterator, Schema, SchemaBatchIterator, SchemaKey, SchemaValue,
 };
@@ -13,10 +13,10 @@ use crate::snapshot_manager::DataLocation::Snapshot;
 
 /// Snapshot manager holds snapshots associated with particular DB and can traverse them backwards
 /// down to DB level
-/// Managed externally by [`NewProverStorageManager`]
+/// Managed externally by [`crate::ProverStorageManager`]
 pub struct SnapshotManager {
     db: sov_schema_db::DB,
-    snapshots: HashMap<SnapshotId, FrozenDbSnapshot>,
+    snapshots: HashMap<SnapshotId, ReadOnlyDbSnapshot>,
     /// Hierarchical
     to_parent: Arc<RwLock<HashMap<SnapshotId, SnapshotId>>>,
 }
@@ -33,7 +33,17 @@ impl SnapshotManager {
         }
     }
 
-    pub(crate) fn add_snapshot(&mut self, snapshot: FrozenDbSnapshot) {
+    /// Create instance of snapshot manager, when it does not have connection to snapshots tree
+    /// So it only reads from database.
+    pub fn orphan(db: sov_schema_db::DB) -> Self {
+        Self {
+            db,
+            snapshots: HashMap::new(),
+            to_parent: Arc::new(RwLock::new(Default::default())),
+        }
+    }
+
+    pub(crate) fn add_snapshot(&mut self, snapshot: ReadOnlyDbSnapshot) {
         let snapshot_id = snapshot.get_id();
         if self.snapshots.insert(snapshot_id, snapshot).is_some() {
             panic!("Attempt to double save same snapshot");
@@ -63,10 +73,10 @@ impl SnapshotManager {
     }
 
     /// Returns iterator over keys in given [`Schema`] among all snapshots and DB in reverse lexicographical order
-    pub fn iter<S: Schema>(
+    fn iter<S: Schema>(
         &self,
         mut snapshot_id: SnapshotId,
-    ) -> anyhow::Result<SnapshotManagerIter<S>> {
+    ) -> anyhow::Result<SnapshotManagerIter<S, Rev<btree_map::Iter<SchemaKey, Operation>>>> {
         let mut snapshot_iterators = vec![];
         let to_parent = self.to_parent.read().unwrap();
         while let Some(parent_snapshot_id) = to_parent.get(&snapshot_id) {
@@ -82,22 +92,54 @@ impl SnapshotManager {
 
         snapshot_iterators.reverse();
         let db_iter = self.db.raw_iter::<S>()?;
+        Ok(SnapshotManagerIter::new(db_iter, snapshot_iterators))
+    }
+
+    fn iter_range<S: Schema>(
+        &self,
+        mut snapshot_id: SnapshotId,
+        upper_bound: SchemaKey,
+    ) -> anyhow::Result<SnapshotManagerIter<S, Rev<btree_map::Range<SchemaKey, Operation>>>> {
+        let mut snapshot_iterators = vec![];
+        let to_parent = self.to_parent.read().unwrap();
+        while let Some(parent_snapshot_id) = to_parent.get(&snapshot_id) {
+            let parent_snapshot = self
+                .snapshots
+                .get(parent_snapshot_id)
+                .expect("Inconsistency between `self.snapshots` and `self.to_parent`");
+
+            snapshot_iterators.push(parent_snapshot.iter_range::<S>(upper_bound.clone()));
+
+            snapshot_id = *parent_snapshot_id;
+        }
+
+        snapshot_iterators.reverse();
+        let mut db_iter = self.db.raw_iter::<S>()?;
+        db_iter.seek(upper_bound)?;
 
         Ok(SnapshotManagerIter::new(db_iter, snapshot_iterators))
     }
 }
 
 /// [`Iterator`] over keys in given [`Schema`] in all snapshots in reverse lexicographical order
-pub struct SnapshotManagerIter<'a, S: Schema> {
+pub struct SnapshotManagerIter<'a, S, I>
+where
+    S: Schema,
+    I: Iterator<Item = (&'a SchemaKey, &'a Operation)>,
+{
     db_iter: Peekable<RawDbReverseIterator<'a>>,
-    snapshot_iterators: Vec<Peekable<SchemaBatchIterator<'a, S>>>,
+    snapshot_iterators: Vec<Peekable<SchemaBatchIterator<'a, S, I>>>,
     max_value_locations: Vec<DataLocation>,
 }
 
-impl<'a, S: Schema> SnapshotManagerIter<'a, S> {
+impl<'a, S, I> SnapshotManagerIter<'a, S, I>
+where
+    S: Schema,
+    I: Iterator<Item = (&'a SchemaKey, &'a Operation)>,
+{
     fn new(
         db_iter: RawDbReverseIterator<'a>,
-        snapshot_iterators: Vec<SchemaBatchIterator<'a, S>>,
+        snapshot_iterators: Vec<SchemaBatchIterator<'a, S, I>>,
     ) -> Self {
         let max_values_size = snapshot_iterators.len().checked_add(1).unwrap_or_default();
         Self {
@@ -118,7 +160,11 @@ enum DataLocation {
     Snapshot(usize),
 }
 
-impl<'a, S: Schema> Iterator for SnapshotManagerIter<'a, S> {
+impl<'a, S, I> Iterator for SnapshotManagerIter<'a, S, I>
+where
+    S: Schema,
+    I: Iterator<Item = (&'a SchemaKey, &'a Operation)>,
+{
     type Item = (SchemaKey, SchemaValue);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -193,7 +239,8 @@ impl<'a, S: Schema> Iterator for SnapshotManagerIter<'a, S> {
 }
 
 impl QueryManager for SnapshotManager {
-    type Iter<'a, S> = SnapshotManagerIter<'a, S> where S: Sized, S: Schema, Self: 'a;
+    type Iter<'a, S> = SnapshotManagerIter<'a, S, Rev<btree_map::Iter<'a, SchemaKey, Operation>>> where S: Sized, S: Schema, Self: 'a;
+    type RangeIter<'a, S: Schema> = SnapshotManagerIter<'a, S, Rev<btree_map::Range<'a, SchemaKey, Operation>>> where S: Sized, S: Schema, Self: 'a;
 
     fn get<S: Schema>(
         &self,
@@ -216,12 +263,19 @@ impl QueryManager for SnapshotManager {
 
             snapshot_id = *parent_snapshot_id;
         }
-
         self.db.get(key)
     }
 
     fn iter<S: Schema>(&self, snapshot_id: SnapshotId) -> anyhow::Result<Self::Iter<'_, S>> {
         self.iter::<S>(snapshot_id)
+    }
+
+    fn iter_range<S: Schema>(
+        &self,
+        snapshot_id: SnapshotId,
+        upper_bound: SchemaKey,
+    ) -> anyhow::Result<Self::RangeIter<'_, S>> {
+        self.iter_range::<S>(snapshot_id, upper_bound)
     }
 }
 
@@ -233,11 +287,14 @@ mod tests {
     use sov_db::rocks_db_config::gen_rocksdb_options;
     use sov_schema_db::schema::{KeyDecoder, ValueCodec};
     use sov_schema_db::snapshot::{DbSnapshot, NoopQueryManager, QueryManager};
-    use sov_schema_db::SchemaBatch;
+    use sov_schema_db::test::TestField;
+    use sov_schema_db::{define_schema, SchemaBatch};
 
-    use crate::dummy_storage::{DummyField, DummyStateSchema, DUMMY_STATE_CF};
     use crate::snapshot_manager::SnapshotManager;
 
+    const DUMMY_STATE_CF: &str = "DummyStateCF";
+
+    define_schema!(DummyStateSchema, TestField, TestField, DUMMY_STATE_CF);
     type Schema = DummyStateSchema;
 
     fn create_test_db(path: &std::path::Path) -> sov_schema_db::DB {
@@ -343,7 +400,7 @@ mod tests {
         let snapshot_manager = SnapshotManager::new(db, to_parent.clone());
         assert_eq!(
             None,
-            snapshot_manager.get::<Schema>(1, &DummyField(1)).unwrap()
+            snapshot_manager.get::<Schema>(1, &TestField(1)).unwrap()
         );
     }
 
@@ -353,9 +410,9 @@ mod tests {
         let db = create_test_db(tempdir.path());
         let to_parent = Arc::new(RwLock::new(HashMap::new()));
 
-        let one = DummyField(1);
-        let two = DummyField(2);
-        let three = DummyField(3);
+        let one = TestField(1);
+        let two = TestField(2);
+        let three = TestField(3);
 
         let mut db_data = SchemaBatch::new();
         db_data.put::<Schema>(&one, &one).unwrap();
@@ -398,14 +455,14 @@ mod tests {
             edit.insert(7, 6);
         }
 
-        let f1 = DummyField(1);
-        let f2 = DummyField(2);
-        let f3 = DummyField(3);
-        let f4 = DummyField(4);
-        let f5 = DummyField(5);
-        let f6 = DummyField(6);
-        let f7 = DummyField(7);
-        let f8 = DummyField(8);
+        let f1 = TestField(1);
+        let f2 = TestField(2);
+        let f3 = TestField(3);
+        let f4 = TestField(4);
+        let f5 = TestField(5);
+        let f6 = TestField(6);
+        let f7 = TestField(7);
+        let f8 = TestField(8);
 
         let mut db_data = SchemaBatch::new();
         db_data.put::<Schema>(&f1, &f1).unwrap();
@@ -496,17 +553,17 @@ mod tests {
             edit.insert(4, 3);
         }
 
-        let f1 = DummyField(1);
-        let f2 = DummyField(2);
-        let f3 = DummyField(3);
-        let f4 = DummyField(4);
-        let f5 = DummyField(5);
-        let f6 = DummyField(6);
-        let f7 = DummyField(7);
-        let f8 = DummyField(8);
-        let f9 = DummyField(9);
-        let f10 = DummyField(10);
-        let f12 = DummyField(12);
+        let f1 = TestField(1);
+        let f2 = TestField(2);
+        let f3 = TestField(3);
+        let f4 = TestField(4);
+        let f5 = TestField(5);
+        let f6 = TestField(6);
+        let f7 = TestField(7);
+        let f8 = TestField(8);
+        let f9 = TestField(9);
+        let f10 = TestField(10);
+        let f12 = TestField(12);
 
         let mut db_data = SchemaBatch::new();
         db_data.put::<Schema>(&f3, &f9).unwrap();

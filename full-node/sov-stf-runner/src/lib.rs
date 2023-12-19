@@ -38,17 +38,17 @@ pub mod verifier;
 // StateTransitionFunction, DA, and Zkvm traits.
 #[serde(bound = "StateRoot: Serialize + DeserializeOwned, Witness: Serialize + DeserializeOwned")]
 /// Data required to verify a state transition.
-pub struct StateTransitionData<StateRoot, Witness, DA: DaSpec> {
+pub struct StateTransitionData<StateRoot, Witness, Da: DaSpec> {
     /// The state root before the state transition
     pub pre_state_root: StateRoot,
     /// The header of the da block that is being processed
-    pub da_block_header: DA::BlockHeader,
+    pub da_block_header: Da::BlockHeader,
     /// The proof of inclusion for all blobs
-    pub inclusion_proof: DA::InclusionMultiProof,
+    pub inclusion_proof: Da::InclusionMultiProof,
     /// The proof that the provided set of blobs is complete
-    pub completeness_proof: DA::CompletenessProof,
+    pub completeness_proof: Da::CompletenessProof,
     /// The blobs that are being processed
-    pub blobs: Vec<<DA as DaSpec>::BlobTransaction>,
+    pub blobs: Vec<<Da as DaSpec>::BlobTransaction>,
     /// The witness for the state transition
     pub state_transition_witness: Witness,
 }
