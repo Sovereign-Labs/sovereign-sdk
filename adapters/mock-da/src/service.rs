@@ -1,6 +1,5 @@
 use std::collections::VecDeque;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -38,7 +37,6 @@ pub struct MockDaService {
     /// How many blocks should be submitted, before block is finalized. 0 means instant finality.
     blocks_to_finality: u32,
     /// Used for calculating correct finality from state of `blocks`
-    last_finalized_height: Arc<AtomicU64>,
     finalized_header_sender: broadcast::Sender<MockBlockHeader>,
     wait_attempts: usize,
 }
@@ -63,7 +61,6 @@ impl MockDaService {
             sequencer_da_address,
             blocks: Arc::new(Default::default()),
             blocks_to_finality,
-            last_finalized_height: Arc::new(AtomicU64::new(0)),
             finalized_header_sender: tx,
             wait_attempts: 100_0000,
         }
@@ -96,6 +93,14 @@ impl MockDaService {
     /// meaning that first blob will be in the block of height + 1.
     pub async fn fork_at(&self, height: u64, blobs: Vec<Vec<u8>>) -> anyhow::Result<()> {
         let mut blocks = self.blocks.write().await;
+        let last_finalized_height = self.get_last_finalized_height(&blocks).await;
+        if last_finalized_height > height {
+            anyhow::bail!(
+                "Cannot fork at height {}, last finalized height is {}",
+                height,
+                last_finalized_height
+            );
+        }
         blocks.retain(|b| b.header().height <= height);
         for blob in blobs {
             let _ = self
@@ -104,6 +109,16 @@ impl MockDaService {
         }
 
         Ok(())
+    }
+
+    async fn get_last_finalized_height(
+        &self,
+        blocks: &RwLockWriteGuard<'_, VecDeque<MockBlock>>,
+    ) -> u64 {
+        blocks
+            .len()
+            .checked_sub(self.blocks_to_finality as usize)
+            .unwrap_or_default() as u64
     }
 
     async fn add_blob(
@@ -145,8 +160,6 @@ impl MockDaService {
         if blocks.len() > self.blocks_to_finality as usize {
             let next_index_to_finalize = blocks.len() - self.blocks_to_finality as usize - 1;
             let next_finalized_header = blocks[next_index_to_finalize].header().clone();
-            self.last_finalized_height
-                .store(next_finalized_header.height(), Ordering::Release);
             self.finalized_header_sender
                 .send(next_finalized_header)
                 .unwrap();
@@ -203,7 +216,7 @@ impl DaService for MockDaService {
         // Block until there's something
         self.wait_for_height(height).await?;
         // Locking blocks here, so submissions has to wait
-        let mut blocks = self.blocks.write().await;
+        let blocks = self.blocks.write().await;
         let oldest_available_height = blocks[0].header.height;
         let index = height
             .checked_sub(oldest_available_height)
@@ -213,23 +226,7 @@ impl DaService for MockDaService {
             ))?;
 
         // We still return error, as it is possible, that block has been consumed between `wait` and locking blocks
-        let block = blocks
-            .get(index as usize)
-            .ok_or(anyhow::anyhow!(
-                "Block at height {} is not available anymore",
-                height
-            ))?
-            .clone();
-
-        // Block that precedes last finalized block is evicted at first read.
-        // Caller can always get last finalized block, or read everything if it is called in order
-        // If readers are from multiple threads, then block will be lost.
-        // This is optimization for long-running cases
-        // Maybe simply storing all blocks is fine, all only keep 100 last finalized.
-        let last_finalized_height = self.last_finalized_height.load(Ordering::Acquire);
-        if last_finalized_height > 0 && oldest_available_height < (last_finalized_height - 1) {
-            blocks.pop_front();
-        }
+        let block = blocks.get(index as usize).unwrap().clone();
 
         Ok(block)
     }
@@ -238,18 +235,13 @@ impl DaService for MockDaService {
         &self,
     ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
         let blocks_len = { self.blocks.read().await.len() };
-        let last_finalized_height = self.last_finalized_height.load(Ordering::Acquire);
         if blocks_len < self.blocks_to_finality as usize + 1 {
             return Ok(GENESIS_HEADER);
         }
 
         let blocks = self.blocks.read().await;
-        let oldest_available_height = blocks[0].header().height();
-        let index = last_finalized_height
-            .checked_sub(oldest_available_height)
-            .expect("Inconsistent MockDa");
-
-        Ok(blocks[index as usize].header().clone())
+        let index = blocks_len - self.blocks_to_finality as usize - 1;
+        Ok(blocks[index].header().clone())
     }
 
     async fn subscribe_finalized_header(&self) -> Result<Self::HeaderStream, Self::Error> {
@@ -552,38 +544,95 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_reorg_control() {
-        let da = MockDaService::with_finality(MockAddress::new([1; 32]), 4);
+    mod reo4g_control {
+        use super::*;
+        use crate::{MockAddress, MockDaService};
 
-        // 1 -> 2 -> 3.1 -> 4.1
-        //      \ -> 3.2 -> 4.2
+        #[tokio::test]
+        async fn test_reorg_control_success() {
+            let da = MockDaService::with_finality(MockAddress::new([1; 32]), 4);
 
-        // 1
-        da.send_transaction(&[1, 2, 3, 4]).await.unwrap();
-        // 2
-        da.send_transaction(&[4, 5, 6, 7]).await.unwrap();
-        // 3.1
-        da.send_transaction(&[8, 9, 0, 1]).await.unwrap();
-        // 4.1
-        da.send_transaction(&[2, 3, 4, 5]).await.unwrap();
+            // 1 -> 2 -> 3.1 -> 4.1
+            //      \ -> 3.2 -> 4.2
 
-        let _block_1 = da.get_block_at(1).await.unwrap();
-        let block_2 = da.get_block_at(2).await.unwrap();
-        let block_3 = da.get_block_at(3).await.unwrap();
-        let head_before = da.get_head_block_header().await.unwrap();
+            // 1
+            da.send_transaction(&[1, 2, 3, 4]).await.unwrap();
+            // 2
+            da.send_transaction(&[4, 5, 6, 7]).await.unwrap();
+            // 3.1
+            da.send_transaction(&[8, 9, 0, 1]).await.unwrap();
+            // 4.1
+            da.send_transaction(&[2, 3, 4, 5]).await.unwrap();
 
-        // Do reorg
-        da.fork_at(2, vec![vec![3, 3, 3, 3], vec![4, 4, 4, 4]])
-            .await
-            .unwrap();
+            let _block_1 = da.get_block_at(1).await.unwrap();
+            let block_2 = da.get_block_at(2).await.unwrap();
+            let block_3 = da.get_block_at(3).await.unwrap();
+            let head_before = da.get_head_block_header().await.unwrap();
 
-        let block_3_after = da.get_block_at(3).await.unwrap();
-        assert_ne!(block_3, block_3_after);
+            // Do reorg
+            da.fork_at(2, vec![vec![3, 3, 3, 3], vec![4, 4, 4, 4]])
+                .await
+                .unwrap();
 
-        assert_eq!(block_2.header().hash(), block_3_after.header().prev_hash());
+            let block_3_after = da.get_block_at(3).await.unwrap();
+            assert_ne!(block_3, block_3_after);
 
-        let head_after = da.get_head_block_header().await.unwrap();
-        assert_ne!(head_before, head_after);
+            assert_eq!(block_2.header().hash(), block_3_after.header().prev_hash());
+
+            let head_after = da.get_head_block_header().await.unwrap();
+            assert_ne!(head_before, head_after);
+        }
+
+        #[tokio::test]
+        async fn test_attempt_reorg_after_finalized() {
+            let da = MockDaService::with_finality(MockAddress::new([1; 32]), 2);
+
+            // 1 -> 2 -> 3 -> 4
+
+            da.send_transaction(&[1, 2, 3, 4]).await.unwrap();
+            da.send_transaction(&[4, 5, 6, 7]).await.unwrap();
+            da.send_transaction(&[8, 9, 0, 1]).await.unwrap();
+            da.send_transaction(&[2, 3, 4, 5]).await.unwrap();
+
+            let block_1_before = da.get_block_at(1).await.unwrap();
+            let block_2_before = da.get_block_at(2).await.unwrap();
+            let block_3_before = da.get_block_at(3).await.unwrap();
+            let block_4_before = da.get_block_at(4).await.unwrap();
+            let finalized_header_before = da.get_last_finalized_block_header().await.unwrap();
+            assert_eq!(&finalized_header_before, block_2_before.header());
+
+            // Attempt at finalized header. It will try to overwrite height 2 and 3
+            let result = da
+                .fork_at(1, vec![vec![3, 3, 3, 3], vec![4, 4, 4, 4]])
+                .await;
+            assert!(result.is_err());
+            assert_eq!(
+                "Cannot fork at height 1, last finalized height is 2",
+                result.unwrap_err().to_string()
+            );
+
+            let block_1_after = da.get_block_at(1).await.unwrap();
+            let block_2_after = da.get_block_at(2).await.unwrap();
+            let block_3_after = da.get_block_at(3).await.unwrap();
+            let block_4_after = da.get_block_at(4).await.unwrap();
+            let finalized_header_after = da.get_last_finalized_block_header().await.unwrap();
+            assert_eq!(&finalized_header_after, block_2_after.header());
+
+            assert_eq!(block_1_before, block_1_after);
+            assert_eq!(block_2_before, block_2_after);
+            assert_eq!(block_3_before, block_3_after);
+            assert_eq!(block_4_before, block_4_after);
+
+            // Overwriting height 3 and 4 is ok
+            let result2 = da
+                .fork_at(2, vec![vec![3, 3, 3, 3], vec![4, 4, 4, 4]])
+                .await;
+            assert!(result2.is_ok());
+            let block_2_after_reorg = da.get_block_at(2).await.unwrap();
+            let block_3_after_reorg = da.get_block_at(3).await.unwrap();
+
+            assert_eq!(block_2_after, block_2_after_reorg);
+            assert_ne!(block_3_after, block_3_after_reorg);
+        }
     }
 }
