@@ -45,7 +45,8 @@ impl<C: Context> TxHooks for Bank<C> {
         let amount = tx.gas_limit().saturating_add(tx.gas_tip());
 
         if amount > 0 {
-            let token_address = C::Address::from_str(GAS_TOKEN_ADDRESS)?;
+            let token_address = C::Address::from_str(GAS_TOKEN_ADDRESS)
+                .map_err(|e| anyhow::anyhow!("failed to parse gas token address: {e}"))?;
             let from = &sender;
             let to = &sequencer;
             let coins = Coins {
@@ -67,7 +68,8 @@ impl<C: Context> TxHooks for Bank<C> {
         let amount = working_set.gas_remaining_funds();
 
         if amount > 0 {
-            let token_address = C::Address::from_str(GAS_TOKEN_ADDRESS)?;
+            let token_address = C::Address::from_str(GAS_TOKEN_ADDRESS)
+                .map_err(|e| anyhow::anyhow!("failed to parse gas token address: {e}"))?;
             let from = ctx.sequencer();
             let to = ctx.sender();
             let coins = Coins {
