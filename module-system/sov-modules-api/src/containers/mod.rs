@@ -3,6 +3,7 @@ mod accessory_value;
 mod accessory_vec;
 
 mod kernel_value;
+mod versioned_value;
 
 mod map;
 mod value;
@@ -20,6 +21,7 @@ pub use traits::{
 };
 pub use value::StateValue;
 pub use vec::StateVec;
+pub use versioned_value::VersionedStateValue;
 
 #[cfg(test)]
 mod test {
