@@ -2,7 +2,7 @@ name: Rust
 
 # On Rust, GitHub Actions, and caching
 # ===========
-# Here's a list of things to keep in mind if you find yourself maintaing this
+# Here's a list of things to keep in mind if you find yourself maintaining this
 # CI:
 #
 # https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows#matching-a-cache-key
@@ -26,7 +26,7 @@ name: Rust
 # - Learn cache invalidation rules of `Swatinem/rust-cache` before making
 #   changes, e.g. what happens when `rustc --version` changes or `Cargo.lock`
 #   changes (or is missing).
-# - The jobs dependency tree is the way it is to accomodate for sharing caches,
+# - The jobs dependency tree is the way it is to accommodate for sharing caches,
 #   not necessarily because it makes logical sense to run one job after the
 #   other. This is due to the fact that we can't share caches between jobs that
 #   run in parallel.
@@ -156,7 +156,7 @@ jobs:
   hack:
     name: features
     # `cargo-hack` uses the same profile as `cargo check` and doesn't require
-    # building dependencies, only chceking them, so we can share caches
+    # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
     runs-on: buildjet-8vcpu-ubuntu-2204

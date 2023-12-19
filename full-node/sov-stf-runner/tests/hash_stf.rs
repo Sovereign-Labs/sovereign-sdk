@@ -1,38 +1,27 @@
 use sha2::Digest;
-use sov_db::ledger_db::LedgerDB;
 use sov_mock_da::{
-    MockAddress, MockBlockHeader, MockDaConfig, MockDaService, MockDaSpec, MockDaVerifier,
-    MockValidityCond,
+    MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaSpec, MockValidityCond,
 };
 use sov_mock_zkvm::MockZkvm;
-use sov_prover_storage_manager::{ProverStorageManager, SnapshotManager};
-use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
+use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
+use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
-use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
-use sov_state::storage::{StorageKey, StorageValue};
+use sov_state::storage::{NativeStorage, StorageKey, StorageValue};
 use sov_state::{
     ArrayWitness, DefaultStorageSpec, OrderedReadsAndWrites, Prefix, ProverStorage, Storage,
 };
-use sov_stf_runner::{
-    InitVariant, ParallelProverService, ProverServiceConfig, RollupConfig, RollupProverConfig,
-    RpcConfig, RunnerConfig, StateTransitionRunner, StorageConfig,
-};
 
-type MockInitVariant = InitVariant<HashStf<MockValidityCond>, MockZkvm, MockDaSpec>;
-
-type S = DefaultStorageSpec;
-type Q = SnapshotManager;
-
-type StorageManager = ProverStorageManager<MockDaSpec, S>;
+pub type S = DefaultStorageSpec;
+pub type Q = SnapshotManager;
 
 #[derive(Default, Clone)]
-struct HashStf<Cond> {
+pub struct HashStf<Cond> {
     phantom_data: std::marker::PhantomData<Cond>,
 }
 
 impl<Cond> HashStf<Cond> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             phantom_data: std::marker::PhantomData,
         }
@@ -74,8 +63,6 @@ impl<Cond> HashStf<Cond> {
     }
 }
 
-/// Outcome of the apply_slot method.
-
 impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, Da>
     for HashStf<Cond>
 {
@@ -101,10 +88,10 @@ impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, 
 
     fn apply_slot<'a, I>(
         &self,
-        _pre_state_root: &Self::StateRoot,
+        pre_state_root: &Self::StateRoot,
         storage: Self::PreState,
         witness: Self::Witness,
-        _slot_header: &Da::BlockHeader,
+        slot_header: &Da::BlockHeader,
         _validity_condition: &Da::ValidityCondition,
         blobs: I,
     ) -> SlotResult<
@@ -117,10 +104,19 @@ impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, 
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
     {
+        tracing::debug!(
+            "Applying slot in HashStf at height={}",
+            slot_header.height()
+        );
         let mut hasher = sha2::Sha256::new();
 
         let hash_key = HashStf::<Cond>::hash_key();
         let existing_cache = storage.get(&hash_key, None, &witness).unwrap();
+        tracing::debug!(
+            "HashStf provided_state_root={:?}, saved={:?}",
+            pre_state_root,
+            existing_cache.value()
+        );
         hasher.update(existing_cache.value());
 
         for blob in blobs {
@@ -140,103 +136,97 @@ impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, 
     }
 }
 
-#[tokio::test]
-async fn init_and_restart() {
-    let tmpdir = tempfile::tempdir().unwrap();
-    let genesis_params = vec![1, 2, 3, 4, 5];
-    let init_variant: MockInitVariant = InitVariant::Genesis {
-        block_header: MockBlockHeader::from_height(0),
-        genesis_params,
-    };
+#[test]
+fn compare_output() {
+    let genesis_params: Vec<u8> = vec![1, 2, 3, 4, 5];
 
-    let state_root_after_genesis = {
-        let runner = initialize_runner(tmpdir.path(), init_variant);
-        *runner.get_state_root()
-    };
+    let raw_blobs: Vec<Vec<Vec<u8>>> = vec![
+        // Block A
+        vec![vec![1, 1, 1], vec![2, 2, 2]],
+        // Block B
+        vec![vec![3, 3, 3], vec![4, 4, 4], vec![5, 5, 5]],
+        // Block C
+        vec![vec![6, 6, 6]],
+        // Block D
+        vec![vec![7, 7, 7], vec![8, 8, 8]],
+    ];
 
-    let init_variant_2: MockInitVariant = InitVariant::Initialized(state_root_after_genesis);
+    let mut blocks = Vec::new();
 
-    let runner_2 = initialize_runner(tmpdir.path(), init_variant_2);
+    for (idx, raw_block) in raw_blobs.iter().enumerate() {
+        let mut blobs = Vec::new();
+        for raw_blob in raw_block.iter() {
+            let blob = MockBlob::new(
+                raw_blob.clone(),
+                MockAddress::new([11u8; 32]),
+                [idx as u8; 32],
+            );
+            blobs.push(blob);
+        }
 
-    let state_root_2 = *runner_2.get_state_root();
+        let block = MockBlock {
+            header: MockBlockHeader::from_height((idx + 1) as u64),
+            validity_cond: MockValidityCond::default(),
+            blobs,
+        };
+        blocks.push(block);
+    }
 
-    assert_eq!(state_root_after_genesis, state_root_2);
+    let (state_root, root_hash) = get_result_from_blocks(&genesis_params, &blocks);
+
+    assert!(root_hash.is_some());
+
+    let recorded_state_root: [u8; 32] = [
+        121, 110, 56, 75, 48, 251, 66, 243, 236, 155, 4, 128, 238, 122, 188, 160, 17, 46, 169, 39,
+        160, 142, 220, 208, 15, 213, 221, 250, 108, 52, 7, 46,
+    ];
+
+    assert_eq!(recorded_state_root, state_root);
 }
 
-type MockProverService = ParallelProverService<
-    [u8; 32],
-    ArrayWitness,
-    MockDaService,
-    MockZkvm,
-    HashStf<MockValidityCond>,
->;
-fn initialize_runner(
-    path: &std::path::Path,
-    init_variant: MockInitVariant,
-) -> StateTransitionRunner<
-    HashStf<MockValidityCond>,
-    StorageManager,
-    MockDaService,
-    MockZkvm,
-    MockProverService,
-> {
-    let address = MockAddress::new([11u8; 32]);
-    let rollup_config = RollupConfig::<MockDaConfig> {
-        storage: StorageConfig {
-            path: path.to_path_buf(),
-        },
-        runner: RunnerConfig {
-            start_height: 1,
-            rpc_config: RpcConfig {
-                bind_host: "127.0.0.1".to_string(),
-                bind_port: 0,
-            },
-        },
-        da: MockDaConfig {
-            sender_address: address,
-        },
-        prover_service: ProverServiceConfig {
-            aggregated_proof_block_jump: 1,
-        },
-    };
+// Returns final data hash and root hash
+pub fn get_result_from_blocks(
+    genesis_params: &[u8],
+    blocks: &[MockBlock],
+) -> ([u8; 32], Option<<ProverStorage<S, Q> as Storage>::Root>) {
+    let tmpdir = tempfile::tempdir().unwrap();
 
-    let da_service = MockDaService::new(address);
-
-    let ledger_db = LedgerDB::with_path(path).unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
 
     let stf = HashStf::<MockValidityCond>::new();
 
-    let storage_config = sov_state::config::Config {
-        path: path.to_path_buf(),
-    };
-    let mut storage_manager = ProverStorageManager::new(storage_config).unwrap();
+    let (genesis_state_root, mut storage) =
+        <HashStf<MockValidityCond> as StateTransitionFunction<MockZkvm, MockDaSpec>>::init_chain(
+            &stf,
+            storage,
+            genesis_params.to_vec(),
+        );
 
-    let vm = MockZkvm::default();
-    let verifier = MockDaVerifier::default();
+    let mut state_root = genesis_state_root;
 
-    let prover_config = RollupProverConfig::Prove;
+    let l = blocks.len();
 
-    let prover_service = ParallelProverService::new(
-        vm,
-        stf.clone(),
-        verifier,
-        prover_config,
-        // Should be ZkStorage, but we don't need it for this test
-        storage_manager.create_finalized_storage().unwrap(),
-        1,
+    for block in blocks {
+        let mut blobs = block.blobs.clone();
+
+        let result =
+            <HashStf<MockValidityCond> as StateTransitionFunction<MockZkvm, MockDaSpec>>::apply_slot::<&mut Vec<MockBlob>>(
+                 &stf,
+                 &state_root,
+                 storage,
+                 ArrayWitness::default(),
+                 &block.header,
+                 &block.validity_cond,
+                 &mut blobs,
         ProverServiceConfig {
             aggregated_proof_block_jump: 1,
         },
     );
 
-    StateTransitionRunner::new(
-        rollup_config.runner,
-        da_service,
-        ledger_db,
-        stf,
-        storage_manager,
-        init_variant,
-        prover_service,
-    )
-    .unwrap()
+        state_root = result.state_root;
+        storage = result.change_set;
+    }
+
+    let root_hash = storage.get_root_hash(l as u64).ok();
+    (state_root, root_hash)
 }
