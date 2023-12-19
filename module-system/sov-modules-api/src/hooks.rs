@@ -22,7 +22,7 @@ pub trait TxHooks {
     /// dealing with thread synchronization concerns. Although this performance improvement
     /// primarily pertains to write operations - which infrequently occur on hook arguments - the
     /// resulting trade-off is worthwhile without additional cost. For further details, please
-    /// refer to https://spcl.inf.ethz.ch/Publications/.pdf/atomic-bench.pdf.
+    /// refer to <https://spcl.inf.ethz.ch/Publications/.pdf/atomic-bench.pdf>
     type PreArg;
     type PreResult;
 
