@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::pin::Pin;
+use std::sync::Mutex;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -24,6 +25,18 @@ const GENESIS_HEADER: MockBlockHeader = MockBlockHeader {
     time: Time::from_secs(1672531200),
 };
 
+/// Definition of a fork that will be executed in `MockDaService` at specified height
+pub struct PlannedFork {
+    /// Height at which fork is "noticed"
+    pub trigger_at_height: u64,
+    /// Height at which chain forked
+    /// Basically height of the first block in `blobs` will be `fork_height + 1`
+    pub fork_height: u64,
+    /// Single blob per each block
+    /// TODO: Use constructor, so it is not possible to create invalid fork, when it will return incorrect block at height
+    pub blobs: Vec<Vec<u8>>,
+}
+
 #[derive(Clone)]
 /// DaService used in tests.
 /// Currently only supports single blob per block.
@@ -39,6 +52,7 @@ pub struct MockDaService {
     /// Used for calculating correct finality from state of `blocks`
     finalized_header_sender: broadcast::Sender<MockBlockHeader>,
     wait_attempts: usize,
+    planned_fork: Arc<Mutex<Option<PlannedFork>>>,
 }
 
 impl MockDaService {
@@ -63,6 +77,7 @@ impl MockDaService {
             blocks_to_finality,
             finalized_header_sender: tx,
             wait_attempts: 100_0000,
+            planned_fork: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -107,6 +122,26 @@ impl MockDaService {
                 .add_blob(&blob, Default::default(), &mut blocks)
                 .await?;
         }
+
+        Ok(())
+    }
+
+    /// Set planned fork, that will be executed at specified height
+    pub async fn set_planned_fork(&self, planned_fork: PlannedFork) -> anyhow::Result<()> {
+        let last_finalized_height = {
+            let blocks = self.blocks.write().await;
+            self.get_last_finalized_height(&blocks).await
+        };
+        if last_finalized_height > planned_fork.trigger_at_height {
+            anyhow::bail!(
+                "Cannot fork at height {}, last finalized height is {}",
+                planned_fork.trigger_at_height,
+                last_finalized_height
+            );
+        }
+
+        let mut fork = self.planned_fork.lock().unwrap();
+        *fork = Some(planned_fork);
 
         Ok(())
     }
@@ -167,6 +202,26 @@ impl MockDaService {
 
         Ok(height)
     }
+
+    /// Executes planned fork if it is planned at given height
+    async fn planned_fork_handler(&self, height: u64) -> anyhow::Result<()> {
+        let planned_fork_now = {
+            let mut planned_fork_guard = self.planned_fork.lock().unwrap();
+            if planned_fork_guard
+                .as_ref()
+                .map_or(false, |x| x.trigger_at_height == height)
+            {
+                Some(planned_fork_guard.take().unwrap())
+            } else {
+                None
+            }
+        };
+        if let Some(planned_fork_now) = planned_fork_now {
+            self.fork_at(planned_fork_now.fork_height, planned_fork_now.blobs)
+                .await?;
+        }
+        Ok(())
+    }
 }
 
 #[pin_project]
@@ -213,6 +268,8 @@ impl DaService for MockDaService {
         if height == 0 {
             anyhow::bail!("The lowest queryable block should be > 0");
         }
+        // Fork logic
+        self.planned_fork_handler(height).await?;
         // Block until there's something
         self.wait_for_height(height).await?;
         // Locking blocks here, so submissions has to wait
@@ -346,6 +403,11 @@ mod tests {
             "The lowest queryable block should be > 0",
             zero_block.unwrap_err().to_string()
         );
+
+        {
+            let has_planned_fork = da.planned_fork.lock().unwrap();
+            assert!(has_planned_fork.is_none());
+        }
     }
 
     async fn get_finalized_headers_collector(
@@ -633,6 +695,58 @@ mod tests {
 
             assert_eq!(block_2_after, block_2_after_reorg);
             assert_ne!(block_3_after, block_3_after_reorg);
+        }
+
+        #[tokio::test]
+        async fn test_planned_reorg() {
+            let mut da = MockDaService::with_finality(MockAddress::new([1; 32]), 4);
+            da.wait_attempts = 2;
+
+            // Planned for will replace blocks at height 3 and 4
+            let planned_fork = PlannedFork {
+                trigger_at_height: 4,
+                fork_height: 2,
+                blobs: vec![vec![3, 3, 3, 3], vec![4, 4, 4, 4]],
+            };
+
+            da.set_planned_fork(planned_fork).await.unwrap();
+            {
+                let has_planned_fork = da.planned_fork.lock().unwrap();
+                assert!(has_planned_fork.is_some());
+            }
+
+            // 1 -> 2 -> 3.1 -> 4.1
+            //      \ -> 3.2 -> 4.2
+
+            da.send_transaction(&[1, 2, 3, 4]).await.unwrap();
+            da.send_transaction(&[4, 5, 6, 7]).await.unwrap();
+            da.send_transaction(&[8, 9, 0, 1]).await.unwrap();
+
+            let block_1_before = da.get_block_at(1).await.unwrap();
+            let block_2_before = da.get_block_at(2).await.unwrap();
+            assert_eq!(
+                block_1_before.header().hash(),
+                block_2_before.header().prev_hash()
+            );
+            let block_3_before = da.get_block_at(3).await.unwrap();
+            assert_eq!(
+                block_2_before.header().hash(),
+                block_3_before.header().prev_hash()
+            );
+            let block_4 = da.get_block_at(4).await.unwrap();
+            {
+                let has_planned_fork = da.planned_fork.lock().unwrap();
+                assert!(!has_planned_fork.is_some());
+            }
+
+            // Fork is happening!
+            assert_ne!(block_3_before.header().hash(), block_4.header().prev_hash());
+            let block_3_after = da.get_block_at(3).await.unwrap();
+            assert_eq!(block_3_after.header().hash(), block_4.header().prev_hash());
+            assert_eq!(
+                block_2_before.header().hash(),
+                block_3_after.header().prev_hash()
+            );
         }
     }
 }
