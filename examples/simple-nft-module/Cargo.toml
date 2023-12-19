@@ -26,6 +26,7 @@ jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], 
 sov-rollup-interface = { path = "../../rollup-interface" }
 tempfile = { workspace = true }
 simple-nft-module = { version = "*", features = ["native"], path = "." }
+sov-prover-storage-manager = { path = "../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
 
 
 [features]

@@ -2,11 +2,12 @@ use simple_nft_module::{CallMessage, NonFungibleToken, NonFungibleTokenConfig, O
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address as gen_addr_generic;
 use sov_modules_api::{Address, Context, Module, WorkingSet};
+use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
 use sov_rollup_interface::stf::Event;
 use sov_state::{DefaultStorageSpec, ProverStorage};
 
 pub type C = DefaultContext;
-pub type Storage = ProverStorage<DefaultStorageSpec>;
+pub type Storage = ProverStorage<DefaultStorageSpec, SnapshotManager>;
 fn generate_address(name: &str) -> Address {
     gen_addr_generic::<DefaultContext>(name)
 }
@@ -17,13 +18,14 @@ fn genesis_and_mint() {
     let admin = generate_address("admin");
     let owner1 = generate_address("owner2");
     let owner2 = generate_address("owner2");
+    let sequencer = generate_address("sequencer");
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
         admin,
         owners: vec![(0, owner1)],
     };
 
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let nft = NonFungibleToken::default();
 
     // Genesis
@@ -38,7 +40,7 @@ fn genesis_and_mint() {
 
     // Mint, anybody can mint
     let mint_message = CallMessage::Mint { id: 1 };
-    let owner2_context = C::new(owner2, 1);
+    let owner2_context = C::new(owner2, sequencer, 1);
     nft.call(mint_message.clone(), &owner2_context, &mut working_set)
         .expect("Minting failed");
 
@@ -61,17 +63,17 @@ fn genesis_and_mint() {
 fn transfer() {
     // Preparation
     let admin = generate_address("admin");
-    let admin_context = C::new(admin, 1);
+    let sequencer = generate_address("sequencer");
+    let admin_context = C::new(admin, sequencer, 1);
     let owner1 = generate_address("owner2");
-    let owner1_context = C::new(owner1, 1);
+    let owner1_context = C::new(owner1, sequencer, 1);
     let owner2 = generate_address("owner2");
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
         admin,
         owners: vec![(0, admin), (1, owner1), (2, owner2)],
     };
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set: WorkingSet<C> =
-        WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let nft = NonFungibleToken::default();
     nft.genesis(&config, &mut working_set).unwrap();
 
@@ -117,17 +119,17 @@ fn transfer() {
 fn burn() {
     // Preparation
     let admin = generate_address("admin");
-    let admin_context = C::new(admin, 1);
+    let sequencer = generate_address("sequencer");
+    let admin_context = C::new(admin, sequencer, 1);
     let owner1 = generate_address("owner2");
-    let owner1_context = C::new(owner1, 1);
+    let owner1_context = C::new(owner1, sequencer, 1);
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
         admin,
         owners: vec![(0, owner1)],
     };
 
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set: WorkingSet<C> =
-        WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let nft = NonFungibleToken::default();
     nft.genesis(&config, &mut working_set).unwrap();
 

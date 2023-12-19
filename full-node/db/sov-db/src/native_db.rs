@@ -1,7 +1,8 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use sov_schema_db::{SchemaBatch, DB};
+use sov_schema_db::snapshot::{DbSnapshot, QueryManager, ReadOnlyDbSnapshot};
+use sov_schema_db::SchemaBatch;
 
 use crate::rocks_db_config::gen_rocksdb_options;
 use crate::schema::tables::{ModuleAccessoryState, NATIVE_TABLES};
@@ -10,32 +11,52 @@ use crate::schema::types::AccessoryKey;
 /// Specifies a particular version of the Accessory state.
 pub type Version = u64;
 
-/// A typed wrapper around RocksDB for storing native-only accessory state.
-/// Internally, this is roughly just an [`Arc<SchemaDB>`].
-#[derive(Clone, Debug)]
-pub struct NativeDB {
-    /// The underlying RocksDB instance, wrapped in an [`Arc`] for convenience
-    /// and [`DB`] for type safety.
-    db: Arc<DB>,
+/// Typesafe wrapper for Data, that is not part of the provable state
+/// TODO: Rename to AccessoryDb
+#[derive(Debug)]
+pub struct NativeDB<Q> {
+    /// Pointer to [`DbSnapshot`] for up to date state
+    db: Arc<DbSnapshot<Q>>,
 }
 
-impl NativeDB {
-    const DB_PATH_SUFFIX: &'static str = "native";
-    const DB_NAME: &'static str = "native-db";
+impl<Q> Clone for NativeDB<Q> {
+    fn clone(&self) -> Self {
+        NativeDB {
+            db: self.db.clone(),
+        }
+    }
+}
 
-    /// Opens a [`NativeDB`] (backed by RocksDB) at the specified path.
-    /// The returned instance will be at the path `{path}/native-db`.
-    pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
+impl<Q> NativeDB<Q> {
+    const DB_PATH_SUFFIX: &'static str = "native-db";
+    const DB_NAME: &'static str = "native";
+
+    /// Initialize [`sov_schema_db::DB`] that matches tables and columns for NativeDB
+    pub fn setup_schema_db(path: impl AsRef<Path>) -> anyhow::Result<sov_schema_db::DB> {
         let path = path.as_ref().join(Self::DB_PATH_SUFFIX);
-        let inner = DB::open(
+        sov_schema_db::DB::open(
             path,
             Self::DB_NAME,
             NATIVE_TABLES.iter().copied(),
             &gen_rocksdb_options(&Default::default(), false),
-        )?;
+        )
+    }
 
+    /// Convert it to [`ReadOnlyDbSnapshot`] which cannot be edited anymore
+    pub fn freeze(self) -> anyhow::Result<ReadOnlyDbSnapshot> {
+        let inner = Arc::into_inner(self.db).ok_or(anyhow::anyhow!(
+            "NativeDB underlying DbSnapshot has more than 1 strong references"
+        ))?;
+        Ok(ReadOnlyDbSnapshot::from(inner))
+    }
+}
+
+impl<Q: QueryManager> NativeDB<Q> {
+    /// Create instance of [`NativeDB`] from [`DbSnapshot`]
+    pub fn with_db_snapshot(db_snapshot: DbSnapshot<Q>) -> anyhow::Result<Self> {
+        // We keep Result type, just for future archival state integration
         Ok(Self {
-            db: Arc::new(inner),
+            db: Arc::new(db_snapshot),
         })
     }
 
@@ -45,12 +66,11 @@ impl NativeDB {
         key: &AccessoryKey,
         version: Version,
     ) -> anyhow::Result<Option<Vec<u8>>> {
-        let mut iter = self.db.iter::<ModuleAccessoryState>()?;
-        iter.seek_for_prev(&(key.to_vec(), version))?;
-        let found = iter.next();
+        let found = self
+            .db
+            .get_prev::<ModuleAccessoryState>(&(key.to_vec(), version))?;
         match found {
-            Some(result) => {
-                let ((found_key, found_version), value) = result?.into_tuple();
+            Some(((found_key, found_version), value)) => {
                 if &found_key == key {
                     anyhow::ensure!(found_version <= version, "Bug! iterator isn't returning expected values. expected a version <= {version:} but found {found_version:}");
                     Ok(value)
@@ -72,95 +92,28 @@ impl NativeDB {
         for (key, value) in key_value_pairs {
             batch.put::<ModuleAccessoryState>(&(key, version), &value)?;
         }
-        self.db.write_schemas(batch)
-    }
-}
-
-#[cfg(feature = "arbitrary")]
-pub mod arbitrary {
-    //! Arbitrary definitions for the [`NativeDB`].
-
-    use core::ops::{Deref, DerefMut};
-
-    use proptest::strategy::LazyJust;
-    use tempfile::TempDir;
-
-    use super::*;
-
-    /// Arbitrary instance of [`NativeDB`].
-    ///
-    /// This is a db wrapper bound to its temporary path that will be deleted once the type is
-    /// dropped.
-    #[derive(Debug)]
-    pub struct ArbitraryNativeDB {
-        /// The underlying RocksDB instance.
-        pub db: NativeDB,
-        /// The temporary directory used to create the [`NativeDB`].
-        pub path: TempDir,
-    }
-
-    /// A fallible, arbitrary instance of [`NativeDB`].
-    ///
-    /// This type is suitable for operations that are expected to be infallible. The internal
-    /// implementation of the db requires I/O to create the temporary dir, making it fallible.
-    #[derive(Debug)]
-    pub struct FallibleArbitraryNativeDB {
-        /// The result of the new db instance.
-        pub result: anyhow::Result<ArbitraryNativeDB>,
-    }
-
-    impl Deref for ArbitraryNativeDB {
-        type Target = NativeDB;
-
-        fn deref(&self) -> &Self::Target {
-            &self.db
-        }
-    }
-
-    impl DerefMut for ArbitraryNativeDB {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.db
-        }
-    }
-
-    impl<'a> ::arbitrary::Arbitrary<'a> for ArbitraryNativeDB {
-        fn arbitrary(_u: &mut ::arbitrary::Unstructured<'a>) -> ::arbitrary::Result<Self> {
-            let path = TempDir::new().map_err(|_| ::arbitrary::Error::NotEnoughData)?;
-            let db = NativeDB::with_path(&path).map_err(|_| ::arbitrary::Error::IncorrectFormat)?;
-            Ok(Self { db, path })
-        }
-    }
-
-    impl proptest::arbitrary::Arbitrary for FallibleArbitraryNativeDB {
-        type Parameters = ();
-        type Strategy = LazyJust<Self, fn() -> FallibleArbitraryNativeDB>;
-
-        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
-            fn gen() -> FallibleArbitraryNativeDB {
-                FallibleArbitraryNativeDB {
-                    result: TempDir::new()
-                        .map_err(|e| {
-                            anyhow::anyhow!(format!("failed to generate path for NativeDB: {e}"))
-                        })
-                        .and_then(|path| {
-                            let db = NativeDB::with_path(&path)?;
-                            Ok(ArbitraryNativeDB { db, path })
-                        }),
-                }
-            }
-            LazyJust::new(gen)
-        }
+        self.db.write_many(batch)?;
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::RwLock;
+
+    use sov_schema_db::snapshot::{NoopQueryManager, ReadOnlyLock};
+
     use super::*;
+
+    fn setup_db() -> NativeDB<NoopQueryManager> {
+        let manager = ReadOnlyLock::new(Arc::new(RwLock::new(Default::default())));
+        let db_snapshot = DbSnapshot::<NoopQueryManager>::new(0, manager);
+        NativeDB::with_db_snapshot(db_snapshot).unwrap()
+    }
 
     #[test]
     fn get_after_set() {
-        let tmpdir = tempfile::tempdir().unwrap();
-        let db = NativeDB::with_path(tmpdir.path()).unwrap();
+        let db = setup_db();
 
         let key = b"foo".to_vec();
         let value = b"bar".to_vec();
@@ -175,8 +128,7 @@ mod tests {
 
     #[test]
     fn get_after_delete() {
-        let tmpdir = tempfile::tempdir().unwrap();
-        let db = NativeDB::with_path(tmpdir.path()).unwrap();
+        let db = setup_db();
 
         let key = b"deleted".to_vec();
         db.set_values(vec![(key.clone(), None)], 0).unwrap();
@@ -185,8 +137,7 @@ mod tests {
 
     #[test]
     fn get_nonexistent() {
-        let tmpdir = tempfile::tempdir().unwrap();
-        let db = NativeDB::with_path(tmpdir.path()).unwrap();
+        let db = setup_db();
 
         let key = b"spam".to_vec();
         assert_eq!(db.get_value_option(&key, 0).unwrap(), None);

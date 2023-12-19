@@ -6,11 +6,11 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use crate::schema::{KeyDecoder, KeyEncoder, ValueCodec};
 use crate::{CodecError, Schema, SeekKeyEncoder};
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 /// Key that composed out of tuple of r u32
 pub struct TestCompositeField(pub u32, pub u32, pub u32);
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 /// Simple value around u32
 pub struct TestField(pub u32);
 
@@ -54,7 +54,7 @@ impl<S: Schema> SeekKeyEncoder<S> for TestCompositeField {
 }
 
 impl TestField {
-    fn to_bytes(&self) -> Vec<u8> {
+    fn as_bytes(&self) -> Vec<u8> {
         self.0.to_be_bytes().to_vec()
     }
 
@@ -70,7 +70,7 @@ impl TestField {
 
 impl<S: Schema> ValueCodec<S> for TestField {
     fn encode_value(&self) -> Result<Vec<u8>, CodecError> {
-        Ok(self.to_bytes())
+        Ok(self.as_bytes())
     }
 
     fn decode_value(data: &[u8]) -> Result<Self, CodecError> {
@@ -86,7 +86,7 @@ impl<S: Schema> KeyDecoder<S> for TestField {
 
 impl<S: Schema> KeyEncoder<S> for TestField {
     fn encode_key(&self) -> std::result::Result<Vec<u8>, CodecError> {
-        Ok(self.to_bytes())
+        Ok(self.as_bytes())
     }
 }
 

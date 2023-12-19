@@ -1,5 +1,8 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
+
+use std::rc::Rc;
+
 mod batch;
 pub mod kernels;
 mod stf_blueprint;
@@ -21,11 +24,22 @@ pub use stf_blueprint::StfBlueprint;
 use tracing::info;
 pub use tx_verifier::RawTx;
 
+/// The tx hook for a blueprint runtime
+pub struct RuntimeTxHook<C: Context> {
+    /// Height to initialize the context
+    pub height: u64,
+    /// Sequencer public key
+    pub sequencer: Rc<C::PublicKey>,
+}
+
 /// This trait has to be implemented by a runtime in order to be used in `StfBlueprint`.
+///
+/// The `TxHooks` implementation sets up a transaction context based on the height at which it is
+/// to be executed.
 pub trait Runtime<C: Context, Da: DaSpec>:
     DispatchCall<Context = C>
     + Genesis<Context = C, Config = Self::GenesisConfig>
-    + TxHooks<Context = C>
+    + TxHooks<Context = C, PreArg = RuntimeTxHook<C>, PreResult = C>
     + SlotHooks<Da, Context = C>
     + FinalizeHook<Da, Context = C>
     + ApplyBlobHooks<
@@ -127,6 +141,7 @@ where
     ) -> (
         <<C as Spec>::Storage as Storage>::Root,
         <<C as Spec>::Storage as Storage>::Witness,
+        C::Storage,
     ) {
         // Run end end_slot_hook
         let mut working_set = checkpoint.to_revertable();
@@ -150,7 +165,7 @@ where
 
         storage.commit(&state_update, &accessory_log);
 
-        (root_hash, witness)
+        (root_hash, witness, storage)
     }
 }
 
@@ -166,7 +181,7 @@ where
 
     type GenesisParams = <RT as Genesis>::Config;
     type PreState = C::Storage;
-    type ChangeSet = ();
+    type ChangeSet = C::Storage;
 
     type TxReceiptContents = TxEffect;
 
@@ -202,9 +217,10 @@ where
         let accessory_log = working_set.checkpoint().freeze_non_provable();
 
         // TODO: Commit here for now, but probably this can be done outside of STF
+        // TODO: Commit is fine
         pre_state.commit(&state_update, &accessory_log);
 
-        (genesis_hash, ())
+        (genesis_hash, pre_state)
     }
 
     fn apply_slot<'a, I>(
@@ -269,10 +285,10 @@ where
             batch_receipts.push(batch_receipt);
         }
 
-        let (state_root, witness) = self.end_slot(pre_state, checkpoint);
+        let (state_root, witness, storage) = self.end_slot(pre_state, checkpoint);
         SlotResult {
             state_root,
-            change_set: (),
+            change_set: storage,
             batch_receipts,
             witness,
         }

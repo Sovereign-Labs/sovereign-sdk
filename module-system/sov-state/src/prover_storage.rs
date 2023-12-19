@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
-use std::path::Path;
 use std::sync::Arc;
 
 use jmt::storage::{NodeBatch, TreeWriter};
 use jmt::{JellyfishMerkleTree, KeyHash, Version};
 use sov_db::native_db::NativeDB;
+use sov_db::schema::{QueryManager, ReadOnlyDbSnapshot};
 use sov_db::state_db::StateDB;
 use sov_modules_core::{
     CacheKey, NativeStorage, OrderedReadsAndWrites, Storage, StorageKey, StorageProof,
@@ -16,13 +16,13 @@ use crate::MerkleProofSpec;
 
 /// A [`Storage`] implementation to be used by the prover in a native execution
 /// environment (outside of the zkVM).
-pub struct ProverStorage<S: MerkleProofSpec> {
-    db: StateDB,
-    native_db: NativeDB,
+pub struct ProverStorage<S: MerkleProofSpec, Q> {
+    db: StateDB<Q>,
+    native_db: NativeDB<Q>,
     _phantom_hasher: PhantomData<S::Hasher>,
 }
 
-impl<S: MerkleProofSpec> Clone for ProverStorage<S> {
+impl<S: MerkleProofSpec, Q> Clone for ProverStorage<S, Q> {
     fn clone(&self) -> Self {
         Self {
             db: self.db.clone(),
@@ -32,21 +32,9 @@ impl<S: MerkleProofSpec> Clone for ProverStorage<S> {
     }
 }
 
-impl<S: MerkleProofSpec> ProverStorage<S> {
-    /// Creates a new [`ProverStorage`] instance at the specified path, opening
-    /// or creating the necessary RocksDB database(s) at the specified path.
-    pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
-        let state_db = StateDB::with_path(&path)?;
-        let native_db = NativeDB::with_path(&path)?;
-
-        Ok(Self {
-            db: state_db,
-            native_db,
-            _phantom_hasher: Default::default(),
-        })
-    }
-
-    pub(crate) fn with_db_handles(db: StateDB, native_db: NativeDB) -> Self {
+impl<S: MerkleProofSpec, Q> ProverStorage<S, Q> {
+    /// Creates a new [`ProverStorage`] instance from specified db handles
+    pub fn with_db_handles(db: StateDB<Q>, native_db: NativeDB<Q>) -> Self {
         Self {
             db,
             native_db,
@@ -54,6 +42,18 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         }
     }
 
+    /// Converts it to pair of readonly [`ReadOnlyDbSnapshot`]s
+    /// First is from [`StateDB`]
+    /// Second is from [`NativeDB`]
+    pub fn freeze(self) -> anyhow::Result<(ReadOnlyDbSnapshot, ReadOnlyDbSnapshot)> {
+        let ProverStorage { db, native_db, .. } = self;
+        let state_db_snapshot = db.freeze()?;
+        let native_db_snapshot = native_db.freeze()?;
+        Ok((state_db_snapshot, native_db_snapshot))
+    }
+}
+
+impl<S: MerkleProofSpec, Q: QueryManager> ProverStorage<S, Q> {
     fn read_value(&self, key: &StorageKey, version: Option<Version>) -> Option<StorageValue> {
         let version_to_use = version.unwrap_or_else(|| self.db.get_next_version());
         match self
@@ -72,16 +72,12 @@ pub struct ProverStateUpdate {
     pub key_preimages: Vec<(KeyHash, CacheKey)>,
 }
 
-impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
+impl<S: MerkleProofSpec, Q: QueryManager> Storage for ProverStorage<S, Q> {
     type Witness = S::Witness;
     type RuntimeConfig = Config;
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
     type Root = jmt::RootHash;
     type StateUpdate = ProverStateUpdate;
-
-    fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
-        Self::with_path(config.path.as_path())
-    }
 
     fn get(
         &self,
@@ -221,9 +217,9 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     }
 }
 
-impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
+impl<S: MerkleProofSpec, Q: QueryManager> NativeStorage for ProverStorage<S, Q> {
     fn get_with_proof(&self, key: StorageKey) -> StorageProof<Self::Proof> {
-        let merkle = JellyfishMerkleTree::<StateDB, S::Hasher>::new(&self.db);
+        let merkle = JellyfishMerkleTree::<StateDB<Q>, S::Hasher>::new(&self.db);
         let (val_opt, proof) = merkle
             .get_with_proof(
                 KeyHash::with::<S::Hasher>(key.as_ref()),
@@ -237,8 +233,8 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
         }
     }
 
-    fn get_root_hash(&self, version: Version) -> Result<jmt::RootHash, anyhow::Error> {
-        let temp_merkle: JellyfishMerkleTree<'_, StateDB, S::Hasher> =
+    fn get_root_hash(&self, version: Version) -> anyhow::Result<jmt::RootHash> {
+        let temp_merkle: JellyfishMerkleTree<'_, StateDB<Q>, S::Hasher> =
             JellyfishMerkleTree::new(&self.db);
         temp_merkle.get_root_hash(version)
     }

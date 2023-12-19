@@ -208,10 +208,6 @@ pub trait Storage: Clone {
     /// State update that will be committed to the database.
     type StateUpdate;
 
-    /// Creates a new instance of this [`Storage`] type, with some configuration
-    /// options.
-    fn with_config(config: Self::RuntimeConfig) -> anyhow::Result<Self>;
-
     /// Returns the value corresponding to the key or None if key is absent.
     fn get(
         &self,
@@ -283,7 +279,7 @@ pub trait Storage: Clone {
     fn is_empty(&self) -> bool;
 }
 
-// Used only in tests.
+/// Used only in tests.
 impl From<&str> for StorageKey {
     fn from(key: &str) -> Self {
         Self {
@@ -292,7 +288,7 @@ impl From<&str> for StorageKey {
     }
 }
 
-// Used only in tests.
+/// Used only in tests.
 impl From<&str> for StorageValue {
     fn from(value: &str) -> Self {
         Self {

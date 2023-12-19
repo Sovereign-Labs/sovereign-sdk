@@ -15,6 +15,8 @@ pub const ANOTHER_SEQUENCER_KEY: &str = "sequencer_2";
 pub const ANOTHER_SEQUENCER_DA_ADDRESS: [u8; 32] = [2; 32];
 pub const UNKNOWN_SEQUENCER_KEY: &str = "sequencer_3";
 #[allow(dead_code)]
+pub const REWARD_SEQUENCER_KEY: &str = "sequencer_4";
+#[allow(dead_code)]
 pub const UNKNOWN_SEQUENCER_DA_ADDRESS: [u8; 32] = [3; 32];
 pub const LOW_FUND_KEY: &str = "zero_funds";
 pub const INITIAL_BALANCE: u64 = 210;

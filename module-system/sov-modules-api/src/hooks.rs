@@ -4,24 +4,42 @@ use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use crate::transaction::Transaction;
 
 /// Hooks that execute within the `StateTransitionFunction::apply_blob` function for each processed transaction.
+///
+/// The arguments consist of expected concretely implemented associated types for the hooks. At
+/// runtime, compatible implementations are selected and utilized by the system to construct its
+/// setup procedures and define post-execution routines.
 pub trait TxHooks {
     type Context: Context;
 
+    /// # Additional context
+    ///
+    /// To prevent cloning of the `PreArg` object even when passed as owned, an affordable
+    /// alternative is to utilize [std::rc::Rc] for owning the underlying data. Subsequently,
+    /// acquire its owned values once the hooks have been executed.
+    ///
+    /// [std::rc::Rc], in comparison to [std::sync::Arc], tends to be faster since the dispatch
+    /// process does not occur within an `async` context. Consequently, we are relieved from
+    /// dealing with thread synchronization concerns. Although this performance improvement
+    /// primarily pertains to write operations - which infrequently occur on hook arguments - the
+    /// resulting trade-off is worthwhile without additional cost. For further details, please
+    /// refer to https://spcl.inf.ethz.ch/Publications/.pdf/atomic-bench.pdf.
+    type PreArg;
+    type PreResult;
+
     /// Runs just before a transaction is dispatched to an appropriate module.
-    /// TODO: Why does it return address?
-    /// Does it implies that it should do signature verification.
-    /// Can other code rely on that assumption?
     fn pre_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
         working_set: &mut WorkingSet<Self::Context>,
-    ) -> anyhow::Result<<Self::Context as Spec>::Address>;
+        arg: Self::PreArg,
+    ) -> anyhow::Result<Self::PreResult>;
 
     /// Runs after the tx is dispatched to an appropriate module.
     /// IF this hook returns error rollup panics
     fn post_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
+        ctx: &Self::Context,
         working_set: &mut WorkingSet<Self::Context>,
     ) -> anyhow::Result<()>;
 }

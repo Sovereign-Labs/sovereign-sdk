@@ -110,7 +110,7 @@ pub trait DaService: Send + Sync + 'static {
     /// Returns nothing if the transaction was successfully sent.
     async fn send_transaction(&self, blob: &[u8]) -> Result<Self::TransactionId, Self::Error>;
 
-    /// Sends am aggrgated zk proof to the DA.
+    /// Sends am aggregated ZK proofs to the DA layer.
     async fn send_aggregated_zk_proof(
         &self,
         aggregated_proof_data: &[u8],
@@ -121,8 +121,8 @@ pub trait DaService: Send + Sync + 'static {
 }
 
 /// `SlotData` is the subset of a DA layer block which is stored in the rollup's database.
-/// At the very least, the rollup needs access to the hashes and headers of all DA layer blocks, but rollups
-/// may choose to store partial (or full) block data as well.
+/// At the very least, the rollup needs access to the hashes and headers of all DA layer blocks,
+/// but rollup may choose to store partial (or full) block data as well.
 pub trait SlotData:
     Serialize + DeserializeOwned + PartialEq + core::fmt::Debug + Clone + Send + Sync
 {

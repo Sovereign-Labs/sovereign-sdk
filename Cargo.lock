@@ -548,15 +548,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "atomic-polyfill"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cf2bce30dfe09ef0bfaef228b9d414faaf7e563035494d7fe092dba54b300f4"
-dependencies = [
- "critical-section",
-]
-
-[[package]]
 name = "attohttpc"
 version = "0.16.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2205,6 +2196,7 @@ dependencies = [
  "sov-modules-api",
  "sov-modules-stf-blueprint",
  "sov-nft-module",
+ "sov-prover-storage-manager",
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
@@ -3709,7 +3701,7 @@ version = "0.7.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db04bc24a18b9ea980628ecf00e6c0264f3c1426dac36c00cb49b6fbad8b0743"
 dependencies = [
- "atomic-polyfill 0.1.11",
+ "atomic-polyfill",
  "hash32",
  "rustc_version 0.4.0",
  "serde",
@@ -4282,6 +4274,7 @@ dependencies = [
  "sov-mock-zkvm",
  "sov-modules-api",
  "sov-modules-stf-blueprint",
+ "sov-prover-storage-manager",
  "sov-rollup-interface",
  "sov-schema-db",
  "sov-state",
@@ -4997,9 +4990,9 @@ dependencies = [
 
 [[package]]
 name = "markdown"
-version = "1.0.0-alpha.15"
+version = "1.0.0-alpha.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff9c0d28952698a9accc957767f2bcad203ec10251601f89b9ddc82661c3a15a"
+checksum = "5b0f0025e8c0d89b84d6dc63e859475e40e8e82ab1a08be0a93ad5731513a508"
 dependencies = [
  "unicode-id",
 ]
@@ -5213,6 +5206,7 @@ dependencies = [
  "serde_json",
  "sov-bank",
  "sov-modules-api",
+ "sov-prover-storage-manager",
  "sov-state",
  "tempfile",
  "thiserror",
@@ -5584,12 +5578,12 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.18.0"
+version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd8b5dd2ae5ed71462c540258bedcb51965123ad7e7ccf4b9a8cafaa4a63576d"
+checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 dependencies = [
- "atomic-polyfill 1.0.3",
  "critical-section",
+ "portable-atomic",
 ]
 
 [[package]]
@@ -8325,6 +8319,7 @@ dependencies = [
  "serde_json",
  "simple-nft-module",
  "sov-modules-api",
+ "sov-prover-storage-manager",
  "sov-rollup-interface",
  "sov-state",
  "tempfile",
@@ -8445,6 +8440,7 @@ dependencies = [
  "jsonrpsee 0.20.3",
  "serde",
  "sov-modules-api",
+ "sov-prover-storage-manager",
  "sov-state",
  "tempfile",
 ]
@@ -8465,6 +8461,7 @@ dependencies = [
  "serde_json",
  "sov-accounts",
  "sov-modules-api",
+ "sov-prover-storage-manager",
  "sov-state",
  "tempfile",
  "thiserror",
@@ -8486,6 +8483,7 @@ dependencies = [
  "sov-mock-da",
  "sov-mock-zkvm",
  "sov-modules-api",
+ "sov-prover-storage-manager",
  "sov-rollup-interface",
  "sov-state",
  "tempfile",
@@ -8532,6 +8530,7 @@ dependencies = [
  "serde_json",
  "sov-bank",
  "sov-modules-api",
+ "sov-prover-storage-manager",
  "sov-state",
  "tempfile",
  "thiserror",
@@ -8556,6 +8555,7 @@ dependencies = [
  "sov-chain-state",
  "sov-mock-da",
  "sov-modules-api",
+ "sov-prover-storage-manager",
  "sov-sequencer-registry",
  "sov-state",
  "tempfile",
@@ -8611,6 +8611,7 @@ dependencies = [
  "sov-data-generators",
  "sov-mock-da",
  "sov-modules-api",
+ "sov-prover-storage-manager",
  "sov-state",
  "tempfile",
 ]
@@ -8657,12 +8658,16 @@ dependencies = [
  "bincode",
  "borsh",
  "byteorder",
+ "criterion",
  "jmt",
  "proptest",
  "proptest-derive",
+ "rand 0.8.5",
  "rocksdb",
  "serde",
+ "sha2 0.10.8",
  "sov-mock-da",
+ "sov-prover-storage-manager",
  "sov-rollup-interface",
  "sov-schema-db",
  "tempfile",
@@ -8689,6 +8694,7 @@ dependencies = [
  "ethers-providers",
  "ethers-signers",
  "hex",
+ "humantime",
  "jsonrpsee 0.20.3",
  "log",
  "log4rs",
@@ -8716,6 +8722,7 @@ dependencies = [
  "sov-modules-rollup-blueprint",
  "sov-modules-stf-blueprint",
  "sov-nft-module",
+ "sov-prover-storage-manager",
  "sov-risc0-adapter",
  "sov-rng-da-service",
  "sov-rollup-interface",
@@ -8780,6 +8787,7 @@ dependencies = [
  "serde_json",
  "sov-evm",
  "sov-modules-api",
+ "sov-prover-storage-manager",
  "sov-state",
  "tempfile",
  "thiserror",
@@ -8880,6 +8888,7 @@ dependencies = [
  "sov-modules-api",
  "sov-modules-core",
  "sov-modules-macros",
+ "sov-prover-storage-manager",
  "sov-rollup-interface",
  "sov-state",
  "sov-zk-cycle-macros",
@@ -8908,6 +8917,7 @@ dependencies = [
  "sov-mock-da",
  "sov-modules-api",
  "sov-modules-core",
+ "sov-prover-storage-manager",
  "sov-rollup-interface",
  "sov-state",
  "tempfile",
@@ -8995,6 +9005,7 @@ dependencies = [
  "sov-modules-api",
  "sov-modules-macros",
  "sov-nft-module",
+ "sov-prover-storage-manager",
  "sov-state",
  "tempfile",
  "tokio",
@@ -9016,6 +9027,7 @@ dependencies = [
  "sov-mock-zkvm",
  "sov-modules-api",
  "sov-prover-incentives",
+ "sov-prover-storage-manager",
  "sov-state",
  "tempfile",
 ]
@@ -9025,13 +9037,16 @@ name = "sov-prover-storage-manager"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "byteorder",
+ "criterion",
+ "rand 0.8.5",
+ "sha2 0.10.8",
  "sov-db",
  "sov-mock-da",
  "sov-rollup-interface",
  "sov-schema-db",
  "sov-state",
  "tempfile",
+ "tracing",
 ]
 
 [[package]]
@@ -9117,9 +9132,12 @@ dependencies = [
  "jsonrpsee 0.20.3",
  "rand 0.8.5",
  "serde",
+ "sov-db",
  "sov-mock-da",
  "sov-modules-api",
+ "sov-prover-storage-manager",
  "sov-rollup-interface",
+ "sov-schema-db",
  "sov-state",
  "sov-value-setter",
  "tempfile",
@@ -9146,6 +9164,7 @@ dependencies = [
  "sov-bank",
  "sov-mock-da",
  "sov-modules-api",
+ "sov-prover-storage-manager",
  "sov-sequencer-registry",
  "sov-state",
  "sov-zk-cycle-macros",
@@ -9192,6 +9211,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+ "sha2 0.10.8",
  "sov-accounts",
  "sov-bank",
  "sov-celestia-adapter",
@@ -9200,6 +9220,7 @@ dependencies = [
  "sov-mock-zkvm",
  "sov-modules-api",
  "sov-modules-stf-blueprint",
+ "sov-prover-storage-manager",
  "sov-rollup-interface",
  "sov-sequencer",
  "sov-sequencer-registry",
@@ -9224,6 +9245,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
+ "sov-prover-storage-manager",
  "sov-state",
  "sov-value-setter",
  "tempfile",
@@ -9242,6 +9264,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
+ "sov-prover-storage-manager",
  "sov-state",
  "tempfile",
  "thiserror",
@@ -10339,22 +10362,22 @@ dependencies = [
 
 [[package]]
 name = "thiserror-core"
-version = "1.0.38"
+version = "1.0.50"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d97345f6437bb2004cd58819d8a9ef8e36cdd7661c2abc4bbde0a7c40d9f497"
+checksum = "c001ee18b7e5e3f62cbf58c7fe220119e68d902bb7443179c0c8aef30090e999"
 dependencies = [
  "thiserror-core-impl",
 ]
 
 [[package]]
 name = "thiserror-core-impl"
-version = "1.0.38"
+version = "1.0.50"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10ac1c5050e43014d16b2f94d0d2ce79e65ffdd8b38d8048f9c8f6a8a6da62ac"
+checksum = "e4c60d69f36615a077cc7663b9cb8e42275722d23e58a7fa3d2c7f2915d09d04"
 dependencies = [
  "proc-macro2 1.0.69",
  "quote 1.0.33",
- "syn 1.0.109",
+ "syn 2.0.39",
 ]
 
 [[package]]
@@ -10494,9 +10517,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.34.0"
+version = "1.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0c014766411e834f7af5b8f4cf46257aab4036ca95e9d2c144a10f59ad6f5b9"
+checksum = "841d45b238a16291a4e1584e61820b8ae57d696cc5015c459c229ccc6990cc1c"
 dependencies = [
  "backtrace",
  "bytes",

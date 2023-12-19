@@ -92,7 +92,7 @@ where
 #[cfg(all(test, feature = "native"))]
 mod test {
     use sov_modules_core::{Prefix, WorkingSet};
-    use sov_state::{DefaultStorageSpec, ProverStorage};
+    use sov_prover_storage_manager::new_orphan_storage;
 
     use crate::containers::traits::vec_tests::Testable;
     use crate::default_context::DefaultContext;
@@ -101,7 +101,7 @@ mod test {
     #[test]
     fn test_state_vec() {
         let tmpdir = tempfile::tempdir().unwrap();
-        let storage = ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap();
+        let storage = new_orphan_storage(tmpdir.path()).unwrap();
         let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(storage);
 
         let prefix = Prefix::new("test".as_bytes().to_vec());

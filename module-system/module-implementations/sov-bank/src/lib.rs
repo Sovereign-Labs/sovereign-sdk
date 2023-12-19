@@ -12,6 +12,7 @@ mod token;
 pub mod utils;
 pub use call::*;
 pub use genesis::*;
+pub use hooks::BankTxHook;
 use sov_modules_api::{CallResponse, Error, GasUnit, ModuleInfo, WorkingSet};
 use token::Token;
 /// Specifies an interface to interact with tokens.

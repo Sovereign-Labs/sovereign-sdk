@@ -3,43 +3,68 @@ use std::sync::{Arc, Mutex};
 
 use jmt::storage::{HasPreimage, TreeReader, TreeWriter};
 use jmt::{KeyHash, Version};
-use sov_schema_db::{SchemaBatch, DB};
+use sov_schema_db::snapshot::{DbSnapshot, QueryManager, ReadOnlyDbSnapshot};
+use sov_schema_db::SchemaBatch;
 
 use crate::rocks_db_config::gen_rocksdb_options;
 use crate::schema::tables::{JmtNodes, JmtValues, KeyHashToKey, STATE_TABLES};
 use crate::schema::types::StateKey;
 
 /// A typed wrapper around the db for storing rollup state. Internally,
-/// this is roughly just an `Arc<SchemaDB>`.
+/// this is roughly just an [`Arc<sov_schema_db::DB>`] with pointer to list of non-finalized snapshots
 ///
 /// StateDB implements several convenience functions for state storage -
-/// notably the `TreeReader` and `TreeWriter` traits.
-#[derive(Clone, Debug)]
-pub struct StateDB {
-    /// The underlying database instance, wrapped in an [`Arc`] for convenience and [`SchemaDB`] for type safety
-    db: Arc<DB>,
-    /// The [`Version`] that will be used for the next batch of writes to the DB.
+/// notably the [`TreeReader`] and [`TreeWriter`] traits.
+#[derive(Debug)]
+pub struct StateDB<Q> {
+    /// The underlying [`DbSnapshot`] that plays as local cache and pointer to previous snapshots and/or [`sov_schema_db::DB`]
+    db: Arc<DbSnapshot<Q>>,
+    /// The [`Version`] that will be used for the next batch of writes to the DB
+    /// This [`Version`] is also used for querying data,
+    /// so if this instance of StateDB is used as read only, it won't see newer data.
     next_version: Arc<Mutex<Version>>,
 }
 
-const STATE_DB_PATH_SUFFIX: &str = "state";
+// Manual implementation of [`Clone`] to satisfy compiler
+impl<Q> Clone for StateDB<Q> {
+    fn clone(&self) -> Self {
+        StateDB {
+            db: self.db.clone(),
+            next_version: self.next_version.clone(),
+        }
+    }
+}
 
-impl StateDB {
-    /// Open a [`StateDB`] (backed by RocksDB) at the specified path.
-    /// The returned instance will be at the path `{path}/state-db`.
-    pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
-        let path = path.as_ref().join(STATE_DB_PATH_SUFFIX);
-        let inner = DB::open(
-            path,
-            "state-db",
+impl<Q> StateDB<Q> {
+    const DB_PATH_SUFFIX: &'static str = "state";
+    const DB_NAME: &'static str = "state-db";
+
+    /// Initialize [`sov_schema_db::DB`] that should be used by snapshots.
+    pub fn setup_schema_db(path: impl AsRef<Path>) -> anyhow::Result<sov_schema_db::DB> {
+        let state_db_path = path.as_ref().join(Self::DB_PATH_SUFFIX);
+        sov_schema_db::DB::open(
+            state_db_path,
+            Self::DB_NAME,
             STATE_TABLES.iter().copied(),
             &gen_rocksdb_options(&Default::default(), false),
-        )?;
+        )
+    }
 
-        let next_version = Self::last_version_written(&inner)?.unwrap_or_default() + 1;
+    /// Convert it to [`ReadOnlyDbSnapshot`] which cannot be edited anymore
+    pub fn freeze(self) -> anyhow::Result<ReadOnlyDbSnapshot> {
+        let inner = Arc::into_inner(self.db).ok_or(anyhow::anyhow!(
+            "StateDB underlying DbSnapshot has more than 1 strong references"
+        ))?;
+        Ok(ReadOnlyDbSnapshot::from(inner))
+    }
+}
 
+impl<Q: QueryManager> StateDB<Q> {
+    /// Creating instance of [`StateDB`] from [`DbSnapshot`]
+    pub fn with_db_snapshot(db_snapshot: DbSnapshot<Q>) -> anyhow::Result<Self> {
+        let next_version = Self::next_version_from(&db_snapshot)?;
         Ok(Self {
-            db: Arc::new(inner),
+            db: Arc::new(db_snapshot),
             next_version: Arc::new(Mutex::new(next_version)),
         })
     }
@@ -54,7 +79,8 @@ impl StateDB {
         for (key_hash, key) in items.into_iter() {
             batch.put::<KeyHashToKey>(&key_hash.0, key)?;
         }
-        self.db.write_schemas(batch)
+        self.db.write_many(batch)?;
+        Ok(())
     }
 
     /// Get an optional value from the database, given a version and a key hash.
@@ -63,13 +89,9 @@ impl StateDB {
         version: Version,
         key: &StateKey,
     ) -> anyhow::Result<Option<jmt::OwnedValue>> {
-        let mut iter = self.db.iter::<JmtValues>()?;
-        // find the latest instance of the key whose version <= target
-        iter.seek_for_prev(&(&key, version))?;
-        let found = iter.next();
+        let found = self.db.get_prev::<JmtValues>(&(&key, version))?;
         match found {
-            Some(result) => {
-                let ((found_key, found_version), value) = result?.into_tuple();
+            Some(((found_key, found_version), value)) => {
                 if &found_key == key {
                     anyhow::ensure!(found_version <= version, "Bug! iterator isn't returning expected values. expected a version <= {version:} but found {found_version:}");
                     Ok(value)
@@ -93,24 +115,29 @@ impl StateDB {
         *version
     }
 
-    fn last_version_written(db: &DB) -> anyhow::Result<Option<Version>> {
-        let mut iter = db.iter::<JmtNodes>()?;
-        iter.seek_to_last();
+    /// Used to always query for latest possible version!
+    pub fn max_out_next_version(&self) {
+        let mut version = self.next_version.lock().unwrap();
+        *version = u64::MAX - 1;
+    }
 
-        let version = match iter.next() {
-            Some(Ok(item)) => Some(item.key.version()),
-            _ => None,
-        };
-        Ok(version)
+    fn next_version_from(db_snapshot: &DbSnapshot<Q>) -> anyhow::Result<Version> {
+        let last_key_value = db_snapshot.get_largest::<JmtNodes>()?;
+        let largest_version = last_key_value.map(|(k, _)| k.version());
+        let next_version = largest_version
+            .unwrap_or_default()
+            .checked_add(1)
+            .expect("JMT Version overflow. Is is over");
+        Ok(next_version)
     }
 }
 
-impl TreeReader for StateDB {
+impl<Q: QueryManager> TreeReader for StateDB<Q> {
     fn get_node_option(
         &self,
         node_key: &jmt::storage::NodeKey,
     ) -> anyhow::Result<Option<jmt::storage::Node>> {
-        self.db.get::<JmtNodes>(node_key)
+        self.db.read::<JmtNodes>(node_key)
     }
 
     fn get_value_option(
@@ -118,7 +145,7 @@ impl TreeReader for StateDB {
         version: Version,
         key_hash: KeyHash,
     ) -> anyhow::Result<Option<jmt::OwnedValue>> {
-        if let Some(key) = self.db.get::<KeyHashToKey>(&key_hash.0)? {
+        if let Some(key) = self.db.read::<KeyHashToKey>(&key_hash.0)? {
             self.get_value_option_by_key(version, &key)
         } else {
             Ok(None)
@@ -132,7 +159,7 @@ impl TreeReader for StateDB {
     }
 }
 
-impl TreeWriter for StateDB {
+impl<Q: QueryManager> TreeWriter for StateDB<Q> {
     fn write_node_batch(&self, node_batch: &jmt::storage::NodeBatch) -> anyhow::Result<()> {
         let mut batch = SchemaBatch::new();
         for (node_key, node) in node_batch.nodes() {
@@ -142,111 +169,38 @@ impl TreeWriter for StateDB {
         for ((version, key_hash), value) in node_batch.values() {
             let key_preimage =
                 self.db
-                    .get::<KeyHashToKey>(&key_hash.0)?
+                    .read::<KeyHashToKey>(&key_hash.0)?
                     .ok_or(anyhow::format_err!(
                         "Could not find preimage for key hash {key_hash:?}. Has `StateDB::put_preimage` been called for this key?"
                     ))?;
             batch.put::<JmtValues>(&(key_preimage, *version), value)?;
         }
-        self.db.write_schemas(batch)?;
+        self.db.write_many(batch)?;
         Ok(())
     }
 }
 
-impl HasPreimage for StateDB {
+impl<Q: QueryManager> HasPreimage for StateDB<Q> {
     fn preimage(&self, key_hash: KeyHash) -> anyhow::Result<Option<Vec<u8>>> {
-        self.db.get::<KeyHashToKey>(&key_hash.0)
-    }
-}
-
-#[cfg(feature = "arbitrary")]
-pub mod arbitrary {
-    //! Arbitrary definitions for the [`StateDB`].
-
-    use core::ops::{Deref, DerefMut};
-
-    use proptest::strategy::LazyJust;
-    use tempfile::TempDir;
-
-    use super::*;
-
-    /// Arbitrary instance of [`StateDB`].
-    ///
-    /// This is a db wrapper bound to its temporary path that will be deleted once the type is
-    /// dropped.
-    #[derive(Debug)]
-    pub struct ArbitraryDB {
-        /// The underlying RocksDB instance.
-        pub db: StateDB,
-        /// The temporary directory used to create the [`StateDB`].
-        pub path: TempDir,
-    }
-
-    /// A fallible, arbitrary instance of [`StateDB`].
-    ///
-    /// This type is suitable for operations that are expected to be infallible. The internal
-    /// implementation of the db requires I/O to create the temporary dir, making it fallible.
-    #[derive(Debug)]
-    pub struct FallibleArbitraryStateDB {
-        /// The result of the new db instance.
-        pub result: anyhow::Result<ArbitraryDB>,
-    }
-
-    impl Deref for ArbitraryDB {
-        type Target = StateDB;
-
-        fn deref(&self) -> &Self::Target {
-            &self.db
-        }
-    }
-
-    impl DerefMut for ArbitraryDB {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.db
-        }
-    }
-
-    impl<'a> ::arbitrary::Arbitrary<'a> for ArbitraryDB {
-        fn arbitrary(_u: &mut ::arbitrary::Unstructured<'a>) -> ::arbitrary::Result<Self> {
-            let path = TempDir::new().map_err(|_| ::arbitrary::Error::NotEnoughData)?;
-            let db = StateDB::with_path(&path).map_err(|_| ::arbitrary::Error::IncorrectFormat)?;
-            Ok(Self { db, path })
-        }
-    }
-
-    impl proptest::arbitrary::Arbitrary for FallibleArbitraryStateDB {
-        type Parameters = ();
-        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
-            fn gen() -> FallibleArbitraryStateDB {
-                FallibleArbitraryStateDB {
-                    result: TempDir::new()
-                        .map_err(|e| {
-                            anyhow::anyhow!(format!("failed to generate path for StateDB: {e}"))
-                        })
-                        .and_then(|path| {
-                            let db = StateDB::with_path(&path)?;
-                            Ok(ArbitraryDB { db, path })
-                        }),
-                }
-            }
-            LazyJust::new(gen)
-        }
-
-        type Strategy = LazyJust<Self, fn() -> FallibleArbitraryStateDB>;
+        self.db.read::<KeyHashToKey>(&key_hash.0)
     }
 }
 
 #[cfg(test)]
 mod state_db_tests {
+    use std::sync::{Arc, RwLock};
+
     use jmt::storage::{NodeBatch, TreeReader, TreeWriter};
     use jmt::KeyHash;
+    use sov_schema_db::snapshot::{DbSnapshot, NoopQueryManager, ReadOnlyLock};
 
     use super::StateDB;
 
     #[test]
     fn test_simple() {
-        let tmpdir = tempfile::tempdir().unwrap();
-        let db = StateDB::with_path(tmpdir.path()).unwrap();
+        let manager = ReadOnlyLock::new(Arc::new(RwLock::new(Default::default())));
+        let db_snapshot = DbSnapshot::<NoopQueryManager>::new(0, manager);
+        let db = StateDB::with_db_snapshot(db_snapshot).unwrap();
         let key_hash = KeyHash([1u8; 32]);
         let key = vec![2u8; 100];
         let value = [8u8; 150];

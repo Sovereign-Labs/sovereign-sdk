@@ -42,7 +42,8 @@ fn call_test() {
     let set_arg = 999;
     {
         let sender_address = generate_address::<C>("sender");
-        let context = C::new(sender_address, 1);
+        let sequencer_address = generate_address::<C>("sequencer");
+        let context = C::new(sender_address, sequencer_address, 1);
 
         let messages = vec![
             create_contract_message(&dev_signer, 0),
@@ -101,7 +102,8 @@ fn failed_transaction_test() {
     evm.begin_slot_hook([5u8; 32], &[10u8; 32].into(), working_set);
     {
         let sender_address = generate_address::<C>("sender");
-        let context = C::new(sender_address, 1);
+        let sequencer_address = generate_address::<C>("sequencer");
+        let context = C::new(sender_address, sequencer_address, 1);
         let message = create_contract_message(&dev_signer, 0);
         evm.call(message, &context, working_set).unwrap();
     }

@@ -1,7 +1,11 @@
+use std::rc::Rc;
+
+use sov_accounts::AccountsTxHook;
+use sov_bank::BankTxHook;
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{AccessoryWorkingSet, Context, Spec, WorkingSet};
-use sov_modules_stf_blueprint::SequencerOutcome;
+use sov_modules_stf_blueprint::{RuntimeTxHook, SequencerOutcome};
 #[cfg(feature = "experimental")]
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
@@ -13,29 +17,44 @@ use crate::runtime::Runtime;
 
 impl<C: Context, Da: DaSpec> TxHooks for Runtime<C, Da> {
     type Context = C;
+    type PreArg = RuntimeTxHook<C>;
+    type PreResult = C;
 
     fn pre_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
         working_set: &mut WorkingSet<C>,
-    ) -> anyhow::Result<<Self::Context as Spec>::Address> {
-        // Before executing a transaction, retrieve the sender's address from the accounts module
-        // and check the nonce
-        let _sender_address = self.accounts.pre_dispatch_tx_hook(tx, working_set)?;
-        let sender_address = self.bank.pre_dispatch_tx_hook(tx, working_set)?;
+        arg: RuntimeTxHook<C>,
+    ) -> anyhow::Result<C> {
+        let RuntimeTxHook { height, sequencer } = arg;
+        let AccountsTxHook { sender, sequencer } =
+            self.accounts
+                .pre_dispatch_tx_hook(tx, working_set, sequencer)?;
+        self.bank.pre_dispatch_tx_hook(
+            tx,
+            working_set,
+            BankTxHook {
+                sender: sender.clone(),
+                sequencer: sequencer.clone(),
+            },
+        )?;
 
-        Ok(sender_address)
+        let sender =
+            Rc::try_unwrap(sender).map_err(|e| anyhow::anyhow!("failed to fetch sender: {e}"))?;
+        let sequencer = Rc::try_unwrap(sequencer)
+            .map_err(|e| anyhow::anyhow!("failed to fetch ssequencer: {e}"))?;
+
+        Ok(C::new(sender, sequencer, height))
     }
 
     fn post_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
+        ctx: &C,
         working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
-        // After executing each transaction, update the nonce
-        self.accounts.post_dispatch_tx_hook(tx, working_set)?;
-        self.bank.post_dispatch_tx_hook(tx, working_set)?;
-
+        self.accounts.post_dispatch_tx_hook(tx, ctx, working_set)?;
+        self.bank.post_dispatch_tx_hook(tx, ctx, working_set)?;
         Ok(())
     }
 }

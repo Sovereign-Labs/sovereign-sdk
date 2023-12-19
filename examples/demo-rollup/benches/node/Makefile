@@ -9,19 +9,19 @@ criterion:
 	@echo "Running criterion bench with $(TXNS_PER_BLOCK) transactions per block"
 	@echo "Method: Criterion"
 	@echo "Output: Criterion"
-	@cd ../.. && cargo bench --features="bench" rollup_bench
+	@cd ../.. && cargo bench --features="bench" --bench=rollup_bench
 
 basic:
 	@echo "Running basic benchmark with $(BLOCKS) blocks and $(TXNS_PER_BLOCK) transactions per block"
 	@echo "Method: Coarse Timers"
 	@echo "Output: Standard"
-	@cd ../.. && cargo bench --features="bench" rollup_coarse_measure
+	@cd ../.. && cargo bench --features="bench" --bench=rollup_coarse_measure
 
 prometheus:
 	@echo "Running basic benchmark with $(BLOCKS) blocks and $(TXNS_PER_BLOCK) transactions per block"
 	@echo "Method: Coarse Timers"
 	@echo "Output: Prometheus"
-	@cd ../.. && PROMETHEUS=1 cargo bench --features="bench" rollup_coarse_measure
+	@cd ../.. && PROMETHEUS=1 cargo bench --features="bench" --bench=rollup_coarse_measure
 
 flamegraph:
 	@echo "Running basic benchmark with $(BLOCKS) blocks and $(TXNS_PER_BLOCK) transactions per block"
