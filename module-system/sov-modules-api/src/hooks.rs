@@ -18,7 +18,7 @@ pub trait TxHooks {
     /// acquire its owned values once the hooks have been executed.
     ///
     /// [std::rc::Rc], in comparison to [std::sync::Arc], tends to be faster since the dispatch
-    /// process does not occur within an `async` context. Consequently, we are relieved from
+    /// process does not occur within this `sync` context. Consequently, we are relieved from
     /// dealing with thread synchronization concerns. Although this performance improvement
     /// primarily pertains to write operations - which infrequently occur on hook arguments - the
     /// resulting trade-off is worthwhile without additional cost. For further details, please
