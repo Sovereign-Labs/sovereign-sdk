@@ -24,13 +24,10 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da>
         self.genesis_height
             .set(&config.initial_slot_height, working_set.inner);
 
-        self.slot_height
+        self.true_height
             .set(&config.initial_slot_height, working_set);
 
-        self.time.set_current(
-            &config.current_time,
-            working_set,
-        );
+        self.time.set_current(&config.current_time, working_set);
         Ok(())
     }
 }

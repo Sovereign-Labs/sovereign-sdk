@@ -10,13 +10,13 @@ where
     Da: sov_modules_api::DaSpec,
 {
     /// Increment the current slot height
-    pub(crate) fn increment_slot_height(&self, working_set: &mut KernelWorkingSet<C>) {
+    pub(crate) fn increment_true_slot_height(&self, working_set: &mut KernelWorkingSet<C>) {
         let current_height = self
-            .slot_height
-            .get_current(working_set)
+            .true_height
+            .get(working_set)
             .expect("Block height must be initialized");
-        self.slot_height
-            .set_current(&(current_height.saturating_add(1)), working_set);
+        self.true_height
+            .set(&(current_height.saturating_add(1)), working_set);
     }
 
     /// Store the previous state transition

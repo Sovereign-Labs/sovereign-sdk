@@ -35,7 +35,7 @@ fn test_simple_chain_state() {
     let mut working_set = WorkingSet::new(storage.clone());
 
     // Check the slot height before any changes to the state.
-    let initial_height = chain_state.get_slot_height(&mut working_set);
+    let initial_height = chain_state.true_slot_height(&mut working_set);
 
     assert_eq!(
         initial_height, INIT_HEIGHT,
@@ -77,7 +77,7 @@ fn test_simple_chain_state() {
     );
 
     // Check that the slot height has been updated
-    let new_height_storage = chain_state.get_slot_height(&mut working_set);
+    let new_height_storage = chain_state.true_slot_height(&mut working_set);
 
     assert_eq!(
         new_height_storage,
@@ -126,7 +126,7 @@ fn test_simple_chain_state() {
     );
 
     // Check that the slot height has been updated correctly
-    let new_height_storage = chain_state.get_slot_height(&mut working_set);
+    let new_height_storage = chain_state.true_slot_height(&mut working_set);
     assert_eq!(
         new_height_storage,
         INIT_HEIGHT + 2,

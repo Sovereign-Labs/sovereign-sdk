@@ -11,7 +11,9 @@ mod query;
 pub use query::*;
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::macros::config_constant;
-use sov_modules_api::{Module, ModuleInfo, StateMap, StateMapAccessor, StateValue, WorkingSet};
+use sov_modules_api::{
+    KernelWorkingSet, Module, ModuleInfo, StateMap, StateMapAccessor, StateValue, WorkingSet,
+};
 use sov_state::storage::kernel_state::VersionReader;
 
 /// For how many slots deferred blobs are stored before being executed
@@ -87,11 +89,11 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> BlobStorage<C, Da
         self.sequencer_registry.get_preferred_sequencer(working_set)
     }
 
-    pub(crate) fn get_current_slot_height(
+    pub(crate) fn get_true_slot_height(
         &self,
-        working_set: &mut impl VersionReader,
+        working_set: &mut KernelWorkingSet<'_, C>,
     ) -> TransitionHeight {
-        self.chain_state.get_slot_height(working_set)
+        self.chain_state.true_slot_height(working_set)
     }
 
     pub(crate) fn get_deferred_slots_count(&self, _working_set: &mut WorkingSet<C>) -> u64 {

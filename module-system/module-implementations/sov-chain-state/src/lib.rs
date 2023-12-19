@@ -121,11 +121,12 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
 
     /// The current block height
     #[state]
-    slot_height: sov_modules_api::VersionedStateValue<TransitionHeight>,
+    visible_height: sov_modules_api::KernelStateValue<TransitionHeight>,
 
-    // /// The real slot height of the rollup.
-    // #[state]
-    // true_height: sov_modules_api::KernelStateValue<TransitionHeight>,
+    /// The real slot height of the rollup.
+    #[state]
+    true_height: sov_modules_api::KernelStateValue<TransitionHeight>,
+
     /// The current time, as reported by the DA layer
     #[state]
     time: sov_modules_api::VersionedStateValue<Time>,
@@ -161,9 +162,9 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
 
 impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da> {
     /// Returns transition height in the current slot
-    pub fn get_slot_height(&self, working_set: &mut impl VersionReader) -> TransitionHeight {
-        self.slot_height
-            .get_current(working_set)
+    pub fn true_slot_height(&self, working_set: &mut KernelWorkingSet<'_, C>) -> TransitionHeight {
+        self.true_height
+            .get(working_set)
             .expect("Slot height should be set at initialization")
     }
 

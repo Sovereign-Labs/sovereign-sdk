@@ -52,7 +52,6 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
             let mut blobs = current_blobs
                 .into_iter()
                 .filter(|b| self.filter_by_allowed_sender(b, working_set.inner))
-                
                 .map(Into::into)
                 .collect::<Vec<_>>();
             if let Some(sequencer) = self.get_preferred_sequencer(working_set.inner) {
@@ -66,25 +65,25 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
         // Calculate any expiring deferred blobs first, since these have to be processed no matter what (Case 2 above).
         // Note that we have to handle this case even if there is no preferred sequencer, since that sequencer might have
         // exited while there were deferred blobs waiting to be processed
-        let current_slot: TransitionHeight = self.get_current_slot_height(working_set);
+        let current_slot: TransitionHeight = self.get_true_slot_height(working_set);
         let slot_for_expiring_blobs =
             current_slot.saturating_sub(self.get_deferred_slots_count(working_set.inner));
         let expiring_deferred_blobs: Vec<Da::BlobTransaction> =
             self.take_blobs_for_slot_height(slot_for_expiring_blobs, working_set.inner);
 
         // If there is no preferred sequencer, that's all we need to do
-        let preferred_sequencer = if let Some(sequencer) = self.get_preferred_sequencer(working_set.inner)
-        {
-            sequencer
-        } else {
-            // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/654
-            // Prevent double number of blobs being executed
-            return Ok(expiring_deferred_blobs
-                .into_iter()
-                .map(Into::into)
-                .chain(current_blobs.into_iter().map(Into::into))
-                .collect());
-        };
+        let preferred_sequencer =
+            if let Some(sequencer) = self.get_preferred_sequencer(working_set.inner) {
+                sequencer
+            } else {
+                // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/654
+                // Prevent double number of blobs being executed
+                return Ok(expiring_deferred_blobs
+                    .into_iter()
+                    .map(Into::into)
+                    .chain(current_blobs.into_iter().map(Into::into))
+                    .collect());
+            };
 
         // If we reach this point, there is a preferred sequencer, so we need to handle cases 1 and 3.
 

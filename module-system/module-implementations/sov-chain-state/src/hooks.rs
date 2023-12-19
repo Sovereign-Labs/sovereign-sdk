@@ -9,7 +9,8 @@ use super::ChainState;
 use crate::{StateTransitionId, TransitionInProgress};
 
 impl<C: Context, Da: sov_modules_api::DaSpec> ChainState<C, Da> {
-    fn begin_slot_hook(
+    /// Update the chain state at the beginning of the slot
+    pub fn begin_slot_hook(
         &self,
         slot_header: &Da::BlockHeader,
         validity_condition: &Da::ValidityCondition,
@@ -36,15 +37,15 @@ impl<C: Context, Da: sov_modules_api::DaSpec> ChainState<C, Da> {
             };
 
             self.store_state_transition(
-                self.slot_height
-                    .get_current(working_set)
+                self.true_height
+                    .get(working_set)
                     .expect("Block height must be set"),
                 transition,
                 working_set.inner,
             );
         }
 
-        self.increment_slot_height(working_set);
+        self.increment_true_slot_height(working_set);
         self.time.set_current(&slot_header.time(), working_set);
 
         self.in_progress_transition.set(
