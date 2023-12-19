@@ -34,3 +34,47 @@ runtime.genesis(&configuration, working_set)
 let call_result = RT::decode_call(message_data)
 
 ```
+
+#### `constants.json`
+
+This crate enables the embedding of constants into the compiled binary, allowing runtime developers to set parameters such as gas prices without modifying the module code.
+
+The root of this JSON file will include two default attributes: `gas_price` and `config`.
+
+The `gas_price` attribute will specify the gas price charged by module execution.
+
+The `config` attribute will act as a placeholder for runtime configuration.
+
+Here is an example of a `constants.json` file:
+
+```json
+{
+  "comment": "Sovereign SDK constants",
+  "gas": {
+    "Bank": {
+      "create_token": [4, 4],
+      "transfer": [5, 5],
+      "burn": [2, 2],
+      "mint": [2, 2],
+      "freeze": [1, 1],
+    }
+  },
+  "constants": {
+    "DEFERRED_SLOTS_COUNT": 2
+  }
+}
+```
+
+The default location of the `constants.json` file is in the root directory of the current workspace. Nonetheless, this can be superseded by setting the environment variable `CONSTANTS_MANIFEST` during compilation.
+
+The following command will assert a `/foo/bar/Cargo.toml` file exists, and will use `/foo/bar/constants.json`.
+
+```sh
+CONSTANTS_MANIFEST=/foo/bar cargo build
+```
+
+The macro compilation will endeavor to obtain the workspace root of the current working directory. If the execution is taking place from an external location, such as `cargo build --manifest-path /foo/bar/Cargo.toml`, you should adjust the path accordingly.
+
+```sh
+CONSTANTS_MANIFEST=/foo/bar cargo build --manifest-path /foo/bar/Cargo.toml
+```

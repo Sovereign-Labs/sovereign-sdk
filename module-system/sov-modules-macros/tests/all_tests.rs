@@ -1,14 +1,12 @@
+use std::env;
 use std::path::PathBuf;
 
 fn set_constants_manifest() {
-    let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR").unwrap();
-    std::env::set_var(
-        "CONSTANTS_MANIFEST",
-        PathBuf::from(manifest_dir)
-            .join("tests")
-            .join("constants.json"),
-    );
-    std::env::set_var("TARGET_PATH_OVERRIDE", "target-path-trybuild");
+    let manifest_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
+    let constants = PathBuf::from(manifest_dir).canonicalize().unwrap();
+
+    env::set_var("CONSTANTS_MANIFEST", constants);
+    env::set_var("CONSTANTS_MANIFEST_TRYBUILD", "1");
 }
 
 #[test]
