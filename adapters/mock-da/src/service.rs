@@ -27,14 +27,33 @@ const GENESIS_HEADER: MockBlockHeader = MockBlockHeader {
 
 /// Definition of a fork that will be executed in `MockDaService` at specified height
 pub struct PlannedFork {
-    /// Height at which fork is "noticed"
-    pub trigger_at_height: u64,
-    /// Height at which chain forked
-    /// Basically height of the first block in `blobs` will be `fork_height + 1`
-    pub fork_height: u64,
-    /// Single blob per each block
-    /// TODO: Use constructor, so it is not possible to create invalid fork, when it will return incorrect block at height
-    pub blobs: Vec<Vec<u8>>,
+    trigger_at_height: u64,
+    fork_height: u64,
+    blobs: Vec<Vec<u8>>,
+}
+
+impl PlannedFork {
+    /// Creates new [`PlannedFork`]. Panics if some parameters are invalid.
+    ///
+    /// # Arguments
+    ///
+    /// * `trigger_at_height` - Height at which fork is "noticed".
+    /// * `fork_height` - Height at which chain forked. Height of the first block in `blobs` will be `fork_height + 1`
+    /// * `blobs` - Blobs that will be added after fork. Single blob per each block
+    pub fn new(trigger_at_height: u64, fork_height: u64, blobs: Vec<Vec<u8>>) -> Self {
+        if fork_height > trigger_at_height {
+            panic!("Fork height must be less than trigger height");
+        }
+        let fork_len = (trigger_at_height - fork_height) as usize;
+        if fork_len < blobs.len() {
+            panic!("Not enough blobs for fork to be produced at given height");
+        }
+        Self {
+            trigger_at_height,
+            fork_height,
+            blobs,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -703,11 +722,7 @@ mod tests {
             da.wait_attempts = 2;
 
             // Planned for will replace blocks at height 3 and 4
-            let planned_fork = PlannedFork {
-                trigger_at_height: 4,
-                fork_height: 2,
-                blobs: vec![vec![3, 3, 3, 3], vec![4, 4, 4, 4]],
-            };
+            let planned_fork = PlannedFork::new(4, 2, vec![vec![3, 3, 3, 3], vec![4, 4, 4, 4]]);
 
             da.set_planned_fork(planned_fork).await.unwrap();
             {
