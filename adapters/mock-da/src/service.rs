@@ -10,7 +10,7 @@ use sha2::Digest;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, Time};
 use sov_rollup_interface::maybestd::sync::Arc;
 use sov_rollup_interface::services::da::{DaService, SlotData};
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, RwLock, RwLockWriteGuard};
 use tokio::time;
 
 use crate::types::{MockAddress, MockBlob, MockBlock, MockDaVerifier};
@@ -95,21 +95,23 @@ impl MockDaService {
     /// New blobs will be added **after** specified height,
     /// meaning that first blob will be in the block of height + 1.
     pub async fn fork_at(&self, height: u64, blobs: Vec<Vec<u8>>) -> anyhow::Result<()> {
-        {
-            let mut blocks = self.blocks.write().await;
-            blocks.retain(|b| b.header().height <= height);
-        }
-        // TODO: Concurrency issue here, sender might submit blocks in between
+        let mut blocks = self.blocks.write().await;
+        blocks.retain(|b| b.header().height <= height);
         for blob in blobs {
-            let _ = self.add_blob(&blob, Default::default()).await?;
+            let _ = self
+                .add_blob(&blob, Default::default(), &mut blocks)
+                .await?;
         }
 
         Ok(())
     }
 
-    async fn add_blob(&self, blob: &[u8], zkp_proof: Vec<u8>) -> anyhow::Result<u64> {
-        let mut blocks = self.blocks.write().await;
-
+    async fn add_blob(
+        &self,
+        blob: &[u8],
+        zkp_proof: Vec<u8>,
+        blocks: &mut RwLockWriteGuard<'_, VecDeque<MockBlock>>,
+    ) -> anyhow::Result<u64> {
         let (previous_block_hash, height) = match blocks.iter().last().map(|b| b.header().clone()) {
             None => (GENESIS_HEADER.hash(), GENESIS_HEADER.height() + 1),
             Some(block_header) => (block_header.hash(), block_header.height + 1),
@@ -286,12 +288,15 @@ impl DaService for MockDaService {
     }
 
     async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
-        let _ = self.add_blob(blob, Default::default()).await?;
+        let mut blocks = self.blocks.write().await;
+        let _ = self.add_blob(blob, Default::default(), &mut blocks).await?;
         Ok(())
     }
 
     async fn send_aggregated_zk_proof(&self, proof: &[u8]) -> Result<u64, Self::Error> {
-        self.add_blob(Default::default(), proof.to_vec()).await
+        let mut blocks = self.blocks.write().await;
+        self.add_blob(Default::default(), proof.to_vec(), &mut blocks)
+            .await
     }
 
     async fn get_aggregated_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
