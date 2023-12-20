@@ -27,12 +27,13 @@ impl<C: Context, Da: DaSpec> TxHooks for TestRuntime<C, Da> {
         &self,
         tx: &Transaction<Self::Context>,
         _working_set: &mut sov_modules_api::WorkingSet<C>,
-        arg: RuntimeTxHook<C>,
+        arg: &RuntimeTxHook<C>,
     ) -> anyhow::Result<C> {
         let RuntimeTxHook { height, sequencer } = arg;
         let sender = tx.pub_key().to_address();
         let sequencer = sequencer.to_address();
-        Ok(C::new(sender, sequencer, height))
+
+        Ok(C::new(sender, sequencer, *height))
     }
 
     fn post_dispatch_tx_hook(

@@ -271,6 +271,7 @@ impl<S: Storage> StateReaderAndWriter for AccessoryDelta<S> {
 pub struct StateCheckpoint<C: Context> {
     delta: Delta<C::Storage>,
     accessory_delta: AccessoryDelta<C::Storage>,
+    gas_meter: GasMeter<C::GasUnit>,
 }
 
 impl<C: Context> StateCheckpoint<C> {
@@ -280,6 +281,7 @@ impl<C: Context> StateCheckpoint<C> {
         Self {
             delta: Delta::new(inner.clone(), None),
             accessory_delta: AccessoryDelta::new(inner, None),
+            gas_meter: GasMeter::default(),
         }
     }
 
@@ -292,6 +294,7 @@ impl<C: Context> StateCheckpoint<C> {
         Self {
             delta: Delta::with_witness(inner.clone(), witness, None),
             accessory_delta: AccessoryDelta::new(inner, None),
+            gas_meter: GasMeter::default(),
         }
     }
 
@@ -301,7 +304,7 @@ impl<C: Context> StateCheckpoint<C> {
             delta: RevertableWriter::new(self.delta, None),
             accessory_delta: RevertableWriter::new(self.accessory_delta, None),
             events: Default::default(),
-            gas_meter: GasMeter::default(),
+            gas_meter: self.gas_meter,
             archival_working_set: None,
             archival_accessory_working_set: None,
         }
@@ -411,6 +414,7 @@ impl<C: Context> WorkingSet<C> {
         StateCheckpoint {
             delta: self.delta.commit(),
             accessory_delta: self.accessory_delta.commit(),
+            gas_meter: self.gas_meter,
         }
     }
 
@@ -420,6 +424,7 @@ impl<C: Context> WorkingSet<C> {
         StateCheckpoint {
             delta: self.delta.revert(),
             accessory_delta: self.accessory_delta.revert(),
+            gas_meter: self.gas_meter,
         }
     }
 

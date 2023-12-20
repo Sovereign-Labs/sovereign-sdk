@@ -62,12 +62,14 @@ async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow
     });
     let chain_id = 0;
     let gas_tip = 0;
+    let gas_limit = 0;
     let nonce = 0;
     let tx = Transaction::<DefaultContext>::new_signed_tx(
         &key,
         msg.try_to_vec().unwrap(),
         chain_id,
         gas_tip,
+        gas_limit,
         nonce,
     );
 

@@ -18,7 +18,7 @@ pub trait TxHooks {
         &self,
         tx: &Transaction<Self::Context>,
         working_set: &mut WorkingSet<Self::Context>,
-        arg: Self::PreArg,
+        arg: &Self::PreArg,
     ) -> anyhow::Result<Self::PreResult>;
 
     /// Runs after the tx is dispatched to an appropriate module.

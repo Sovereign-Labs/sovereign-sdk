@@ -34,10 +34,10 @@ impl<C: Context> TxHooks for Accounts<C> {
         &self,
         tx: &Transaction<C>,
         working_set: &mut WorkingSet<C>,
-        sequencer: C::PublicKey,
+        sequencer: &C::PublicKey,
     ) -> anyhow::Result<AccountsTxHook<C>> {
         let sender = self.get_or_create_default(tx.pub_key(), working_set)?;
-        let sequencer = self.get_or_create_default(&sequencer, working_set)?;
+        let sequencer = self.get_or_create_default(sequencer, working_set)?;
         let tx_nonce = tx.nonce();
 
         anyhow::ensure!(
