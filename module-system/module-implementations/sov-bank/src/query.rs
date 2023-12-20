@@ -36,7 +36,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
     }
 
     #[rpc_method(name = "supplyOf")]
-    /// Rpc method that returns the supply of a token of the token stored at the address `token_address`.
+    /// Rpc method that returns the supply of a token stored at the address `token_address`.
     pub fn supply_of(
         &self,
         token_address: C::Address,
