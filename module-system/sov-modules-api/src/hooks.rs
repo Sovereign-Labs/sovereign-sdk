@@ -10,19 +10,6 @@ use crate::transaction::Transaction;
 /// setup procedures and define post-execution routines.
 pub trait TxHooks {
     type Context: Context;
-
-    /// # Additional context
-    ///
-    /// To prevent cloning of the `PreArg` object even when passed as owned, an affordable
-    /// alternative is to utilize [std::rc::Rc] for owning the underlying data. Subsequently,
-    /// acquire its owned values once the hooks have been executed.
-    ///
-    /// [std::rc::Rc], in comparison to [std::sync::Arc], tends to be faster since the dispatch
-    /// process does not occur within this `sync` context. Consequently, we are relieved from
-    /// dealing with thread synchronization concerns. Although this performance improvement
-    /// primarily pertains to write operations - which infrequently occur on hook arguments - the
-    /// resulting trade-off is worthwhile without additional cost. For further details, please
-    /// refer to <https://spcl.inf.ethz.ch/Publications/.pdf/atomic-bench.pdf>
     type PreArg;
     type PreResult;
 
@@ -31,7 +18,7 @@ pub trait TxHooks {
         &self,
         tx: &Transaction<Self::Context>,
         working_set: &mut WorkingSet<Self::Context>,
-        arg: Self::PreArg,
+        arg: &Self::PreArg,
     ) -> anyhow::Result<Self::PreResult>;
 
     /// Runs after the tx is dispatched to an appropriate module.

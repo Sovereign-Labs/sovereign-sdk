@@ -1,8 +1,6 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
 
-use std::rc::Rc;
-
 mod batch;
 pub mod kernels;
 mod stf_blueprint;
@@ -29,7 +27,7 @@ pub struct RuntimeTxHook<C: Context> {
     /// Height to initialize the context
     pub height: u64,
     /// Sequencer public key
-    pub sequencer: Rc<C::PublicKey>,
+    pub sequencer: C::PublicKey,
 }
 
 /// This trait has to be implemented by a runtime in order to be used in `StfBlueprint`.

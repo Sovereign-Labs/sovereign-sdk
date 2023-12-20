@@ -1,5 +1,4 @@
 use core::str::FromStr;
-use std::rc::Rc;
 
 use sov_modules_api::hooks::TxHooks;
 use sov_modules_api::macros::config_constant;
@@ -25,9 +24,9 @@ const GAS_TOKEN_ADDRESS: &'static str;
 /// The computed addresses of a pre-dispatch tx hook.
 pub struct BankTxHook<C: Context> {
     /// The tx sender address
-    pub sender: Rc<C::Address>,
+    pub sender: C::Address,
     /// The sequencer address
-    pub sequencer: Rc<C::Address>,
+    pub sequencer: C::Address,
 }
 
 impl<C: Context> TxHooks for Bank<C> {
@@ -39,7 +38,7 @@ impl<C: Context> TxHooks for Bank<C> {
         &self,
         tx: &Transaction<C>,
         working_set: &mut WorkingSet<C>,
-        hook: BankTxHook<C>,
+        hook: &BankTxHook<C>,
     ) -> anyhow::Result<()> {
         let BankTxHook { sender, sequencer } = hook;
         let amount = tx.gas_limit().saturating_add(tx.gas_tip());
@@ -47,8 +46,8 @@ impl<C: Context> TxHooks for Bank<C> {
         if amount > 0 {
             let token_address = C::Address::from_str(GAS_TOKEN_ADDRESS)
                 .map_err(|_| anyhow::anyhow!("failed to parse gas token address"))?;
-            let from = &sender;
-            let to = &sequencer;
+            let from = sender;
+            let to = sequencer;
             let coins = Coins {
                 amount,
                 token_address,

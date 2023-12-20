@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use sov_accounts::AccountsTxHook;
 use sov_bank::BankTxHook;
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
@@ -24,26 +22,17 @@ impl<C: Context, Da: DaSpec> TxHooks for Runtime<C, Da> {
         &self,
         tx: &Transaction<Self::Context>,
         working_set: &mut WorkingSet<C>,
-        arg: RuntimeTxHook<C>,
+        arg: &RuntimeTxHook<C>,
     ) -> anyhow::Result<C> {
         let RuntimeTxHook { height, sequencer } = arg;
         let AccountsTxHook { sender, sequencer } =
             self.accounts
                 .pre_dispatch_tx_hook(tx, working_set, sequencer)?;
 
-        self.bank.pre_dispatch_tx_hook(
-            tx,
-            working_set,
-            BankTxHook {
-                sender: sender.clone(),
-                sequencer: sequencer.clone(),
-            },
-        )?;
+        let hook = BankTxHook { sender, sequencer };
+        self.bank.pre_dispatch_tx_hook(tx, working_set, &hook)?;
 
-        let sender = Rc::try_unwrap(sender).unwrap_or_else(|s| (*s).clone());
-        let sequencer = Rc::try_unwrap(sequencer).unwrap_or_else(|s| (*s).clone());
-
-        Ok(C::new(sender, sequencer, height))
+        Ok(C::new(hook.sender, hook.sequencer, *height))
     }
 
     fn post_dispatch_tx_hook(
