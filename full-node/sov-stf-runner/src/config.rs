@@ -33,7 +33,7 @@ pub struct StorageConfig {
 /// Prover service configuration.
 #[derive(Debug, Clone, PartialEq, Deserialize, Copy)]
 pub struct ProverServiceConfig {
-    /// TODO
+    /// The "distance"  measured in the number of blocks between two consecutive aggregated proofs.
     pub aggregated_proof_block_jump: u64,
 }
 
