@@ -1,5 +1,4 @@
 use std::marker::PhantomData;
-use std::rc::Rc;
 
 use borsh::BorshDeserialize;
 use sov_modules_api::runtime::capabilities::Kernel;
@@ -193,7 +192,7 @@ where
             // TODO set the sequencer pubkey
             let hook = RuntimeTxHook {
                 height: 1,
-                sequencer: Rc::new(tx.pub_key().clone()),
+                sequencer: tx.pub_key().clone(),
             };
             let ctx = match self
                 .runtime
