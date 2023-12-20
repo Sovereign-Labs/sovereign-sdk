@@ -172,3 +172,55 @@ Total cycles consumed for test: 26152702
 ```
 * There's an overall efficiency of 6 million cycles in total for 3 blocks. 
 * Keep in mind that the above table shows average number of cycles per call, so they give an efficiency per call, but the "Total cycles consumed for test" metric at the bottom shows total for 3 blocks
+
+* With ed25519 acceleration
+```
++----------------------+----------------+-----------+
+| Function             | Average Cycles | Num Calls |
++----------------------+----------------+-----------+
+| Cycles per block     | 1684534        | 3         |
++----------------------+----------------+-----------+
+| apply_blob           | 899771         | 3         |
++----------------------+----------------+-----------+
+| verify               | 714955         | 3         |
++----------------------+----------------+-----------+
+| end_slot             | 415147         | 3         |
++----------------------+----------------+-----------+
+| compute_state_update | 397247         | 3         |
++----------------------+----------------+-----------+
+| begin_slot           | 82357          | 3         |
++----------------------+----------------+-----------+
+| commit               | 7              | 3         |
++----------------------+----------------+-----------+
+
+Total cycles consumed for test: 5053603
+```
+* Without ed25519 acceleration
+```
++----------------------+----------------+-----------+
+| Function             | Average Cycles | Num Calls |
++----------------------+----------------+-----------+
+| Cycles per block     | 4764675        | 3         |
++----------------------+----------------+-----------+
+| apply_blob           | 3979880        | 3         |
++----------------------+----------------+-----------+
+| verify               | 3579797        | 3         |
++----------------------+----------------+-----------+
+| end_slot             | 413717         | 3         |
++----------------------+----------------+-----------+
+| compute_state_update | 393992         | 3         |
++----------------------+----------------+-----------+
+| begin_slot           | 83817          | 3         |
++----------------------+----------------+-----------+
+| commit               | 7              | 3         |
++----------------------+----------------+-----------+
+
+Total cycles consumed for test: 14294025
+```
+* We can see a ~4x speedup for the `verify` function when using risc0 accelerated ed25519-dalek patch
+```
+[patch.crates-io]
+sha2 = { git = "https://github.com/risc0/RustCrypto-hashes", tag = "sha2/v0.10.6-risc0" }
+ed25519-dalek = { git = "https://github.com/risc0/curve25519-dalek", tag = "curve25519-4.1.0-risczero.1" }
+crypto-bigint = {git = "https://github.com/risc0/RustCrypto-crypto-bigint", tag = "v0.5.2-risc0"}
+```
