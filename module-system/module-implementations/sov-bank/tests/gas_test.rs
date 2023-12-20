@@ -10,8 +10,8 @@ use tempfile::TempDir;
 
 mod helpers;
 
-const CREATE_TOKEN_NATIVE_PRICE: u64 = 2;
-const CREATE_TOKEN_ZK_PRICE: u64 = 3;
+const CREATE_TOKEN_NATIVE_COST: u64 = 2;
+const CREATE_TOKEN_ZK_COST: u64 = 3;
 
 #[test]
 fn zeroed_price_wont_deduct_working_set() {
@@ -38,7 +38,7 @@ fn normal_price_will_deduct_working_set() {
         .unwrap();
 
     // compute the expected gas cost, based on the test constants
-    let gas_cost = native_price * CREATE_TOKEN_NATIVE_PRICE + zk_price * CREATE_TOKEN_ZK_PRICE;
+    let gas_cost = native_price * CREATE_TOKEN_NATIVE_COST + zk_price * CREATE_TOKEN_ZK_COST;
 
     assert_eq!(
         remaining_funds,
@@ -181,7 +181,7 @@ impl BankGasTestCase {
 
     pub fn override_gas_config(mut self) -> Self {
         self.bank.override_gas_config(BankGasConfig {
-            create_token: [CREATE_TOKEN_NATIVE_PRICE, CREATE_TOKEN_ZK_PRICE],
+            create_token: [CREATE_TOKEN_NATIVE_COST, CREATE_TOKEN_ZK_COST],
             transfer: Default::default(),
             burn: Default::default(),
             mint: Default::default(),
