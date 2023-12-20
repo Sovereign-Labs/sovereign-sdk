@@ -69,13 +69,19 @@ where
         let prover_manager_clone = self.prover_manager.clone();
         let mut prover_manager = self.prover_manager.write().expect("Lock was poisoned");
 
-        let (prover_status, state_transition_data) = prover_manager
+        let prover_status = prover_manager
             .remove(&block_header_hash)
             .ok_or_else(|| anyhow::anyhow!("Missing witness for block: {:?}", block_header_hash))?;
 
         match prover_status {
             ProverStatus::WitnessSubmitted => {
                 let start_prover = prover_manager.inc_task_count_if_not_busy(self.num_threads);
+
+                let state_transition_data = prover_manager
+                    .get_witness(&block_header_hash)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Missing witness for block: {:?}", block_header_hash)
+                    })?;
 
                 // Initiate a new proving job only if the prover is not busy.
                 if start_prover {

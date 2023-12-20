@@ -29,6 +29,13 @@ impl<StateRoot, Witness, Da: DaSpec> ProverState<StateRoot, Witness, Da> {
         self.witness.remove(hash)
     }
 
+    fn get_witness(
+        &mut self,
+        hash: &Da::SlotHash,
+    ) -> Option<&StateTransitionData<StateRoot, Witness, Da>> {
+        self.witness.get(hash)
+    }
+
     fn set_to_proving(&mut self, hash: Da::SlotHash) -> Option<ProverStatus> {
         self.prover_status
             .insert(hash, ProverStatus::ProvingInProgress)
@@ -117,8 +124,8 @@ impl<StateRoot, Witness, Da: DaSpec> ProverManager<StateRoot, Witness, Da> {
     pub(crate) fn get_witness(
         &mut self,
         hash: &Da::SlotHash,
-    ) -> &StateTransitionData<StateRoot, Witness, Da> {
-        self.prover_state.witness.get(hash).unwrap()
+    ) -> Option<&StateTransitionData<StateRoot, Witness, Da>> {
+        self.prover_state.witness.get(hash)
     }
 
     pub(crate) fn submit_witness(
@@ -149,13 +156,8 @@ impl<StateRoot, Witness, Da: DaSpec> ProverManager<StateRoot, Witness, Da> {
     }
 
     // TODO change name
-    pub(crate) fn remove(
-        &mut self,
-        hash: &Da::SlotHash,
-    ) -> Option<(ProverStatus, StateTransitionData<StateRoot, Witness, Da>)> {
-        let status = self.prover_state.remove(hash)?;
-        let witness = self.prover_state.remove_witness(hash)?;
-        Some((status, witness))
+    pub(crate) fn remove(&mut self, hash: &Da::SlotHash) -> Option<ProverStatus> {
+        self.prover_state.remove(hash)
     }
 
     pub(crate) fn get_prover_status(&mut self, hash: &Da::SlotHash) -> Option<&ProverStatus> {
