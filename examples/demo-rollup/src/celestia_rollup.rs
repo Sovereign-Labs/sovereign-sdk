@@ -12,7 +12,9 @@ use sov_prover_storage_manager::ProverStorageManager;
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::{DefaultStorageSpec, Storage, ZkStorage};
-use sov_stf_runner::{ParallelProverService, RollupConfig, RollupProverConfig};
+use sov_stf_runner::{
+    ParallelProverService, ProverServiceConfig, RollupConfig, RollupProverConfig,
+};
 
 use crate::{ROLLUP_BATCH_NAMESPACE, ROLLUP_PROOF_NAMESPACE};
 
@@ -94,6 +96,7 @@ impl RollupBlueprint for CelestiaDemoRollup {
     async fn create_prover_service(
         &self,
         prover_config: RollupProverConfig,
+        rollup_config: &RollupConfig<Self::DaConfig>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
         let vm = Risc0Host::new(risc0::ROLLUP_ELF);
@@ -110,6 +113,7 @@ impl RollupBlueprint for CelestiaDemoRollup {
             da_verifier,
             prover_config,
             zk_storage,
+            rollup_config.prover_service,
         )
     }
 

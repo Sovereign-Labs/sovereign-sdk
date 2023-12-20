@@ -95,6 +95,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
     async fn create_prover_service(
         &self,
         prover_config: RollupProverConfig,
+        rollup_config: &RollupConfig<Self::DaConfig>,
         da_service: &Self::DaService,
     ) -> Self::ProverService;
 
@@ -121,13 +122,17 @@ pub trait RollupBlueprint: Sized + Send + Sync {
         <Self::NativeContext as Spec>::Storage: NativeStorage,
     {
         let da_service = self.create_da_service(&rollup_config).await;
+
         // TODO: Double check what kind of storage needed here.
         // Maybe whole "prev_root" can be initialized inside runner
         // Getting block here, so prover_service doesn't have to be `Send`
         let last_finalized_block_header = da_service.get_last_finalized_block_header().await?;
-        let prover_service = self.create_prover_service(prover_config, &da_service).await;
+        let prover_service = self
+            .create_prover_service(prover_config, &rollup_config, &da_service)
+            .await;
 
         let ledger_db = self.create_ledger_db(&rollup_config);
+
         let genesis_config = self.create_genesis_config(genesis_paths, &rollup_config)?;
 
         let mut storage_manager = self.create_storage_manager(&rollup_config)?;

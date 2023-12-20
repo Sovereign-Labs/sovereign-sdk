@@ -1,4 +1,5 @@
 mod prover;
+mod prover_manager;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -13,8 +14,8 @@ use sov_rollup_interface::zk::ZkvmHost;
 use super::{ProverService, ProverServiceError};
 use crate::verifier::StateTransitionVerifier;
 use crate::{
-    ProofGenConfig, ProofProcessingStatus, ProofSubmissionStatus, RollupProverConfig,
-    StateTransitionData, WitnessSubmissionStatus,
+    ProofGenConfig, ProofProcessingStatus, ProofSubmissionStatus, ProverServiceConfig,
+    RollupProverConfig, StateTransitionData, WitnessSubmissionStatus,
 };
 
 /// Prover service that generates proofs in parallel.
@@ -28,6 +29,7 @@ where
 {
     vm: Vm,
     prover_config: Arc<ProofGenConfig<V, Da, Vm>>,
+    prover_service_config: ProverServiceConfig,
     zk_storage: V::PreState,
     prover_state: Prover<StateRoot, Witness, Da>,
 }
@@ -49,6 +51,7 @@ where
         config: RollupProverConfig,
         zk_storage: V::PreState,
         num_threads: usize,
+        prover_service_config: ProverServiceConfig,
     ) -> Self {
         let stf_verifier =
             StateTransitionVerifier::<V, Da::Verifier, Vm::Guest>::new(zk_stf, da_verifier);
@@ -65,7 +68,11 @@ where
         Self {
             vm,
             prover_config,
-            prover_state: Prover::new(num_threads),
+            prover_state: Prover::new(
+                num_threads,
+                prover_service_config.aggregated_proof_block_jump,
+            ),
+            prover_service_config,
             zk_storage,
         }
     }
@@ -77,11 +84,20 @@ where
         da_verifier: Da::Verifier,
         config: RollupProverConfig,
         zk_storage: V::PreState,
+        prover_service_config: ProverServiceConfig,
     ) -> Self {
         let num_cpus = num_cpus::get();
         assert!(num_cpus > 1, "Unable to create parallel prover service");
 
-        Self::new(vm, zk_stf, da_verifier, config, zk_storage, num_cpus - 1)
+        Self::new(
+            vm,
+            zk_stf,
+            da_verifier,
+            config,
+            zk_storage,
+            num_cpus - 1,
+            prover_service_config,
+        )
     }
 }
 

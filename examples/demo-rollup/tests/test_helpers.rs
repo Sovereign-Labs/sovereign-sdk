@@ -4,7 +4,9 @@ use demo_stf::genesis_config::GenesisPaths;
 use sov_demo_rollup::MockDemoRollup;
 use sov_mock_da::{MockAddress, MockDaConfig};
 use sov_modules_rollup_blueprint::RollupBlueprint;
-use sov_stf_runner::{RollupConfig, RollupProverConfig, RpcConfig, RunnerConfig, StorageConfig};
+use sov_stf_runner::{
+    ProverServiceConfig, RollupConfig, RollupProverConfig, RpcConfig, RunnerConfig, StorageConfig,
+};
 use tokio::sync::oneshot;
 
 pub async fn start_rollup(
@@ -28,6 +30,9 @@ pub async fn start_rollup(
         },
         da: MockDaConfig {
             sender_address: MockAddress::from([0; 32]),
+        },
+        prover_service: ProverServiceConfig {
+            aggregated_proof_block_jump: 1,
         },
     };
 
