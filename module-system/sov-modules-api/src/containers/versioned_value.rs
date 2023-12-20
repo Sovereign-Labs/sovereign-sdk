@@ -420,13 +420,13 @@ mod tests {
                 let mut versioned_state =
                     working_set.versioned_state(&DefaultContext::new(signer, sequencer, 1));
                 // Try to read the value from user space with the slot number set to 1. Should fail.
-                assert_eq!(value.get(&mut versioned_state), None);
+                assert_eq!(value.get_current(&mut versioned_state), None);
             }
             // Try to read the value from user space with the slot number set to 4. Should succeed.
             let mut versioned_state =
                 working_set.versioned_state(&DefaultContext::new(signer, sequencer, 4));
             // Try to read the value from user space with the slot number set to 1. Should fail.
-            assert_eq!(value.get(&mut versioned_state), Some(100));
+            assert_eq!(value.get_current(&mut versioned_state), Some(100));
         }
     }
 
@@ -446,7 +446,7 @@ mod tests {
             let mut kernel_state = KernelWorkingSet::from_kernel(&kernel, &mut working_set);
             value.set(&2, &100, &mut kernel_state);
             assert_eq!(value.get(&2, &mut kernel_state), Some(100));
-            value.set_current(17, &mut kernel_state);
+            value.set_current(&17, &mut kernel_state);
         }
 
         let signer = Address::from([1; 32]);

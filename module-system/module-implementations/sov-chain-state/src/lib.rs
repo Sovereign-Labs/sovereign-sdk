@@ -167,16 +167,12 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
 impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da> {
     /// Returns transition height in the current slot
     pub fn true_slot_height(&self, working_set: &mut WorkingSet<C>) -> TransitionHeight {
-        self.true_height
-            .get(working_set)
-            .expect("Slot height should be set at initialization")
+        self.true_height.get(working_set).unwrap_or_default()
     }
 
     /// Returns transition height in the current slot
     pub fn visible_slot_height(&self, working_set: &mut WorkingSet<C>) -> TransitionHeight {
-        self.visible_height
-            .get(working_set)
-            .expect("Visible height should be set at initialization")
+        self.visible_height.get(working_set).unwrap_or_default()
     }
 
     /// Returns the current time, as reported by the DA layer

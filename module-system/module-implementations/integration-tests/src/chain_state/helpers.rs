@@ -1,7 +1,6 @@
-use sov_chain_state::{ChainState, ChainStateConfig};
+use sov_chain_state::ChainState;
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::macros::DefaultRuntime;
-use sov_modules_api::runtime::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{
     AccessoryWorkingSet, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, MessageCodec,
@@ -17,7 +16,12 @@ pub(crate) struct TestRuntime<C: Context> {
     pub value_setter: ValueSetter<C>,
 }
 
-impl<C: Context, Da: DaSpec> TxHooks for TestRuntime<C, Da> {
+#[derive(Default)]
+pub(crate) struct TestKernel<C: Context, Da: DaSpec> {
+    pub chain_state: ChainState<C, Da>,
+}
+
+impl<C: Context> TxHooks for TestRuntime<C> {
     type Context = C;
     type PreArg = RuntimeTxHook<C>;
     type PreResult = C;
@@ -44,14 +48,13 @@ impl<C: Context, Da: DaSpec> TxHooks for TestRuntime<C, Da> {
     }
 }
 
-impl<C: Context, Da: DaSpec> ApplyBlobHooks<Da::BlobTransaction> for TestRuntime<C, Da> {
+impl<C: Context, B: BlobReaderTrait> ApplyBlobHooks<B> for TestRuntime<C> {
     type Context = C;
-    type BlobResult =
-        SequencerOutcome<<<Da as DaSpec>::BlobTransaction as BlobReaderTrait>::Address>;
+    type BlobResult = SequencerOutcome<<B as BlobReaderTrait>::Address>;
 
     fn begin_blob_hook(
         &self,
-        _blob: &mut Da::BlobTransaction,
+        _blob: &mut B,
         _working_set: &mut sov_modules_api::WorkingSet<C>,
     ) -> anyhow::Result<()> {
         Ok(())
@@ -66,7 +69,7 @@ impl<C: Context, Da: DaSpec> ApplyBlobHooks<Da::BlobTransaction> for TestRuntime
     }
 }
 
-impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da> {
+impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C> {
     type Context = C;
 
     fn begin_slot_hook(
@@ -76,18 +79,18 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da> {
         pre_state_root: &<<Self::Context as Spec>::Storage as Storage>::Root,
         working_set: &mut sov_modules_api::WorkingSet<C>,
     ) {
-        self.chain_state.begin_slot_hook(
-            slot_header,
-            validity_condition,
-            pre_state_root,
-            working_set,
-        )
+        // self.chain_state.begin_slot_hook(
+        //     slot_header,
+        //     validity_condition,
+        //     pre_state_root,
+        //     working_set,
+        // )
     }
 
     fn end_slot_hook(&self, _working_set: &mut sov_modules_api::WorkingSet<C>) {}
 }
 
-impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for TestRuntime<C, Da> {
+impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for TestRuntime<C> {
     type Context = C;
 
     fn finalize_hook(
@@ -98,27 +101,27 @@ impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for TestRuntime<C
     }
 }
 
-impl<C, Da> BlobSelector<Da> for TestRuntime<C, Da>
-where
-    C: Context,
-    Da: DaSpec,
-{
-    type Context = C;
+// impl<C, Da> BlobSelector<Da> for TestRuntime<C>
+// where
+//     C: Context,
+//     Da: DaSpec,
+// {
+//     type Context = C;
 
-    fn get_blobs_for_this_slot<'a, I>(
-        &self,
-        current_blobs: I,
-        _working_set: &mut sov_modules_api::WorkingSet<C>,
-    ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, Da::BlobTransaction>>>
-    where
-        I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
-    {
-        Ok(current_blobs.into_iter().map(Into::into).collect())
-    }
-}
+//     fn get_blobs_for_this_slot<'a, I>(
+//         &self,
+//         current_blobs: I,
+//         _working_set: &mut sov_modules_api::WorkingSet<C>,
+//     ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, Da::BlobTransaction>>>
+//     where
+//         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
+//     {
+//         Ok(current_blobs.into_iter().map(Into::into).collect())
+//     }
+// }
 
-impl<C: Context, Da: DaSpec> Runtime<C, Da> for TestRuntime<C, Da> {
-    type GenesisConfig = GenesisConfig<C, Da>;
+impl<C: Context, Da: DaSpec> Runtime<C, Da> for TestRuntime<C> {
+    type GenesisConfig = GenesisConfig<C>;
 
     fn rpc_methods(_storage: <C as Spec>::Storage) -> jsonrpsee::RpcModule<()> {
         todo!()
@@ -133,9 +136,9 @@ impl<C: Context, Da: DaSpec> Runtime<C, Da> for TestRuntime<C, Da> {
     }
 }
 
-pub(crate) fn create_chain_state_genesis_config<C: Context, Da: DaSpec>(
+pub(crate) fn create_chain_state_genesis_config<C: Context>(
     admin: <C as Spec>::Address,
-) -> GenesisConfig<C, Da> {
+) -> GenesisConfig<C> {
     let value_setter_config = ValueSetterConfig { admin };
 
     GenesisConfig::new(value_setter_config)
