@@ -99,7 +99,7 @@ impl RollupBlueprint for MockDemoRollup {
             da_verifier,
             prover_config,
             zk_storage,
-            rollup_config.prover_service.clone(),
+            rollup_config.prover_service,
         )
     }
 
