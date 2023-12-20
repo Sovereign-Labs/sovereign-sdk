@@ -15,8 +15,8 @@ use sov_state::{
     ArrayWitness, DefaultStorageSpec, OrderedReadsAndWrites, Prefix, ProverStorage, Storage,
 };
 use sov_stf_runner::{
-    InitVariant, ParallelProverService, RollupConfig, RollupProverConfig, RpcConfig, RunnerConfig,
-    StateTransitionRunner, StorageConfig,
+    InitVariant, ParallelProverService, ProverServiceConfig, RollupConfig, RollupProverConfig,
+    RpcConfig, RunnerConfig, StateTransitionRunner, StorageConfig,
 };
 
 type MockInitVariant = InitVariant<HashStf<MockValidityCond>, MockZkvm, MockDaSpec>;
@@ -195,6 +195,9 @@ fn initialize_runner(
         da: MockDaConfig {
             sender_address: address,
         },
+        prover_service: ProverServiceConfig {
+            aggregated_proof_block_jump: 1,
+        },
     };
 
     let da_service = MockDaService::new(address);
@@ -221,6 +224,9 @@ fn initialize_runner(
         // Should be ZkStorage, but we don't need it for this test
         storage_manager.create_finalized_storage().unwrap(),
         1,
+        ProverServiceConfig {
+            aggregated_proof_block_jump: 1,
+        },
     );
 
     StateTransitionRunner::new(
