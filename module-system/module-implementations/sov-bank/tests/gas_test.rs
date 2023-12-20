@@ -38,11 +38,11 @@ fn normal_price_will_deduct_working_set() {
         .unwrap();
 
     // compute the expected gas cost, based on the test constants
-    let gas_cost = native_price * CREATE_TOKEN_NATIVE_COST + zk_price * CREATE_TOKEN_ZK_COST;
+    let gas_used = native_price * CREATE_TOKEN_NATIVE_COST + zk_price * CREATE_TOKEN_ZK_COST;
 
     assert_eq!(
         remaining_funds,
-        sender_balance - gas_cost,
+        sender_balance - gas_used,
         "the sender balance is enough for this call"
     );
 }
@@ -63,11 +63,11 @@ fn constants_price_is_charged_correctly() {
     let bank = Bank::<C>::default();
     let config = bank.gas_config();
     let gas_price = <C as Context>::GasUnit::from_arbitrary_dimensions(&[native_price, zk_price]);
-    let gas_cost = config.create_token.value(&gas_price);
+    let gas_used = config.create_token.value(&gas_price);
 
     assert_eq!(
         remaining_funds,
-        sender_balance - gas_cost,
+        sender_balance - gas_used,
         "the sender balance is enough for this call"
     );
 }
