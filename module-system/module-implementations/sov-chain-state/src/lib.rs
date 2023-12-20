@@ -27,7 +27,6 @@ use sov_modules_api::{DaSpec, Error, ModuleInfo, ValidityConditionChecker, Worki
 use sov_state::codec::BcsCodec;
 use sov_state::storage::kernel_state::VersionReader;
 use sov_state::storage::KernelWorkingSet;
-use sov_state::storage::VersionedWorkingSet;
 use sov_state::Storage;
 
 /// Type alias that contains the height of a given transition
@@ -120,12 +119,17 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
     address: C::Address,
 
     /// The current block height
+    // We use a standard StateValue here instead of a `KernelStateValue` to avoid a chicken-and-egg problem.
+    // You need to load the current visible_height in order to create a `KernelWorkingSet`, which is itself
+    // required in order to read a `KernelStateValue`. This value is still protected by the fact that it exists
+    // on a kernel module, which will not be accessible to the runtime.
     #[state]
-    visible_height: sov_modules_api::KernelStateValue<TransitionHeight>,
+    visible_height: sov_modules_api::StateValue<TransitionHeight>,
 
     /// The real slot height of the rollup.
+    // This value is also required to create a `KernelWorkingSet`. See note on `visible_height` above.
     #[state]
-    true_height: sov_modules_api::KernelStateValue<TransitionHeight>,
+    true_height: sov_modules_api::StateValue<TransitionHeight>,
 
     /// The current time, as reported by the DA layer
     #[state]
@@ -162,10 +166,17 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
 
 impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da> {
     /// Returns transition height in the current slot
-    pub fn true_slot_height(&self, working_set: &mut KernelWorkingSet<'_, C>) -> TransitionHeight {
+    pub fn true_slot_height(&self, working_set: &mut WorkingSet<C>) -> TransitionHeight {
         self.true_height
             .get(working_set)
             .expect("Slot height should be set at initialization")
+    }
+
+    /// Returns transition height in the current slot
+    pub fn visible_slot_height(&self, working_set: &mut WorkingSet<C>) -> TransitionHeight {
+        self.visible_height
+            .get(working_set)
+            .expect("Visible height should be set at initialization")
     }
 
     /// Returns the current time, as reported by the DA layer
@@ -214,11 +225,7 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> sov_modules_api::
 
     type Config = ChainStateConfig;
 
-    fn genesis<'a>(
-        &self,
-        config: &Self::Config,
-        working_set: &mut KernelWorkingSet<'a, C>,
-    ) -> Result<(), Error> {
+    fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         // The initialization logic
         Ok(self.init_module(config, working_set)?)
     }

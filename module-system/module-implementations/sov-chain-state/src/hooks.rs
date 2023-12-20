@@ -38,7 +38,7 @@ impl<C: Context, Da: sov_modules_api::DaSpec> ChainState<C, Da> {
 
             self.store_state_transition(
                 self.true_height
-                    .get(working_set)
+                    .get(working_set.inner)
                     .expect("Block height must be set"),
                 transition,
                 working_set.inner,
@@ -57,7 +57,8 @@ impl<C: Context, Da: sov_modules_api::DaSpec> ChainState<C, Da> {
         );
     }
 
-    fn end_slot_hook(&self, _working_set: &mut KernelWorkingSet<C>) {}
+    /// Update the chain state at the end of each slot, if necessary
+    pub fn end_slot_hook(&self, _working_set: &mut KernelWorkingSet<C>) {}
 }
 
 impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for ChainState<C, Da> {

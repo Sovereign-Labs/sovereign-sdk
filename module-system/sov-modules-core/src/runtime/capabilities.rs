@@ -32,9 +32,9 @@ pub trait Kernel<C: Context, Da: DaSpec>: BlobSelector<Da, Context = C> + Defaul
     fn init(&mut self, working_set: &mut WorkingSet<C>);
 
     /// Return the current slot height
-    fn true_height(&self) -> u64;
+    fn true_height(&self, working_set: &mut WorkingSet<C>) -> u64;
     /// Return the height at which transactions currently *appear* to be executing.
-    fn visible_height(&self) -> u64;
+    fn visible_height(&self, working_set: &mut WorkingSet<C>) -> u64;
 }
 
 /// Hooks allowing the kernel to get access to the DA layer state
@@ -116,7 +116,7 @@ pub mod mocks {
     use sov_rollup_interface::da::DaSpec;
 
     use super::{BlobRefOrOwned, BlobSelector, Kernel};
-    use crate::Context;
+    use crate::{Context, WorkingSet};
 
     /// A mock kernel for use in tests
     #[derive(Debug, Clone)]
@@ -150,10 +150,10 @@ pub mod mocks {
     }
 
     impl<C: Context, Da: DaSpec> Kernel<C, Da> for MockKernel<C, Da> {
-        fn true_height(&self) -> u64 {
+        fn true_height(&self, _ws: &mut WorkingSet<C>) -> u64 {
             self.true_height
         }
-        fn visible_height(&self) -> u64 {
+        fn visible_height(&self, _ws: &mut WorkingSet<C>) -> u64 {
             self.visible_height
         }
 

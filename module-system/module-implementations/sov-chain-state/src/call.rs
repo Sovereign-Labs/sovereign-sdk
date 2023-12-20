@@ -13,10 +13,10 @@ where
     pub(crate) fn increment_true_slot_height(&self, working_set: &mut KernelWorkingSet<C>) {
         let current_height = self
             .true_height
-            .get(working_set)
+            .get(working_set.inner)
             .expect("Block height must be initialized");
         self.true_height
-            .set(&(current_height.saturating_add(1)), working_set);
+            .set(&(current_height.saturating_add(1)), working_set.inner);
     }
 
     /// Store the previous state transition

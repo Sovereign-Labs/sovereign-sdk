@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context as _};
 use sov_accounts::AccountConfig;
 use sov_bank::BankConfig;
-use sov_chain_state::ChainStateConfig;
 #[cfg(feature = "experimental")]
 use sov_evm::EvmConfig;
 pub use sov_modules_api::default_context::DefaultContext;

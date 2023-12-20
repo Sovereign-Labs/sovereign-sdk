@@ -8,7 +8,7 @@ use std::net::SocketAddr;
 use async_trait::async_trait;
 pub use runtime_rpc::*;
 use sov_db::ledger_db::LedgerDB;
-use sov_modules_api::runtime::capabilities::{Kernel, KernelSlotHooks};
+use sov_modules_api::runtime::capabilities::KernelSlotHooks;
 use sov_modules_api::{Context, DaSpec, Spec};
 use sov_modules_stf_blueprint::{Runtime as RuntimeTrait, StfBlueprint};
 use sov_rollup_interface::services::da::DaService;

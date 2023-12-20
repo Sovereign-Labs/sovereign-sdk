@@ -1,7 +1,8 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use sov_modules_api::da::Time;
-use sov_modules_api::StateValueAccessor;
+use sov_modules_api::runtime::capabilities::Kernel;
+use sov_modules_api::{da::Time, WorkingSet};
+use sov_modules_api::{StateValueAccessor, VersionedWorkingSet};
 use sov_state::storage::KernelWorkingSet;
 
 use crate::{ChainState, TransitionHeight};
@@ -19,15 +20,15 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da>
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::KernelModule>::Config,
-        working_set: &mut KernelWorkingSet<C>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         self.genesis_height
-            .set(&config.initial_slot_height, working_set.inner);
+            .set(&config.initial_slot_height, working_set);
 
         self.true_height
             .set(&config.initial_slot_height, working_set);
 
-        self.time.set_current(&config.current_time, working_set);
+        self.time.set_genesis(&config.current_time, working_set);
         Ok(())
     }
 }

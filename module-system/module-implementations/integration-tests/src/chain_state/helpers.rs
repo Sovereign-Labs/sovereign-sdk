@@ -13,9 +13,8 @@ use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub(crate) struct TestRuntime<C: Context, Da: DaSpec> {
+pub(crate) struct TestRuntime<C: Context> {
     pub value_setter: ValueSetter<C>,
-    pub chain_state: ChainState<C, Da>,
 }
 
 impl<C: Context, Da: DaSpec> TxHooks for TestRuntime<C, Da> {
@@ -138,9 +137,6 @@ pub(crate) fn create_chain_state_genesis_config<C: Context, Da: DaSpec>(
     admin: <C as Spec>::Address,
 ) -> GenesisConfig<C, Da> {
     let value_setter_config = ValueSetterConfig { admin };
-    let chain_state_config = ChainStateConfig {
-        initial_slot_height: 0,
-        current_time: Default::default(),
-    };
-    GenesisConfig::new(value_setter_config, chain_state_config)
+
+    GenesisConfig::new(value_setter_config)
 }

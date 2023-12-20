@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_core::{
     kernel_state::VersionReader, Context, KernelWorkingSet, Prefix, StateCodec, StateKeyCodec,
-    StateReaderAndWriter, StateValueCodec,
+    StateReaderAndWriter, StateValueCodec, WorkingSet,
 };
 use sov_state::codec::BorshCodec;
 
@@ -76,6 +76,15 @@ impl<V, Codec> VersionedStateValue<V, Codec> {
         Codec::KeyCodec: StateKeyCodec<u64>,
     {
         ws.set_value(self.prefix(), &ws.current_version(), value, &self.codec)
+    }
+
+    pub fn set_genesis<C: Context>(&self, value: &V, ws: &mut WorkingSet<C>)
+    where
+        Codec: StateCodec,
+        Codec::ValueCodec: StateValueCodec<V>,
+        Codec::KeyCodec: StateKeyCodec<u64>,
+    {
+        ws.set_value(self.prefix(), &0, value, &self.codec)
     }
 }
 //         for VersionedStateValue<V, Codec>

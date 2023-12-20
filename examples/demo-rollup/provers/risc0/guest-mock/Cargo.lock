@@ -1143,6 +1143,8 @@ dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",
+ "sov-blob-storage",
+ "sov-chain-state",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",

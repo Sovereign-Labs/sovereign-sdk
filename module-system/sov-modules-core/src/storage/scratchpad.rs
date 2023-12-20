@@ -674,10 +674,12 @@ pub mod kernel_state {
             kernel: &K,
             ws: &'a mut WorkingSet<C>,
         ) -> Self {
+            let true_slot_num = kernel.true_height(ws);
+            let virtual_slot_num = kernel.visible_height(ws);
             Self {
                 inner: ws,
-                true_slot_num: kernel.true_height(),
-                virtual_slot_num: kernel.visible_height(),
+                true_slot_num,
+                virtual_slot_num,
             }
         }
 

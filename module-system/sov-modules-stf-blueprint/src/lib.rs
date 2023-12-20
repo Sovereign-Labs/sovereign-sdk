@@ -7,10 +7,10 @@ mod tx_verifier;
 
 pub use batch::Batch;
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
-use sov_modules_api::runtime::capabilities::{Kernel, KernelSlotHooks};
+use sov_modules_api::runtime::capabilities::KernelSlotHooks;
 use sov_modules_api::{
-    BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, KernelWorkingSet, Spec, StateCheckpoint,
-    Zkvm,
+    BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, KernelWorkingSet, Spec,
+    StateCheckpoint, Zkvm,
 };
 pub use sov_rollup_interface::stf::BatchReceipt;
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
@@ -250,7 +250,8 @@ where
 
         // Initialize batch workspace
         let mut batch_workspace = checkpoint.to_revertable();
-        let mut kernel_working_set = KernelWorkingSet::from_kernel(&self.kernel, &mut batch_workspace);
+        let mut kernel_working_set =
+            KernelWorkingSet::from_kernel(&self.kernel, &mut batch_workspace);
         let selected_blobs = self
             .kernel
             .get_blobs_for_this_slot(blobs, &mut kernel_working_set)

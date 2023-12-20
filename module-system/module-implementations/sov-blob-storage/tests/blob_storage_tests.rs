@@ -2,7 +2,7 @@ use sov_blob_storage::BlobStorage;
 use sov_chain_state::{ChainState, ChainStateConfig};
 use sov_mock_da::{MockAddress, MockBlob, MockDaSpec};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Module, WorkingSet};
+use sov_modules_api::{KernelModule, WorkingSet};
 use sov_prover_storage_manager::new_orphan_storage;
 
 type C = DefaultContext;

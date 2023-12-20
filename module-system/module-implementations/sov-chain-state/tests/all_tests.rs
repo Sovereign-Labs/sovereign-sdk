@@ -3,6 +3,7 @@ use sov_mock_da::{MockBlock, MockBlockHeader, MockDaSpec, MockValidityCond};
 use sov_modules_api::da::{BlockHeaderTrait, Time};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
+use sov_modules_api::KernelModule;
 use sov_modules_api::{Genesis, WorkingSet};
 use sov_prover_storage_manager::new_orphan_storage;
 use sov_state::Storage;
