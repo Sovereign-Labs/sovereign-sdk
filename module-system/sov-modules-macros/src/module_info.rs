@@ -7,13 +7,20 @@ use self::parsing::{ModuleField, ModuleFieldAttribute, StructDef};
 use crate::common::get_generics_type_param;
 use crate::manifest::Manifest;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum ModuleType {
+    Standard,
+    Kernel,
+}
+
 pub(crate) fn derive_module_info(
     input: DeriveInput,
+    variant: ModuleType,
 ) -> Result<proc_macro::TokenStream, syn::Error> {
     let struct_def = StructDef::parse(&input)?;
 
     let impl_prefix_functions = impl_prefix_functions(&struct_def)?;
-    let impl_new = impl_module_info(&struct_def)?;
+    let impl_new = impl_module_info(&struct_def, variant)?;
 
     Ok(quote::quote! {
         #impl_prefix_functions
@@ -48,7 +55,10 @@ fn impl_prefix_functions(struct_def: &StructDef) -> Result<proc_macro2::TokenStr
 }
 
 // Implements the `ModuleInfo` trait.
-fn impl_module_info(struct_def: &StructDef) -> Result<proc_macro2::TokenStream, syn::Error> {
+fn impl_module_info(
+    struct_def: &StructDef,
+    variant: ModuleType,
+) -> Result<proc_macro2::TokenStream, syn::Error> {
     let module_address = struct_def.module_address();
 
     let StructDef {
@@ -77,7 +87,18 @@ fn impl_module_info(struct_def: &StructDef) -> Result<proc_macro2::TokenStream, 
                 impl_self_body.push(&field.ident);
             }
             ModuleFieldAttribute::Module => {
-                impl_self_init.push(make_init_module(field)?);
+                impl_self_init.push(make_init_module(field, ModuleType::Standard)?);
+                impl_self_body.push(&field.ident);
+                modules.push(&field.ident);
+            }
+            ModuleFieldAttribute::KernelModule => {
+                if let ModuleType::Standard = variant {
+                    return Err(syn::Error::new_spanned(
+                        &field.ident,
+                        "The `#[kernel_module]` attribute is only allowed in kernel modules.",
+                    ));
+                }
+                impl_self_init.push(make_init_module(field, ModuleType::Kernel)?);
                 impl_self_body.push(&field.ident);
                 modules.push(&field.ident);
             }
@@ -208,11 +229,20 @@ fn make_init_state(
     })
 }
 
-fn make_init_module(field: &ModuleField) -> Result<proc_macro2::TokenStream, syn::Error> {
+fn make_init_module(
+    field: &ModuleField,
+    variant: ModuleType,
+) -> Result<proc_macro2::TokenStream, syn::Error> {
     let field_ident = &field.ident;
     let ty = &field.ty;
+    let trait_to_assert = match variant {
+        ModuleType::Standard => quote::quote! { ::sov_modules_api::Module },
+        ModuleType::Kernel => quote::quote! { ::sov_modules_api::KernelModule },
+    };
 
     Ok(quote::quote! {
+        // Ensure that the type implements "Module" or "KernelModule" at compile time
+        let _ = <#ty as #trait_to_assert>::genesis;
         let #field_ident = <#ty as ::std::default::Default>::default();
     })
 }
@@ -314,6 +344,7 @@ pub mod parsing {
     #[derive(Clone)]
     pub enum ModuleFieldAttribute {
         Module,
+        KernelModule,
         State { codec_builder: Option<syn::Path> },
         Address,
         Gas,
@@ -329,6 +360,16 @@ pub mod parsing {
                         Err(syn::Error::new_spanned(
                             attr,
                             "The `#[module]` attribute does not accept any arguments.",
+                        ))
+                    }
+                }
+                "kernel_module" => {
+                    if attr.tokens.is_empty() {
+                        Ok(Self::KernelModule)
+                    } else {
+                        Err(syn::Error::new_spanned(
+                            attr,
+                            "The `#[kernel_module]` attribute does not accept any arguments.",
                         ))
                     }
                 }
@@ -477,9 +518,9 @@ pub mod parsing {
         let mut attr = None;
         for a in field.attrs.iter() {
             match a.path.segments[0].ident.to_string().as_str() {
-                "state" | "module" | "address" | "gas" => {
+                "state" | "module" | "address" | "gas" | "kernel_module" => {
                     if attr.is_some() {
-                        return Err(syn::Error::new_spanned(ident, "Only one attribute out of `#[module]`, `#[state]`, `#[address]`, and #[gas] is allowed per field."));
+                        return Err(syn::Error::new_spanned(ident, "Only one attribute out of `#[kernel_module]`, `#[module]`, `#[state]`, `#[address]`, and #[gas] is allowed per field."));
                     } else {
                         attr = Some(a);
                     }
@@ -493,7 +534,7 @@ pub mod parsing {
         } else {
             Err(syn::Error::new_spanned(
                 ident,
-                format!("The field `{}` is missing an attribute: add `#[module]`, `#[state]`, `#[address]`, or #[gas].", ident),
+                format!("The field `{}` is missing an attribute: add `#[kernel_module]`, `#[module]`, `#[state]`, `#[address]`, or #[gas].", ident),
             ))
         }
     }

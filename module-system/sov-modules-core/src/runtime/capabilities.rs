@@ -29,7 +29,7 @@ pub trait Kernel<C: Context, Da: DaSpec>: BlobSelector<Da, Context = C> + Defaul
     ) -> Result<Self::GenesisConfig, anyhow::Error>;
 
     /// Initialize the kernel at genesis
-    fn init(&mut self, working_set: &mut WorkingSet<C>);
+    fn init(&mut self, config: &Self::GenesisConfig, working_set: &mut WorkingSet<C>);
 
     /// Return the current slot height
     fn true_height(&self, working_set: &mut WorkingSet<C>) -> u64;
@@ -167,7 +167,7 @@ pub mod mocks {
             Ok(())
         }
 
-        fn init(&mut self, _working_set: &mut crate::WorkingSet<C>) {}
+        fn init(&mut self, config: &Self::GenesisConfig, working_set: &mut WorkingSet<C>) {}
     }
 
     impl<C: Context, Da: DaSpec> BlobSelector<Da> for MockKernel<C, Da> {

@@ -89,6 +89,10 @@ pub use sov_modules_macros::ModuleCallJsonSchema;
 #[cfg(feature = "macros")]
 pub use sov_modules_macros::ModuleInfo;
 
+/// Derives the [`ModuleInfo`] trait for the underlying `struct`, giving full access to kernel functionality
+#[cfg(feature = "macros")]
+pub use sov_modules_macros::KernelModuleInfo;
+
 /// Procedural macros to assist with creating new modules.
 #[cfg(feature = "macros")]
 pub mod macros {

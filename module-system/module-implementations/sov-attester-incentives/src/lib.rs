@@ -21,7 +21,7 @@ pub use query::*;
 use sov_bank::Amount;
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::{
-    Context, DaSpec, Error, ModuleInfo, ValidityConditionChecker, WorkingSet, Zkvm,
+    Context, DaSpec, Error, KernelModuleInfo, ValidityConditionChecker, WorkingSet, Zkvm,
 };
 use sov_state::codec::BcsCodec;
 
@@ -38,7 +38,7 @@ pub struct UnbondingInfo {
 /// - Must derive `ModuleInfo`
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
-#[derive(ModuleInfo)]
+#[derive(KernelModuleInfo)]
 pub struct AttesterIncentives<C, Vm, Da, Checker>
 where
     C: Context,
@@ -115,7 +115,7 @@ where
     pub(crate) bank: sov_bank::Bank<C>,
 
     /// Reference to the chain state module, used to check the initial hashes of the state transition.
-    #[module]
+    #[kernel_module]
     pub(crate) chain_state: sov_chain_state::ChainState<C, Da>,
 }
 

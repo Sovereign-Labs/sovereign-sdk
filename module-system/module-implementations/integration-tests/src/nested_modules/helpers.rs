@@ -1,7 +1,7 @@
 use sov_modules_api::{Context, ModuleInfo, StateMap, StateValue, WorkingSet};
 
 pub mod module_a {
-    use sov_modules_api::{StateMapAccessor, StateValueAccessor};
+    use sov_modules_api::{Module, StateMapAccessor, StateValueAccessor};
 
     use super::*;
 
@@ -17,6 +17,25 @@ pub mod module_a {
         pub(crate) state_2_a: StateValue<String>,
     }
 
+    impl<C: Context> Module for ModuleA<C> {
+        type Context = C;
+
+        type Config = ();
+
+        type CallMessage = ();
+
+        type Event = ();
+
+        fn call(
+            &self,
+            _message: Self::CallMessage,
+            _context: &Self::Context,
+            _working_set: &mut WorkingSet<Self::Context>,
+        ) -> Result<sov_modules_api::CallResponse, sov_modules_api::Error> {
+            todo!()
+        }
+    }
+
     impl<C: Context> ModuleA<C> {
         pub fn update(&mut self, key: &str, value: &str, working_set: &mut WorkingSet<C>) {
             working_set.add_event("module A", "update");
@@ -28,6 +47,7 @@ pub mod module_a {
 }
 
 pub mod module_b {
+    use sov_modules_api::Module;
     use sov_modules_api::StateMapAccessor;
 
     use super::*;
@@ -44,6 +64,25 @@ pub mod module_b {
         pub(crate) mod_1_a: module_a::ModuleA<C>,
     }
 
+    impl<C: Context> Module for ModuleB<C> {
+        type Context = C;
+
+        type Config = ();
+
+        type CallMessage = ();
+
+        type Event = ();
+
+        fn call(
+            &self,
+            _message: Self::CallMessage,
+            _context: &Self::Context,
+            _working_set: &mut WorkingSet<Self::Context>,
+        ) -> Result<sov_modules_api::CallResponse, sov_modules_api::Error> {
+            todo!()
+        }
+    }
+
     impl<C: Context> ModuleB<C> {
         pub fn update(&mut self, key: &str, value: &str, working_set: &mut WorkingSet<C>) {
             working_set.add_event("module B", "update");
@@ -56,6 +95,7 @@ pub mod module_b {
 
 pub(crate) mod module_c {
     use super::*;
+    use sov_modules_api::Module;
 
     #[derive(ModuleInfo)]
     pub(crate) struct ModuleC<C: Context> {
@@ -67,6 +107,25 @@ pub(crate) mod module_c {
 
         #[module]
         mod_1_b: module_b::ModuleB<C>,
+    }
+
+    impl<C: Context> Module for ModuleC<C> {
+        type Context = C;
+
+        type Config = ();
+
+        type CallMessage = ();
+
+        type Event = ();
+
+        fn call(
+            &self,
+            _message: Self::CallMessage,
+            _context: &Self::Context,
+            _working_set: &mut WorkingSet<Self::Context>,
+        ) -> Result<sov_modules_api::CallResponse, sov_modules_api::Error> {
+            todo!()
+        }
     }
 
     impl<C: Context> ModuleC<C> {

@@ -22,7 +22,7 @@ pub use query::*;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::da::Time;
-use sov_modules_api::prelude::*;
+use sov_modules_api::{prelude::*, KernelModuleInfo};
 use sov_modules_api::{DaSpec, Error, ModuleInfo, ValidityConditionChecker, WorkingSet};
 use sov_state::codec::BcsCodec;
 use sov_state::storage::kernel_state::VersionReader;
@@ -112,7 +112,7 @@ impl<Da: DaSpec> TransitionInProgress<Da> {
 /// - Must derive `ModuleInfo`
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
-#[derive(Clone, ModuleInfo)]
+#[derive(Clone, KernelModuleInfo)]
 pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> {
     /// Address of the module.
     #[address]

@@ -1,9 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use sov_modules_api::runtime::capabilities::Kernel;
+use sov_modules_api::StateValueAccessor;
 use sov_modules_api::{da::Time, WorkingSet};
-use sov_modules_api::{StateValueAccessor, VersionedWorkingSet};
-use sov_state::storage::KernelWorkingSet;
 
 use crate::{ChainState, TransitionHeight};
 

@@ -2199,6 +2199,7 @@ dependencies = [
  "sov-prover-storage-manager",
  "sov-rollup-interface",
  "sov-sequencer-registry",
+ "sov-soft-confirmations-kernel",
  "sov-state",
  "sov-stf-runner",
  "sov-value-setter",
@@ -9172,6 +9173,19 @@ dependencies = [
  "sov-zk-cycle-macros",
  "sov-zk-cycle-utils",
  "tempfile",
+]
+
+[[package]]
+name = "sov-soft-confirmations-kernel"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "sov-blob-storage",
+ "sov-chain-state",
+ "sov-modules-api",
+ "sov-state",
 ]
 
 [[package]]
