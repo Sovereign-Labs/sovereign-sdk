@@ -1,3 +1,5 @@
+//! Utilities for the sequencer RPC.
+
 use borsh::BorshSerialize;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
