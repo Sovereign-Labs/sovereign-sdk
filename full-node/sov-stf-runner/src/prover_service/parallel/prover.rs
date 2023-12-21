@@ -8,12 +8,12 @@ use serde::Serialize;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_rollup_interface::zk::StateTransitionData;
 use sov_rollup_interface::zk::{Proof, ZkvmHost};
 
 use super::ProverServiceError;
 use crate::{
-    ProofGenConfig, ProofProcessingStatus, ProofSubmissionStatus, StateTransitionData,
-    WitnessSubmissionStatus,
+    ProofGenConfig, ProofProcessingStatus, ProofSubmissionStatus, WitnessSubmissionStatus,
 };
 
 enum ProverStatus<StateRoot, Witness, Da: DaSpec> {

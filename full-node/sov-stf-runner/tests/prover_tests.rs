@@ -3,11 +3,11 @@ use sov_mock_da::{
 };
 use sov_mock_zkvm::MockZkvm;
 use sov_rollup_interface::da::Time;
+use sov_rollup_interface::zk::StateTransitionData;
 use sov_stf_runner::mock::MockStf;
 use sov_stf_runner::{
     ParallelProverService, ProofProcessingStatus, ProofSubmissionStatus, ProverService,
-    ProverServiceConfig, ProverServiceError, RollupProverConfig, StateTransitionData,
-    WitnessSubmissionStatus,
+    ProverServiceConfig, ProverServiceError, RollupProverConfig, WitnessSubmissionStatus,
 };
 
 #[tokio::test]
