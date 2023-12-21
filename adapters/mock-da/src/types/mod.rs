@@ -33,7 +33,7 @@ impl Debug for MockHash {
 
 impl core::fmt::Display for MockHash {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "0x{}", hex::encode(&self.0))
+        write!(f, "0x{}", hex::encode(self.0))
     }
 }
 

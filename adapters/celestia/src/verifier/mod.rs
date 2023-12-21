@@ -70,7 +70,7 @@ impl AsRef<[u8]> for TmHash {
 
 impl core::fmt::Display for TmHash {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "0x{}", hex::encode(&self.0))
+        write!(f, "0x{}", hex::encode(self.0))
     }
 }
 

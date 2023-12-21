@@ -15,7 +15,7 @@ impl BlockHashTrait for AvailHash {}
 
 impl core::fmt::Display for AvailHash {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "0x{}", hex::encode(&self.0))
+        write!(f, "0x{}", hex::encode(self.0))
     }
 }
 
