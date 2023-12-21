@@ -168,7 +168,7 @@ async fn main() -> Result<(), anyhow::Error> {
         MockDaSpec,
         Risc0Host,
         Runtime<DefaultContext, MockDaSpec>,
-        BasicKernel<DefaultContext>,
+        BasicKernel<DefaultContext, _>,
     >::new();
 
     let genesis_config = get_genesis_config(&GenesisPaths::from_dir(

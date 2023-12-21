@@ -121,7 +121,7 @@ async fn main() -> Result<(), anyhow::Error> {
         RngDaSpec,
         Risc0Verifier,
         Runtime<DefaultContext, RngDaSpec>,
-        BasicKernel<DefaultContext>,
+        BasicKernel<DefaultContext, _>,
     >::new();
 
     let demo_genesis_config = get_genesis_config(&GenesisPaths::from_dir(

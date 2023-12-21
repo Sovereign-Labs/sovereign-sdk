@@ -167,7 +167,7 @@ pub mod mocks {
             Ok(())
         }
 
-        fn init(&mut self, config: &Self::GenesisConfig, working_set: &mut WorkingSet<C>) {}
+        fn init(&mut self, _config: &Self::GenesisConfig, _working_set: &mut WorkingSet<C>) {}
     }
 
     impl<C: Context, Da: DaSpec> BlobSelector<Da> for MockKernel<C, Da> {
