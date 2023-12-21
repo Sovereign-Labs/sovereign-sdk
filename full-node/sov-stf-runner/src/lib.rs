@@ -40,7 +40,7 @@ pub mod verifier;
 /// Data required to verify a state transition.
 pub struct StateTransitionData<StateRoot, Witness, Da: DaSpec> {
     /// The state root before the state transition
-    pub pre_state_root: StateRoot,
+    pub initial_state_root: StateRoot,
     /// The header of the da block that is being processed
     pub da_block_header: Da::BlockHeader,
     /// The proof of inclusion for all blobs

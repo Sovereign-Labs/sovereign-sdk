@@ -125,13 +125,12 @@ impl Zkvm for Risc0Guest {
     }
 
     fn verify_and_extract_output<
-        Add: sov_rollup_interface::RollupAddress,
         Da: sov_rollup_interface::da::DaSpec,
         Root: Serialize + DeserializeOwned,
     >(
         _serialized_proof: &[u8],
         _code_commitment: &Self::CodeCommitment,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Root>, Self::Error> {
         todo!()
     }
 }

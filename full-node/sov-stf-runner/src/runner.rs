@@ -236,7 +236,8 @@ where
             let transition_data: StateTransitionData<Stf::StateRoot, Stf::Witness, Da::Spec> =
                 StateTransitionData {
                     // TODO(https://github.com/Sovereign-Labs/sovereign-sdk/issues/1247): incorrect pre-state root in case of re-org
-                    pre_state_root: self.state_root.clone(),
+                    initial_state_root: self.state_root.clone(),
+
                     da_block_header: filtered_block.header().clone(),
                     inclusion_proof,
                     completeness_proof,

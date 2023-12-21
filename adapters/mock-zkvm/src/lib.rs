@@ -123,13 +123,12 @@ impl sov_rollup_interface::zk::Zkvm for MockZkvm {
     }
 
     fn verify_and_extract_output<
-        Add: sov_rollup_interface::RollupAddress,
         Da: sov_rollup_interface::da::DaSpec,
         Root: serde::Serialize + serde::de::DeserializeOwned,
     >(
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Root>, Self::Error> {
         let output = Self::verify(serialized_proof, code_commitment)?;
         Ok(bincode::deserialize(output)?)
     }
@@ -166,13 +165,12 @@ impl sov_rollup_interface::zk::Zkvm for MockZkGuest {
     }
 
     fn verify_and_extract_output<
-        Add: sov_rollup_interface::RollupAddress,
         Da: sov_rollup_interface::da::DaSpec,
         Root: Serialize + serde::de::DeserializeOwned,
     >(
         _serialized_proof: &[u8],
         _code_commitment: &Self::CodeCommitment,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Root>, Self::Error> {
         unimplemented!()
     }
 }
