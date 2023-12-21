@@ -10,7 +10,7 @@ use sov_state::codec::BorshCodec;
 
 /// A `versioned` value stored in kernel state. The semantics of this type are different
 /// depending on the priveleges of the accessor. For a standard ("user space") interaction
-/// via a [`VersionedWorkingSet`], only one version of this value is accessible. Inside the kernel,
+/// via a `VersionedWorkingSet`, only one version of this value is accessible. Inside the kernel,
 /// (where access is mediated by a [`KernelWorkingSet`]), all versions of this value are accessible.
 ///
 /// Under the hood, a versioned value is implemented as a map from a slot number to a value. From the kernel, any

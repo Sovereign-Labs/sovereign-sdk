@@ -157,6 +157,7 @@ pub mod mocks {
 
         type GenesisConfig = ();
 
+        #[cfg(feature = "native")]
         type GenesisPaths = ();
 
         fn genesis(
