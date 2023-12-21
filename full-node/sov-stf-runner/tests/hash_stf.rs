@@ -217,11 +217,7 @@ pub fn get_result_from_blocks(
                  ArrayWitness::default(),
                  &block.header,
                  &block.validity_cond,
-                 &mut blobs,
-        ProverServiceConfig {
-            aggregated_proof_block_jump: 1,
-        },
-    );
+                 &mut blobs);
 
         state_root = result.state_root;
         storage = result.change_set;

@@ -4,8 +4,8 @@ use sov_mock_da::{
 };
 use sov_mock_zkvm::MockZkvm;
 use sov_stf_runner::{
-    InitVariant, ParallelProverService, RollupConfig, RollupProverConfig, RpcConfig, RunnerConfig,
-    StateTransitionRunner, StorageConfig,
+    InitVariant, ParallelProverService, ProverServiceConfig, RollupConfig, RollupProverConfig,
+    RpcConfig, RunnerConfig, StateTransitionRunner, StorageConfig,
 };
 
 mod hash_stf;
@@ -132,6 +132,9 @@ async fn runner_execution(
         da: MockDaConfig {
             sender_address: da_service.get_sequencer_address(),
         },
+        prover_service: ProverServiceConfig {
+            aggregated_proof_block_jump: 1,
+        },
     };
 
     let ledger_db = LedgerDB::with_path(path).unwrap();
@@ -155,6 +158,7 @@ async fn runner_execution(
         // Should be ZkStorage, but we don't need it for this test
         storage_manager.create_finalized_storage().unwrap(),
         1,
+        rollup_config.prover_service,
     );
 
     let mut runner = StateTransitionRunner::new(

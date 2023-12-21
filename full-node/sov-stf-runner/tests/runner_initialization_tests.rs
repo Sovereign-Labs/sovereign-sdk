@@ -8,8 +8,8 @@ use sov_prover_storage_manager::ProverStorageManager;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::{ArrayWitness, DefaultStorageSpec};
 use sov_stf_runner::{
-    InitVariant, ParallelProverService, RollupConfig, RollupProverConfig, RpcConfig, RunnerConfig,
-    StateTransitionRunner, StorageConfig,
+    InitVariant, ParallelProverService, ProverServiceConfig, RollupConfig, RollupProverConfig,
+    RpcConfig, RunnerConfig, StateTransitionRunner, StorageConfig,
 };
 
 mod hash_stf;
@@ -76,6 +76,9 @@ fn initialize_runner(
         da: MockDaConfig {
             sender_address: address,
         },
+        prover_service: ProverServiceConfig {
+            aggregated_proof_block_jump: 1,
+        },
     };
 
     let da_service = MockDaService::new(address);
@@ -102,6 +105,7 @@ fn initialize_runner(
         // Should be ZkStorage, but we don't need it for this test
         storage_manager.create_finalized_storage().unwrap(),
         1,
+        rollup_config.prover_service,
     );
 
     StateTransitionRunner::new(
