@@ -26,8 +26,13 @@ fn test_simple_value_setter_with_chain_state() {
     let tmpdir = tempfile::tempdir().unwrap();
     let storage = new_orphan_storage(tmpdir.path()).unwrap();
 
-    let stf =
-        StfBlueprint::<C, MockDaSpec, MockZkvm, TestRuntime<C, MockDaSpec>, BasicKernel<C>>::new();
+    let stf = StfBlueprint::<
+        C,
+        MockDaSpec,
+        MockZkvm<MockValidityCond>,
+        TestRuntime<C, MockDaSpec>,
+        BasicKernel<C>,
+    >::new();
     let test_runtime = TestRuntime::<C, MockDaSpec>::default();
 
     let value_setter_messages = ValueSetterMessages::default();

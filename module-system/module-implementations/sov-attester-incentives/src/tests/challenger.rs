@@ -138,7 +138,7 @@ fn invalid_proof_helper(
     challenger_address: sov_modules_api::Address,
     module: &crate::AttesterIncentives<
         DefaultContext,
-        MockZkvm,
+        MockZkvm<MockValidityCond>,
         MockDaSpec,
         MockValidityCondChecker<MockValidityCond>,
     >,
