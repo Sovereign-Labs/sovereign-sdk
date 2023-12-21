@@ -44,7 +44,7 @@ where
         )?;
 
         let result = self.app.apply_slot(
-            &data.pre_state_root,
+            &data.initial_state_root,
             pre_state,
             data.state_transition_witness,
             &data.da_block_header,
@@ -53,7 +53,7 @@ where
         );
 
         let out: StateTransition<Da::Spec, _> = StateTransition {
-            initial_state_root: data.pre_state_root,
+            initial_state_root: data.initial_state_root,
             final_state_root: result.state_root,
             slot_hash: data.da_block_header.hash(),
             validity_condition,

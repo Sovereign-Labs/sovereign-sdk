@@ -213,7 +213,7 @@ where
 
             let transition_data: StateTransitionData<Stf::StateRoot, Stf::Witness, Da::Spec> =
                 StateTransitionData {
-                    pre_state_root: self.state_root.clone(),
+                    initial_state_root: self.state_root.clone(),
                     da_block_header: filtered_block.header().clone(),
                     inclusion_proof,
                     completeness_proof,
