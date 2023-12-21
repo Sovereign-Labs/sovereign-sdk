@@ -118,9 +118,6 @@ pub struct StateTransition<Da: DaSpec, Root> {
     /// The slot hash of the state transition
     pub slot_hash: Da::SlotHash,
 
-    /// Rewarded address: the account that has produced the transition proof.
-    pub rewarded_address: Vec<u8>,
-
     /// An additional validity condition for the state transition which needs
     /// to be checked outside of the zkVM circuit. This typically corresponds to
     /// some claim about the DA layer history, such as (X) is a valid block on the DA layer

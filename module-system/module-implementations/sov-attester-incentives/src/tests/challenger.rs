@@ -66,7 +66,6 @@ fn test_valid_challenge() {
             initial_state_root: initial_transition.state_root,
             slot_hash: [1; 32].into(),
             final_state_root: transition_1.state_root,
-            rewarded_address: challenger_address,
             validity_condition: MockValidityCond { is_valid: true },
         };
 
@@ -195,7 +194,6 @@ fn test_invalid_challenge() {
         initial_state_root: initial_transition.state_root,
         slot_hash: [1; 32].into(),
         final_state_root: transition_1.state_root,
-        rewarded_address: challenger_address,
         validity_condition: MockValidityCond { is_valid: true },
     };
 
@@ -256,7 +254,6 @@ fn test_invalid_challenge() {
             initial_state_root: initial_transition.state_root,
             slot_hash: [2; 32].into(),
             final_state_root: transition_1.state_root,
-            rewarded_address: challenger_address,
             validity_condition: MockValidityCond { is_valid: true },
         }
         .try_to_vec()
@@ -284,7 +281,6 @@ fn test_invalid_challenge() {
             initial_state_root: initial_transition.state_root,
             slot_hash: [1; 32].into(),
             final_state_root: transition_1.state_root,
-            rewarded_address: challenger_address,
             validity_condition: MockValidityCond { is_valid: false },
         }
         .try_to_vec()
@@ -312,7 +308,6 @@ fn test_invalid_challenge() {
             initial_state_root: transition_1.state_root,
             slot_hash: [1; 32].into(),
             final_state_root: transition_1.state_root,
-            rewarded_address: challenger_address,
             validity_condition: MockValidityCond { is_valid: true },
         }
         .try_to_vec()

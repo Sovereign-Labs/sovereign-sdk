@@ -56,7 +56,6 @@ where
             initial_state_root: data.pre_state_root,
             final_state_root: result.state_root,
             slot_hash: data.da_block_header.hash(),
-            rewarded_address: Vec::default(),
             validity_condition,
         };
 
