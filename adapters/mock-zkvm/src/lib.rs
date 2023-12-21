@@ -186,11 +186,10 @@ impl<ValidityCond: ValidityCondition> sov_rollup_interface::zk::ZkvmHost
     ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
         match proof {
             sov_rollup_interface::zk::Proof::Empty(x) => {
-                let data: ProofInfo<Da::ValidityCondition> = bincode::deserialize(x).unwrap();
+                let data: ProofInfo<Da::ValidityCondition> = bincode::deserialize(x)?;
                 let addr = bincode::deserialize(&data.addr).unwrap();
 
-                let st: StateTransitionData<Root, (), Da> =
-                    bincode::deserialize(&data.hint).unwrap();
+                let st: StateTransitionData<Root, (), Da> = bincode::deserialize(&data.hint)?;
 
                 println!("XX---:{:?}", st.da_block_header.hash());
 
