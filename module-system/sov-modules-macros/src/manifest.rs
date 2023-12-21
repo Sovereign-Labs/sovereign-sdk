@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::{env, fmt, fs, ops};
+use std::{env, fmt, fs, ops, process};
 
 use proc_macro2::{Ident, TokenStream};
 use quote::format_ident;
@@ -41,49 +41,116 @@ impl<'a> Manifest<'a> {
         })
     }
 
-    /// Reads a `constants.json` manifest file, recursing from the target directory that builds the
-    /// current implementation.
+    /// Reads a `constants.json` manifest file, retrieving it from the workspace root of the
+    /// current working directory.
     ///
-    /// If the environment variable `CONSTANTS_MANIFEST` is set, it will use that instead.
+    /// If the environment variable `CONSTANTS_MANIFEST` is set, it will use that path as workspace
+    /// directory.
+    ///
+    /// If the compilation is executed for a directory different than the current working dir
+    /// (example: `cargo build --manifest-path /foo/bar/Cargo.toml`), you should override the
+    /// constants manifest dir with the target directory:
+    ///
+    /// ```sh
+    /// CONSTANTS_MANIFEST=/foo/bar cargo build --manifest-path /foo/bar/Cargo.toml
+    /// ```
     ///
     /// The `parent` is used to report the errors to the correct span location.
     pub fn read_constants(parent: &'a Ident) -> Result<Self, syn::Error> {
-        let target_path_filename =
-            std::env::var("TARGET_PATH_OVERRIDE").unwrap_or("target-path".to_string());
-        let target_path_pointer = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .canonicalize()
+        #[cfg(not(test))]
+        let mut name = "constants.json";
+
+        #[cfg(test)]
+        let mut name = "constants.test.json";
+
+        // workaround to https://github.com/dtolnay/trybuild/issues/231
+        // despite trybuild being a crate to build tests, it won't set the `test` flag. It isn't
+        // setting the `trybuild` flag properly either.
+        if env::var_os("CONSTANTS_MANIFEST_TRYBUILD").is_some() {
+            name = "constants.test.json";
+        }
+
+        let constants_dir = env::var_os("CONSTANTS_MANIFEST")
+            .map(PathBuf::from)
+            .map(Ok)
+            .unwrap_or_else(env::current_dir)
             .map_err(|e| {
                 Self::err(
-                    &target_path_filename,
+                    env!("CARGO_MANIFEST_DIR"),
                     parent,
-                    format!("failed access base dir for sovereign manifest file: {e}"),
+                    format!("failed to compute the `{name}` base path: {e}"),
                 )
-            })?
-            .join(&target_path_filename);
+            })?;
 
-        let manifest_path = fs::read_to_string(&target_path_pointer).map_err(|e| {
+        // we remove the __CARGO_FIX_PLZ due to incompatibility with `cargo metadata`
+        // https://github.com/rust-lang/cargo/issues/9706
+        let output = process::Command::new(env!("CARGO"))
+            .args(["metadata", "--format-version=1", "--no-deps"])
+            .current_dir(&constants_dir)
+            .env_remove("__CARGO_FIX_PLZ")
+            .output()
+            .map_err(|e| {
+                Self::err(
+                    &constants_dir,
+                    parent,
+                    format!("failed to compute the `{name}` path: {e}"),
+                )
+            })?;
+
+        let metadata: Value = serde_json::from_slice::<Value>(&output.stdout).map_err(|e| {
             Self::err(
-                &target_path_pointer,
+                &constants_dir,
                 parent,
-                format!("failed to read target path for sovereign manifest file: {e}"),
+                format!("Failed to parse `workspace_root` as json: {}", e),
+            )
+        })?;
+        let ws_root = metadata.get("workspace_root").ok_or_else(|| {
+            Self::err(
+                &constants_dir,
+                parent,
+                "Failed to read `workspace_root` from cargo metadata",
+            )
+        })?;
+        let ws = ws_root
+            .as_str()
+            .ok_or_else(|| {
+                Self::err(
+                    &constants_dir,
+                    parent,
+                    "The `workspace_root` from cargo metadata is not a valid string",
+                )
+            })
+            .map(PathBuf::from)?;
+
+        if !ws.is_dir() {
+            return Err(Self::err(
+                &ws,
+                parent,
+                format!("the computed `{name}` path is not a directory"),
+            ));
+        }
+
+        // checks if is pointing to a cargo project
+        if !ws.join("Cargo.toml").is_file() {
+            return Err(Self::err(
+                &ws,
+                parent,
+                format!(
+                    "the computed `{name}` path is not a valid workspace: Cargo.toml not found"
+                ),
+            ));
+        }
+
+        let constants_path = ws.join(name);
+        let constants = fs::read_to_string(&constants_path).map_err(|e| {
+            Self::err(
+                &constants_path,
+                parent,
+                format!("failed to read `{}`: {}", constants_path.display(), e),
             )
         })?;
 
-        let manifest_path = PathBuf::from(manifest_path.trim())
-            .canonicalize()
-            .map_err(|e| {
-                Self::err(
-                    &manifest_path,
-                    parent,
-                    format!("failed access base dir for sovereign manifest file: {e}"),
-                )
-            })?
-            .join("constants.json");
-
-        let manifest = fs::read_to_string(&manifest_path)
-            .map_err(|e| Self::err(&manifest_path, parent, format!("failed to read file: {e}")))?;
-
-        Self::read_str(manifest, manifest_path, parent)
+        Self::read_str(constants, constants_path, parent)
     }
 
     /// Gets the requested object from the manifest by key

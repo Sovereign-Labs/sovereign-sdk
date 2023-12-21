@@ -17,6 +17,7 @@ use sov_rollup_interface::services::da::{DaService, SlotData};
 
 const DEFAULT_CHAIN_ID: u64 = 0;
 const DEFAULT_GAS_TIP: u64 = 0;
+const DEFAULT_GAS_LIMIT: u64 = 0;
 
 pub fn sender_address_with_pkey() -> (Address, DefaultPrivateKey) {
     // TODO: maybe generate address and private key randomly, instead of
@@ -211,6 +212,7 @@ pub fn generate_transfers(n: usize, start_nonce: u64) -> Vec<u8> {
             enc_msg,
             DEFAULT_CHAIN_ID,
             DEFAULT_GAS_TIP,
+            DEFAULT_GAS_LIMIT,
             start_nonce + (i as u64),
         );
         let ser_tx = tx.try_to_vec().unwrap();
@@ -238,6 +240,7 @@ pub fn generate_create_token_payload(start_nonce: u64) -> Vec<u8> {
         enc_msg,
         DEFAULT_CHAIN_ID,
         DEFAULT_GAS_TIP,
+        DEFAULT_GAS_LIMIT,
         start_nonce,
     );
     let ser_tx = tx.try_to_vec().unwrap();

@@ -2,6 +2,7 @@
 #![doc = include_str!("../README.md")]
 mod call;
 mod genesis;
+mod hooks;
 #[cfg(feature = "native")]
 mod query;
 #[cfg(feature = "native")]
@@ -11,6 +12,7 @@ mod token;
 pub mod utils;
 pub use call::*;
 pub use genesis::*;
+pub use hooks::BankTxHook;
 use sov_modules_api::{CallResponse, Error, GasUnit, ModuleInfo, WorkingSet};
 use token::Token;
 /// Specifies an interface to interact with tokens.

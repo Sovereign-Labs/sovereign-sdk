@@ -16,6 +16,8 @@ pub struct StateTransitionOutput<StateRoot, SlotHash> {
     pub post_state_root: StateRoot,
     /// Da block hash
     pub da_block_hash: SlotHash,
+    /// The block height.
+    pub height: u64,
 }
 
 /// Verifies a state transition
@@ -68,6 +70,7 @@ where
             pre_state_root: data.pre_state_root,
             post_state_root: result.state_root,
             da_block_hash: data.da_block_header.hash(),
+            height: data.da_block_header.height(),
         };
 
         zkvm.commit(&out);

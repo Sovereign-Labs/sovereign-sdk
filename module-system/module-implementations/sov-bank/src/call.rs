@@ -268,6 +268,17 @@ impl<C: sov_modules_api::Context> Bank<C> {
         let token = self.tokens.get(token_address, working_set);
         token.map(|token| token.name)
     }
+
+    /// Total supply of a token stored at the address `token_address`
+    pub fn get_total_supply_of(
+        &self,
+        token_address: &C::Address,
+        working_set: &mut WorkingSet<C>,
+    ) -> Option<u64> {
+        self.tokens
+            .get(token_address, working_set)
+            .map(|token| token.total_supply)
+    }
 }
 
 /// Creates a new prefix from an already existing prefix `parent_prefix` and a `token_address`

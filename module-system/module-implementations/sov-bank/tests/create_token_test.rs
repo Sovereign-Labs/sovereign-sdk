@@ -44,8 +44,12 @@ fn initial_and_deployed_token() {
     assert_eq!(&token_name, &observed_token_name);
 
     let minter_balance = bank.get_balance_of(minter_address, token_address, &mut working_set);
-
     assert_eq!(Some(initial_balance), minter_balance);
+
+    let total_supply = bank
+        .get_total_supply_of(&token_address, &mut working_set)
+        .unwrap();
+    assert_eq!(initial_balance, total_supply);
 }
 
 #[test]

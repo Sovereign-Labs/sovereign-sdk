@@ -217,11 +217,19 @@ mod tests {
         let msg = <TestRuntime<C> as EncodeCall<ValueSetter<DefaultContext>>>::encode_call(msg);
         let chain_id = 0;
         let gas_tip = 0;
+        let gas_limit = 0;
         let nonce = 1;
 
-        Transaction::<DefaultContext>::new_signed_tx(private_key, msg, chain_id, gas_tip, nonce)
-            .try_to_vec()
-            .unwrap()
+        Transaction::<DefaultContext>::new_signed_tx(
+            private_key,
+            msg,
+            chain_id,
+            gas_tip,
+            gas_limit,
+            nonce,
+        )
+        .try_to_vec()
+        .unwrap()
     }
 
     fn generate_random_bytes() -> Vec<u8> {
@@ -236,11 +244,19 @@ mod tests {
         let msg = generate_random_bytes();
         let chain_id = 0;
         let gas_tip = 0;
+        let gas_limit = 0;
         let nonce = 1;
 
-        Transaction::<DefaultContext>::new_signed_tx(private_key, msg, chain_id, gas_tip, nonce)
-            .try_to_vec()
-            .unwrap()
+        Transaction::<DefaultContext>::new_signed_tx(
+            private_key,
+            msg,
+            chain_id,
+            gas_tip,
+            gas_limit,
+            nonce,
+        )
+        .try_to_vec()
+        .unwrap()
     }
 
     fn create_batch_builder(

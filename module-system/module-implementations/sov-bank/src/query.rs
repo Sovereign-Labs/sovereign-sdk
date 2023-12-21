@@ -1,7 +1,7 @@
 //! Defines rpc queries exposed by the bank module, along with the relevant types
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::{StateMapAccessor, WorkingSet};
+use sov_modules_api::WorkingSet;
 
 use crate::{Amount, Bank};
 
@@ -36,17 +36,14 @@ impl<C: sov_modules_api::Context> Bank<C> {
     }
 
     #[rpc_method(name = "supplyOf")]
-    /// Rpc method that returns the supply of token of the token stored at the address `token_address`.
+    /// Rpc method that returns the supply of a token stored at the address `token_address`.
     pub fn supply_of(
         &self,
         token_address: C::Address,
         working_set: &mut WorkingSet<C>,
     ) -> RpcResult<TotalSupplyResponse> {
         Ok(TotalSupplyResponse {
-            amount: self
-                .tokens
-                .get(&token_address, working_set)
-                .map(|token| token.total_supply),
+            amount: self.get_total_supply_of(&token_address, working_set),
         })
     }
 }
