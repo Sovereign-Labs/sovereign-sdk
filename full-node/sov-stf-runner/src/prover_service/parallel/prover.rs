@@ -228,14 +228,7 @@ where
             .run_block(vm.simulate_with_hints(), zk_storage)
             .map(|_| Proof::Empty(Vec::default()))
             .map_err(|e| anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)),
-        ProofGenConfig::Execute => {
-            let p = vm.run(false)?;
-            let s = Vm::extract_public_input::<Vec<u8>, Da::Spec, V::StateRoot>(&p).unwrap();
-
-            let x = &s.slot_hash;
-            println!("-----X {:?}", x);
-            Ok(p)
-        }
+        ProofGenConfig::Execute => vm.run(false),
         ProofGenConfig::Prover => vm.run(true),
     }
 }

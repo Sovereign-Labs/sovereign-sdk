@@ -97,7 +97,7 @@ impl<'a> ZkvmHost for Risc0Host<'a> {
         }
     }
 
-    fn extract_public_input<
+    fn extract_output<
         Add: DeserializeOwned,
         Da: sov_rollup_interface::da::DaSpec,
         Root: Serialize + DeserializeOwned,
@@ -105,11 +105,14 @@ impl<'a> ZkvmHost for Risc0Host<'a> {
         proof: &Proof,
     ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
         match proof {
-            Proof::Empty(jurnal) => {
-                let jurnal: Journal = bincode::deserialize(jurnal)?;
-                Ok(jurnal.decode()?)
+            Proof::Empty(journal) => {
+                let journal: Journal = bincode::deserialize(journal)?;
+                Ok(journal.decode()?)
             }
-            Proof::Data(data) => todo!(),
+            Proof::Data(data) => {
+                let receipt: Receipt = bincode::deserialize(data)?;
+                Ok(receipt.journal.decode()?)
+            }
         }
     }
 }

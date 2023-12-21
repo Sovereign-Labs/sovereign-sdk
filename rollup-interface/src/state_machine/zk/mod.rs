@@ -47,7 +47,7 @@ pub trait ZkvmHost: Zkvm + Clone {
     fn run(&mut self, with_proof: bool) -> Result<Proof, anyhow::Error>;
 
     ///TODO
-    fn extract_public_input<
+    fn extract_output<
         Add: DeserializeOwned,
         Da: DaSpec,
         Root: Serialize + DeserializeOwned + Clone,
