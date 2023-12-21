@@ -47,8 +47,7 @@ pub mod module_a {
 }
 
 pub mod module_b {
-    use sov_modules_api::Module;
-    use sov_modules_api::StateMapAccessor;
+    use sov_modules_api::{Module, StateMapAccessor};
 
     use super::*;
 
@@ -94,8 +93,9 @@ pub mod module_b {
 }
 
 pub(crate) mod module_c {
-    use super::*;
     use sov_modules_api::Module;
+
+    use super::*;
 
     #[derive(ModuleInfo)]
     pub(crate) struct ModuleC<C: Context> {

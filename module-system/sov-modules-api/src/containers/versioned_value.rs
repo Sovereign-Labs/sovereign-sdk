@@ -1,9 +1,10 @@
 use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use sov_modules_core::kernel_state::VersionReader;
 use sov_modules_core::{
-    kernel_state::VersionReader, Context, KernelWorkingSet, Prefix, StateCodec, StateKeyCodec,
-    StateReaderAndWriter, StateValueCodec, WorkingSet,
+    Context, KernelWorkingSet, Prefix, StateCodec, StateKeyCodec, StateReaderAndWriter,
+    StateValueCodec, WorkingSet,
 };
 use sov_state::codec::BorshCodec;
 

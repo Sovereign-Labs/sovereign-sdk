@@ -1,7 +1,7 @@
 use sov_chain_state::TransitionHeight;
+use sov_modules_api::prelude::*;
 use sov_modules_api::runtime::capabilities::{BlobRefOrOwned, BlobSelector};
-use sov_modules_api::{prelude::*, KernelWorkingSet};
-use sov_modules_api::{BlobReaderTrait, Context, DaSpec, WorkingSet};
+use sov_modules_api::{BlobReaderTrait, Context, DaSpec, KernelWorkingSet, WorkingSet};
 use tracing::info;
 
 use crate::{BlobStorage, DEFERRED_SLOTS_COUNT};

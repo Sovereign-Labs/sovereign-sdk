@@ -1,6 +1,7 @@
 use sov_modules_api::prelude::*;
 use sov_modules_api::WorkingSet;
-use sov_state::{storage::KernelWorkingSet, Storage};
+use sov_state::storage::KernelWorkingSet;
+use sov_state::Storage;
 
 use crate::{ChainState, StateTransitionId, TransitionHeight};
 
