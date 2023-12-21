@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::net::SocketAddr;
 
 use jsonrpsee::RpcModule;
@@ -165,12 +166,32 @@ where
 
     /// Runs the rollup.
     pub async fn run_in_process(&mut self) -> Result<(), anyhow::Error> {
-        for height in self.start_height.. {
+        let mut seen_block_headers: VecDeque<<Da::Spec as DaSpec>::BlockHeader> = VecDeque::new();
+        let mut seen_receipts: VecDeque<_> = VecDeque::new();
+        let mut height = self.start_height;
+        loop {
             debug!("Requesting data for height {}", height);
-            // TODO(https://github.com/Sovereign-Labs/sovereign-sdk/issues/1217)
-            // STF runner should handle re-org
-            // Assumes we are on chains with instant finality and no change of head happens
-            let filtered_block = self.da_service.get_block_at(height).await?;
+            let mut filtered_block = self.da_service.get_block_at(height).await?;
+
+            // Checking if reorg happened or not.
+            if let Some(prev_block_header) = seen_block_headers.back() {
+                if prev_block_header.hash() != filtered_block.header().prev_hash() {
+                    tracing::warn!("Block at height={} does not belong in current chain. Chain has forked. Traversing backwards", height);
+                    while let Some(seen_block_header) = seen_block_headers.pop_back() {
+                        seen_receipts.pop_back();
+                        let block = self
+                            .da_service
+                            .get_block_at(seen_block_header.height())
+                            .await?;
+                        if block.header().prev_hash() == seen_block_header.prev_hash() {
+                            height = seen_block_header.height();
+                            filtered_block = block;
+                            break;
+                        }
+                    }
+                    tracing::info!("Resuming execution on height={}", height);
+                }
+            }
 
             let mut blobs = self.da_service.extract_relevant_blobs(&filtered_block);
 
@@ -194,6 +215,7 @@ where
                 .storage_manager
                 .create_storage_on(filtered_block.header())?;
             let slot_result = self.stf.apply_slot(
+                // TODO(https://github.com/Sovereign-Labs/sovereign-sdk/issues/1247): incorrect pre-state root in case of re-org
                 &self.state_root,
                 pre_state,
                 Default::default(),
@@ -213,6 +235,7 @@ where
 
             let transition_data: StateTransitionData<Stf::StateRoot, Stf::Witness, Da::Spec> =
                 StateTransitionData {
+                    // TODO(https://github.com/Sovereign-Labs/sovereign-sdk/issues/1247): incorrect pre-state root in case of re-org
                     pre_state_root: self.state_root.clone(),
                     da_block_header: filtered_block.header().clone(),
                     inclusion_proof,
@@ -223,12 +246,8 @@ where
 
             self.storage_manager
                 .save_change_set(filtered_block.header(), slot_result.change_set)?;
-            // TODO: This should be in different thread https://github.com/Sovereign-Labs/sovereign-sdk/issues/1217
-            let last_finalized = self.da_service.get_last_finalized_block_header().await?;
-            if last_finalized.height() >= filtered_block.header().height() {
-                self.storage_manager.finalize(filtered_block.header())?;
-            }
 
+            // ----------------
             // Create ZK proof.
             {
                 let header_hash = transition_data.da_block_header.hash();
@@ -261,11 +280,42 @@ where
             }
             let next_state_root = slot_result.state_root;
 
-            self.ledger_db.commit_slot(data_to_commit)?;
-            self.state_root = next_state_root;
-        }
+            seen_receipts.push_back(data_to_commit);
 
-        Ok(())
+            self.state_root = next_state_root;
+            seen_block_headers.push_back(filtered_block.header().clone());
+            height += 1;
+
+            // ----------------
+            // Finalization. Done after seen block for proper handling of instant finality
+            // Can be moved to another thread to improve throughput
+            let last_finalized = self.da_service.get_last_finalized_block_header().await?;
+            // For safety we finalize blocks one by one
+            tracing::info!(
+                "Last finalized header height is {}, ",
+                last_finalized.height()
+            );
+            // Checking all seen blocks, in case if there was delay in getting last finalized header.
+            while let Some(earliest_seen_header) = seen_block_headers.get(0) {
+                tracing::debug!(
+                    "Checking seen header height={}",
+                    earliest_seen_header.height()
+                );
+                if earliest_seen_header.height() <= last_finalized.height() {
+                    tracing::debug!(
+                        "Finalizing seen header height={}",
+                        earliest_seen_header.height()
+                    );
+                    self.storage_manager.finalize(earliest_seen_header)?;
+                    seen_block_headers.pop_front();
+                    let receipts = seen_receipts.pop_front().unwrap();
+                    self.ledger_db.commit_slot(receipts)?;
+                    continue;
+                }
+
+                break;
+            }
+        }
     }
 
     /// Allows to read current state root

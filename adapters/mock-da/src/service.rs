@@ -98,6 +98,16 @@ impl MockDaService {
         }
     }
 
+    /// Get sequencer address
+    pub fn get_sequencer_address(&self) -> MockAddress {
+        self.sequencer_da_address
+    }
+
+    /// Change number of wait attempts before giving up on waiting for block
+    pub fn set_wait_attempts(&mut self, wait_attempts: usize) {
+        self.wait_attempts = wait_attempts;
+    }
+
     async fn wait_for_height(&self, height: u64) -> anyhow::Result<()> {
         // Waits self.wait_attempts * 10ms to get block at height
         for _ in 0..self.wait_attempts {
@@ -725,24 +735,15 @@ mod tests {
                 assert!(has_planned_fork.is_some());
             }
 
-            // 1 -> 2 -> 3.1 -> 4.1
-            //      \ -> 3.2 -> 4.2
-
             da.send_transaction(&[1, 2, 3, 4]).await.unwrap();
             da.send_transaction(&[4, 5, 6, 7]).await.unwrap();
             da.send_transaction(&[8, 9, 0, 1]).await.unwrap();
 
             let block_1_before = da.get_block_at(1).await.unwrap();
             let block_2_before = da.get_block_at(2).await.unwrap();
-            assert_eq!(
-                block_1_before.header().hash(),
-                block_2_before.header().prev_hash()
-            );
+            assert_consecutive_blocks(&block_1_before, &block_2_before);
             let block_3_before = da.get_block_at(3).await.unwrap();
-            assert_eq!(
-                block_2_before.header().hash(),
-                block_3_before.header().prev_hash()
-            );
+            assert_consecutive_blocks(&block_2_before, &block_3_before);
             let block_4 = da.get_block_at(4).await.unwrap();
             {
                 let has_planned_fork = da.planned_fork.lock().unwrap();
@@ -752,11 +753,48 @@ mod tests {
             // Fork is happening!
             assert_ne!(block_3_before.header().hash(), block_4.header().prev_hash());
             let block_3_after = da.get_block_at(3).await.unwrap();
-            assert_eq!(block_3_after.header().hash(), block_4.header().prev_hash());
+            assert_consecutive_blocks(&block_3_after, &block_4);
+            assert_consecutive_blocks(&block_2_before, &block_3_after);
+        }
+
+        #[tokio::test]
+        async fn test_planned_reorg_shorter() {
+            let mut da = MockDaService::with_finality(MockAddress::new([1; 32]), 4);
+            da.wait_attempts = 2;
+            // Planned for will replace blocks at height 3 and 4
+            let planned_fork =
+                PlannedFork::new(4, 2, vec![vec![13, 13, 13, 13], vec![14, 14, 14, 14]]);
+            da.set_planned_fork(planned_fork).await.unwrap();
+
+            da.send_transaction(&[1, 1, 1, 1]).await.unwrap();
+            da.send_transaction(&[2, 2, 2, 2]).await.unwrap();
+            da.send_transaction(&[3, 3, 3, 3]).await.unwrap();
+            da.send_transaction(&[4, 4, 4, 4]).await.unwrap();
+            da.send_transaction(&[5, 5, 5, 5]).await.unwrap();
+
+            let block_1_before = da.get_block_at(1).await.unwrap();
+            let block_2_before = da.get_block_at(2).await.unwrap();
+            assert_consecutive_blocks(&block_1_before, &block_2_before);
+            let block_3_before = da.get_block_at(3).await.unwrap();
+            assert_consecutive_blocks(&block_2_before, &block_3_before);
+            let block_4 = da.get_block_at(4).await.unwrap();
+            assert_ne!(block_4.header().prev_hash(), block_3_before.header().hash());
+            let block_1_after = da.get_block_at(1).await.unwrap();
+            let block_2_after = da.get_block_at(2).await.unwrap();
+            let block_3_after = da.get_block_at(3).await.unwrap();
+            assert_consecutive_blocks(&block_3_after, &block_4);
+            assert_consecutive_blocks(&block_2_after, &block_3_after);
+            assert_consecutive_blocks(&block_1_after, &block_2_after);
+
+            let block_5 = da.get_block_at(5).await;
             assert_eq!(
-                block_2_before.header().hash(),
-                block_3_after.header().prev_hash()
+                "No block at height=5 has been sent in 20ms",
+                block_5.unwrap_err().to_string()
             );
         }
+    }
+
+    fn assert_consecutive_blocks(block1: &MockBlock, block2: &MockBlock) {
+        assert_eq!(block2.header().prev_hash(), block1.header().hash())
     }
 }
