@@ -2,6 +2,7 @@
 #![doc = include_str!("../README.md")]
 
 use std::collections::VecDeque;
+use std::default;
 use std::io::Write;
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -148,6 +149,13 @@ impl<ValidityCond: ValidityCondition> sov_rollup_interface::zk::Zkvm for MockZkv
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct XXX<ValidityCond> {
+    data: Vec<u8>,
+    validity_condition: ValidityCond,
+    addr: Vec<u8>,
+}
+
 impl<ValidityCond: ValidityCondition> sov_rollup_interface::zk::ZkvmHost
     for MockZkvm<ValidityCond>
 {
@@ -155,7 +163,15 @@ impl<ValidityCond: ValidityCondition> sov_rollup_interface::zk::ZkvmHost
 
     fn add_hint<T: Serialize>(&mut self, item: T) {
         let data = bincode::serialize(&item).unwrap();
-        self.committed_data.push_back((data))
+        let addr: Vec<u8> = Default::default();
+        let x = XXX {
+            data,
+            validity_condition: self.validity_condition,
+            addr: bincode::serialize(&addr).unwrap(),
+        };
+
+        let x = bincode::serialize(&item).unwrap();
+        self.committed_data.push_back(x)
     }
 
     fn simulate_with_hints(&mut self) -> Self::Guest {
@@ -176,16 +192,21 @@ impl<ValidityCond: ValidityCondition> sov_rollup_interface::zk::ZkvmHost
         proof: &sov_rollup_interface::zk::Proof,
     ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
         match proof {
-            sov_rollup_interface::zk::Proof::Empty(data) => {
-                let st: StateTransitionData<Root, (), Da> = bincode::deserialize(data).unwrap();
+            sov_rollup_interface::zk::Proof::Empty(x) => {
+                let data: XXX<ValidityCond> = bincode::deserialize(x).unwrap();
+                let addr = bincode::deserialize(&data.addr).unwrap();
+
+                let st: StateTransitionData<Root, (), Da> =
+                    bincode::deserialize(&data.data).unwrap();
+
                 println!("XX---:{:?}", st.da_block_header.hash());
                 //todo!()
                 Ok(sov_rollup_interface::zk::StateTransition {
                     initial_state_root: st.pre_state_root.clone(),
                     final_state_root: st.pre_state_root,
                     slot_hash: st.da_block_header.hash(),
-                    rewarded_address: todo!(),
-                    validity_condition: todo!(),
+                    rewarded_address: addr,
+                    validity_condition: data.validity_condition,
                 })
             }
             sov_rollup_interface::zk::Proof::Data(_) => todo!(),
