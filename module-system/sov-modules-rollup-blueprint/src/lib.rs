@@ -73,6 +73,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error>;
 
     /// Creates GenesisConfig from genesis files.
+    #[allow(clippy::type_complexity)]
     fn create_genesis_config(
         &self,
         rt_genesis_paths: &<Self::NativeRuntime as RuntimeTrait<

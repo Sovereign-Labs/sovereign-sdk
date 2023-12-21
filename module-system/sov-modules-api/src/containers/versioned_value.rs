@@ -70,7 +70,7 @@ impl<V, Codec> VersionedStateValue<V, Codec> {
     }
 
     /// Only the kernel working set can write to versioned values
-    pub fn set_current<'a, C: Context>(&self, value: &V, ws: &mut KernelWorkingSet<'a, C>)
+    pub fn set_current<C: Context>(&self, value: &V, ws: &mut KernelWorkingSet<'_, C>)
     where
         Codec: StateCodec,
         Codec::ValueCodec: StateValueCodec<V>,
