@@ -17,12 +17,13 @@ anyhow = { workspace = true }
 borsh = { workspace = true }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["client", "server"] }
+mini-moka = "0.10"
 serde = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
+tokio = { workspace = true }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
 sov-modules-api = { path = "../../module-system/sov-modules-api", version = "0.3", features = ["native"] }
 sov-state = { path = "../../module-system/sov-state", version = "0.3" }
-
 
 [dev-dependencies]
 tempfile = { workspace = true }
