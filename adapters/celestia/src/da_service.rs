@@ -9,7 +9,7 @@ use celestia_types::consts::appconsts::{
 };
 use celestia_types::nmt::Namespace;
 use celestia_types::ExtendedHeader;
-use jsonrpsee::core::client::Subscription;
+use jsonrpsee::core::client::{Subscription, SubscriptionClientT};
 use jsonrpsee::http_client::{HeaderMap, HttpClient};
 use pin_project::pin_project;
 use sov_rollup_interface::da::CountedBufReader;

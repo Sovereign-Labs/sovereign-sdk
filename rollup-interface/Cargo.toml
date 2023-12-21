@@ -18,7 +18,7 @@ exclude = [
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-borsh = { workspace = true }
+borsh = { workspace = true, features = ["derive"] }
 bytes = { workspace = true, optional = true, default-features = true }
 digest = { workspace = true }
 hex = { workspace = true }

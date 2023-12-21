@@ -23,7 +23,7 @@ sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3", fe
 anyhow = { workspace = true, default-features = true }
 arbitrary = { workspace = true, optional = true }
 byteorder = { workspace = true, default-features = true }
-borsh = { workspace = true, default-features = true, features = ["bytes", "rc"] }
+borsh = { workspace = true, default-features = true, features = ["bytes", "derive", "rc"] }
 proptest = { workspace = true, optional = true, default-features = true }
 proptest-derive = { workspace = true, optional = true }
 serde = { workspace = true, default-features = true, features = ["rc"] }

@@ -1075,9 +1075,19 @@ version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4114279215a005bc675e386011e594e1d9b800918cea18fcadadcce864a2046b"
 dependencies = [
- "borsh-derive",
- "bytes",
+ "borsh-derive 0.10.3",
  "hashbrown 0.13.2",
+]
+
+[[package]]
+name = "borsh"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26d4d6dafc1a3bb54687538972158f07b2c948bc57d5890df22c0739098b3028"
+dependencies = [
+ "borsh-derive 1.3.0",
+ "bytes",
+ "cfg_aliases",
 ]
 
 [[package]]
@@ -1091,6 +1101,20 @@ dependencies = [
  "proc-macro-crate 0.1.5",
  "proc-macro2 1.0.69",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "borsh-derive"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf4918709cc4dd777ad2b6303ed03cb37f3ca0ccede8c1b0d28ac6db8f4710e0"
+dependencies = [
+ "once_cell",
+ "proc-macro-crate 2.0.0",
+ "proc-macro2 1.0.69",
+ "quote 1.0.33",
+ "syn 2.0.39",
+ "syn_derive",
 ]
 
 [[package]]
@@ -1356,6 +1380,12 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
+name = "cfg_aliases"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd16c4719339c4530435d38e511904438d07cce7950afa3718a84ac36c10e89e"
 
 [[package]]
 name = "chrono"
@@ -2174,7 +2204,7 @@ name = "demo-stf"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "borsh",
+ "borsh 1.3.0",
  "clap 4.4.11",
  "demo-stf",
  "hex",
@@ -4265,7 +4295,7 @@ name = "integration-tests"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "borsh",
+ "borsh 1.3.0",
  "jsonrpsee 0.20.3",
  "serde",
  "sov-chain-state",
@@ -4346,7 +4376,7 @@ version = "0.9.0"
 source = "git+https://github.com/penumbra-zone/jmt.git?rev=1d007e11cb68aa5ca13e9a5af4a12e6439d5f7b6#1d007e11cb68aa5ca13e9a5af4a12e6439d5f7b6"
 dependencies = [
  "anyhow",
- "borsh",
+ "borsh 0.10.3",
  "digest 0.10.7",
  "hashbrown 0.13.2",
  "hex",
@@ -5197,7 +5227,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "arbitrary",
- "borsh",
+ "borsh 1.3.0",
  "module-template",
  "proptest",
  "proptest-derive",
@@ -5312,7 +5342,7 @@ name = "nmt-rs"
 version = "0.1.0"
 source = "git+https://github.com/Sovereign-Labs/nmt-rs.git?rev=d821332#d821332baa03aea625d23060dc239af57b9121f5"
 dependencies = [
- "borsh",
+ "borsh 0.10.3",
  "bytes",
  "serde",
  "sha2 0.10.8",
@@ -8311,7 +8341,7 @@ name = "simple-nft-module"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "borsh",
+ "borsh 1.3.0",
  "clap 4.4.11",
  "jsonrpsee 0.20.3",
  "schemars",
@@ -8436,7 +8466,7 @@ dependencies = [
 name = "sov-accessory-state"
 version = "0.3.0"
 dependencies = [
- "borsh",
+ "borsh 1.3.0",
  "jsonrpsee 0.20.3",
  "serde",
  "sov-modules-api",
@@ -8451,7 +8481,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "arbitrary",
- "borsh",
+ "borsh 1.3.0",
  "clap 4.4.11",
  "jsonrpsee 0.20.3",
  "proptest",
@@ -8473,7 +8503,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
- "borsh",
+ "borsh 1.3.0",
  "jmt",
  "serde",
  "serde_json",
@@ -8497,7 +8527,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "avail-subxt",
- "borsh",
+ "borsh 1.3.0",
  "bytes",
  "futures",
  "parity-scale-codec",
@@ -8522,7 +8552,7 @@ name = "sov-bank"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "borsh",
+ "borsh 1.3.0",
  "clap 4.4.11",
  "jsonrpsee 0.20.3",
  "schemars",
@@ -8542,7 +8572,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "bincode",
- "borsh",
+ "borsh 1.3.0",
  "clap 4.4.11",
  "hex",
  "jmt",
@@ -8570,7 +8600,7 @@ dependencies = [
  "async-trait",
  "base64 0.21.5",
  "bech32",
- "borsh",
+ "borsh 1.3.0",
  "celestia-proto",
  "celestia-rpc",
  "celestia-types",
@@ -8603,7 +8633,7 @@ name = "sov-chain-state"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "borsh",
+ "borsh 1.3.0",
  "jsonrpsee 0.20.3",
  "serde",
  "serde_json",
@@ -8621,7 +8651,7 @@ name = "sov-cli"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "borsh",
+ "borsh 1.3.0",
  "demo-stf",
  "directories",
  "hex",
@@ -8639,7 +8669,7 @@ dependencies = [
 name = "sov-data-generators"
 version = "0.3.0"
 dependencies = [
- "borsh",
+ "borsh 1.3.0",
  "proptest",
  "sov-bank",
  "sov-mock-da",
@@ -8656,7 +8686,7 @@ dependencies = [
  "anyhow",
  "arbitrary",
  "bincode",
- "borsh",
+ "borsh 1.3.0",
  "byteorder",
  "criterion",
  "jmt",
@@ -8681,7 +8711,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "bincode",
- "borsh",
+ "borsh 1.3.0",
  "clap 4.4.11",
  "const-rollup-config",
  "criterion",
@@ -8742,7 +8772,7 @@ name = "sov-ethereum"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "borsh",
+ "borsh 1.3.0",
  "demo-stf",
  "ethers",
  "jsonrpsee 0.20.3",
@@ -8764,7 +8794,7 @@ name = "sov-evm"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "borsh",
+ "borsh 1.3.0",
  "bytes",
  "clap 4.4.11",
  "derive_more",
@@ -8818,7 +8848,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "borsh",
+ "borsh 1.3.0",
  "bytes",
  "futures",
  "hex",
@@ -8838,7 +8868,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "bincode",
- "borsh",
+ "borsh 1.3.0",
  "serde",
  "sov-rollup-interface",
 ]
@@ -8866,7 +8896,7 @@ dependencies = [
  "arbitrary",
  "bech32",
  "bincode",
- "borsh",
+ "borsh 1.3.0",
  "clap 4.4.11",
  "derive_more",
  "ed25519-dalek 2.1.0",
@@ -8903,7 +8933,7 @@ dependencies = [
  "anyhow",
  "arbitrary",
  "bech32",
- "borsh",
+ "borsh 1.3.0",
  "derive_more",
  "digest 0.10.7",
  "hex",
@@ -8929,7 +8959,7 @@ name = "sov-modules-macros"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "borsh",
+ "borsh 1.3.0",
  "clap 4.4.11",
  "jsonrpsee 0.20.3",
  "proc-macro2 1.0.69",
@@ -8953,7 +8983,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "borsh",
+ "borsh 1.3.0",
  "jsonrpsee 0.20.3",
  "serde",
  "serde_json",
@@ -8974,7 +9004,7 @@ name = "sov-modules-stf-blueprint"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "borsh",
+ "borsh 1.3.0",
  "hex",
  "jmt",
  "jsonrpsee 0.20.3",
@@ -8995,7 +9025,7 @@ name = "sov-nft-module"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "borsh",
+ "borsh 1.3.0",
  "jsonrpsee 0.20.3",
  "postgres",
  "schemars",
@@ -9018,7 +9048,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "bincode",
- "borsh",
+ "borsh 1.3.0",
  "schemars",
  "serde",
  "serde_json",
@@ -9073,7 +9103,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "borsh",
+ "borsh 1.3.0",
  "demo-stf",
  "futures",
  "serde",
@@ -9090,7 +9120,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "borsh",
+ "borsh 1.3.0",
  "bytes",
  "digest 0.10.7",
  "futures",
@@ -9127,7 +9157,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "borsh",
+ "borsh 1.3.0",
  "hex",
  "jsonrpsee 0.20.3",
  "rand 0.8.5",
@@ -9151,7 +9181,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "arbitrary",
- "borsh",
+ "borsh 1.3.0",
  "clap 4.4.11",
  "jsonrpsee 0.20.3",
  "proptest",
@@ -9179,7 +9209,7 @@ dependencies = [
  "anyhow",
  "arbitrary",
  "bcs 0.1.6",
- "borsh",
+ "borsh 1.3.0",
  "hex",
  "jmt",
  "proptest",
@@ -9203,7 +9233,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "borsh",
+ "borsh 1.3.0",
  "futures",
  "hex",
  "jsonrpsee 0.20.3",
@@ -9238,7 +9268,7 @@ name = "sov-value-setter"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "borsh",
+ "borsh 1.3.0",
  "clap 4.4.11",
  "jsonrpsee 0.20.3",
  "schemars",
@@ -9257,7 +9287,7 @@ name = "sov-vec-setter"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "borsh",
+ "borsh 1.3.0",
  "clap 4.4.11",
  "jsonrpsee 0.20.3",
  "schemars",
@@ -9275,7 +9305,7 @@ name = "sov-zk-cycle-macros"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "borsh",
+ "borsh 1.3.0",
  "proc-macro2 1.0.69",
  "quote 1.0.33",
  "risc0-zkvm",
@@ -10165,6 +10195,18 @@ dependencies = [
  "proc-macro2 1.0.69",
  "quote 1.0.33",
  "unicode-ident",
+]
+
+[[package]]
+name = "syn_derive"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1329189c02ff984e9736652b1631330da25eaa6bc639089ed4915d25446cbe7b"
+dependencies = [
+ "proc-macro-error",
+ "proc-macro2 1.0.69",
+ "quote 1.0.33",
+ "syn 2.0.39",
 ]
 
 [[package]]
