@@ -13,6 +13,12 @@ impl AvailHash {
 
 impl BlockHashTrait for AvailHash {}
 
+impl core::fmt::Display for AvailHash {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "0x{}", hex::encode(&self.0))
+    }
+}
+
 impl AsRef<[u8]> for AvailHash {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()

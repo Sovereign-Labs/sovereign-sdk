@@ -8559,6 +8559,7 @@ dependencies = [
  "borsh",
  "bytes",
  "futures",
+ "hex",
  "parity-scale-codec",
  "pin-project",
  "primitive-types",

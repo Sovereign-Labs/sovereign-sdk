@@ -187,7 +187,7 @@ pub trait BlockHashTrait:
 /// A block header, typically used in the context of an underlying DA blockchain.
 pub trait BlockHeaderTrait: PartialEq + Debug + Clone + Serialize + DeserializeOwned {
     /// Each block header must have a unique canonical hash.
-    type Hash: Clone;
+    type Hash: Clone + core::fmt::Display;
 
     /// Each block header must contain the hash of the previous block.
     fn prev_hash(&self) -> Self::Hash;
