@@ -2,7 +2,7 @@
 extern crate prettytable;
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -15,8 +15,8 @@ use prometheus::{Histogram, HistogramOpts, Registry};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_mock_da::{MockBlock, MockBlockHeader, MockDaSpec};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
-use sov_modules_stf_blueprint::{StfBlueprint, TxEffect};
+use sov_modules_stf_blueprint::kernels::basic::{BasicKernel, BasicKernelGenesisConfig};
+use sov_modules_stf_blueprint::{GenesisParams, StfBlueprint, TxEffect};
 use sov_prover_storage_manager::ProverStorageManager;
 use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rng_da_service::{RngDaService, RngDaSpec};
@@ -25,7 +25,7 @@ use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::DefaultStorageSpec;
-use sov_stf_runner::{from_toml_path, RollupConfig};
+use sov_stf_runner::{from_toml_path, read_json_file, RollupConfig};
 use tempfile::TempDir;
 
 fn print_times(
@@ -124,10 +124,19 @@ async fn main() -> Result<(), anyhow::Error> {
         BasicKernel<DefaultContext, _>,
     >::new();
 
-    let demo_genesis_config = get_genesis_config(&GenesisPaths::from_dir(
-        "../test-data/genesis/integration-tests",
-    ))
-    .unwrap();
+    let demo_genesis_config = {
+        let integ_test_conf_dir: &Path = "../../test-data/genesis/integration-tests".as_ref();
+        let rt_params =
+            get_genesis_config::<DefaultContext, _>(&GenesisPaths::from_dir(integ_test_conf_dir))
+                .unwrap();
+
+        let chain_state = read_json_file(integ_test_conf_dir.join("chain_state.json")).unwrap();
+        let kernel_params = BasicKernelGenesisConfig { chain_state };
+        GenesisParams {
+            runtime: rt_params,
+            kernel: kernel_params,
+        }
+    };
 
     let (mut current_root, storage) = stf.init_chain(storage, demo_genesis_config);
 
