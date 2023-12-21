@@ -52,7 +52,7 @@ where
             &mut data.blobs,
         );
 
-        let out: StateTransition<Da::Spec, Vec<u8>, _> = StateTransition {
+        let out: StateTransition<Da::Spec, _> = StateTransition {
             initial_state_root: data.pre_state_root,
             final_state_root: result.state_root,
             slot_hash: data.da_block_header.hash(),

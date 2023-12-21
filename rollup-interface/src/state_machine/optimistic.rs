@@ -39,7 +39,7 @@ pub struct ChallengeContents<Address, Da: DaSpec, Root> {
     /// The rollup address of the originator of this challenge
     pub challenger_address: Address,
     /// The state transition that was proven
-    pub state_transition: StateTransition<Da, Address, Root>,
+    pub state_transition: StateTransition<Da, Root>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, Serialize, Deserialize)]

@@ -754,7 +754,7 @@ where
 
     fn check_challenge_outputs_against_transition(
         &self,
-        public_outputs: StateTransition<Da, C::Address, <C::Storage as Storage>::Root>,
+        public_outputs: StateTransition<Da, <C::Storage as Storage>::Root>,
         height: &TransitionHeight,
         condition_checker: &mut impl ValidityConditionChecker<Da::ValidityCondition>,
         working_set: &mut WorkingSet<C>,
@@ -840,13 +840,12 @@ where
                 )
             })?;
 
-        let public_outputs_opt: anyhow::Result<
-            StateTransition<Da, C::Address, <C::Storage as Storage>::Root>,
-        > = Vm::verify_and_extract_output::<C::Address, Da, <C::Storage as Storage>::Root>(
-            proof,
-            &code_commitment,
-        )
-        .map_err(|e| anyhow::format_err!("{:?}", e));
+        let public_outputs_opt: anyhow::Result<StateTransition<Da, <C::Storage as Storage>::Root>> =
+            Vm::verify_and_extract_output::<Da, <C::Storage as Storage>::Root>(
+                proof,
+                &code_commitment,
+            )
+            .map_err(|e| anyhow::format_err!("{:?}", e));
 
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
         match public_outputs_opt {
