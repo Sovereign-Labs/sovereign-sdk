@@ -23,7 +23,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::da::Time;
 use sov_modules_api::{prelude::*, KernelModuleInfo};
-use sov_modules_api::{DaSpec, Error, ModuleInfo, ValidityConditionChecker, WorkingSet};
+use sov_modules_api::{DaSpec, Error, ValidityConditionChecker, WorkingSet};
 use sov_state::codec::BcsCodec;
 use sov_state::storage::kernel_state::VersionReader;
 use sov_state::storage::KernelWorkingSet;

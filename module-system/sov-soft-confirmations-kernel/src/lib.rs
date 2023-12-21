@@ -39,7 +39,6 @@ pub struct SoftConfirmationsKernelGenesisConfig<C: Context, Da: DaSpec> {
 
 impl<C: Context, Da: DaSpec> Kernel<C, Da> for SoftConfirmationsKernel<C, Da> {
     fn true_height(&self, working_set: &mut WorkingSet<C>) -> u64 {
-        // let kernel_ws = KernelWorkingSet::from_kernel(self, working_set);
         self.chain_state.true_slot_height(working_set)
     }
     fn visible_height(&self, working_set: &mut WorkingSet<C>) -> u64 {

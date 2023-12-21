@@ -1,7 +1,6 @@
 //! The basic kernel provides censorship resistance by processing all blobs immediately in the order they appear on DA
 use std::path::PathBuf;
 
-use anyhow::Chain;
 use sov_blob_storage::BlobStorage;
 use sov_chain_state::ChainState;
 use sov_modules_api::runtime::capabilities::{
@@ -41,7 +40,6 @@ pub struct BasicKernelGenesisConfig<C: Context, Da: DaSpec> {
 
 impl<C: Context, Da: DaSpec> Kernel<C, Da> for BasicKernel<C, Da> {
     fn true_height(&self, working_set: &mut WorkingSet<C>) -> u64 {
-        // let kernel_ws = KernelWorkingSet::from_kernel(self, working_set);
         self.chain_state.true_slot_height(working_set)
     }
     fn visible_height(&self, working_set: &mut WorkingSet<C>) -> u64 {

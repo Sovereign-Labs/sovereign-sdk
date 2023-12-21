@@ -6,7 +6,6 @@ use sov_modules_api::DaSpec;
 use sov_modules_stf_blueprint::kernels::basic::{BasicKernel, BasicKernelGenesisConfig};
 use sov_modules_stf_blueprint::{GenesisParams, StfBlueprint};
 use sov_prover_storage_manager::ProverStorageManager;
-use sov_soft_confirmations_kernel::SoftConfirmationsKernelGenesisConfig;
 use sov_state::DefaultStorageSpec;
 use sov_stf_runner::read_json_file;
 
