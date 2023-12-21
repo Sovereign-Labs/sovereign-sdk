@@ -215,6 +215,7 @@ where
                 .storage_manager
                 .create_storage_on(filtered_block.header())?;
             let slot_result = self.stf.apply_slot(
+                // TODO(https://github.com/Sovereign-Labs/sovereign-sdk/issues/1247): incorrect pre-state root in case of re-org
                 &self.state_root,
                 pre_state,
                 Default::default(),
@@ -234,6 +235,7 @@ where
 
             let transition_data: StateTransitionData<Stf::StateRoot, Stf::Witness, Da::Spec> =
                 StateTransitionData {
+                    // TODO(https://github.com/Sovereign-Labs/sovereign-sdk/issues/1247): incorrect pre-state root in case of re-org
                     pre_state_root: self.state_root.clone(),
                     da_block_header: filtered_block.header().clone(),
                     inclusion_proof,
@@ -280,7 +282,6 @@ where
 
             seen_receipts.push_back(data_to_commit);
 
-            // TODO: What about state root on reorg
             self.state_root = next_state_root;
             seen_block_headers.push_back(filtered_block.header().clone());
             height += 1;
