@@ -4,6 +4,7 @@ use sov_modules_api::{Context, Spec};
 use sov_modules_stf_blueprint::{Runtime as RuntimeTrait, SequencerOutcome, TxEffect};
 use sov_rollup_interface::services::da::DaService;
 use sov_sequencer::batch_builder::FiFoStrictBatchBuilder;
+use sov_sequencer::Sequencer;
 
 /// Register rollup's default rpc methods.
 pub fn register_rpc<RT, C, Da>(
@@ -16,6 +17,7 @@ where
     RT: RuntimeTrait<C, <Da as DaService>::Spec> + Send + Sync + 'static,
     C: Context,
     Da: DaService + Clone,
+    Da::TransactionId: Clone + serde::Serialize + Send + Sync,
 {
     // runtime rpc.
     let mut rpc_methods = RT::rpc_methods(storage.clone());
@@ -39,7 +41,7 @@ where
             sequencer,
         );
 
-        let sequencer_rpc = sov_sequencer::get_sequencer_rpc(batch_builder, da_service.clone());
+        let sequencer_rpc = Sequencer::new(batch_builder, da_service.clone()).rpc();
         rpc_methods
             .merge(sequencer_rpc)
             .context("Failed to merge Txs RPC modules")?;
