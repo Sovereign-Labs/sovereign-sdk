@@ -226,7 +226,7 @@ fn test_sequencer_unknown_sequencer() {
     let path = tempdir.path();
 
     let mut config = get_genesis_config_for_tests();
-    config.sequencer_registry.is_preferred_sequencer = false;
+    config.runtime.sequencer_registry.is_preferred_sequencer = false;
 
     let genesis_block = MockBlock::default();
     let block_1 = genesis_block.next_mock();

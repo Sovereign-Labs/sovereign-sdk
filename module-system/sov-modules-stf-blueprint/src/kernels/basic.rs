@@ -53,20 +53,13 @@ impl<C: Context, Da: DaSpec> Kernel<C, Da> for BasicKernel<C, Da> {
     #[cfg(feature = "native")]
     type GenesisPaths = BasicKernelGenesisPaths;
 
-    #[cfg(feature = "native")]
-    fn genesis_config(
-        genesis_paths: &Self::GenesisPaths,
-    ) -> Result<Self::GenesisConfig, anyhow::Error> {
-        todo!()
+    fn genesis(
+        &self,
+        config: &Self::GenesisConfig,
+        working_set: &mut WorkingSet<C>,
+    ) -> Result<(), anyhow::Error> {
+        Ok(self.chain_state.genesis(&config.chain_state, working_set)?)
     }
-
-    fn init(&mut self, config: &Self::GenesisConfig, working_set: &mut WorkingSet<C>) {
-        todo!()
-    }
-
-    // fn init(&mut self, working_set: &mut sov_modules_api::WorkingSet<C>) {
-    //     todo!()
-    // }
 }
 
 impl<C: Context, Da: DaSpec> BlobSelector<Da> for BasicKernel<C, Da> {

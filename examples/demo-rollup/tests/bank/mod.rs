@@ -10,6 +10,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{PrivateKey, Spec};
+use sov_modules_stf_blueprint::kernels::basic::BasicKernelGenesisPaths;
 use sov_sequencer::utils::SimpleClient;
 use sov_stf_runner::RollupProverConfig;
 
@@ -26,6 +27,9 @@ async fn bank_tx_tests() -> Result<(), anyhow::Error> {
         start_rollup(
             port_tx,
             GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
+            BasicKernelGenesisPaths {
+                chain_state: "../test-data/genesis/integration-tests/chain_state.json".into(),
+            },
             RollupProverConfig::Execute,
         )
         .await;

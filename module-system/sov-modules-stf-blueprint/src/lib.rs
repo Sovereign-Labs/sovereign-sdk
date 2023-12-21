@@ -7,7 +7,7 @@ mod tx_verifier;
 
 pub use batch::Batch;
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
-use sov_modules_api::runtime::capabilities::KernelSlotHooks;
+use sov_modules_api::runtime::capabilities::{Kernel, KernelSlotHooks};
 use sov_modules_api::{
     BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, KernelWorkingSet, Spec,
     StateCheckpoint, Zkvm,
@@ -89,6 +89,14 @@ pub enum SequencerOutcome<A: BasicAddress> {
     },
     /// Batch was ignored, sequencer deposit left untouched.
     Ignored,
+}
+
+/// Genesis parameters for a blueprint
+pub struct GenesisParams<RT, K> {
+    /// The runtime genesis parameters
+    pub runtime: RT,
+    /// The kernel's genesis parameters
+    pub kernel: K,
 }
 
 /// Reason why sequencer was slashed.
@@ -182,7 +190,8 @@ where
 {
     type StateRoot = <C::Storage as Storage>::Root;
 
-    type GenesisParams = <RT as Genesis>::Config;
+    type GenesisParams =
+        GenesisParams<<RT as Genesis>::Config, <K as Kernel<C, Da>>::GenesisConfig>;
     type PreState = C::Storage;
     type ChangeSet = C::Storage;
 
@@ -201,9 +210,12 @@ where
     ) -> (Self::StateRoot, Self::ChangeSet) {
         let mut working_set = StateCheckpoint::new(pre_state.clone()).to_revertable();
 
+        self.kernel
+            .genesis(&params.kernel, &mut working_set)
+            .expect("Kernel initialization must succeed");
         self.runtime
-            .genesis(&params, &mut working_set)
-            .expect("module initialization must succeed");
+            .genesis(&params.runtime, &mut working_set)
+            .expect("Runtime initialization must succeed");
 
         let mut checkpoint = working_set.checkpoint();
         let (log, witness) = checkpoint.freeze();

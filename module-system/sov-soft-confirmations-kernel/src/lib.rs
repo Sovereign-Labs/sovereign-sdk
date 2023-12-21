@@ -51,22 +51,12 @@ impl<C: Context, Da: DaSpec> Kernel<C, Da> for SoftConfirmationsKernel<C, Da> {
     #[cfg(feature = "native")]
     type GenesisPaths = SoftConfirmationsKernelGenesisPaths;
 
-    #[cfg(feature = "native")]
-    fn genesis_config(
-        genesis_paths: &Self::GenesisPaths,
-    ) -> Result<Self::GenesisConfig, anyhow::Error> {
-        let chain_state = read_json_file(&genesis_paths.chain_state)?;
-        Ok(Self::GenesisConfig { chain_state })
-    }
-
-    fn init(
-        &mut self,
+    fn genesis(
+        &self,
         config: &Self::GenesisConfig,
-        working_set: &mut sov_modules_api::WorkingSet<C>,
-    ) {
-        self.chain_state
-            .genesis(&config.chain_state, working_set)
-            .expect("Genesis configuration must be valid");
+        working_set: &mut WorkingSet<C>,
+    ) -> Result<(), anyhow::Error> {
+        Ok(self.chain_state.genesis(&config.chain_state, working_set)?)
     }
 }
 
@@ -103,20 +93,4 @@ impl<C: Context, Da: DaSpec> KernelSlotHooks<C, Da> for SoftConfirmationsKernel<
         let mut ws = sov_modules_api::KernelWorkingSet::from_kernel(self, working_set);
         self.chain_state.end_slot_hook(&mut ws);
     }
-}
-
-#[cfg(feature = "native")]
-/// Reads json file.
-pub fn read_json_file<T: serde::de::DeserializeOwned, P: AsRef<std::path::Path>>(
-    path: P,
-) -> anyhow::Result<T> {
-    use anyhow::Context;
-    let path_str = path.as_ref().display();
-
-    let data = std::fs::read_to_string(&path)
-        .with_context(|| format!("Failed to read genesis from {}", path_str))?;
-    let config: T = serde_json::from_str(&data)
-        .with_context(|| format!("Failed to parse genesis from {}", path_str))?;
-
-    Ok(config)
 }

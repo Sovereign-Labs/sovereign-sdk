@@ -22,14 +22,12 @@ pub trait Kernel<C: Context, Da: DaSpec>: BlobSelector<Da, Context = C> + Defaul
     /// GenesisPaths type.
     type GenesisPaths: Send + Sync;
 
-    #[cfg(feature = "native")]
-    /// Reads genesis configs.
-    fn genesis_config(
-        genesis_paths: &Self::GenesisPaths,
-    ) -> Result<Self::GenesisConfig, anyhow::Error>;
-
     /// Initialize the kernel at genesis
-    fn init(&mut self, config: &Self::GenesisConfig, working_set: &mut WorkingSet<C>);
+    fn genesis(
+        &self,
+        config: &Self::GenesisConfig,
+        working_set: &mut WorkingSet<C>,
+    ) -> Result<(), anyhow::Error>;
 
     /// Return the current slot height
     fn true_height(&self, working_set: &mut WorkingSet<C>) -> u64;
@@ -161,13 +159,13 @@ pub mod mocks {
 
         type GenesisPaths = ();
 
-        fn genesis_config(
-            _genesis_paths: &Self::GenesisPaths,
-        ) -> Result<Self::GenesisConfig, anyhow::Error> {
+        fn genesis(
+            &self,
+            _config: &Self::GenesisConfig,
+            _working_set: &mut WorkingSet<C>,
+        ) -> Result<(), anyhow::Error> {
             Ok(())
         }
-
-        fn init(&mut self, _config: &Self::GenesisConfig, _working_set: &mut WorkingSet<C>) {}
     }
 
     impl<C: Context, Da: DaSpec> BlobSelector<Da> for MockKernel<C, Da> {

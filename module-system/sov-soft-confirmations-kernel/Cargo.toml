@@ -12,8 +12,6 @@ repository.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-serde_json = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
 
 sov-state = { path = "../sov-state", version = "0.3" }
 sov-modules-api = { path = "../sov-modules-api", version = "0.3" }
@@ -23,8 +21,6 @@ sov-chain-state = { path = "../module-implementations/sov-chain-state" }
 [features]
 default = []
 native = [
-	"serde_json",
-	"serde",
 	"sov-state/native",
 	"sov-modules-api/native",
 	"sov-chain-state/native",

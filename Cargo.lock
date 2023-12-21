@@ -9239,8 +9239,6 @@ name = "sov-soft-confirmations-kernel"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "serde",
- "serde_json",
  "sov-blob-storage",
  "sov-chain-state",
  "sov-modules-api",

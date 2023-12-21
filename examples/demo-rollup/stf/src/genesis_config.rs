@@ -34,8 +34,6 @@ pub struct GenesisPaths {
     pub value_setter_genesis_path: PathBuf,
     /// Accounts genesis path.
     pub accounts_genesis_path: PathBuf,
-    /// Chain State genesis path.
-    pub chain_state_genesis_path: PathBuf,
     /// NFT genesis path.
     pub nft_path: PathBuf,
     #[cfg(feature = "experimental")]
@@ -55,7 +53,6 @@ impl GenesisPaths {
             sequencer_genesis_path: dir.as_ref().join("sequencer_registry.json"),
             value_setter_genesis_path: dir.as_ref().join("value_setter.json"),
             accounts_genesis_path: dir.as_ref().join("accounts.json"),
-            chain_state_genesis_path: dir.as_ref().join("chain_state.json"),
             nft_path: dir.as_ref().join("nft.json"),
             #[cfg(feature = "experimental")]
             evm_genesis_path: dir.as_ref().join("evm.json"),
