@@ -136,13 +136,12 @@ impl<ValidityCond: ValidityCondition> sov_rollup_interface::zk::Zkvm for MockZkv
     }
 
     fn verify_and_extract_output<
-        Add: sov_rollup_interface::RollupAddress,
         Da: sov_rollup_interface::da::DaSpec,
         Root: serde::Serialize + serde::de::DeserializeOwned,
     >(
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Root>, Self::Error> {
         let output = Self::verify(serialized_proof, code_commitment)?;
         Ok(bincode::deserialize(output)?)
     }
@@ -155,12 +154,10 @@ impl<ValidityCond: ValidityCondition> sov_rollup_interface::zk::ZkvmHost
 
     fn add_hint<T: Serialize>(&mut self, item: T) {
         let hint = bincode::serialize(&item).unwrap();
-        let address: Vec<u8> = Default::default();
 
         let proof_info = ProofInfo {
             hint,
             validity_condition: self.validity_condition,
-            addr: bincode::serialize(&address).unwrap(),
         };
 
         let data = bincode::serialize(&proof_info).unwrap();
@@ -178,27 +175,24 @@ impl<ValidityCond: ValidityCondition> sov_rollup_interface::zk::ZkvmHost
     }
 
     fn extract_output<
-        Add: serde::de::DeserializeOwned,
         Da: sov_rollup_interface::da::DaSpec,
         Root: Serialize + serde::de::DeserializeOwned + Clone,
     >(
         proof: &sov_rollup_interface::zk::Proof,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Root>, Self::Error> {
         match proof {
             sov_rollup_interface::zk::Proof::Empty(x) => {
                 let data: ProofInfo<Da::ValidityCondition> = bincode::deserialize(x)?;
-                let addr = bincode::deserialize(&data.addr).unwrap();
 
                 let st: StateTransitionData<Root, (), Da> = bincode::deserialize(&data.hint)?;
 
                 println!("XX---:{:?}", st.da_block_header.hash());
 
                 Ok(sov_rollup_interface::zk::StateTransition {
-                    initial_state_root: st.pre_state_root.clone(),
+                    initial_state_root: st.initial_state_root.clone(),
                     // TODO
-                    final_state_root: st.pre_state_root,
+                    final_state_root: st.initial_state_root,
                     slot_hash: st.da_block_header.hash(),
-                    rewarded_address: addr,
                     validity_condition: data.validity_condition,
                 })
             }
@@ -223,13 +217,12 @@ impl sov_rollup_interface::zk::Zkvm for MockZkGuest {
     }
 
     fn verify_and_extract_output<
-        Add: sov_rollup_interface::RollupAddress,
         Da: sov_rollup_interface::da::DaSpec,
         Root: Serialize + serde::de::DeserializeOwned,
     >(
         _serialized_proof: &[u8],
         _code_commitment: &Self::CodeCommitment,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Root>, Self::Error> {
         unimplemented!()
     }
 }
@@ -248,7 +241,6 @@ impl sov_rollup_interface::zk::ZkvmGuest for MockZkGuest {
 struct ProofInfo<ValidityCond> {
     hint: Vec<u8>,
     validity_condition: ValidityCond,
-    addr: Vec<u8>,
 }
 
 #[test]

@@ -46,7 +46,9 @@ sov-stf-runner = { path = ".", features = ["mock"] }
 
 sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
 sov-mock-zkvm = { path = "../../adapters/mock-zkvm" }
-sov-prover-storage-manager = { path = "../sov-prover-storage-manager" }
+sov-prover-storage-manager = { path = "../sov-prover-storage-manager", features = ["test-utils"] }
+
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
 
 [features]

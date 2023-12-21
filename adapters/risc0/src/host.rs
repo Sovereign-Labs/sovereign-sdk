@@ -3,7 +3,7 @@
 use risc0_zkvm::{ExecutorEnvBuilder, ExecutorImpl, InnerReceipt, Journal, Receipt, Session};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use sov_rollup_interface::zk::{Proof, StateTransition, Zkvm, ZkvmHost};
+use sov_rollup_interface::zk::{Proof, Zkvm, ZkvmHost};
 
 use crate::guest::Risc0Guest;
 use crate::Risc0MethodId;
@@ -97,13 +97,9 @@ impl<'a> ZkvmHost for Risc0Host<'a> {
         }
     }
 
-    fn extract_output<
-        Add: DeserializeOwned,
-        Da: sov_rollup_interface::da::DaSpec,
-        Root: Serialize + DeserializeOwned,
-    >(
+    fn extract_output<Da: sov_rollup_interface::da::DaSpec, Root: Serialize + DeserializeOwned>(
         proof: &Proof,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Root>, Self::Error> {
         match proof {
             Proof::Empty(journal) => {
                 let journal: Journal = bincode::deserialize(journal)?;
@@ -130,13 +126,12 @@ impl<'host> Zkvm for Risc0Host<'host> {
     }
 
     fn verify_and_extract_output<
-        Add: sov_rollup_interface::RollupAddress,
         Da: sov_rollup_interface::da::DaSpec,
         Root: Serialize + DeserializeOwned,
     >(
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<StateTransition<Da, Add, Root>, Self::Error> {
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Root>, Self::Error> {
         let output = Self::verify(serialized_proof, code_commitment)?;
         Ok(risc0_zkvm::serde::from_slice(output)?)
     }
@@ -158,13 +153,12 @@ impl Zkvm for Risc0Verifier {
     }
 
     fn verify_and_extract_output<
-        Add: sov_rollup_interface::RollupAddress,
         Da: sov_rollup_interface::da::DaSpec,
         Root: Serialize + DeserializeOwned,
     >(
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Root>, Self::Error> {
         let output = Self::verify(serialized_proof, code_commitment)?;
         Ok(risc0_zkvm::serde::from_slice(output)?)
     }
