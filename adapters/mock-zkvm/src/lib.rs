@@ -1,13 +1,15 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
 
+use std::collections::VecDeque;
 use std::io::Write;
 use std::sync::{Arc, Condvar, Mutex};
 
 use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::zk::Matches;
+use sov_rollup_interface::da::BlockHeaderTrait;
+use sov_rollup_interface::zk::{Matches, StateTransitionData};
 
 /// A mock commitment to a particular zkVM program.
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
@@ -94,6 +96,7 @@ impl Notifier {
 #[derive(Clone, Default)]
 pub struct MockZkvm {
     worker_thread_notifier: Notifier,
+    committed_data: VecDeque<Vec<u8>>,
 }
 
 impl MockZkvm {
@@ -138,7 +141,10 @@ impl sov_rollup_interface::zk::Zkvm for MockZkvm {
 impl sov_rollup_interface::zk::ZkvmHost for MockZkvm {
     type Guest = MockZkGuest;
 
-    fn add_hint<T: Serialize>(&mut self, _item: T) {}
+    fn add_hint<T: Serialize>(&mut self, item: T) {
+        let data = bincode::serialize(&item).unwrap();
+        self.committed_data.push_back(data)
+    }
 
     fn simulate_with_hints(&mut self) -> Self::Guest {
         MockZkGuest {}
@@ -146,17 +152,71 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvm {
 
     fn run(&mut self, _with_proof: bool) -> Result<sov_rollup_interface::zk::Proof, anyhow::Error> {
         self.worker_thread_notifier.wait();
-        Ok(sov_rollup_interface::zk::Proof::Empty(Vec::default()))
+        let data = self.committed_data.pop_front().unwrap_or_default();
+        Ok(sov_rollup_interface::zk::Proof::Empty(data))
     }
 
     fn extract_public_input<
         Add: serde::de::DeserializeOwned,
         Da: sov_rollup_interface::da::DaSpec,
-        Root: Serialize + serde::de::DeserializeOwned,
+        Root: Serialize + serde::de::DeserializeOwned + Clone,
     >(
         proof: &sov_rollup_interface::zk::Proof,
     ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
-        todo!()
+        match proof {
+            sov_rollup_interface::zk::Proof::Empty(data) => {
+                let st: StateTransitionData<Root, (), Da> = bincode::deserialize(data).unwrap();
+                println!("XX---:{:?}", st.da_block_header.hash());
+                //todo!()
+                Ok(sov_rollup_interface::zk::StateTransition {
+                    initial_state_root: st.pre_state_root.clone(),
+                    final_state_root: st.pre_state_root,
+                    slot_hash: st.da_block_header.hash(),
+                    rewarded_address: todo!(),
+                    validity_condition: todo!(),
+                })
+            }
+            sov_rollup_interface::zk::Proof::Data(_) => todo!(),
+        }
+    }
+}
+
+trait PublicInputExtractor {
+    type Error;
+    fn extract_public_input<
+        Add: serde::de::DeserializeOwned,
+        Da: sov_rollup_interface::da::DaSpec,
+        Root: Serialize + serde::de::DeserializeOwned + Clone,
+    >(
+        proof: &sov_rollup_interface::zk::Proof,
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error>;
+}
+
+impl PublicInputExtractor for MockZkvm {
+    type Error = ();
+
+    fn extract_public_input<
+        Add: serde::de::DeserializeOwned,
+        Da: sov_rollup_interface::da::DaSpec,
+        Root: Serialize + serde::de::DeserializeOwned + Clone,
+    >(
+        proof: &sov_rollup_interface::zk::Proof,
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
+        match proof {
+            sov_rollup_interface::zk::Proof::Empty(data) => {
+                let st: StateTransitionData<Root, (), Da> = bincode::deserialize(data).unwrap();
+                println!("XX---:{:?}", st.da_block_header.hash());
+                //todo!()
+                Ok(sov_rollup_interface::zk::StateTransition {
+                    initial_state_root: st.pre_state_root.clone(),
+                    final_state_root: st.pre_state_root,
+                    slot_hash: st.da_block_header.hash(),
+                    rewarded_address: todo!(),
+                    validity_condition: todo!(),
+                })
+            }
+            sov_rollup_interface::zk::Proof::Data(_) => todo!(),
+        }
     }
 }
 

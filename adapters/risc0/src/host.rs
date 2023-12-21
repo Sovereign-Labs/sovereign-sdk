@@ -89,13 +89,10 @@ impl<'a> ZkvmHost for Risc0Host<'a> {
         if with_proof {
             let receipt = self.run()?;
             let data = bincode::serialize(&receipt)?;
-
             Ok(Proof::Data(data))
         } else {
             let session = self.run_without_proving()?;
-
             let data = bincode::serialize(&session.journal)?;
-
             Ok(Proof::Empty(data))
         }
     }
