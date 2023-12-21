@@ -1,9 +1,9 @@
 //! This module implements the [`ZkvmHost`] trait for the RISC0 VM.
 
-use risc0_zkvm::{ExecutorEnvBuilder, ExecutorImpl, InnerReceipt, Receipt, Session};
+use risc0_zkvm::{ExecutorEnvBuilder, ExecutorImpl, InnerReceipt, Journal, Receipt, Session};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use sov_rollup_interface::zk::{Proof, Zkvm, ZkvmHost};
+use sov_rollup_interface::zk::{Proof, StateTransition, Zkvm, ZkvmHost};
 
 use crate::guest::Risc0Guest;
 use crate::Risc0MethodId;
@@ -89,10 +89,30 @@ impl<'a> ZkvmHost for Risc0Host<'a> {
         if with_proof {
             let receipt = self.run()?;
             let data = bincode::serialize(&receipt)?;
+
             Ok(Proof::Data(data))
         } else {
-            self.run_without_proving()?;
-            Ok(Proof::Empty)
+            let session = self.run_without_proving()?;
+
+            let data = bincode::serialize(&session.journal)?;
+
+            Ok(Proof::Empty(data))
+        }
+    }
+
+    fn extract_public_input<
+        Add: DeserializeOwned,
+        Da: sov_rollup_interface::da::DaSpec,
+        Root: Serialize + DeserializeOwned,
+    >(
+        proof: &Proof,
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
+        match proof {
+            Proof::Empty(jurnal) => {
+                let jurnal: Journal = bincode::deserialize(jurnal)?;
+                Ok(jurnal.decode()?)
+            }
+            Proof::Data(data) => todo!(),
         }
     }
 }
@@ -116,7 +136,7 @@ impl<'host> Zkvm for Risc0Host<'host> {
     >(
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
+    ) -> Result<StateTransition<Da, Add, Root>, Self::Error> {
         let output = Self::verify(serialized_proof, code_commitment)?;
         Ok(risc0_zkvm::serde::from_slice(output)?)
     }

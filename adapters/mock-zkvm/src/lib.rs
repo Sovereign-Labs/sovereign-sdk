@@ -146,7 +146,17 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvm {
 
     fn run(&mut self, _with_proof: bool) -> Result<sov_rollup_interface::zk::Proof, anyhow::Error> {
         self.worker_thread_notifier.wait();
-        Ok(sov_rollup_interface::zk::Proof::Empty)
+        Ok(sov_rollup_interface::zk::Proof::Empty(Vec::default()))
+    }
+
+    fn extract_public_input<
+        Add: serde::de::DeserializeOwned,
+        Da: sov_rollup_interface::da::DaSpec,
+        Root: Serialize + serde::de::DeserializeOwned,
+    >(
+        proof: &sov_rollup_interface::zk::Proof,
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
+        todo!()
     }
 }
 
