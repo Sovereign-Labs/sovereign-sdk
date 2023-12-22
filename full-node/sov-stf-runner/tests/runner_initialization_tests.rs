@@ -16,7 +16,8 @@ mod hash_stf;
 
 use hash_stf::HashStf;
 
-type MockInitVariant = InitVariant<HashStf<MockValidityCond>, MockZkvm, MockDaSpec>;
+type MockInitVariant =
+    InitVariant<HashStf<MockValidityCond>, MockZkvm<MockValidityCond>, MockDaSpec>;
 
 type S = DefaultStorageSpec;
 type StorageManager = ProverStorageManager<MockDaSpec, S>;
@@ -48,7 +49,7 @@ type MockProverService = ParallelProverService<
     [u8; 32],
     ArrayWitness,
     MockDaService,
-    MockZkvm,
+    MockZkvm<MockValidityCond>,
     HashStf<MockValidityCond>,
 >;
 fn initialize_runner(
@@ -58,7 +59,7 @@ fn initialize_runner(
     HashStf<MockValidityCond>,
     StorageManager,
     MockDaService,
-    MockZkvm,
+    MockZkvm<MockValidityCond>,
     MockProverService,
 > {
     let address = MockAddress::new([11u8; 32]);
@@ -92,7 +93,7 @@ fn initialize_runner(
     };
     let mut storage_manager = ProverStorageManager::new(storage_config).unwrap();
 
-    let vm = MockZkvm::default();
+    let vm = MockZkvm::new(MockValidityCond::default());
     let verifier = MockDaVerifier::default();
 
     let prover_config = RollupProverConfig::Prove;

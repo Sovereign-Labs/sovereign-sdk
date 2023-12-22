@@ -196,11 +196,10 @@ pub fn get_result_from_blocks(
     let stf = HashStf::<MockValidityCond>::new();
 
     let (genesis_state_root, mut storage) =
-        <HashStf<MockValidityCond> as StateTransitionFunction<MockZkvm, MockDaSpec>>::init_chain(
-            &stf,
-            storage,
-            genesis_params.to_vec(),
-        );
+        <HashStf<MockValidityCond> as StateTransitionFunction<
+            MockZkvm<MockValidityCond>,
+            MockDaSpec,
+        >>::init_chain(&stf, storage, genesis_params.to_vec());
 
     let mut state_root = genesis_state_root;
 
@@ -209,15 +208,18 @@ pub fn get_result_from_blocks(
     for block in blocks {
         let mut blobs = block.blobs.clone();
 
-        let result =
-            <HashStf<MockValidityCond> as StateTransitionFunction<MockZkvm, MockDaSpec>>::apply_slot::<&mut Vec<MockBlob>>(
-                 &stf,
-                 &state_root,
-                 storage,
-                 ArrayWitness::default(),
-                 &block.header,
-                 &block.validity_cond,
-                 &mut blobs);
+        let result = <HashStf<MockValidityCond> as StateTransitionFunction<
+            MockZkvm<MockValidityCond>,
+            MockDaSpec,
+        >>::apply_slot::<&mut Vec<MockBlob>>(
+            &stf,
+            &state_root,
+            storage,
+            ArrayWitness::default(),
+            &block.header,
+            &block.validity_cond,
+            &mut blobs,
+        );
 
         state_root = result.state_root;
         storage = result.change_set;

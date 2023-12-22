@@ -2,10 +2,7 @@ use std::marker::PhantomData;
 
 use sov_rollup_interface::da::{BlockHeaderTrait, DaVerifier};
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::{StateTransition, Zkvm, ZkvmGuest};
-
-use crate::StateTransitionData;
-
+use sov_rollup_interface::zk::{StateTransition, StateTransitionData, Zkvm, ZkvmGuest};
 /// Verifies a state transition
 pub struct StateTransitionVerifier<ST, Da, Zk>
 where

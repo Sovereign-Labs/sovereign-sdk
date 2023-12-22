@@ -1,13 +1,15 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
 
+use std::collections::VecDeque;
 use std::io::Write;
 use std::sync::{Arc, Condvar, Mutex};
 
 use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::zk::Matches;
+use sov_rollup_interface::da::BlockHeaderTrait;
+use sov_rollup_interface::zk::{Matches, StateTransitionData, ValidityCondition};
 
 /// A mock commitment to a particular zkVM program.
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
@@ -91,12 +93,23 @@ impl Notifier {
 }
 
 /// A mock implementing the zkVM trait.
-#[derive(Clone, Default)]
-pub struct MockZkvm {
+#[derive(Clone)]
+pub struct MockZkvm<ValidityCond> {
     worker_thread_notifier: Notifier,
+    committed_data: VecDeque<Vec<u8>>,
+    validity_condition: ValidityCond,
 }
 
-impl MockZkvm {
+impl<ValidityCond> MockZkvm<ValidityCond> {
+    /// Creates a new MockZkvm
+    pub fn new(validity_condition: ValidityCond) -> Self {
+        Self {
+            worker_thread_notifier: Default::default(),
+            committed_data: Default::default(),
+            validity_condition,
+        }
+    }
+
     /// Simulates zk proof generation.
     pub fn make_proof(&self) {
         // We notify the worket thread.
@@ -104,7 +117,7 @@ impl MockZkvm {
     }
 }
 
-impl sov_rollup_interface::zk::Zkvm for MockZkvm {
+impl<ValidityCond: ValidityCondition> sov_rollup_interface::zk::Zkvm for MockZkvm<ValidityCond> {
     type CodeCommitment = MockCodeCommitment;
 
     type Error = anyhow::Error;
@@ -134,10 +147,21 @@ impl sov_rollup_interface::zk::Zkvm for MockZkvm {
     }
 }
 
-impl sov_rollup_interface::zk::ZkvmHost for MockZkvm {
+impl<ValidityCond: ValidityCondition> sov_rollup_interface::zk::ZkvmHost
+    for MockZkvm<ValidityCond>
+{
     type Guest = MockZkGuest;
 
-    fn add_hint<T: Serialize>(&mut self, _item: T) {}
+    fn add_hint<T: Serialize>(&mut self, item: T) {
+        let hint = bincode::serialize(&item).unwrap();
+        let proof_info = ProofInfo {
+            hint,
+            validity_condition: self.validity_condition,
+        };
+
+        let data = bincode::serialize(&proof_info).unwrap();
+        self.committed_data.push_back(data)
+    }
 
     fn simulate_with_hints(&mut self) -> Self::Guest {
         MockZkGuest {}
@@ -145,7 +169,32 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvm {
 
     fn run(&mut self, _with_proof: bool) -> Result<sov_rollup_interface::zk::Proof, anyhow::Error> {
         self.worker_thread_notifier.wait();
-        Ok(sov_rollup_interface::zk::Proof::Empty)
+        let data = self.committed_data.pop_front().unwrap_or_default();
+        Ok(sov_rollup_interface::zk::Proof::PublicInput(data))
+    }
+
+    fn extract_output<
+        Da: sov_rollup_interface::da::DaSpec,
+        Root: Serialize + serde::de::DeserializeOwned,
+    >(
+        proof: &sov_rollup_interface::zk::Proof,
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Root>, Self::Error> {
+        match proof {
+            sov_rollup_interface::zk::Proof::PublicInput(pub_input) => {
+                let data: ProofInfo<Da::ValidityCondition> = bincode::deserialize(pub_input)?;
+                let st: StateTransitionData<Root, (), Da> = bincode::deserialize(&data.hint)?;
+
+                Ok(sov_rollup_interface::zk::StateTransition {
+                    initial_state_root: st.initial_state_root,
+                    final_state_root: st.final_state_root,
+                    slot_hash: st.da_block_header.hash(),
+                    validity_condition: data.validity_condition,
+                })
+            }
+            sov_rollup_interface::zk::Proof::Full(_) => {
+                panic!("Mock DA doesn't generate real proofs")
+            }
+        }
     }
 }
 
@@ -183,6 +232,12 @@ impl sov_rollup_interface::zk::ZkvmGuest for MockZkGuest {
     fn commit<T: Serialize>(&self, _item: &T) {
         unimplemented!()
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ProofInfo<ValidityCond> {
+    hint: Vec<u8>,
+    validity_condition: ValidityCond,
 }
 
 #[test]

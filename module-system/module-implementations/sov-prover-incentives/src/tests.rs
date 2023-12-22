@@ -1,3 +1,4 @@
+use sov_mock_da::MockValidityCond;
 use sov_mock_zkvm::{MockCodeCommitment, MockProof, MockZkvm};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::digest::Digest;
@@ -42,7 +43,13 @@ fn create_bank_config() -> (
     )
 }
 
-fn setup(working_set: &mut WorkingSet<C>) -> (ProverIncentives<C, MockZkvm>, Address, Address) {
+fn setup(
+    working_set: &mut WorkingSet<C>,
+) -> (
+    ProverIncentives<C, MockZkvm<MockValidityCond>>,
+    Address,
+    Address,
+) {
     // Initialize bank
     let (bank_config, prover_address, sequencer) = create_bank_config();
     let bank = sov_bank::Bank::<C>::default();
@@ -55,7 +62,7 @@ fn setup(working_set: &mut WorkingSet<C>) -> (ProverIncentives<C, MockZkvm>, Add
     );
 
     // initialize prover incentives
-    let module = ProverIncentives::<C, MockZkvm>::default();
+    let module = ProverIncentives::<C, MockZkvm<MockValidityCond>>::default();
     let config = crate::ProverIncentivesConfig {
         bonding_token_address: token_address,
         minimum_bond: BOND_AMOUNT,

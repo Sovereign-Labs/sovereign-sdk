@@ -8,14 +8,14 @@ use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::ZkvmHost;
+use sov_rollup_interface::zk::{StateTransitionData, ZkvmHost};
 
 use super::{ProverService, ProverServiceError};
 use crate::config::ProverServiceConfig;
 use crate::verifier::StateTransitionVerifier;
 use crate::{
     ProofGenConfig, ProofProcessingStatus, ProofSubmissionStatus, RollupProverConfig,
-    StateTransitionData, WitnessSubmissionStatus,
+    WitnessSubmissionStatus,
 };
 
 /// Prover service that generates proofs in parallel.

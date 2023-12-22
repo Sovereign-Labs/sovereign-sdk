@@ -8,12 +8,11 @@ use serde::Serialize;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::{Proof, ZkvmHost};
+use sov_rollup_interface::zk::{Proof, StateTransitionData, ZkvmHost};
 
 use super::ProverServiceError;
 use crate::{
-    ProofGenConfig, ProofProcessingStatus, ProofSubmissionStatus, StateTransitionData,
-    WitnessSubmissionStatus,
+    ProofGenConfig, ProofProcessingStatus, ProofSubmissionStatus, WitnessSubmissionStatus,
 };
 
 enum ProverStatus<StateRoot, Witness, Da: DaSpec> {
@@ -223,10 +222,10 @@ where
     V::PreState: Send + Sync + 'static,
 {
     match config.deref() {
-        ProofGenConfig::Skip => Ok(Proof::Empty),
+        ProofGenConfig::Skip => Ok(Proof::PublicInput(Vec::default())),
         ProofGenConfig::Simulate(verifier) => verifier
             .run_block(vm.simulate_with_hints(), zk_storage)
-            .map(|_| Proof::Empty)
+            .map(|_| Proof::PublicInput(Vec::default()))
             .map_err(|e| anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)),
         ProofGenConfig::Execute => vm.run(false),
         ProofGenConfig::Prover => vm.run(true),

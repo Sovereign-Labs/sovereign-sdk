@@ -7,12 +7,13 @@ use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
+use sov_rollup_interface::zk::{StateTransitionData, Zkvm, ZkvmHost};
 use tokio::sync::oneshot;
 use tracing::{debug, info};
 
 use crate::verifier::StateTransitionVerifier;
-use crate::{ProofSubmissionStatus, ProverService, RunnerConfig, StateTransitionData};
+use crate::{ProofSubmissionStatus, ProverService, RunnerConfig};
+
 type StateRoot<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::StateRoot;
 type GenesisParams<ST, Vm, Da> = <ST as StateTransitionFunction<Vm, Da>>::GenesisParams;
 
@@ -237,7 +238,7 @@ where
                 StateTransitionData {
                     // TODO(https://github.com/Sovereign-Labs/sovereign-sdk/issues/1247): incorrect pre-state root in case of re-org
                     initial_state_root: self.state_root.clone(),
-
+                    final_state_root: slot_result.state_root.clone(),
                     da_block_header: filtered_block.header().clone(),
                     inclusion_proof,
                     completeness_proof,

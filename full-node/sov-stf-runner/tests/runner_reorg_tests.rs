@@ -18,7 +18,8 @@ use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::storage::NativeStorage;
 use sov_state::{ProverStorage, Storage};
 
-type MockInitVariant = InitVariant<HashStf<MockValidityCond>, MockZkvm, MockDaSpec>;
+type MockInitVariant =
+    InitVariant<HashStf<MockValidityCond>, MockZkvm<MockValidityCond>, MockDaSpec>;
 #[tokio::test]
 async fn test_simple_reorg_case() {
     let tmpdir = tempfile::tempdir().unwrap();
@@ -146,7 +147,7 @@ async fn runner_execution(
     };
     let mut storage_manager = ProverStorageManager::new(storage_config).unwrap();
 
-    let vm = MockZkvm::default();
+    let vm = MockZkvm::new(MockValidityCond::default());
     let verifier = MockDaVerifier::default();
     let prover_config = RollupProverConfig::Skip;
 
