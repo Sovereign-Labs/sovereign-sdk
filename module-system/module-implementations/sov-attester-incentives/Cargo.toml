@@ -26,7 +26,7 @@ sov-prover-storage-manager = { path = "../../../full-node/sov-prover-storage-man
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
-bcs = { git = "https://github.com/preston-evans98/bcs.git", rev = "e4f1861" }
+bcs =  { workspace = true }
 jmt = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }

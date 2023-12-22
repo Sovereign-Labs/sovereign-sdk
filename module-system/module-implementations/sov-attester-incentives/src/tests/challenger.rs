@@ -62,11 +62,10 @@ fn test_valid_challenge() {
     let context = DefaultContext::new(challenger_address, sequencer, INIT_HEIGHT + 2);
 
     {
-        let transition = StateTransition::<MockDaSpec, _, _> {
+        let transition = StateTransition::<MockDaSpec, _> {
             initial_state_root: initial_transition.state_root,
             slot_hash: [1; 32].into(),
             final_state_root: transition_1.state_root,
-            rewarded_address: challenger_address,
             validity_condition: MockValidityCond { is_valid: true },
         };
 
@@ -138,7 +137,7 @@ fn invalid_proof_helper(
     challenger_address: sov_modules_api::Address,
     module: &crate::AttesterIncentives<
         DefaultContext,
-        MockZkvm,
+        MockZkvm<MockValidityCond>,
         MockDaSpec,
         MockValidityCondChecker<MockValidityCond>,
     >,
@@ -191,11 +190,10 @@ fn test_invalid_challenge() {
         .set(&(INIT_HEIGHT + 1), &BOND_AMOUNT, &mut working_set);
 
     let context = DefaultContext::new(challenger_address, sequencer, INIT_HEIGHT + 2);
-    let transition: StateTransition<MockDaSpec, _, _> = StateTransition {
+    let transition: StateTransition<MockDaSpec, _> = StateTransition {
         initial_state_root: initial_transition.state_root,
         slot_hash: [1; 32].into(),
         final_state_root: transition_1.state_root,
-        rewarded_address: challenger_address,
         validity_condition: MockValidityCond { is_valid: true },
     };
 
@@ -252,11 +250,10 @@ fn test_invalid_challenge() {
         );
 
         // Bad slot hash
-        let bad_transition = StateTransition::<MockDaSpec, _, _> {
+        let bad_transition = StateTransition::<MockDaSpec, _> {
             initial_state_root: initial_transition.state_root,
             slot_hash: [2; 32].into(),
             final_state_root: transition_1.state_root,
-            rewarded_address: challenger_address,
             validity_condition: MockValidityCond { is_valid: true },
         }
         .try_to_vec()
@@ -280,11 +277,10 @@ fn test_invalid_challenge() {
         );
 
         // Bad validity condition
-        let bad_transition = StateTransition::<MockDaSpec, _, _> {
+        let bad_transition = StateTransition::<MockDaSpec, _> {
             initial_state_root: initial_transition.state_root,
             slot_hash: [1; 32].into(),
             final_state_root: transition_1.state_root,
-            rewarded_address: challenger_address,
             validity_condition: MockValidityCond { is_valid: false },
         }
         .try_to_vec()
@@ -308,11 +304,10 @@ fn test_invalid_challenge() {
         );
 
         // Bad initial root
-        let bad_transition = StateTransition::<MockDaSpec, _, _> {
+        let bad_transition = StateTransition::<MockDaSpec, _> {
             initial_state_root: transition_1.state_root,
             slot_hash: [1; 32].into(),
             final_state_root: transition_1.state_root,
-            rewarded_address: challenger_address,
             validity_condition: MockValidityCond { is_valid: true },
         }
         .try_to_vec()

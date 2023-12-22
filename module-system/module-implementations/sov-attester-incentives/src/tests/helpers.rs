@@ -79,7 +79,12 @@ pub(crate) fn create_bank_config_with_token(
 pub(crate) fn setup(
     working_set: &mut WorkingSet<C>,
 ) -> (
-    AttesterIncentives<C, MockZkvm, MockDaSpec, MockValidityCondChecker<MockValidityCond>>,
+    AttesterIncentives<
+        C,
+        MockZkvm<MockValidityCond>,
+        MockDaSpec,
+        MockValidityCondChecker<MockValidityCond>,
+    >,
     Address,
     Address,
     Address,
@@ -113,7 +118,7 @@ pub(crate) fn setup(
     // initialize prover incentives
     let module = AttesterIncentives::<
         C,
-        MockZkvm,
+        MockZkvm<MockValidityCond>,
         MockDaSpec,
         MockValidityCondChecker<MockValidityCond>,
     >::default();
@@ -153,7 +158,7 @@ pub(crate) struct ExecutionSimulationVars {
 /// with associated bonding proofs, as long as the last state root
 pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidityCond>>(
     rounds: u8,
-    module: &AttesterIncentives<C, MockZkvm, MockDaSpec, Checker>,
+    module: &AttesterIncentives<C, MockZkvm<MockValidityCond>, MockDaSpec, Checker>,
     storage: &ProverStorage<DefaultStorageSpec, SnapshotManager>,
     attester_address: <C as Spec>::Address,
     mut working_set: WorkingSet<C>,

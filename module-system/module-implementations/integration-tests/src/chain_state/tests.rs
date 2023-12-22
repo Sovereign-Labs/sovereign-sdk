@@ -28,8 +28,14 @@
 //     let tmpdir = tempfile::tempdir().unwrap();
 //     let storage = new_orphan_storage(tmpdir.path()).unwrap();
 
-//     let stf = StfBlueprint::<C, MockDaSpec, MockZkvm, TestRuntime<C>, BasicKernel<C, _>>::new();
-//     let test_runtime = TestRuntime::<C>::default();
+// let stf = StfBlueprint::<
+//     C,
+//     MockDaSpec,
+//     MockZkvm<MockValidityCond>,
+//     TestRuntime<C, MockDaSpec>,
+//     BasicKernel<C>,
+// >::new();
+// let test_runtime = TestRuntime::<C, MockDaSpec>::default();
 
 //     let value_setter_messages = ValueSetterMessages::default();
 //     let value_setter = value_setter_messages.create_raw_txs::<TestRuntime<C>>();

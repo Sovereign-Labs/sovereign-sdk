@@ -31,6 +31,12 @@ impl Debug for MockHash {
     }
 }
 
+impl core::fmt::Display for MockHash {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "0x{}", hex::encode(self.0))
+    }
+}
+
 impl AsRef<[u8]> for MockHash {
     fn as_ref(&self) -> &[u8] {
         &self.0

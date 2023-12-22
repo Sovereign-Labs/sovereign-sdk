@@ -19,8 +19,13 @@ pub(crate) type C = DefaultContext;
 pub(crate) type Da = MockDaSpec;
 
 pub(crate) type RuntimeTest = Runtime<DefaultContext, Da>;
-pub(crate) type StfBlueprintTest =
-    StfBlueprint<DefaultContext, Da, sov_mock_zkvm::MockZkvm, RuntimeTest, BasicKernel<C, Da>>;
+pub(crate) type StfBlueprintTest = StfBlueprint<
+    DefaultContext,
+    Da,
+    sov_mock_zkvm::MockZkvm<<Da as DaSpec>::ValidityCondition>,
+    RuntimeTest,
+    BasicKernel<C, Da>,
+>;
 
 pub(crate) fn create_storage_manager_for_tests(
     path: impl AsRef<Path>,

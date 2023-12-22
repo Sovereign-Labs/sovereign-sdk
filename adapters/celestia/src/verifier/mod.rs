@@ -68,6 +68,12 @@ impl AsRef<[u8]> for TmHash {
     }
 }
 
+impl core::fmt::Display for TmHash {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "0x{}", hex::encode(self.0))
+    }
+}
+
 impl TmHash {
     pub fn inner(&self) -> &[u8; 32] {
         match self.0 {

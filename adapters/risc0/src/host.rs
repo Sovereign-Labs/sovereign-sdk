@@ -1,6 +1,6 @@
 //! This module implements the [`ZkvmHost`] trait for the RISC0 VM.
 
-use risc0_zkvm::{ExecutorEnvBuilder, ExecutorImpl, InnerReceipt, Receipt, Session};
+use risc0_zkvm::{ExecutorEnvBuilder, ExecutorImpl, InnerReceipt, Journal, Receipt, Session};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::zk::{Proof, Zkvm, ZkvmHost};
@@ -89,10 +89,26 @@ impl<'a> ZkvmHost for Risc0Host<'a> {
         if with_proof {
             let receipt = self.run()?;
             let data = bincode::serialize(&receipt)?;
-            Ok(Proof::Data(data))
+            Ok(Proof::Full(data))
         } else {
-            self.run_without_proving()?;
-            Ok(Proof::Empty)
+            let session = self.run_without_proving()?;
+            let data = bincode::serialize(&session.journal)?;
+            Ok(Proof::PublicInput(data))
+        }
+    }
+
+    fn extract_output<Da: sov_rollup_interface::da::DaSpec, Root: Serialize + DeserializeOwned>(
+        proof: &Proof,
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Root>, Self::Error> {
+        match proof {
+            Proof::PublicInput(journal) => {
+                let journal: Journal = bincode::deserialize(journal)?;
+                Ok(journal.decode()?)
+            }
+            Proof::Full(data) => {
+                let receipt: Receipt = bincode::deserialize(data)?;
+                Ok(receipt.journal.decode()?)
+            }
         }
     }
 }
@@ -110,13 +126,12 @@ impl<'host> Zkvm for Risc0Host<'host> {
     }
 
     fn verify_and_extract_output<
-        Add: sov_rollup_interface::RollupAddress,
         Da: sov_rollup_interface::da::DaSpec,
         Root: Serialize + DeserializeOwned,
     >(
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Root>, Self::Error> {
         let output = Self::verify(serialized_proof, code_commitment)?;
         Ok(risc0_zkvm::serde::from_slice(output)?)
     }
@@ -138,13 +153,12 @@ impl Zkvm for Risc0Verifier {
     }
 
     fn verify_and_extract_output<
-        Add: sov_rollup_interface::RollupAddress,
         Da: sov_rollup_interface::da::DaSpec,
         Root: Serialize + DeserializeOwned,
     >(
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Add, Root>, Self::Error> {
+    ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Root>, Self::Error> {
         let output = Self::verify(serialized_proof, code_commitment)?;
         Ok(risc0_zkvm::serde::from_slice(output)?)
     }
