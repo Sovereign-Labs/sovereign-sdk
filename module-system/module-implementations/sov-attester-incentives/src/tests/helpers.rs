@@ -5,11 +5,11 @@ use sov_mock_da::{
 };
 use sov_mock_zkvm::{MockCodeCommitment, MockZkvm};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::runtime::capabilities::mocks::MockKernel;
 use sov_modules_api::utils::generate_address;
 use sov_modules_api::{
     Address, Genesis, KernelModule, KernelWorkingSet, Spec, ValidityConditionChecker, WorkingSet,
 };
+use sov_modules_core::runtime::capabilities::mocks::MockKernel;
 use sov_prover_storage_manager::SnapshotManager;
 use sov_rollup_interface::da::Time;
 use sov_state::storage::{NativeStorage, Storage, StorageProof};
