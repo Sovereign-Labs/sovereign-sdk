@@ -89,11 +89,11 @@ impl<'a> ZkvmHost for Risc0Host<'a> {
         if with_proof {
             let receipt = self.run()?;
             let data = bincode::serialize(&receipt)?;
-            Ok(Proof::Data(data))
+            Ok(Proof::Full(data))
         } else {
             let session = self.run_without_proving()?;
             let data = bincode::serialize(&session.journal)?;
-            Ok(Proof::Empty(data))
+            Ok(Proof::PublicInput(data))
         }
     }
 
@@ -101,11 +101,11 @@ impl<'a> ZkvmHost for Risc0Host<'a> {
         proof: &Proof,
     ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Root>, Self::Error> {
         match proof {
-            Proof::Empty(journal) => {
+            Proof::PublicInput(journal) => {
                 let journal: Journal = bincode::deserialize(journal)?;
                 Ok(journal.decode()?)
             }
-            Proof::Data(data) => {
+            Proof::Full(data) => {
                 let receipt: Receipt = bincode::deserialize(data)?;
                 Ok(receipt.journal.decode()?)
             }

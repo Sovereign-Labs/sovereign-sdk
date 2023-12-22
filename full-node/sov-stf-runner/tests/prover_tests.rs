@@ -222,6 +222,7 @@ fn make_transition_data(
 ) -> StateTransitionData<[u8; 0], Vec<u8>, MockDaSpec> {
     StateTransitionData {
         initial_state_root: [],
+        final_state_root: [],
         da_block_header: MockBlockHeader {
             prev_hash: [0; 32].into(),
             hash: header_hash,

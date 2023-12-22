@@ -222,10 +222,10 @@ where
     V::PreState: Send + Sync + 'static,
 {
     match config.deref() {
-        ProofGenConfig::Skip => Ok(Proof::Empty(Vec::default())),
+        ProofGenConfig::Skip => Ok(Proof::PublicInput(Vec::default())),
         ProofGenConfig::Simulate(verifier) => verifier
             .run_block(vm.simulate_with_hints(), zk_storage)
-            .map(|_| Proof::Empty(Vec::default()))
+            .map(|_| Proof::PublicInput(Vec::default()))
             .map_err(|e| anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)),
         ProofGenConfig::Execute => vm.run(false),
         ProofGenConfig::Prover => vm.run(true),

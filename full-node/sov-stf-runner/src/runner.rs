@@ -238,7 +238,7 @@ where
                 StateTransitionData {
                     // TODO(https://github.com/Sovereign-Labs/sovereign-sdk/issues/1247): incorrect pre-state root in case of re-org
                     initial_state_root: self.state_root.clone(),
-
+                    final_state_root: slot_result.state_root.clone(),
                     da_block_header: filtered_block.header().clone(),
                     inclusion_proof,
                     completeness_proof,

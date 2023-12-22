@@ -101,7 +101,7 @@ pub struct MockZkvm<ValidityCond> {
 }
 
 impl<ValidityCond> MockZkvm<ValidityCond> {
-    /// TODO
+    /// Creates a new MockZkvm
     pub fn new(validity_condition: ValidityCond) -> Self {
         Self {
             worker_thread_notifier: Default::default(),
@@ -154,7 +154,6 @@ impl<ValidityCond: ValidityCondition> sov_rollup_interface::zk::ZkvmHost
 
     fn add_hint<T: Serialize>(&mut self, item: T) {
         let hint = bincode::serialize(&item).unwrap();
-
         let proof_info = ProofInfo {
             hint,
             validity_condition: self.validity_condition,
@@ -171,32 +170,30 @@ impl<ValidityCond: ValidityCondition> sov_rollup_interface::zk::ZkvmHost
     fn run(&mut self, _with_proof: bool) -> Result<sov_rollup_interface::zk::Proof, anyhow::Error> {
         self.worker_thread_notifier.wait();
         let data = self.committed_data.pop_front().unwrap_or_default();
-        Ok(sov_rollup_interface::zk::Proof::Empty(data))
+        Ok(sov_rollup_interface::zk::Proof::PublicInput(data))
     }
 
     fn extract_output<
         Da: sov_rollup_interface::da::DaSpec,
-        Root: Serialize + serde::de::DeserializeOwned + Clone,
+        Root: Serialize + serde::de::DeserializeOwned,
     >(
         proof: &sov_rollup_interface::zk::Proof,
     ) -> Result<sov_rollup_interface::zk::StateTransition<Da, Root>, Self::Error> {
         match proof {
-            sov_rollup_interface::zk::Proof::Empty(x) => {
-                let data: ProofInfo<Da::ValidityCondition> = bincode::deserialize(x)?;
-
+            sov_rollup_interface::zk::Proof::PublicInput(pub_input) => {
+                let data: ProofInfo<Da::ValidityCondition> = bincode::deserialize(pub_input)?;
                 let st: StateTransitionData<Root, (), Da> = bincode::deserialize(&data.hint)?;
 
-                println!("XX---:{:?}", st.da_block_header.hash());
-
                 Ok(sov_rollup_interface::zk::StateTransition {
-                    initial_state_root: st.initial_state_root.clone(),
-                    // TODO
-                    final_state_root: st.initial_state_root,
+                    initial_state_root: st.initial_state_root,
+                    final_state_root: st.final_state_root,
                     slot_hash: st.da_block_header.hash(),
                     validity_condition: data.validity_condition,
                 })
             }
-            sov_rollup_interface::zk::Proof::Data(_) => todo!(),
+            sov_rollup_interface::zk::Proof::Full(_) => {
+                panic!("Mock DA doesn't generate real proofs")
+            }
         }
     }
 }
