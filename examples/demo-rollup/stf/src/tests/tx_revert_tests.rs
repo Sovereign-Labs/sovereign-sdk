@@ -30,7 +30,7 @@ fn test_tx_revert() {
     let tempdir = tempfile::tempdir().unwrap();
 
     let config = get_genesis_config_for_tests();
-    let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address;
+    let sequencer_rollup_address = config.runtime.sequencer_registry.seq_rollup_address;
 
     let genesis_block = MockBlock::default();
     let block_1 = genesis_block.next_mock();
@@ -255,7 +255,7 @@ fn test_tx_bad_serialization() {
     let path = tempdir.path();
 
     let config = get_genesis_config_for_tests();
-    let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address;
+    let sequencer_rollup_address = config.runtime.sequencer_registry.seq_rollup_address;
 
     let genesis_block = MockBlock::default();
     let block_1 = genesis_block.next_mock();

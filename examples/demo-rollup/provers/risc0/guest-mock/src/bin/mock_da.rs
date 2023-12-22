@@ -36,7 +36,7 @@ pub fn main() {
     #[cfg(feature = "bench")]
     let start_cycles = env::get_cycle_count();
 
-    let stf: StfBlueprint<ZkDefaultContext, _, _, Runtime<_, _>, BasicKernel<_>> =
+    let stf: StfBlueprint<ZkDefaultContext, _, _, Runtime<_, _>, BasicKernel<_, _>> =
         StfBlueprint::new();
 
     let stf_verifier = StfVerifier::new(stf, MockDaVerifier {});

@@ -634,6 +634,7 @@ dependencies = [
  "sov-nft-module",
  "sov-rollup-interface",
  "sov-sequencer-registry",
+ "sov-soft-confirmations-kernel",
  "sov-state",
  "sov-stf-runner",
  "sov-value-setter",
@@ -2199,6 +2200,8 @@ dependencies = [
  "hex",
  "jmt",
  "serde",
+ "sov-blob-storage",
+ "sov-chain-state",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
@@ -2256,6 +2259,17 @@ dependencies = [
  "borsh",
  "serde",
  "sov-bank",
+ "sov-modules-api",
+ "sov-state",
+]
+
+[[package]]
+name = "sov-soft-confirmations-kernel"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "sov-blob-storage",
+ "sov-chain-state",
  "sov-modules-api",
  "sov-state",
 ]

@@ -230,9 +230,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.75"
+version = "1.0.76"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4668cab20f66d8d020e1fbc0ebe47217433c1b6c8f2040faf858554e394ace6"
+checksum = "59d2a3357dde987206219e78ecfbbb6e8dad06cbb65292758d3270e6254f7355"
 
 [[package]]
 name = "arbitrary"
@@ -518,9 +518,9 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.74"
+version = "0.1.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a66537f1bb974b254c98ed142ff995236e81b9d0fe4db0575f46612cb15eb0f9"
+checksum = "fdf6721fb0140e4f897002dd086c06f6c27775df19cfe1fccb21181a48fd2c98"
 dependencies = [
  "proc-macro2 1.0.70",
  "quote 1.0.33",
@@ -2208,6 +2208,7 @@ dependencies = [
  "sov-prover-storage-manager",
  "sov-rollup-interface",
  "sov-sequencer-registry",
+ "sov-soft-confirmations-kernel",
  "sov-state",
  "sov-stf-runner",
  "sov-value-setter",
@@ -6017,9 +6018,9 @@ dependencies = [
 
 [[package]]
 name = "pkg-config"
-version = "0.3.27"
+version = "0.3.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26072860ba924cbfa98ea39c8c19b4dd6a4a25423dbdf219c1eca91aa0cf6964"
+checksum = "69d3587f8a9e599cc7ec2c00e331f71c4e69a5f9a4b8a6efd5b07466b9736f9a"
 
 [[package]]
 name = "plain_hasher"
@@ -8533,6 +8534,7 @@ dependencies = [
  "sov-mock-da",
  "sov-mock-zkvm",
  "sov-modules-api",
+ "sov-modules-core",
  "sov-prover-storage-manager",
  "sov-rollup-interface",
  "sov-state",
@@ -9032,6 +9034,8 @@ dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",
+ "sov-blob-storage",
+ "sov-chain-state",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
@@ -9221,6 +9225,17 @@ dependencies = [
  "sov-zk-cycle-macros",
  "sov-zk-cycle-utils",
  "tempfile",
+]
+
+[[package]]
+name = "sov-soft-confirmations-kernel"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "sov-blob-storage",
+ "sov-chain-state",
+ "sov-modules-api",
+ "sov-state",
 ]
 
 [[package]]

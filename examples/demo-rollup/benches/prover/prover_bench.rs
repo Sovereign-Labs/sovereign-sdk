@@ -21,8 +21,8 @@ use regex::Regex;
 use risc0::MOCK_DA_ELF;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::SlotData;
-use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
-use sov_modules_stf_blueprint::StfBlueprint;
+use sov_modules_stf_blueprint::kernels::basic::{BasicKernel, BasicKernelGenesisConfig};
+use sov_modules_stf_blueprint::{GenesisParams, StfBlueprint};
 use sov_prover_storage_manager::ProverStorageManager;
 use sov_risc0_adapter::host::Risc0Host;
 #[cfg(feature = "bench")]
@@ -33,7 +33,7 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::DefaultStorageSpec;
-use sov_stf_runner::{from_toml_path, RollupConfig};
+use sov_stf_runner::{from_toml_path, read_json_file, RollupConfig};
 use tempfile::TempDir;
 
 use crate::datagen::get_bench_blocks;
@@ -168,13 +168,23 @@ async fn main() -> Result<(), anyhow::Error> {
         MockDaSpec,
         Risc0Host,
         Runtime<DefaultContext, MockDaSpec>,
-        BasicKernel<DefaultContext>,
+        BasicKernel<DefaultContext, _>,
     >::new();
 
-    let genesis_config = get_genesis_config(&GenesisPaths::from_dir(
-        "../test-data/genesis/integration-tests",
-    ))
-    .unwrap();
+    let genesis_config = {
+        let integ_test_conf_dir: &Path = "../../test-data/genesis/integration-tests".as_ref();
+        let rt_params =
+            get_genesis_config::<DefaultContext, _>(&GenesisPaths::from_dir(integ_test_conf_dir))
+                .unwrap();
+
+        let chain_state = read_json_file(integ_test_conf_dir.join("chain_state.json")).unwrap();
+        let kernel_params = BasicKernelGenesisConfig { chain_state };
+        GenesisParams {
+            runtime: rt_params,
+            kernel: kernel_params,
+        }
+    };
+
     println!("Starting from empty storage, initialization chain");
     let genesis_block = MockBlock::default();
     let (mut prev_state_root, storage) = stf.init_chain(

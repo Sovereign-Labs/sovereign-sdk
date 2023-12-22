@@ -9,6 +9,9 @@ pub use sov_modules_macros::Event;
 /// `struct`.
 #[cfg(feature = "macros")]
 pub use sov_modules_macros::Genesis;
+/// Derives the [`ModuleInfo`] trait for the underlying `struct`, giving full access to kernel functionality
+#[cfg(feature = "macros")]
+pub use sov_modules_macros::KernelModuleInfo;
 #[cfg(feature = "macros")]
 pub use sov_modules_macros::MessageCodec;
 /// Derives the [`ModuleCallJsonSchema`](trait.ModuleCallJsonSchema.html) trait for

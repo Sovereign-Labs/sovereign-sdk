@@ -33,6 +33,7 @@ use dispatch::message_codec::MessageCodec;
 use event::EventMacro;
 use make_constants::{make_const, PartialItemConst};
 use module_call_json_schema::derive_module_call_json_schema;
+use module_info::ModuleType;
 use new_types::address_type_helper;
 use offchain::offchain_generator;
 use proc_macro::TokenStream;
@@ -44,7 +45,17 @@ use syn::{parse_macro_input, DeriveInput, ItemFn};
 pub fn module_info(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
 
-    handle_macro_error(module_info::derive_module_info(input))
+    handle_macro_error(module_info::derive_module_info(input, ModuleType::Standard))
+}
+
+#[proc_macro_derive(
+    KernelModuleInfo,
+    attributes(state, module, kernel_module, address, gas)
+)]
+pub fn kernel_module_info(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input);
+
+    handle_macro_error(module_info::derive_module_info(input, ModuleType::Kernel))
 }
 
 #[proc_macro_derive(DefaultRuntime)]

@@ -7,6 +7,7 @@ use demo_stf::genesis_config::GenesisPaths;
 use ethers_core::abi::Address;
 use ethers_signers::{LocalWallet, Signer};
 use sov_evm::SimpleStorageContract;
+use sov_modules_stf_blueprint::kernels::basic::BasicKernelGenesisPaths;
 use sov_stf_runner::RollupProverConfig;
 use test_client::TestClient;
 use tokio::time::{sleep, Duration};
@@ -23,6 +24,9 @@ async fn evm_tx_tests() -> Result<(), anyhow::Error> {
         start_rollup(
             port_tx,
             GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
+            BasicKernelGenesisPaths {
+                chain_state: "../test-data/genesis/integration-tests/chain_state.json".into(),
+            },
             RollupProverConfig::Skip,
         )
         .await;

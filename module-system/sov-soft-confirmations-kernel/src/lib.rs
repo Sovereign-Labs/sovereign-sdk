@@ -9,14 +9,14 @@ use sov_modules_api::runtime::capabilities::{
 use sov_modules_api::{Context, DaSpec, KernelModule, WorkingSet};
 use sov_state::Storage;
 
-/// The simplest imaginable kernel. It does not do any batching or reordering of blobs.
-pub struct BasicKernel<C: Context, Da: DaSpec> {
+/// A kernel supporting based sequencing with soft confirmations
+pub struct SoftConfirmationsKernel<C: Context, Da: DaSpec> {
     phantom: std::marker::PhantomData<C>,
     chain_state: ChainState<C, Da>,
     blob_storage: BlobStorage<C, Da>,
 }
 
-impl<C: Context, Da: DaSpec> Default for BasicKernel<C, Da> {
+impl<C: Context, Da: DaSpec> Default for SoftConfirmationsKernel<C, Da> {
     fn default() -> Self {
         Self {
             phantom: std::marker::PhantomData,
@@ -27,29 +27,28 @@ impl<C: Context, Da: DaSpec> Default for BasicKernel<C, Da> {
 }
 
 /// Path information required to initialize a basic kernel from files
-pub struct BasicKernelGenesisPaths {
+pub struct SoftConfirmationsKernelGenesisPaths {
     /// The path to the chain_state genesis config
     pub chain_state: PathBuf,
 }
 
-/// The genesis configuration for the basic kernel
-pub struct BasicKernelGenesisConfig<C: Context, Da: DaSpec> {
+pub struct SoftConfirmationsKernelGenesisConfig<C: Context, Da: DaSpec> {
     /// The chain state genesis config
     pub chain_state: <ChainState<C, Da> as KernelModule>::Config,
 }
 
-impl<C: Context, Da: DaSpec> Kernel<C, Da> for BasicKernel<C, Da> {
+impl<C: Context, Da: DaSpec> Kernel<C, Da> for SoftConfirmationsKernel<C, Da> {
     fn true_height(&self, working_set: &mut WorkingSet<C>) -> u64 {
         self.chain_state.true_slot_height(working_set)
     }
     fn visible_height(&self, working_set: &mut WorkingSet<C>) -> u64 {
-        self.chain_state.true_slot_height(working_set)
+        self.chain_state.visible_slot_height(working_set)
     }
 
-    type GenesisConfig = BasicKernelGenesisConfig<C, Da>;
+    type GenesisConfig = SoftConfirmationsKernelGenesisConfig<C, Da>;
 
     #[cfg(feature = "native")]
-    type GenesisPaths = BasicKernelGenesisPaths;
+    type GenesisPaths = SoftConfirmationsKernelGenesisPaths;
 
     fn genesis(
         &self,
@@ -60,7 +59,7 @@ impl<C: Context, Da: DaSpec> Kernel<C, Da> for BasicKernel<C, Da> {
     }
 }
 
-impl<C: Context, Da: DaSpec> BlobSelector<Da> for BasicKernel<C, Da> {
+impl<C: Context, Da: DaSpec> BlobSelector<Da> for SoftConfirmationsKernel<C, Da> {
     type Context = C;
 
     fn get_blobs_for_this_slot<'a, 'k, I>(
@@ -76,7 +75,7 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BasicKernel<C, Da> {
     }
 }
 
-impl<C: Context, Da: DaSpec> KernelSlotHooks<C, Da> for BasicKernel<C, Da> {
+impl<C: Context, Da: DaSpec> KernelSlotHooks<C, Da> for SoftConfirmationsKernel<C, Da> {
     fn begin_slot_hook(
         &self,
         slot_header: &<Da as DaSpec>::BlockHeader,

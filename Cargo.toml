@@ -30,6 +30,7 @@ members = [
     "module-system/sov-modules-rollup-blueprint",
     "module-system/sov-modules-macros",
     "module-system/sov-modules-core",
+    "module-system/sov-soft-confirmations-kernel",
     "module-system/sov-state",
     "module-system/sov-modules-api",
     "module-system/module-schemas",

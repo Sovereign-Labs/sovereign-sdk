@@ -5,9 +5,11 @@ use sov_mock_da::{
 };
 use sov_mock_zkvm::{MockCodeCommitment, MockZkvm};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::utils::generate_address;
-use sov_modules_api::{Address, Genesis, Spec, ValidityConditionChecker, WorkingSet};
+use sov_modules_api::{
+    Address, Genesis, KernelModule, KernelWorkingSet, Spec, ValidityConditionChecker, WorkingSet,
+};
+use sov_modules_core::runtime::capabilities::mocks::MockKernel;
 use sov_prover_storage_manager::SnapshotManager;
 use sov_rollup_interface::da::Time;
 use sov_state::storage::{NativeStorage, Storage, StorageProof};
@@ -190,11 +192,12 @@ pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidit
             validity_cond: MockValidityCond { is_valid: true },
             blobs: Default::default(),
         };
+        let kernel = MockKernel::<C, MockDaSpec>::new(i as u64, i as u64);
         module.chain_state.begin_slot_hook(
             &slot_data.header,
             &slot_data.validity_cond,
             &root_hash,
-            &mut working_set,
+            &mut KernelWorkingSet::from_kernel(&kernel, &mut working_set),
         );
     }
 

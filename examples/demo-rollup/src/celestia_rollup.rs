@@ -34,8 +34,8 @@ impl RollupBlueprint for CelestiaDemoRollup {
 
     type NativeRuntime = Runtime<Self::NativeContext, Self::DaSpec>;
 
-    type NativeKernel = BasicKernel<Self::NativeContext>;
-    type ZkKernel = BasicKernel<Self::ZkContext>;
+    type NativeKernel = BasicKernel<Self::NativeContext, Self::DaSpec>;
+    type ZkKernel = BasicKernel<Self::ZkContext, Self::DaSpec>;
 
     type ProverService = ParallelProverService<
         <<Self::NativeContext as Spec>::Storage as Storage>::Root,
