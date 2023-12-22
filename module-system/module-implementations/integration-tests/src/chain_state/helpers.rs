@@ -1,3 +1,5 @@
+use std::sync::{Arc, RwLock};
+
 use sov_chain_state::ChainState;
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::macros::DefaultRuntime;
@@ -99,11 +101,11 @@ impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for TestRuntime<C
 impl<C: Context, Da: DaSpec> Runtime<C, Da> for TestRuntime<C> {
     type GenesisConfig = GenesisConfig<C>;
 
-    fn rpc_methods(_storage: <C as Spec>::Storage) -> jsonrpsee::RpcModule<()> {
+    type GenesisPaths = ();
+
+    fn rpc_methods(_storage: Arc<RwLock<<C as Spec>::Storage>>) -> jsonrpsee::RpcModule<()> {
         todo!()
     }
-
-    type GenesisPaths = ();
 
     fn genesis_config(
         _genesis_paths: &Self::GenesisPaths,

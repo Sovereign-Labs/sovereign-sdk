@@ -31,6 +31,9 @@
 //!  The `DispatchCall` implementation (derived by a macro) forwards the message to the appropriate module and executes its `call` method.
 
 #![allow(unused_doc_comments)]
+
+use std::sync::{Arc, RwLock};
+
 #[cfg(feature = "native")]
 use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
@@ -90,7 +93,7 @@ where
     type GenesisPaths = GenesisPaths;
 
     #[cfg(feature = "native")]
-    fn rpc_methods(storage: <C as Spec>::Storage) -> jsonrpsee::RpcModule<()> {
+    fn rpc_methods(storage: Arc<RwLock<<C as Spec>::Storage>>) -> jsonrpsee::RpcModule<()> {
         get_rpc_methods::<C, Da>(storage)
     }
 

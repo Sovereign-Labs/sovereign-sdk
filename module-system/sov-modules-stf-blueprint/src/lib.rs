@@ -6,6 +6,8 @@ pub mod kernels;
 mod stf_blueprint;
 mod tx_verifier;
 
+use std::sync::{Arc, RwLock};
+
 pub use batch::Batch;
 use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::runtime::capabilities::{Kernel, KernelSlotHooks};
@@ -56,8 +58,8 @@ pub trait Runtime<C: Context, Da: DaSpec>:
     type GenesisPaths: Send + Sync;
 
     #[cfg(feature = "native")]
-    /// Default rpc methods.
-    fn rpc_methods(storage: <C as Spec>::Storage) -> jsonrpsee::RpcModule<()>;
+    /// Default RPC methods.
+    fn rpc_methods(storage: Arc<RwLock<<C as Spec>::Storage>>) -> jsonrpsee::RpcModule<()>;
 
     #[cfg(feature = "native")]
     /// Reads genesis configs.

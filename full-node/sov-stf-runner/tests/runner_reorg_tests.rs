@@ -1,3 +1,5 @@
+use std::sync::{Arc, RwLock};
+
 use sov_mock_da::{
     MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaConfig, MockDaService, MockDaSpec,
     MockDaVerifier, MockValidityCond, PlannedFork,
@@ -146,6 +148,9 @@ async fn runner_execution(
         path: rollup_config.storage.path.clone(),
     };
     let mut storage_manager = ProverStorageManager::new(storage_config).unwrap();
+    let rpc_storage = Arc::new(RwLock::new(
+        storage_manager.create_finalized_storage().unwrap(),
+    ));
 
     let vm = MockZkvm::new(MockValidityCond::default());
     let verifier = MockDaVerifier::default();
@@ -168,6 +173,7 @@ async fn runner_execution(
         ledger_db,
         stf,
         storage_manager,
+        rpc_storage,
         init_variant,
         prover_service,
     )

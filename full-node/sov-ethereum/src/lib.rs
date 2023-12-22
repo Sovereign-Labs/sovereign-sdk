@@ -12,7 +12,7 @@ pub use sov_evm::DevSigner;
 #[cfg(feature = "experimental")]
 pub mod experimental {
     use std::array::TryFromSliceError;
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc, Mutex, RwLock};
 
     use borsh::ser::BorshSerialize;
     use demo_stf::runtime::Runtime;
@@ -46,7 +46,7 @@ pub mod experimental {
     pub fn get_ethereum_rpc<C: sov_modules_api::Context, Da: DaService>(
         da_service: Da,
         eth_rpc_config: EthRpcConfig<C>,
-        storage: C::Storage,
+        storage: Arc<RwLock<C::Storage>>,
     ) -> RpcModule<Ethereum<C, Da>> {
         // Unpack config
         let EthRpcConfig {
@@ -59,12 +59,20 @@ pub mod experimental {
 
         // Fetch nonce from storage
         let accounts = sov_accounts::Accounts::<C>::default();
-        let sov_tx_signer_account = accounts
-            .get_account(
-                sov_tx_signer_priv_key.pub_key(),
-                &mut WorkingSet::<C>::new(storage.clone()),
-            )
-            .unwrap();
+        let sov_tx_signer_account = {
+            let storage = {
+                let storage_guard = storage
+                    .read()
+                    .expect("Ethereum Storage lock must not be poisoned");
+                storage_guard.clone()
+            };
+            accounts
+                .get_account(
+                    sov_tx_signer_priv_key.pub_key(),
+                    &mut WorkingSet::<C>::new(storage),
+                )
+                .unwrap()
+        };
         let sov_tx_signer_nonce: u64 = match sov_tx_signer_account {
             sov_accounts::Response::AccountExists { nonce, .. } => nonce,
             sov_accounts::Response::AccountEmpty { .. } => 0,
@@ -93,7 +101,7 @@ pub mod experimental {
         gas_price_oracle: GasPriceOracle<C>,
         #[cfg(feature = "local")]
         eth_signer: DevSigner,
-        storage: C::Storage,
+        storage: Arc<RwLock<C::Storage>>,
     }
 
     impl<C: sov_modules_api::Context, Da: DaService> Ethereum<C, Da> {
@@ -102,7 +110,7 @@ pub mod experimental {
             batch_builder: Arc<Mutex<EthBatchBuilder<C>>>,
             gas_price_oracle_config: GasPriceOracleConfig,
             #[cfg(feature = "local")] eth_signer: DevSigner,
-            storage: C::Storage,
+            storage: Arc<RwLock<C::Storage>>,
         ) -> Self {
             let evm = Evm::<C>::default();
             let gas_price_oracle = GasPriceOracle::new(evm, gas_price_oracle_config);
@@ -187,7 +195,14 @@ pub mod experimental {
     ) -> Result<(), jsonrpsee::core::Error> {
         rpc.register_async_method("eth_gasPrice", |_, ethereum| async move {
             let price = {
-                let mut working_set = WorkingSet::<C>::new(ethereum.storage.clone());
+                let storage = {
+                    let storage_guard = ethereum
+                        .storage
+                        .read()
+                        .expect("Ethereum Storage lock must not be poisoned");
+                    storage_guard.clone()
+                };
+                let mut working_set = WorkingSet::<C>::new(storage);
 
                 let suggested_tip = ethereum
                     .gas_price_oracle
@@ -268,7 +283,14 @@ pub mod experimental {
             }
 
             let raw_evm_tx = {
-                let mut working_set = WorkingSet::<C>::new(ethereum.storage.clone());
+                let storage = {
+                    let storage_guard = ethereum
+                        .storage
+                        .read()
+                        .expect("Ethereum Storage lock must not be poisoned");
+                    storage_guard.clone()
+                };
+                let mut working_set = WorkingSet::<C>::new(storage);
 
                 // set nonce if none
                 if transaction_request.nonce.is_none() {

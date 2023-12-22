@@ -1,3 +1,5 @@
+use std::sync::{Arc, RwLock};
+
 use sov_db::ledger_db::LedgerDB;
 use sov_mock_da::{
     MockAddress, MockBlockHeader, MockDaConfig, MockDaService, MockDaSpec, MockDaVerifier,
@@ -92,6 +94,9 @@ fn initialize_runner(
         path: path.to_path_buf(),
     };
     let mut storage_manager = ProverStorageManager::new(storage_config).unwrap();
+    let rpc_storage = Arc::new(RwLock::new(
+        storage_manager.create_finalized_storage().unwrap(),
+    ));
 
     let vm = MockZkvm::new(MockValidityCond::default());
     let verifier = MockDaVerifier::default();
@@ -115,6 +120,7 @@ fn initialize_runner(
         ledger_db,
         stf,
         storage_manager,
+        rpc_storage,
         init_variant,
         prover_service,
     )

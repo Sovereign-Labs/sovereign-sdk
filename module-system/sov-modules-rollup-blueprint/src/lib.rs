@@ -4,6 +4,7 @@
 mod runtime_rpc;
 mod wallet;
 use std::net::SocketAddr;
+use std::sync::{Arc, RwLock};
 
 use async_trait::async_trait;
 pub use runtime_rpc::*;
@@ -67,7 +68,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
     /// Creates RPC methods for the rollup.
     fn create_rpc_methods(
         &self,
-        storage: &<Self::NativeContext as Spec>::Storage,
+        storage: Arc<RwLock<<Self::NativeContext as Spec>::Storage>>,
         ledger_db: &LedgerDB,
         da_service: &Self::DaService,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error>;
@@ -164,7 +165,9 @@ pub trait RollupBlueprint: Sized + Send + Sync {
             .transpose()?;
 
         // TODO(https://github.com/Sovereign-Labs/sovereign-sdk/issues/1218)
-        let rpc_methods = self.create_rpc_methods(&prover_storage, &ledger_db, &da_service)?;
+        // PASS ARC<MUTEX>>
+        let rpc_storage = Arc::new(RwLock::new(prover_storage));
+        let rpc_methods = self.create_rpc_methods(rpc_storage.clone(), &ledger_db, &da_service)?;
 
         let native_stf = StfBlueprint::new();
 
@@ -182,6 +185,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
             ledger_db,
             native_stf,
             storage_manager,
+            rpc_storage,
             init_variant,
             prover_service,
         )?;
@@ -204,7 +208,7 @@ pub struct Rollup<S: RollupBlueprint> {
         S::Vm,
         S::ProverService,
     >,
-    /// Rpc methods for the rollup.
+    /// RPC methods for the rollup.
     pub rpc_methods: jsonrpsee::RpcModule<()>,
 }
 

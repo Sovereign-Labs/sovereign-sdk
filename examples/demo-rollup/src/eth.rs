@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::sync::{Arc, RwLock};
 
 use anyhow::Context as _;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
@@ -26,7 +27,7 @@ fn read_sov_tx_signer_priv_key() -> Result<DefaultPrivateKey, anyhow::Error> {
 // register ethereum methods.
 pub(crate) fn register_ethereum<Da: DaService>(
     da_service: Da,
-    storage: ProverStorage<sov_state::DefaultStorageSpec, SnapshotManager>,
+    storage: Arc<RwLock<ProverStorage<sov_state::DefaultStorageSpec, SnapshotManager>>>,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error> {
     let eth_rpc_config = {

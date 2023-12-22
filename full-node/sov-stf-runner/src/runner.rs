@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::net::SocketAddr;
+use std::sync::{Arc, RwLock};
 
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
@@ -30,6 +31,8 @@ where
     da_service: Da,
     stf: Stf,
     storage_manager: Sm,
+    #[allow(dead_code)]
+    rpc_storage: Arc<RwLock<Sm::NativeStorage>>,
     ledger_db: LedgerDB,
     state_root: StateRoot<Stf, Vm, Da::Spec>,
     listen_address: SocketAddr,
@@ -92,6 +95,7 @@ where
         ledger_db: LedgerDB,
         stf: Stf,
         mut storage_manager: Sm,
+        rpc_storage: Arc<RwLock<Sm::NativeStorage>>,
         init_variant: InitVariant<Stf, Vm, Da::Spec>,
         prover_service: Ps,
     ) -> Result<Self, anyhow::Error> {
@@ -134,6 +138,7 @@ where
             da_service,
             stf,
             storage_manager,
+            rpc_storage,
             ledger_db,
             state_root: prev_state_root,
             listen_address,
@@ -142,6 +147,9 @@ where
     }
 
     /// Starts a RPC server with provided rpc methods.
+    ///  # Arguments:
+    ///   * methods: [`RpcModule`] with all RPC methods.
+    ///   * channel: If `Some`, notification with actual [`SocketAddr`] where RPC server listens
     pub async fn start_rpc_server(
         &self,
         methods: RpcModule<()>,
@@ -155,12 +163,12 @@ where
                 .unwrap();
 
             let bound_address = server.local_addr().unwrap();
+            info!("Starting RPC server at {} ", &bound_address);
+            let _server_handle = server.start(methods);
+
             if let Some(channel) = channel {
                 channel.send(bound_address).unwrap();
             }
-            info!("Starting RPC server at {} ", &bound_address);
-
-            let _server_handle = server.start(methods);
             futures::future::pending::<()>().await;
         });
     }
@@ -248,6 +256,7 @@ where
 
             self.storage_manager
                 .save_change_set(filtered_block.header(), slot_result.change_set)?;
+            // Send
 
             // ----------------
             // Create ZK proof.

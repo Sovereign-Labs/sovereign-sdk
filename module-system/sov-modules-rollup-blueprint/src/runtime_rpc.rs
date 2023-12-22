@@ -1,3 +1,5 @@
+use std::sync::{Arc, RwLock};
+
 use anyhow::Context as _;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::{Context, Spec};
@@ -7,7 +9,7 @@ use sov_sequencer::batch_builder::FiFoStrictBatchBuilder;
 
 /// Register rollup's default rpc methods.
 pub fn register_rpc<RT, C, Da>(
-    storage: &<C as Spec>::Storage,
+    storage: Arc<RwLock<<C as Spec>::Storage>>,
     ledger_db: &LedgerDB,
     da_service: &Da,
     sequencer: C::Address,
@@ -42,7 +44,7 @@ where
         let sequencer_rpc = sov_sequencer::get_sequencer_rpc(batch_builder, da_service.clone());
         rpc_methods
             .merge(sequencer_rpc)
-            .context("Failed to merge Txs RPC modules")?;
+            .context("Failed to merge Transactions RPC modules")?;
     }
 
     Ok(rpc_methods)
