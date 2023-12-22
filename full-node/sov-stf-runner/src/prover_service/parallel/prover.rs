@@ -8,8 +8,7 @@ use serde::Serialize;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::StateTransitionData;
-use sov_rollup_interface::zk::{Proof, ZkvmHost};
+use sov_rollup_interface::zk::{Proof, StateTransitionData, ZkvmHost};
 
 use super::ProverServiceError;
 use crate::{

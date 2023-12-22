@@ -15,7 +15,6 @@ use std::path::Path;
 
 #[cfg(feature = "native")]
 use anyhow::Context;
-
 #[cfg(feature = "native")]
 pub use config::RpcConfig;
 #[cfg(feature = "native")]
