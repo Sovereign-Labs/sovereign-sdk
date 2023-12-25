@@ -32,7 +32,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 reqwest = { version = "0.11", features = ["json"], optional = true }
 thiserror = { workspace = true }
-sp-keyring = { version = "24", optional = true }
+sp-keyring = { version = "30", optional = true }
 sp-core = { version = "21", optional = true }
 hex = { workspace = true }
 
