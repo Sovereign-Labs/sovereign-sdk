@@ -795,8 +795,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93f2635620bf0b9d4576eb7bb9a38a55df78bd1205d26fa994b25911a69f212f"
 dependencies = [
  "bitcoin_hashes",
- "rand 0.8.5",
- "rand_core 0.6.4",
+ "rand 0.7.3",
+ "rand_core 0.5.1",
  "serde",
  "unicode-normalization",
 ]
@@ -2190,7 +2190,7 @@ dependencies = [
  "jsonrpsee 0.20.3",
  "rand 0.8.5",
  "reth-primitives",
- "secp256k1 0.27.0",
+ "secp256k1 0.28.0",
  "serde",
  "serde_json",
  "sov-accounts",
@@ -7984,6 +7984,7 @@ version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2acea373acb8c21ecb5a23741452acd2593ed44ee3d343e72baaa143bc89d0d5"
 dependencies = [
+ "rand 0.8.5",
  "secp256k1-sys 0.9.1",
 ]
 
@@ -8759,7 +8760,7 @@ dependencies = [
  "reth-primitives",
  "revm",
  "risc0",
- "secp256k1 0.27.0",
+ "secp256k1 0.28.0",
  "serde",
  "serde_json",
  "sha2 0.10.8",
@@ -8835,7 +8836,7 @@ dependencies = [
  "reth-rpc-types-compat",
  "revm",
  "schemars",
- "secp256k1 0.27.0",
+ "secp256k1 0.28.0",
  "serde",
  "serde_json",
  "sov-evm",
@@ -11039,7 +11040,7 @@ checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
  "cfg-if",
  "digest 0.10.7",
- "rand 0.8.5",
+ "rand 0.7.3",
  "static_assertions",
 ]
 

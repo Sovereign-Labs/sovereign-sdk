@@ -127,7 +127,7 @@ reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
 revm = { git = "https://github.com/bluealloy/revm", rev = "516f62cc" }
 revm-primitives = { git = "https://github.com/bluealloy/revm", rev = "516f62cc" }
 
-secp256k1 = { version = "0.27.0", default-features = false, features = ["global-context", "rand-std", "recovery"] }
+secp256k1 = { version = "0.28.0", default-features = false, features = ["global-context", "rand-std", "recovery"] }
 
 [patch.'https://github.com/eigerco/celestia-node-rs.git']
 # Uncomment to apply local changes
