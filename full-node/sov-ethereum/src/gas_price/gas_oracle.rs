@@ -3,8 +3,6 @@
 
 // Adopted from: https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc/src/eth/gas_oracle.rs
 
-use std::array::TryFromSliceError;
-
 use reth_primitives::constants::GWEI_TO_WEI;
 use reth_primitives::{H256, U256, U64};
 use reth_rpc_types::BlockTransactions;
@@ -141,7 +139,7 @@ impl<C: sov_modules_api::Context> GasPriceOracle<C> {
         let mut results = Vec::new();
         let mut populated_blocks = 0;
 
-        let header_number = convert_u256_to_u64(header.number.unwrap()).unwrap();
+        let header_number = convert_u256_to_u64(header.number.unwrap());
 
         // we only check a maximum of 2 * max_block_history, or the number of blocks in the chain
         let max_blocks = if self.oracle_config.max_block_history * 2 > header_number {
@@ -303,8 +301,19 @@ fn effective_gas_tip(
     }
 }
 
+/// Takes only 8 least significant bytes
+fn convert_u256_to_u64(u256: U256) -> u64 {
+    let bytes: [u8; 32] = u256.to_be_bytes();
+    // 32 - 24 = 8, so it should always fit into destination array.
+    // Unless allocation or something weird
+    let bytes: [u8; 8] = bytes[24..].try_into().unwrap();
+    u64::from_be_bytes(bytes)
+}
+
 #[cfg(test)]
 mod tests {
+    use proptest::arbitrary::any;
+    use proptest::proptest;
     use reth_primitives::constants::GWEI_TO_WEI;
 
     use super::*;
@@ -319,10 +328,28 @@ mod tests {
     fn ignore_price_sanity() {
         assert_eq!(DEFAULT_IGNORE_PRICE, U256::from(2u64));
     }
-}
 
-fn convert_u256_to_u64(u256: reth_primitives::U256) -> Result<u64, TryFromSliceError> {
-    let bytes: [u8; 32] = u256.to_be_bytes();
-    let bytes: [u8; 8] = bytes[24..].try_into()?;
-    Ok(u64::from_be_bytes(bytes))
+    proptest! {
+
+        #[test]
+        fn converts_back_and_forth(input in any::<u64>()) {
+            let mut bytes: [u8; 32] = [0; 32];
+            for (i, b) in input.to_be_bytes().into_iter().enumerate() {
+                let idx = 24 + i;
+                bytes[idx] = b;
+            }
+
+
+            let u256 = U256::from_be_slice(&bytes);
+            let output = convert_u256_to_u64(u256);
+
+            assert_eq!(input, output);
+        }
+
+        #[test]
+        fn convert_u256_to_u64_doesnt_panic(input in any::<[u8; 32]>()) {
+            let u256 = U256::from_be_slice(&input);
+            let _output = convert_u256_to_u64(u256);
+        }
+    }
 }

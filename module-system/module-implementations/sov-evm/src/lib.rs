@@ -9,7 +9,7 @@ mod genesis;
 #[cfg(feature = "experimental")]
 mod hooks;
 #[cfg(feature = "experimental")]
-pub use {call::*, error::rpc::*, evm::*, genesis::*, hooks::*};
+pub use {call::*, error::rpc::*, evm::*, genesis::*};
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
 mod query;

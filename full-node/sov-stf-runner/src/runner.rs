@@ -298,7 +298,7 @@ where
                 last_finalized.height()
             );
             // Checking all seen blocks, in case if there was delay in getting last finalized header.
-            while let Some(earliest_seen_header) = seen_block_headers.get(0) {
+            while let Some(earliest_seen_header) = seen_block_headers.front() {
                 tracing::debug!(
                     "Checking seen header height={}",
                     earliest_seen_header.height()
