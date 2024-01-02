@@ -3,6 +3,7 @@ use ed25519_dalek::{VerifyingKey as DalekPublicKey, PUBLIC_KEY_LENGTH};
 
 /// A hexadecimal representation of a PublicKey.
 use crate::default_signature::DefaultPublicKey;
+
 #[derive(
     serde::Serialize,
     serde::Deserialize,
@@ -83,8 +84,10 @@ impl TryFrom<&PublicKeyHex> for DefaultPublicKey {
 #[cfg(feature = "arbitrary")]
 impl<'a> arbitrary::Arbitrary<'a> for PublicKeyHex {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        let hex: String = hex::encode(String::arbitrary(u)?);
-        Ok(PublicKeyHex::try_from(hex).unwrap())
+        use sov_modules_core::PrivateKey;
+        let public_key =
+            crate::default_signature::private_key::DefaultPrivateKey::arbitrary(u)?.pub_key();
+        Ok(PublicKeyHex::from(&public_key))
     }
 }
 
