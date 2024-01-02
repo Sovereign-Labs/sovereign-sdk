@@ -77,7 +77,7 @@ pub fn update_nft<C: sov_modules_api::Context>(nft: &Nft<C>, old_owner: Option<O
                 )
                 .unwrap();
 
-            let db_owner: Option<String> = rows.get(0).map(|row| row.get(0));
+            let db_owner: Option<String> = rows.first().map(|row| row.get(0));
 
             // Handle ownership change logic for top_owners table
             if let Some(db_owner_str) = db_owner {

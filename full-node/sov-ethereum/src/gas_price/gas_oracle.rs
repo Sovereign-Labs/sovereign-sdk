@@ -303,6 +303,12 @@ fn effective_gas_tip(
     }
 }
 
+fn convert_u256_to_u64(u256: U256) -> Result<u64, TryFromSliceError> {
+    let bytes: [u8; 32] = u256.to_be_bytes();
+    let bytes: [u8; 8] = bytes[24..].try_into()?;
+    Ok(u64::from_be_bytes(bytes))
+}
+
 #[cfg(test)]
 mod tests {
     use reth_primitives::constants::GWEI_TO_WEI;
@@ -319,10 +325,4 @@ mod tests {
     fn ignore_price_sanity() {
         assert_eq!(DEFAULT_IGNORE_PRICE, U256::from(2u64));
     }
-}
-
-fn convert_u256_to_u64(u256: reth_primitives::U256) -> Result<u64, TryFromSliceError> {
-    let bytes: [u8; 32] = u256.to_be_bytes();
-    let bytes: [u8; 8] = bytes[24..].try_into()?;
-    Ok(u64::from_be_bytes(bytes))
 }
