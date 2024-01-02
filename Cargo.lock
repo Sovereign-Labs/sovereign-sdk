@@ -8799,6 +8799,7 @@ dependencies = [
  "demo-stf",
  "ethers",
  "jsonrpsee 0.20.3",
+ "proptest",
  "reth-primitives",
  "reth-rpc-types",
  "schnellru",

@@ -35,6 +35,7 @@ schnellru = "0.2.1"
 
 [dev-dependencies]
 tokio = { workspace = true }
+proptest = { workspace = true }
 
 
 [features]
