@@ -76,9 +76,7 @@ fn initialize_runner(
                 bind_port: 0,
             },
         },
-        da: MockDaConfig {
-            sender_address: address,
-        },
+        da: MockDaConfig::instant_with_sender(address),
         prover_service: ProverServiceConfig {
             aggregated_proof_block_jump: 1,
         },

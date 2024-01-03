@@ -132,9 +132,7 @@ async fn runner_execution(
                 bind_port: 0,
             },
         },
-        da: MockDaConfig {
-            sender_address: da_service.get_sequencer_address(),
-        },
+        da: MockDaConfig::instant_with_sender(da_service.get_sequencer_address()),
         prover_service: ProverServiceConfig {
             aggregated_proof_block_jump: 1,
         },

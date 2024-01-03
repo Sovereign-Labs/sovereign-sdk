@@ -135,6 +135,18 @@ impl BlockHeaderTrait for MockBlockHeader {
 pub struct MockDaConfig {
     /// The address to use to "submit" blobs on the mock da layer
     pub sender_address: MockAddress,
+    /// How many blocks progress to finalization
+    pub finalization_blocks: u32,
+}
+
+impl MockDaConfig {
+    /// Create [`MockDaConfig`] with instant finality
+    pub fn instant_with_sender(sender: MockAddress) -> Self {
+        MockDaConfig {
+            sender_address: sender,
+            finalization_blocks: 0,
+        }
+    }
 }
 
 #[derive(Clone, Default)]

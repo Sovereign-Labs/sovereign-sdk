@@ -34,6 +34,8 @@ pub async fn start_rollup(
         },
         da: MockDaConfig {
             sender_address: MockAddress::from([0; 32]),
+            // TODO:
+            finalization_blocks: 0,
         },
         prover_service: ProverServiceConfig {
             aggregated_proof_block_jump: 1,
