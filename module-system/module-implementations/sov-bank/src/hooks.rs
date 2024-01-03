@@ -21,12 +21,6 @@ use crate::{Bank, Coins};
 // https://github.com/Sovereign-Labs/sovereign-sdk/issues/1234
 const GAS_TOKEN_ADDRESS: &'static str;
 
-#[config_constant]
-const GAS_TX_FIXED_COST: &[u64];
-
-#[config_constant]
-const GAS_TX_COST_PER_BYTE: &[u64];
-
 /// The computed addresses of a pre-dispatch tx hook.
 pub struct BankTxHook<C: Context> {
     /// The tx sender address
