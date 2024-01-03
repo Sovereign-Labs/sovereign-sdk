@@ -203,7 +203,7 @@ where
                     // Don't revert any state changes made by the pre_dispatch_hook even if the Tx is rejected.
                     // For example nonce for the relevant account is incremented.
                     error!("Stateful verification error - the sequencer included an invalid transaction: {}", e);
-                    let gas_total = batch_workspace.gas_total().into_dimensions();
+                    let gas_total = batch_workspace.gas_total().to_dimensions();
                     let receipt = TransactionReceipt {
                         tx_hash: raw_tx_hash,
                         body_to_save: None,
@@ -251,7 +251,7 @@ where
             };
             debug!("Tx {} effect: {:?}", hex::encode(raw_tx_hash), tx_effect);
 
-            let gas_total = batch_workspace.gas_total().into_dimensions();
+            let gas_total = batch_workspace.gas_total().to_dimensions();
             let receipt = TransactionReceipt {
                 tx_hash: raw_tx_hash,
                 body_to_save: None,

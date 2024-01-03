@@ -13,7 +13,7 @@ pub trait GasUnit: fmt::Debug + Clone + Send + Sync {
     fn from_arbitrary_dimensions(dimensions: &[u64]) -> Self;
 
     /// Creates a multi-dimensional representation of the unit.
-    fn into_dimensions(&self) -> Vec<u64>;
+    fn to_dimensions(&self) -> Vec<u64>;
 
     /// Converts the unit into a scalar value, given a price.
     fn value(&self, price: &Self) -> u64;
@@ -43,7 +43,7 @@ impl<const N: usize> GasUnit for TupleGasUnit<N> {
         unit
     }
 
-    fn into_dimensions(&self) -> Vec<u64> {
+    fn to_dimensions(&self) -> Vec<u64> {
         self.to_vec()
     }
 
