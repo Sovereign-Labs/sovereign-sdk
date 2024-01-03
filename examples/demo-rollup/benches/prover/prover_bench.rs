@@ -31,7 +31,7 @@ use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_rollup_interface::zk::ZkvmHost;
+use sov_rollup_interface::zk::{StateTransitionData, ZkvmHost};
 use sov_state::DefaultStorageSpec;
 use sov_stf_runner::{from_toml_path, read_json_file, RollupConfig};
 use tempfile::TempDir;
@@ -135,6 +135,14 @@ fn chain_stats(num_blocks: usize, num_blocks_with_txns: usize, num_txns: usize, 
     table.printstd();
 }
 
+type BenchSTF<'a> = StfBlueprint<
+    DefaultContext,
+    MockDaSpec,
+    Risc0Host<'a>,
+    Runtime<DefaultContext, MockDaSpec>,
+    BasicKernel<DefaultContext, MockDaSpec>,
+>;
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     if let Ok(rollup_trace) = env::var("ROLLUP_TRACE") {
@@ -163,16 +171,10 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut storage_manager =
         ProverStorageManager::<MockDaSpec, DefaultStorageSpec>::new(storage_config)
             .expect("ProverStorageManager initialization has failed");
-    let stf = StfBlueprint::<
-        DefaultContext,
-        MockDaSpec,
-        Risc0Host,
-        Runtime<DefaultContext, MockDaSpec>,
-        BasicKernel<DefaultContext, _>,
-    >::new();
+    let stf = BenchSTF::new();
 
     let genesis_config = {
-        let integ_test_conf_dir: &Path = "../../test-data/genesis/integration-tests".as_ref();
+        let integ_test_conf_dir: &Path = "../test-data/genesis/integration-tests".as_ref();
         let rt_params =
             get_genesis_config::<DefaultContext, _>(&GenesisPaths::from_dir(integ_test_conf_dir))
                 .unwrap();
@@ -205,20 +207,16 @@ async fn main() -> Result<(), anyhow::Error> {
     for filtered_block in &blocks {
         num_blocks += 1;
         let mut host = Risc0Host::new(MOCK_DA_ELF);
-        host.add_hint(prev_state_root);
+
         let height = filtered_block.header().height();
         println!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
             hex::encode(prev_state_root.0)
         );
-        host.add_hint(filtered_block.header());
         let (mut blob_txs, inclusion_proof, completeness_proof) = da_service
             .extract_relevant_blobs_with_proof(filtered_block)
             .await;
-
-        host.add_hint(inclusion_proof);
-        host.add_hint(completeness_proof);
 
         if !blob_txs.is_empty() {
             num_blobs += blob_txs.len();
@@ -236,7 +234,7 @@ async fn main() -> Result<(), anyhow::Error> {
             &filtered_block.validity_condition(),
             &mut blob_txs,
         );
-        host.add_hint(&blob_txs);
+
         for r in result.batch_receipts {
             let num_tx = r.tx_receipts.len();
             num_total_transactions += num_tx;
@@ -245,7 +243,20 @@ async fn main() -> Result<(), anyhow::Error> {
             }
         }
 
-        host.add_hint(&result.witness);
+        let data = StateTransitionData::<
+            <BenchSTF as StateTransitionFunction<Risc0Host<'_>, MockDaSpec>>::StateRoot,
+            <BenchSTF as StateTransitionFunction<Risc0Host<'_>, MockDaSpec>>::Witness,
+            MockDaSpec,
+        > {
+            initial_state_root: prev_state_root,
+            da_block_header: filtered_block.header().clone(),
+            inclusion_proof,
+            completeness_proof,
+            state_transition_witness: result.witness,
+            blobs: blob_txs,
+            final_state_root: result.state_root,
+        };
+        host.add_hint(data);
 
         println!("Skipping prover at block {height} to capture cycle counts\n");
         let _receipt = host
