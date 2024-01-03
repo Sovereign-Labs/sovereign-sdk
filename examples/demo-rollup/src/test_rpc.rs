@@ -88,6 +88,7 @@ fn batch2_tx_receipts() -> Vec<TransactionReceipt<u32>> {
             body_to_save: Some(b"tx body".to_vec()),
             events: vec![],
             receipt: 0,
+            gas_total: vec![0, 0],
         })
         .collect()
 }
@@ -113,6 +114,7 @@ fn regular_test_helper(payload: serde_json::Value, expected: &serde_json::Value)
                     body_to_save: Some(b"tx1 body".to_vec()),
                     events: vec![],
                     receipt: 0,
+                    gas_total: vec![0, 0],
                 },
                 TransactionReceipt::<u32> {
                     tx_hash: ::sha2::Sha256::digest(b"tx2"),
@@ -122,6 +124,7 @@ fn regular_test_helper(payload: serde_json::Value, expected: &serde_json::Value)
                         Event::new("event2_key", "event2_value"),
                     ],
                     receipt: 1,
+                    gas_total: vec![2, 3],
                 },
             ],
             inner: 0,

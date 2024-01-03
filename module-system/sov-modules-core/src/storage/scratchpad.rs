@@ -471,6 +471,16 @@ impl<C: Context> WorkingSet<C> {
         self.gas_meter.charge_gas(gas)
     }
 
+    /// Returns the gas price.
+    pub const fn gas_price(&self) -> &C::GasUnit {
+        self.gas_meter.gas_price()
+    }
+
+    /// Returns the total gas incurred.
+    pub const fn gas_total(&self) -> &C::GasUnit {
+        self.gas_meter.gas_total()
+    }
+
     /// Fetches given value and provides a proof of it presence/absence.
     pub fn get_with_proof(
         &mut self,

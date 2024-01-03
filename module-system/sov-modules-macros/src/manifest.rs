@@ -295,11 +295,21 @@ impl<'a> Manifest<'a> {
             )
         })?;
         let value = self.value_to_tokens(field, value, ty)?;
-        let output = quote::quote! {
+
+        if let Type::Reference(tr) = ty {
+            if tr.lifetime.is_none() {
+                let output = quote::quote! {
+                    #(#attrs)*
+                    #vis const #field: #ty = & #value;
+                };
+                return Ok(output);
+            }
+        }
+
+        Ok(quote::quote! {
             #(#attrs)*
             #vis const #field: #ty = #value;
-        };
-        Ok(output)
+        })
     }
 
     fn value_to_tokens(
@@ -329,17 +339,29 @@ impl<'a> Manifest<'a> {
             Value::String(s) => Ok(quote::quote!(#s)),
             Value::Array(arr) => {
                 let mut values = Vec::with_capacity(arr.len());
-                let ty = if let Type::Array(ty) = ty {
-                    &ty.elem
-                } else {
-                    return Err(Self::err(
+                let ty = match ty {
+                    Type::Array(ty) => &ty.elem,
+                    Type::Reference(ty) => {
+                        match ty.elem.as_ref() {
+                            Type::Slice(ty) => &ty.elem,
+                            _ => return Err(Self::err(
+                                &self.path,
+                                field,
+                                format!(
+                                    "Found value of type {:?} while parsing `{}` but expected a slice type ",
+                                    ty, field
+                                ),
+                            )),
+                        }
+                    }
+                    _ => return Err(Self::err(
                         &self.path,
                         field,
                         format!(
                             "Found value of type {:?} while parsing `{}` but expected an array type ",
                             ty, field
                         ),
-                    ));
+                    ))
                 };
                 for (idx, value) in arr.iter().enumerate() {
                     values.push(self.value_to_tokens(

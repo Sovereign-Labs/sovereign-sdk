@@ -3,7 +3,8 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "native")]
 use sov_modules_core::PrivateKey;
-use sov_modules_core::{Context, Signature};
+use sov_modules_core::{Context, GasUnit, Signature};
+use sov_modules_macros::config_constant;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use sov_zk_cycle_macros::cycle_tracker;
 
@@ -67,6 +68,22 @@ impl<C: Context> Transaction<C> {
 
     pub const fn gas_limit(&self) -> u64 {
         self.gas_limit
+    }
+
+    pub fn gas_fixed_cost(&self) -> C::GasUnit {
+        #[config_constant]
+        const GAS_TX_FIXED_COST: &[u64];
+
+        #[config_constant]
+        const GAS_TX_COST_PER_BYTE: &[u64];
+
+        let gas_tx_fixed_cost = C::GasUnit::from_arbitrary_dimensions(GAS_TX_FIXED_COST);
+        let mut gas_tx_cost = C::GasUnit::from_arbitrary_dimensions(GAS_TX_COST_PER_BYTE);
+
+        gas_tx_cost.scalar_product(self.runtime_msg.len() as u64);
+        gas_tx_cost.combine(&gas_tx_fixed_cost);
+
+        gas_tx_cost
     }
 
     /// Check whether the transaction has been signed correctly.

@@ -55,6 +55,8 @@ pub struct TransactionReceipt<R> {
     /// Any additional structured data to be saved in the database and served over RPC
     /// For example, this might contain a status code.
     pub receipt: R,
+    /// Total gas incurred for this transaction.
+    pub gas_total: Vec<u64>,
 }
 
 /// A receipt for a batch of transactions. These receipts are stored in the rollup's database
