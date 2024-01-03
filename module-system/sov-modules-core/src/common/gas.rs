@@ -1,5 +1,6 @@
 //! Gas unit definitions and implementations.
 
+use alloc::vec::Vec;
 use core::fmt;
 
 use anyhow::Result;
