@@ -18,16 +18,16 @@ use crate::test_helpers::start_rollup;
 #[cfg(feature = "experimental")]
 #[tokio::test]
 async fn evm_tx_tests_instant_finality() -> anyhow::Result<()> {
-    evt_tx_test(0).await
+    evm_tx_test(0).await
 }
 
 #[cfg(feature = "experimental")]
 #[tokio::test]
 async fn evm_tx_tests_non_instant_finality() -> anyhow::Result<()> {
-    evt_tx_test(3).await
+    evm_tx_test(3).await
 }
 
-async fn evt_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
+async fn evm_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
     let (port_tx, port_rx) = tokio::sync::oneshot::channel();
 
     let rollup_task = tokio::spawn(async move {

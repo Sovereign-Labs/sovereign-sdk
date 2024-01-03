@@ -12,8 +12,8 @@ clean: ## Cleans compiled
 test-legacy: ## Runs test suite with output from tests printed
 	@cargo test -- --nocapture -Zunstable-options --report-time
 
-test:  ## Runs test suite using next test
-	@cargo nextest run --workspace --all-features
+test: ## Runs test suite using next test
+	SKIP_GUEST_BUILD=0 cargo nextest run --workspace --all-features
 
 install-dev-tools:  ## Installs all necessary cargo helpers
 	cargo install cargo-llvm-cov
@@ -33,8 +33,8 @@ lint:  ## cargo check and clippy. Skip clippy on guest code since it's not suppo
 	SKIP_GUEST_BUILD=1 cargo clippy --all-targets --all-features
 
 lint-fix:  ## cargo fmt, fix and clippy. Skip clippy on guest code since it's not supported by risc0
-	cargo +nightly fmt --all
-	cargo fix --allow-dirty
+	@cargo +nightly fmt --all
+	@cargo fix --allow-dirty
 	SKIP_GUEST_BUILD=1 cargo clippy --fix --allow-dirty
 
 check-features: ## Checks that project compiles with all combinations of features.
@@ -48,7 +48,7 @@ check-no-std: ## Checks that project compiles without std
 	$(MAKE) -C ./module-system/sov-modules-core $@
 
 find-unused-deps: ## Prints unused dependencies for project. Note: requires nightly
-	cargo +nightly udeps --all-targets --all-features
+	SKIP_GUEST_BUILD=1 cargo +nightly udeps --all-targets --all-features
 
 find-flaky-tests:  ## Runs tests over and over to find if there's flaky tests
 	flaky-finder -j16 -r320 --continue "cargo test -- --nocapture"

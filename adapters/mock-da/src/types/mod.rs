@@ -136,6 +136,7 @@ pub struct MockDaConfig {
     /// The address to use to "submit" blobs on the mock da layer
     pub sender_address: MockAddress,
     /// How many blocks progress to finalization
+    #[serde(default)]
     pub finalization_blocks: u32,
 }
 

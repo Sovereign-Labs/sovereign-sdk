@@ -20,10 +20,19 @@ const TOKEN_SALT: u64 = 0;
 const TOKEN_NAME: &str = "test_token";
 
 #[tokio::test]
-async fn bank_tx_tests() -> Result<(), anyhow::Error> {
+async fn bank_tx_tests_instant_finality() -> Result<(), anyhow::Error> {
+    bank_tx_tests(0).await
+}
+
+#[tokio::test]
+async fn bank_tx_tests_non_instant_finality() -> Result<(), anyhow::Error> {
+    bank_tx_tests(3).await
+}
+
+async fn bank_tx_tests(finalization_blocks: u32) -> anyhow::Result<()> {
     let (port_tx, port_rx) = tokio::sync::oneshot::channel();
 
-    let rollup_task = tokio::spawn(async {
+    let rollup_task = tokio::spawn(async move {
         start_rollup(
             port_tx,
             GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
@@ -31,7 +40,10 @@ async fn bank_tx_tests() -> Result<(), anyhow::Error> {
                 chain_state: "../test-data/genesis/integration-tests/chain_state.json".into(),
             },
             RollupProverConfig::Execute,
-            MockDaConfig::instant_with_sender(MockAddress::new([11; 32])),
+            MockDaConfig {
+                sender_address: MockAddress::new([11; 32]),
+                finalization_blocks,
+            },
         )
         .await;
     });
