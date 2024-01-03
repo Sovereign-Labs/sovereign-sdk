@@ -214,7 +214,7 @@ jobs:
         with:
           cache-provider: "buildjet"
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
-      - run: cargo nextest run --workspace --all-features
+      - run: cargo test run --workspace --all-features
   test:
     name: test
     runs-on: buildjet-4vcpu-ubuntu-2204
