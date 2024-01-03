@@ -31,7 +31,6 @@ where
     da_service: Da,
     stf: Stf,
     storage_manager: Sm,
-    #[allow(dead_code)]
     rpc_storage: Arc<RwLock<Sm::NativeStorage>>,
     ledger_db: LedgerDB,
     state_root: StateRoot<Stf, Vm, Da::Spec>,
@@ -202,6 +201,17 @@ where
                 }
             }
 
+            {
+                let new_rpc_storage = self
+                    .storage_manager
+                    .create_storage_on(filtered_block.header())?;
+                let mut rpc_storage = self
+                    .rpc_storage
+                    .write()
+                    .expect("RPC Storage RwLock is poisoned");
+                *rpc_storage = new_rpc_storage;
+            }
+
             let mut blobs = self.da_service.extract_relevant_blobs(&filtered_block);
 
             info!(
@@ -223,6 +233,7 @@ where
             let pre_state = self
                 .storage_manager
                 .create_storage_on(filtered_block.header())?;
+
             let slot_result = self.stf.apply_slot(
                 // TODO(https://github.com/Sovereign-Labs/sovereign-sdk/issues/1247): incorrect pre-state root in case of re-org
                 &self.state_root,

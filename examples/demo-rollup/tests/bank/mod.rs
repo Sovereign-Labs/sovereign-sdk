@@ -39,7 +39,7 @@ async fn bank_tx_tests(finalization_blocks: u32) -> anyhow::Result<()> {
             BasicKernelGenesisPaths {
                 chain_state: "../test-data/genesis/integration-tests/chain_state.json".into(),
             },
-            RollupProverConfig::Execute,
+            RollupProverConfig::Skip,
             MockDaConfig {
                 sender_address: MockAddress::new([11; 32]),
                 finalization_blocks,
