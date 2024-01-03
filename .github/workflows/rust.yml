@@ -396,7 +396,6 @@ jobs:
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
   check-demo-rollup-bash-commands-mock-da:
     runs-on: buildjet-4vcpu-ubuntu-2204
-    needs: nextest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v3
@@ -420,10 +419,12 @@ jobs:
         with:
           cache-provider: "buildjet"
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
+      - run: cargo test
       - name: Compile README.md to Bash
         run: cargo run --bin bashtestmd -- --input examples/demo-rollup/README.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
+      
     
   validate-packages-to-publish-yml:
     runs-on: ubuntu-latest
