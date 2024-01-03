@@ -15,7 +15,7 @@ use tokio::time;
 
 use crate::types::{MockAddress, MockBlob, MockBlock, MockDaVerifier};
 use crate::verifier::MockDaSpec;
-use crate::{MockBlockHeader, MockHash};
+use crate::{MockBlockHeader, MockDaConfig, MockHash};
 
 const GENESIS_HEADER: MockBlockHeader = MockBlockHeader {
     prev_hash: MockHash([0; 32]),
@@ -76,6 +76,11 @@ impl MockDaService {
     /// Creates a new [`MockDaService`] with instant finality.
     pub fn new(sequencer_da_address: MockAddress) -> Self {
         Self::with_finality(sequencer_da_address, 0)
+    }
+
+    /// Creates a new [`MockDaService`] from given [`MockDaConfig`].
+    pub fn from_config(config: MockDaConfig) -> Self {
+        Self::with_finality(config.sender_address, config.finalization_blocks)
     }
 
     /// Create a new [`MockDaService`] with given finality.

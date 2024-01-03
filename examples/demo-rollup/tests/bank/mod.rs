@@ -5,7 +5,7 @@ use demo_stf::genesis_config::GenesisPaths;
 use demo_stf::runtime::RuntimeCall;
 use jsonrpsee::core::client::{Subscription, SubscriptionClientT};
 use jsonrpsee::rpc_params;
-use sov_mock_da::MockDaSpec;
+use sov_mock_da::{MockAddress, MockDaConfig, MockDaSpec};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
@@ -31,6 +31,7 @@ async fn bank_tx_tests() -> Result<(), anyhow::Error> {
                 chain_state: "../test-data/genesis/integration-tests/chain_state.json".into(),
             },
             RollupProverConfig::Execute,
+            MockDaConfig::instant_with_sender(MockAddress::new([11; 32])),
         )
         .await;
     });

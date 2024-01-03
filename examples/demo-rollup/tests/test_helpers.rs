@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use demo_stf::genesis_config::GenesisPaths;
 use sov_demo_rollup::MockDemoRollup;
-use sov_mock_da::{MockAddress, MockDaConfig};
+use sov_mock_da::MockDaConfig;
 use sov_modules_rollup_blueprint::RollupBlueprint;
 use sov_modules_stf_blueprint::kernels::basic::{
     BasicKernelGenesisConfig, BasicKernelGenesisPaths,
@@ -17,6 +17,7 @@ pub async fn start_rollup(
     rt_genesis_paths: GenesisPaths,
     kernel_genesis_paths: BasicKernelGenesisPaths,
     rollup_prover_config: RollupProverConfig,
+    da_config: MockDaConfig,
 ) {
     let temp_dir = tempfile::tempdir().unwrap();
     let temp_path = temp_dir.path();
@@ -32,11 +33,7 @@ pub async fn start_rollup(
                 bind_port: 0,
             },
         },
-        da: MockDaConfig {
-            sender_address: MockAddress::from([0; 32]),
-            // TODO:
-            finalization_blocks: 0,
-        },
+        da: da_config,
         prover_service: ProverServiceConfig {
             aggregated_proof_block_jump: 1,
         },

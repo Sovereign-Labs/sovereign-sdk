@@ -7,6 +7,7 @@ use demo_stf::genesis_config::GenesisPaths;
 use ethers_core::abi::Address;
 use ethers_signers::{LocalWallet, Signer};
 use sov_evm::SimpleStorageContract;
+use sov_mock_da::{MockAddress, MockDaConfig};
 use sov_modules_stf_blueprint::kernels::basic::BasicKernelGenesisPaths;
 use sov_stf_runner::RollupProverConfig;
 use test_client::TestClient;
@@ -16,10 +17,20 @@ use crate::test_helpers::start_rollup;
 
 #[cfg(feature = "experimental")]
 #[tokio::test]
-async fn evm_tx_tests() -> Result<(), anyhow::Error> {
+async fn evm_tx_tests_instant_finality() -> anyhow::Result<()> {
+    evt_tx_test(0).await
+}
+
+#[cfg(feature = "experimental")]
+#[tokio::test]
+async fn evm_tx_tests_non_instant_finality() -> anyhow::Result<()> {
+    evt_tx_test(3).await
+}
+
+async fn evt_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
     let (port_tx, port_rx) = tokio::sync::oneshot::channel();
 
-    let rollup_task = tokio::spawn(async {
+    let rollup_task = tokio::spawn(async move {
         // Don't provide a prover since the EVM is not currently provable
         start_rollup(
             port_tx,
@@ -28,6 +39,10 @@ async fn evm_tx_tests() -> Result<(), anyhow::Error> {
                 chain_state: "../test-data/genesis/integration-tests/chain_state.json".into(),
             },
             RollupProverConfig::Skip,
+            MockDaConfig {
+                sender_address: MockAddress::new([0; 32]),
+                finalization_blocks,
+            },
         )
         .await;
     });
