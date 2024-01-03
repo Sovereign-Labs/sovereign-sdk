@@ -477,8 +477,8 @@ impl<C: Context> WorkingSet<C> {
     }
 
     /// Returns the total gas incurred.
-    pub const fn gas_total(&self) -> &C::GasUnit {
-        self.gas_meter.gas_total()
+    pub const fn gas_used(&self) -> &C::GasUnit {
+        self.gas_meter.gas_used()
     }
 
     /// Fetches given value and provides a proof of it presence/absence.

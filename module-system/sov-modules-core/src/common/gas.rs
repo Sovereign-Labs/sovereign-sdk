@@ -55,15 +55,13 @@ impl<const N: usize> GasUnit for TupleGasUnit<N> {
     }
 
     fn combine(&mut self, rhs: &Self) {
-        for i in 0..N {
-            self[i] = self[i].saturating_add(rhs[i]);
-        }
+        self.iter_mut()
+            .zip(rhs.iter())
+            .for_each(|(l, r)| *l = l.saturating_add(*r))
     }
 
     fn scalar_product(&mut self, scalar: u64) {
-        for i in 0..N {
-            self[i] = self[i].saturating_mul(scalar);
-        }
+        self.iter_mut().for_each(|s| *s = s.saturating_mul(scalar));
     }
 }
 
@@ -74,7 +72,7 @@ where
 {
     remaining_funds: u64,
     gas_price: GU,
-    gas_total: GU,
+    gas_used: GU,
 }
 
 impl<GU> Default for GasMeter<GU>
@@ -85,7 +83,7 @@ where
         Self {
             remaining_funds: 0,
             gas_price: GU::ZEROED,
-            gas_total: GU::ZEROED,
+            gas_used: GU::ZEROED,
         }
     }
 }
@@ -99,7 +97,7 @@ where
         Self {
             remaining_funds,
             gas_price,
-            gas_total: GU::ZEROED,
+            gas_used: GU::ZEROED,
         }
     }
 
@@ -109,8 +107,8 @@ where
     }
 
     /// Returns the total gas incurred.
-    pub const fn gas_total(&self) -> &GU {
-        &self.gas_total
+    pub const fn gas_used(&self) -> &GU {
+        &self.gas_used
     }
 
     /// Returns the gas price.
@@ -121,7 +119,7 @@ where
     /// Deducts the provided gas unit from the remaining funds, computing the scalar value of the
     /// funds from the price of the instance.
     pub fn charge_gas(&mut self, gas: &GU) -> Result<()> {
-        self.gas_total.combine(gas);
+        self.gas_used.combine(gas);
 
         let gas = gas.value(&self.gas_price);
         self.remaining_funds = self

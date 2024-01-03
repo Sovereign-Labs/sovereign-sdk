@@ -56,7 +56,7 @@ pub struct TransactionReceipt<R> {
     /// For example, this might contain a status code.
     pub receipt: R,
     /// Total gas incurred for this transaction.
-    pub gas_total: Vec<u64>,
+    pub gas_used: Vec<u64>,
 }
 
 /// A receipt for a batch of transactions. These receipts are stored in the rollup's database

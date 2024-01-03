@@ -133,18 +133,18 @@ impl<R: proptest::arbitrary::Arbitrary + 'static> proptest::arbitrary::Arbitrary
                 proptest::collection::vec(any::<u64>(), 0..args.gas_unit_dimensions),
             )
                 .prop_map(
-                    move |(tx_hash, body_to_save, events, receipt, mut gas_total)| {
+                    move |(tx_hash, body_to_save, events, receipt, mut gas_used)| {
                         let tx_hash = match (args.hasher.as_ref(), body_to_save.as_ref()) {
                             (Some(hasher), Some(body)) => hasher.hash(body),
                             _ => tx_hash,
                         };
-                        gas_total.resize(args.gas_unit_dimensions, 0);
+                        gas_used.resize(args.gas_unit_dimensions, 0);
                         Self {
                             tx_hash,
                             body_to_save,
                             events,
                             receipt,
-                            gas_total,
+                            gas_used,
                         }
                     },
                 )
