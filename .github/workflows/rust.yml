@@ -151,6 +151,8 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
       - name: Run check
         run: make check-no-std
+      - name: Run bench
+        run: cargo bench --features bench --bench prover_bench
 
   # Check that every combination of features is working properly.
   hack:
