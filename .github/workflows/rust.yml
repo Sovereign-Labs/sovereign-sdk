@@ -152,9 +152,8 @@ jobs:
       - name: Run check
         run: make check-no-std
 
-  # Check that every combination of features is working properly.
-  bench_check:
-    name: bench_check
+  prover_bench_check:
+    name: prover_bench_check
     needs: check
     runs-on: buildjet-8vcpu-ubuntu-2204
     timeout-minutes: 120
@@ -184,8 +183,34 @@ jobs:
           workspaces: |
             .
             fuzz
-      - name: cargo bench check
+      - name: cargo prover bench check
         run: cargo bench --bench prover_bench --features bench
+
+  bench_check:
+    name: bench_check
+    needs: check
+    runs-on: buildjet-8vcpu-ubuntu-2204
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v3
+      - uses: rui314/setup-mold@v1
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+        with:
+          version: "23.2"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Rust
+        run: rustup show && rustup install nightly && rustup component add rustfmt --toolchain nightly-x86_64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-provider: "buildjet"
+          shared-key: cargo-check-cache
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
+          workspaces: |
+            .
+            fuzz
+      - name: cargo bench check
+        run: cargo bench
 
   # Check that every combination of features is working properly.
   hack:
