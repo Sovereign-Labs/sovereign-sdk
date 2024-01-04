@@ -127,6 +127,8 @@ jobs:
             echo "Linting or formatting errors detected, please run 'make lint-fix' to fix it";
             exit 1
           fi
+      - name: Run bench
+        run: cargo bench --features bench --bench prover_bench
 
   check_no_std:
     runs-on: ubuntu-latest
@@ -151,8 +153,6 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
       - name: Run check
         run: make check-no-std
-      - name: Run bench
-        run: cargo bench --features bench --bench prover_bench
 
   # Check that every combination of features is working properly.
   hack:
