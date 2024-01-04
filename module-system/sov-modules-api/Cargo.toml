@@ -34,6 +34,7 @@ hex = { workspace = true }
 clap = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true, features = [] }
 
+# The risc0 patch only applies to version 2.0.0 exactly.
 ed25519-dalek = { version = "=2.0.0", default-features = false, features = ["serde"] }
 rand = { workspace = true, optional = true }
 
