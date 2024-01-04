@@ -160,7 +160,10 @@ mod test {
             let mut storage_manager =
                 ProverStorageManager::<MockDaSpec, DefaultStorageSpec>::new(storage_config.clone())
                     .unwrap();
-            let prover_storage = storage_manager.create_finalized_storage().unwrap();
+            let mock_block_header = MockBlockHeader::from_height(100000);
+            let prover_storage = storage_manager
+                .create_storage_for(&mock_block_header)
+                .unwrap();
             assert!(!prover_storage.is_empty());
             assert_eq!(
                 value,

@@ -42,6 +42,7 @@ async fn evm_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
             MockDaConfig {
                 sender_address: MockAddress::new([0; 32]),
                 finalization_blocks,
+                wait_attempts: 10,
             },
         )
         .await;

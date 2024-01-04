@@ -13,7 +13,7 @@ use sov_rollup_interface::services::da::{DaService, SlotData};
 use tokio::sync::{broadcast, RwLock, RwLockWriteGuard};
 use tokio::time;
 
-use crate::types::{MockAddress, MockBlob, MockBlock, MockDaVerifier};
+use crate::types::{default_wait_attempts, MockAddress, MockBlob, MockBlock, MockDaVerifier};
 use crate::verifier::MockDaSpec;
 use crate::{MockBlockHeader, MockDaConfig, MockHash};
 
@@ -24,6 +24,10 @@ const GENESIS_HEADER: MockBlockHeader = MockBlockHeader {
     // 2023-01-01T00:00:00Z
     time: Time::from_secs(1672531200),
 };
+
+/// Time in milliseconds to wait for the next block if it is not there yet.
+/// How many times wait attempts are done depends on service configuration.
+pub const WAIT_ATTEMPT_PAUSE_MS: u64 = 10;
 
 /// Definition of a fork that will be executed in `MockDaService` at specified height
 pub struct PlannedFork {
@@ -68,23 +72,39 @@ pub struct MockDaService {
     blocks_to_finality: u32,
     /// Used for calculating correct finality from state of `blocks`
     finalized_header_sender: broadcast::Sender<MockBlockHeader>,
-    wait_attempts: usize,
+    wait_attempts: u64,
     planned_fork: Arc<Mutex<Option<PlannedFork>>>,
 }
 
 impl MockDaService {
     /// Creates a new [`MockDaService`] with instant finality.
     pub fn new(sequencer_da_address: MockAddress) -> Self {
-        Self::with_finality(sequencer_da_address, 0)
+        Self::with_params(sequencer_da_address, 0, default_wait_attempts())
     }
 
     /// Creates a new [`MockDaService`] from given [`MockDaConfig`].
     pub fn from_config(config: MockDaConfig) -> Self {
-        Self::with_finality(config.sender_address, config.finalization_blocks)
+        Self::with_params(
+            config.sender_address,
+            config.finalization_blocks,
+            config.wait_attempts,
+        )
     }
 
     /// Create a new [`MockDaService`] with given finality.
     pub fn with_finality(sequencer_da_address: MockAddress, blocks_to_finality: u32) -> Self {
+        Self::with_params(
+            sequencer_da_address,
+            blocks_to_finality,
+            default_wait_attempts(),
+        )
+    }
+
+    fn with_params(
+        sequencer_da_address: MockAddress,
+        blocks_to_finality: u32,
+        wait_attempts: u64,
+    ) -> Self {
         let (tx, rx1) = broadcast::channel(16);
         // Spawn a task, so channel is never closed
         tokio::spawn(async move {
@@ -98,7 +118,7 @@ impl MockDaService {
             blocks: Arc::new(Default::default()),
             blocks_to_finality,
             finalized_header_sender: tx,
-            wait_attempts: 100_0000,
+            wait_attempts,
             planned_fork: Arc::new(Mutex::new(None)),
         }
     }
@@ -109,7 +129,7 @@ impl MockDaService {
     }
 
     /// Change number of wait attempts before giving up on waiting for block
-    pub fn set_wait_attempts(&mut self, wait_attempts: usize) {
+    pub fn set_wait_attempts(&mut self, wait_attempts: u64) {
         self.wait_attempts = wait_attempts;
     }
 
@@ -127,11 +147,11 @@ impl MockDaService {
                     return Ok(());
                 }
             }
-            time::sleep(Duration::from_millis(10)).await;
+            time::sleep(Duration::from_millis(WAIT_ATTEMPT_PAUSE_MS)).await;
         }
         anyhow::bail!(
             "No block at height={height} has been sent in {:?}",
-            Duration::from_millis((self.wait_attempts * 10) as u64),
+            Duration::from_millis(self.wait_attempts * WAIT_ATTEMPT_PAUSE_MS),
         );
     }
 

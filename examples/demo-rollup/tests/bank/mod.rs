@@ -43,6 +43,7 @@ async fn bank_tx_tests(finalization_blocks: u32) -> anyhow::Result<()> {
             MockDaConfig {
                 sender_address: MockAddress::new([11; 32]),
                 finalization_blocks,
+                wait_attempts: 10,
             },
         )
         .await;

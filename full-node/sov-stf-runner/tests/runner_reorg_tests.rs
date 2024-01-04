@@ -146,9 +146,9 @@ async fn runner_execution(
         path: rollup_config.storage.path.clone(),
     };
     let mut storage_manager = ProverStorageManager::new(storage_config).unwrap();
-    let rpc_storage = Arc::new(RwLock::new(
-        storage_manager.create_finalized_storage().unwrap(),
-    ));
+    let genesis_block = MockBlockHeader::from_height(0);
+    let genesis_storage = storage_manager.create_storage_for(&genesis_block).unwrap();
+    let rpc_storage = Arc::new(RwLock::new(genesis_storage.clone()));
 
     let vm = MockZkvm::new(MockValidityCond::default());
     let verifier = MockDaVerifier::default();
@@ -160,7 +160,7 @@ async fn runner_execution(
         verifier,
         prover_config,
         // Should be ZkStorage, but we don't need it for this test
-        storage_manager.create_finalized_storage().unwrap(),
+        genesis_storage,
         1,
         rollup_config.prover_service,
     );
@@ -192,13 +192,14 @@ fn get_saved_root_hash(
         path: path.to_path_buf(),
     };
     let mut storage_manager = ProverStorageManager::<MockDaSpec, S>::new(storage_config).unwrap();
-    let finalized_storage = storage_manager.create_finalized_storage()?;
+    let mock_block_header = MockBlockHeader::default();
+    let storage = storage_manager.create_storage_for(&mock_block_header)?;
 
     let ledger_db = LedgerDB::with_path(path).unwrap();
 
     ledger_db
         .get_head_slot()?
-        .map(|(number, _)| finalized_storage.get_root_hash(number.0))
+        .map(|(number, _)| storage.get_root_hash(number.0))
         .transpose()
 }
 

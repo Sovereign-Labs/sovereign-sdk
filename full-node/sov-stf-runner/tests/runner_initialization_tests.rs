@@ -92,9 +92,9 @@ fn initialize_runner(
         path: path.to_path_buf(),
     };
     let mut storage_manager = ProverStorageManager::new(storage_config).unwrap();
-    let rpc_storage = Arc::new(RwLock::new(
-        storage_manager.create_finalized_storage().unwrap(),
-    ));
+    let genesis_block = MockBlockHeader::from_height(0);
+    let genesis_storage = storage_manager.create_storage_for(&genesis_block).unwrap();
+    let rpc_storage = Arc::new(RwLock::new(genesis_storage.clone()));
 
     let vm = MockZkvm::new(MockValidityCond::default());
     let verifier = MockDaVerifier::default();
@@ -107,7 +107,7 @@ fn initialize_runner(
         verifier,
         prover_config,
         // Should be ZkStorage, but we don't need it for this test
-        storage_manager.create_finalized_storage().unwrap(),
+        genesis_storage,
         1,
         rollup_config.prover_service,
     );

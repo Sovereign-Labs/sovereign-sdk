@@ -157,7 +157,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
         )?;
 
         let mut storage_manager = self.create_storage_manager(&rollup_config)?;
-        let prover_storage = storage_manager.create_finalized_storage()?;
+        let prover_storage = storage_manager.create_storage_for(&last_finalized_block_header)?;
 
         let prev_root = ledger_db
             .get_head_slot()?

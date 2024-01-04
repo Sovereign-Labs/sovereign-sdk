@@ -138,6 +138,14 @@ pub struct MockDaConfig {
     /// How many blocks progress to finalization
     #[serde(default)]
     pub finalization_blocks: u32,
+    /// How many times try to wait for given block.
+    /// Time between wait attempts is [`crate::service::WAIT_ATTEMPT_PAUSE_MS`]
+    #[serde(default = "default_wait_attempts")]
+    pub wait_attempts: u64,
+}
+
+pub(crate) fn default_wait_attempts() -> u64 {
+    10_000
 }
 
 impl MockDaConfig {
@@ -146,6 +154,7 @@ impl MockDaConfig {
         MockDaConfig {
             sender_address: sender,
             finalization_blocks: 0,
+            wait_attempts: default_wait_attempts(),
         }
     }
 }
