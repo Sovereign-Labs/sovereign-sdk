@@ -49,6 +49,12 @@ pub enum KeyWorkflow<C: sov_modules_api::Context> {
         #[clap(subcommand)]
         identifier: KeyIdentifier<C>,
     },
+    /// Show a key info from the wallet
+    Show {
+        /// The identifier of the key to show
+        #[clap(subcommand)]
+        identifier: KeyIdentifier<C>,
+    },
 }
 
 impl<C: sov_modules_api::Context> KeyWorkflow<C> {
@@ -79,6 +85,10 @@ impl<C: sov_modules_api::Context> KeyWorkflow<C> {
                 wallet_state
                     .addresses
                     .add(address, nickname, public_key, path);
+            }
+            KeyWorkflow::Show { identifier } => {
+                let addr = wallet_state.addresses.get_address(&identifier);
+                println!("{}", serde_json::to_string_pretty(&addr)?)
             }
             KeyWorkflow::List => {
                 println!("{}", serde_json::to_string_pretty(&wallet_state.addresses)?)

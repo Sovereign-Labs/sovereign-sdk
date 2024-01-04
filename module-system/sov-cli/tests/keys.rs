@@ -96,3 +96,59 @@ fn test_activate() {
     let current_active_wallet = wallet_state.addresses.default_address().unwrap();
     assert!(current_active_wallet.is_nicknamed("key1"));
 }
+
+#[test]
+fn test_show() {
+    // Setup a wallet with mock key
+    let app_dir = tempfile::tempdir().unwrap();
+    let mut wallet_state =
+        WalletState::<RuntimeCall<DefaultContext, Da>, DefaultContext>::default();
+    let workflow = KeyWorkflow::Generate {
+        nickname: Some("mockkey".into()),
+    };
+    workflow.run(&mut wallet_state, &app_dir).unwrap();
+
+    // show mockkey by nickname
+    let workflow = KeyWorkflow::Show {
+        identifier: KeyIdentifier::ByNickname {
+            nickname: "mockkey".to_string(),
+        },
+    };
+    workflow.run(&mut wallet_state, &app_dir).unwrap();
+
+    let addr_entry = wallet_state
+        .addresses
+        .get_address(&KeyIdentifier::ByNickname {
+            nickname: "mockkey".to_string(),
+        })
+        .unwrap();
+
+    // show mockkey by address
+    let workflow = KeyWorkflow::Show {
+        identifier: KeyIdentifier::ByAddress {
+            address: addr_entry.address,
+        },
+    };
+    workflow.run(&mut wallet_state, &app_dir).unwrap();
+}
+
+#[test]
+fn test_list() {
+    // Setup a wallet with key1 and key2
+    let app_dir = tempfile::tempdir().unwrap();
+    let mut wallet_state =
+        WalletState::<RuntimeCall<DefaultContext, Da>, DefaultContext>::default();
+
+    let workflow = KeyWorkflow::Generate {
+        nickname: Some("key1".into()),
+    };
+    workflow.run(&mut wallet_state, &app_dir).unwrap();
+
+    let workflow = KeyWorkflow::Generate {
+        nickname: Some("key2".into()),
+    };
+    workflow.run(&mut wallet_state, &app_dir).unwrap();
+
+    let workflow = KeyWorkflow::List {};
+    workflow.run(&mut wallet_state, &app_dir).unwrap();
+}
