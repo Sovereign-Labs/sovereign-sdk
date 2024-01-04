@@ -29,7 +29,7 @@ fn test_demo_values_in_db() {
     let last_block = {
         let stf: StfBlueprintTest = StfBlueprint::new();
         let storage = storage_manager
-            .create_storage_on(genesis_block.header())
+            .create_storage_for(genesis_block.header())
             .unwrap();
         let (genesis_root, storage) = stf.init_chain(storage, config);
         storage_manager
@@ -42,7 +42,9 @@ fn test_demo_values_in_db() {
 
         let mut blobs = [blob];
 
-        let storage = storage_manager.create_storage_on(block_1.header()).unwrap();
+        let storage = storage_manager
+            .create_storage_for(block_1.header())
+            .unwrap();
 
         let result = stf.apply_slot(
             &genesis_root,
@@ -76,7 +78,7 @@ fn test_demo_values_in_db() {
         let next_block = last_block.next_mock();
         let runtime = &mut Runtime::<DefaultContext, MockDaSpec>::default();
         let storage = storage_manager
-            .create_storage_on(next_block.header())
+            .create_storage_for(next_block.header())
             .unwrap();
         let mut working_set = WorkingSet::new(storage);
         let resp = runtime
@@ -103,7 +105,7 @@ fn test_demo_values_in_cache() {
 
     let genesis_block = MockBlock::default();
     let storage = storage_manager
-        .create_storage_on(genesis_block.header())
+        .create_storage_for(genesis_block.header())
         .unwrap();
     let (genesis_root, storage) = stf.init_chain(storage, config);
     storage_manager
@@ -116,7 +118,9 @@ fn test_demo_values_in_cache() {
     let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
     let mut blobs = [blob];
     let block_1 = genesis_block.next_mock();
-    let storage = storage_manager.create_storage_on(block_1.header()).unwrap();
+    let storage = storage_manager
+        .create_storage_for(block_1.header())
+        .unwrap();
 
     let apply_block_result = stf.apply_slot(
         &genesis_root,
@@ -169,7 +173,7 @@ fn test_demo_values_not_in_db() {
         let stf: StfBlueprintTest = StfBlueprint::new();
 
         let storage = storage_manager
-            .create_storage_on(genesis_block.header())
+            .create_storage_for(genesis_block.header())
             .unwrap();
         let (genesis_root, storage) = stf.init_chain(storage, config);
         storage_manager
@@ -180,7 +184,9 @@ fn test_demo_values_not_in_db() {
         let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
 
-        let storage = storage_manager.create_storage_on(block_1.header()).unwrap();
+        let storage = storage_manager
+            .create_storage_for(block_1.header())
+            .unwrap();
 
         let apply_block_result = stf.apply_slot(
             &genesis_root,
@@ -205,7 +211,9 @@ fn test_demo_values_not_in_db() {
     // values are missing because change set from apply slot wasn't saved back to storage manager
     {
         let runtime = &mut Runtime::<C, MockDaSpec>::default();
-        let storage = storage_manager.create_storage_on(block_2.header()).unwrap();
+        let storage = storage_manager
+            .create_storage_for(block_2.header())
+            .unwrap();
         let mut working_set = WorkingSet::new(storage);
 
         let resp = runtime
@@ -235,7 +243,7 @@ fn test_sequencer_unknown_sequencer() {
     let stf: StfBlueprintTest = StfBlueprint::new();
     let (genesis_root, storage) = stf.init_chain(
         storage_manager
-            .create_storage_on(genesis_block.header())
+            .create_storage_for(genesis_block.header())
             .unwrap(),
         config,
     );
@@ -250,7 +258,9 @@ fn test_sequencer_unknown_sequencer() {
     let blob = new_test_blob_from_batch(Batch { txs }, &some_sequencer, [0; 32]);
     let mut blobs = [blob];
 
-    let storage = storage_manager.create_storage_on(block_1.header()).unwrap();
+    let storage = storage_manager
+        .create_storage_for(block_1.header())
+        .unwrap();
 
     let apply_block_result = stf.apply_slot(
         &genesis_root,

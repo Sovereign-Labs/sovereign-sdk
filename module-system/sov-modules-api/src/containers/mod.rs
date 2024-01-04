@@ -78,7 +78,7 @@ mod test {
                 ProverStorageManager::<MockDaSpec, DefaultStorageSpec>::new(storage_config.clone())
                     .unwrap();
             let header = MockBlockHeader::default();
-            let prover_storage = storage_manager.create_storage_on(&header).unwrap();
+            let prover_storage = storage_manager.create_storage_for(&header).unwrap();
             for test in tests.clone() {
                 {
                     let mut working_set: WorkingSet<DefaultContext> =
@@ -106,7 +106,7 @@ mod test {
                 ProverStorageManager::<MockDaSpec, DefaultStorageSpec>::new(storage_config)
                     .unwrap();
             let header = MockBlockHeader::default();
-            let storage = storage_manager.create_storage_on(&header).unwrap();
+            let storage = storage_manager.create_storage_for(&header).unwrap();
             for test in tests {
                 assert_eq!(
                     test.value,
@@ -129,7 +129,7 @@ mod test {
                 ProverStorageManager::<MockDaSpec, DefaultStorageSpec>::new(storage_config.clone())
                     .unwrap();
             let header = MockBlockHeader::default();
-            let prover_storage = storage_manager.create_storage_on(&header).unwrap();
+            let prover_storage = storage_manager.create_storage_for(&header).unwrap();
             assert!(prover_storage.is_empty());
         }
 
@@ -141,7 +141,7 @@ mod test {
                 ProverStorageManager::<MockDaSpec, DefaultStorageSpec>::new(storage_config.clone())
                     .unwrap();
             let header = MockBlockHeader::default();
-            let prover_storage = storage_manager.create_storage_on(&header).unwrap();
+            let prover_storage = storage_manager.create_storage_for(&header).unwrap();
             assert!(prover_storage.is_empty());
             let mut storage: WorkingSet<DefaultContext> = WorkingSet::new(prover_storage.clone());
             storage.set(&key, value.clone());

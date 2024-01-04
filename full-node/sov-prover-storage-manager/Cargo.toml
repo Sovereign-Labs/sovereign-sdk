@@ -18,6 +18,7 @@ sov-db = { path = "../db/sov-db" }
 sov-schema-db = { path = "../db/sov-schema-db" }
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 tracing = { workspace = true }
+tracing-subscriber = "0.3.18"
 
 [dev-dependencies]
 sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
@@ -26,6 +27,7 @@ tempfile = { workspace = true }
 criterion = "0.5.1"
 rand = { workspace = true }
 sha2 = { workspace = true }
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
 [[bench]]
 name = "single_thread_storage_bench"

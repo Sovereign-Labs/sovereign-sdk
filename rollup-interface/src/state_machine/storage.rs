@@ -11,9 +11,17 @@ pub trait HierarchicalStorageManager<Da: DaSpec> {
     /// Type that is produced by `[crate::state_machine::stf::StateTransitionFunction]`.
     type NativeChangeSet;
 
-    /// Creates storage based on given Da block header,
-    /// meaning that at will have access to previous blocks state in same fork.
-    fn create_storage_on(
+    /// Creates a storage that can be used for execution of given DA block,
+    /// meaning that at will have access to previous state in same fork.
+    fn create_storage_for(
+        &mut self,
+        block_header: &Da::BlockHeader,
+    ) -> anyhow::Result<Self::NativeStorage>;
+
+    /// Creates a storage, that have data from execution of given DA block and all previous
+    /// Similar to executing [`create_storage_for`] of the next block after `block_header`
+    /// ChangeSet from this storage cannot be saved, as it does not have association with particular block
+    fn create_storage_after(
         &mut self,
         block_header: &Da::BlockHeader,
     ) -> anyhow::Result<Self::NativeStorage>;

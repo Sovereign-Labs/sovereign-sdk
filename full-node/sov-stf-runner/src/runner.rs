@@ -113,7 +113,7 @@ where
                     "No history detected. Initializing chain on block_header={:?}...",
                     block_header
                 );
-                let storage = storage_manager.create_storage_on(&block_header)?;
+                let storage = storage_manager.create_storage_for(&block_header)?;
                 let (genesis_root, initialized_storage) = stf.init_chain(storage, params);
                 storage_manager.save_change_set(&block_header, initialized_storage)?;
                 storage_manager.finalize(&block_header)?;
@@ -204,7 +204,7 @@ where
             {
                 let new_rpc_storage = self
                     .storage_manager
-                    .create_storage_on(filtered_block.header())?;
+                    .create_storage_for(filtered_block.header())?;
                 let mut rpc_storage = self
                     .rpc_storage
                     .write()
@@ -232,7 +232,7 @@ where
 
             let pre_state = self
                 .storage_manager
-                .create_storage_on(filtered_block.header())?;
+                .create_storage_for(filtered_block.header())?;
 
             let slot_result = self.stf.apply_slot(
                 // TODO(https://github.com/Sovereign-Labs/sovereign-sdk/issues/1247): incorrect pre-state root in case of re-org
@@ -268,6 +268,16 @@ where
             self.storage_manager
                 .save_change_set(filtered_block.header(), slot_result.change_set)?;
             // Send
+            {
+                let new_rpc_storage = self
+                    .storage_manager
+                    .create_storage_after(filtered_block.header())?;
+                let mut rpc_storage = self
+                    .rpc_storage
+                    .write()
+                    .expect("RPC Storage RwLock poisoned");
+                *rpc_storage = new_rpc_storage;
+            }
 
             // ----------------
             // Create ZK proof.
