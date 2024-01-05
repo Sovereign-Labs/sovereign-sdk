@@ -1,13 +1,13 @@
+use std::io::Cursor;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Context, Spec};
 use sov_rollup_interface::digest::Digest;
-use std::io::Cursor;
-use tracing::debug;
-
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use sov_zk_cycle_macros::cycle_tracker;
+use tracing::debug;
 
 type RawTxHash = [u8; 32];
 

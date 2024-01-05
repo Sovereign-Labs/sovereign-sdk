@@ -1,4 +1,5 @@
-use sov_data_generators::{bank_data::BankMessageGenerator, MessageGenerator};
+use sov_data_generators::bank_data::BankMessageGenerator;
+use sov_data_generators::MessageGenerator;
 use sov_demo_rollup::MockDemoRollup;
 use sov_mock_da::{MockAddress, MockBlock, MockDaService};
 use sov_rollup_interface::services::da::DaService;

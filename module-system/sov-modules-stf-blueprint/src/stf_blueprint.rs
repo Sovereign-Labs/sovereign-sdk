@@ -248,7 +248,7 @@ where
             txs.into_iter().zip(messages.into_iter())
         {
             // Update the working set gas meter with the available funds
-            let gas_price = C::GasUnit::from_arbitrary_dimensions(&gas_elastic_price);
+            let gas_price = C::GasUnit::from_arbitrary_dimensions(gas_elastic_price);
             let gas_limit = tx.gas_limit();
             let gas_tip = tx.gas_tip();
             batch_workspace.set_gas(gas_limit, gas_price);

@@ -58,7 +58,7 @@ fn jmt_verify_existence<S: MerkleProofSpec>(
         }
     }
 
-    return Ok(());
+    Ok(())
 }
 
 #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
