@@ -5,6 +5,7 @@ use demo_stf::genesis_config::GenesisPaths;
 use demo_stf::runtime::RuntimeCall;
 use jsonrpsee::core::client::{Subscription, SubscriptionClientT};
 use jsonrpsee::rpc_params;
+use sov_demo_rollup::initialize_logging;
 use sov_mock_da::{MockAddress, MockDaConfig, MockDaSpec};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
@@ -31,6 +32,7 @@ async fn bank_tx_tests_non_instant_finality() -> Result<(), anyhow::Error> {
 
 async fn bank_tx_tests(finalization_blocks: u32) -> anyhow::Result<()> {
     let (port_tx, port_rx) = tokio::sync::oneshot::channel();
+    initialize_logging();
 
     let rollup_task = tokio::spawn(async move {
         start_rollup(
@@ -104,7 +106,6 @@ async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow
             "ledger_unsubscribeSlots",
         )
         .await?;
-
     client.send_transaction(tx).await?;
 
     // Wait until the rollup has processed the next slot

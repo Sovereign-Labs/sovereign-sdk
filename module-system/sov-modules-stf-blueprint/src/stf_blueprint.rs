@@ -225,11 +225,6 @@ where
                 .saturating_sub(remaining_gas);
 
             sequencer_reward = sequencer_reward.saturating_add(gas_reward);
-            debug!(
-                "Tx {} sequencer reward: {}",
-                hex::encode(raw_tx_hash),
-                gas_reward
-            );
 
             let events = batch_workspace.take_events();
             let tx_effect = match tx_result {
@@ -246,7 +241,12 @@ where
                     TxEffect::Reverted
                 }
             };
-            debug!("Tx {} effect: {:?}", hex::encode(raw_tx_hash), tx_effect);
+            debug!(
+                "Tx 0x{} effect: {:?}, sequencer reward: {}",
+                hex::encode(raw_tx_hash),
+                tx_effect,
+                gas_reward
+            );
 
             let receipt = TransactionReceipt {
                 tx_hash: raw_tx_hash,

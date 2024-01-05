@@ -45,7 +45,7 @@ async fn evm_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
                 // Otherwise batches are going to be rejected
                 sender_address: MockAddress::new([0; 32]),
                 finalization_blocks,
-                wait_attempts: 10_000,
+                wait_attempts: 1_000,
             },
         )
         .await;
@@ -170,19 +170,18 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
     // This call should fail because function does not exist
     let failing_call = client.failing_call(contract_address).await;
     assert!(failing_call.is_err());
-
     // Create a blob with multiple transactions.
-    let mut requests = Vec::default();
-    for value in 150..153 {
-        let set_value_req = client.set_value(contract_address, value, None, None).await;
-        requests.push(set_value_req);
-    }
+    let values: Vec<u32> = (150..153).collect();
+    let requests = client
+        .set_values(contract_address, values, None, None)
+        .await;
 
     client.send_publish_batch_request().await;
     let _ = slot_subscription.next().await.unwrap().unwrap();
 
     for req in requests {
-        req.await.unwrap();
+        let receipt = req.await.unwrap();
+        assert!(receipt.is_some());
     }
 
     {
@@ -208,22 +207,25 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
         let get_arg = client.query_contract(contract_address).await?;
         assert_eq!(value, get_arg.as_u32());
     }
+    tracing::info!("5: SET VALUE 2 SUBMITTED");
 
     {
         // get initial gas price
         let initial_gas_price = client.eth_gas_price().await;
 
         // send 100 set transaction with high gas fee in a four batch to increase gas price
-        for _ in 0..4 {
-            let mut requests = Vec::default();
-            for value in 0..25 {
-                let set_value_req = client
-                    .set_value(contract_address, value, Some(20u64), Some(21u64))
-                    .await;
-                requests.push(set_value_req);
-            }
+        for i in 0..4 {
+            let values: Vec<u32> = (0..25).collect();
+            let requests = client
+                .set_values(contract_address, values, Some(20u64), Some(21u64))
+                .await;
             client.send_publish_batch_request().await;
             slot_subscription.next().await;
+            tracing::info!(
+                "6.{}: {} REQUESTS FOR GAS PRICE HAVE BEEN SUBMITTED",
+                i,
+                requests.len()
+            );
         }
         // get gas price
         let latest_gas_price = client.eth_gas_price().await;

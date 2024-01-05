@@ -145,7 +145,9 @@ pub mod experimental {
             messages: Vec<Vec<u8>>,
             min_blob_size: Option<usize>,
         ) -> Result<(), jsonrpsee::core::Error> {
+            tracing::info!("Build and submit ETH batch request has been received: messages={}, min_blob_size={:?}", messages.len(), min_blob_size);
             let batch = self.build_batch(messages, min_blob_size)?;
+            tracing::debug!("Batch of {} tx(s) have been built", batch.len());
 
             self.submit_batch(batch)
                 .await
@@ -156,9 +158,11 @@ pub mod experimental {
 
         async fn submit_batch(&self, batch: Vec<Vec<u8>>) -> Result<(), jsonrpsee::core::Error> {
             if batch.is_empty() {
-                return Ok(());
+                tracing::error!("Attempt to submit empty batch");
+                return Err(jsonrpsee::core::Error::Custom(
+                    "Attempt to submit empty batch".to_string(),
+                ));
             }
-
             let blob = batch
                 .try_to_vec()
                 .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
@@ -167,7 +171,7 @@ pub mod experimental {
                 .send_transaction(&blob)
                 .await
                 .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
-
+            tracing::debug!("ETH Batch has been submitted");
             Ok(())
         }
 

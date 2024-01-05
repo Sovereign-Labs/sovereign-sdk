@@ -41,8 +41,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
     /// Handler for: `eth_chainId`
     #[rpc_method(name = "eth_chainId")]
     pub fn chain_id(&self, working_set: &mut WorkingSet<C>) -> RpcResult<Option<U64>> {
-        tracing::debug!("evm module: eth_chainId");
-
         let chain_id = reth_primitives::U64::from(
             self.cfg
                 .get(working_set)
@@ -62,7 +60,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         details: Option<bool>,
         working_set: &mut WorkingSet<C>,
     ) -> RpcResult<Option<reth_rpc_types::RichBlock>> {
-        info!("evm module: eth_getBlockByHash");
+        info!("evm module: eth_getBlockByHash {}", block_hash);
 
         let block_number_hex = self
             .block_hashes
@@ -81,7 +79,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         details: Option<bool>,
         working_set: &mut WorkingSet<C>,
     ) -> RpcResult<Option<reth_rpc_types::RichBlock>> {
-        info!("evm module: eth_getBlockByNumber");
+        info!("evm module: eth_getBlockByNumber {:?}", block_number);
 
         let block = self.get_sealed_block_by_number(block_number, working_set);
 
@@ -141,8 +139,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _block_number: Option<String>,
         working_set: &mut WorkingSet<C>,
     ) -> RpcResult<reth_primitives::U256> {
-        info!("evm module: eth_getBalance");
-
         // TODO: Implement block_number once we have archival state #951
         // https://github.com/Sovereign-Labs/sovereign-sdk/issues/951
 
@@ -151,6 +147,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
             .get(&address, working_set)
             .map(|account| account.info.balance)
             .unwrap_or_default();
+
+        info!("evm module: eth_getBalance({}) -> {}", address, balance);
 
         Ok(balance)
     }
@@ -186,8 +184,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _block_number: Option<String>,
         working_set: &mut WorkingSet<C>,
     ) -> RpcResult<reth_primitives::U64> {
-        info!("evm module: eth_getTransactionCount");
-
         // TODO: Implement block_number once we have archival state #882
         // https://github.com/Sovereign-Labs/sovereign-sdk/issues/882
 
@@ -196,6 +192,11 @@ impl<C: sov_modules_api::Context> Evm<C> {
             .get(&address, working_set)
             .map(|account| account.info.nonce)
             .unwrap_or_default();
+
+        info!(
+            "evm module: eth_getTransactionCount({}) -> {}",
+            address, nonce
+        );
 
         Ok(nonce.into())
     }
@@ -246,7 +247,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
         hash: reth_primitives::H256,
         working_set: &mut WorkingSet<C>,
     ) -> RpcResult<Option<reth_rpc_types::Transaction>> {
-        info!("evm module: eth_getTransactionByHash({})", hash);
         let mut accessory_state = working_set.accessory_state();
 
         let tx_number = self.transaction_hashes.get(&hash, &mut accessory_state);
@@ -275,7 +275,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
                 U256::from(tx_number.unwrap() - block.transactions.start),
             )
         });
-        tracing::debug!(
+        tracing::info!(
             "evm module: eth_getTransactionByHash({}) -> {:?}",
             hash,
             transaction

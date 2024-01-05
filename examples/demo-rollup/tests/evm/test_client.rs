@@ -125,6 +125,40 @@ impl TestClient {
         self.eth_send_transaction(typed_transaction).await
     }
 
+    pub(crate) async fn set_values(
+        &self,
+        contract_address: H160,
+        set_args: Vec<u32>,
+        max_priority_fee_per_gas: Option<u64>,
+        max_fee_per_gas: Option<u64>,
+    ) -> Vec<PendingTransaction<'_, Http>> {
+        let mut requests = vec![];
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+
+        for (i, set_arg) in set_args.into_iter().enumerate() {
+            let req = Eip1559TransactionRequest::new()
+                .from(self.from_addr)
+                .to(contract_address)
+                .chain_id(self.chain_id)
+                .nonce(nonce + (i as u64))
+                .data(self.contract.set_call_data(set_arg))
+                .max_priority_fee_per_gas(max_priority_fee_per_gas.unwrap_or(10u64))
+                .max_fee_per_gas(max_fee_per_gas.unwrap_or(MAX_FEE_PER_GAS))
+                .gas(GAS);
+
+            let typed_transaction = TypedTransaction::Eip1559(req);
+
+            requests.push(
+                self.client
+                    .send_transaction(typed_transaction, None)
+                    .await
+                    .unwrap(),
+            )
+        }
+
+        requests
+    }
+
     pub(crate) async fn set_value(
         &self,
         contract_address: H160,
@@ -133,6 +167,7 @@ impl TestClient {
         max_fee_per_gas: Option<u64>,
     ) -> PendingTransaction<'_, Http> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
+        tracing::info!("NONCE FOR {} is {}", self.from_addr, nonce);
 
         let req = Eip1559TransactionRequest::new()
             .from(self.from_addr)

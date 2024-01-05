@@ -175,7 +175,6 @@ where
     /// Runs the rollup.
     pub async fn run_in_process(&mut self) -> Result<(), anyhow::Error> {
         let mut seen_block_headers: VecDeque<<Da::Spec as DaSpec>::BlockHeader> = VecDeque::new();
-        let mut seen_receipts: VecDeque<_> = VecDeque::new();
         let mut height = self.start_height;
         loop {
             debug!("Requesting DA block for height={}", height);
@@ -186,7 +185,6 @@ where
                 if prev_block_header.hash() != filtered_block.header().prev_hash() {
                     tracing::warn!("Block at height={} does not belong in current chain. Chain has forked. Traversing backwards", height);
                     while let Some(seen_block_header) = seen_block_headers.pop_back() {
-                        seen_receipts.pop_back();
                         let block = self
                             .da_service
                             .get_block_at(seen_block_header.height())
@@ -301,11 +299,10 @@ where
             }
             let next_state_root = slot_result.state_root;
 
-            seen_receipts.push_back(data_to_commit);
-
             self.state_root = next_state_root;
             seen_block_headers.push_back(filtered_block.header().clone());
             height += 1;
+            self.ledger_db.commit_slot(data_to_commit)?;
 
             // ----------------
             // Finalization. Done after seen block for proper handling of instant finality
@@ -316,6 +313,7 @@ where
                 "Last finalized header height is {}, ",
                 last_finalized.height()
             );
+
             // Checking all seen blocks, in case if there was delay in getting last finalized header.
             while let Some(earliest_seen_header) = seen_block_headers.front() {
                 tracing::debug!(
@@ -329,8 +327,6 @@ where
                     );
                     self.storage_manager.finalize(earliest_seen_header)?;
                     seen_block_headers.pop_front();
-                    let receipts = seen_receipts.pop_front().unwrap();
-                    self.ledger_db.commit_slot(receipts)?;
                     continue;
                 }
 

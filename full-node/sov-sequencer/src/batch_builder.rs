@@ -113,6 +113,10 @@ where
             .map_err(anyhow::Error::new)
             .context("Failed to decode message in transaction")?;
 
+        tracing::debug!(
+            "Transaction has been added to the mempool: raw_tx={:?}",
+            raw
+        );
         self.mempool.push_back(PooledTransaction {
             raw,
             tx,
@@ -124,6 +128,7 @@ where
     /// Builds a new batch of valid transactions in order they were added to mempool
     /// Only transactions, which are dispatched successfully are included in the batch
     fn get_next_blob(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
+        tracing::debug!("Build next blob has been called");
         let storage = {
             let storage_guard = self
                 .current_storage
@@ -179,6 +184,8 @@ where
         if txs.is_empty() {
             bail!("No valid transactions are available");
         }
+
+        tracing::info!("Batch of {} transactions has been built", txs.len());
 
         Ok(txs)
     }

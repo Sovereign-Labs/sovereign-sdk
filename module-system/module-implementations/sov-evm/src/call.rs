@@ -74,6 +74,11 @@ impl<C: sov_modules_api::Context> Evm<C> {
             }
             // Adopted from https://github.com/paradigmxyz/reth/blob/main/crates/payload/basic/src/lib.rs#L884
             Err(err) => {
+                tracing::debug!(
+                    "EVM transaction with hash={} has been reverted {}",
+                    evm_tx_recovered.hash(),
+                    err
+                );
                 return match err {
                     EVMError::Transaction(_) => {
                         // This is a transactional error, so we can skip it without doing anything.
