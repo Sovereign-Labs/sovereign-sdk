@@ -23,7 +23,7 @@ members = [
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
     "utils/bashtestmd",
-"utils/rng-da-service",
+    "utils/rng-da-service",
     # Module System
     "module-system/sov-cli",
     "module-system/sov-modules-stf-blueprint",
