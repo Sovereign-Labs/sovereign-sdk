@@ -20,9 +20,9 @@ struct AccountsData {
     pub_keys: Vec<DefaultPublicKey>,
 }
 
-const DEFAULT_BLOCKS: u64 = 1;
-const DEFAULT_TXNS_PER_BLOCK: u64 = 10;
-const DEFAULT_NUM_PUB_KEYS: u64 = 100;
+const DEFAULT_BLOCKS: u64 = 10;
+const DEFAULT_TXNS_PER_BLOCK: u64 = 100;
+const DEFAULT_NUM_PUB_KEYS: u64 = 1000;
 
 pub fn generate_genesis_config(config_dir: &str) -> anyhow::Result<()> {
     let num_pub_keys = match env::var("NUM_PUB_KEYS") {
