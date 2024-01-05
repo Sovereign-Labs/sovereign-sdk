@@ -5,6 +5,7 @@ use sov_modules_api::runtime::capabilities::KernelSlotHooks;
 use sov_modules_api::{
     BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, GasUnit, StateCheckpoint,
 };
+use sov_modules_core::WorkingSet;
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
 use tracing::{debug, error};
 
@@ -177,8 +178,72 @@ where
         let gas_elastic_price = [0, 0];
         let mut sequencer_reward = 0u64;
 
-        // Dispatching transactions
         let mut tx_receipts = Vec::with_capacity(txs.len());
+
+        let mut batch_workspace = self.apply_txs(
+            txs,
+            messages,
+            &gas_elastic_price,
+            &mut tx_receipts,
+            batch_workspace,
+            &mut sequencer_reward,
+        );
+
+        // TODO: calculate the amount based of gas and fees
+        let sequencer_outcome = SequencerOutcome::Rewarded(sequencer_reward);
+
+        if let Err(e) = self
+            .runtime
+            .end_blob_hook(sequencer_outcome.clone(), &mut batch_workspace)
+        {
+            // TODO: will be covered in https://github.com/Sovereign-Labs/sovereign-sdk/issues/421
+            error!("Failed on `end_blob_hook`: {}", e);
+        };
+
+        (
+            Ok(BatchReceipt {
+                batch_hash: blob.hash(),
+                tx_receipts,
+                inner: sequencer_outcome,
+            }),
+            batch_workspace.checkpoint(),
+        )
+    }
+
+    // Do all stateless checks and data formatting, that can be results in sequencer slashing
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
+    fn pre_process_batch(
+        &self,
+        blob_data: &mut impl BlobReaderTrait,
+    ) -> Result<
+        (
+            Vec<TransactionAndRawHash<C>>,
+            Vec<<RT as DispatchCall>::Decodable>,
+        ),
+        SlashingReason,
+    > {
+        let batch = self.deserialize_batch(blob_data)?;
+        debug!("Deserialized batch with {} txs", batch.txs.len());
+
+        // Run the stateless verification, since it is stateless we don't commit.
+        let txs = self.verify_txs_stateless(batch)?;
+
+        let messages = self.decode_txs(&txs)?;
+
+        Ok((txs, messages))
+    }
+
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
+    fn apply_txs(
+        &self,
+        txs: Vec<TransactionAndRawHash<C>>,
+        messages: Vec<<RT as DispatchCall>::Decodable>,
+        gas_elastic_price: &[u64],
+        tx_receipts: &mut Vec<TransactionReceipt<TxEffect>>,
+        mut batch_workspace: WorkingSet<C>,
+        sequencer_reward: &mut u64,
+    ) -> WorkingSet<C> {
+        // Dispatching transactions
         for (TransactionAndRawHash { tx, raw_tx_hash }, msg) in
             txs.into_iter().zip(messages.into_iter())
         {
@@ -224,7 +289,7 @@ where
                 .saturating_add(gas_tip)
                 .saturating_sub(remaining_gas);
 
-            sequencer_reward = sequencer_reward.saturating_add(gas_reward);
+            *sequencer_reward = sequencer_reward.saturating_add(gas_reward);
             debug!(
                 "Tx {} sequencer reward: {}",
                 hex::encode(raw_tx_hash),
@@ -265,50 +330,11 @@ where
                 .expect("inconsistent state: error in post_dispatch_tx_hook");
         }
 
-        // TODO: calculate the amount based of gas and fees
-        let sequencer_outcome = SequencerOutcome::Rewarded(sequencer_reward);
-
-        if let Err(e) = self
-            .runtime
-            .end_blob_hook(sequencer_outcome.clone(), &mut batch_workspace)
-        {
-            // TODO: will be covered in https://github.com/Sovereign-Labs/sovereign-sdk/issues/421
-            error!("Failed on `end_blob_hook`: {}", e);
-        };
-
-        (
-            Ok(BatchReceipt {
-                batch_hash: blob.hash(),
-                tx_receipts,
-                inner: sequencer_outcome,
-            }),
-            batch_workspace.checkpoint(),
-        )
-    }
-
-    // Do all stateless checks and data formatting, that can be results in sequencer slashing
-    fn pre_process_batch(
-        &self,
-        blob_data: &mut impl BlobReaderTrait,
-    ) -> Result<
-        (
-            Vec<TransactionAndRawHash<C>>,
-            Vec<<RT as DispatchCall>::Decodable>,
-        ),
-        SlashingReason,
-    > {
-        let batch = self.deserialize_batch(blob_data)?;
-        debug!("Deserialized batch with {} txs", batch.txs.len());
-
-        // Run the stateless verification, since it is stateless we don't commit.
-        let txs = self.verify_txs_stateless(batch)?;
-
-        let messages = self.decode_txs(&txs)?;
-
-        Ok((txs, messages))
+        batch_workspace
     }
 
     // Attempt to deserialize batch, error results in sequencer slashing.
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn deserialize_batch(
         &self,
         blob_data: &mut impl BlobReaderTrait,
@@ -330,6 +356,7 @@ where
 
     // Stateless verification of transaction, such as signature check
     // Single malformed transaction results in sequencer slashing.
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn verify_txs_stateless(
         &self,
         batch: Batch,
@@ -345,6 +372,7 @@ where
 
     // Checks that runtime message can be decoded from transaction.
     // If a single message cannot be decoded, sequencer is slashed
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn decode_txs(
         &self,
         txs: &[TransactionAndRawHash<C>],

@@ -23,7 +23,7 @@ members = [
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
     "utils/bashtestmd",
-    "utils/rng-da-service",
+"utils/rng-da-service",
     # Module System
     "module-system/sov-cli",
     "module-system/sov-modules-stf-blueprint",
@@ -34,7 +34,7 @@ members = [
     "module-system/sov-state",
     "module-system/sov-modules-api",
     "module-system/module-schemas",
-    "module-system/utils/sov-data-generators",
+    "module-system/sov-data-generators",
     "module-system/module-implementations/sov-accounts",
     "module-system/module-implementations/sov-bank",
     "module-system/module-implementations/sov-nft-module",

@@ -1157,6 +1157,7 @@ dependencies = [
  "sov-blob-storage",
  "sov-chain-state",
  "sov-modules-api",
+ "sov-modules-core",
  "sov-rollup-interface",
  "sov-state",
  "sov-zk-cycle-macros",

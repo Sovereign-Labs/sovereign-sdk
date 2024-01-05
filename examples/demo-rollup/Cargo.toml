@@ -57,6 +57,7 @@ sov-evm = { path = "../../module-system/module-implementations/sov-evm", feature
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
 sov-nft-module = { path = "../../module-system/module-implementations/sov-nft-module", features = ["native"] }
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros" }
+sov-data-generators = { path = "../../module-system/sov-data-generators" }
 humantime = "2.1"
 
 borsh = { workspace = true }

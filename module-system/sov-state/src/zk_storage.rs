@@ -36,6 +36,63 @@ impl<S: MerkleProofSpec> ZkStorage<S> {
     }
 }
 
+#[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
+fn jmt_verify_existence<S: MerkleProofSpec>(
+    prev_state_root: [u8; 32],
+    state_accesses: &OrderedReadsAndWrites,
+    witness: &S::Witness,
+) -> Result<(), anyhow::Error> {
+    // For each value that's been read from the tree, verify the provided smt proof
+    for (key, read_value) in &state_accesses.ordered_reads {
+        let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
+        // TODO: Switch to the batch read API once it becomes available
+        let proof: jmt::proof::SparseMerkleProof<S::Hasher> = witness.get_hint();
+
+        match read_value {
+            Some(val) => proof.verify_existence(
+                jmt::RootHash(prev_state_root),
+                key_hash,
+                val.value.as_ref(),
+            )?,
+            None => proof.verify_nonexistence(jmt::RootHash(prev_state_root), key_hash)?,
+        }
+    }
+
+    return Ok(());
+}
+
+#[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
+fn jmt_verify_update<S: MerkleProofSpec>(
+    prev_state_root: [u8; 32],
+    state_accesses: OrderedReadsAndWrites,
+    witness: &S::Witness,
+) -> [u8; 32] {
+    // Compute the jmt update from the write batch
+    let batch = state_accesses
+        .ordered_writes
+        .into_iter()
+        .map(|(key, value)| {
+            let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
+            (
+                key_hash,
+                value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let update_proof: jmt::proof::UpdateMerkleProof<S::Hasher> = witness.get_hint();
+    let new_root: [u8; 32] = witness.get_hint();
+    update_proof
+        .verify_update(
+            jmt::RootHash(prev_state_root),
+            jmt::RootHash(new_root),
+            batch,
+        )
+        .expect("Updates must be valid");
+
+    new_root
+}
+
 impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     type Witness = S::Witness;
     type RuntimeConfig = ();
@@ -52,7 +109,6 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         witness.get_hint()
     }
 
-    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn compute_state_update(
         &self,
         state_accesses: OrderedReadsAndWrites,
@@ -61,42 +117,9 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         let prev_state_root = witness.get_hint();
 
         // For each value that's been read from the tree, verify the provided smt proof
-        for (key, read_value) in state_accesses.ordered_reads {
-            let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
-            // TODO: Switch to the batch read API once it becomes available
-            let proof: jmt::proof::SparseMerkleProof<S::Hasher> = witness.get_hint();
-            match read_value {
-                Some(val) => proof.verify_existence(
-                    jmt::RootHash(prev_state_root),
-                    key_hash,
-                    val.value.as_ref(),
-                )?,
-                None => proof.verify_nonexistence(jmt::RootHash(prev_state_root), key_hash)?,
-            }
-        }
+        jmt_verify_existence::<S>(prev_state_root, &state_accesses, witness)?;
 
-        // Compute the jmt update from the write batch
-        let batch = state_accesses
-            .ordered_writes
-            .into_iter()
-            .map(|(key, value)| {
-                let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
-                (
-                    key_hash,
-                    value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
-                )
-            })
-            .collect::<Vec<_>>();
-
-        let update_proof: jmt::proof::UpdateMerkleProof<S::Hasher> = witness.get_hint();
-        let new_root: [u8; 32] = witness.get_hint();
-        update_proof
-            .verify_update(
-                jmt::RootHash(prev_state_root),
-                jmt::RootHash(new_root),
-                batch,
-            )
-            .expect("Updates must be valid");
+        let new_root = jmt_verify_update::<S>(prev_state_root, state_accesses, witness);
 
         Ok((jmt::RootHash(new_root), ()))
     }

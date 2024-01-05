@@ -1,0 +1,25 @@
+[package]
+name = "sov-data-generators"
+description = "A set of generator utils used to automatically produce and serialize transaction data"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+resolver = "2"
+publish = false
+
+[dependencies]
+sov-modules-api = { path = "../sov-modules-api", features = ["native"] }
+sov-modules-stf-blueprint = { path = "../sov-modules-stf-blueprint", features = ["native"] }
+sov-value-setter = { path = "../module-implementations/examples/sov-value-setter", features = ["native"] }
+sov-bank = { path = "../module-implementations/sov-bank", features = ["native"] }
+sov-state = { path = "../sov-state" }
+sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
+
+borsh = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
