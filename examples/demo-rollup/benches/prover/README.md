@@ -274,3 +274,39 @@ Here are the results (including ed25519 acceleration):
 | commit               | 7              | 11        |
 
 **Total cycles consumed for test: 858,641,427**
+
+## Benchmarks with prepopulated accounts
+
+Now we compare these results by prepopulating the accounts module with 1M accounts.
+
+### Block Stats
+
+| Description                              | Value |
+| ---------------------------------------- | ----- |
+| Total blocks                             | 11    |
+| Blocks with transactions                 | 11    |
+| Number of blobs                          | 11    |
+| Total number of transactions             | 1001  |
+| Average number of transactions per block | 91    |
+
+### Cycle Metrics
+
+| Function             | Average Cycles | Num Calls |
+| -------------------- | -------------- | --------- |
+| Cycles per block     | 82,501,342     | 11        |
+| apply_blob           | 73,774,539     | 11        |
+| pre_process_batch    | 71,614,640     | 11        |
+| verify_txs_stateless | 71,203,340     | 11        |
+| end_slot             | 5,277,919      | 11        |
+| jmt_verify_update    | 3,007,153      | 11        |
+| jmt_verify_existence | 2,143,099      | 11        |
+| apply_txs            | 2,120,704      | 11        |
+| verify               | 731,327        | 1001      |
+| decode_txs           | 308,557        | 11        |
+| begin_slot           | 184,097        | 11        |
+| deserialize_batch    | 82,908         | 11        |
+| deserialize          | 24,004         | 1001      |
+| hash                 | 5,852          | 1001      |
+| commit               | 7              | 11        |
+
+**Total cycles consumed for test: 907,514,763**

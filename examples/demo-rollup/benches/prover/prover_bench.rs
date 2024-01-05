@@ -36,13 +36,15 @@ use sov_state::DefaultStorageSpec;
 use sov_stf_runner::{from_toml_path, read_json_file, RollupConfig};
 use tempfile::TempDir;
 
-use crate::datagen::get_bench_blocks;
+use crate::datagen::{generate_genesis_config, get_bench_blocks};
 
 #[derive(Debug)]
 struct RegexAppender {
     regex: Regex,
     file: Arc<Mutex<File>>,
 }
+
+const DEFAULT_GENESIS_CONFIG_DIR: &str = "../test-data/genesis/benchmark";
 
 impl RegexAppender {
     fn new(pattern: &str, file_path: &str) -> Self {
@@ -151,6 +153,14 @@ async fn main() -> Result<(), anyhow::Error> {
         }
     }
 
+    let genesis_conf_dir = match env::var("GENESIS_CONFIG_DIR") {
+        Ok(dir) => dir,
+        Err(_) => {
+            println!("GENESIS_CONFIG_DIR not set, using default");
+            String::from(DEFAULT_GENESIS_CONFIG_DIR)
+        }
+    };
+
     let rollup_config_path = "benches/prover/rollup_config.toml".to_string();
     let mut rollup_config: RollupConfig<MockDaConfig> = from_toml_path(rollup_config_path)
         .context("Failed to read rollup configuration")
@@ -173,13 +183,16 @@ async fn main() -> Result<(), anyhow::Error> {
             .expect("ProverStorageManager initialization has failed");
     let stf = BenchSTF::new();
 
-    let genesis_config = {
-        let integ_test_conf_dir: &Path = "../test-data/genesis/integration-tests".as_ref();
-        let rt_params =
-            get_genesis_config::<DefaultContext, _>(&GenesisPaths::from_dir(integ_test_conf_dir))
-                .unwrap();
+    generate_genesis_config(genesis_conf_dir.as_str())?;
 
-        let chain_state = read_json_file(integ_test_conf_dir.join("chain_state.json")).unwrap();
+    let genesis_config = {
+        let rt_params = get_genesis_config::<DefaultContext, _>(&GenesisPaths::from_dir(
+            genesis_conf_dir.as_str(),
+        ))
+        .unwrap();
+
+        let chain_state =
+            read_json_file(Path::new(genesis_conf_dir.as_str()).join("chain_state.json")).unwrap();
         let kernel_params = BasicKernelGenesisConfig { chain_state };
         GenesisParams {
             runtime: rt_params,
@@ -202,7 +215,7 @@ async fn main() -> Result<(), anyhow::Error> {
     storage_manager.finalize(&genesis_block.header).unwrap();
 
     // TODO: Fix this with genesis logic.
-    let blocks = get_bench_blocks().await;
+    let blocks = get_bench_blocks().await?;
 
     for filtered_block in &blocks {
         num_blocks += 1;
