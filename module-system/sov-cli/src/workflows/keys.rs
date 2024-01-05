@@ -45,14 +45,14 @@ pub enum KeyWorkflow<C: sov_modules_api::Context> {
     },
     /// Unlink a key from the wallet
     Remove {
-        /// The identifier of the key to activate
+        /// The identifier of the key to remove
         #[clap(subcommand)]
         identifier: KeyIdentifier<C>,
     },
 }
 
 impl<C: sov_modules_api::Context> KeyWorkflow<C> {
-    /// Run the key workflow to import, generate, activate, or list keys
+    /// Run the key workflow to import, generate, activate, remove or list keys
     pub fn run<Tx>(
         self,
         wallet_state: &mut WalletState<Tx, C>,
