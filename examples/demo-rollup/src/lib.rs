@@ -29,9 +29,10 @@ pub fn initialize_logging() {
     tracing_subscriber::registry()
         .with(fmt::layer())
         .with(
-            EnvFilter::from_str(&env::var("RUST_LOG").unwrap_or_else(|_| {
-                "debug,jmt=info,trie=info,hyper=info,risc0_zkvm=info".to_string()
-            }))
+            EnvFilter::from_str(
+                &env::var("RUST_LOG")
+                    .unwrap_or_else(|_| "debug,hyper=info,risc0_zkvm=info".to_string()),
+            )
             .unwrap(),
         )
         .init();
