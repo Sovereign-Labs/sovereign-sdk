@@ -18,8 +18,6 @@ use crate::schema::types::{
 
 mod rpc;
 
-const LEDGER_DB_PATH_SUFFIX: &str = "ledger";
-
 #[derive(Clone, Debug)]
 /// A database which stores the ledger history (slots, transactions, events, etc).
 /// Ledger data is first ingested into an in-memory map before being fed to the state-transition function.
@@ -86,17 +84,25 @@ impl<S: SlotData, B, T> SlotCommit<S, B, T> {
 }
 
 impl LedgerDB {
+    const DB_PATH_SUFFIX: &'static str = "ledger-db";
+    const DB_NAME: &'static str = "ledger";
+
+    /// Initialize [`sov_schema_db::DB`] that matches tables and columns for [`LedgerDB`]
+    pub fn setup_schema_db(path: impl AsRef<Path>) -> anyhow::Result<sov_schema_db::DB> {
+        let path = path.as_ref().join(Self::DB_PATH_SUFFIX);
+        DB::open(
+            path,
+            Self::DB_NAME,
+            LEDGER_TABLES.iter().copied(),
+            &gen_rocksdb_options(&Default::default(), false),
+        )
+    }
+
+    // TODO: UPDATE
     /// Open a [`LedgerDB`] (backed by RocksDB) at the specified path.
     /// The returned instance will be at the path `{path}/ledger-db`.
     pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
-        let path = path.as_ref().join(LEDGER_DB_PATH_SUFFIX);
-        let inner = DB::open(
-            path,
-            "ledger-db",
-            LEDGER_TABLES.iter().copied(),
-            &gen_rocksdb_options(&Default::default(), false),
-        )?;
-
+        let inner = Self::setup_schema_db(path)?;
         let next_item_numbers = ItemNumbers {
             slot_number: Self::last_version_written(&inner, SlotByNumber)?.unwrap_or_default() + 1,
             batch_number: Self::last_version_written(&inner, BatchByNumber)?.unwrap_or_default()
