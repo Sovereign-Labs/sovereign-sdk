@@ -178,7 +178,7 @@ where
         let mut seen_receipts: VecDeque<_> = VecDeque::new();
         let mut height = self.start_height;
         loop {
-            debug!("Requesting data for height {}", height);
+            debug!("Requesting DA block for height={}", height);
             let mut filtered_block = self.da_service.get_block_at(height).await?;
 
             // Checking if reorg happened or not.
@@ -199,17 +199,6 @@ where
                     }
                     tracing::info!("Resuming execution on height={}", height);
                 }
-            }
-
-            {
-                let new_rpc_storage = self
-                    .storage_manager
-                    .create_storage_for(filtered_block.header())?;
-                let mut rpc_storage = self
-                    .rpc_storage
-                    .write()
-                    .expect("RPC Storage RwLock is poisoned");
-                *rpc_storage = new_rpc_storage;
             }
 
             let mut blobs = self.da_service.extract_relevant_blobs(&filtered_block);

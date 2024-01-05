@@ -26,10 +26,6 @@ pub trait HierarchicalStorageManager<Da: DaSpec> {
         block_header: &Da::BlockHeader,
     ) -> anyhow::Result<Self::NativeStorage>;
 
-    /// Snapshots that points directly to finalized storage.
-    /// Won't be saved if somehow 'saved'
-    fn create_finalized_storage(&mut self) -> anyhow::Result<Self::NativeStorage>;
-
     /// Adds [`Self::NativeChangeSet`] to the storage.
     /// [`DaSpec::BlockHeader`] must be provided for efficient consistency checking.
     fn save_change_set(

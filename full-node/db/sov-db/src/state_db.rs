@@ -115,12 +115,6 @@ impl<Q: QueryManager> StateDB<Q> {
         *version
     }
 
-    /// Used to always query for latest possible version!
-    pub fn max_out_next_version(&self) {
-        let mut version = self.next_version.lock().unwrap();
-        *version = u64::MAX - 1;
-    }
-
     fn next_version_from(db_snapshot: &DbSnapshot<Q>) -> anyhow::Result<Version> {
         let last_key_value = db_snapshot.get_largest::<JmtNodes>()?;
         let largest_version = last_key_value.map(|(k, _)| k.version());

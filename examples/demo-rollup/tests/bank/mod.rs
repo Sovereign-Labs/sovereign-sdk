@@ -41,7 +41,9 @@ async fn bank_tx_tests(finalization_blocks: u32) -> anyhow::Result<()> {
             },
             RollupProverConfig::Skip,
             MockDaConfig {
-                sender_address: MockAddress::new([11; 32]),
+                // This value is important and should match ../test-data/genesis/integration-tests /sequencer_registry.json
+                // Otherwise batches are going to be rejected
+                sender_address: MockAddress::new([0; 32]),
                 finalization_blocks,
                 wait_attempts: 10,
             },

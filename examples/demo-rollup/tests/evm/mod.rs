@@ -6,12 +6,12 @@ use std::str::FromStr;
 use demo_stf::genesis_config::GenesisPaths;
 use ethers_core::abi::Address;
 use ethers_signers::{LocalWallet, Signer};
+use sov_demo_rollup::initialize_logging;
 use sov_evm::SimpleStorageContract;
 use sov_mock_da::{MockAddress, MockDaConfig};
 use sov_modules_stf_blueprint::kernels::basic::BasicKernelGenesisPaths;
 use sov_stf_runner::RollupProverConfig;
 use test_client::TestClient;
-use tokio::time::{sleep, Duration};
 
 use crate::test_helpers::start_rollup;
 
@@ -28,6 +28,7 @@ async fn evm_tx_tests_non_instant_finality() -> anyhow::Result<()> {
 }
 
 async fn evm_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
+    initialize_logging();
     let (port_tx, port_rx) = tokio::sync::oneshot::channel();
 
     let rollup_task = tokio::spawn(async move {
@@ -40,9 +41,11 @@ async fn evm_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
             },
             RollupProverConfig::Skip,
             MockDaConfig {
+                // This value is important and should match ../test-data/genesis/integration-tests /sequencer_registry.json
+                // Otherwise batches are going to be rejected
                 sender_address: MockAddress::new([0; 32]),
                 finalization_blocks,
-                wait_attempts: 10,
+                wait_attempts: 10_000,
             },
         )
         .await;
@@ -97,11 +100,14 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
     let balance = client.eth_get_balance(client.from_addr).await;
     assert!(balance > ethereum_types::U256::zero());
 
+    let mut slot_subscription = client.subscribe_for_slots().await;
+
     let (contract_address, runtime_code) = {
         let runtime_code = client.deploy_contract_call().await?;
 
         let deploy_contract_req = client.deploy_contract().await?;
         client.send_publish_batch_request().await;
+        let _ = slot_subscription.next().await.unwrap().unwrap();
 
         let contract_address = deploy_contract_req
             .await?
@@ -133,6 +139,7 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
             .set_value(contract_address, set_arg, None, None)
             .await;
         client.send_publish_batch_request().await;
+        let _ = slot_subscription.next().await.unwrap().unwrap();
         set_value_req.await.unwrap().unwrap().transaction_hash
     };
 
@@ -172,7 +179,7 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
     }
 
     client.send_publish_batch_request().await;
-    client.send_publish_batch_request().await;
+    let _ = slot_subscription.next().await.unwrap().unwrap();
 
     for req in requests {
         req.await.unwrap();
@@ -190,6 +197,7 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
         let tx_hash = {
             let set_value_req = client.set_value_unsigned(contract_address, value).await;
             client.send_publish_batch_request().await;
+            let _ = slot_subscription.next().await.unwrap().unwrap();
             set_value_req.await.unwrap().unwrap().transaction_hash
         };
 
@@ -215,9 +223,8 @@ async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> 
                 requests.push(set_value_req);
             }
             client.send_publish_batch_request().await;
-            sleep(Duration::from_millis(1000)).await;
+            slot_subscription.next().await;
         }
-        sleep(Duration::from_millis(6000)).await;
         // get gas price
         let latest_gas_price = client.eth_gas_price().await;
 

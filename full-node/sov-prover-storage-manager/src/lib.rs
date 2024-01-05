@@ -274,6 +274,12 @@ where
 
         self.latest_snapshot_id += 1;
         let new_snapshot_id = self.latest_snapshot_id;
+        tracing::debug!(
+            "Creating storage after block {:?}, giving snapshot id={}, parent snapshot id={}",
+            &block_header,
+            new_snapshot_id,
+            parent_snapshot_id,
+        );
         {
             let mut snapshot_id_to_parent = self.snapshot_id_to_parent.write().unwrap();
             snapshot_id_to_parent.insert(new_snapshot_id, *parent_snapshot_id);
@@ -295,28 +301,6 @@ where
         Ok(ProverStorage::with_db_handles(state_db, native_db))
     }
 
-    fn create_finalized_storage(&mut self) -> anyhow::Result<Self::NativeStorage> {
-        self.latest_snapshot_id += 1;
-        let snapshot_id = self.latest_snapshot_id;
-        tracing::debug!("Giving 'finalized' storage ref with id {}", snapshot_id);
-        self.orphaned_snapshots.insert(snapshot_id);
-        let state_db_snapshot = DbSnapshot::new(
-            snapshot_id,
-            ReadOnlyLock::new(self.state_snapshot_manager.clone()),
-        );
-
-        let state_db = StateDB::with_db_snapshot(state_db_snapshot)?;
-        state_db.max_out_next_version();
-
-        let native_db_snapshot = DbSnapshot::new(
-            snapshot_id,
-            ReadOnlyLock::new(self.accessory_snapshot_manager.clone()),
-        );
-
-        let native_db = NativeDB::with_db_snapshot(native_db_snapshot)?;
-        Ok(ProverStorage::with_db_handles(state_db, native_db))
-    }
-
     fn save_change_set(
         &mut self,
         block_header: &Da::BlockHeader,
@@ -330,9 +314,14 @@ where
         }
         let (state_snapshot, native_snapshot) = change_set.freeze()?;
         let snapshot_id = state_snapshot.get_id();
+        tracing::debug!(
+            "Saving ChangeSet id={} for block {:?}",
+            snapshot_id,
+            block_header
+        );
         if snapshot_id != native_snapshot.get_id() {
             anyhow::bail!(
-                "State id={} and Native id={} snapshots have different are not matching",
+                "State id={} and Native id={} snapshots are not matching.",
                 snapshot_id,
                 native_snapshot.get_id()
             );
@@ -345,7 +334,7 @@ where
 
         if self.orphaned_snapshots.remove(&snapshot_id) {
             tracing::debug!(
-                "Discarded reference to 'finalized' snapshot={}",
+                "Discarded reference to '__finalized__' snapshot={}",
                 snapshot_id
             );
             return Ok(());

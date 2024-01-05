@@ -8,11 +8,12 @@ use ethers_core::types::{
 use ethers_middleware::SignerMiddleware;
 use ethers_providers::{Http, Middleware, PendingTransaction, Provider};
 use ethers_signers::Wallet;
-use jsonrpsee::core::client::ClientT;
+use jsonrpsee::core::client::{ClientT, Subscription, SubscriptionClientT};
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use jsonrpsee::rpc_params;
 use reth_primitives::Bytes;
 use sov_evm::SimpleStorageContract;
+use sov_sequencer::utils::SimpleClient;
 
 const MAX_FEE_PER_GAS: u64 = 100000001;
 const GAS: u64 = 900000u64;
@@ -23,6 +24,7 @@ pub(crate) struct TestClient {
     contract: SimpleStorageContract,
     client: SignerMiddleware<Provider<Http>, Wallet<SigningKey>>,
     http_client: HttpClient,
+    simple_client: SimpleClient,
 }
 
 impl TestClient {
@@ -42,6 +44,9 @@ impl TestClient {
             .unwrap();
 
         let http_client = HttpClientBuilder::default().build(host).unwrap();
+        let simple_client = SimpleClient::new("localhost", rpc_addr.port())
+            .await
+            .unwrap();
 
         Self {
             chain_id,
@@ -49,6 +54,7 @@ impl TestClient {
             contract,
             client,
             http_client,
+            simple_client,
         }
     }
 
@@ -338,5 +344,17 @@ impl TestClient {
             .unwrap();
 
         gas.as_u64()
+    }
+
+    pub(crate) async fn subscribe_for_slots(&self) -> Subscription<u64> {
+        self.simple_client
+            .ws()
+            .subscribe(
+                "ledger_subscribeSlots",
+                rpc_params![],
+                "ledger_unsubscribeSlots",
+            )
+            .await
+            .unwrap()
     }
 }
