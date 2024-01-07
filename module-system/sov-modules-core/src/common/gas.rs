@@ -1,5 +1,6 @@
 //! Gas unit definitions and implementations.
 
+use alloc::vec::Vec;
 use core::fmt;
 
 use anyhow::Result;
@@ -12,8 +13,17 @@ pub trait GasUnit: fmt::Debug + Clone + Send + Sync {
     /// Creates a unit from a multi-dimensional unit with arbitrary dimension.
     fn from_arbitrary_dimensions(dimensions: &[u64]) -> Self;
 
+    /// Creates a multi-dimensional representation of the unit.
+    fn to_dimensions(&self) -> Vec<u64>;
+
     /// Converts the unit into a scalar value, given a price.
     fn value(&self, price: &Self) -> u64;
+
+    /// In-place combination of gas units, resulting in an addition.
+    fn combine(&mut self, rhs: &Self);
+
+    /// In-place product of gas units, resulting in a multiplication.
+    fn scalar_product(&mut self, scalar: u64);
 }
 
 /// A multi-dimensional gas unit.
@@ -34,11 +44,25 @@ impl<const N: usize> GasUnit for TupleGasUnit<N> {
         unit
     }
 
+    fn to_dimensions(&self) -> Vec<u64> {
+        self.to_vec()
+    }
+
     fn value(&self, price: &Self) -> u64 {
         self.iter()
             .zip(price.iter().copied())
             .map(|(a, b)| a.saturating_mul(b))
             .fold(0, |a, b| a.saturating_add(b))
+    }
+
+    fn combine(&mut self, rhs: &Self) {
+        self.iter_mut()
+            .zip(rhs.iter())
+            .for_each(|(l, r)| *l = l.saturating_add(*r))
+    }
+
+    fn scalar_product(&mut self, scalar: u64) {
+        self.iter_mut().for_each(|s| *s = s.saturating_mul(scalar));
     }
 }
 
@@ -49,6 +73,7 @@ where
 {
     remaining_funds: u64,
     gas_price: GU,
+    gas_used: GU,
 }
 
 impl<GU> Default for GasMeter<GU>
@@ -59,6 +84,7 @@ where
         Self {
             remaining_funds: 0,
             gas_price: GU::ZEROED,
+            gas_used: GU::ZEROED,
         }
     }
 }
@@ -72,6 +98,7 @@ where
         Self {
             remaining_funds,
             gas_price,
+            gas_used: GU::ZEROED,
         }
     }
 
@@ -80,9 +107,21 @@ where
         self.remaining_funds
     }
 
+    /// Returns the total gas incurred.
+    pub const fn gas_used(&self) -> &GU {
+        &self.gas_used
+    }
+
+    /// Returns the gas price.
+    pub const fn gas_price(&self) -> &GU {
+        &self.gas_price
+    }
+
     /// Deducts the provided gas unit from the remaining funds, computing the scalar value of the
     /// funds from the price of the instance.
     pub fn charge_gas(&mut self, gas: &GU) -> Result<()> {
+        self.gas_used.combine(gas);
+
         let gas = gas.value(&self.gas_price);
         self.remaining_funds = self
             .remaining_funds

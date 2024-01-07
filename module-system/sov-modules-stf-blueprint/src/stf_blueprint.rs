@@ -203,17 +203,20 @@ where
                     // Don't revert any state changes made by the pre_dispatch_hook even if the Tx is rejected.
                     // For example nonce for the relevant account is incremented.
                     error!("Stateful verification error - the sequencer included an invalid transaction: {}", e);
+                    let gas_used = batch_workspace.gas_used().to_dimensions();
                     let receipt = TransactionReceipt {
                         tx_hash: raw_tx_hash,
                         body_to_save: None,
                         events: batch_workspace.take_events(),
                         receipt: TxEffect::Reverted,
+                        gas_used,
                     };
 
                     tx_receipts.push(receipt);
                     continue;
                 }
             };
+
             // Commit changes after pre_dispatch_tx_hook
             batch_workspace = batch_workspace.checkpoint().to_revertable();
 
@@ -248,11 +251,13 @@ where
             };
             debug!("Tx {} effect: {:?}", hex::encode(raw_tx_hash), tx_effect);
 
+            let gas_used = batch_workspace.gas_used().to_dimensions();
             let receipt = TransactionReceipt {
                 tx_hash: raw_tx_hash,
                 body_to_save: None,
                 events,
                 receipt: tx_effect,
+                gas_used,
             };
 
             tx_receipts.push(receipt);
