@@ -128,11 +128,36 @@ fn main() {
 ```
 
 ## Enabling Archival queries for RPC
-We use `working_set: &mut WorkingSet<C>` in order to query state. `WorkingSet` has a function `set_archival_version`
+* We use `working_set: &mut WorkingSet<C>` in order to query state. `WorkingSet` has a function `working_set.set_archival_version(v)` where v is of type `u64` and represents the block height. 
+* Once the `set_archival_version` is called, the working_set is configured to query against the state at height `v`.
+* To modify an RPC query of the form
 ```rust
-    /// Sets archival version for a working set
-    pub fn set_archival_version(&mut self, version: Version) {
-        self.archival_working_set = Some(self.archival_state(version));
-        self.archival_accessory_working_set = Some(self.archival_accessory_state(version));
-    }
+pub fn balance_of(
+         &self,
+         user_address: C::Address,
+         token_address: C::Address,
+         working_set: &mut WorkingSet<C>,
+     ) -> RpcResult<BalanceResponse> {
+    Ok(BalanceResponse {
+        amount: self.get_balance_of(user_address, token_address, working_set),
+    })
+}
 ```
+We need to make the following changes
+```rust
+pub fn balance_of(
+         &self,
+         version: Option<u64>,
+         user_address: C::Address,
+         token_address: C::Address,
+         working_set: &mut WorkingSet<C>,
+     ) -> RpcResult<BalanceResponse> {
+    if let Some(v) = version {
+        working_set.set_archival_version(v)
+    }
+    Ok(BalanceResponse {
+        amount: self.get_balance_of(user_address, token_address, working_set),
+    })
+}
+```
+* NOTE: `set_archival_version` handles configuring `WorkingSet` for both JMT state as well as accessory state
