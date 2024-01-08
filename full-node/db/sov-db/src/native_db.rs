@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use sov_schema_db::snapshot::{DbSnapshot, QueryManager, ReadOnlyDbSnapshot};
+use sov_schema_db::snapshot::{CacheDb, ChangeSet, QueryManager};
 use sov_schema_db::SchemaBatch;
 
 use crate::rocks_db_config::gen_rocksdb_options;
@@ -15,8 +15,8 @@ pub type Version = u64;
 /// TODO: Rename to AccessoryDb
 #[derive(Debug)]
 pub struct NativeDB<Q> {
-    /// Pointer to [`DbSnapshot`] for up to date state
-    db: Arc<DbSnapshot<Q>>,
+    /// Pointer to [`CacheDb`] for up to date state
+    db: Arc<CacheDb<Q>>,
 }
 
 impl<Q> Clone for NativeDB<Q> {
@@ -42,18 +42,18 @@ impl<Q> NativeDB<Q> {
         )
     }
 
-    /// Convert it to [`ReadOnlyDbSnapshot`] which cannot be edited anymore
-    pub fn freeze(self) -> anyhow::Result<ReadOnlyDbSnapshot> {
+    /// Convert it to [`ChangeSet`] which cannot be edited anymore
+    pub fn freeze(self) -> anyhow::Result<ChangeSet> {
         let inner = Arc::into_inner(self.db).ok_or(anyhow::anyhow!(
             "NativeDB underlying DbSnapshot has more than 1 strong references"
         ))?;
-        Ok(ReadOnlyDbSnapshot::from(inner))
+        Ok(ChangeSet::from(inner))
     }
 }
 
 impl<Q: QueryManager> NativeDB<Q> {
-    /// Create instance of [`NativeDB`] from [`DbSnapshot`]
-    pub fn with_db_snapshot(db_snapshot: DbSnapshot<Q>) -> anyhow::Result<Self> {
+    /// Create instance of [`NativeDB`] from [`CacheDb`]
+    pub fn with_db_snapshot(db_snapshot: CacheDb<Q>) -> anyhow::Result<Self> {
         // We keep Result type, just for future archival state integration
         Ok(Self {
             db: Arc::new(db_snapshot),
@@ -107,7 +107,7 @@ mod tests {
 
     fn setup_db() -> NativeDB<NoopQueryManager> {
         let manager = ReadOnlyLock::new(Arc::new(RwLock::new(Default::default())));
-        let db_snapshot = DbSnapshot::<NoopQueryManager>::new(0, manager);
+        let db_snapshot = CacheDb::<NoopQueryManager>::new(0, manager);
         NativeDB::with_db_snapshot(db_snapshot).unwrap()
     }
 

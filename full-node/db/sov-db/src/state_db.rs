@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use jmt::storage::{HasPreimage, TreeReader, TreeWriter};
 use jmt::{KeyHash, Version};
-use sov_schema_db::snapshot::{DbSnapshot, QueryManager, ReadOnlyDbSnapshot};
+use sov_schema_db::snapshot::{CacheDb, ChangeSet, QueryManager};
 use sov_schema_db::SchemaBatch;
 
 use crate::rocks_db_config::gen_rocksdb_options;
@@ -17,8 +17,8 @@ use crate::schema::types::StateKey;
 /// notably the [`TreeReader`] and [`TreeWriter`] traits.
 #[derive(Debug)]
 pub struct StateDB<Q> {
-    /// The underlying [`DbSnapshot`] that plays as local cache and pointer to previous snapshots and/or [`sov_schema_db::DB`]
-    db: Arc<DbSnapshot<Q>>,
+    /// The underlying [`CacheDb`] that plays as local cache and pointer to previous snapshots and/or [`sov_schema_db::DB`]
+    db: Arc<CacheDb<Q>>,
     /// The [`Version`] that will be used for the next batch of writes to the DB
     /// This [`Version`] is also used for querying data,
     /// so if this instance of StateDB is used as read only, it won't see newer data.
@@ -50,18 +50,18 @@ impl<Q> StateDB<Q> {
         )
     }
 
-    /// Convert it to [`ReadOnlyDbSnapshot`] which cannot be edited anymore
-    pub fn freeze(self) -> anyhow::Result<ReadOnlyDbSnapshot> {
+    /// Convert it to [`ChangeSet`] which cannot be edited anymore
+    pub fn freeze(self) -> anyhow::Result<ChangeSet> {
         let inner = Arc::into_inner(self.db).ok_or(anyhow::anyhow!(
             "StateDB underlying DbSnapshot has more than 1 strong references"
         ))?;
-        Ok(ReadOnlyDbSnapshot::from(inner))
+        Ok(ChangeSet::from(inner))
     }
 }
 
 impl<Q: QueryManager> StateDB<Q> {
-    /// Creating instance of [`StateDB`] from [`DbSnapshot`]
-    pub fn with_db_snapshot(db_snapshot: DbSnapshot<Q>) -> anyhow::Result<Self> {
+    /// Creating instance of [`StateDB`] from [`CacheDb`]
+    pub fn with_db_snapshot(db_snapshot: CacheDb<Q>) -> anyhow::Result<Self> {
         let next_version = Self::next_version_from(&db_snapshot)?;
         Ok(Self {
             db: Arc::new(db_snapshot),
@@ -115,7 +115,7 @@ impl<Q: QueryManager> StateDB<Q> {
         *version
     }
 
-    fn next_version_from(db_snapshot: &DbSnapshot<Q>) -> anyhow::Result<Version> {
+    fn next_version_from(db_snapshot: &CacheDb<Q>) -> anyhow::Result<Version> {
         let last_key_value = db_snapshot.get_largest::<JmtNodes>()?;
         let largest_version = last_key_value.map(|(k, _)| k.version());
         let next_version = largest_version
@@ -186,14 +186,14 @@ mod state_db_tests {
 
     use jmt::storage::{NodeBatch, TreeReader, TreeWriter};
     use jmt::KeyHash;
-    use sov_schema_db::snapshot::{DbSnapshot, NoopQueryManager, ReadOnlyLock};
+    use sov_schema_db::snapshot::{CacheDb, NoopQueryManager, ReadOnlyLock};
 
     use super::StateDB;
 
     #[test]
     fn test_simple() {
         let manager = ReadOnlyLock::new(Arc::new(RwLock::new(Default::default())));
-        let db_snapshot = DbSnapshot::<NoopQueryManager>::new(0, manager);
+        let db_snapshot = CacheDb::<NoopQueryManager>::new(0, manager);
         let db = StateDB::with_db_snapshot(db_snapshot).unwrap();
         let key_hash = KeyHash([1u8; 32]);
         let key = vec![2u8; 100];

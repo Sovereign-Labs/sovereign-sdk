@@ -1,7 +1,7 @@
 use std::sync::{Arc, RwLock};
 
 use sov_schema_db::define_schema;
-use sov_schema_db::snapshot::{DbSnapshot, ReadOnlyLock, SingleSnapshotQueryManager};
+use sov_schema_db::snapshot::{CacheDb, ReadOnlyLock, SingleSnapshotQueryManager};
 use sov_schema_db::test::TestField;
 
 define_schema!(TestSchema1, TestField, TestField, "TestCF1");
@@ -15,7 +15,7 @@ fn snapshot_lifecycle() {
     let key = TestField(1);
     let value = TestField(1);
 
-    let snapshot_1 = DbSnapshot::new(0, ReadOnlyLock::new(manager.clone()));
+    let snapshot_1 = CacheDb::new(0, ReadOnlyLock::new(manager.clone()));
     assert_eq!(
         None,
         snapshot_1.read::<S>(&key).unwrap(),
@@ -34,7 +34,7 @@ fn snapshot_lifecycle() {
     }
 
     // Snapshot 2: reads value from snapshot 1, then deletes it
-    let snapshot_2 = DbSnapshot::new(1, ReadOnlyLock::new(manager.clone()));
+    let snapshot_2 = CacheDb::new(1, ReadOnlyLock::new(manager.clone()));
     assert_eq!(Some(value), snapshot_2.read::<S>(&key).unwrap());
     snapshot_2.delete::<S>(&key).unwrap();
     assert_eq!(None, snapshot_2.read::<S>(&key).unwrap());
@@ -44,6 +44,6 @@ fn snapshot_lifecycle() {
     }
 
     // Snapshot 3: gets empty result, event value is in some previous snapshots
-    let snapshot_3 = DbSnapshot::new(2, ReadOnlyLock::new(manager.clone()));
+    let snapshot_3 = CacheDb::new(2, ReadOnlyLock::new(manager.clone()));
     assert_eq!(None, snapshot_3.read::<S>(&key).unwrap());
 }

@@ -11,7 +11,7 @@ use jmt::{JellyfishMerkleTree, KeyHash};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use sov_db::state_db::StateDB;
-use sov_schema_db::snapshot::{DbSnapshot, NoopQueryManager, ReadOnlyLock};
+use sov_schema_db::snapshot::{CacheDb, NoopQueryManager, ReadOnlyLock};
 
 // TODO: Improve for collisions
 fn generate_random_bytes(count: usize) -> Vec<Vec<u8>> {
@@ -41,7 +41,7 @@ struct TestData {
 fn prepare_data(size: usize) -> TestData {
     assert!(size > 0, "Do not generate empty TestData");
     let manager = ReadOnlyLock::new(Arc::new(RwLock::new(Default::default())));
-    let db_snapshot = DbSnapshot::<NoopQueryManager>::new(0, manager);
+    let db_snapshot = CacheDb::<NoopQueryManager>::new(0, manager);
     let db = StateDB::with_db_snapshot(db_snapshot).unwrap();
     db.inc_next_version();
 

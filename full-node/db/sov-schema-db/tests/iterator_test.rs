@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 use sov_schema_db::schema::{KeyDecoder, KeyEncoder, ValueCodec};
-use sov_schema_db::snapshot::{DbSnapshot, ReadOnlyLock, SingleSnapshotQueryManager};
+use sov_schema_db::snapshot::{CacheDb, ReadOnlyLock, SingleSnapshotQueryManager};
 use sov_schema_db::test::{KeyPrefix1, KeyPrefix2, TestCompositeField, TestField};
 use sov_schema_db::{
     define_schema, Operation, Schema, SchemaBatch, SchemaIterator, SeekKeyEncoder, DB,
@@ -353,7 +353,7 @@ fn test_schema_batch_iter_range() {
 fn test_db_snapshot_get_last_value() {
     let manager = Arc::new(RwLock::new(SingleSnapshotQueryManager::default()));
 
-    let snapshot_1 = DbSnapshot::new(0, ReadOnlyLock::new(manager.clone()));
+    let snapshot_1 = CacheDb::new(0, ReadOnlyLock::new(manager.clone()));
 
     assert!(snapshot_1.get_largest::<S>().unwrap().is_none());
 
@@ -376,7 +376,7 @@ fn test_db_snapshot_get_last_value() {
         manager.add_snapshot(snapshot_1.into());
     }
 
-    let snapshot_2 = DbSnapshot::new(1, ReadOnlyLock::new(manager.clone()));
+    let snapshot_2 = CacheDb::new(1, ReadOnlyLock::new(manager.clone()));
 
     {
         let (latest_key, latest_value) = snapshot_2
@@ -429,7 +429,7 @@ fn test_db_snapshot_get_prev_value() {
     let manager = Arc::new(RwLock::new(SingleSnapshotQueryManager::default()));
 
     // Snapshots 1 and 2 are to black box usages of parents iterator
-    let snapshot_1 = DbSnapshot::new(0, ReadOnlyLock::new(manager.clone()));
+    let snapshot_1 = CacheDb::new(0, ReadOnlyLock::new(manager.clone()));
 
     let key_1 = TestCompositeField(8, 2, 3);
     let key_2 = TestCompositeField(8, 2, 0);
@@ -469,7 +469,7 @@ fn test_db_snapshot_get_prev_value() {
         manager.add_snapshot(snapshot_1.into());
     }
 
-    let snapshot_2 = DbSnapshot::new(1, ReadOnlyLock::new(manager.clone()));
+    let snapshot_2 = CacheDb::new(1, ReadOnlyLock::new(manager.clone()));
     // Equal:
     assert_eq!(
         (key_1.clone(), TestField(1)),
@@ -506,7 +506,7 @@ fn test_db_snapshot_get_prev_value() {
         let mut manager = manager.write().unwrap();
         manager.add_snapshot(snapshot_2.into());
     }
-    let snapshot_3 = DbSnapshot::new(2, ReadOnlyLock::new(manager.clone()));
+    let snapshot_3 = CacheDb::new(2, ReadOnlyLock::new(manager.clone()));
     assert_eq!(
         (key_2.clone(), TestField(20)),
         snapshot_3

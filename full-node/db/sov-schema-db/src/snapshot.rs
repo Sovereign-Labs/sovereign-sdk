@@ -66,20 +66,24 @@ impl<T> From<Arc<RwLock<T>>> for ReadOnlyLock<T> {
 }
 
 /// Wrapper around [`QueryManager`] that allows to read from snapshots
+/// What it does:
+///  * maintains local cache
+///  * reads from parent manager if value is missing
 #[derive(Debug)]
-pub struct DbSnapshot<Q> {
-    id: SnapshotId,
-    cache: Mutex<SchemaBatch>,
-    parents_manager: ReadOnlyLock<Q>,
+pub struct CacheDb<Q> {
+    inner: Mutex<ChangeSet>,
+    db: ReadOnlyLock<Q>,
 }
 
-impl<Q> DbSnapshot<Q> {
-    /// Create new [`DbSnapshot`]
+impl<Q> CacheDb<Q> {
+    /// Create new [`CacheDb`]
     pub fn new(id: SnapshotId, manager: ReadOnlyLock<Q>) -> Self {
         Self {
-            id,
-            cache: Mutex::new(SchemaBatch::default()),
-            parents_manager: manager,
+            inner: Mutex::new(ChangeSet {
+                id,
+                operations: SchemaBatch::default(),
+            }),
+            db: manager,
         }
     }
 
@@ -89,32 +93,34 @@ impl<Q> DbSnapshot<Q> {
         key: &impl KeyCodec<S>,
         value: &impl ValueCodec<S>,
     ) -> anyhow::Result<()> {
-        self.cache
+        self.inner
             .lock()
-            .expect("Local SchemaBatch lock must not be poisoned")
+            .expect("Local ChangeSet lock must not be poisoned")
+            .operations
             .put(key, value)
     }
 
     /// Delete given key from snapshot
     pub fn delete<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<()> {
-        self.cache
+        self.inner
             .lock()
-            .expect("Local SchemaBatch lock must not be poisoned")
+            .expect("Local ChangeSet lock must not be poisoned")
+            .operations
             .delete(key)
     }
 
     /// Writes many operations at once, atomically
     pub fn write_many(&self, batch: SchemaBatch) -> anyhow::Result<()> {
-        let mut cache = self
-            .cache
+        let mut inner = self
+            .inner
             .lock()
             .expect("Local SchemaBatch lock must not be poisoned");
-        cache.merge(batch);
+        inner.operations.merge(batch);
         Ok(())
     }
 }
 
-impl<Q: QueryManager> DbSnapshot<Q> {
+impl<Q: QueryManager> CacheDb<Q> {
     /// Get a value from current snapshot, its parents or underlying database
     pub fn read<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<Option<S::Value>> {
         // Some(Operation) means that key was touched,
@@ -124,37 +130,31 @@ impl<Q: QueryManager> DbSnapshot<Q> {
 
         // Hold local cache lock explicitly, so reads are atomic
         let local_cache = self
-            .cache
+            .inner
             .lock()
             .expect("SchemaBatch lock should not be poisoned");
 
         // 1. Check in cache
-        if let Some(operation) = local_cache.read(key)? {
+        if let Some(operation) = local_cache.get(key)? {
             return decode_operation::<S>(operation);
         }
 
         // 2. Check parent
-        let parent = self
-            .parents_manager
-            .read()
-            .expect("Parent lock must not be poisoned");
-        parent.get::<S>(self.id, key)
+        let parent = self.db.read().expect("Parent lock must not be poisoned");
+        parent.get::<S>(local_cache.id, key)
     }
 
     /// Get value of largest key written value for given [`Schema`]
     pub fn get_largest<S: Schema>(&self) -> anyhow::Result<Option<(S::Key, S::Value)>> {
-        let local_cache = self
-            .cache
+        let change_set = self
+            .inner
             .lock()
             .expect("SchemaBatch lock must not be poisoned");
-        let local_cache_iter = local_cache.iter::<S>();
+        let local_cache_iter = change_set.iter::<S>();
 
-        let parent = self
-            .parents_manager
-            .read()
-            .expect("Parent lock must not be poisoned");
+        let parent = self.db.read().expect("Parent lock must not be poisoned");
 
-        let parent_iter = parent.iter::<S>(self.id)?;
+        let parent_iter = parent.iter::<S>(change_set.id)?;
 
         let mut combined_iter: SnapshotIter<'_, S, _, _> = SnapshotIter {
             local_cache_iter: local_cache_iter.peekable(),
@@ -176,17 +176,17 @@ impl<Q: QueryManager> DbSnapshot<Q> {
         seek_key: &impl SeekKeyEncoder<S>,
     ) -> anyhow::Result<Option<(S::Key, S::Value)>> {
         let seek_key = seek_key.encode_seek_key()?;
-        let local_cache = self
-            .cache
+        let change_set = self
+            .inner
             .lock()
             .expect("Local cache lock must not be poisoned");
-        let local_cache_iter = local_cache.iter_range::<S>(seek_key.clone());
+        let local_cache_iter = change_set.iter_range::<S>(seek_key.clone());
 
         let parent = self
-            .parents_manager
+            .db
             .read()
             .expect("Parent snapshots lock must not be poisoned");
-        let parent_iter = parent.iter_range::<S>(self.id, seek_key.clone())?;
+        let parent_iter = parent.iter_range::<S>(change_set.id, seek_key.clone())?;
 
         let mut combined_iter: SnapshotIter<'_, S, _, _> = SnapshotIter {
             local_cache_iter: local_cache_iter.peekable(),
@@ -266,16 +266,17 @@ where
     }
 }
 
-/// Read only version of [`DbSnapshot`], for usage inside [`QueryManager`]
-pub struct ReadOnlyDbSnapshot {
+/// Collection of all writes with Id
+#[derive(Debug)]
+pub struct ChangeSet {
     id: SnapshotId,
-    cache: SchemaBatch,
+    operations: SchemaBatch,
 }
 
-impl ReadOnlyDbSnapshot {
+impl ChangeSet {
     /// Get value from its own cache
     pub fn get<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<Option<&Operation>> {
-        self.cache.read(key)
+        self.operations.read(key)
     }
 
     /// Get id of this Snapshot
@@ -287,7 +288,7 @@ impl ReadOnlyDbSnapshot {
     pub fn iter<S: Schema>(
         &self,
     ) -> SchemaBatchIterator<'_, S, Rev<btree_map::Iter<SchemaKey, Operation>>> {
-        self.cache.iter::<S>()
+        self.operations.iter::<S>()
     }
 
     /// Iterate over all operations in snapshot in reversed lexicographical order, starting from `upper_bound`
@@ -295,25 +296,26 @@ impl ReadOnlyDbSnapshot {
         &self,
         upper_bound: SchemaKey,
     ) -> SchemaBatchIterator<'_, S, Rev<btree_map::Range<SchemaKey, Operation>>> {
-        self.cache.iter_range::<S>(upper_bound)
+        self.operations.iter_range::<S>(upper_bound)
     }
 }
 
-impl<Q> From<DbSnapshot<Q>> for ReadOnlyDbSnapshot {
-    fn from(snapshot: DbSnapshot<Q>) -> Self {
-        Self {
-            id: snapshot.id,
-            cache: snapshot
-                .cache
-                .into_inner()
-                .expect("SchemaBatch lock must not be poisoned"),
-        }
+impl<Q> From<CacheDb<Q>> for ChangeSet {
+    fn from(snapshot: CacheDb<Q>) -> Self {
+        snapshot.inner.into_inner().unwrap()
+        // Self {
+        //     id: snapshot.id,
+        //     operations: snapshot
+        //
+        //         .into_inner()
+        //         .expect("SchemaBatch lock must not be poisoned"),
+        // }
     }
 }
 
-impl From<ReadOnlyDbSnapshot> for SchemaBatch {
-    fn from(value: ReadOnlyDbSnapshot) -> Self {
-        value.cache
+impl From<ChangeSet> for SchemaBatch {
+    fn from(value: ChangeSet) -> Self {
+        value.operations
     }
 }
 
@@ -371,9 +373,10 @@ pub struct SingleSnapshotQueryManager {
 
 impl SingleSnapshotQueryManager {
     /// Adding new snapshot. It will override any existing data on key match
-    pub fn add_snapshot(&mut self, snapshot: ReadOnlyDbSnapshot) {
-        let ReadOnlyDbSnapshot {
-            cache: new_data, ..
+    pub fn add_snapshot(&mut self, snapshot: ChangeSet) {
+        let ChangeSet {
+            operations: new_data,
+            ..
         } = snapshot;
 
         self.cache.merge(new_data);

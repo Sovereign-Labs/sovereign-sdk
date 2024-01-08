@@ -4,7 +4,7 @@ use std::sync::Arc;
 use jmt::storage::{NodeBatch, TreeWriter};
 use jmt::{JellyfishMerkleTree, KeyHash, Version};
 use sov_db::native_db::NativeDB;
-use sov_db::schema::{QueryManager, ReadOnlyDbSnapshot};
+use sov_db::schema::{ChangeSet, QueryManager};
 use sov_db::state_db::StateDB;
 use sov_modules_core::{
     CacheKey, NativeStorage, OrderedReadsAndWrites, Storage, StorageKey, StorageProof,
@@ -42,10 +42,10 @@ impl<S: MerkleProofSpec, Q> ProverStorage<S, Q> {
         }
     }
 
-    /// Converts it to pair of readonly [`ReadOnlyDbSnapshot`]s
+    /// Converts it to pair of readonly [`ChangeSet`]s
     /// First is from [`StateDB`]
     /// Second is from [`NativeDB`]
-    pub fn freeze(self) -> anyhow::Result<(ReadOnlyDbSnapshot, ReadOnlyDbSnapshot)> {
+    pub fn freeze(self) -> anyhow::Result<(ChangeSet, ChangeSet)> {
         let ProverStorage { db, native_db, .. } = self;
         let state_db_snapshot = db.freeze()?;
         let native_db_snapshot = native_db.freeze()?;

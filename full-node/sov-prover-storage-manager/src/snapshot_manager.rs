@@ -4,7 +4,7 @@ use std::iter::{Peekable, Rev};
 use std::sync::{Arc, RwLock};
 
 use sov_schema_db::schema::{KeyCodec, ValueCodec};
-use sov_schema_db::snapshot::{QueryManager, ReadOnlyDbSnapshot, SnapshotId};
+use sov_schema_db::snapshot::{ChangeSet, QueryManager, SnapshotId};
 use sov_schema_db::{
     Operation, RawDbReverseIterator, Schema, SchemaBatchIterator, SchemaKey, SchemaValue,
 };
@@ -16,7 +16,7 @@ use crate::snapshot_manager::DataLocation::Snapshot;
 /// Managed externally by [`crate::ProverStorageManager`]
 pub struct SnapshotManager {
     db: sov_schema_db::DB,
-    snapshots: HashMap<SnapshotId, ReadOnlyDbSnapshot>,
+    snapshots: HashMap<SnapshotId, ChangeSet>,
     /// Hierarchical
     to_parent: Arc<RwLock<HashMap<SnapshotId, SnapshotId>>>,
 }
@@ -43,7 +43,7 @@ impl SnapshotManager {
         }
     }
 
-    pub(crate) fn add_snapshot(&mut self, snapshot: ReadOnlyDbSnapshot) {
+    pub(crate) fn add_snapshot(&mut self, snapshot: ChangeSet) {
         let snapshot_id = snapshot.get_id();
         if self.snapshots.insert(snapshot_id, snapshot).is_some() {
             panic!("Attempt to double save same snapshot");
@@ -286,7 +286,7 @@ mod tests {
 
     use sov_db::rocks_db_config::gen_rocksdb_options;
     use sov_schema_db::schema::{KeyDecoder, ValueCodec};
-    use sov_schema_db::snapshot::{DbSnapshot, NoopQueryManager, QueryManager};
+    use sov_schema_db::snapshot::{CacheDb, NoopQueryManager, QueryManager};
     use sov_schema_db::test::TestField;
     use sov_schema_db::{define_schema, SchemaBatch};
 
@@ -325,7 +325,7 @@ mod tests {
         let query_manager = Arc::new(RwLock::new(NoopQueryManager));
 
         let snapshot_id = 1;
-        let db_snapshot = DbSnapshot::new(snapshot_id, query_manager.clone().into());
+        let db_snapshot = CacheDb::new(snapshot_id, query_manager.clone().into());
 
         snapshot_manager.add_snapshot(db_snapshot.into());
         assert!(!snapshot_manager.is_empty());
@@ -344,8 +344,8 @@ mod tests {
 
         let snapshot_id = 1;
         // Both share the same ID
-        let db_snapshot_1 = DbSnapshot::new(snapshot_id, query_manager.clone().into());
-        let db_snapshot_2 = DbSnapshot::new(snapshot_id, query_manager.clone().into());
+        let db_snapshot_1 = CacheDb::new(snapshot_id, query_manager.clone().into());
+        let db_snapshot_2 = CacheDb::new(snapshot_id, query_manager.clone().into());
 
         snapshot_manager.add_snapshot(db_snapshot_1.into());
         assert!(!snapshot_manager.is_empty());
@@ -384,7 +384,7 @@ mod tests {
         let query_manager = Arc::new(RwLock::new(NoopQueryManager));
 
         let snapshot_id = 1;
-        let db_snapshot = DbSnapshot::new(snapshot_id, query_manager.clone().into());
+        let db_snapshot = CacheDb::new(snapshot_id, query_manager.clone().into());
 
         snapshot_manager.add_snapshot(db_snapshot.into());
         let result = snapshot_manager.commit_snapshot(&snapshot_id);
@@ -422,7 +422,7 @@ mod tests {
         let mut snapshot_manager = SnapshotManager::new(db, to_parent.clone());
         let query_manager = Arc::new(RwLock::new(NoopQueryManager));
 
-        let db_snapshot = DbSnapshot::new(1, query_manager.clone().into());
+        let db_snapshot = CacheDb::new(1, query_manager.clone().into());
         db_snapshot.put::<Schema>(&two, &two).unwrap();
         db_snapshot.delete::<Schema>(&three).unwrap();
 
@@ -483,38 +483,38 @@ mod tests {
         // | 6           |   2 |  write(8) |
 
         // 1
-        let db_snapshot = DbSnapshot::new(1, query_manager.clone().into());
+        let db_snapshot = CacheDb::new(1, query_manager.clone().into());
         db_snapshot.put::<Schema>(&f2, &f2).unwrap();
         db_snapshot.put::<Schema>(&f3, &f4).unwrap();
         snapshot_manager.add_snapshot(db_snapshot.into());
 
         // 2
-        let db_snapshot = DbSnapshot::new(2, query_manager.clone().into());
+        let db_snapshot = CacheDb::new(2, query_manager.clone().into());
         db_snapshot.put::<Schema>(&f1, &f5).unwrap();
         db_snapshot.delete::<Schema>(&f2).unwrap();
         snapshot_manager.add_snapshot(db_snapshot.into());
 
         // 3
-        let db_snapshot = DbSnapshot::new(3, query_manager.clone().into());
+        let db_snapshot = CacheDb::new(3, query_manager.clone().into());
         snapshot_manager.add_snapshot(db_snapshot.into());
 
         // 4
-        let db_snapshot = DbSnapshot::new(4, query_manager.clone().into());
+        let db_snapshot = CacheDb::new(4, query_manager.clone().into());
         db_snapshot.put::<Schema>(&f3, &f6).unwrap();
         snapshot_manager.add_snapshot(db_snapshot.into());
 
         // 5
-        let db_snapshot = DbSnapshot::new(5, query_manager.clone().into());
+        let db_snapshot = CacheDb::new(5, query_manager.clone().into());
         snapshot_manager.add_snapshot(db_snapshot.into());
 
         // 6
-        let db_snapshot = DbSnapshot::new(6, query_manager.clone().into());
+        let db_snapshot = CacheDb::new(6, query_manager.clone().into());
         db_snapshot.put::<Schema>(&f1, &f7).unwrap();
         db_snapshot.put::<Schema>(&f2, &f8).unwrap();
         snapshot_manager.add_snapshot(db_snapshot.into());
 
         // 7
-        let db_snapshot = DbSnapshot::new(7, query_manager.clone().into());
+        let db_snapshot = CacheDb::new(7, query_manager.clone().into());
         snapshot_manager.add_snapshot(db_snapshot.into());
 
         // View:
@@ -590,7 +590,7 @@ mod tests {
         // |           3 |   1 |   write(2) |
 
         // 1
-        let db_snapshot = DbSnapshot::new(1, query_manager.clone().into());
+        let db_snapshot = CacheDb::new(1, query_manager.clone().into());
         db_snapshot.put::<Schema>(&f1, &f8).unwrap();
         db_snapshot.put::<Schema>(&f5, &f7).unwrap();
         db_snapshot.put::<Schema>(&f8, &f3).unwrap();
@@ -598,7 +598,7 @@ mod tests {
         snapshot_manager.add_snapshot(db_snapshot.into());
 
         // 2
-        let db_snapshot = DbSnapshot::new(2, query_manager.clone().into());
+        let db_snapshot = CacheDb::new(2, query_manager.clone().into());
         db_snapshot.put::<Schema>(&f10, &f2).unwrap();
         db_snapshot.put::<Schema>(&f9, &f4).unwrap();
         db_snapshot.delete::<Schema>(&f4).unwrap();
@@ -606,7 +606,7 @@ mod tests {
         snapshot_manager.add_snapshot(db_snapshot.into());
 
         // 3
-        let db_snapshot = DbSnapshot::new(3, query_manager.clone().into());
+        let db_snapshot = CacheDb::new(3, query_manager.clone().into());
         db_snapshot.put::<Schema>(&f8, &f6).unwrap();
         db_snapshot.delete::<Schema>(&f9).unwrap();
         db_snapshot.put::<Schema>(&f12, &f1).unwrap();

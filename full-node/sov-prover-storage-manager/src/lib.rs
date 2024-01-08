@@ -8,7 +8,7 @@ use sov_db::native_db::NativeDB;
 use sov_db::state_db::StateDB;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_schema_db::snapshot::{DbSnapshot, ReadOnlyLock, SnapshotId};
+use sov_schema_db::snapshot::{CacheDb, ReadOnlyLock, SnapshotId};
 use sov_state::{MerkleProofSpec, ProverStorage};
 
 pub use crate::snapshot_manager::SnapshotManager;
@@ -97,14 +97,14 @@ where
         &self,
         snapshot_id: SnapshotId,
     ) -> anyhow::Result<ProverStorage<S, SnapshotManager>> {
-        let state_db_snapshot = DbSnapshot::new(
+        let state_db_snapshot = CacheDb::new(
             snapshot_id,
             ReadOnlyLock::new(self.state_snapshot_manager.clone()),
         );
 
         let state_db = StateDB::with_db_snapshot(state_db_snapshot)?;
 
-        let native_db_snapshot = DbSnapshot::new(
+        let native_db_snapshot = CacheDb::new(
             snapshot_id,
             ReadOnlyLock::new(self.accessory_snapshot_manager.clone()),
         );
@@ -297,13 +297,13 @@ where
         }
         self.orphaned_snapshots.insert(new_snapshot_id);
 
-        let state_db_snapshot = DbSnapshot::new(
+        let state_db_snapshot = CacheDb::new(
             new_snapshot_id,
             ReadOnlyLock::new(self.state_snapshot_manager.clone()),
         );
         let state_db = StateDB::with_db_snapshot(state_db_snapshot)?;
 
-        let native_db_snapshot = DbSnapshot::new(
+        let native_db_snapshot = CacheDb::new(
             new_snapshot_id,
             ReadOnlyLock::new(self.accessory_snapshot_manager.clone()),
         );
@@ -392,11 +392,11 @@ pub fn new_orphan_storage<S: MerkleProofSpec>(
 ) -> anyhow::Result<ProverStorage<S, SnapshotManager>> {
     let state_db_raw = StateDB::<SnapshotManager>::setup_schema_db(path.as_ref())?;
     let state_db_sm = Arc::new(RwLock::new(SnapshotManager::orphan(state_db_raw)));
-    let state_db_snapshot = DbSnapshot::<SnapshotManager>::new(0, state_db_sm.into());
+    let state_db_snapshot = CacheDb::<SnapshotManager>::new(0, state_db_sm.into());
     let state_db = StateDB::with_db_snapshot(state_db_snapshot)?;
     let native_db_raw = NativeDB::<SnapshotManager>::setup_schema_db(path.as_ref())?;
     let native_db_sm = Arc::new(RwLock::new(SnapshotManager::orphan(native_db_raw)));
-    let native_db_snapshot = DbSnapshot::<SnapshotManager>::new(0, native_db_sm.into());
+    let native_db_snapshot = CacheDb::<SnapshotManager>::new(0, native_db_sm.into());
     let native_db = NativeDB::with_db_snapshot(native_db_snapshot)?;
     Ok(ProverStorage::with_db_handles(state_db, native_db))
 }
