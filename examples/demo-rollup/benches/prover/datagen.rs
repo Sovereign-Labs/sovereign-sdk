@@ -1,18 +1,16 @@
 use std::env;
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::BufWriter;
 use std::path::Path;
 
-use borsh::BorshSerialize;
 use serde::Serialize;
 use sov_data_generators::bank_data::BankMessageGenerator;
 use sov_data_generators::MessageGenerator;
 use sov_demo_rollup::MockDemoRollup;
 use sov_mock_da::{MockAddress, MockBlock, MockDaService};
-use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::default_signature::DefaultPublicKey;
-use sov_modules_api::{PrivateKey, PublicKey};
+use sov_modules_api::PrivateKey;
 use sov_rollup_interface::services::da::DaService;
 
 #[derive(Serialize)]
@@ -33,7 +31,7 @@ pub fn generate_genesis_config(config_dir: &str) -> anyhow::Result<()> {
         }
     };
 
-    let file = File::create(Path::join(&Path::new(config_dir), "accounts.json")).unwrap();
+    let file = File::create(Path::join(Path::new(config_dir), "accounts.json")).unwrap();
     let accounts_pub_keys: Vec<_> = (0..num_pub_keys)
         .map(|_| {
             let pkey = DefaultPrivateKey::generate();
