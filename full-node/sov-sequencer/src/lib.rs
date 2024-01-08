@@ -15,6 +15,7 @@ use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_rollup_interface::services::batch_builder::{BatchBuilder, TxHash};
 use sov_rollup_interface::services::da::DaService;
 use tokio::sync::{broadcast, Mutex};
+use tracing::{info, warn};
 
 const SEQUENCER_RPC_ERROR: &str = "SEQUENCER_RPC_ERROR";
 
@@ -100,14 +101,17 @@ where
                         da_transaction_id: da_tx_id.clone(),
                     },
                 })
-                .map_err(|e| anyhow!("failed to send tx status update: {}", e.to_string()))?;
+                .map_err(|error| warn!(%error, "Failed to send tx status update"))
+                // Batch submission shouldn't fail if notifications can't be
+                // sent.
+                .ok();
         }
 
         Ok(num_txs)
     }
 
     async fn accept_tx(&self, tx: Vec<u8>) -> anyhow::Result<()> {
-        tracing::info!("Accepting tx: 0x{}", hex::encode(&tx));
+        info!("Accepting tx: 0x{}", hex::encode(&tx));
         let mut batch_builder = self.batch_builder.lock().await;
         let tx_hash = batch_builder.accept_tx(tx)?;
         self.tx_statuses_sender
@@ -293,7 +297,7 @@ mod tests {
             let txs = std::mem::take(&mut self.mempool)
                 .into_iter()
                 .filter_map(|tx| {
-                    let first_byte = *tx.get(0)?;
+                    let first_byte = *tx.first()?;
                     Some(TxWithHash {
                         raw_tx: vec![first_byte],
                         hash: [0; 32],

@@ -49,9 +49,9 @@ where
 /// BatchBuilder that creates batches of transactions in the order they were submitted
 /// Only transactions that were successfully dispatched are included.
 pub struct FiFoStrictBatchBuilder<C: Context, R: DispatchCall<Context = C>> {
-    txs: VecDeque<PooledTransaction<C, R>>,
+    mempool: VecDeque<PooledTransaction<C, R>>,
     // Makes it cheap to check if transaction is already in the mempool.
-    tx_hashes: HashSet<TxHash>,
+    mempool_hashes: HashSet<TxHash>,
     mempool_max_txs_count: usize,
     runtime: R,
     max_batch_size_bytes: usize,
@@ -73,8 +73,8 @@ where
         sequencer: C::Address,
     ) -> Self {
         Self {
-            txs: VecDeque::new(),
-            tx_hashes: HashSet::new(),
+            mempool: VecDeque::new(),
+            mempool_hashes: HashSet::new(),
             mempool_max_txs_count,
             max_batch_size_bytes,
             runtime,
@@ -95,13 +95,13 @@ where
     /// - mempool is full
     /// - transaction is invalid (deserialization, verification or decoding of the runtime message failed)
     fn accept_tx(&mut self, raw: Vec<u8>) -> anyhow::Result<TxHash> {
-        debug_assert_eq!(
-            self.txs.len(),
-            self.tx_hashes.len(),
-            "Mempool invariant violated: txs and tx_hashes got out of sync because they have different lengths. This is a bug!"
+        assert_eq!(
+            self.mempool.len(),
+            self.mempool_hashes.len(),
+            "Mempool invariant violated, the variables got out of sync. This is a bug!"
         );
 
-        if self.txs.len() >= self.mempool_max_txs_count {
+        if self.mempool.len() >= self.mempool_max_txs_count {
             bail!("Mempool is full")
         }
 
@@ -132,14 +132,14 @@ where
         };
 
         let hash = tx.calculate_hash();
-        self.txs.push_back(tx);
-        self.tx_hashes.insert(hash);
+        self.mempool.push_back(tx);
+        self.mempool_hashes.insert(hash);
 
         Ok(hash)
     }
 
     fn contains(&self, hash: &TxHash) -> bool {
-        self.tx_hashes.contains(hash)
+        self.mempool_hashes.contains(hash)
     }
 
     /// Builds a new batch of valid transactions in order they were added to mempool
@@ -149,15 +149,15 @@ where
         let mut txs = Vec::new();
         let mut current_batch_size = 0;
 
-        while let Some(mut pooled) = self.txs.pop_front() {
+        while let Some(mut pooled) = self.mempool.pop_front() {
             // In order to fill batch as big as possible, we only check if valid tx can fit in the batch.
             let tx_len = pooled.raw.len();
             if current_batch_size + tx_len > self.max_batch_size_bytes {
-                self.txs.push_front(pooled);
+                self.mempool.push_front(pooled);
                 break;
             }
 
-            self.tx_hashes.remove(&pooled.calculate_hash());
+            self.mempool_hashes.remove(&pooled.calculate_hash());
 
             // Take the decoded runtime message cached upon accepting transaction
             // into the pool or attempt to decode the message again if
@@ -452,7 +452,7 @@ mod tests {
                 batch_builder.accept_tx(tx.clone()).unwrap();
             }
 
-            assert_eq!(txs.len(), batch_builder.txs.len());
+            assert_eq!(txs.len(), batch_builder.mempool.len());
 
             let build_result = batch_builder.get_next_blob();
             assert!(build_result.is_err());
@@ -485,7 +485,7 @@ mod tests {
                 batch_builder.accept_tx(tx.clone()).unwrap();
             }
 
-            assert_eq!(txs.len(), batch_builder.txs.len());
+            assert_eq!(txs.len(), batch_builder.mempool.len());
 
             let build_result = batch_builder.get_next_blob();
             assert!(build_result.is_ok());
@@ -499,7 +499,7 @@ mod tests {
             assert!(blob.contains(&txs[0]));
             assert!(blob.contains(&txs[2]));
             assert!(!blob.contains(&txs[3]));
-            assert_eq!(1, batch_builder.txs.len());
+            assert_eq!(1, batch_builder.mempool.len());
         }
     }
 }
