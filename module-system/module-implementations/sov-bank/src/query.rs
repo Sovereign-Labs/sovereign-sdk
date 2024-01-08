@@ -26,10 +26,14 @@ impl<C: sov_modules_api::Context> Bank<C> {
     /// stored at the address `token_address`.
     pub fn balance_of(
         &self,
+        version: Option<u64>,
         user_address: C::Address,
         token_address: C::Address,
         working_set: &mut WorkingSet<C>,
     ) -> RpcResult<BalanceResponse> {
+        if let Some(v) = version {
+            working_set.set_archival_version(v)
+        }
         Ok(BalanceResponse {
             amount: self.get_balance_of(user_address, token_address, working_set),
         })
@@ -39,9 +43,13 @@ impl<C: sov_modules_api::Context> Bank<C> {
     /// Rpc method that returns the supply of a token stored at the address `token_address`.
     pub fn supply_of(
         &self,
+        version: Option<u64>,
         token_address: C::Address,
         working_set: &mut WorkingSet<C>,
     ) -> RpcResult<TotalSupplyResponse> {
+        if let Some(v) = version {
+            working_set.set_archival_version(v)
+        }
         Ok(TotalSupplyResponse {
             amount: self.get_total_supply_of(&token_address, working_set),
         })

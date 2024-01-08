@@ -129,6 +129,7 @@ impl<C: sov_modules_api::Context + Serialize + DeserializeOwned + Send + Sync> R
             } => {
                 let BalanceResponse { amount } = BankRpcClient::<C>::balance_of(
                     &client,
+                    None,
                     account.address.clone(),
                     token_address.clone(),
                 )

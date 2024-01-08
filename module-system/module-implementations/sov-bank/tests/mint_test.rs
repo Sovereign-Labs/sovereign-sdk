@@ -42,12 +42,12 @@ fn mint_token() {
     // No events at the moment. If there are, needs to be checked
     assert!(working_set.events().is_empty());
 
-    let query_total_supply = |token_address: Address,
-                              working_set: &mut WorkingSet<DefaultContext>|
-     -> Option<u64> {
-        let total_supply: TotalSupplyResponse = bank.supply_of(token_address, working_set).unwrap();
-        total_supply.amount
-    };
+    let query_total_supply =
+        |token_address: Address, working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
+            let total_supply: TotalSupplyResponse =
+                bank.supply_of(None, token_address, working_set).unwrap();
+            total_supply.amount
+        };
 
     let query_user_balance =
         |user_address: Address, working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {

@@ -96,6 +96,7 @@ async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow
 
     let balance_response = sov_bank::BankRpcClient::<DefaultContext>::balance_of(
         client.http(),
+        None,
         user_address,
         token_address,
     )

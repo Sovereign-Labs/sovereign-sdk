@@ -126,3 +126,13 @@ fn main() {
 
 }
 ```
+
+## Enabling Archival queries for RPC
+We use `working_set: &mut WorkingSet<C>` in order to query state. `WorkingSet` has a function `set_archival_version`
+```rust
+    /// Sets archival version for a working set
+    pub fn set_archival_version(&mut self, version: Version) {
+        self.archival_working_set = Some(self.archival_state(version));
+        self.archival_accessory_working_set = Some(self.archival_accessory_state(version));
+    }
+```

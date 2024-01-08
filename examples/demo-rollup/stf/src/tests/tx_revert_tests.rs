@@ -91,6 +91,7 @@ fn test_tx_revert() {
         let resp = runtime
             .bank
             .balance_of(
+                None,
                 get_default_private_key().default_address(),
                 get_default_token_address(),
                 &mut working_set,
