@@ -19,7 +19,7 @@ use crate::schema::types::{
 
 mod rpc;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 /// A database which stores the ledger history (slots, transactions, events, etc).
 /// Ledger data is first ingested into an in-memory map before being fed to the state-transition function.
 /// Once the state-transition function has been executed and finalized, the results are committed to the final db
@@ -29,6 +29,16 @@ pub struct LedgerDB<Q> {
     db: Arc<CacheDb<Q>>,
     next_item_numbers: Arc<Mutex<ItemNumbers>>,
     slot_subscriptions: tokio::sync::broadcast::Sender<u64>,
+}
+
+impl<Q> Clone for LedgerDB<Q> {
+    fn clone(&self) -> Self {
+        LedgerDB {
+            db: self.db.clone(),
+            next_item_numbers: self.next_item_numbers.clone(),
+            slot_subscriptions: self.slot_subscriptions.clone(),
+        }
+    }
 }
 
 /// A SlotNumber, BatchNumber, TxNumber, and EventNumber which are grouped together, typically representing

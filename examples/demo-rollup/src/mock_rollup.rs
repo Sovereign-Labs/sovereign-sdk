@@ -12,6 +12,7 @@ use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
 use sov_modules_stf_blueprint::StfBlueprint;
 use sov_prover_storage_manager::ProverStorageManager;
 use sov_risc0_adapter::host::Risc0Host;
+use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::{DefaultStorageSpec, Storage, ZkStorage};
 use sov_stf_runner::{ParallelProverService, RollupConfig, RollupProverConfig};
@@ -54,7 +55,9 @@ impl RollupBlueprint for MockDemoRollup {
     fn create_rpc_methods(
         &self,
         storage: Arc<RwLock<<Self::NativeContext as Spec>::Storage>>,
-        ledger_db: &LedgerDB,
+        ledger_db: &LedgerDB<
+            <Self::StorageManager as HierarchicalStorageManager<Self::DaSpec>>::LedgerQueryManager,
+        >,
         da_service: &Self::DaService,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
         // TODO set the sequencer address
@@ -65,6 +68,7 @@ impl RollupBlueprint for MockDemoRollup {
             Self::NativeRuntime,
             Self::NativeContext,
             Self::DaService,
+            <Self::StorageManager as HierarchicalStorageManager<Self::DaSpec>>::LedgerQueryManager,
         >(storage.clone(), ledger_db, da_service, sequencer)?;
 
         #[cfg(feature = "experimental")]

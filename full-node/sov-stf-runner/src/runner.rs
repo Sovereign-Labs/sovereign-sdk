@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock};
 
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_db::schema::QueryManager;
+use sov_db::schema::{CacheDb, ChangeSet, QueryManager};
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -72,7 +72,13 @@ impl<Stf, Sm, Da, Vm, Ps> StateTransitionRunner<Stf, Sm, Da, Vm, Ps>
 where
     Da: DaService<Error = anyhow::Error> + Clone + Send + Sync + 'static,
     Vm: ZkvmHost,
-    Sm: HierarchicalStorageManager<Da::Spec>,
+    Sm: HierarchicalStorageManager<
+        Da::Spec,
+        LedgerChangeSet = ChangeSet,
+        LedgerState = CacheDb<
+            <Sm as HierarchicalStorageManager<<Da as DaService>::Spec>>::LedgerQueryManager,
+        >,
+    >,
     Stf: StateTransitionFunction<
         Vm,
         Da::Spec,
@@ -92,7 +98,7 @@ where
     pub fn new(
         runner_config: RunnerConfig,
         da_service: Da,
-        ledger_db: LedgerDB<Sm::LedgerQueryManager>,
+        mut ledger_db: LedgerDB<Sm::LedgerQueryManager>,
         stf: Stf,
         mut storage_manager: Sm,
         rpc_storage: Arc<RwLock<Sm::StfState>>,
@@ -115,6 +121,7 @@ where
                     block_header
                 );
                 let (stf_state, ledger_state) = storage_manager.create_state_for(&block_header)?;
+                ledger_db.replace_db(ledger_state)?;
                 let (genesis_root, initialized_storage) = stf.init_chain(stf_state, params);
                 let ledger_change_set = ledger_db.clone_db();
                 storage_manager.save_change_set(
@@ -226,6 +233,7 @@ where
             let (stf_pre_state, ledger_state) = self
                 .storage_manager
                 .create_state_for(filtered_block.header())?;
+            self.ledger_db.replace_db(ledger_state)?;
 
             let slot_result = self.stf.apply_slot(
                 // TODO(https://github.com/Sovereign-Labs/sovereign-sdk/issues/1247): incorrect pre-state root in case of re-org

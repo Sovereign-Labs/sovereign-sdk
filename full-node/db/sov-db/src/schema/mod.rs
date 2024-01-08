@@ -4,4 +4,4 @@ pub mod tables;
 /// are split into their constituent parts and stored in separate tables for easy retrieval.
 pub mod types;
 
-pub use sov_schema_db::snapshot::{ChangeSet, QueryManager};
+pub use sov_schema_db::snapshot::{CacheDb, ChangeSet, QueryManager};
