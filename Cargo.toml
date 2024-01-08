@@ -67,7 +67,7 @@ jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "1d007e11cb68aa5
 
 # External dependencies
 async-trait = "0.1.71"
-anyhow = { version = "1.0.68", default-features = false }
+anyhow = { version = "1.0.79", default-features = false }
 arbitrary = { version = "1.3.1", features = ["derive"] }
 borsh = { version = "0.10.3", default-features = false }
 # TODO: Consider replacing this serialization format
