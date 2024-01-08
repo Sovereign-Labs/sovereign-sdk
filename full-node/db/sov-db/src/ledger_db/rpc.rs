@@ -5,6 +5,7 @@ use sov_rollup_interface::rpc::{
     TxIdentifier, TxResponse,
 };
 use sov_rollup_interface::stf::Event;
+use sov_schema_db::snapshot::QueryManager;
 use tokio::sync::broadcast::Receiver;
 
 use crate::schema::tables::{
@@ -25,10 +26,32 @@ const MAX_EVENTS_PER_REQUEST: u64 = 500;
 
 use super::LedgerDB;
 
-impl LedgerRpcProvider for LedgerDB {
+impl<Q: QueryManager> LedgerRpcProvider for LedgerDB<Q> {
+    fn get_head<B: DeserializeOwned, T: DeserializeOwned>(
+        &self,
+        query_mode: QueryMode,
+    ) -> Result<Option<SlotResponse<B, T>>, anyhow::Error> {
+        let next_ids = self.get_next_items_numbers();
+        let next_slot = next_ids.slot_number;
+
+        let head_number = next_slot.saturating_sub(1);
+
+        if let Some(stored_slot) = self
+            .db
+            .read::<SlotByNumber>(&SlotNumber(next_slot.saturating_sub(1)))?
+        {
+            return Ok(Some(self.populate_slot_response(
+                head_number,
+                stored_slot,
+                query_mode,
+            )?));
+        }
+        Ok(None)
+    }
+
     fn get_slots<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
-        slot_ids: &[sov_rollup_interface::rpc::SlotIdentifier],
+        slot_ids: &[SlotIdentifier],
         query_mode: QueryMode,
     ) -> Result<Vec<Option<SlotResponse<B, T>>>, anyhow::Error> {
         anyhow::ensure!(
@@ -44,7 +67,7 @@ impl LedgerRpcProvider for LedgerDB {
             let slot_num = self.resolve_slot_identifier(slot_id)?;
             out.push(match slot_num {
                 Some(num) => {
-                    if let Some(stored_slot) = self.db.get::<SlotByNumber>(&num)? {
+                    if let Some(stored_slot) = self.db.read::<SlotByNumber>(&num)? {
                         Some(self.populate_slot_response(num.into(), stored_slot, query_mode)?)
                     } else {
                         None
@@ -58,7 +81,7 @@ impl LedgerRpcProvider for LedgerDB {
 
     fn get_batches<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
-        batch_ids: &[sov_rollup_interface::rpc::BatchIdentifier],
+        batch_ids: &[BatchIdentifier],
         query_mode: QueryMode,
     ) -> Result<Vec<Option<BatchResponse<B, T>>>, anyhow::Error> {
         anyhow::ensure!(
@@ -74,7 +97,7 @@ impl LedgerRpcProvider for LedgerDB {
             let batch_num = self.resolve_batch_identifier(batch_id)?;
             out.push(match batch_num {
                 Some(num) => {
-                    if let Some(stored_batch) = self.db.get::<BatchByNumber>(&num)? {
+                    if let Some(stored_batch) = self.db.read::<BatchByNumber>(&num)? {
                         Some(self.populate_batch_response(stored_batch, query_mode)?)
                     } else {
                         None
@@ -88,7 +111,7 @@ impl LedgerRpcProvider for LedgerDB {
 
     fn get_transactions<T: DeserializeOwned>(
         &self,
-        tx_ids: &[sov_rollup_interface::rpc::TxIdentifier],
+        tx_ids: &[TxIdentifier],
         _query_mode: QueryMode,
     ) -> Result<Vec<Option<TxResponse<T>>>, anyhow::Error> {
         anyhow::ensure!(
@@ -104,7 +127,7 @@ impl LedgerRpcProvider for LedgerDB {
             let num = self.resolve_tx_identifier(id)?;
             out.push(match num {
                 Some(num) => {
-                    if let Some(tx) = self.db.get::<TxByNumber>(&num)? {
+                    if let Some(tx) = self.db.read::<TxByNumber>(&num)? {
                         Some(tx.try_into()?)
                     } else {
                         None
@@ -118,7 +141,7 @@ impl LedgerRpcProvider for LedgerDB {
 
     fn get_events(
         &self,
-        event_ids: &[sov_rollup_interface::rpc::EventIdentifier],
+        event_ids: &[EventIdentifier],
     ) -> Result<Vec<Option<Event>>, anyhow::Error> {
         anyhow::ensure!(
             event_ids.len() <= MAX_EVENTS_PER_REQUEST as usize,
@@ -132,33 +155,11 @@ impl LedgerRpcProvider for LedgerDB {
         for id in event_ids {
             let num = self.resolve_event_identifier(id)?;
             out.push(match num {
-                Some(num) => self.db.get::<EventByNumber>(&num)?,
+                Some(num) => self.db.read::<EventByNumber>(&num)?,
                 None => None,
             })
         }
         Ok(out)
-    }
-
-    fn get_head<B: DeserializeOwned, T: DeserializeOwned>(
-        &self,
-        query_mode: QueryMode,
-    ) -> Result<Option<SlotResponse<B, T>>, anyhow::Error> {
-        let next_ids = self.get_next_items_numbers();
-        let next_slot = next_ids.slot_number;
-
-        let head_number = next_slot.saturating_sub(1);
-
-        if let Some(stored_slot) = self
-            .db
-            .get::<SlotByNumber>(&SlotNumber(next_slot.saturating_sub(1)))?
-        {
-            return Ok(Some(self.populate_slot_response(
-                head_number,
-                stored_slot,
-                query_mode,
-            )?));
-        }
-        Ok(None)
     }
 
     // Get X by hash
@@ -208,6 +209,11 @@ impl LedgerRpcProvider for LedgerDB {
             .map(|mut slots| slots.pop().unwrap_or(None))
     }
 
+    fn get_event_by_number(&self, number: u64) -> Result<Option<Event>, anyhow::Error> {
+        self.get_events(&[EventIdentifier::Number(number)])
+            .map(|mut events| events.pop().unwrap_or(None))
+    }
+
     fn get_tx_by_number<T: DeserializeOwned>(
         &self,
         number: u64,
@@ -215,11 +221,6 @@ impl LedgerRpcProvider for LedgerDB {
     ) -> Result<Option<TxResponse<T>>, anyhow::Error> {
         self.get_transactions(&[TxIdentifier::Number(number)], query_mode)
             .map(|mut txs| txs.pop().unwrap_or(None))
-    }
-
-    fn get_event_by_number(&self, number: u64) -> Result<Option<Event>, anyhow::Error> {
-        self.get_events(&[EventIdentifier::Number(number)])
-            .map(|mut events| events.pop().unwrap_or(None))
     }
 
     fn get_slots_range<B: DeserializeOwned, T: DeserializeOwned>(
@@ -275,13 +276,13 @@ impl LedgerRpcProvider for LedgerDB {
     }
 }
 
-impl LedgerDB {
+impl<Q: QueryManager> LedgerDB<Q> {
     fn resolve_slot_identifier(
         &self,
         slot_id: &SlotIdentifier,
     ) -> Result<Option<SlotNumber>, anyhow::Error> {
         match slot_id {
-            SlotIdentifier::Hash(hash) => self.db.get::<SlotByHash>(hash),
+            SlotIdentifier::Hash(hash) => self.db.read::<SlotByHash>(hash),
             SlotIdentifier::Number(num) => Ok(Some(SlotNumber(*num))),
         }
     }
@@ -291,13 +292,13 @@ impl LedgerDB {
         batch_id: &BatchIdentifier,
     ) -> Result<Option<BatchNumber>, anyhow::Error> {
         match batch_id {
-            BatchIdentifier::Hash(hash) => self.db.get::<BatchByHash>(hash),
+            BatchIdentifier::Hash(hash) => self.db.read::<BatchByHash>(hash),
             BatchIdentifier::Number(num) => Ok(Some(BatchNumber(*num))),
             BatchIdentifier::SlotIdAndOffset(SlotIdAndOffset { slot_id, offset }) => {
                 if let Some(slot_num) = self.resolve_slot_identifier(slot_id)? {
                     Ok(self
                         .db
-                        .get::<SlotByNumber>(&slot_num)?
+                        .read::<SlotByNumber>(&slot_num)?
                         .map(|slot: StoredSlot| BatchNumber(slot.batches.start.0 + offset)))
                 } else {
                     Ok(None)
@@ -311,13 +312,13 @@ impl LedgerDB {
         tx_id: &TxIdentifier,
     ) -> Result<Option<TxNumber>, anyhow::Error> {
         match tx_id {
-            TxIdentifier::Hash(hash) => self.db.get::<TxByHash>(hash),
+            TxIdentifier::Hash(hash) => self.db.read::<TxByHash>(hash),
             TxIdentifier::Number(num) => Ok(Some(TxNumber(*num))),
             TxIdentifier::BatchIdAndOffset(BatchIdAndOffset { batch_id, offset }) => {
                 if let Some(batch_num) = self.resolve_batch_identifier(batch_id)? {
                     Ok(self
                         .db
-                        .get::<BatchByNumber>(&batch_num)?
+                        .read::<BatchByNumber>(&batch_num)?
                         .map(|batch: StoredBatch| TxNumber(batch.txs.start.0 + offset)))
                 } else {
                     Ok(None)
@@ -335,7 +336,7 @@ impl LedgerDB {
                 if let Some(tx_num) = self.resolve_tx_identifier(tx_id)? {
                     Ok(self
                         .db
-                        .get::<TxByNumber>(&tx_num)?
+                        .read::<TxByNumber>(&tx_num)?
                         .map(|tx| EventNumber(tx.events.start.0 + offset)))
                 } else {
                     Ok(None)

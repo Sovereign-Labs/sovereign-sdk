@@ -77,7 +77,7 @@ where
         let path = config.path;
         let state_db = StateDB::<SnapshotManager>::setup_schema_db(&path)?;
         let native_db = NativeDB::<SnapshotManager>::setup_schema_db(&path)?;
-        let ledger_db = LedgerDB::setup_schema_db(&path)?;
+        let ledger_db = LedgerDB::<SnapshotManager>::setup_schema_db(&path)?;
 
         Ok(Self::with_db_handles(state_db, native_db, ledger_db))
     }
@@ -212,9 +212,11 @@ where
 {
     type StfState = ProverStorage<S, SnapshotManager>;
     type StfChangeSet = ProverStorage<S, SnapshotManager>;
-    type LedgerState = CacheDb<SnapshotManager>;
+
+    type LedgerQueryManager = SnapshotManager;
+    type LedgerState = CacheDb<Self::LedgerQueryManager>;
     // type LedgerChangeSet = ChangeSet;
-    type LedgerChangeSet = CacheDb<SnapshotManager>;
+    type LedgerChangeSet = ChangeSet;
 
     fn create_state_for(
         &mut self,

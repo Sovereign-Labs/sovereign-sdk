@@ -8,7 +8,7 @@ use crate::{Operation, Schema, SchemaKey};
 // [`SchemaBatch`] holds a collection of updates that can be applied to a DB
 /// ([`Schema`]) atomically. The updates will be applied in the order in which
 /// they are added to the [`SchemaBatch`].
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct SchemaBatch {
     // Temporary pub(crate), before iterator is done
     pub(crate) last_writes: HashMap<ColumnFamilyName, BTreeMap<SchemaKey, Operation>>,

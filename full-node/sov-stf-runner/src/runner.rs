@@ -4,6 +4,7 @@ use std::sync::{Arc, RwLock};
 
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
+use sov_db::schema::QueryManager;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -32,7 +33,7 @@ where
     stf: Stf,
     storage_manager: Sm,
     rpc_storage: Arc<RwLock<Sm::StfState>>,
-    ledger_db: LedgerDB,
+    ledger_db: LedgerDB<Sm::LedgerQueryManager>,
     state_root: StateRoot<Stf, Vm, Da::Spec>,
     listen_address: SocketAddr,
     prover_service: Ps,
@@ -79,8 +80,8 @@ where
         PreState = Sm::StfState,
         ChangeSet = Sm::StfChangeSet,
     >,
-    Sm::LedgerState: Into<Sm::LedgerChangeSet>,
     Ps: ProverService<StateRoot = Stf::StateRoot, Witness = Stf::Witness, DaService = Da>,
+    Sm::LedgerQueryManager: QueryManager,
 {
     /// Creates a new `StateTransitionRunner`.
     ///
@@ -91,7 +92,7 @@ where
     pub fn new(
         runner_config: RunnerConfig,
         da_service: Da,
-        ledger_db: LedgerDB,
+        ledger_db: LedgerDB<Sm::LedgerQueryManager>,
         stf: Stf,
         mut storage_manager: Sm,
         rpc_storage: Arc<RwLock<Sm::StfState>>,
@@ -115,10 +116,11 @@ where
                 );
                 let (stf_state, ledger_state) = storage_manager.create_state_for(&block_header)?;
                 let (genesis_root, initialized_storage) = stf.init_chain(stf_state, params);
+                let ledger_change_set = ledger_db.clone_db();
                 storage_manager.save_change_set(
                     &block_header,
                     initialized_storage,
-                    ledger_state.into(),
+                    ledger_change_set,
                 )?;
                 storage_manager.finalize(&block_header)?;
                 info!(
@@ -256,10 +258,11 @@ where
                     state_transition_witness: slot_result.witness,
                 };
 
+            let ledger_change_set = self.ledger_db.clone_db();
             self.storage_manager.save_change_set(
                 filtered_block.header(),
                 slot_result.change_set,
-                ledger_state.into(),
+                ledger_change_set,
             )?;
             // Send
             {

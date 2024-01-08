@@ -207,6 +207,19 @@ impl<Q: QueryManager> CacheDb<Q> {
         }
         Ok(None)
     }
+
+    /// Get a clone of current change set
+    pub fn clone_change_set(&self) -> ChangeSet {
+        let change_set = self
+            .cache
+            .lock()
+            .expect("Local change set lock is poisoned");
+
+        ChangeSet {
+            id: change_set.id,
+            operations: change_set.operations.clone(),
+        }
+    }
 }
 
 struct SnapshotIter<'a, S, LocalIter, ParentIter>
