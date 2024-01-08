@@ -120,7 +120,7 @@ where
     }
 
     async fn tx_status(&self, tx_hash: &TxHash) -> Option<TxStatus<Da::TransactionId>> {
-        let is_in_mempool = self.batch_builder.lock().await.contains(&tx_hash);
+        let is_in_mempool = self.batch_builder.lock().await.contains(tx_hash);
 
         if is_in_mempool {
             Some(TxStatus::Submitted)
