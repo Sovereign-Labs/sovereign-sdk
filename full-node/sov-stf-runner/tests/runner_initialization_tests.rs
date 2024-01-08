@@ -93,7 +93,7 @@ fn initialize_runner(
     };
     let mut storage_manager = ProverStorageManager::new(storage_config).unwrap();
     let genesis_block = MockBlockHeader::from_height(0);
-    let genesis_storage = storage_manager.create_storage_for(&genesis_block).unwrap();
+    let genesis_storage = storage_manager.create_state_for(&genesis_block).unwrap();
     let rpc_storage = Arc::new(RwLock::new(genesis_storage.clone()));
 
     let vm = MockZkvm::new(MockValidityCond::default());

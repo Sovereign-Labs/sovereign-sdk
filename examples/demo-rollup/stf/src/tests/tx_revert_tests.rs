@@ -41,7 +41,7 @@ fn test_tx_revert() {
 
         let (genesis_root, storage) = stf.init_chain(
             storage_manager
-                .create_storage_for(genesis_block.header())
+                .create_state_for(genesis_block.header())
                 .unwrap(),
             config,
         );
@@ -53,9 +53,7 @@ fn test_tx_revert() {
         let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
 
-        let storage = storage_manager
-            .create_storage_for(block_1.header())
-            .unwrap();
+        let storage = storage_manager.create_state_for(block_1.header()).unwrap();
         let apply_block_result = stf.apply_slot(
             &genesis_root,
             storage,
@@ -143,7 +141,7 @@ fn test_tx_bad_signature() {
         let stf: StfBlueprintTest = StfBlueprint::new();
         let (genesis_root, storage) = stf.init_chain(
             storage_manager
-                .create_storage_for(genesis_block.header())
+                .create_state_for(genesis_block.header())
                 .unwrap(),
             config,
         );
@@ -157,9 +155,7 @@ fn test_tx_bad_signature() {
         let blob_sender = blob.sender();
         let mut blobs = [blob];
 
-        let storage = storage_manager
-            .create_storage_for(block_1.header())
-            .unwrap();
+        let storage = storage_manager.create_state_for(block_1.header()).unwrap();
         let apply_block_result = stf.apply_slot(
             &genesis_root,
             storage,
@@ -214,7 +210,7 @@ fn test_tx_bad_nonce() {
         let stf: StfBlueprintTest = StfBlueprint::new();
         let (genesis_root, storage) = stf.init_chain(
             storage_manager
-                .create_storage_for(genesis_block.header())
+                .create_state_for(genesis_block.header())
                 .unwrap(),
             config,
         );
@@ -226,9 +222,7 @@ fn test_tx_bad_nonce() {
         let blob = new_test_blob_from_batch(Batch { txs }, &MOCK_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
 
-        let storage = storage_manager
-            .create_storage_for(block_1.header())
-            .unwrap();
+        let storage = storage_manager.create_state_for(block_1.header()).unwrap();
         let apply_block_result = stf.apply_slot(
             &genesis_root,
             storage,
@@ -272,7 +266,7 @@ fn test_tx_bad_serialization() {
 
         let (genesis_root, storage) = stf.init_chain(
             storage_manager
-                .create_storage_for(genesis_block.header())
+                .create_state_for(genesis_block.header())
                 .unwrap(),
             config,
         );
@@ -309,9 +303,7 @@ fn test_tx_bad_serialization() {
         let blob_sender = blob.sender();
         let mut blobs = [blob];
 
-        let storage = storage_manager
-            .create_storage_for(block_1.header())
-            .unwrap();
+        let storage = storage_manager.create_state_for(block_1.header()).unwrap();
         let apply_block_result = stf.apply_slot(
             &genesis_root,
             storage,

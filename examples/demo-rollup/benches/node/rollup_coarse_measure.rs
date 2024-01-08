@@ -113,7 +113,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let genesis_block_header = MockBlockHeader::from_height(0);
 
     let storage = storage_manager
-        .create_storage_for(&genesis_block_header)
+        .create_state_for(&genesis_block_header)
         .expect("Getting genesis storage failed");
 
     let stf = StfBlueprint::<
@@ -162,7 +162,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // Setup. Block h=1 has a single tx that creates the token. Exclude from timers
     let filtered_block = blocks.remove(0);
     let storage = storage_manager
-        .create_storage_for(filtered_block.header())
+        .create_state_for(filtered_block.header())
         .unwrap();
     let apply_block_result = stf.apply_slot(
         &current_root,
@@ -190,7 +190,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut apply_block_time = Duration::new(0, 0);
     for (filtered_block, mut blobs) in blocks.into_iter().zip(blobs.into_iter()) {
         let storage = storage_manager
-            .create_storage_for(filtered_block.header())
+            .create_state_for(filtered_block.header())
             .unwrap();
         let now = Instant::now();
         let apply_block_result = stf.apply_slot(

@@ -31,7 +31,7 @@ where
     da_service: Da,
     stf: Stf,
     storage_manager: Sm,
-    rpc_storage: Arc<RwLock<Sm::NativeStorage>>,
+    rpc_storage: Arc<RwLock<Sm::StfState>>,
     ledger_db: LedgerDB,
     state_root: StateRoot<Stf, Vm, Da::Spec>,
     listen_address: SocketAddr,
@@ -76,10 +76,10 @@ where
         Vm,
         Da::Spec,
         Condition = <Da::Spec as DaSpec>::ValidityCondition,
-        PreState = Sm::NativeStorage,
-        ChangeSet = Sm::NativeChangeSet,
+        PreState = Sm::StfState,
+        ChangeSet = Sm::StfChangeSet,
     >,
-
+    Sm::LedgerState: Into<Sm::LedgerChangeSet>,
     Ps: ProverService<StateRoot = Stf::StateRoot, Witness = Stf::Witness, DaService = Da>,
 {
     /// Creates a new `StateTransitionRunner`.
@@ -94,7 +94,7 @@ where
         ledger_db: LedgerDB,
         stf: Stf,
         mut storage_manager: Sm,
-        rpc_storage: Arc<RwLock<Sm::NativeStorage>>,
+        rpc_storage: Arc<RwLock<Sm::StfState>>,
         init_variant: InitVariant<Stf, Vm, Da::Spec>,
         prover_service: Ps,
     ) -> Result<Self, anyhow::Error> {
@@ -113,9 +113,13 @@ where
                     "No history detected. Initializing chain on block_header={:?}...",
                     block_header
                 );
-                let storage = storage_manager.create_storage_for(&block_header)?;
-                let (genesis_root, initialized_storage) = stf.init_chain(storage, params);
-                storage_manager.save_change_set(&block_header, initialized_storage)?;
+                let (stf_state, ledger_state) = storage_manager.create_state_for(&block_header)?;
+                let (genesis_root, initialized_storage) = stf.init_chain(stf_state, params);
+                storage_manager.save_change_set(
+                    &block_header,
+                    initialized_storage,
+                    ledger_state.into(),
+                )?;
                 storage_manager.finalize(&block_header)?;
                 info!(
                     "Chain initialization is done. Genesis root: 0x{}",
@@ -217,14 +221,14 @@ where
 
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
 
-            let pre_state = self
+            let (stf_pre_state, ledger_state) = self
                 .storage_manager
-                .create_storage_for(filtered_block.header())?;
+                .create_state_for(filtered_block.header())?;
 
             let slot_result = self.stf.apply_slot(
                 // TODO(https://github.com/Sovereign-Labs/sovereign-sdk/issues/1247): incorrect pre-state root in case of re-org
                 &self.state_root,
-                pre_state,
+                stf_pre_state,
                 Default::default(),
                 filtered_block.header(),
                 &filtered_block.validity_condition(),
@@ -252,13 +256,16 @@ where
                     state_transition_witness: slot_result.witness,
                 };
 
-            self.storage_manager
-                .save_change_set(filtered_block.header(), slot_result.change_set)?;
+            self.storage_manager.save_change_set(
+                filtered_block.header(),
+                slot_result.change_set,
+                ledger_state.into(),
+            )?;
             // Send
             {
-                let new_rpc_storage = self
+                let (new_rpc_storage, _) = self
                     .storage_manager
-                    .create_storage_after(filtered_block.header())?;
+                    .create_state_after(filtered_block.header())?;
                 let mut rpc_storage = self
                     .rpc_storage
                     .write()

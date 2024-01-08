@@ -71,7 +71,7 @@ impl<T> From<Arc<RwLock<T>>> for ReadOnlyLock<T> {
 ///  * reads from parent manager if value is missing
 #[derive(Debug)]
 pub struct CacheDb<Q> {
-    inner: Mutex<ChangeSet>,
+    cache: Mutex<ChangeSet>,
     db: ReadOnlyLock<Q>,
 }
 
@@ -79,7 +79,7 @@ impl<Q> CacheDb<Q> {
     /// Create new [`CacheDb`]
     pub fn new(id: SnapshotId, manager: ReadOnlyLock<Q>) -> Self {
         Self {
-            inner: Mutex::new(ChangeSet {
+            cache: Mutex::new(ChangeSet {
                 id,
                 operations: SchemaBatch::default(),
             }),
@@ -93,7 +93,7 @@ impl<Q> CacheDb<Q> {
         key: &impl KeyCodec<S>,
         value: &impl ValueCodec<S>,
     ) -> anyhow::Result<()> {
-        self.inner
+        self.cache
             .lock()
             .expect("Local ChangeSet lock must not be poisoned")
             .operations
@@ -102,7 +102,7 @@ impl<Q> CacheDb<Q> {
 
     /// Delete given key from snapshot
     pub fn delete<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<()> {
-        self.inner
+        self.cache
             .lock()
             .expect("Local ChangeSet lock must not be poisoned")
             .operations
@@ -112,11 +112,18 @@ impl<Q> CacheDb<Q> {
     /// Writes many operations at once, atomically
     pub fn write_many(&self, batch: SchemaBatch) -> anyhow::Result<()> {
         let mut inner = self
-            .inner
+            .cache
             .lock()
             .expect("Local SchemaBatch lock must not be poisoned");
         inner.operations.merge(batch);
         Ok(())
+    }
+
+    /// Overwrites inner cache with new, while retaining reference to parent
+    pub fn overwrite_change_set(&self, other: CacheDb<Q>) {
+        let mut this_cache = self.cache.lock().unwrap();
+        let other_cache = other.cache.into_inner().unwrap();
+        *this_cache = other_cache;
     }
 }
 
@@ -130,7 +137,7 @@ impl<Q: QueryManager> CacheDb<Q> {
 
         // Hold local cache lock explicitly, so reads are atomic
         let local_cache = self
-            .inner
+            .cache
             .lock()
             .expect("SchemaBatch lock should not be poisoned");
 
@@ -147,7 +154,7 @@ impl<Q: QueryManager> CacheDb<Q> {
     /// Get value of largest key written value for given [`Schema`]
     pub fn get_largest<S: Schema>(&self) -> anyhow::Result<Option<(S::Key, S::Value)>> {
         let change_set = self
-            .inner
+            .cache
             .lock()
             .expect("SchemaBatch lock must not be poisoned");
         let local_cache_iter = change_set.iter::<S>();
@@ -177,7 +184,7 @@ impl<Q: QueryManager> CacheDb<Q> {
     ) -> anyhow::Result<Option<(S::Key, S::Value)>> {
         let seek_key = seek_key.encode_seek_key()?;
         let change_set = self
-            .inner
+            .cache
             .lock()
             .expect("Local cache lock must not be poisoned");
         let local_cache_iter = change_set.iter_range::<S>(seek_key.clone());
@@ -302,14 +309,10 @@ impl ChangeSet {
 
 impl<Q> From<CacheDb<Q>> for ChangeSet {
     fn from(snapshot: CacheDb<Q>) -> Self {
-        snapshot.inner.into_inner().unwrap()
-        // Self {
-        //     id: snapshot.id,
-        //     operations: snapshot
-        //
-        //         .into_inner()
-        //         .expect("SchemaBatch lock must not be poisoned"),
-        // }
+        snapshot
+            .cache
+            .into_inner()
+            .expect("Internal cache mutex is poisoned")
     }
 }
 

@@ -44,8 +44,8 @@ pub trait RollupBlueprint: Sized + Send + Sync {
     /// Manager for the native storage lifecycle.
     type StorageManager: HierarchicalStorageManager<
         Self::DaSpec,
-        NativeStorage = <Self::NativeContext as Spec>::Storage,
-        NativeChangeSet = <Self::NativeContext as Spec>::Storage,
+        StfState = <Self::NativeContext as Spec>::Storage,
+        StfChangeSet = <Self::NativeContext as Spec>::Storage,
     >;
 
     /// Runtime for the Zero Knowledge environment.
@@ -157,7 +157,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
         )?;
 
         let mut storage_manager = self.create_storage_manager(&rollup_config)?;
-        let prover_storage = storage_manager.create_storage_for(&last_finalized_block_header)?;
+        let prover_storage = storage_manager.create_state_for(&last_finalized_block_header)?;
 
         let prev_root = ledger_db
             .get_head_slot()?

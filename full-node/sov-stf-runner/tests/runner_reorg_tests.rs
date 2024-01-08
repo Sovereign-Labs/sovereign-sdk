@@ -147,7 +147,7 @@ async fn runner_execution(
     };
     let mut storage_manager = ProverStorageManager::new(storage_config).unwrap();
     let genesis_block = MockBlockHeader::from_height(0);
-    let genesis_storage = storage_manager.create_storage_for(&genesis_block).unwrap();
+    let genesis_storage = storage_manager.create_state_for(&genesis_block).unwrap();
     let rpc_storage = Arc::new(RwLock::new(genesis_storage.clone()));
 
     let vm = MockZkvm::new(MockValidityCond::default());
@@ -193,7 +193,7 @@ fn get_saved_root_hash(
     };
     let mut storage_manager = ProverStorageManager::<MockDaSpec, S>::new(storage_config).unwrap();
     let mock_block_header = MockBlockHeader::default();
-    let storage = storage_manager.create_storage_for(&mock_block_header)?;
+    let storage = storage_manager.create_state_for(&mock_block_header)?;
 
     let ledger_db = LedgerDB::with_path(path).unwrap();
 

@@ -189,7 +189,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let genesis_block = MockBlock::default();
     let (mut prev_state_root, storage) = stf.init_chain(
         storage_manager
-            .create_storage_for(genesis_block.header())
+            .create_state_for(genesis_block.header())
             .unwrap(),
         genesis_config,
     );
@@ -225,7 +225,7 @@ async fn main() -> Result<(), anyhow::Error> {
         }
 
         let storage = storage_manager
-            .create_storage_for(filtered_block.header())
+            .create_state_for(filtered_block.header())
             .unwrap();
 
         let result = stf.apply_slot(

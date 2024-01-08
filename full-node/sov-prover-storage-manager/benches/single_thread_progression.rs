@@ -64,7 +64,7 @@ fn setup_storage(
 
     for h in 1..=rollup_height {
         let block_header = MockBlockHeader::from_height(h);
-        let storage = storage_manager.create_storage_for(&block_header).unwrap();
+        let storage = storage_manager.create_state_for(&block_header).unwrap();
 
         let new_keys = generate_random_bytes(&mut rng, num_new_writes, &old_writes);
         let new_values = generate_random_bytes(&mut rng, num_new_writes, &[]);
@@ -157,7 +157,7 @@ fn bench_random_read(
         num_old_writes,
     );
     let block = MockBlockHeader::from_height(rollup_height + 1);
-    let storage = storage_manager.create_storage_for(&block).unwrap();
+    let storage = storage_manager.create_state_for(&block).unwrap();
     let cache_key = CacheKey {
         key: Arc::new(random_key),
     };
@@ -201,7 +201,7 @@ fn bench_not_found_read(
         num_old_writes,
     );
     let block = MockBlockHeader::from_height(rollup_height + 1);
-    let storage = storage_manager.create_storage_for(&block).unwrap();
+    let storage = storage_manager.create_state_for(&block).unwrap();
     let cache_key = CacheKey {
         key: Arc::new(non_existing_key),
     };
