@@ -139,3 +139,96 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::Arc, time::Duration};
+
+    use sov_mock_da::MockDaService;
+
+    use super::*;
+
+    async fn wait() {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn get_cached() {
+        let notifier = TxStatusNotifier::<MockDaService>::new();
+
+        notifier.notify([1; 32], TxStatus::Submitted);
+        notifier.notify(
+            [2; 32],
+            TxStatus::Published {
+                da_transaction_id: (),
+            },
+        );
+
+        wait().await;
+
+        assert_eq!(notifier.get_cached(&[1; 32]), Some(TxStatus::Submitted));
+        assert_eq!(
+            notifier.get_cached(&[2; 32]),
+            Some(TxStatus::Published {
+                da_transaction_id: ()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn multiple_subscribers() {
+        let notifier = Arc::new(TxStatusNotifier::<MockDaService>::new());
+
+        let mut sub1a = notifier.clone().subscribe([1; 32]);
+        let mut sub1b = notifier.clone().subscribe([1; 32]);
+        let sub2 = notifier.clone().subscribe([2; 32]);
+
+        assert_eq!(notifier.senders.len(), 2);
+
+        // No notifications yet.
+        assert_eq!(sub1a.recv.len(), 0);
+        assert_eq!(sub1b.recv.len(), 0);
+        assert_eq!(sub2.recv.len(), 0);
+
+        notifier.notify([1; 32], TxStatus::Submitted);
+        notifier.notify(
+            [1; 32],
+            TxStatus::Published {
+                da_transaction_id: (),
+            },
+        );
+        wait().await;
+
+        assert_eq!(sub1a.recv.len(), 2);
+        assert_eq!(sub1b.recv.len(), 2);
+        assert_eq!(sub2.recv.len(), 0);
+
+        sub1a.recv.recv().await.unwrap();
+
+        assert_eq!(sub1a.recv.len(), 1);
+        assert_eq!(sub1b.recv.len(), 2);
+        assert_eq!(sub2.recv.len(), 0);
+
+        sub1b.recv.recv().await.unwrap();
+
+        assert_eq!(sub1a.recv.len(), 1);
+        assert_eq!(sub1b.recv.len(), 1);
+        assert_eq!(sub2.recv.len(), 0);
+
+        assert_eq!(
+            notifier.get_cached(&[1; 32]),
+            Some(TxStatus::Published {
+                da_transaction_id: ()
+            })
+        );
+        assert_eq!(notifier.get_cached(&[2; 32]), None);
+
+        // Mix up the order of dropping the subscribers to catch any potential
+        // funny business.
+        drop(sub1a);
+        drop(sub2);
+        drop(sub1b);
+
+        assert_eq!(notifier.senders.len(), 0);
+    }
+}

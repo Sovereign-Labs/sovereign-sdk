@@ -1,4 +1,4 @@
-//! Concrete implementations of [`BatchBuilder`].
+//! Concrete implementation(s) of [`BatchBuilder`].
 
 use std::collections::{HashSet, VecDeque};
 use std::io::Cursor;
@@ -150,7 +150,8 @@ where
         let mut current_batch_size = 0;
 
         while let Some(mut pooled) = self.mempool.pop_front() {
-            // In order to fill batch as big as possible, we only check if valid tx can fit in the batch.
+            // In order to fill batch as big as possible, we only check if valid
+            // tx can fit in the batch.
             let tx_len = pooled.raw.len();
             if current_batch_size + tx_len > self.max_batch_size_bytes {
                 self.mempool.push_front(pooled);
