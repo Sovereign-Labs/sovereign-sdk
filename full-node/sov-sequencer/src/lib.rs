@@ -18,7 +18,7 @@ use tokio::sync::Mutex;
 use tracing::info;
 use tx_status::TxStatusNotifier;
 
-use crate::tx_status::TxStatus;
+pub use crate::tx_status::TxStatus;
 
 const SEQUENCER_RPC_ERROR: &str = "SEQUENCER_RPC_ERROR";
 
@@ -160,6 +160,15 @@ where
         let mut receiver = sequencer.tx_status_notifier.clone().subscribe(tx_hash.0);
 
         let subscription = sink.accept().await?;
+
+        let initial_status = sequencer
+            .tx_status(&tx_hash.0)
+            .await
+            .unwrap_or(TxStatus::Unknown);
+        subscription
+            .send(SubscriptionMessage::from_json(&initial_status)?)
+            .await?;
+
         while let Ok(new_status) = receiver.recv.recv().await {
             let notification = SubscriptionMessage::from_json(&new_status)?;
             subscription.send(notification).await?;

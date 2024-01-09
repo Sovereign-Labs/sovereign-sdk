@@ -11,6 +11,8 @@ use tracing::warn;
 /// A rollup transaction status.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TxStatus<DaTxId> {
+    /// The sequencer has no knowledge of this transaction's status.
+    Unknown,
     /// The transaction was successfully submitted to a sequencer and it's
     /// sitting in the mempool waiting to be included in a batch.
     Submitted,
