@@ -11,9 +11,9 @@ use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_schema_db::snapshot::{CacheDb, ChangeSet, ReadOnlyLock, SnapshotId};
 use sov_state::{MerkleProofSpec, ProverStorage};
 
-pub use crate::snapshot_manager::CacheContainer;
+pub use crate::cache_container::CacheContainer;
 
-mod snapshot_manager;
+mod cache_container;
 
 /// Implementation of [`HierarchicalStorageManager`] that handles relation between snapshots
 /// And reorgs on Data Availability layer.

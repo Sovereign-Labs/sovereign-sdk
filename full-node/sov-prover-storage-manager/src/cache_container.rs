@@ -9,7 +9,7 @@ use sov_schema_db::{
     Operation, RawDbReverseIterator, Schema, SchemaBatchIterator, SchemaKey, SchemaValue,
 };
 
-use crate::snapshot_manager::DataLocation::Snapshot;
+use crate::cache_container::DataLocation::Snapshot;
 
 /// Snapshot manager holds snapshots associated with particular DB and can traverse them backwards
 /// down to DB level
@@ -298,7 +298,7 @@ mod tests {
     use sov_schema_db::test::TestField;
     use sov_schema_db::{define_schema, SchemaBatch};
 
-    use crate::snapshot_manager::CacheContainer;
+    use crate::cache_container::CacheContainer;
 
     const DUMMY_STATE_CF: &str = "DummyStateCF";
 
