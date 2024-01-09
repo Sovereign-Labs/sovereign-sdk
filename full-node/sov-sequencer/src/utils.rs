@@ -1,10 +1,17 @@
 //! Utilities for the sequencer RPC.
 
 use borsh::BorshSerialize;
-use jsonrpsee::core::client::ClientT;
+use jsonrpsee::core::client::{ClientT, Subscription, SubscriptionClientT};
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
+use jsonrpsee::types::Params;
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
+use serde::de::DeserializeOwned;
+use sov_modules_api::transaction::Transaction;
+use sov_modules_api::Context;
+use sov_rollup_interface::services::batch_builder::TxHash;
 use tracing::info;
+
+use crate::{HexHash, TxStatus};
 
 /// A simple client for the sequencer RPC.
 pub struct SimpleClient {
@@ -40,9 +47,9 @@ impl SimpleClient {
     }
 
     /// Sends multiple transactions to the sequencer for immediate publication.
-    pub async fn send_transactions<Tx: BorshSerialize>(
+    pub async fn send_transactions<C: Context>(
         &self,
-        txs: Vec<Tx>,
+        txs: Vec<Transaction<C>>,
         chunk_size: Option<usize>,
     ) -> Result<(), anyhow::Error> {
         let serialized_txs: Vec<Vec<u8>> = txs
@@ -70,6 +77,23 @@ impl SimpleClient {
         }
 
         Ok(())
+    }
+
+    /// Subscribes to transaction status updates for the given transaction hash.
+    pub async fn subscribe_to_tx_status_updates<DaTxId: DeserializeOwned>(
+        &self,
+        tx_hash: TxHash,
+    ) -> anyhow::Result<Subscription<TxStatus<DaTxId>>> {
+        println!("connect");
+        let sub = self
+            .ws_client
+            .subscribe(
+                "sequencer_subscribeToTxStatusUpdates",
+                &[HexHash(tx_hash)] as &[_],
+                "sequencer_unsubscribeToTxStatusUpdates",
+            )
+            .await?;
+        Ok(sub)
     }
 
     /// Get a reference to the underlying [`HttpClient`]

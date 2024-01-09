@@ -4,17 +4,20 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 pub mod batch_builder;
+mod tx_statuses;
 pub mod utils;
 
 use anyhow::anyhow;
+use futures::future::Either;
 use jsonrpsee::core::StringError;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::{PendingSubscriptionSink, RpcModule, SubscriptionMessage};
-use mini_moka::sync::Cache as MokaCache;
 use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_rollup_interface::services::batch_builder::{BatchBuilder, TxHash};
 use sov_rollup_interface::services::da::DaService;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::watch::Receiver;
+use tokio::sync::Mutex;
+use tx_statuses::TxStatuses;
 
 const SEQUENCER_RPC_ERROR: &str = "SEQUENCER_RPC_ERROR";
 
@@ -22,8 +25,7 @@ const SEQUENCER_RPC_ERROR: &str = "SEQUENCER_RPC_ERROR";
 pub struct Sequencer<B: BatchBuilder, Da: DaService> {
     batch_builder: Mutex<B>,
     da_service: Da,
-    tx_statuses_cache: MokaCache<TxHash, TxStatus<Da::TransactionId>>,
-    tx_statuses_sender: broadcast::Sender<TxStatusUpdate<Da::TransactionId>>,
+    tx_statuses: TxStatuses<Da>,
 }
 
 impl<B, Da> Sequencer<B, Da>
@@ -32,32 +34,12 @@ where
     Da: DaService + Send + Sync + 'static,
     Da::TransactionId: Clone + Send + Sync + serde::Serialize,
 {
-    // The cache capacity is kind of arbitrary, as long as it's big enough to
-    // fit a handful of typical batches worth of transactions it won't make much
-    // of a difference.
-    const TX_STATUSES_CACHE_CAPACITY: u64 = 300;
-    // As long as we're reasonably fast at processing transaction status updates
-    // (which we are!), the channel size won't matter significantly.
-    const TX_STATUSES_UPDATES_CHANNEL_CAPACITY: usize = 100;
-
     /// Creates new Sequencer from BatchBuilder and DaService
     pub fn new(batch_builder: B, da_service: Da) -> Self {
-        let tx_statuses_cache = MokaCache::new(Self::TX_STATUSES_CACHE_CAPACITY);
-        let (tx_statuses_sender, mut receiver) =
-            broadcast::channel(Self::TX_STATUSES_UPDATES_CHANNEL_CAPACITY);
-
-        let tx_statuses_cache_clone = tx_statuses_cache.clone();
-        tokio::spawn(async move {
-            while let Ok(TxStatusUpdate { tx_hash, status }) = receiver.recv().await {
-                tx_statuses_cache_clone.insert(tx_hash, status);
-            }
-        });
-
         Self {
             batch_builder: Mutex::new(batch_builder),
             da_service,
-            tx_statuses_cache,
-            tx_statuses_sender,
+            tx_statuses: TxStatuses::new(),
         }
     }
 
@@ -92,40 +74,37 @@ where
             Err(e) => return Err(anyhow!("failed to submit batch: {:?}", e)),
         };
 
-        for tx_hash in tx_hashes {
-            self.tx_statuses_sender
-                .send(TxStatusUpdate {
-                    tx_hash,
-                    status: TxStatus::Published {
-                        da_transaction_id: da_tx_id.clone(),
-                    },
-                })
-                .map_err(|e| anyhow!("failed to send tx status update: {}", e.to_string()))?;
-        }
+        let status = TxStatus::Published {
+            da_transaction_id: da_tx_id.clone(),
+        };
+        self.tx_statuses
+            .batch_notify(&status, tx_hashes.iter())
+            .await;
 
         Ok(num_txs)
     }
 
     async fn accept_tx(&self, tx: Vec<u8>) -> anyhow::Result<()> {
         tracing::info!("Accepting tx: 0x{}", hex::encode(&tx));
+
         let mut batch_builder = self.batch_builder.lock().await;
         let tx_hash = batch_builder.accept_tx(tx)?;
-        self.tx_statuses_sender
-            .send(TxStatusUpdate {
-                tx_hash,
-                status: TxStatus::Submitted,
-            })
-            .map_err(|e| anyhow!("failed to send tx status update: {}", e.to_string()))?;
+        println!("notifying registered");
+        self.tx_statuses
+            .batch_notify(&TxStatus::Registered, std::iter::once(&tx_hash))
+            .await;
         Ok(())
     }
 
-    async fn tx_status(&self, tx_hash: &TxHash) -> Option<TxStatus<Da::TransactionId>> {
+    async fn cached_tx_status(&self, tx_hash: &TxHash) -> TxStatus<Da::TransactionId> {
         let is_in_mempool = self.batch_builder.lock().await.contains(&tx_hash);
 
         if is_in_mempool {
-            Some(TxStatus::Submitted)
+            TxStatus::Registered
         } else {
-            self.tx_statuses_cache.get(tx_hash)
+            self.tx_statuses
+                .get_cached(tx_hash)
+                .unwrap_or(TxStatus::Unknown)
         }
     }
 
@@ -133,8 +112,10 @@ where
         rpc.register_async_method(
             "sequencer_publishBatch",
             |params, batch_builder| async move {
+                println!("publish batch {:?}", params);
                 let mut params_iter = params.sequence();
                 while let Some(tx) = params_iter.optional_next::<Vec<u8>>()? {
+                    println!("accept tx {:?}", tx);
                     batch_builder
                         .accept_tx(tx)
                         .await
@@ -160,7 +141,7 @@ where
         rpc.register_async_method("sequencer_txStatus", |params, sequencer| async move {
             let tx_hash: HexHash = params.one()?;
 
-            let status = sequencer.tx_status(&tx_hash.0).await;
+            let status = sequencer.cached_tx_status(&tx_hash.0).await;
             Ok::<_, ErrorObjectOwned>(status)
         })?;
         rpc.register_subscription(
@@ -168,7 +149,13 @@ where
             "sequencer_newTxStatus",
             "sequencer_unsubscribeToTxStatusUpdates",
             |params, pending, sequencer| async move {
-                Self::handle_tx_status_update_subscription(sequencer, params, pending).await
+                let tx_hash: HexHash = params.one()?;
+
+                let result =
+                    Self::handle_tx_status_update_subscription(sequencer, &tx_hash.0, pending)
+                        .await;
+                // TODO: unsuscribe from tx_statuses to clean up resources.
+                result
             },
         )?;
 
@@ -177,31 +164,61 @@ where
 
     async fn handle_tx_status_update_subscription(
         sequencer: Arc<Self>,
-        params: jsonrpsee::types::Params<'_>,
+        tx_hash: &TxHash,
         sink: PendingSubscriptionSink,
     ) -> Result<(), StringError> {
-        let tx_hash: HexHash = params.one()?;
-
-        let mut receiver = sequencer.tx_statuses_sender.subscribe();
+        println!(
+            "Subscribing to tx status updates for tx 0x{}",
+            hex::encode(tx_hash)
+        );
+        // As soon as a client connects, we calculate the current status of the
+        // transaction and send it over. If we weren't to do that, the client
+        // would only get a notification for the next status change *after*
+        // they've subscribed.
+        let initial_tx_status = sequencer.cached_tx_status(&tx_hash).await;
+        let initial_notification = SubscriptionMessage::from_json(&initial_tx_status)?;
+        println!("done initial");
+        let mut receiver = sequencer
+            .tx_statuses
+            .subscribe(*tx_hash, initial_tx_status)
+            .await;
+        println!("done initial sub");
         let subscription = sink.accept().await?;
-        while let Ok(update) = receiver.recv().await {
-            // We're only interested in updates for the requested transaction hash.
-            if tx_hash.0 != update.tx_hash {
-                continue;
-            }
+        println!("accept");
 
-            let notification = SubscriptionMessage::from_json(&update.status)?;
-            subscription.send(notification).await?;
+        // This call can only fail if the subscription was closed. In that case,
+        // no need to handle the error as the main loop will just exit.
+        subscription.send(initial_notification).await.ok();
+        println!("send");
+
+        loop {
+            println!("iter");
+            let closed = subscription.closed();
+            futures::pin_mut!(closed);
+
+            let mut receiver_clone = receiver.clone();
+            let tx_status_has_changed = receiver_clone.changed();
+            futures::pin_mut!(tx_status_has_changed);
+
+            // Wait for either the subscription to close or for the tx status to
+            // change.
+            match futures::future::select(closed, tx_status_has_changed).await {
+                // If the subscription closed, we're done
+                Either::Left(_) => break,
+                Either::Right((Ok(()), _)) => {
+                    let tx_status = Receiver::borrow_and_update(&mut receiver).clone();
+                    let notification = SubscriptionMessage::from_json(&tx_status)?;
+
+                    subscription.send(notification).await.ok();
+                }
+                Either::Right((Result::Err(_), _)) => {
+                    panic!("Sender has been dropped; this should be impossible. This is a bug.");
+                }
+            }
         }
 
         Ok(())
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct TxStatusUpdate<DaTxId> {
-    tx_hash: TxHash,
-    status: TxStatus<DaTxId>,
 }
 
 /// A 32-byte hash [`serde`]-encoded as a hex string optionally prefixed with
@@ -234,9 +251,11 @@ pub enum SubmitTransactionResponse {
 /// A rollup transaction status.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TxStatus<DaTxId> {
+    /// The transaction has no known status at the moment.
+    Unknown,
     /// The transaction was successfully submitted to a sequencer and it's
     /// sitting in the mempool waiting to be included in a batch.
-    Submitted,
+    Registered,
     /// The transaction was published to the DA as part of a batch, but it may
     /// not be finalized yet.
     Published {

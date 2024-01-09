@@ -15,6 +15,7 @@ resolver = "2"
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true }
+futures = { workspace = true }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["client", "server"] }
 mini-moka = "0.10"
@@ -30,6 +31,8 @@ tempfile = { workspace = true }
 rand = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
+demo-stf = { path = "../../examples/demo-rollup/stf", features = ["native"] }
+sov-data-generators = { path = "../../module-system/utils/sov-data-generators" }
 sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", features = ["native"] }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.3", features = ["native"] }
 sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
