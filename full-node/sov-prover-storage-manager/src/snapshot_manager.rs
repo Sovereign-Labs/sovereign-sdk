@@ -4,7 +4,7 @@ use std::iter::{Peekable, Rev};
 use std::sync::{Arc, RwLock};
 
 use sov_schema_db::schema::{KeyCodec, ValueCodec};
-use sov_schema_db::snapshot::{ChangeSet, QueryManager, SnapshotId};
+use sov_schema_db::snapshot::{ChangeSet, QueryManager, ReadOnlyLock, SnapshotId};
 use sov_schema_db::{
     Operation, RawDbReverseIterator, Schema, SchemaBatchIterator, SchemaKey, SchemaValue,
 };
@@ -14,17 +14,24 @@ use crate::snapshot_manager::DataLocation::Snapshot;
 /// Snapshot manager holds snapshots associated with particular DB and can traverse them backwards
 /// down to DB level
 /// Managed externally by [`crate::ProverStorageManager`]
-pub struct SnapshotManager {
+pub struct CacheContainer {
     db: sov_schema_db::DB,
+    /// Set of [`ChangeSet`]s of data per individual database per snapshot
     snapshots: HashMap<SnapshotId, ChangeSet>,
     /// Hierarchical
-    to_parent: Arc<RwLock<HashMap<SnapshotId, SnapshotId>>>,
+    /// Shared between all SnapshotManagers and managed by StorageManager
+    to_parent: ReadOnlyLock<HashMap<SnapshotId, SnapshotId>>,
 }
 
-impl SnapshotManager {
+// 4 SnapshotManager
+
+// sov-prover-storage-manager:
+//   - sov-state::ProverStorage
+
+impl CacheContainer {
     pub(crate) fn new(
         db: sov_schema_db::DB,
-        to_parent: Arc<RwLock<HashMap<SnapshotId, SnapshotId>>>,
+        to_parent: ReadOnlyLock<HashMap<SnapshotId, SnapshotId>>,
     ) -> Self {
         Self {
             db,
@@ -35,11 +42,12 @@ impl SnapshotManager {
 
     /// Create instance of snapshot manager, when it does not have connection to snapshots tree
     /// So it only reads from database.
+    /// TODO: Feature gate
     pub fn orphan(db: sov_schema_db::DB) -> Self {
         Self {
             db,
             snapshots: HashMap::new(),
-            to_parent: Arc::new(RwLock::new(Default::default())),
+            to_parent: Arc::new(RwLock::new(Default::default())).into(),
         }
     }
 
@@ -182,17 +190,17 @@ where
                 if let Some(&(peeked_key, _)) = iter.peek() {
                     match max_value {
                         None => {
-                            self.max_value_locations.push(DataLocation::Snapshot(idx));
+                            self.max_value_locations.push(Snapshot(idx));
                             max_value = Some(peeked_key);
                         }
                         Some(max_key) => match peeked_key.cmp(max_key) {
                             Ordering::Greater => {
                                 max_value = Some(peeked_key);
                                 self.max_value_locations.clear();
-                                self.max_value_locations.push(DataLocation::Snapshot(idx));
+                                self.max_value_locations.push(Snapshot(idx));
                             }
                             Ordering::Equal => {
-                                self.max_value_locations.push(DataLocation::Snapshot(idx));
+                                self.max_value_locations.push(Snapshot(idx));
                             }
                             Ordering::Less => {}
                         },
@@ -238,7 +246,7 @@ where
     }
 }
 
-impl QueryManager for SnapshotManager {
+impl QueryManager for CacheContainer {
     type Iter<'a, S> = SnapshotManagerIter<'a, S, Rev<btree_map::Iter<'a, SchemaKey, Operation>>> where S: Sized, S: Schema, Self: 'a;
     type RangeIter<'a, S: Schema> = SnapshotManagerIter<'a, S, Rev<btree_map::Range<'a, SchemaKey, Operation>>> where S: Sized, S: Schema, Self: 'a;
 
@@ -290,7 +298,7 @@ mod tests {
     use sov_schema_db::test::TestField;
     use sov_schema_db::{define_schema, SchemaBatch};
 
-    use crate::snapshot_manager::SnapshotManager;
+    use crate::snapshot_manager::CacheContainer;
 
     const DUMMY_STATE_CF: &str = "DummyStateCF";
 
@@ -312,7 +320,8 @@ mod tests {
     fn test_empty() {
         let tempdir = tempfile::tempdir().unwrap();
         let db = create_test_db(tempdir.path());
-        let snapshot_manager = SnapshotManager::new(db, Arc::new(RwLock::new(HashMap::new())));
+        let snapshot_manager =
+            CacheContainer::new(db, Arc::new(RwLock::new(HashMap::new())).into());
         assert!(snapshot_manager.is_empty());
     }
 
@@ -321,7 +330,7 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         let db = create_test_db(tempdir.path());
         let to_parent = Arc::new(RwLock::new(HashMap::new()));
-        let mut snapshot_manager = SnapshotManager::new(db, to_parent.clone());
+        let mut snapshot_manager = CacheContainer::new(db, to_parent.clone().into());
         let query_manager = Arc::new(RwLock::new(NoopQueryManager));
 
         let snapshot_id = 1;
@@ -339,7 +348,7 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         let db = create_test_db(tempdir.path());
         let to_parent = Arc::new(RwLock::new(HashMap::new()));
-        let mut snapshot_manager = SnapshotManager::new(db, to_parent.clone());
+        let mut snapshot_manager = CacheContainer::new(db, to_parent.clone().into());
         let query_manager = Arc::new(RwLock::new(NoopQueryManager));
 
         let snapshot_id = 1;
@@ -358,7 +367,7 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         let db = create_test_db(tempdir.path());
         let to_parent = Arc::new(RwLock::new(HashMap::new()));
-        let mut snapshot_manager = SnapshotManager::new(db, to_parent.clone());
+        let mut snapshot_manager = CacheContainer::new(db, to_parent.clone().into());
 
         snapshot_manager.commit_snapshot(&1).unwrap();
     }
@@ -370,7 +379,7 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         let db = create_test_db(tempdir.path());
         let to_parent = Arc::new(RwLock::new(HashMap::new()));
-        let mut snapshot_manager = SnapshotManager::new(db, to_parent.clone());
+        let mut snapshot_manager = CacheContainer::new(db, to_parent.clone().into());
 
         snapshot_manager.discard_snapshot(&1);
     }
@@ -380,7 +389,7 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         let db = create_test_db(tempdir.path());
         let to_parent = Arc::new(RwLock::new(HashMap::new()));
-        let mut snapshot_manager = SnapshotManager::new(db, to_parent.clone());
+        let mut snapshot_manager = CacheContainer::new(db, to_parent.clone().into());
         let query_manager = Arc::new(RwLock::new(NoopQueryManager));
 
         let snapshot_id = 1;
@@ -397,7 +406,7 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         let db = create_test_db(tempdir.path());
         let to_parent = Arc::new(RwLock::new(HashMap::new()));
-        let snapshot_manager = SnapshotManager::new(db, to_parent.clone());
+        let snapshot_manager = CacheContainer::new(db, to_parent.clone().into());
         assert_eq!(
             None,
             snapshot_manager.get::<Schema>(1, &TestField(1)).unwrap()
@@ -419,7 +428,7 @@ mod tests {
         db_data.put::<Schema>(&three, &three).unwrap();
         db.write_schemas(db_data).unwrap();
 
-        let mut snapshot_manager = SnapshotManager::new(db, to_parent.clone());
+        let mut snapshot_manager = CacheContainer::new(db, to_parent.clone().into());
         let query_manager = Arc::new(RwLock::new(NoopQueryManager));
 
         let db_snapshot = CacheDb::new(1, query_manager.clone().into());
@@ -468,7 +477,7 @@ mod tests {
         db_data.put::<Schema>(&f1, &f1).unwrap();
         db.write_schemas(db_data).unwrap();
 
-        let mut snapshot_manager = SnapshotManager::new(db, to_parent.clone());
+        let mut snapshot_manager = CacheContainer::new(db, to_parent.clone().into());
         let query_manager = Arc::new(RwLock::new(NoopQueryManager));
 
         // Operations:
@@ -571,7 +580,7 @@ mod tests {
         db_data.put::<Schema>(&f4, &f1).unwrap();
         db.write_schemas(db_data).unwrap();
 
-        let mut snapshot_manager = SnapshotManager::new(db, to_parent.clone());
+        let mut snapshot_manager = CacheContainer::new(db, to_parent.clone().into());
         let query_manager = Arc::new(RwLock::new(NoopQueryManager));
 
         // Operations:

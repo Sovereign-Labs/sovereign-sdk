@@ -15,7 +15,6 @@ pub trait HierarchicalStorageManager<Da: DaSpec> {
     type LedgerQueryManager;
     /// TBD
     type LedgerState;
-
     /// TBD
     type LedgerChangeSet;
 

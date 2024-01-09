@@ -11,7 +11,7 @@ use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_schema_db::snapshot::{CacheDb, ChangeSet, ReadOnlyLock, SnapshotId};
 use sov_state::{MerkleProofSpec, ProverStorage};
 
-pub use crate::snapshot_manager::SnapshotManager;
+pub use crate::snapshot_manager::CacheContainer;
 
 mod snapshot_manager;
 
@@ -34,9 +34,9 @@ pub struct ProverStorageManager<Da: DaSpec, S: MerkleProofSpec> {
     // Same reference for individual managers
     snapshot_id_to_parent: Arc<RwLock<HashMap<SnapshotId, SnapshotId>>>,
 
-    state_snapshot_manager: Arc<RwLock<SnapshotManager>>,
-    accessory_snapshot_manager: Arc<RwLock<SnapshotManager>>,
-    ledger_snapshot_manager: Arc<RwLock<SnapshotManager>>,
+    state_snapshot_manager: Arc<RwLock<CacheContainer>>,
+    accessory_snapshot_manager: Arc<RwLock<CacheContainer>>,
+    ledger_snapshot_manager: Arc<RwLock<CacheContainer>>,
 
     phantom_mp_spec: PhantomData<S>,
 }
@@ -52,11 +52,12 @@ where
     ) -> Self {
         let snapshot_id_to_parent = Arc::new(RwLock::new(HashMap::new()));
 
-        let state_snapshot_manager = SnapshotManager::new(state_db, snapshot_id_to_parent.clone());
+        let state_snapshot_manager =
+            CacheContainer::new(state_db, ReadOnlyLock::new(snapshot_id_to_parent.clone()));
         let accessory_snapshot_manager =
-            SnapshotManager::new(native_db, snapshot_id_to_parent.clone());
+            CacheContainer::new(native_db, ReadOnlyLock::new(snapshot_id_to_parent.clone()));
         let ledger_snapshot_manager =
-            SnapshotManager::new(ledger_db, snapshot_id_to_parent.clone());
+            CacheContainer::new(ledger_db, ReadOnlyLock::new(snapshot_id_to_parent.clone()));
 
         Self {
             chain_forks: Default::default(),
@@ -75,9 +76,9 @@ where
     /// Create new [`ProverStorageManager`] from state config
     pub fn new(config: sov_state::config::Config) -> anyhow::Result<Self> {
         let path = config.path;
-        let state_db = StateDB::<SnapshotManager>::setup_schema_db(&path)?;
-        let native_db = NativeDB::<SnapshotManager>::setup_schema_db(&path)?;
-        let ledger_db = LedgerDB::<SnapshotManager>::setup_schema_db(&path)?;
+        let state_db = StateDB::<CacheContainer>::setup_schema_db(&path)?;
+        let native_db = NativeDB::<CacheContainer>::setup_schema_db(&path)?;
+        let ledger_db = LedgerDB::<CacheContainer>::setup_schema_db(&path)?;
 
         Ok(Self::with_db_handles(state_db, native_db, ledger_db))
     }
@@ -95,7 +96,7 @@ where
     fn get_storage_with_snapshot_id(
         &self,
         snapshot_id: SnapshotId,
-    ) -> anyhow::Result<(ProverStorage<S, SnapshotManager>, CacheDb<SnapshotManager>)> {
+    ) -> anyhow::Result<(ProverStorage<S, CacheContainer>, CacheDb<CacheContainer>)> {
         let state_db_snapshot = CacheDb::new(
             snapshot_id,
             ReadOnlyLock::new(self.state_snapshot_manager.clone()),
@@ -210,10 +211,10 @@ impl<Da: DaSpec, S: MerkleProofSpec> HierarchicalStorageManager<Da> for ProverSt
 where
     Da::SlotHash: Hash,
 {
-    type StfState = ProverStorage<S, SnapshotManager>;
-    type StfChangeSet = ProverStorage<S, SnapshotManager>;
+    type StfState = ProverStorage<S, CacheContainer>;
+    type StfChangeSet = ProverStorage<S, CacheContainer>;
 
-    type LedgerQueryManager = SnapshotManager;
+    type LedgerQueryManager = CacheContainer;
     type LedgerState = CacheDb<Self::LedgerQueryManager>;
     // type LedgerChangeSet = ChangeSet;
     type LedgerChangeSet = ChangeSet;
@@ -359,8 +360,6 @@ where
             );
         }
 
-        let ledger_change_set = ChangeSet::from(ledger_change_set);
-
         if snapshot_id != ledger_change_set.get_id() {
             anyhow::bail!(
                 "STF change set id={} and ledger id={} are not matching.",
@@ -422,14 +421,14 @@ where
 #[cfg(feature = "test-utils")]
 pub fn new_orphan_storage<S: MerkleProofSpec>(
     path: impl AsRef<std::path::Path>,
-) -> anyhow::Result<ProverStorage<S, SnapshotManager>> {
-    let state_db_raw = StateDB::<SnapshotManager>::setup_schema_db(path.as_ref())?;
-    let state_db_sm = Arc::new(RwLock::new(SnapshotManager::orphan(state_db_raw)));
-    let state_db_snapshot = CacheDb::<SnapshotManager>::new(0, state_db_sm.into());
+) -> anyhow::Result<ProverStorage<S, CacheContainer>> {
+    let state_db_raw = StateDB::<CacheContainer>::setup_schema_db(path.as_ref())?;
+    let state_db_sm = Arc::new(RwLock::new(CacheContainer::orphan(state_db_raw)));
+    let state_db_snapshot = CacheDb::<CacheContainer>::new(0, state_db_sm.into());
     let state_db = StateDB::with_db_snapshot(state_db_snapshot)?;
-    let native_db_raw = NativeDB::<SnapshotManager>::setup_schema_db(path.as_ref())?;
-    let native_db_sm = Arc::new(RwLock::new(SnapshotManager::orphan(native_db_raw)));
-    let native_db_snapshot = CacheDb::<SnapshotManager>::new(0, native_db_sm.into());
+    let native_db_raw = NativeDB::<CacheContainer>::setup_schema_db(path.as_ref())?;
+    let native_db_sm = Arc::new(RwLock::new(CacheContainer::orphan(native_db_raw)));
+    let native_db_snapshot = CacheDb::<CacheContainer>::new(0, native_db_sm.into());
     let native_db = NativeDB::with_db_snapshot(native_db_snapshot)?;
     Ok(ProverStorage::with_db_handles(state_db, native_db))
 }
@@ -441,7 +440,7 @@ mod tests {
     use sov_mock_da::{MockBlockHeader, MockHash};
     use sov_rollup_interface::da::Time;
     use sov_state::storage::{CacheKey, CacheValue};
-    use sov_state::{ArrayWitness, OrderedReadsAndWrites};
+    use sov_state::{ArrayWitness, OrderedReadsAndWrites, Storage};
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
     use tracing_subscriber::{fmt, EnvFilter};
@@ -512,9 +511,9 @@ mod tests {
     fn build_dbs(
         path: &std::path::Path,
     ) -> (sov_schema_db::DB, sov_schema_db::DB, sov_schema_db::DB) {
-        let state_db = StateDB::<SnapshotManager>::setup_schema_db(path).unwrap();
-        let native_db = NativeDB::<SnapshotManager>::setup_schema_db(path).unwrap();
-        let ledger_db = LedgerDB::setup_schema_db(path).unwrap();
+        let state_db = StateDB::<CacheContainer>::setup_schema_db(path).unwrap();
+        let native_db = NativeDB::<CacheContainer>::setup_schema_db(path).unwrap();
+        let ledger_db = LedgerDB::<CacheContainer>::setup_schema_db(path).unwrap();
 
         (state_db, native_db, ledger_db)
     }
@@ -693,7 +692,7 @@ mod tests {
 
         // We can save empty storage as well
         storage_manager
-            .save_change_set(&block_header, storage)
+            .save_change_set(&block_header, storage, ledger_state.into())
             .unwrap();
 
         assert!(!storage_manager.is_empty());
@@ -1240,7 +1239,7 @@ mod tests {
             .save_change_set(&block_f, storage_f)
             .unwrap();
         // G
-        let storage_g = storage_manager.create_state_for(&block_g).unwrap();
+        let (storage_g, ledger_e) = storage_manager.create_state_for(&block_g).unwrap();
         {
             let mut state_operations = OrderedReadsAndWrites::default();
             state_operations.ordered_writes.push(write_op(1, 8));
@@ -1252,10 +1251,10 @@ mod tests {
             storage_g.commit(&state_update, &native_operations);
         }
         storage_manager
-            .save_change_set(&block_g, storage_g)
+            .save_change_set(&block_g, ledger_e.into())
             .unwrap();
         // L
-        let storage_l = storage_manager.create_state_for(&block_l).unwrap();
+        let (storage_l, ledger_l) = storage_manager.create_state_for(&block_l).unwrap();
         {
             let mut state_operations = OrderedReadsAndWrites::default();
             state_operations.ordered_writes.push(write_op(1, 10));
@@ -1265,7 +1264,7 @@ mod tests {
             storage_l.commit(&state_update, &OrderedReadsAndWrites::default());
         }
         storage_manager
-            .save_change_set(&block_l, storage_l)
+            .save_change_set(&block_l, storage_l, ledger_l.into())
             .unwrap();
 
         // VIEW: Before finalization of A
@@ -1299,10 +1298,10 @@ mod tests {
         // |        K |    aux |   2 |   None |
         // |        K |    aux |   3 |     70 |
 
-        let storage_e = storage_manager.create_state_for(&block_e).unwrap();
-        let storage_m = storage_manager.create_state_for(&block_m).unwrap();
-        let storage_h = storage_manager.create_state_for(&block_h).unwrap();
-        let storage_k = storage_manager.create_state_for(&block_k).unwrap();
+        let (storage_e, ledger_e) = storage_manager.create_state_for(&block_e).unwrap();
+        let (storage_m, _) = storage_manager.create_state_for(&block_m).unwrap();
+        let (storage_h, _) = storage_manager.create_state_for(&block_h).unwrap();
+        let (storage_k, _) = storage_manager.create_state_for(&block_k).unwrap();
 
         let assert_main_fork = || {
             assert_eq!(None, storage_e.get(&key_from(1).into(), None, &witness));
@@ -1404,7 +1403,7 @@ mod tests {
         validate_internal_consistency(&storage_manager);
         assert_main_fork();
         storage_manager
-            .save_change_set(&block_e, storage_e)
+            .save_change_set(&block_e, storage_e, ledger_e)
             .unwrap();
         storage_manager.finalize(&block_e).unwrap();
         assert!(storage_manager.is_empty());
@@ -1417,7 +1416,7 @@ mod tests {
             height: 6,
             time: Time::now(),
         };
-        let storage_last = storage_manager
+        let (storage_last, _) = storage_manager
             .create_state_for(&new_block_after_e)
             .unwrap();
         assert_eq!(

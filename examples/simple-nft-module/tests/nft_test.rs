@@ -2,12 +2,12 @@ use simple_nft_module::{CallMessage, NonFungibleToken, NonFungibleTokenConfig, O
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address as gen_addr_generic;
 use sov_modules_api::{Address, Context, Module, WorkingSet};
-use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
+use sov_prover_storage_manager::{new_orphan_storage, CacheContainer};
 use sov_rollup_interface::stf::Event;
 use sov_state::{DefaultStorageSpec, ProverStorage};
 
 pub type C = DefaultContext;
-pub type Storage = ProverStorage<DefaultStorageSpec, SnapshotManager>;
+pub type Storage = ProverStorage<DefaultStorageSpec, CacheContainer>;
 fn generate_address(name: &str) -> Address {
     gen_addr_generic::<DefaultContext>(name)
 }

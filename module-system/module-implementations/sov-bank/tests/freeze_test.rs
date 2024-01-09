@@ -3,12 +3,12 @@ use sov_bank::{get_token_address, Bank, BankConfig, CallMessage, Coins, TotalSup
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Address, Context, Error, Module, WorkingSet};
-use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
+use sov_prover_storage_manager::{new_orphan_storage, CacheContainer};
 use sov_state::{DefaultStorageSpec, ProverStorage};
 
 mod helpers;
 
-pub type Storage = ProverStorage<DefaultStorageSpec, SnapshotManager>;
+pub type Storage = ProverStorage<DefaultStorageSpec, CacheContainer>;
 
 #[test]
 fn freeze_token() {

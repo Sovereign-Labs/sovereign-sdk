@@ -3,7 +3,7 @@ use sov_mock_da::{
     MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaSpec, MockValidityCond,
 };
 use sov_mock_zkvm::MockZkvm;
-use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
+use sov_prover_storage_manager::{new_orphan_storage, CacheContainer};
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
@@ -13,7 +13,7 @@ use sov_state::{
 };
 
 pub type S = DefaultStorageSpec;
-pub type Q = SnapshotManager;
+pub type Q = CacheContainer;
 
 #[derive(Default, Clone)]
 pub struct HashStf<Cond> {

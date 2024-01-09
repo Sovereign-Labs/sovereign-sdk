@@ -5,14 +5,14 @@ use sov_bank::{
 };
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Context, Error, Module, WorkingSet};
-use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
+use sov_prover_storage_manager::{new_orphan_storage, CacheContainer};
 use sov_state::{DefaultStorageSpec, ProverStorage};
 
 use crate::helpers::create_bank_config_with_token;
 
 mod helpers;
 
-pub type Storage = ProverStorage<DefaultStorageSpec, SnapshotManager>;
+pub type Storage = ProverStorage<DefaultStorageSpec, CacheContainer>;
 
 #[test]
 fn burn_deployed_tokens() {

@@ -4,7 +4,7 @@ use helpers::*;
 use sov_bank::{get_genesis_token_address, Amount, Bank, CallMessage, Coins};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Context, Module, StateReaderAndWriter, WorkingSet};
-use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
+use sov_prover_storage_manager::{new_orphan_storage, CacheContainer};
 use sov_state::storage::{StorageKey, StorageValue};
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
 
@@ -272,7 +272,7 @@ fn transfer(
 
 fn commit(
     working_set: WorkingSet<DefaultContext>,
-    storage: ProverStorage<DefaultStorageSpec, SnapshotManager>,
+    storage: ProverStorage<DefaultStorageSpec, CacheContainer>,
 ) {
     // Save checkpoint
     let mut checkpoint = working_set.checkpoint();

@@ -10,7 +10,7 @@ use sov_modules_api::{
     Address, Genesis, KernelModule, KernelWorkingSet, Spec, ValidityConditionChecker, WorkingSet,
 };
 use sov_modules_core::runtime::capabilities::mocks::MockKernel;
-use sov_prover_storage_manager::SnapshotManager;
+use sov_prover_storage_manager::CacheContainer;
 use sov_rollup_interface::da::Time;
 use sov_state::storage::{NativeStorage, Storage, StorageProof};
 use sov_state::{DefaultStorageSpec, ProverStorage};
@@ -29,7 +29,7 @@ pub const INIT_HEIGHT: u64 = 0;
 /// Consumes and commit the existing working set on the underlying storage
 /// `storage` must be the underlying storage defined on the working set for this method to work.
 pub(crate) fn commit_get_new_working_set(
-    storage: &ProverStorage<DefaultStorageSpec, SnapshotManager>,
+    storage: &ProverStorage<DefaultStorageSpec, CacheContainer>,
     working_set: WorkingSet<C>,
 ) -> (jmt::RootHash, WorkingSet<C>) {
     let (reads_writes, witness) = working_set.checkpoint().freeze();
@@ -159,7 +159,7 @@ pub(crate) struct ExecutionSimulationVars {
 pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidityCond>>(
     rounds: u8,
     module: &AttesterIncentives<C, MockZkvm<MockValidityCond>, MockDaSpec, Checker>,
-    storage: &ProverStorage<DefaultStorageSpec, SnapshotManager>,
+    storage: &ProverStorage<DefaultStorageSpec, CacheContainer>,
     attester_address: <C as Spec>::Address,
     mut working_set: WorkingSet<C>,
 ) -> (
