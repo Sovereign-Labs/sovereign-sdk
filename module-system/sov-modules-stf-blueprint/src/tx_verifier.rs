@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Context, Spec};
 use sov_rollup_interface::digest::Digest;
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
+use sov_zk_cycle_macros::cycle_tracker;
 use tracing::debug;
 
 type RawTxHash = [u8; 32];
@@ -22,8 +24,15 @@ pub struct RawTx {
 }
 
 impl RawTx {
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn hash<C: Context>(&self) -> [u8; 32] {
         <C as Spec>::Hasher::digest(&self.data).into()
+    }
+
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
+    fn deserialize<C: Context>(&self) -> Result<Transaction<C>, std::io::Error> {
+        let mut data = Cursor::new(&self.data);
+        Transaction::<C>::deserialize_reader(&mut data)
     }
 }
 
@@ -34,8 +43,7 @@ pub(crate) fn verify_txs_stateless<C: Context>(
     debug!("Verifying {} transactions", raw_txs.len());
     for raw_tx in raw_txs {
         let raw_tx_hash = raw_tx.hash::<C>();
-        let mut data = Cursor::new(&raw_tx.data);
-        let tx = Transaction::<C>::deserialize_reader(&mut data)?;
+        let tx = raw_tx.deserialize()?;
         tx.verify()?;
         txs.push(TransactionAndRawHash { tx, raw_tx_hash });
     }

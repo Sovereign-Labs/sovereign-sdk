@@ -5,7 +5,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::utils::generate_address;
-use sov_modules_api::{Context, EncodeCall, Module, PrivateKey, Spec};
+use sov_modules_api::{Context, EncodeCall, Module, PrivateKey, PublicKey, Spec};
 
 use crate::{Message, MessageGenerator};
 
@@ -36,6 +36,7 @@ const DEFAULT_PVT_KEY: &str = "236e80cb222c4ed0431b093b3ac53e6aa7a2273fe1f4351cd
 const DEFAULT_CHAIN_ID: u64 = 0;
 const DEFAULT_GAS_TIP: u64 = 0;
 const DEFAULT_GAS_LIMIT: u64 = 0;
+const DEFAULT_INIT_BALANCE: u64 = 1000000;
 
 pub fn get_default_token_address() -> <DefaultContext as Spec>::Address {
     let minter_key = DefaultPrivateKey::from_hex(DEFAULT_PVT_KEY).unwrap();
@@ -60,13 +61,13 @@ impl Default for BankMessageGenerator<DefaultContext> {
             salt,
             initial_balance: 1000,
             minter_address,
-            minter_pkey: Rc::new(minter_key),
+            minter_pkey: Rc::new(minter_key.clone()),
             authorized_minters: Vec::from([minter_address]),
         };
         Self {
             token_mint_txs: Vec::from([mint_data]),
             transfer_txs: Vec::from([TransferData {
-                sender_pkey: Rc::new(DefaultPrivateKey::from_hex(DEFAULT_PVT_KEY).unwrap()),
+                sender_pkey: Rc::new(minter_key),
                 transfer_amount: 15,
                 receiver_address: generate_address::<DefaultContext>("just_receiver"),
                 token_address: get_token_address::<DefaultContext>(
@@ -80,6 +81,86 @@ impl Default for BankMessageGenerator<DefaultContext> {
 }
 
 impl BankMessageGenerator<DefaultContext> {
+    /// Gets the default sender address and private key.
+    fn default_address_with_pkey() -> (<DefaultContext as Spec>::Address, DefaultPrivateKey) {
+        let pkey = DefaultPrivateKey::from_hex(DEFAULT_PVT_KEY).unwrap();
+        let address = pkey.default_address();
+        (address, pkey)
+    }
+
+    /// Generates random transfers between the default sender and random receivers for default token parameters.
+    pub fn default_generate_random_transfers(n: u64) -> Self {
+        Self::generate_random_transfers(
+            n,
+            DEFAULT_TOKEN_NAME.to_owned(),
+            DEFAULT_SALT,
+            DefaultPrivateKey::from_hex(DEFAULT_PVT_KEY).unwrap(),
+        )
+    }
+
+    /// Generates random transfers between the default sender and random receivers.
+    pub fn generate_random_transfers(
+        n: u64,
+        token_name: String,
+        salt: u64,
+        sender_pk: DefaultPrivateKey,
+    ) -> Self {
+        let sa = sender_pk.default_address();
+        let token_address =
+            sov_bank::get_token_address::<DefaultContext>(token_name.as_str(), sa.as_ref(), salt);
+
+        let mut transfer_txs = vec![];
+        for _ in 1..(n + 1) {
+            let priv_key = DefaultPrivateKey::generate();
+            let address: <DefaultContext as Spec>::Address = priv_key.pub_key().to_address();
+
+            transfer_txs.push(TransferData {
+                sender_pkey: Rc::new(sender_pk.clone()),
+                receiver_address: address,
+                token_address,
+                transfer_amount: 1,
+            });
+        }
+
+        BankMessageGenerator {
+            token_mint_txs: vec![],
+            transfer_txs,
+        }
+    }
+
+    /// Generates a create token transaction for default token parameters.
+    pub fn default_generate_create_token() -> Self {
+        let (minter_address, pk) = Self::default_address_with_pkey();
+        Self::generate_create_token(
+            DEFAULT_TOKEN_NAME.to_owned(),
+            DEFAULT_SALT,
+            pk.into(),
+            vec![minter_address],
+            DEFAULT_INIT_BALANCE,
+        )
+    }
+
+    /// Generates a create token transaction.
+    pub fn generate_create_token(
+        token_name: String,
+        salt: u64,
+        minter_pkey: std::rc::Rc<DefaultPrivateKey>,
+        authorized_minters: Vec<<DefaultContext as Spec>::Address>,
+        initial_balance: u64,
+    ) -> Self {
+        Self {
+            token_mint_txs: vec![MintData {
+                token_name,
+                salt,
+                initial_balance,
+                minter_address: minter_pkey.default_address(),
+                minter_pkey,
+                authorized_minters,
+            }],
+            transfer_txs: vec![],
+        }
+    }
+
     pub fn create_invalid_transfer() -> Self {
         let minter_key = DefaultPrivateKey::from_hex(DEFAULT_PVT_KEY).unwrap();
         let minter_address = minter_key.default_address();

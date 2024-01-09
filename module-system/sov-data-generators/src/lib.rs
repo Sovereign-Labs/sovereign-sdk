@@ -123,4 +123,14 @@ pub trait MessageGenerator {
         }
         serialized_messages
     }
+
+    fn create_blobs<Encoder: EncodeCall<Self::Module>>(&self) -> Vec<u8> {
+        let txs: Vec<Vec<u8>> = self
+            .create_raw_txs::<Encoder>()
+            .into_iter()
+            .map(|tx| tx.data)
+            .collect();
+
+        txs.try_to_vec().unwrap()
+    }
 }

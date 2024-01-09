@@ -29,7 +29,7 @@ tracing = { workspace = true, optional = true }
 [dev-dependencies]
 sov-nft-module = { version = "*", features = ["native"], path = "." }
 tempfile = { workspace = true }
-sov-data-generators = { path = "../../utils/sov-data-generators" }
+sov-data-generators = { path = "../../sov-data-generators" }
 sov-prover-storage-manager = { path = "../../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
 
 
