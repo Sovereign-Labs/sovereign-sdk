@@ -9264,6 +9264,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "borsh",
+ "dashmap",
  "hex",
  "jsonrpsee 0.20.3",
  "mini-moka",

@@ -4,18 +4,21 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 pub mod batch_builder;
+mod tx_status;
 pub mod utils;
 
 use anyhow::anyhow;
 use jsonrpsee::core::StringError;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::{PendingSubscriptionSink, RpcModule, SubscriptionMessage};
-use mini_moka::sync::Cache as MokaCache;
 use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_rollup_interface::services::batch_builder::{BatchBuilder, TxHash};
 use sov_rollup_interface::services::da::DaService;
-use tokio::sync::{broadcast, Mutex};
-use tracing::{info, warn};
+use tokio::sync::Mutex;
+use tracing::info;
+use tx_status::TxStatusNotifier;
+
+use crate::tx_status::TxStatus;
 
 const SEQUENCER_RPC_ERROR: &str = "SEQUENCER_RPC_ERROR";
 
@@ -23,8 +26,7 @@ const SEQUENCER_RPC_ERROR: &str = "SEQUENCER_RPC_ERROR";
 pub struct Sequencer<B: BatchBuilder, Da: DaService> {
     batch_builder: Mutex<B>,
     da_service: Da,
-    tx_statuses_cache: MokaCache<TxHash, TxStatus<Da::TransactionId>>,
-    tx_statuses_sender: broadcast::Sender<TxStatusUpdate<Da::TransactionId>>,
+    tx_status_notifier: Arc<TxStatusNotifier<Da>>,
 }
 
 impl<B, Da> Sequencer<B, Da>
@@ -33,32 +35,12 @@ where
     Da: DaService + Send + Sync + 'static,
     Da::TransactionId: Clone + Send + Sync + serde::Serialize,
 {
-    // The cache capacity is kind of arbitrary, as long as it's big enough to
-    // fit a handful of typical batches worth of transactions it won't make much
-    // of a difference.
-    const TX_STATUSES_CACHE_CAPACITY: u64 = 300;
-    // As long as we're reasonably fast at processing transaction status updates
-    // (which we are!), the channel size won't matter significantly.
-    const TX_STATUSES_UPDATES_CHANNEL_CAPACITY: usize = 100;
-
     /// Creates new Sequencer from BatchBuilder and DaService
     pub fn new(batch_builder: B, da_service: Da) -> Self {
-        let tx_statuses_cache = MokaCache::new(Self::TX_STATUSES_CACHE_CAPACITY);
-        let (tx_statuses_sender, mut receiver) =
-            broadcast::channel(Self::TX_STATUSES_UPDATES_CHANNEL_CAPACITY);
-
-        let tx_statuses_cache_clone = tx_statuses_cache.clone();
-        tokio::spawn(async move {
-            while let Ok(TxStatusUpdate { tx_hash, status }) = receiver.recv().await {
-                tx_statuses_cache_clone.insert(tx_hash, status);
-            }
-        });
-
         Self {
             batch_builder: Mutex::new(batch_builder),
             da_service,
-            tx_statuses_cache,
-            tx_statuses_sender,
+            tx_status_notifier: Arc::new(TxStatusNotifier::new()),
         }
     }
 
@@ -94,17 +76,12 @@ where
         };
 
         for tx_hash in tx_hashes {
-            self.tx_statuses_sender
-                .send(TxStatusUpdate {
-                    tx_hash,
-                    status: TxStatus::Published {
-                        da_transaction_id: da_tx_id.clone(),
-                    },
-                })
-                .map_err(|error| warn!(%error, "Failed to send tx status update"))
-                // Batch submission shouldn't fail if notifications can't be
-                // sent.
-                .ok();
+            self.tx_status_notifier.notify(
+                tx_hash,
+                TxStatus::Published {
+                    da_transaction_id: da_tx_id.clone(),
+                },
+            );
         }
 
         Ok(num_txs)
@@ -114,12 +91,7 @@ where
         info!("Accepting tx: 0x{}", hex::encode(&tx));
         let mut batch_builder = self.batch_builder.lock().await;
         let tx_hash = batch_builder.accept_tx(tx)?;
-        self.tx_statuses_sender
-            .send(TxStatusUpdate {
-                tx_hash,
-                status: TxStatus::Submitted,
-            })
-            .map_err(|e| anyhow!("failed to send tx status update: {}", e.to_string()))?;
+        self.tx_status_notifier.notify(tx_hash, TxStatus::Submitted);
         Ok(())
     }
 
@@ -129,7 +101,7 @@ where
         if is_in_mempool {
             Some(TxStatus::Submitted)
         } else {
-            self.tx_statuses_cache.get(tx_hash)
+            self.tx_status_notifier.get_cached(tx_hash)
         }
     }
 
@@ -185,27 +157,16 @@ where
         sink: PendingSubscriptionSink,
     ) -> Result<(), StringError> {
         let tx_hash: HexHash = params.one()?;
+        let mut receiver = sequencer.tx_status_notifier.clone().subscribe(tx_hash.0);
 
-        let mut receiver = sequencer.tx_statuses_sender.subscribe();
         let subscription = sink.accept().await?;
-        while let Ok(update) = receiver.recv().await {
-            // We're only interested in updates for the requested transaction hash.
-            if tx_hash.0 != update.tx_hash {
-                continue;
-            }
-
-            let notification = SubscriptionMessage::from_json(&update.status)?;
+        while let Ok(new_status) = receiver.recv.recv().await {
+            let notification = SubscriptionMessage::from_json(&new_status)?;
             subscription.send(notification).await?;
         }
 
         Ok(())
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct TxStatusUpdate<DaTxId> {
-    tx_hash: TxHash,
-    status: TxStatus<DaTxId>,
 }
 
 /// A 32-byte hash [`serde`]-encoded as a hex string optionally prefixed with
@@ -233,28 +194,6 @@ pub enum SubmitTransactionResponse {
     Registered,
     /// Submission failed with given reason
     Failed(String),
-}
-
-/// A rollup transaction status.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum TxStatus<DaTxId> {
-    /// The transaction was successfully submitted to a sequencer and it's
-    /// sitting in the mempool waiting to be included in a batch.
-    Submitted,
-    /// The transaction was published to the DA as part of a batch, but it may
-    /// not be finalized yet.
-    Published {
-        /// The ID of the DA transaction that included the rollup transaction to
-        /// which this [`TxStatus`] refers.
-        da_transaction_id: DaTxId,
-    },
-    /// The transaction was published to the DA as part of a batch that is
-    /// considered finalized
-    Finalized {
-        /// The ID of the DA transaction that included the rollup transaction to
-        /// which this [`TxStatus`] refers.
-        da_transaction_id: DaTxId,
-    },
 }
 
 #[cfg(test)]

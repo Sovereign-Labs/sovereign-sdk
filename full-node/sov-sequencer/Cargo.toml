@@ -15,6 +15,7 @@ resolver = "2"
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true }
+dashmap = "5"
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["client", "server"] }
 mini-moka = "0.10"
