@@ -5,7 +5,6 @@ use sov_rollup_interface::rpc::{
     TxIdentifier, TxResponse,
 };
 use sov_rollup_interface::stf::Event;
-use sov_schema_db::snapshot::QueryManager;
 use tokio::sync::broadcast::Receiver;
 
 use crate::schema::tables::{
@@ -26,7 +25,7 @@ const MAX_EVENTS_PER_REQUEST: u64 = 500;
 
 use super::LedgerDB;
 
-impl<Q: QueryManager> LedgerRpcProvider for LedgerDB<Q> {
+impl LedgerRpcProvider for LedgerDB {
     fn get_head<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         query_mode: QueryMode,
@@ -276,7 +275,7 @@ impl<Q: QueryManager> LedgerRpcProvider for LedgerDB<Q> {
     }
 }
 
-impl<Q: QueryManager> LedgerDB<Q> {
+impl LedgerDB {
     fn resolve_slot_identifier(
         &self,
         slot_id: &SlotIdentifier,

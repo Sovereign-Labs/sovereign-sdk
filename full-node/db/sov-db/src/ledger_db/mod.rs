@@ -4,7 +4,8 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{BatchReceipt, Event};
-use sov_schema_db::snapshot::{CacheDb, ChangeSet, QueryManager};
+use sov_schema_db::cache::cache_db::CacheDb;
+use sov_schema_db::cache::change_set::ChangeSet;
 use sov_schema_db::{Schema, SchemaBatch, SeekKeyEncoder};
 
 use crate::rocks_db_config::gen_rocksdb_options;
@@ -18,28 +19,6 @@ use crate::schema::types::{
 };
 
 mod rpc;
-
-#[derive(Debug)]
-/// A database which stores the ledger history (slots, transactions, events, etc).
-/// Ledger data is first ingested into an in-memory map before being fed to the state-transition function.
-/// Once the state-transition function has been executed and finalized, the results are committed to the final db
-pub struct LedgerDB<Q> {
-    /// The database which stores the committed ledger. Uses an optimized layout which
-    /// requires transactions to be executed before being committed.
-    db: Arc<CacheDb<Q>>,
-    next_item_numbers: Arc<Mutex<ItemNumbers>>,
-    slot_subscriptions: tokio::sync::broadcast::Sender<u64>,
-}
-
-impl<Q> Clone for LedgerDB<Q> {
-    fn clone(&self) -> Self {
-        LedgerDB {
-            db: self.db.clone(),
-            next_item_numbers: self.next_item_numbers.clone(),
-            slot_subscriptions: self.slot_subscriptions.clone(),
-        }
-    }
-}
 
 /// A SlotNumber, BatchNumber, TxNumber, and EventNumber which are grouped together, typically representing
 /// the respective heights at the start or end of slot processing.
@@ -94,7 +73,32 @@ impl<S: SlotData, B, T> SlotCommit<S, B, T> {
     }
 }
 
-impl<Q> LedgerDB<Q> {
+#[derive(Debug)]
+/// A database which stores the ledger history (slots, transactions, events, etc).
+/// Ledger data is first ingested into an in-memory map
+/// before being fed to the state-transition function.
+/// Once the state-transition function has been executed and finalized,
+/// the results are committed to the final db
+pub struct LedgerDB {
+    /// The database which stores the committed ledger.
+    /// Uses an optimized layout which
+    /// requires transactions to be executed before being committed.
+    db: Arc<CacheDb>,
+    next_item_numbers: Arc<Mutex<ItemNumbers>>,
+    slot_subscriptions: tokio::sync::broadcast::Sender<u64>,
+}
+
+impl Clone for LedgerDB {
+    fn clone(&self) -> Self {
+        LedgerDB {
+            db: self.db.clone(),
+            next_item_numbers: self.next_item_numbers.clone(),
+            slot_subscriptions: self.slot_subscriptions.clone(),
+        }
+    }
+}
+
+impl LedgerDB {
     const DB_PATH_SUFFIX: &'static str = "ledger-db";
     const DB_NAME: &'static str = "ledger";
 
@@ -108,9 +112,7 @@ impl<Q> LedgerDB<Q> {
             &gen_rocksdb_options(&Default::default(), false),
         )
     }
-}
 
-impl<Q: QueryManager> LedgerDB<Q> {
     // TODO: UPDATE
     /// Open a [`LedgerDB`] (backed by RocksDB) at the specified path.
     /// The returned instance will be at the path `{path}/ledger-db`.
@@ -133,7 +135,7 @@ impl<Q: QueryManager> LedgerDB<Q> {
         // })
     }
 
-    fn load_next_item_numbers(db_snapshot: &CacheDb<Q>) -> anyhow::Result<ItemNumbers> {
+    fn load_next_item_numbers(db_snapshot: &CacheDb) -> anyhow::Result<ItemNumbers> {
         Ok(ItemNumbers {
             slot_number: Self::last_version_written(db_snapshot, SlotByNumber)?.unwrap_or_default()
                 + 1,
@@ -148,7 +150,7 @@ impl<Q: QueryManager> LedgerDB<Q> {
     }
 
     /// TBD
-    pub fn with_db_snapshot(db_snapshot: CacheDb<Q>) -> anyhow::Result<Self> {
+    pub fn with_db_snapshot(db_snapshot: CacheDb) -> anyhow::Result<Self> {
         let next_item_numbers = Self::load_next_item_numbers(&db_snapshot)?;
         Ok(Self {
             db: Arc::new(db_snapshot),
@@ -158,7 +160,7 @@ impl<Q: QueryManager> LedgerDB<Q> {
     }
 
     /// TBD
-    pub fn replace_db(&mut self, db_snapshot: CacheDb<Q>) -> anyhow::Result<()> {
+    pub fn replace_db(&mut self, db_snapshot: CacheDb) -> anyhow::Result<()> {
         self.db.overwrite_change_set(db_snapshot);
         let loaded_item_numbers = Self::load_next_item_numbers(&self.db)?;
         let mut next_item_numbers = self
@@ -169,7 +171,7 @@ impl<Q: QueryManager> LedgerDB<Q> {
         Ok(())
     }
 
-    /// TBD
+    /// TBD + Rename
     pub fn clone_db(&self) -> ChangeSet {
         self.db.clone_change_set()
     }
@@ -362,7 +364,7 @@ impl<Q: QueryManager> LedgerDB<Q> {
     }
 
     fn last_version_written<T: Schema<Key = U>, U: Into<u64>>(
-        db: &CacheDb<Q>,
+        db: &CacheDb,
         _schema: T,
     ) -> anyhow::Result<Option<u64>> {
         let largest = db.get_largest::<T>()?;

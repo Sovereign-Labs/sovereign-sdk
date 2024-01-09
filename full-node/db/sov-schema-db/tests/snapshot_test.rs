@@ -1,7 +1,7 @@
 use std::sync::{Arc, RwLock};
 
+use sov_schema_db::cache::{CacheDb, ReadOnlyLock, SingleSnapshotQueryManager};
 use sov_schema_db::define_schema;
-use sov_schema_db::snapshot::{CacheDb, ReadOnlyLock, SingleSnapshotQueryManager};
 use sov_schema_db::test::TestField;
 
 define_schema!(TestSchema1, TestField, TestField, "TestCF1");

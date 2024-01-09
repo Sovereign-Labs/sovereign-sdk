@@ -8,7 +8,8 @@ use sov_db::native_db::NativeDB;
 use sov_db::state_db::StateDB;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_schema_db::snapshot::{CacheDb, ChangeSet, ReadOnlyLock, SnapshotId};
+use sov_schema_db::cache::{CacheDb, ChangeSet, SnapshotId};
+use sov_schema_db::ReadOnlyLock;
 use sov_state::{MerkleProofSpec, ProverStorage};
 
 pub use crate::cache_container::CacheContainer;

@@ -1,21 +1,24 @@
 use std::cmp::Ordering;
 use std::collections::{btree_map, HashMap};
 use std::iter::{Peekable, Rev};
-use std::sync::{Arc, RwLock};
 
-use sov_schema_db::schema::{KeyCodec, ValueCodec};
-use sov_schema_db::snapshot::{ChangeSet, QueryManager, ReadOnlyLock, SnapshotId};
-use sov_schema_db::{
-    Operation, RawDbReverseIterator, Schema, SchemaBatchIterator, SchemaKey, SchemaValue,
+use crate::cache::cache_container::DataLocation::Snapshot;
+use crate::cache::change_set::ChangeSet;
+use crate::cache::SnapshotId;
+use crate::schema::{KeyCodec, ValueCodec};
+use crate::{
+    Operation, RawDbReverseIterator, ReadOnlyLock, Schema, SchemaBatchIterator, SchemaKey,
+    SchemaValue, DB,
 };
 
-use crate::cache_container::DataLocation::Snapshot;
-
-/// Snapshot manager holds snapshots associated with particular DB and can traverse them backwards
-/// down to DB level
-/// Managed externally by [`crate::ProverStorageManager`]
+/// Holds collection of [`ChangeSet`] associated with particular Snapshot
+/// and knows how to traverse them.
+/// Managed externally.
+/// Should be managed carefully, because discrepancy between `snapshots` and `to_parent` leads to panic
+/// Ideally owner of writable reference to parent nad owner of cache container manages both correctly.
+#[derive(Debug)]
 pub struct CacheContainer {
-    db: sov_schema_db::DB,
+    db: DB,
     /// Set of [`ChangeSet`]s of data per individual database per snapshot
     snapshots: HashMap<SnapshotId, ChangeSet>,
     /// Hierarchical
@@ -29,10 +32,8 @@ pub struct CacheContainer {
 //   - sov-state::ProverStorage
 
 impl CacheContainer {
-    pub(crate) fn new(
-        db: sov_schema_db::DB,
-        to_parent: ReadOnlyLock<HashMap<SnapshotId, SnapshotId>>,
-    ) -> Self {
+    /// Create CacheContainer pointing go given DB and Snapshot ID relations
+    pub fn new(db: DB, to_parent: ReadOnlyLock<HashMap<SnapshotId, SnapshotId>>) -> Self {
         Self {
             db,
             snapshots: HashMap::new(),
@@ -42,27 +43,35 @@ impl CacheContainer {
 
     /// Create instance of snapshot manager, when it does not have connection to snapshots tree
     /// So it only reads from database.
-    /// TODO: Feature gate
-    pub fn orphan(db: sov_schema_db::DB) -> Self {
+    #[cfg(feature = "test-utils")]
+    pub fn orphan(db: DB) -> Self {
         Self {
             db,
             snapshots: HashMap::new(),
-            to_parent: Arc::new(RwLock::new(Default::default())).into(),
+            to_parent: std::sync::Arc::new(std::sync::RwLock::new(Default::default())).into(),
         }
     }
 
-    pub(crate) fn add_snapshot(&mut self, snapshot: ChangeSet) {
+    /// Adds Snapshot to the collection.
+    /// Please note that caller must update its own reference of `to_parent`
+    /// After adding snapshot.
+    /// Ideally these operations should be atomic
+    pub fn add_snapshot(&mut self, snapshot: ChangeSet) {
         let snapshot_id = snapshot.get_id();
         if self.snapshots.insert(snapshot_id, snapshot).is_some() {
             panic!("Attempt to double save same snapshot");
         }
     }
 
-    pub(crate) fn discard_snapshot(&mut self, snapshot_id: &SnapshotId) {
+    /// Removes snapshot from collection
+    /// This should happen **after** `to_parent` is updated
+    pub fn discard_snapshot(&mut self, snapshot_id: &SnapshotId) {
         self.snapshots.remove(snapshot_id);
     }
 
-    pub(crate) fn commit_snapshot(&mut self, snapshot_id: &SnapshotId) -> anyhow::Result<()> {
+    /// Writes snapshot to the underlying database
+    /// Snapshot id should be removed from `to_parent` atomically.
+    pub fn commit_snapshot(&mut self, snapshot_id: &SnapshotId) -> anyhow::Result<()> {
         if !self.snapshots.contains_key(snapshot_id) {
             anyhow::bail!("Attempt to commit unknown snapshot");
         }
@@ -76,12 +85,13 @@ impl CacheContainer {
         self.snapshots.is_empty()
     }
 
-    pub(crate) fn contains_snapshot(&self, snapshot_id: &SnapshotId) -> bool {
+    /// Helper method to check if snapshot has been saved
+    pub fn contains_snapshot(&self, snapshot_id: &SnapshotId) -> bool {
         self.snapshots.contains_key(snapshot_id)
     }
 
     /// Returns iterator over keys in given [`Schema`] among all snapshots and DB in reverse lexicographical order
-    fn iter<S: Schema>(
+    pub(crate) fn iter<S: Schema>(
         &self,
         mut snapshot_id: SnapshotId,
     ) -> anyhow::Result<SnapshotManagerIter<S, Rev<btree_map::Iter<SchemaKey, Operation>>>> {
@@ -103,7 +113,31 @@ impl CacheContainer {
         Ok(SnapshotManagerIter::new(db_iter, snapshot_iterators))
     }
 
-    fn iter_range<S: Schema>(
+    pub(crate) fn get<S: Schema>(
+        &self,
+        mut snapshot_id: SnapshotId,
+        key: &impl KeyCodec<S>,
+    ) -> anyhow::Result<Option<S::Value>> {
+        while let Some(parent_snapshot_id) = self.to_parent.read().unwrap().get(&snapshot_id) {
+            let parent_snapshot = self
+                .snapshots
+                .get(parent_snapshot_id)
+                .expect("Inconsistency between `self.snapshots` and `self.to_parent`");
+
+            // Some operation has been found
+            if let Some(operation) = parent_snapshot.get(key)? {
+                return match operation {
+                    Operation::Put { value } => Ok(Some(S::Value::decode_value(value)?)),
+                    Operation::Delete => Ok(None),
+                };
+            }
+
+            snapshot_id = *parent_snapshot_id;
+        }
+        self.db.get(key)
+    }
+
+    pub(crate) fn iter_range<S: Schema>(
         &self,
         mut snapshot_id: SnapshotId,
         upper_bound: SchemaKey,
@@ -246,59 +280,18 @@ where
     }
 }
 
-impl QueryManager for CacheContainer {
-    type Iter<'a, S> = SnapshotManagerIter<'a, S, Rev<btree_map::Iter<'a, SchemaKey, Operation>>> where S: Sized, S: Schema, Self: 'a;
-    type RangeIter<'a, S: Schema> = SnapshotManagerIter<'a, S, Rev<btree_map::Range<'a, SchemaKey, Operation>>> where S: Sized, S: Schema, Self: 'a;
-
-    fn get<S: Schema>(
-        &self,
-        mut snapshot_id: SnapshotId,
-        key: &impl KeyCodec<S>,
-    ) -> anyhow::Result<Option<S::Value>> {
-        while let Some(parent_snapshot_id) = self.to_parent.read().unwrap().get(&snapshot_id) {
-            let parent_snapshot = self
-                .snapshots
-                .get(parent_snapshot_id)
-                .expect("Inconsistency between `self.snapshots` and `self.to_parent`");
-
-            // Some operation has been found
-            if let Some(operation) = parent_snapshot.get(key)? {
-                return match operation {
-                    Operation::Put { value } => Ok(Some(S::Value::decode_value(value)?)),
-                    Operation::Delete => Ok(None),
-                };
-            }
-
-            snapshot_id = *parent_snapshot_id;
-        }
-        self.db.get(key)
-    }
-
-    fn iter<S: Schema>(&self, snapshot_id: SnapshotId) -> anyhow::Result<Self::Iter<'_, S>> {
-        self.iter::<S>(snapshot_id)
-    }
-
-    fn iter_range<S: Schema>(
-        &self,
-        snapshot_id: SnapshotId,
-        upper_bound: SchemaKey,
-    ) -> anyhow::Result<Self::RangeIter<'_, S>> {
-        self.iter_range::<S>(snapshot_id, upper_bound)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
 
     use sov_db::rocks_db_config::gen_rocksdb_options;
-    use sov_schema_db::schema::{KeyDecoder, ValueCodec};
-    use sov_schema_db::snapshot::{CacheDb, NoopQueryManager, QueryManager};
-    use sov_schema_db::test::TestField;
-    use sov_schema_db::{define_schema, SchemaBatch};
 
+    use crate::cache::{CacheDb, NoopQueryManager, QueryManager};
     use crate::cache_container::CacheContainer;
+    use crate::schema::{KeyDecoder, ValueCodec};
+    use crate::test::TestField;
+    use crate::{define_schema, SchemaBatch};
 
     const DUMMY_STATE_CF: &str = "DummyStateCF";
 

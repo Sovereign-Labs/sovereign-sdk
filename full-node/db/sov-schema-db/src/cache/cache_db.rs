@@ -1,0 +1,322 @@
+use std::sync::Mutex;
+
+use crate::cache::cache_container::CacheContainer;
+use crate::cache::change_set::ChangeSet;
+use crate::cache::SnapshotId;
+use crate::schema::KeyDecoder;
+use crate::{
+    decode_operation, put_or_none, KeyCodec, Operation, ReadOnlyLock, Schema, SchemaBatch,
+    SchemaBatchIterator, SchemaKey, SchemaValue, SeekKeyEncoder, ValueCodec,
+};
+
+///  TBDk
+///  * maintains local cache
+///  * reads from parent manager if value is missing
+#[derive(Debug)]
+pub struct CacheDb {
+    cache: Mutex<ChangeSet>,
+    db: ReadOnlyLock<CacheContainer>,
+}
+
+impl CacheDb {
+    /// Create new [`CacheDb`]
+    pub fn new(id: SnapshotId, manager: ReadOnlyLock<CacheContainer>) -> Self {
+        Self {
+            cache: Mutex::new(ChangeSet::new(id)),
+            db: manager,
+        }
+    }
+
+    /// Store a value in snapshot
+    pub fn put<S: Schema>(
+        &self,
+        key: &impl KeyCodec<S>,
+        value: &impl ValueCodec<S>,
+    ) -> anyhow::Result<()> {
+        self.cache
+            .lock()
+            .expect("Local ChangeSet lock must not be poisoned")
+            .operations
+            .put(key, value)
+    }
+
+    /// Delete given key from snapshot
+    pub fn delete<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<()> {
+        self.cache
+            .lock()
+            .expect("Local ChangeSet lock must not be poisoned")
+            .operations
+            .delete(key)
+    }
+
+    /// Writes many operations at once, atomically
+    pub fn write_many(&self, batch: SchemaBatch) -> anyhow::Result<()> {
+        let mut inner = self
+            .cache
+            .lock()
+            .expect("Local SchemaBatch lock must not be poisoned");
+        inner.operations.merge(batch);
+        Ok(())
+    }
+
+    /// Overwrites inner cache with new, while retaining reference to parent
+    pub fn overwrite_change_set(&self, other: CacheDb) {
+        let mut this_cache = self.cache.lock().unwrap();
+        let other_cache = other.cache.into_inner().unwrap();
+        *this_cache = other_cache;
+    }
+}
+
+impl CacheDb {
+    /// Get a value from current snapshot, its parents or underlying database
+    pub fn read<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<Option<S::Value>> {
+        // Some(Operation) means that key was touched,
+        // but in case of deletion we early return None
+        // Only in case of not finding operation for key,
+        // we go deeper
+
+        // Hold local cache lock explicitly, so reads are atomic
+        let local_cache = self
+            .cache
+            .lock()
+            .expect("SchemaBatch lock should not be poisoned");
+
+        // 1. Check in cache
+        if let Some(operation) = local_cache.get(key)? {
+            return decode_operation::<S>(operation);
+        }
+
+        // 2. Check parent
+        let parent = self.db.read().expect("Parent lock must not be poisoned");
+        parent.get::<S>(local_cache.get_id(), key)
+    }
+
+    /// Get value of largest key written value for given [`Schema`]
+    pub fn get_largest<S: Schema>(&self) -> anyhow::Result<Option<(S::Key, S::Value)>> {
+        let change_set = self
+            .cache
+            .lock()
+            .expect("SchemaBatch lock must not be poisoned");
+        let local_cache_iter = change_set.iter::<S>();
+
+        let parent = self.db.read().expect("Parent lock must not be poisoned");
+
+        let parent_iter = parent.iter::<S>(change_set.get_id())?;
+
+        let mut combined_iter: SnapshotIter<'_, S, _, _> = SnapshotIter {
+            local_cache_iter: local_cache_iter.peekable(),
+            parent_iter: parent_iter.peekable(),
+        };
+
+        if let Some((key, value)) = combined_iter.next() {
+            let key = S::Key::decode_key(&key)?;
+            let value = S::Value::decode_value(&value)?;
+            return Ok(Some((key, value)));
+        }
+
+        Ok(None)
+    }
+
+    /// Get largest value in [`Schema`] that is smaller or equal than give `seek_key`
+    pub fn get_prev<S: Schema>(
+        &self,
+        seek_key: &impl SeekKeyEncoder<S>,
+    ) -> anyhow::Result<Option<(S::Key, S::Value)>> {
+        let seek_key = seek_key.encode_seek_key()?;
+        let change_set = self
+            .cache
+            .lock()
+            .expect("Local cache lock must not be poisoned");
+        let local_cache_iter = change_set.iter_range::<S>(seek_key.clone());
+
+        let parent = self
+            .db
+            .read()
+            .expect("Parent snapshots lock must not be poisoned");
+        let parent_iter = parent.iter_range::<S>(change_set.get_id(), seek_key.clone())?;
+
+        let mut combined_iter: SnapshotIter<'_, S, _, _> = SnapshotIter {
+            local_cache_iter: local_cache_iter.peekable(),
+            parent_iter: parent_iter.peekable(),
+        };
+
+        if let Some((key, value)) = combined_iter.next() {
+            let key = S::Key::decode_key(&key)?;
+            let value = S::Value::decode_value(&value)?;
+            return Ok(Some((key, value)));
+        }
+        Ok(None)
+    }
+
+    /// Get a clone of internal ChangeSet
+    pub fn clone_change_set(&self) -> ChangeSet {
+        let change_set = self
+            .cache
+            .lock()
+            .expect("Local change set lock is poisoned");
+        change_set.clone()
+    }
+}
+
+struct SnapshotIter<'a, S, LocalIter, ParentIter>
+where
+    S: Schema,
+    LocalIter: Iterator<Item = (&'a SchemaKey, &'a Operation)>,
+    ParentIter: Iterator<Item = (SchemaKey, SchemaValue)>,
+{
+    local_cache_iter: std::iter::Peekable<SchemaBatchIterator<'a, S, LocalIter>>,
+    parent_iter: std::iter::Peekable<ParentIter>,
+}
+
+impl<'a, S, LocalIter, ParentIter> Iterator for SnapshotIter<'a, S, LocalIter, ParentIter>
+where
+    S: Schema,
+    LocalIter: Iterator<Item = (&'a SchemaKey, &'a Operation)>,
+    ParentIter: Iterator<Item = (SchemaKey, SchemaValue)>,
+{
+    type Item = (SchemaKey, SchemaValue);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let local_cache_peeked = self.local_cache_iter.peek();
+            let parent_peeked = self.parent_iter.peek();
+
+            match (local_cache_peeked, parent_peeked) {
+                // Both iterators exhausted
+                (None, None) => break,
+                // Parent exhausted (just like me on friday)
+                (Some(&(key, operation)), None) => {
+                    self.local_cache_iter.next();
+                    let next = put_or_none(key, operation);
+                    if next.is_none() {
+                        continue;
+                    }
+                    return next;
+                }
+                // Local exhausted
+                (None, Some((_key, _value))) => {
+                    return self.parent_iter.next();
+                }
+                // Both are active, need to compare keys
+                (Some(&(local_key, local_operation)), Some((parent_key, _parent_value))) => {
+                    return if local_key < parent_key {
+                        self.parent_iter.next()
+                    } else {
+                        // Local is preferable, as it is the latest
+                        // But both operators must succeed
+                        if local_key == parent_key {
+                            self.parent_iter.next();
+                        }
+                        self.local_cache_iter.next();
+                        let next = put_or_none(local_key, local_operation);
+                        if next.is_none() {
+                            continue;
+                        }
+                        next
+                    };
+                }
+            }
+        }
+
+        None
+    }
+}
+
+impl From<CacheDb> for ChangeSet {
+    fn from(value: CacheDb) -> Self {
+        value
+            .cache
+            .into_inner()
+            .expect("Internal cache lock is poisoned")
+    }
+}
+
+// //! Snapshot related logic
+//
+// use std::collections::btree_map;
+// use std::iter::Rev;
+// use std::sync::Mutex;
+//
+// use crate::schema::{KeyCodec, KeyDecoder, ValueCodec};
+// use crate::schema_batch::SchemaBatchIterator;
+// use crate::{Operation, ReadOnlyLock, Schema, SchemaBatch, SchemaKey, SchemaValue, SeekKeyEncoder};
+//
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::define_schema;
+//     use crate::schema::KeyEncoder;
+//     use crate::test::{TestCompositeField, TestField};
+//
+//     define_schema!(TestSchema, TestCompositeField, TestField, "TestCF");
+//
+//     fn encode_key(key: &TestCompositeField) -> Vec<u8> {
+//         <TestCompositeField as KeyEncoder<TestSchema>>::encode_key(key).unwrap()
+//     }
+//
+//     fn encode_value(value: &TestField) -> Vec<u8> {
+//         <TestField as ValueCodec<TestSchema>>::encode_value(value).unwrap()
+//     }
+//
+//     #[test]
+//     fn test_db_snapshot_iterator_empty() {
+//         let local_cache = SchemaBatch::new();
+//         let parent_values = SchemaBatch::new();
+//
+//         let manager = SingleSnapshotQueryManager {
+//             cache: parent_values,
+//         };
+//
+//         let local_cache_iter = local_cache.iter::<TestSchema>().peekable();
+//         let manager_iter = manager.iter::<TestSchema>(0).unwrap().peekable();
+//
+//         let snapshot_iter = SnapshotIter::<'_, TestSchema, _, _> {
+//             local_cache_iter,
+//             parent_iter: manager_iter,
+//         };
+//
+//         let values: Vec<(SchemaKey, SchemaValue)> = snapshot_iter.collect();
+//
+//         assert!(values.is_empty());
+//     }
+//
+//     #[test]
+//     fn test_db_snapshot_iterator_values() {
+//         let k1 = TestCompositeField(0, 1, 0);
+//         let k2 = TestCompositeField(0, 1, 2);
+//         let k3 = TestCompositeField(3, 1, 0);
+//         let k4 = TestCompositeField(3, 2, 0);
+//
+//         let mut parent_values = SchemaBatch::new();
+//         parent_values.put::<TestSchema>(&k2, &TestField(2)).unwrap();
+//         parent_values.put::<TestSchema>(&k1, &TestField(1)).unwrap();
+//         parent_values.put::<TestSchema>(&k4, &TestField(4)).unwrap();
+//         parent_values.put::<TestSchema>(&k3, &TestField(3)).unwrap();
+//
+//         let mut local_cache = SchemaBatch::new();
+//         local_cache.delete::<TestSchema>(&k3).unwrap();
+//         local_cache.put::<TestSchema>(&k1, &TestField(10)).unwrap();
+//         local_cache.put::<TestSchema>(&k2, &TestField(20)).unwrap();
+//
+//         let manager = SingleSnapshotQueryManager {
+//             cache: parent_values,
+//         };
+//
+//         let local_cache_iter = local_cache.iter::<TestSchema>().peekable();
+//         let manager_iter = manager.iter::<TestSchema>(0).unwrap().peekable();
+//
+//         let snapshot_iter = SnapshotIter::<'_, TestSchema, _, _> {
+//             local_cache_iter,
+//             parent_iter: manager_iter,
+//         };
+//
+//         let actual_values: Vec<(SchemaKey, SchemaValue)> = snapshot_iter.collect();
+//         let expected_values = vec![
+//             (encode_key(&k4), encode_value(&TestField(4))),
+//             (encode_key(&k2), encode_value(&TestField(20))),
+//             (encode_key(&k1), encode_value(&TestField(10))),
+//         ];
+//
+//         assert_eq!(expected_values, actual_values);
+//     }
+// }

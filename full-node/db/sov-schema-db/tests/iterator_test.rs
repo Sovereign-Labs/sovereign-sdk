@@ -4,8 +4,8 @@
 use std::sync::{Arc, RwLock};
 
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
+use sov_schema_db::cache::{CacheDb, ReadOnlyLock, SingleSnapshotQueryManager};
 use sov_schema_db::schema::{KeyDecoder, KeyEncoder, ValueCodec};
-use sov_schema_db::snapshot::{CacheDb, ReadOnlyLock, SingleSnapshotQueryManager};
 use sov_schema_db::test::{KeyPrefix1, KeyPrefix2, TestCompositeField, TestField};
 use sov_schema_db::{
     define_schema, Operation, Schema, SchemaBatch, SchemaIterator, SeekKeyEncoder, DB,

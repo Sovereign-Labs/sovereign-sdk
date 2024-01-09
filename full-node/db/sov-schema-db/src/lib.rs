@@ -14,15 +14,17 @@
 //! [`define_schema!`] macro to define the schema name, the types of key and value, and name of the
 //! column family.
 
+/// All structs related to Caching layer of Sov-Schema-DB
+pub mod cache;
 mod iterator;
 mod metrics;
 pub mod schema;
 mod schema_batch;
-pub mod snapshot;
 #[cfg(feature = "test-utils")]
 pub mod test;
 
 use std::path::Path;
+use std::sync::{Arc, LockResult, RwLock, RwLockReadGuard};
 
 use anyhow::format_err;
 use iterator::ScanDirection;
@@ -307,6 +309,25 @@ pub enum Operation {
     Delete,
 }
 
+/// TODO: decode
+fn decode_operation<S: Schema>(operation: &Operation) -> anyhow::Result<Option<S::Value>> {
+    match operation {
+        Operation::Put { value } => {
+            let value = S::Value::decode_value(value)?;
+            Ok(Some(value))
+        }
+        Operation::Delete => Ok(None),
+    }
+}
+
+// TODO: make Method
+fn put_or_none(key: &SchemaKey, operation: &Operation) -> Option<(SchemaKey, SchemaValue)> {
+    if let Operation::Put { value } = operation {
+        return Some((key.to_vec(), value.to_vec()));
+    }
+    None
+}
+
 /// An error that occurred during (de)serialization of a [`Schema`]'s keys or
 /// values.
 #[derive(Error, Debug)]
@@ -332,6 +353,31 @@ fn default_write_options() -> rocksdb::WriteOptions {
     let mut opts = rocksdb::WriteOptions::default();
     opts.set_sync(true);
     opts
+}
+
+/// Wrapper around `RwLock` that only allows read access.
+/// This type implies that wrapped type suppose to be used only for reading.
+#[derive(Debug)]
+pub struct ReadOnlyLock<T> {
+    lock: Arc<RwLock<T>>,
+}
+
+impl<T> ReadOnlyLock<T> {
+    /// Create new [`ReadOnlyLock`] from [`Arc<RwLock<T>>`].
+    pub fn new(lock: Arc<RwLock<T>>) -> Self {
+        Self { lock }
+    }
+
+    /// Acquires a read lock on the underlying [`RwLock`].
+    pub fn read(&self) -> LockResult<RwLockReadGuard<'_, T>> {
+        self.lock.read()
+    }
+}
+
+impl<T> From<Arc<RwLock<T>>> for ReadOnlyLock<T> {
+    fn from(value: Arc<RwLock<T>>) -> Self {
+        Self::new(value)
+    }
 }
 
 #[cfg(test)]

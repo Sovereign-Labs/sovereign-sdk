@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock};
 
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_db::schema::{CacheDb, ChangeSet, QueryManager};
+use sov_db::schema::{CacheDb, ChangeSet};
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -33,7 +33,7 @@ where
     stf: Stf,
     storage_manager: Sm,
     rpc_storage: Arc<RwLock<Sm::StfState>>,
-    ledger_db: LedgerDB<Sm::LedgerQueryManager>,
+    ledger_db: LedgerDB,
     state_root: StateRoot<Stf, Vm, Da::Spec>,
     listen_address: SocketAddr,
     prover_service: Ps,
@@ -72,13 +72,7 @@ impl<Stf, Sm, Da, Vm, Ps> StateTransitionRunner<Stf, Sm, Da, Vm, Ps>
 where
     Da: DaService<Error = anyhow::Error> + Clone + Send + Sync + 'static,
     Vm: ZkvmHost,
-    Sm: HierarchicalStorageManager<
-        Da::Spec,
-        LedgerChangeSet = ChangeSet,
-        LedgerState = CacheDb<
-            <Sm as HierarchicalStorageManager<<Da as DaService>::Spec>>::LedgerQueryManager,
-        >,
-    >,
+    Sm: HierarchicalStorageManager<Da::Spec, LedgerChangeSet = ChangeSet, LedgerState = CacheDb>,
     Stf: StateTransitionFunction<
         Vm,
         Da::Spec,
@@ -87,7 +81,6 @@ where
         ChangeSet = Sm::StfChangeSet,
     >,
     Ps: ProverService<StateRoot = Stf::StateRoot, Witness = Stf::Witness, DaService = Da>,
-    Sm::LedgerQueryManager: QueryManager,
 {
     /// Creates a new `StateTransitionRunner`.
     ///
@@ -98,7 +91,7 @@ where
     pub fn new(
         runner_config: RunnerConfig,
         da_service: Da,
-        mut ledger_db: LedgerDB<Sm::LedgerQueryManager>,
+        mut ledger_db: LedgerDB,
         stf: Stf,
         mut storage_manager: Sm,
         rpc_storage: Arc<RwLock<Sm::StfState>>,
@@ -208,7 +201,7 @@ where
                             break;
                         }
                     }
-                    tracing::info!("Resuming execution on height={}", height);
+                    info!("Resuming execution on height={}", height);
                 }
             }
 
@@ -327,19 +320,19 @@ where
             // Can be moved to another thread to improve throughput
             let last_finalized = self.da_service.get_last_finalized_block_header().await?;
             // For safety we finalize blocks one by one
-            tracing::info!(
+            info!(
                 "Last finalized header height is {}, ",
                 last_finalized.height()
             );
 
             // Checking all seen blocks, in case if there was delay in getting last finalized header.
             while let Some(earliest_seen_header) = seen_block_headers.front() {
-                tracing::debug!(
+                debug!(
                     "Checking seen header height={}",
                     earliest_seen_header.height()
                 );
                 if earliest_seen_header.height() <= last_finalized.height() {
-                    tracing::debug!(
+                    debug!(
                         "Finalizing seen header height={}",
                         earliest_seen_header.height()
                     );

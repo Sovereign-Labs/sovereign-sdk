@@ -1,7 +1,8 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use sov_schema_db::snapshot::{CacheDb, ChangeSet, QueryManager};
+use sov_schema_db::cache::cache_db::CacheDb;
+use sov_schema_db::cache::change_set::ChangeSet;
 use sov_schema_db::SchemaBatch;
 
 use crate::rocks_db_config::gen_rocksdb_options;
@@ -14,12 +15,12 @@ pub type Version = u64;
 /// Typesafe wrapper for Data, that is not part of the provable state
 /// TODO: Rename to AccessoryDb
 #[derive(Debug)]
-pub struct NativeDB<Q> {
+pub struct NativeDB {
     /// Pointer to [`CacheDb`] for up to date state
-    db: Arc<CacheDb<Q>>,
+    db: Arc<CacheDb>,
 }
 
-impl<Q> Clone for NativeDB<Q> {
+impl Clone for NativeDB {
     fn clone(&self) -> Self {
         NativeDB {
             db: self.db.clone(),
@@ -27,7 +28,7 @@ impl<Q> Clone for NativeDB<Q> {
     }
 }
 
-impl<Q> NativeDB<Q> {
+impl NativeDB {
     const DB_PATH_SUFFIX: &'static str = "native-db";
     const DB_NAME: &'static str = "native";
 
@@ -49,11 +50,9 @@ impl<Q> NativeDB<Q> {
         ))?;
         Ok(ChangeSet::from(inner))
     }
-}
 
-impl<Q: QueryManager> NativeDB<Q> {
     /// Create instance of [`NativeDB`] from [`CacheDb`]
-    pub fn with_db_snapshot(db_snapshot: CacheDb<Q>) -> anyhow::Result<Self> {
+    pub fn with_db_snapshot(db_snapshot: CacheDb) -> anyhow::Result<Self> {
         // We keep Result type, just for future archival state integration
         Ok(Self {
             db: Arc::new(db_snapshot),
@@ -101,13 +100,13 @@ impl<Q: QueryManager> NativeDB<Q> {
 mod tests {
     use std::sync::RwLock;
 
-    use sov_schema_db::snapshot::{NoopQueryManager, ReadOnlyLock};
+    use sov_schema_db::cache::{NoopQueryManager, ReadOnlyLock};
 
     use super::*;
 
-    fn setup_db() -> NativeDB<NoopQueryManager> {
+    fn setup_db() -> NativeDB {
         let manager = ReadOnlyLock::new(Arc::new(RwLock::new(Default::default())));
-        let db_snapshot = CacheDb::<NoopQueryManager>::new(0, manager);
+        let db_snapshot = CacheDb::new(0, manager);
         NativeDB::with_db_snapshot(db_snapshot).unwrap()
     }
 

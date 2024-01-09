@@ -11,7 +11,7 @@ use jmt::{JellyfishMerkleTree, KeyHash};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use sov_db::state_db::StateDB;
-use sov_schema_db::snapshot::{CacheDb, NoopQueryManager, ReadOnlyLock};
+use sov_schema_db::cache::{CacheDb, NoopQueryManager, ReadOnlyLock};
 
 // TODO: Improve for collisions
 fn generate_random_bytes(count: usize) -> Vec<Vec<u8>> {
