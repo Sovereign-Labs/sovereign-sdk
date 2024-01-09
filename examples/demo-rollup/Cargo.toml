@@ -48,6 +48,11 @@ sov-cli = { path = "../../module-system/sov-cli" }
 clap = { workspace = true }
 secp256k1 = { workspace = true, optional = true }
 
+env_logger = "0.10"
+
+# Need to featuregate
+risc0-zkvm = { workspace = true, default-features = false, features = ["std"] }
+
 [dev-dependencies]
 sov-rng-da-service = { path = "../../utils/rng-da-service" }
 sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }

@@ -10,7 +10,7 @@ publish = false
 risc0-build = { workspace = true }
 
 [package.metadata.risc0]
-methods = ["guest-celestia", "guest-mock"]
+methods = ["guest-celestia", "guest-mock", "guest-recursion"]
 
 [features]
 bench = []

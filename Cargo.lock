@@ -2738,6 +2738,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "env_logger"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95b3f3e67048839cb0d0781f445682a35113da7121f7c949db0e2be96a4fbece"
+dependencies = [
+ "humantime",
+ "is-terminal",
+ "log",
+ "regex",
+ "termcolor",
+]
+
+[[package]]
 name = "environmental"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8738,6 +8751,7 @@ dependencies = [
  "const-rollup-config",
  "criterion",
  "demo-stf",
+ "env_logger",
  "ethereum-types",
  "ethers",
  "ethers-contract",
@@ -8758,6 +8772,7 @@ dependencies = [
  "reth-primitives",
  "revm",
  "risc0",
+ "risc0-zkvm",
  "secp256k1 0.27.0",
  "serde",
  "serde_json",

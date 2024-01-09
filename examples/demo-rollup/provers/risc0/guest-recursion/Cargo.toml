@@ -1,0 +1,24 @@
+[package]
+name = "sov-demo-prover-guest-recursion"
+version = "0.3.0"
+edition = "2021"
+resolver = "2"
+
+[workspace]
+
+[dependencies]
+# If you want to try (experimental) std support, add `features = [ "std" ]` to risc0-zkvm
+risc0-zkvm = { version = "0.19.1", default-features = false, features = ["std"] }
+
+[profile.dev]
+opt-level = 3
+
+[profile.dev.build-override]
+opt-level = 3
+
+[profile.release]
+debug = 1
+lto = true
+
+[profile.release.build-override]
+opt-level = 3
