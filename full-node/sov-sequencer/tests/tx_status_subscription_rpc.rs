@@ -1,13 +1,17 @@
 use borsh::BorshSerialize;
 use demo_stf::runtime::Runtime;
-use sov_data_generators::{bank_data::BankMessageGenerator, MessageGenerator};
+use sov_data_generators::bank_data::BankMessageGenerator;
+use sov_data_generators::MessageGenerator;
 use sov_mock_da::{MockBlockHeader, MockDaService, MockDaSpec};
-use sov_modules_api::{default_context::DefaultContext, digest::Digest, Spec};
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::digest::Digest;
+use sov_modules_api::Spec;
 use sov_prover_storage_manager::ProverStorageManager;
-use sov_rollup_interface::{services::batch_builder::TxHash, storage::HierarchicalStorageManager};
-use sov_sequencer::{
-    batch_builder::FiFoStrictBatchBuilder, utils::SimpleClient, Sequencer, TxStatus,
-};
+use sov_rollup_interface::services::batch_builder::TxHash;
+use sov_rollup_interface::storage::HierarchicalStorageManager;
+use sov_sequencer::batch_builder::FiFoStrictBatchBuilder;
+use sov_sequencer::utils::SimpleClient;
+use sov_sequencer::{Sequencer, TxStatus};
 use sov_state::DefaultStorageSpec;
 use tempfile::TempDir;
 

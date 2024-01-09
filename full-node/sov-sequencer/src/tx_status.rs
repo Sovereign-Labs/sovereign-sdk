@@ -144,7 +144,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, time::Duration};
+    use std::sync::Arc;
+    use std::time::Duration;
 
     use sov_mock_da::MockDaService;
 
