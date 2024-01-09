@@ -84,7 +84,6 @@ impl SimpleClient {
         &self,
         tx_hash: TxHash,
     ) -> anyhow::Result<Subscription<TxStatus<DaTxId>>> {
-        println!("connect");
         let sub = self
             .ws_client
             .subscribe(
