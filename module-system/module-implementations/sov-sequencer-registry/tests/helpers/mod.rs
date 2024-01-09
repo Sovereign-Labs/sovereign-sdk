@@ -45,6 +45,7 @@ impl TestSequencer {
         working_set: &mut WorkingSet<C>,
     ) -> RpcResult<sov_bank::BalanceResponse> {
         self.bank.balance_of(
+            None,
             self.sequencer_config.seq_rollup_address,
             self.sequencer_config.coins_to_lock.token_address,
             working_set,
@@ -58,6 +59,7 @@ impl TestSequencer {
         working_set: &mut WorkingSet<C>,
     ) -> RpcResult<sov_bank::BalanceResponse> {
         self.bank.balance_of(
+            None,
             user_address,
             self.sequencer_config.coins_to_lock.token_address,
             working_set,

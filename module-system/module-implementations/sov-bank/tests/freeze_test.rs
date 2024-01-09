@@ -132,12 +132,12 @@ fn freeze_token() {
         minter_address: new_holder,
     };
 
-    let query_total_supply = |token_address: Address,
-                              working_set: &mut WorkingSet<DefaultContext>|
-     -> Option<u64> {
-        let total_supply: TotalSupplyResponse = bank.supply_of(token_address, working_set).unwrap();
-        total_supply.amount
-    };
+    let query_total_supply =
+        |token_address: Address, working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
+            let total_supply: TotalSupplyResponse =
+                bank.supply_of(None, token_address, working_set).unwrap();
+            total_supply.amount
+        };
 
     let minted = bank.call(mint_message, &minter_context, &mut working_set);
     assert!(minted.is_err());

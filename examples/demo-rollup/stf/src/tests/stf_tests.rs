@@ -81,7 +81,7 @@ fn test_demo_values_in_db() {
         let mut working_set = WorkingSet::new(storage);
         let resp = runtime
             .bank
-            .supply_of(get_default_token_address(), &mut working_set)
+            .supply_of(None, get_default_token_address(), &mut working_set)
             .unwrap();
         assert_eq!(resp, sov_bank::TotalSupplyResponse { amount: Some(1000) });
 
@@ -143,7 +143,7 @@ fn test_demo_values_in_cache() {
 
     let resp = runtime
         .bank
-        .supply_of(get_default_token_address(), &mut working_set)
+        .supply_of(None, get_default_token_address(), &mut working_set)
         .unwrap();
     assert_eq!(resp, sov_bank::TotalSupplyResponse { amount: Some(1000) });
 
@@ -210,7 +210,7 @@ fn test_demo_values_not_in_db() {
 
         let resp = runtime
             .bank
-            .supply_of(get_default_token_address(), &mut working_set)
+            .supply_of(None, get_default_token_address(), &mut working_set)
             .unwrap();
         assert_eq!(resp, sov_bank::TotalSupplyResponse { amount: Some(1000) });
 

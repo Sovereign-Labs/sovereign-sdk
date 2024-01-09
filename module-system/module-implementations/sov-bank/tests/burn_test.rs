@@ -48,7 +48,8 @@ fn burn_deployed_tokens() {
     assert!(working_set.events().is_empty());
 
     let query_total_supply = |working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
-        let total_supply: TotalSupplyResponse = bank.supply_of(token_address, working_set).unwrap();
+        let total_supply: TotalSupplyResponse =
+            bank.supply_of(None, token_address, working_set).unwrap();
         total_supply.amount
     };
 
