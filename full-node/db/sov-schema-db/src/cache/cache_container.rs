@@ -80,8 +80,8 @@ impl CacheContainer {
         self.db.write_schemas(snapshot.into())
     }
 
-    #[cfg(test)]
-    pub(crate) fn is_empty(&self) -> bool {
+    /// Indicates, if CacheContainer has any snapshots stored.
+    pub fn is_empty(&self) -> bool {
         self.snapshots.is_empty()
     }
 

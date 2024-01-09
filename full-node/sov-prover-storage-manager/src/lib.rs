@@ -8,13 +8,12 @@ use sov_db::native_db::NativeDB;
 use sov_db::state_db::StateDB;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_schema_db::cache::{CacheDb, ChangeSet, SnapshotId};
+use sov_schema_db::cache::cache_container::CacheContainer;
+use sov_schema_db::cache::cache_db::CacheDb;
+use sov_schema_db::cache::change_set::ChangeSet;
+use sov_schema_db::cache::SnapshotId;
 use sov_schema_db::ReadOnlyLock;
 use sov_state::{MerkleProofSpec, ProverStorage};
-
-pub use crate::cache_container::CacheContainer;
-
-mod cache_container;
 
 /// Implementation of [`HierarchicalStorageManager`] that handles relation between snapshots
 /// And reorgs on Data Availability layer.
@@ -77,9 +76,9 @@ where
     /// Create new [`ProverStorageManager`] from state config
     pub fn new(config: sov_state::config::Config) -> anyhow::Result<Self> {
         let path = config.path;
-        let state_db = StateDB::<CacheContainer>::setup_schema_db(&path)?;
-        let native_db = NativeDB::<CacheContainer>::setup_schema_db(&path)?;
-        let ledger_db = LedgerDB::<CacheContainer>::setup_schema_db(&path)?;
+        let state_db = StateDB::setup_schema_db(&path)?;
+        let native_db = NativeDB::setup_schema_db(&path)?;
+        let ledger_db = LedgerDB::setup_schema_db(&path)?;
 
         Ok(Self::with_db_handles(state_db, native_db, ledger_db))
     }
@@ -97,7 +96,7 @@ where
     fn get_storage_with_snapshot_id(
         &self,
         snapshot_id: SnapshotId,
-    ) -> anyhow::Result<(ProverStorage<S, CacheContainer>, CacheDb<CacheContainer>)> {
+    ) -> anyhow::Result<(ProverStorage<S>, CacheDb)> {
         let state_db_snapshot = CacheDb::new(
             snapshot_id,
             ReadOnlyLock::new(self.state_snapshot_manager.clone()),
@@ -212,11 +211,9 @@ impl<Da: DaSpec, S: MerkleProofSpec> HierarchicalStorageManager<Da> for ProverSt
 where
     Da::SlotHash: Hash,
 {
-    type StfState = ProverStorage<S, CacheContainer>;
-    type StfChangeSet = ProverStorage<S, CacheContainer>;
-
-    type LedgerQueryManager = CacheContainer;
-    type LedgerState = CacheDb<Self::LedgerQueryManager>;
+    type StfState = ProverStorage<S>;
+    type StfChangeSet = ProverStorage<S>;
+    type LedgerState = CacheDb;
     // type LedgerChangeSet = ChangeSet;
     type LedgerChangeSet = ChangeSet;
 
@@ -422,14 +419,14 @@ where
 #[cfg(feature = "test-utils")]
 pub fn new_orphan_storage<S: MerkleProofSpec>(
     path: impl AsRef<std::path::Path>,
-) -> anyhow::Result<ProverStorage<S, CacheContainer>> {
-    let state_db_raw = StateDB::<CacheContainer>::setup_schema_db(path.as_ref())?;
+) -> anyhow::Result<ProverStorage<S>> {
+    let state_db_raw = StateDB::setup_schema_db(path.as_ref())?;
     let state_db_sm = Arc::new(RwLock::new(CacheContainer::orphan(state_db_raw)));
-    let state_db_snapshot = CacheDb::<CacheContainer>::new(0, state_db_sm.into());
+    let state_db_snapshot = CacheDb::new(0, state_db_sm.into());
     let state_db = StateDB::with_db_snapshot(state_db_snapshot)?;
-    let native_db_raw = NativeDB::<CacheContainer>::setup_schema_db(path.as_ref())?;
+    let native_db_raw = NativeDB::setup_schema_db(path.as_ref())?;
     let native_db_sm = Arc::new(RwLock::new(CacheContainer::orphan(native_db_raw)));
-    let native_db_snapshot = CacheDb::<CacheContainer>::new(0, native_db_sm.into());
+    let native_db_snapshot = CacheDb::new(0, native_db_sm.into());
     let native_db = NativeDB::with_db_snapshot(native_db_snapshot)?;
     Ok(ProverStorage::with_db_handles(state_db, native_db))
 }
@@ -512,9 +509,9 @@ mod tests {
     fn build_dbs(
         path: &std::path::Path,
     ) -> (sov_schema_db::DB, sov_schema_db::DB, sov_schema_db::DB) {
-        let state_db = StateDB::<CacheContainer>::setup_schema_db(path).unwrap();
-        let native_db = NativeDB::<CacheContainer>::setup_schema_db(path).unwrap();
-        let ledger_db = LedgerDB::<CacheContainer>::setup_schema_db(path).unwrap();
+        let state_db = StateDB::setup_schema_db(path).unwrap();
+        let native_db = NativeDB::setup_schema_db(path).unwrap();
+        let ledger_db = LedgerDB::setup_schema_db(path).unwrap();
 
         (state_db, native_db, ledger_db)
     }

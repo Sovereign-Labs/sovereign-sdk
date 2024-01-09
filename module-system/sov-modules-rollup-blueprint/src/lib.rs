@@ -9,7 +9,7 @@ use std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 pub use runtime_rpc::*;
 use sov_db::ledger_db::LedgerDB;
-use sov_db::schema::{CacheDb, ChangeSet, QueryManager};
+use sov_db::schema::{CacheDb, ChangeSet};
 use sov_modules_api::runtime::capabilities::{Kernel, KernelSlotHooks};
 use sov_modules_api::{Context, DaSpec, Spec};
 use sov_modules_stf_blueprint::{GenesisParams, Runtime as RuntimeTrait, StfBlueprint};
@@ -47,9 +47,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
         Self::DaSpec,
         StfState = <Self::NativeContext as Spec>::Storage,
         StfChangeSet = <Self::NativeContext as Spec>::Storage,
-        LedgerState = CacheDb<
-            <Self::StorageManager as HierarchicalStorageManager<Self::DaSpec>>::LedgerQueryManager,
-        >,
+        LedgerState = CacheDb,
         LedgerChangeSet = ChangeSet,
     >;
 
@@ -74,9 +72,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
     fn create_rpc_methods(
         &self,
         storage: Arc<RwLock<<Self::NativeContext as Spec>::Storage>>,
-        ledger_db: &LedgerDB<
-            <Self::StorageManager as HierarchicalStorageManager<Self::DaSpec>>::LedgerQueryManager,
-        >,
+        ledger_db: &LedgerDB,
         da_service: &Self::DaService,
     ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error>;
 
@@ -132,16 +128,7 @@ pub trait RollupBlueprint: Sized + Send + Sync {
     fn create_ledger_db(
         &self,
         ledger_state: <Self::StorageManager as HierarchicalStorageManager<Self::DaSpec>>::LedgerState,
-    ) -> anyhow::Result<
-        LedgerDB<
-            <Self::StorageManager as HierarchicalStorageManager<Self::DaSpec>>::LedgerQueryManager,
-        >,
-    >
-    where
-        <<Self as RollupBlueprint>::StorageManager as HierarchicalStorageManager<
-            <Self as RollupBlueprint>::DaSpec,
-        >>::LedgerQueryManager: QueryManager,
-    {
+    ) -> anyhow::Result<LedgerDB> {
         LedgerDB::with_db_snapshot(ledger_state)
     }
 
@@ -158,9 +145,6 @@ pub trait RollupBlueprint: Sized + Send + Sync {
     ) -> Result<Rollup<Self>, anyhow::Error>
     where
         <Self::NativeContext as Spec>::Storage: NativeStorage,
-        <<Self as RollupBlueprint>::StorageManager as HierarchicalStorageManager<
-            <Self as RollupBlueprint>::DaSpec,
-        >>::LedgerQueryManager: QueryManager,
     {
         let da_service = self.create_da_service(&rollup_config).await;
         // TODO: Double check what kind of storage needed here.
@@ -237,12 +221,7 @@ pub struct Rollup<S: RollupBlueprint> {
 
 impl<S: RollupBlueprint> Rollup<S> {
     /// Runs the rollup.
-    pub async fn run(self) -> Result<(), anyhow::Error>
-    where
-        <<S as RollupBlueprint>::StorageManager as HierarchicalStorageManager<
-            <S as RollupBlueprint>::DaSpec,
-        >>::LedgerQueryManager: QueryManager,
-    {
+    pub async fn run(self) -> Result<(), anyhow::Error> {
         self.run_and_report_rpc_port(None).await
     }
 
@@ -250,12 +229,7 @@ impl<S: RollupBlueprint> Rollup<S> {
     pub async fn run_and_report_rpc_port(
         self,
         channel: Option<oneshot::Sender<SocketAddr>>,
-    ) -> Result<(), anyhow::Error>
-    where
-        <<S as RollupBlueprint>::StorageManager as HierarchicalStorageManager<
-            <S as RollupBlueprint>::DaSpec,
-        >>::LedgerQueryManager: QueryManager,
-    {
+    ) -> anyhow::Result<()> {
         let mut runner = self.runner;
         runner.start_rpc_server(self.rpc_methods, channel).await;
         runner.run_in_process().await?;
