@@ -188,7 +188,7 @@ jobs:
           BLOCKS: 1
           TXNS_PER_BLOCK: 10
           NUM_PUB_KEYS: 100
-        run: cargo bench --bench prover_bench --features bench
+        run: sh ci_prover_count_check.sh
 
   bench_check:
     name: bench_check
@@ -264,7 +264,7 @@ jobs:
           BLOCKS: 10
           TXNS_PER_BLOCK: 10000
           NUM_PUB_KEYS: 100
-        run: cd examples/demo-rollup make basic
+        run: sh ci_rollup_count_check.sh
 
   # Check that every combination of features is working properly.
   hack:
