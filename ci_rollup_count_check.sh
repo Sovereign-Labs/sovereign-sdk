@@ -13,13 +13,13 @@ if [ -z "$verify_line" ]; then
     exit 1
 else
     tps_count=$(echo $verify_line | awk -F '|' '{print $3}' | sed 's/,//g')
-    result=$(awk -v val="$tps_count" -v threshold="$TPS" 'BEGIN {print (val > threshold) ? "FAIL" : "PASS"}')
+    result=$(awk -v val="$tps_count" -v threshold="$TPS" 'BEGIN {print (val <g threshold) ? "FAIL" : "PASS"}')
     if [ "$result" = "FAIL" ]; then
         echo "The value for TPS is less than $TPS. Failing the check. Value: $tps_count"
-        exit 0
+        exit 1
     else
         echo "The value for TPS is greater than $TPS. Passing the check. Value: $tps_count"
-        exit 1
+        exit 0
     fi
 fi
 exit 1
