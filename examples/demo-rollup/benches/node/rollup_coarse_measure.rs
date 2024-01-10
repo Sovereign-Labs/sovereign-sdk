@@ -125,7 +125,7 @@ async fn main() -> Result<(), anyhow::Error> {
     >::new();
 
     let demo_genesis_config = {
-        let integ_test_conf_dir: &Path = "../../test-data/genesis/integration-tests".as_ref();
+        let integ_test_conf_dir: &Path = "../test-data/genesis/integration-tests".as_ref();
         let rt_params =
             get_genesis_config::<DefaultContext, _>(&GenesisPaths::from_dir(integ_test_conf_dir))
                 .unwrap();
