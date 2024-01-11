@@ -13,4 +13,4 @@ regex = "1.5.4"
 prettytable-rs = "^0.10"
 textwrap = "0.16.0"
 indicatif = "0.17.6"
-clap = { workspace = true }
+clap = {version = "4.4.10", features = ["derive"] }
