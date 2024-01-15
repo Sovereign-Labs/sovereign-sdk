@@ -28,7 +28,7 @@ nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "d821332"
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 sha2 = { workspace = true }
-base64 = "0.21.5"
+base64 = "0.21.7"
 hex = { workspace = true, features = ["serde"] }
 jsonrpsee = { workspace = true, features = ["http-client"], optional = true }
 serde = { workspace = true }
