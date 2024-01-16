@@ -139,3 +139,10 @@ secp256k1 = { version = "0.27.0", default-features = false, features = ["global-
 # Uncomment to apply local changes
 # tendermint = { path = "../celestia-tendermint-rs/tendermint" }
 # tendermint-proto = { path = "../celestia-tendermint-rs/proto" }
+
+[patch.crates-io]
+# To apply the v0.19 build script downlaod issue hotfix.
+risc0-circuit-recursion = { git = "https://github.com/neysofu/risc0-hotfixes", rev = "v0.19.2-hotfix" }
+risc0-zkvm = { git = "https://github.com/neysofu/risc0-hotfixes", rev = "v0.19.2-hotfix" }
+risc0-zkvm-platform = { git = "https://github.com/neysofu/risc0-hotfixes", rev = "v0.19.2-hotfix" }
+risc0-circuit-rv32im = { git = "https://github.com/neysofu/risc0-hotfixes", rev = "v0.19.2-hotfix" }
