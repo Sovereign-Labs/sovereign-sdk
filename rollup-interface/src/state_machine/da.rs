@@ -1,11 +1,8 @@
 //! Defines traits and types used by the rollup to verify claims about the
 //! DA layer.
 use core::fmt::Debug;
-use std::cmp::min;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use bytes::Buf;
-use digest::Digest;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -13,34 +10,34 @@ use crate::zk::ValidityCondition;
 use crate::BasicAddress;
 
 /// A specification for the types used by a DA layer.
-pub trait DaSpec: 'static {
+pub trait DaSpec: 'static + Debug + PartialEq + Eq + Clone {
     /// The hash of a DA layer block
     type SlotHash: BlockHashTrait;
 
     /// The block header type used by the DA layer
-    type BlockHeader: BlockHeaderTrait<Hash = Self::SlotHash>;
+    type BlockHeader: BlockHeaderTrait<Hash = Self::SlotHash> + Send + Sync;
 
     /// The transaction type used by the DA layer.
-    type BlobTransaction: BlobReaderTrait<Address = Self::Address>;
+    type BlobTransaction: BlobReaderTrait<Address = Self::Address> + Send + Sync;
 
     /// The type used to represent addresses on the DA layer.
-    type Address: BasicAddress;
+    type Address: BasicAddress + Send + Sync;
 
     /// Any conditions imposed by the DA layer which need to be checked outside of the SNARK
-    type ValidityCondition: ValidityCondition;
+    type ValidityCondition: ValidityCondition + Send + Sync;
 
     /// A proof that each tx in a set of blob transactions is included in a given block.
-    type InclusionMultiProof: Serialize + DeserializeOwned;
+    type InclusionMultiProof: Serialize + DeserializeOwned + Send + Sync;
 
     /// A proof that a claimed set of transactions is complete.
     /// For example, this could be a range proof demonstrating that
     /// the provided BlobTransactions represent the entire contents
     /// of Celestia namespace in a given block
-    type CompletenessProof: Serialize + DeserializeOwned;
+    type CompletenessProof: Serialize + DeserializeOwned + Send + Sync;
 
     /// The parameters of the rollup which are baked into the state-transition function.
     /// For example, this could include the namespace of the rollup on Celestia.
-    type ChainParams;
+    type ChainParams: Send + Sync;
 }
 
 /// A `DaVerifier` implements the logic required to create a zk proof that some data
@@ -49,7 +46,7 @@ pub trait DaSpec: 'static {
 /// This trait implements the required functionality to *verify* claims of the form
 /// "If X is the most recent block in the DA layer, then Y is the ordered set of transactions that must
 /// be processed by the rollup."
-pub trait DaVerifier {
+pub trait DaVerifier: Send + Sync {
     /// The set of types required by the DA layer.
     type Spec: DaSpec;
 
@@ -61,7 +58,7 @@ pub trait DaVerifier {
     fn new(params: <Self::Spec as DaSpec>::ChainParams) -> Self;
 
     /// Verify a claimed set of transactions against a block header.
-    fn verify_relevant_tx_list<H: Digest>(
+    fn verify_relevant_tx_list(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],
@@ -70,12 +67,13 @@ pub trait DaVerifier {
     ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error>;
 }
 
+#[cfg(feature = "std")]
 #[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize, PartialEq)]
 /// Simple structure that implements the Read trait for a buffer and  counts the number of bytes read from the beginning.
 /// Useful for the partial blob reading optimization: we know for each blob how many bytes have been read from the beginning.
 ///
 /// Because of soundness issues we cannot implement the Buf trait because the prover could get unproved blob data using the chunk method.
-pub struct CountedBufReader<B: Buf> {
+pub struct CountedBufReader<B: bytes::Buf> {
     /// The original blob data.
     inner: B,
 
@@ -84,7 +82,8 @@ pub struct CountedBufReader<B: Buf> {
     accumulator: Vec<u8>,
 }
 
-impl<B: Buf> CountedBufReader<B> {
+#[cfg(feature = "std")]
+impl<B: bytes::Buf> CountedBufReader<B> {
     /// Creates a new buffer reader with counter from an objet that implements the buffer trait
     pub fn new(inner: B) -> Self {
         let buf_size = inner.remaining();
@@ -104,7 +103,7 @@ impl<B: Buf> CountedBufReader<B> {
         }
         // `Buf::advance` would panic if `num_bytes` was greater than the length of the remaining unverified data,
         // but we just advance to the end of the buffer.
-        let num_to_read = min(remaining, requested);
+        let num_to_read = core::cmp::min(remaining, requested);
         // Extend the inner vector with zeros (copy_to_slice requires the vector to have
         // the correct *length* not just capacity)
         self.accumulator
@@ -179,15 +178,104 @@ pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static 
 }
 
 /// Trait with collection of trait bounds for a block hash.
-pub trait BlockHashTrait: Serialize + DeserializeOwned + PartialEq + Debug + Send + Sync {}
+pub trait BlockHashTrait:
+    // so it is compatible with StorageManager implementation?
+    Serialize + DeserializeOwned + PartialEq + Debug + Send + Sync + Clone + Eq + Into<[u8; 32]> + core::hash::Hash
+{
+}
 
 /// A block header, typically used in the context of an underlying DA blockchain.
-pub trait BlockHeaderTrait: PartialEq + Debug + Clone {
+pub trait BlockHeaderTrait: PartialEq + Debug + Clone + Serialize + DeserializeOwned {
     /// Each block header must have a unique canonical hash.
-    type Hash: Clone;
+    type Hash: Clone + core::fmt::Display;
+
     /// Each block header must contain the hash of the previous block.
     fn prev_hash(&self) -> Self::Hash;
 
     /// Hash the type to get the digest.
     fn hash(&self) -> Self::Hash;
+
+    /// The current header height
+    fn height(&self) -> u64;
+
+    /// The timestamp of the block
+    fn time(&self) -> Time;
+}
+
+#[derive(
+    Serialize, Deserialize, Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Default,
+)]
+/// A timestamp, represented as seconds since the unix epoch.
+pub struct Time {
+    /// The number of seconds since the unix epoch
+    secs: i64,
+    nanos: u32,
+}
+
+#[derive(Debug)]
+#[cfg_attr(
+    feature = "std",
+    derive(thiserror::Error),
+    error("Only intervals less than one second may be represented as nanoseconds")
+)]
+/// An error that occurs when trying to create a `NanoSeconds` representing more than one second
+pub struct ErrTooManyNanos;
+
+/// A number of nanoseconds
+pub struct NanoSeconds(u32);
+
+impl NanoSeconds {
+    /// Try to turn a u32 into a `NanoSeconds`. Only values less than one second are valid.
+    pub fn new(nanos: u32) -> Result<Self, ErrTooManyNanos> {
+        if nanos < NANOS_PER_SECOND {
+            Ok(NanoSeconds(nanos))
+        } else {
+            Err(ErrTooManyNanos)
+        }
+    }
+}
+
+const NANOS_PER_SECOND: u32 = 1_000_000_000;
+
+impl Time {
+    /// The time since the unix epoch
+    pub const fn new(secs: i64, nanos: NanoSeconds) -> Self {
+        Time {
+            secs,
+            nanos: nanos.0,
+        }
+    }
+
+    #[cfg(feature = "std")]
+    /// Get the current time
+    pub fn now() -> Self {
+        let current_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("Time went backwards");
+        Time {
+            secs: current_time.as_secs() as i64,
+            nanos: current_time.subsec_nanos(),
+        }
+    }
+
+    /// Create a time from the specified number of whole seconds.
+    pub const fn from_secs(secs: i64) -> Self {
+        Time { secs, nanos: 0 }
+    }
+
+    /// Returns the number of whole seconds since the epoch
+    ///
+    /// The returned value does not include the fractional (nanosecond) part of the duration,
+    /// which can be obtained using `subsec_nanos`.
+    pub fn secs(&self) -> i64 {
+        self.secs
+    }
+
+    /// Returns the fractional part of this [`Time`], in nanoseconds.
+    ///
+    /// This method does not return the length of the time when represented by nanoseconds.
+    /// The returned number always represents a fractional portion of a second (i.e., it is less than one billion).
+    pub fn subsec_nanos(&self) -> u32 {
+        self.nanos
+    }
 }

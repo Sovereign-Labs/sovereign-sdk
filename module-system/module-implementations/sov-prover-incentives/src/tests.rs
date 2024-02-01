@@ -1,8 +1,10 @@
+use sov_mock_da::MockValidityCond;
+use sov_mock_zkvm::{MockCodeCommitment, MockProof, MockZkvm};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::digest::Digest;
-use sov_modules_api::{Address, Module, Spec};
-use sov_rollup_interface::mocks::{MockCodeCommitment, MockProof, MockZkvm};
-use sov_state::{ProverStorage, WorkingSet};
+use sov_modules_api::prelude::*;
+use sov_modules_api::{Address, Context, Module, Spec, WorkingSet};
+use sov_prover_storage_manager::new_orphan_storage;
 
 use crate::ProverIncentives;
 
@@ -17,8 +19,13 @@ pub fn generate_address(key: &str) -> <C as Spec>::Address {
     Address::from(hash)
 }
 
-fn create_bank_config() -> (sov_bank::BankConfig<C>, <C as Spec>::Address) {
+fn create_bank_config() -> (
+    sov_bank::BankConfig<C>,
+    <C as Spec>::Address,
+    <C as Spec>::Address,
+) {
     let prover_address = generate_address("prover_pub_key");
+    let sequencer_address = generate_address("sequencer_pub_key");
 
     let token_config = sov_bank::TokenConfig {
         token_name: "InitialToken".to_owned(),
@@ -32,14 +39,19 @@ fn create_bank_config() -> (sov_bank::BankConfig<C>, <C as Spec>::Address) {
             tokens: vec![token_config],
         },
         prover_address,
+        sequencer_address,
     )
 }
 
 fn setup(
-    working_set: &mut WorkingSet<<C as Spec>::Storage>,
-) -> (ProverIncentives<C, MockZkvm>, Address) {
+    working_set: &mut WorkingSet<C>,
+) -> (
+    ProverIncentives<C, MockZkvm<MockValidityCond>>,
+    Address,
+    Address,
+) {
     // Initialize bank
-    let (bank_config, prover_address) = create_bank_config();
+    let (bank_config, prover_address, sequencer) = create_bank_config();
     let bank = sov_bank::Bank::<C>::default();
     bank.genesis(&bank_config, working_set)
         .expect("bank genesis must succeed");
@@ -50,7 +62,7 @@ fn setup(
     );
 
     // initialize prover incentives
-    let module = ProverIncentives::<C, MockZkvm>::default();
+    let module = ProverIncentives::<C, MockZkvm<MockValidityCond>>::default();
     let config = crate::ProverIncentivesConfig {
         bonding_token_address: token_address,
         minimum_bond: BOND_AMOUNT,
@@ -61,14 +73,14 @@ fn setup(
     module
         .genesis(&config, working_set)
         .expect("prover incentives genesis must succeed");
-    (module, prover_address)
+    (module, prover_address, sequencer)
 }
 
 #[test]
 fn test_burn_on_invalid_proof() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, prover_address) = setup(&mut working_set);
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
+    let (module, prover_address, sequencer) = setup(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
     assert_eq!(
@@ -80,9 +92,7 @@ fn test_burn_on_invalid_proof() {
 
     // Process an invalid proof
     {
-        let context = DefaultContext {
-            sender: prover_address,
-        };
+        let context = DefaultContext::new(prover_address, sequencer, 1);
         let proof = MockProof {
             program_id: MOCK_CODE_COMMITMENT,
             is_valid: false,
@@ -105,8 +115,8 @@ fn test_burn_on_invalid_proof() {
 #[test]
 fn test_valid_proof() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, prover_address) = setup(&mut working_set);
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
+    let (module, prover_address, sequencer) = setup(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
     assert_eq!(
@@ -118,9 +128,7 @@ fn test_valid_proof() {
 
     // Process a valid proof
     {
-        let context = DefaultContext {
-            sender: prover_address,
-        };
+        let context = DefaultContext::new(prover_address, sequencer, 1);
         let proof = MockProof {
             program_id: MOCK_CODE_COMMITMENT,
             is_valid: true,
@@ -143,11 +151,9 @@ fn test_valid_proof() {
 #[test]
 fn test_unbonding() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, prover_address) = setup(&mut working_set);
-    let context = DefaultContext {
-        sender: prover_address,
-    };
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
+    let (module, prover_address, sequencer) = setup(&mut working_set);
+    let context = DefaultContext::new(prover_address, sequencer, 1);
     let token_address = module
         .bonding_token_address
         .get(&mut working_set)
@@ -196,11 +202,9 @@ fn test_unbonding() {
 #[test]
 fn test_prover_not_bonded() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, prover_address) = setup(&mut working_set);
-    let context = DefaultContext {
-        sender: prover_address,
-    };
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
+    let (module, prover_address, sequencer) = setup(&mut working_set);
+    let context = DefaultContext::new(prover_address, sequencer, 1);
 
     // Unbond the prover
     module

@@ -14,8 +14,13 @@ mod cli_parser;
 mod common;
 mod default_runtime;
 mod dispatch;
+mod event;
+mod make_constants;
+mod manifest;
 mod module_call_json_schema;
 mod module_info;
+mod new_types;
+mod offchain;
 #[cfg(feature = "native")]
 mod rpc;
 
@@ -25,17 +30,32 @@ use default_runtime::DefaultRuntimeMacro;
 use dispatch::dispatch_call::DispatchCallMacro;
 use dispatch::genesis::GenesisMacro;
 use dispatch::message_codec::MessageCodec;
+use event::EventMacro;
+use make_constants::{make_const, PartialItemConst};
 use module_call_json_schema::derive_module_call_json_schema;
+use module_info::ModuleType;
+use new_types::address_type_helper;
+use offchain::offchain_generator;
 use proc_macro::TokenStream;
 #[cfg(feature = "native")]
 use rpc::ExposeRpcMacro;
-use syn::parse_macro_input;
+use syn::{parse_macro_input, DeriveInput, ItemFn};
 
-#[proc_macro_derive(ModuleInfo, attributes(state, module, address))]
+#[proc_macro_derive(ModuleInfo, attributes(state, module, address, gas))]
 pub fn module_info(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
 
-    handle_macro_error(module_info::derive_module_info(input))
+    handle_macro_error(module_info::derive_module_info(input, ModuleType::Standard))
+}
+
+#[proc_macro_derive(
+    KernelModuleInfo,
+    attributes(state, module, kernel_module, address, gas)
+)]
+pub fn kernel_module_info(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input);
+
+    handle_macro_error(module_info::derive_module_info(input, ModuleType::Kernel))
 }
 
 #[proc_macro_derive(DefaultRuntime)]
@@ -62,6 +82,14 @@ pub fn dispatch_call(input: TokenStream) -> TokenStream {
     handle_macro_error(call_macro.derive_dispatch_call(input))
 }
 
+#[proc_macro_derive(Event, attributes(serialization))]
+pub fn event(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input);
+    let event_macro = EventMacro::new("Event");
+
+    handle_macro_error(event_macro.derive_event_enum(input))
+}
+
 #[proc_macro_derive(ModuleCallJsonSchema)]
 pub fn module_call_json_schema(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
@@ -75,6 +103,15 @@ pub fn codec(input: TokenStream) -> TokenStream {
     let codec_macro = MessageCodec::new("MessageCodec");
 
     handle_macro_error(codec_macro.derive_message_codec(input))
+}
+
+/// Sets a constant from the manifest file instead of hard-coding it inline.
+#[proc_macro_attribute]
+pub fn config_constant(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as PartialItemConst);
+    handle_macro_error(
+        make_const(&input.ident, &input.ty, input.vis, &input.attrs).map(|ok| ok.into()),
+    )
 }
 
 /// Derives a [`jsonrpsee`] implementation for the underlying type. Any code relying on this macro
@@ -110,9 +147,8 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// This is exactly equivalent to hand-writing
 ///
 /// ```
-/// use sov_modules_api::{Context, ModuleInfo};
+/// use sov_modules_api::{Context, ModuleInfo, WorkingSet};
 /// use sov_modules_api::macros::rpc_gen;
-/// use sov_state::WorkingSet;
 /// use jsonrpsee::core::RpcResult;
 ///
 /// #[derive(ModuleInfo)]
@@ -123,13 +159,13 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// };
 ///
 /// impl<C: Context> MyModule<C> {
-///     fn my_method(&self, working_set: &mut WorkingSet<C::Storage>, param: u32) -> RpcResult<u32> {
+///     fn my_method(&self, working_set: &mut WorkingSet<C>, param: u32) -> RpcResult<u32> {
 ///         Ok(1)
 ///     }  
 /// }
 ///
 /// #[jsonrpsee::proc_macros::rpc(client, server, namespace ="myNamespace")]
-/// pub trait MyModuleRpc {
+/// pub trait MyModuleRpc<C: Context> {
 ///     #[method(name = "myMethod")]
 ///     fn my_method(&self, param: u32) ->RpcResult<u32>;
 ///
@@ -137,6 +173,12 @@ pub fn codec(input: TokenStream) -> TokenStream {
 ///     fn health(&self) -> RpcResult<()> {
 ///         Ok(())
 ///     }
+///
+///     #[method(name = "moduleAddress")]
+///     fn module_address(&self) -> ::jsonrpsee::core::RpcResult<String> {
+///        Ok(<MyModule<C> as ModuleInfo>::address(&<MyModule<C> as ::core::default::Default>::default()).to_string())
+///     }
+///         
 /// }
 /// ```
 ///
@@ -189,4 +231,104 @@ pub fn cli_parser(input: TokenStream) -> TokenStream {
 pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
     let input: syn::DeriveInput = parse_macro_input!(input);
     handle_macro_error(derive_cli_wallet_arg(input))
+}
+
+/// Simple convenience macro for adding some common derive macros and
+/// impls specifically for a NewType wrapping an Address.
+/// The reason for having this is that we assumes NewTypes for address as a common use case
+///
+/// ## Example
+/// ```
+///use sov_modules_macros::address_type;
+///use std::fmt;
+///use sov_modules_api::Context;
+///#[address_type]
+///pub struct UserAddress;
+/// ```
+///
+/// This is exactly equivalent to hand-writing
+///
+/// ```
+/// use std::fmt;
+/// use sov_modules_api::Context;
+///#[cfg(feature = "native")]
+///#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+///#[schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "UserAddress")]
+///#[serde(transparent)]
+///#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Clone, Debug, PartialEq, Eq, Hash)]
+///pub struct UserAddress<C: Context>(C::Address);
+///
+///#[cfg(not(feature = "native"))]
+///#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Clone, Debug, PartialEq, Eq, Hash)]
+///pub struct UserAddress<C: Context>(C::Address);
+///
+///impl<C: Context> UserAddress<C> {
+///    /// Public constructor
+///    pub fn new(address: &C::Address) -> Self {
+///        UserAddress(address.clone())
+///    }
+///
+///    /// Public getter
+///    pub fn get_address(&self) -> &C::Address {
+///        &self.0
+///    }
+///}
+///
+///impl<C: Context> fmt::Display for UserAddress<C>
+///where
+///    C::Address: fmt::Display,
+///{
+///    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+///        write!(f, "{}", self.0)
+///    }
+///}
+///
+///impl<C: Context> AsRef<[u8]> for UserAddress<C>
+///where
+///    C::Address: AsRef<[u8]>,
+///{
+///    fn as_ref(&self) -> &[u8] {
+///        self.0.as_ref()
+///    }
+///}
+/// ```
+#[proc_macro_attribute]
+pub fn address_type(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
+    handle_macro_error(address_type_helper(input))
+}
+
+/// The offchain macro is used to annotate functions that should only be executed by the rollup
+/// when the "offchain" feature flag is passed. The macro produces one of two functions depending on
+/// the presence flag.
+/// "offchain" feature enabled: function is present as defined
+/// "offchain" feature absent: function body is replaced with an empty definition
+///
+/// The idea here is that offchain computation is optionally enabled for a full node and is not
+/// part of chain state and does not impact consensus, prover or anything else.
+///
+/// ## Example
+/// ```
+/// use sov_modules_macros::offchain;
+/// #[offchain]
+/// fn redis_insert(count: u64){
+///     println!("Inserting {} to redis", count);
+/// }
+/// ```
+///
+/// This is exactly equivalent to hand-writing
+///```
+/// #[cfg(feature = "offchain")]
+/// fn redis_insert(count: u64){
+///     println!("Inserting {} to redis", count);
+/// }
+///
+/// #[cfg(not(feature = "offchain"))]
+/// fn redis_insert(count: u64){
+/// }
+///```
+#[proc_macro_attribute]
+pub fn offchain(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemFn);
+    handle_macro_error(offchain_generator(input))
 }

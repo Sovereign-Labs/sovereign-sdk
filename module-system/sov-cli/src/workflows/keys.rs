@@ -1,6 +1,7 @@
 //! Key management workflows for the sov CLI wallet
 use std::path::{Path, PathBuf};
 
+use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_modules_api::{clap, PrivateKey, PublicKey, Spec};
@@ -44,19 +45,22 @@ pub enum KeyWorkflow<C: sov_modules_api::Context> {
     },
     /// Unlink a key from the wallet
     Remove {
-        /// The identifier of the key to activate
+        /// The identifier of the key to remove
         #[clap(subcommand)]
         identifier: KeyIdentifier<C>,
     },
 }
 
 impl<C: sov_modules_api::Context> KeyWorkflow<C> {
-    /// Run the key workflow to import, generate, activate, or list keys
-    pub fn run<Tx: Serialize + DeserializeOwned>(
+    /// Run the key workflow to import, generate, activate, remove or list keys
+    pub fn run<Tx>(
         self,
         wallet_state: &mut WalletState<Tx, C>,
         app_dir: impl AsRef<Path>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), anyhow::Error>
+    where
+        Tx: Serialize + DeserializeOwned + BorshSerialize + BorshDeserialize,
+    {
         match self {
             KeyWorkflow::Generate { nickname } => {
                 generate_and_save_key(nickname, app_dir, wallet_state)?;
@@ -121,17 +125,21 @@ pub fn generate_and_save_key<Tx, C: sov_modules_api::Context>(
     nickname: Option<String>,
     app_dir: impl AsRef<Path>,
     wallet_state: &mut WalletState<Tx, C>,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), anyhow::Error>
+where
+    Tx: Serialize + DeserializeOwned + BorshSerialize + BorshDeserialize,
+{
     let keys = <C as Spec>::PrivateKey::generate();
-    let public_key = keys.pub_key();
-    let address = keys.pub_key().to_address::<<C as Spec>::Address>();
+    let key_and_address = PrivateKeyAndAddress::<C>::from_key(keys);
+    let public_key = key_and_address.private_key.pub_key();
+    let address = key_and_address.address.clone();
     let key_path = app_dir.as_ref().join(format!("{}.json", address));
     println!(
         "Generated key pair with address: {}. Saving to {}",
         address,
         key_path.display()
     );
-    std::fs::write(&key_path, serde_json::to_string(&keys)?)?;
+    std::fs::write(&key_path, serde_json::to_string(&key_and_address)?)?;
     wallet_state
         .addresses
         .add(address, nickname, public_key, key_path);

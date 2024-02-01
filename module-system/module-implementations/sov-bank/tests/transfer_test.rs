@@ -1,24 +1,26 @@
 mod helpers;
 
 use helpers::*;
-use sov_bank::query::TotalSupplyResponse;
 use sov_bank::{
     get_genesis_token_address, get_token_address, Bank, BankConfig, CallMessage, Coins,
+    TotalSupplyResponse,
 };
+use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address;
-use sov_modules_api::{Address, Context, Error, Module};
-use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
+use sov_modules_api::{Address, Context, Error, Module, WorkingSet};
+use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
-pub type Storage = ProverStorage<DefaultStorageSpec>;
+pub type Storage = ProverStorage<DefaultStorageSpec, SnapshotManager>;
 
 #[test]
 fn transfer_initial_token() {
     let initial_balance = 100;
     let transfer_amount = 10;
-    let bank_config = create_bank_config_with_token(3, initial_balance);
+    let bank_config = create_bank_config_with_token(4, initial_balance);
     let token_name = bank_config.tokens[0].token_name.clone();
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let bank = Bank::default();
     bank.genesis(&bank_config, &mut working_set).unwrap();
 
@@ -28,16 +30,18 @@ fn transfer_initial_token() {
     );
     let sender_address = bank_config.tokens[0].address_and_balances[0].0;
     let receiver_address = bank_config.tokens[0].address_and_balances[1].0;
+    let sequencer_address = bank_config.tokens[0].address_and_balances[3].0;
     assert_ne!(sender_address, receiver_address);
 
     // Preparation
     let query_user_balance =
-        |user_address: Address, working_set: &mut WorkingSet<Storage>| -> Option<u64> {
+        |user_address: Address, working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
             bank.get_balance_of(user_address, token_address, working_set)
         };
 
-    let query_total_supply = |working_set: &mut WorkingSet<Storage>| -> Option<u64> {
-        let total_supply: TotalSupplyResponse = bank.supply_of(token_address, working_set).unwrap();
+    let query_total_supply = |working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
+        let total_supply: TotalSupplyResponse =
+            bank.supply_of(None, token_address, working_set).unwrap();
         total_supply.amount
     };
 
@@ -48,7 +52,7 @@ fn transfer_initial_token() {
 
     assert_eq!(Some(initial_balance), sender_balance_before);
     assert_eq!(sender_balance_before, receiver_balance_before);
-    let sender_context = C::new(sender_address);
+    let sender_context = C::new(sender_address, sequencer_address, 1);
 
     // Transfer happy test
     {
@@ -155,7 +159,8 @@ fn transfer_initial_token() {
     // Sender does not exist
     {
         let unknown_sender = generate_address::<C>("non_existing_sender");
-        let unknown_sender_context = C::new(unknown_sender);
+        let sequencer = generate_address::<C>("sequencer");
+        let unknown_sender_context = C::new(unknown_sender, sequencer, 1);
 
         let sender_balance = query_user_balance(unknown_sender, &mut working_set);
         assert!(sender_balance.is_none());
@@ -256,12 +261,13 @@ fn transfer_initial_token() {
 fn transfer_deployed_token() {
     let bank = Bank::<C>::default();
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let empty_bank_config = BankConfig::<C> { tokens: vec![] };
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 
     let sender_address = generate_address::<C>("just_sender");
     let receiver_address = generate_address::<C>("just_receiver");
+    let sequencer_address = generate_address::<C>("just_sequencer");
 
     let salt = 10;
     let token_name = "Token1".to_owned();
@@ -272,12 +278,13 @@ fn transfer_deployed_token() {
 
     // Preparation
     let query_user_balance =
-        |user_address: Address, working_set: &mut WorkingSet<Storage>| -> Option<u64> {
+        |user_address: Address, working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
             bank.get_balance_of(user_address, token_address, working_set)
         };
 
-    let query_total_supply = |working_set: &mut WorkingSet<Storage>| -> Option<u64> {
-        let total_supply: TotalSupplyResponse = bank.supply_of(token_address, working_set).unwrap();
+    let query_total_supply = |working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
+        let total_supply: TotalSupplyResponse =
+            bank.supply_of(None, token_address, working_set).unwrap();
         total_supply.amount
     };
 
@@ -288,7 +295,7 @@ fn transfer_deployed_token() {
 
     assert!(sender_balance_before.is_none());
     assert!(receiver_balance_before.is_none());
-    let sender_context = C::new(sender_address);
+    let sender_context = C::new(sender_address, sequencer_address, 1);
 
     let mint_message = CallMessage::CreateToken {
         salt,

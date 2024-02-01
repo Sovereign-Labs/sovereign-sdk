@@ -6,35 +6,41 @@ edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
+publish = false
 
 [dev-dependencies]
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1", features = ["mocks"] }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-attester-incentives = { path = ".", features = ["native"] }
 tempfile = { workspace = true }
+sov-attester-incentives = { path = ".", features = ["native"] }
+sov-mock-da = { path = "../../../adapters/mock-da", features = ["native"] }
+sov-mock-zkvm = { path = "../../../adapters/mock-zkvm" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.3" }
+sov-modules-core = { path = "../../sov-modules-core", version = "0.3", features = ["mocks"] }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3" }
+sov-prover-storage-manager = { path = "../../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
+
 
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
+bcs =  { workspace = true }
 jmt = { workspace = true }
 thiserror = { workspace = true }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 
-sov-bank = { path = "../sov-bank", version = "0.1" }
-sov-chain-state = { path = "../sov-chain-state", version = "0.1" }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-state = { path = "../../sov-state", version = "0.1" }
+sov-bank = { path = "../sov-bank", version = "0.3" }
+sov-chain-state = { path = "../sov-chain-state", version = "0.3" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.3" }
+sov-state = { path = "../../sov-state", version = "0.3" }
 
 
 [features]
 default = []
 native = [
-    "serde",
     "serde_json",
     "sov-modules-api/native",
     "sov-bank/native",

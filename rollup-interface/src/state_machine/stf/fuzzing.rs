@@ -6,6 +6,8 @@ use proptest::prelude::{any, Arbitrary};
 use proptest::strategy::{BoxedStrategy, Strategy};
 
 use super::{BatchReceipt, Event, TransactionReceipt};
+use crate::maybestd::boxed::Box;
+use crate::maybestd::vec::Vec;
 
 /// An object-safe hashing trait, which is blanket implemented for all
 /// [`digest::Digest`] implementors.
@@ -16,7 +18,7 @@ pub trait FuzzHasher {
 
 /// The default hasher to use for fuzzing
 fn default_fuzz_hasher() -> Box<dyn FuzzHasher> {
-    Box::new(::sha2::Sha256::new())
+    Box::new(sha2::Sha256::new())
 }
 
 impl<T: Digest<OutputSize = U32> + Clone> FuzzHasher for T {
@@ -93,6 +95,8 @@ pub struct TransactionReceiptStrategyArgs {
     /// Whether to generate entries for the `body_to_save` field of the `TransactionReceipt`.
     /// Values are guaranteed to be `Some` if this is `Always`, and `None` if this is `Never`.
     pub generate_tx_bodies: Frequency,
+    /// The gas unit dimensions count.
+    pub gas_unit_dimensions: usize,
 }
 
 impl Default for TransactionReceiptStrategyArgs {
@@ -101,6 +105,7 @@ impl Default for TransactionReceiptStrategyArgs {
             hasher: Some(default_fuzz_hasher()),
             max_events: 10,
             generate_tx_bodies: Frequency::Sometimes,
+            gas_unit_dimensions: 2,
         }
     }
 }
@@ -125,19 +130,24 @@ impl<R: proptest::arbitrary::Arbitrary + 'static> proptest::arbitrary::Arbitrary
                 tx_body_strategy,
                 proptest::collection::vec(any::<Event>(), 0..args.max_events),
                 any::<R>(),
+                proptest::collection::vec(any::<u64>(), 0..args.gas_unit_dimensions),
             )
-                .prop_map(move |(tx_hash, body_to_save, events, receipt)| {
-                    let tx_hash = match (args.hasher.as_ref(), body_to_save.as_ref()) {
-                        (Some(hasher), Some(body)) => hasher.hash(body),
-                        _ => tx_hash,
-                    };
-                    Self {
-                        tx_hash,
-                        body_to_save,
-                        events,
-                        receipt,
-                    }
-                })
+                .prop_map(
+                    move |(tx_hash, body_to_save, events, receipt, mut gas_used)| {
+                        let tx_hash = match (args.hasher.as_ref(), body_to_save.as_ref()) {
+                            (Some(hasher), Some(body)) => hasher.hash(body),
+                            _ => tx_hash,
+                        };
+                        gas_used.resize(args.gas_unit_dimensions, 0);
+                        Self {
+                            tx_hash,
+                            body_to_save,
+                            events,
+                            receipt,
+                            gas_used,
+                        }
+                    },
+                )
                 .boxed()
         }
     }

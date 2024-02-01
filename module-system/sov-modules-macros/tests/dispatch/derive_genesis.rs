@@ -22,8 +22,8 @@ where
 
 fn main() {
     type C = ZkDefaultContext;
-    let storage = ZkStorage::new([1u8; 32]);
-    let mut working_set = &mut sov_state::WorkingSet::new(storage);
+    let storage = ZkStorage::new();
+    let mut working_set = &mut sov_modules_api::WorkingSet::new(storage);
     let runtime = &mut Runtime::<C, u32>::default();
     let config = GenesisConfig::new((), (), ());
     runtime.genesis(&config, working_set).unwrap();

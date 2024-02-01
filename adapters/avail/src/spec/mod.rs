@@ -1,4 +1,5 @@
 use sov_rollup_interface::da::DaSpec;
+
 use crate::verifier::ChainValidityCondition;
 
 pub mod address;
@@ -7,15 +8,11 @@ mod hash;
 pub mod header;
 pub mod transaction;
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct DaLayerSpec;
 
 impl DaSpec for DaLayerSpec {
-    type ValidityCondition =  ChainValidityCondition;
-
     type SlotHash = hash::AvailHash;
-
-    type ChainParams = ();
 
     type BlockHeader = header::AvailHeader;
 
@@ -23,7 +20,11 @@ impl DaSpec for DaLayerSpec {
 
     type Address = address::AvailAddress;
 
+    type ValidityCondition = ChainValidityCondition;
+
     type InclusionMultiProof = ();
 
     type CompletenessProof = ();
+
+    type ChainParams = ();
 }

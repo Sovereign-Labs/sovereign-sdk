@@ -2,34 +2,42 @@
 resolver = "2"
 members = [
     "rollup-interface",
+    "adapters/avail",
     "adapters/risc0",
     "adapters/celestia",
+    "adapters/mock-da",
+    "adapters/mock-zkvm",
+    # Examples
     "examples/const-rollup-config",
-    "examples/demo-stf",
     "examples/demo-simple-stf",
     "examples/demo-rollup",
-    "examples/demo-rollup-avail",
-    "examples/demo-nft-module",
-    "examples/avail-helper",
-
+    "examples/simple-nft-module",
+    # Full Node
     "full-node/db/sov-db",
     "full-node/sov-sequencer",
     "full-node/sov-ethereum",
+    "full-node/sov-ledger-rpc",
     "full-node/sov-stf-runner",
-
+    "full-node/sov-prover-storage-manager",
+    # Utils
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
-
+    "utils/bashtestmd",
+    "utils/rng-da-service",
+    # Module System
     "module-system/sov-cli",
-    "module-system/sov-modules-stf-template",
+    "module-system/sov-modules-stf-blueprint",
+    "module-system/sov-modules-rollup-blueprint",
     "module-system/sov-modules-macros",
+    "module-system/sov-modules-core",
+    "module-system/sov-soft-confirmations-kernel",
     "module-system/sov-state",
     "module-system/sov-modules-api",
     "module-system/module-schemas",
-    "module-system/utils/sov-first-read-last-write-cache",
-    "module-system/utils/sov-data-generators",
+    "module-system/sov-data-generators",
     "module-system/module-implementations/sov-accounts",
     "module-system/module-implementations/sov-bank",
+    "module-system/module-implementations/sov-nft-module",
     "module-system/module-implementations/sov-chain-state",
     "module-system/module-implementations/sov-blob-storage",
     "module-system/module-implementations/sov-evm",
@@ -42,80 +50,92 @@ members = [
     "module-system/module-implementations/examples/sov-accessory-state",
     "module-system/module-implementations/integration-tests",
 ]
-exclude = [
-    "examples/demo-prover",
-    "examples/demo-prover-avail"
-]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["Sovereign Labs <info@sovereign.xyz>"]
 homepage = "https://www.sovereign.xyz"
 publish = false
 repository = "https://github.com/sovereign-labs/sovereign-sdk"
-rust-version = "1.66"
 
 [workspace.dependencies]
 # Dependencies maintained by Sovereign
-jmt = { version = "0.7.0" }
+jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "1d007e11cb68aa5ca13e9a5af4a12e6439d5f7b6" }
+
 
 # External dependencies
 async-trait = "0.1.71"
-anyhow = "1.0.68"
-arbitrary = { version = "1.3.0", features = ["derive"] }
-borsh = { version = "0.10.3", features = ["rc", "bytes"] }
+anyhow = { version = "1.0.68", default-features = false }
+arbitrary = { version = "1.3.1", features = ["derive"] }
+borsh = { version = "0.10.3", default-features = false }
 # TODO: Consider replacing this serialization format
 #     https://github.com/Sovereign-Labs/sovereign-sdk/issues/283
 bincode = "1.3.3"
-bcs = "0.1.5"
-byteorder = "1.4.3"
-bytes = "1.2.1"
-hex = "0.4.3"
-once_cell = "1.10.0"
+bcs = "0.1.6"
+byteorder = { version = "1.5.0", default-features = false }
+bytes = { version = "1.2.1", default-features = false }
+digest = { version = "0.10.6", default-features = false, features = ["alloc"] }
+futures = "0.3"
+pin-project = { version = "1.1.3" }
+hex = { version = "0.4.3", default-features = false, features = ["alloc", "serde"] }
+once_cell = { version = "1.19.0", default-features = false, features = ["alloc"] }
 prometheus = { version = "0.13.3", default-features = false }
-proptest = "1.0.0"
+proptest = { version = "1.3.1", default-features = false, features = ["alloc"] }
 proptest-derive = "0.3.0"
 rand = "0.8"
-rayon = "1.5.2"
+rayon = "1.8.0"
 rocksdb = { version = "0.21.0", features = ["lz4"] }
-serde = { version = "1.0.188", features = ["derive", "rc"] }
-serde_json = { version = "1.0" }
-sha2 = "0.10.6"
-digest = "0.10.6"
-thiserror = "1.0.38"
+serde = { version = "1.0.192", default-features = false, features = ["alloc", "derive"] }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
+sha2 = { version = "0.10.6", default-features = false }
+thiserror = "1.0.50"
 tiny-keccak = "2.0.2"
-tracing = "0.1.37"
-bech32 = "0.9.1"
-derive_more = "0.99.11"
-clap = { version = "4.2.7", features = ["derive"] }
-toml = "0.7.3"
-jsonrpsee = { version = "0.18.2", features = ["jsonrpsee-types"] }
-schemars = { version = "0.8.12", features = ["derive"] }
-tempfile = "3.5"
+tracing = { version = "0.1.40", default-features = false }
+bech32 = { version = "0.9.1", default-features = false }
+derive_more = { version = "0.99.11", default-features = false }
+clap = { version = "4.4.10", features = ["derive"] }
+toml = "0.8.0"
+jsonrpsee = { version = "0.20.1", features = ["jsonrpsee-types"] }
+schemars = { version = "0.8.16", features = ["derive"] }
+tempfile = "3.8"
 tokio = { version = "1", features = ["full"] }
-
+lazy_static = "1.4.0"
+num_cpus = "1.0"
+risc0-zkvm = { version = "0.19", default-features = false }
+risc0-zkvm-platform = { version = "0.19" }
+risc0-zkp = "0.19"
+risc0-circuit-rv32im = "0.19"
+risc0-build = "0.19"
 
 # EVM dependencies
-ethers = "=2.0.8"
-ethers-core = "=2.0.8"
-ethers-contract = "=2.0.8"
-ethers-providers = "=2.0.8"
-ethers-signers = { version = "=2.0.8", default-features = false }
-ethers-middleware = "=2.0.8"
+ethereum-types = "0.14.1"
+ethers = "=2.0.10"
+ethers-core = { version = "=2.0.10", default-features = false }
+ethers-contract = "=2.0.10"
+ethers-providers = { version = "=2.0.10", default-features = false }
+ethers-signers = { version = "=2.0.10", default-features = false }
+ethers-middleware = { version = "=2.0.10", default-features = false }
 
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7" }
-reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7" }
-reth-rpc = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7" }
-reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7" }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
+reth-interfaces = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
+reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
+reth-rpc-types-compat = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
+reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
 
-revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
-revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
+revm = { git = "https://github.com/bluealloy/revm", rev = "516f62cc" }
+revm-primitives = { git = "https://github.com/bluealloy/revm", rev = "516f62cc" }
 
 secp256k1 = { version = "0.27.0", default-features = false, features = ["global-context", "rand-std", "recovery"] }
 
-[patch.crates-io]
-# See reth: https://github.com/paradigmxyz/reth/blob/main/Cargo.toml#L79
-revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
-revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
+[patch.'https://github.com/eigerco/celestia-node-rs.git']
+# Uncomment to apply local changes
+# celestia-proto = { path = "../celestia-node-rs/proto" }
+# celestia-rpc = { path = "../celestia-node-rs/rpc" }
+# celestia-types = { path = "../celestia-node-rs/types" }
+
+[patch.'https://github.com/eigerco/celestia-tendermint-rs.git']
+# Uncomment to apply local changes
+# tendermint = { path = "../celestia-tendermint-rs/tendermint" }
+# tendermint-proto = { path = "../celestia-tendermint-rs/proto" }

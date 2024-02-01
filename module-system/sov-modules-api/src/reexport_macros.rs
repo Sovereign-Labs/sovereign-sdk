@@ -2,10 +2,16 @@
 /// type.
 #[cfg(feature = "macros")]
 pub use sov_modules_macros::DispatchCall;
+/// Derives the <runtime_name>Event enum for a given runtime.
+#[cfg(feature = "macros")]
+pub use sov_modules_macros::Event;
 /// Derives the [`Genesis`](trait.Genesis.html) trait for the underlying runtime
 /// `struct`.
 #[cfg(feature = "macros")]
 pub use sov_modules_macros::Genesis;
+/// Derives the [`ModuleInfo`] trait for the underlying `struct`, giving full access to kernel functionality
+#[cfg(feature = "macros")]
+pub use sov_modules_macros::KernelModuleInfo;
 #[cfg(feature = "macros")]
 pub use sov_modules_macros::MessageCodec;
 /// Derives the [`ModuleCallJsonSchema`](trait.ModuleCallJsonSchema.html) trait for
@@ -16,10 +22,8 @@ pub use sov_modules_macros::MessageCodec;
 /// ```
 /// use std::marker::PhantomData;
 ///
-/// use sov_modules_api::{Context, Module, ModuleInfo, ModuleCallJsonSchema};
+/// use sov_modules_api::{WorkingSet,Error, CallResponse, Context, Module, ModuleInfo, ModuleCallJsonSchema, StateMap};
 /// use sov_modules_api::default_context::ZkDefaultContext;
-/// use sov_state::StateMap;
-/// use sov_bank::CallMessage;
 ///
 /// #[derive(ModuleInfo, ModuleCallJsonSchema)]
 /// struct TestModule<C: Context> {
@@ -33,7 +37,17 @@ pub use sov_modules_macros::MessageCodec;
 /// impl<C: Context> Module for TestModule<C> {
 ///     type Context = C;
 ///     type Config = PhantomData<C>;
-///     type CallMessage = CallMessage<C>;
+///     type CallMessage = ();
+///     type Event = ();
+///     
+///     fn call(
+///        &self,
+///        _msg: Self::CallMessage,
+///        _context: &Self::Context,
+///        _working_set: &mut WorkingSet<C>,
+///     ) -> Result<CallResponse, Error> {
+///        Ok(CallResponse {})
+///     }
 /// }
 ///
 /// println!("JSON Schema: {}", TestModule::<ZkDefaultContext>::json_schema());
@@ -58,8 +72,7 @@ pub use sov_modules_macros::ModuleCallJsonSchema;
 /// ## Example
 ///
 /// ```
-/// use sov_modules_api::{Context, ModuleInfo};
-/// use sov_state::StateMap;
+/// use sov_modules_api::{Context, ModuleInfo, StateMap};
 ///
 /// #[derive(ModuleInfo)]
 /// struct TestModule<C: Context> {
@@ -82,12 +95,14 @@ pub use sov_modules_macros::ModuleInfo;
 /// Procedural macros to assist with creating new modules.
 #[cfg(feature = "macros")]
 pub mod macros {
+    /// Sets the value of a constant at compile time by reading from the Manifest file.
+    pub use sov_modules_macros::config_constant;
     /// The macro exposes RPC endpoints from all modules in the runtime.
     /// It gets storage from the Context generic
     /// and utilizes output of [`#[rpc_gen]`] macro to generate RPC methods.
     ///
     /// It has limitations:
-    ///   - First type generic attribute must have bound to [`Context`](crate::Context) trait
+    ///   - First type generic attribute must have bound to [`Context`](sov_modules_core::Context) trait
     ///   - All generic attributes must own the data, thus have bound `'static`
     #[cfg(feature = "native")]
     pub use sov_modules_macros::expose_rpc;

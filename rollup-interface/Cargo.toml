@@ -6,7 +6,7 @@ edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
@@ -15,37 +15,43 @@ exclude = [
 ]
 
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-async-trait = { workspace = true }
-borsh = { workspace = true, features = ["rc"] }
-serde = { workspace = true }
-bytes = { workspace = true }
-hex = { workspace = true, features = ["serde"] }
-digest = { workspace = true }
-sha2 = { workspace = true, optional = true }
-
-# TODO: Replace with serde-compatible borsh implementation when it becomes availabile 
-#    see https://github.com/Sovereign-Labs/sovereign-sdk/issues/215
-bincode = { workspace = true }
-
 anyhow = { workspace = true }
+async-trait = { workspace = true }
+borsh = { workspace = true }
+bytes = { workspace = true, optional = true, default-features = true }
+digest = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+# TODO: Remove tokio when https://github.com/Sovereign-Labs/sovereign-sdk/issues/1161 is resolved
+tokio = { workspace = true, optional = true }
 
 # Proptest should be a dev-dependency, but those can't be optional
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
 
-tokio = { workspace = true, optional = true}
-
 
 [dev-dependencies]
-serde_json = "1"
+serde_json = { workspace = true }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
 
 [features]
-default = []
-native = ["tokio"]
-fuzzing = ["proptest", "proptest-derive", "sha2"]
-mocks = ["sha2", "bytes/serde", "tokio"]
+default = ["std"]
+native = ["std", "tokio", "futures"]
+fuzzing = ["proptest", "proptest-derive", "sha2", "std"]
+std = [
+    "anyhow/default",
+    "borsh/default",
+    "borsh/bytes",
+    "bytes",
+    "digest/default",
+    "hex/default",
+    "proptest?/default",
+    "serde/default",
+    "sha2?/default",
+    "thiserror"
+]

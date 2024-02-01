@@ -1,0 +1,16 @@
+[package]
+name = "risc0"
+version = "0.3.0"
+edition = "2021"
+resolver = "2"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[build-dependencies]
+risc0-build = { workspace = true }
+
+[package.metadata.risc0]
+methods = ["guest-celestia", "guest-mock"]
+
+[features]
+bench = []

@@ -6,14 +6,16 @@ edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
+publish = false
 
 [build-dependencies]
 sov-modules-api = { path = "../sov-modules-api" }
-sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
+sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
+sov-mock-zkvm = { path = "../../adapters/mock-zkvm" }
 
 # Modules
 sov-accounts = { path = "../module-implementations/sov-accounts", features = ["native"] }

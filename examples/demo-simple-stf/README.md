@@ -8,7 +8,7 @@ In this tutorial, we’ll build an STF which checks if the input data (called a 
 
 The [State Transition Function
 interface](../../rollup-interface/specs/interfaces/stf.md) serves as the core component of our rollup, where the business logic will reside.
-Implementations of this trait can be integrated with any ZKVM and DA Layer resulting in a fully functional rollup. To begin, we will create a structure called `CheckHashPreimageStf`, and implement the `StateTransitionFunction` trait for it. You can find the complete code in the `lib.rs` file, but we will go over the most important parts here:
+Implementations of this trait can be integrated with any zkVM and DA Layer resulting in a fully functional rollup. To begin, we will create a structure called `CheckHashPreimageStf`, and implement the `StateTransitionFunction` trait for it. You can find the complete code in the `lib.rs` file, but we will go over the most important parts here:
 
 ```rust, ignore
 pub struct CheckHashPreimageStf {}
@@ -152,18 +152,19 @@ The first transaction that finds the correct hash would break the loop and retur
 
 ## Testing
 
-The `sov_rollup_interface::mocks` crate provides two utilities that are useful for testing:
+The `sov-mock-da` and `sov-mock-zkvm` crates provide two utilities that are useful for testing:
 
-1. The `MockZkvm` is an implementation of the `Zkvm` trait that can be used in tests.
-1. The `MockBlob` is an implementation of the `BlobTransactionTrait` trait that can be used in tests. It accepts an `A: BasicAddress` as a generic parameter. For testing purposes, we use `MockAddress` struct from the same `mocks` module
+1. The `sov_mock_zkvm::MockZkvm` is an implementation of the `Zkvm` trait that can be used in tests.
+2. The `sov_mock_da::MockBlob` is an implementation of the `BlobTransactionTrait` trait that can be used in tests. It accepts an `A: BasicAddress` as a generic parameter. For testing purposes, we use `MockAddress` struct from the same module 
 
 You can find more details in the `stf_test.rs` file.
 
 The following test checks the rollup logic. In the test, we call `init_chain, begin_slot, and end_slot` for completeness, even though these methods do nothing.
 
-```rust 
+```rust
 use demo_simple_stf::{ApplySlotResult, CheckHashPreimageStf};
-use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockBlock, MockValidityCond, MockZkvm};
+use sov_mock_da::{MockAddress, MockBlob, MockBlock, MockValidityCond};
+use sov_mock_zkvm::MockZkvm;
 use sov_rollup_interface::stf::StateTransitionFunction;
 
 #[test]
@@ -171,18 +172,24 @@ fn test_stf() {
     let address = MockAddress { addr: [1; 32] };
     let preimage = vec![0; 32];
 
-    let test_blob = MockBlob::new(preimage, address, [0; 32]);
+    let mut test_blob = MockBlob::new(preimage, address, [0; 32]);
+    // Work around for https://github.com/Sovereign-Labs/sovereign-sdk/issues/1129
+    test_blob.data.advance(test_blob.data.total_len());
     let stf = &mut CheckHashPreimageStf::<MockValidityCond>::default();
+    StateTransitionFunction::<MockZkvm, MockDaSpec>::init_chain(stf, (), ());
 
     let data = MockBlock::default();
     let mut blobs = [test_blob];
 
-    StateTransitionFunction::<MockZkvm, MockBlob>::init_chain(stf, ());
+    StateTransitionFunction::<MockZkvm, MockDaSpec>::init_chain(stf, ());
 
-    let result = StateTransitionFunction::<MockZkvm, MockBlob>::apply_slot(
+    let result = StateTransitionFunction::<MockZkvm, MockDaSpec>::apply_slot(
         stf,
+        &[],
         (),
-        &data,
+        (),
+        &MockBlockHeader::default(),
+        &MockValidityCond::default(),
         &mut blobs,
     );
 

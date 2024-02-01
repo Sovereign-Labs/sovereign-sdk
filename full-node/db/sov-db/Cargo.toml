@@ -6,7 +6,7 @@ edition = { workspace = true }
 authors = { workspace = true }
 homepage = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
@@ -16,18 +16,41 @@ resolver = "2"
 [dependencies]
 # Maintained by sovereign labs
 jmt = { workspace = true }
-sov-schema-db = { path = "../sov-schema-db", version = "0.1" }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1", features = ["native", "mocks"] }
+sov-schema-db = { path = "../sov-schema-db", version = "0.3" }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.3", features = ["native"] }
 
 # External
-anyhow = { workspace = true }
-byteorder = { workspace = true }
-borsh = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
+anyhow = { workspace = true, default-features = true }
+arbitrary = { workspace = true, optional = true }
+byteorder = { workspace = true, default-features = true }
+borsh = { workspace = true, default-features = true, features = ["bytes", "rc"] }
+proptest = { workspace = true, optional = true, default-features = true }
+proptest-derive = { workspace = true, optional = true }
+serde = { workspace = true, default-features = true, features = ["rc"] }
+tempfile = { workspace = true, optional = true }
 rocksdb = { workspace = true }
 bincode = { workspace = true }
 tokio = { workspace = true }
 
 
 [dev-dependencies]
+sov-mock-da = { path = "../../../adapters/mock-da", features = ["native"] }
 tempfile = { workspace = true }
+sov-prover-storage-manager = { path = "../../sov-prover-storage-manager" }
+criterion = "0.5.1"
+rand = { workspace = true }
+sha2 = { workspace = true }
+
+
+[features]
+arbitrary = [
+    "dep:arbitrary",
+    "dep:proptest",
+    "dep:proptest-derive",
+    "dep:tempfile",
+]
+
+[[bench]]
+name = "state_db_single_snapshot"
+path = "benches/state_db_bench.rs"
+harness = false

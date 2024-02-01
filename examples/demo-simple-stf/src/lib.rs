@@ -3,13 +3,11 @@
 use std::marker::PhantomData;
 
 use sha2::Digest;
-use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::services::da::SlotData;
+use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::stf::{BatchReceipt, SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 
-/// An implementation of the
-/// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
+/// An implementation of the [`StateTransitionFunction`]
 /// that is specifically designed to check if someone knows a preimage of a specific hash.
 #[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub struct CheckHashPreimageStf<Cond> {
@@ -25,14 +23,16 @@ pub enum ApplySlotResult {
     Success,
 }
 
-impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunction<Vm, B>
+impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, Da>
     for CheckHashPreimageStf<Cond>
 {
     // Since our rollup is stateless, we don't need to consider the StateRoot.
-    type StateRoot = ();
+    type StateRoot = [u8; 0];
 
     // This represents the initial configuration of the rollup, but it is not supported in this tutorial.
-    type InitialState = ();
+    type GenesisParams = ();
+    type PreState = ();
+    type ChangeSet = ();
 
     // We could incorporate the concept of a transaction into the rollup, but we leave it as an exercise for the reader.
     type TxReceiptContents = ();
@@ -47,28 +47,35 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
     type Condition = Cond;
 
     // Perform one-time initialization for the genesis block.
-    fn init_chain(&mut self, _params: Self::InitialState) {
-        // Do nothing
+    fn init_chain(
+        &self,
+        _base_state: Self::PreState,
+        _params: Self::GenesisParams,
+    ) -> ([u8; 0], ()) {
+        ([], ())
     }
 
-    fn apply_slot<'a, I, Data>(
-        &mut self,
+    fn apply_slot<'a, I>(
+        &self,
+        _pre_state_root: &[u8; 0],
+        _base_state: Self::PreState,
         _witness: Self::Witness,
-        _slot_data: &Data,
+        _slot_header: &Da::BlockHeader,
+        _validity_condition: &Da::ValidityCondition,
         blobs: I,
     ) -> SlotResult<
         Self::StateRoot,
+        Self::ChangeSet,
         Self::BatchReceiptContents,
         Self::TxReceiptContents,
         Self::Witness,
     >
     where
-        I: IntoIterator<Item = &'a mut B>,
-        Data: SlotData,
+        I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
     {
         let mut receipts = vec![];
         for blob in blobs {
-            let data = blob.full_data();
+            let data = blob.verified_data();
 
             // Check if the sender submitted the preimage of the hash.
             let hash = sha2::Sha256::digest(data).into();
@@ -92,13 +99,10 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
         }
 
         SlotResult {
-            state_root: (),
+            state_root: [],
+            change_set: (),
             batch_receipts: receipts,
             witness: (),
         }
-    }
-
-    fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot> {
-        Ok(())
     }
 }

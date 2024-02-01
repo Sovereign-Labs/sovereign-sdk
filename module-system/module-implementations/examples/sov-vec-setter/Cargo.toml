@@ -6,23 +6,23 @@ edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
 publish = false
 
 [dev-dependencies]
-sov-modules-api = { path = "../../../sov-modules-api" }
 tempfile = { workspace = true }
+sov-modules-api = { path = "../../../sov-modules-api", features = ["native", "macros"] }
+sov-prover-storage-manager = { path = "../../../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
 
 [dependencies]
 anyhow = { workspace = true }
 sov-modules-api = { path = "../../../sov-modules-api", default-features = false, features = ["macros"] }
 sov-state = { path = "../../../sov-state", default-features = false }
-sov-rollup-interface = { path = "../../../../rollup-interface" }
 schemars = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
@@ -31,4 +31,4 @@ clap = { workspace = true, optional = true }
 
 [features]
 default = ["native"]
-native = ["serde", "serde_json", "jsonrpsee", "schemars", "clap", "sov-modules-api/native"]
+native = ["serde_json", "jsonrpsee", "schemars", "clap", "sov-modules-api/native"]

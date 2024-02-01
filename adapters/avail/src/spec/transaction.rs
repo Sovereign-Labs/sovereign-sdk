@@ -1,4 +1,6 @@
 #[cfg(feature = "native")]
+use anyhow::anyhow;
+#[cfg(feature = "native")]
 use avail_subxt::{
     api::runtime_types::{da_control::pallet::Call, da_runtime::RuntimeCall::DataAvailability},
     primitives::AppUncheckedExtrinsic,
@@ -6,7 +8,6 @@ use avail_subxt::{
 use bytes::Bytes;
 #[cfg(feature = "native")]
 use codec::Encode;
-
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
 
@@ -48,23 +49,32 @@ impl BlobReaderTrait for AvailBlobTransaction {
 
 impl AvailBlobTransaction {
     #[cfg(feature = "native")]
-    pub fn new(unchecked_extrinsic: &AppUncheckedExtrinsic) -> Self {
+    pub fn new(unchecked_extrinsic: &AppUncheckedExtrinsic) -> anyhow::Result<Self> {
         let address = match &unchecked_extrinsic.signature {
-            Some((subxt::utils::MultiAddress::Id(id), _, _)) => AvailAddress(id.clone().0),
-            _ => unimplemented!(),
+            //TODO: Handle other types of MultiAddress.
+            Some((subxt::utils::MultiAddress::Id(id), _, _)) => AvailAddress::from(id.clone().0),
+            _ => {
+                return Err(anyhow!(
+                    "Unsigned extrinsic being used to create AvailBlobTransaction."
+                ))
+            }
         };
         let blob = match &unchecked_extrinsic.function {
             DataAvailability(Call::submit_data { data }) => {
                 CountedBufReader::<Bytes>::new(Bytes::copy_from_slice(&data.0))
             }
-            _ => unimplemented!(),
+            _ => {
+                return Err(anyhow!(
+                    "Invalid type of extrinsic being converted to AvailBlobTransaction."
+                ))
+            }
         };
 
-        AvailBlobTransaction {
+        Ok(AvailBlobTransaction {
             hash: sp_core_hashing::blake2_256(&unchecked_extrinsic.encode()),
             address,
             blob,
-        }
+        })
     }
 
     pub fn combine_hash(&self, hash: [u8; 32]) -> [u8; 32] {

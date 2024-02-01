@@ -3,8 +3,8 @@ use std::fmt::Debug;
 use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_bank::Coins;
-use sov_modules_api::CallResponse;
-use sov_state::WorkingSet;
+use sov_modules_api::prelude::*;
+use sov_modules_api::{CallResponse, WorkingSet};
 
 use crate::ProverIncentives;
 
@@ -29,7 +29,7 @@ impl<C: sov_modules_api::Context, Vm: sov_modules_api::Zkvm> ProverIncentives<C,
         &self,
         bond_amount: u64,
         prover: &C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         // Transfer the bond amount from the sender to the module's address.
         // On failure, no state is changed
@@ -66,7 +66,7 @@ impl<C: sov_modules_api::Context, Vm: sov_modules_api::Zkvm> ProverIncentives<C,
         &self,
         bond_amount: u64,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<sov_modules_api::CallResponse> {
         self.bond_prover_helper(bond_amount, context.sender(), working_set)
     }
@@ -75,7 +75,7 @@ impl<C: sov_modules_api::Context, Vm: sov_modules_api::Zkvm> ProverIncentives<C,
     pub(crate) fn unbond_prover(
         &self,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<sov_modules_api::CallResponse> {
         // Get the prover's old balance.
         if let Some(old_balance) = self.bonded_provers.get(context.sender(), working_set) {
@@ -111,7 +111,7 @@ impl<C: sov_modules_api::Context, Vm: sov_modules_api::Zkvm> ProverIncentives<C,
         &self,
         proof: &[u8],
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<sov_modules_api::CallResponse> {
         // Get the prover's old balance.
         // Revert if they aren't bonded
@@ -125,8 +125,7 @@ impl<C: sov_modules_api::Context, Vm: sov_modules_api::Zkvm> ProverIncentives<C,
         anyhow::ensure!(old_balance >= minimum_bond, "Prover is not bonded");
         let code_commitment = self
             .commitment_of_allowed_verifier_method
-            .get_or_err(working_set)?
-            .commitment;
+            .get_or_err(working_set)?;
 
         // Lock the prover's bond amount.
         self.bonded_provers

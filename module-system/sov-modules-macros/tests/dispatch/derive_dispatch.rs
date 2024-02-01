@@ -24,11 +24,13 @@ fn main() {
     type RT = Runtime<ZkDefaultContext, u32>;
     let runtime = &mut RT::default();
 
-    let storage = ZkStorage::new([1u8; 32]);
-    let mut working_set = &mut sov_state::WorkingSet::new(storage);
+    let storage = ZkStorage::new();
+    let mut working_set = &mut sov_modules_api::WorkingSet::new(storage);
     let config = GenesisConfig::new((), (), ());
     runtime.genesis(&config, working_set).unwrap();
-    let context = ZkDefaultContext::new(Address::try_from([0; 32].as_ref()).unwrap());
+    let sender = Address::try_from([0; 32].as_ref()).unwrap();
+    let sequencer = Address::try_from([1; 32].as_ref()).unwrap();
+    let context = ZkDefaultContext::new(sender, sequencer, 1);
 
     let value = 11;
     {

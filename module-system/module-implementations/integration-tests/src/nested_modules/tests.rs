@@ -1,14 +1,16 @@
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
-use sov_modules_api::{Context, Event, Prefix};
-use sov_state::{ProverStorage, StateMap, Storage, WorkingSet, ZkStorage};
+use sov_modules_api::prelude::*;
+use sov_modules_api::{Context, Event, ModulePrefix, StateMap, WorkingSet};
+use sov_prover_storage_manager::new_orphan_storage;
+use sov_state::{Storage, ZkStorage};
 
 use super::helpers::module_c;
 
 #[test]
 fn nested_module_call_test() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let native_storage = ProverStorage::with_path(tmpdir.path()).unwrap();
-    let mut working_set = WorkingSet::new(native_storage.clone());
+    let prover_storage = new_orphan_storage(tmpdir.path()).unwrap();
+    let mut working_set = WorkingSet::new(prover_storage.clone());
 
     // Test the `native` execution.
     {
@@ -27,31 +29,31 @@ fn nested_module_call_test() {
     );
 
     let (log, witness) = working_set.checkpoint().freeze();
-    native_storage
+    prover_storage
         .validate_and_commit(log, &witness)
         .expect("State update is valid");
 
     // Test the `zk` execution.
     {
-        let zk_storage = ZkStorage::new([0u8; 32]);
+        let zk_storage = ZkStorage::new();
         let working_set = &mut WorkingSet::with_witness(zk_storage, witness);
         execute_module_logic::<ZkDefaultContext>(working_set);
         test_state_update::<ZkDefaultContext>(working_set);
     }
 }
 
-fn execute_module_logic<C: Context>(working_set: &mut WorkingSet<C::Storage>) {
+fn execute_module_logic<C: Context>(working_set: &mut WorkingSet<C>) {
     let module = &mut module_c::ModuleC::<C>::default();
     module.execute("some_key", "some_value", working_set);
 }
 
-fn test_state_update<C: Context>(working_set: &mut WorkingSet<C::Storage>) {
+fn test_state_update<C: Context>(working_set: &mut WorkingSet<C>) {
     let module = <module_c::ModuleC<C> as Default>::default();
 
     let expected_value = "some_value".to_owned();
 
     {
-        let prefix = Prefix::new_storage(
+        let prefix = ModulePrefix::new_storage(
             "integration_tests::nested_modules::helpers::module_a",
             "ModuleA",
             "state_1_a",
@@ -63,7 +65,7 @@ fn test_state_update<C: Context>(working_set: &mut WorkingSet<C::Storage>) {
     }
 
     {
-        let prefix = Prefix::new_storage(
+        let prefix = ModulePrefix::new_storage(
             "integration_tests::nested_modules::helpers::module_b",
             "ModuleB",
             "state_1_b",
@@ -75,7 +77,7 @@ fn test_state_update<C: Context>(working_set: &mut WorkingSet<C::Storage>) {
     }
 
     {
-        let prefix = Prefix::new_storage(
+        let prefix = ModulePrefix::new_storage(
             "integration_tests::nested_modules::helpers::module_a",
             "ModuleA",
             "state_1_a",

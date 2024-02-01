@@ -1,25 +1,26 @@
 use helpers::C;
-use sov_bank::query::TotalSupplyResponse;
-use sov_bank::{get_token_address, Bank, BankConfig, CallMessage, Coins};
+use sov_bank::{get_token_address, Bank, BankConfig, CallMessage, Coins, TotalSupplyResponse};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address;
-use sov_modules_api::{Address, Context, Error, Module};
-use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
+use sov_modules_api::{Address, Context, Error, Module, WorkingSet};
+use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
 mod helpers;
 
-pub type Storage = ProverStorage<DefaultStorageSpec>;
+pub type Storage = ProverStorage<DefaultStorageSpec, SnapshotManager>;
 
 #[test]
 fn freeze_token() {
     let bank = Bank::<C>::default();
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let empty_bank_config = BankConfig::<C> { tokens: vec![] };
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 
     let minter_address = generate_address::<DefaultContext>("minter");
-    let minter_context = C::new(minter_address);
+    let sequencer_address = generate_address::<DefaultContext>("sequencer");
+    let minter_context = C::new(minter_address, sequencer_address, 1);
 
     let salt = 0;
     let token_name = "Token1".to_owned();
@@ -92,7 +93,8 @@ fn freeze_token() {
 
     // Try to freeze with a non authorized minter
     let unauthorized_address = generate_address::<C>("unauthorized_address");
-    let unauthorized_context = C::new(unauthorized_address);
+    let sequencer_address = generate_address::<C>("sequencer");
+    let unauthorized_context = C::new(unauthorized_address, sequencer_address, 1);
     let freeze_message = CallMessage::Freeze {
         token_address: token_address_2,
     };
@@ -130,12 +132,12 @@ fn freeze_token() {
         minter_address: new_holder,
     };
 
-    let query_total_supply = |token_address: Address,
-                              working_set: &mut WorkingSet<Storage>|
-     -> Option<u64> {
-        let total_supply: TotalSupplyResponse = bank.supply_of(token_address, working_set).unwrap();
-        total_supply.amount
-    };
+    let query_total_supply =
+        |token_address: Address, working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
+            let total_supply: TotalSupplyResponse =
+                bank.supply_of(None, token_address, working_set).unwrap();
+            total_supply.amount
+        };
 
     let minted = bank.call(mint_message, &minter_context, &mut working_set);
     assert!(minted.is_err());
@@ -179,7 +181,7 @@ fn freeze_token() {
     let query_user_balance =
         |token_address: Address,
          user_address: Address,
-         working_set: &mut WorkingSet<Storage>|
+         working_set: &mut WorkingSet<DefaultContext>|
          -> Option<u64> { bank.get_balance_of(user_address, token_address, working_set) };
     let bal = query_user_balance(token_address_2, minter_address, &mut working_set);
 

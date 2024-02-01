@@ -1,27 +1,37 @@
 [package]
 name = "sov-sequencer"
 authors = { workspace = true }
+description = "A simple implementation of a sequencer for Sovereign SDK rollups"
 edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
 
 
 [dependencies]
-
 anyhow = { workspace = true }
 borsh = { workspace = true }
 hex = { workspace = true }
-jsonrpsee = { workspace = true, features = ["client", "server",] }
+jsonrpsee = { workspace = true, features = ["client", "server"] }
 serde = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
-sov-rollup-interface = { path = "../../rollup-interface" }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
+sov-modules-api = { path = "../../module-system/sov-modules-api", version = "0.3", features = ["native"] }
+sov-state = { path = "../../module-system/sov-state", version = "0.3" }
+
 
 [dev-dependencies]
-async-trait = { workspace = true }
-sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
+tempfile = { workspace = true }
+rand = { workspace = true }
 tokio = { workspace = true }
+async-trait = { workspace = true }
+sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", features = ["native"] }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.3", features = ["native"] }
+sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
+sov-prover-storage-manager = { path = "../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
+sov-schema-db = { path = "../db/sov-schema-db" }
+sov-db = { path = "../db/sov-db" }

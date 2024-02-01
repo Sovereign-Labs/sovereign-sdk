@@ -1,7 +1,7 @@
 //! Defines rpc queries exposed by the bank module, along with the relevant types
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 
 use crate::{Amount, Bank};
 
@@ -26,27 +26,32 @@ impl<C: sov_modules_api::Context> Bank<C> {
     /// stored at the address `token_address`.
     pub fn balance_of(
         &self,
+        version: Option<u64>,
         user_address: C::Address,
         token_address: C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<BalanceResponse> {
+        if let Some(v) = version {
+            working_set.set_archival_version(v)
+        }
         Ok(BalanceResponse {
             amount: self.get_balance_of(user_address, token_address, working_set),
         })
     }
 
     #[rpc_method(name = "supplyOf")]
-    /// Rpc method that returns the supply of token of the token stored at the address `token_address`.
+    /// Rpc method that returns the supply of a token stored at the address `token_address`.
     pub fn supply_of(
         &self,
+        version: Option<u64>,
         token_address: C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<TotalSupplyResponse> {
+        if let Some(v) = version {
+            working_set.set_archival_version(v)
+        }
         Ok(TotalSupplyResponse {
-            amount: self
-                .tokens
-                .get(&token_address, working_set)
-                .map(|token| token.total_supply),
+            amount: self.get_total_supply_of(&token_address, working_set),
         })
     }
 }

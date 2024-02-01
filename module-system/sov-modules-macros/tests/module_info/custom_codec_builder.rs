@@ -1,5 +1,4 @@
-use sov_modules_api::{Context, ModuleInfo};
-use sov_state::StateMap;
+use sov_modules_api::{Context, ModuleInfo, StateMap};
 
 #[derive(ModuleInfo)]
 struct FirstTestStruct<C>

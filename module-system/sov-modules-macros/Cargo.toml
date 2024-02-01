@@ -6,7 +6,7 @@ edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
@@ -23,13 +23,12 @@ path = "tests/all_tests.rs"
 clap = { workspace = true }
 jsonrpsee = { workspace = true, features = ["macros", "http-client", "server"] }
 serde = { workspace = true }
-serde_json = { workspace = true }
 tempfile = { workspace = true }
 trybuild = "1.0"
 
-sov-modules-api = { path = "../sov-modules-api", version = "0.1" }
-sov-state = { path = "../sov-state", version = "0.1" }
-sov-bank = { path = "../module-implementations/sov-bank", version = "0.1", features = ["native"] }
+sov-modules-api = { path = "../sov-modules-api" }
+sov-state = { path = "../sov-state" }
+sov-bank = { path = "../module-implementations/sov-bank", features = ["native"] }
 sov-modules-macros = { path = ".", features = ["native"] }
 
 [dependencies]
@@ -39,7 +38,13 @@ jsonrpsee = { workspace = true, features = ["http-client", "server"], optional =
 proc-macro2 = "1.0"
 quote = "1.0"
 schemars = { workspace = true }
+serde_json = { workspace = true }
 syn = { version = "1.0", features = ["full"] }
+sov-modules-core = { path = "../sov-modules-core" }
+
+
+[build-dependencies]
+anyhow = { workspace = true }
 
 [features]
 default = []

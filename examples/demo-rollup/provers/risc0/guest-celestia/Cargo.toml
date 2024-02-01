@@ -1,0 +1,40 @@
+[package]
+name = "sov-demo-prover-guest-celestia"
+version = "0.3.0"
+edition = "2021"
+resolver = "2"
+
+[workspace]
+
+[dependencies]
+anyhow = "1.0.68"
+risc0-zkvm = { version = "0.19", default-features = false, features = ["std"] }
+risc0-zkvm-platform = "0.19"
+demo-stf = { path = "../../../stf" }
+sov-risc0-adapter = { path = "../../../../../adapters/risc0" }
+const-rollup-config = { path = "../../../../const-rollup-config" }
+sov-celestia-adapter = { path = "../../../../../adapters/celestia" }
+sov-modules-api = { path = "../../../../../module-system/sov-modules-api" }
+sov-state = { path = "../../../../../module-system/sov-state" }
+sov-modules-stf-blueprint = { path = "../../../../../module-system/sov-modules-stf-blueprint" }
+
+[patch.crates-io]
+sha2 = { git = "https://github.com/risc0/RustCrypto-hashes", tag = "sha2/v0.10.6-risc0" }
+ed25519-dalek = { git = "https://github.com/risc0/curve25519-dalek", tag = "curve25519-4.1.0-risczero.1" }
+crypto-bigint = {git = "https://github.com/risc0/RustCrypto-crypto-bigint", tag = "v0.5.2-risc0"}
+
+[profile.dev]
+opt-level = 3
+
+[profile.dev.build-override]
+opt-level = 3
+
+[profile.release]
+debug = 1
+lto = true
+
+[profile.release.build-override]
+opt-level = 3
+
+[features]
+bench = ["sov-celestia-adapter/bench"]

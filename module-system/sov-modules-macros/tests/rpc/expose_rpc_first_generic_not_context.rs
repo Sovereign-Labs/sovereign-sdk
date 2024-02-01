@@ -3,9 +3,9 @@ use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::{expose_rpc, rpc_gen, DefaultRuntime};
 use sov_modules_api::{
     Address, CallResponse, Context, DispatchCall, EncodeCall, Error, Genesis, MessageCodec, Module,
-    ModuleInfo,
+    ModuleInfo, StateValue, WorkingSet,
 };
-use sov_state::{StateValue, WorkingSet, ZkStorage};
+use sov_state::ZkStorage;
 
 pub trait TestSpec: 'static {
     type Data: Data;
@@ -45,11 +45,12 @@ pub mod my_module {
         type Context = C;
         type Config = D;
         type CallMessage = D;
+        type Event = ();
 
         fn genesis(
             &self,
             config: &Self::Config,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<C>,
         ) -> Result<(), Error> {
             self.data.set(config, working_set);
             Ok(())
@@ -59,7 +60,7 @@ pub mod my_module {
             &self,
             msg: Self::CallMessage,
             _context: &Self::Context,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<C>,
         ) -> Result<CallResponse, Error> {
             self.data.set(&msg, working_set);
             Ok(CallResponse::default())
@@ -82,10 +83,7 @@ pub mod my_module {
             C: Context,
         {
             #[rpc_method(name = "queryValue")]
-            pub fn query_value(
-                &self,
-                working_set: &mut WorkingSet<C::Storage>,
-            ) -> RpcResult<QueryResponse> {
+            pub fn query_value(&self, working_set: &mut WorkingSet<C>) -> RpcResult<QueryResponse> {
                 let value = self.data.get(working_set).map(|d| format!("{:?}", d));
                 Ok(QueryResponse { value })
             }
@@ -111,7 +109,7 @@ impl TestSpec for ActualSpec {
 fn main() {
     type C = ZkDefaultContext;
     type RT = Runtime<C, ActualSpec>;
-    let storage = ZkStorage::new([1u8; 32]);
+    let storage = ZkStorage::new();
     let working_set = &mut WorkingSet::new(storage);
     let runtime = &mut Runtime::<C, ActualSpec>::default();
     let config = GenesisConfig::new(22);
@@ -121,7 +119,9 @@ fn main() {
     let serialized_message =
         <RT as EncodeCall<my_module::QueryModule<C, u32>>>::encode_call(message);
     let module = RT::decode_call(&serialized_message).unwrap();
-    let context = C::new(Address::try_from([11; 32].as_ref()).unwrap());
+    let sender = Address::try_from([11; 32].as_ref()).unwrap();
+    let sequencer = Address::try_from([11; 32].as_ref()).unwrap();
+    let context = C::new(sender, sequencer, 1);
 
     let _ = runtime
         .dispatch_call(module, working_set, &context)

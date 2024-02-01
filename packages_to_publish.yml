@@ -1,0 +1,32 @@
+- sov-rollup-interface
+- sov-mock-da
+- sov-mock-zkvm
+- sov-schema-db
+- sov-db
+- sov-zk-cycle-macros
+- sov-zk-cycle-utils
+- sov-modules-core
+- sov-state
+- sov-prover-storage-manager
+- sov-modules-macros # Requires --no-verify because it writes outside of OUT_DIR.
+- sov-modules-api
+- sov-sequencer
+- sov-modules-stf-blueprint
+- sov-stf-runner
+- sov-modules-rollup-blueprint
+- sov-ledger-rpc
+
+# Modules
+- sov-accounts
+- sov-bank
+- sov-sequencer-registry
+- sov-prover-incentives
+- sov-chain-state
+- sov-blob-storage
+- sov-nft-module
+
+# Adapters
+- sov-risc0-adapter
+- sov-celestia-adapter
+- sov-mock-da
+- sov-mock-zkvm

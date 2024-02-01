@@ -1,5 +1,6 @@
-use zk_cycle_macros::cycle_tracker;
 use std::marker::PhantomData;
+
+use sov_zk_cycle_macros::cycle_tracker;
 
 struct TestStruct;
 
@@ -52,23 +53,19 @@ fn _type_param_clause_function<T: Clone + 'static>(_t: T) {}
 
 #[cycle_tracker]
 fn _where_clause_function<T>(value: T)
-    where T: Clone + std::fmt::Debug {
+where
+    T: Clone + std::fmt::Debug,
+{
     println!("{:?}", value.clone());
 }
 
+#[cycle_tracker]
+fn _function_without_params() {}
 
 #[cycle_tracker]
-fn _function_without_params() {
-}
+fn _function_with_params(_a: u32, _b: usize) {}
 
 #[cycle_tracker]
-fn _function_with_params(_a: u32, _b: usize) {
-}
+pub fn _function_with_access_specifier(_a: u32, _b: usize) {}
 
-#[cycle_tracker]
-pub fn _function_with_access_specifier(_a: u32, _b: usize) {
-}
-
-fn main() {
-
-}
+fn main() {}

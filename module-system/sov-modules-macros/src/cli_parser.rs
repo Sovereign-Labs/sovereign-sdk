@@ -30,6 +30,9 @@ impl CliParserMacro {
 
         let mut module_json_parser_arms = vec![];
         let mut module_message_arms = vec![];
+        let mut tx_args_subcommand_match_arms_chain_id = vec![];
+        let mut tx_args_subcommand_match_arms_gas_tip = vec![];
+        let mut tx_args_subcommand_match_arms_gas_limit = vec![];
         let mut try_from_subcommand_match_arms = vec![];
         let mut try_map_match_arms = vec![];
         let mut from_json_match_arms = vec![];
@@ -49,11 +52,13 @@ impl CliParserMacro {
             if let syn::Type::Path(type_path) = &field.ty {
                 let module_path = type_path.path.clone();
                 let field_name = field.ident.clone();
-                let doc_str = format!("Generates a transaction for the `{}` module", &field_name);
+                let doc_str = format!("A subcommand for the `{}` module", &field_name);
+                let doc_contents = format!("A clap argument for the `{}` module", &field_name);
 
                 module_json_parser_arms.push(quote! {
                     #[doc = #doc_str]
                     #field_name {
+                        #[doc = #doc_contents]
                         #[clap(flatten)]
                         contents: __Inner
                     }
@@ -62,6 +67,7 @@ impl CliParserMacro {
                 module_message_arms.push(quote! {
                     #[doc = #doc_str]
                     #field_name {
+                        #[doc = #doc_contents]
                         contents: __Inner
                     }
                 });
@@ -77,6 +83,18 @@ impl CliParserMacro {
 
                 try_map_match_arms.push(quote! {
                     RuntimeMessage::#field_name { contents } => RuntimeMessage::#field_name { contents: contents.try_into()? },
+                });
+
+                tx_args_subcommand_match_arms_chain_id.push(quote! {
+                    RuntimeSubcommand::#field_name { contents } => <__Inner as ::sov_modules_api::cli::CliTxImportArg>::chain_id(&contents),
+                });
+
+                tx_args_subcommand_match_arms_gas_tip.push(quote! {
+                    RuntimeSubcommand::#field_name { contents } => <__Inner as ::sov_modules_api::cli::CliTxImportArg>::gas_tip(&contents),
+                });
+
+                tx_args_subcommand_match_arms_gas_limit.push(quote! {
+                    RuntimeSubcommand::#field_name { contents } => <__Inner as ::sov_modules_api::cli::CliTxImportArg>::gas_limit(&contents),
                 });
 
                 try_from_subcommand_match_arms.push(quote! {
@@ -104,9 +122,7 @@ impl CliParserMacro {
         let where_clause_with_deserialize_bounds = match where_clause {
             Some(where_clause) => {
                 let mut result = where_clause.clone();
-                result
-                    .predicates
-                    .extend(deserialize_constraints.into_iter());
+                result.predicates.extend(deserialize_constraints);
                 result
             }
             None => syn::parse_quote! {
@@ -180,6 +196,29 @@ impl CliParserMacro {
                 #[clap(skip)]
                 #[doc(hidden)]
                 ____phantom(::std::marker::PhantomData<#ident #ty_generics>)
+            }
+
+            impl #impl_generics_with_inner ::sov_modules_api::cli::CliTxImportArg for RuntimeSubcommand #ty_generics_with_inner #where_clause_with_deserialize_bounds, __Inner: ::clap::Args + ::sov_modules_api::cli::CliTxImportArg {
+                fn chain_id(&self) -> u64 {
+                    match self {
+                        #( #tx_args_subcommand_match_arms_chain_id )*
+                        RuntimeSubcommand::____phantom(_) => unreachable!(),
+                    }
+                }
+
+                fn gas_tip(&self) -> u64 {
+                    match self {
+                        #( #tx_args_subcommand_match_arms_gas_tip )*
+                        RuntimeSubcommand::____phantom(_) => unreachable!(),
+                    }
+                }
+
+                fn gas_limit(&self) -> u64 {
+                    match self {
+                        #( #tx_args_subcommand_match_arms_gas_limit )*
+                        RuntimeSubcommand::____phantom(_) => unreachable!(),
+                    }
+                }
             }
 
             impl #impl_generics_with_inner ::sov_modules_api::cli::CliFrontEnd<#ident #ty_generics> for RuntimeSubcommand #ty_generics_with_inner #where_clause_with_deserialize_bounds, __Inner: ::clap::Args {

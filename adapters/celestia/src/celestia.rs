@@ -1,14 +1,15 @@
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
-use base64::engine::general_purpose::STANDARD as B64_ENGINE;
-use base64::Engine;
+use anyhow::Context;
 use borsh::{BorshDeserialize, BorshSerialize};
-use nmt_rs::NamespacedHash;
+use celestia_proto::celestia::blob::v1::MsgPayForBlobs;
+use celestia_proto::cosmos::tx::v1beta1::Tx;
+use celestia_types::{DataAvailabilityHeader, ExtendedHeader};
 use prost::bytes::Buf;
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::da::{BlockHeaderTrait as BlockHeader, CountedBufReader};
+use sov_rollup_interface::da::{BlockHeaderTrait as BlockHeader, CountedBufReader, Time};
 use sov_rollup_interface::services::da::SlotData;
 pub use tendermint::block::Header as TendermintHeader;
 use tendermint::block::Height;
@@ -16,24 +17,16 @@ use tendermint::crypto::default::Sha256;
 use tendermint::merkle::simple_hash_from_byte_vectors;
 use tendermint::Hash;
 pub use tendermint_proto::v0_34 as celestia_tm_version;
+use tendermint_proto::v0_34::types::IndexWrapper;
 use tendermint_proto::Protobuf;
 use tracing::debug;
 
-const NAMESPACED_HASH_LEN: usize = 48;
-
-pub const GENESIS_PLACEHOLDER_HASH: &[u8; 32] = &[255; 32];
-
-use crate::pfb::{BlobTx, MsgPayForBlobs, Tx};
-use crate::shares::{read_varint, BlobIterator, BlobRefIterator, NamespaceGroup};
-use crate::utils::BoxError;
+use crate::shares::{BlobIterator, BlobRefIterator, NamespaceGroup};
+use crate::utils::{read_varint, BoxError};
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::{ChainValidityCondition, TmHash, PFB_NAMESPACE};
 
-#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
-pub struct MarshalledDataAvailabilityHeader {
-    pub row_roots: Vec<String>,
-    pub column_roots: Vec<String>,
-}
+pub const GENESIS_PLACEHOLDER_HASH: &[u8; 32] = &[255; 32];
 
 /// A partially serialized tendermint header. Only fields which are actually inspected by
 /// Jupiter are included in their raw form. Other fields are pre-encoded as protobufs.
@@ -42,7 +35,8 @@ pub struct MarshalledDataAvailabilityHeader {
 /// a tendermint::block::Header from being deserialized in most formats except JSON. However
 /// it also provides a significant efficiency benefit over the standard tendermint type, which
 /// performs a complete protobuf serialization every time `.hash()` is called.
-#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+// TODO: derive borsh Serialize, Deserialize <https://github.com/eigerco/celestia-node-rs/issues/155>
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub struct CompactHeader {
     /// Header version
     pub version: Vec<u8>,
@@ -93,13 +87,9 @@ trait EncodeTm34 {
 
 impl From<TendermintHeader> for CompactHeader {
     fn from(value: TendermintHeader) -> Self {
-        let data_hash = if let Some(h) = value.data_hash {
-            match h {
-                Hash::Sha256(value) => Some(ProtobufHash(value)),
-                Hash::None => None,
-            }
-        } else {
-            None
+        let data_hash = match value.data_hash {
+            Hash::Sha256(value) => Some(ProtobufHash(value)),
+            Hash::None => None,
         };
         Self {
             version: Protobuf::<celestia_tm_version::version::Consensus>::encode_vec(
@@ -113,26 +103,14 @@ impl From<TendermintHeader> for CompactHeader {
                 &value.last_block_id.unwrap_or_default(),
             )
             .unwrap(),
-            last_commit_hash: value
-                .last_commit_hash
-                .unwrap_or_default()
-                .encode_vec()
-                .unwrap(),
+            last_commit_hash: value.last_commit_hash.encode_vec().unwrap(),
             data_hash,
             validators_hash: value.validators_hash.encode_vec().unwrap(),
             next_validators_hash: value.next_validators_hash.encode_vec().unwrap(),
             consensus_hash: value.consensus_hash.encode_vec().unwrap(),
             app_hash: value.app_hash.encode_vec().unwrap(),
-            last_results_hash: value
-                .last_results_hash
-                .unwrap_or_default()
-                .encode_vec()
-                .unwrap(),
-            evidence_hash: value
-                .evidence_hash
-                .unwrap_or_default()
-                .encode_vec()
-                .unwrap(),
+            last_results_hash: value.last_results_hash.encode_vec().unwrap(),
+            evidence_hash: value.evidence_hash.encode_vec().unwrap(),
             proposer_address: value.proposer_address.encode_vec().unwrap(),
         }
     }
@@ -181,57 +159,12 @@ impl CompactHeader {
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
-pub struct DataAvailabilityHeader {
-    pub row_roots: Vec<NamespacedHash>,
-    pub column_roots: Vec<NamespacedHash>,
-}
-
-// Danger! This method panics if the provided bas64 is longer than a namespaced hash
-fn decode_to_ns_hash(b64: &str) -> Result<NamespacedHash, base64::DecodeSliceError> {
-    let mut out = [0u8; NAMESPACED_HASH_LEN];
-    B64_ENGINE.decode_slice(b64.as_bytes(), &mut out)?;
-    Ok(NamespacedHash(out))
-}
-
-impl TryFrom<MarshalledDataAvailabilityHeader> for DataAvailabilityHeader {
-    type Error = base64::DecodeSliceError;
-
-    fn try_from(value: MarshalledDataAvailabilityHeader) -> Result<Self, Self::Error> {
-        let mut row_roots = Vec::with_capacity(value.row_roots.len());
-        for root in value.row_roots {
-            row_roots.push(decode_to_ns_hash(&root)?);
-        }
-        let mut column_roots = Vec::with_capacity(value.column_roots.len());
-        for root in value.column_roots {
-            column_roots.push(decode_to_ns_hash(&root)?);
-        }
-        Ok(Self {
-            row_roots,
-            column_roots,
-        })
-    }
-}
-
-/// The response from the celestia `/header` endpoint. Must be converted to a
-/// [`CelestiaHeader`] before use.
-#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
-pub struct CelestiaHeaderResponse {
-    pub header: tendermint::block::Header,
-    pub dah: MarshalledDataAvailabilityHeader,
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct NamespacedSharesResponse {
-    pub shares: Option<Vec<String>>,
-    pub height: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+// TODO: derive borsh Serialize, Deserialize <https://github.com/eigerco/celestia-node-rs/issues/155>
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CelestiaHeader {
     pub dah: DataAvailabilityHeader,
     pub header: CompactHeader,
-    #[borsh_skip]
+    // #[borsh_skip]
     #[serde(skip)]
     cached_prev_hash: Arc<Mutex<Option<TmHash>>>,
 }
@@ -256,7 +189,14 @@ impl CelestiaHeader {
     }
 }
 
-#[derive(PartialEq, Clone, Debug, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+impl From<celestia_types::ExtendedHeader> for CelestiaHeader {
+    fn from(extended_header: ExtendedHeader) -> Self {
+        CelestiaHeader::new(extended_header.dah, extended_header.header.into())
+    }
+}
+
+// TODO: derive borsh Serialize, Deserialize <https://github.com/eigerco/celestia-node-rs/issues/155>
+#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct BlobWithSender {
     pub blob: CountedBufReader<BlobIterator>,
     pub sender: CelestiaAddress,
@@ -273,7 +213,7 @@ impl BlockHeader for CelestiaHeader {
         }
 
         // We special case the block following genesis, since genesis has a `None` hash, which
-        // we don't want to deal with. In this case, we return a specail placeholder for the
+        // we don't want to deal with. In this case, we return a special placeholder for the
         // block "hash"
         if Height::decode_vec(&self.header.height)
             .expect("header must be validly encoded")
@@ -298,6 +238,19 @@ impl BlockHeader for CelestiaHeader {
 
     fn hash(&self) -> Self::Hash {
         TmHash(self.header.hash())
+    }
+
+    fn height(&self) -> u64 {
+        let height = tendermint::block::Height::decode(self.header.height.as_slice())
+            .expect("Height must be valid");
+        height.value()
+    }
+
+    fn time(&self) -> Time {
+        let protobuf_time = tendermint::time::Time::decode(self.header.time.as_slice())
+            .expect("Timestamp must be valid");
+
+        Time::from_secs(protobuf_time.unix_timestamp())
     }
 }
 
@@ -375,31 +328,25 @@ pub struct TxPosition {
 }
 
 pub(crate) fn pfb_from_iter(data: impl Buf, pfb_len: usize) -> Result<MsgPayForBlobs, BoxError> {
-    debug!("Decoding blob tx");
-    let mut blob_tx = BlobTx::decode(data.take(pfb_len))?;
-    debug!("Decoding cosmos sdk tx");
-    let cosmos_tx = Tx::decode(&mut blob_tx.tx)?;
-    let messages = cosmos_tx
-        .body
-        .ok_or(anyhow::format_err!("No body in cosmos tx"))?
-        .messages;
-    if messages.len() != 1 {
-        return Err(anyhow::format_err!("Expected 1 message in cosmos tx"));
-    }
-    debug!("Decoding PFB from blob tx value");
-    Ok(MsgPayForBlobs::decode(&mut &messages[0].value[..])?)
+    let blob_tx = IndexWrapper::decode(data.take(pfb_len)).context("failed decoding blob tx")?;
+    let cosmos_tx =
+        Tx::decode(&blob_tx.tx[..]).context("failed decoding cosmos tx from blob tx")?;
+    let messages = cosmos_tx.body.context("No body in cosmos tx")?.messages;
+
+    anyhow::ensure!(messages.len() == 1, "Expected 1 message in cosmos tx");
+    MsgPayForBlobs::decode(&messages[0].value[..]).context("failed decoding PFB frob cosmos tx")
 }
 
 fn next_pfb(mut data: &mut BlobRefIterator) -> Result<(MsgPayForBlobs, TxPosition), BoxError> {
     let (start_idx, start_offset) = data.current_position();
-    let (len, len_of_len) = read_varint(&mut data).expect("Varint must be valid");
+    let (len, len_of_len) = read_varint(&mut data).context("failed decoding varint")?;
     debug!(
         "Decoding wrapped PFB of length {}. Stripped {} bytes of prefix metadata",
         len, len_of_len
     );
 
     let current_share_idx = data.current_position().0;
-    let pfb = pfb_from_iter(&mut data, len as usize)?;
+    let pfb = pfb_from_iter(data, len as usize)?;
 
     Ok((
         pfb,
@@ -412,37 +359,88 @@ fn next_pfb(mut data: &mut BlobRefIterator) -> Result<(MsgPayForBlobs, TxPositio
 
 #[cfg(test)]
 mod tests {
-    use crate::{CelestiaHeaderResponse, CompactHeader};
+    use celestia_types::ExtendedHeader;
+    use sov_rollup_interface::services::da::SlotData;
+    use sov_rollup_interface::zk::ValidityCondition;
 
-    const HEADER_RESPONSE_JSON: &[u8] = include_bytes!("./header_response.json");
+    use crate::{CelestiaHeader, CompactHeader};
+
+    const HEADER_JSON_RESPONSES: &[&str] = &[
+        include_str!("../test_data/block_with_rollup_data/header.json"),
+        include_str!("../test_data/block_without_rollup_data/header.json"),
+    ];
+
+    #[test]
+    fn test_validity_condition() {
+        let headers: Vec<_> = HEADER_JSON_RESPONSES
+            .iter()
+            .map(|header| {
+                let eh: ExtendedHeader = serde_json::from_str(header).unwrap();
+                CelestiaHeader::new(eh.dah, eh.header.into())
+            })
+            .collect();
+
+        let former_validity_cond = headers[0].validity_condition();
+        let latter_validity_cond = headers[1].validity_condition();
+
+        assert!(former_validity_cond
+            .combine::<sha2::Sha256>(latter_validity_cond)
+            .is_ok());
+        assert!(latter_validity_cond
+            .combine::<sha2::Sha256>(former_validity_cond)
+            .is_err());
+    }
 
     #[test]
     fn test_compact_header_serde() {
-        let original_header: CelestiaHeaderResponse =
-            serde_json::from_slice(HEADER_RESPONSE_JSON).unwrap();
+        for header_json in HEADER_JSON_RESPONSES {
+            let original_header: ExtendedHeader = serde_json::from_str(header_json).unwrap();
 
-        let header: CompactHeader = original_header.header.into();
+            let header: CompactHeader = original_header.header.into();
 
-        let serialized_header = postcard::to_stdvec(&header).unwrap();
-        let deserialized_header: CompactHeader = postcard::from_bytes(&serialized_header).unwrap();
-        assert_eq!(deserialized_header, header)
+            let serialized_header = postcard::to_stdvec(&header).unwrap();
+            let deserialized_header: CompactHeader =
+                postcard::from_bytes(&serialized_header).unwrap();
+            assert_eq!(deserialized_header, header)
+        }
     }
 
     #[test]
     fn test_compact_header_hash() {
-        let original_header: CelestiaHeaderResponse =
-            serde_json::from_slice(HEADER_RESPONSE_JSON).unwrap();
+        let expected_hashes = [
+            "C839E720DA55CC6E43EC7CE00744D6151D79E84C81D7F6995F3B13B7AE532456",
+            "F769490DC768E7678160384070727533B7AE809477EA5D191CF7AF5C917A7973",
+        ];
+        for (header_json, expected_hash) in HEADER_JSON_RESPONSES.iter().zip(expected_hashes.iter())
+        {
+            let original_header: ExtendedHeader = serde_json::from_str(header_json).unwrap();
 
-        let tm_header = original_header.header.clone();
-        let compact_header: CompactHeader = original_header.header.into();
+            let tm_header = original_header.header.clone();
+            let compact_header: CompactHeader = original_header.header.into();
 
-        assert_eq!(tm_header.hash(), compact_header.hash());
-        assert_eq!(
-            hex::decode("32381A0B7262F15F081ACEF769EE59E6BB4C42C1013A3EEE23967FBF32B86AE6")
-                .unwrap(),
-            compact_header.hash().as_bytes()
-        );
+            assert_eq!(tm_header.hash(), compact_header.hash());
+            assert_eq!(
+                hex::decode(expected_hash).unwrap(),
+                compact_header.hash().as_bytes()
+            );
 
-        assert_eq!(tm_header.hash(), compact_header.hash(),);
+            assert_eq!(tm_header.hash(), compact_header.hash(),);
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "risc0")]
+    fn test_zkvm_serde_celestia_header() {
+        // regression https://github.com/eigerco/celestia-tendermint-rs/pull/12
+        for header_json in HEADER_JSON_RESPONSES {
+            let original_header: ExtendedHeader = serde_json::from_str(header_json).unwrap();
+            let cel_header =
+                CelestiaHeader::new(original_header.dah, original_header.header.into());
+
+            let serialized = risc0_zkvm::serde::to_vec(&cel_header).unwrap();
+            let deserialized = risc0_zkvm::serde::from_slice(&serialized).unwrap();
+
+            assert_eq!(cel_header, deserialized);
+        }
     }
 }

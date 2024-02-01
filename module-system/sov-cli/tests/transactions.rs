@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use demo_stf::runtime::{Runtime, RuntimeCall, RuntimeSubcommand};
 use sov_cli::wallet_state::WalletState;
 use sov_cli::workflows::transactions::{ImportTransaction, TransactionWorkflow};
+use sov_mock_da::MockDaSpec;
 use sov_modules_api::cli::{FileNameArg, JsonStringArg};
 use sov_modules_api::default_context::DefaultContext;
-use sov_rollup_interface::mocks::MockDaSpec;
 
 type Da = MockDaSpec;
 
@@ -19,6 +19,9 @@ fn test_import_transaction_from_string() {
     let subcommand = RuntimeSubcommand::<JsonStringArg, DefaultContext, Da>::bank {
         contents: JsonStringArg {
             json: std::fs::read_to_string(test_token_path).unwrap(),
+            chain_id: 0,
+            gas_tip: 0,
+            gas_limit: 0,
         },
     };
 
@@ -43,6 +46,9 @@ fn test_import_transaction_from_file() {
     let subcommand = RuntimeSubcommand::<FileNameArg, DefaultContext, Da>::bank {
         contents: FileNameArg {
             path: test_token_path.to_str().unwrap().into(),
+            chain_id: 0,
+            gas_tip: 0,
+            gas_limit: 0,
         },
     };
 

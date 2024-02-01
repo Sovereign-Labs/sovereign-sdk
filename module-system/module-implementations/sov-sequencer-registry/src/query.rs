@@ -1,10 +1,9 @@
 //! Defines rpc queries exposed by the sequencer registry module, along with the relevant types
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::Context;
-use sov_state::WorkingSet;
+use sov_modules_api::{Context, StateMapAccessor, WorkingSet};
 
-use crate::{DaAddress, SequencerRegistry};
+use crate::SequencerRegistry;
 
 /// The response type to the `getSequencerDddress` RPC method.
 #[cfg_attr(
@@ -18,15 +17,15 @@ pub struct SequencerAddressResponse<C: Context> {
 }
 
 #[rpc_gen(client, server, namespace = "sequencer")]
-impl<C: Context> SequencerRegistry<C> {
+impl<C: Context, Da: sov_modules_api::DaSpec> SequencerRegistry<C, Da> {
     /// Returns the rollup address of the sequencer with the given DA address.
     ///
     /// The response only contains data if the sequencer is registered.
     #[rpc_method(name = "getSequencerAddress")]
     pub fn sequencer_address(
         &self,
-        da_address: DaAddress,
-        working_set: &mut WorkingSet<C::Storage>,
+        da_address: Da::Address,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<SequencerAddressResponse<C>> {
         Ok(SequencerAddressResponse {
             address: self.allowed_sequencers.get(&da_address, working_set),

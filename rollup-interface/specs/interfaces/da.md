@@ -173,7 +173,7 @@ peer network (likely via JSON-RPC requests to a local light node), and for conve
 which can be efficiently verified in the SNARK. The DA service exists outside of the rollup's state machine, so it will not be proven
 in-circuit. For this reason, implementers are encouraged to prioritize readability and maintainability over efficiency.
 
-### Method:`extract_relevant_txs`
+### Method:`extract_relevant_blobs`
 
 - **Usage:**
 
@@ -194,12 +194,12 @@ in-circuit. For this reason, implementers are encouraged to prioritize readabili
 | ----- | --------------------------- | ------------------------------------------------------------ |
 | `txs` | `iterable<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders |
 
-### Method:`extract_relevant_txs_with_proof`
+### Method:`extract_relevant_blobs_with_proof`
 
 - **Usage:**
 
-  - An adaptation of the `extract_relevant_txs` method designed for use by provers. This method
-    returns the same list of transactions that would be returned by `extract_relevant_txs`, in addition
+  - An adaptation of the `extract_relevant_blobs` method designed for use by provers. This method
+    returns the same list of transactions that would be returned by `extract_relevant_blobs`, in addition
     to a witness proving the inclusion of these transactions in the DA layer block, and a witness
     showing the completeness of the provided list. The output of this function is intended to be
     passed to the `DaVerifier`.

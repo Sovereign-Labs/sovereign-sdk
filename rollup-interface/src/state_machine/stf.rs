@@ -7,17 +7,17 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::da::BlobReaderTrait;
-use crate::services::da::SlotData;
+use crate::da::DaSpec;
+use crate::maybestd::vec::Vec;
 use crate::zk::{ValidityCondition, Zkvm};
 
-#[cfg(any(test, feature = "fuzzing"))]
+#[cfg(any(all(test, feature = "sha2"), feature = "fuzzing"))]
 pub mod fuzzing;
 
 /// The configuration of a full node of the rollup which creates zk proofs.
 pub struct ProverConfig;
 /// The configuration used to initialize the "Verifier" of the state transition function
-/// which runs inside of the zkvm.
+/// which runs inside of the zkVM.
 pub struct ZkConfig;
 /// The configuration of a standard full node of the rollup which does not create zk proofs
 pub struct StandardConfig;
@@ -41,7 +41,7 @@ mod sealed {
 
 /// A receipt for a single transaction. These receipts are stored in the rollup's database
 /// and may be queried via RPC. Receipts are generic over a type `R` which the rollup can use to
-/// store additional data, such as the status code of the transaction or the amout of gas used.s
+/// store additional data, such as the status code of the transaction or the amount of gas used.s
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// A receipt showing the result of a transaction
 pub struct TransactionReceipt<R> {
@@ -55,6 +55,8 @@ pub struct TransactionReceipt<R> {
     /// Any additional structured data to be saved in the database and served over RPC
     /// For example, this might contain a status code.
     pub receipt: R,
+    /// Total gas incurred for this transaction.
+    pub gas_used: Vec<u64>,
 }
 
 /// A receipt for a batch of transactions. These receipts are stored in the rollup's database
@@ -78,9 +80,11 @@ pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
 ///  - B - generic for batch receipt contents
 ///  - T - generic for transaction receipt contents
 ///  - W - generic for witness
-pub struct SlotResult<S, B, T, W> {
+pub struct SlotResult<S, Cs, B, T, W> {
     /// Final state root after all blobs were applied
     pub state_root: S,
+    /// Container for all state alterations that happened during slot execution
+    pub change_set: Cs,
     /// Receipt for each applied batch
     pub batch_receipts: Vec<BatchReceipt<B, T>>,
     /// Witness after applying the whole block
@@ -94,11 +98,18 @@ pub struct SlotResult<S, B, T, W> {
 ///  - block: DA layer block
 ///  - batch: Set of transactions grouped together, or block on L2
 ///  - blob: Non serialised batch or anything else that can be posted on DA layer, like attestation or proof.
-pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
+pub trait StateTransitionFunction<Vm: Zkvm, Da: DaSpec> {
     /// Root hash of state merkle tree
-    type StateRoot;
-    /// The initial state of the rollup.
-    type InitialState;
+    type StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]>;
+
+    /// The initial params of the rollup.
+    type GenesisParams;
+
+    /// State of the rollup before transition.
+    type PreState;
+
+    /// State of the rollup after transition.
+    type ChangeSet;
 
     /// The contents of a transaction receipt. This is the data that is persisted in the database
     type TxReceiptContents: Serialize + DeserializeOwned + Clone;
@@ -108,14 +119,19 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
 
     /// Witness is a data that is produced during actual batch execution
     /// or validated together with proof during verification
-    type Witness: Default + Serialize;
+    type Witness: Default + Serialize + DeserializeOwned;
 
     /// The validity condition that must be verified outside of the Vm
     type Condition: ValidityCondition;
 
-    /// Perform one-time initialization for the genesis block and returns the resulting root hash wrapped in a result.
+    /// Perform one-time initialization for the genesis block and
+    /// returns the resulting root hash and changeset.
     /// If the init chain fails we panic.
-    fn init_chain(&mut self, params: Self::InitialState) -> Self::StateRoot;
+    fn init_chain(
+        &self,
+        genesis_state: Self::PreState,
+        params: Self::GenesisParams,
+    ) -> (Self::StateRoot, Self::ChangeSet);
 
     /// Called at each **DA-layer block** - whether or not that block contains any
     /// data relevant to the rollup.
@@ -130,24 +146,24 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     /// which is why we use a generic here instead of an associated type.
     ///
     /// Commits state changes to the database
-    fn apply_slot<'a, I, Data>(
-        &mut self,
+    #[allow(clippy::type_complexity)]
+    fn apply_slot<'a, I>(
+        &self,
+        pre_state_root: &Self::StateRoot,
+        pre_state: Self::PreState,
         witness: Self::Witness,
-        slot_data: &Data,
+        slot_header: &Da::BlockHeader,
+        validity_condition: &Da::ValidityCondition,
         blobs: I,
     ) -> SlotResult<
         Self::StateRoot,
+        Self::ChangeSet,
         Self::BatchReceiptContents,
         Self::TxReceiptContents,
         Self::Witness,
     >
     where
-        I: IntoIterator<Item = &'a mut B>,
-        Data: SlotData<Cond = Self::Condition>;
-
-    /// Gets the state root from the associated state. If not available (because the chain has not been initialized yet),
-    /// return None.
-    fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot>;
+        I: IntoIterator<Item = &'a mut Da::BlobTransaction>;
 }
 
 /// A key-value pair representing a change to the rollup state

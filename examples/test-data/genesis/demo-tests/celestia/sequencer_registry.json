@@ -1,0 +1,9 @@
+{
+  "seq_rollup_address": "sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94",
+  "seq_da_address": "celestia1a68m2l85zn5xh0l07clk4rfvnezhywc53g8x7s",
+  "coins_to_lock": {
+    "amount": 50,
+    "token_address": "sov1zsnx7n2wjvtkr0ttscfgt06pjca3v2e6stxeu49qwynavmk7a8xqlxkkjp"
+  },
+  "is_preferred_sequencer": true
+}

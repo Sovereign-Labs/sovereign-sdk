@@ -2,7 +2,7 @@
 
 This crate provides abstractions specifically designed for storing and retrieving data from a permanent storage, tailored to be used within the Module System.
 
-## High level explanation
+## High-level explanation
 
 At a high level, the crate offers two main abstractions that module developers can utilize to access data:
 
@@ -37,13 +37,13 @@ Module developers can interact with the `WorkingSet`, `StateValue`, and `StateMa
 
 The above API is used in the following way:
 
-```Rust
+```rust
 state.value.set(&some_value, working_set);
 let maybe_value = state.value.get(working_set);
 
 ```
 
-## Low level explanation
+## Low-level explanation
 
 It's important to note that an understanding of this section is not necessarily required for efficient usage of the `sov-state`.
 

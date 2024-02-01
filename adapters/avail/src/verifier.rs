@@ -1,7 +1,7 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::zk::ValidityCondition;
-use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
 use crate::spec::DaLayerSpec;
@@ -12,7 +12,9 @@ pub enum ValidityConditionError {
     BlocksNotConsecutive,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy, BorshDeserialize, BorshSerialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy, BorshDeserialize, BorshSerialize,
+)]
 /// A validity condition expressing that a chain of DA layer blocks is contiguous and canonical
 pub struct ChainValidityCondition {
     pub prev_hash: [u8; 32],
@@ -28,7 +30,7 @@ impl ValidityCondition for ChainValidityCondition {
         let mut combined_hashes: Vec<u8> = Vec::with_capacity(64);
         combined_hashes.extend_from_slice(self.txs_commitment.as_ref());
         combined_hashes.extend_from_slice(rhs.txs_commitment.as_ref());
-        
+
         let combined_root = sp_core_hashing::blake2_256(&combined_hashes);
 
         if self.block_hash != rhs.prev_hash {
@@ -36,8 +38,8 @@ impl ValidityCondition for ChainValidityCondition {
         }
 
         Ok(Self {
-            prev_hash: rhs.prev_hash, 
-            block_hash: rhs.block_hash, 
+            prev_hash: rhs.prev_hash,
+            block_hash: rhs.block_hash,
             txs_commitment: combined_root,
         })
     }

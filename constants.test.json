@@ -1,0 +1,86 @@
+{
+  "comment": "Sovereign SDK constants",
+  "constants": {
+    "GAS_TOKEN_ADDRESS": "sov1p9xxgsh78u3nxsl0zhfq4eazy0y4c8m5psjv3k3vrv45859jgazq3x72sg",
+    "GAS_TX_FIXED_COST": [0, 0],
+    "GAS_TX_COST_PER_BYTE": [0, 0],
+    "TEST_U32": 42,
+    "TEST_BOOL": true,
+    "TEST_STRING": "Some Other String",
+    "TEST_NESTED_ARRAY": [
+      [
+        7,
+        7,
+        7
+      ],
+      [
+        7,
+        7,
+        7
+      ]
+    ],
+    "TEST_ARRAY_OF_U8": [
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11
+    ],
+    "TEST_SLICE": [
+      11,
+      11,
+      11
+    ]
+  },
+  "gas": {
+    "Bank": {
+      "create_token": [
+        4,
+        4
+      ],
+      "transfer": [
+        5,
+        5
+      ],
+      "burn": [
+        2,
+        2
+      ],
+      "mint": [
+        2,
+        2
+      ],
+      "freeze": [
+        1,
+        1
+      ]
+    }
+  }
+}

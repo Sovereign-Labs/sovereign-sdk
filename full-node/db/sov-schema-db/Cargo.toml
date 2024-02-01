@@ -9,18 +9,27 @@ authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 readme = "README.md"
 
 [dependencies]
-# External dependencies 
-anyhow = { workspace = true }
-once_cell = { workspace = true }
+# External dependencies
+anyhow = { workspace = true, default-features = true }
+byteorder = { workspace = true, default-features = true, optional = true }
+once_cell = { workspace = true, default-features = true }
 prometheus = { workspace = true }
+proptest = { workspace = true, optional = true, default-features = true }
+proptest-derive = { workspace = true, optional = true }
 rocksdb = { workspace = true }
-tracing = { workspace = true }
+tracing = { workspace = true, default-features = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-byteorder = { workspace = true }
+byteorder = { workspace = true, default-features = true }
 tempfile = { workspace = true }
+sov-schema-db = { path = ".", features = ["test-utils"] }
+
+[features]
+default = []
+test-utils = ["dep:byteorder"]
+arbitrary = ["dep:proptest", "dep:proptest-derive"]

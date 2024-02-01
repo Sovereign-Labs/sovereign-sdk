@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::net::SocketAddr;
 
 use proptest::prelude::any_with;
 use proptest::strategy::Strategy;
@@ -8,15 +7,14 @@ use reqwest::header::CONTENT_TYPE;
 use serde_json::json;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 #[cfg(test)]
-use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash};
+use sov_mock_da::{MockBlock, MockBlockHeader, MockHash};
+use sov_rollup_interface::da::Time;
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::fuzzing::BatchReceiptStrategyArgs;
 use sov_rollup_interface::stf::{BatchReceipt, Event, TransactionReceipt};
 #[cfg(test)]
-use sov_stf_runner::get_ledger_rpc;
 use sov_stf_runner::RpcConfig;
 use tendermint::crypto::Sha256;
-use tokio::sync::oneshot;
 
 struct TestExpect {
     payload: serde_json::Value,
@@ -61,39 +59,25 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<MockBlock, u
         .unwrap();
 
     rt.block_on(async {
-        let (tx_start, rx_start) = oneshot::channel();
-        let (tx_end, rx_end) = oneshot::channel();
-
-        let address = SocketAddr::new("127.0.0.1".parse().unwrap(), 0);
-
         // Initialize the ledger database, which stores blocks, transactions, events, etc.
         let tmpdir = tempfile::tempdir().unwrap();
         let mut ledger_db = LedgerDB::with_path(tmpdir.path()).unwrap();
-
         populate_ledger(&mut ledger_db, slots);
+        let server = jsonrpsee::server::ServerBuilder::default()
+            .build("127.0.0.1:0")
+            .await
+            .unwrap();
+        let addr = server.local_addr().unwrap();
+        let server_rpc_module =
+            sov_ledger_rpc::server::rpc_module::<LedgerDB, u32, u32>(ledger_db).unwrap();
+        let _server_handle = server.start(server_rpc_module);
 
-        let ledger_rpc_module = get_ledger_rpc::<u32, u32>(ledger_db.clone());
-
-        rt.spawn(async move {
-            let server = jsonrpsee::server::ServerBuilder::default()
-                .build([address].as_ref())
-                .await
-                .unwrap();
-            let actual_address = server.local_addr().unwrap();
-            let _server_handle = server.start(ledger_rpc_module).unwrap();
-            tx_start.send(actual_address.port()).unwrap();
-            rx_end.await.unwrap();
-        });
-
-        let bind_port = rx_start.await.unwrap();
         let rpc_config = RpcConfig {
             bind_host: "127.0.0.1".to_string(),
-            bind_port,
+            bind_port: addr.port(),
         };
 
         queries_test_runner(test_queries, rpc_config).await;
-
-        tx_end.send("drop server").unwrap();
     });
 }
 
@@ -104,17 +88,19 @@ fn batch2_tx_receipts() -> Vec<TransactionReceipt<u32>> {
             body_to_save: Some(b"tx body".to_vec()),
             events: vec![],
             receipt: 0,
+            gas_used: vec![0, 0],
         })
         .collect()
 }
 
 fn regular_test_helper(payload: serde_json::Value, expected: &serde_json::Value) {
     let mut slots: Vec<SlotCommit<MockBlock, u32, u32>> = vec![SlotCommit::new(MockBlock {
-        curr_hash: sha2::Sha256::digest(b"slot_data"),
         header: MockBlockHeader {
-            prev_hash: MockHash(sha2::Sha256::digest(b"prev_header")),
+            prev_hash: sha2::Sha256::digest(b"prev_header").into(),
+            hash: sha2::Sha256::digest(b"slot_data").into(),
+            height: 0,
+            time: Time::now(),
         },
-        height: 0,
         validity_cond: Default::default(),
         blobs: Default::default(),
     })];
@@ -128,6 +114,7 @@ fn regular_test_helper(payload: serde_json::Value, expected: &serde_json::Value)
                     body_to_save: Some(b"tx1 body".to_vec()),
                     events: vec![],
                     receipt: 0,
+                    gas_used: vec![0, 0],
                 },
                 TransactionReceipt::<u32> {
                     tx_hash: ::sha2::Sha256::digest(b"tx2"),
@@ -137,6 +124,7 @@ fn regular_test_helper(payload: serde_json::Value, expected: &serde_json::Value)
                         Event::new("event2_key", "event2_value"),
                     ],
                     receipt: 1,
+                    gas_used: vec![2, 3],
                 },
             ],
             inner: 0,
@@ -306,7 +294,7 @@ prop_compose! {
 
         let mut total_num_batches = 1;
 
-        let mut prev_hash = MockHash([0;32]);
+        let mut prev_hash = MockHash::from([0;32]);
 
         let mut curr_tx_id = 1;
         let mut curr_event_id = 1;
@@ -315,11 +303,12 @@ prop_compose! {
 
         for (batches, hash) in batches_and_hashes{
             let mut new_slot = SlotCommit::new(MockBlock {
-                curr_hash: hash,
                 header: MockBlockHeader {
+                hash: hash.into(),
                     prev_hash,
-                },
                 height: 0,
+                time: Time::now(),
+                },
                 validity_cond: Default::default(),
                 blobs: Default::default()
             });
@@ -340,7 +329,7 @@ prop_compose! {
 
             slots.push(new_slot);
 
-            prev_hash = MockHash(hash);
+            prev_hash = MockHash::from(hash);
         }
 
         (slots, tx_id_to_event_range, total_num_batches)
@@ -388,7 +377,7 @@ proptest!(
         let last_slot_start_batch = total_num_batches - last_slot_num_batches;
         let last_slot_end_batch = total_num_batches;
 
-        let payload = jsonrpc_req!("ledger_getHead", []);
+        let payload = jsonrpc_req!("ledger_getHead", ["Compact"]);
         let expected = jsonrpc_result!({
             "number": slots.len(),
             "hash": format!("0x{}", hex::encode(last_slot.slot_data().hash())),

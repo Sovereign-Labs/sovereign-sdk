@@ -1,0 +1,90 @@
+[package]
+name = "demo-stf"
+version = { workspace = true }
+edition = { workspace = true }
+resolver = "2"
+authors = { workspace = true }
+license = { workspace = true }
+homepage = "sovereign.xyz"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = { workspace = true }
+borsh = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+toml = { workspace = true, optional = true }
+jsonrpsee = { workspace = true, features = ["http-client", "server"], optional = true }
+tokio = { workspace = true, optional = true }
+hex = { workspace = true }
+tracing = { workspace = true }
+reth-primitives = { workspace = true, optional = true }
+secp256k1 = { workspace = true, optional = true }
+
+sov-stf-runner = { path = "../../../full-node/sov-stf-runner" }
+sov-rollup-interface = { path = "../../../rollup-interface" }
+sov-cli = { path = "../../../module-system/sov-cli", optional = true }
+sov-sequencer-registry = { path = "../../../module-system/module-implementations/sov-sequencer-registry" }
+sov-blob-storage = { path = "../../../module-system/module-implementations/sov-blob-storage" }
+sov-bank = { path = "../../../module-system/module-implementations/sov-bank" }
+sov-nft-module = { path = "../../../module-system/module-implementations/sov-nft-module" }
+sov-soft-confirmations-kernel = { path = "../../../module-system/sov-soft-confirmations-kernel" }
+
+sov-mock-da = { path = "../../../adapters/mock-da" }
+sov-chain-state = { path = "../../../module-system/module-implementations/sov-chain-state" }
+sov-modules-stf-blueprint = { path = "../../../module-system/sov-modules-stf-blueprint" }
+sov-value-setter = { path = "../../../module-system/module-implementations/examples/sov-value-setter" }
+sov-accounts = { path = "../../../module-system/module-implementations/sov-accounts" }
+sov-state = { path = "../../../module-system/sov-state" }
+sov-modules-api = { path = "../../../module-system/sov-modules-api" }
+# Only enable the evm on "experimental" feature
+sov-evm = { path = "../../../module-system/module-implementations/sov-evm", optional = true }
+
+
+[dev-dependencies]
+demo-stf = { path = ".", features = ["native"] }
+tempfile = { workspace = true }
+rand = { workspace = true }
+sov-data-generators = { path = "../../../module-system/sov-data-generators" }
+sov-mock-zkvm = { path = "../../../adapters/mock-zkvm" }
+sov-prover-storage-manager = { path = "../../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
+
+
+[features]
+default = []
+offchain = ["sov-nft-module/offchain"]
+experimental = ["sov-evm/experimental", "reth-primitives", "secp256k1"]
+native = [
+    "sov-stf-runner/native",
+    "sov-bank/native",
+    "sov-nft-module/native",
+    "sov-cli",
+    "sov-accounts/native",
+    "sov-sequencer-registry/native",
+    "sov-blob-storage/native",
+    "sov-chain-state/native",
+    "sov-value-setter/native",
+    "sov-modules-api/native",
+    "sov-rollup-interface/native",
+    "sov-mock-da/native",
+    "sov-modules-stf-blueprint/native",
+    "sov-soft-confirmations-kernel/native",
+    "clap",
+    "serde",
+    "serde_json",
+    "jsonrpsee",
+    "tokio",
+    "toml",
+]
+serde = [
+    "sov-bank/serde",
+    "sov-sequencer-registry/serde",
+    "sov-blob-storage/serde",
+    "sov-value-setter/serde",
+    "sov-accounts/serde",
+    "sov-nft-module/serde",
+    "sov-evm?/serde",
+]

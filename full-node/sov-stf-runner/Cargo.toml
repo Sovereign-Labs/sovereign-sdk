@@ -1,50 +1,67 @@
 [package]
 name = "sov-stf-runner"
 authors = { workspace = true }
+description = "Runs Sovereign SDK rollups and their verifiers"
 edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
+num_cpus = { workspace = true }
+thiserror = { workspace = true, optional = true }
 borsh = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
-toml = { workspace = true }
-jsonrpsee = { workspace = true, features = ["http-client", "server"] }
-tokio = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true, optional = true }
+jsonrpsee = { workspace = true, features = ["http-client", "server"], optional = true }
+tokio = { workspace = true, optional = true }
 hex = { workspace = true }
-tracing = { workspace = true }
-futures = "0.3"
-tracing-subscriber = "0.3.17"
-
-sov-db = { path = "../db/sov-db" }
-sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
-sov-state = { path = "../../module-system/sov-state", version = "0.1", features = ["native"] }
-sov-modules-api = { path = "../../module-system/sov-modules-api", version = "0.1", features = ["native"] }
-celestia = { path = "../../adapters/celestia", features = ["native"] }
+tracing = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+async-trait = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
+sov-db = { path = "../db/sov-db", version = "0.3", optional = true }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-rand = { workspace = true }
+sha2 = { workspace = true }
 
 sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry", features = ["native"] }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
-sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
-sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", features = ["native"] }
-sov-accounts = { path = "../../module-system/module-implementations/sov-accounts", features = ["native"] }
+sov-modules-stf-blueprint = { path = "../../module-system/sov-modules-stf-blueprint", features = ["native"] }
 
-#[features]
-#default = []
-#native = [
-#    "sov-sequencer-registry/native",
-#    "sov-bank/native",
-#    "sov-value-setter/native",
-#    "sov-accounts/native",
-#    "jupiter/native",
-#]
+sov-accounts = { path = "../../module-system/module-implementations/sov-accounts", features = ["native"] }
+sov-celestia-adapter = { path = "../../adapters/celestia", features = ["native"] }
+sov-sequencer = { path = "../sov-sequencer" }
+
+sov-state = { path = "../../module-system/sov-state", features = ["native"] }
+sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
+sov-stf-runner = { path = ".", features = ["mock"] }
+
+sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
+sov-mock-zkvm = { path = "../../adapters/mock-zkvm" }
+sov-prover-storage-manager = { path = "../sov-prover-storage-manager", features = ["test-utils"] }
+
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+
+
+[features]
+default = []
+mock = ["native"]
+native = [
+    "sov-db",
+    "jsonrpsee",
+    "toml",
+    "tokio",
+    "tracing",
+    "futures",
+    "async-trait",
+    "rayon",
+    "thiserror",
+]

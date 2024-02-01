@@ -1,27 +1,28 @@
-use std::fs;
 use std::marker::PhantomData;
-use std::path::Path;
 use std::sync::Arc;
 
 use jmt::storage::{NodeBatch, TreeWriter};
-use jmt::{JellyfishMerkleTree, KeyHash, RootHash, Version};
+use jmt::{JellyfishMerkleTree, KeyHash, Version};
 use sov_db::native_db::NativeDB;
+use sov_db::schema::{QueryManager, ReadOnlyDbSnapshot};
 use sov_db::state_db::StateDB;
+use sov_modules_core::{
+    CacheKey, NativeStorage, OrderedReadsAndWrites, Storage, StorageKey, StorageProof,
+    StorageValue, Witness,
+};
 
 use crate::config::Config;
-use crate::internal_cache::OrderedReadsAndWrites;
-use crate::storage::{NativeStorage, StorageKey, StorageProof, StorageValue};
-use crate::tree_db::TreeReadLogger;
-use crate::witness::Witness;
-use crate::{MerkleProofSpec, Storage};
+use crate::MerkleProofSpec;
 
-pub struct ProverStorage<S: MerkleProofSpec> {
-    db: StateDB,
-    native_db: NativeDB,
+/// A [`Storage`] implementation to be used by the prover in a native execution
+/// environment (outside of the zkVM).
+pub struct ProverStorage<S: MerkleProofSpec, Q> {
+    db: StateDB<Q>,
+    native_db: NativeDB<Q>,
     _phantom_hasher: PhantomData<S::Hasher>,
 }
 
-impl<S: MerkleProofSpec> Clone for ProverStorage<S> {
+impl<S: MerkleProofSpec, Q> Clone for ProverStorage<S, Q> {
     fn clone(&self) -> Self {
         Self {
             db: self.db.clone(),
@@ -31,84 +32,87 @@ impl<S: MerkleProofSpec> Clone for ProverStorage<S> {
     }
 }
 
-impl<S: MerkleProofSpec> ProverStorage<S> {
-    pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
-        let state_db = StateDB::with_path(&path)?;
-        let native_db = NativeDB::with_path(&path)?;
-
-        Ok(Self {
-            db: state_db,
+impl<S: MerkleProofSpec, Q> ProverStorage<S, Q> {
+    /// Creates a new [`ProverStorage`] instance from specified db handles
+    pub fn with_db_handles(db: StateDB<Q>, native_db: NativeDB<Q>) -> Self {
+        Self {
+            db,
             native_db,
             _phantom_hasher: Default::default(),
-        })
+        }
     }
 
-    fn read_value(&self, key: &StorageKey) -> Option<StorageValue> {
+    /// Converts it to pair of readonly [`ReadOnlyDbSnapshot`]s
+    /// First is from [`StateDB`]
+    /// Second is from [`NativeDB`]
+    pub fn freeze(self) -> anyhow::Result<(ReadOnlyDbSnapshot, ReadOnlyDbSnapshot)> {
+        let ProverStorage { db, native_db, .. } = self;
+        let state_db_snapshot = db.freeze()?;
+        let native_db_snapshot = native_db.freeze()?;
+        Ok((state_db_snapshot, native_db_snapshot))
+    }
+}
+
+impl<S: MerkleProofSpec, Q: QueryManager> ProverStorage<S, Q> {
+    fn read_value(&self, key: &StorageKey, version: Option<Version>) -> Option<StorageValue> {
+        let version_to_use = version.unwrap_or_else(|| self.db.get_next_version());
         match self
             .db
-            .get_value_option_by_key(self.db.get_next_version(), key.as_ref())
+            .get_value_option_by_key(version_to_use, key.as_ref())
         {
             Ok(value) => value.map(Into::into),
             // It is ok to panic here, we assume the db is available and consistent.
             Err(e) => panic!("Unable to read value from db: {e}"),
         }
     }
-
-    fn get_root_hash(&self, version: Version) -> Result<RootHash, anyhow::Error> {
-        let temp_merkle: JellyfishMerkleTree<'_, StateDB, S::Hasher> =
-            JellyfishMerkleTree::new(&self.db);
-        temp_merkle.get_root_hash(version)
-    }
 }
 
-impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
+pub struct ProverStateUpdate {
+    pub(crate) node_batch: NodeBatch,
+    pub key_preimages: Vec<(KeyHash, CacheKey)>,
+}
+
+impl<S: MerkleProofSpec, Q: QueryManager> Storage for ProverStorage<S, Q> {
     type Witness = S::Witness;
     type RuntimeConfig = Config;
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
-    type StateUpdate = NodeBatch;
+    type Root = jmt::RootHash;
+    type StateUpdate = ProverStateUpdate;
 
-    fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
-        Self::with_path(config.path.as_path())
-    }
-
-    fn get(&self, key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
-        let val = self.read_value(key);
+    fn get(
+        &self,
+        key: &StorageKey,
+        version: Option<Version>,
+        witness: &Self::Witness,
+    ) -> Option<StorageValue> {
+        let val = self.read_value(key, version);
         witness.add_hint(val.clone());
         val
     }
 
     #[cfg(feature = "native")]
-    fn get_accessory(&self, key: &StorageKey) -> Option<StorageValue> {
+    fn get_accessory(&self, key: &StorageKey, version: Option<Version>) -> Option<StorageValue> {
+        let version_to_use = version.unwrap_or_else(|| self.db.get_next_version() - 1);
         self.native_db
-            .get_value_option(key.as_ref())
+            .get_value_option(key.as_ref(), version_to_use)
             .unwrap()
             .map(Into::into)
-    }
-
-    fn get_state_root(&self, _witness: &Self::Witness) -> anyhow::Result<[u8; 32]> {
-        self.get_root_hash(self.db.get_next_version() - 1)
-            .map(|root| root.0)
     }
 
     fn compute_state_update(
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-    ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error> {
+    ) -> Result<(Self::Root, Self::StateUpdate), anyhow::Error> {
         let latest_version = self.db.get_next_version() - 1;
-        witness.add_hint(latest_version);
+        let jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&self.db);
 
-        let read_logger = TreeReadLogger::with_db_and_witness(self.db.clone(), witness);
-        let untracked_jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&self.db);
-
-        // Handle empty untracked_jmt
-        if untracked_jmt
-            .get_root_hash_option(latest_version)?
-            .is_none()
-        {
+        // Handle empty jmt
+        // TODO: Fix this before introducing snapshots!
+        if jmt.get_root_hash_option(latest_version)?.is_none() {
             assert_eq!(latest_version, 0);
             let empty_batch = Vec::default().into_iter();
-            let (_, tree_update) = untracked_jmt
+            let (_, tree_update) = jmt
                 .put_value_set(empty_batch, latest_version)
                 .expect("JMT update must succeed");
 
@@ -116,28 +120,31 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
                 .write_node_batch(&tree_update.node_batch)
                 .expect("db write must succeed");
         }
+        let prev_root = jmt
+            .get_root_hash(latest_version)
+            .expect("Previous root hash was just populated");
+        witness.add_hint(prev_root.0);
 
         // For each value that's been read from the tree, read it from the logged JMT to populate hints
         for (key, read_value) in state_accesses.ordered_reads {
             let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
             // TODO: Switch to the batch read API once it becomes available
-            let (result, proof) = untracked_jmt.get_with_proof(key_hash, latest_version)?;
+            let (result, proof) = jmt.get_with_proof(key_hash, latest_version)?;
             if result.as_ref() != read_value.as_ref().map(|f| f.value.as_ref()) {
                 anyhow::bail!("Bug! Incorrect value read from jmt");
             }
             witness.add_hint(proof);
         }
 
-        let tracked_jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&read_logger);
+        let mut key_preimages = Vec::with_capacity(state_accesses.ordered_writes.len());
+
         // Compute the jmt update from the write batch
         let batch = state_accesses
             .ordered_writes
             .into_iter()
             .map(|(key, value)| {
                 let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
-                self.db
-                    .put_preimage(key_hash, key.key.as_ref())
-                    .expect("preimage must succeed");
+                key_preimages.push((key_hash, key));
                 (
                     key_hash,
                     value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
@@ -146,60 +153,73 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
 
         let next_version = self.db.get_next_version();
 
-        let (new_root, tree_update) = tracked_jmt
-            .put_value_set(batch, next_version)
+        let (new_root, update_proof, tree_update) = jmt
+            .put_value_set_with_proof(batch, next_version)
             .expect("JMT update must succeed");
 
-        Ok((new_root.0, tree_update.node_batch))
+        witness.add_hint(update_proof);
+        witness.add_hint(new_root.0);
+
+        let state_update = ProverStateUpdate {
+            node_batch: tree_update.node_batch,
+            key_preimages,
+        };
+
+        Ok((new_root, state_update))
     }
 
-    fn commit(&self, node_batch: &Self::StateUpdate, accessory_writes: &OrderedReadsAndWrites) {
+    fn commit(&self, state_update: &Self::StateUpdate, accessory_writes: &OrderedReadsAndWrites) {
+        let latest_version = self.db.get_next_version() - 1;
         self.db
-            .write_node_batch(node_batch)
-            .expect("db write must succeed");
+            .put_preimages(
+                state_update
+                    .key_preimages
+                    .iter()
+                    .map(|(key_hash, key)| (*key_hash, key.key.as_ref())),
+            )
+            .expect("Preimage put must succeed");
 
         self.native_db
             .set_values(
                 accessory_writes
                     .ordered_writes
                     .iter()
-                    .map(|(k, v_opt)| (k.key.to_vec(), v_opt.as_ref().map(|v| v.value.to_vec())))
-                    .collect(),
+                    .map(|(k, v_opt)| (k.key.to_vec(), v_opt.as_ref().map(|v| v.value.to_vec()))),
+                latest_version,
             )
             .expect("native db write must succeed");
 
+        // Write the state values last, since we base our view of what has been touched
+        // on state. If the node crashes between the `native_db` update and this update,
+        // then the whole `commit` will be re-run later so no data can be lost.
+        self.db
+            .write_node_batch(&state_update.node_batch)
+            .expect("db write must succeed");
+
+        // Finally, update our in-memory view of the current item numbers
         self.db.inc_next_version();
+    }
+
+    fn open_proof(
+        state_root: Self::Root,
+        state_proof: StorageProof<Self::Proof>,
+    ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error> {
+        let StorageProof { key, value, proof } = state_proof;
+        let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
+
+        proof.verify(state_root, key_hash, value.as_ref().map(|v| v.value()))?;
+        Ok((key, value))
     }
 
     // Based on assumption `validate_and_commit` increments version.
     fn is_empty(&self) -> bool {
         self.db.get_next_version() <= 1
     }
-
-    fn open_proof(
-        &self,
-        state_root: [u8; 32],
-        state_proof: StorageProof<Self::Proof>,
-    ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error> {
-        let StorageProof { key, value, proof } = state_proof;
-        let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
-
-        proof.verify(
-            jmt::RootHash(state_root),
-            key_hash,
-            value.as_ref().map(|v| v.value()),
-        )?;
-        Ok((key, value))
-    }
 }
 
-impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
-    fn get_with_proof(
-        &self,
-        key: StorageKey,
-        _witness: &Self::Witness,
-    ) -> StorageProof<Self::Proof> {
-        let merkle = JellyfishMerkleTree::<StateDB, S::Hasher>::new(&self.db);
+impl<S: MerkleProofSpec, Q: QueryManager> NativeStorage for ProverStorage<S, Q> {
+    fn get_with_proof(&self, key: StorageKey) -> StorageProof<Self::Proof> {
+        let merkle = JellyfishMerkleTree::<StateDB<Q>, S::Hasher>::new(&self.db);
         let (val_opt, proof) = merkle
             .get_with_proof(
                 KeyHash::with::<S::Hasher>(key.as_ref()),
@@ -212,113 +232,10 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
             proof,
         }
     }
-}
 
-pub fn delete_storage(path: impl AsRef<Path>) {
-    fs::remove_dir_all(&path)
-        .or_else(|_| fs::remove_file(&path))
-        .unwrap();
-}
-
-#[cfg(test)]
-mod test {
-    use jmt::Version;
-
-    use super::*;
-    use crate::{DefaultStorageSpec, StateReaderAndWriter, WorkingSet};
-
-    #[derive(Clone)]
-    struct TestCase {
-        key: StorageKey,
-        value: StorageValue,
-        version: Version,
-    }
-
-    fn create_tests() -> Vec<TestCase> {
-        vec![
-            TestCase {
-                key: StorageKey::from("key_0"),
-                value: StorageValue::from("value_0"),
-                version: 1,
-            },
-            TestCase {
-                key: StorageKey::from("key_1"),
-                value: StorageValue::from("value_1"),
-                version: 2,
-            },
-            TestCase {
-                key: StorageKey::from("key_2"),
-                value: StorageValue::from("value_2"),
-                version: 3,
-            },
-        ]
-    }
-
-    #[test]
-    fn test_jmt_storage() {
-        let tempdir = tempfile::tempdir().unwrap();
-        let path = tempdir.path();
-        let tests = create_tests();
-        {
-            for test in tests.clone() {
-                let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
-                let mut storage = WorkingSet::new(prover_storage.clone());
-                assert_eq!(prover_storage.db.get_next_version(), test.version);
-
-                storage.set(&test.key, test.value.clone());
-                let (cache, witness) = storage.checkpoint().freeze();
-                prover_storage
-                    .validate_and_commit(cache, &witness)
-                    .expect("storage is valid");
-
-                assert_eq!(test.value, prover_storage.get(&test.key, &witness).unwrap());
-                assert_eq!(prover_storage.db.get_next_version(), test.version + 1)
-            }
-        }
-
-        {
-            let storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
-            assert_eq!(storage.db.get_next_version(), (tests.len() + 1) as u64);
-            for test in tests {
-                assert_eq!(
-                    test.value,
-                    storage.get(&test.key, &Default::default()).unwrap()
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_restart_lifecycle() {
-        let tempdir = tempfile::tempdir().unwrap();
-        let path = tempdir.path();
-        {
-            let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
-            assert!(prover_storage.is_empty());
-        }
-
-        let key = StorageKey::from("some_key");
-        let value = StorageValue::from("some_value");
-        // First restart
-        {
-            let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
-            assert!(prover_storage.is_empty());
-            let mut storage = WorkingSet::new(prover_storage.clone());
-            storage.set(&key, value.clone());
-            let (cache, witness) = storage.checkpoint().freeze();
-            prover_storage
-                .validate_and_commit(cache, &witness)
-                .expect("storage is valid");
-        }
-
-        // Correctly restart from disk
-        {
-            let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
-            assert!(!prover_storage.is_empty());
-            assert_eq!(
-                value,
-                prover_storage.get(&key, &Default::default()).unwrap()
-            );
-        }
+    fn get_root_hash(&self, version: Version) -> anyhow::Result<jmt::RootHash> {
+        let temp_merkle: JellyfishMerkleTree<'_, StateDB<Q>, S::Hasher> =
+            JellyfishMerkleTree::new(&self.db);
+        temp_merkle.get_root_hash(version)
     }
 }

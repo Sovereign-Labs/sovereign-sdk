@@ -1,6 +1,6 @@
 [package]
 name = "sovereign-sdk-fuzz"
-version = "0.1.0"
+version = "0.3.0"
 publish = false
 edition = "2021"
 
@@ -14,21 +14,16 @@ tempfile = "3"
 rand = "0.8"
 
 # Sovereign-maintained dependencies.
-celestia = { path = "../adapters/celestia" }
+sov-celestia-adapter = { path = "../adapters/celestia", features = ["native"] }
 sov-modules-api = { path = "../module-system/sov-modules-api", features = ["arbitrary", "native"] }
 sov-accounts = { path = "../module-system/module-implementations/sov-accounts", features = ["arbitrary", "native"] }
 sov-bank = { path = "../module-system/module-implementations/sov-bank", features = ["native"] }
 sov-state = { path = "../module-system/sov-state" }
+sov-prover-storage-manager = { path = "../full-node/sov-prover-storage-manager", features = ["test-utils"] }
 
 # Prevent this from interfering with workspaces.
 [workspace]
 members = ["."]
-
-[[bin]]
-name = "namespace_group_from_b64"
-path = "fuzz_targets/namespace_group_from_b64.rs"
-test = false
-doc = false
 
 [[bin]]
 name = "parse_address"

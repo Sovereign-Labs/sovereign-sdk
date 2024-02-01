@@ -1,42 +1,32 @@
-use borsh::{BorshDeserialize, BorshSerialize};
-use nmt_rs::{NamespaceId, NamespaceProof, NamespacedSha2Hasher};
+// use borsh::{BorshDeserialize, BorshSerialize};
+use celestia_types::nmt::NamespaceProof;
+use celestia_types::NamespacedShares;
 use serde::{Deserialize, Serialize};
 
 use super::CelestiaSpec;
 use crate::types::FilteredCelestiaBlock;
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+// TODO: derive borsh Serialize, Deserialize <https://github.com/eigerco/celestia-node-rs/issues/155>
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct EtxProof {
     pub proof: Vec<EtxRangeProof>,
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+// TODO: derive borsh Serialize, Deserialize <https://github.com/eigerco/celestia-node-rs/issues/155>
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct EtxRangeProof {
     pub shares: Vec<Vec<u8>>,
-    pub proof: NamespaceProof<NamespacedSha2Hasher>,
+    pub proof: NamespaceProof,
     pub start_share_idx: usize,
     pub start_offset: usize,
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
-pub struct RelevantRowProof {
-    pub leaves: Vec<Vec<u8>>,
-    pub proof: NamespaceProof<NamespacedSha2Hasher>,
-}
-
 #[derive(Debug, PartialEq, Clone)]
-pub struct CompletenessProof(pub Vec<RelevantRowProof>);
+pub struct CompletenessProof(pub NamespacedShares);
 
 impl CompletenessProof {
-    pub fn from_filtered_block(block: &FilteredCelestiaBlock, namespace: NamespaceId) -> Self {
-        let mut row_proofs = Vec::new();
-        for row in block.rollup_rows.iter() {
-            let mut nmt = row.merklized();
-            let (leaves, proof) = nmt.get_namespace_with_proof(namespace);
-            let row_proof = RelevantRowProof { leaves, proof };
-            row_proofs.push(row_proof)
-        }
-        Self(row_proofs)
+    pub fn from_filtered_block(block: &FilteredCelestiaBlock) -> Self {
+        Self(block.rollup_rows.clone())
     }
 }
 
@@ -76,7 +66,7 @@ impl CorrectnessProof {
 
                         current_tx_proof.proof.push(EtxRangeProof {
                             shares,
-                            proof,
+                            proof: proof.into(),
                             start_offset: next_needed_share.start_offset,
                             start_share_idx: next_needed_share.share_range.start,
                         });
@@ -89,7 +79,7 @@ impl CorrectnessProof {
 
                         current_tx_proof.proof.push(EtxRangeProof {
                             shares,
-                            proof,
+                            proof: proof.into(),
                             start_offset: next_needed_share.start_offset,
                             start_share_idx: next_needed_share.share_range.start,
                         });

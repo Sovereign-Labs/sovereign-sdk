@@ -1,0 +1,18 @@
+[package]
+name = "bashtestmd"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+resolver = "2"
+publish = false
+autotests = false
+
+[dependencies]
+clap = { workspace = true }
+indoc = "2"
+markdown = "1.0.0-alpha.16"
+shell-escape = "0.1.5"

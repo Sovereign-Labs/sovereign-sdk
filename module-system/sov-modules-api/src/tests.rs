@@ -1,9 +1,10 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+use sov_modules_core::{Address, PrivateKey, Signature};
 
 use crate::default_context::DefaultContext;
 use crate::default_signature::private_key::DefaultPrivateKey;
 use crate::default_signature::{DefaultPublicKey, DefaultSignature};
-use crate::{Address, ModuleInfo, PrivateKey, Signature};
+use crate::ModuleInfo;
 
 #[test]
 fn test_account_bech32m_display() {
@@ -58,8 +59,8 @@ impl crate::ModuleInfo for Module {
         &self.address
     }
 
-    fn prefix(&self) -> crate::Prefix {
-        crate::Prefix::new_module(module_path!(), "Module")
+    fn prefix(&self) -> crate::ModulePrefix {
+        crate::ModulePrefix::new_module(module_path!(), "Module")
     }
 
     fn dependencies(&self) -> Vec<&<Self::Context as crate::Spec>::Address> {

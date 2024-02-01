@@ -2,14 +2,17 @@
 #![doc = include_str!("../README.md")]
 use std::sync::Mutex;
 
+/// Concrete implementations of `[BatchBuilder]`
+pub mod batch_builder;
 /// Utilities for the sequencer rpc
 pub mod utils;
+
 use anyhow::anyhow;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
+use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_rollup_interface::services::da::DaService;
-use utils::to_jsonrpsee_error_object;
 
 const SEQUENCER_RPC_ERROR: &str = "SEQUENCER_RPC_ERROR";
 
@@ -127,15 +130,15 @@ impl SubmitTransaction {
 pub enum SubmitTransactionResponse {
     /// Submission succeeded
     Registered,
-    /// Submission faileds
+    /// Submission failed with given reason
     Failed(String),
 }
 
 #[cfg(test)]
 mod tests {
 
+    use sov_mock_da::{MockAddress, MockDaService};
     use sov_rollup_interface::da::BlobReaderTrait;
-    use sov_rollup_interface::mocks::{MockAddress, MockDaService};
 
     use super::*;
 
@@ -202,7 +205,7 @@ mod tests {
         let arg: &[u8] = &[];
         let _: String = rpc.call("sequencer_publishBatch", arg).await.unwrap();
 
-        let mut submitted_block = da_service.get_block_at(0).await.unwrap();
+        let mut submitted_block = da_service.get_block_at(1).await.unwrap();
         let block_data = submitted_block.blobs[0].full_data();
 
         // First bytes of each tx, flattened
@@ -227,7 +230,7 @@ mod tests {
         let arg: &[u8] = &[];
         let _: String = rpc.call("sequencer_publishBatch", arg).await.unwrap();
 
-        let mut submitted_block = da_service.get_block_at(0).await.unwrap();
+        let mut submitted_block = da_service.get_block_at(1).await.unwrap();
         let block_data = submitted_block.blobs[0].full_data();
 
         // First bytes of each tx, flattened

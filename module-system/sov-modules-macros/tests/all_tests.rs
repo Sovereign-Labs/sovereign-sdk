@@ -1,5 +1,17 @@
+use std::env;
+use std::path::PathBuf;
+
+fn set_constants_manifest() {
+    let manifest_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
+    let constants = PathBuf::from(manifest_dir).canonicalize().unwrap();
+
+    env::set_var("CONSTANTS_MANIFEST", constants);
+    env::set_var("CONSTANTS_MANIFEST_TRYBUILD", "1");
+}
+
 #[test]
 fn module_info_tests() {
+    set_constants_manifest();
     let t = trybuild::TestCases::new();
     t.pass("tests/module_info/parse.rs");
     t.pass("tests/module_info/mod_and_state.rs");
@@ -17,14 +29,17 @@ fn module_info_tests() {
 
 #[test]
 fn module_dispatch_tests() {
+    set_constants_manifest();
     let t = trybuild::TestCases::new();
     t.pass("tests/dispatch/derive_genesis.rs");
     t.pass("tests/dispatch/derive_dispatch.rs");
+    t.pass("tests/dispatch/derive_event.rs");
     t.compile_fail("tests/dispatch/missing_serialization.rs");
 }
 
 #[test]
 fn rpc_tests() {
+    set_constants_manifest();
     let t = trybuild::TestCases::new();
     t.pass("tests/rpc/derive_rpc.rs");
     t.pass("tests/rpc/derive_rpc_with_where.rs");
@@ -38,11 +53,21 @@ fn rpc_tests() {
 
 #[test]
 fn cli_wallet_arg_tests() {
+    set_constants_manifest();
     let t: trybuild::TestCases = trybuild::TestCases::new();
+
     t.pass("tests/cli_wallet_arg/derive_enum_named_fields.rs");
     t.pass("tests/cli_wallet_arg/derive_struct_unnamed_fields.rs");
     t.pass("tests/cli_wallet_arg/derive_struct_named_fields.rs");
     t.pass("tests/cli_wallet_arg/derive_enum_mixed_fields.rs");
     t.pass("tests/cli_wallet_arg/derive_enum_unnamed_fields.rs");
     t.pass("tests/cli_wallet_arg/derive_wallet.rs");
+}
+
+#[test]
+fn constants_from_manifests_test() {
+    set_constants_manifest();
+    let t: trybuild::TestCases = trybuild::TestCases::new();
+
+    t.pass("tests/constants/create_constant.rs");
 }

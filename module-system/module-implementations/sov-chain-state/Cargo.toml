@@ -1,37 +1,34 @@
 [package]
 name = "sov-chain-state"
 authors = { workspace = true }
+description = "A Sovereign SDK module for storing a rollup's historical state"
 edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
-publish = false
 resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-state = { path = "../../sov-state", version = "0.1" }
-
+sov-modules-api = { path = "../../sov-modules-api", version = "0.3" }
+sov-state = { path = "../../sov-state", version = "0.3" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-sov-bank = { path = "../sov-bank" }
-sov-value-setter = { path = "../examples/sov-value-setter" }
-sov-modules-stf-template = { path = "../../sov-modules-stf-template" }
-sov-data-generators = { path = "../../utils/sov-data-generators" }
+sov-data-generators = { path = "../../sov-data-generators" }
 sov-chain-state = { path = ".", features = ["native"] }
-sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"] }
+sov-mock-da = { path = "../../../adapters/mock-da" }
+sov-prover-storage-manager = { path = "../../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
 
 
 [features]
 default = []
-native = ["serde", "serde_json", "jsonrpsee", "sov-state/native", "sov-modules-api/native"]
+native = ["serde_json", "jsonrpsee", "sov-state/native", "sov-modules-api/native"]

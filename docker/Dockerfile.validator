@@ -1,0 +1,18 @@
+# A dockerfile for the celestia validator in consensus layer
+# Based on:
+# https://github.com/celestiaorg/celestia-app/blob/main/Dockerfile
+FROM docker.io/alpine:3.18.3
+
+ENV CELESTIA_HOME=/root
+
+RUN apk update && apk add --no-cache bash jq
+
+# Copy in the binary
+COPY --from=ghcr.io/celestiaorg/celestia-app:v1.3.0 /bin/celestia-appd /bin/celestia-appd
+
+COPY ./run-validator.sh /opt/entrypoint.sh
+
+# p2p, rpc and prometheus port
+EXPOSE 26656 26657 1317 9090
+
+CMD /opt/entrypoint.sh

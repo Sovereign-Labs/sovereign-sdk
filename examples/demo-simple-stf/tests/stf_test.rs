@@ -1,13 +1,15 @@
 use demo_simple_stf::{ApplySlotResult, CheckHashPreimageStf};
-use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockBlock, MockValidityCond, MockZkvm};
+use sov_mock_da::verifier::MockDaSpec;
+use sov_mock_da::{MockAddress, MockBlob, MockBlockHeader, MockValidityCond};
+use sov_mock_zkvm::MockZkvm;
 use sov_rollup_interface::stf::StateTransitionFunction;
 
 #[test]
 fn test_stf_success() {
-    let address = MockAddress { addr: [1; 32] };
+    let address = MockAddress::from([1; 32]);
 
     let stf = &mut CheckHashPreimageStf::<MockValidityCond>::default();
-    StateTransitionFunction::<MockZkvm, MockBlob>::init_chain(stf, ());
+    StateTransitionFunction::<MockZkvm<MockValidityCond>, MockDaSpec>::init_chain(stf, (), ());
 
     let mut blobs = {
         let incorrect_preimage = vec![1; 32];
@@ -19,10 +21,18 @@ fn test_stf_success() {
         ]
     };
 
-    let result = StateTransitionFunction::<MockZkvm, MockBlob>::apply_slot(
+    // Pretend we are in native code and progress the blobs to the verified state.
+    for blob in &mut blobs {
+        blob.data.advance(blob.data.total_len());
+    }
+
+    let result = StateTransitionFunction::<MockZkvm<MockValidityCond>, MockDaSpec>::apply_slot(
         stf,
+        &[],
         (),
-        &MockBlock::default(),
+        (),
+        &MockBlockHeader::default(),
+        &MockValidityCond::default(),
         &mut blobs,
     );
 

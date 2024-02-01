@@ -1,0 +1,18 @@
+# A dockerfile for the celestia bridge node in DA layer
+# Based on:
+# https://github.com/celestiaorg/celestia-node/blob/main/Dockerfile
+FROM docker.io/alpine:3.18.3
+
+ENV CELESTIA_HOME=/root
+
+RUN apk update && apk add --no-cache bash jq
+
+# Copy in the binary
+COPY --from=ghcr.io/celestiaorg/celestia-node:v0.12.0 /bin/celestia /bin/celestia
+COPY --from=ghcr.io/celestiaorg/celestia-node:v0.12.0 /bin/cel-key /bin/cel-key
+
+COPY ./run-bridge.sh /opt/entrypoint.sh
+
+EXPOSE 2121 26658
+
+CMD /opt/entrypoint.sh

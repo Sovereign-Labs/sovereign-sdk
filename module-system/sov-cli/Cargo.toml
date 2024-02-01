@@ -7,7 +7,6 @@ authors.workspace = true
 homepage.workspace = true
 publish.workspace = true
 repository.workspace = true
-rust-version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -17,9 +16,9 @@ path = "src/lib.rs"
 
 
 [dependencies]
-sov-modules-api = { path = "../sov-modules-api", version = "0.1", features = ["native"] }
-sov-bank = { path = "../module-implementations/sov-bank", version = "0.1", features = ["native"] }
-sov-accounts = { path = "../module-implementations/sov-accounts", version = "0.1", features = ["native"] }
+sov-modules-api = { path = "../sov-modules-api", version = "0.3", features = ["native"] }
+sov-bank = { path = "../module-implementations/sov-bank", version = "0.3", features = ["native"] }
+sov-accounts = { path = "../module-implementations/sov-accounts", version = "0.3", features = ["native"] }
 directories = "5.0.1"
 anyhow = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
@@ -27,9 +26,8 @@ borsh = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 jsonrpsee = { workspace = true, features = ["client"] }
-tokio = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-demo-stf = { path = "../../examples/demo-stf", features = ["native"] }
-sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
+demo-stf = { path = "../../examples/demo-rollup/stf", features = ["native"] }
+sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }

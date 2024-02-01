@@ -1,3 +1,4 @@
+demo-rollup-readme.sh
 /target
 
 .idea/
@@ -12,3 +13,10 @@ demo_data/
 seed-phrase.json
 
 /.vscode/*
+
+/docker/credentials/*
+!/docker/credentials/bridge-0.addr
+!/docker/credentials/bridge-0.key
+
+adapters/solana/libyellowstone_grpc_geyser.dylib
+

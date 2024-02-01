@@ -4,15 +4,15 @@ use libfuzzer_sys::arbitrary::Unstructured;
 use libfuzzer_sys::fuzz_target;
 use sov_accounts::{Accounts, CallMessage};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Module, Spec};
-use sov_state::WorkingSet;
+use sov_modules_api::{Module, WorkingSet};
+use sov_prover_storage_manager::new_orphan_storage;
 
 type C = DefaultContext;
 
 // Check arbitrary, random calls
 fuzz_target!(|input: (&[u8], Vec<(C, CallMessage<C>)>)| {
     let tmpdir = tempfile::tempdir().unwrap();
-    let storage = <C as Spec>::Storage::with_path(tmpdir.path()).unwrap();
+    let storage = new_orphan_storage(tmpdir.path()).unwrap();
     let working_set = &mut WorkingSet::new(storage);
 
     let (seed, msgs) = input;

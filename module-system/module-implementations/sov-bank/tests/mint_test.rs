@@ -1,24 +1,26 @@
 use helpers::C;
-use sov_bank::query::TotalSupplyResponse;
-use sov_bank::{get_token_address, Bank, BankConfig, CallMessage, Coins};
+use sov_bank::{get_token_address, Bank, BankConfig, CallMessage, Coins, TotalSupplyResponse};
+use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address;
-use sov_modules_api::{Address, Context, Error, Module};
-use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
+use sov_modules_api::{Address, Context, Error, Module, WorkingSet};
+use sov_prover_storage_manager::{new_orphan_storage, SnapshotManager};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
 mod helpers;
 
-pub type Storage = ProverStorage<DefaultStorageSpec>;
+pub type Storage = ProverStorage<DefaultStorageSpec, SnapshotManager>;
 
 #[test]
 fn mint_token() {
     let bank = Bank::<C>::default();
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
     let empty_bank_config = BankConfig::<C> { tokens: vec![] };
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 
     let minter_address = generate_address::<C>("minter");
-    let minter_context = C::new(minter_address);
+    let sequencer_address = generate_address::<C>("sequencer");
+    let minter_context = C::new(minter_address, sequencer_address, 1);
 
     let salt = 0;
     let token_name = "Token1".to_owned();
@@ -40,15 +42,15 @@ fn mint_token() {
     // No events at the moment. If there are, needs to be checked
     assert!(working_set.events().is_empty());
 
-    let query_total_supply = |token_address: Address,
-                              working_set: &mut WorkingSet<Storage>|
-     -> Option<u64> {
-        let total_supply: TotalSupplyResponse = bank.supply_of(token_address, working_set).unwrap();
-        total_supply.amount
-    };
+    let query_total_supply =
+        |token_address: Address, working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
+            let total_supply: TotalSupplyResponse =
+                bank.supply_of(None, token_address, working_set).unwrap();
+            total_supply.amount
+        };
 
     let query_user_balance =
-        |user_address: Address, working_set: &mut WorkingSet<Storage>| -> Option<u64> {
+        |user_address: Address, working_set: &mut WorkingSet<DefaultContext>| -> Option<u64> {
             bank.get_balance_of(user_address, token_address, working_set)
         };
 
@@ -85,7 +87,8 @@ fn mint_token() {
 
     // Mint with an un-authorized user
     let unauthorized_address = generate_address::<C>("unauthorized_address");
-    let unauthorized_context = C::new(unauthorized_address);
+    let sequencer_address = generate_address::<C>("sequencer");
+    let unauthorized_context = C::new(unauthorized_address, sequencer_address, 1);
     let unauthorized_mint = bank.call(mint_message, &unauthorized_context, &mut working_set);
 
     assert!(unauthorized_mint.is_err());
@@ -119,6 +122,7 @@ fn mint_token() {
     let token_address = get_token_address::<C>(&token_name, minter_address.as_ref(), salt);
     let authorized_minter_address_1 = generate_address::<C>("authorized_minter_1");
     let authorized_minter_address_2 = generate_address::<C>("authorized_minter_2");
+    let sequencer_address = generate_address::<C>("sequencer");
     // ---
     // Deploying token
     let mint_message = CallMessage::CreateToken {
@@ -168,7 +172,7 @@ fn mint_token() {
         message_2
     );
     // Try to mint new token with authorized sender 2
-    let authorized_minter_2_context = C::new(authorized_minter_address_2);
+    let authorized_minter_2_context = C::new(authorized_minter_address_2, sequencer_address, 1);
     let mint_message = CallMessage::Mint {
         coins: Coins {
             amount: mint_amount,
@@ -185,7 +189,7 @@ fn mint_token() {
     assert_eq!(Some(110), supply);
 
     // Try to mint new token with authorized sender 1
-    let authorized_minter_1_context = C::new(authorized_minter_address_1);
+    let authorized_minter_1_context = C::new(authorized_minter_address_1, sequencer_address, 1);
     let mint_message = CallMessage::Mint {
         coins: Coins {
             amount: mint_amount,

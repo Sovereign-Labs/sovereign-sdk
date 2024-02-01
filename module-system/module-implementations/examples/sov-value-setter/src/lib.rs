@@ -7,17 +7,13 @@ mod genesis;
 mod tests;
 
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
 
-pub use call::CallMessage;
-use sov_modules_api::{Error, ModuleInfo};
-use sov_state::WorkingSet;
-
-/// Initial configuration for sov-value-setter module.
-pub struct ValueSetterConfig<C: sov_modules_api::Context> {
-    /// Admin of the module.
-    pub admin: C::Address,
-}
+pub use call::*;
+pub use genesis::*;
+#[cfg(feature = "native")]
+pub use query::*;
+use sov_modules_api::{Error, ModuleInfo, WorkingSet};
 
 /// A new module:
 /// - Must derive `ModuleInfo`
@@ -32,11 +28,11 @@ pub struct ValueSetter<C: sov_modules_api::Context> {
 
     /// Some value kept in the state.
     #[state]
-    pub value: sov_state::StateValue<u32>,
+    pub value: sov_modules_api::StateValue<u32>,
 
     /// Holds the address of the admin user who is allowed to update the value.
     #[state]
-    pub admin: sov_state::StateValue<C::Address>,
+    pub admin: sov_modules_api::StateValue<C::Address>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
@@ -46,11 +42,9 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
 
     type CallMessage = call::CallMessage;
 
-    fn genesis(
-        &self,
-        config: &Self::Config,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<(), Error> {
+    type Event = ();
+
+    fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         // The initialization logic
         Ok(self.init_module(config, working_set)?)
     }
@@ -59,7 +53,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
         &self,
         msg: Self::CallMessage,
         context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
             call::CallMessage::SetValue(new_value) => {

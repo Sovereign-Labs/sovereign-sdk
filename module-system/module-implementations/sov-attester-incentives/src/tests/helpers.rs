@@ -1,15 +1,19 @@
 use jmt::proof::SparseMerkleProof;
 use sov_bank::{BankConfig, TokenConfig};
-use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::hooks::SlotHooks;
-use sov_modules_api::utils::generate_address;
-use sov_modules_api::{Address, Genesis, Spec, ValidityConditionChecker};
-use sov_rollup_interface::mocks::{
-    MockBlock, MockBlockHeader, MockCodeCommitment, MockDaSpec, MockHash, MockValidityCond,
-    MockValidityCondChecker, MockZkvm,
+use sov_mock_da::{
+    MockBlock, MockBlockHeader, MockDaSpec, MockValidityCond, MockValidityCondChecker,
 };
-use sov_state::storage::StorageProof;
-use sov_state::{DefaultStorageSpec, ProverStorage, Storage, WorkingSet};
+use sov_mock_zkvm::{MockCodeCommitment, MockZkvm};
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::utils::generate_address;
+use sov_modules_api::{
+    Address, Genesis, KernelModule, KernelWorkingSet, Spec, ValidityConditionChecker, WorkingSet,
+};
+use sov_modules_core::runtime::capabilities::mocks::MockKernel;
+use sov_prover_storage_manager::SnapshotManager;
+use sov_rollup_interface::da::Time;
+use sov_state::storage::{NativeStorage, Storage, StorageProof};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
 use crate::AttesterIncentives;
 
@@ -25,16 +29,16 @@ pub const INIT_HEIGHT: u64 = 0;
 /// Consumes and commit the existing working set on the underlying storage
 /// `storage` must be the underlying storage defined on the working set for this method to work.
 pub(crate) fn commit_get_new_working_set(
-    storage: &ProverStorage<DefaultStorageSpec>,
-    working_set: WorkingSet<<C as Spec>::Storage>,
-) -> WorkingSet<<C as Spec>::Storage> {
+    storage: &ProverStorage<DefaultStorageSpec, SnapshotManager>,
+    working_set: WorkingSet<C>,
+) -> (jmt::RootHash, WorkingSet<C>) {
     let (reads_writes, witness) = working_set.checkpoint().freeze();
 
-    storage
+    let prev_root = storage
         .validate_and_commit(reads_writes, &witness)
         .expect("Should be able to commit");
 
-    WorkingSet::new(storage.clone())
+    (prev_root, WorkingSet::new(storage.clone()))
 }
 
 pub(crate) fn create_bank_config_with_token(
@@ -71,10 +75,17 @@ pub(crate) fn create_bank_config_with_token(
 
 /// Creates a bank config with a token, and a prover incentives module.
 /// Returns the prover incentives module and the attester and challenger's addresses.
+#[allow(clippy::type_complexity)]
 pub(crate) fn setup(
-    working_set: &mut WorkingSet<<C as Spec>::Storage>,
+    working_set: &mut WorkingSet<C>,
 ) -> (
-    AttesterIncentives<C, MockZkvm, MockDaSpec, MockValidityCondChecker<MockValidityCond>>,
+    AttesterIncentives<
+        C,
+        MockZkvm<MockValidityCond>,
+        MockDaSpec,
+        MockValidityCondChecker<MockValidityCond>,
+    >,
+    Address,
     Address,
     Address,
     Address,
@@ -89,12 +100,14 @@ pub(crate) fn setup(
     let attester_address = addresses.pop().unwrap();
     let challenger_address = addresses.pop().unwrap();
     let reward_supply = addresses.pop().unwrap();
+    let sequencer = generate_address::<C>("sequencer");
 
     let token_address = sov_bank::get_genesis_token_address::<DefaultContext>(TOKEN_NAME, SALT);
 
     // Initialize chain state
     let chain_state_config = sov_chain_state::ChainStateConfig {
         initial_slot_height: INIT_HEIGHT,
+        current_time: Default::default(),
     };
 
     let chain_state = sov_chain_state::ChainState::<C, MockDaSpec>::default();
@@ -105,7 +118,7 @@ pub(crate) fn setup(
     // initialize prover incentives
     let module = AttesterIncentives::<
         C,
-        MockZkvm,
+        MockZkvm<MockValidityCond>,
         MockDaSpec,
         MockValidityCondChecker<MockValidityCond>,
     >::default();
@@ -127,11 +140,17 @@ pub(crate) fn setup(
         .genesis(&config, working_set)
         .expect("prover incentives genesis must succeed");
 
-    (module, token_address, attester_address, challenger_address)
+    (
+        module,
+        token_address,
+        attester_address,
+        challenger_address,
+        sequencer,
+    )
 }
 
 pub(crate) struct ExecutionSimulationVars {
-    pub state_root: [u8; 32],
+    pub state_root: jmt::RootHash,
     pub state_proof: StorageProof<SparseMerkleProof<<C as Spec>::Hasher>>,
 }
 
@@ -139,43 +158,47 @@ pub(crate) struct ExecutionSimulationVars {
 /// with associated bonding proofs, as long as the last state root
 pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidityCond>>(
     rounds: u8,
-    module: &AttesterIncentives<C, MockZkvm, MockDaSpec, Checker>,
-    storage: &ProverStorage<DefaultStorageSpec>,
+    module: &AttesterIncentives<C, MockZkvm<MockValidityCond>, MockDaSpec, Checker>,
+    storage: &ProverStorage<DefaultStorageSpec, SnapshotManager>,
     attester_address: <C as Spec>::Address,
-    mut working_set: WorkingSet<<C as Spec>::Storage>,
+    mut working_set: WorkingSet<C>,
 ) -> (
     // Vector of the successive state roots with associated bonding proofs
     Vec<ExecutionSimulationVars>,
-    WorkingSet<<C as Spec>::Storage>,
+    WorkingSet<C>,
 ) {
     let mut ret_exec_vars = Vec::<ExecutionSimulationVars>::new();
 
     for i in 0..rounds {
         // Commit the working set
-        working_set = commit_get_new_working_set(storage, working_set);
+        let (root_hash, w_set) = commit_get_new_working_set(storage, working_set);
+        working_set = w_set;
+
+        let bond_proof = storage.get_with_proof(module.get_attester_storage_key(attester_address));
 
         ret_exec_vars.push(ExecutionSimulationVars {
-            state_root: storage.get_state_root(&Default::default()).unwrap(),
-            state_proof: module.get_bond_proof(
-                attester_address,
-                &Default::default(),
-                &mut working_set,
-            ),
+            state_root: root_hash,
+            state_proof: bond_proof,
         });
 
         // Then process the first transaction. Only sets the genesis hash and a transition in progress.
         let slot_data = MockBlock {
-            curr_hash: [i + 1; 32],
             header: MockBlockHeader {
-                prev_hash: MockHash([i; 32]),
+                prev_hash: [i; 32].into(),
+                hash: [i + 1; 32].into(),
+                height: INIT_HEIGHT + u64::from(i + 1),
+                time: Time::now(),
             },
-            height: INIT_HEIGHT + u64::from(i + 1),
             validity_cond: MockValidityCond { is_valid: true },
             blobs: Default::default(),
         };
-        module
-            .chain_state
-            .begin_slot_hook(&slot_data, &mut working_set);
+        let kernel = MockKernel::<C, MockDaSpec>::new(i as u64, i as u64);
+        module.chain_state.begin_slot_hook(
+            &slot_data.header,
+            &slot_data.validity_cond,
+            &root_hash,
+            &mut KernelWorkingSet::from_kernel(&kernel, &mut working_set),
+        );
     }
 
     (ret_exec_vars, working_set)

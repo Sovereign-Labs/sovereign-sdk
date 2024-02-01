@@ -1,9 +1,9 @@
 use sov_blob_storage::BlobStorage;
 use sov_chain_state::{ChainState, ChainStateConfig};
+use sov_mock_da::{MockAddress, MockBlob, MockDaSpec};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::Module;
-use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockDaSpec};
-use sov_state::{ProverStorage, WorkingSet};
+use sov_modules_api::{KernelModule, WorkingSet};
+use sov_prover_storage_manager::new_orphan_storage;
 
 type C = DefaultContext;
 type B = MockBlob;
@@ -12,12 +12,13 @@ type Da = MockDaSpec;
 #[test]
 fn empty_test() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
 
     let chain_state = ChainState::<C, Da>::default();
     let initial_slot_height = 1;
     let chain_state_config = ChainStateConfig {
         initial_slot_height,
+        current_time: Default::default(),
     };
     chain_state
         .genesis(&chain_state_config, &mut working_set)
@@ -34,12 +35,13 @@ fn empty_test() {
 #[test]
 fn store_and_retrieve_standard() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let mut working_set = WorkingSet::new(new_orphan_storage(tmpdir.path()).unwrap());
 
     let chain_state = ChainState::<C, Da>::default();
     let initial_slot_height = 1;
     let chain_state_config = ChainStateConfig {
         initial_slot_height,
+        current_time: Default::default(),
     };
     chain_state
         .genesis(&chain_state_config, &mut working_set)

@@ -3,3 +3,5 @@ pub mod tables;
 /// their native format. Notable examples including slots, blocks, transactions and events, which
 /// are split into their constituent parts and stored in separate tables for easy retrieval.
 pub mod types;
+
+pub use sov_schema_db::snapshot::{QueryManager, ReadOnlyDbSnapshot};

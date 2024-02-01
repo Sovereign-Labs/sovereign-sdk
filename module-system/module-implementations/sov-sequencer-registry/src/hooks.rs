@@ -1,22 +1,23 @@
 use sov_modules_api::hooks::ApplyBlobHooks;
-use sov_modules_api::{BlobReaderTrait, Context};
-use sov_state::WorkingSet;
+use sov_modules_api::{BlobReaderTrait, Context, WorkingSet};
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
-use zk_cycle_macros::cycle_tracker;
+use sov_zk_cycle_macros::cycle_tracker;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
-use zk_cycle_utils::print_cycle_count;
+use sov_zk_cycle_utils::print_cycle_count;
 
 use crate::{SequencerOutcome, SequencerRegistry};
 
-impl<C: Context, B: BlobReaderTrait> ApplyBlobHooks<B> for SequencerRegistry<C> {
+impl<C: Context, Da: sov_modules_api::DaSpec> ApplyBlobHooks<Da::BlobTransaction>
+    for SequencerRegistry<C, Da>
+{
     type Context = C;
-    type BlobResult = SequencerOutcome;
+    type BlobResult = SequencerOutcome<Da>;
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn begin_blob_hook(
         &self,
-        blob: &mut B,
-        working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+        blob: &mut Da::BlobTransaction,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
         #[cfg(all(target_os = "zkvm", feature = "bench"))]
         print_cycle_count();
@@ -31,12 +32,12 @@ impl<C: Context, B: BlobReaderTrait> ApplyBlobHooks<B> for SequencerRegistry<C> 
     fn end_blob_hook(
         &self,
         result: Self::BlobResult,
-        working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
         match result {
             SequencerOutcome::Completed => (),
             SequencerOutcome::Slashed { sequencer } => {
-                self.delete(sequencer, working_set);
+                self.delete(&sequencer, working_set);
             }
         }
         Ok(())

@@ -1,30 +1,33 @@
+use sov_modules_core::{AccessoryWorkingSet, Context, Spec, Storage, WorkingSet};
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
-use sov_rollup_interface::services::da::SlotData;
-use sov_state::WorkingSet;
 
 use crate::transaction::Transaction;
-use crate::{Context, Spec};
 
 /// Hooks that execute within the `StateTransitionFunction::apply_blob` function for each processed transaction.
+///
+/// The arguments consist of expected concretely implemented associated types for the hooks. At
+/// runtime, compatible implementations are selected and utilized by the system to construct its
+/// setup procedures and define post-execution routines.
 pub trait TxHooks {
     type Context: Context;
+    type PreArg;
+    type PreResult;
 
     /// Runs just before a transaction is dispatched to an appropriate module.
-    /// TODO: Why does it return address?
-    /// Does it implies that it should do signature verification.
-    /// Can other code rely on that assumption?
     fn pre_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> anyhow::Result<<Self::Context as Spec>::Address>;
+        working_set: &mut WorkingSet<Self::Context>,
+        arg: &Self::PreArg,
+    ) -> anyhow::Result<Self::PreResult>;
 
     /// Runs after the tx is dispatched to an appropriate module.
     /// IF this hook returns error rollup panics
     fn post_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        ctx: &Self::Context,
+        working_set: &mut WorkingSet<Self::Context>,
     ) -> anyhow::Result<()>;
 }
 
@@ -40,7 +43,7 @@ pub trait ApplyBlobHooks<B: BlobReaderTrait> {
     fn begin_blob_hook(
         &self,
         blob: &mut B,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<Self::Context>,
     ) -> anyhow::Result<()>;
 
     /// Executes at the end of apply_blob and rewards or slashed the sequencer
@@ -48,7 +51,7 @@ pub trait ApplyBlobHooks<B: BlobReaderTrait> {
     fn end_blob_hook(
         &self,
         result: Self::BlobResult,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<Self::Context>,
     ) -> anyhow::Result<()>;
 }
 
@@ -58,13 +61,21 @@ pub trait SlotHooks<Da: DaSpec> {
 
     fn begin_slot_hook(
         &self,
-        slot_data: &impl SlotData<Cond = Da::ValidityCondition>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        slot_header: &Da::BlockHeader,
+        validity_condition: &Da::ValidityCondition,
+        pre_state_root: &<<Self::Context as Spec>::Storage as Storage>::Root,
+        working_set: &mut WorkingSet<Self::Context>,
     );
 
-    fn end_slot_hook(
+    fn end_slot_hook(&self, working_set: &mut WorkingSet<Self::Context>);
+}
+
+pub trait FinalizeHook<Da: DaSpec> {
+    type Context: Context;
+
+    fn finalize_hook(
         &self,
-        root_hash: [u8; 32],
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        root_hash: &<<Self::Context as Spec>::Storage as Storage>::Root,
+        accessory_working_set: &mut AccessoryWorkingSet<Self::Context>,
     );
 }

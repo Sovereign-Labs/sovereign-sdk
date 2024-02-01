@@ -1,97 +1,59 @@
-use std::collections::HashMap;
-use std::str::FromStr;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use async_trait::async_trait;
-use base64::engine::general_purpose::STANDARD as B64_ENGINE;
-use base64::Engine;
-use jsonrpsee::core::client::ClientT;
-use jsonrpsee::core::params::ArrayParams;
+use celestia_rpc::prelude::*;
+use celestia_types::blob::{Blob as JsonBlob, Commitment, SubmitOptions};
+use celestia_types::consts::appconsts::{
+    CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE, SHARE_SIZE,
+};
+use celestia_types::nmt::Namespace;
+use celestia_types::ExtendedHeader;
+use jsonrpsee::core::client::Subscription;
 use jsonrpsee::http_client::{HeaderMap, HttpClient};
-use nmt_rs::NamespaceId;
+use pin_project::pin_project;
 use sov_rollup_interface::da::CountedBufReader;
 use sov_rollup_interface::services::da::DaService;
-use tracing::{debug, info, span, Level};
+use tracing::{debug, info, instrument, trace};
 
-use crate::share_commit::recreate_commitment;
-use crate::shares::{Blob, NamespaceGroup, Share};
-use crate::types::{ExtendedDataSquare, FilteredCelestiaBlock, Row, RpcNamespacedSharesResponse};
+use crate::shares::Blob;
+use crate::types::FilteredCelestiaBlock;
 use crate::utils::BoxError;
-use crate::verifier::address::CelestiaAddress;
 use crate::verifier::proofs::{CompletenessProof, CorrectnessProof};
-use crate::verifier::{CelestiaSpec, RollupParams, PFB_NAMESPACE};
-use crate::{
-    parse_pfb_namespace, BlobWithSender, CelestiaHeader, CelestiaHeaderResponse,
-    DataAvailabilityHeader,
-};
+use crate::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams, PFB_NAMESPACE};
+use crate::{BlobWithSender, CelestiaHeader};
 
 // Approximate value, just to make it work.
-const GAS_PER_BYTE: usize = 120;
+const GAS_PER_BYTE: usize = 20;
+const GAS_PRICE: usize = 1;
 
 #[derive(Debug, Clone)]
 pub struct CelestiaService {
     client: HttpClient,
-    rollup_namespace: NamespaceId,
+    rollup_batch_namespace: Namespace,
+    rollup_proof_namespace: Namespace,
 }
 
 impl CelestiaService {
-    pub fn with_client(client: HttpClient, nid: NamespaceId) -> Self {
+    pub fn with_client(
+        client: HttpClient,
+        rollup_batch_namespace: Namespace,
+        rollup_proof_namespace: Namespace,
+    ) -> Self {
         Self {
             client,
-            rollup_namespace: nid,
+            rollup_batch_namespace,
+            rollup_proof_namespace,
         }
     }
 }
 
-/// Fetch the rollup namespace shares and etx data. Returns a tuple `(rollup_shares, etx_shares)`
-async fn fetch_needed_shares_by_header(
-    rollup_namespace: NamespaceId,
-    client: &HttpClient,
-    header: &serde_json::Value,
-) -> Result<(NamespaceGroup, NamespaceGroup), BoxError> {
-    let dah = header
-        .get("dah")
-        .ok_or(BoxError::msg("missing dah in block header"))?;
-    let rollup_namespace_str = B64_ENGINE.encode(rollup_namespace).into();
-    let rollup_shares_future = {
-        let params: Vec<&serde_json::Value> = vec![dah, &rollup_namespace_str];
-        client.request::<RpcNamespacedSharesResponse, _>("share.GetSharesByNamespace", params)
-    };
-
-    let etx_namespace_str = B64_ENGINE.encode(PFB_NAMESPACE).into();
-    let etx_shares_future = {
-        let params: Vec<&serde_json::Value> = vec![dah, &etx_namespace_str];
-        client.request::<RpcNamespacedSharesResponse, _>("share.GetSharesByNamespace", params)
-    };
-
-    let (rollup_shares_resp, etx_shares_resp) =
-        tokio::join!(rollup_shares_future, etx_shares_future);
-
-    let rollup_shares = NamespaceGroup::Sparse(
-        rollup_shares_resp?
-            .0
-            .unwrap_or_default()
-            .into_iter()
-            .flat_map(|resp| resp.shares)
-            .collect(),
-    );
-    let tx_data = NamespaceGroup::Compact(
-        etx_shares_resp?
-            .0
-            .unwrap_or_default()
-            .into_iter()
-            .flat_map(|resp| resp.shares)
-            .collect(),
-    );
-
-    Ok((rollup_shares, tx_data))
-}
-
-/// Runtime configuration for the DA service
+/// Runtime configuration for the [`DaService`] implementation.
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
-pub struct DaServiceConfig {
-    /// The jwt used to authenticate with the Celestia rpc server
+pub struct CelestiaConfig {
+    /// The JWT used to authenticate with the Celestia RPC server
     pub celestia_rpc_auth_token: String,
-    /// The address of the Celestia rpc server
+    /// The address of the Celestia RPC server
     #[serde(default = "default_rpc_addr")]
     pub celestia_rpc_address: String,
     /// The maximum size of a Celestia RPC response, in bytes
@@ -115,7 +77,7 @@ const fn default_request_timeout_seconds() -> u64 {
 }
 
 impl CelestiaService {
-    pub async fn new(config: DaServiceConfig, chain_params: RollupParams) -> Self {
+    pub async fn new(config: CelestiaConfig, chain_params: RollupParams) -> Self {
         let client = {
             let mut headers = HeaderMap::new();
             headers.insert(
@@ -135,7 +97,43 @@ impl CelestiaService {
         }
         .expect("Client initialization is valid");
 
-        Self::with_client(client, chain_params.namespace)
+        Self::with_client(
+            client,
+            chain_params.rollup_batch_namespace,
+            chain_params.rollup_proof_namespace,
+        )
+    }
+}
+
+/// A Wrapper around [`Subscription`] that converts [`ExtendedHeader`] to [`CelestiaHeader`]
+/// and converts [`Error`] to [`BoxError`]
+#[pin_project]
+pub struct CelestiaBlockHeaderSubscription {
+    #[pin]
+    inner: Subscription<ExtendedHeader>,
+}
+
+impl CelestiaBlockHeaderSubscription {
+    /// Create a new [`CelestiaBlockHeaderSubscription`] from [`Subscription`]
+    pub fn new(inner: Subscription<ExtendedHeader>) -> Self {
+        Self { inner }
+    }
+}
+
+impl futures::Stream for CelestiaBlockHeaderSubscription {
+    type Item = Result<CelestiaHeader, BoxError>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        let poll_result = this.inner.poll_next(cx);
+        Poll::Ready(match poll_result {
+            Poll::Ready(Some(Ok(extended_header))) => {
+                Some(Ok(CelestiaHeader::from(extended_header)))
+            }
+            Poll::Ready(Some(Err(e))) => Some(Err(e.into())),
+            Poll::Ready(None) => None,
+            Poll::Pending => return Poll::Pending,
+        })
     }
 }
 
@@ -143,87 +141,74 @@ impl CelestiaService {
 impl DaService for CelestiaService {
     type Spec = CelestiaSpec;
 
-    type FilteredBlock = FilteredCelestiaBlock;
+    type Verifier = CelestiaVerifier;
 
+    type FilteredBlock = FilteredCelestiaBlock;
+    type HeaderStream = CelestiaBlockHeaderSubscription;
+    type TransactionId = ();
     type Error = BoxError;
 
-    async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        let client = self.client.clone();
-        let rollup_namespace = self.rollup_namespace;
-
-        let _span = span!(Level::TRACE, "fetching finalized block", height = height);
-        // Fetch the header and relevant shares via RPC
-        debug!("Fetching header at height={}...", height);
-        let header = client
-            .request::<serde_json::Value, _>("header.GetByHeight", vec![height])
-            .await?;
-        debug!(header_result = ?header);
-        debug!("Fetching shares...");
-        let (rollup_shares, tx_data) =
-            fetch_needed_shares_by_header(rollup_namespace, &client, &header).await?;
-
-        debug!("Fetching EDS...");
-        // Fetch entire extended data square
-        let data_square = client
-            .request::<ExtendedDataSquare, _>(
-                "share.GetEDS",
-                vec![header
-                    .get("dah")
-                    .ok_or(BoxError::msg("missing 'dah' in block header"))?],
-            )
-            .await?;
-
-        let unmarshalled_header: CelestiaHeaderResponse = serde_json::from_value(header)?;
-        let dah: DataAvailabilityHeader = unmarshalled_header.dah.try_into()?;
-        debug!("Parsing namespaces...");
-        // Parse out all of the rows containing etxs
-        let etx_rows =
-            get_rows_containing_namespace(PFB_NAMESPACE, &dah, data_square.rows()?.into_iter())
-                .await?;
-        // Parse out all of the rows containing rollup data
-        let rollup_rows =
-            get_rows_containing_namespace(rollup_namespace, &dah, data_square.rows()?.into_iter())
-                .await?;
-
-        debug!("Decoding pfb protobufs...");
-        // Parse out the pfds and store them for later retrieval
-        let pfds = parse_pfb_namespace(tx_data)?;
-        let mut pfd_map = HashMap::new();
-        for tx in pfds {
-            for (idx, nid) in tx.0.namespace_ids.iter().enumerate() {
-                if nid == &rollup_namespace.0[..] {
-                    // TODO: Retool this map to avoid cloning txs
-                    pfd_map.insert(tx.0.share_commitments[idx].clone(), tx.clone());
-                }
-            }
-        }
-
-        let filtered_block = FilteredCelestiaBlock {
-            header: CelestiaHeader::new(dah, unmarshalled_header.header.into()),
-            rollup_data: rollup_shares,
-            relevant_pfbs: pfd_map,
-            rollup_rows,
-            pfb_rows: etx_rows,
-        };
-
-        Ok::<Self::FilteredBlock, BoxError>(filtered_block)
-    }
-
+    #[instrument(skip(self), err)]
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        self.get_finalized_at(height).await
+        let client = self.client.clone();
+        let rollup_namespace = self.rollup_batch_namespace;
+
+        // Fetch the header and relevant shares via RPC
+        debug!("Fetching header at height: {}...", height);
+        let header = client.header_get_by_height(height).await?;
+        trace!(header_result = ?header);
+
+        // Fetch the rollup namespace shares, etx data and extended data square
+        debug!("Fetching rollup data...");
+        let rollup_rows_future = client.share_get_shares_by_namespace(&header, rollup_namespace);
+        let etx_rows_future = client.share_get_shares_by_namespace(&header, PFB_NAMESPACE);
+        let data_square_future = client.share_get_eds(&header);
+
+        let (rollup_rows, etx_rows, data_square) =
+            tokio::try_join!(rollup_rows_future, etx_rows_future, data_square_future)?;
+
+        FilteredCelestiaBlock::new(
+            self.rollup_batch_namespace,
+            header,
+            rollup_rows,
+            etx_rows,
+            data_square,
+        )
     }
 
-    fn extract_relevant_txs(
+    async fn get_last_finalized_block_header(
+        &self,
+    ) -> Result<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlockHeader, Self::Error> {
+        // Tendermint has instant finality, so head block is the one that finalized
+        // and network is always guaranteed to be secure,
+        // it can work even if the node is still catching up
+        self.get_head_block_header().await
+    }
+
+    async fn subscribe_finalized_header(&self) -> Result<Self::HeaderStream, Self::Error> {
+        let subscription = self.client.header_subscribe().await?;
+        Ok(CelestiaBlockHeaderSubscription::new(subscription))
+    }
+
+    async fn get_head_block_header(
+        &self,
+    ) -> Result<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlockHeader, Self::Error> {
+        let header = self.client.header_network_head().await?;
+        Ok(CelestiaHeader::from(header))
+    }
+
+    fn extract_relevant_blobs(
         &self,
         block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction> {
         let mut output = Vec::new();
         for blob_ref in block.rollup_data.blobs() {
-            let commitment = recreate_commitment(block.square_size(), blob_ref.clone())
+            let commitment = Commitment::from_shares(self.rollup_batch_namespace, blob_ref.0)
                 .expect("blob must be valid");
+            info!("Blob: {:?}", commitment);
             let sender = block
                 .relevant_pfbs
-                .get(&commitment[..])
+                .get(&commitment.0[..])
                 .expect("blob must be relevant")
                 .0
                 .signer
@@ -233,8 +218,8 @@ impl DaService for CelestiaService {
 
             let blob_tx = BlobWithSender {
                 blob: CountedBufReader::new(blob.into_iter()),
-                sender: CelestiaAddress::from_str(&sender).expect("Incorrect sender address"),
-                hash: commitment,
+                sender: sender.parse().expect("Incorrect sender address"),
+                hash: commitment.0,
             };
 
             output.push(blob_tx)
@@ -251,131 +236,125 @@ impl DaService for CelestiaService {
         <Self::Spec as sov_rollup_interface::da::DaSpec>::CompletenessProof,
     ) {
         let etx_proofs = CorrectnessProof::for_block(block, blobs);
-        let rollup_row_proofs =
-            CompletenessProof::from_filtered_block(block, self.rollup_namespace);
+        let rollup_row_proofs = CompletenessProof::from_filtered_block(block);
 
         (etx_proofs.0, rollup_row_proofs.0)
     }
 
+    #[instrument(skip_all, err)]
     async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
-        // https://node-rpc-docs.celestia.org/
-        let client = self.client.clone();
         debug!("Sending {} bytes of raw data to Celestia.", blob.len());
-        let fee: u64 = 2000;
-        let namespace = self.rollup_namespace.0.to_vec();
-        let blob = blob.to_vec();
-        // We factor extra share to be occupied for namespace, which is pessimistic
-        let gas_limit = get_gas_limit_for_bytes(blob.len());
 
-        let mut params = ArrayParams::new();
-        params.insert(namespace)?;
-        params.insert(blob)?;
-        params.insert(fee.to_string())?;
-        params.insert(gas_limit)?;
-        // Note, we only deserialize what we can use, other fields might be left over
-        let response = client
-            .request::<CelestiaBasicResponse, _>("state.SubmitPayForBlob", params)
+        let gas_limit = get_gas_limit_for_bytes(blob.len()) as u64;
+        let fee = gas_limit * GAS_PRICE as u64;
+
+        let blob = JsonBlob::new(self.rollup_batch_namespace, blob.to_vec())?;
+        info!("Submitting: {:?}", blob.commitment);
+
+        let height = self
+            .client
+            .blob_submit(
+                &[blob],
+                SubmitOptions {
+                    fee: Some(fee),
+                    gas_limit: Some(gas_limit),
+                },
+            )
             .await?;
-        if !response.is_success() {
-            anyhow::bail!("Error returned from Celestia node: {:?}", response);
-        }
-        debug!("Response after submitting blob: {:?}", response);
         info!(
-            "Blob has been submitted to Celestia. tx-hash={}",
-            response.tx_hash,
+            "Blob has been submitted to Celestia. block-height={}",
+            height,
         );
-        Ok::<(), BoxError>(())
+        Ok(())
+    }
+
+    async fn send_aggregated_zk_proof(&self, aggregated_proof: &[u8]) -> Result<u64, Self::Error> {
+        let gas_limit = get_gas_limit_for_bytes(aggregated_proof.len()) as u64;
+        let fee = gas_limit * GAS_PRICE as u64;
+        let blob = JsonBlob::new(self.rollup_proof_namespace, aggregated_proof.to_vec())?;
+
+        let height = self
+            .client
+            .blob_submit(
+                &[blob],
+                SubmitOptions {
+                    fee: Some(fee),
+                    gas_limit: Some(gas_limit),
+                },
+            )
+            .await?;
+
+        Ok(height)
+    }
+
+    async fn get_aggregated_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
+        let blobs = self
+            .client
+            .blob_get_all(height, &[self.rollup_proof_namespace])
+            .await?;
+
+        Ok(blobs.into_iter().map(|blob| blob.data).collect())
     }
 }
 
+// https://docs.celestia.org/learn/submit-data/#fees-and-gas-limits
 fn get_gas_limit_for_bytes(n: usize) -> usize {
-    (n + 512) * GAS_PER_BYTE + 1060
-}
+    let fixed_cost = 75000;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct CelestiaBasicResponse {
-    raw_log: String,
-    #[serde(rename = "code")]
-    error_code: Option<u64>,
-    #[serde(rename = "txhash")]
-    tx_hash: String,
-    gas_wanted: u64,
-    gas_used: u64,
-}
+    let continuation_shares_needed =
+        n.saturating_sub(FIRST_SPARSE_SHARE_CONTENT_SIZE) / CONTINUATION_SPARSE_SHARE_CONTENT_SIZE;
+    let shares_needed = 1 + continuation_shares_needed + 1; // add one extra, pessimistic
 
-impl CelestiaBasicResponse {
-    /// We assume that absence of `code` indicates that request was successful
-    pub fn is_success(&self) -> bool {
-        self.error_code.is_none()
-    }
-}
-
-async fn get_rows_containing_namespace(
-    nid: NamespaceId,
-    dah: &DataAvailabilityHeader,
-    data_square_rows: impl Iterator<Item = &[Share]>,
-) -> Result<Vec<Row>, BoxError> {
-    let mut output = vec![];
-
-    for (row, root) in data_square_rows.zip(dah.row_roots.iter()) {
-        if root.contains(nid) {
-            output.push(Row {
-                shares: row.to_vec(),
-                root: root.clone(),
-            })
-        }
-    }
-    Ok(output)
+    fixed_cost + shares_needed * SHARE_SIZE * GAS_PER_BYTE
 }
 
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
 
-    use nmt_rs::NamespaceId;
+    use celestia_types::nmt::Namespace;
+    use celestia_types::{Blob as JsonBlob, NamespacedShares};
     use serde_json::json;
+    use sov_rollup_interface::da::{BlockHeaderTrait, DaVerifier};
     use sov_rollup_interface::services::da::DaService;
     use wiremock::matchers::{bearer_token, body_json, method, path};
     use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
     use super::default_request_timeout_seconds;
-    use crate::da_service::{CelestiaService, DaServiceConfig};
+    use crate::da_service::{get_gas_limit_for_bytes, CelestiaConfig, CelestiaService, GAS_PRICE};
     use crate::parse_pfb_namespace;
-    use crate::shares::{NamespaceGroup, Share};
-    use crate::verifier::RollupParams;
+    use crate::shares::NamespaceGroup;
+    use crate::types::tests::{with_rollup_data, without_rollup_data};
+    use crate::verifier::{CelestiaVerifier, RollupParams};
 
-    const SERIALIZED_PFB_SHARES: &str = r#"["AAAAAAAAAAQBAAABRQAAABHDAgq3AgqKAQqHAQogL2NlbGVzdGlhLmJsb2IudjEuTXNnUGF5Rm9yQmxvYnMSYwovY2VsZXN0aWExemZ2cnJmYXE5dWQ2Zzl0NGt6bXNscGYyNHlzYXhxZm56ZWU1dzkSCHNvdi10ZXN0GgEoIiCB8FoaUuOPrX2wFBbl4MnWY3qE72tns7sSY8xyHnQtr0IBABJmClAKRgofL2Nvc21vcy5jcnlwdG8uc2VjcDI1NmsxLlB1YktleRIjCiEDmXaTf6RVIgUVdG0XZ6bqecEn8jWeAi+LjzTis5QZdd4SBAoCCAEYARISCgwKBHV0aWESBDIwMDAQgPEEGkAhq2CzD1DqxsVXIriANXYyLAmJlnnt8YTNXiwHgMQQGUbl65QUe37UhnbNVrOzDVYK/nQV9TgI+5NetB2JbIz6EgEBGgRJTkRYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="]"#;
-    const SERIALIZED_ROLLUP_DATA_SHARES: &str = r#"["c292LXRlc3QBAAAAKHsia2V5IjogInRlc3RrZXkiLCAidmFsdWUiOiAidGVzdHZhbHVlIn0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="]"#;
+    const ROLLUP_ROWS_JSON: &str = with_rollup_data::ROLLUP_ROWS_JSON;
+    const ETX_ROWS_JSON: &str = with_rollup_data::ETX_ROWS_JSON;
 
     #[test]
     fn test_get_pfbs() {
-        // the following test case is taken from arabica-6, block 275345
-        let shares: Vec<Share> =
-            serde_json::from_str(SERIALIZED_PFB_SHARES).expect("failed to deserialize pfb shares");
+        let rows: NamespacedShares =
+            serde_json::from_str(ETX_ROWS_JSON).expect("failed to deserialize pfb shares");
 
-        assert_eq!(shares.len(), 1);
-
-        let pfb_ns = NamespaceGroup::Compact(shares);
+        let pfb_ns = NamespaceGroup::from(&rows);
         let pfbs = parse_pfb_namespace(pfb_ns).expect("failed to parse pfb shares");
-        assert_eq!(pfbs.len(), 1);
+        assert_eq!(pfbs.len(), 3);
     }
 
     #[test]
     fn test_get_rollup_data() {
-        let shares: Vec<Share> = serde_json::from_str(SERIALIZED_ROLLUP_DATA_SHARES)
-            .expect("failed to deserialize pfb shares");
+        let rows: NamespacedShares =
+            serde_json::from_str(ROLLUP_ROWS_JSON).expect("failed to deserialize pfb shares");
 
-        let rollup_ns_group = NamespaceGroup::Sparse(shares);
+        let rollup_ns_group = NamespaceGroup::from(&rows);
         let mut blobs = rollup_ns_group.blobs();
         let first_blob = blobs
             .next()
             .expect("iterator should contain exactly one blob");
 
-        let found_data: Vec<u8> = first_blob.data().collect();
-        assert_eq!(
-            found_data,
-            r#"{"key": "testkey", "value": "testvalue"}"#.as_bytes()
-        );
+        // this is a batch submitted by sequencer, consisting of a single
+        // "CreateToken" transaction, but we verify only length there to
+        // not make this test depend on deserialization logic
+        assert_eq!(first_blob.data().count(), 252);
 
         assert!(blobs.next().is_none());
     }
@@ -383,31 +362,31 @@ mod tests {
     // Last return value is namespace
     async fn setup_service(
         timeout_sec: Option<u64>,
-    ) -> (MockServer, DaServiceConfig, CelestiaService, [u8; 8]) {
+    ) -> (MockServer, CelestiaConfig, CelestiaService, RollupParams) {
         // Start a background HTTP server on a random local port
         let mock_server = MockServer::start().await;
 
         let timeout_sec = timeout_sec.unwrap_or_else(default_request_timeout_seconds);
-        let config = DaServiceConfig {
+        let config = CelestiaConfig {
             celestia_rpc_auth_token: "RPC_TOKEN".to_string(),
             celestia_rpc_address: mock_server.uri(),
             max_celestia_response_body_size: 120_000,
             celestia_rpc_timeout_seconds: timeout_sec,
         };
-        let namespace = [9u8; 8];
-        let da_service = CelestiaService::new(
-            config.clone(),
-            RollupParams {
-                namespace: NamespaceId(namespace),
-            },
-        )
-        .await;
+        let rollup_batch_namespace = Namespace::new_v0(b"sov-test").unwrap();
+        let rollup_proof_namespace = Namespace::new_v0(b"sov-proof").unwrap();
+        let params = RollupParams {
+            rollup_batch_namespace,
+            rollup_proof_namespace,
+        };
 
-        (mock_server, config, da_service, namespace)
+        let da_service = CelestiaService::new(config.clone(), params.clone()).await;
+
+        (mock_server, config, da_service, params)
     }
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-    struct BasicJsonRpcResponse {
+    struct BasicJsonRpcRequest {
         jsonrpc: String,
         id: u64,
         method: String,
@@ -416,20 +395,22 @@ mod tests {
 
     #[tokio::test]
     async fn test_submit_blob_correct() -> anyhow::Result<()> {
-        let (mock_server, config, da_service, namespace) = setup_service(None).await;
+        let (mock_server, config, da_service, rollup_params) = setup_service(None).await;
 
-        let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
+        let blob = [1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
+        let gas_limit = get_gas_limit_for_bytes(blob.len());
 
         // TODO: Fee is hardcoded for now
         let expected_body = json!({
             "id": 0,
             "jsonrpc": "2.0",
-            "method": "state.SubmitPayForBlob",
+            "method": "blob.Submit",
             "params": [
-                namespace,
-                blob,
-                "2000",
-                63700
+                [JsonBlob::new(rollup_params.rollup_batch_namespace, blob.to_vec()).unwrap()],
+                {
+                    "GasLimit": gas_limit,
+                    "Fee": gas_limit * GAS_PRICE,
+                },
             ]
         });
 
@@ -438,22 +419,11 @@ mod tests {
             .and(bearer_token(config.celestia_rpc_auth_token))
             .and(body_json(&expected_body))
             .respond_with(|req: &Request| {
-                let request: BasicJsonRpcResponse = serde_json::from_slice(&req.body).unwrap();
+                let request: BasicJsonRpcRequest = serde_json::from_slice(&req.body).unwrap();
                 let response_json = json!({
                     "jsonrpc": "2.0",
                     "id": request.id,
-                    "result": {
-                        "data": "122A0A282F365",
-                        "events": ["some event"],
-                        "gas_used": 70522,
-                        "gas_wanted": 133540,
-                        "height": 26,
-                        "logs":  [
-                           "some log"
-                        ],
-                        "raw_log": "some raw logs",
-                        "txhash": "C9FEFD6D35FCC73F9E7D5C74E1D33F0B7666936876F2AD75E5D0FB2944BFADF2"
-                    }
+                    "result": 14, // just some block-height
                 });
 
                 ResponseTemplate::new(200)
@@ -481,17 +451,13 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/"))
             .respond_with(|req: &Request| {
-                let request: BasicJsonRpcResponse = serde_json::from_slice(&req.body).unwrap();
+                let request: BasicJsonRpcRequest = serde_json::from_slice(&req.body).unwrap();
                 let response_json = json!({
                     "jsonrpc": "2.0",
                     "id": request.id,
-                    "result": {
-                        "code": 11,
-                        "codespace": "sdk",
-                        "gas_used": 10_000,
-                        "gas_wanted": 12_000,
-                        "raw_log": "out of gas in location: ReadFlat; gasWanted: 10, gasUsed: 1000: out of gas",
-                        "txhash": "C9FEFD6D35FCC73F9E7D5C74E1D33F0B7666936876F2AD75E5D0FB2944BFADF2"
+                    "error": {
+                        "code": 1,
+                        "message": ": out of gas"
                     }
                 });
                 ResponseTemplate::new(200)
@@ -502,14 +468,13 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let result = da_service.send_transaction(&blob).await;
+        let error = da_service
+            .send_transaction(&blob)
+            .await
+            .unwrap_err()
+            .to_string();
 
-        assert!(result.is_err());
-        let error_string = result.err().unwrap().to_string();
-        assert!(error_string.contains("Error returned from Celestia node:"));
-        assert!(error_string.contains(
-            "out of gas in location: ReadFlat; gasWanted: 10, gasUsed: 1000: out of gas"
-        ));
+        assert!(error.contains("out of gas"));
         Ok(())
     }
 
@@ -530,11 +495,13 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let result = da_service.send_transaction(&blob).await;
+        let error = da_service
+            .send_transaction(&blob)
+            .await
+            .unwrap_err()
+            .to_string();
 
-        assert!(result.is_err());
-        let error_string = result.err().unwrap().to_string();
-        assert!(error_string.contains(
+        assert!(error.contains(
             "Networking or low-level protocol error: Server returned an error status code: 500"
         ));
         Ok(())
@@ -581,11 +548,168 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let result = da_service.send_transaction(&blob).await;
+        let error = da_service
+            .send_transaction(&blob)
+            .await
+            .unwrap_err()
+            .to_string();
 
-        assert!(result.is_err());
-        let error_string = result.err().unwrap().to_string();
-        assert!(error_string.contains("Request timeout"));
+        assert!(error.contains("Request timeout"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn verification_succeeds_for_correct_blocks() {
+        let blocks = [
+            with_rollup_data::filtered_block(),
+            without_rollup_data::filtered_block(),
+        ];
+
+        for block in blocks {
+            let (_, _, da_service, rollup_params) = setup_service(None).await;
+
+            let txs = da_service.extract_relevant_blobs(&block);
+            let (correctness_proof, completeness_proof) =
+                da_service.get_extraction_proof(&block, &txs).await;
+
+            let verifier = CelestiaVerifier::new(rollup_params);
+
+            let validity_cond = verifier
+                .verify_relevant_tx_list(&block.header, &txs, correctness_proof, completeness_proof)
+                .unwrap();
+
+            assert_eq!(validity_cond.prev_hash, *block.header.prev_hash().inner());
+            assert_eq!(validity_cond.block_hash, *block.header.hash().inner());
+        }
+    }
+
+    #[tokio::test]
+    async fn verification_fails_if_tx_missing() {
+        let block = with_rollup_data::filtered_block();
+        let (_, _, da_service, rollup_params) = setup_service(None).await;
+
+        let txs = da_service.extract_relevant_blobs(&block);
+        let (correctness_proof, completeness_proof) =
+            da_service.get_extraction_proof(&block, &txs).await;
+
+        let verifier = CelestiaVerifier::new(rollup_params);
+
+        // give verifier empty txs list
+        let error = verifier
+            .verify_relevant_tx_list(&block.header, &[], correctness_proof, completeness_proof)
+            .unwrap_err();
+
+        assert!(error.to_string().contains("Transaction missing"));
+    }
+
+    #[tokio::test]
+    async fn verification_fails_if_not_all_etxs_are_proven() {
+        let block = with_rollup_data::filtered_block();
+        let (_, _, da_service, rollup_params) = setup_service(None).await;
+
+        let txs = da_service.extract_relevant_blobs(&block);
+        let (mut correctness_proof, completeness_proof) =
+            da_service.get_extraction_proof(&block, &txs).await;
+
+        // drop the proof for last etx
+        correctness_proof.pop();
+
+        let verifier = CelestiaVerifier::new(rollup_params);
+
+        let error = verifier
+            .verify_relevant_tx_list(&block.header, &txs, correctness_proof, completeness_proof)
+            .unwrap_err();
+
+        assert!(error.to_string().contains("not all blobs proven"));
+    }
+
+    #[tokio::test]
+    async fn verification_fails_if_there_is_less_blobs_than_proofs() {
+        let block = with_rollup_data::filtered_block();
+        let (_, _, da_service, rollup_params) = setup_service(None).await;
+
+        let txs = da_service.extract_relevant_blobs(&block);
+        let (mut correctness_proof, completeness_proof) =
+            da_service.get_extraction_proof(&block, &txs).await;
+
+        // push one extra etx proof
+        correctness_proof.push(correctness_proof[0].clone());
+
+        let verifier = CelestiaVerifier::new(rollup_params);
+
+        let error = verifier
+            .verify_relevant_tx_list(&block.header, &txs, correctness_proof, completeness_proof)
+            .unwrap_err();
+
+        assert!(error.to_string().contains("more proofs than blobs"));
+    }
+
+    #[tokio::test]
+    #[should_panic]
+    async fn verification_fails_for_incorrect_namespace() {
+        let block = with_rollup_data::filtered_block();
+        let (_, _, da_service, _) = setup_service(None).await;
+
+        let txs = da_service.extract_relevant_blobs(&block);
+        let (correctness_proof, completeness_proof) =
+            da_service.get_extraction_proof(&block, &txs).await;
+
+        // create a verifier with a different namespace than the da_service
+        let verifier = CelestiaVerifier::new(RollupParams {
+            rollup_batch_namespace: Namespace::new_v0(b"abc").unwrap(),
+            rollup_proof_namespace: Namespace::new_v0(b"xyz").unwrap(),
+        });
+
+        let _panics = verifier.verify_relevant_tx_list(
+            &block.header,
+            &txs,
+            correctness_proof,
+            completeness_proof,
+        );
+    }
+
+    #[tokio::test]
+    async fn test_submit_proof() -> anyhow::Result<()> {
+        let (mock_server, config, da_service, rollup_params) = setup_service(None).await;
+
+        let zk_proof: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
+        let gas_limit = get_gas_limit_for_bytes(zk_proof.len());
+
+        let expected_body = json!({
+            "id": 0,
+            "jsonrpc": "2.0",
+            "method": "blob.Submit",
+            "params": [
+                [JsonBlob::new(rollup_params.rollup_proof_namespace, zk_proof.to_vec()).unwrap()],
+                {
+                    "GasLimit": gas_limit,
+                    "Fee": gas_limit * GAS_PRICE,
+                },
+            ]
+        });
+
+        Mock::given(method("POST"))
+            .and(path("/"))
+            .and(bearer_token(config.celestia_rpc_auth_token))
+            .and(body_json(&expected_body))
+            .respond_with(|req: &Request| {
+                let request: BasicJsonRpcRequest = serde_json::from_slice(&req.body).unwrap();
+                let response_json = json!({
+                    "jsonrpc": "2.0",
+                    "id": request.id,
+                    "result": 14, // just some block-height
+                });
+
+                ResponseTemplate::new(200)
+                    .append_header("Content-Type", "application/json")
+                    .set_body_json(response_json)
+            })
+            .up_to_n_times(1)
+            .mount(&mock_server)
+            .await;
+
+        da_service.send_aggregated_zk_proof(&zk_proof).await?;
+
         Ok(())
     }
 }

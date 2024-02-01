@@ -1,8 +1,8 @@
 use std::fmt::Debug;
 
 use anyhow::Result;
-use sov_modules_api::CallResponse;
-use sov_state::WorkingSet;
+use sov_modules_api::prelude::*;
+use sov_modules_api::{CallResponse, WorkingSet};
 use thiserror::Error;
 
 use crate::ExampleModule;
@@ -12,6 +12,10 @@ use crate::ExampleModule;
 /// The `derive` for [`schemars::JsonSchema`] is a requirement of
 /// [`sov_modules_api::ModuleCallJsonSchema`].
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "arbitrary",
+    derive(arbitrary::Arbitrary, proptest_derive::Arbitrary)
+)]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage {
     SetValue(u32),
@@ -27,7 +31,7 @@ impl<C: sov_modules_api::Context> ExampleModule<C> {
         &self,
         new_value: u32,
         _context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<sov_modules_api::CallResponse> {
         self.value.set(&new_value, working_set);
         working_set.add_event("set", &format!("value_set: {new_value:?}"));

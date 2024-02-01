@@ -20,12 +20,12 @@ mod rpc;
 
 const LEDGER_DB_PATH_SUFFIX: &str = "ledger";
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 /// A database which stores the ledger history (slots, transactions, events, etc).
 /// Ledger data is first ingested into an in-memory map before being fed to the state-transition function.
-/// Once the state-transition function has been executed and finalzied, the results are committed to the final db
+/// Once the state-transition function has been executed and finalized, the results are committed to the final db
 pub struct LedgerDB {
-    /// The RocksDB which stores the committed ledger. Uses an optimized layout which
+    /// The database which stores the committed ledger. Uses an optimized layout which
     /// requires transactions to be executed before being committed.
     db: Arc<DB>,
     next_item_numbers: Arc<Mutex<ItemNumbers>>,
@@ -35,6 +35,7 @@ pub struct LedgerDB {
 /// A SlotNumber, BatchNumber, TxNumber, and EventNumber which are grouped together, typically representing
 /// the respective heights at the start or end of slot processing.
 #[derive(Default, Clone, Debug)]
+#[cfg_attr(feature = "arbitrary", derive(proptest_derive::Arbitrary))]
 pub struct ItemNumbers {
     /// The slot number
     pub slot_number: u64,
@@ -46,7 +47,7 @@ pub struct ItemNumbers {
     pub event_number: u64,
 }
 
-/// All of the data to be commited to the ledger db for a single slot.
+/// All of the data to be committed to the ledger db for a single slot.
 #[derive(Debug)]
 pub struct SlotCommit<S: SlotData, B, T> {
     slot_data: S,
@@ -165,7 +166,7 @@ impl LedgerDB {
         let iter = raw_iter.take(max_items);
         let mut out = Vec::with_capacity(max_items);
         for res in iter {
-            let (_, batch) = res?;
+            let batch = res?.value;
             out.push(batch)
         }
         Ok(out)
@@ -278,7 +279,7 @@ impl LedgerDB {
         // Once all batches are inserted, Insert slot
         let slot_to_store = StoredSlot {
             hash: data_to_commit.slot_data.hash(),
-            // TODO: Add a method to the slotdata trait allowing additional data to be stored
+            // TODO: Add a method to the slot data trait allowing additional data to be stored
             extra_data: vec![].into(),
             batches: BatchNumber(first_batch_number)..BatchNumber(last_batch_number),
         };
@@ -306,7 +307,19 @@ impl LedgerDB {
         iter.seek_to_last();
 
         match iter.next() {
-            Some(Ok((version, _))) => Ok(Some(version.into())),
+            Some(Ok(item)) => Ok(Some(item.key.into())),
+            Some(Err(e)) => Err(e),
+            _ => Ok(None),
+        }
+    }
+
+    /// Get the most recent committed slot, if any
+    pub fn get_head_slot(&self) -> anyhow::Result<Option<(SlotNumber, StoredSlot)>> {
+        let mut iter = self.db.iter::<SlotByNumber>()?;
+        iter.seek_to_last();
+
+        match iter.next() {
+            Some(Ok(item)) => Ok(Some(item.into_tuple())),
             Some(Err(e)) => Err(e),
             _ => Ok(None),
         }

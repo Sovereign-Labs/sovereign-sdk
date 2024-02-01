@@ -17,26 +17,29 @@
 mod iterator;
 mod metrics;
 pub mod schema;
+mod schema_batch;
+pub mod snapshot;
+#[cfg(feature = "test-utils")]
+pub mod test;
 
-use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Mutex;
 
-use anyhow::{format_err, Result};
+use anyhow::format_err;
 use iterator::ScanDirection;
-pub use iterator::{SchemaIterator, SeekKeyEncoder};
+pub use iterator::{RawDbReverseIterator, SchemaIterator, SeekKeyEncoder};
 use metrics::{
-    SCHEMADB_BATCH_COMMIT_BYTES, SCHEMADB_BATCH_COMMIT_LATENCY_SECONDS,
-    SCHEMADB_BATCH_PUT_LATENCY_SECONDS, SCHEMADB_DELETES, SCHEMADB_GET_BYTES,
-    SCHEMADB_GET_LATENCY_SECONDS, SCHEMADB_PUT_BYTES,
+    SCHEMADB_BATCH_COMMIT_BYTES, SCHEMADB_BATCH_COMMIT_LATENCY_SECONDS, SCHEMADB_DELETES,
+    SCHEMADB_GET_BYTES, SCHEMADB_GET_LATENCY_SECONDS, SCHEMADB_PUT_BYTES,
 };
+pub use rocksdb;
+use rocksdb::ReadOptions;
 pub use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
-use rocksdb::{ColumnFamilyDescriptor, ReadOptions};
 use thiserror::Error;
 use tracing::info;
 
 pub use crate::schema::Schema;
 use crate::schema::{ColumnFamilyName, KeyCodec, ValueCodec};
+pub use crate::schema_batch::{SchemaBatch, SchemaBatchIterator};
 
 /// This DB is a schematized RocksDB wrapper where all data passed in and out are typed according to
 /// [`Schema`]s.
@@ -54,8 +57,8 @@ impl DB {
         name: &'static str,
         column_families: impl IntoIterator<Item = impl Into<String>>,
         db_opts: &rocksdb::Options,
-    ) -> Result<Self> {
-        let db = DB::open_cf(
+    ) -> anyhow::Result<Self> {
+        let db = DB::open_with_cfds(
             db_opts,
             path,
             name,
@@ -69,12 +72,13 @@ impl DB {
     }
 
     /// Open RocksDB with the provided column family descriptors.
-    pub fn open_cf(
+    /// This allows to configure options for each column family.
+    pub fn open_with_cfds(
         db_opts: &rocksdb::Options,
         path: impl AsRef<Path>,
         name: &'static str,
-        cfds: impl IntoIterator<Item = ColumnFamilyDescriptor>,
-    ) -> Result<DB> {
+        cfds: impl IntoIterator<Item = rocksdb::ColumnFamilyDescriptor>,
+    ) -> anyhow::Result<DB> {
         let inner = rocksdb::DB::open_cf_descriptors(db_opts, path, cfds)?;
         Ok(Self::log_construct(name, inner))
     }
@@ -86,7 +90,7 @@ impl DB {
         path: impl AsRef<Path>,
         name: &'static str,
         cfs: Vec<ColumnFamilyName>,
-    ) -> Result<DB> {
+    ) -> anyhow::Result<DB> {
         let error_if_log_file_exists = false;
         let inner = rocksdb::DB::open_cf_for_read_only(opts, path, cfs, error_if_log_file_exists)?;
 
@@ -102,7 +106,7 @@ impl DB {
         secondary_path: P,
         name: &'static str,
         cfs: Vec<ColumnFamilyName>,
-    ) -> Result<DB> {
+    ) -> anyhow::Result<DB> {
         let inner = rocksdb::DB::open_cf_as_secondary(opts, primary_path, secondary_path, cfs)?;
         Ok(Self::log_construct(name, inner))
     }
@@ -113,7 +117,10 @@ impl DB {
     }
 
     /// Reads single record by key.
-    pub fn get<S: Schema>(&self, schema_key: &impl KeyCodec<S>) -> Result<Option<S::Value>> {
+    pub fn get<S: Schema>(
+        &self,
+        schema_key: &impl KeyCodec<S>,
+    ) -> anyhow::Result<Option<S::Value>> {
         let _timer = SCHEMADB_GET_LATENCY_SECONDS
             .with_label_values(&[S::COLUMN_FAMILY_NAME])
             .start_timer();
@@ -121,7 +128,7 @@ impl DB {
         let k = schema_key.encode_key()?;
         let cf_handle = self.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
 
-        let result = self.inner.get_cf(cf_handle, k)?;
+        let result = self.inner.get_pinned_cf(cf_handle, k)?;
         SCHEMADB_GET_BYTES
             .with_label_values(&[S::COLUMN_FAMILY_NAME])
             .observe(result.as_ref().map_or(0.0, |v| v.len() as f64));
@@ -133,19 +140,49 @@ impl DB {
     }
 
     /// Writes single record.
-    pub fn put<S: Schema>(&self, key: &impl KeyCodec<S>, value: &impl ValueCodec<S>) -> Result<()> {
+    pub fn put<S: Schema>(
+        &self,
+        key: &impl KeyCodec<S>,
+        value: &impl ValueCodec<S>,
+    ) -> anyhow::Result<()> {
         // Not necessary to use a batch, but we'd like a central place to bump counters.
         // Used in tests only anyway.
-        let batch = SchemaBatch::new();
+        let mut batch = SchemaBatch::new();
         batch.put::<S>(key, value)?;
         self.write_schemas(batch)
+    }
+
+    /// Delete a single key from the database.
+    pub fn delete<S: Schema>(&self, key: &impl KeyCodec<S>) -> anyhow::Result<()> {
+        // Not necessary to use a batch, but we'd like a central place to bump counters.
+        // Used in tests only anyway.
+        let mut batch = SchemaBatch::new();
+        batch.delete::<S>(key)?;
+        self.write_schemas(batch)
+    }
+
+    /// Removes the database entries in the range `["from", "to")` using default write options.
+    ///
+    /// Note that this operation will be done lexicographic on the *encoding* of the seek keys. It is
+    /// up to the table creator to ensure that the lexicographic ordering of the encoded seek keys matches the
+    /// logical ordering of the type.
+    pub fn delete_range<S: Schema>(
+        &self,
+        from: &impl SeekKeyEncoder<S>,
+        to: &impl SeekKeyEncoder<S>,
+    ) -> anyhow::Result<()> {
+        let cf_handle = self.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
+        let from = from.encode_seek_key()?;
+        let to = to.encode_seek_key()?;
+        self.inner.delete_range_cf(cf_handle, from, to)?;
+        Ok(())
     }
 
     fn iter_with_direction<S: Schema>(
         &self,
         opts: ReadOptions,
         direction: ScanDirection,
-    ) -> Result<SchemaIterator<S>> {
+    ) -> anyhow::Result<SchemaIterator<S>> {
         let cf_handle = self.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
         Ok(SchemaIterator::new(
             self.inner.raw_iterator_cf_opt(cf_handle, opts),
@@ -154,39 +191,39 @@ impl DB {
     }
 
     /// Returns a forward [`SchemaIterator`] on a certain schema with the default read options.
-    pub fn iter<S: Schema>(&self) -> Result<SchemaIterator<S>> {
+    pub fn iter<S: Schema>(&self) -> anyhow::Result<SchemaIterator<S>> {
         self.iter_with_direction::<S>(Default::default(), ScanDirection::Forward)
     }
 
+    /// Returns a [`RawDbReverseIterator`] which allows to iterate over raw values, backwards
+    pub fn raw_iter<S: Schema>(&self) -> anyhow::Result<RawDbReverseIterator> {
+        let cf_handle = self.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
+        Ok(RawDbReverseIterator::new(
+            self.inner
+                .raw_iterator_cf_opt(cf_handle, Default::default()),
+        ))
+    }
+
     /// Returns a forward [`SchemaIterator`] on a certain schema with the provided read options.
-    pub fn iter_with_opts<S: Schema>(&self, opts: ReadOptions) -> Result<SchemaIterator<S>> {
+    pub fn iter_with_opts<S: Schema>(
+        &self,
+        opts: ReadOptions,
+    ) -> anyhow::Result<SchemaIterator<S>> {
         self.iter_with_direction::<S>(opts, ScanDirection::Forward)
     }
 
-    /// Returns a backward [`SchemaIterator`] on a certain schema with the default read options.
-    pub fn rev_iter<S: Schema>(&self) -> Result<SchemaIterator<S>> {
-        self.iter_with_direction::<S>(Default::default(), ScanDirection::Backward)
-    }
-
-    /// Returns a backward [`SchemaIterator`] on a certain schema with the provided read options.
-    pub fn rev_iter_with_opts<S: Schema>(&self, opts: ReadOptions) -> Result<SchemaIterator<S>> {
-        self.iter_with_direction::<S>(opts, ScanDirection::Backward)
-    }
-
     /// Writes a group of records wrapped in a [`SchemaBatch`].
-    pub fn write_schemas(&self, batch: SchemaBatch) -> Result<()> {
+    pub fn write_schemas(&self, batch: SchemaBatch) -> anyhow::Result<()> {
         let _timer = SCHEMADB_BATCH_COMMIT_LATENCY_SECONDS
             .with_label_values(&[self.name])
             .start_timer();
-        let rows_locked = batch.rows.lock().expect("Lock must not be poisoned");
-
         let mut db_batch = rocksdb::WriteBatch::default();
-        for (cf_name, rows) in rows_locked.iter() {
+        for (cf_name, rows) in batch.last_writes.iter() {
             let cf_handle = self.get_cf_handle(cf_name)?;
-            for write_op in rows {
-                match write_op {
-                    WriteOp::Value { key, value } => db_batch.put_cf(cf_handle, key, value),
-                    WriteOp::Deletion { key } => db_batch.delete_cf(cf_handle, key),
+            for (key, operation) in rows {
+                match operation {
+                    Operation::Put { value } => db_batch.put_cf(cf_handle, key, value),
+                    Operation::Delete => db_batch.delete_cf(cf_handle, key),
                 }
             }
         }
@@ -195,15 +232,15 @@ impl DB {
         self.inner.write_opt(db_batch, &default_write_options())?;
 
         // Bump counters only after DB write succeeds.
-        for (cf_name, rows) in rows_locked.iter() {
-            for write_op in rows {
-                match write_op {
-                    WriteOp::Value { key, value } => {
+        for (cf_name, rows) in batch.last_writes.iter() {
+            for (key, operation) in rows {
+                match operation {
+                    Operation::Put { value } => {
                         SCHEMADB_PUT_BYTES
                             .with_label_values(&[cf_name])
                             .observe((key.len() + value.len()) as f64);
                     }
-                    WriteOp::Deletion { key: _ } => {
+                    Operation::Delete => {
                         SCHEMADB_DELETES.with_label_values(&[cf_name]).inc();
                     }
                 }
@@ -216,7 +253,7 @@ impl DB {
         Ok(())
     }
 
-    fn get_cf_handle(&self, cf_name: &str) -> Result<&rocksdb::ColumnFamily> {
+    fn get_cf_handle(&self, cf_name: &str) -> anyhow::Result<&rocksdb::ColumnFamily> {
         self.inner.cf_handle(cf_name).ok_or_else(|| {
             format_err!(
                 "DB::cf_handle not found for column family name: {}",
@@ -225,15 +262,15 @@ impl DB {
         })
     }
 
-    /// Flushes memtable data. This is only used for testing `get_approximate_sizes_cf` in unit
-    /// tests.
-    pub fn flush_cf(&self, cf_name: &str) -> Result<()> {
+    /// Flushes [MemTable](https://github.com/facebook/rocksdb/wiki/MemTable) data.
+    /// This is only used for testing `get_approximate_sizes_cf` in unit tests.
+    pub fn flush_cf(&self, cf_name: &str) -> anyhow::Result<()> {
         Ok(self.inner.flush_cf(self.get_cf_handle(cf_name)?)?)
     }
 
     /// Returns the current RocksDB property value for the provided column family name
     /// and property name.
-    pub fn get_property(&self, cf_name: &str, property_name: &str) -> Result<u64> {
+    pub fn get_property(&self, cf_name: &str, property_name: &str) -> anyhow::Result<u64> {
         self.inner
             .property_int_value_cf(self.get_cf_handle(cf_name)?, property_name)?
             .ok_or_else(|| {
@@ -246,61 +283,28 @@ impl DB {
     }
 
     /// Creates new physical DB checkpoint in directory specified by `path`.
-    pub fn create_checkpoint<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+    pub fn create_checkpoint<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()> {
         rocksdb::checkpoint::Checkpoint::new(&self.inner)?.create_checkpoint(path)?;
         Ok(())
     }
 }
 
-#[derive(Debug)]
-enum WriteOp {
-    Value { key: Vec<u8>, value: Vec<u8> },
-    Deletion { key: Vec<u8> },
-}
+/// Readability alias for a key in the DB.
+pub type SchemaKey = Vec<u8>;
+/// Readability alias for a value in the DB.
+pub type SchemaValue = Vec<u8>;
 
-/// [`SchemaBatch`] holds a collection of updates that can be applied to a DB
-/// ([`Schema`]) atomically. The updates will be applied in the order in which
-/// they are added to the [`SchemaBatch`].
-#[derive(Debug, Default)]
-pub struct SchemaBatch {
-    rows: Mutex<HashMap<ColumnFamilyName, Vec<WriteOp>>>,
-}
-
-impl SchemaBatch {
-    /// Creates an empty batch.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Adds an insert/update operation to the batch.
-    pub fn put<S: Schema>(&self, key: &impl KeyCodec<S>, value: &impl ValueCodec<S>) -> Result<()> {
-        let _timer = SCHEMADB_BATCH_PUT_LATENCY_SECONDS
-            .with_label_values(&["unknown"])
-            .start_timer();
-        let key = key.encode_key()?;
-        let value = value.encode_value()?;
-        self.rows
-            .lock()
-            .expect("Lock must not be poisoned")
-            .entry(S::COLUMN_FAMILY_NAME)
-            .or_insert_with(Vec::new)
-            .push(WriteOp::Value { key, value });
-
-        Ok(())
-    }
-
-    /// Adds a delete operation to the batch.
-    pub fn delete<S: Schema>(&self, key: &impl KeyCodec<S>) -> Result<()> {
-        let key = key.encode_key()?;
-        self.rows
-            .lock()
-            .expect("Lock must not be poisoned")
-            .entry(S::COLUMN_FAMILY_NAME)
-            .or_insert_with(Vec::new)
-            .push(WriteOp::Deletion { key });
-
-        Ok(())
-    }
+#[cfg_attr(feature = "arbitrary", derive(proptest_derive::Arbitrary))]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+/// Represents operation written to the database
+pub enum Operation {
+    /// Writing a value to the DB.
+    Put {
+        /// Value to write
+        value: SchemaValue,
+    },
+    /// Deleting a value
+    Delete,
 }
 
 /// An error that occurred during (de)serialization of a [`Schema`]'s keys or
@@ -328,4 +332,26 @@ fn default_write_options() -> rocksdb::WriteOptions {
     let mut opts = rocksdb::WriteOptions::default();
     opts.set_sync(true);
     opts
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_db_debug_output() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let column_families = vec![DEFAULT_COLUMN_FAMILY_NAME];
+
+        let mut db_opts = rocksdb::Options::default();
+        db_opts.create_if_missing(true);
+        db_opts.create_missing_column_families(true);
+
+        let db = DB::open(tmpdir.path(), "test_db_debug", column_families, &db_opts)
+            .expect("Failed to open DB.");
+
+        let db_debug = format!("{:?}", db);
+        assert!(db_debug.contains("test_db_debug"));
+        assert!(db_debug.contains(tmpdir.path().to_str().unwrap()));
+    }
 }

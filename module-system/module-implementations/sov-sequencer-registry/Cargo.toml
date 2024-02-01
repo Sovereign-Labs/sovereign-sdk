@@ -6,36 +6,41 @@ edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
 
 resolver = "2"
 
-[dev-dependencies]
-sov-sequencer-registry = { path = ".", features = ["native"] }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1", features = ["mocks"] }
-tempfile = { workspace = true }
-
 [dependencies]
 anyhow = { workspace = true }
+arbitrary = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
-sov-bank = { path = "../sov-bank", version = "0.1" }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-state = { path = "../../sov-state", version = "0.1" }
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
+sov-bank = { path = "../sov-bank", version = "0.3" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.3" }
+sov-state = { path = "../../sov-state", version = "0.3" }
 schemars = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["rc"] }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
-zk-cycle-macros = { path = "../../../utils/zk-cycle-macros", optional = true }
-risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional = true }
-risc0-zkvm-platform = { version = "0.16", optional = true }
-zk-cycle-utils = { path = "../../../utils/zk-cycle-utils", optional = true }
+sov-zk-cycle-macros = { path = "../../../utils/zk-cycle-macros", version = "0.3", optional = true }
+risc0-zkvm = { workspace = true, default-features = false, features = ["std"], optional = true }
+risc0-zkvm-platform = { workspace = true, optional = true }
+sov-zk-cycle-utils = { path = "../../../utils/zk-cycle-utils", version = "0.3", optional = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+sov-sequencer-registry = { path = ".", features = ["native"] }
+sov-mock-da = { path = "../../../adapters/mock-da", features = ["native"] }
+sov-prover-storage-manager = { path = "../../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
 
 [features]
-bench = ["zk-cycle-macros/bench", "risc0-zkvm", "risc0-zkvm-platform", "zk-cycle-utils"]
+bench = ["sov-zk-cycle-macros/bench", "risc0-zkvm", "risc0-zkvm-platform", "sov-zk-cycle-utils"]
 default = []
+arbitrary = ["dep:arbitrary", "dep:proptest", "dep:proptest-derive"]
 native = [
     "serde",
     "serde_json",
@@ -47,4 +52,4 @@ native = [
     # This:
     "sov-bank/native",
 ]
-
+serde = []

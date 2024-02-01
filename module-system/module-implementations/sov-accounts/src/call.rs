@@ -1,6 +1,5 @@
 use anyhow::{ensure, Result};
-use sov_modules_api::{CallResponse, Context, Signature};
-use sov_state::WorkingSet;
+use sov_modules_api::{CallResponse, Context, Signature, StateMapAccessor, WorkingSet};
 
 use crate::Accounts;
 
@@ -10,14 +9,17 @@ pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
 /// Represents the available call messages for interacting with the sov-accounts module.
 #[cfg_attr(
     feature = "native",
-    derive(serde::Serialize),
-    derive(serde::Deserialize),
     derive(schemars::JsonSchema),
     derive(sov_modules_api::macros::CliWalletArg),
     schemars(
         bound = "C::PublicKey: ::schemars::JsonSchema, C::Signature: ::schemars::JsonSchema",
         rename = "CallMessage"
     )
+)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: Context> {
@@ -37,7 +39,7 @@ impl<C: Context> Accounts<C> {
         new_pub_key: C::PublicKey,
         signature: C::Signature,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         self.exit_if_account_exists(&new_pub_key, working_set)?;
 
@@ -63,32 +65,12 @@ impl<C: Context> Accounts<C> {
     fn exit_if_account_exists(
         &self,
         new_pub_key: &C::PublicKey,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         anyhow::ensure!(
             self.accounts.get(new_pub_key, working_set).is_none(),
             "New PublicKey already exists"
         );
         Ok(())
-    }
-}
-
-#[cfg(all(feature = "arbitrary", feature = "native"))]
-impl<'a, C> arbitrary::Arbitrary<'a> for CallMessage<C>
-where
-    C: Context,
-    C::PrivateKey: arbitrary::Arbitrary<'a>,
-{
-    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        use sov_modules_api::PrivateKey;
-
-        let secret = C::PrivateKey::arbitrary(u)?;
-        let public = secret.pub_key();
-
-        let payload_len = u.arbitrary_len::<u8>()?;
-        let payload = u.bytes(payload_len)?;
-        let signature = secret.sign(payload);
-
-        Ok(Self::UpdatePublicKey(public, signature))
     }
 }

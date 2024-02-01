@@ -1,179 +1,42 @@
+mod test_client;
+
 use std::net::SocketAddr;
 use std::str::FromStr;
 
-use ethereum_types::H160;
+use demo_stf::genesis_config::GenesisPaths;
 use ethers_core::abi::Address;
-use ethers_core::k256::ecdsa::SigningKey;
-use ethers_core::types::transaction::eip2718::TypedTransaction;
-use ethers_core::types::Eip1559TransactionRequest;
-use ethers_middleware::SignerMiddleware;
-use ethers_providers::{Http, Middleware, PendingTransaction, Provider};
-use ethers_signers::{LocalWallet, Signer, Wallet};
-use jsonrpsee::core::client::ClientT;
-use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
-use jsonrpsee::rpc_params;
-use sov_evm::smart_contracts::SimpleStorageContract;
+use ethers_signers::{LocalWallet, Signer};
+use sov_evm::SimpleStorageContract;
+use sov_modules_stf_blueprint::kernels::basic::BasicKernelGenesisPaths;
+use sov_stf_runner::RollupProverConfig;
+use test_client::TestClient;
+use tokio::time::{sleep, Duration};
 
-use super::test_helpers::start_rollup;
+use crate::test_helpers::start_rollup;
 
-const MAX_FEE_PER_GAS: u64 = 100000001;
+#[cfg(feature = "experimental")]
+#[tokio::test]
+async fn evm_tx_tests() -> Result<(), anyhow::Error> {
+    let (port_tx, port_rx) = tokio::sync::oneshot::channel();
 
-struct TestClient {
-    chain_id: u64,
-    from_addr: Address,
-    contract: SimpleStorageContract,
-    client: SignerMiddleware<Provider<Http>, Wallet<SigningKey>>,
-    http_client: HttpClient,
-}
+    let rollup_task = tokio::spawn(async {
+        // Don't provide a prover since the EVM is not currently provable
+        start_rollup(
+            port_tx,
+            GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
+            BasicKernelGenesisPaths {
+                chain_state: "../test-data/genesis/integration-tests/chain_state.json".into(),
+            },
+            RollupProverConfig::Skip,
+        )
+        .await;
+    });
 
-impl TestClient {
-    #[allow(dead_code)]
-    async fn new(
-        chain_id: u64,
-        key: Wallet<SigningKey>,
-        from_addr: Address,
-        contract: SimpleStorageContract,
-        rpc_addr: std::net::SocketAddr,
-    ) -> Self {
-        let host = format!("http://localhost:{}", rpc_addr.port());
-
-        let provider = Provider::try_from(&host).unwrap();
-        let client = SignerMiddleware::new_with_provider_chain(provider, key)
-            .await
-            .unwrap();
-
-        let http_client = HttpClientBuilder::default().build(host).unwrap();
-
-        Self {
-            chain_id,
-            from_addr,
-            contract,
-            client,
-            http_client,
-        }
-    }
-
-    async fn send_publish_batch_request(&self) {
-        let _: String = self
-            .http_client
-            .request("eth_publishBatch", rpc_params![])
-            .await
-            .unwrap();
-    }
-
-    async fn deploy_contract(
-        &self,
-    ) -> Result<PendingTransaction<'_, Http>, Box<dyn std::error::Error>> {
-        let req = Eip1559TransactionRequest::new()
-            .from(self.from_addr)
-            .chain_id(self.chain_id)
-            .nonce(0u64)
-            .max_priority_fee_per_gas(10u64)
-            .max_fee_per_gas(MAX_FEE_PER_GAS)
-            .gas(900000u64)
-            .data(self.contract.byte_code());
-
-        let typed_transaction = TypedTransaction::Eip1559(req);
-
-        let receipt_req = self
-            .client
-            .send_transaction(typed_transaction, None)
-            .await?;
-
-        Ok(receipt_req)
-    }
-
-    async fn set_value(
-        &self,
-        contract_address: H160,
-        set_arg: u32,
-        nonce: u64,
-    ) -> PendingTransaction<'_, Http> {
-        let req = Eip1559TransactionRequest::new()
-            .from(self.from_addr)
-            .to(contract_address)
-            .chain_id(self.chain_id)
-            .nonce(nonce)
-            .data(self.contract.set_call_data(set_arg))
-            .max_priority_fee_per_gas(10u64)
-            .max_fee_per_gas(MAX_FEE_PER_GAS)
-            .gas(900000u64);
-
-        let typed_transaction = TypedTransaction::Eip1559(req);
-
-        self.client
-            .send_transaction(typed_transaction, None)
-            .await
-            .unwrap()
-    }
-
-    async fn query_contract(
-        &self,
-        contract_address: H160,
-        nonce: u64,
-    ) -> Result<ethereum_types::U256, Box<dyn std::error::Error>> {
-        let req = Eip1559TransactionRequest::new()
-            .from(self.from_addr)
-            .to(contract_address)
-            .chain_id(self.chain_id)
-            .nonce(nonce)
-            .data(self.contract.get_call_data())
-            .gas(900000u64);
-
-        let typed_transaction = TypedTransaction::Eip1559(req);
-
-        let response = self.client.call(&typed_transaction, None).await?;
-
-        let resp_array: [u8; 32] = response.to_vec().try_into().unwrap();
-        Ok(ethereum_types::U256::from(resp_array))
-    }
-
-    async fn execute(self) -> Result<(), Box<dyn std::error::Error>> {
-        let contract_address = {
-            let deploy_contract_req = self.deploy_contract().await?;
-            self.send_publish_batch_request().await;
-
-            deploy_contract_req
-                .await?
-                .unwrap()
-                .contract_address
-                .unwrap()
-        };
-
-        let set_arg = 923;
-        {
-            let set_value_req = self.set_value(contract_address, set_arg, 1).await;
-            self.send_publish_batch_request().await;
-            set_value_req.await.unwrap();
-        }
-
-        {
-            let get_arg = self.query_contract(contract_address, 2).await?;
-            assert_eq!(set_arg, get_arg.as_u32());
-        }
-
-        // Create a blob with multiple transactions.
-        let mut requests = Vec::default();
-        let mut nonce = 2;
-        for value in 100..103 {
-            let set_value_req = self.set_value(contract_address, value, nonce).await;
-            requests.push(set_value_req);
-            nonce += 1
-        }
-
-        self.send_publish_batch_request().await;
-
-        for req in requests {
-            req.await.unwrap();
-        }
-
-        {
-            let get_arg = self.query_contract(contract_address, nonce).await?;
-            assert_eq!(102, get_arg.as_u32());
-        }
-
-        Ok(())
-    }
+    // Wait for rollup task to start:
+    let port = port_rx.await.unwrap();
+    send_tx_test_to_eth(port).await.unwrap();
+    rollup_task.abort();
+    Ok(())
 }
 
 async fn send_tx_test_to_eth(rpc_address: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
@@ -184,23 +47,178 @@ async fn send_tx_test_to_eth(rpc_address: SocketAddr) -> Result<(), Box<dyn std:
         .with_chain_id(chain_id);
 
     let contract = SimpleStorageContract::default();
+
     let from_addr = Address::from_str("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();
 
     let test_client = TestClient::new(chain_id, key, from_addr, contract, rpc_address).await;
-    test_client.execute().await
+
+    let etc_accounts = test_client.eth_accounts().await;
+    assert_eq!(vec![from_addr], etc_accounts);
+
+    let eth_chain_id = test_client.eth_chain_id().await;
+    assert_eq!(chain_id, eth_chain_id);
+
+    // No block exists yet
+    let latest_block = test_client
+        .eth_get_block_by_number(Some("latest".to_owned()))
+        .await;
+    let earliest_block = test_client
+        .eth_get_block_by_number(Some("earliest".to_owned()))
+        .await;
+
+    assert_eq!(latest_block, earliest_block);
+    assert_eq!(latest_block.number.unwrap().as_u64(), 0);
+
+    execute(&test_client).await
 }
 
-#[tokio::test]
-async fn evm_tx_tests() -> Result<(), anyhow::Error> {
-    let (port_tx, port_rx) = tokio::sync::oneshot::channel();
+async fn execute(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> {
+    // Nonce should be 0 in genesis
+    let nonce = client.eth_get_transaction_count(client.from_addr).await;
+    assert_eq!(0, nonce);
 
-    let rollup_task = tokio::spawn(async {
-        start_rollup(port_tx).await;
-    });
+    // Balance should be > 0 in genesis
+    let balance = client.eth_get_balance(client.from_addr).await;
+    assert!(balance > ethereum_types::U256::zero());
 
-    // Wait for rollup task to start:
-    let port = port_rx.await.unwrap();
-    send_tx_test_to_eth(port).await.unwrap();
-    rollup_task.abort();
+    let (contract_address, runtime_code) = {
+        let runtime_code = client.deploy_contract_call().await?;
+
+        let deploy_contract_req = client.deploy_contract().await?;
+        client.send_publish_batch_request().await;
+
+        let contract_address = deploy_contract_req
+            .await?
+            .unwrap()
+            .contract_address
+            .unwrap();
+
+        (contract_address, runtime_code)
+    };
+
+    // Assert contract deployed correctly
+    let code = client.eth_get_code(contract_address).await;
+    // code has natural following 0x00 bytes, so we need to trim it
+    assert_eq!(code.to_vec()[..runtime_code.len()], runtime_code.to_vec());
+
+    // Nonce should be 1 after the deploy
+    let nonce = client.eth_get_transaction_count(client.from_addr).await;
+    assert_eq!(1, nonce);
+
+    // Check that the first block has published
+    // It should have a single transaction, deploying the contract
+    let first_block = client.eth_get_block_by_number(Some("1".to_owned())).await;
+    assert_eq!(first_block.number.unwrap().as_u64(), 1);
+    assert_eq!(first_block.transactions.len(), 1);
+
+    let set_arg = 923;
+    let tx_hash = {
+        let set_value_req = client
+            .set_value(contract_address, set_arg, None, None)
+            .await;
+        client.send_publish_batch_request().await;
+        set_value_req.await.unwrap().unwrap().transaction_hash
+    };
+
+    let get_arg = client.query_contract(contract_address).await?;
+    assert_eq!(set_arg, get_arg.as_u32());
+
+    // Assert storage slot is set
+    let storage_slot = 0x0;
+    let storage_value = client
+        .eth_get_storage_at(contract_address, storage_slot.into())
+        .await;
+    assert_eq!(storage_value, ethereum_types::U256::from(set_arg));
+
+    // Check that the second block has published
+    // None should return the latest block
+    // It should have a single transaction, setting the value
+    let latest_block = client.eth_get_block_by_number_with_detail(None).await;
+    assert_eq!(latest_block.number.unwrap().as_u64(), 2);
+    assert_eq!(latest_block.transactions.len(), 1);
+    assert_eq!(latest_block.transactions[0].hash, tx_hash);
+
+    // This should just pass without error
+    client
+        .set_value_call(contract_address, set_arg)
+        .await
+        .unwrap();
+
+    // This call should fail because function does not exist
+    let failing_call = client.failing_call(contract_address).await;
+    assert!(failing_call.is_err());
+
+    // Create a blob with multiple transactions.
+    let mut requests = Vec::default();
+    for value in 150..153 {
+        let set_value_req = client.set_value(contract_address, value, None, None).await;
+        requests.push(set_value_req);
+    }
+
+    client.send_publish_batch_request().await;
+    client.send_publish_batch_request().await;
+
+    for req in requests {
+        req.await.unwrap();
+    }
+
+    {
+        let get_arg = client.query_contract(contract_address).await?.as_u32();
+        // should be one of three values sent in a single block. 150, 151, or 152
+        assert!((150..=152).contains(&get_arg));
+    }
+
+    {
+        let value = 103;
+
+        let tx_hash = {
+            let set_value_req = client.set_value_unsigned(contract_address, value).await;
+            client.send_publish_batch_request().await;
+            set_value_req.await.unwrap().unwrap().transaction_hash
+        };
+
+        let latest_block = client.eth_get_block_by_number(None).await;
+        assert_eq!(latest_block.transactions.len(), 1);
+        assert_eq!(latest_block.transactions[0], tx_hash);
+
+        let get_arg = client.query_contract(contract_address).await?;
+        assert_eq!(value, get_arg.as_u32());
+    }
+
+    {
+        // get initial gas price
+        let initial_gas_price = client.eth_gas_price().await;
+
+        // send 100 set transaction with high gas fee in a four batch to increase gas price
+        for _ in 0..4 {
+            let mut requests = Vec::default();
+            for value in 0..25 {
+                let set_value_req = client
+                    .set_value(contract_address, value, Some(20u64), Some(21u64))
+                    .await;
+                requests.push(set_value_req);
+            }
+            client.send_publish_batch_request().await;
+            sleep(Duration::from_millis(1000)).await;
+        }
+        sleep(Duration::from_millis(6000)).await;
+        // get gas price
+        let latest_gas_price = client.eth_gas_price().await;
+
+        // assert gas price is higher
+        // TODO: emulate gas price oracle here to have exact value
+        assert!(latest_gas_price > initial_gas_price);
+    }
+
+    let first_block = client.eth_get_block_by_number(Some("0".to_owned())).await;
+    let second_block = client.eth_get_block_by_number(Some("1".to_owned())).await;
+
+    // assert parent hash works correctly
+    assert_eq!(
+        first_block.hash.unwrap(),
+        second_block.parent_hash,
+        "Parent hash should be the hash of the previous block"
+    );
+
     Ok(())
 }

@@ -1,0 +1,19 @@
+[da]
+sender_address = "0000000000000000000000000000000000000000000000000000000000000000"
+
+[storage]
+# The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
+path = "demo_data"
+
+# We define the rollup's genesis to occur at block number `start_height`. The rollup will ignore
+# any blocks before this height
+[runner]
+start_height = 1
+
+[runner.rpc_config]
+# the host and port to bind the rpc server for
+bind_host = "127.0.0.1"
+bind_port = 12345
+
+[prover_service]
+aggregated_proof_block_jump = 1

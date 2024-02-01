@@ -1,51 +1,62 @@
-use sov_chain_state::{ChainState, ChainStateConfig};
-use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
-use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
+use sov_chain_state::ChainState;
+use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::macros::DefaultRuntime;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{
-    BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, MessageCodec, PublicKey, Spec,
+    AccessoryWorkingSet, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, MessageCodec,
+    PublicKey, Spec,
 };
-use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
-use sov_rollup_interface::mocks::MockZkvm;
-use sov_value_setter::{ValueSetter, ValueSetterConfig};
+use sov_modules_stf_blueprint::{Runtime, RuntimeTxHook, SequencerOutcome};
+use sov_state::Storage;
+use sov_value_setter::ValueSetter;
 
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub(crate) struct TestRuntime<C: Context, Da: DaSpec> {
+pub(crate) struct TestRuntime<C: Context> {
     pub value_setter: ValueSetter<C>,
-    pub chain_state: ChainState<C, Da>,
 }
 
-impl<C: Context, Da: DaSpec> TxHooks for TestRuntime<C, Da> {
+#[derive(Default)]
+pub(crate) struct TestKernel<C: Context, Da: DaSpec> {
+    pub _chain_state: ChainState<C, Da>,
+}
+
+impl<C: Context> TxHooks for TestRuntime<C> {
     type Context = C;
+    type PreArg = RuntimeTxHook<C>;
+    type PreResult = C;
 
     fn pre_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
-        _working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> anyhow::Result<<Self::Context as Spec>::Address> {
-        Ok(tx.pub_key().to_address())
+        _working_set: &mut sov_modules_api::WorkingSet<C>,
+        arg: &RuntimeTxHook<C>,
+    ) -> anyhow::Result<C> {
+        let RuntimeTxHook { height, sequencer } = arg;
+        let sender = tx.pub_key().to_address();
+        let sequencer = sequencer.to_address();
+
+        Ok(C::new(sender, sequencer, *height))
     }
 
     fn post_dispatch_tx_hook(
         &self,
         _tx: &Transaction<Self::Context>,
-        _working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
+        _ctx: &C,
+        _working_set: &mut sov_modules_api::WorkingSet<C>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
 }
 
-impl<C: Context, Da: DaSpec> ApplyBlobHooks<Da::BlobTransaction> for TestRuntime<C, Da> {
+impl<C: Context, B: BlobReaderTrait> ApplyBlobHooks<B> for TestRuntime<C> {
     type Context = C;
-    type BlobResult =
-        SequencerOutcome<<<Da as DaSpec>::BlobTransaction as BlobReaderTrait>::Address>;
+    type BlobResult = SequencerOutcome<<B as BlobReaderTrait>::Address>;
 
     fn begin_blob_hook(
         &self,
-        _blob: &mut Da::BlobTransaction,
-        _working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
+        _blob: &mut B,
+        _working_set: &mut sov_modules_api::WorkingSet<C>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -53,65 +64,50 @@ impl<C: Context, Da: DaSpec> ApplyBlobHooks<Da::BlobTransaction> for TestRuntime
     fn end_blob_hook(
         &self,
         _result: Self::BlobResult,
-        _working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
+        _working_set: &mut sov_modules_api::WorkingSet<C>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
 }
 
-impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da> {
+impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C> {
     type Context = C;
 
     fn begin_slot_hook(
         &self,
-        slot_data: &impl sov_modules_api::SlotData<Cond = Da::ValidityCondition>,
-        working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
+        _slot_header: &Da::BlockHeader,
+        _validity_condition: &Da::ValidityCondition,
+        _pre_state_root: &<<Self::Context as Spec>::Storage as Storage>::Root,
+        _working_set: &mut sov_modules_api::WorkingSet<C>,
     ) {
-        self.chain_state.begin_slot_hook(slot_data, working_set)
     }
 
-    fn end_slot_hook(
-        &self,
-        _root_hash: [u8; 32],
-        _working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
-    ) {
-    }
+    fn end_slot_hook(&self, _working_set: &mut sov_modules_api::WorkingSet<C>) {}
 }
 
-impl<C, Da> BlobSelector<Da> for TestRuntime<C, Da>
-where
-    C: Context,
-    Da: DaSpec,
-{
+impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for TestRuntime<C> {
     type Context = C;
 
-    fn get_blobs_for_this_slot<'a, I>(
+    fn finalize_hook(
         &self,
-        current_blobs: I,
-        _working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, Da::BlobTransaction>>>
-    where
-        I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
-    {
-        Ok(current_blobs.into_iter().map(Into::into).collect())
+        _root_hash: &<<Self::Context as Spec>::Storage as Storage>::Root,
+        _accesorry_working_set: &mut AccessoryWorkingSet<C>,
+    ) {
     }
 }
 
-impl<C: Context, Da: DaSpec> Runtime<C, Da> for TestRuntime<C, Da> {}
+impl<C: Context, Da: DaSpec> Runtime<C, Da> for TestRuntime<C> {
+    type GenesisConfig = GenesisConfig<C>;
 
-pub(crate) fn create_demo_genesis_config<C: Context, Da: DaSpec>(
-    admin: <C as Spec>::Address,
-) -> GenesisConfig<C, Da> {
-    let value_setter_config = ValueSetterConfig { admin };
-    let chain_state_config = ChainStateConfig {
-        initial_slot_height: 0,
-    };
-    GenesisConfig::new(value_setter_config, chain_state_config)
-}
+    fn rpc_methods(_storage: <C as Spec>::Storage) -> jsonrpsee::RpcModule<()> {
+        todo!()
+    }
 
-/// Clones the [`AppTemplate`]'s [`Storage`] and extract the underlying [`WorkingSet`]
-pub(crate) fn get_working_set<C: Context, Da: DaSpec>(
-    app_template: &AppTemplate<C, Da, MockZkvm, TestRuntime<C, Da>>,
-) -> sov_state::WorkingSet<<C as Spec>::Storage> {
-    sov_state::WorkingSet::new(app_template.current_storage.clone())
+    type GenesisPaths = ();
+
+    fn genesis_config(
+        _genesis_paths: &Self::GenesisPaths,
+    ) -> Result<Self::GenesisConfig, anyhow::Error> {
+        todo!()
+    }
 }

@@ -1,19 +1,21 @@
 use anyhow::{bail, Context, Result};
 #[cfg(feature = "native")]
 use sov_modules_api::macros::CliWalletArg;
-use sov_modules_api::CallResponse;
-use sov_state::WorkingSet;
+use sov_modules_api::{CallResponse, StateMapAccessor, WorkingSet};
 
 use crate::{Amount, Bank, Coins, Token};
 
 /// This enumeration represents the available call messages for interacting with the sov-bank module.
 #[cfg_attr(
     feature = "native",
-    derive(serde::Serialize),
-    derive(serde::Deserialize),
     derive(CliWalletArg),
     derive(schemars::JsonSchema),
     schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "CallMessage")
+)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: sov_modules_api::Context> {
@@ -72,7 +74,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         minter_address: C::Address,
         authorized_minters: Vec<C::Address>,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<C::Address> {
         let (token_address, token) = Token::<C>::create(
             &token_name,
@@ -102,7 +104,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         to: C::Address,
         coins: Coins<C>,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         self.transfer_from(context.sender(), &to, coins, working_set)
     }
@@ -116,7 +118,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         &self,
         coins: Coins<C>,
         owner: &C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         let context_logger = || format!("Failed to burn coins({}) from owner {}", coins, owner,);
         let mut token = self
@@ -137,7 +139,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         &self,
         coins: Coins<C>,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         self.burn(coins, context.sender(), working_set)?;
         Ok(CallResponse::default())
@@ -153,7 +155,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         coins: &Coins<C>,
         mint_to_address: &C::Address,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         self.mint(coins, mint_to_address, context.sender(), working_set)
     }
@@ -167,7 +169,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         coins: &Coins<C>,
         mint_to_address: &C::Address,
         authorizer: &C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         let context_logger = || {
             format!(
@@ -194,7 +196,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         &self,
         token_address: C::Address,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         let context_logger = || {
             format!(
@@ -225,7 +227,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         from: &C::Address,
         to: &C::Address,
         coins: Coins<C>,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         let context_logger = || {
             format!(
@@ -250,11 +252,32 @@ impl<C: sov_modules_api::Context> Bank<C> {
         &self,
         user_address: C::Address,
         token_address: C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Option<u64> {
         self.tokens
             .get(&token_address, working_set)
             .and_then(|token| token.balances.get(&user_address, working_set))
+    }
+
+    /// Get the name of a token by address
+    pub fn get_token_name(
+        &self,
+        token_address: &C::Address,
+        working_set: &mut WorkingSet<C>,
+    ) -> Option<String> {
+        let token = self.tokens.get(token_address, working_set);
+        token.map(|token| token.name)
+    }
+
+    /// Total supply of a token stored at the address `token_address`
+    pub fn get_total_supply_of(
+        &self,
+        token_address: &C::Address,
+        working_set: &mut WorkingSet<C>,
+    ) -> Option<u64> {
+        self.tokens
+            .get(token_address, working_set)
+            .map(|token| token.total_supply)
     }
 }
 

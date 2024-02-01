@@ -1,0 +1,75 @@
+[package]
+name = "sov-modules-core"
+description = "Defines the core components of the Sovereign SDK module system"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+resolver = "2"
+
+
+[dependencies]
+anyhow = { workspace = true }
+arbitrary = { workspace = true, optional = true }
+bech32 = { workspace = true }
+borsh = { workspace = true }
+derive_more = { workspace = true, features = ["display", "into"] }
+digest = { workspace = true }
+hex = { workspace = true }
+jmt = { workspace = true, optional = true }
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true, optional = true }
+
+sov-rollup-interface = { path = "../../rollup-interface", default-features = false }
+
+
+[dev-dependencies]
+proptest = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+sov-state = { path = "../sov-state", features = ["native"] }
+sov-modules-api = { path = "../sov-modules-api", features = ["native"] }
+sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
+sov-modules-core = { path = ".", features = ["mocks"] }
+sov-prover-storage-manager = { path = "../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
+
+
+[features]
+default = ["std"]
+arbitrary = [
+    "dep:arbitrary",
+    "dep:proptest",
+    "dep:proptest-derive",
+    "proptest/default",
+    "std",
+]
+native = []
+std = [
+    "anyhow/default",
+    "bech32/default",
+    "borsh/default",
+    "derive_more/default",
+    "digest/default",
+    "hex/default",
+    "jmt",
+    "schemars",
+    "serde/default",
+    "sha2/default",
+    "sov-rollup-interface/default",
+    "sync",
+    "thiserror",
+]
+serde = []
+sync = [
+    "borsh/rc",
+    "serde/rc",
+]
+mocks = []

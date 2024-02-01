@@ -2,6 +2,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
+use crate::da::DaSpec;
 use crate::zk::StateTransition;
 
 /// A proof that the attester was bonded at the transition num `transition_num`.
@@ -9,7 +10,7 @@ use crate::zk::StateTransition;
 #[derive(
     Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Default,
 )]
-pub struct ProofOfBond<StateProof: BorshSerialize> {
+pub struct ProofOfBond<StateProof> {
     /// The transition number for which the proof of bond applies
     pub claimed_transition_num: u64,
     /// The actual state proof that the attester was bonded
@@ -20,13 +21,13 @@ pub struct ProofOfBond<StateProof: BorshSerialize> {
 #[derive(
     Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Default,
 )]
-pub struct Attestation<StateProof: BorshSerialize> {
+pub struct Attestation<Da: DaSpec, StateProof, StateRoot> {
     /// The alleged state root before applying the contents of the da block
-    pub initial_state_root: [u8; 32],
+    pub initial_state_root: StateRoot,
     /// The hash of the block in which the transition occurred
-    pub da_block_hash: [u8; 32],
+    pub da_block_hash: Da::SlotHash,
     /// The alleged post-state root
-    pub post_state_root: [u8; 32],
+    pub post_state_root: StateRoot,
     /// A proof that the attester was bonded at some point in time before the attestation is generated
     pub proof_of_bond: ProofOfBond<StateProof>,
 }
@@ -34,11 +35,11 @@ pub struct Attestation<StateProof: BorshSerialize> {
 /// The contents of a challenge to an attestation, which are contained as a public output of the proof
 /// Generic over an address type and a validity condition
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
-pub struct ChallengeContents<Address, VC> {
+pub struct ChallengeContents<Address, Da: DaSpec, Root> {
     /// The rollup address of the originator of this challenge
     pub challenger_address: Address,
     /// The state transition that was proven
-    pub state_transition: StateTransition<VC, Address>,
+    pub state_transition: StateTransition<Da, Root>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, Serialize, Deserialize)]

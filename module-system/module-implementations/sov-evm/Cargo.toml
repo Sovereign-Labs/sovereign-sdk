@@ -6,16 +6,15 @@ edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
-
+publish = false
 
 [dependencies]
-
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-state = { path = "../../sov-state", version = "0.1" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.3" }
+sov-state = { path = "../../sov-state", version = "0.3" }
 
 anyhow = { workspace = true }
 thiserror = { workspace = true }
@@ -26,37 +25,52 @@ serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
-jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
+jsonrpsee = { workspace = true, features = [
+    "macros",
+    "client-core",
+    "server",
+], optional = true }
 tracing = { workspace = true }
-derive_more = { workspace = true }
+derive_more = { workspace = true, default-features = true }
+lazy_static = "1.4.0"
 
 
-ethereum-types = "0.14.1"
+ethereum-types = { workspace = true }
 ethers-core = { workspace = true }
 ethers-contract = { workspace = true }
-ethers-middleware = { workspace = true }
 ethers-signers = { workspace = true }
-ethers = { workspace = true }
 
-revm = { workspace = true }
+revm = { workspace = true, features = [
+    "optional_block_gas_limit",
+    "optional_eip3607",
+    "optional_no_base_fee",
+] }
 reth-primitives = { workspace = true }
+reth-interfaces = { workspace = true }
 reth-rpc-types = { workspace = true }
-reth-rpc = { workspace = true }
+reth-rpc-types-compat = { workspace = true }
 reth-revm = { workspace = true }
-
+secp256k1 = { workspace = true }
 
 [dev-dependencies]
 sov-evm = { path = ".", features = ["smart_contracts"] }
-primitive-types = "0.12.1"
 tokio = { workspace = true }
 tempfile = { workspace = true }
 bytes = { workspace = true }
-secp256k1 = { workspace = true }
+sov-prover-storage-manager = { path = "../../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
 
 
 [features]
 default = []
-native = ["serde", "serde_json", "jsonrpsee", "schemars", "clap", "sov-state/native", "sov-modules-api/native"]
+native = [
+    "serde",
+    "serde_json",
+    "jsonrpsee",
+    "schemars",
+    "clap",
+    "sov-state/native",
+    "sov-modules-api/native",
+]
 experimental = ["native"]
+serde = ["dep:serde"]
 smart_contracts = ["experimental"]
-

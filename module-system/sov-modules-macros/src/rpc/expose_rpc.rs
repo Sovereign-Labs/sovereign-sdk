@@ -48,7 +48,11 @@ impl ExposeRpcMacro {
         let rpc_storage_struct = quote! {
             struct RpcStorage #impl_generics #where_clause {
                 storage: #context_type::Storage,
-                _phantom: ::std::marker::PhantomData< #input_ident #ty_generics >,
+                // Function pointers are always Send + Sync, regardless of
+                // whether the return type is. The alternative would be to
+                // `unsafe impl Send/Sync` for `RpcStorage`, but this seems
+                // better (and safer).
+                _phantom: ::std::marker::PhantomData<fn() -> #input_ident #ty_generics >,
             }
 
             // Manually implementing clone, as in reality only cloning storage
@@ -60,16 +64,13 @@ impl ExposeRpcMacro {
                     }
                  }
             }
-
-            // As long as RpcStorage only cares about C::Storage, which is Sync + Send, we can do this:
-            unsafe impl #impl_generics ::std::marker::Sync for RpcStorage #ty_generics #where_clause {}
-            unsafe impl #impl_generics ::std::marker::Send for RpcStorage #ty_generics #where_clause {}
         };
 
         let mut merge_operations = proc_macro2::TokenStream::new();
         let mut rpc_trait_impls = proc_macro2::TokenStream::new();
 
         for field in fields {
+            let attrs = field.attrs;
             let ty = match field.ty {
                 syn::Type::Path(type_path) => type_path.clone(),
                 _ => panic!("Expected a path type"),
@@ -91,6 +92,7 @@ impl ExposeRpcMacro {
                 syn::Ident::new(&format!("{}RpcServer", &module_ident), module_ident.span());
 
             let merge_operation = quote! {
+                #(#attrs)*
                 module
                     .merge(#rpc_server_ident:: #field_path_args ::into_rpc(r.clone()))
                     .unwrap();
@@ -99,11 +101,12 @@ impl ExposeRpcMacro {
             merge_operations.extend(merge_operation);
 
             let rpc_trait_impl = quote! {
+                #(#attrs)*
                 impl #impl_generics #rpc_trait_ident #field_path_args for RpcStorage #ty_generics #where_clause {
                     /// Get a working set on top of the current storage
-                    fn get_working_set(&self) -> ::sov_state::WorkingSet<<#context_type as ::sov_modules_api::Spec>::Storage>
+                    fn get_working_set(&self) -> ::sov_modules_api::WorkingSet<#context_type>
                     {
-                        ::sov_state::WorkingSet::new(self.storage.clone())
+                        ::sov_modules_api::WorkingSet::new(self.storage.clone())
                     }
                 }
             };

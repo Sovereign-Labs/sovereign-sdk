@@ -6,7 +6,7 @@ edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
@@ -15,35 +15,68 @@ resolver = "2"
 jsonrpsee = { workspace = true, optional = true }
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
-sov-state = { path = "../sov-state", version = "0.1" }
-sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
-sov-modules-macros = { path = "../sov-modules-macros", version = "0.1", optional = true }
-sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true }
+sov-state = { path = "../sov-state", version = "0.3" }
+sov-modules-core = { path = "../sov-modules-core", version = "0.3" }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
+sov-modules-macros = { path = "../sov-modules-macros", version = "0.3", optional = true }
+sov-prover-storage-manager = { path = "../../full-node/sov-prover-storage-manager", optional = true }
 serde = { workspace = true }
 borsh = { workspace = true }
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
 thiserror = { workspace = true }
 sha2 = { workspace = true }
-bech32 = { workspace = true }
-derive_more = { workspace = true }
+bech32 = { workspace = true, default-features = true }
+derive_more = { workspace = true, default-features = true }
+jmt = { workspace = true }
 serde_json = { workspace = true, optional = true }
-hex = { workspace = true, optional = true }
+hex = { workspace = true }
 clap = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true, features = [] }
 
-ed25519-dalek = { version = "2.0.0", default-features = false }
-rand = { version = "0.8", optional = true }
+# The risc0 patch only applies to version 2.0.0 exactly.
+ed25519-dalek = { version = "=2.0.0", default-features = false, features = ["serde"] }
+rand = { workspace = true, optional = true }
 
-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", optional = true }
-risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional = true }
-risc0-zkvm-platform = { version = "0.16", optional = true }
+sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", version = "0.3", optional = true }
+risc0-zkvm = { workspace = true, default-features = false, features = ["std"], optional = true }
+risc0-zkvm-platform = { workspace = true, optional = true }
 
 [dev-dependencies]
 bincode = { workspace = true }
+tempfile = { workspace = true }
 sov-modules-api = { path = ".", features = ["native"] }
-sov-bank = { path = "../module-implementations/sov-bank", version = "0.1", features = ["native"] }
+sov-modules-core = { path = "../sov-modules-core", features = ["mocks"] }
+sov-mock-da = { path = "../../adapters/mock-da", features = ["native"] }
+sov-bank = { path = "../module-implementations/sov-bank", features = ["native"] }
+sov-db = { path = "../../full-node/db/sov-db" }
+sov-prover-storage-manager = { path = "../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
+
 
 [features]
-bench = ["zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
+arbitrary = [
+    "dep:arbitrary",
+    "dep:proptest",
+    "dep:proptest-derive",
+    "proptest/default",
+    "sov-state/arbitrary",
+]
+bench = ["sov-zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
 default = ["macros"]
-native = ["serde_json", "rand", "hex", "schemars", "ed25519-dalek/default", "ed25519-dalek/serde", "ed25519-dalek/rand_core", "clap", "jsonrpsee", "macros", "sov-modules-macros/native", "sov-state/native", "sov-sequencer"]
+native = [
+    "serde_json",
+    "rand",
+    "schemars",
+    "serde",
+    "ed25519-dalek/default",
+    "ed25519-dalek/rand_core",
+    "clap",
+    "jsonrpsee",
+    "macros",
+    "sov-modules-core/native",
+    "sov-modules-macros/native",
+    "sov-state/native",
+    "sov-prover-storage-manager",
+]
 macros = ["sov-modules-macros"]
+serde = ["sov-modules-core/serde"]

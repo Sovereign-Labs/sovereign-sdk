@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::services::da::SlotData;
-use crate::verifier::ChainValidityCondition;
 
 use super::header::AvailHeader;
 use super::transaction::AvailBlobTransaction;
+use crate::verifier::ChainValidityCondition;
 
 #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
 pub struct AvailBlock {
@@ -17,7 +17,7 @@ impl SlotData for AvailBlock {
     type Cond = ChainValidityCondition;
 
     fn hash(&self) -> [u8; 32] {
-        self.header.hash().0.0
+        *self.header.hash().inner()
     }
 
     fn header(&self) -> &Self::BlockHeader {

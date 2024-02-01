@@ -15,8 +15,8 @@ pub mod ledger_db;
 pub mod rocks_db_config;
 /// Defines the tables used by the Sovereign SDK.
 pub mod schema;
-/// Implements a wrapper around RocksDB meant for storing rollup state. This is primarily used
-/// as the backing store for the JMT.
+/// Implements a wrapper around [RocksDB](https://rocksdb.org/) meant for storing rollup state.
+/// This is primarily used as the backing store for the [JMT(JellyfishMerkleTree)](https://docs.rs/jmt/latest/jmt/).
 pub mod state_db;
 
 /// Implements a wrapper around RocksDB meant for storing state only accessible

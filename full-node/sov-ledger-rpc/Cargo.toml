@@ -1,0 +1,36 @@
+[package]
+name = "sov-ledger-rpc"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+description = "JSON-RPC server and client implementations for Sovereign SDK rollups"
+repository = { workspace = true }
+
+version = { workspace = true }
+resolver = "2"
+publish = true
+
+[dependencies]
+# Common dependencies
+jsonrpsee = { workspace = true }
+serde = "1"
+sov-rollup-interface = { path = "../../rollup-interface", features = ["native"], version = "0.3" }
+# Client dependencies
+# (None)
+# Server dependencies
+anyhow = { version = "1", optional = true }
+futures = { version = "0.3", optional = true }
+sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"], optional = true, version = "0.3" }
+
+[dev-dependencies]
+tempfile = "3"
+serde_json = "1"
+sov-db = { path = "../../full-node/db/sov-db" }
+tokio = { workspace = true, features = ["full"] }
+sov-ledger-rpc = { path = ".", features = ["client", "server"] }
+
+[features]
+default = ["client", "server"]
+server = ["anyhow", "futures", "jsonrpsee/server", "sov-modules-api"]
+client = ["jsonrpsee/client", "jsonrpsee/macros"]

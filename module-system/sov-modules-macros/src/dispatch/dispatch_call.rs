@@ -66,7 +66,7 @@ impl<'a> StructDef<'a> {
                 fn dispatch_call(
                     &self,
                     decodable: Self::Decodable,
-                    working_set: &mut ::sov_state::WorkingSet<<Self::Context as ::sov_modules_api::Spec>::Storage>,
+                    working_set: &mut ::sov_modules_api::WorkingSet<Self::Context>,
                     context: &Self::Context,
                 ) -> ::core::result::Result<::sov_modules_api::CallResponse, ::sov_modules_api::Error> {
 

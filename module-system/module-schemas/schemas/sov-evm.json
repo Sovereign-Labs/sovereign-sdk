@@ -7,11 +7,11 @@
   ],
   "properties": {
     "tx": {
-      "$ref": "#/definitions/RawEvmTransaction"
+      "$ref": "#/definitions/RlpEvmTransaction"
     }
   },
   "definitions": {
-    "RawEvmTransaction": {
+    "RlpEvmTransaction": {
       "description": "Rlp encoded evm transaction.",
       "type": "object",
       "required": [

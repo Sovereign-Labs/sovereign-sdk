@@ -1,3 +1,0 @@
-[build]
-target = "./riscv32im-risc0-zkvm-elf.json"
-rustflags=["-Cpasses=loweratomic"]

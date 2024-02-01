@@ -5,7 +5,7 @@ edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
 publish = false
@@ -13,22 +13,30 @@ resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
+arbitrary = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["rc"] }
-thiserror = { workspace = true }
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
+thiserror = { workspace = true }
 
 sov-bank = { path = "../sov-bank" }
 sov-modules-api = { path = "../../sov-modules-api" }
 sov-state = { path = "../../sov-state" }
-sov-rollup-interface = { path = "../../../rollup-interface" }
 
 
 [dev-dependencies]
 tempfile = { workspace = true }
 module-template = { path = ".", version = "*", features = ["native"] }
+sov-prover-storage-manager = { path = "../../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
 
 [features]
 default = []
-native = ["serde", "serde_json", "schemars", "sov-modules-api/native"]
+arbitrary = [
+    "dep:arbitrary",
+    "dep:proptest",
+    "dep:proptest-derive"
+]
+native = ["serde_json", "schemars", "sov-modules-api/native"]

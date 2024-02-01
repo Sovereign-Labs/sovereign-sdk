@@ -41,7 +41,7 @@ impl GenesisMacro {
                 type Context = #generic_param;
                 type Config = GenesisConfig #type_generics;
 
-                fn genesis(&self, config: &Self::Config, working_set: &mut sov_state::WorkingSet<<<Self as sov_modules_api::Genesis>::Context as sov_modules_api::Spec>::Storage>) -> core::result::Result<(), sov_modules_api::Error> {
+                fn genesis(&self, config: &Self::Config, working_set: &mut sov_modules_api::WorkingSet<<Self as sov_modules_api::Genesis>::Context>) -> core::result::Result<(), sov_modules_api::Error> {
                     #genesis_fn_body
                     Ok(())
                 }
@@ -101,12 +101,14 @@ impl GenesisMacro {
 
         quote::quote! {
             #[doc = "Initial configuration for the rollup."]
+            #[derive(::serde::Deserialize, ::serde::Serialize)]
             pub struct GenesisConfig #impl_generics #where_clause{
                 #(#[doc = "Module configuration"] pub #fields)*
             }
 
             impl #impl_generics GenesisConfig #type_generics #where_clause {
                 #[doc = "GenesisConfig constructor."]
+                #[allow(clippy::too_many_arguments)]
                 pub fn new(#(#fields)*) -> Self {
                     Self {
                         #(#field_names),*

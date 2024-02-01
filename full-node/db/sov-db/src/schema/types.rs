@@ -16,6 +16,7 @@ use sov_rollup_interface::stf::{Event, EventKey, TransactionReceipt};
 #[derive(
     Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Default, BorshDeserialize, BorshSerialize,
 )]
+#[cfg_attr(feature = "arbitrary", derive(proptest_derive::Arbitrary))]
 pub struct DbBytes(Arc<Vec<u8>>);
 
 impl DbBytes {
@@ -56,6 +57,7 @@ pub(crate) type StateKey = Vec<u8>;
 /// and the hash of the da block. TODO(@preston-evans98): add any additional data
 /// required to reconstruct the da block proof.
 #[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize)]
+#[cfg_attr(feature = "arbitrary", derive(proptest_derive::Arbitrary))]
 pub struct StoredSlot {
     /// The slot's hash, as reported by the DA layer.
     pub hash: DbHash,
@@ -68,6 +70,7 @@ pub struct StoredSlot {
 /// The on-disk format for a batch. Stores the hash and identifies the range of transactions
 /// included in the batch.
 #[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize)]
+#[cfg_attr(feature = "arbitrary", derive(proptest_derive::Arbitrary))]
 pub struct StoredBatch {
     /// The hash of the batch, as reported by the DA layer.
     pub hash: DbHash,
@@ -135,9 +138,9 @@ pub fn split_tx_for_storage<R: Serialize>(
 /// An identifier that specifies a single event
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum EventIdentifier {
-    /// A unique identifier for an event consiting of a [`TxIdentifier`] and an offset into that transaction's event list
+    /// A unique identifier for an event consisting of a [`TxIdentifier`] and an offset into that transaction's event list
     TxIdAndIndex((TxIdentifier, u64)),
-    /// A unique identifier for an event consiting of a [`TxIdentifier`] and an event key
+    /// A unique identifier for an event consisting of a [`TxIdentifier`] and an event key
     TxIdAndKey((TxIdentifier, EventKey)),
     /// The monotonically increasing number of the event, ordered by the DA layer For example, if the first tx
     /// contains 7 events, tx 2 contains 11 events, and tx 3 contains 7 txs,
@@ -150,7 +153,8 @@ pub enum EventIdentifier {
 pub enum EventGroupIdentifier {
     /// All of the events which occurred in a particular transaction
     TxId(TxIdentifier),
-    /// All events wich a particular key (typically, these events will have been emitted by several different transactions)
+    /// All events which a particular key
+    /// (typically, these events will have been emitted by several different transactions)
     Key(Vec<u8>),
 }
 
@@ -171,11 +175,19 @@ macro_rules! u64_wrapper {
             ::serde::Serialize,
             ::serde::Deserialize,
         )]
+        #[cfg_attr(feature = "arbitrary", derive(proptest_derive::Arbitrary))]
         pub struct $name(pub u64);
 
         impl From<$name> for u64 {
             fn from(value: $name) -> Self {
                 value.0
+            }
+        }
+
+        #[cfg(feature = "arbitrary")]
+        impl<'a> ::arbitrary::Arbitrary<'a> for $name {
+            fn arbitrary(u: &mut ::arbitrary::Unstructured<'a>) -> ::arbitrary::Result<Self> {
+                u.arbitrary().map($name)
             }
         }
     };
@@ -185,3 +197,47 @@ u64_wrapper!(SlotNumber);
 u64_wrapper!(BatchNumber);
 u64_wrapper!(TxNumber);
 u64_wrapper!(EventNumber);
+
+#[cfg(feature = "arbitrary")]
+pub mod arbitrary {
+    //! Arbitrary definitions for the types.
+
+    use super::*;
+
+    impl<'a> ::arbitrary::Arbitrary<'a> for DbBytes {
+        fn arbitrary(u: &mut ::arbitrary::Unstructured<'a>) -> ::arbitrary::Result<Self> {
+            u.arbitrary().map(DbBytes::new)
+        }
+    }
+
+    impl<'a> ::arbitrary::Arbitrary<'a> for StoredTransaction {
+        fn arbitrary(u: &mut ::arbitrary::Unstructured<'a>) -> ::arbitrary::Result<Self> {
+            Ok(StoredTransaction {
+                hash: u.arbitrary()?,
+                events: u.arbitrary()?,
+                body: u.arbitrary()?,
+                custom_receipt: u.arbitrary()?,
+            })
+        }
+    }
+
+    impl<'a> ::arbitrary::Arbitrary<'a> for StoredBatch {
+        fn arbitrary(u: &mut ::arbitrary::Unstructured<'a>) -> ::arbitrary::Result<Self> {
+            Ok(StoredBatch {
+                hash: u.arbitrary()?,
+                txs: u.arbitrary()?,
+                custom_receipt: u.arbitrary()?,
+            })
+        }
+    }
+
+    impl<'a> ::arbitrary::Arbitrary<'a> for StoredSlot {
+        fn arbitrary(u: &mut ::arbitrary::Unstructured<'a>) -> ::arbitrary::Result<Self> {
+            Ok(StoredSlot {
+                hash: u.arbitrary()?,
+                extra_data: u.arbitrary()?,
+                batches: u.arbitrary()?,
+            })
+        }
+    }
+}

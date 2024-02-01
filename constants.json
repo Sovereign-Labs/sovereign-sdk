@@ -1,0 +1,33 @@
+{
+  "comment": "Sovereign SDK constants",
+  "gas": {
+    "Bank": {
+      "create_token": [
+        4,
+        4
+      ],
+      "transfer": [
+        5,
+        5
+      ],
+      "burn": [
+        2,
+        2
+      ],
+      "mint": [
+        2,
+        2
+      ],
+      "freeze": [
+        1,
+        1
+      ]
+    }
+  },
+  "constants": {
+    "DEFERRED_SLOTS_COUNT": 2,
+    "GAS_TOKEN_ADDRESS": "sov1p9xxgsh78u3nxsl0zhfq4eazy0y4c8m5psjv3k3vrv45859jgazq3x72sg",
+    "GAS_TX_FIXED_COST": [0, 0],
+    "GAS_TX_COST_PER_BYTE": [0, 0]
+  }
+}

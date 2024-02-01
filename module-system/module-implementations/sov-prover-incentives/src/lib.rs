@@ -9,28 +9,13 @@ mod tests;
 #[cfg(feature = "native")]
 mod query;
 
-/// The call methods specified in this module
-pub use call::CallMessage;
+pub use call::*;
+pub use genesis::*;
 /// The response type used by RPC queries.
 #[cfg(feature = "native")]
-pub use query::Response;
-use sov_modules_api::{Context, Error, ModuleInfo, StoredCodeCommitment, Zkvm};
-use sov_state::WorkingSet;
-
-/// Configuration of the prover incentives module. Specifies the
-/// address of the bonding token, the minimum bond, the commitment to
-/// the allowed verifier method and a set of initial provers with their
-/// bonding amount.
-pub struct ProverIncentivesConfig<C: Context, Vm: Zkvm> {
-    /// The address of the token to be used for bonding.
-    bonding_token_address: C::Address,
-    /// The minimum bond for a prover.
-    minimum_bond: u64,
-    /// A code commitment to be used for verifying proofs
-    commitment_of_allowed_verifier_method: Vm::CodeCommitment,
-    /// A list of initial provers and their bonded amount.
-    initial_provers: Vec<(C::Address, u64)>,
-}
+pub use query::*;
+use sov_modules_api::{Context, Error, ModuleInfo, WorkingSet, Zkvm};
+use sov_state::codec::BcsCodec;
 
 /// A new module:
 /// - Must derive `ModuleInfo`
@@ -45,19 +30,20 @@ pub struct ProverIncentives<C: Context, Vm: Zkvm> {
 
     /// The address of the token used for bonding provers
     #[state]
-    pub bonding_token_address: sov_state::StateValue<C::Address>,
+    pub bonding_token_address: sov_modules_api::StateValue<C::Address>,
 
     /// The code commitment to be used for verifying proofs
     #[state]
-    pub commitment_of_allowed_verifier_method: sov_state::StateValue<StoredCodeCommitment<Vm>>,
+    pub commitment_of_allowed_verifier_method:
+        sov_modules_api::StateValue<Vm::CodeCommitment, BcsCodec>,
 
     /// The set of registered provers and their bonded amount.
     #[state]
-    pub bonded_provers: sov_state::StateMap<C::Address, u64>,
+    pub bonded_provers: sov_modules_api::StateMap<C::Address, u64>,
 
     /// The minimum bond for a prover to be eligible for onchain verification
     #[state]
-    pub minimum_bond: sov_state::StateValue<u64>,
+    pub minimum_bond: sov_modules_api::StateValue<u64>,
 
     /// Reference to the Bank module.
     #[module]
@@ -71,11 +57,9 @@ impl<C: Context, Vm: Zkvm> sov_modules_api::Module for ProverIncentives<C, Vm> {
 
     type CallMessage = call::CallMessage;
 
-    fn genesis(
-        &self,
-        config: &Self::Config,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<(), Error> {
+    type Event = ();
+
+    fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         // The initialization logic
         Ok(self.init_module(config, working_set)?)
     }
@@ -84,7 +68,7 @@ impl<C: Context, Vm: Zkvm> sov_modules_api::Module for ProverIncentives<C, Vm> {
         &self,
         msg: Self::CallMessage,
         context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
             call::CallMessage::BondProver(bond_amount) => {

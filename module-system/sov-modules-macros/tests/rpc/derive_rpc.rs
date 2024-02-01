@@ -1,8 +1,8 @@
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::{Context, ModuleInfo};
-use sov_state::{WorkingSet, ZkStorage};
+use sov_modules_api::{Context, ModuleInfo, WorkingSet};
+use sov_state::ZkStorage;
 
 #[derive(ModuleInfo)]
 pub struct TestStruct<C: ::sov_modules_api::Context> {
@@ -13,7 +13,7 @@ pub struct TestStruct<C: ::sov_modules_api::Context> {
 #[rpc_gen(client, server, namespace = "test")]
 impl<C: sov_modules_api::Context> TestStruct<C> {
     #[rpc_method(name = "firstMethod")]
-    pub fn first_method(&self, _working_set: &mut WorkingSet<C::Storage>) -> RpcResult<u32> {
+    pub fn first_method(&self, _working_set: &mut WorkingSet<C>) -> RpcResult<u32> {
         Ok(11)
     }
 
@@ -21,7 +21,7 @@ impl<C: sov_modules_api::Context> TestStruct<C> {
     pub fn second_method(
         &self,
         result: u32,
-        _working_set: &mut WorkingSet<C::Storage>,
+        _working_set: &mut WorkingSet<C>,
     ) -> RpcResult<u32> {
         Ok(result)
     }
@@ -34,7 +34,7 @@ impl<C: sov_modules_api::Context> TestStruct<C> {
     #[rpc_method(name = "fourthMethod")]
     pub fn fourth_method(
         &self,
-        _working_set: &mut WorkingSet<C::Storage>,
+        _working_set: &mut WorkingSet<C>,
         result: u32,
     ) -> RpcResult<u32> {
         Ok(result)
@@ -54,13 +54,13 @@ struct RpcStorage<C: Context> {
 impl TestStructRpcImpl<ZkDefaultContext> for RpcStorage<ZkDefaultContext> {
     fn get_working_set(
         &self,
-    ) -> ::sov_state::WorkingSet<<ZkDefaultContext as ::sov_modules_api::Spec>::Storage> {
-        ::sov_state::WorkingSet::new(self.storage.clone())
+    ) -> ::sov_modules_api::WorkingSet<ZkDefaultContext> {
+        ::sov_modules_api::WorkingSet::new(self.storage.clone())
     }
 }
 
 fn main() {
-    let storage = ZkStorage::new([1u8; 32]);
+    let storage = ZkStorage::new();
     let r: RpcStorage<ZkDefaultContext> = RpcStorage {
         storage: storage.clone(),
     };
@@ -105,6 +105,16 @@ fn main() {
             <RpcStorage<ZkDefaultContext> as TestStructRpcServer<ZkDefaultContext>>::health(&r)
                 .unwrap();
         assert_eq!(result, ());
+    }
+
+    {
+        let result =
+            <RpcStorage<ZkDefaultContext> as TestStructRpcServer<ZkDefaultContext>>::module_address(&r)
+                .unwrap();
+        assert_eq!(
+            result,
+            "sov1y34qkrqwffa3hmpdzvj0fqc0ahmlgrjf5ltfan9ugt82v5ej6lkshg9ypu"
+        );
     }
 
     println!("All tests passed!");

@@ -3,24 +3,26 @@ use std::fmt::Debug;
 use anyhow::Result;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::CliWalletArg;
-use sov_modules_api::CallResponse;
-use sov_state::WorkingSet;
+use sov_modules_api::prelude::*;
+use sov_modules_api::{CallResponse, WorkingSet};
 use thiserror::Error;
 
 use super::ValueSetter;
 
 /// This enumeration represents the available call messages for interacting with the `sov-value-setter` module.
+#[cfg_attr(feature = "native", derive(CliWalletArg), derive(schemars::JsonSchema))]
 #[cfg_attr(
-    feature = "native",
+    feature = "serde",
     derive(serde::Serialize),
-    derive(serde::Deserialize),
-    derive(CliWalletArg),
-    derive(schemars::JsonSchema)
+    derive(serde::Deserialize)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage {
     /// value to set
-    SetValue(u32),
+    SetValue(
+        /// new value
+        u32,
+    ),
 }
 
 /// Example of a custom error.
@@ -36,7 +38,7 @@ impl<C: sov_modules_api::Context> ValueSetter<C> {
         &self,
         new_value: u32,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<sov_modules_api::CallResponse> {
         // If admin is not then early return:
         let admin = self.admin.get_or_err(working_set)?;

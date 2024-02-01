@@ -1,81 +1,103 @@
 use anyhow::Result;
-use revm::primitives::CfgEnv;
-use sov_modules_api::CallResponse;
-use sov_state::WorkingSet;
+use reth_primitives::TransactionSignedEcRecovered;
+use reth_revm::into_reth_log;
+use revm::primitives::{CfgEnv, EVMError, SpecId};
+use sov_modules_api::prelude::*;
+use sov_modules_api::{CallResponse, WorkingSet};
 
 use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};
-use crate::evm::transaction::{BlockEnv, EvmTransactionSignedEcRecovered};
-use crate::evm::{contract_address, EvmChainCfg, RawEvmTransaction};
-use crate::experimental::SpecIdWrapper;
+use crate::evm::primitive_types::{BlockEnv, Receipt, TransactionSignedAndRecovered};
+use crate::evm::{EvmChainConfig, RlpEvmTransaction};
+use crate::experimental::PendingTransaction;
 use crate::Evm;
 
 #[cfg_attr(
-    feature = "native",
+    feature = "serde",
     derive(serde::Serialize),
-    derive(serde::Deserialize),
-    derive(schemars::JsonSchema)
+    derive(serde::Deserialize)
 )]
+
+/// EVM call message.
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct CallMessage {
-    pub tx: RawEvmTransaction,
+    /// RLP encoded transaction.
+    pub tx: RlpEvmTransaction,
 }
 
 impl<C: sov_modules_api::Context> Evm<C> {
     pub(crate) fn execute_call(
         &self,
-        tx: RawEvmTransaction,
+        tx: RlpEvmTransaction,
         _context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
-        let evm_tx_recovered: EvmTransactionSignedEcRecovered = tx.try_into()?;
+        let evm_tx_recovered: TransactionSignedEcRecovered = tx.try_into()?;
+        let block_env = self
+            .block_env
+            .get(working_set)
+            .expect("Pending block must be set");
 
-        let block_env = self.block_env.get(working_set).unwrap_or_default();
-        let cfg = self.cfg.get(working_set).unwrap_or_default();
+        let cfg = self.cfg.get(working_set).expect("Evm config must be set");
         let cfg_env = get_cfg_env(&block_env, cfg, None);
 
-        let hash = evm_tx_recovered.hash();
-
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
+        let result = executor::execute_tx(evm_db, &block_env, &evm_tx_recovered, cfg_env);
+        let previous_transaction = self.pending_transactions.last(working_set);
+        let previous_transaction_cumulative_gas_used = previous_transaction
+            .as_ref()
+            .map_or(0u64, |tx| tx.receipt.receipt.cumulative_gas_used);
+        let log_index_start = previous_transaction.as_ref().map_or(0u64, |tx| {
+            tx.receipt.log_index_start + tx.receipt.receipt.logs.len() as u64
+        });
 
-        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
-        let result = executor::execute_tx(evm_db, block_env, &evm_tx_recovered, cfg_env).unwrap();
-
-        let from = evm_tx_recovered.signer();
-        let to = evm_tx_recovered.to().map(|to| to.into());
-        let transaction = reth_rpc_types::Transaction::from_recovered(evm_tx_recovered.tx);
-
-        self.pending_transactions
-            .push(&transaction, &mut working_set.accessory_state());
-
-        let receipt = reth_rpc_types::TransactionReceipt {
-            transaction_hash: hash.into(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            transaction_index: Some(reth_primitives::U256::from(0)),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            block_hash: Default::default(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            block_number: Some(reth_primitives::U256::from(0)),
-            from,
-            to,
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            gas_used: Default::default(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            cumulative_gas_used: Default::default(),
-            contract_address: contract_address(result),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            logs: Default::default(),
-            state_root: Some(reth_primitives::U256::from(0).into()),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            logs_bloom: Default::default(),
-            status_code: Some(1u64.into()),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            effective_gas_price: Default::default(),
-            transaction_type: reth_primitives::U8::from(1),
+        let receipt = match result {
+            Ok(result) => {
+                let logs: Vec<_> = result.logs().into_iter().map(into_reth_log).collect();
+                let gas_used = result.gas_used();
+                tracing::debug!(
+                    "EVM transaction with hash={} has been successfully executed, gas used: {}",
+                    evm_tx_recovered.hash(),
+                    gas_used
+                );
+                Receipt {
+                    receipt: reth_primitives::Receipt {
+                        tx_type: evm_tx_recovered.tx_type(),
+                        success: result.is_success(),
+                        cumulative_gas_used: previous_transaction_cumulative_gas_used + gas_used,
+                        logs,
+                    },
+                    gas_used,
+                    log_index_start,
+                    error: None,
+                }
+            }
+            // Adopted from https://github.com/paradigmxyz/reth/blob/main/crates/payload/basic/src/lib.rs#L884
+            Err(err) => {
+                return match err {
+                    EVMError::Transaction(_) => {
+                        // This is a transactional error, so we can skip it without doing anything.
+                        Ok(CallResponse::default())
+                    }
+                    err => {
+                        // This is a fatal error, so we need to return it.
+                        Err(err.into())
+                    }
+                };
+            }
         };
 
-        self.receipts
-            .set(&hash.into(), &receipt, &mut working_set.accessory_state());
+        let pending_transaction = PendingTransaction {
+            transaction: TransactionSignedAndRecovered {
+                signer: evm_tx_recovered.signer(),
+                signed_transaction: evm_tx_recovered.into(),
+                block_number: block_env.number,
+            },
+            receipt,
+        };
+
+        self.pending_transactions
+            .push(&pending_transaction, working_set);
 
         Ok(CallResponse::default())
     }
@@ -86,21 +108,19 @@ impl<C: sov_modules_api::Context> Evm<C> {
 /// Copies context dependent values from template_cfg or default if not provided
 pub(crate) fn get_cfg_env(
     block_env: &BlockEnv,
-    cfg: EvmChainCfg,
+    cfg: EvmChainConfig,
     template_cfg: Option<CfgEnv>,
 ) -> CfgEnv {
-    CfgEnv {
-        chain_id: revm::primitives::U256::from(cfg.chain_id),
-        limit_contract_code_size: cfg.limit_contract_code_size,
-        spec_id: get_spec_id(cfg.spec, block_env.number).into(),
-        // disable_gas_refund: !cfg.gas_refunds, // option disabled for now, we could add if needed
-        ..template_cfg.unwrap_or_default()
-    }
+    let mut cfg_env = template_cfg.unwrap_or_default();
+    cfg_env.chain_id = cfg.chain_id;
+    cfg_env.spec_id = get_spec_id(cfg.spec, block_env.number);
+    cfg_env.limit_contract_code_size = cfg.limit_contract_code_size;
+    cfg_env
 }
 
 /// Get spec id for a given block number
 /// Returns the first spec id defined for block >= block_number
-pub(crate) fn get_spec_id(spec: Vec<(u64, SpecIdWrapper)>, block_number: u64) -> SpecIdWrapper {
+pub(crate) fn get_spec_id(spec: Vec<(u64, SpecId)>, block_number: u64) -> SpecId {
     match spec.binary_search_by(|&(k, _)| k.cmp(&block_number)) {
         Ok(index) => spec[index].1,
         Err(index) => {

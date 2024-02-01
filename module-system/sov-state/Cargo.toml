@@ -6,7 +6,7 @@ edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
+
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
@@ -14,26 +14,35 @@ resolver = "2"
 [dependencies]
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
-borsh = { workspace = true }
+borsh = { workspace = true, features = ["rc", "bytes"] }
 bcs = { workspace = true }
-serde = { workspace = true }
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
+serde = { workspace = true, features = ["rc"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
-sov-db = { path = "../../full-node/db/sov-db", version = "0.1", optional = true }
-sov-first-read-last-write-cache = { path = "../utils/sov-first-read-last-write-cache", version = "0.1" }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
+sov-modules-core = { path = "../sov-modules-core", version = "0.3" }
+sov-db = { path = "../../full-node/db/sov-db", version = "0.3", optional = true }
 jmt = { workspace = true }
 hex = { workspace = true }
 sha2 = { workspace = true }
 
-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", optional = true }
-risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional = true }
-risc0-zkvm-platform = { version = "0.16", optional = true }
+sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", version = "0.3", optional = true }
+risc0-zkvm = { workspace = true, default-features = false, features = ["std"], optional = true }
+risc0-zkvm-platform = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+proptest = { workspace = true }
 
 [features]
-bench = ["zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
+arbitrary = [
+    "dep:arbitrary",
+    "dep:proptest",
+    "dep:proptest-derive",
+    "sov-modules-core/arbitrary",
+]
+bench = ["sov-zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
 default = []
 native = ["sov-db"]

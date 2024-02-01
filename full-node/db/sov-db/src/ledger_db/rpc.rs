@@ -141,6 +141,7 @@ impl LedgerRpcProvider for LedgerDB {
 
     fn get_head<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
+        query_mode: QueryMode,
     ) -> Result<Option<SlotResponse<B, T>>, anyhow::Error> {
         let next_ids = self.get_next_items_numbers();
         let next_slot = next_ids.slot_number;
@@ -154,7 +155,7 @@ impl LedgerRpcProvider for LedgerDB {
             return Ok(Some(self.populate_slot_response(
                 head_number,
                 stored_slot,
-                QueryMode::Compact,
+                query_mode,
             )?));
         }
         Ok(None)
@@ -427,7 +428,7 @@ impl LedgerDB {
 
 #[cfg(test)]
 mod tests {
-    use sov_rollup_interface::mocks::{MockBlob, MockBlock};
+    use sov_mock_da::{MockBlob, MockBlock};
     use sov_rollup_interface::rpc::LedgerRpcProvider;
 
     use crate::ledger_db::{LedgerDB, SlotCommit};

@@ -2,53 +2,24 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::Mutex;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use jmt::storage::TreeReader;
 use serde::{Deserialize, Serialize};
+use sov_modules_core::Witness;
 
-// TODO: Refactor witness trait so it only require Serialize / Deserialize
-//   https://github.com/Sovereign-Labs/sovereign-sdk/issues/263
-pub trait Witness: Default + Serialize {
-    fn add_hint<T: BorshSerialize>(&self, hint: T);
-    fn get_hint<T: BorshDeserialize>(&self) -> T;
-    fn merge(&self, rhs: &Self);
-}
-
-#[derive(Debug)]
-pub struct TreeWitnessReader<'a, T: Witness>(&'a T);
-
-impl<'a, T: Witness> TreeWitnessReader<'a, T> {
-    pub fn new(witness: &'a T) -> Self {
-        Self(witness)
-    }
-}
-
-impl<'a, T: Witness> TreeReader for TreeWitnessReader<'a, T> {
-    fn get_node_option(
-        &self,
-        _node_key: &jmt::storage::NodeKey,
-    ) -> anyhow::Result<Option<jmt::storage::Node>> {
-        let serialized_node_opt: Option<Vec<u8>> = self.0.get_hint();
-        match serialized_node_opt {
-            Some(val) => Ok(Some(jmt::storage::Node::deserialize_reader(&mut &val[..])?)),
-            None => Ok(None),
-        }
-    }
-
-    fn get_value_option(
-        &self,
-        _max_version: jmt::Version,
-        _key_hash: jmt::KeyHash,
-    ) -> anyhow::Result<Option<jmt::OwnedValue>> {
-        Ok(self.0.get_hint())
-    }
-
-    fn get_rightmost_leaf(
-        &self,
-    ) -> anyhow::Result<Option<(jmt::storage::NodeKey, jmt::storage::LeafNode)>> {
-        unimplemented!()
-    }
-}
-
+/// A [`Vec`]-based implementation of [`Witness`] with no special logic.
+///
+/// # Example
+///
+/// ```
+/// use sov_state::{ArrayWitness, Witness};
+///
+/// let witness = ArrayWitness::default();
+///
+/// witness.add_hint(1u64);
+/// witness.add_hint(2u64);
+///
+/// assert_eq!(witness.get_hint::<u64>(), 1u64);
+/// assert_eq!(witness.get_hint::<u64>(), 2u64);
+/// ```
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct ArrayWitness {
     next_idx: AtomicUsize,

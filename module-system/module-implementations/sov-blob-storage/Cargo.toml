@@ -6,7 +6,6 @@ edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
 version = { workspace = true }
 readme = "README.md"
 
@@ -20,10 +19,10 @@ bincode = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
 
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-state = { path = "../../sov-state", version = "0.1" }
-sov-sequencer-registry = { path = "../sov-sequencer-registry", version = "0.1" }
-sov-chain-state = { path = "../sov-chain-state" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.3" }
+sov-state = { path = "../../sov-state", version = "0.3" }
+sov-sequencer-registry = { path = "../sov-sequencer-registry", version = "0.3" }
+sov-chain-state = { path = "../sov-chain-state", version = "0.3" }
 
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
@@ -33,19 +32,14 @@ clap = { workspace = true, optional = true }
 
 
 [dev-dependencies]
-sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"] }
-sov-blob-storage = { path = ".", features = ["native"] }
-sov-bank = { path = "../sov-bank" }
 tempfile = { workspace = true }
+jmt = { workspace = true }
+sov-blob-storage = { path = ".", features = ["native"] }
+sov-mock-da = { path = "../../../adapters/mock-da", features = ["native"] }
+sov-bank = { path = "../sov-bank" }
+sov-prover-storage-manager = { path = "../../../full-node/sov-prover-storage-manager", features = ["test-utils"] }
 
 [features]
 default = []
-native = [
-    "jsonrpsee",
-    "schemars",
-    "serde",
-    "serde_json",
-    "sov-modules-api/native",
-    "sov-state/native",
-    "sov-sequencer-registry/native",
-]
+native = ["jsonrpsee", "schemars", "serde", "serde_json", "sov-modules-api/native", "sov-state/native", "sov-sequencer-registry/native", "clap"]
+serde = ["dep:serde"]

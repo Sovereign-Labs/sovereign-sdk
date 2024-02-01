@@ -5,6 +5,7 @@ use anyhow::Result;
 
 use crate::metrics::{SCHEMADB_ITER_BYTES, SCHEMADB_ITER_LATENCY_SECONDS};
 use crate::schema::{KeyDecoder, Schema, ValueCodec};
+use crate::{SchemaKey, SchemaValue};
 
 /// This defines a type that can be used to seek a [`SchemaIterator`], via
 /// interfaces like [`SchemaIterator::seek`]. Mind you, not all
@@ -81,7 +82,20 @@ where
         Ok(())
     }
 
-    fn next_impl(&mut self) -> Result<Option<(S::Key, S::Value)>> {
+    /// Reverses iterator direction.
+    pub fn rev(self) -> Self {
+        let new_direction = match self.direction {
+            ScanDirection::Forward => ScanDirection::Backward,
+            ScanDirection::Backward => ScanDirection::Forward,
+        };
+        SchemaIterator {
+            db_iter: self.db_iter,
+            direction: new_direction,
+            phantom: Default::default(),
+        }
+    }
+
+    fn next_impl(&mut self) -> Result<Option<IteratorOutput<S::Key, S::Value>>> {
         let _timer = SCHEMADB_ITER_LATENCY_SECONDS
             .with_label_values(&[S::COLUMN_FAMILY_NAME])
             .start_timer();
@@ -93,6 +107,7 @@ where
 
         let raw_key = self.db_iter.key().expect("db_iter.key() failed.");
         let raw_value = self.db_iter.value().expect("db_iter.value() failed.");
+        let value_size_bytes = raw_value.len();
         SCHEMADB_ITER_BYTES
             .with_label_values(&[S::COLUMN_FAMILY_NAME])
             .observe((raw_key.len() + raw_value.len()) as f64);
@@ -105,7 +120,24 @@ where
             ScanDirection::Backward => self.db_iter.prev(),
         }
 
-        Ok(Some((key, value)))
+        Ok(Some(IteratorOutput {
+            key,
+            value,
+            value_size_bytes,
+        }))
+    }
+}
+
+/// The output of [`SchemaIterator`]'s next_impl
+pub struct IteratorOutput<K, V> {
+    pub key: K,
+    pub value: V,
+    pub value_size_bytes: usize,
+}
+
+impl<K, V> IteratorOutput<K, V> {
+    pub fn into_tuple(self) -> (K, V) {
+        (self.key, self.value)
     }
 }
 
@@ -113,7 +145,7 @@ impl<'a, S> Iterator for SchemaIterator<'a, S>
 where
     S: Schema,
 {
-    type Item = Result<(S::Key, S::Value)>;
+    type Item = Result<IteratorOutput<S::Key, S::Value>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.next_impl().transpose()
@@ -121,3 +153,40 @@ where
 }
 
 impl<'a, S> FusedIterator for SchemaIterator<'a, S> where S: Schema {}
+
+/// Iterates over given column backwards
+pub struct RawDbReverseIterator<'a> {
+    db_iter: rocksdb::DBRawIterator<'a>,
+}
+
+impl<'a> RawDbReverseIterator<'a> {
+    pub(crate) fn new(mut db_iter: rocksdb::DBRawIterator<'a>) -> Self {
+        db_iter.seek_to_last();
+        RawDbReverseIterator { db_iter }
+    }
+
+    /// Navigate iterator go given key
+    pub fn seek(&mut self, seek_key: SchemaKey) -> Result<()> {
+        self.db_iter.seek_for_prev(&seek_key);
+        Ok(())
+    }
+}
+
+impl<'a> Iterator for RawDbReverseIterator<'a> {
+    type Item = (SchemaKey, SchemaValue);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.db_iter.valid() {
+            self.db_iter.status().ok()?;
+            return None;
+        }
+
+        let next_item = self.db_iter.item().expect("db_iter.key() failed.");
+        // Have to allocate to fix lifetime issue
+        let next_item = (next_item.0.to_vec(), next_item.1.to_vec());
+
+        self.db_iter.prev();
+
+        Some(next_item)
+    }
+}
