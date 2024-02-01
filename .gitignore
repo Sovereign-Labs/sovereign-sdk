@@ -9,6 +9,9 @@ fuzz/Cargo.lock
 .DS_Store
 
 demo_data/
+
+seed-phrase.json
+
 /.vscode/*
 
 /docker/credentials/*

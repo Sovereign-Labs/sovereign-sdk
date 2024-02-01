@@ -54,7 +54,7 @@ impl DaVerifier for Verifier {
 
     // Verify that the given list of blob transactions is complete and correct.
     // NOTE: Function return unit since application client already verifies application data.
-    fn verify_relevant_tx_list(
+    fn verify_relevant_tx_list<SimpleHasher>(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],

@@ -1,0 +1,25 @@
+[package]
+name = "sov-demo-rollup-avail"
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+homepage = "sovereign.xyz"
+publish = false
+resolver = "2"
+default-run = "sov-demo-rollup-avail"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tracing-subscriber = "0.3.17"
+sov-demo-rollup = { path = "../demo-rollup" }
+presence = { path = "../../adapters/avail" }
+sov-rollup-interface = { path = "../../rollup-interface" }
+demo-stf = { path = "../demo-stf", features = ["native"] }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+
+[[bin]]
+name = "sov-cli"
+path = "src/sov-cli/main.rs"
