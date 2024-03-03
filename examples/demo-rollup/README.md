@@ -86,8 +86,6 @@ After switching to a new terminal tab, let's submit our first transaction by cre
 $ make test-create-token
 ```
 
-### How to Submit Transactions
-The `make test-create-token` command above was useful to test if everything is running correctly. Now let's get a better understanding of how to create and submit a transaction
 
 ### How to Submit Transactions
 The `make test-create-token` command above was useful to test if everything is running correctly. Now let's get a better understanding of how to create and submit a transaction.
