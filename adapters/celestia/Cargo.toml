@@ -49,7 +49,7 @@ sov-rollup-interface = { path = "../../rollup-interface", version = "0.3" }
 postcard = { version = "1", features = ["use-std"] }
 proptest = { version = "1.3" }
 sov-celestia-adapter = { path = ".", features = ["native"] }
-wiremock = "0.5"
+wiremock = "0.6"
 
 [features]
 default = []
