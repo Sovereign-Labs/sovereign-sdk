@@ -78,7 +78,7 @@ ethers-signers = { workspace = true }
 ethers = { workspace = true }
 revm = { workspace = true }
 
-reqwest = "0.11"
+reqwest = "0.12"
 tendermint = "0.32"
 prometheus = "0.11.0"
 prettytable-rs = "^0.10"
