@@ -47,15 +47,15 @@ results in two different additions in the data square.
 First, the cosmos `Tx` is created which contains the `MsgPayForBlobs`
 message. This message contains the address of the `signer`, namespaces of all the blobs included and their commitments.
 This cosmos transaction is then appended to other transactions appearing in given block. All the transactions are then
-splitted into [`Compact Shares`](https://github.com/celestiaorg/celestia-app/blob/main/specs/src/specs/shares.md#transaction-shares)
-and included in the data square under the [`PAY_FOR_BLOB_NAMESPACE`](https://github.com/celestiaorg/celestia-app/blob/main/specs/src/specs/namespace.md).
+splitted into [`Compact Shares`](https://github.com/celestiaorg/celestia-app/blob/main/specs/src/shares.md#transaction-shares)
+and included in the data square under the [`PAY_FOR_BLOB_NAMESPACE`](https://github.com/celestiaorg/celestia-app/blob/main/specs/src/namespace.md).
 
-Second, each submitted blob is split into the [`Sparse Shares`](https://github.com/celestiaorg/celestia-app/blob/main/specs/src/specs/shares.md#share-format)
+Second, each submitted blob is split into the [`Sparse Shares`](https://github.com/celestiaorg/celestia-app/blob/main/specs/src/shares.md#share-format)
 and also included in the data square, each blob under it's own namespace.
 
-The layout and structure of the `ExtendedDataSquare` is explained in [data square layout spec](https://github.com/celestiaorg/celestia-app/blob/main/specs/src/specs/data_square_layout.md#data-square-layout)
-and in the [data structures spec](https://github.com/celestiaorg/celestia-app/blob/main/specs/src/specs/data_structures.md#arranging-available-data-into-shares).
-Celestia distributes the [`DataAvailabilityHeader`](https://github.com/celestiaorg/celestia-app/blob/main/specs/src/specs/data_structures.md#availabledataheader)
+The layout and structure of the `ExtendedDataSquare` is explained in [data square layout spec](https://github.com/celestiaorg/celestia-app/blob/main/specs/src/data_square_layout.md#data-square-layout)
+and in the [data structures spec](https://github.com/celestiaorg/celestia-app/blob/main/specs/src/data_structures.md#arranging-available-data-into-shares).
+Celestia distributes the [`DataAvailabilityHeader`](https://github.com/celestiaorg/celestia-app/blob/main/specs/src/data_structures.md#availabledataheader)
 in block's `ExtendedHeader` which have all the merkle roots for each row and column of the data square.
 Those can be later compared with the computed row roots from the NMT proofs.
 
@@ -81,7 +81,7 @@ way to associate a blob of data with its sender - so we have to be pretty creati
 Sovereign SDK requires blobs to be attributable to a particular sender for DOS protection). We have to read
 all of the data from a special reserved namespace on Celestia which contains the Cosmos SDK transactions associated
 with the current block. The transactions are serialized using `protobuf` and encoded into data square in
-[compact share format](https://github.com/celestiaorg/celestia-app/blob/main/specs/src/specs/shares.md#transaction-shares).
+[compact share format](https://github.com/celestiaorg/celestia-app/blob/main/specs/src/shares.md#transaction-shares).
 
 In order to prove that, we use a proofs called `EtxProof` which consist of the merkle proofs for all the shares contaniing transaction
 as well the offset to the beginning of the cosmos transaction in first of those shares.
@@ -123,7 +123,7 @@ that data into the format expected by the DA verifier and returns.
 ## License
 
 Licensed under the [Apache License, Version
-2.0](./LICENSE).
+2.0](../../LICENSE).
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in this repository by you, as defined in the Apache-2.0 license, shall be
