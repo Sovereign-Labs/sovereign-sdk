@@ -11,7 +11,7 @@ This folder contains
   * https://docs.solana.com/cli/install-solana-cli-tools
 
 ### Installation and Setup
-* The on-chain program that handles the DA logic is located at `solana/solana_da_programs/programs/bockroot`
+* The on-chain program that handles the DA logic is located at `solana/solana_da_programs/programs/blockroot`
 * A sequencer that wants to submit blobs for rollup first needs to create a `ChunkAccumulator` account on-chain
   * This account is like "scratch space" for the sequencer. It keeps track of chunks as they arrive
   * The account is a keypair account
