@@ -10,7 +10,8 @@
   <a href="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk" > 
       <img alt="Coverage" src="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk/branch/nightly/graph/badge.svg"/> 
   </a>
-  <img alt="GitHub Workflow Status (with event)" src="https://img.shields.io/github/actions/workflow/status/sovereign-labs/sovereign-sdk/prerelease_checks.yml?label=Pre-release%20checks">
+  <a href="https://github.com/Sovereign-Labs/sovereign-sdk/actions/workflows/prerelease_checks.yml" >
+    <img alt="GitHub Workflow Status (with event)" src="https://img.shields.io/github/actions/workflow/status/sovereign-labs/sovereign-sdk/prerelease_checks.yml?label=Pre-release%20checks">
 </div>
 
 ## NOTE: Early Access Program for Sovereign SDK
