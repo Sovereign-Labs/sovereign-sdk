@@ -78,7 +78,7 @@ members = [
     "examples/demo-rollup/sov-soak-testing",
     # Adapters
     # TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/498
-    # "crates/adapters/avail",
+    "crates/adapters/avail",
     "crates/adapters/celestia",
     "crates/adapters/risc0",
     "crates/adapters/sp1",
