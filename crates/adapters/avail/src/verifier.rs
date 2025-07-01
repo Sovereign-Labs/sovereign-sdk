@@ -1,9 +1,6 @@
 use avail_rust::avail_core::DataProof;
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Serialize};
-use sov_rollup_interface::da::{DaSpec, DaVerifier};
-use sov_rollup_interface::node::da::{RelevantBlobs, RelevantProofs};
-use thiserror::Error;
+use sov_rollup_interface::da::{DaSpec, DaVerifier, RelevantBlobs, RelevantProofs};
 
 use crate::types::prelude::*;
 use avail_rust::prelude::*;
@@ -52,6 +49,6 @@ impl DaVerifier for AvailDAVerifier {
     }
 
     fn new(_params: <Self::Spec as DaSpec>::ChainParams) -> Self {
-        Verifier {}
+        AvailDAVerifier {}
     }
 }
