@@ -1,285 +1,278 @@
-use core::time::Duration;
+use avail_rust::avail_core::data_proof::TxDataRoots;
+use avail_rust::avail_core::from_substrate::blake2_256;
+use avail_rust::avail_core::DataProof;
+use avail_rust::error::ClientError;
+use avail_rust::{
+    AppId, Block, BlockNumber, Client, Filter, Keypair, Options, TransactionDetails, SDK,
+};
 
-use anyhow::anyhow;
-use async_trait::async_trait;
-use avail_subxt::api::runtime_types::sp_core::bounded::bounded_vec::BoundedVec;
-use avail_subxt::primitives::AvailExtrinsicParams;
-use avail_subxt::{api, AvailConfig};
-use futures::stream::BoxStream;
-use futures::StreamExt;
-use reqwest::StatusCode;
-use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::node::da::{DaService, RelevantBlobs, RelevantProofs};
-use sp_core::crypto::Pair as PairTrait;
-use sp_keyring::sr25519::sr25519::Pair;
-use subxt::tx::PairSigner;
-use subxt::OnlineClient;
-use tracing::info;
+use sov_rollup_interface::common::HexHash;
+use sov_rollup_interface::da::{DaProof, DaSpec, RelevantBlobs, RelevantProofs, Time};
+use sov_rollup_interface::node::da::{
+    run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SubmitBlobReceipt,
+};
 
-use crate::avail::{Confidence, ExtrinsicsData};
-use crate::spec::block::AvailBlock;
-use crate::spec::header::AvailHeader;
-use crate::spec::transaction::AvailBlobTransaction;
-use crate::spec::DaLayerSpec;
-use crate::verifier::Verifier;
+use backon::ExponentialBuilder;
+use tokio::sync::oneshot;
 
-/// Runtime configuration for the DA service
-#[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize)]
-pub struct DaServiceConfig {
-    pub light_client_url: String,
-    pub node_client_url: String,
-    //TODO: Safer strategy to load seed so it is not accidentally revealed.
-    pub seed: String,
-    pub polling_timeout: Option<u64>,
-    pub polling_interval: Option<u64>,
-    pub app_id: u32,
-}
+use crate::types::blob::AvailDABlob;
+use crate::types::block::AvailBlock;
+use crate::types::config::AvailDAConfig;
+use crate::types::data::AvailData;
+use crate::types::error::AvailError;
+use crate::types::header::AvailHeader;
+use crate::verifier::{AvailDASpec, AvailDAVerifier};
 
-const DEFAULT_POLLING_TIMEOUT: Duration = Duration::from_secs(60);
-const DEFAULT_POLLING_INTERVAL: Duration = Duration::from_secs(1);
+type TimestampCall = avail_rust::avail::timestamp::calls::types::Set;
 
 #[derive(Clone)]
-pub struct DaProvider {
-    pub node_client: OnlineClient<AvailConfig>,
-    pub light_client_url: String,
-    signer: PairSigner<AvailConfig, Pair>,
-    polling_timeout: Duration,
-    polling_interval: Duration,
-    app_id: u32,
+pub struct AvailDAService {
+    pub client: Client,
+    pub proof_app_id: AppId,
+    pub batch_app_id: AppId,
+    pub signer: Keypair,
+    backoff_policy: ExponentialBuilder,
 }
 
-impl DaProvider {
-    fn appdata_url(&self, block_num: u64) -> String {
-        let light_client_url = &self.light_client_url;
-        format!("{light_client_url}/v1/appdata/{block_num}")
-    }
-
-    fn confidence_url(&self, block_num: u64) -> String {
-        let light_client_url = &self.light_client_url;
-        format!("{light_client_url}/v1/confidence/{block_num}")
-    }
-
-    pub async fn new(config: DaServiceConfig) -> Self {
-        let pair = Pair::from_string_with_seed(&config.seed, None).unwrap();
-        let signer = PairSigner::<AvailConfig, Pair>::new(pair.0.clone());
-
-        let node_client = avail_subxt::build_client(config.node_client_url.to_string(), false)
-            .await
-            .unwrap();
-        let light_client_url = config.light_client_url;
-
-        DaProvider {
-            node_client,
-            light_client_url,
-            signer,
-            polling_timeout: match config.polling_timeout {
-                Some(i) => Duration::from_secs(i),
-                None => DEFAULT_POLLING_TIMEOUT,
-            },
-            polling_interval: match config.polling_interval {
-                Some(i) => Duration::from_secs(i),
-                None => DEFAULT_POLLING_INTERVAL,
-            },
-            app_id: config.app_id,
-        }
-    }
-}
-
-// TODO: Is there a way to avoid coupling to tokio?
-
-async fn wait_for_confidence(
-    confidence_url: &str,
-    polling_timeout: Duration,
-    polling_interval: Duration,
-) -> anyhow::Result<()> {
-    let start_time = std::time::Instant::now();
-
-    loop {
-        if start_time.elapsed() >= polling_timeout {
-            return Err(anyhow!(
-                "Confidence not received after timeout: {}s",
-                polling_timeout.as_secs()
-            ));
-        }
-
-        let response = reqwest::get(confidence_url).await?;
-        if response.status() != StatusCode::OK {
-            info!("Confidence not received");
-            tokio::time::sleep(polling_interval).await;
-            continue;
-        }
-
-        let response: Confidence = serde_json::from_str(&response.text().await?)?;
-        if response.confidence < 92.5 {
-            info!("Confidence not reached");
-            tokio::time::sleep(polling_interval).await;
-            continue;
-        }
-
-        break;
-    }
-
-    Ok(())
-}
-
-async fn wait_for_appdata(
-    appdata_url: &str,
-    block: u32,
-    polling_timeout: Duration,
-    polling_interval: Duration,
-) -> anyhow::Result<ExtrinsicsData> {
-    let start_time = std::time::Instant::now();
-
-    loop {
-        if start_time.elapsed() >= polling_timeout {
-            return Err(anyhow!(
-                "RPC call for filtered block to light client timed out. Timeout: {}s",
-                polling_timeout.as_secs()
-            ));
-        }
-
-        let response = reqwest::get(appdata_url).await?;
-        if response.status() == StatusCode::NOT_FOUND {
-            return Ok(ExtrinsicsData {
-                block,
-                extrinsics: vec![],
-            });
-        }
-        if response.status() != StatusCode::OK {
-            tokio::time::sleep(polling_interval).await;
-            continue;
-        }
-
-        let appdata: ExtrinsicsData = serde_json::from_str(&response.text().await?)?;
-        return Ok(appdata);
-    }
-}
-
-#[async_trait]
-impl DaService for DaProvider {
-    type Spec = DaLayerSpec;
-
-    type Verifier = Verifier;
-
+#[async_trait::async_trait]
+impl DaService for AvailDAService {
+    type Spec = AvailDASpec;
+    type Config = AvailDAConfig;
+    type Verifier = AvailDAVerifier;
     type FilteredBlock = AvailBlock;
-    type Error = anyhow::Error;
+    type Error = AvailError;
 
-    // Make an RPC call to the node to get the block at the given height, if one exists.
-    // If no such block exists, block until one does.
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        let node_client = self.node_client.clone();
-        let confidence_url = self.confidence_url(height);
-        let appdata_url = self.appdata_url(height);
-
-        wait_for_confidence(&confidence_url, self.polling_timeout, self.polling_interval).await?;
-        let appdata = wait_for_appdata(
-            &appdata_url,
-            height as u32,
-            self.polling_timeout,
-            self.polling_interval,
+        run_maybe_retryable_async_fn_with_retries(
+            &self.backoff_policy,
+            || async {
+                self.get_block_at_height(height.try_into().unwrap())
+                    .await
+                    .map_err(MaybeRetryable::Transient)
+            },
+            "get_block_at",
         )
-        .await?;
-        info!(?appdata, "Received Appdata");
-
-        let hash = match { node_client.rpc().block_hash(Some(height.into())).await? } {
-            Some(i) => i,
-            None => return Err(anyhow!("Hash for height: {} not found.", height)),
-        };
-
-        let header = match { node_client.rpc().header(Some(hash)).await? } {
-            Some(i) => i,
-            None => return Err(anyhow!("Header for hash: {} not found.", hash)),
-        };
-
-        let header = AvailHeader::new(header, hash);
-        let transactions: anyhow::Result<Vec<AvailBlobTransaction>> = appdata
-            .extrinsics
-            .iter()
-            .map(AvailBlobTransaction::new)
-            .collect();
-
-        let transactions = transactions?;
-        Ok(AvailBlock {
-            header,
-            transactions,
-        })
+        .await
     }
 
     async fn get_last_finalized_block_header(
         &self,
     ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
-        let node_client = self.node_client.clone();
-        let finalized_header_hash = node_client.rpc().finalized_head().await?;
-
-        let header = node_client
-            .rpc()
-            .header(Some(finalized_header_hash))
-            .await?
-            .ok_or(anyhow::anyhow!("No finalized head found"))?;
-        let header = AvailHeader::new(header, finalized_header_hash);
-        Ok(header)
+        run_maybe_retryable_async_fn_with_retries(
+            &self.backoff_policy,
+            || async {
+                self.get_finalized_block_header()
+                    .await
+                    .map_err(MaybeRetryable::Transient)
+            },
+            "get_last_finalised_block_header",
+        )
+        .await
     }
-
 
     async fn get_head_block_header(
         &self,
     ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
-        let node_client = self.node_client.clone();
-        let latest_block = node_client.blocks().at_latest().await?;
-
-        Ok(latest_block.into())
+        run_maybe_retryable_async_fn_with_retries(
+            &self.backoff_policy,
+            || async {
+                self.get_best_block_header()
+                    .await
+                    .map_err(MaybeRetryable::Transient)
+            },
+            "get_head_block_header",
+        )
+        .await
     }
 
-    // Extract the blob transactions relevant to a particular rollup from a block.
-    // NOTE: The avail light client is expected to be run in app specific mode, and hence the
-    // transactions in the block are already filtered and retrieved by light client.
     fn extract_relevant_blobs(
         &self,
-        _block: &Self::FilteredBlock,
+        block: &Self::FilteredBlock,
     ) -> RelevantBlobs<<Self::Spec as DaSpec>::BlobTransaction> {
-        todo!()
+        let batch_blobs = block
+            .batch_blobs
+            .iter()
+            .cloned()
+            .map(AvailDABlob::from)
+            .collect();
+
+        let proof_blobs = block
+            .proof_blobs
+            .iter()
+            .cloned()
+            .map(AvailDABlob::from)
+            .collect();
+
+        RelevantBlobs {
+            batch_blobs,
+            proof_blobs,
+        }
     }
 
-    // Extract the inclusion and completeness proof for filtered block provided.
-    // The output of this method will be passed to the verifier.
-    // NOTE: The light client here has already completed DA sampling and verification of inclusion and soundness.
+    async fn send_transaction(
+        &self,
+        blob: &[u8],
+    ) -> oneshot::Receiver<
+        Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
+    > {
+        let (tx, rx) = oneshot::channel();
+        let result = Self::submit_data(&self.client, &self.signer, self.batch_app_id, blob)
+            .await
+            .map(|tx_details| SubmitBlobReceipt {
+                blob_hash: HexHash::from(blake2_256(blob)),
+                da_transaction_id: tx_details.tx_hash.into(),
+            });
+        let _ = tx.send(result);
+        rx
+    }
+
+    async fn send_proof(
+        &self,
+        aggregated_proof_data: &[u8],
+    ) -> oneshot::Receiver<
+        Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
+    > {
+        let (tx, rx) = oneshot::channel();
+        let result = Self::submit_data(
+            &self.client,
+            &self.signer,
+            self.proof_app_id,
+            aggregated_proof_data,
+        )
+        .await
+        .map(|tx_details| SubmitBlobReceipt {
+            blob_hash: HexHash::from(blake2_256(aggregated_proof_data)),
+            da_transaction_id: tx_details.tx_hash.into(),
+        });
+        let _ = tx.send(result);
+        rx
+    }
+
+    async fn get_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
+        Err(AvailError(ClientError::Custom(
+            "get_proofs_at method is not implemented yet".to_string(),
+        )))
+    }
     async fn get_extraction_proof(
         &self,
-        _block: &Self::FilteredBlock,
-        _blobs: &RelevantBlobs<<Self::Spec as DaSpec>::BlobTransaction>,
+        block: &Self::FilteredBlock,
+        blobs: &RelevantBlobs<<Self::Spec as DaSpec>::BlobTransaction>,
     ) -> RelevantProofs<
         <Self::Spec as DaSpec>::InclusionMultiProof,
         <Self::Spec as DaSpec>::CompletenessProof,
     > {
-        todo!()
+        let dummy_proof = DataProof {
+            roots: TxDataRoots {
+                data_root: sp_core::H256::zero(),
+                blob_root: sp_core::H256::zero(),
+                bridge_root: sp_core::H256::zero(),
+            },
+            proof: vec![],
+            number_of_leaves: 1,
+            leaf_index: 0,
+            leaf: sp_core::H256::zero(),
+        };
+
+        RelevantProofs {
+            batch: DaProof {
+                inclusion_proof: dummy_proof.clone(),
+                completeness_proof: dummy_proof.clone(),
+            },
+            proof: DaProof {
+                inclusion_proof: dummy_proof.clone(),
+                completeness_proof: dummy_proof.clone(),
+            },
+        }
+    }
+}
+
+impl AvailDAService {
+    async fn get_finalized_block_header(&self) -> Result<AvailHeader, AvailError> {
+        let block = Block::new_finalized_block(&self.client)
+            .await
+            .map_err(AvailError)?;
+        Ok(AvailHeader {
+            header: block.block.header().clone(),
+        })
     }
 
-    async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
-        let data_transfer = api::tx()
-            .data_availability()
-            .submit_data(BoundedVec(blob.to_vec()));
-
-        let extrinsic_params = AvailExtrinsicParams::new_with_app_id(self.app_id.into());
-
-        let h = self
-            .node_client
-            .tx()
-            .sign_and_submit_then_watch(&data_transfer, &self.signer, extrinsic_params)
-            .await?;
-
-        info!(
-            hash = hex::encode(h.extrinsic_hash()),
-            "Transaction submitted"
-        );
-
-        Ok(())
+    async fn get_best_block_header(&self) -> Result<AvailHeader, AvailError> {
+        let block = Block::new_best_block(&self.client)
+            .await
+            .map_err(AvailError)?;
+        Ok(AvailHeader {
+            header: block.block.header().clone(),
+        })
     }
 
-    async fn send_proof(&self, _proof: &[u8]) -> Result<(), Self::Error> {
-        unimplemented!()
+    async fn get_block_at_height(
+        &self,
+        block_number: BlockNumber,
+    ) -> Result<AvailBlock, AvailError> {
+        let block = Block::from_block_number(&self.client, block_number)
+            .await
+            .map_err(AvailError)?;
+
+        // To find the block timestamp
+        let block_transactions = block.transactions_static::<TimestampCall>(Filter::default());
+        if block_transactions.len() != 1 {
+            return Err(AvailError(ClientError::Custom(
+                "Expected exactly 1 transaction".into(),
+            )));
+        }
+
+        let filter = Filter::new();
+        // To extract the blob transactions of batch submitted by batch_app_id
+        let batch_blobs = block
+            .data_submissions(filter.clone().app_id(self.batch_app_id.0 .0))
+            .into_iter()
+            .filter_map(|tx| {
+                tx.account_id().map(|signer| AvailData {
+                    data: tx.data,
+                    signer,
+                })
+            })
+            .collect();
+
+        // To extract the blob transactions of proof submitted by proof_app_id
+        let proof_blobs = block
+            .data_submissions(filter.clone().app_id(self.proof_app_id.0 .0))
+            .into_iter()
+            .filter_map(|tx| {
+                tx.account_id().map(|signer| AvailData {
+                    data: tx.data,
+                    signer,
+                })
+            })
+            .collect();
+
+        Ok(AvailBlock::new(
+            crate::types::header::AvailHeader {
+                header: block.block.header().clone(),
+            },
+            block.block.hash(),
+            Time::from_secs(block_transactions[0].value.now as i64),
+            batch_blobs,
+            proof_blobs,
+        ))
     }
 
-    async fn get_proofs_at(&self, _height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
-        unimplemented!()
+    async fn submit_data(
+        client: &Client,
+        account: &Keypair,
+        app_id: AppId,
+        data: &[u8],
+    ) -> Result<TransactionDetails, AvailError> {
+        let sdk = SDK::new_custom(client.clone()).await.map_err(AvailError)?;
+        let tx = sdk.tx.data_availability.submit_data(data.to_vec());
+        let options = Options {
+            app_id: Some(app_id.0 .0),
+            ..Default::default()
+        };
+        let res = tx
+            .execute_and_watch_finalization(&account, options)
+            .await
+            .map_err(AvailError)?;
+        Ok(res)
     }
 }

@@ -11,42 +11,38 @@ repository.workspace = true
 [lints]
 workspace = true
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-borsh = { workspace = true, features = ["bytes"] }
+avail-rust = { git = "https://github.com/availproject/avail-rust", tag = "v0.1.9" }
 sov-rollup-interface = { workspace = true }
+borsh = { workspace = true, features = ["bytes"] }
 bytes = { version = "1.2.1", features = ["serde"] }
 primitive-types = { version = "0.12.2", features = ["serde"] }
 sp-core-hashing = "16.0.0"
-avail-rust = { git = "https://github.com/availproject/avail-rust", tag = "v0.1.9" }
+async-trait = { workspace = true }
+serde = { workspace = true }
+schemars = { workspace = true, features = ["derive"] }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["fmt"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+hex = { workspace = true }
+
+# Optional dependencies used only in native mode or for testing
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = [
     "derive",
     "full",
     "bit-vec",
 ], optional = true }
-
-# Convenience
-tokio = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["fmt"] }
-async-trait = { workspace = true }
-anyhow = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
+tokio = { workspace = true, optional = true }
 reqwest = { workspace = true, features = [
     "rustls-tls",
     "json",
 ], default-features = false, optional = true }
-thiserror = { workspace = true }
-sp-keyring = { version = "24", optional = true }
 sp-core = { version = "21", optional = true }
-hex = { workspace = true }
-
-[dev-dependencies]
-static_assertions = "1"
-
+sp-keyring = { version = "24", optional = true }
+backon = { workspace = true, optional = true }
 
 [features]
 default = ["native"]
@@ -57,5 +53,9 @@ native = [
     "dep:sp-core",
     "dep:sp-keyring",
     "dep:tokio",
+    "dep:backon",
     "sov-rollup-interface/native",
 ]
+
+[dev-dependencies]
+static_assertions = "1"
