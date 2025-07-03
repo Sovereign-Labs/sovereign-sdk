@@ -1,26 +1,27 @@
-use avail_rust::{
-    block::DataSubmission, subxt::utils::MultiAddress, AccountId, BlockHash, MultiAddress, H256,
-};
+use avail_rust::avail_core::from_substrate::blake2_256;
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_rollup_interface::da::{BlockHashTrait, CountedBufReader};
+use serde::{Deserialize, Serialize};
+use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
+
+use crate::types::{address::AvailAddress, data::AvailData, hash::AvailHash};
 
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct AvailDABlob {
     pub blob: CountedBufReader<bytes::Bytes>,
-    pub hash: H256,
-    pub sender: AccountId,
+    pub hash: AvailHash,
+    pub sender: AvailAddress,
 }
 
 impl BlobReaderTrait for AvailDABlob {
-    type Address = AccountId;
-    type BlobHash = H256;
+    type Address = AvailAddress;
+    type BlobHash = AvailHash;
 
-    fn sender(&self) -> AccountId {
+    fn sender(&self) -> Self::Address {
         self.sender.clone()
     }
 
     fn hash(&self) -> Self::BlobHash {
-        H256(self.hash)
+        self.hash
     }
 
     fn verified_data(&self) -> &[u8] {
@@ -35,5 +36,17 @@ impl BlobReaderTrait for AvailDABlob {
     fn advance(&mut self, num_bytes: usize) -> &[u8] {
         self.blob.advance(num_bytes);
         self.blob.accumulator()
+    }
+}
+
+impl From<AvailData> for AvailDABlob {
+    fn from(data: AvailData) -> Self {
+        let bytes = bytes::Bytes::from(data.data.clone());
+        let blob = CountedBufReader::new(bytes.clone());
+        AvailDABlob {
+            blob,
+            hash: AvailHash::try_from(blake2_256(&bytes)).unwrap(),
+            sender: AvailAddress(data.signer),
+        }
     }
 }

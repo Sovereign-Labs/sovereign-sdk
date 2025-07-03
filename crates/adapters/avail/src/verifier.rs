@@ -2,14 +2,14 @@ use avail_rust::avail_core::DataProof;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_rollup_interface::da::{DaSpec, DaVerifier, RelevantBlobs, RelevantProofs};
 
-use crate::types::prelude::*;
+use crate::types::{address::AvailAddress, hash::AvailHash, prelude::*};
 use avail_rust::prelude::*;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, BorshDeserialize, BorshSerialize)]
 pub struct AvailDASpec;
 
 impl DaSpec for AvailDASpec {
-    type SlotHash = BlockHash;
+    type SlotHash = AvailHash;
 
     type BlockHeader = AvailHeader;
 
@@ -17,7 +17,7 @@ impl DaSpec for AvailDASpec {
 
     type TransactionId = H256;
 
-    type Address = AccountId;
+    type Address = AvailAddress;
 
     type InclusionMultiProof = DataProof;
 
