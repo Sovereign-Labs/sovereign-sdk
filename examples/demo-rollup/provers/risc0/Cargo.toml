@@ -28,7 +28,7 @@ risc0-build = "2.1"
 sov-zkvm-utils = { workspace = true }
 
 [package.metadata.risc0]
-methods = ["guest-celestia", "guest-mock"]
+methods = ["guest-celestia", "guest-mock", "guest-avail"]
 
 [features]
 bench = []
