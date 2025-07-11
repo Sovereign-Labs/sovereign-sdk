@@ -13,6 +13,12 @@ mod mock_rollup;
 
 pub use mock_rollup::*;
 
+mod avail_rollup;
+pub use avail_rollup::*;
+
+mod avail_nomt_rollup;
+pub use avail_nomt_rollup::*;
+
 mod celestia_rollup;
 pub use celestia_rollup::*;
 

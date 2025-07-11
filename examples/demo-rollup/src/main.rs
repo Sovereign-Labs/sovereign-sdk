@@ -5,10 +5,12 @@ use anyhow::Context as _;
 use clap::Parser;
 use demo_stf::genesis_config::GenesisPaths;
 use sov_address::MultiAddressEvm;
+use sov_avail_adapter::service::AvailDAService;
 use sov_celestia_adapter::CelestiaService;
 use sov_demo_rollup::{
-    celestia_risc0_host_args, mock_da_risc0_host_args, CelestiaDemoRollup, CelestiaNomtDemoRollup,
-    MockDemoRollup, MockNomtDemoRollup,
+    avail_risc0_host_args, celestia_risc0_host_args, mock_da_risc0_host_args, AvailDemoRollup,
+    AvailNomtDemoRollup, CelestiaDemoRollup, CelestiaNomtDemoRollup, MockDemoRollup,
+    MockNomtDemoRollup,
 };
 use sov_mock_da::storable::service::StorableMockDaService;
 use sov_modules_api::capabilities::RollupHeight;
@@ -59,6 +61,7 @@ struct Args {
 enum SupportedDaLayer {
     Celestia,
     Mock,
+    Avail,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
@@ -156,6 +159,30 @@ async fn run() -> anyhow::Result<()> {
             .context("Failed to initialize Celestia rollup")?;
             rollup.run().await
         }
+        (SupportedDaLayer::Avail, SupportedStorage::Jmt) => {
+            let prover_config = prover_config_disc
+                .map(|config_disc| config_disc.into_config(avail_risc0_host_args()));
+            let rollup = new_rollup_with_avail_da_and_jmt(
+                &GenesisPaths::from_dir(&args.genesis_config_dir),
+                rollup_config_path,
+                prover_config,
+            )
+            .await
+            .context("Failed to initialize Celestia rollup")?;
+            rollup.run().await
+        }
+        (SupportedDaLayer::Avail, SupportedStorage::Nomt) => {
+            let prover_config = prover_config_disc
+                .map(|config_disc| config_disc.into_config(avail_risc0_host_args()));
+            let rollup = new_rollup_with_avail_da_and_nomt(
+                &GenesisPaths::from_dir(&args.genesis_config_dir),
+                rollup_config_path,
+                prover_config,
+            )
+            .await
+            .context("Failed to initialize Celestia rollup")?;
+            rollup.run().await
+        }
     }
 }
 
@@ -225,6 +252,54 @@ async fn new_rollup_with_celestia_da_and_nomt(
             start_at_rollup_height,
             stop_at_rollup_height,
         )
+        .await
+}
+
+async fn new_rollup_with_avail_da_and_jmt(
+    rt_genesis_paths: &GenesisPaths,
+    rollup_config_path: &str,
+    prover_config: Option<RollupProverConfig<Risc0>>,
+) -> anyhow::Result<Rollup<AvailDemoRollup<Native>, Native>> {
+    debug!(
+        config_path = rollup_config_path,
+        "Starting rollup on Avail DA"
+    );
+
+    let rollup_config: RollupConfig<MultiAddressEvm, AvailDAService> =
+        from_toml_path(rollup_config_path).with_context(|| {
+            format!(
+                "Failed to read rollup configuration from {}",
+                rollup_config_path
+            )
+        })?;
+
+    let avail_rollup = AvailDemoRollup::<Native>::default();
+    avail_rollup
+        .create_new_rollup(rt_genesis_paths, rollup_config, prover_config)
+        .await
+}
+
+async fn new_rollup_with_avail_da_and_nomt(
+    rt_genesis_paths: &GenesisPaths,
+    rollup_config_path: &str,
+    prover_config: Option<RollupProverConfig<Risc0>>,
+) -> anyhow::Result<Rollup<AvailNomtDemoRollup<Native>, Native>> {
+    debug!(
+        config_path = rollup_config_path,
+        "Starting NOMT rollup on Avail DA"
+    );
+
+    let rollup_config: RollupConfig<MultiAddressEvm, AvailDAService> =
+        from_toml_path(rollup_config_path).with_context(|| {
+            format!(
+                "Failed to read rollup configuration from {}",
+                rollup_config_path
+            )
+        })?;
+
+    let avail_rollup = AvailNomtDemoRollup::<Native>::default();
+    avail_rollup
+        .create_new_rollup(rt_genesis_paths, rollup_config, prover_config)
         .await
 }
 

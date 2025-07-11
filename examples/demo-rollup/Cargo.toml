@@ -17,6 +17,7 @@ workspace = true
 const-rollup-config = { path = "../const-rollup-config" }
 sov-address = { workspace = true, features = ["evm"] }
 sov-celestia-adapter = { workspace = true, features = ["native"] }
+sov-avail-adapter = { workspace = true, features = ["native"] }
 sov-mock-da = { workspace = true, features = ["native"] }
 sov-rollup-interface = { workspace = true, features = ["native"] }
 sov-stf-runner = { workspace = true }
