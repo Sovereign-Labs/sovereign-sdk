@@ -118,6 +118,7 @@ demo-stf = { path = "examples/demo-rollup/stf", default-features = false, versio
 sov-eth-client = { path = "crates/utils/sov-eth-client", default-features = false, version = "0.3" }
 sov-blob-sender = { path = "crates/full-node/sov-blob-sender", default-features = false, version = "0.3" }
 sov-celestia-adapter = { path = "crates/adapters/celestia", default-features = false, version = "0.3" }
+sov-avail-adapter = { path = "crates/adapters/avail", default-features = false, version = "0.3" }
 sov-risc0-adapter = { path = "crates/adapters/risc0", default-features = false, version = "0.3" }
 sov-sp1-adapter = { path = "crates/adapters/sp1", default-features = false, version = "0.3" }
 sov-ethereum = { path = "crates/full-node/sov-ethereum", default-features = false, version = "0.3" }

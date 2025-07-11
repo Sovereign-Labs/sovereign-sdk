@@ -187,6 +187,26 @@ impl DaService for AvailDAService {
 }
 
 impl AvailDAService {
+    pub async fn new_from_config(config: AvailDAConfig) -> Result<Self, AvailError> {
+        let client = avail_rust::client::reconnecting_api(&config.http_api_url)
+            .await
+            .map_err(AvailError)?;
+
+        let account =
+            avail_rust::account::from_secret_uri(&config.signer_key).map_err(AvailError)?;
+
+        // NOTE: Current exponential backoff policy defaults:
+        // jitter: false, factor: 2, min_delay: 1s, max_delay: 60s, max_times: 3,
+        let backoff_policy = ExponentialBuilder::default();
+
+        Ok(AvailDAService {
+            client,
+            proof_app_id: config.proof_app_id,
+            batch_app_id: config.batch_app_id,
+            signer: account,
+            backoff_policy,
+        })
+    }
     async fn get_finalized_block_header(&self) -> Result<AvailHeader, AvailError> {
         let block = Block::new_finalized_block(&self.client)
             .await

@@ -14362,6 +14362,7 @@ dependencies = [
  "sov-accounts",
  "sov-address",
  "sov-api-spec",
+ "sov-avail-adapter",
  "sov-bank",
  "sov-blob-storage",
  "sov-build",
