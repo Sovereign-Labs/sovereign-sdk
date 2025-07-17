@@ -35,7 +35,7 @@ alloy-primitives = { workspace = true, default-features = false, features = [
     "rlp",
     "serde",
     "std",
-    "k256"
+    "k256",
 ], optional = true }
 k256 = { workspace = true, features = ["serde", "ecdsa", "ecdsa-core"], optional = true }
 
@@ -66,6 +66,8 @@ arbitrary = [
 native = [
     "dep:rand",
     "alloy-primitives?/std",
+    "alloy-primitives?/asm-keccak",
+    "k256?/precomputed-tables",
     "sov-rollup-interface/native",
     "sov-address/native",
     "sov-modules-api/native"
