@@ -1,11 +1,15 @@
-use avail_rust::avail_core::data_proof::TxDataRoots;
-use avail_rust::avail_core::from_substrate::blake2_256;
-use avail_rust::avail_core::DataProof;
-use avail_rust::error::ClientError;
-use avail_rust::{
-    AppId, Block, BlockNumber, Client, Filter, Keypair, Options, TransactionDetails, SDK,
+use avail_rust_client::avail::data_availability::tx::SubmitData;
+use avail_rust_client::avail_rust_core::rpc::kate::{DataProof, TxDataRoots};
+use avail_rust_client::avail_rust_core::rpc::system::fetch_extrinsics_v1_types::{
+    EncodeSelector, SignatureFilter,
+};
+use avail_rust_client::avail_rust_core::AppId;
+use avail_rust_client::error::ClientError;
+use avail_rust_client::{
+    AccountId, AccountIdExt, Client, HashNumber, Keypair, Options, TransactionDecodable, H256,
 };
 
+use futures::executor::block_on;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{DaProof, DaSpec, RelevantBlobs, RelevantProofs, Time};
 use sov_rollup_interface::node::da::{
@@ -13,6 +17,7 @@ use sov_rollup_interface::node::da::{
 };
 
 use backon::ExponentialBuilder;
+use sp_core::blake2_256;
 use tokio::sync::oneshot;
 
 use crate::types::blob::AvailDABlob;
@@ -20,10 +25,9 @@ use crate::types::block::AvailBlock;
 use crate::types::config::AvailDAConfig;
 use crate::types::data::AvailData;
 use crate::types::error::AvailError;
-use crate::types::header::AvailHeader;
+use crate::types::header::CustomAvailHeader;
+use crate::types::utils::CustomTransaction;
 use crate::verifier::{AvailDASpec, AvailDAVerifier};
-
-type TimestampCall = avail_rust::avail::timestamp::calls::types::Set;
 
 #[derive(Clone)]
 pub struct AvailDAService {
@@ -118,9 +122,9 @@ impl DaService for AvailDAService {
         let (tx, rx) = oneshot::channel();
         let result = Self::submit_data(&self.client, &self.signer, self.batch_app_id, blob)
             .await
-            .map(|tx_details| SubmitBlobReceipt {
+            .map(|tx_hash| SubmitBlobReceipt {
                 blob_hash: HexHash::from(blake2_256(blob)),
-                da_transaction_id: tx_details.tx_hash.into(),
+                da_transaction_id: tx_hash,
             });
         let _ = tx.send(result);
         rx
@@ -140,9 +144,9 @@ impl DaService for AvailDAService {
             aggregated_proof_data,
         )
         .await
-        .map(|tx_details| SubmitBlobReceipt {
+        .map(|tx_hash: H256| SubmitBlobReceipt {
             blob_hash: HexHash::from(blake2_256(aggregated_proof_data)),
-            da_transaction_id: tx_details.tx_hash.into(),
+            da_transaction_id: tx_hash,
         });
         let _ = tx.send(result);
         rx
@@ -163,14 +167,14 @@ impl DaService for AvailDAService {
     > {
         let dummy_proof = DataProof {
             roots: TxDataRoots {
-                data_root: sp_core::H256::zero(),
-                blob_root: sp_core::H256::zero(),
-                bridge_root: sp_core::H256::zero(),
+                data_root: H256::zero(),
+                blob_root: H256::zero(),
+                bridge_root: H256::zero(),
             },
             proof: vec![],
             number_of_leaves: 1,
             leaf_index: 0,
-            leaf: sp_core::H256::zero(),
+            leaf: H256::zero(),
         };
 
         RelevantProofs {
@@ -207,71 +211,102 @@ impl AvailDAService {
             backoff_policy,
         })
     }
-    async fn get_finalized_block_header(&self) -> Result<AvailHeader, AvailError> {
-        let block = Block::new_finalized_block(&self.client)
-            .await
-            .map_err(AvailError)?;
-        Ok(AvailHeader {
-            header: block.block.header().clone(),
-        })
+
+    async fn get_finalized_block_header(&self) -> Result<CustomAvailHeader, AvailError> {
+        let header = self.client.finalized_block_header().await?;
+        Ok(CustomAvailHeader { header })
     }
 
-    async fn get_best_block_header(&self) -> Result<AvailHeader, AvailError> {
-        let block = Block::new_best_block(&self.client)
-            .await
-            .map_err(AvailError)?;
-        Ok(AvailHeader {
-            header: block.block.header().clone(),
-        })
+    async fn get_best_block_header(&self) -> Result<CustomAvailHeader, AvailError> {
+        let header = self.client.best_block_header().await?;
+        Ok(CustomAvailHeader { header })
     }
 
-    async fn get_block_at_height(
-        &self,
-        block_number: BlockNumber,
-    ) -> Result<AvailBlock, AvailError> {
-        let block = Block::from_block_number(&self.client, block_number)
+    async fn get_block_at_height(&self, block_number: u32) -> Result<AvailBlock, AvailError> {
+        let block_hash = self
+            .client
+            .block_hash(block_number)
             .await
-            .map_err(AvailError)?;
+            .map_err(|e| AvailError(ClientError::Core(e)))?;
 
-        // To find the block timestamp
-        let block_transactions = block.transactions_static::<TimestampCall>(Filter::default());
-        if block_transactions.len() != 1 {
-            return Err(AvailError(ClientError::Custom(
-                "Expected exactly 1 transaction".into(),
-            )));
-        }
+        let block_client = self.client.block_client();
 
-        let filter = Filter::new();
-        // To extract the blob transactions of batch submitted by batch_app_id
-        let batch_blobs = block
-            .data_submissions(filter.clone().app_id(self.batch_app_id.0 .0))
-            .into_iter()
-            .filter_map(|tx| {
-                tx.account_id().map(|signer| AvailData {
-                    data: tx.data,
-                    signer,
-                })
+        let block_header = self.client.block_header(block_hash.unwrap()).await?;
+
+        let batch_blobs: Vec<avail_rust_client::avail_rust_core::rpc::system::fetch_extrinsics_v1_types::ExtrinsicInformation> = block_client
+            .block_transactions(HashNumber::Number(block_number), None, Some(SignatureFilter::new(None, Some(self.batch_app_id.0), None)),Some(EncodeSelector::Call)).await?;
+
+        let batch_blobs: Vec<AvailData> = batch_blobs
+            .iter()
+            .map(|item| {
+                let submit_data =
+                    SubmitData::decode_hex_call(item.encoded.as_ref().unwrap().as_str());
+                let ss58 = item
+                    .signature
+                    .as_ref()
+                    .unwrap()
+                    .ss58_address
+                    .as_ref()
+                    .unwrap();
+                AvailData {
+                    data: submit_data.unwrap().data,
+                    signer: AccountId::from_str(
+                        item.signature
+                            .as_ref()
+                            .unwrap()
+                            .ss58_address
+                            .as_ref()
+                            .unwrap()
+                            .as_str(),
+                    )
+                    .unwrap(),
+                }
             })
             .collect();
 
-        // To extract the blob transactions of proof submitted by proof_app_id
-        let proof_blobs = block
-            .data_submissions(filter.clone().app_id(self.proof_app_id.0 .0))
-            .into_iter()
-            .filter_map(|tx| {
-                tx.account_id().map(|signer| AvailData {
-                    data: tx.data,
-                    signer,
-                })
+        let proof_blobs: Vec<avail_rust_client::avail_rust_core::rpc::system::fetch_extrinsics_v1_types::ExtrinsicInformation> = block_client
+        .block_transactions(HashNumber::Number(block_number), None, Some(SignatureFilter::new(None, Some(self.proof_app_id.0), None)),Some(EncodeSelector::Call)).await?;
+
+        let proof_blobs: Vec<AvailData> = proof_blobs
+            .iter()
+            .map(|item| {
+                let submit_data =
+                    SubmitData::decode_hex_call(item.encoded.as_ref().unwrap().as_str());
+                let ss58 = item
+                    .signature
+                    .as_ref()
+                    .unwrap()
+                    .ss58_address
+                    .as_ref()
+                    .unwrap();
+                AvailData {
+                    data: submit_data.unwrap().data,
+                    signer: AccountId::from_str(
+                        item.signature
+                            .as_ref()
+                            .unwrap()
+                            .ss58_address
+                            .as_ref()
+                            .unwrap()
+                            .as_str(),
+                    )
+                    .unwrap(),
+                }
             })
             .collect();
+
+        let tx = block_client
+            .block_transaction(block_hash.unwrap().into(), 0.into(), None, None)
+            .await?;
+        let encoded_call = hex::decode(tx.unwrap().encoded.unwrap().trim_start_matches("0x"));
+        let custom_tx = CustomTransaction::decode_call(&encoded_call.unwrap());
 
         Ok(AvailBlock::new(
-            crate::types::header::AvailHeader {
-                header: block.block.header().clone(),
+            CustomAvailHeader {
+                header: block_header.unwrap(),
             },
-            block.block.hash(),
-            Time::from_secs(block_transactions[0].value.now as i64),
+            block_hash.unwrap(),
+            Time::from_secs(custom_tx.unwrap().set as i64),
             batch_blobs,
             proof_blobs,
         ))
@@ -282,17 +317,13 @@ impl AvailDAService {
         account: &Keypair,
         app_id: AppId,
         data: &[u8],
-    ) -> Result<TransactionDetails, AvailError> {
-        let sdk = SDK::new_custom(client.clone()).await.map_err(AvailError)?;
-        let tx = sdk.tx.data_availability.submit_data(data.to_vec());
-        let options = Options {
-            app_id: Some(app_id.0 .0),
-            ..Default::default()
-        };
-        let res = tx
-            .execute_and_watch_finalization(&account, options)
+    ) -> Result<H256, AvailError> {
+        let submittable_tx = client.tx().data_availability().submit_data(data.to_vec());
+        let submitted_tx = submittable_tx
+            .sign_and_submit(account, Options::new(Some(app_id.0)))
             .await
-            .map_err(AvailError)?;
+            .map_err(|e| AvailError(ClientError::Core(e)))?;
+        let res = submitted_tx.tx_hash;
         Ok(res)
     }
 }

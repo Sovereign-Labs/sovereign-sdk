@@ -1,7 +1,7 @@
-use avail_rust::avail_core::from_substrate::blake2_256;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
+use sp_core::blake2_256;
 
 use crate::types::{address::AvailAddress, data::AvailData, hash::AvailHash};
 

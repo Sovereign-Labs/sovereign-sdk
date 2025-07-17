@@ -6,7 +6,8 @@ pub mod data;
 pub mod error;
 pub mod hash;
 pub mod header;
+pub mod utils;
 pub mod prelude {
     pub use super::blob::AvailDABlob;
-    pub use super::header::AvailHeader;
+    pub use super::header::CustomAvailHeader;
 }

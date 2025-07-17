@@ -1,5 +1,6 @@
-use avail_rust::subxt::utils::AccountId32;
-use avail_rust::AccountId;
+use arbitrary::Arbitrary;
+use avail_rust_client::subxt_core::utils::AccountId32;
+use avail_rust_client::AccountId;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::{sov_universal_wallet::UniversalWallet, BasicAddress};
@@ -82,6 +83,13 @@ impl BorshSerialize for AvailAddress {
 impl BorshDeserialize for AvailAddress {
     fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
         let bytes: [u8; 32] = borsh::BorshDeserialize::deserialize_reader(reader)?;
+        Ok(Self(AccountId::from(bytes)))
+    }
+}
+
+impl<'a> Arbitrary<'a> for AvailAddress {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+        let bytes: [u8; 32] = u.arbitrary()?;
         Ok(Self(AccountId::from(bytes)))
     }
 }
