@@ -16,15 +16,10 @@ avail-rust-client = { git = "https://github.com/availproject/avail-rust", tag = 
 sov-rollup-interface = { workspace = true }
 borsh = { workspace = true, features = ["bytes"] }
 bytes = { version = "1.2.1", features = ["serde"] }
-primitive-types = { version = "0.12.2", features = ["serde"] }
-sp-core-hashing = "16.0.0"
 async-trait = { workspace = true }
 serde = { workspace = true }
 schemars = { workspace = true, features = ["derive"] }
 anyhow = { workspace = true }
-arbitrary = { workspace = true, features = ["derive"] }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["fmt"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 hex = { workspace = true }
@@ -44,6 +39,7 @@ reqwest = { workspace = true, features = [
 sp-core = { version = "21", optional = true }
 sp-keyring = { version = "24", optional = true }
 backon = { workspace = true, optional = true }
+arbitrary = { workspace = true, optional = true, features = ["derive"] }
 
 [features]
 default = ["native"]
@@ -58,5 +54,12 @@ native = [
     "sov-rollup-interface/native",
 ]
 
+arbitrary = [
+    "dep:arbitrary",
+    "sov-avail-adapter/arbitrary",
+    "sov-rollup-interface/arbitrary",
+]
+
 [dev-dependencies]
+sov-avail-adapter = { path = ".", features = ["native", "arbitrary"] }
 static_assertions = "1"

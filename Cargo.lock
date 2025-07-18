@@ -11800,20 +11800,17 @@ dependencies = [
  "futures",
  "hex",
  "parity-scale-codec",
- "primitive-types 0.12.2",
  "reqwest 0.12.22",
  "schemars 0.8.22",
  "serde",
  "serde_json",
+ "sov-avail-adapter",
  "sov-rollup-interface",
  "sp-core",
- "sp-core-hashing 16.0.0",
  "sp-keyring",
  "static_assertions",
  "thiserror 1.0.69",
  "tokio",
- "tracing",
- "tracing-subscriber 0.3.19",
 ]
 
 [[package]]
@@ -13518,7 +13515,7 @@ dependencies = [
  "secp256k1 0.24.3",
  "secrecy 0.8.0",
  "serde",
- "sp-core-hashing 9.0.0",
+ "sp-core-hashing",
  "sp-debug-derive",
  "sp-externalities",
  "sp-runtime-interface",
@@ -13544,15 +13541,6 @@ dependencies = [
  "sha3",
  "sp-std",
  "twox-hash 1.6.3",
-]
-
-[[package]]
-name = "sp-core-hashing"
-version = "16.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f812cb2dff962eb378c507612a50f1c59f52d92eb97b710f35be3c2346a3cd7"
-dependencies = [
- "sp-crypto-hashing",
 ]
 
 [[package]]
