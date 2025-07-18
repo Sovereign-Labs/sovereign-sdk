@@ -3,8 +3,8 @@ use std::time::Duration;
 use clap::Parser;
 use sov_modules_api::prelude::tracing;
 use sov_soak_testing::{
-    run_generator_task_for_bank_and_synthetic_load, CelestiaRollupSpec, DemoCelestiaRT, DemoMockRT,
-    MockDemoRollupSpec, TestRT, TxType, ValidityProfile,
+    run_generator_task_for_bank_and_synthetic_load, AvailRollupSpec, CelestiaRollupSpec,
+    DemoAvailRT, DemoCelestiaRT, DemoMockRT, MockDemoRollupSpec, TestRT, TxType, ValidityProfile,
 };
 use sov_test_utils::TestSpec;
 use tokio::signal::unix::SignalKind;
@@ -19,6 +19,8 @@ enum SelectedRuntime {
     DemoCelestia,
     /// demo-stf with Mock DA
     DemoMock,
+    /// demo-stf with Avail DA
+    DemoAvail,
 }
 
 #[derive(Parser)]
@@ -62,6 +64,17 @@ async fn worker_task(
     let result = match runtime {
         SelectedRuntime::Test => {
             run_generator_task_for_bank_and_synthetic_load::<TestRT, TestSpec>(
+                client,
+                rx,
+                worker_id,
+                num_workers,
+                validity,
+                tx_type,
+            )
+            .await
+        }
+        SelectedRuntime::DemoAvail => {
+            run_generator_task_for_bank_and_synthetic_load::<DemoAvailRT, AvailRollupSpec>(
                 client,
                 rx,
                 worker_id,

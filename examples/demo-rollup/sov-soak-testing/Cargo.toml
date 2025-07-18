@@ -44,6 +44,7 @@ sov-synthetic-load = { path = "../../../crates/module-system/module-implementati
 sov-bank = { workspace = true, features = ["native", "arbitrary"] }
 sov-paymaster = { workspace = true, features = ["native"] }
 sov-celestia-adapter = { workspace = true, features = ["native", "arbitrary"] }
+sov-avail-adapter = { workspace = true, features = ["native", "arbitrary"] }
 sov-address = { workspace = true }
 demo-stf = { workspace = true, features = ["native"] }
 

@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use rand::Rng;
 use sov_address::MultiAddressEvm;
+use sov_avail_adapter::verifier::AvailDASpec;
 use sov_bank::Bank;
 use sov_bank::CallMessageDiscriminants::Transfer;
 use sov_celestia_adapter::verifier::CelestiaSpec;
@@ -81,6 +82,11 @@ pub type DemoCelestiaRT = demo_stf::runtime::Runtime<CelestiaRollupSpec>;
 pub type MockDemoRollupSpec =
     ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, MultiAddressEvm, Native>;
 pub type DemoMockRT = demo_stf::runtime::Runtime<MockDemoRollupSpec>;
+
+// AvailDA
+pub type AvailRollupSpec =
+    ConfigurableSpec<AvailDASpec, MockZkvm, MockZkvm, MultiAddressEvm, Native>;
+pub type DemoAvailRT = demo_stf::runtime::Runtime<AvailRollupSpec>;
 
 pub const BUFFER_SIZE: usize = 100_000;
 // The minimum randomness needed to guarantee successful transaction generation
