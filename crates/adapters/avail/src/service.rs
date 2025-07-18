@@ -6,10 +6,10 @@ use avail_rust_client::avail_rust_core::rpc::system::fetch_extrinsics_v1_types::
 use avail_rust_client::avail_rust_core::AppId;
 use avail_rust_client::error::ClientError;
 use avail_rust_client::{
-    AccountId, AccountIdExt, Client, HashNumber, Keypair, Options, TransactionDecodable, H256,
+    AccountId, AccountIdExt, Client, HashNumber, Keypair, KeypairExt, Options,
+    TransactionDecodable, H256,
 };
 
-use futures::executor::block_on;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{DaProof, DaSpec, RelevantBlobs, RelevantProofs, Time};
 use sov_rollup_interface::node::da::{
@@ -192,12 +192,10 @@ impl DaService for AvailDAService {
 
 impl AvailDAService {
     pub async fn new_from_config(config: AvailDAConfig) -> Result<Self, AvailError> {
-        let client = avail_rust::client::reconnecting_api(&config.http_api_url)
-            .await
-            .map_err(AvailError)?;
+        let client = Client::new(&config.http_api_url).await?;
 
-        let account =
-            avail_rust::account::from_secret_uri(&config.signer_key).map_err(AvailError)?;
+        let account = Keypair::from_str(&config.signer_key)
+            .map_err(|err| AvailError(ClientError::Custom(err)))?;
 
         // NOTE: Current exponential backoff policy defaults:
         // jitter: false, factor: 2, min_delay: 1s, max_delay: 60s, max_times: 3,
@@ -205,8 +203,8 @@ impl AvailDAService {
 
         Ok(AvailDAService {
             client,
-            proof_app_id: config.proof_app_id,
-            batch_app_id: config.batch_app_id,
+            proof_app_id: AppId(config.proof_app_id),
+            batch_app_id: AppId(config.batch_app_id),
             signer: account,
             backoff_policy,
         })
