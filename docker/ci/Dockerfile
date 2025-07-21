@@ -9,7 +9,7 @@ FROM ${NAMESPACE_BASE_IMAGE_REF} AS base
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN sudo apt-get update && sudo apt-get install -y \
     build-essential \
     pkg-config \
     libssl-dev \
@@ -24,63 +24,68 @@ RUN apt-get update && apt-get install -y \
     lld \
     zstd \
     unzip \
-    && rm -rf /var/lib/apt/lists/*
+    && sudo rm -rf /var/lib/apt/lists/*
 
-# Install Rust
-ENV RUSTUP_HOME=/usr/local/rustup \
-    CARGO_HOME=/usr/local/cargo \
-    PATH=/usr/local/cargo/bin:$PATH
+# Install Rust as user
+# The base image runs as runner user with home at /home/runner
+ENV RUSTUP_HOME=/home/runner/.rustup \
+    CARGO_HOME=/home/runner/.cargo \
+    PATH=/home/runner/.cargo/bin:$PATH
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88.0 --profile minimal \
+    && . /home/runner/.cargo/env \
     && rustup component add clippy --toolchain 1.88.0 \
     && rustup toolchain install nightly --component rustfmt --profile minimal \
     && rustup target add wasm32-unknown-unknown
 
 # Install Node.js 20.x
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash - \
+    && sudo apt-get install -y nodejs \
+    && sudo rm -rf /var/lib/apt/lists/*
 
 # Install pnpm
-RUN npm install -g pnpm@9
+RUN sudo npm install -g pnpm@9
 
 # Install yq for YAML processing
-RUN wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq \
-    && chmod +x /usr/bin/yq
+RUN sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq \
+    && sudo chmod +x /usr/bin/yq
 
 # Install Node.js tools
-RUN npm install -g doctoc
+RUN sudo npm install -g doctoc
 
 # Install protoc v23.2
 RUN PROTOC_VERSION="23.2" \
     && PROTOC_ZIP="protoc-${PROTOC_VERSION}-linux-x86_64.zip" \
     && curl -OL "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/${PROTOC_ZIP}" \
-    && unzip -o "${PROTOC_ZIP}" -d /usr/local bin/protoc \
-    && unzip -o "${PROTOC_ZIP}" -d /usr/local 'include/*' \
+    && sudo unzip -o "${PROTOC_ZIP}" -d /usr/local bin/protoc \
+    && sudo unzip -o "${PROTOC_ZIP}" -d /usr/local 'include/*' \
     && rm -f "${PROTOC_ZIP}"
 
 # Install RISC0 toolchain
 SHELL ["/bin/bash", "-c"]
-RUN curl -L https://risczero.com/install | bash \
-    && export PATH="/root/.risc0/bin:$PATH" \
-    && rzup install cargo-risczero 2.0.2 \
-    && rzup install rust 1.88.0 \
-    && rzup install cpp 2024.1.5 \
-    && rm -rf $CARGO_HOME/registry \
-    && rm -rf $CARGO_HOME/git
+RUN . /home/runner/.cargo/env \
+    && curl -L https://risczero.com/install | bash \
+    && export PATH="/home/runner/.risc0/bin:$PATH" \
+    && /home/runner/.risc0/bin/rzup install cargo-risczero 2.0.2 \
+    && /home/runner/.risc0/bin/rzup install rust 1.88.0 \
+    && /home/runner/.risc0/bin/rzup install cpp 2024.1.5 \
+    && rm -rf /home/runner/.cargo/registry \
+    && rm -rf /home/runner/.cargo/git
 SHELL ["/bin/sh", "-c"]
 
 # Install SP1 toolchain
-RUN curl -L https://raw.githubusercontent.com/succinctlabs/sp1/main/sp1up/install | bash \
-    && ~/.sp1/bin/sp1up --version 5.0.8 \
-    && ~/.sp1/bin/cargo-prove prove install-toolchain \
-    && rm -rf $CARGO_HOME/registry \
-    && rm -rf $CARGO_HOME/git
+RUN . /home/runner/.cargo/env \
+    && curl -L https://raw.githubusercontent.com/succinctlabs/sp1/main/sp1up/install | bash \
+    && /home/runner/.sp1/bin/sp1up --version 5.0.8 \
+    && /home/runner/.sp1/bin/cargo-prove prove install-toolchain \
+    && rm -rf /home/runner/.cargo/registry \
+    && rm -rf /home/runner/.cargo/git
 
 ## Move it to bottom for now for faster iteration
 
 # Install core Rust development tools
-RUN cargo install cargo-hack --locked \
+RUN . /home/runner/.cargo/env \
+    && cargo install cargo-hack --locked \
     && cargo install cargo-nextest@0.9.96 --locked \
     && cargo install cargo-llvm-cov --locked \
     && cargo install cargo-deny@0.16.1 --locked \
@@ -88,18 +93,19 @@ RUN cargo install cargo-hack --locked \
     && cargo install zepter@1.5.0 --locked \
     && cargo install bashtestmd@0.5.0 --locked \
     # Clear cargo cache to reduce image size
-    && rm -rf $CARGO_HOME/registry \
-    && rm -rf $CARGO_HOME/git \
+    && rm -rf /home/runner/.cargo/registry \
+    && rm -rf /home/runner/.cargo/git \
     && rm -rf /tmp/cargo-*
 
 # Install additional tools on nightly
-RUN cargo +nightly install cargo-udeps --locked \
-    && rm -rf $CARGO_HOME/registry \
-    && rm -rf $CARGO_HOME/git
+RUN . /home/runner/.cargo/env \
+    && cargo +nightly install cargo-udeps --locked \
+    && rm -rf /home/runner/.cargo/registry \
+    && rm -rf /home/runner/.cargo/git
 
 # Set environment variables
 ENV CARGO_NET_GIT_FETCH_WITH_CLI=true \
-    PATH="/root/.risc0/bin:/root/.sp1/bin:${PATH}" \
+    PATH="/home/runner/.risc0/bin:/home/runner/.sp1/bin:/home/runner/.cargo/bin:${PATH}" \
     RISC0_RUST_TOOLCHAIN_VERSION=1.88.0 \
     RISC0_CPP_TOOLCHAIN_VERSION=2024.1.5
 
