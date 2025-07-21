@@ -1,9 +1,6 @@
 ARG NAMESPACE_BASE_IMAGE_REF=""
-
 # Your image must build FROM NAMESPACE_BASE_IMAGE_REF
 FROM ${NAMESPACE_BASE_IMAGE_REF} AS base
-# Multi-stage build for efficiency
-#FROM ubuntu:24.04 AS base
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -43,15 +40,12 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash - \
     && sudo apt-get install -y nodejs \
     && sudo rm -rf /var/lib/apt/lists/*
 
-# Install pnpm
-RUN sudo npm install -g pnpm@9
+# Install pnpm and Node.js tools
+RUN sudo npm install -g pnpm@9 doctoc
 
 # Install yq for YAML processing
 RUN sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq \
     && sudo chmod +x /usr/bin/yq
-
-# Install Node.js tools
-RUN sudo npm install -g doctoc
 
 # Install protoc v23.2
 RUN PROTOC_VERSION="23.2" \
@@ -61,25 +55,25 @@ RUN PROTOC_VERSION="23.2" \
     && sudo unzip -o "${PROTOC_ZIP}" -d /usr/local 'include/*' \
     && rm -f "${PROTOC_ZIP}"
 
-# Install RISC0 toolchain
+# Install RISC0 toolchain (AMD64 only - RISC0 doesn't support ARM64)
 SHELL ["/bin/bash", "-c"]
 RUN . /home/runner/.cargo/env \
-    && curl -L https://risczero.com/install | bash \
-    && export PATH="/home/runner/.risc0/bin:$PATH" \
-    && /home/runner/.risc0/bin/rzup install cargo-risczero 2.0.2 \
-    && /home/runner/.risc0/bin/rzup install rust 1.88.0 \
-    && /home/runner/.risc0/bin/rzup install cpp 2024.1.5 \
-    && rm -rf /home/runner/.cargo/registry \
-    && rm -rf /home/runner/.cargo/git
+        && curl -L https://risczero.com/install | bash \
+        && export PATH="/home/runner/.risc0/bin:$PATH" \
+        && /home/runner/.risc0/bin/rzup install cargo-risczero 2.0.2 \
+        && /home/runner/.risc0/bin/rzup install rust 1.88.0 \
+        && /home/runner/.risc0/bin/rzup install cpp 2024.1.5 \
+        && rm -rf /home/runner/.cargo/registry \
+        && rm -rf /home/runner/.cargo/git;
 SHELL ["/bin/sh", "-c"]
 
-# Install SP1 toolchain
+# Install SP1 toolchain (AMD64 only - SP1 doesn't support ARM64)
 RUN . /home/runner/.cargo/env \
-    && curl -L https://raw.githubusercontent.com/succinctlabs/sp1/main/sp1up/install | bash \
-    && /home/runner/.sp1/bin/sp1up --version 5.0.8 \
-    && /home/runner/.sp1/bin/cargo-prove prove install-toolchain \
-    && rm -rf /home/runner/.cargo/registry \
-    && rm -rf /home/runner/.cargo/git
+        && curl -L https://raw.githubusercontent.com/succinctlabs/sp1/main/sp1up/install | bash \
+        && /home/runner/.sp1/bin/sp1up --version 5.0.8 \
+        && /home/runner/.sp1/bin/cargo-prove prove install-toolchain \
+        && rm -rf /home/runner/.cargo/registry \
+        && rm -rf /home/runner/.cargo/git
 
 ## Move it to bottom for now for faster iteration
 
@@ -103,13 +97,7 @@ RUN . /home/runner/.cargo/env \
     && rm -rf /home/runner/.cargo/registry \
     && rm -rf /home/runner/.cargo/git
 
-# Set environment variables
 ENV CARGO_NET_GIT_FETCH_WITH_CLI=true \
     PATH="/home/runner/.risc0/bin:/home/runner/.sp1/bin:/home/runner/.cargo/bin:${PATH}" \
     RISC0_RUST_TOOLCHAIN_VERSION=1.88.0 \
     RISC0_CPP_TOOLCHAIN_VERSION=2024.1.5
-
-# Set working directory
-WORKDIR /workspace
-
-CMD ["/bin/bash"]
