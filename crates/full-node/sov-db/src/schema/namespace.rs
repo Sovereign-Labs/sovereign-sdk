@@ -11,20 +11,20 @@ use rockbound::{CodecError, Schema, SchemaKey, SchemaValue, SeekKeyEncoder};
 use sov_rollup_interface::common::SlotNumber;
 
 /// Mapping table from key Hash to jmt key
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct KeyHashToKey<N: Namespace>(std::marker::PhantomData<N>);
 /// In the case of jmt, it maps key hash to node value
 /// In other cases, such as nomt, it maps key to value and used for historical data.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct StateValues<N: Namespace>(std::marker::PhantomData<N>);
 /// Mapping table from (key, version) to jmt value
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct JmtNodes<N: Namespace>(std::marker::PhantomData<N>);
 
 /// The generic Namespace trait used across the rollup to select a given state partition.
 /// We need to define the constants by hand because currently, fully generic expression resolution
 /// in constants is unstable: `<https://github.com/rust-lang/rust/issues/76560>`
-pub trait Namespace: Sync + Send + Debug + Clone + Copy + 'static {
+pub trait Namespace: Sync + Send + Debug + Clone + Copy + 'static + Default {
     /// Mapping table from node hash to jmt node. Static name used to define the table.
     const KEY_HASH_TO_KEY_TABLE_NAME: ColumnFamilyName;
 
