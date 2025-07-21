@@ -26,7 +26,7 @@ pub(crate) fn update_ledger_finalized_height(
 
     if let Some((slot_num, _slot)) = ledger_db.get_head_slot()? {
         let ledger_changeset = ledger_db.materialize_latest_finalize_slot(slot_num, slot_num)?;
-        ledger.write_schemas(&ledger_changeset)?;
+        ledger.write_schemas(ledger_changeset)?;
     }
 
     Ok(())

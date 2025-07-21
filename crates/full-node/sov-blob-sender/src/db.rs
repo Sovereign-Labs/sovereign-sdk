@@ -81,7 +81,7 @@ impl BlobSenderDb {
         s.delete::<tables::Blobs>(&id)?;
         s.delete::<tables::BlobInfos>(&id)?;
 
-        self.db.write_schemas_async(&s).await?;
+        self.db.write_schemas_async(s).await?;
         Ok(())
     }
 }

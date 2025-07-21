@@ -73,6 +73,7 @@ pub trait Namespace: Sync + Send + Debug + Clone + Copy + 'static + Default {
 
 impl<N: Namespace> Schema for NomtStateValues<N> {
     const COLUMN_FAMILY_NAME: ColumnFamilyName = N::STATE_VALUES_TABLE_NAME;
+    const SHOULD_CACHE: bool = true;
 
     type Key = Arc<SchemaKey>;
     type Value = Option<SchemaValue>;
@@ -86,6 +87,7 @@ impl<N: Namespace> SchemaWithVersion for NomtStateValues<N> {
 
 impl<N: Namespace> Schema for NomtHistoricalState<N> {
     const COLUMN_FAMILY_NAME: ColumnFamilyName = N::HISTORICAL_COLUMN_FAMILY;
+    const SHOULD_CACHE: bool = false;
 
     type Key = VersionedKey<NomtStateValues<N>, Arc<SchemaKey>>;
     type Value = Option<SchemaValue>;
@@ -102,6 +104,7 @@ impl<N: Namespace> ValueCodec<NomtHistoricalState<N>> for Option<SchemaValue> {
 
 impl<N: Namespace> Schema for NomtPruningState<N> {
     const COLUMN_FAMILY_NAME: ColumnFamilyName = N::PRUNING_COLUMN_FAMILY;
+    const SHOULD_CACHE: bool = false;
 
     type Key = PrunableKey<NomtStateValues<N>, Arc<SchemaKey>>;
     type Value = ();
@@ -118,6 +121,7 @@ impl<N: Namespace> ValueCodec<NomtPruningState<N>> for () {
 
 impl<N: Namespace> Schema for NomtCommittedVersion<N> {
     const COLUMN_FAMILY_NAME: ColumnFamilyName = N::COMITTED_VERSION_COLUMN;
+    const SHOULD_CACHE: bool = false;
 
     type Key = EmptyKey;
     type Value = u64;
@@ -181,6 +185,7 @@ impl<N: Namespace> ValueCodec<NomtStateValues<N>> for Option<SchemaValue> {
 
 impl<N: Namespace> Schema for KeyHashToKey<N> {
     const COLUMN_FAMILY_NAME: ColumnFamilyName = N::KEY_HASH_TO_KEY_TABLE_NAME;
+    const SHOULD_CACHE: bool = false;
 
     type Key = [u8; 32];
     type Value = SchemaKey;
@@ -188,6 +193,7 @@ impl<N: Namespace> Schema for KeyHashToKey<N> {
 
 impl<N: Namespace> Schema for StateValues<N> {
     const COLUMN_FAMILY_NAME: ColumnFamilyName = N::STATE_VALUES_TABLE_NAME;
+    const SHOULD_CACHE: bool = false;
 
     type Key = (SchemaKey, SlotNumber);
     type Value = Option<SchemaValue>;
@@ -195,6 +201,7 @@ impl<N: Namespace> Schema for StateValues<N> {
 
 impl<N: Namespace> Schema for JmtNodes<N> {
     const COLUMN_FAMILY_NAME: ColumnFamilyName = N::JMT_NODES_TABLE_NAME;
+    const SHOULD_CACHE: bool = false;
 
     type Key = NodeKey;
     type Value = Node;

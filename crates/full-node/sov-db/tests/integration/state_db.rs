@@ -48,7 +48,7 @@ fn test_state_db_simple() {
             Some(preimages_schematized),
         )
         .unwrap();
-    rocksdb.write_schemas(&batch).unwrap();
+    rocksdb.write_schemas(batch).unwrap();
 
     // Still zero after materialization and writing.
     // Nothing changes
@@ -128,7 +128,7 @@ fn test_state_db_writing_empty_batch() {
     let batch = state_db
         .materialize(&kernel_materialize, &user_materialize, None)
         .unwrap();
-    rocksdb.write_schemas(&batch).unwrap();
+    rocksdb.write_schemas(batch).unwrap();
 
     // Still zero after materialization and writing.
     // Nothing changes.
@@ -219,7 +219,7 @@ fn test_state_db_writing_same_node_batch_both_namespaces() {
             Some(preimages_schematized),
         )
         .unwrap();
-    rocksdb.write_schemas(&batch).unwrap();
+    rocksdb.write_schemas(batch).unwrap();
 
     // So that's seems fine, user value leaks into kernel data.
     let state_db = init_state_db(rocksdb.clone());
@@ -280,7 +280,7 @@ fn test_write_node_batches_different_versions() {
         )
         .unwrap();
 
-    rocksdb.write_schemas(&batch).unwrap();
+    rocksdb.write_schemas(batch).unwrap();
 
     // What is the next version going to be?
     let reader = DeltaReader::new(rocksdb, Vec::new());
@@ -330,7 +330,7 @@ fn test_namespace() {
             .materialize(&kernel_node_batch, &user_batch, Some(preimages_schematized))
             .unwrap();
 
-        rocksdb.write_schemas(&node_batch_schematized).unwrap();
+        rocksdb.write_schemas(node_batch_schematized).unwrap();
     }
 
     let state_db = init_state_db(rocksdb.clone());
@@ -367,7 +367,7 @@ fn test_namespace() {
             .materialize(&kernel_node_batch, &user_batch, None)
             .unwrap();
 
-        rocksdb.write_schemas(&node_batch_schematized).unwrap();
+        rocksdb.write_schemas(node_batch_schematized).unwrap();
     }
 
     // Check that the correct value is returned.

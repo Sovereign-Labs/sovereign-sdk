@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
 
 use anyhow::Context;
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::rocksdb::ColumnFamilyDescriptor;
-use rockbound::versioned_db::{EmptyKey, VersionedDB, VersionedDeltaReader};
+use rockbound::versioned_db::{ VersionedDB, VersionedDeltaReader};
 use rockbound::{default_cf_descriptor, SchemaBatch};
 use sov_rollup_interface::reexports::digest;
 
@@ -17,8 +16,8 @@ use crate::historical_state::{HistoricalStateReader, StateChanges};
 use crate::ledger_db::LedgerDb;
 use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::pruner::Pruner;
-use crate::schema::namespace::{NomtCommittedVersion, NomtStateValues, StateValues};
-use crate::schema::tables::{ModuleAccessoryState, StateRootHashes};
+use crate::schema::namespace::{ NomtStateValues, };
+use crate::schema::tables::{StateRootHashes};
 use crate::state_db_nomt::{NomtSessionBuilder, NomtStateDb, StateOverlay};
 use crate::storage_manager::{update_ledger_finalized_height, InitializableNativeNomtStorage};
 use crate::DbOptions;
@@ -39,16 +38,8 @@ impl PlainStateDb {
         let mut columns = vec![default_cf_descriptor(StateRootHashes::table_name())];
         VersionedDB::<NomtStateValues<UserNamespace>>::add_column_families(&mut columns)?;
         VersionedDB::<NomtStateValues<KernelNamespace>>::add_column_families(&mut columns)?;
-        let mut other =
+        let other =
             Self::get_rockbound_options(columns).setup_db_in_path_with_column_descriptors(path)?;
-        let next_version = other
-            .get::<NomtCommittedVersion<KernelNamespace>>(&EmptyKey)?
-            .and_then(|v| v.checked_add(1))
-            .unwrap_or(0);
-        // TODO: Add consistency checks and/or roll back one DB if necessary.
-
-        other.initialize_next_version_to_commit(next_version);
-
         let other = Arc::new(other);
         let user = VersionedDB::<NomtStateValues<UserNamespace>>::from_db(other.clone())?;
         let kernel = VersionedDB::<NomtStateValues<KernelNamespace>>::from_db(other.clone())?;
@@ -86,7 +77,9 @@ impl PlainStateDb {
         }
     }
 
-    /// Coalesce all the changes into a single schema batch.
+    /// Coalesce all the changes into a single schema batch. 
+    /// Assumption: only a single thread is committing at a time. Calling prepare_commit multiple times
+    /// will result in a version mismatch.
     fn prepare_commit(&self, state: StateChanges) -> anyhow::Result<SchemaBatch> {
         let StateChanges {
             user,
@@ -95,8 +88,13 @@ impl PlainStateDb {
         } = state;
 
         let mut other_changes = Arc::try_unwrap(other).unwrap_or_else(|arc| (*arc).clone());
-        self.user.materialize(&user, &mut other_changes)?;
-        self.kernel.materialize(&kernel, &mut other_changes)?;
+        let version = self.kernel.get_committed_version()?.and_then(|v| v.checked_add(1)).unwrap_or(0);
+        if cfg!(debug_assertions) {
+            let user_version = self.user.get_committed_version()?.and_then(|v| v.checked_add(1)).unwrap_or(0);
+            assert_eq!(user_version, version);
+        }
+        self.user.materialize(&user, &mut other_changes, version)?;
+        self.kernel.materialize(&kernel, &mut other_changes, version)?;
 
         Ok(other_changes)
     }
@@ -104,7 +102,7 @@ impl PlainStateDb {
     /// Coalesce all the changes into a single schema batch and write it atomically.
     pub fn commit(&self, state: StateChanges) -> anyhow::Result<()> {
         let commit = self.prepare_commit(state)?;
-        self.other.write_schemas(&commit)?;
+        self.other.write_schemas(commit)?;
         Ok(())
     }
 }
@@ -152,10 +150,10 @@ where
 
         // Note: failure handling and data recovery will be implemented later.
         self.state.commit(state)?;
-        self.accessory.write_schemas(&accessory)?;
+        self.accessory.write_schemas(Arc::unwrap_or_clone(accessory))?;
         // Ledger goes last, as its data is used during the start.
         // So if ledger save failed, state and accessory will be synced from DA
-        self.ledger.write_schemas(&ledger)?;
+        self.ledger.write_schemas(Arc::unwrap_or_clone(ledger))?;
         // Historical data is committed the last, as in case of failure, it can be synced from the normal state,
         // as it duplicates the last written data to `self.state`.
         self.plain_state.commit(historical_state)?;
@@ -170,8 +168,8 @@ where
     pub(crate) fn commit_pruning(&mut self, group: PruneGroup) -> anyhow::Result<()> {
         self.plain_state
             .other
-            .write_schemas_without_version_bump(&group.historical_state)?;
-        self.accessory.write_schemas(&group.accessory)?;
+            .write_schemas(group.historical_state)?;
+        self.accessory.write_schemas(group.accessory)?;
         Ok(())
     }
 
@@ -209,9 +207,8 @@ where
             DeltaReader::new(self.plain_state.other.clone(), historical_state_snapshots);
         let version = self
             .plain_state
-            .other
-            .get_committed_version(Ordering::Acquire);
-        tracing::debug!("creating storage. committed version: {:?}", version);
+            .get_kernel_db()
+            .get_committed_version()?;
 
         let user_state_reader = VersionedDeltaReader::<NomtStateValues<UserNamespace>>::new(
             self.plain_state.user.clone(),

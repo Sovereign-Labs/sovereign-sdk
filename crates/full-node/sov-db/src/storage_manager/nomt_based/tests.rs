@@ -12,7 +12,6 @@ use super::{NomtChangeSet, NomtStorageManager, StateFinishedSession};
 use crate::accessory_db::AccessoryDb;
 use crate::config::RollupDbConfig;
 use crate::historical_state::HistoricalStateReader;
-use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::state_db_nomt::{get_session_builder_from_committed, NomtStateDb, StateRootHashes};
 use crate::storage_manager::tests::arbitrary::ForkDescription;
 use crate::storage_manager::tests::data_helpers::verify_accessory_db;

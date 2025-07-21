@@ -300,8 +300,6 @@ impl HistoricalStateReader {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use super::*;
     use crate::storage_manager::PlainStateDb;
 

@@ -17,8 +17,7 @@ use super::data_helpers::{
     get_expected_chain_values, materialize_ledger_changes, verify_ledger_storage,
 };
 use crate::ledger_db::LedgerDb;
-use crate::schema::tables::StateRootHashes;
-use crate::schema::types::{BatchNumber, StateRootHashId, StoredSlot};
+use crate::schema::types::{BatchNumber, StoredSlot};
 use crate::storage_manager::tests::arbitrary::{get_block_hash, ForkDescription, ForkMap};
 
 pub trait TestableStorage: Sized {

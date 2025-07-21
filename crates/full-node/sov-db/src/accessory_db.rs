@@ -88,7 +88,7 @@ mod tests {
             0.to_slot_number(),
         )
         .unwrap();
-        rocksdb.write_schemas(&changes1).unwrap();
+        rocksdb.write_schemas(changes1).unwrap();
         assert_eq!(
             db.get_value_option(&key, 0.to_slot_number()).unwrap(),
             Some(value.clone())
@@ -100,7 +100,7 @@ mod tests {
             1.to_slot_number(),
         )
         .unwrap();
-        rocksdb.write_schemas(&changes2).unwrap();
+        rocksdb.write_schemas(changes2).unwrap();
         assert_eq!(
             db.get_value_option(&key, 0.to_slot_number()).unwrap(),
             Some(value)
@@ -125,7 +125,7 @@ mod tests {
             0.to_slot_number(),
         )
         .unwrap();
-        rocksdb.write_schemas(&changes1).unwrap();
+        rocksdb.write_schemas(changes1).unwrap();
         assert_eq!(
             db.get_value_option(&key, 0.to_slot_number()).unwrap(),
             Some(value.clone())
@@ -133,7 +133,7 @@ mod tests {
 
         let changes2 =
             AccessoryDb::materialize_values(vec![(key.clone(), None)], 0.to_slot_number()).unwrap();
-        rocksdb.write_schemas(&changes2).unwrap();
+        rocksdb.write_schemas(changes2).unwrap();
         assert_eq!(db.get_value_option(&key, 0.to_slot_number()).unwrap(), None);
     }
 
