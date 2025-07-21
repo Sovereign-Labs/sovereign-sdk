@@ -249,7 +249,7 @@ jobs:
   nextest:
     name: nextest
     runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+      - namespace-profile-sov-rust-amd64-ubuntu-24-04-16x32-with-cache
       - nscloud-cache-tag-cache-test
       - nscloud-cache-size-100gb
       # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
