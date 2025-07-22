@@ -88,6 +88,7 @@ sov-modules-api = { workspace = true, features = [
   "test-utils",
 ] }
 sov-mock-da = { workspace = true, features = ["arbitrary"] }
+sov-avail-adapter = { workspace = true, features = ["arbitrary"] }
 sov-bank = { workspace = true, features = ["native", "arbitrary"] }
 sov-sequencer-registry = { workspace = true, features = [
   "native",

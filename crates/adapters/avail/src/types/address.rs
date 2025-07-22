@@ -1,4 +1,6 @@
+#[cfg(feature = "arbitrary")]
 use arbitrary::Arbitrary;
+
 use avail_rust_client::subxt_core::utils::AccountId32;
 use avail_rust_client::AccountId;
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -87,6 +89,7 @@ impl BorshDeserialize for AvailAddress {
     }
 }
 
+#[cfg(feature = "arbitrary")]
 impl<'a> Arbitrary<'a> for AvailAddress {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         let bytes: [u8; 32] = u.arbitrary()?;
