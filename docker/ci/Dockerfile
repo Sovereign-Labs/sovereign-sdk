@@ -31,8 +31,8 @@ ENV RUSTUP_HOME=/home/runner/.rustup \
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88.0 --profile minimal \
     && . /home/runner/.cargo/env \
-    && rustup component add clippy --toolchain 1.88.0 \
-    && rustup toolchain install nightly --component rustfmt --profile minimal \
+    && rustup component add clippy rust-src llvm-tools-preview --toolchain 1.88.0 \
+    && rustup toolchain install nightly --component rustfmt --component rust-src --profile minimal \
     && rustup target add wasm32-unknown-unknown
 
 # Install Node.js 20.x

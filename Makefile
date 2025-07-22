@@ -62,8 +62,8 @@ test-all: ## Runs test suite using nextest, across the whole workspace
 test-default-features:  ## Runs test suite using default features
 	@cargo nextest run --no-fail-fast --status-level skip
 
-install-dev-tools:  ## Installs all necessary cargo helpers
-install-dev-tools: install-risc0-toolchain install-sp1-toolchain
+install-dev-tools:  ## Installs all necessary dev tools
+install-dev-tools: install-cargo-tools install-risc0-toolchain install-sp1-toolchain
 	rustup update nightly
 	## Backup VS Code settings to `.vscode/settings.json.bak`.
 	cp .vscode/settings.json .vscode/settings.json.bak || true
@@ -79,6 +79,16 @@ install-dev-tools: install-risc0-toolchain install-sp1-toolchain
 	cargo install zepter
 	cargo +stable install cargo-dylint dylint-link
 	rustup target add wasm32-unknown-unknown
+
+install-cargo-tools:  ## Installs all necessary cargo helpers
+	cargo install cargo-llvm-cov
+	cargo install cargo-hack
+	cargo install cargo-udeps
+	cargo install cargo-deny
+	cargo install flaky-finder
+	cargo install cargo-insta
+	cargo install cargo-nextest --locked
+	cargo install zepter
 
 install-risc0-toolchain:  ## install risc0 toolchain
 	curl -L https://risczero.com/install | bash
