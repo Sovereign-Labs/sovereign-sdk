@@ -1,0 +1,64 @@
+[da]
+# The avail node endpoints to interact with Avail DA
+http_api_url = "https://turing-rpc.avail.so/rpc"
+ws_api_url = "wss://turing-rpc.avail.so/ws"
+
+proof_app_id = 
+batch_app_id = 
+
+# the signer's seed, to use to submit blob on Avail DA# App ids for batches and proofs submited by rollup, for more info https://docs.availproject.org/docs/build-with-avail/interact-with-avail-da/app-id# App ids for submitting batches and proofs over Avail DA
+signer_key = ""
+
+
+[storage]
+# The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
+path = "demo_data"
+
+# We define the rollup's genesis to occur at block number `genesis_height`. The rollup will ignore
+# any blocks before this height, and any blobs at this height will not be processed
+[runner]
+genesis_height = 0
+
+# da.block_time is 20s, so status updater will try to poll it 20 times during it.
+da_polling_interval_ms = 1000
+
+[runner.http_config]
+bind_host = "127.0.0.1"
+bind_port = 12346
+# In case of the arollup is running behind a proxy
+# public_address = "http://rollup.sovereign.xyz"
+
+[monitoring]
+telegraf_address = "udp://127.0.0.1:8094"
+# Defines how many measurements a rollup node will accumulate before sending it to the Telegraf.
+# It is expected from the rollup node to produce metrics all the time,
+# so measurements are buffered by size and not sent by time.
+# and below 67 KB, which is the maximal UDP packet size.
+# It also means that if a single serialized metric is larger than this value, a UDP packet will be larger.
+# The default value is 508.
+# max_datagram_size = 508
+# How many metrics are allowed to be in pending state, before new metrics will be dropped.
+# This is a number of metrics, not serialized bytes.
+# The total number of bytes to be held in memory might vary per metric + `max_datagram_size`
+# max_pending_metrics = 100
+
+[proof_manager]
+aggregated_proof_block_jump = 1
+prover_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+max_number_of_transitions_in_db = 100
+max_number_of_transitions_in_memory = 30
+
+[sequencer]
+blob_processing_timeout_secs = 300
+max_batch_size_bytes = 1048576
+max_concurrent_blobs = 128
+max_allowed_node_distance_behind = 10
+da_address = "0000000000000000000000000000000000000000000000000000000000000000"
+rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+[sequencer.preferred]
+# TODO: Remove it when https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2814 is resolved
+disable_state_root_consistency_checks = true
+# Strategy for handling recovery scenarios when the sequencer is too far behind.
+# "None" - Shutdown the sequencer instead of attempting recovery (default)
+# "TryToSave" - Attempt to recover by flushing batches and catching up with the chain
+recovery_strategy = "TryToSave"
