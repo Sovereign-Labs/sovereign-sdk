@@ -79,23 +79,18 @@ RUN . /home/runner/.cargo/env \
 
 # Install core Rust development tools
 RUN . /home/runner/.cargo/env \
-    && cargo install cargo-hack --locked \
-    && cargo install cargo-nextest@0.9.96 --locked \
-    && cargo install cargo-llvm-cov --locked \
-    && cargo install cargo-deny@0.16.1 --locked \
-    && cargo install cargo-insta@1.42.1 --locked \
-    && cargo install zepter@1.5.0 --locked \
+    && cargo install cargo-hack@0.6.37 --locked \
+    && cargo install cargo-nextest@0.9.100 --locked \
+    && cargo install cargo-llvm-cov@0.6.18 --locked \
+    && cargo install cargo-deny@0.18.3 --locked \
+    && cargo install cargo-insta@1.43.1 --locked \
+    && cargo install zepter@1.78.2 --locked \
     && cargo install bashtestmd@0.5.0 --locked \
+    && cargo +nightly install cargo-udeps@0.1.57 --locked \
     # Clear cargo cache to reduce image size
     && rm -rf /home/runner/.cargo/registry \
     && rm -rf /home/runner/.cargo/git \
     && rm -rf /tmp/cargo-*
-
-# Install additional tools on nightly
-RUN . /home/runner/.cargo/env \
-    && cargo +nightly install cargo-udeps --locked \
-    && rm -rf /home/runner/.cargo/registry \
-    && rm -rf /home/runner/.cargo/git
 
 # Important step to make cache mountable
 RUN rm -rf /home/runner/.cargo/.global-cache
