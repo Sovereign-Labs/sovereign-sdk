@@ -283,7 +283,10 @@ jobs:
 
   doctests:
     name: doctests
-    runs-on: namespace-profile-sov-rust-amd64-ubuntu-24-04-16x64-with-cache
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+      - nscloud-cache-tag-cache-doctests
+      - nscloud-cache-size-100gb
     timeout-minutes: 60
     env:
       SKIP_GUEST_BUILD: "1"
@@ -293,6 +296,10 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      - uses: ./.github/actions/setup
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          install_zkvm: "0"
       # `cargo-nextest` does not support doctests (yet?), so we have to run them
       # separately.
       # TODO: https://github.com/nextest-rs/nextest/issues/16
@@ -300,8 +307,12 @@ jobs:
 
   coverage:
     name: coverage
-    # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-rust-amd64-ubuntu-24-04-16x64-with-cache;container.privileged=true;container.host-pid-namespace=true
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-16x32-with-cache
+      - nscloud-cache-tag-cache-coverage
+      - nscloud-cache-size-150gb
+      # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
+      - nscloud-exp-features:privileged;host-pid-namespace
     timeout-minutes: 90
     env:
       SKIP_GUEST_BUILD: "1"
@@ -312,6 +323,10 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      - uses: ./.github/actions/setup
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          install_zkvm: "0"
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
