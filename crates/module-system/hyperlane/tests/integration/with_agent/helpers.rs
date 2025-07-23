@@ -11,6 +11,7 @@ use serde_json::{json, Value};
 use sov_bank::Amount;
 use sov_hyperlane_integration::{EthAddress, Message};
 use sov_mock_da::BlockProducingConfig;
+use sov_modules_api::macros::config_value;
 use sov_modules_api::{CryptoSpec, HexHash, HexString, Spec};
 use sov_sequencer::preferred::PreferredSequencerConfig;
 use sov_sequencer::SequencerKindConfig;
@@ -26,7 +27,6 @@ use tokio::time::timeout;
 
 use super::configs::{
     agent_config, core_config, ethtest_metadata, sovtest_addresses, sovtest_metadata,
-    warp_route_deployment,
 };
 use super::preferred_sequencer_runtime::{GenesisConfig, TestRuntime};
 use crate::with_agent::configs::warp_route_config;
@@ -191,7 +191,7 @@ pub async fn setup_rollup(
 pub struct HyperlaneBuilder {
     image: GenericImage,
     rollup_port: Option<u16>,
-    rollup_recipient: Option<HexHash>,
+    with_evm: bool,
     relayer: Option<PrivateKey>,
     validators: Vec<PrivateKey>,
 }
@@ -223,7 +223,7 @@ impl HyperlaneBuilder {
         Self {
             image,
             rollup_port: None,
-            rollup_recipient: None,
+            with_evm: false,
             relayer: None,
             validators: vec![],
         }
@@ -255,8 +255,8 @@ impl HyperlaneBuilder {
     }
 
     /// Run evm counterparty that will send test messages to specified recipient
-    pub fn with_evm_counterparty(mut self, rollup_recipient: HexHash) -> Self {
-        self.rollup_recipient = Some(rollup_recipient);
+    pub fn with_evm_counterparty(mut self) -> Self {
+        self.with_evm = true;
         self
     }
 
@@ -300,9 +300,8 @@ impl HyperlaneBuilder {
         // evm counterparty must be started before agents
         // because they will try to reach out to it immediately.
         // same goes for rollup, but we assume its runnig knowing its port.
-        let (anvil, evm_recipient) = if let Some(rollup_recipient) = self.rollup_recipient {
-            let (anvil, evm_recipient) =
-                start_evm_counterparty(&container, rollup_recipient, rollup_port).await;
+        let (anvil, evm_recipient) = if self.with_evm {
+            let (anvil, evm_recipient) = start_evm_counterparty(&container, rollup_port).await;
             (Some(anvil), Some(evm_recipient))
         } else {
             (None, None)
@@ -355,53 +354,38 @@ pub struct Hyperlane {
 
 impl Hyperlane {
     /// Send test message from evm counterparty to sov test recipient
-    pub async fn dispatch_msg_from_counterparty(&self) -> (Message, HexHash) {
+    pub async fn dispatch_msg_from_counterparty(&self, recipient: HexHash) -> EvmDispatchWithId {
         if self.anvil.is_none() {
             panic!("called dispatch_msg_from_counterparty without set up counterparty");
         }
+        let dest_domain = config_value!("HYPERLANE_BRIDGE_DOMAIN");
 
-        let output = self
-            .container
-            .exec(ExecCommand::new([
-                "hyperlane",
-                "send",
-                "message",
-                "--origin",
-                "ethtest",
-                "--destination",
-                "sovtest",
-                // don't wait for confirmation of delivery
-                "--quick",
-            ]))
-            .await
-            .unwrap()
-            .stdout_to_vec()
-            .await
-            .unwrap();
+        // https://github.com/hyperlane-xyz/hyperlane-monorepo/blob/main/solidity/contracts/Mailbox.sol#L110
+        let logs = cast_call(
+            &self.container,
+            EVM_MAILBOX,
+            "dispatch(uint32,bytes32,bytes)",
+            [
+                // destination domain
+                dest_domain.to_string().as_str(),
+                // recipient
+                recipient.to_string().as_str(),
+                // message
+                HexString(b"hello world".to_vec()).to_string().as_str(),
+            ],
+            Amount(0),
+        )
+        .await;
 
-        let output = String::from_utf8_lossy(&output);
-        // skip everything up to Message info
-        let lines: Vec<_> = output
-            .lines()
-            .skip_while(|&line| line != "Message:")
-            .collect();
-
-        extract_message_from_logs(&lines, true)
+        EvmDispatchWithId::new(logs)
     }
 
     /// Searches latest block on evm counterparty (where there's block per tx)
     /// and tries to extract the Mailbox Process event from it.
     pub async fn latest_message_on_counterparty(&self) -> EvmProcessWithId {
         // fetch logs in latest block
-        let logs: Vec<EvmLog> = anvil_rpc(&self.container, "eth_getLogs", json!([{}])).await;
-        let mut logs = logs.into_iter().filter(|log| log.address == EVM_MAILBOX);
-        let process = logs.next().unwrap();
-        let process_id = logs.next().unwrap();
-
-        // we should only have 2 logs
-        assert!(logs.next().is_none());
-
-        EvmProcessWithId::new(&process.topics, &process_id.topics)
+        let logs: Vec<_> = anvil_rpc(&self.container, "eth_getLogs", json!([{}])).await;
+        EvmProcessWithId::new(logs)
     }
 
     /// Mines next block on the counterparty evm chain.
@@ -427,7 +411,7 @@ impl Hyperlane {
         }
 
         // deploy warp route on evm counterparty
-        let warp_config = warp_route_config(sovtest_route);
+        let warp_config = warp_route_config(sovtest_route, sovtest_decimals);
         exec_in_bash(
             &self.container,
             format!("echo '{warp_config}' > configs/warp-route-deployment.yaml"),
@@ -442,7 +426,13 @@ impl Hyperlane {
         let stdout = res.stdout_to_vec().await.unwrap();
         let stdout = String::from_utf8_lossy(&stdout);
         if res.exit_code().await.unwrap().unwrap() != 0 {
+            let stderr = res.stderr_to_vec().await.unwrap();
+
             println!("hyperlane warp deploy stdout: {stdout}");
+            println!(
+                "hyperlane warp deploy stderr: {}",
+                String::from_utf8_lossy(&stderr)
+            );
             panic!("hyperlane deployment on evm chain failed");
         }
 
@@ -454,95 +444,42 @@ impl Hyperlane {
             .split("\"")
             .nth(1)
             .unwrap();
-        let ethtest_route = parse_eth_addr(ethtest_route);
 
-        // now call the hyperlane warp apply for the same config,
-        // as hyperlane warp deploy skips `remoteRouters`
-        let mut res = self
-            .container
-            .exec(ExecCommand::new([
-                "hyperlane",
-                "warp",
-                "apply",
-                "--symbol",
-                "nativeETH",
-                "--config",
-                "configs/warp-route-deployment.yaml",
-                "--yes",
-            ]))
-            .await
-            .unwrap();
-
-        let stdout = res.stdout_to_vec().await.unwrap();
-        let stdout = String::from_utf8_lossy(&stdout);
-        if res.exit_code().await.unwrap().unwrap() != 0 {
-            println!("hyperlane warp apply stdout: {stdout}");
-            let stderr = res.stderr_to_vec().await.unwrap();
-            let stderr = String::from_utf8_lossy(&stderr);
-            println!("hyperlane warp apply stderr: {stderr}");
-            panic!("hyperlane deployment on evm chain failed");
-        }
-
-        // put the config for `hyperlane warp send` command that includes the rollup
-        // as `warp deploy` only had ethtest configuration.
-        let warp_deployment = warp_route_deployment(ethtest_route, sovtest_route, sovtest_decimals);
-        exec_in_bash(
-            &self.container,
-            format!("echo '{warp_deployment}' > ~/.hyperlane/deployments/warp_routes/nativeETH/ethtest-config.yaml"),
-        ).await;
-
-        ethtest_route
+        parse_eth_addr(ethtest_route)
     }
 
     pub async fn send_warp_token_transfer_from_counterparty(
         &self,
+        counterparty_route_id: HexHash,
         recipient: HexHash,
         amount: Amount,
-    ) -> (Message, HexHash) {
+    ) -> EvmDispatchWithId {
         if self.anvil.is_none() {
             panic!("called dispatch_msg_from_counterparty without set up counterparty");
         }
+        let route_addr = HexString::new(counterparty_route_id.0[12..].try_into().unwrap());
+        let destination = config_value!("HYPERLANE_BRIDGE_DOMAIN").to_string();
 
-        // `warp send` currently only supports routes between evm chains.
-        // `hyperlane-cli` thinks rollup uses "ethereum" protocol (see [`sovtest_metadata`]),
-        // however we still need to run slightly patched version that does 2 things differently:
-        // - runs pre-transfer checks only on origin chain
-        // - accepts hyperlane addresses in addition to ethereum addresses
-        // <https://github.com/eigerco/hyperlane-monorepo/commit/ca16901f7a4a86d041fb5f052bccc33deee8f4c4>
-        let output = self
-            .container
-            .exec(ExecCommand::new([
-                "hyperlane",
-                "warp",
-                "send",
-                "--symbol",
-                "nativeETH",
-                "--origin",
-                "ethtest",
-                "--destination",
-                "sovtest",
-                "--amount",
-                &amount.to_string(),
-                "--recipient",
-                &recipient.to_string(),
-                // don't wait for confirmation of delivery
-                "--quick",
-            ]))
-            .await
-            .unwrap()
-            .stdout_to_vec()
-            .await
-            .unwrap();
+        // https://github.com/hyperlane-xyz/hyperlane-monorepo/tree/c177c4733de52f8a2477ad74b46b3f1eebb5740b/solidity/contracts/token/libs/TokenRouter.sol#L54
+        let logs = cast_call(
+            &self.container,
+            route_addr,
+            "transferRemote(uint32,bytes32,uint256)",
+            [
+                // destination domain
+                destination.as_str(),
+                // recipient
+                recipient.to_string().as_str(),
+                // amount
+                amount.to_string().as_str(),
+            ],
+            // we don't need to pay fees on counterparty
+            // so we only need to give contract what we want to send
+            amount,
+        )
+        .await;
 
-        let output = String::from_utf8_lossy(&output);
-        // skip everything up to Message info
-        let lines: Vec<_> = output
-            .lines()
-            .skip_while(|&line| line != "Message:")
-            .collect();
-
-        // don't extract the body
-        extract_message_from_logs(&lines, false)
+        EvmDispatchWithId::new(logs)
     }
 
     pub async fn counterparty_balance_of(&self, address: HexHash) -> Amount {
@@ -623,7 +560,11 @@ impl Hyperlane {
 #[derive(Debug, Deserialize)]
 struct EvmLog {
     address: EthAddress,
+    /// First topic is keccak hash of event's signature
+    /// followed by indexed event's fields in order they are defined.
     topics: Vec<HexHash>,
+    /// Data holds abi encoded non-indexed event's fields
+    data: HexString,
 }
 
 pub struct EvmProcessWithId {
@@ -638,23 +579,72 @@ pub struct EvmProcessWithId {
 }
 
 impl EvmProcessWithId {
-    /// Reconstruct combined process event from contract log's topics.
-    fn new(dispatch_topics: &[HexHash], dispatch_id_topics: &[HexHash]) -> Self {
-        // Topics are events, where first topic is event signature,
-        // followed by event's fields in order.
-        //
-        // Fields on evm have the same order as our events
-        // https://github.com/hyperlane-xyz/hyperlane-monorepo/blob/7656fe1c3865f817d68971ed3c8b939376065283/solidity/contracts/interfaces/IMailbox.sol#L29-L45
-        assert_eq!(dispatch_topics.len(), 4);
-        assert_eq!(dispatch_id_topics.len(), 2);
+    /// Reconstruct combined process event from mailbox logs.
+    /// https://github.com/hyperlane-xyz/hyperlane-monorepo/blob/7656fe1c3865f817d68971ed3c8b939376065283/solidity/contracts/interfaces/IMailbox.sol#L29-L45
+    fn new(logs: impl IntoIterator<Item = EvmLog>) -> Self {
+        let mut logs = logs.into_iter().filter(|log| log.address == EVM_MAILBOX);
+        let process = logs.next().unwrap();
+        let process_id = logs.next().unwrap();
 
-        let origin_domain = domain_from_hexhash(dispatch_topics[1]);
+        // we should only have 2 logs from the mailbox
+        assert!(logs.next().is_none());
+
+        // Fields on evm have the same order as our events
+        assert_eq!(process.topics.len(), 4);
+        assert_eq!(process_id.topics.len(), 2);
 
         EvmProcessWithId {
-            origin_domain,
-            sender_address: dispatch_topics[2],
-            recipient_address: dispatch_topics[3],
-            id: dispatch_id_topics[1],
+            origin_domain: domain_from_hexhash(process.topics[1]),
+            sender_address: process.topics[2],
+            recipient_address: process.topics[3],
+            id: process_id.topics[1],
+        }
+    }
+}
+
+pub struct EvmDispatchWithId {
+    /// The sender address of the message.
+    pub sender_address: HexHash,
+    /// The destination domain of the message.
+    pub destination_domain: u32,
+    /// The recipient address of the message.
+    pub recipient_address: HexHash,
+    /// The message that was dispatched.
+    pub message: Message,
+    /// The ID of the message.
+    pub message_id: HexHash,
+}
+
+impl EvmDispatchWithId {
+    /// Reconstruct combined dispatch event from mailbox logs.
+    /// https://github.com/hyperlane-xyz/hyperlane-monorepo/blob/7656fe1c3865f817d68971ed3c8b939376065283/solidity/contracts/interfaces/IMailbox.sol#L9-L27
+    fn new(logs: impl IntoIterator<Item = EvmLog>) -> Self {
+        let mut logs = logs.into_iter().filter(|log| log.address == EVM_MAILBOX);
+        let dispatch = logs.next().unwrap();
+        let dispatch_id = logs.next().unwrap();
+
+        // we should only have 2 logs from the mailbox
+        assert!(logs.next().is_none());
+
+        // Fields on evm have the same order as our events
+        assert_eq!(dispatch.topics.len(), 4);
+        assert_eq!(dispatch_id.topics.len(), 2);
+
+        // first 32 bytes is field's offset, always 0x20 for first field
+        // next 32 bytes is the length of the field bytes
+        let encoded_len = &dispatch.data.0[32..64];
+        assert!(encoded_len.iter().take(28).all(|&byte| byte == 0));
+        let message_len = u32::from_be_bytes(encoded_len[28..].try_into().unwrap());
+        // next comes the field's data, with the length we just parsed, padded with 0' to the
+        // mulitplier of 32
+        let message_bytes = &dispatch.data.0[64..64 + message_len as usize];
+
+        EvmDispatchWithId {
+            sender_address: dispatch.topics[1],
+            destination_domain: domain_from_hexhash(dispatch.topics[2]),
+            recipient_address: dispatch.topics[3],
+            message: Message::decode(message_bytes).unwrap(),
+            message_id: dispatch_id.topics[1],
         }
     }
 }
@@ -755,13 +745,8 @@ async fn start_validator(
 
 /// Run Evm counterparty chain in docker.
 ///
-/// Takes an address of sov test recipient, that can be used as a target of test
-/// messages sent by `hyperlane-cli` and returns an address of evm test recipient
-async fn start_evm_counterparty(
-    container: &Container,
-    rollup_recipient: HexHash,
-    rollup_port: u16,
-) -> (ExecResult, HexHash) {
+/// Returns an address of evm test recipient, to which we can dispatch test messages.
+async fn start_evm_counterparty(container: &Container, rollup_port: u16) -> (ExecResult, HexHash) {
     let anvil = container
         .exec(ExecCommand::new([
             "anvil",
@@ -816,7 +801,7 @@ async fn start_evm_counterparty(
     }
 
     // create `~/.hyperlane/chains/sovtest/addresses.yaml
-    let sov_addresses = sovtest_addresses(rollup_recipient);
+    let sov_addresses = sovtest_addresses();
     exec_in_bash(
         container,
         format!("echo '{sov_addresses}' > {chains_dir}/sovtest/addresses.yaml"),
@@ -868,7 +853,7 @@ pub async fn get_docker_gateway_ip() -> String {
 
 // parses eth addr 0x(40 chars hex) into HexHash
 pub fn parse_eth_addr(addr: &str) -> HexHash {
-    let address: HexString<[u8; 20]> = addr.trim().parse().unwrap();
+    let address: EthAddress = addr.trim().parse().unwrap();
     let mut res = [0; 32];
     res[12..].copy_from_slice(&address.0);
 
@@ -904,36 +889,48 @@ pub async fn anvil_rpc<T: DeserializeOwned>(
     serde_json::from_value(resp["result"].clone()).unwrap()
 }
 
-fn extract_message_from_logs(logs: &[&str], with_body: bool) -> (Message, HexHash) {
-    let extract_field = |pattern, split| {
-        logs.iter()
-            .find(|l| l.contains(pattern))
-            .and_then(|l| l.split(split).nth(1))
-            .unwrap()
-            .trim()
-    };
-    // we extract from two patterns and take second element
-    // - '   something: 1234' using ': '
-    // - '   something: "0x123...224"' using '"' to remove quotes
-    let message_id = extract_field("id: ", "\"").parse().unwrap();
-    let message = Message {
-        version: extract_field("version: ", ": ").parse().unwrap(),
-        nonce: extract_field("nonce: ", ": ").parse().unwrap(),
-        origin_domain: extract_field("origin: ", ": ").parse().unwrap(),
-        sender: extract_field("sender: ", "\"").parse().unwrap(),
-        dest_domain: extract_field("destination: ", ": ").parse().unwrap(),
-        recipient: extract_field("recipient: ", "\"").parse().unwrap(),
-        // if body is too long, it's gonna be split into multiple lines
-        // and harder to parse. This happens eg. in case of warp. Since it
-        // is not needed in this case, it's simpler to just skip it conditionally
-        body: if with_body {
-            extract_field("body: ", "\"").parse().unwrap()
-        } else {
-            HexString::new(vec![])
-        },
-    };
+async fn cast_call(
+    container: &Container,
+    contract: EthAddress,
+    abi: &str,
+    args: impl AsRef<[&str]>,
+    value: Amount,
+) -> Vec<EvmLog> {
+    let contract = contract.to_string();
+    let value = value.to_string();
+    let command = [
+        &["cast", "send", contract.as_str(), abi][..],
+        args.as_ref(),
+        &[
+            "--value",
+            value.as_str(),
+            "--private-key",
+            ANVIL_ACCOUNTS[0].1,
+            "--json",
+        ][..],
+    ]
+    .concat();
 
-    (message, message_id)
+    let output = container
+        .exec(ExecCommand::new(command.clone()))
+        .await
+        .unwrap()
+        .stdout_to_vec()
+        .await
+        .unwrap();
+
+    // print the output to help debugging, it anyway only shows if test fails
+    println!("executing {command:?}");
+    println!("{}", String::from_utf8_lossy(&output));
+
+    #[derive(Debug, Deserialize)]
+    struct CallOutput {
+        logs: Vec<EvmLog>,
+    }
+
+    let output: CallOutput = serde_json::from_slice(&output).unwrap();
+
+    output.logs
 }
 
 fn domain_from_hexhash(hash: HexHash) -> u32 {
