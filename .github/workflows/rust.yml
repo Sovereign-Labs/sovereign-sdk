@@ -52,8 +52,6 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
-  # This is faster for CI: https://github.com/dtolnay/rust-toolchain/issues/26.
-  CARGO_INCREMENTAL: "0"
   CARGO_NET_GIT_FETCH_WITH_CLI: true
   NO_COLOR: 1
 
