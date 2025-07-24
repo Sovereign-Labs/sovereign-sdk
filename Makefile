@@ -36,7 +36,7 @@ clean: ## Cleans compiled
 check-provers:   ## cargo check in non attached crates
 	@set -e; for dir in $(PROVER_DIRS); do \
 		echo "$$(date) Running cargo fmt + check in $$dir"; \
-		cargo +nightly fmt --all --check --quiet --manifest-path "$$dir/Cargo.toml"; \
+		cargo fmt --all --check --quiet --manifest-path "$$dir/Cargo.toml"; \
 		cargo check --all-targets --all-features --manifest-path "$$dir/Cargo.toml"; \
 	done
 
@@ -108,7 +108,7 @@ install-sp1-toolchain:  ## install SP1 toolchain
 
 lint:  ## cargo fmt, check and clippy.
 	## fmt first, because it's the cheapest
-	cargo +nightly fmt --all --check
+	cargo fmt --all --check
 	cargo check --all-targets --all-features
 	## Invokes Zepter multiple times because fixes sometimes unveal more underlying issues.
 	zepter
@@ -137,7 +137,7 @@ cargo-deny-check:   ## Runs a global cargo-deny check, not just the licenses.
 	cargo deny check --hide-inclusion-graph
 
 lint-fix:  ## cargo fmt, fix and clippy. Skip clippy on guest code since it's not supported by risc0
-	cargo +nightly fmt --all
+	cargo fmt --all
 	cargo fix --allow-dirty
 	SKIP_GUEST_BUILD=1 cargo clippy --fix --allow-dirty -- -A clippy::too_many_arguments
 
@@ -156,9 +156,6 @@ check-constant-overriding-is-disabled-in-release-mode:
 		exit 1; \
 	fi
 	@echo "Check succeeded!"
-
-find-unused-deps: ## Prints unused dependencies for project. Note: requires nightly
-	cargo +nightly udeps --all-targets --all-features
 
 find-flaky-tests:  ## Runs tests over and over to find if there's flaky tests
 	flaky-finder -j16 -r320 --continue "cargo test -- --nocapture"
