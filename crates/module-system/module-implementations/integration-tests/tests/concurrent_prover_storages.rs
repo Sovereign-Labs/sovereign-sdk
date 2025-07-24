@@ -509,7 +509,8 @@ fn assert_values<S: NativeStorage>(
     assert_eq!(
         last_value,
         get_value(None),
-        "Not specifying version should be equal to last version for this storage in {namespace:?}",
+        "Not specifying version should be equal to last version for this storage in {namespace:?}. Expected_values: {:?}",
+        expected_values
     );
 
     let next_version = expected_values.len() as u64;

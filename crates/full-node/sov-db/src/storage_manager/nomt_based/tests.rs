@@ -71,11 +71,16 @@ impl TestableStorage for TestNomtStorage {
         let accessory_change_set =
             AccessoryDb::materialize_values(accessory_writes.clone(), SlotNumber::GENESIS).unwrap();
 
+        let root_hash = [
+            user_finished_session.root().into_inner(),
+            kernel_finished_session.root().into_inner(),
+        ]
+        .concat();
         let historical_change_set = HistoricalStateReader::materialize_values(
             accessory_writes.clone(),
             accessory_writes.clone(),
             // Not used at the moment,
-            items.len().to_be_bytes().to_vec(),
+            root_hash,
             SlotNumber::new(version),
         )
         .unwrap();
@@ -122,6 +127,22 @@ impl TestableStorage for TestNomtStorage {
         assert_eq!(historical_value_kernel, kernel_value);
 
         kernel_value
+    }
+
+    fn get_value_without_consistency_checks(&self, key: &[u8]) -> Option<Vec<u8>> {
+        let schema_key = key.to_vec();
+        let historical_value_user = self
+            .historical_state
+            .get_user_value_option_by_key(&schema_key)
+            .unwrap();
+
+        let historical_value_kernel = self
+            .historical_state
+            .get_kernel_value_option_by_key(&schema_key)
+            .unwrap();
+        assert_eq!(historical_value_user, historical_value_kernel);
+
+        historical_value_kernel
     }
 }
 
@@ -225,7 +246,7 @@ fn test_several_jumping_forks() {
 
 #[test]
 fn test_removed_fork_view() {
-    removed_fork_data_view::<Sm>();
+    removed_fork_data_view::<Sm>(true);
 }
 
 #[test]

@@ -82,22 +82,18 @@ where
         self.is_strict_mode = use_strict_mode;
     }
 
-    fn get_version_to_use(&self, version: Option<SlotNumber>) -> Option<SlotNumber> {
+    fn get_version_to_use(&self, version: Option<SlotNumber>) -> Option<Option<SlotNumber>> {
         if self.is_empty() {
             return None;
         }
         let next_version = self.historical_state.get_next_version();
         match version {
-            None => Some(
-                next_version
-                    .checked_sub(1)
-                    .expect("Next version for non empty storage should be above 0"),
-            ),
+            None => Some(None),
             Some(passed_version) => {
                 if passed_version >= next_version {
                     None
                 } else {
-                    Some(passed_version)
+                    Some(Some(passed_version))
                 }
             }
         }
@@ -133,10 +129,10 @@ where
         // bypasses the cache. This causes worse read performance, but prevents queries from interfering with
         // transaction execution by thrashing the cache.
         let resolved_version = self.get_version_to_use(version)?;
-        let _span = tracing::debug_span!("version", %resolved_version, passed = ?version).entered();
+        let _span = tracing::debug_span!("version", ?resolved_version, passed = ?version).entered();
         match N::NAMESPACE {
             Namespace::User => {
-                let historical_value = if let Some(version) = version {
+                let historical_value = if let Some(version) = resolved_version {
                     self.historical_state
                         .get_user_value_option_by_key_historical(key.as_ref(), version)
                         .expect("Underlying user I/O failed")
@@ -145,7 +141,8 @@ where
                         .get_user_value_option_by_key(key.as_ref())
                         .expect("Underlying user I/O failed")
                 };
-                if self.should_check_dbs_sync(resolved_version) {
+                let version_to_check = resolved_version.unwrap_or(self.latest_version());
+                if self.should_check_dbs_sync(version_to_check) {
                     let key_path = S::Hasher::digest(key.as_ref()).into();
                     tracing::trace!(
                         %key,
@@ -176,7 +173,8 @@ where
                         .get_kernel_value_option_by_key(key.as_ref())
                         .expect("Underlying kernel I/O failed")
                 };
-                if self.should_check_dbs_sync(resolved_version) {
+                let version_to_check = resolved_version.unwrap_or(self.latest_version());
+                if self.should_check_dbs_sync(version_to_check) {
                     let key_path = S::Hasher::digest(key.as_ref()).into();
                     tracing::trace!(
                         %key,
@@ -199,7 +197,10 @@ where
             }
             Namespace::Accessory => self
                 .accessory
-                .get_value_option(key.as_ref(), resolved_version)
+                .get_value_option(
+                    key.as_ref(),
+                    resolved_version.unwrap_or(self.latest_version()),
+                )
                 .expect("Unable to read from AccessoryDb"),
         }
         .map(Into::into)
@@ -575,21 +576,10 @@ where
         key: SlotKey,
         slot_number: Option<SlotNumber>,
     ) -> anyhow::Result<StorageProof<Self::Proof>> {
-        let version_to_use = match self.get_version_to_use(slot_number) {
-            None => {
-                anyhow::bail!(
-                    "Proof is not available at version {:?}. Empty storage or future version",
-                    slot_number,
-                )
-            }
-            Some(v) => v,
-        };
         let namespace = N::PROVABLE_NAMESPACE;
         let value = match namespace {
-            ProvableNamespace::User => self.read_value::<crate::User>(&key, Some(version_to_use)),
-            ProvableNamespace::Kernel => {
-                self.read_value::<crate::Kernel>(&key, Some(version_to_use))
-            }
+            ProvableNamespace::User => self.read_value::<crate::User>(&key, slot_number),
+            ProvableNamespace::Kernel => self.read_value::<crate::Kernel>(&key, slot_number),
         };
 
         Ok(StorageProof {
@@ -608,7 +598,8 @@ where
                 anyhow::bail!("Root node not found for version {}.", version)
             }
             Some(v) => v,
-        };
+        }
+        .unwrap_or(self.latest_version());
         let storage_root_historical = self.get_root_hash_unbound(version_to_use)?;
         if self.should_check_dbs_sync(version_to_use) {
             let user_session = self.state_session_builder.begin_user_session()?;

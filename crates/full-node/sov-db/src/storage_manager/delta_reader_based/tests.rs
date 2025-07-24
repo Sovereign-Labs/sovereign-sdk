@@ -90,6 +90,10 @@ impl TestableStorage for TestNativeStorage {
         assert_eq!(user_value, kernel_value);
         user_value
     }
+
+    fn get_value_without_consistency_checks(&self, key: &[u8]) -> Option<Vec<u8>> {
+        self.get_value(key)
+    }
 }
 
 type Sm = NativeStorageManager<MockDaSpec, TestNativeStorage>;
@@ -209,7 +213,7 @@ fn test_several_jumping_forks() {
 
 #[test]
 fn test_removed_fork_view() {
-    removed_fork_data_view::<Sm>();
+    removed_fork_data_view::<Sm>(false);
 }
 
 // This test is similar to `removed_fork_data_view`,

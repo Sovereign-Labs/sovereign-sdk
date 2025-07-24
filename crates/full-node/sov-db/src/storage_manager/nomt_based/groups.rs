@@ -6,8 +6,9 @@ use std::thread::JoinHandle;
 
 use anyhow::Context;
 use rockbound::cache::delta_reader::DeltaReader;
+use rockbound::rocksdb::ColumnFamilyDescriptor;
 use rockbound::versioned_db::{EmptyKey, VersionedDB, VersionedDeltaReader};
-use rockbound::SchemaBatch;
+use rockbound::{default_cf_descriptor, SchemaBatch};
 use sov_rollup_interface::reexports::digest;
 
 use crate::accessory_db::AccessoryDb;
@@ -35,10 +36,11 @@ impl PlainStateDb {
 
     /// Create a new [`PlainStateDb`] from a path.
     pub fn new(path: std::path::PathBuf) -> anyhow::Result<Self> {
-        let mut columns = vec![StateRootHashes::table_name()];
+        let mut columns = vec![default_cf_descriptor(StateRootHashes::table_name())];
         VersionedDB::<NomtStateValues<UserNamespace>>::add_column_families(&mut columns)?;
         VersionedDB::<NomtStateValues<KernelNamespace>>::add_column_families(&mut columns)?;
-        let mut other = Self::get_rockbound_options(columns).default_setup_db_in_path(path)?;
+        let mut other =
+            Self::get_rockbound_options(columns).setup_db_in_path_with_column_descriptors(path)?;
         let next_version = other
             .get::<NomtCommittedVersion<KernelNamespace>>(&EmptyKey)?
             .and_then(|v| v.checked_add(1))
@@ -74,7 +76,9 @@ impl PlainStateDb {
     }
 
     /// [`DbOptions`] for [`HistoricalStateReader`].
-    pub fn get_rockbound_options(columns: Vec<&'static str>) -> DbOptions {
+    pub fn get_rockbound_options(
+        columns: Vec<ColumnFamilyDescriptor>,
+    ) -> DbOptions<ColumnFamilyDescriptor> {
         DbOptions {
             name: Self::DB_NAME,
             path_suffix: Self::DB_PATH_SUFFIX,
@@ -117,7 +121,7 @@ pub(crate) struct DbGroup<H, K> {
 impl<H, K> DbGroup<H, K>
 where
     H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
-    K: Eq + std::hash::Hash + Clone,
+    K: Eq + std::hash::Hash + Clone + std::fmt::Debug,
 {
     pub(crate) fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
         let path = config.path.clone();
@@ -166,7 +170,7 @@ where
     pub(crate) fn commit_pruning(&mut self, group: PruneGroup) -> anyhow::Result<()> {
         self.plain_state
             .other
-            .write_schemas(&group.historical_state)?;
+            .write_schemas_without_version_bump(&group.historical_state)?;
         self.accessory.write_schemas(&group.accessory)?;
         Ok(())
     }
@@ -207,6 +211,8 @@ where
             .plain_state
             .other
             .get_committed_version(Ordering::Acquire);
+        tracing::debug!("creating storage. committed version: {:?}", version);
+
         let user_state_reader = VersionedDeltaReader::<NomtStateValues<UserNamespace>>::new(
             self.plain_state.user.clone(),
             version,
