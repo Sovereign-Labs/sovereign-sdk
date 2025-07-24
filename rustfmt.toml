@@ -1,2 +1,3 @@
-group_imports = "StdExternalCrate"
-imports_granularity = "Module"
+# Keep those and have warnings on CI or remove it and don't have it locally?
+#group_imports = "StdExternalCrate"
+#imports_granularity = "Module"
