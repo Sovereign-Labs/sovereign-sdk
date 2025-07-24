@@ -110,9 +110,6 @@ jobs:
         with:
           cache: rust
           path: ./crates/fuzz/target
-      - uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run lint
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: true
@@ -142,9 +139,6 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - run: cargo bench --no-run
         env:
           SOV_BENCH_BLOCKS: 1
@@ -162,9 +156,6 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: rollup bench check
         env:
           SOV_BENCH_BLOCKS: 10
@@ -194,10 +185,6 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          install_zkvm: "0"
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
       - name: cargo hack
         run: make check-features
@@ -225,10 +212,6 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          install_zkvm: "0"
       - name: cargo hack
         run: make check-features-default-targets
 
@@ -280,10 +263,6 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          install_zkvm: "0"
       # `cargo-nextest` does not support doctests (yet?), so we have to run them
       # separately.
       # TODO: https://github.com/nextest-rs/nextest/issues/16
