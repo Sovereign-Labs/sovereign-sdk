@@ -411,15 +411,23 @@ impl Hyperlane {
         }
 
         // deploy warp route on evm counterparty
+        let config_path = "./configs/warp-route-deployment.yaml";
         let warp_config = warp_route_config(sovtest_route, sovtest_decimals);
         exec_in_bash(
             &self.container,
-            format!("echo '{warp_config}' > configs/warp-route-deployment.yaml"),
+            format!("echo '{warp_config}' > {config_path}"),
         )
         .await;
         let mut res = self
             .container
-            .exec(ExecCommand::new(["hyperlane", "warp", "deploy", "--yes"]))
+            .exec(ExecCommand::new([
+                "hyperlane",
+                "warp",
+                "deploy",
+                "--config",
+                config_path,
+                "--yes",
+            ]))
             .await
             .unwrap();
 
