@@ -1,27 +1,114 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
 
 use anyhow::Context;
 use rockbound::cache::delta_reader::DeltaReader;
+use rockbound::versioned_db::{EmptyKey, VersionedDB, VersionedDeltaReader};
 use rockbound::SchemaBatch;
 use sov_rollup_interface::reexports::digest;
 
 use crate::accessory_db::AccessoryDb;
 use crate::config::RollupDbConfig;
-use crate::historical_state::HistoricalStateReader;
+use crate::historical_state::{HistoricalStateReader, StateChanges};
 use crate::ledger_db::LedgerDb;
 use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::pruner::Pruner;
-use crate::schema::namespace::StateValues;
-use crate::schema::tables::ModuleAccessoryState;
+use crate::schema::namespace::{NomtCommittedVersion, NomtStateValues, StateValues};
+use crate::schema::tables::{ModuleAccessoryState, StateRootHashes};
 use crate::state_db_nomt::{NomtSessionBuilder, NomtStateDb, StateOverlay};
 use crate::storage_manager::{update_ledger_finalized_height, InitializableNativeNomtStorage};
+use crate::DbOptions;
+
+/// A database to store the flat state of the rollup (i.e. the raw key-value pairs)
+pub struct PlainStateDb {
+    user: VersionedDB<NomtStateValues<UserNamespace>>,
+    kernel: VersionedDB<NomtStateValues<KernelNamespace>>,
+    other: Arc<rockbound::DB>,
+}
+
+impl PlainStateDb {
+    const DB_NAME: &'static str = "state";
+    const DB_PATH_SUFFIX: &'static str = "state";
+
+    /// Create a new [`PlainStateDb`] from a path.
+    pub fn new(path: std::path::PathBuf) -> anyhow::Result<Self> {
+        let mut columns = vec![StateRootHashes::table_name()];
+        VersionedDB::<NomtStateValues<UserNamespace>>::add_column_families(&mut columns)?;
+        VersionedDB::<NomtStateValues<KernelNamespace>>::add_column_families(&mut columns)?;
+        let mut other = Self::get_rockbound_options(columns).default_setup_db_in_path(path)?;
+        let next_version = other
+            .get::<NomtCommittedVersion<KernelNamespace>>(&EmptyKey)?
+            .and_then(|v| v.checked_add(1))
+            .unwrap_or(0);
+        // TODO: Add consistency checks and/or roll back one DB if necessary.
+
+        other.initialize_next_version_to_commit(next_version);
+
+        let other = Arc::new(other);
+        let user = VersionedDB::<NomtStateValues<UserNamespace>>::from_db(other.clone())?;
+        let kernel = VersionedDB::<NomtStateValues<KernelNamespace>>::from_db(other.clone())?;
+        Ok(Self {
+            user,
+            kernel,
+            other,
+        })
+    }
+
+    #[allow(dead_code)]
+    /// Get the underlying [`rockbound::DB`] for the historical state. Used for testing only.
+    pub fn get_db(&self) -> Arc<rockbound::DB> {
+        self.other.clone()
+    }
+
+    /// Get the underlying [`VersionedDB`] for the user state.
+    pub fn get_user_db(&self) -> &VersionedDB<NomtStateValues<UserNamespace>> {
+        &self.user
+    }
+
+    /// Get the underlying [`VersionedDB`] for the kernel state.
+    pub fn get_kernel_db(&self) -> &VersionedDB<NomtStateValues<KernelNamespace>> {
+        &self.kernel
+    }
+
+    /// [`DbOptions`] for [`HistoricalStateReader`].
+    pub fn get_rockbound_options(columns: Vec<&'static str>) -> DbOptions {
+        DbOptions {
+            name: Self::DB_NAME,
+            path_suffix: Self::DB_PATH_SUFFIX,
+            columns,
+        }
+    }
+
+    /// Coalesce all the changes into a single schema batch.
+    fn prepare_commit(&self, state: StateChanges) -> anyhow::Result<SchemaBatch> {
+        let StateChanges {
+            user,
+            kernel,
+            other,
+        } = state;
+
+        let mut other_changes = Arc::try_unwrap(other).unwrap_or_else(|arc| (*arc).clone());
+        self.user.materialize(&user, &mut other_changes)?;
+        self.kernel.materialize(&kernel, &mut other_changes)?;
+
+        Ok(other_changes)
+    }
+
+    /// Coalesce all the changes into a single schema batch and write it atomically.
+    pub fn commit(&self, state: StateChanges) -> anyhow::Result<()> {
+        let commit = self.prepare_commit(state)?;
+        self.other.write_schemas(&commit)?;
+        Ok(())
+    }
+}
 
 pub(crate) struct DbGroup<H, K> {
+    // TODO: Rename this! This is a dumb name
     state: Arc<NomtStateDb<H>>,
-    historical_state: Arc<rockbound::DB>,
+    plain_state: PlainStateDb,
     accessory: Arc<rockbound::DB>,
     ledger: Arc<rockbound::DB>,
     phantom_ref: PhantomData<K>,
@@ -35,14 +122,13 @@ where
     pub(crate) fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
         let path = config.path.clone();
         let state_db = NomtStateDb::<H>::new(config)?;
-        let historical_state =
-            HistoricalStateReader::get_rockbound_options().default_setup_db_in_path(&path)?;
         let accessory_rocksdb =
             AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?;
         let ledger_rocksdb = LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?;
+        let plain_state = PlainStateDb::new(path)?;
         Ok(Self {
             state: Arc::new(state_db),
-            historical_state: Arc::new(historical_state),
+            plain_state,
             accessory: Arc::new(accessory_rocksdb),
             ledger: Arc::new(ledger_rocksdb),
             phantom_ref: Default::default(),
@@ -68,16 +154,18 @@ where
         self.ledger.write_schemas(&ledger)?;
         // Historical data is committed the last, as in case of failure, it can be synced from the normal state,
         // as it duplicates the last written data to `self.state`.
-        self.historical_state.write_schemas(&historical_state)?;
+        self.plain_state.commit(historical_state)?;
 
         self.state.send_metrics();
 
         Ok(())
     }
 
+    // TODO: Remove this method.
     // Flush pruning schema batches to disk.
     pub(crate) fn commit_pruning(&mut self, group: PruneGroup) -> anyhow::Result<()> {
-        self.historical_state
+        self.plain_state
+            .other
             .write_schemas(&group.historical_state)?;
         self.accessory.write_schemas(&group.accessory)?;
         Ok(())
@@ -92,6 +180,8 @@ where
         use_strict_mode: bool,
     ) -> anyhow::Result<(S, DeltaReader)> {
         let mut historical_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
+        let mut user_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
+        let mut kernel_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
         let mut accessory_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
         let mut ledger_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
 
@@ -100,7 +190,9 @@ where
         // (in normal chronological order).
         for snapshot_ref in relevant_snapshot_refs.iter().rev() {
             let snapshot = rockbound_snapshots.get(snapshot_ref).unwrap();
-            historical_state_snapshots.push(snapshot.historical_state.clone());
+            historical_state_snapshots.push(snapshot.historical_state.other.clone());
+            user_state_snapshots.push(snapshot.historical_state.user.clone());
+            kernel_state_snapshots.push(snapshot.historical_state.kernel.clone());
             accessory_snapshots.push(snapshot.accessory.clone());
             ledger_snapshots.push(snapshot.ledger.clone());
         }
@@ -110,9 +202,26 @@ where
         let state_session_builder =
             NomtSessionBuilder::new(self.state.clone(), relevant_snapshot_refs, nomt_snapshots);
         let historical_state_reader =
-            DeltaReader::new(self.historical_state.clone(), historical_state_snapshots);
-        let historical_state_mapper =
-            HistoricalStateReader::with_delta_reader(historical_state_reader)?;
+            DeltaReader::new(self.plain_state.other.clone(), historical_state_snapshots);
+        let version = self
+            .plain_state
+            .other
+            .get_committed_version(Ordering::Acquire);
+        let user_state_reader = VersionedDeltaReader::<NomtStateValues<UserNamespace>>::new(
+            self.plain_state.user.clone(),
+            version,
+            user_state_snapshots,
+        );
+        let kernel_state_reader = VersionedDeltaReader::<NomtStateValues<KernelNamespace>>::new(
+            self.plain_state.kernel.clone(),
+            version,
+            kernel_state_snapshots,
+        );
+        let historical_state_mapper = HistoricalStateReader::new(
+            user_state_reader,
+            kernel_state_reader,
+            historical_state_reader,
+        );
 
         let accessory_reader = DeltaReader::new(self.accessory.clone(), accessory_snapshots);
         let accessory_db = AccessoryDb::with_reader(accessory_reader)?;
@@ -133,22 +242,26 @@ where
 
     pub(crate) fn start_pruner(&self, versions_to_keep: usize) -> PrunerJob {
         tracing::info!(versions_to_keep, "Starting pruner task");
-        let state_pruner = Pruner::new(self.historical_state.clone());
-        let accessory_pruner = Pruner::new(self.accessory.clone());
+        // let state_pruner = Pruner::new(self.historical_state.clone());
+        // TODO: Re-enable state pruner
+        // let accessory_pruner = Pruner::new(self.accessory.clone());
 
-        // Spawn historical state pruner thread
-        let historical_state = std::thread::spawn(move || -> anyhow::Result<SchemaBatch> {
-            let mut kernel_prune_batch = state_pruner
-                .collect_pruning_batch::<StateValues<KernelNamespace>>(versions_to_keep as u64)?;
-            let user_prune_batch = state_pruner
-                .collect_pruning_batch::<StateValues<UserNamespace>>(versions_to_keep as u64)?;
-            kernel_prune_batch.merge(user_prune_batch);
-            Ok(kernel_prune_batch)
-        });
+        // // Spawn historical state pruner thread
+        // let historical_state = std::thread::spawn(move || -> anyhow::Result<SchemaBatch> {
+        //     let mut kernel_prune_batch = state_pruner
+        //         .collect_pruning_batch::<StateValues<KernelNamespace>>(versions_to_keep as u64)?;
+        //     let user_prune_batch = state_pruner
+        //         .collect_pruning_batch::<StateValues<UserNamespace>>(versions_to_keep as u64)?;
+        //     kernel_prune_batch.merge(user_prune_batch);
+        //     Ok(kernel_prune_batch)
+        // });
+        let historical_state =
+            std::thread::spawn(move || -> anyhow::Result<SchemaBatch> { Ok(SchemaBatch::new()) });
 
         // Spawn accessory pruner thread
         let accessory_state = std::thread::spawn(move || -> anyhow::Result<SchemaBatch> {
-            accessory_pruner.collect_pruning_batch::<ModuleAccessoryState>(versions_to_keep as u64)
+            // accessory_pruner.collect_pruning_batch::<ModuleAccessoryState>(versions_to_keep as u64)
+            Ok(SchemaBatch::new())
         });
 
         PrunerJob {
@@ -159,13 +272,15 @@ where
 
     fn are_root_hashes_match(&self) -> anyhow::Result<bool> {
         let historical_state_delta_reader =
-            DeltaReader::new(self.historical_state.clone(), Vec::new());
-        let historical_state_reader =
-            HistoricalStateReader::with_delta_reader(historical_state_delta_reader)?;
+            DeltaReader::new(self.plain_state.other.clone(), Vec::new());
+        // let historical_state_reader =
+        //     HistoricalStateReader::with_delta_reader(historical_state_delta_reader)?;
 
         let nomt_root_hashes = self.state.get_root_hashes();
+        let last_version =
+            HistoricalStateReader::last_version_from_reader(&historical_state_delta_reader)?;
 
-        match historical_state_reader.last_version() {
+        match last_version {
             None => {
                 let is_kernel_empty = nomt_root_hashes.kernel.is_empty();
                 let is_user_empty = nomt_root_hashes.user.is_empty();
@@ -178,7 +293,10 @@ where
             }
             Some(latest_version) => {
                 let Some(state_root_rocksdb) =
-                    historical_state_reader.get_serialized_root_hash(latest_version)?
+                    HistoricalStateReader::get_serialized_root_hash_from_reader(
+                        &historical_state_delta_reader,
+                        latest_version,
+                    )?
                 else {
                     anyhow::bail!(
                         "Missing root hash for the latest version {}",
@@ -211,7 +329,7 @@ where
 }
 
 pub(crate) struct SnapshotGroup {
-    pub(crate) historical_state: Arc<SchemaBatch>,
+    pub(crate) historical_state: StateChanges,
     pub(crate) accessory: Arc<SchemaBatch>,
     pub(crate) ledger: Arc<SchemaBatch>,
 }

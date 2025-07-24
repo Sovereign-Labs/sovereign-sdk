@@ -14,6 +14,12 @@ impl Namespace for KernelNamespace {
     const JMT_NODES_TABLE_NAME: ColumnFamilyName = "kernel_jmt_nodes";
 
     const STATE_VALUES_TABLE_NAME: ColumnFamilyName = "kernel_jmt_values";
+
+    const PRUNING_COLUMN_FAMILY: ColumnFamilyName = "kernel_pruning";
+
+    const COMITTED_VERSION_COLUMN: ColumnFamilyName = "kernel_committed_version";
+
+    const HISTORICAL_COLUMN_FAMILY: ColumnFamilyName = "kernel_historical_state_values";
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -26,4 +32,10 @@ impl Namespace for UserNamespace {
     const JMT_NODES_TABLE_NAME: ColumnFamilyName = "user_jmt_nodes";
 
     const STATE_VALUES_TABLE_NAME: ColumnFamilyName = "user_jmt_values";
+
+    const PRUNING_COLUMN_FAMILY: ColumnFamilyName = "user_pruning";
+
+    const COMITTED_VERSION_COLUMN: ColumnFamilyName = "user_committed_version";
+
+    const HISTORICAL_COLUMN_FAMILY: ColumnFamilyName = "user_historical_state_values";
 }

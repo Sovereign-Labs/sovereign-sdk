@@ -28,14 +28,23 @@ pub trait TestableStorage: Sized {
     fn materialize_from_block(self, da_header: &MockBlockHeader) -> Self::ChangeSet {
         let height = da_header.height().to_be_bytes().to_vec();
         let hash_bytes = da_header.hash().0.to_vec();
-        self.materialize_from_key_value(height, Some(hash_bytes))
+        self.materialize_from_key_value(height, Some(hash_bytes), da_header.height() - 1)
     }
 
-    fn materialize_from_key_value(self, key: Vec<u8>, value: Option<Vec<u8>>) -> Self::ChangeSet {
+    fn materialize_from_key_value(
+        self,
+        key: Vec<u8>,
+        value: Option<Vec<u8>>,
+        version: u64,
+    ) -> Self::ChangeSet {
         let items = [(key, value)];
-        self.materialize_from_key_values(&items)
+        self.materialize_from_key_values(&items, version)
     }
-    fn materialize_from_key_values(self, items: &[(Vec<u8>, Option<Vec<u8>>)]) -> Self::ChangeSet;
+    fn materialize_from_key_values(
+        self,
+        items: &[(Vec<u8>, Option<Vec<u8>>)],
+        version: u64,
+    ) -> Self::ChangeSet;
     fn get_value(&self, key: &[u8]) -> Option<Vec<u8>>;
 }
 
@@ -697,7 +706,7 @@ where
 
     // Operations in Block A
     let (storage, _) = storage_manager.create_state_for(&block_a).unwrap();
-    let stf_changes = storage.materialize_from_key_value(key.to_vec(), Some(value_1.to_vec()));
+    let stf_changes = storage.materialize_from_key_value(key.to_vec(), Some(value_1.to_vec()), 0);
     storage_manager
         .save_change_set(&block_a, stf_changes, SchemaBatch::default())
         .unwrap();
@@ -714,7 +723,8 @@ where
     assert_eq!(Some(value_1.clone()), value_at_c);
 
     // Saving block B, data is correct
-    let stf_changes = stf_reader_b.materialize_from_key_value(key.to_vec(), Some(value_2.to_vec()));
+    let stf_changes =
+        stf_reader_b.materialize_from_key_value(key.to_vec(), Some(value_2.to_vec()), 1);
     storage_manager
         .save_change_set(&block_b, stf_changes, SchemaBatch::default())
         .unwrap();
@@ -763,7 +773,7 @@ where
 
         let (stf_storage, _) = storage_manager.create_state_for(&da_header).unwrap();
 
-        let stf_changes = stf_storage.materialize_from_key_values(&expected_values);
+        let stf_changes = stf_storage.materialize_from_key_values(&expected_values, height - 1);
 
         storage_manager
             .save_change_set(&da_header, stf_changes, SchemaBatch::default())

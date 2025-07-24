@@ -128,14 +128,23 @@ where
         key: &SlotKey,
         version: Option<SlotNumber>,
     ) -> Option<SlotValue> {
+        // Note that the resolved version is logged but *not* necessarily passed to the backing DB.
+        // Passing a version indicates intent to perform a historical (rather than live) query, which
+        // bypasses the cache. This causes worse read performance, but prevents queries from interfering with
+        // transaction execution by thrashing the cache.
         let resolved_version = self.get_version_to_use(version)?;
         let _span = tracing::debug_span!("version", %resolved_version, passed = ?version).entered();
         match N::NAMESPACE {
             Namespace::User => {
-                let historical_value = self
-                    .historical_state
-                    .get_value_option_by_key::<UserNamespace>(resolved_version, key.as_ref())
-                    .expect("Underlying user I/O failed");
+                let historical_value = if let Some(version) = version {
+                    self.historical_state
+                        .get_user_value_option_by_key_historical(key.as_ref(), version)
+                        .expect("Underlying user I/O failed")
+                } else {
+                    self.historical_state
+                        .get_user_value_option_by_key(key.as_ref())
+                        .expect("Underlying user I/O failed")
+                };
                 if self.should_check_dbs_sync(resolved_version) {
                     let key_path = S::Hasher::digest(key.as_ref()).into();
                     tracing::trace!(
@@ -158,10 +167,15 @@ where
                 historical_value
             }
             Namespace::Kernel => {
-                let historical_value = self
-                    .historical_state
-                    .get_value_option_by_key::<KernelNamespace>(resolved_version, key.as_ref())
-                    .expect("Underlying user I/O failed");
+                let historical_value = if let Some(version) = version {
+                    self.historical_state
+                        .get_kernel_value_option_by_key_historical(key.as_ref(), version)
+                        .expect("Underlying kernel I/O failed")
+                } else {
+                    self.historical_state
+                        .get_kernel_value_option_by_key(key.as_ref())
+                        .expect("Underlying kernel I/O failed")
+                };
                 if self.should_check_dbs_sync(resolved_version) {
                     let key_path = S::Hasher::digest(key.as_ref()).into();
                     tracing::trace!(

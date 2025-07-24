@@ -38,7 +38,11 @@ impl std::fmt::Debug for TestNomtStorage {
 impl TestableStorage for TestNomtStorage {
     type ChangeSet = NomtChangeSet;
 
-    fn materialize_from_key_values(self, items: &[(Vec<u8>, Option<Vec<u8>>)]) -> Self::ChangeSet {
+    fn materialize_from_key_values(
+        self,
+        items: &[(Vec<u8>, Option<Vec<u8>>)],
+        version: u64,
+    ) -> Self::ChangeSet {
         let TestNomtStorage {
             state_session_builder,
             historical_state: _,
@@ -72,7 +76,7 @@ impl TestableStorage for TestNomtStorage {
             accessory_writes.clone(),
             // Not used at the moment,
             items.len().to_be_bytes().to_vec(),
-            SlotNumber::GENESIS,
+            SlotNumber::new(version),
         )
         .unwrap();
 
@@ -107,13 +111,13 @@ impl TestableStorage for TestNomtStorage {
 
         let historical_value_user = self
             .historical_state
-            .get_value_option_by_key::<UserNamespace>(SlotNumber::GENESIS, &schema_key)
+            .get_user_value_option_by_key(&schema_key)
             .unwrap();
         assert_eq!(historical_value_user, kernel_value);
 
         let historical_value_kernel = self
             .historical_state
-            .get_value_option_by_key::<KernelNamespace>(SlotNumber::GENESIS, &schema_key)
+            .get_kernel_value_option_by_key(&schema_key)
             .unwrap();
         assert_eq!(historical_value_kernel, kernel_value);
 

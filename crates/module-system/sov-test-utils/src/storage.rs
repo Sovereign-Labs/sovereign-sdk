@@ -3,14 +3,19 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use rockbound::cache::delta_reader::DeltaReader;
+use rockbound::versioned_db::VersionedDeltaReader;
 use rockbound::SchemaBatch;
 use sov_db::accessory_db::AccessoryDb;
 use sov_db::config::RollupDbConfig;
 use sov_db::historical_state::HistoricalStateReader;
 use sov_db::ledger_db::LedgerDb;
+use sov_db::namespaces::{KernelNamespace, UserNamespace};
+use sov_db::schema::namespace::NomtStateValues;
 use sov_db::state_db::StateDb;
 use sov_db::state_db_nomt::get_session_builder_from_committed;
-use sov_db::storage_manager::{InitializableNativeNomtStorage, InitializableNativeStorage};
+use sov_db::storage_manager::{
+    InitializableNativeNomtStorage, InitializableNativeStorage, PlainStateDb,
+};
 pub use sov_db::storage_manager::{
     NativeChangeSet, NativeStorageManager, NomtChangeSet, NomtStorageManager,
 };
@@ -146,7 +151,7 @@ pub struct SimpleNomtStorageManager<S: MerkleProofSpec> {
     // Holds ownership of [`Tempdir`] so it is not removed prematurely
     _dir: TempDir,
     state: Arc<sov_db::state_db_nomt::NomtStateDb<S::Hasher>>,
-    historical_state: Arc<rockbound::DB>,
+    historical_state: PlainStateDb,
     accessory: Arc<rockbound::DB>,
     root: StorageRoot<S>,
     is_strict_mode: bool,
@@ -159,9 +164,7 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
         let config = RollupDbConfig::default_in_path(dir.path().to_path_buf());
         let state_db = sov_db::state_db_nomt::NomtStateDb::new(config)
             .expect("Failed to initialize StateDb for NOMT");
-        let historical_state_rocksdb = HistoricalStateReader::get_rockbound_options()
-            .default_setup_db_in_path(dir.path())
-            .unwrap();
+        let historical_state = PlainStateDb::new(dir.path().to_path_buf()).unwrap();
         let accessory_rocksdb = AccessoryDb::get_rockbound_options()
             .default_setup_db_in_path(dir.path())
             .unwrap();
@@ -169,7 +172,7 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
         Self {
             _dir: dir,
             state: Arc::new(state_db),
-            historical_state: Arc::new(historical_state_rocksdb),
+            historical_state,
             accessory: Arc::new(accessory_rocksdb),
             root: <NomtProverStorage<S, TestSlotHash> as Storage>::PRE_GENESIS_ROOT,
             is_strict_mode: true,
@@ -183,12 +186,26 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
 
     /// Create a new [`NomtProverStorage`] that has a view only on data written to disc.
     pub fn create_storage(&self) -> NomtProverStorage<S, TestSlotHash> {
+        let plain_state = &self.historical_state;
+        let other_data_reader =
+            DeltaReader::new(self.historical_state.get_db().clone(), Vec::new());
+        let version = HistoricalStateReader::last_version_from_reader(&other_data_reader)
+            .unwrap()
+            .map(|v| v.get());
+        let user_state_reader = VersionedDeltaReader::<NomtStateValues<UserNamespace>>::new(
+            plain_state.get_user_db().clone(),
+            version,
+            vec![],
+        );
+        let kernel_state_reader = VersionedDeltaReader::<NomtStateValues<KernelNamespace>>::new(
+            plain_state.get_kernel_db().clone(),
+            version,
+            vec![],
+        );
+
         let state_session_builder = get_session_builder_from_committed(self.state.clone());
-        let historical_state_reader = HistoricalStateReader::with_delta_reader(DeltaReader::new(
-            self.historical_state.clone(),
-            Vec::new(),
-        ))
-        .expect("Failed to create historical state reader");
+        let historical_state_reader =
+            HistoricalStateReader::new(user_state_reader, kernel_state_reader, other_data_reader);
         let accessory_db =
             AccessoryDb::with_reader(DeltaReader::new(self.accessory.clone(), Vec::new()))
                 .expect("Failed to create accessory db");
@@ -214,9 +231,7 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
         tracing::trace!("Committed state changes to disk");
         self.accessory.write_schemas(&accessory).unwrap();
         tracing::trace!("Committed accessory changes to disk");
-        self.historical_state
-            .write_schemas(&historical_state)
-            .unwrap();
+        self.historical_state.commit(historical_state).unwrap();
         tracing::trace!("Committed historical state changes to disk");
         tracing::trace!("Committed all changes to disk");
     }
