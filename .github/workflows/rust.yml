@@ -101,10 +101,8 @@ jobs:
 
   check:
     name: check
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-cache-dev
-      - nscloud-cache-size-100gb
+    # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
+    runs-on: namespace-profile-sov-rust-amd64-ubuntu-24-04-16x64-with-cache;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -136,10 +134,8 @@ jobs:
   bench_check:
     name: bench_check
     needs: check
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-16x64-with-cache
-      - nscloud-cache-tag-cache-bench
-      - nscloud-cache-size-100gb
+    # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
+    runs-on: namespace-profile-sov-rust-amd64-ubuntu-24-04-16x64-with-cache;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -158,10 +154,8 @@ jobs:
   rollup_tps_validation:
     name: rollup_tps_validation
     needs: check
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-cache-bench
-      - nscloud-cache-size-100gb
+    # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
+    runs-on: namespace-profile-sov-rust-amd64-ubuntu-24-04-16x64-with-cache;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -185,10 +179,7 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-cache-dev
-      - nscloud-cache-size-100gb
+    runs-on: namespace-profile-sov-rust-amd64-ubuntu-24-04-16x64-with-cache
     strategy:
       matrix:
         partition: [1, 2, 3]
@@ -219,10 +210,7 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-cache-dev
-      - nscloud-cache-size-100gb
+    runs-on: namespace-profile-sov-rust-amd64-ubuntu-24-04-16x64-with-cache
     strategy:
       matrix:
         partition: [1, 2, 3]
