@@ -4,11 +4,11 @@ use avail_rust_client::avail_rust_core::rpc::system::fetch_extrinsics_v1_types::
     EncodeSelector, SignatureFilter,
 };
 use avail_rust_client::avail_rust_core::AppId;
-use avail_rust_client::error::ClientError;
 use avail_rust_client::{
     AccountId, AccountIdExt, Client, HashNumber, Keypair, KeypairExt, Options,
     TransactionDecodable, H256,
 };
+use avail_rust_core::Error;
 
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{DaProof, DaSpec, RelevantBlobs, RelevantProofs, Time};
@@ -153,7 +153,7 @@ impl DaService for AvailDAService {
     }
 
     async fn get_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
-        Err(AvailError(ClientError::Custom(
+        Err(AvailError(Error::Custom(
             "get_proofs_at method is not implemented yet".to_string(),
         )))
     }
@@ -194,8 +194,8 @@ impl AvailDAService {
     pub async fn new_from_config(config: AvailDAConfig) -> Result<Self, AvailError> {
         let client = Client::new(&config.http_api_url).await?;
 
-        let account = Keypair::from_str(&config.signer_key)
-            .map_err(|err| AvailError(ClientError::Custom(err)))?;
+        let account =
+            Keypair::from_str(&config.signer_key).map_err(|err| AvailError(Error::Custom(err)))?;
 
         // NOTE: Current exponential backoff policy defaults:
         // jitter: false, factor: 2, min_delay: 1s, max_delay: 60s, max_times: 3,
@@ -221,11 +221,7 @@ impl AvailDAService {
     }
 
     async fn get_block_at_height(&self, block_number: u32) -> Result<AvailBlock, AvailError> {
-        let block_hash = self
-            .client
-            .block_hash(block_number)
-            .await
-            .map_err(|e| AvailError(ClientError::Core(e)))?;
+        let block_hash = self.client.block_hash(block_number).await?;
 
         let block_client = self.client.block_client();
 
@@ -305,8 +301,7 @@ impl AvailDAService {
         let submittable_tx = client.tx().data_availability().submit_data(data.to_vec());
         let submitted_tx = submittable_tx
             .sign_and_submit(account, Options::new(Some(app_id.0)))
-            .await
-            .map_err(|e| AvailError(ClientError::Core(e)))?;
+            .await?;
         let res = submitted_tx.tx_hash;
         Ok(res)
     }

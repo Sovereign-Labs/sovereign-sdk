@@ -1,6 +1,9 @@
-use avail_rust_client::H256;
+use avail_rust_core::H256;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::{da::Time, node::da::SlotData};
+use sov_rollup_interface::da::Time;
+
+#[cfg(feature = "native")]
+use sov_rollup_interface::node::da::SlotData;
 
 use crate::types::{data::AvailData, header::CustomAvailHeader};
 
@@ -13,6 +16,7 @@ pub struct AvailBlock {
     pub proof_blobs: Vec<AvailData>,
 }
 
+#[cfg(feature = "native")]
 impl SlotData for AvailBlock {
     type BlockHeader = CustomAvailHeader;
 

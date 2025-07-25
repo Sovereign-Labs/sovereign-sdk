@@ -1,4 +1,4 @@
-use avail_rust_client::H256;
+use avail_rust_core::H256;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::BlockHashTrait;

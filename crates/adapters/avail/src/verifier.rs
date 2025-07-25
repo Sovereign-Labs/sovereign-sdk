@@ -1,7 +1,5 @@
-use avail_rust_client::{
-    avail_rust_core::{rpc::kate::DataProof, AppId},
-    H256,
-};
+use avail_rust_core::{rpc::kate::DataProof, AppId, H256};
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_rollup_interface::da::{DaSpec, DaVerifier, RelevantBlobs, RelevantProofs};
 

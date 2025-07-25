@@ -1,4 +1,4 @@
-use avail_rust_client::HasTxDispatchIndex;
+use avail_rust_core::HasTxDispatchIndex;
 
 #[derive(codec::Decode, codec::Encode, PartialEq, Eq)]
 pub struct CustomTransaction {

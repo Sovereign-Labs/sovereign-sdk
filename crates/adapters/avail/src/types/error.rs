@@ -1,9 +1,9 @@
 use std::fmt::{Display, Formatter, Result};
 
-use avail_rust_client::{avail_rust_core::Error, error::ClientError};
+use avail_rust_core::Error;
 
 #[derive(Debug)]
-pub struct AvailError(pub ClientError);
+pub struct AvailError(pub Error);
 
 impl Display for AvailError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
@@ -13,6 +13,6 @@ impl Display for AvailError {
 
 impl From<Error> for AvailError {
     fn from(e: Error) -> Self {
-        AvailError(ClientError::Core(e))
+        AvailError(e)
     }
 }

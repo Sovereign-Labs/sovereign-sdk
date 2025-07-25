@@ -1,4 +1,4 @@
-use avail_rust_client::AccountId;
+use avail_rust_core::AccountId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

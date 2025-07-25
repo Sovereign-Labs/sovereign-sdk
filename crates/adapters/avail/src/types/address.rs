@@ -1,8 +1,7 @@
 #[cfg(feature = "arbitrary")]
 use arbitrary::Arbitrary;
 
-use avail_rust_client::subxt_core::utils::AccountId32;
-use avail_rust_client::AccountId;
+use avail_rust_core::AccountId;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::{sov_universal_wallet::UniversalWallet, BasicAddress};
@@ -57,7 +56,7 @@ impl FromStr for AvailAddress {
 }
 impl Hash for AvailAddress {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        <AccountId32 as AsRef<[u8]>>::as_ref(&self.0).hash(state)
+        <AccountId as AsRef<[u8]>>::as_ref(&self.0).hash(state)
     }
 }
 
@@ -78,7 +77,7 @@ impl schemars::JsonSchema for AvailAddress {
 
 impl BorshSerialize for AvailAddress {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        borsh::BorshSerialize::serialize(&<AccountId32 as AsRef<[u8]>>::as_ref(&self.0), writer)
+        borsh::BorshSerialize::serialize(&<AccountId as AsRef<[u8]>>::as_ref(&self.0), writer)
     }
 }
 

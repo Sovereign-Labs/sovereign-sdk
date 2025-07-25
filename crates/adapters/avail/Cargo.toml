@@ -12,7 +12,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-avail-rust-client = { git = "https://github.com/availproject/avail-rust", tag = "v0.2.9" }
+avail-rust-core = { git = "https://github.com/availproject/avail-rust", tag = "v0.2.9" }
 sov-rollup-interface = { workspace = true }
 borsh = { workspace = true, features = ["bytes"] }
 bytes = { version = "1.2.1", features = ["serde"] }
@@ -23,35 +23,37 @@ anyhow = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 hex = { workspace = true }
-
-# Optional dependencies used only in native mode or for testing
+sp-core = { version = "37" }
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = [
     "derive",
     "full",
     "bit-vec",
-], optional = true }
+] }
+
+# Optional dependencies used only in native mode or for testing
+avail-rust-client = { git = "https://github.com/availproject/avail-rust", tag = "v0.2.9", optional = true }
 futures = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 reqwest = { workspace = true, features = [
     "rustls-tls",
     "json",
 ], default-features = false, optional = true }
-sp-core = { version = "21", optional = true }
+
 sp-keyring = { version = "24", optional = true }
 backon = { workspace = true, optional = true }
 arbitrary = { workspace = true, optional = true, features = ["derive"] }
 
+
 [features]
-default = ["native"]
+default = []
 native = [
-    "dep:codec",
     "dep:futures",
     "dep:reqwest",
-    "dep:sp-core",
     "dep:sp-keyring",
     "dep:tokio",
     "dep:backon",
     "sov-rollup-interface/native",
+    "dep:avail-rust-client",
 ]
 
 arbitrary = [

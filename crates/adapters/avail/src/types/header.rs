@@ -1,4 +1,3 @@
-pub use avail_rust_client::prelude::*;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlockHeaderTrait, Time};
 
@@ -9,7 +8,7 @@ use crate::types::{
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CustomAvailHeader {
-    pub header: avail_rust_client::AvailHeader,
+    pub header: avail_rust_core::AvailHeader,
 }
 
 impl BlockHeaderTrait for CustomAvailHeader {
