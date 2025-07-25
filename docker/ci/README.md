@@ -38,15 +38,15 @@ Once you have a successful build, continue to the next phase.
 
 ## How to build a new Namespace profile.
 
-1. Log in into namepspace 
+1. Log in into [Namepspace](https://namespace.so/) Web UI
 2. Got to "Profiles" section
-3. Click new profile
-4. Enter new tag you wish to use (more on tags below) and enter the following values:
+3. Click "New Profile"
+4. Enter the new tag you wish to use (more on tags below) and enter the following values:
     - OS: linux on amd64 
     - Base Image: Custom Ubuntu 24.04
     - Ubuntu-based Custom Image: select "Custom Dockerfile" and paste new Dockerfile you've just updated and tested before.
     - Caching: enable, set the desired size and enable "container images", "git checkouts" and "toolchain download".
-      For advanaced section of caching set `nightly` as protected branch
+      For advanced section of caching set `nightly` as protected branch
 5. Click "Update Profile". The icon "Building" next to "Ubuntu-based custom image" will appear. Wait  till it becomes ready.
 
 Now this profile is ready to be used.
@@ -55,13 +55,21 @@ More information at the [configure your runners](https://namespace.so/docs/solut
 
 ### Tags and cache with pre-built images
 
-TBD
+Custom-based images profile does not support a combination of cache volume tags. 
+This means that if the same container profile needs different caches, it needs to be a different profile.
 
-sov-ubuntu-24.04-amd64-16x32-test-250gb-1-88
+Some details from Namespace:
 
-## Updating workflow file
+Custom-based images profile enables container image caching.
+This means that Namepsace keeping pulled and unpacked images in the cache.
+This caching includes also your new custom base image.
+The fact that the custom base image also lives in the cache is a performance optimization today so that subsequent runs do not need to pull it.
+But it also means that the image takes space from here.
+It also implies that while the runner is running, and files created in your run will allocate space from the cache while the run is ongoing.
+
+## Updating the Workflow file
 
 After profile is ready, it is possible to copy `runs-on` value needed
 
-TBD: Note on features for I/O uring
+If container needs io_uring, for instance for NOMT or tests, append `;container.privileged=true;container.host-pid-namespace=true` to the runs on label from namespace
 
