@@ -217,7 +217,7 @@ jobs:
   nextest:
     name: nextest
     # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-test-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 60
     env:
       RISC0_DEV_MODE: "true"
@@ -234,7 +234,7 @@ jobs:
   nextest_all_features:
     name: nextest_all_features
     # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-test-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 60
     env:
       RISC0_DEV_MODE: "true"
