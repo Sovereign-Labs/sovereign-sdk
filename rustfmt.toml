@@ -1,4 +1,0 @@
-# Until stable supports these options, it remains commented out
-# To avoid warnings in CI, which can confuse people
-#group_imports = "StdExternalCrate"
-#imports_granularity = "Module"
