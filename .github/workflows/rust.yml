@@ -405,10 +405,7 @@ jobs:
         run: git diff --exit-code
 
   check-demo-rollup-bash-commands:
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-demo-rollup
-      - nscloud-cache-size-100gb
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-demo-rollup-250gb-1-88
     needs:
       - check
     timeout-minutes: 60
@@ -427,20 +424,13 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - name: Setup Zkvm toolchains + Rust
-        uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Compile README.md to Bash
         run: bashtestmd --input examples/demo-rollup/README_CELESTIA.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
 
   check-demo-rollup-bash-commands-mock-da:
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-demo-rollup
-      - nscloud-cache-size-100gb
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-demo-rollup-250gb-1-88
     needs:
       - check
     timeout-minutes: 60
@@ -453,10 +443,6 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - name: Setup Zkvm toolchains + Rust
-        uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Compile README.md to Bash
         run: bashtestmd --input examples/demo-rollup/README.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh

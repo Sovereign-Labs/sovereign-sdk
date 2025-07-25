@@ -45,7 +45,8 @@ Once you have a successful build, continue to the next phase.
     - OS: linux on amd64 
     - Base Image: Custom Ubuntu 24.04
     - Ubuntu-based Custom Image: select "Custom Dockerfile" and paste new Dockerfile you've just updated and tested before.
-    - Caching: enable, set the desired size and enable "container images", "git checkouts" and "toolchain download"
+    - Caching: enable, set the desired size and enable "container images", "git checkouts" and "toolchain download".
+      For advanaced section of caching set `nightly` as protected branch
 5. Click "Update Profile". The icon "Building" next to "Ubuntu-based custom image" will appear. Wait  till it becomes ready.
 
 Now this profile is ready to be used.
@@ -55,6 +56,8 @@ More information at the [configure your runners](https://namespace.so/docs/solut
 ### Tags and cache with pre-built images
 
 TBD
+
+sov-ubuntu-24.04-amd64-16x32-test-250gb-1-88
 
 ## Updating workflow file
 
