@@ -101,8 +101,7 @@ jobs:
 
   check:
     name: check
-    # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-rust-amd64-ubuntu-24-04-16x64-with-cache
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -170,7 +169,7 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on: namespace-profile-sov-rust-amd64-ubuntu-24-04-16x64-with-cache
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
     strategy:
       matrix:
         partition: [1, 2, 3]
@@ -197,7 +196,7 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on: namespace-profile-sov-rust-amd64-ubuntu-24-04-16x64-with-cache
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
     strategy:
       matrix:
         partition: [1, 2, 3]
@@ -218,7 +217,7 @@ jobs:
   nextest:
     name: nextest
     # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-rust-amd64-ubuntu-24-04-16x64-with-cache;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 60
     env:
       RISC0_DEV_MODE: "true"
@@ -235,7 +234,7 @@ jobs:
   nextest_all_features:
     name: nextest_all_features
     # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-rust-amd64-ubuntu-24-04-16x64-with-cache;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 60
     env:
       RISC0_DEV_MODE: "true"
@@ -252,8 +251,7 @@ jobs:
 
   doctests:
     name: doctests
-    # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-rust-amd64-ubuntu-24-04-16x64-with-cache
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-250gb-1-88
     timeout-minutes: 60
     env:
       SKIP_GUEST_BUILD: "1"
@@ -263,8 +261,7 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      # `cargo-nextest` does not support doctests (yet?), so we have to run them
-      # separately.
+      # `cargo-nextest` does not support doctests (yet?), so we have to run them separately.
       # TODO: https://github.com/nextest-rs/nextest/issues/16
       - run: make doctest
 
@@ -466,20 +463,13 @@ jobs:
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
 
   check-constant-overriding-is-disabled-in-release-mode:
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-check-constant-overriding-is-disabled-in-release-mode
-      - nscloud-cache-size-20gb
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-250gb-1-88
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - name: Setup Zkvm toolchains + Rust
-        uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - run: make check-constant-overriding-is-disabled-in-release-mode
 
   validate-packages-to-publish-yml:
@@ -491,19 +481,12 @@ jobs:
         working-directory: .
 
   cargo-switcheroo-default:
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-4x16-with-cache
-      - nscloud-cache-tag-cargo-switcheroo
-      - nscloud-cache-size-20gb
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
     steps:
       - uses: actions/checkout@v4
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - name: Setup Zkvm toolchains + Rust
-        uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - run: cargo switcheroo set default
         # Exit status 0 means no changes were made.
       - run: git diff --exit-code
