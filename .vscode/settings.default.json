@@ -20,7 +20,7 @@
     "--message-format=json",
     "--keep-going"
   ],
-  "rust-analyzer.rustfmt.extraArgs": [],
+  "rust-analyzer.rustfmt.extraArgs": ["+nightly", "--config-path", "rustfmt.nightly.toml "],
   "json.schemas": [
     {
       "fileMatch": ["bank.json"],

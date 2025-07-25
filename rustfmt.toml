@@ -1,3 +1,4 @@
-# Keep those and have warnings on CI or remove it and don't have it locally?
+# Until stable supports these options, it remains commented out
+# To avoid warnings in CI, which can confuse people
 #group_imports = "StdExternalCrate"
 #imports_granularity = "Module"
