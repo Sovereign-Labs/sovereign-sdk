@@ -76,7 +76,7 @@ This setup works with an in-memory DA that is easy to set up for testing purpose
 
 ```shell,test-ci
 $ cd examples/demo-rollup/
-$ make build
+$ echo "R0 _ $RISC0_DEV_MODE _" && make build
 ```
 
 2. Clean up the existing database.
@@ -93,7 +93,7 @@ $ export SOV_PROVER_MODE=execute
 ```
 
 ```sh,test-ci,bashtestmd:long-running,bashtestmd:wait-until=rest_address
-$ cargo run --release
+$ ../../target/debug/sov-demo-rollup
 ```
 
 Leave it running while you proceed with the rest of the demo.
