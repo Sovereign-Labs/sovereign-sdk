@@ -48,7 +48,6 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --de
 # Configure cargo to use mold linker
 RUN mkdir -p /home/runner/.cargo \
     && echo '[target.x86_64-unknown-linux-gnu]' >> /home/runner/.cargo/config.toml \
-    && echo 'linker = "clang"' >> /home/runner/.cargo/config.toml \
     && echo 'rustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/mold"]' >> /home/runner/.cargo/config.toml
 
 # Install Node.js 20.x

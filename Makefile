@@ -50,6 +50,30 @@ total-clean:
     done;
 	rm -rf "examples/demo-rollup/tests/evm/uniswap/node_modules"
 
+check-mold: ## Check mold version if available
+	@if command -v mold > /dev/null 2>&1; then \
+		echo "mold version:"; \
+		mold --version; \
+	else \
+		echo "mold is not available"; \
+	fi
+
+remove-clang-linker: ## Remove linker = "clang" from ~/.cargo/config.toml if present
+	@if [ -f ~/.cargo/config.toml ]; then \
+		if grep -q '^[[:space:]]*linker[[:space:]]*=[[:space:]]*"clang"' ~/.cargo/config.toml; then \
+			sed -i.bak '/^[[:space:]]*linker[[:space:]]*=[[:space:]]*"clang"[[:space:]]*$$/d' ~/.cargo/config.toml; \
+			echo "Removed linker = \"clang\" line from ~/.cargo/config.toml"; \
+		else \
+			echo "linker = \"clang\" not found in ~/.cargo/config.toml"; \
+		fi; \
+	else \
+		echo "~/.cargo/config.toml does not exist"; \
+	fi
+
+
+
+test: check-mold
+test: remove-clang-linker
 test:  ## Runs test suite using next test
 	@cargo nextest run --no-fail-fast --status-level skip --all-features
 
@@ -59,6 +83,8 @@ test-all: ## Runs test suite using nextest, across the whole workspace
 	$(MAKE) test
 	cargo switcheroo set _backup
 
+test-default-features: check-mold
+test-default-features: remove-clang-linker
 test-default-features:  ## Runs test suite using default features
 	@cargo nextest run --no-fail-fast --status-level skip
 
