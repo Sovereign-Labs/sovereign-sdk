@@ -110,10 +110,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: webfactory/ssh-agent@v0.5.2
-        with:
-          ssh-private-key: |
-            ${{ secrets.SDK_LINTS_ACCESS_TOKEN }}
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
