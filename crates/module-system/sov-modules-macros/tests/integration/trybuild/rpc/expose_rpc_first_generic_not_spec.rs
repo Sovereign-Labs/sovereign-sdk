@@ -17,6 +17,7 @@ pub trait Data:
     + Eq
     + PartialEq
     + std::fmt::Debug
+    + Default
     + serde::Serialize
     + serde::de::DeserializeOwned
     + borsh::BorshSerialize
