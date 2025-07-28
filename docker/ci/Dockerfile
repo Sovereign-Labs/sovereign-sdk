@@ -23,6 +23,16 @@ RUN sudo apt-get update && sudo apt-get install -y \
     unzip \
     && sudo rm -rf /var/lib/apt/lists/*
 
+# Build and install mold linker from source
+RUN git clone https://github.com/rui314/mold.git /tmp/mold \
+    && cd /tmp/mold \
+    && git checkout $(git describe --tags --abbrev=0) \
+    && cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++ \
+    && cmake --build build -j$(nproc) \
+    && sudo cmake --build build --target install \
+    && cd / \
+    && rm -rf /tmp/mold
+
 # Install Rust as user
 # The base image runs as runner user with home at /home/runner
 ENV RUSTUP_HOME=/home/runner/.rustup \
@@ -34,6 +44,12 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --de
     && rustup component add clippy rustfmt rust-src llvm-tools-preview --toolchain 1.88.0 \
     && rustup toolchain install nightly --component rustfmt --component rust-src --profile minimal \
     && rustup target add wasm32-unknown-unknown
+
+# Configure cargo to use mold linker
+RUN mkdir -p /home/runner/.cargo \
+    && echo '[target.x86_64-unknown-linux-gnu]' >> /home/runner/.cargo/config.toml \
+    && echo 'linker = "clang"' >> /home/runner/.cargo/config.toml \
+    && echo 'rustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/mold"]' >> /home/runner/.cargo/config.toml
 
 # Install Node.js 20.x
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash - \
