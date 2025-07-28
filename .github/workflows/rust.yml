@@ -362,64 +362,65 @@ jobs:
       - uses: taiki-e/install-action@cargo-deny
       - run: make cargo-deny-check-licenses
 
-  cargo-doc-artifact:
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-cache-dev
-      - nscloud-cache-size-100gb
-    timeout-minutes: 90
-    env:
-      RUSTDOCFLAGS: "-D warnings"
-      SKIP_GUEST_BUILD: "1"
-      SP1_SKIP_PROGRAM_BUILD: "true"
-      S3_BUCKET_NAME: "sovlabs-ci-rustdoc-artifacts"
-      AWS_REGION: "us-east-1"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: namespacelabs/nscloud-cache-action@v1
-        with:
-          cache: rust
-      - uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          install_zkvm: "0"
-      # The docs' artifact tends to become quite large with all the
-      # dependencies, so we don't include them.
-      - run: make docs-generate
-      - name: Add index.html
-        # We're inside a Cargo workspace, so there's no index.html by default.
-        # We must redirect to one of the workspace member crates' documentation.
-        # <https://dev.to/deciduously/prepare-your-rust-api-docs-for-github-pages-2n5i>
-        run: echo '<meta http-equiv="refresh" content="0; url=sov_rollup_interface/index.html">' > target/doc/index.html
-      # https://github.com/actions/deploy-pages/issues/188
-      - name: Fix assets' file permissions
-        run: chmod -c -R +rX "target/doc"
-      - name: Upload artifacts
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: target/doc
-      - run: mkdir "test-upload-dir"; echo "This is a test file from CI" > test-upload-dir/test_ci.txt
-      - name: Configure AWS credentials
-        if: github.event.pull_request.head.repo.full_name == github.repository
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Upload to doc artifacts to S3
-        if: github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          GITHUB_HEAD_REF_SAFE: ${{ github.head_ref }}
-          GITHUB_REF_SAFE: ${{ github.ref }}
-        run: |
-          # Sanitize inputs by removing any non-alphanumeric characters
-          SAFE_HEAD_REF=$(echo "$GITHUB_HEAD_REF_SAFE" | tr -cd '[:alnum:]-_')
-          SAFE_REF=$(echo "$GITHUB_REF_SAFE" | tr -cd '[:alnum:]-_')
-          # Use the sanitized variables
-          TARGET_DIR="${SAFE_HEAD_REF:-${SAFE_REF#refs/heads/}}-doc"
-          # Use quoting to prevent word splitting and globbing
-          aws --quiet s3 sync target/doc "s3://${S3_BUCKET_NAME}/${TARGET_DIR}" && \
-          echo "Docs are available at https://${S3_BUCKET_NAME}.${AWS_REGION}.amazonaws.com/${TARGET_DIR}/index.html";
+# Temporarily disabled until AWS credentials can be re-issued
+  # cargo-doc-artifact:
+  #   runs-on:
+  #     - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+  #     - nscloud-cache-tag-cache-dev
+  #     - nscloud-cache-size-100gb
+  #   timeout-minutes: 90
+  #   env:
+  #     RUSTDOCFLAGS: "-D warnings"
+  #     SKIP_GUEST_BUILD: "1"
+  #     SP1_SKIP_PROGRAM_BUILD: "true"
+  #     S3_BUCKET_NAME: "sovlabs-ci-rustdoc-artifacts"
+  #     AWS_REGION: "us-east-1"
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: namespacelabs/nscloud-cache-action@v1
+  #       with:
+  #         cache: rust
+  #     - uses: ./.github/actions/setup
+  #       with:
+  #         github_token: ${{ secrets.GITHUB_TOKEN }}
+  #         install_zkvm: "0"
+  #     # The docs' artifact tends to become quite large with all the
+  #     # dependencies, so we don't include them.
+  #     - run: make docs-generate
+  #     - name: Add index.html
+  #       # We're inside a Cargo workspace, so there's no index.html by default.
+  #       # We must redirect to one of the workspace member crates' documentation.
+  #       # <https://dev.to/deciduously/prepare-your-rust-api-docs-for-github-pages-2n5i>
+  #       run: echo '<meta http-equiv="refresh" content="0; url=sov_rollup_interface/index.html">' > target/doc/index.html
+  #     # https://github.com/actions/deploy-pages/issues/188
+  #     - name: Fix assets' file permissions
+  #       run: chmod -c -R +rX "target/doc"
+  #     - name: Upload artifacts
+  #       uses: actions/upload-pages-artifact@v3
+  #       with:
+  #         path: target/doc
+  #     - run: mkdir "test-upload-dir"; echo "This is a test file from CI" > test-upload-dir/test_ci.txt
+  #     - name: Configure AWS credentials
+  #       if: github.event.pull_request.head.repo.full_name == github.repository
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #         aws-region: ${{ env.AWS_REGION }}
+  #     - name: Upload to doc artifacts to S3
+  #       if: github.event.pull_request.head.repo.full_name == github.repository
+  #       env:
+  #         GITHUB_HEAD_REF_SAFE: ${{ github.head_ref }}
+  #         GITHUB_REF_SAFE: ${{ github.ref }}
+  #       run: |
+  #         # Sanitize inputs by removing any non-alphanumeric characters
+  #         SAFE_HEAD_REF=$(echo "$GITHUB_HEAD_REF_SAFE" | tr -cd '[:alnum:]-_')
+  #         SAFE_REF=$(echo "$GITHUB_REF_SAFE" | tr -cd '[:alnum:]-_')
+  #         # Use the sanitized variables
+  #         TARGET_DIR="${SAFE_HEAD_REF:-${SAFE_REF#refs/heads/}}-doc"
+  #         # Use quoting to prevent word splitting and globbing
+  #         aws --quiet s3 sync target/doc "s3://${S3_BUCKET_NAME}/${TARGET_DIR}" && \
+  #         echo "Docs are available at https://${S3_BUCKET_NAME}.${AWS_REGION}.amazonaws.com/${TARGET_DIR}/index.html";
 
   deploy-github-pages:
     runs-on: nscloud-ubuntu-22.04-amd64-2x4
