@@ -1,8 +1,8 @@
 [package]
 name = "const-rollup-config"
-version = { workspace = true }
-edition = { workspace = true }
-authors = { workspace = true }
-license = { workspace = true }
-homepage = "sovereign.xyz"
+version = "0.3.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Sovereign Labs <info@sovereign.xyz>"]
+homepage = "https://www.sovereign.xyz"
 publish = false

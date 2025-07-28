@@ -1,0 +1,89 @@
+[package]
+name = "sov-test-utils"
+description = "A set of utils for testing the Sovereign SDK"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum-server = { workspace = true }
+borsh = { workspace = true }
+derivative = { workspace = true }
+derive_more = { workspace = true }
+jsonschema = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+serde = { workspace = true }
+schemars = { workspace = true }
+serde_json = { workspace = true }
+testcontainers = "0.23"
+tracing = { workspace = true }
+hex = { workspace = true }
+
+ethereum-types = { workspace = true }
+ethers-core = { workspace = true }
+ethers-contract = { workspace = true }
+
+sha2 = { workspace = true }
+sov-address = { workspace = true }
+sov-cli = { workspace = true }
+sov-rollup-interface = { workspace = true }
+sov-rollup-apis = { workspace = true }
+sov-universal-wallet = { workspace = true }
+sov-modules-api = { workspace = true, features = ["native", "test-utils"] }
+sov-modules-stf-blueprint = { workspace = true, features = ["native", "test-utils"] }
+sov-stf-runner = { workspace = true }
+sov-value-setter = { workspace = true, features = ["native"] }
+sov-attester-incentives = { workspace = true, features = ["native"] }
+sov-paymaster = { workspace = true, features = ["native"] }
+sov-operator-incentives = { workspace = true, features = ["native"] }
+sov-prover-incentives = { workspace = true, features = ["native"] }
+sov-modules-rollup-blueprint = { workspace = true, features = ["native"] }
+sov-bank = { workspace = true, features = ["native", "test-utils"] }
+sov-accounts = { workspace = true, features = ["native"] }
+sov-uniqueness = { workspace = true, features = ["native"] }
+sov-kernels = { workspace = true, features = ["native"] }
+sov-ledger-apis = { workspace = true }
+sov-api-spec = { workspace = true }
+sov-capabilities = { workspace = true, features = ["native"] }
+sov-sequencer = { workspace = true, features = ["test-utils"] }
+sov-sequencer-registry = { workspace = true, features = ["native"] }
+sov-blob-sender = { workspace = true }
+sov-chain-state = { workspace = true, features = ["native", "test-utils"] }
+sov-blob-storage = { workspace = true, features = ["native"] }
+sov-db = { workspace = true, features = ["test-utils"] }
+sov-state = { workspace = true, features = ["native"] }
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+strum = { workspace = true }
+tempfile = { workspace = true }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+rockbound = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+
+[features]
+arbitrary = [
+    "ethereum-types/arbitrary",
+    "sov-db/arbitrary",
+    "sov-mock-zkvm/arbitrary",
+    "sov-modules-api/arbitrary",
+    "sov-rollup-interface/arbitrary",
+    "sov-sequencer-registry/arbitrary",
+    "sov-state/arbitrary",
+    "rockbound/arbitrary",
+    "sov-address/arbitrary",
+    "sov-accounts/arbitrary",
+    "sov-uniqueness/arbitrary",
+    "sov-mock-da/arbitrary",
+    "sov-bank/arbitrary",
+    "sov-paymaster/arbitrary",
+]

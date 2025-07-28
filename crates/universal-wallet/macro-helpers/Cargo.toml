@@ -1,0 +1,17 @@
+[package]
+name = "sov-universal-wallet-macro-helpers"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+syn = { features = ["parsing", "derive"], workspace = true }
+syn_derive = "0.2.0"
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+convert_case = { workspace = true }
+darling = { workspace = true }
+hex = { workspace = true }
+borsh = { workspace = true }
+bs58 = { workspace = true }
+bech32 = { workspace = true }

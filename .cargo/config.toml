@@ -1,0 +1,75 @@
+[build]
+# See <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1196>: it might break.
+# But right now it seems to work.
+incremental = true
+
+[alias]
+switcheroo = "run --manifest-path scripts/switcheroo/Cargo.toml --"
+
+# SP1 (and Plonky3) need to be optimized during compilation for fast prover setup. This is necessary
+# for all operations involving executing or proving in SP1. This is necessary to avoid needing to
+# run tests in release mode.
+# Note: This is quite verbose due to the fact that Rust doesn't support wildcards/glob patterns in
+# profiles, so we have to explicitly list each package. Additionally, transitive dependencies aren't
+# automatically included, so we have to explicitly list each transitive dependency. Otherwise, we'd
+# just list sp1-sdk.
+
+# Note: This has been configured in config.toml to avoid polluting Cargo.toml
+
+[profile.dev.package.sov-sp1-adapter]
+opt-level = 2
+[profile.dev.package.sp1-sdk]
+opt-level = 2
+[profile.dev.package.sp1-prover]
+opt-level = 2
+[profile.dev.package.sp1-core]
+opt-level = 2
+[profile.dev.package.sp1-recursion-program]
+opt-level = 2
+[profile.dev.package.sp1-recursion-compiler]
+opt-level = 2
+[profile.dev.package.sp1-recursion-derive]
+opt-level = 2
+[profile.dev.package.sp1-recursion-gnark-ffi]
+opt-level = 2
+[profile.dev.package.sp1-recursion-core]
+opt-level = 2
+[profile.dev.package.sp1-recursion-circuit]
+opt-level = 2
+# Plonky3 packages
+[profile.dev.package.p3-air]
+opt-level = 2
+[profile.dev.package.p3-field]
+opt-level = 2
+[profile.dev.package.p3-commit]
+opt-level = 2
+[profile.dev.package.p3-matrix]
+opt-level = 2
+[profile.dev.package.p3-baby-bear]
+opt-level = 2
+[profile.dev.package.p3-util]
+opt-level = 2
+[profile.dev.package.p3-challenger]
+opt-level = 2
+[profile.dev.package.p3-dft]
+opt-level = 2
+[profile.dev.package.p3-fri]
+opt-level = 2
+[profile.dev.package.p3-keccak]
+opt-level = 2
+[profile.dev.package.p3-keccak-air]
+opt-level = 2
+[profile.dev.package.p3-blake3]
+opt-level = 2
+[profile.dev.package.p3-merkle-tree]
+opt-level = 2
+[profile.dev.package.p3-poseidon2]
+opt-level = 2
+[profile.dev.package.p3-symmetric]
+opt-level = 2
+[profile.dev.package.p3-uni-stark]
+opt-level = 2
+[profile.dev.package.p3-maybe-rayon]
+opt-level = 2
+[profile.dev.package.p3-bn254-fr]
+opt-level = 2

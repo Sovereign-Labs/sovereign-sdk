@@ -1,0 +1,75 @@
+error[E0310]: the parameter type `T` may not live long enough
+   --> tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs:107:28
+    |
+107 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+    |                            ^^^^^^^^^^^^
+    |                            |
+    |                            the parameter type `T` must be valid for the static lifetime...
+    |                            ...so that the type `__generated_dispatch_call_impl::RuntimeCall<S, T>` will meet its required lifetime bounds...
+    |
+note: ...that is required by this bound
+   --> $WORKSPACE/crates/module-system/sov-modules-api/src/module/dispatch.rs
+    |
+    |         + UniversalWallet;
+    |           ^^^^^^^^^^^^^^^
+    = note: this error originates in the derive macro `DispatchCall` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider adding an explicit lifetime bound
+    |
+108 | struct Runtime<S: Spec, T: TestSpec + 'static> {
+    |                                     +++++++++
+
+error[E0310]: the parameter type `T` may not live long enough
+   --> tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs:107:28
+    |
+107 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+    |                            ^^^^^^^^^^^^
+    |                            |
+    |                            the parameter type `T` must be valid for the static lifetime...
+    |                            ...so that the type `T` will meet its required lifetime bounds...
+    |
+note: ...that is required by this bound
+   --> $WORKSPACE/crates/module-system/sov-modules-api/src/module/dispatch.rs
+    |
+    |         + UniversalWallet;
+    |           ^^^^^^^^^^^^^^^
+    = note: this error originates in the derive macro `DispatchCall` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider adding an explicit lifetime bound
+    |
+108 | struct Runtime<S: Spec, T: TestSpec + 'static> {
+    |                                     +++++++++
+
+error[E0310]: the parameter type `T` may not live long enough
+   --> tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs:107:28
+    |
+107 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+    |                            ^^^^^^^^^^^^
+    |                            |
+    |                            the parameter type `T` must be valid for the static lifetime...
+    |                            ...so that the type `__SovVirtualWallet_RuntimeCall_First<S, T>` will meet its required lifetime bounds...
+    |
+note: ...that is required by this bound
+   --> $WORKSPACE/crates/module-system/sov-modules-api/src/module/dispatch.rs
+    |
+    |         + UniversalWallet;
+    |           ^^^^^^^^^^^^^^^
+    = note: this error originates in the derive macro `DispatchCall` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider adding an explicit lifetime bound
+    |
+108 | struct Runtime<S: Spec, T: TestSpec + 'static> {
+    |                                     +++++++++
+
+error[E0308]: mismatched types
+  --> tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs:73:22
+   |
+73 |                 .set(10, state)
+   |                  --- ^^ expected `&D`, found integer
+   |                  |
+   |                  arguments to this method are incorrect
+   |
+   = note: expected reference `&D`
+                   found type `{integer}`
+note: method defined here
+  --> $WORKSPACE/crates/module-system/sov-modules-api/src/containers/value.rs
+   |
+   |     pub fn set<Vq, Writer>(&mut self, value: &V, state: &mut Writer) -> Result<(), Writer::Error>
+   |            ^^^

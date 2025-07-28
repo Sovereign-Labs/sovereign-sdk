@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CallMessage",
+  "description": "Represents the available call messages for interacting with the sov-accounts module.",
+  "oneOf": [
+    {
+      "description": "Inserts a new credential id for the corresponding Account.",
+      "type": "object",
+      "required": [
+        "insert_credential_id"
+      ],
+      "properties": {
+        "insert_credential_id": {
+          "$ref": "#/definitions/CredentialId"
+        }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "definitions": {
+    "CredentialId": {
+      "description": "32 bytes in hexadecimal format, with `0x` prefix.",
+      "type": "string",
+      "pattern": "^0x[a-fA-F0-9]{64}$"
+    }
+  }
+}

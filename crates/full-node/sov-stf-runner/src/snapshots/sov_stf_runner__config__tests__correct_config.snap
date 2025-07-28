@@ -1,0 +1,67 @@
+---
+source: crates/full-node/sov-stf-runner/src/config.rs
+expression: config
+---
+{
+  "storage": {
+    "path": "/tmp",
+    "user_commit_concurrency": null,
+    "user_hashtable_buckets": null,
+    "user_page_cache_size": null,
+    "user_leaf_cache_size": null,
+    "kernel_commit_concurrency": null,
+    "kernel_hashtable_buckets": null,
+    "kernel_page_cache_size": null,
+    "kernel_leaf_cache_size": null,
+    "pruner_block_interval": null,
+    "pruner_versions_to_keep": null
+  },
+  "runner": {
+    "genesis_height": 31337,
+    "da_polling_interval_ms": 10000,
+    "http_config": {
+      "bind_host": "127.0.0.1",
+      "bind_port": 12346,
+      "public_address": "https://rollup.sovereign.xyz",
+      "cors": "restrictive"
+    },
+    "concurrent_sync_tasks": 18,
+    "save_tx_bodies": false
+  },
+  "da": {
+    "connection_string": "sqlite:///tmp/mockda.sqlite?mode=rwc",
+    "sender_address": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+    "finalization_blocks": 0,
+    "block_producing": {
+      "periodic": {
+        "block_time_ms": 1000
+      }
+    },
+    "randomization": null
+  },
+  "proof_manager": {
+    "aggregated_proof_block_jump": 22,
+    "prover_address": "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
+    "max_number_of_transitions_in_db": 1025,
+    "max_number_of_transitions_in_memory": 768
+  },
+  "sequencer": {
+    "automatic_batch_production": true,
+    "max_allowed_node_distance_behind": 5,
+    "dropped_tx_ttl_secs": 60,
+    "rollup_address": "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
+    "admin_addresses": [],
+    "standard": {
+      "mempool_max_txs_count": null,
+      "max_batch_size_bytes": null
+    },
+    "max_batch_size_bytes": 1048576,
+    "max_concurrent_blobs": 16,
+    "blob_processing_timeout_secs": 60
+  },
+  "monitoring": {
+    "telegraf_address": "udp://192.168.4.5:8543",
+    "max_datagram_size": 1024,
+    "max_pending_metrics": 2560
+  }
+}

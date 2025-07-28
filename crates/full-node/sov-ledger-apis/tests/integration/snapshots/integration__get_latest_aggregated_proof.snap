@@ -1,0 +1,8 @@
+---
+source: crates/full-node/sov-ledger-apis/tests/integration/main.rs
+expression: response
+---
+{
+  "proof": "YWdncmVnYXRlZC1wcm9vZg==",
+  "type": "aggregatedProof"
+}

@@ -1,19 +1,45 @@
 demo-rollup-readme.sh
 /target
+lcov.info
+
+rustc-ice*
 
 .idea/
 
 target/
-fuzz/Cargo.lock
 
 .DS_Store
 
 demo_data/
-/.vscode/*
+demo_data_1/
+demo_data_2/
 
-/docker/credentials/*
-!/docker/credentials/bridge-0.addr
-!/docker/credentials/bridge-0.key
+docker/observability
 
-adapters/solana/libyellowstone_grpc_geyser.dylib
+.vscode/settings.json
+.vscode/*
 
+/docker/celestia/credentials/*
+/docker/**/storage/*
+/docker/influxdb-data
+!/docker/celestia/credentials/bridge-0.addr
+!/docker/celestia/credentials/bridge-0.key
+!/docker/celestia/credentials/bridge-1.key
+!/docker/celestia/credentials/bridge-1.addr
+!/docker/celestia/bridge-2.key
+!/docker/celestia/credentials/bridge-2.addr
+
+examples/test-data/genesis/benchmark/accounts.json
+examples/demo-rollup/demo_rollup_config.toml
+examples/demo-rollup/demo_rollup_config_1.toml
+examples/demo-rollup/demo_rollup_config_2.toml
+
+riscv32im-succinct-zkvm-elf
+build
+
+runtime_call.json
+zk_vm.csv
+constants_output.csv
+
+# Temporary test data files
+examples/demo-rollup/tests/resync/data/.tmp*

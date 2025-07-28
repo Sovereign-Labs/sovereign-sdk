@@ -1,0 +1,87 @@
+error: The field `test_state1` is missing an attribute: add `#[kernel_module]`, `#[module]`, `#[state]`, `#[id]`, or #[phantom].
+ --> tests/integration/trybuild/module_info/field_missing_attribute.rs:8:5
+  |
+8 |     test_state1: StateMap<u32, u32>,
+  |     ^^^^^^^^^^^
+
+error[E0277]: the trait bound `std::vec::Vec<u8>: FromStr` is not satisfied
+  --> tests/integration/trybuild/module_info/field_missing_attribute.rs:11:18
+   |
+11 |     test_state2: StateMap<Vec<u8>, u64>,
+   |                  ^^^^^^^^^^^^^^^^^^^^^^ the trait `FromStr` is not implemented for `std::vec::Vec<u8>`
+   |
+   = help: the following other types implement trait `FromStr`:
+             AddressBech32
+             Amount
+             Base58Address
+             ByteString
+             CString
+             ColorChoice
+             CredentialId
+             HeaderName
+           and $N others
+note: required by a bound in `sov_modules_api::containers::map::NamespacedStateMap`
+  --> $WORKSPACE/crates/module-system/sov-modules-api/src/containers/map.rs
+   |
+   | pub struct NamespacedStateMap<N, K, V, Codec = BorshCodec>
+   |            ------------------ required by a bound in this struct
+...
+   |     K: FromStr + std::fmt::Display,
+   |        ^^^^^^^ required by this bound in `NamespacedStateMap`
+
+error[E0277]: `std::vec::Vec<u8>` doesn't implement `std::fmt::Display`
+  --> tests/integration/trybuild/module_info/field_missing_attribute.rs:11:18
+   |
+11 |     test_state2: StateMap<Vec<u8>, u64>,
+   |                  ^^^^^^^^^^^^^^^^^^^^^^ `std::vec::Vec<u8>` cannot be formatted with the default formatter
+   |
+   = help: the trait `std::fmt::Display` is not implemented for `std::vec::Vec<u8>`
+   = note: in format strings you may be able to use `{:?}` (or {:#?} for pretty-print) instead
+note: required by a bound in `sov_modules_api::containers::map::NamespacedStateMap`
+  --> $WORKSPACE/crates/module-system/sov-modules-api/src/containers/map.rs
+   |
+   | pub struct NamespacedStateMap<N, K, V, Codec = BorshCodec>
+   |            ------------------ required by a bound in this struct
+...
+   |     K: FromStr + std::fmt::Display,
+   |                  ^^^^^^^^^^^^^^^^^ required by this bound in `NamespacedStateMap`
+
+error[E0277]: the trait bound `std::vec::Vec<u8>: FromStr` is not satisfied
+  --> tests/integration/trybuild/module_info/field_missing_attribute.rs:11:5
+   |
+3  | #[derive(Clone, ModuleInfo)]
+   |          ----- in this derive macro expansion
+...
+11 |     test_state2: StateMap<Vec<u8>, u64>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `FromStr` is not implemented for `std::vec::Vec<u8>`
+   |
+   = help: the following other types implement trait `FromStr`:
+             AddressBech32
+             Amount
+             Base58Address
+             ByteString
+             CString
+             ColorChoice
+             CredentialId
+             HeaderName
+           and $N others
+note: required by a bound in `sov_modules_api::containers::map::NamespacedStateMap`
+  --> $WORKSPACE/crates/module-system/sov-modules-api/src/containers/map.rs
+   |
+   | pub struct NamespacedStateMap<N, K, V, Codec = BorshCodec>
+   |            ------------------ required by a bound in this struct
+...
+   |     K: FromStr + std::fmt::Display,
+   |        ^^^^^^^ required by this bound in `NamespacedStateMap`
+
+error[E0277]: `std::vec::Vec<u8>` doesn't implement `std::fmt::Display`
+  --> tests/integration/trybuild/module_info/field_missing_attribute.rs:11:5
+   |
+3  | #[derive(Clone, ModuleInfo)]
+   |          ----- in this derive macro expansion
+...
+11 |     test_state2: StateMap<Vec<u8>, u64>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `std::vec::Vec<u8>` cannot be formatted with the default formatter
+   |
+   = help: the trait `std::fmt::Display` is not implemented for `std::vec::Vec<u8>`
+   = note: in format strings you may be able to use `{:?}` (or {:#?} for pretty-print) instead

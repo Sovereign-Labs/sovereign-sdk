@@ -1,0 +1,24 @@
+name: Stainless
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - "nightly"
+      - "stable"
+    paths:
+      - "crates/full-node/sov-api-spec/openapi-v3.yaml"
+      - "crates/full-node/sov-api-spec/openapi.stainless.yml"
+
+jobs:
+  stainless:
+    concurrency: upload-openapi-spec-action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: stainless-api/upload-openapi-spec-action@main
+        with:
+          stainless_api_key: ${{ secrets.STAINLESS_API_KEY }}
+          input_path: "crates/full-node/sov-api-spec/openapi-v3.yaml"
+          config_path: "crates/full-node/sov-api-spec/openapi.stainless.yml"
+          project_name: "sovereign-sdk"

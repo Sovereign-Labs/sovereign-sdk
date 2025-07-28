@@ -1,7 +1,0 @@
-error: No generic parameters found
- --> tests/module_info/no_generics.rs:3:10
-  |
-3 | #[derive(ModuleInfo)]
-  |          ^^^^^^^^^^
-  |
-  = note: this error originates in the derive macro `ModuleInfo` (in Nightly builds, run with -Z macro-backtrace for more info)

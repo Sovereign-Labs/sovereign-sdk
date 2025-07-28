@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SequencerConfig",
+  "description": "The initial sequencer config.",
+  "type": "object",
+  "required": [
+    "is_preferred_sequencer",
+    "seq_bond",
+    "seq_da_address",
+    "seq_rollup_address"
+  ],
+  "properties": {
+    "is_preferred_sequencer": {
+      "description": "Determines whether this sequencer is *regular* or *preferred*.\n\nBatches from the preferred sequencer are always processed first in block, which means the preferred sequencer can guarantee soft confirmation time for transactions.",
+      "type": "boolean"
+    },
+    "seq_bond": {
+      "description": "Initial sequencer bond",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Amount"
+        }
+      ]
+    },
+    "seq_da_address": {
+      "description": "The Data Availability (DA) address of the sequencer.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/MockAddress"
+        }
+      ]
+    },
+    "seq_rollup_address": {
+      "description": "The rollup address of the sequencer.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Address"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "Address": {
+      "description": "Address",
+      "type": "string",
+      "pattern": "^sov1[a-zA-Z0-9]+$"
+    },
+    "Amount": {
+      "description": "A token amount.",
+      "type": "integer",
+      "format": "uint128",
+      "minimum": 0.0
+    },
+    "MockAddress": {
+      "description": "Mock address; 32 bytes in hex-encoded format",
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    }
+  }
+}

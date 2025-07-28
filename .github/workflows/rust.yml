@@ -46,12 +46,16 @@ on:
     types: ["checks_requested"]
   push:
     branches: ["nightly", "stable"]
-  pull_request:
-    branches: ["nightly", "stable"]
+  pull_request: {}
+  workflow_dispatch: {}
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
+  # This is faster for CI: https://github.com/dtolnay/rust-toolchain/issues/26.
+  CARGO_INCREMENTAL: "0"
+  CARGO_NET_GIT_FETCH_WITH_CLI: true
+  NO_COLOR: 1
 
 # Automatically cancels a job if a new commit if pushed to the same PR, branch, or tag.
 # Source: <https://stackoverflow.com/a/72408109/5148606>
@@ -64,24 +68,32 @@ concurrency:
 jobs:
   check-aggregate:
     # Follows the guide at <https://github.com/re-actors/alls-green>.
-    runs-on: ubuntu-latest
+    runs-on: nscloud-ubuntu-22.04-amd64-2x4
+    timeout-minutes: 5
     if: always()
     needs:
       # If you're modifying this workflow file and you're adding/removing a job
       # which should be required to pass before merging a PR, don't forget to
       # update this list!
       - check
-      - check_no_std
+      - bench_check
+      - rollup_tps_validation
+      - doctests
       - hack
+      - hack_default_targets
       - nextest
-      - test
+      - nextest_all_features
       - coverage
-      - check-licenses
+      - cargo-deny-check-licenses
       - cargo-doc-artifact
       - deploy-github-pages
       - check-demo-rollup-table-of-contents
+      - check-demo-rollup-bash-commands-mock-da
       - check-demo-rollup-bash-commands
+      - check-constant-overriding-is-disabled-in-release-mode
       - validate-packages-to-publish-yml
+      - cargo-switcheroo-default
+      - check-web3-js-sdk-integration
     steps:
       - name: Compute whether the needed jobs succeeded or failed
         uses: re-actors/alls-green@release/v1
@@ -91,180 +103,86 @@ jobs:
 
   check:
     name: check
-    runs-on: buildjet-4vcpu-ubuntu-2204
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+      - nscloud-cache-tag-cache-dev
+      - nscloud-cache-size-100gb
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v3
-      - uses: rui314/setup-mold@v1
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+      - uses: actions/checkout@v4
+      - uses: webfactory/ssh-agent@v0.5.2
         with:
-          version: "23.2"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install Rust
-        run: rustup show && rustup install nightly && rustup component add rustfmt --toolchain nightly-x86_64-unknown-linux-gnu # Nightly is needed for our configuration of cargo fmt
-      - name: Install cargo-risczero
-        uses: taiki-e/install-action@v2
+          ssh-private-key: |
+            ${{ secrets.SDK_LINTS_ACCESS_TOKEN }}
+      - uses: namespacelabs/nscloud-cache-action@v1
         with:
-          tool: cargo-risczero@0.19
-      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
-        run: cargo risczero install
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: Swatinem/rust-cache@v2
+          cache: rust
+          path: ./crates/fuzz/target
+      - uses: ./.github/actions/setup
         with:
-          cache-provider: "buildjet"
-          shared-key: cargo-check-cache
-          save-if: ${{ github.ref == 'refs/heads/nightly' }}
-          workspaces: |
-            .
-            fuzz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run lint
+        env:
+          CARGO_NET_GIT_FETCH_WITH_CLI: true
         run: |
           if ! make lint ; then
             echo "Linting or formatting errors detected, please run 'make lint-fix' to fix it";
             exit 1
           fi
-
-  check_no_std:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Install Rust Bare Metal
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: thumbv6m-none-eabi
-          override: true
-      - name: Install Rust WASM
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: wasm32-unknown-unknown
-          override: true
-      - name: cargo install cargo-hack
-        uses: taiki-e/install-action@cargo-hack
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/nightly' }}
-      - name: Run check
-        run: make check-no-std
-
-  prover_bench_check:
-    name: prover_bench_check
-    needs: check
-    runs-on: buildjet-8vcpu-ubuntu-2204
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v3
-      - uses: rui314/setup-mold@v1
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
-        with:
-          version: "23.2"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install Rust
-        run: rustup show && rustup install nightly && rustup component add rustfmt --toolchain nightly-x86_64-unknown-linux-gnu
-      - name: Install cargo-risczero
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-risczero@0.19
-      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
-        run: cargo risczero install
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-provider: "buildjet"
-          shared-key: cargo-check-cache
-          save-if: ${{ github.ref == 'refs/heads/nightly' }}
-          workspaces: |
-            .
-            fuzz
-      - name: cargo prover bench check
-        env:
-          BLOCKS: 1
-          TXNS_PER_BLOCK: 10
-          NUM_PUB_KEYS: 100
-        run: sh ci_prover_count_check.sh
+      - name: Exit if working tree is dirty
+        # A dirty working tree likely means that `sov-modules-schemas` was
+        # out of date.
+        # Ignore the ELF's, because of how they are exposed in SP1 with include_bytes.
+        run: cargo switcheroo set default && git diff --exit-code -- . ':(exclude)**/elf/**'
+      - name: Check exit code and print custom message
+        if: ${{ failure() }}
+        run: |
+          echo "Dirty working tree means probably that some of the Cargo.lock files haven't been updated. Run `make lint` to update them"
 
   bench_check:
     name: bench_check
     needs: check
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-16x64-with-cache
+      - nscloud-cache-tag-cache-bench
+      - nscloud-cache-size-100gb
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v3
-      - uses: rui314/setup-mold@v1
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+      - uses: actions/checkout@v4
+      - uses: namespacelabs/nscloud-cache-action@v1
         with:
-          version: "23.2"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install Rust
-        run: rustup show && rustup install nightly && rustup component add rustfmt --toolchain nightly-x86_64-unknown-linux-gnu
-      - name: Install cargo-risczero
-        uses: taiki-e/install-action@v2
+          cache: rust
+      - uses: ./.github/actions/setup
         with:
-          tool: cargo-risczero@0.19
-      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
-        run: cargo risczero install
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - run: cargo bench --no-run
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-provider: "buildjet"
-          shared-key: cargo-check-cache
-          save-if: ${{ github.ref == 'refs/heads/nightly' }}
-          workspaces: |
-            .
-            fuzz
-      - name: cargo bench check
-        env:
-          BLOCKS: 1
-          TXNS_PER_BLOCK: 10
-          NUM_PUB_KEYS: 100
-        run: cargo bench
+          SOV_BENCH_BLOCKS: 1
+          SOV_BENCH_TXNS_PER_BLOCK: 10
+          SOV_BENCH_NUM_PUB_KEYS: 100
 
-  rollup_bench_check:
-    name: rollup_bench_check
+  rollup_tps_validation:
+    name: rollup_tps_validation
     needs: check
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+      - nscloud-cache-tag-cache-bench
+      - nscloud-cache-size-100gb
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v3
-      - uses: rui314/setup-mold@v1
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+      - uses: actions/checkout@v4
+      - uses: namespacelabs/nscloud-cache-action@v1
         with:
-          version: "23.2"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install Rust
-        run: rustup show && rustup install nightly && rustup component add rustfmt --toolchain nightly-x86_64-unknown-linux-gnu
-      - name: Install cargo-risczero
-        uses: taiki-e/install-action@v2
+          cache: rust
+      - uses: ./.github/actions/setup
         with:
-          tool: cargo-risczero@0.19
-      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
-        run: cargo risczero install
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-provider: "buildjet"
-          shared-key: cargo-check-cache
-          save-if: ${{ github.ref == 'refs/heads/nightly' }}
-          workspaces: |
-            .
-            fuzz
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: rollup bench check
         env:
-          BLOCKS: 10
-          TXNS_PER_BLOCK: 10000
-          NUM_PUB_KEYS: 100
-        run: sh ci_rollup_count_check.sh
+          SOV_BENCH_BLOCKS: 10
+          SOV_BENCH_TXNS_PER_BLOCK: 10000
+          SOV_BENCH_NUM_PUB_KEYS: 100
+        run: sh scripts/ci_rollup_count_check.sh ##
 
   # Check that every combination of features is working properly.
   hack:
@@ -273,166 +191,205 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+      - nscloud-cache-tag-cache-dev
+      - nscloud-cache-size-100gb
+    strategy:
+      matrix:
+        partition: [1, 2, 3]
     timeout-minutes: 120
     env:
       SKIP_GUEST_BUILD: "1"
+      SP1_SKIP_PROGRAM_BUILD: "true"
+      CARGO_HACK_PARTITION_N: ${{ matrix.partition }}
+      CARGO_HACK_PARTITION_M: 3
     steps:
-      - uses: actions/checkout@v3
-      - uses: rui314/setup-mold@v1
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+      - uses: actions/checkout@v4
+      - uses: namespacelabs/nscloud-cache-action@v1
         with:
-          version: "23.2"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install Rust
-        run: rustup show
-      - name: cargo install cargo-hack
-        uses: taiki-e/install-action@cargo-hack
-      - uses: Swatinem/rust-cache@v2
+          cache: rust
+      - uses: ./.github/actions/setup
         with:
-          cache-provider: "buildjet"
-          shared-key: cargo-check-cache
-          save-if: ${{ github.ref == 'refs/heads/nightly' }}
-          workspaces: |
-            .
-            fuzz
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          install_zkvm: "0"
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
       - name: cargo hack
         run: make check-features
+
+  # Check that every combination of features is working properly, but without
+  # test or bench targets so dev-dependencies are not required.
+  hack_default_targets:
+    name: features_default_targets
+    # `cargo-hack` uses the same profile as `cargo check` and doesn't require
+    # building dependencies, only checking them, so we can share caches
+    # effectively.
+    needs: check
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+      - nscloud-cache-tag-cache-dev
+      - nscloud-cache-size-100gb
+    strategy:
+      matrix:
+        partition: [1, 2, 3]
+    timeout-minutes: 120
+    env:
+      SKIP_GUEST_BUILD: "1"
+      SP1_SKIP_PROGRAM_BUILD: "true"
+      CARGO_HACK_PARTITION_N: ${{ matrix.partition }}
+      CARGO_HACK_PARTITION_M: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: rust
+      - uses: ./.github/actions/setup
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          install_zkvm: "0"
+      - name: cargo hack
+        run: make check-features-default-targets
+
   nextest:
     name: nextest
-    runs-on: buildjet-4vcpu-ubuntu-2204
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+      - nscloud-cache-tag-cache-test
+      - nscloud-cache-size-100gb
+      # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
+      - nscloud-exp-features:privileged;host-pid-namespace
     timeout-minutes: 60
+    env:
+      RISC0_DEV_MODE: "true"
+      SP1_PROVER: "mock"
+      RUST_BACKTRACE: 1
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v3
-      - uses: rui314/setup-mold@v1
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+      - uses: actions/checkout@v4
+      - uses: namespacelabs/nscloud-cache-action@v1
         with:
-          version: "23.2"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install cargo-risczero
-        uses: taiki-e/install-action@v2
+          cache: rust
+      - uses: ./.github/actions/setup
         with:
-          tool: cargo-risczero@0.19
-      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
-        run: cargo risczero install
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - run: make test-default-features
+
+  nextest_all_features:
+    name: nextest_all_features
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+      - nscloud-cache-tag-cache-test
+      - nscloud-cache-size-100gb
+      # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
+      - nscloud-exp-features:privileged;host-pid-namespace
+    timeout-minutes: 60
+    env:
+      RISC0_DEV_MODE: "true"
+      SP1_PROVER: "mock"
+      RUST_BACKTRACE: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: rust
+      - uses: ./.github/actions/setup
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - run: make test-all
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # `cargo-nextest` is much faster than standard `cargo test`.
-      - uses: taiki-e/install-action@nextest
-      - name: Install Rust
-        run: rustup show
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-provider: "buildjet"
-          save-if: ${{ github.ref == 'refs/heads/nightly' }}
-      - run: cargo nextest run --workspace --all-features
-  test:
-    name: test
-    runs-on: buildjet-4vcpu-ubuntu-2204
+
+  doctests:
+    name: doctests
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+      - nscloud-cache-tag-cache-doctests
+      - nscloud-cache-size-100gb
     timeout-minutes: 60
+    env:
+      SKIP_GUEST_BUILD: "1"
+      SP1_SKIP_PROGRAM_BUILD: "true"
     steps:
-      - uses: actions/checkout@v3
-      - uses: rui314/setup-mold@v1
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+      - uses: actions/checkout@v4
+      - uses: namespacelabs/nscloud-cache-action@v1
         with:
-          version: "23.2"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install cargo-risczero
-        uses: taiki-e/install-action@v2
+          cache: rust
+      - uses: ./.github/actions/setup
         with:
-          tool: cargo-risczero@0.19
-      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
-        run: cargo risczero install
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install Rust
-        run: rustup show
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-provider: "buildjet"
-          save-if: ${{ github.ref == 'refs/heads/nightly' }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          install_zkvm: "0"
       # `cargo-nextest` does not support doctests (yet?), so we have to run them
       # separately.
       # TODO: https://github.com/nextest-rs/nextest/issues/16
-      - run: cargo test --workspace --doc --all-features
+      - run: make doctest
+
   coverage:
     name: coverage
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-16x32-with-cache
+      - nscloud-cache-tag-cache-coverage
+      - nscloud-cache-size-150gb
+      # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
+      - nscloud-exp-features:privileged;host-pid-namespace
     timeout-minutes: 90
+    env:
+      SKIP_GUEST_BUILD: "1"
+      SP1_SKIP_PROGRAM_BUILD: "true"
+      RUST_BACKTRACE: 1
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: namespacelabs/nscloud-cache-action@v1
         with:
-          submodules: true
-      - uses: rui314/setup-mold@v1
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+          cache: rust
+      - uses: ./.github/actions/setup
         with:
-          version: "23.2"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install Rust
-        run: rustup show
-      - name: add llvm component
-        run: rustup component add llvm-tools-preview
-      - name: cargo install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-      - name: Install cargo-risczero
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-risczero@0.19
-      - name: Install risc0-zkvm toolchain
-        run: cargo risczero install
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-provider: "buildjet"
-          save-if: ${{ github.ref == 'refs/heads/nightly' }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          install_zkvm: "0"
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
       - name: cargo llvm-cov
         run: make coverage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v3
         with:
           # When retry is implemented, we can enable it again: https://github.com/codecov/codecov-action/issues/926
           fail_ci_if_error: false
-  check-licenses:
-    runs-on: ubuntu-latest
+
+  cargo-deny-check-licenses:
+    runs-on: nscloud-ubuntu-22.04-amd64-2x4
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: taiki-e/install-action@cargo-deny
-      - run: cargo deny check licenses
+      - run: make cargo-deny-check-licenses
+
   cargo-doc-artifact:
-    runs-on: ubuntu-latest
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+      - nscloud-cache-tag-cache-dev
+      - nscloud-cache-size-100gb
     timeout-minutes: 90
     env:
       RUSTDOCFLAGS: "-D warnings"
       SKIP_GUEST_BUILD: "1"
+      SP1_SKIP_PROGRAM_BUILD: "true"
+      S3_BUCKET_NAME: "sovlabs-ci-rustdoc-artifacts"
+      AWS_REGION: "us-east-1"
     steps:
-      - uses: actions/checkout@v3
-        # Not sure installing `mold` is actually needed, but it's what the
-        # `check` job, and we'd rather keep things as similar as possible.
-      - uses: rui314/setup-mold@v1
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+      - uses: actions/checkout@v4
+      - uses: namespacelabs/nscloud-cache-action@v1
         with:
-          version: "23.2"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install Rust
-        run: rustup show
-      - uses: Swatinem/rust-cache@v2
+          cache: rust
+      - uses: ./.github/actions/setup
         with:
-          cache-provider: "buildjet"
-          save-if: ${{ github.ref == 'refs/heads/nightly' }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          install_zkvm: "0"
       # The docs' artifact tends to become quite large with all the
       # dependencies, so we don't include them.
-      - run: cargo doc --no-deps --all-features
+      - run: make docs-generate
       - name: Add index.html
         # We're inside a Cargo workspace, so there's no index.html by default.
         # We must redirect to one of the workspace member crates' documentation.
@@ -442,10 +399,34 @@ jobs:
       - name: Fix assets' file permissions
         run: chmod -c -R +rX "target/doc"
       - name: Upload artifacts
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
           path: target/doc
+      - run: mkdir "test-upload-dir"; echo "This is a test file from CI" > test-upload-dir/test_ci.txt
+      - name: Configure AWS credentials
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Upload to doc artifacts to S3
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GITHUB_HEAD_REF_SAFE: ${{ github.head_ref }}
+          GITHUB_REF_SAFE: ${{ github.ref }}
+        run: |
+          # Sanitize inputs by removing any non-alphanumeric characters
+          SAFE_HEAD_REF=$(echo "$GITHUB_HEAD_REF_SAFE" | tr -cd '[:alnum:]-_')
+          SAFE_REF=$(echo "$GITHUB_REF_SAFE" | tr -cd '[:alnum:]-_')
+          # Use the sanitized variables
+          TARGET_DIR="${SAFE_HEAD_REF:-${SAFE_REF#refs/heads/}}-doc"
+          # Use quoting to prevent word splitting and globbing
+          aws --quiet s3 sync target/doc "s3://${S3_BUCKET_NAME}/${TARGET_DIR}" && \
+          echo "Docs are available at https://${S3_BUCKET_NAME}.${AWS_REGION}.amazonaws.com/${TARGET_DIR}/index.html";
+
   deploy-github-pages:
+    runs-on: nscloud-ubuntu-22.04-amd64-2x4
     needs: cargo-doc-artifact
     timeout-minutes: 5
     if: github.ref == 'refs/heads/stable'
@@ -457,15 +438,15 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v2
+        uses: actions/deploy-pages@v4
+
   check-demo-rollup-table-of-contents:
-    runs-on: ubuntu-latest
+    runs-on: nscloud-ubuntu-22.04-amd64-2x4
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
       - run: npm install -g doctoc
       - name: Update table of contents for mock-da
@@ -476,73 +457,158 @@ jobs:
         working-directory: ./examples/demo-rollup
       - name: Check table of contents
         # Exit status 0 means no changes were made, so the table of contents is
-        # up to date.
+        # up-to-date.
+        # You can run `make fix-readme-toc` from `examples/demo-rollup`.
         run: git diff --exit-code
+
   check-demo-rollup-bash-commands:
-    runs-on: buildjet-4vcpu-ubuntu-2204
-    needs: nextest
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+      - nscloud-cache-tag-demo-rollup
+      - nscloud-cache-size-100gb
+    needs:
+      - check
     timeout-minutes: 60
+    env:
+      SP1_SKIP_PROGRAM_BUILD: "true"
+      SKIP_GUEST_BUILD: "sp1"
+      RUST_LOG: "debug,sov_sequencer=trace,sov-celestia-adapter=trace,hyper=info,risc0_zkvm=warn,jmt=info,jsonrpsee-server=info,jsonrpsee-client=info,reqwest=info,sqlx=warn,tiny_http=warn,tower_http=info,tungstenite=info,risc0_circuit_rv32im=info,risc0_zkp::verify=info,h2=info,tower=info"
     steps:
-      - uses: actions/checkout@v3
-      - uses: rui314/setup-mold@v1
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+      - uses: actions/checkout@v4
+      - name: Login to Docker Hub
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: docker/login-action@v3
         with:
-          version: "23.2"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install cargo-risczero
-        uses: taiki-e/install-action@v2
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: namespacelabs/nscloud-cache-action@v1
         with:
-          tool: cargo-risczero@0.19
-      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
-        run: cargo risczero install
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install Rust
-        run: rustup show
-      - uses: Swatinem/rust-cache@v2
+          cache: rust
+      - name: Setup Zkvm toolchains + Rust
+        uses: ./.github/actions/setup
         with:
-          cache-provider: "buildjet"
-          save-if: ${{ github.ref == 'refs/heads/nightly' }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Compile README.md to Bash
-        run: cargo run --bin bashtestmd -- --input examples/demo-rollup/README_CELESTIA.md --output demo-rollup-readme.sh --tag test-ci
-      - run: cat demo-rollup-readme.sh
-      - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
-  check-demo-rollup-bash-commands-mock-da:
-    runs-on: buildjet-4vcpu-ubuntu-2204
-    needs: nextest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v3
-      - uses: rui314/setup-mold@v1
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
-        with:
-          version: "23.2"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install cargo-risczero
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-risczero@0.19
-      - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
-        run: cargo risczero install
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install Rust
-        run: rustup show
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-provider: "buildjet"
-          save-if: ${{ github.ref == 'refs/heads/nightly' }}
-      - name: Compile README.md to Bash
-        run: cargo run --bin bashtestmd -- --input examples/demo-rollup/README.md --output demo-rollup-readme.sh --tag test-ci
+        run: bashtestmd --input examples/demo-rollup/README_CELESTIA.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
 
-  validate-packages-to-publish-yml:
-    runs-on: ubuntu-latest
+  check-demo-rollup-bash-commands-mock-da:
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+      - nscloud-cache-tag-demo-rollup
+      - nscloud-cache-size-100gb
+    needs:
+      - check
+    timeout-minutes: 60
+    env:
+      SP1_SKIP_PROGRAM_BUILD: "true"
+      SKIP_GUEST_BUILD: "sp1"
+      RUST_LOG: "debug,sov_stf_runner=trace,sov_sequencer=trace,hyper=info,risc0_zkvm=warn,jmt=info,jsonrpsee-server=info,jsonrpsee-client=info,reqwest=info,sqlx=warn,tiny_http=warn,tower_http=info,tungstenite=info,risc0_circuit_rv32im=info,risc0_zkp::verify=info,h2=info,tower=info"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: rust
+      - name: Setup Zkvm toolchains + Rust
+        uses: ./.github/actions/setup
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compile README.md to Bash
+        run: bashtestmd --input examples/demo-rollup/README.md --output demo-rollup-readme.sh --tag test-ci
+      - run: cat demo-rollup-readme.sh
+      - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
+
+  check-constant-overriding-is-disabled-in-release-mode:
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+      - nscloud-cache-tag-check-constant-overriding-is-disabled-in-release-mode
+      - nscloud-cache-size-20gb
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: rust
+      - name: Setup Zkvm toolchains + Rust
+        uses: ./.github/actions/setup
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - run: make check-constant-overriding-is-disabled-in-release-mode
+
+  validate-packages-to-publish-yml:
+    runs-on: nscloud-ubuntu-22.04-amd64-2x4
+    steps:
+      - uses: actions/checkout@v4
       - run: ./scripts/validate_packages_to_publish_yml.sh
         shell: bash
         working-directory: .
+
+  cargo-switcheroo-default:
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-4x16-with-cache
+      - nscloud-cache-tag-cargo-switcheroo
+      - nscloud-cache-size-20gb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: rust
+      - name: Setup Zkvm toolchains + Rust
+        uses: ./.github/actions/setup
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - run: cargo switcheroo set default
+        # Exit status 0 means no changes were made.
+      - run: git diff --exit-code
+
+  check-web3-js-sdk-integration:
+    runs-on:
+      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+      - nscloud-cache-tag-demo-rollup
+      - nscloud-cache-size-100gb
+    needs:
+      - check
+    # There exists a circular dependency between repos where web3 JS needs changes from a PR
+    # But the PR needs the web3 SDK to be updated for this job to pass. In these cases
+    # we can skip this check but do our best to avoid this until we can fix the situation
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-web3-js-check') }}
+    timeout-minutes: 60
+    env:
+      SP1_SKIP_PROGRAM_BUILD: "true"
+      SKIP_GUEST_BUILD: "1"
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: rust
+      - name: Setup Zkvm toolchains + Rust
+        uses: ./.github/actions/setup
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          install_zkvm: "0"
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.SELF_ACCESS_TOKEN }}
+            ${{ secrets.SOV_SDK_WEB3_JS_ACCESS_TOKEN }}
+      - name: Checkout web3-js SDK
+        uses: actions/checkout@v4
+        with:
+          repository: "Sovereign-Labs/sovereign-sdk-web3-js"
+          path: "examples/demo-rollup/web3-js-sdk"
+          ref: "493795cb30bdea3b840253a5888467177b64cc93"
+          ssh-key: |
+            ${{ secrets.SOV_SDK_WEB3_JS_ACCESS_TOKEN }}
+      - name: Run web3-js SDK tests against demo-rollup
+        # See script for more details about what to do if job
+        run: |
+          cd examples/demo-rollup
+          bash ./web3-js-sdk-test-runner.sh

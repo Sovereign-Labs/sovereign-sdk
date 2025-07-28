@@ -1,0 +1,172 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BankConfig",
+  "description": "Initial configuration for sov-bank module.",
+  "type": "object",
+  "required": [
+    "gas_token_config",
+    "tokens"
+  ],
+  "properties": {
+    "gas_token_config": {
+      "description": "Configuration for the gas token",
+      "allOf": [
+        {
+          "$ref": "#/definitions/GasTokenConfig"
+        }
+      ]
+    },
+    "tokens": {
+      "description": "A list of configurations for any other tokens to create at genesis",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/TokenConfig"
+      }
+    }
+  },
+  "definitions": {
+    "Address": {
+      "description": "Address",
+      "type": "string",
+      "pattern": "^sov1[a-zA-Z0-9]+$"
+    },
+    "Amount": {
+      "description": "A token amount.",
+      "type": "integer",
+      "format": "uint128",
+      "minimum": 0.0
+    },
+    "GasTokenConfig": {
+      "description": "[`GasTokenConfig`] specifies a configuration for the rollup's gas token.",
+      "type": "object",
+      "required": [
+        "address_and_balances",
+        "admins",
+        "token_name"
+      ],
+      "properties": {
+        "address_and_balances": {
+          "description": "A vector of tuples containing the initial addresses and balances (as u128)",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "$ref": "#/definitions/Address"
+              },
+              {
+                "$ref": "#/definitions/Amount"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "admins": {
+          "description": "The addresses that are authorized to mint the token.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Address"
+          }
+        },
+        "supply_cap": {
+          "description": "The supply cap of the token, if any.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Amount"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "token_decimals": {
+          "description": "The decimal places of the token.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "token_name": {
+          "description": "The name of the token.",
+          "type": "string"
+        }
+      }
+    },
+    "TokenConfig": {
+      "description": "[`TokenConfig`] specifies a configuration used when generating a token for the bank module.",
+      "type": "object",
+      "required": [
+        "address_and_balances",
+        "admins",
+        "token_id",
+        "token_name"
+      ],
+      "properties": {
+        "address_and_balances": {
+          "description": "A vector of tuples containing the initial addresses and balances (as u128)",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "$ref": "#/definitions/Address"
+              },
+              {
+                "$ref": "#/definitions/Amount"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "admins": {
+          "description": "The addresses that are authorized to mint the token.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Address"
+          }
+        },
+        "supply_cap": {
+          "description": "The supply cap of the token, if any.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Amount"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "token_decimals": {
+          "description": "The decimal places of the token.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "token_id": {
+          "description": "Predetermined ID of the token. Allowed only for genesis tokens.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/TokenId"
+            }
+          ]
+        },
+        "token_name": {
+          "description": "The name of the token.",
+          "type": "string"
+        }
+      }
+    },
+    "TokenId": {
+      "description": "A bech32 string",
+      "type": "string",
+      "pattern": "token_1[a-zA-Z0-9]+$"
+    }
+  }
+}

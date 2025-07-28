@@ -1,0 +1,20 @@
+[
+  {
+    "shares": [],
+    "proof": {
+      "start": 2,
+      "end": 3,
+      "nodes": [
+        "AAAAAAAAAAAAAAAAAAAAAAAAAFHMGnPWX5X2veYAAAAAAAAAAAAAAAAAAAAAAAAAXSUTEfJbE6VJ4OUvu2t1qy3qW+qijdXv1ByH49x2Qhox4VQGQEYnOTEQ",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAMod4SoxZ3r5T8AAAAAAAAAAAAAAAAAAAAAAAAAAyh3hKjFnevlPwDKchVR+PdH4vSwg1xGVcdJFYFUIhLKHtjElleg0A7dX",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAMod4SoxZ3r5T8AAAAAAAAAAAAAAAAAAAAAAAAAAyh3hKjFnevlPwESub4rfVho25Rezayn3VplEs75Yi1xqcA2BPeCdbugF",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAMod4SoxZ3r5T8D//////////////////////////////////////mnP9vTXpi6xZXY6wBq81UAQ93LIFj9FgCGWQmBGFDZf",
+        "//////////////////////////////////////7//////////////////////////////////////i78l7x6hc+r4PDOj/ojJFtChc0fWOiDF42n8pbp/dUO",
+        "//////////////////////////////////////7//////////////////////////////////////nv6BM04fuwZggth+O9G6qCRn1vSz9cURJ32UN+p8l7F",
+        "/////////////////////////////////////////////////////////////////////////////8u8y4GuYRwct3+Va+HXEoOOEbJVW9pLedkDjtiC4jgx"
+      ],
+      "leaf_hash": "AAAAAAAAAAAAAAAAAAAAAAAAAMod4SoxZ3r5T8AAAAAAAAAAAAAAAAAAAAAAAAAAyh3hKjFnevlPwLC9vyQ4yaqwg7r+7P7aj87h30Can2/W1HaQIB1VNd1k",
+      "is_max_namespace_ignored": true
+    }
+  }
+]

@@ -1,5 +1,0 @@
-error: Type not supported by the `ModuleInfo` macro
- --> tests/module_info/not_supported_type.rs:9:18
-  |
-9 |     test_state1: [usize; 22],
-  |                  ^^^^^^^^^^^

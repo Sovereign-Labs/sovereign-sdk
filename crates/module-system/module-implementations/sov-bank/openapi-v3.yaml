@@ -1,0 +1,133 @@
+# Specification for custom bank REST API endpoints
+openapi: "3.0.2"
+info:
+  title: Sov-bank custom endpoints
+  version: 0.1.0
+paths:
+  /tokens/gas_token:
+    get:
+      summary: Get the id of the native gas token of the rollup
+      operationId: "bank_gas_token_id"
+      tags: [Bank]
+      responses:
+        "200":
+          $ref: "#/components/responses/TokenIdResponse"
+        "404":
+          # Referring type from `runtime-base.yaml`
+          $ref: "#/components/responses/StateNotFound"
+  /tokens/gas_token/balances/{address}:
+    get:
+      summary: Fetch the current balance of the native gas token for a given user
+      operationId: "bank_gas_token_get_user_balance"
+      tags: [Bank]
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Address"
+      responses:
+        "200":
+          $ref: "#/components/responses/CoinsResponse"
+        "404":
+          # Referring type from `runtime-base.yaml`
+          $ref: "#/components/responses/StateNotFound"
+  /tokens/{token_id}/total-supply:
+    get:
+      summary: Get the total supply of a specific token
+      operationId: "bank_custom_token_get_total_supply"
+      tags: [Bank]
+      parameters:
+        - name: token_id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/TokenId"
+      responses:
+        "200":
+          $ref: "#/components/responses/CoinsResponse"
+        "404":
+          # Referring type from `runtime-base.yaml`
+          $ref: "#/components/responses/StateNotFound"
+  /tokens/{token_id}/balances/{address}:
+    get:
+      summary: Fetch the current balance of the token for a given user
+      operationId: "bank_custom_token_get_user_balance"
+      tags: [Bank]
+      parameters:
+        - name: token_id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/TokenId"
+        - name: address
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Address"
+      responses:
+        "200":
+          $ref: "#/components/responses/CoinsResponse"
+        "404":
+          # Referring type from `runtime-base.yaml`
+          $ref: "#/components/responses/StateNotFound"
+  /tokens:
+    get:
+      summary: Compute a token ID from the given parameters
+      operationId: "bank_custom_token_compute_token_id"
+      tags: [Bank]
+      parameters:
+        - name: token_name
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The name of the token to filter by
+        - name: sender
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Address"
+          description: The address of the deployer of the token
+      responses:
+        "200":
+          $ref: "#/components/responses/TokenIdResponse"
+        "404":
+          # Referring type from `runtime-base.yaml`
+          $ref: "#/components/responses/StateNotFound"
+
+components:
+  schemas:
+    TokenId:
+      type: string
+      pattern: "^token_1[02-9ac-hj-np-z]+$"
+      description: bech32 encoded token id, prefix with "token_".
+    Address:
+      type: string
+      description: The address of a rollup user.
+    Coins:
+      type: object
+      description: Token Id and amount
+      properties:
+        token_id:
+          $ref: "#/components/schemas/TokenId"
+        amount:
+          type: string
+          pattern: "^[0-9]+$"
+          description: Amount
+  responses:
+    CoinsResponse:
+      description: OK
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Coins"
+    TokenIdResponse:
+      description: OK
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              token_id:
+                $ref: "#/components/schemas/TokenId"

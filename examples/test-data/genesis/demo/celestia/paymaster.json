@@ -1,0 +1,20 @@
+{
+  "payers": [
+    {
+      "payer_address": "sov1x3jtvq0zwhj2ucsc4hqugskvralrulxvf53vwtkred93s85ar2a",
+      "policy": {
+        "default_payee_policy": {
+          "allow": {
+            "max_fee": "100000000000"
+          }
+        },
+        "payees": [],
+        "authorized_updaters": [],
+        "authorized_sequencers": "all"
+      },
+      "sequencers_to_register": [
+        "celestia1a68m2l85zn5xh0l07clk4rfvnezhywc53g8x7s"
+      ]
+    }
+  ]
+}

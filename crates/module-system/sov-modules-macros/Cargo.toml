@@ -1,0 +1,91 @@
+[package]
+name = "sov-modules-macros"
+description = "Macros for use with the Sovereign SDK module system"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+autotests = false
+
+[lints]
+workspace = true
+
+[lib]
+proc-macro = true
+
+[[test]]
+name = "tests"
+path = "tests/integration/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+bech32 = { workspace = true }
+blake2 = "0.10"
+convert_case = "0.6.0"
+darling = { workspace = true }
+derive_more = { workspace = true, features = ["deref"] }
+hex = { workspace = true }
+prettier-please = { version = "0.3", default-features = false }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+serde = { workspace = true }
+syn = { workspace = true, features = ["full"] }
+toml = { workspace = true }
+sov-universal-wallet-macro-helpers = { workspace = true }
+sov-metrics = { workspace = true, optional = true }
+
+
+[dev-dependencies]
+sov-modules-macros = { path = ".", features = ["native"] }
+sov-modules-api = { workspace = true, features = ["native", "test-utils"] }
+borsh = { workspace = true }
+jsonrpsee = { workspace = true, features = ["http-client", "macros", "server"] }
+schemars = { workspace = true }
+serde = { workspace = true }
+strum = { workspace = true }
+trybuild = "1.0"
+tokio = { workspace = true }
+
+sov-address = { workspace = true }
+
+sov-rollup-interface = { workspace = true, features = ["native"] }
+sov-state = { workspace = true, features = ["native", "test-utils"] }
+sov-bank = { workspace = true, features = ["native"] }
+
+sov-metrics = { workspace = true }
+sov-test-utils = { workspace = true }
+
+[build-dependencies]
+anyhow = { workspace = true }
+
+[features]
+default = []
+native = [
+	"sov-bank/native",
+	"sov-modules-api/native",
+	"sov-modules-macros/native",
+	"sov-rollup-interface/native",
+	"sov-state/native",
+	"sov-address/native",
+	"sov-metrics?/native"
+]
+arbitrary = [
+	"sov-modules-macros/arbitrary",
+	"sov-address/arbitrary",
+	"sov-bank/arbitrary",
+	"sov-modules-api/arbitrary",
+	"sov-rollup-interface/arbitrary",
+	"sov-state/arbitrary",
+	"sov-test-utils/arbitrary"
+]
+bench = [
+	"sov-metrics",
+	"sov-modules-api/bench",
+	"sov-modules-macros/bench",
+	"sov-state/bench"
+]
+gas-constant-estimation = ["sov-modules-macros/gas-constant-estimation", "sov-modules-api/gas-constant-estimation"]

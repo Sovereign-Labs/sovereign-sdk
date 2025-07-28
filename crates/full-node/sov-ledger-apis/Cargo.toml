@@ -1,0 +1,46 @@
+[package]
+name = "sov-ledger-apis"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+description = "JSON-RPC server and client implementations for Sovereign SDK rollups"
+repository = { workspace = true }
+version = { workspace = true }
+publish = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+axum = { workspace = true, features = ["http1", "http2", "ws", "json"] }
+borsh = { workspace = true }
+derive_more = { workspace = true, features = ["display"] }
+futures = { workspace = true }
+hex = { workspace = true }
+serde = "1"
+serde_json = "1"
+serde_with = { workspace = true, features = ["base64"] }
+serde_yaml = { workspace = true }
+sov-db = { workspace = true }
+sov-modules-api = { workspace = true, features = ["native"] }
+sov-rest-utils = { workspace = true }
+sov-rollup-interface = { workspace = true, features = ["native"] }
+tokio = { workspace = true, features = ["macros"] }
+tracing = { workspace = true }
+utoipa-swagger-ui = { workspace = true, features = ["axum"] }
+openapiv3 = { workspace = true }
+
+[dev-dependencies]
+assert-json-diff = "2"
+axum-server = { workspace = true }
+base64 = { workspace = true }
+insta = { workspace = true }
+reqwest = { workspace = true, features = ["rustls-tls", "json"] }
+sov-db = { workspace = true }
+sov-api-spec = { workspace = true }
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-test-utils = { workspace = true }
+tempfile = "3"
+tokio = { workspace = true, features = ["test-util", "rt-multi-thread"] }

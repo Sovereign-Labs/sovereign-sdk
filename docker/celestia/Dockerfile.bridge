@@ -1,0 +1,25 @@
+# A dockerfile for the celestia bridge node in DA layer
+# Based on:
+# https://github.com/celestiaorg/celestia-node/blob/main/Dockerfile
+FROM docker.io/alpine:3.20.1
+
+ENV CELESTIA_HOME=/root
+
+RUN apk update && \
+    apk add --no-cache bash jq curl && \
+    wget https://github.com/fullstorydev/grpcurl/releases/download/v1.8.7/grpcurl_1.8.7_linux_x86_64.tar.gz && \
+    tar -xvf grpcurl_1.8.7_linux_x86_64.tar.gz && \
+    mv grpcurl /usr/local/bin && \
+    rm grpcurl_1.8.7_linux_x86_64.tar.gz
+
+# Copy in the binary
+COPY --from=ghcr.io/celestiaorg/celestia-node:v0.23.2-mocha /bin/celestia /bin/celestia
+COPY --from=ghcr.io/celestiaorg/celestia-node:v0.23.2-mocha /bin/cel-key /bin/cel-key
+
+COPY ./run-bridge.sh /opt/entrypoint.sh
+COPY ./bridge-healthcheck.sh /opt/bridge-healthcheck.sh
+RUN chmod +x /opt/entrypoint.sh && chmod +x /opt/bridge-healthcheck.sh
+
+EXPOSE 2121 26658
+
+CMD /opt/entrypoint.sh

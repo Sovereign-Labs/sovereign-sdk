@@ -1,0 +1,52 @@
+[package]
+name = "sov-chain-state"
+authors = { workspace = true }
+description = "A Sovereign SDK module for storing a rollup's historical state"
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+schemars = { workspace = true }
+anyhow = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+serde = { workspace = true }
+tracing = { workspace = true }
+derivative = { workspace = true }
+
+sov-modules-api = { workspace = true }
+sov-rollup-interface = { workspace = true }
+sov-state = { workspace = true }
+
+[dev-dependencies]
+sov-value-setter = { workspace = true, features = ["native"] }
+sov-chain-state = { path = ".", features = ["native", "test-utils"] }
+tempfile = { workspace = true }
+strum = { workspace = true }
+sov-test-utils = { workspace = true }
+sov-mock-da = { workspace = true }
+sov-mock-zkvm = { workspace = true }
+sov-modules-api = { workspace = true, features = ["test-utils"] }
+sov-bank = { workspace = true, features = ["test-utils"] }
+
+[features]
+default = []
+test-utils = []
+native = [
+	"sov-chain-state/native",
+	"sov-mock-da/native",
+	"sov-mock-zkvm/native",
+	"sov-modules-api/native",
+	"sov-state/native",
+	"sov-value-setter/native",
+	"sov-bank/native",
+	"sov-rollup-interface/native"
+]

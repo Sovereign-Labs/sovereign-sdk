@@ -1,0 +1,17 @@
+[package]
+name = "sov-zkvm-utils"
+description = "Helpers for ZKVM build scripts"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+version = { workspace = true }
+#readme = "README.md"
+
+[dependencies]
+anyhow = { workspace = true }
+convert_case = { workspace = true }
+
+[lints]
+workspace = true

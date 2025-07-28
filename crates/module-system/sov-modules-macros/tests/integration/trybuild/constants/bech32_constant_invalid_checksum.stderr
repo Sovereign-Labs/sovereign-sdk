@@ -1,0 +1,5 @@
+error: The constant named `CONST_TOKEN_ID_INVALID_CHECKSUM` is not a valid bech32 string; decoding failed: parse failed
+ --> tests/integration/trybuild/constants/bech32_constant_invalid_checksum.rs:6:43
+  |
+6 | const TOKEN_ID: MyTokenId = config_value!("CONST_TOKEN_ID_INVALID_CHECKSUM");
+  |                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

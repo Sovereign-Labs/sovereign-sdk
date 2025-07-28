@@ -1,0 +1,31 @@
+[package]
+name = "sov-demo-rollup-rest-api-load-testing"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+tokio = { workspace = true, features = ["full"] }
+borsh = { workspace = true }
+
+anyhow = { workspace = true }
+sov-address = { workspace = true, features = ["evm"] }
+sov-test-utils = { workspace = true }
+sov-cli = { workspace = true }
+rest-api-load-testing = {workspace = true}
+sov-modules-api = {workspace = true}
+sov-api-spec = { workspace = true }
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-bank = { workspace = true, features = ["native", "test-utils"] }
+demo-stf = { workspace = true, features = ["native"] }
+sov-modules-rollup-blueprint = { workspace = true }
+sov-demo-rollup = { path = ".." }
+sha2 = { workspace = true }

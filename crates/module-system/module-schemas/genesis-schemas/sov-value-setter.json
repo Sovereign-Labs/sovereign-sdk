@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ValueSetterConfig",
+  "description": "Initial configuration for sov-value-setter module.",
+  "type": "object",
+  "required": [
+    "admin"
+  ],
+  "properties": {
+    "admin": {
+      "description": "Admin of the module.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Address"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "Address": {
+      "description": "Address",
+      "type": "string",
+      "pattern": "^sov1[a-zA-Z0-9]+$"
+    }
+  }
+}

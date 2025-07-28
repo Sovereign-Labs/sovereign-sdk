@@ -1,0 +1,60 @@
+[package]
+name = "sov-blob-storage"
+description = "A Sovereign SDK module for holding blobs from Data Availability Layer"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = "Sovereign Labs Community Software License"
+repository = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+borsh = { workspace = true }
+derive_more = { workspace = true }
+tracing = { workspace = true }
+hex = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+
+sov-modules-api = { workspace = true }
+sov-bank = { workspace = true }
+sov-state = { workspace = true }
+sov-rollup-interface = { workspace = true }
+sov-sequencer-registry = { workspace = true }
+sov-chain-state = { workspace = true }
+
+
+[dev-dependencies]
+tempfile = { workspace = true }
+strum = { workspace = true }
+sov-blob-storage = { path = ".", features = ["native", "test-utils"] }
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-bank = { workspace = true }
+sov-test-utils = { workspace = true }
+sov-kernels = { workspace = true, features = ["native", "test-utils"] }
+sov-value-setter = { workspace = true }
+sov-rollup-interface = { workspace = true }
+sov-modules-stf-blueprint = { workspace = true }
+
+[features]
+default = []
+test-utils = []
+native = [
+	"sov-bank/native",
+	"sov-blob-storage/native",
+	"sov-chain-state/native",
+	"sov-kernels/native",
+	"sov-mock-da/native",
+	"sov-modules-api/native",
+	"sov-sequencer-registry/native",
+	"sov-state/native",
+	"sov-modules-stf-blueprint/native",
+	"sov-rollup-interface/native",
+	"sov-value-setter/native",
+]

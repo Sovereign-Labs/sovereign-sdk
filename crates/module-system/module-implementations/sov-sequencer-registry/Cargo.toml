@@ -1,0 +1,61 @@
+[package]
+name = "sov-sequencer-registry"
+description = "A Sovereign SDK module for registering rollup sequencers"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+arbitrary = { workspace = true, optional = true }
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
+sov-bank = { workspace = true }
+sov-modules-api = { workspace = true }
+sov-state = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+strum = { workspace = true }
+sov-sequencer-registry = { path = ".", features = ["native"] }
+sov-value-setter = { workspace = true }
+sov-chain-state = { workspace = true }
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-test-utils = { workspace = true }
+sov-modules-api = { workspace = true, features = ["test-utils"] }
+
+[features]
+default = []
+arbitrary = [
+	"dep:arbitrary",
+	"dep:proptest",
+	"dep:proptest-derive",
+	"sov-modules-api/arbitrary",
+	"sov-sequencer-registry/arbitrary",
+	"sov-state/arbitrary",
+	"sov-test-utils/arbitrary",
+	"sov-mock-da/arbitrary",
+	"sov-bank/arbitrary",
+]
+native = [
+	"sov-bank/native",
+	"sov-mock-da/native",
+	"sov-modules-api/native",
+	"sov-sequencer-registry/native",
+	"sov-state/native",
+	"sov-value-setter/native",
+	"sov-chain-state/native",
+]

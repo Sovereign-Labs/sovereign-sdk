@@ -1,0 +1,852 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RollupConfig",
+  "description": "Rollup Configuration",
+  "type": "object",
+  "required": [
+    "da",
+    "monitoring",
+    "proof_manager",
+    "runner",
+    "sequencer",
+    "storage"
+  ],
+  "properties": {
+    "da": {
+      "description": "Data Availability service configuration.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/MockDaConfig"
+        }
+      ]
+    },
+    "monitoring": {
+      "description": "Monitoring configuration.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/MonitoringConfig"
+        }
+      ]
+    },
+    "proof_manager": {
+      "description": "Proof manager configuration.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/ProofManagerConfig_for_Address"
+        }
+      ]
+    },
+    "runner": {
+      "description": "Runner own configuration.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/RunnerConfig"
+        }
+      ]
+    },
+    "sequencer": {
+      "description": "Sequencer (and batch builder) configuration.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/SequencerConfig"
+        }
+      ]
+    },
+    "storage": {
+      "description": "Currently rollup config runner only supports storage path parameter",
+      "allOf": [
+        {
+          "$ref": "#/definitions/RollupDbConfig"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "Address": {
+      "description": "Address",
+      "type": "string",
+      "pattern": "^sov1[a-zA-Z0-9]+$"
+    },
+    "BlockProducingConfig": {
+      "description": "Configuration for block producing.",
+      "oneOf": [
+        {
+          "description": "Blocks are produced at fixed time intervals, regardless of whether there are transactions. This means empty blocks may be created.",
+          "type": "object",
+          "required": [
+            "periodic"
+          ],
+          "properties": {
+            "periodic": {
+              "type": "object",
+              "required": [
+                "block_time_ms"
+              ],
+              "properties": {
+                "block_time_ms": {
+                  "description": "The interval, in milliseconds, at which new blocks are produced.",
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "A new block is produced only when a batch blob (but not a proof blob) is submitted. Each block contains exactly one batch blob and zero or more proof blobs.",
+          "type": "object",
+          "required": [
+            "on_batch_submit"
+          ],
+          "properties": {
+            "on_batch_submit": {
+              "type": "object",
+              "properties": {
+                "block_wait_timeout_ms": {
+                  "description": "The maximum time [`sov_rollup_interface::node::da::DaService::get_block_at`] will wait for a block to become available. If this timeout elapses, an error is returned. If set to `None`, [`DEFAULT_BLOCK_WAITING_TIME_MS`] is used.",
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "A new block is produced when either a batch blob or a proof blob is submitted. Each block contains exactly one blob.",
+          "type": "object",
+          "required": [
+            "on_any_submit"
+          ],
+          "properties": {
+            "on_any_submit": {
+              "type": "object",
+              "properties": {
+                "block_wait_timeout_ms": {
+                  "description": "The maximum time [`sov_rollup_interface::node::da::DaService::get_block_at`] will wait for a block to become available. If this timeout elapses, an error is returned. If set to `None`, [`DEFAULT_BLOCK_WAITING_TIME_MS`] is used.",
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Blocks are created manually, with no automatic production.",
+          "type": "string",
+          "enum": [
+            "manual"
+          ]
+        }
+      ]
+    },
+    "CorsConfiguration": {
+      "description": "See [`HttpServerConfig::cors`].\n\n# Default\n\nCross-origin resource sharing (CORS) makes local development easier, so it's enabled by default\n\nIn production, one may want to disable it and let your reverse proxy handle CORS instead. Security note: Allowing CORS in production allows making requests to rollup node any website on the Internet.",
+      "oneOf": [
+        {
+          "description": "Enables CORS with a permissive policy, intended for local development.",
+          "type": "string",
+          "enum": [
+            "permissive"
+          ]
+        },
+        {
+          "description": "Disables CORS.",
+          "type": "string",
+          "enum": [
+            "restrictive"
+          ]
+        }
+      ]
+    },
+    "HexHash": {
+      "description": "32 bytes in hexadecimal format, with `0x` prefix.",
+      "type": "string",
+      "pattern": "^0x[a-fA-F0-9]{64}$"
+    },
+    "HttpServerConfig": {
+      "description": "Configuration for HTTP server(s) exposed by the node.",
+      "type": "object",
+      "required": [
+        "bind_host",
+        "bind_port"
+      ],
+      "properties": {
+        "bind_host": {
+          "description": "Server host.",
+          "type": "string"
+        },
+        "bind_port": {
+          "description": "Server port.",
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "cors": {
+          "description": "Enable or disable CORS policy headers. Enabled by default.",
+          "default": "permissive",
+          "allOf": [
+            {
+              "$ref": "#/definitions/CorsConfiguration"
+            }
+          ]
+        },
+        "public_address": {
+          "description": "The fully qualified public name of the server, in case the rollup node is running behind a proxy. For instance: ```toml public_address = \"https://rollup.example.com\" ```",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "MockAddress": {
+      "description": "Mock address; 32 bytes in hex-encoded format",
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "MockDaConfig": {
+      "description": "The configuration for Mock Da.",
+      "type": "object",
+      "required": [
+        "connection_string",
+        "sender_address"
+      ],
+      "properties": {
+        "block_producing": {
+          "description": "How MockDaService should produce blocks.",
+          "default": {
+            "on_batch_submit": {
+              "block_wait_timeout_ms": 120000
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/BlockProducingConfig"
+            }
+          ]
+        },
+        "connection_string": {
+          "description": "Connection string to the database for storing Da Data. - \"sqlite://demo_data/da.sqlite?mode=rwc\" - \"sqlite::memory:\" - \"postgresql://root:hunter2@aws.amazon.com/mock-da\"",
+          "type": "string"
+        },
+        "finalization_blocks": {
+          "description": "Defines how many blocks progress to finalization.",
+          "default": 0,
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "randomization": {
+          "description": "If specified, [`StorableMockDaLayer`] will add randomization to non-finalized blocks.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RandomizationConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sender_address": {
+          "description": "The address to use to \"submit\" blobs on the mock da layer.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/MockAddress"
+            }
+          ]
+        }
+      }
+    },
+    "MonitoringConfig": {
+      "description": "Configuration of Sovereign monitoring",
+      "type": "object",
+      "required": [
+        "telegraf_address"
+      ],
+      "properties": {
+        "max_datagram_size": {
+          "description": "Defines how many measurements a rollup node will accumulate before sending it to the Telegraf. It is expected from the rollup node to produce metrics all the time, so measurements are buffered by size and not sent by time. and below 67 KB, which is the maximal UDP packet size. It also means that if a single serialized metric is larger than this value, a UDP packet will be larger.\n\nNote: to disable buffering, set this value to `Some(1)`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "max_pending_metrics": {
+          "description": "How many metrics are allowed to be in pending state, before new metrics will be dropped. This is a number of metrics, not serialized bytes. The total number of bytes to be held in memory might vary per metric + `max_datagram_size`",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "telegraf_address": {
+          "description": "A UDP or TCP socket where Telegraf has `inputs.socket_listener`, something like `udp://127.0.0.1:8094`. Localhost is preferred for latency and reliability reasons.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/TelegrafSocketConfig"
+            }
+          ]
+        }
+      }
+    },
+    "PreferredSequencerConfig": {
+      "description": "Configuration for [`PreferredSequencer`].",
+      "type": "object",
+      "required": [
+        "batch_execution_time_limit_millis",
+        "recovery_strategy"
+      ],
+      "properties": {
+        "batch_execution_time_limit_millis": {
+          "description": "Target time in milliseconds to spend executing all the txs in a single batch. Batches will be closed when they exceed this value.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "db_event_channel_size": {
+          "description": "The number of events that can be buffered in the database event channel while `update_state` is running. This value needs to be increased at higher TPS to avoid blocking the sequencer.",
+          "default": 10000,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "disable_state_root_consistency_checks": {
+          "description": "When enabled, the sequencer will skip some expensive consistency checks on the state root. This means that bugs in the implementation are less likely to be detected but may improve performance and allows the sequencer to continue operating in case of known bugs.",
+          "default": false,
+          "type": "boolean"
+        },
+        "events_channel_size": {
+          "description": "The size of the Tokio channel used to stream events.\n\nDon't deviate from the default unless you know what you're doing.",
+          "default": 10000,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "ideal_lag_behind_finalized_slot": {
+          "description": "The ideal lag behind the finalized slot number.",
+          "default": 10,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "is_replica": {
+          "description": "When enabled, the sequencer runs in replica mode and cannot accept transactions. It will sync from the master sequencer's database but remain read-only.",
+          "default": false,
+          "type": "boolean"
+        },
+        "minimum_profit_per_tx": {
+          "description": "The minimum fee that the preferred sequencer is willing to accept, denominated in rollup tokens. Defaults to zero. Sequencers should set this to a non-zero value if they wish to cover their DA costs.",
+          "default": 0,
+          "type": "integer",
+          "format": "uint128",
+          "minimum": 0.0
+        },
+        "postgres_connection_string": {
+          "description": "Optional. When present, Postgres will be used as a database instead of RocksDB.",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recovery_strategy": {
+          "description": "Strategy for handling recovery scenarios in the preferred sequencer.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/RecoveryStrategy"
+            }
+          ]
+        }
+      }
+    },
+    "ProofManagerConfig_for_Address": {
+      "description": "Prover service configuration.",
+      "type": "object",
+      "required": [
+        "aggregated_proof_block_jump",
+        "max_number_of_transitions_in_db",
+        "max_number_of_transitions_in_memory",
+        "prover_address"
+      ],
+      "properties": {
+        "aggregated_proof_block_jump": {
+          "description": "The \"distance\" measured in the number of blocks between two consecutive aggregated proofs.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 1.0
+        },
+        "max_number_of_transitions_in_db": {
+          "description": "A number of state transition info entries are allowed to be stored in the database. When the number is exceeded, older entries are removed.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 1.0
+        },
+        "max_number_of_transitions_in_memory": {
+          "description": "A number of state transition info entries are allowed to be kept in memory. If the number is exceeded, rollup execution will be blocked until provers cathes up.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 1.0
+        },
+        "prover_address": {
+          "description": "The prover receives rewards to this address.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Address"
+            }
+          ]
+        }
+      }
+    },
+    "RandomizationBehaviour": {
+      "description": "Defines the behavior of randomization applied to blobs or blocks.\n\nThis configurable behavior determines how blobs are processed and returned to the caller during various stages of the block production process. Randomization may involve reordering, shuffling, skipping, or altering the chain's length, while preserving certain constraints such as finality.",
+      "oneOf": [
+        {
+          "description": "Blobs inside a single block are rearranged in a random order when read. This does not affect the boundary between blocks, meaning no blob will cross its original block's boundary.\n\nNotes: - Does not impact how new blocks are produced, and block hashes are not changed. - Finalized blocks may have their blobs reordered within this mode. - This does not change the stored order of blobs. - If randomization is disabled, blobs will be returned in their original order. - Order guaranteed to be deterministic for each block with the same randomizer configuration.",
+          "type": "string",
+          "enum": [
+            "out_of_order_blobs"
+          ]
+        },
+        {
+          "description": "Rewinds the chain to a specific height, chosen randomly between the most recently finalized block and the current head of the chain.\n\nThis operation adjusts the chain height but maintains finalization constraints.",
+          "type": "string",
+          "enum": [
+            "rewind"
+          ]
+        },
+        {
+          "description": "Combines blob shuffling with chain height adjustment:\n\n1. All non-finalized blobs, including those being added to a new block, are shuffled across all blobs that are part of the new chain state. 2. The chain height is adjusted (rewound or extended) within the constraints of the finality window.\n\n**Constraints**: - Rewinding can only occur as far back as the finality window allows. - Extending is not possible if the finality window is already full. - Rewinding is not triggered if there is only one non-finalized block. - The specified percentage of blobs (`drop_percent`) is always respected.",
+          "type": "object",
+          "required": [
+            "shuffle_and_resize"
+          ],
+          "properties": {
+            "shuffle_and_resize": {
+              "type": "object",
+              "required": [
+                "adjust_head_height",
+                "drop_percent"
+              ],
+              "properties": {
+                "adjust_head_height": {
+                  "description": "Range of possible adjustments to the chain head height: - Negative values represent rewinding the chain length (moving backward in height). - Positive values represent extending the chain length (adding new blocks). - This adjustment is constrained by the finality window.\n\nThe actual value is selected by [`crate::storable::layer::Randomizer`] from this range.",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/Range_of_int32"
+                    }
+                  ]
+                },
+                "drop_percent": {
+                  "description": "Percentage of blobs to be permanently skipped during this process.\n\nA value of `100` means all non-finalized blobs will be dropped.",
+                  "type": "integer",
+                  "format": "uint8",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "RandomizationConfig": {
+      "description": "Configuration for randomization applied.\n\nThis struct defines how randomization is performed, including the seed for the randomizer, the timing of chain reorganization, and the specific randomization behavior applied.",
+      "type": "object",
+      "required": [
+        "behaviour",
+        "reorg_interval",
+        "seed"
+      ],
+      "properties": {
+        "behaviour": {
+          "description": "Defines the specific behavior of the randomizer during randomization.\n\nThis determines how blobs or blocks are processed, including their ordering, shuffling, skipping, or potential adjustments affecting the chain.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/RandomizationBehaviour"
+            }
+          ]
+        },
+        "reorg_interval": {
+          "description": "The interval, in produced blocks, at which chain reorganization may occur. Applicable for all cases except [`RandomizationBehaviour::OutOfOrderBlobs`], which does not affect block production.\n\nFor a range `m..n`: - A reorganization can occur at every `m`-th block produced after the last reorganization. - A reorganization will definitely occur at or before the `n`-th block produced since the last reorganization.\n\nNote: - The interval is counted starting from the height at which the last reorganization happened, rather than the current state of the chain. - This allows the chain to progress consistently within the specified bounds between reorganizations.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Range_of_uint32"
+            }
+          ]
+        },
+        "seed": {
+          "description": "Seed used by the randomizer to ensure deterministic but randomized behavior.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/HexHash"
+            }
+          ]
+        }
+      }
+    },
+    "Range_of_int32": {
+      "type": "object",
+      "required": [
+        "end",
+        "start"
+      ],
+      "properties": {
+        "end": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "start": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "Range_of_uint32": {
+      "type": "object",
+      "required": [
+        "end",
+        "start"
+      ],
+      "properties": {
+        "end": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "start": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    },
+    "RecoveryStrategy": {
+      "description": "Strategy for handling the scenario where the preferred sequencer finds itself close to or past deferred_slots_count in the past, i.e. risking its soft confirmations being invalidated due to the possibility of a non-preferred (deferred) batch having been included.",
+      "oneOf": [
+        {
+          "description": "Do not attempt recovery, shutdown the sequencer instead. The user may attempt to resume operation either by swapping to TryToSave, or deleting everything from the preferred sequencer database (cancelling ALL pending soft confirmations!).",
+          "type": "string",
+          "enum": [
+            "None"
+          ]
+        },
+        {
+          "description": "Attempt to recover by flushing batches and catching up with the chain. Triggers a bit more conservatively to attempt to preserve soft confirmations (but if the sequencer was offline, this will likely make no difference). If some soft confirmations have indeed been invalidated, the sequencer will be penalized for every invalid batch!",
+          "type": "string",
+          "enum": [
+            "TryToSave"
+          ]
+        }
+      ]
+    },
+    "RollupDbConfig": {
+      "description": "Configuration for Sovereign Rollup node database.",
+      "type": "object",
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "kernel_commit_concurrency": {
+          "description": "Number of concurrent commit workers for kernel state. More details at [`Options::commit_concurrency`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "kernel_hashtable_buckets": {
+          "description": "Cannot be changed for the existing database. More details at [`Options::hashtable_buckets`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "kernel_leaf_cache_size": {
+          "description": "Leaf cache size for kernel state. More details at [`Options::leaf_cache_size`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "kernel_page_cache_size": {
+          "description": "Page cache size for kernel state. More details at [`Options::page_cache_size`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "path": {
+          "description": "Path where all databases are stored",
+          "type": "string"
+        },
+        "pruner_block_interval": {
+          "description": "Pruner Defines how often pruner is going to be started. Measure by DA blocks.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "pruner_versions_to_keep": {
+          "description": "This many versions will be available for historical querying.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "user_commit_concurrency": {
+          "description": "Number of concurrent commit workers for user state. More details at [`Options::commit_concurrency`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "user_hashtable_buckets": {
+          "description": "Value is determined by the expected size of the state. Recommended to start with 15_000_000. Cannot be changed for the existing database. More details at [`Options::hashtable_buckets`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "user_leaf_cache_size": {
+          "description": "Leaf cache size for user state. More details at [`Options::leaf_cache_size`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "user_page_cache_size": {
+          "description": "Page cache size for user state. More details at [`Options::page_cache_size`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        }
+      }
+    },
+    "RunnerConfig": {
+      "description": "Configuration for StateTransitionRunner.",
+      "type": "object",
+      "required": [
+        "da_polling_interval_ms",
+        "genesis_height",
+        "http_config"
+      ],
+      "properties": {
+        "concurrent_sync_tasks": {
+          "description": "How many concurrent tasks to get block from DA service",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "da_polling_interval_ms": {
+          "description": "Polling interval for the DA service to check the sync status (in milliseconds).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "genesis_height": {
+          "description": "DA start height.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "http_config": {
+          "description": "HTTP Server configuration: On this socket REST API and RPC endpoints are going to listen.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/HttpServerConfig"
+            }
+          ]
+        },
+        "save_tx_bodies": {
+          "description": "Whether to save transaction bodies to the database.",
+          "default": false,
+          "type": "boolean"
+        }
+      }
+    },
+    "SequencerConfig": {
+      "description": "Sequencer configuration.",
+      "type": "object",
+      "oneOf": [
+        {
+          "description": "A \"Standard\" sequencer, which can post transactions to the rollup but not give soft confirmations.",
+          "type": "object",
+          "required": [
+            "standard"
+          ],
+          "properties": {
+            "standard": {
+              "$ref": "#/definitions/StdSequencerConfig"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "A \"Preferred\" sequencer which is allowed to give soft confirmations.",
+          "type": "object",
+          "required": [
+            "preferred"
+          ],
+          "properties": {
+            "preferred": {
+              "$ref": "#/definitions/PreferredSequencerConfig"
+            }
+          },
+          "additionalProperties": false
+        }
+      ],
+      "required": [
+        "blob_processing_timeout_secs",
+        "max_allowed_node_distance_behind",
+        "max_batch_size_bytes",
+        "max_concurrent_blobs",
+        "rollup_address"
+      ],
+      "properties": {
+        "admin_addresses": {
+          "description": "The list of addresses that are allowed to perform admin operations on the sequencer.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Address"
+          }
+        },
+        "automatic_batch_production": {
+          "description": "When enabled, submitted transactions are periodically assembled into batches and automatically posted to the DA layer. When disabled, the batch production endpoint has to be called explicitly.",
+          "default": true,
+          "type": "boolean"
+        },
+        "blob_processing_timeout_secs": {
+          "description": "Maximum time in seconds to wait for a blob to be processed.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "dropped_tx_ttl_secs": {
+          "description": "For how many seconds the sequencer keeps track of dropped transactions after being done with them.\n\nLarger values result in higher memory usage, but better tx status tracking for users.",
+          "default": 60,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "max_allowed_node_distance_behind": {
+          "description": "The sequencer won't process incoming requests unless the node is within this many blocks or ahead of the sequencer.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "max_batch_size_bytes": {
+          "description": "Maximum size of a batch.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_concurrent_blobs": {
+          "description": "Maximum number of blobs sent in parallel.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "rollup_address": {
+          "description": "Rollup address of the sequencer.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Address"
+            }
+          ]
+        }
+      }
+    },
+    "StdSequencerConfig": {
+      "description": "Configuration for [`StdSequencer`].",
+      "type": "object",
+      "properties": {
+        "max_batch_size_bytes": {
+          "description": "Maximum size of a batch. The sequencer will not build batches larger than this size.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 1.0
+        },
+        "mempool_max_txs_count": {
+          "description": "Maximum number of transactions in mempool. Once this limit is reached, the batch builder will evict older transactions.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 1.0
+        }
+      }
+    },
+    "TelegrafSocketConfig": {
+      "description": "Config of receiving `inputs.socket_listener` <https://www.influxdata.com/blog/telegraf-socket-listener-input-plugin/>",
+      "type": "object",
+      "required": [
+        "addr",
+        "transport"
+      ],
+      "properties": {
+        "addr": {
+          "description": "Socket",
+          "type": "string"
+        },
+        "transport": {
+          "description": "Transport",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Transport"
+            }
+          ]
+        }
+      }
+    },
+    "Transport": {
+      "description": "Variant of transport supported by metrics sender.",
+      "type": "string",
+      "enum": [
+        "tcp",
+        "udp"
+      ]
+    }
+  }
+}

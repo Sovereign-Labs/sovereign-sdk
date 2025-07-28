@@ -1,0 +1,232 @@
+openapi: "3.0.2"
+info:
+  title: Sovereign SDK Runtime API
+  version: 0.1.0
+  contact:
+    name: Sovereign Labs
+    url: https://github.com/Sovereign-Labs/sovereign-sdk-wip
+    email: info@sovereign.xyz
+servers:
+  - url: http://localhost:12346
+    description: Localhost
+paths:
+  /modules:
+    get:
+      summary: Get the list of modules
+      tags:
+        - Runtime
+      operationId: get_modules
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  modules:
+                    $ref: "#/components/schemas/Modules"
+  /modules/{moduleName}:
+    get:
+      summary: Get module information by name
+      tags:
+        - Runtime
+      operationId: get_module
+      parameters:
+        - name: moduleName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Module"
+        "404":
+          $ref: "#/components/responses/StateNotFound"
+components:
+  parameters:
+    rollup_height:
+      name: rollup_height
+      in: query
+      description: The height of the rollup to query. If not provided, the rollup head is used.
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+  responses:
+    StateMapInfoResponse:
+      description: Contains meta information about StateMap.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StateMapInfo"
+    StateMapElementResponse:
+      description: Contains the value of a StateMap element.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StateMapElement"
+    StateVecInfoResponse:
+      description: Contains meta information about StateVec.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StateVecInfo"
+    StateVecElementResponse:
+      description: containing the value of a `StateVec` element.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StateVecElement"
+    StateValueResponse:
+      description: Response containing the `StateValue`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StateValue"
+    StateNotFound:
+      description: The requested resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RuntimeError"
+    BadRequestResponse:
+      description: The request has invalid parameters.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RuntimeError"
+  schemas:
+    RuntimeAnyJsonValue:
+      description: "Any JSON type, including null."
+      nullable: true
+      oneOf:
+        - type: string
+          title: "String"
+        - type: number
+          title: "Number"
+        - type: boolean
+          title: "Boolean"
+        - type: array
+          title: "Array"
+          items:
+            x-stainless-any: true
+        - type: object
+          title: "Object"
+          additionalProperties: true
+    Module:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ModuleId"
+        name:
+          type: string
+          description: The name of the module.
+        description:
+          type: string
+          description: A short description of the module.
+        prefix:
+          $ref: "#/components/schemas/Prefix"
+        state_items:
+          type: object
+          description: Items that can be displayed via REST API.
+          additionalProperties:
+            $ref: "#/components/schemas/StateValueBase"
+    Namespace:
+      type: string
+      description: The namespace of the state value.
+      enum:
+        - user
+        - kernel
+        - accessory
+    Prefix:
+      type: string
+      description: The prefix of the module in the state tree.
+      pattern: "^0x[a-fA-F0-9]+$"
+      example: "0x1234567890abcdef"
+    ModuleId:
+      type: string
+      pattern: "^module_1[02-9ac-hj-np-z]+$"
+      example: "module_1r5glamudyy9ysysfjkwu3wf9cjqs98e47tzc6pxuqlp48phqk36sh0zjpk"
+      description: The ID of a module, bech32 encoded with `module_` prefix.
+    Modules:
+      type: object
+      additionalProperties:
+        $ref: "#/components/schemas/ModuleOverviewFromRuntime"
+    ModuleOverviewFromRuntime:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ModuleId"
+      required:
+        - id
+    RuntimeError:
+      type: object
+      properties:
+        status:
+          type: integer
+          format: int32
+          description: HTTP status code related to this error
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+      required:
+        - status
+        - message
+        - details
+    StateValueBase:
+      type: object
+      properties:
+        prefix:
+          $ref: "#/components/schemas/Prefix"
+        type:
+          type: string
+          description: The type of the state value.
+        description:
+          type: string
+          description: A short description of the state value.
+        namespace:
+          $ref: "#/components/schemas/Namespace"
+    StateValueInfo:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the value.
+      additionalProperties:
+        $ref: "#/components/schemas/StateValueBase"
+    StateValue:
+      $ref: "#/components/schemas/RuntimeAnyJsonValue"
+    StateVecInfo:
+      type: object
+      properties:
+        length:
+          type: integer
+    StateVecElement:
+      type: object
+      properties:
+        index:
+          type: integer
+        value:
+          $ref: "#/components/schemas/RuntimeAnyJsonValue"
+      required:
+        - index
+        - value
+    StateMapInfo:
+      $ref: "#/components/schemas/StateValueBase"
+    StateMapElement:
+      type: object
+      properties:
+        key:
+          $ref: "#/components/schemas/RuntimeAnyJsonValue"
+        value:
+          $ref: "#/components/schemas/RuntimeAnyJsonValue"
+      required:
+        - key
+        - value

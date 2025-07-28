@@ -1,0 +1,14 @@
+---
+source: crates/full-node/sov-metrics/src/influxdb/config.rs
+expression: "schemars::schema_for!(Transport)"
+---
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Transport",
+  "description": "Variant of transport supported by metrics sender.",
+  "type": "string",
+  "enum": [
+    "tcp",
+    "udp"
+  ]
+}

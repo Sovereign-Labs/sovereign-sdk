@@ -1,0 +1,11 @@
+mod archival_query_test;
+mod burn_test;
+mod capability_test;
+mod create_token_test;
+mod freeze_test;
+mod helpers;
+mod init;
+mod mint_test;
+mod transfer_test;
+mod update_admin;
+mod wallet_test;

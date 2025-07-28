@@ -1,0 +1,58 @@
+# Specification for custom bank REST API endpoints
+openapi: "3.0.2"
+info:
+  title: sov-hyperlane-integration merkle-tree-hook custom endpoints
+  version: 0.1.0
+paths:
+  /count:
+    get:
+      summary: Get the current count of merkle tree leaves
+      operationId: "hyperlane_merkle_tree_hook_count"
+      tags: [MerkleTreeHook]
+      responses:
+        "200":
+          $ref: "#/components/responses/CountResponse"
+        "404":
+          # Referring type from `runtime-base.yaml`
+          $ref: "#/components/responses/StateNotFound"
+  /checkpoint:
+    get:
+      summary: Get the current checkpoint of merkle tree
+      operationId: "hyperlane_merkle_tree_hook_checkpoint"
+      tags: [MerkleTreeHook]
+      responses:
+        "200":
+          $ref: "#/components/responses/CheckpointResponse"
+        "404":
+          # Referring type from `runtime-base.yaml`
+          $ref: "#/components/responses/StateNotFound"
+
+components:
+  schemas:
+    Checkpoint:
+      type: object
+      properties:
+        root:
+          type: string
+          pattern: ^0x[a-fA-F0-9]{64}$
+          description: Root hash of a merkle tree
+        index:
+          type: integer
+          description: Index of a checkpoint
+  responses:
+    CountResponse:
+      description: Merkle tree leaves count
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              count:
+                type: integer
+                description: The merkle tree leaves count
+    CheckpointResponse:
+      description: Checkpoint of a merkle tree
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Checkpoint"

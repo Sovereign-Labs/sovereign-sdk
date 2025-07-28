@@ -1,0 +1,9 @@
+---
+source: crates/full-node/sov-metrics/src/influxdb/config.rs
+expression: config
+---
+{
+  "telegraf_address": "tcp://127.0.0.1:8094",
+  "max_datagram_size": null,
+  "max_pending_metrics": null
+}

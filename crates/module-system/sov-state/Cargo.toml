@@ -1,0 +1,62 @@
+[package]
+name = "sov-state"
+description = "Defines traits and types for state storage in the Sovereign SDK module system"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = "Sovereign Labs Community Software License"
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+arbitrary = { workspace = true, optional = true }
+borsh = { workspace = true, features = ["rc", "bytes"] }
+bcs = { workspace = true }
+derivative = { workspace = true }
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
+serde = { workspace = true, features = ["rc"] }
+derive_more = { workspace = true }
+serde-big-array = "0.5.1"
+sov-rollup-interface = { workspace = true }
+sov-db = { workspace = true, optional = true }
+hex = { workspace = true }
+jmt = { workspace = true, features = ["std", "sha2"] }
+nomt-core = { workspace = true }
+nomt = { workspace = true, optional = true }
+sov-metrics = { workspace = true, optional = true }
+sov-modules-macros = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+test-strategy = { workspace = true }
+sha2 = { workspace = true }
+
+[features]
+arbitrary = [
+    "dep:arbitrary",
+    "dep:proptest",
+    "dep:proptest-derive",
+    "sov-db?/arbitrary",
+    "sov-rollup-interface/arbitrary",
+    "sov-modules-macros?/arbitrary"
+]
+bench = ["sov-metrics", "sov-modules-macros/bench"]
+default = []
+native = [
+    "sov-db",
+    "sov-rollup-interface/native",
+    "sov-metrics?/native",
+    "sov-modules-macros?/native",
+    "dep:nomt",
+    "dep:tracing",
+]
+
+test-utils = ["native"]

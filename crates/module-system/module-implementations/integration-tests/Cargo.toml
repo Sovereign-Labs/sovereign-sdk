@@ -1,0 +1,49 @@
+[package]
+name = "integration-tests"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+publish = false
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+anyhow = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+strum = { workspace = true }
+derive_more = { workspace = true }
+tempfile = { workspace = true }
+serde = { workspace = true }
+schemars = { workspace = true }
+jsonrpsee = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+rockbound = { workspace = true }
+hex = { workspace = true }
+
+sov-modules-api = { workspace = true, features = ["native", "test-utils"] }
+sov-state = { workspace = true }
+
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-test-utils = { workspace = true }
+sov-rollup-interface = { workspace = true, features = ["native"] }
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-modules-stf-blueprint = { workspace = true, features = [
+	"native",
+	"test-utils",
+] }
+sov-kernels = { workspace = true, features = ["native"] }
+
+sov-attester-incentives = { workspace = true, features = ["native"] }
+sov-chain-state = { workspace = true, features = ["native"] }
+sov-value-setter = { workspace = true, features = ["native"] }
+sov-sequencer-registry = { workspace = true, features = ["native"] }
+sov-bank = { workspace = true, features = ["native"] }
+sov-accounts = { workspace = true, features = ["native"] }
+

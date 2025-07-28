@@ -1,0 +1,72 @@
+[package]
+name = "sovereign-sdk-fuzz"
+version = "0.3.0"
+publish = false
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1"
+tempfile = "3"
+rand = "0.8"
+sha2 = "0.10.6"
+
+# Sovereign-maintained dependencies.
+sov-celestia-adapter = { workspace = true, features = ["native", "arbitrary"] }
+sov-modules-api = { workspace = true, features = ["arbitrary", "native"] }
+sov-accounts = { workspace = true, features = ["arbitrary", "native"] }
+sov-bank = { workspace = true, features = ["native"] }
+sov-rollup-interface = { workspace = true }
+sov-test-utils = { workspace = true, features = ["arbitrary"] }
+
+[[bin]]
+name = "parse_address"
+path = "fuzz_targets/parse_address.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "address_parse_serde"
+path = "fuzz_targets/address_parse_serde.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "address_try_from_bytes"
+path = "fuzz_targets/address_try_from_bytes.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "accounts_call"
+path = "fuzz_targets/accounts_call.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "accounts_call_random"
+path = "fuzz_targets/accounts_call_random.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "bank_parse_call_message"
+path = "fuzz_targets/bank_parse_call_message.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "accounts_parse_call_message"
+path = "fuzz_targets/accounts_parse_call_message.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "accounts_parse_call_message_random"
+path = "fuzz_targets/accounts_parse_call_message_random.rs"
+test = false
+doc = false

@@ -1,0 +1,15 @@
+[
+  {
+    "shares": [],
+    "proof": {
+      "start": 1,
+      "end": 2,
+      "nodes": [
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABO3dzUbJNfVr/86xlKEWm9OfNZg/cHIXIUNb4rOgjodE",
+        "/////////////////////////////////////////////////////////////////////////////4RC707CAl/dbqYTvwl6kwspDs+BB7dWCooHHdaQtE0K"
+      ],
+      "leaf_hash": "AAAAAAAAAAAAAAAAAAAAAAAAAHNvdi10ZXN0LXAAAAAAAAAAAAAAAAAAAAAAAAAAc292LXRlc3QtcLO1NDOS1hSiu7JXNcz6/JILorDKmwVpSN6RxAnASe3Y",
+      "is_max_namespace_ignored": true
+    }
+  }
+]

@@ -1,0 +1,11 @@
+---
+source: crates/adapters/mock-da/src/config.rs
+expression: config
+---
+{
+  "connection_string": "sqlite:///tmp/mockda.sqlite?mode=rwc",
+  "sender_address": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+  "finalization_blocks": 0,
+  "block_producing": "manual",
+  "randomization": null
+}

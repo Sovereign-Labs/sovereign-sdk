@@ -1,141 +1,301 @@
 [workspace]
 resolver = "2"
 members = [
-    "rollup-interface",
-    "adapters/avail",
-    "adapters/risc0",
-    "adapters/celestia",
-    "adapters/mock-da",
-    "adapters/mock-zkvm",
+    "crates/rollup-interface",
+    "crates/adapters/mock-da",
+    "crates/adapters/mock-zkvm",
+    "scripts/switcheroo",
+    # Fuzzing
+    "crates/fuzz",
+    # Full Node
+    "crates/full-node/sov-blob-sender",
+    "crates/full-node/sov-db",
+    "crates/full-node/sov-sequencer",
+    "crates/full-node/sov-ethereum",
+    "crates/full-node/sov-ledger-apis",
+    "crates/full-node/sov-rollup-apis",
+    "crates/full-node/sov-stf-runner",
+    "crates/full-node/sov-metrics",
+    "crates/full-node/sov-eth-dev-signer",
+    "crates/full-node/sov-api-spec",
+    # Utils
+    "crates/utils/sov-rest-utils",
+    "crates/utils/rest-api-load-testing",
+    "crates/utils/nearly-linear",
+    "crates/utils/sov-zkvm-utils",
+    "crates/utils/sov-build",
+    # Module System
+    "crates/module-system/sov-cli",
+    "crates/module-system/sov-modules-stf-blueprint",
+    "crates/module-system/sov-modules-rollup-blueprint",
+    "crates/module-system/sov-modules-macros",
+    "crates/module-system/sov-kernels",
+    "crates/module-system/sov-state",
+    "crates/module-system/sov-modules-api",
+    "crates/module-system/sov-address",
+    "crates/module-system/module-schemas",
+    "crates/module-system/sov-test-utils",
+    "crates/module-system/module-implementations/sov-accounts",
+    "crates/module-system/module-implementations/sov-bank",
+    "crates/module-system/module-implementations/sov-chain-state",
+    "crates/module-system/module-implementations/sov-blob-storage",
+    "crates/module-system/module-implementations/sov-evm",
+    "crates/module-system/module-implementations/sov-paymaster",
+    "crates/module-system/module-implementations/sov-operator-incentives",
+    "crates/module-system/module-implementations/sov-prover-incentives",
+    "crates/module-system/module-implementations/sov-attester-incentives",
+    "crates/module-system/module-implementations/sov-sequencer-registry",
+    "crates/module-system/module-implementations/sov-value-setter",
+    "crates/module-system/module-implementations/sov-revenue-share",
+    "crates/module-system/module-implementations/sov-synthetic-load",
+    "crates/module-system/module-implementations/sov-test-modules",
+    "crates/module-system/module-implementations/module-template",
+    "crates/module-system/module-implementations/integration-tests",
+    "crates/module-system/sov-capabilities",
+    "crates/module-system/module-implementations/sov-uniqueness",
+    "crates/utils/transaction-generator",
+    "crates/utils/sov-node-client",
+    "crates/universal-wallet/schema",
+    "crates/universal-wallet/macros",
+    "crates/universal-wallet/macro-helpers",
+    "crates/utils/sov-eth-client",
+    "crates/utils/workspace-hack",
+    # Hyperlane
+    "crates/module-system/hyperlane",
     # Examples
     "examples/const-rollup-config",
     "examples/demo-simple-stf",
     "examples/demo-rollup",
-    "examples/simple-nft-module",
-    # Full Node
-    "full-node/db/sov-db",
-    "full-node/sov-sequencer",
-    "full-node/sov-ethereum",
-    "full-node/sov-ledger-rpc",
-    "full-node/sov-stf-runner",
-    "full-node/sov-prover-storage-manager",
-    # Utils
-    "utils/zk-cycle-macros",
-    "utils/zk-cycle-utils",
-    "utils/bashtestmd",
-    "utils/rng-da-service",
-    # Module System
-    "module-system/sov-cli",
-    "module-system/sov-modules-stf-blueprint",
-    "module-system/sov-modules-rollup-blueprint",
-    "module-system/sov-modules-macros",
-    "module-system/sov-modules-core",
-    "module-system/sov-soft-confirmations-kernel",
-    "module-system/sov-state",
-    "module-system/sov-modules-api",
-    "module-system/module-schemas",
-    "module-system/sov-data-generators",
-    "module-system/module-implementations/sov-accounts",
-    "module-system/module-implementations/sov-bank",
-    "module-system/module-implementations/sov-nft-module",
-    "module-system/module-implementations/sov-chain-state",
-    "module-system/module-implementations/sov-blob-storage",
-    "module-system/module-implementations/sov-evm",
-    "module-system/module-implementations/sov-prover-incentives",
-    "module-system/module-implementations/sov-attester-incentives",
-    "module-system/module-implementations/sov-sequencer-registry",
-    "module-system/module-implementations/module-template",
-    "module-system/module-implementations/examples/sov-value-setter",
-    "module-system/module-implementations/examples/sov-vec-setter",
-    "module-system/module-implementations/examples/sov-accessory-state",
-    "module-system/module-implementations/integration-tests",
+    "examples/demo-rollup/stf",
+    "examples/demo-rollup/sov-benchmarks",
+    "examples/demo-rollup/rest-api-load-testing",
+    "examples/demo-rollup/stf/demo-stf-json-client",
+    "examples/demo-rollup/sov-soak-testing",
+    # Adapters
+    # TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/498
+    # "crates/adapters/avail",
+    "crates/adapters/celestia",
+    "crates/adapters/risc0",
+    "crates/adapters/sp1",
 ]
-
+default-members = ["crates/rollup-interface", "crates/adapters/mock-da", "crates/adapters/mock-zkvm", "crates/full-node/sov-blob-sender", "crates/full-node/sov-db", "crates/full-node/sov-sequencer", "crates/full-node/sov-ledger-apis", "crates/full-node/sov-rollup-apis", "crates/full-node/sov-stf-runner", "crates/full-node/sov-metrics", "crates/full-node/sov-api-spec", "crates/utils/sov-rest-utils", "crates/utils/nearly-linear", "crates/utils/sov-zkvm-utils", "crates/utils/sov-build", "crates/module-system/hyperlane", "crates/module-system/sov-cli", "crates/module-system/sov-modules-stf-blueprint", "crates/module-system/sov-modules-rollup-blueprint", "crates/module-system/sov-modules-macros", "crates/module-system/sov-kernels", "crates/module-system/sov-state", "crates/module-system/sov-modules-api", "crates/module-system/sov-address", "crates/module-system/sov-test-utils", "crates/module-system/module-implementations/sov-accounts", "crates/module-system/module-implementations/sov-bank", "crates/module-system/module-implementations/sov-chain-state", "crates/module-system/module-implementations/sov-blob-storage", "crates/module-system/module-implementations/sov-evm", "crates/module-system/module-implementations/sov-paymaster", "crates/module-system/module-implementations/sov-prover-incentives", "crates/module-system/module-implementations/sov-attester-incentives", "crates/module-system/module-implementations/sov-sequencer-registry", "crates/module-system/module-implementations/sov-value-setter", "crates/module-system/module-implementations/sov-revenue-share", "crates/module-system/module-implementations/sov-synthetic-load", "crates/module-system/module-implementations/module-template", "crates/module-system/module-implementations/integration-tests", "crates/module-system/sov-capabilities", "crates/module-system/module-implementations/sov-uniqueness", "crates/utils/sov-node-client", "crates/universal-wallet/schema", "crates/universal-wallet/macros", "crates/universal-wallet/macro-helpers", "crates/utils/workspace-hack"]
 [workspace.package]
 version = "0.3.0"
 edition = "2021"
-license = "MIT OR Apache-2.0"
+license = "Sovereign Labs Community Software License"
 authors = ["Sovereign Labs <info@sovereign.xyz>"]
 homepage = "https://www.sovereign.xyz"
 publish = false
 repository = "https://github.com/sovereign-labs/sovereign-sdk"
 
+[workspace.lints.rust]
+dead_code = "deny"
+non_ascii_idents = "deny" # Bad for readability and it can also be a security vulnerability
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(tokio_unstable)'] } # See <https://docs.rs/tokio/latest/tokio/#unstable-features>.
+
+# In case you need inspiration for new lints to add to the list, this is a good
+# reference: <https://github.com/EmbarkStudios/rust-ecosystem/blob/6783ae1573d62f3f5439b8ff9e04bec191ec2eaf/lints.toml>.
+[workspace.lints.clippy]
+debug_assert_with_mut_call = "deny"
+inefficient_to_string = "deny"
+map_flatten = "deny"
+manual_ok_or = "deny"
+doc_link_with_quotes = "deny"
+match_same_arms = "deny"
+semicolon_if_nothing_returned = "deny"
+float_arithmetic = "deny"              # Can cause subtle bugs due to different behavior between native and zkVM execution.
+
+#map_err_ignore = "warn"
+#doc_markdown = "warn"
+
 [workspace.dependencies]
+demo-stf = { path = "examples/demo-rollup/stf", default-features = false, version = "0.3" }
+sov-eth-client = { path = "crates/utils/sov-eth-client", default-features = false, version = "0.3" }
+sov-blob-sender = { path = "crates/full-node/sov-blob-sender", default-features = false, version = "0.3" }
+sov-celestia-adapter = { path = "crates/adapters/celestia", default-features = false, version = "0.3" }
+sov-risc0-adapter = { path = "crates/adapters/risc0", default-features = false, version = "0.3" }
+sov-sp1-adapter = { path = "crates/adapters/sp1", default-features = false, version = "0.3" }
+sov-ethereum = { path = "crates/full-node/sov-ethereum", default-features = false, version = "0.3" }
+sov-mock-da = { path = "crates/adapters/mock-da", default-features = false, version = "0.3" }
+sov-mock-zkvm = { path = "crates/adapters/mock-zkvm", default-features = false, version = "0.3" }
+sov-bank = { path = "crates/module-system/module-implementations/sov-bank", default-features = false, version = "0.3" }
+sov-sequencer-registry = { path = "crates/module-system/module-implementations/sov-sequencer-registry", default-features = false, version = "0.3" }
+sov-node-client = { path = "crates/utils/sov-node-client", default-features = false, version = "0.3" }
+sov-operator-incentives = { path = "crates/module-system/module-implementations/sov-operator-incentives", default-features = false, version = "0.3" }
+sov-prover-incentives = { path = "crates/module-system/module-implementations/sov-prover-incentives", default-features = false, version = "0.3" }
+sov-value-setter = { path = "crates/module-system/module-implementations/sov-value-setter", default-features = false, version = "0.3" }
+sov-synthetic-load = { path = "crates/module-system/module-implementations/sov-synthetic-load", default-features = false, version = "0.3" }
+sov-test-modules = { path = "crates/module-system/module-implementations/sov-test-modules", default-features = false, version = "0.3" }
+sov-chain-state = { path = "crates/module-system/module-implementations/sov-chain-state", default-features = false, version = "0.3" }
+sov-blob-storage = { path = "crates/module-system/module-implementations/sov-blob-storage", default-features = false, version = "0.3" }
+sov-evm = { path = "crates/module-system/module-implementations/sov-evm", default-features = false, version = "0.3" }
+sov-sequencer = { path = "crates/full-node/sov-sequencer", default-features = false, version = "0.3" }
+sov-accounts = { path = "crates/module-system/module-implementations/sov-accounts", default-features = false, version = "0.3" }
+sov-ledger-apis = { path = "crates/full-node/sov-ledger-apis", default-features = false, version = "0.3" }
+sov-rollup-apis = { path = "crates/full-node/sov-rollup-apis", default-features = false, version = "0.3" }
+sov-api-spec = { path = "crates/full-node/sov-api-spec", default-features = false, version = "0.3" }
+sov-eth-dev-signer = { path = "crates/full-node/sov-eth-dev-signer", default-features = false, version = "0.3" }
+sov-modules-api = { path = "crates/module-system/sov-modules-api", default-features = false, version = "0.3" }
+sov-uniqueness = { path = "crates/module-system/module-implementations/sov-uniqueness", default-features = false, version = "0.3" }
+sov-paymaster = { path = "crates/module-system/module-implementations/sov-paymaster", default-features = false, version = "0.3" }
+sov-rollup-interface = { path = "crates/rollup-interface", default-features = false, version = "0.3" }
+sov-stf-runner = { path = "crates/full-node/sov-stf-runner", default-features = false, version = "0.3" }
+sov-attester-incentives = { path = "crates/module-system/module-implementations/sov-attester-incentives", default-features = false, version = "0.3" }
+sov-revenue-share = { path = "crates/module-system/module-implementations/sov-revenue-share", default-features = false, version = "0.3" }
+sov-capabilities = { path = "crates/module-system/sov-capabilities", default-features = false, version = "0.3" }
+sov-kernels = { path = "crates/module-system/sov-kernels", default-features = false, version = "0.3" }
+sov-state = { path = "crates/module-system/sov-state", default-features = false, version = "0.3" }
+sov-address = { path = "crates/module-system/sov-address", default-features = false, version = "0.3" }
+sov-rest-utils = { path = "crates/utils/sov-rest-utils", default-features = false, version = "0.3" }
+sov-transaction-generator = { path = "crates/utils/transaction-generator", default-features = false, version = "0.3" }
+sov-metrics = { path = "crates/full-node/sov-metrics", default-features = false, version = "0.3" }
+sov-cli = { path = "crates/module-system/sov-cli", default-features = false, version = "0.3" }
+sov-modules-rollup-blueprint = { path = "crates/module-system/sov-modules-rollup-blueprint", default-features = false, version = "0.3" }
+sov-modules-macros = { path = "crates/module-system/sov-modules-macros", default-features = false, version = "0.3" }
+sov-modules-stf-blueprint = { path = "crates/module-system/sov-modules-stf-blueprint", default-features = false, version = "0.3" }
+sov-test-utils = { path = "crates/module-system/sov-test-utils", default-features = false, version = "0.3" }
+sov-db = { path = "crates/full-node/sov-db", default-features = false, version = "0.3" }
+rest-api-load-testing = { path = "crates/utils/rest-api-load-testing" }
+sov-universal-wallet = { path = "crates/universal-wallet/schema" }
+sov-universal-wallet-macros = { path = "crates/universal-wallet/macros" }
+sov-universal-wallet-macro-helpers = { path = "crates/universal-wallet/macro-helpers" }
+sov-zkvm-utils = { path = "crates/utils/sov-zkvm-utils" }
+sov-build = { path = "crates/utils/sov-build" }
+workspace-hack = { path = "crates/utils/workspace-hack" }
+nearly-linear = { path = "crates/utils/nearly-linear" }
 # Dependencies maintained by Sovereign
-jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "1d007e11cb68aa5ca13e9a5af4a12e6439d5f7b6" }
-
-
+jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "f60beb0fa54d9231706f62a8b1315e3c57855590", default-features = false }
+reltester = { git = "https://github.com/sovereign-labs/reltester.git", rev = "d6209abff72929f5ba41614f5cea3e4a748428c3" }
+rockbound = { git = "https://github.com/sovereign-labs/rockbound", rev = "dfd0624c32f5fb363c2190e9d911605663f7d693" }
+nmt-rs = { version = "0.2.5", features = ["serde", "borsh"] }
 # External dependencies
-async-trait = "0.1.71"
-anyhow = { version = "1.0.68", default-features = false }
-arbitrary = { version = "1.3.1", features = ["derive"] }
-borsh = { version = "0.10.3", default-features = false }
+# Uncomment this when a new preview is released
+# nomt = { version = "1.0.0-preview", default-features = false, default-features = false, features = ["borsh", "serde"]}
+nomt-core = { git = "https://github.com/thrumdev/nomt.git", rev = "ff4491440d401f32e18fe91041c4344b2bacb068", default-features = false, features = ["borsh", "serde"] }
+nomt = { git = "https://github.com/thrumdev/nomt.git", rev = "ff4491440d401f32e18fe91041c4344b2bacb068", default-features = false, features = ["borsh", "serde"] }
+
+anyhow = { version = "1.0.95" }
+async-trait = "0.1.81"
+arrayvec = { version = "0.7.6", features = ["serde", "borsh"] }
+console-subscriber = "0.4"
+
+axum = { version = "0.7.9", default-features = false }
+axum-server = { version = "0.6", features = ["tls-rustls"] }
+arbitrary = { version = "1.3.2", features = ["derive"] }
+backon = { version = "1.5.1", default-features = false, features = ["tokio-sleep"] }
+base64 = "0.22"
+bs58 = { version = "0.5.1", default-features = false, features = ["std", "alloc"] }
+borsh = { version = "1", features = ["derive"] }
 # TODO: Consider replacing this serialization format
 #     https://github.com/Sovereign-Labs/sovereign-sdk/issues/283
 bincode = "1.3.3"
 bcs = "0.1.6"
 byteorder = { version = "1.5.0", default-features = false }
-bytes = { version = "1.2.1", default-features = false }
-digest = { version = "0.10.6", default-features = false, features = ["alloc"] }
-futures = "0.3"
-pin-project = { version = "1.1.3" }
-hex = { version = "0.4.3", default-features = false, features = ["alloc", "serde"] }
-once_cell = { version = "1.19.0", default-features = false, features = ["alloc"] }
-prometheus = { version = "0.13.3", default-features = false }
-proptest = { version = "1.3.1", default-features = false, features = ["alloc"] }
-proptest-derive = "0.3.0"
+bytes = { version = "1.7.1", default-features = false }
+convert_case = { version = "0.6", default-features = false }
+chrono = { version = "0.4", default-features = false, features = ["now"] }
+darling = "0.20"
+derivative = { version = "2.2", features = ["use_core"] }
+digest = { version = "0.10.7", default-features = false, features = ["alloc"] }
+derive-getters = { version = "0.5.0" }
+futures = { version = "0.3", default-features = false }
+hex = { version = "0.4.3" }
+insta = { version = "1.39", features = ["json"] }
+jsonschema = "0.26.1"
+openapiv3 = "2.0.0"
+prometheus = { version = "0.13.4", default-features = false }
+proc-macro2 = { version = "1.0" }
+proptest = { version = "1.5", default-features = false, features = ["std", "alloc"] }
+proptest-derive = "0.5.0"
+quote = "1.0"
 rand = "0.8"
-rayon = "1.8.0"
-rocksdb = { version = "0.21.0", features = ["lz4"] }
-serde = { version = "1.0.192", default-features = false, features = ["alloc", "derive"] }
+rand_chacha = "0.3.1"
+rayon = "1.10.0"
+reqwest = { version = "0.12", features = [
+    "rustls-tls",
+], default-features = false }
+serde = { version = "1.0.208", default-features = false, features = [
+    "alloc",
+    "derive",
+] }
+serde_arrays = "0.1"
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
-sha2 = { version = "0.10.6", default-features = false }
-thiserror = "1.0.50"
-tiny-keccak = "2.0.2"
+serde_yaml = { version = "0.9", default-features = false }
+serde_with = { version = "3.9", features = ["schemars_0_8"] }
+sha2 = { version = "0.10.8", default-features = false }
+sha3 = { version = "0.10.8", default-features = false }
+strum = { version = "0.26.3", features = ["derive"] }
+syn = { version = "2.0" }
+thiserror = "1.0.64"
+tower = { version = "0.5", default-features = false }
+tower-http = "0.5"
+tower-request-id = "0.3"
 tracing = { version = "0.1.40", default-features = false }
-bech32 = { version = "0.9.1", default-features = false }
-derive_more = { version = "0.99.11", default-features = false }
-clap = { version = "4.4.10", features = ["derive"] }
-toml = "0.8.0"
-jsonrpsee = { version = "0.20.1", features = ["jsonrpsee-types"] }
-schemars = { version = "0.8.16", features = ["derive"] }
-tempfile = "3.8"
-tokio = { version = "1", features = ["full"] }
-lazy_static = "1.4.0"
-num_cpus = "1.0"
-risc0-zkvm = { version = "0.19", default-features = false }
-risc0-zkvm-platform = { version = "0.19" }
-risc0-zkp = "0.19"
-risc0-circuit-rv32im = "0.19"
-risc0-build = "0.19"
+tracing-subscriber = { version = "0.3.18" } # There's hardly any reason to disable its default features.
+tracing-test = { version = "0.2.5", features = [
+    "no-env-filter",
+] } # https://docs.rs/tracing-test/latest/tracing_test/#per-crate-filtering
+utoipa = "4.2"
+utoipa-swagger-ui = { git = "https://github.com/juhaku/utoipa.git", rev = "a985d8c1340f80ab69b2b0e5de799df98d567732", features = ["axum", "debug-embed"] }
+unwrap-infallible = "0.1.5"
+bech32 = { version = "0.11" }
+derive_more = { version = "1.0", default-features = false, features = ["std"] }
+clap = { version = "4.5.16", features = ["derive"] }
+toml = { version = "0.8.19", features = ["parse"] }
+jsonrpsee = { version = "0.25" }
+schemars = { version = "0.8.21", features = ["derive"] }
+tempfile = "3.20.0"
+testcontainers = "0.23.3"
+testcontainers-modules = "0.11.6"
+test-strategy = "0.4.0"
+tokio = { version = "1.42", default-features = false }
+tokio-stream = { version = "0.1", features = ["sync"] }
+uuid = { version = "1.10", default-features = false } # v1.9 is important because it guarantees monotic UUIDv7 generation: https://github.com/uuid-rs/uuid/releases/tag/1.9.0.
+lazy_static = "1.5.0"
+num_cpus = "1.16"
+ruint = "1"
+risc0-zkvm = { version = "2.1", default-features = false }
+risc0-zkvm-platform = "2.0"
+risc0-build = "2.1"
 
 # EVM dependencies
 ethereum-types = "0.14.1"
-ethers = "=2.0.10"
-ethers-core = { version = "=2.0.10", default-features = false }
-ethers-contract = "=2.0.10"
-ethers-providers = { version = "=2.0.10", default-features = false }
-ethers-signers = { version = "=2.0.10", default-features = false }
-ethers-middleware = { version = "=2.0.10", default-features = false }
+ethers-core = { version = "=2.0.14", default-features = false }
+ethers-contract = { version = "=2.0.14", default-features = false }
+ethers-providers = { version = "=2.0.14", default-features = false }
+ethers-signers = { version = "=2.0.14", default-features = false }
+ethers-middleware = { version = "=2.0.14", default-features = false }
+# ea25df7ed3b02c951c1d6ed49cee1ba40728f3f9, just couple days after 1.0.4
+alloy-primitives = { version = "=0.7.7", default-features = false }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "ea25df7ed3b02c951c1d6ed49cee1ba40728f3f9", default-features = false }
+reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", rev = "ea25df7ed3b02c951c1d6ed49cee1ba40728f3f9", default-features = false }
+reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "ea25df7ed3b02c951c1d6ed49cee1ba40728f3f9", default-features = false }
+alloy-rpc-types = { version = "0.2", default-features = false }
+revm = { version = "12.1.0", features = ["serde"], default-features = false }
+revm-inspectors = { version = "0.5", default-features = false }
+secp256k1 = { version = "=0.29.0", default-features = false, features = [
+    "global-context",
+    "recovery",
+] }
+k256 = { version = "0.13.4", default-features = false, features = ["ecdsa", "std"] }
+# End of EVM dependencies
 
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
-reth-interfaces = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
-reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
-reth-rpc-types-compat = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
-reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "e83d3aa" }
+[profile.rust-analyzer-optimized]
+inherits = "dev"
+debug = false
+strip = true
+codegen-units = 256
 
-revm = { git = "https://github.com/bluealloy/revm", rev = "516f62cc" }
-revm-primitives = { git = "https://github.com/bluealloy/revm", rev = "516f62cc" }
+[profile.dev.package.sov-modules-macros]
+# Set the optimization level to 3 for the sov-modules-macros crate. This
+# should reduce build times for other packages.
+opt-level = 1
 
-secp256k1 = { version = "0.27.0", default-features = false, features = ["global-context", "rand-std", "recovery"] }
+[profile.release-with-opt-level-0]
+inherits = "release"
+opt-level = 0
 
-[patch.'https://github.com/eigerco/celestia-node-rs.git']
-# Uncomment to apply local changes
-# celestia-proto = { path = "../celestia-node-rs/proto" }
-# celestia-rpc = { path = "../celestia-node-rs/rpc" }
-# celestia-types = { path = "../celestia-node-rs/types" }
-
-[patch.'https://github.com/eigerco/celestia-tendermint-rs.git']
-# Uncomment to apply local changes
-# tendermint = { path = "../celestia-tendermint-rs/tendermint" }
-# tendermint-proto = { path = "../celestia-tendermint-rs/proto" }
+[workspace.metadata.dylint]
+libraries = [
+    { git = "ssh://git@github.com/Sovereign-Labs/sdk-lints.git" },
+]

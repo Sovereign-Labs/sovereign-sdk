@@ -1,8 +1,0 @@
-{
-  "UpdateNft": {
-    "collection_address": "sov1j2e3dh76nmuw4gctrqduh0wzqdny8c62z36r2q3883rknw3ky3vsk9g02a",
-    "token_id": 42,
-    "token_uri": "https://foo.bar/test_collection/nft_new/42",
-    "frozen": null
-  }
-}

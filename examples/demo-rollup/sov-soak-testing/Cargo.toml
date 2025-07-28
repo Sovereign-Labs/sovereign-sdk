@@ -1,0 +1,56 @@
+[package]
+name = "sov-soak-testing"
+version = "0.1.0"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+publish = false
+default-run = "main"
+
+[dependencies]
+tokio = { workspace = true, default-features = false }
+borsh = { workspace = true, features = ["derive"] }
+
+schemars = { workspace = true, features = ["derive"] }
+serde = { workspace = true, default-features = false, features = [
+    "alloc",
+    "derive",
+] }
+anyhow = { workspace = true }
+derivative = { version = "2.2", features = ["use_core"] }
+strum = { workspace = true, features = ["derive"] }
+rand = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+reqwest = { workspace = true }
+
+sov-api-spec = { workspace = true }
+sov-metrics = { workspace = true }
+sov-modules-rollup-blueprint = { workspace = true }
+sov-transaction-generator = { workspace = true }
+sov-modules-api = { workspace = true }
+sov-test-utils = { workspace = true, features = ["arbitrary"] }
+sov-mock-da = { workspace = true, features = ["arbitrary", "native"] }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-rollup-interface = { workspace = true, features = ["arbitrary"] }
+sov-node-client = { workspace = true }
+sov-sequencer = { workspace = true, default-features = false }
+sov-kernels = { workspace = true, features = ["native"] }
+sov-state = { workspace = true, features = ["arbitrary"] }
+# modules
+sov-value-setter = { workspace = true }
+sov-synthetic-load = { path = "../../../crates/module-system/module-implementations/sov-synthetic-load" }
+sov-bank = { workspace = true, features = ["native", "arbitrary"] }
+sov-paymaster = { workspace = true, features = ["native"] }
+sov-celestia-adapter = { workspace = true, features = ["native", "arbitrary"] }
+sov-address = { workspace = true }
+demo-stf = { workspace = true, features = ["native"] }
+
+[[bin]]
+name = "main"
+path = "src/bin/main.rs"
+
+[[bin]]
+name = "generator"
+path = "src/bin/generator.rs"

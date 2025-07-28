@@ -1,0 +1,28 @@
+{
+  "gas_token_config": {
+    "token_name": "sov-token",
+    "token_decimals": 6,
+    "address_and_balances": [
+      [
+        "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
+        "10000000000000"
+      ],
+      [
+        "sov1x3jtvq0zwhj2ucsc4hqugskvralrulxvf53vwtkred93s85ar2a",
+        "10000000000000000"
+      ],
+      [
+        "sov10d6chuh8vu86ltmt7qq4ec8lt25qyvr0cl3lg4mzs5llcfnx69m",
+        "10000000000000"
+      ],
+      [
+        "sov1v870parxhssv5wyz634wqlt9yflrrnawlwzjhj8409q4yevcj3s",
+        "10000000000000"
+      ]
+    ],
+    "admins": [
+      "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+    ]
+  },
+  "tokens": []
+}

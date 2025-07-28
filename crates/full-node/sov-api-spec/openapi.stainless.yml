@@ -1,0 +1,142 @@
+# yaml-language-server: $schema=https://app.stainlessapi.com/config.schema.json
+
+organization:
+  name: sovereign-sdk
+  docs: https://github.com/Sovereign-Labs/sovereign-sdk
+  contact: info@sovereign.xyz
+  github_org: Sovereign-Labs
+resources:
+  ledger:
+    subresources:
+      slots:
+        methods:
+          latest: get /ledger/slots/latest
+          finalized: get /ledger/slots/finalized
+          retrieve: get /ledger/slots/{slotId}
+        subresources:
+          events:
+            methods:
+              list: get /ledger/slots/{slotId}/events
+          batches:
+            methods:
+              retrieve: get /ledger/slots/{slotId}/batches/{batchOffset}
+            subresources:
+              txs:
+                methods:
+                  retrieve: >-
+                    get
+                    /ledger/slots/{slotId}/batches/{batchOffset}/txs/{txOffset}
+                subresources:
+                  events:
+                    methods:
+                      retrieve: >-
+                        get
+                        /ledger/slots/{slotId}/batches/{batchOffset}/txs/{txOffset}/events/{eventOffset}
+      batches:
+        methods:
+          retrieve: get /ledger/batches/{batchId}
+        subresources:
+          txs:
+            methods:
+              retrieve: get /ledger/batches/{batchId}/txs/{txOffset}
+            subresources:
+              events:
+                methods:
+                  retrieve: >-
+                    get
+                    /ledger/batches/{batchId}/txs/{txOffset}/events/{eventOffset}
+      txs:
+        methods:
+          retrieve: get /ledger/txs/{txId}
+        subresources:
+          events:
+            methods:
+              retrieve: get /ledger/txs/{txId}/events/{eventOffset}
+      events:
+        methods:
+          list: get /ledger/events
+          latest: get /ledger/events/latest
+          retrieve: get /ledger/events/{eventId}
+      aggregated_proofs:
+        methods:
+          retrieve: get /ledger/aggregated-proofs/latest
+    models:
+      jsonValue: AnyJsonValue
+      tx: LedgerTx
+      event: LedgerEvent
+      batch: LedgerBatch
+      txReceipt: TxReceipt
+      moduleRef: ModuleRef
+      uint64Range: Uint64Range
+  sequencer:
+    subresources:
+      txs:
+        methods:
+          create: post /sequencer/txs
+          retrieve: get /sequencer/txs/{txHash}
+        models:
+          txInfo: TxInfo
+      events:
+        methods:
+          retrieve: get /sequencer/unstable/events/{eventOffset}
+          list: get /sequencer/unstable/events
+  rollup:
+    models:
+      simulateExecutionResponse: SimulateExecutionResponse
+    methods:
+      simulate: post /rollup/simulate
+    subresources:
+      base_fee_per_gas:
+        methods:
+          retrieve: get /rollup/base-fee-per-gas/latest
+        models:
+          baseFeePerGas: BaseFeePerGas
+      addresses:
+        methods:
+          dedup: get /rollup/addresses/{address}/dedup
+      sync_status:
+        methods:
+          retrieve: get /rollup/sync-status
+      schema:
+        methods:
+          retrieve: get /rollup/schema
+      constants:
+        methods:
+          retrieve: get /rollup/constants
+targets:
+  node:
+    production_repo: Sovereign-Labs/sovereign-sdk-client-js
+    package_name: "@sovereign-sdk/client"
+    publish:
+      npm: true
+    options:
+      browser:
+        state: allow
+  python:
+    package_name: sovereign_sdk
+    production_repo: null
+    publish:
+      pypi: false
+settings:
+  license: Apache-2.0
+client_settings: {}
+environments:
+  local: http://localhost:12346
+query_settings:
+  nested_format: brackets
+  array_format: comma
+readme:
+  example_requests:
+    default:
+      type: request
+      endpoint: post /sequencer/txs
+      params: &ref_0
+        body: REPLACE_ME
+    headline:
+      type: request
+      endpoint: post /sequencer/txs
+      params: *ref_0
+    pagination:
+      type: request
+      endpoint: get /ledger/slots/{slotId}/events
+      params: {}

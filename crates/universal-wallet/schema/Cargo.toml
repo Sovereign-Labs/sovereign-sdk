@@ -1,0 +1,45 @@
+[package]
+name = "sov-universal-wallet"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+arrayvec = { workspace = true, optional = true }
+bech32 = { workspace = true }
+bs58 = { workspace = true }
+hex = { workspace = true }
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+
+borsh = { workspace = true, features = [] }
+nmt-rs = { workspace = true }
+
+# Schema ser/de traits, and json_to_borsh functionality
+serde_json = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+# Re-exporting the macro
+sov-universal-wallet-macros = { workspace = true, optional = true }
+schemars = { workspace = true, optional = true }                    # for SafeString
+
+[dev-dependencies]
+borsh = { workspace = true }
+sov-universal-wallet-macros = { workspace = true }
+sov-universal-wallet = { path = ".", features = ["serde", "macros"] }
+sov-rollup-interface = { workspace = true }
+serde_arrays = { workspace = true }
+serde_with = { workspace = true }
+serde = { workspace = true }
+
+[features]
+test-vectors = []
+macros = ["sov-universal-wallet-macros"]
+serde = [
+  "dep:serde",
+  "schemars",
+  "serde_json",
+  "sov-universal-wallet/serde",
+  "nmt-rs/serde",
+  "arrayvec?/serde",
+  "hex/serde",
+]

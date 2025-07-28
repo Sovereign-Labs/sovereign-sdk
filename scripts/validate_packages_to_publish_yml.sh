@@ -35,7 +35,7 @@ while read -r pkg; do
 done <<< "$releasable_packages"
 
 echo ""
-echo "Validating the present of package metadata for all packages_to_publish.yml entries..."
+echo "Validating the presence of package metadata for all packages_to_publish.yml entries..."
 
 while read -r pkg; do
 	# Capture both stdout and stderr.

@@ -1,0 +1,156 @@
+# Specification for custom bank REST API endpoints
+openapi: "3.0.2"
+info:
+  title: sov-hyperlane-integration custom endpoints
+  version: 0.1.0
+paths:
+  /nonce:
+    get:
+      summary: Get the current nonce of mailbox's dispatch state
+      operationId: "hyperlane_mailbox_nonce"
+      tags: [Mailbox]
+      responses:
+        "200":
+          $ref: "#/components/responses/NonceResponse"
+  /recipient-ism/{hyperlane-address}:
+    get:
+      summary: Fetch the type of ISM used by the recipient with a given address
+      operationId: "hyperlane_mailbox_recipient_ism"
+      tags: [Mailbox]
+      parameters:
+        - name: hyperlane-address
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/HyperlaneAddress"
+      responses:
+        "200":
+          $ref: "#/components/responses/RecipientIsmResponse"
+        "404":
+          # Referring type from `runtime-base.yaml`
+          $ref: "#/components/responses/StateNotFound"
+  /recipient-ism/{hyperlane-address}/validators_and_threshold:
+    get:
+      summary: Fetch the multisig configuration of MessageIdMultisig ISM
+      operationId: "hyperlane_mailbox_recipient_ism_validators_and_threshold"
+      tags: [Mailbox]
+      parameters:
+        - name: hyperlane-address
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/HyperlaneAddress"
+      responses:
+        "200":
+          $ref: "#/components/responses/ValidatorsAndThresholdResponse"
+        # Referring types from `runtime-base.yaml`
+        "400":
+          $ref: "#/components/responses/BadRequestResponse"
+        "404":
+          $ref: "#/components/responses/StateNotFound"
+  /quote-dispatch:
+    get:
+      summary: Get the estimated gas price for relaying message
+      operationId: "hyperlane_igp_quote_dispatch"
+      tags: [Mailbox]
+      parameters:
+        - name: destination-domain
+          in: query
+          description: The destination domain ID.
+          required: true
+          schema:
+            type: integer
+            format: uint32
+        - name: relayer-address
+          in: query
+          description: The address of relayer. Could be optional if default relayer address is present.
+          required: false
+          schema:
+            type: string
+        - name: gas-limit
+          in: query
+          description: The gas limit to use for the interchain transfer.
+          required: true
+          schema:
+            type: integer
+            format: uint128
+      responses:
+        "200":
+          $ref: "#/components/responses/QuoteDispatchResponse"
+
+components:
+  schemas:
+    EthAddress:
+      type: string
+      title: Ethereum address
+      pattern: "^0x[a-fA-F0-9]{40}$"
+      description: Ethereum address
+      example: "0xb7401b5f6d8976fae23aeb2342aedac24843ead3"
+    HyperlaneAddress:
+      type: string
+      title: Hyperlane address
+      pattern: "^0x[a-fA-F0-9]{64}$"
+      description: Hyperlane address
+      example: "0x71c7656ec7ab88b098defb751b7401b5f6d8976fae23aeb2342aedac24843ead"
+    IsmKind:
+      type: integer
+      minimum: 0
+      maximum: 7
+      description: Type of the ISM in use
+    ValidatorsAndThreshold:
+      type: object
+      properties:
+        validators:
+          type: array
+          description: Addresses of trusted validators
+          items:
+            $ref: "#/components/schemas/EthAddress"
+        threshold:
+          type: integer
+          description: Multisig threshold
+    TokenId:
+      type: string
+      pattern: "^token_1[02-9ac-hj-np-z]+$"
+      description: bech32 encoded token id, prefix with "token_".
+    Coins:
+      type: object
+      description: Token Id and amount.
+      properties:
+        token_id:
+          $ref: "#/components/schemas/TokenId"
+        amount:
+          type: integer
+          format: uint128
+          description: Amount
+  responses:
+    NonceResponse:
+      description: Nonce
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              nonce:
+                type: integer
+                description: Nonce
+    RecipientIsmResponse:
+      description: Type of the ISM the recipient uses
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ism_kind:
+                $ref: "#/components/schemas/IsmKind"
+    ValidatorsAndThresholdResponse:
+      description: Validators and threshold configuration of MessageIdMultisig(5) ISM
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidatorsAndThreshold"
+    QuoteDispatchResponse:
+      description: OK
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Coins"

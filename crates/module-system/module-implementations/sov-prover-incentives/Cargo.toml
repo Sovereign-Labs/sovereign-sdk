@@ -1,0 +1,56 @@
+[package]
+name = "sov-prover-incentives"
+description = "A Sovereign SDK module for incentivizing provers"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tempfile = { workspace = true }
+strum = { workspace = true }
+sov-db = { workspace = true }
+sov-prover-incentives = { path = ".", features = ["native"] }
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-modules-api = { workspace = true, features = ["native", "test-utils"] }
+sov-modules-rollup-blueprint = { workspace = true, features = ["native"] }
+sov-test-utils = { workspace = true }
+sov-value-setter = { workspace = true, features = ["native"] }
+
+[dependencies]
+anyhow = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+schemars = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+derive_more = { workspace = true }
+
+sov-bank = { workspace = true }
+sov-modules-api = { workspace = true }
+sov-rollup-interface = { workspace = true }
+sov-state = { workspace = true }
+sov-chain-state = { workspace = true }
+
+[features]
+default = []
+native = [
+	"sov-bank/native",
+	"sov-chain-state/native",
+	"sov-mock-da/native",
+	"sov-mock-zkvm/native",
+	"sov-modules-api/native",
+	"sov-prover-incentives/native",
+	"sov-state/native",
+	"sov-modules-rollup-blueprint/native",
+	"sov-rollup-interface/native",
+	"sov-value-setter/native"
+]

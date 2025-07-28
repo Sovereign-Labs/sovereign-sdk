@@ -1,0 +1,33 @@
+[package]
+name = "demo-stf-json-client"
+version = "0.3.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish = false
+
+# These dependencies are not defined through workspace inheritance because
+# `progenitor` demands very specific version ranges for its dependencies. Read
+# more here: <https://github.com/oxidecomputer/progenitor>.
+[dependencies]
+futures = "0.3"
+progenitor-client = { version = "0.8" }
+regress = "0.4.1"
+reqwest = { workspace = true, features = ["rustls-tls", "json", "stream"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["alloc"] }
+
+[build-dependencies]
+prettyplease = "0.2.22"
+sov-address = { workspace = true, features = ["evm"] }
+progenitor = { version = "0.8" }
+serde_json = { workspace = true, features = ["alloc"] }
+syn = "2.0"
+demo-stf = { workspace = true, features = ["native"] }
+
+sov-modules-api = { workspace = true }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-state = { workspace = true, features = ["native"] }

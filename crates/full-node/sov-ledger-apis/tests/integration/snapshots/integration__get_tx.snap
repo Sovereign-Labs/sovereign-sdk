@@ -1,0 +1,18 @@
+---
+source: crates/full-node/sov-ledger-apis/tests/integration/main.rs
+expression: "&tx"
+---
+{
+  "batch_number": 0,
+  "body": "dHgxIGJvZHk=",
+  "event_range": {
+    "end": 0,
+    "start": 0
+  },
+  "hash": "0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b",
+  "number": 0,
+  "receipt": {
+    "result": "successful"
+  },
+  "type": "tx"
+}

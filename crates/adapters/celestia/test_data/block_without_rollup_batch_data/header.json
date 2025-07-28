@@ -1,0 +1,82 @@
+{
+  "header": {
+    "version": {
+      "block": "11",
+      "app": "3"
+    },
+    "chain_id": "private",
+    "height": "105",
+    "time": "2025-03-25T12:50:30.303193666Z",
+    "last_block_id": {
+      "hash": "FF623B7E8A9075CC40FA32C64348632D80D3178E56FDEF4E778EBB0A3F94F328",
+      "parts": {
+        "total": 1,
+        "hash": "27AD68E1F7C73D22C85C1635BAE54E4183B6EFF7B306B12E3D59A0083C51B3FB"
+      }
+    },
+    "last_commit_hash": "ACEB2D1795B00A161A883A629180316B3FB4C79EA5D52A23717C3D9865AD1718",
+    "data_hash": "8675E8A9D47574F0FA3915160730C6C1C434E069DF811CC9248E0D8E3E3ED51B",
+    "validators_hash": "0C2028AD09FEAE6DA8947B6BDA73515F9645EAF11E48E85106D1AF3D31039393",
+    "next_validators_hash": "0C2028AD09FEAE6DA8947B6BDA73515F9645EAF11E48E85106D1AF3D31039393",
+    "consensus_hash": "C0B6A634B72AE9687EA53B6D277A73ABA1386BA3CFC6D0F26963602F7F6FFCD6",
+    "app_hash": "90395E752C1623648BDD161CD091D632086D30B47F741F1827D16CCAC453BFA5",
+    "last_results_hash": "5E87AF54ECDA6F05B7657864EEA750F8945A3FA22790F756E13E16319A14DEBB",
+    "evidence_hash": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "proposer_address": "F5F9239825A49DC4AE4BE476795FC173D2622CBD"
+  },
+  "commit": {
+    "height": 105,
+    "round": 0,
+    "block_id": {
+      "hash": "A8EB3B1136887F7782AEF5874438625A84271C6C4B0B02CE3EACAF163984C0AE",
+      "parts": {
+        "total": 1,
+        "hash": "7465A17190DC85475B020E0314831C5806F66F62F476A14BF9E5C6CB50F7E6E0"
+      }
+    },
+    "signatures": [
+      {
+        "block_id_flag": 2,
+        "validator_address": "F5F9239825A49DC4AE4BE476795FC173D2622CBD",
+        "timestamp": "2025-03-25T12:50:34.52004496Z",
+        "signature": "dPfin82QnM31i09GamEx9neUgpgJmRIAHQEkYHn28UEOXIm57zkElTU+L/LcuvfuFawOOHfeyZulTPI1hBeaAA=="
+      }
+    ]
+  },
+  "validator_set": {
+    "validators": [
+      {
+        "address": "F5F9239825A49DC4AE4BE476795FC173D2622CBD",
+        "pub_key": {
+          "type": "tendermint/PubKeyEd25519",
+          "value": "y78A3nAypeLz6OKG4XTsdPv98Nq5cZIzvC7DUIdURaw="
+        },
+        "voting_power": "5000",
+        "proposer_priority": "0"
+      }
+    ],
+    "proposer": {
+      "address": "F5F9239825A49DC4AE4BE476795FC173D2622CBD",
+      "pub_key": {
+        "type": "tendermint/PubKeyEd25519",
+        "value": "y78A3nAypeLz6OKG4XTsdPv98Nq5cZIzvC7DUIdURaw="
+      },
+      "voting_power": "5000",
+      "proposer_priority": "0"
+    }
+  },
+  "dah": {
+    "row_roots": [
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAc292LW5hbWUteNrWq3/+6EWQlIgJs6ziyHEDWUEiXGfzpQuuVCqoi5eo",
+      "//////////////////////////////////////7//////////////////////////////////////pTdwtp+AfV191f7tPpCuiAtUaV2tgmorrEU/SJsbnNy",
+      "/////////////////////////////////////////////////////////////////////////////5TRbziL9EePrQYYlWNKAVNgx05uYgk3WT7iLjHOpzxW",
+      "/////////////////////////////////////////////////////////////////////////////wOarZIffcLdjfz8/88jWr7pP1hKqfGkpZ9kt+sh4by4"
+    ],
+    "column_roots": [
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAT//////////////////////////////////////hur9QGRmUmtA7uUnfPAiqrVcu4l1OdPw5OVbyxFlJsC",
+      "AAAAAAAAAAAAAAAAAAAAAAAAAHNvdi1uYW1lLXj//////////////////////////////////////n9lyXQzuL49q3k0ECGzaeG9awPkgi6CgNdyCoZq6qLN",
+      "/////////////////////////////////////////////////////////////////////////////8awcjLEsrnMbAy1KmlX9rVWP/zXBOywE1zQ+RwUkMTc",
+      "/////////////////////////////////////////////////////////////////////////////+2T8y/0LdBb/Pz9JPiZr28246tU1zU/Dwwsym8sJQxW"
+    ]
+  }
+}

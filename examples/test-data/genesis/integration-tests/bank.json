@@ -1,17 +1,20 @@
 {
-  "tokens": [
-    {
-      "token_name": "sov-demo-token",
-      "address_and_balances": [
-        [
-          "sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94",
-          100000000
-        ]
+  "gas_token_config": {
+    "token_name": "sov-integration-test-token",
+    "token_decimals": 6,
+    "address_and_balances": [
+      [
+        "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
+        "10000000000000"
       ],
-      "authorized_minters": [
-        "sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94"
-      ],
-      "salt": 0
-    }
-  ]
+      [
+        "sov1v870parxhssv5wyz634wqlt9yflrrnawlwzjhj8409q4yevcj3s",
+        "10000000000000"
+      ]
+    ],
+    "admins": [
+      "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+    ]
+  },
+  "tokens": []
 }

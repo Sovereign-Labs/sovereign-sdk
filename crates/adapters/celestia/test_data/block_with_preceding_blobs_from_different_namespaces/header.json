@@ -1,0 +1,90 @@
+{
+  "header": {
+    "version": {
+      "block": "11",
+      "app": "3"
+    },
+    "chain_id": "private",
+    "height": "11",
+    "time": "2025-04-08T10:40:30.235387044Z",
+    "last_block_id": {
+      "hash": "CC65005209246CC04D8DF26F0FF2B0AC808744BE6A848C6DDC4C48CB7713DD20",
+      "parts": {
+        "total": 2,
+        "hash": "806B0A3B080244637DF8329BFFF79459FD70F7B9E27D33E3EED4D456C5B3CD82"
+      }
+    },
+    "last_commit_hash": "E057FC95525727B4FCBA0BFBC7417CCB8D81E2BD0C2843696E4485603AF0EC84",
+    "data_hash": "5AA44855C664FC152D4EFA7B4B443579BE967EA33DA6FCC1B69664FFA77821C8",
+    "validators_hash": "7D47F6AE6E86847DAB0880264FFD9C803C82DBBC5B354E999135A82908FE79A9",
+    "next_validators_hash": "7D47F6AE6E86847DAB0880264FFD9C803C82DBBC5B354E999135A82908FE79A9",
+    "consensus_hash": "C0B6A634B72AE9687EA53B6D277A73ABA1386BA3CFC6D0F26963602F7F6FFCD6",
+    "app_hash": "33C6D9835CF7F91772E361D739FBB61674A9105F0E238AA4DADAAA317559E5CF",
+    "last_results_hash": "28D17664D119D51D3E95860AD145364B821007575A547EFFE8667373B4711E22",
+    "evidence_hash": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "proposer_address": "DB056FA0B65EA7B3B85D1B993F074E964C45108E"
+  },
+  "commit": {
+    "height": 11,
+    "round": 0,
+    "block_id": {
+      "hash": "42BDCAA624E873C4445D7E1D882376EE0DCCDFA9ECFCB252FAFBC1E844DAD09F",
+      "parts": {
+        "total": 1,
+        "hash": "389242CD17390A63F4978A3754C110C0E91BAB4D9A8881C4D8355CE58B735D72"
+      }
+    },
+    "signatures": [
+      {
+        "block_id_flag": 2,
+        "validator_address": "DB056FA0B65EA7B3B85D1B993F074E964C45108E",
+        "timestamp": "2025-04-08T10:40:34.458515671Z",
+        "signature": "MLDvpS0hVOXfJP6vQz8dtNXkEyr4d5NF1zPMI2FoBnRbPqbCm5Hbn1PAX3vzPrv2Ec/c4KXla9943CEaoDn+Aw=="
+      }
+    ]
+  },
+  "validator_set": {
+    "validators": [
+      {
+        "address": "DB056FA0B65EA7B3B85D1B993F074E964C45108E",
+        "pub_key": {
+          "type": "tendermint/PubKeyEd25519",
+          "value": "W3tdP5lvwwTOHjmDs17aBHJsxRTb5iaytHX3MpjCIbs="
+        },
+        "voting_power": "5000",
+        "proposer_priority": "0"
+      }
+    ],
+    "proposer": {
+      "address": "DB056FA0B65EA7B3B85D1B993F074E964C45108E",
+      "pub_key": {
+        "type": "tendermint/PubKeyEd25519",
+        "value": "W3tdP5lvwwTOHjmDs17aBHJsxRTb5iaytHX3MpjCIbs="
+      },
+      "voting_power": "5000",
+      "proposer_priority": "0"
+    }
+  },
+  "dah": {
+    "row_roots": [
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAABzb3YtYWFhYfJgYZm8Gi+9BLYSs2BbJgtYog6p5OvGqiM8wmto6KfV",
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAc292LWFhYWEAAAAAAAAAAAAAAAAAAAAAAAAAAABzb3YtdGVzdOCAskE7A9uryDIsQmlXsbNcK1zIZ6ZT6ibHxHJGL/f4",
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAc292LXRlc3QAAAAAAAAAAAAAAAAAAAAAAAAAAABzb3Ytenp6enYjS3ZB58/78Wa9+X/klc4S675aXeP0xEbNqON846Sr",
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAc292LXp6enr//////////////////////////////////////rbHw9YXPfIe/dqBTD/hIojefcfH4OpkanfpWXuASn4W",
+      "//////////////////////////////////////////////////////////////////////////////eEFK360K6dwQA/XTg5xDtdexXV4msnoRJJ2tO2BJed",
+      "/////////////////////////////////////////////////////////////////////////////7zvpSgXbTs8az8WvNT6JdWylUWNEYLgqDBGDqaWDtL8",
+      "/////////////////////////////////////////////////////////////////////////////07d+g+BhtQjtRgYgN2VH/x/Cn9opmVyQ/9t+JoGaDpz",
+      "/////////////////////////////////////////////////////////////////////////////+dPcTBVq3xqqCoowOoOxYsD5QkIJvGuMN16F4O9r7hX"
+    ],
+    "column_roots": [
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAABzb3Ytenp6esFvmf2ytMzATHwWN5ULNCN/EMozIoqBkE7e9afXTI9h",
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAABzb3Ytenp6enXQPGEBpozcytjL97iRFMLv1qoY4LGs5CWeyRLIBAMN",
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAc292LWFhYWH//////////////////////////////////////lDl/l+rwOazDitxLPUhPe7Aupd9volhLn5TEIX5eeww",
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAc292LWFhYWH//////////////////////////////////////tZfjeuMpF1BTS0xdXJs7zWrkbkUh2XEgi1FYkLPFQKk",
+      "/////////////////////////////////////////////////////////////////////////////7fhENMj46Shahpgm2IhR9gPDY9jqu5UJJKuaC2xTVU3",
+      "/////////////////////////////////////////////////////////////////////////////5TMq5fpfRT30f4KFiY2VBdC+YG3fpOLv6AUu29Nay3N",
+      "/////////////////////////////////////////////////////////////////////////////33JD4cWpAF+Gb5iCgeyuxqlhWB32FJtDaMx3a/N5EUf",
+      "/////////////////////////////////////////////////////////////////////////////52bCgsxfKcEyycJAfI3YNA/V28iXEIyaai5BKvJbTDM"
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+[package]
+name = "sov-universal-wallet-macros"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { workspace = true }
+proc-macro2 = { workspace = true }
+sov-universal-wallet-macro-helpers = { workspace = true }

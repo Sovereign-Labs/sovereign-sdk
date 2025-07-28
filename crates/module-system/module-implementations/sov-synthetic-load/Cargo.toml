@@ -1,0 +1,42 @@
+[package]
+name = "sov-synthetic-load"
+description = "A Sovereign SDK module that exposes heavy transaction types for load testing"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+publish = false
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+sov-address = { workspace = true }
+strum = { workspace = true }
+sov-modules-api = { workspace = true, features = ["native"] }
+sov-state = { workspace = true, features = ["native"] }
+
+[dependencies]
+anyhow = { workspace = true }
+strum = { workspace = true }
+sov-modules-api = { workspace = true }
+sov-rollup-interface = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+sov-state = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+
+[features]
+default = []
+native = [
+    "sov-modules-api/native",
+    "sov-rollup-interface/native",
+    "sov-state/native",
+    "sov-address/native"
+]

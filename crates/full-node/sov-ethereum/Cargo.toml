@@ -1,0 +1,63 @@
+[package]
+name = "sov-ethereum"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+tracing = { workspace = true }
+jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+sov-rollup-interface = { workspace = true, features = ["native"] }
+sov-address = { workspace = true, features = ["evm"] }
+
+sov-evm = { workspace = true, features = ["native"] }
+sov-modules-api = { workspace = true, features = ["native"] }
+sov-blob-storage = { workspace = true, features = ["native"] }
+sov-sequencer = { workspace = true }
+sov-eth-dev-signer = { workspace = true }
+
+borsh = { workspace = true }
+serde = { workspace = true }
+
+reth-primitives = { workspace = true }
+reth-rpc-types = { workspace = true }
+reth-rpc-eth-types = { workspace = true }
+
+tokio = { workspace = true, features = ["sync"] }
+schnellru = "0.2.3"
+
+[dev-dependencies]
+anyhow = { workspace = true }
+futures = { workspace = true }
+proptest = { workspace = true }
+strum = { workspace = true }
+test-strategy = { workspace = true }
+
+sov-mock-da = { workspace = true }
+sov-api-spec = { workspace = true }
+sov-stf-runner = { workspace = true }
+sov-cli = { workspace = true }
+sov-state = { workspace = true }
+sov-kernels = { workspace = true }
+sov-accounts = { workspace = true }
+sov-test-utils = { workspace = true }
+
+ethereum-types = "0.14.1"
+ethers-core = { version = "=2.0.14", default-features = false }
+ethers-contract = { version = "=2.0.14", default-features = false }
+ethers-providers = { version = "=2.0.14", default-features = false }
+ethers-signers = { version = "=2.0.14", default-features = false }
+ethers-middleware = { version = "=2.0.14", default-features = false }
+
+[features]
+default = []
+local = []

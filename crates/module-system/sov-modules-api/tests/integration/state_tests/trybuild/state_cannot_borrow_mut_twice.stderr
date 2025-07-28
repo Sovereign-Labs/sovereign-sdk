@@ -1,0 +1,9 @@
+error[E0499]: cannot borrow `value` as mutable more than once at a time
+  --> tests/integration/state_tests/trybuild/state_cannot_borrow_mut_twice.rs:23:18
+   |
+22 |     let val = value.borrow_mut(&mut state).unwrap_infallible().unwrap();
+   |               ----- first mutable borrow occurs here
+23 |     let second = value.borrow_mut(&mut state).unwrap_infallible().unwrap();
+   |                  ^^^^^ second mutable borrow occurs here
+24 |     assert_eq!(*val, *second);
+   |                 --- first borrow later used here

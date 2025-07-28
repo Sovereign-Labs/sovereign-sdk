@@ -9,9 +9,9 @@ Main entry point for CLI
 Usage: sov-cli <COMMAND>
 
 Commands:
-  transactions  Generate, sign, and send transactions
+  transactions  Generate, sign, list and remove transactions
   keys          View and manage keys associated with this wallet
-  rpc           Query the current state of the rollup and submit transactions
+  rpc           Query the current state of the rollup and send transactions
   help          Print this message or the help of the given subcommand(s)
 
 Options:

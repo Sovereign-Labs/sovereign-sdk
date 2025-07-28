@@ -5,119 +5,130 @@
 use std::convert::AsRef;
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context as _};
-use sov_accounts::AccountConfig;
-use sov_bank::BankConfig;
-#[cfg(feature = "experimental")]
-use sov_evm::EvmConfig;
-pub use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::Context;
+use serde::de::DeserializeOwned;
+pub use sov_accounts::{AccountConfig, AccountData};
+use sov_address::{EthereumAddress, FromVmAddress};
+use sov_attester_incentives::AttesterIncentivesConfig;
+pub use sov_bank::{BankConfig, Coins, TokenConfig};
+pub use sov_chain_state::ChainStateConfig;
+pub use sov_evm::EvmConfig;
+use sov_modules_api::prelude::*;
 use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
-use sov_nft_module::NonFungibleTokenConfig;
-use sov_rollup_interface::da::DaSpec;
-use sov_sequencer_registry::SequencerConfig;
+use sov_operator_incentives::OperatorIncentivesConfig;
+use sov_paymaster::PaymasterConfig;
+use sov_prover_incentives::ProverIncentivesConfig;
+pub use sov_sequencer_registry::{SequencerConfig, SequencerRegistryConfig};
 pub use sov_state::config::Config as StorageConfig;
-use sov_stf_runner::read_json_file;
-use sov_value_setter::ValueSetterConfig;
 
 /// Creates config for a rollup with some default settings, the config is used in demos and tests.
 use crate::runtime::GenesisConfig;
 use crate::runtime::Runtime;
 
 /// Paths pointing to genesis files.
+#[derive(Clone, Debug)]
 pub struct GenesisPaths {
     /// Bank genesis path.
     pub bank_genesis_path: PathBuf,
     /// Sequencer Registry genesis path.
     pub sequencer_genesis_path: PathBuf,
-    /// Value Setter genesis path.
-    pub value_setter_genesis_path: PathBuf,
     /// Accounts genesis path.
     pub accounts_genesis_path: PathBuf,
-    /// NFT genesis path.
-    pub nft_path: PathBuf,
-    #[cfg(feature = "experimental")]
+    /// Operator Incentives genesis path.
+    pub operator_incentives_genesis_path: PathBuf,
+    /// Attester Incentives genesis path.
+    pub attester_incentives_genesis_path: PathBuf,
+    /// Prover Incentives genesis path.
+    pub prover_incentives_genesis_path: PathBuf,
     /// EVM genesis path.
     pub evm_genesis_path: PathBuf,
+    /// Chain State genesis path.
+    pub chain_state_genesis_path: PathBuf,
+    /// Paymaster genesis path
+    pub paymaster_genesis_path: PathBuf,
+    /// Bench pattern genesis path
+    pub access_pattern: PathBuf,
 }
 
 impl GenesisPaths {
     /// Creates a new [`GenesisPaths`] from the files contained in the given
     /// directory.
     ///
-    /// Take a look at the contents of the `test_data` directory to see the
+    /// Take a look at the contents of the `test-data` directory to see the
     /// expected files.
     pub fn from_dir(dir: impl AsRef<Path>) -> Self {
         Self {
             bank_genesis_path: dir.as_ref().join("bank.json"),
             sequencer_genesis_path: dir.as_ref().join("sequencer_registry.json"),
-            value_setter_genesis_path: dir.as_ref().join("value_setter.json"),
             accounts_genesis_path: dir.as_ref().join("accounts.json"),
-            nft_path: dir.as_ref().join("nft.json"),
-            #[cfg(feature = "experimental")]
+            operator_incentives_genesis_path: dir.as_ref().join("operator_incentives.json"),
+            prover_incentives_genesis_path: dir.as_ref().join("prover_incentives.json"),
+            attester_incentives_genesis_path: dir.as_ref().join("attester_incentives.json"),
             evm_genesis_path: dir.as_ref().join("evm.json"),
+            chain_state_genesis_path: dir.as_ref().join("chain_state.json"),
+            paymaster_genesis_path: dir.as_ref().join("paymaster.json"),
+            access_pattern: dir.as_ref().join("access_pattern.json"),
         }
     }
 }
 
-/// Creates genesis configuration.
-pub fn get_genesis_config<C: Context, Da: DaSpec>(
+/// Creates a new [`RuntimeTrait::GenesisConfig`] from the files contained in
+/// the given directory.
+pub fn create_genesis_config<S: Spec>(
     genesis_paths: &GenesisPaths,
-) -> Result<<Runtime<C, Da> as RuntimeTrait<C, Da>>::GenesisConfig, anyhow::Error> {
-    let genesis_config =
-        create_genesis_config(genesis_paths).context("Unable to read genesis configuration")?;
-    validate_config(genesis_config)
-}
+) -> anyhow::Result<<Runtime<S> as RuntimeTrait<S>>::GenesisConfig>
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    let bank_config: BankConfig<S> = read_genesis_json(&genesis_paths.bank_genesis_path)?;
 
-pub(crate) fn validate_config<C: Context, Da: DaSpec>(
-    genesis_config: <Runtime<C, Da> as RuntimeTrait<C, Da>>::GenesisConfig,
-) -> Result<<Runtime<C, Da> as RuntimeTrait<C, Da>>::GenesisConfig, anyhow::Error> {
-    let token_address = &sov_bank::get_genesis_token_address::<C>(
-        &genesis_config.bank.tokens[0].token_name,
-        genesis_config.bank.tokens[0].salt,
-    );
+    let sequencer_registry_config: SequencerRegistryConfig<S> =
+        read_genesis_json(&genesis_paths.sequencer_genesis_path)?;
 
-    let coins_token_addr = &genesis_config
-        .sequencer_registry
-        .coins_to_lock
-        .token_address;
+    let operator_incentives_config: OperatorIncentivesConfig<S> =
+        read_genesis_json(&genesis_paths.operator_incentives_genesis_path)?;
 
-    if coins_token_addr != token_address {
-        bail!(
-            "Wrong token address in `sequencer_registry_config` expected {} but found {}",
-            token_address,
-            coins_token_addr
-        )
-    }
+    let attester_incentives_config: AttesterIncentivesConfig<S> =
+        read_genesis_json(&genesis_paths.attester_incentives_genesis_path)?;
 
-    Ok(genesis_config)
-}
+    let prover_incentives_config: ProverIncentivesConfig<S> =
+        read_genesis_json(&genesis_paths.prover_incentives_genesis_path)?;
 
-fn create_genesis_config<C: Context, Da: DaSpec>(
-    genesis_paths: &GenesisPaths,
-) -> anyhow::Result<<Runtime<C, Da> as RuntimeTrait<C, Da>>::GenesisConfig> {
-    let bank_config: BankConfig<C> = read_json_file(&genesis_paths.bank_genesis_path)?;
+    let accounts_config: AccountConfig<S> =
+        read_genesis_json(&genesis_paths.accounts_genesis_path)?;
 
-    let sequencer_registry_config: SequencerConfig<C, Da> =
-        read_json_file(&genesis_paths.sequencer_genesis_path)?;
+    let nonces_config = ();
 
-    let value_setter_config: ValueSetterConfig<C> =
-        read_json_file(&genesis_paths.value_setter_genesis_path)?;
+    let evm_config: EvmConfig = read_genesis_json(&genesis_paths.evm_genesis_path)?;
 
-    let accounts_config: AccountConfig<C> = read_json_file(&genesis_paths.accounts_genesis_path)?;
+    let chain_state_config: ChainStateConfig<S> =
+        read_genesis_json(&genesis_paths.chain_state_genesis_path)?;
+    let paymaster_config: PaymasterConfig<S> =
+        read_genesis_json(&genesis_paths.paymaster_genesis_path)?;
+    let blob_storage_config = ();
 
-    let nft_config: NonFungibleTokenConfig = read_json_file(&genesis_paths.nft_path)?;
+    let access_pattern: sov_test_modules::access_pattern::AccessPatternGenesisConfig<S> =
+        read_genesis_json(&genesis_paths.access_pattern)?;
 
-    #[cfg(feature = "experimental")]
-    let evm_config: EvmConfig = read_json_file(&genesis_paths.evm_genesis_path)?;
+    let synthetic_load_config = ();
 
     Ok(GenesisConfig::new(
         bank_config,
         sequencer_registry_config,
-        value_setter_config,
+        operator_incentives_config,
+        attester_incentives_config,
+        prover_incentives_config,
         accounts_config,
-        nft_config,
-        #[cfg(feature = "experimental")]
+        nonces_config,
+        chain_state_config,
+        blob_storage_config,
+        paymaster_config,
         evm_config,
+        access_pattern,
+        synthetic_load_config,
     ))
+}
+
+fn read_genesis_json<T: DeserializeOwned>(path: &Path) -> anyhow::Result<T> {
+    let contents = std::fs::read_to_string(path)?;
+    Ok(serde_json::from_str(&contents)?)
 }

@@ -1,0 +1,18 @@
+[
+  {
+    "shares": [],
+    "proof": {
+      "start": 5,
+      "end": 6,
+      "nodes": [
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAc292LXRlc3QAAAAAAAAAAAAAAAAAAAAAAAAAAABzb3YtdGVzdPNpH3qdhMsUvEwxH9DjywkijEA+pR2wWvsjSVdvFZ9m",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAc292LXRlc3QAAAAAAAAAAAAAAAAAAAAAAAAAAABzb3YtdGVzdGmWdpcnReALGMA5rsmFzhAChFDRoNSMJoTkpHLMSl55",
+        "//////////////////////////////////////7//////////////////////////////////////lrD0qJ9dspxSO1Yl8NDioZfgOm8Yj63Y+BGDRHlKCRj",
+        "//////////////////////////////////////7//////////////////////////////////////iNa9Eq830VsdytAm6Xke+fTeD22gHTjIOVg5DYjsG9c",
+        "/////////////////////////////////////////////////////////////////////////////1ThOQxum9yok4oYTzRR0udSIt8lAd7dWMLPGRxYkddw"
+      ],
+      "leaf_hash": "//////////////////////////////////////7//////////////////////////////////////plEqgR/c4IAVkNdYRWOYOAESD4whneKR54Dz5Dfe4p2",
+      "is_max_namespace_ignored": true
+    }
+  }
+]

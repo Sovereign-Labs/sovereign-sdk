@@ -1,0 +1,19 @@
+tabWidth = 4
+
+[[overrides]]
+files = ["*.toml"]
+
+[overrides.options]
+tabWidth = 4
+arrayAutoExpand = false
+arrayAutoCollapse = false
+compactArrays = true
+# This is commented out as this is not node project, we don't have package.json and node_modules.
+#plugins = ["prettier-plugin-toml"]
+
+[[overrides]]
+files = ["*.yaml", "*.yml"]
+
+[overrides.options]
+tabWidth = 2
+

@@ -35,10 +35,8 @@ Before starting, ensure your local copy of the repository is up to date with the
   - [ ] Manually run the steps from `examples/demo-rollup/README.md`.
   - [ ] Manually run the steps from `examples/demo-prover/README.md`.
 - [ ] Review all the other tutorials and ensure explanations are up to date:
-  - [ ] `examples/demo-nft-module/README.md`
   - [ ] `examples/demo-simple-stf/README.md`
   - [ ] `examples/demo-rollup/stf/README.md`
-  - [ ] `examples/demo-nft-module/README.md`
 - [ ] Audit `packages_to_publish.yml` and ensure that all relevant _library_ crates are included. Binaries (such as `demo-rollup`) and other internal crates not intended to be used by SDK users (such as `sov-modules-schemas`) should not be included. The list must remain pre-sorted by dependencies, so that crates are published in the correct order.
 - [ ] Commit any changes.
 

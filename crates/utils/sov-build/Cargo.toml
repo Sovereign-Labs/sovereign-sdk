@@ -1,0 +1,24 @@
+[package]
+name = "sov-build"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true, default-features = false, features = [
+  "alloc",
+  "derive",
+] }
+serde_json = { workspace = true, default-features = false, features = [
+  "alloc",
+] }
+sov-universal-wallet = { workspace = true, features = ["serde"] }
+sov-modules-api = { workspace = true }
+
+[lints]
+workspace = true

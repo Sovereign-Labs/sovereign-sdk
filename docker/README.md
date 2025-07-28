@@ -1,7 +1,7 @@
-# Local celestia setup
+# Local Celestia setup
 
-It consists of one validator (block maker) and arbitrary number of bridge nodes
-for sequencers (1 by default).
+It consists of one validator (block maker) and an arbitrary number of bridge nodes
+for rollup sequencers (1 by default).
 
 ## Example
 
@@ -10,7 +10,7 @@ for sequencers (1 by default).
 docker compose -f docker/docker-compose.yml up --build --force-recreate -d
 
 # grab the jwt
-CELESTIA_NODE_AUTH_TOKEN="$(cat docker/credentials/bridge-0.jwt)"
+CELESTIA_NODE_AUTH_TOKEN="$(cat docker/celestia/credentials/bridge-0.jwt)"
 
 # check the celestia rpc
 curl -X POST \                                                                           
@@ -24,13 +24,13 @@ curl -X POST \
   }' \
   localhost:26658
 
-# stop the celestia network
+# stop the Celestia network
 docker compose -f docker/docker-compose.yml down
 ```
 
-### Login to github registry
+### Login to GitHub registry
 
-You'll need to be logged in to the github's registry in order to pull celestia images.
+You'll need to be logged in to the github's registry to pull celestia images.
 Follow [this guide](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic)
 to authorize yourself in github's container registry. (we use original celestia images which they publish in ghcr)
 
@@ -60,3 +60,49 @@ run will use the same credentials until the directory is manually cleaned up.
 
 In addition, each sequencer on startup will write it's `JWT` token to the same directory. The token is
 updated during consecutive runs.
+
+## Chaos Engineering
+
+[Toxiproxy](https://github.com/Shopify/toxiproxy) enables chaos engineering by simulating network failures and instabilities. 
+Use it to test how the rollup behaves when the connection to celestia-node is unreliable.
+
+### Setup
+
+1. Uncomment the toxiproxy service in [`docker-compose.yml`](./docker-compose.yml)
+2. Configure your rollup to connect to port `26659` (proxied) instead of `26658` (direct)
+
+### Usage
+
+The proxy starts without any network toxics enabled. Use the provided scripts to control network conditions:
+
+```bash
+# Enable standard toxics (light network issues)
+docker/toxiproxy/enable_standard_toxics.sh
+
+# Enable brutal toxics (severe network issues)
+docker/toxiproxy/enable_brutal_toxics.sh
+
+# Remove all toxics (restore normal network)
+docker/toxiproxy/remove_toxics.sh
+
+# Check current toxic status
+docker/toxiproxy/status_chaos.sh
+```
+
+Available toxic types include latency, timeouts, connection resets, and bandwidth limiting. 
+This allows you to test rollup resilience under various network failure scenarios.
+
+### Troubleshooting
+
+**Toxiproxy crashes when adding toxics:**
+- This happens when trying to add toxics to a proxy with active connections
+- Solution: Restart toxiproxy and try again:
+  ```bash
+  docker compose restart toxiproxy
+  # Wait a few seconds, then try adding toxics again
+  ```
+
+**Best practices:**
+- Add toxics immediately after starting toxiproxy, before connections are established
+- Use the remove script to clean up toxics before stopping services
+- Monitor toxiproxy logs for crash indicators: `docker compose logs toxiproxy`

@@ -1,0 +1,76 @@
+[package]
+name = "sov-rollup-interface"
+description = "Defines interfaces for building rollups with the Sovereign SDK"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+exclude = ["specs/assets/*"]
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+arbitrary = { workspace = true, optional = true }
+async-trait = { workspace = true }
+backon = { workspace = true, optional = true }
+borsh = { workspace = true }
+bytes = { workspace = true, default-features = true }
+derive_more = { workspace = true, features = [
+    "add",
+    "as_ref",
+    "debug",
+    "display",
+    "from",
+    "from_str",
+] }
+digest = { workspace = true }
+futures = { workspace = true, optional = true, features = ["alloc"] }
+hex = { workspace = true }
+# Proptest should be a dev-dependency, but those can't be optional
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rockbound = { workspace = true, optional = true }
+sov-universal-wallet = { workspace = true, features = ["macros"] }
+sha2 = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tracing = { workspace = true, optional = true }
+tokio = { workspace = true, features = ["macros", "sync", "rt"], optional = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+proptest-derive = { workspace = true }
+serde_json = { workspace = true }
+jsonschema = { workspace = true }
+schemars = { workspace = true }
+bincode = { workspace = true }
+sov-rollup-interface = { path = ".", features = ["native", "arbitrary"] }
+test-strategy = { workspace = true }
+tokio = { workspace = true, features = ["sync", "macros", "rt-multi-thread"] }
+
+[features]
+native = [
+    "backon",
+    "futures",
+    "sov-rollup-interface/native",
+    "tracing",
+    "tokio",
+    "rockbound"
+]
+arbitrary = [
+	"dep:arbitrary",
+	"proptest",
+	"proptest-derive",
+	"sov-rollup-interface/arbitrary",
+	"dep:sha2",
+	"rockbound/arbitrary"
+]
+vec-compat = []

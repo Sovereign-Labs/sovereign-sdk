@@ -1,0 +1,131 @@
+[package]
+name = "sov-modules-api"
+description = "Defines the interface of the Sovereign SDK module system"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+jsonrpsee = { workspace = true, features = [
+    "macros",
+    "server",
+], optional = true }
+anyhow = { workspace = true }
+arbitrary = { workspace = true, optional = true }
+axum = { workspace = true, optional = true }
+async-trait = { workspace = true, optional = true }
+derive_more = { workspace = true, default-features = true, features = [
+    "deref",
+    "debug",
+    "display",
+    "into",
+] }
+serde_yaml = { workspace = true, optional = true }
+sov-rest-utils = { workspace = true, optional = true }
+sov-state = { workspace = true }
+sov-rollup-interface = { workspace = true }
+sov-modules-macros = { workspace = true }
+sov-universal-wallet = { workspace = true, features = ["serde"] }
+sov-db = { workspace = true, optional = true }
+sov-metrics = { workspace = true, optional = true }
+serde = { workspace = true }
+borsh = { workspace = true }
+digest = { workspace = true }
+heck = { version = "0.5", optional = true }
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, optional = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-test = { workspace = true, optional = true }
+sha2 = { workspace = true }
+strum = { workspace = true }
+bech32 = { workspace = true }
+bs58 = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
+clap = { workspace = true, optional = true }
+schemars = { workspace = true, features = [] }
+derivative = { workspace = true }
+utoipa = { workspace = true, optional = true }
+utoipa-swagger-ui = { workspace = true, optional = true }
+unwrap-infallible = { workspace = true }
+nearly-linear = { workspace = true }
+
+[dev-dependencies]
+sov-state = { workspace = true, features = ["native", "test-utils"] }
+bincode = { workspace = true }
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-bank = { workspace = true, features = ["native"] }
+sov-sequencer-registry = { workspace = true, features = ["native"] }
+sov-modules-api = { path = ".", features = ["native", "test-utils"] }
+sov-test-utils = { workspace = true, features = ["arbitrary"] }
+reqwest = { workspace = true }
+# Debug for more convinient tests output
+utoipa = { workspace = true, features = ["debug"] }
+openapiv3 = "2.0.0"
+trybuild = "1.0"
+tokio = { workspace = true }
+
+[features]
+arbitrary = [
+	"dep:arbitrary",
+	"dep:proptest",
+	"dep:proptest-derive",
+	"proptest/default",
+	"sov-db?/arbitrary",
+	"sov-mock-zkvm/arbitrary",
+	"sov-modules-api/arbitrary",
+	"sov-rest-utils/arbitrary",
+	"sov-rollup-interface/arbitrary",
+	"sov-state/arbitrary",
+	"sov-sequencer-registry/arbitrary",
+	"sov-test-utils/arbitrary",
+	"sov-mock-da/arbitrary",
+	"sov-bank/arbitrary",
+	"sov-modules-macros/arbitrary"
+]
+bench = [
+    "sov-metrics",
+    "sov-modules-api/bench",
+    "sov-state/bench",
+    "sov-modules-macros/bench",
+]
+native = [
+    "async-trait",
+    "axum",
+    "clap",
+    "jsonrpsee",
+    "heck",
+    "serde_yaml",
+    "sov-bank/native",
+    "sov-db",
+    "sov-mock-da/native",
+    "sov-mock-zkvm/native",
+    "sov-modules-api/native",
+    "sov-modules-macros/native",
+    "sov-rest-utils",
+    "sov-rollup-interface/native",
+    "sov-state/native",
+    "tokio",
+    "utoipa",
+    "utoipa-swagger-ui",
+    "sov-sequencer-registry/native",
+    "sov-metrics?/native",
+]
+test-utils = ["dep:tracing-test", "sov-state/test-utils"]
+evm = []
+gas-constant-estimation = [
+    "sov-metrics/gas-constant-estimation",
+    "sov-modules-macros/gas-constant-estimation",
+]

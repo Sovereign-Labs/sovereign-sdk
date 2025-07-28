@@ -1,0 +1,25 @@
+[package]
+name = "sov-eth-client"
+description = "Client for the Sovereign SDK Ethereum APIs"
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+ethereum-types = { workspace = true }
+ethers-core = { workspace = true }
+ethers-providers = { workspace = true }
+ethers-signers = { workspace = true }
+ethers-middleware = { workspace = true }
+futures = { workspace = true }
+jsonrpsee = { workspace = true }
+reth-primitives = { workspace = true }
+sov-cli = { workspace = true }
+sov-modules-api = { workspace = true }
+sov-test-utils = { workspace = true }
+tracing = { workspace = true }

@@ -1,0 +1,70 @@
+[package]
+name = "sov-sp1-adapter"
+description = "An adapter allowing SP1 to be used with the Sovereign SDK"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+arbitrary = { workspace = true, features = ["derive"], optional = true }
+bincode = { workspace = true }
+borsh = { workspace = true, features = ["derive"] }
+ed25519-consensus = { version = "=2.1.0" }
+hex = { workspace = true }
+proptest = { workspace = true, features = ["alloc", "std"], optional = true }
+rand = { workspace = true, optional = true }
+schemars = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = [
+    "alloc",
+    "derive",
+] }
+sha2 = { workspace = true }
+sp1-lib = { version = "5.0.8" }
+
+sov-rollup-interface = { workspace = true }
+sov-metrics = { workspace = true, features = ["sp1"], optional = true }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+sp1-sdk = { version = "5.0.8", default-features = false }
+
+[target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
+sp1-zkvm = { version = "5.0.8" }
+
+[dev-dependencies]
+reltester = { workspace = true }
+serde_json = { workspace = true, features = ["alloc"] }
+sov-sp1-adapter = { path = ".", features = ["arbitrary", "native"] }
+sov-test-utils = { workspace = true, features = ["arbitrary"] }
+sp1-build = { version = "5.0.8" }
+
+[build-dependencies]
+anyhow = { workspace = true }
+sov-zkvm-utils = { workspace = true }
+
+[features]
+default = []
+native = [
+    "rand",
+    "sov-rollup-interface/native",
+    "sov-metrics?/native",
+    "sov-sp1-adapter/native",
+]
+bench = [
+    "sov-metrics/sp1",
+    "sov-sp1-adapter/bench"
+]
+arbitrary = [
+    "dep:arbitrary",
+    "dep:proptest",
+    "sov-rollup-interface/arbitrary",
+    "sov-sp1-adapter/arbitrary",
+    "sov-test-utils/arbitrary"
+]

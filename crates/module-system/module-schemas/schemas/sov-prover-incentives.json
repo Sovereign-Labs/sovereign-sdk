@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CallMessage",
+  "description": "This enumeration represents the available call messages for interacting with the `ExampleModule` module.",
+  "oneOf": [
+    {
+      "description": "Add a new prover as a bonded prover.",
+      "type": "object",
+      "required": [
+        "register"
+      ],
+      "properties": {
+        "register": {
+          "$ref": "#/definitions/Amount"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Increases the balance of the prover, transferring the funds from the prover account to the rollup.",
+      "type": "object",
+      "required": [
+        "deposit"
+      ],
+      "properties": {
+        "deposit": {
+          "$ref": "#/definitions/Amount"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Unbonds the prover.",
+      "type": "string",
+      "enum": [
+        "exit"
+      ]
+    }
+  ],
+  "definitions": {
+    "Amount": {
+      "description": "A token amount.",
+      "type": "integer",
+      "format": "uint128",
+      "minimum": 0.0
+    }
+  }
+}

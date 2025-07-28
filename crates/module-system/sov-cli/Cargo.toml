@@ -1,0 +1,43 @@
+[package]
+name = "sov-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "sov_cli"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+derive_more = { workspace = true, features = ["display"] }
+sov-modules-api = { workspace = true, features = ["native"] }
+sov-modules-stf-blueprint = { workspace = true }
+sov-bank = { workspace = true }
+sov-rollup-interface = { workspace = true }
+directories = "5.0.1"
+anyhow = { workspace = true }
+hex = { workspace = true, features = ["serde"] }
+borsh = { workspace = true }
+semver = "1.0"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+sov-node-client = { workspace = true }
+tracing = { workspace = true }
+futures = { workspace = true }
+
+[dev-dependencies]
+sov-address = { workspace = true }
+tempfile = { workspace = true }
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-test-utils = { workspace = true }
+sov-modules-stf-blueprint = { workspace = true }

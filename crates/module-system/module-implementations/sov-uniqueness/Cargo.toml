@@ -1,0 +1,64 @@
+[package]
+name = "sov-uniqueness"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = "Sovereign Labs Community Software License"
+repository = { workspace = true }
+description = "Sovereign SDK module for managing and tracking transaction uniqueness"
+
+version = { workspace = true }
+readme = "README.md"
+
+[dependencies]
+anyhow = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+schemars = { workspace = true }
+serde = { workspace = true }
+
+sov-modules-api = { workspace = true }
+sov-state = { workspace = true }
+
+[dev-dependencies]
+sov-modules-stf-blueprint = { workspace = true }
+sov-uniqueness = { path = ".", features = ["native"] }
+tempfile = { workspace = true }
+strum = { workspace = true }
+sov-modules-api = { workspace = true, features = ["test-utils"] }
+sov-test-utils = { workspace = true }
+sov-value-setter = { workspace = true }
+sov-evm = { workspace = true, features = ["native"] }
+reth-primitives = { workspace = true }
+sov-address = { workspace = true, features = ["evm"] }
+sov-rollup-interface = { workspace = true }
+sov-kernels = { workspace = true }
+secp256k1 = { workspace = true, features = ["rand-std"] }
+reth-rpc-types = { workspace = true, default-features = false }
+sov-eth-dev-signer = { workspace = true }
+
+[features]
+default = []
+arbitrary = [
+	"sov-modules-api/arbitrary",
+	"sov-uniqueness/arbitrary",
+	"sov-state/arbitrary",
+	"sov-test-utils/arbitrary",
+	"reth-primitives/arbitrary",
+	"reth-rpc-types/arbitrary",
+	"sov-address/arbitrary",
+	"sov-evm/arbitrary",
+	"sov-rollup-interface/arbitrary"
+]
+native = [
+	"reth-primitives/std",
+	"reth-rpc-types/default",
+	"sov-modules-api/native",
+	"sov-uniqueness/native",
+	"sov-state/native",
+	"sov-value-setter/native",
+	"sov-modules-stf-blueprint/native",
+	"sov-address/native",
+	"sov-evm/native",
+	"sov-kernels/native",
+	"sov-rollup-interface/native",
+]

@@ -1,0 +1,35 @@
+[package]
+name = "sov-kernels"
+version.workspace = true
+edition.workspace = true
+license = "Sovereign Labs Community Software License"
+authors.workspace = true
+homepage.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+
+sov-state = { workspace = true }
+sov-modules-api = { workspace = true }
+sov-blob-storage = { workspace = true }
+sov-chain-state = { workspace = true }
+sov-rollup-interface = { workspace = true }
+
+serde_json = { workspace = true, optional = true }
+
+[features]
+default = []
+native = [
+	"sov-blob-storage/native",
+	"sov-chain-state/native",
+	"sov-modules-api/native",
+	"sov-state/native",
+	"dep:serde_json",
+	"sov-rollup-interface/native"
+]
+test-utils = []

@@ -1,0 +1,63 @@
+[package]
+name = "sov-transaction-generator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+sov-bank = { workspace = true, features = ["native", "arbitrary"] }
+sov-value-setter = { workspace = true }
+sov-synthetic-load = { workspace = true }
+sov-test-modules = { workspace = true, features = ["native"] }
+sov-modules-api = { workspace = true, features = ["native", "arbitrary"] }
+sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
+sov-node-client = { workspace = true }
+sov-test-utils = { workspace = true, features = ["arbitrary"] }
+sov-state = { workspace = true, features = ["native"] }
+sov-mock-da = { workspace = true, features = ["native", "arbitrary"] }
+
+schemars = { workspace = true }
+serde = { workspace = true }
+backon = { workspace = true }
+anyhow = { workspace = true }
+derivative = { workspace = true }
+derive_more = { workspace = true, features = [
+    "constructor",
+    "deref_mut",
+    "add",
+    "mul",
+] }
+borsh = { workspace = true }
+hex = { workspace = true }
+sha2 = { version = "0.10.8", default-features = false }
+strum = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+
+indexmap = "2"
+
+[dev-dependencies]
+sov-kernels = { workspace = true, features = ["native"] }
+sov-mock-da = { workspace = true, features = ["native", "arbitrary"] }
+sov-mock-zkvm = { workspace = true, features = ["native", "arbitrary"] }
+sov-paymaster = { workspace = true, features = ["native"] }
+sov-state = { workspace = true, features = ["native"] }
+sov-sequencer-registry = { workspace = true, features = ["native"] }
+sov-rollup-interface = { workspace = true, features = ["native"] }
+sov-sequencer = { workspace = true }
+sov-test-utils = { workspace = true, features = ["arbitrary"] }
+
+futures = { workspace = true }
+borsh = { workspace = true }
+progenitor-client = { version = "0.8" }
+serde = { workspace = true }
+
+[lints]
+workspace = true

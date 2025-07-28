@@ -1,0 +1,70 @@
+asyncapi: 3.0.0
+info:
+  title: Sovereign SDK ledger async API
+  version: 0.1.0
+  description: |
+    The async API for Sovereign SDK ledger data. Provides ledger data in real-time.
+  contact:
+    name: Sovereign Labs
+    url: https://github.com/Sovereign-Labs/sovereign-sdk
+    email: info@sovereign.xyz
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+defaultContentType: application/json
+servers:
+  local:
+    host: localhost:12346
+    pathname: /ledger
+    protocol: ws
+channels:
+  events:
+    address: /slots/latest/events/ws
+    bindings:
+      ws:
+        method: GET
+        query:
+          type: object
+          properties:
+            prefix:
+              type: string
+              description: Filter events based on the provided string prefix.
+    messages:
+      eventBatch:
+        $ref: "#/components/messages/EventBatch"
+operations:
+  eventsListener:
+    action: receive
+    channel:
+      $ref: "#/channels/events"
+    messages:
+      - $ref: "#/channels/events/messages/eventBatch"
+components:
+  messages:
+    EventBatch:
+      summary: A batch of events emitted by transactions included in the ledger.
+      payload:
+        type: object
+        properties:
+          slot_number:
+            type: integer
+            description: The height of the block that emitted the event.
+          events:
+            type: array
+            items:
+              $ref: "#/components/schemas/EventPayload"
+  schemas:
+    EventPayload:
+      type: object
+      properties:
+        number:
+          type: integer
+        key:
+          type: string
+        value:
+          type: object
+        module:
+          type: object
+          properties:
+            name:
+              type: string

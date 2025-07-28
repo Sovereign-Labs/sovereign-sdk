@@ -1,9 +1,9 @@
 {
-  "Mint": {
-    "coins": {
-      "amount": 3000,
-      "token_address": "sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"
-    },
-    "minter_address": "sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqwr57gc"
-  }
+    "mint": {
+        "coins": {
+            "amount": "3000",
+            "token_id": "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"
+        },
+        "mint_to_address": "sov10d6chuh8vu86ltmt7qq4ec8lt25qyvr0cl3lg4mzs5llcfnx69m"
+    }
 }

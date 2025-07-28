@@ -1,0 +1,9 @@
+error[E0502]: cannot borrow `value` as immutable because it is also borrowed as mutable
+  --> tests/integration/state_tests/trybuild/state_cannot_borrow_while_borrowed_mut.rs:23:5
+   |
+22 |     let val = value.borrow_mut(&mut state).unwrap_infallible().unwrap();
+   |               ----- mutable borrow occurs here
+23 |     value.borrow(&mut state).unwrap_infallible();
+   |     ^^^^^ immutable borrow occurs here
+24 |     assert_eq!(*val, RollupHeight::new(100));
+   |                 --- mutable borrow later used here

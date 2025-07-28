@@ -1,0 +1,46 @@
+{
+  "rust-analyzer.cargo.targetDir": true,
+  "rust-analyzer.cargo.extraEnv": {
+    "SKIP_GUEST_BUILD": "1",
+    "SP1_SKIP_PROGRAM_BUILD": "1"
+  },
+  "rust-analyzer.check.overrideCommand": [
+    "cargo",
+    "check",
+    "--message-format=json",
+    "--profile",
+    "rust-analyzer-optimized",
+    "--all-targets",
+    "--all-features"
+  ],
+  "rust-analyzer.cargo.buildScripts.overrideCommand": [
+    "cargo",
+    "check",
+    "--quiet",
+    "--message-format=json",
+    "--keep-going"
+  ],
+  "rust-analyzer.rustfmt.extraArgs": ["+nightly"],
+  "json.schemas": [
+    {
+      "fileMatch": ["bank.json"],
+      "url": "./crates/module-system/module-schemas/genesis-schemas/sov-bank.json"
+    },
+    {
+      "fileMatch": ["accounts.json"],
+      "url": "./crates/module-system/module-schemas/genesis-schemas/sov-accounts.json"
+    },
+    {
+      "fileMatch": ["value_setter.json"],
+      "url": "./crates/module-system/module-schemas/genesis-schemas/sov-value-setter.json"
+    },
+    {
+      "fileMatch": ["prover_incentives.json"],
+      "url": "./crates/module-system/module-schemas/genesis-schemas/sov-prover-incentives.json"
+    },
+    {
+      "fileMatch": ["sequencer_registry.json"],
+      "url": "./crates/module-system/module-schemas/genesis-schemas/sov-sequencer-registry.json"
+    }
+  ]
+}

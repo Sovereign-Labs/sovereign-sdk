@@ -6,11 +6,30 @@ resolver = "2"
 license = "MIT OR Apache-2.0"
 publish = false
 
+[lints.rust]
+dead_code = "deny"
+non_ascii_idents = "deny" # Bad for readability and it can also be a security vulnerability
+
+# In case you need inspiration for new lints to add to the list, this is a good
+# reference: <https://github.com/EmbarkStudios/rust-ecosystem/blob/6783ae1573d62f3f5439b8ff9e04bec191ec2eaf/lints.toml>.
+[lints.clippy]
+debug_assert_with_mut_call = "deny"
+inefficient_to_string = "deny"
+map_flatten = "deny"
+manual_ok_or = "deny"
+doc_link_with_quotes = "deny"
+match_same_arms = "deny"
+semicolon_if_nothing_returned = "deny"
+float_arithmetic = "deny"              # Can cause subtle bugs due to different behavior between native and zkVM execution.
+
 [build-dependencies]
-risc0-build = { workspace = true }
+anyhow = { workspace = true }
+risc0-build = "2.1"
+sov-zkvm-utils = { workspace = true }
 
 [package.metadata.risc0]
 methods = ["guest-celestia", "guest-mock"]
 
 [features]
 bench = []
+bincode = []

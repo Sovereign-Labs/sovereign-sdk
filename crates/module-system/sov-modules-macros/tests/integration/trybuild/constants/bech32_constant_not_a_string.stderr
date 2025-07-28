@@ -1,0 +1,7 @@
+error[E0308]: mismatched types
+ --> tests/integration/trybuild/constants/bech32_constant_not_a_string.rs:6:26
+  |
+6 | const TOKEN: MyTokenId = config_value!("GAS_DIMENSIONS");
+  |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `MyTokenId`, found integer
+  |
+  = note: this error originates in the macro `config_value` (in Nightly builds, run with -Z macro-backtrace for more info)

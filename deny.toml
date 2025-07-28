@@ -1,11 +1,13 @@
 [licenses]
-# Deny crates that do not have a license.
-unlicensed = "deny"
+version = 2
 allow = [
   "Apache-2.0",
   "MIT",
+  "MIT-0",
+  "NCSA",
   "Unlicense",
   "Unicode-DFS-2016",
+  "Unicode-3.0",
   "MPL-2.0",
   "ISC",
   "CC0-1.0",
@@ -13,7 +15,9 @@ allow = [
   "BSD-3-Clause",
   "OpenSSL",
   "Apache-2.0 WITH LLVM-exception",
+  "LicenseRef-Sovereign-Labs-Community-Software-License",
   "Zlib",
+  "BSL-1.0",                                              # Relevant discussion: <https://github.com/Sovereign-Labs/sovereign-sdk-wip/pull/985#issuecomment-2242712349>.
 ]
 
 [[licenses.clarify]]
@@ -22,3 +26,417 @@ name = "ring"
 # but we can effectively treat is as OpenSSL-like licensing.
 expression = "OpenSSL"
 license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+[[licenses.clarify]]
+# Halo 2 is now MIT licensed, but the update hasn't been published on crates.io
+# Its resolved license is BOSL, which is effectively proprietary.
+name = "halo2"
+expression = "LicenseRef-Proprietary"
+license-files = [{ path = "COPYING", hash = 0x106164e0 }]
+
+# Sovereign SDK packages use a custom community license
+[[licenses.clarify]]
+name = "sov-blob-sender"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-blob-storage"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-db"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-kernels"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-modules-rollup-blueprint"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-modules-stf-blueprint"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-paymaster"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-sequencer"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-state"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-uniqueness"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "demo-stf"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-eth-client"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-celestia-adapter"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-risc0-adapter"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-sp1-adapter"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-ethereum"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-mock-da"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-mock-zkvm"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-bank"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-sequencer-registry"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-node-client"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-operator-incentives"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-prover-incentives"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-value-setter"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-synthetic-load"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-test-modules"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-chain-state"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-evm"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-accounts"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-ledger-apis"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-rollup-apis"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-api-spec"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-eth-dev-signer"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-modules-api"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-rollup-interface"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-stf-runner"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-attester-incentives"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-revenue-share"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-capabilities"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-address"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-rest-utils"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-transaction-generator"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-metrics"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-cli"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-modules-macros"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-test-utils"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "rest-api-load-testing"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-universal-wallet"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-universal-wallet-macros"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-universal-wallet-macro-helpers"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "workspace-hack"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "nearly-linear"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "demo-simple-stf"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "demo-stf-json-client"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "integration-tests"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "module-template"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-benchmarks"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-demo-rollup"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-demo-rollup-rest-api-load-testing"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-modules-schemas"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-soak-testing"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "switcheroo"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-hyperlane-integration"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-hyperlane-integration"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-module-schemas"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-zkvm-utils"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-build"
+expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+license-files = []
+
+[[licenses.exceptions]]
+allow = ["LGPL-3.0"]
+# Used by `risc0-circuit-recursion` in its build script: <https://github.com/risc0/risc0/blob/3177cdedda8fad56d7acd71fe2439e8dd0d93413/risc0/circuit/recursion/build.rs>.
+name = "downloader"
+version = "0.2"
+
+[[licenses.exceptions]]
+# Halo 2 is now MIT licensed, but the update hasn't been published on crates.io
+allow = ["LicenseRef-Proprietary"]
+name = "halo2"
+version = "0.1.0-beta.2"
+
+[[licenses.exceptions]]
+# Used by risc0 and we use it as a library and **not as a derivative work**.
+# Unfortunately, this new one is actually statically linked into our prover,
+# which is one of the things that LGPL specifically singles out as making your project a “derivative work”
+# But, as long as we distribute our source such that users can recompile with a different version of the LGPL software we’re compliant
+allow = ["LGPL-3.0"]
+name = "malachite-nz"
+version = "0.4.22"
+
+[[licenses.exceptions]]
+# Same as above
+allow = ["LGPL-3.0"]
+name = "malachite"
+version = "0.4.22"
+
+[[licenses.exceptions]]
+# Same as above
+allow = ["LGPL-3.0"]
+name = "malachite-base"
+version = "0.4.22"
+
+[[licenses.exceptions]]
+# Same as above
+allow = ["LGPL-3.0"]
+name = "malachite-float"
+version = "0.4.22"
+
+[[licenses.exceptions]]
+# Same as above
+allow = ["LGPL-3.0"]
+name = "malachite-q"
+version = "0.4.22"
+
+[[licenses.exceptions]]
+allow = ["CDLA-Permissive-2.0"]
+name = "webpki-root-certs"
+version = "1.0.1"
+
+[[licenses.exceptions]]
+allow = ["CDLA-Permissive-2.0"]
+name = "webpki-root-certs"
+version = "0.26.11"
+
+[sources]
+# We're okay with sourcing crates from Git repositories.
+unknown-git = "allow"
+# If we source crates from Git repositories, we always ought to pin them by
+# commit. If we don't, we effectively allow maintainers to inject arbitrary code
+# into our dependency tree just by e.g. overwriting a tag.
+required-git-spec = "rev"
+
+[bans]
+# We have so many duplicates, that warnings are barely useful. (I know, not a fan of this.)
+# TODO: See <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1016>.
+multiple-versions = "allow"
+# We'd prefer to use Rustls instead of OpenSSL; this helps up from accidentally
+# using OpenSSL. See <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/352>.
+deny = [{ name = "native-tls" }, { name = "openssl" }]

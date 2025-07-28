@@ -1,0 +1,4 @@
+/target
+.DS_Store
+fibonacci-program/Cargo.lock
+fibonacci-program/target

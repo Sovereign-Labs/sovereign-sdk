@@ -15,8 +15,7 @@
 
 # Demo State Transition Function
 
-This package shows how you can combine modules to build a custom state transition function. We provide several module implementations
-for you, and if you want additional functionality you can find a tutorial on writing custom modules [here](../simple-nft-module/README.md).
+This package shows how you can combine modules to build a custom state transition function.
 
 For purposes of this tutorial, the exact choices of modules don't matter at all - the steps to combine modules are identical
 no matter which ones you pick.
@@ -24,7 +23,7 @@ no matter which ones you pick.
 ## Overview
 
 To get a fully functional rollup, we recommend implementing the [State Transition Function
-interface](../../rollup-interface/specs/interfaces/stf.md) ("STF")  trait, which specifies your rollup's abstract logic. Second, there's
+interface](../../rollup-interface/specs/interfaces/stf.md) ("STF") trait, which specifies your rollup's abstract logic. Second, there's
 a related struct called `State Transition Runner` ("STR") which tells a full node how to run your abstract STF on a concrete machine.
 
 ## Implementing State Transition _Function_
@@ -54,34 +53,29 @@ In the remainder of this section, we'll walk you through implementing each of th
 The final piece of the puzzle is your app's runtime. A runtime is just a list of modules - really, that's it! To add a new
 module to your app, just add an additional field to the runtime.
 
-```rust
-use sov_modules_api::{Genesis, DispatchCall, MessageCodec, Context};
+```rust,no_run
+use sov_modules_api::prelude::*;
+use sov_modules_api::{Genesis, DispatchCall, MessageCodec, Spec};
 use sov_modules_api::macros::expose_rpc;
-use sov_rollup_interface::da::DaSpec;
-#[cfg(feature = "native")]
-use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
-#[cfg(feature = "native")]
-use sov_bank::{BankRpcImpl, BankRpcServer};
-#[cfg(feature = "native")]
-use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 
 
 #[cfg_attr(
     feature = "native",
     expose_rpc(DefaultContext)
 )]
-#[derive(Genesis, DispatchCall, MessageCodec)]
-#[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub struct MyRuntime<C: Context, Da: DaSpec> {
+#[derive(Default, Genesis, DispatchCall, MessageCodec)]
+pub struct MyRuntime<S: Spec> {
     #[allow(unused)]
-    sequencer: sov_sequencer_registry::SequencerRegistry<C, Da>,
+    sequencer: sov_sequencer_registry::SequencerRegistry<S>,
 
     #[allow(unused)]
-    bank: sov_bank::Bank<C>,
+    bank: sov_bank::Bank<S>,
 
     #[allow(unused)]
-    accounts: sov_accounts::Accounts<C>,
+    accounts: sov_accounts::Accounts<S>,
 }
+
+fn main() {}
 ```
 
 As you can see in the above snippet, we derive four macros on the runtime. The `Genesis` macro generates
@@ -93,77 +87,51 @@ We recommend borsh, since it's both fast and safe for hashing.
 
 The next step is to implement `Hooks` for `MyRuntime`. Hooks are abstractions that allow for the injection of custom logic into the transaction processing pipeline.
 
-There are two kind of hooks:
+The runtime provides hooks for executing custom logic inside the tx processing pipeline:
 
-`TxHooks`, which has the following methods:
+`TxHooks` has the following methods:
 
 1. `pre_dispatch_tx_hook`: Invoked immediately before each transaction is processed. This is a good time to apply stateful transaction verification, like checking the nonce.
 2. `post_dispatch_tx_hook`: Invoked immediately after each transaction is executed. This is a good place to perform any post-execution operations, like incrementing the nonce.
 
-`ApplyBlobHooks`, which has the following methods:
-
-1. `begin_blob_hook `Invoked at the beginning of the `apply_blob` function, before the blob is deserialized into a group of transactions. This is a good time to ensure that the sequencer is properly bonded.
-2. `end_blob_hook` invoked at the end of the `apply_blob` function. This is a good place to reward sequencers.
 
 To use the `StfBlueprint`, the runtime needs to provide implementation of these hooks which specifies what needs to happen at each of these four stages.
 
-In this demo, we only rely on two modules which need access to the hooks - `sov-accounts` and `sequencer-registry`.
-
-The `sov-accounts` module implements `TxHooks` because it needs to check and increment the sender nonce for every transaction.
-The `sequencer-registry` implements `ApplyBlobHooks` since it is responsible for managing the sequencer bond.
+In this demo, we only rely on a single modules which need access to the hooks - `sov-accounts`.
 
 The implementation for `MyRuntime` is straightforward because we can leverage the existing hooks provided by `sov-accounts` and `sequencer-registry` and reuse them in our implementation.
 
-```Rust
-impl<C: Context> TxHooks for Runtime<C> {
-    type Context = C;
+```Rust,no_run
+impl<S: Spec> TxHooks for Runtime<S> {
+    type Spec = S;
+
+    type TxState = WorkingSet<S>
 
     fn pre_dispatch_tx_hook(
         &self,
-        tx: Transaction<Self::Context>,
-        working_set: &mut WorkingSet<C>,
-    ) -> anyhow::Result<<Self::Context as Spec>::Address> {
-        self.accounts.pre_dispatch_tx_hook(tx, working_set)
+        tx: Transaction<Self::Spec>,
+        state: &mut Self::TxState<S>,
+    ) -> anyhow::Result<<Self::Spec as Spec>::Address> {
+        self.accounts.pre_dispatch_tx_hook(tx, state)
     }
 
     fn post_dispatch_tx_hook(
         &self,
-        tx: &Transaction<Self::Context>,
-        working_set: &mut WorkingSet<C>,
+        tx: &Transaction<Self::Spec>,
+        state: &mut Self::TxState,
     ) -> anyhow::Result<()> {
-        self.accounts.post_dispatch_tx_hook(tx, working_set)
+        self.accounts.post_dispatch_tx_hook(tx, state)
     }
 }
 ```
 
-```Rust
-impl<C: Context> ApplyBlobHooks for Runtime<C> {
-    type Context = C;
-
-    fn lock_sequencer_bond(
-        &self,
-        sequencer: &[u8],
-        working_set: &mut WorkingSet<C>,
-    ) -> anyhow::Result<()> {
-        self.sequencer.lock_sequencer_bond(sequencer, working_set)
-    }
-
-    fn reward_sequencer(
-        &self,
-        amount: u64,
-        working_set: &mut WorkingSet<C>,
-    ) -> anyhow::Result<()> {
-        self.sequencer.reward_sequencer(amount, working_set)
-    }
-}
-```
 
 That's it - with those three structs implemented, you can plug them into your `StfBlueprint` and get a
 complete State Transition Function!
 
 ### Exposing RPC
 
-Your modules implement rpc methods via the `rpc_gen` macro, in order to enable the full-node to expose them, annotate the `Runtime` with `expose_rpc`.
+Your modules optionally implement RPC methods via the `rpc_gen` macro, in order to enable the full-node to expose them, annotate the `Runtime` with `expose_rpc`.
 In the example above, you can see how to use the `expose_rpc` macro on the `native` `Runtime`.
 
 ## Make Full Node Integrations Simpler with the State Transition Runner:
@@ -184,7 +152,6 @@ The State Transition Runner struct contains logic related to initialization and 
 1. `new` - which consumes all the dependencies need for running the rollup.
 2. `run` - which runs the rollup.
 3. `start_rpc_server` - which exposes an RPC server.
-
 
 ## Wrapping Up
 

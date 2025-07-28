@@ -1,0 +1,12 @@
+{
+    "create_token": {
+        "token_name": "sov-test-token",
+        "initial_balance": "10000",
+        "mint_to_address": "sov1x3jtvq0zwhj2ucsc4hqugskvralrulxvf53vwtkred93s85ar2a",
+        "admins": [
+            "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
+            "sov1x3jtvq0zwhj2ucsc4hqugskvralrulxvf53vwtkred93s85ar2a",
+            "sov10d6chuh8vu86ltmt7qq4ec8lt25qyvr0cl3lg4mzs5llcfnx69m"
+        ]
+    }
+}

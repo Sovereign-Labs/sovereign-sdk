@@ -1,0 +1,57 @@
+[package]
+name = "sov-bank"
+description = "A Sovereign SDK managing fungible tokens"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+derive_more = { workspace = true, features = ["display"] }
+proptest = { workspace = true, optional = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+strum = { workspace = true }
+
+sov-modules-api = { workspace = true }
+sov-rollup-interface = { workspace = true }
+sov-state = { workspace = true }
+
+[dev-dependencies]
+sov-modules-stf-blueprint = { workspace = true }
+sov-bank = { path = ".", features = ["native", "test-utils"] }
+sov-chain-state = { workspace = true }
+tempfile = { workspace = true }
+sov-test-utils = { workspace = true }
+
+[features]
+default = []
+arbitrary = [
+	"sov-modules-api/arbitrary",
+	"dep:proptest",
+	"sov-bank/arbitrary",
+	"sov-state/arbitrary",
+	"sov-test-utils/arbitrary",
+	"sov-rollup-interface/arbitrary"
+]
+native = [
+	"sov-bank/native",
+	"sov-modules-api/native",
+	"sov-state/native",
+	"sov-chain-state/native",
+	"sov-modules-stf-blueprint/native",
+	"sov-rollup-interface/native"
+]
+cli = ["native"]
+test-utils = []

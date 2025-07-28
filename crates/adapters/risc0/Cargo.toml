@@ -1,0 +1,81 @@
+[package]
+name = "sov-risc0-adapter"
+description = "An adapter allowing Risc0 to be used with the Sovereign SDK"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+arbitrary = { workspace = true, features = ["derive"], optional = true }
+bincode = { workspace = true }
+borsh = { workspace = true, features = ["derive"] }
+bytemuck = "1.17.0"
+digest = { workspace = true, features = ["alloc"] }
+# Corresponding release: <https://github.com/risc0/curve25519-dalek/releases/tag/curve25519-4.1.2-risczero.0>
+ed25519-dalek = { git = "https://github.com/risc0/curve25519-dalek", rev = "3dccc5b71b806f500e73829e2a5cbfe288cce2a0", features = [
+    "serde",
+] }
+hex = { workspace = true }
+proptest = { workspace = true, features = ["alloc", "std"], optional = true }
+rand = { workspace = true, optional = true }
+risc0-zkvm = { workspace = true, features = ["std"] }
+risc0-zkvm-platform = { workspace = true }
+schemars = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = [
+    "alloc",
+    "derive",
+] }
+
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+home = { version = "=0.5.9", optional = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["fmt"] }
+
+sov-rollup-interface = { workspace = true }
+sov-metrics = { workspace = true, features = ["risc0"], optional = true }
+
+[dev-dependencies]
+sov-risc0-adapter = { path = ".", features = ["native", "arbitrary"] }
+jsonschema = { workspace = true }
+serde_json = { workspace = true, features = ["alloc"] }
+
+[build-dependencies]
+anyhow = { workspace = true }
+sov-zkvm-utils = { workspace = true }
+
+[features]
+default = []
+native = [
+    "ed25519-dalek/default",
+    "ed25519-dalek/rand_core",
+    "rand",
+    "sov-metrics?/native",
+    "risc0-zkvm/prove",
+    "sov-rollup-interface/native",
+    "home",
+    "sov-risc0-adapter/native"
+]
+bench = [
+    "sov-metrics",
+    "sov-risc0-adapter/bench"
+]
+arbitrary = [
+    "dep:arbitrary",
+    "dep:proptest",
+    "sov-rollup-interface/arbitrary",
+    "sov-risc0-adapter/arbitrary"
+]
+bincode = []
+
+[[test]]
+name = "native"
+required-features = ["native", "arbitrary"]

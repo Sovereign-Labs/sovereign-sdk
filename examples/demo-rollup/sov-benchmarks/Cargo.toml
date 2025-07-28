@@ -1,0 +1,81 @@
+[package]
+name = "sov-benchmarks"
+version = "0.3.0"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+publish = false
+
+[dependencies]
+# Sovereign dependencies
+sov-rollup-interface = { workspace = true, features = ["arbitrary"] }
+
+sov-modules-api = { workspace = true, features = ["arbitrary", "bench", "native"] }
+sov-capabilities = { workspace = true }
+
+sov-test-modules = { workspace = true, features = ["native"] }
+sov-test-utils = { workspace = true, features = ["arbitrary"] }
+sov-sequencer = { workspace = true, default-features = false }
+sov-address = { workspace = true }
+sov-state = { workspace = true, features = ["arbitrary", "native"] }
+sov-modules-stf-blueprint = { workspace = true, features = ["bench"] }
+sov-transaction-generator = { workspace = true }
+sov-modules-rollup-blueprint = { workspace = true, default-features = false }
+sov-node-client = { workspace = true }
+
+sov-metrics = { workspace = true, default-features = false }
+
+sov-mock-da = { workspace = true, features = ["arbitrary", "native"] }
+sov-celestia-adapter = { workspace = true, features = ["arbitrary", "bench", "native"] }
+
+demo-stf = { workspace = true, features = ["test-utils"] }
+reqwest = { workspace = true, features = ["rustls-tls", "stream"], default-features = false }
+
+sov-risc0-adapter = { workspace = true, features = ["arbitrary", "bench", "native"] }
+sov-sp1-adapter = { workspace = true, features = ["arbitrary", "bench", "native"] }
+
+# Provers
+risc0 = { path = "../provers/risc0", features = ["bench"] }
+sp1 = { path = "../provers/sp1", features = ["bench"] }
+
+# Other dependencies
+derive_more = { workspace = true, default-features = false, features = ["std"] }
+tracing = { workspace = true, default-features = false }
+prettytable-rs = "^0.10"
+criterion = "0.5.1"
+borsh = { workspace = true, features = ["derive"] }
+bincode = { workspace = true }
+derivative = { workspace = true, features = ["use_core"] }
+anyhow = { workspace = true }
+serde = { workspace = true, default-features = false, features = [
+    "alloc",
+    "derive",
+] }
+backon = { workspace = true }
+progenitor = { version = "0.8" }
+tokio = { workspace = true, default-features = false, features = ["process"] }
+humantime = "2.1"
+hex = { workspace = true }
+clap = { version = "4.5.16", features = ["derive"] }
+tempfile = { workspace = true }
+strum = { workspace = true, features = ["derive"] }
+futures = { workspace = true, default-features = false }
+
+[[bench]]
+name = "rollup_bench"
+path = "src/node/rollup_bench.rs"
+harness = false
+
+[[bench]]
+name = "rollup_coarse_measure"
+path = "src/node/rollup_coarse_measure.rs"
+harness = false
+
+[features]
+gas-constant-estimation = [
+    "sov-modules-api/gas-constant-estimation",
+    "sov-metrics/gas-constant-estimation",
+    "sov-modules-stf-blueprint/gas-constant-estimation",
+]

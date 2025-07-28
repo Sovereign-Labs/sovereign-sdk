@@ -1,0 +1,295 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CallMessage",
+  "description": "This enumeration represents the available call messages for interacting with the sov-bank module.",
+  "oneOf": [
+    {
+      "description": "Creates a new token with the specified name and initial balance.",
+      "type": "object",
+      "required": [
+        "create_token"
+      ],
+      "properties": {
+        "create_token": {
+          "type": "object",
+          "required": [
+            "admins",
+            "initial_balance",
+            "mint_to_address",
+            "token_name"
+          ],
+          "properties": {
+            "admins": {
+              "description": "Admins list.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SafeVec_20_of_Address"
+                }
+              ]
+            },
+            "initial_balance": {
+              "description": "The initial balance of the new token.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Amount"
+                }
+              ]
+            },
+            "mint_to_address": {
+              "description": "The address of the account that the new tokens are minted to.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Address"
+                }
+              ]
+            },
+            "supply_cap": {
+              "description": "The supply cap of the new token, if any.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Amount"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "token_decimals": {
+              "description": "The number of decimal places this token's amounts will have.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "token_name": {
+              "description": "The name of the new token.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SizedSafeString_for_128"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Transfers a specified amount of tokens to the specified address.",
+      "type": "object",
+      "required": [
+        "transfer"
+      ],
+      "properties": {
+        "transfer": {
+          "type": "object",
+          "required": [
+            "coins",
+            "to"
+          ],
+          "properties": {
+            "coins": {
+              "description": "The amount of tokens to transfer.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Coins"
+                }
+              ]
+            },
+            "to": {
+              "description": "The address to which the tokens will be transferred.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Address"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Burns a specified amount of tokens.",
+      "type": "object",
+      "required": [
+        "burn"
+      ],
+      "properties": {
+        "burn": {
+          "type": "object",
+          "required": [
+            "coins"
+          ],
+          "properties": {
+            "coins": {
+              "description": "The amount of tokens to burn.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Coins"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Mints a specified amount of tokens.",
+      "type": "object",
+      "required": [
+        "mint"
+      ],
+      "properties": {
+        "mint": {
+          "type": "object",
+          "required": [
+            "coins",
+            "mint_to_address"
+          ],
+          "properties": {
+            "coins": {
+              "description": "The amount of tokens to mint.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Coins"
+                }
+              ]
+            },
+            "mint_to_address": {
+              "description": "Address to mint tokens to",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Address"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Freezes a token so that the supply is frozen",
+      "type": "object",
+      "required": [
+        "freeze"
+      ],
+      "properties": {
+        "freeze": {
+          "type": "object",
+          "required": [
+            "token_id"
+          ],
+          "properties": {
+            "token_id": {
+              "description": "Address of the token to be frozen",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/TokenId"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Updates the list of admins for a specified token.",
+      "type": "object",
+      "required": [
+        "update_admin"
+      ],
+      "properties": {
+        "update_admin": {
+          "type": "object",
+          "required": [
+            "token_id"
+          ],
+          "properties": {
+            "new_admin": {
+              "description": "The new admin address. If `None`, the current admin entry for the transaction sender will be removed.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Address"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "token_id": {
+              "description": "The ID of the token whose admin list is being updated.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/TokenId"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "definitions": {
+    "Address": {
+      "description": "Address",
+      "type": "string",
+      "pattern": "^sov1[a-zA-Z0-9]+$"
+    },
+    "Amount": {
+      "description": "A token amount.",
+      "type": "integer",
+      "format": "uint128",
+      "minimum": 0.0
+    },
+    "Coins": {
+      "description": "Structure that stores information specifying a given `amount` (type [`Amount`]) of coins stored at a `token_id` (type [`crate::TokenId`]).",
+      "type": "object",
+      "required": [
+        "amount",
+        "token_id"
+      ],
+      "properties": {
+        "amount": {
+          "description": "The number of tokens",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Amount"
+            }
+          ]
+        },
+        "token_id": {
+          "description": "The ID of the token",
+          "allOf": [
+            {
+              "$ref": "#/definitions/TokenId"
+            }
+          ]
+        }
+      }
+    },
+    "SafeVec_20_of_Address": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Address"
+      },
+      "maxItems": 20,
+      "minItems": 0
+    },
+    "SizedSafeString_for_128": {
+      "description": "A String wrapper which enforces certain constraints to ensure it is safely displayable as part of a transaction without confusing the user. Only printable ASCII is allowed, and the length is limited.\n\n`UniversalWallet` implementation is forbidden on `std::String` by default, to avoid the possibility of untrusted input supplying highly confusing text that tricks users into misunderstanding the transaction they are signing. `SafeString` enforces some constraints to mitigate this risk. If you need to encode a large data blob such as a hex string, use a `Vec<u8>` with the `[sov_wallet(display = \"hex\")]` attribute (or any of the other display styles). Avoid raw `String`s if possible. If an actual `String` is absolutely necessary, then a newtype wrapper can be used, on which `UniversalWallet` is derived manually.",
+      "type": "string"
+    },
+    "TokenId": {
+      "description": "A bech32 string",
+      "type": "string",
+      "pattern": "token_1[a-zA-Z0-9]+$"
+    }
+  }
+}

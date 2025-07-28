@@ -1,0 +1,18 @@
+[[profile.default.overrides]]
+filter = 'test(flaky_)'
+retries = { backoff = "fixed", count = 5, delay = "1s", jitter = true }
+slow-timeout = { period = "60s", terminate-after = 7 }                  # Terminate any test that takes longer than 7 minutes
+
+# Hyperlane e2e tests spawns docker with relayer, validators and evm
+# thus they need to fight for cpu. Giving them more space makes
+# them more stable and allows for overall faster execution.
+[[profile.default.overrides]]
+filter = 'package(sov-hyperlane-integration) & test(/with_agent::/)'
+priority = 90                                                        # try to run it first, so it doesn't add up at the end
+threads-required = 3
+
+[[profile.default.overrides]]
+filter = 'not test(heavy_)'
+
+[profile.ci]
+default-filter = 'all()'

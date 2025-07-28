@@ -1,0 +1,6 @@
+[
+	"examples/demo-rollup",
+	"examples/demo-rollup/rest-api-load-testing",
+	"examples/demo-rollup/sov-benchmarks",
+	"examples/demo-simple-stf"
+]

@@ -15,7 +15,7 @@ on:
 
 jobs:
   check-missing-dependency-versions:
-    runs-on: buildjet-4vcpu-ubuntu-2204
+    runs-on: nscloud-ubuntu-22.04-amd64-2x4
     steps:
       - uses: actions/checkout@v3
       - run: ./scripts/check_missing_dependency_versions.sh

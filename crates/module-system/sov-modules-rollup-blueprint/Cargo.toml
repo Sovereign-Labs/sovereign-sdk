@@ -1,0 +1,81 @@
+[package]
+name = "sov-modules-rollup-blueprint"
+description = "This crate contains abstractions needed to create a new rollup"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = "Sovereign Labs Community Software License"
+repository = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+publish = true
+
+[lints]
+workspace = true
+
+[dependencies]
+console-subscriber = { workspace = true, optional = true }
+derivative = { workspace = true, optional = true }
+sov-rollup-interface = { workspace = true, features = ["native"] }
+sov-stf-runner = { workspace = true, optional = true }
+sov-state = { workspace = true }
+sov-modules-api = { workspace = true, features = ["native"] }
+sov-cli = { workspace = true, optional = true }
+sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
+sov-db = { workspace = true, optional = true }
+sov-sequencer = { workspace = true, optional = true }
+sov-ledger-apis = { workspace = true, optional = true }
+sov-rollup-apis = { workspace = true, optional = true }
+sov-api-spec = { workspace = true, optional = true }
+
+anyhow = { workspace = true }
+futures = { workspace = true, optional = true }
+async-trait = { workspace = true, optional = true }
+borsh = { workspace = true }
+openapiv3 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true, optional = true }
+tokio = { workspace = true, features = ["sync", "signal"], optional = true }
+tracing = { workspace = true, optional = true }
+tracing-panic = { version = "0.1.2", optional = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"], optional = true }
+hex = { workspace = true, optional = true }
+opentelemetry = { version = "0.27.0", default-features = false, features = ["trace"], optional = true }
+opentelemetry_sdk = { version = "0.27.0", default-features = false, features = ["trace", "rt-tokio"], optional = true }
+opentelemetry-otlp = { version = "0.27.0", default-features = false, features = ["grpc-tonic", "trace", "logs"], optional = true }
+opentelemetry-appender-tracing = { version = "0.27", optional = true }
+opentelemetry-semantic-conventions = { version = "0.27.0", features = ["semconv_experimental"], optional = true }
+tracing-opentelemetry = { version = "0.28.0", default-features = false, features = ["tracing-log"], optional = true }
+
+[features]
+default = ["native"]
+native = [
+    "async-trait",
+    "futures",
+    "console-subscriber",
+    "derivative",
+    "serde_json",
+    "sov-cli",
+    "sov-db",
+    "sov-ledger-apis",
+    "sov-rollup-apis",
+    "sov-api-spec",
+    "sov-modules-api/native",
+    "sov-modules-stf-blueprint/native",
+    "sov-rollup-apis",
+    "sov-rollup-interface/native",
+    "sov-sequencer",
+    "sov-state/native",
+    "sov-stf-runner",
+    "tokio",
+    "tracing",
+    "tracing-panic",
+    "tracing-subscriber",
+    "hex",
+    "opentelemetry",
+    "opentelemetry_sdk",
+    "opentelemetry-otlp",
+    "opentelemetry-appender-tracing",
+    "opentelemetry-semantic-conventions",
+    "tracing-opentelemetry",
+]

@@ -1,0 +1,24 @@
+[package]
+name = "sov-eth-dev-signer"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+revm = { workspace = true, features = [
+    "std",
+    "secp256k1",
+] }
+reth-primitives = { workspace = true, features = ["secp256k1"] }
+reth-rpc-types = { workspace = true }
+secp256k1 = { workspace = true }

@@ -1,0 +1,65 @@
+[package]
+name = "sov-demo-prover-guest-mock-sp1"
+version = "0.3.0"
+license = "MIT OR Apache-2.0"
+edition = "2021"
+resolver = "2"
+
+[workspace]
+
+[dependencies]
+anyhow = { version = "1.0.95" }
+sp1-zkvm = { version = "5.0.8" }
+sov-mock-da = { path = "../../../../../crates/adapters/mock-da" }
+demo-stf = { path = "../../../stf" }
+sov-sp1-adapter = { path = "../../../../../crates/adapters/sp1" }
+sov-mock-zkvm = { path = "../../../../../crates/adapters/mock-zkvm" }
+sov-modules-api = { path = "../../../../../crates/module-system/sov-modules-api" }
+sov-address = { path = "../../../../../crates/module-system/sov-address" }
+sov-state = { path = "../../../../../crates/module-system/sov-state" }
+sov-modules-stf-blueprint = { path = "../../../../../crates/module-system/sov-modules-stf-blueprint" }
+sov-kernels = { path = "../../../../../crates/module-system/sov-kernels" }
+sov-metrics = { path = "../../../../../crates/full-node/sov-metrics", optional = true, features = [
+    "sp1",
+] }
+
+[patch.crates-io]
+# Commented out branches, but below there are exact revision, this helps with preventing accidental breakages
+#sha2-v0-9-9 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", package = "sha2", branch = "patch-v0.9.9" }
+sha2-v0-9-9 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", package = "sha2", rev = "32cd33136ff22cc977ea6a95dd5a322a1de7283c" }
+#sha2-v0-10-8 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", package = "sha2", branch = "patch-v0.10.8" }
+sha2-v0-10-8 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", package = "sha2", rev = "1f224388fdede7cef649bce0d63876d1a9e3f515" }
+#curve25519-dalek = { git = "https://github.com/sp1-patches/curve25519-dalek", branch = "patch-curve25519-v4.1.3" }
+curve25519-dalek = { git = "https://github.com/sp1-patches/curve25519-dalek", rev = "1d73fd95f1a76bee8f46643cf78bbccc1fb06ede" }
+# This is not needed, as it is patched via curve25519-dalek already
+#curve25519-dalek-ng = { git = "https://github.com/sp1-patches/curve25519-dalek-ng.git", branch = "patch-v4.1.1" }
+#ed25519-consensus = { git = "https://github.com/sp1-patches/ed25519-consensus", branch = "patch-v2.1.0" }
+ed25519-consensus = { git = "https://github.com/sp1-patches/ed25519-consensus", rev = "2b2c4b43344bc4daf5b1326f367f2d9d661eeabb" }
+#tiny-keccak = { git = "https://github.com/sp1-patches/tiny-keccak", branch = "patch-v2.0.2" }
+tiny-keccak = { git = "https://github.com/sp1-patches/tiny-keccak", rev = "bf0b28f63510a90c7b6c21ac6ff461c93ecd2331" }
+
+# Patches aren't useful right now
+# revm = { git = "https://github.com/sp1-patches/revm", branch = "patch-v5.0.0" }
+# reth-primitives = { git = "https://github.com/sp1-patches/reth", branch = "sp1-reth" }
+
+[profile.dev]
+opt-level = 3
+
+[profile.dev.build-override]
+opt-level = 3
+
+[profile.release]
+debug = 1
+lto = true
+
+[profile.release.build-override]
+opt-level = 3
+
+[features]
+default = []
+bench = [
+    "sov-modules-api/bench",
+    "sov-state/bench",
+    "sov-modules-stf-blueprint/bench",
+    "sov-metrics",
+]

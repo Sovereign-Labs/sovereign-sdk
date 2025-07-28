@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AccountConfig",
+  "description": "Initial configuration for sov-accounts module.",
+  "type": "object",
+  "required": [
+    "accounts"
+  ],
+  "properties": {
+    "accounts": {
+      "description": "Accounts to initialize the rollup.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/AccountData_for_Address"
+      }
+    }
+  },
+  "definitions": {
+    "AccountData_for_Address": {
+      "description": "Account data for the genesis.",
+      "type": "object",
+      "required": [
+        "address",
+        "credential_id"
+      ],
+      "properties": {
+        "address": {
+          "description": "Address of the account.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Address"
+            }
+          ]
+        },
+        "credential_id": {
+          "description": "Credential ID of the account.",
+          "type": "string"
+        }
+      }
+    },
+    "Address": {
+      "description": "Address",
+      "type": "string",
+      "pattern": "^sov1[a-zA-Z0-9]+$"
+    }
+  }
+}

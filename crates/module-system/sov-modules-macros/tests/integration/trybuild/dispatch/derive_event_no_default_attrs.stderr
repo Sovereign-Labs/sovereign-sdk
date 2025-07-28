@@ -1,0 +1,198 @@
+error[E0412]: cannot find type `RuntimeEventDiscriminants` in this scope
+ --> tests/integration/trybuild/dispatch/derive_event_no_default_attrs.rs:6:42
+  |
+6 | #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
+  |                                          ^^^^^ not found in this scope
+  |
+  = note: this error originates in the derive macro `Event` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `RuntimeEvent<S>: AsRef<str>` is not satisfied
+ --> tests/integration/trybuild/dispatch/derive_event_no_default_attrs.rs:6:42
+  |
+6 | #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
+  |                                          ^^^^^ the trait `AsRef<str>` is not implemented for `RuntimeEvent<S>`
+  |
+note: required by a bound in `NestedEnumUtils`
+ --> $WORKSPACE/crates/module-system/sov-modules-api/src/module/dispatch.rs
+  |
+  | pub trait NestedEnumUtils: VariantNames + AsRef<str> {
+  |                                           ^^^^^^^^^^ required by this bound in `NestedEnumUtils`
+  = note: this error originates in the derive macro `Event` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `RuntimeEvent<S>: VariantNames` is not satisfied
+ --> tests/integration/trybuild/dispatch/derive_event_no_default_attrs.rs:6:42
+  |
+6 | #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
+  |                                          ^^^^^ the trait `VariantNames` is not implemented for `RuntimeEvent<S>`
+  |
+  = help: the following other types implement trait `VariantNames`:
+            RuntimeCallDiscriminants
+            __generated_dispatch_call_impl::RuntimeCall<S>
+            ethers_core::types::Chain
+            ethers_core::types::Opcode
+            sov_test_utils::runtime::TestOptimisticRuntimeCall<S>
+            sov_test_utils::runtime::TestOptimisticRuntimeCallDiscriminants
+            sov_test_utils::runtime::TestOptimisticRuntimeEvent<S>
+            sov_test_utils::runtime::TestOptimisticRuntimeEventDiscriminants
+note: required by a bound in `NestedEnumUtils`
+ --> $WORKSPACE/crates/module-system/sov-modules-api/src/module/dispatch.rs
+  |
+  | pub trait NestedEnumUtils: VariantNames + AsRef<str> {
+  |                            ^^^^^^^^^^^^ required by this bound in `NestedEnumUtils`
+  = note: this error originates in the derive macro `Event` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: can't compare `RuntimeEvent<S>` with `RuntimeEvent<S>`
+ --> tests/integration/trybuild/dispatch/derive_event_no_default_attrs.rs:6:42
+  |
+6 | #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
+  |                                          ^^^^^ no implementation for `RuntimeEvent<S> == RuntimeEvent<S>`
+  |
+  = help: the trait `PartialEq` is not implemented for `RuntimeEvent<S>`
+note: required by a bound in `sov_modules_api::RuntimeEventProcessor::RuntimeEvent`
+ --> $WORKSPACE/crates/module-system/sov-modules-api/src/module/event.rs
+  |
+  |     type RuntimeEvent: borsh::BorshDeserialize
+  |          ------------ required by a bound in this associated type
+...
+  |         + PartialEq
+  |           ^^^^^^^^^ required by this bound in `RuntimeEventProcessor::RuntimeEvent`
+  = note: this error originates in the derive macro `Event` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `RuntimeEvent<S>: Clone` is not satisfied
+ --> tests/integration/trybuild/dispatch/derive_event_no_default_attrs.rs:6:42
+  |
+6 | #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
+  |                                          ^^^^^ the trait `Clone` is not implemented for `RuntimeEvent<S>`
+  |
+note: required by a bound in `sov_modules_api::RuntimeEventProcessor::RuntimeEvent`
+ --> $WORKSPACE/crates/module-system/sov-modules-api/src/module/event.rs
+  |
+  |     type RuntimeEvent: borsh::BorshDeserialize
+  |          ------------ required by a bound in this associated type
+...
+  |         + Clone
+  |           ^^^^^ required by this bound in `RuntimeEventProcessor::RuntimeEvent`
+  = note: this error originates in the derive macro `Event` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `RuntimeEvent<S>` doesn't implement `std::fmt::Debug`
+ --> tests/integration/trybuild/dispatch/derive_event_no_default_attrs.rs:6:42
+  |
+6 | #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
+  |                                          ^^^^^ `RuntimeEvent<S>` cannot be formatted using `{:?}`
+  |
+  = help: the trait `std::fmt::Debug` is not implemented for `RuntimeEvent<S>`
+  = note: add `#[derive(Debug)]` to `RuntimeEvent<S>` or manually `impl std::fmt::Debug for RuntimeEvent<S>`
+note: required by a bound in `sov_modules_api::RuntimeEventProcessor::RuntimeEvent`
+ --> $WORKSPACE/crates/module-system/sov-modules-api/src/module/event.rs
+  |
+  |     type RuntimeEvent: borsh::BorshDeserialize
+  |          ------------ required by a bound in this associated type
+...
+  |         + core::fmt::Debug
+  |           ^^^^^^^^^^^^^^^^ required by this bound in `RuntimeEventProcessor::RuntimeEvent`
+  = note: this error originates in the derive macro `Event` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `for<'de> RuntimeEvent<S>: Deserialize<'de>` is not satisfied
+ --> tests/integration/trybuild/dispatch/derive_event_no_default_attrs.rs:6:42
+  |
+6 | #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
+  |                                          ^^^^^ the trait `for<'de> Deserialize<'de>` is not implemented for `RuntimeEvent<S>`
+  |
+  = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `RuntimeEvent<S>` type
+  = note: for types from other crates check whether the crate offers a `serde` feature flag
+  = help: the following other types implement trait `Deserialize<'de>`:
+            `&'a JsonRawValue` implements `Deserialize<'de>`
+            `&'a [u8]` implements `Deserialize<'de>`
+            `&'a std::path::Path` implements `Deserialize<'de>`
+            `&'a str` implements `Deserialize<'de>`
+            `()` implements `Deserialize<'de>`
+            `(T,)` implements `Deserialize<'de>`
+            `(T0, T1)` implements `Deserialize<'de>`
+            `(T0, T1, T2)` implements `Deserialize<'de>`
+          and $N others
+  = note: required for `<Runtime<S> as RuntimeEventProcessor>::RuntimeEvent` to implement `DeserializeOwned`
+note: required by a bound in `sov_modules_api::RuntimeEventProcessor::RuntimeEvent`
+ --> $WORKSPACE/crates/module-system/sov-modules-api/src/module/event.rs
+  |
+  |     type RuntimeEvent: borsh::BorshDeserialize
+  |          ------------ required by a bound in this associated type
+...
+  |         + serde::de::DeserializeOwned
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `RuntimeEventProcessor::RuntimeEvent`
+  = note: this error originates in the derive macro `Event` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `RuntimeEvent<S>: Serialize` is not satisfied
+ --> tests/integration/trybuild/dispatch/derive_event_no_default_attrs.rs:6:42
+  |
+6 | #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
+  |                                          ^^^^^ the trait `Serialize` is not implemented for `RuntimeEvent<S>`
+  |
+  = note: for local types consider adding `#[derive(serde::Serialize)]` to your `RuntimeEvent<S>` type
+  = note: for types from other crates check whether the crate offers a `serde` feature flag
+  = help: the following other types implement trait `Serialize`:
+            &'a T
+            &'a mut T
+            ()
+            (T,)
+            (T0, T1)
+            (T0, T1, T2)
+            (T0, T1, T2, T3)
+            (T0, T1, T2, T3, T4)
+          and $N others
+note: required by a bound in `sov_modules_api::RuntimeEventProcessor::RuntimeEvent`
+ --> $WORKSPACE/crates/module-system/sov-modules-api/src/module/event.rs
+  |
+  |     type RuntimeEvent: borsh::BorshDeserialize
+  |          ------------ required by a bound in this associated type
+  |         + borsh::BorshSerialize
+  |         + serde::Serialize
+  |           ^^^^^^^^^^^^^^^^ required by this bound in `RuntimeEventProcessor::RuntimeEvent`
+  = note: this error originates in the derive macro `Event` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `RuntimeEvent<S>: BorshSerialize` is not satisfied
+ --> tests/integration/trybuild/dispatch/derive_event_no_default_attrs.rs:6:42
+  |
+6 | #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
+  |                                          ^^^^^ the trait `BorshSerialize` is not implemented for `RuntimeEvent<S>`
+  |
+  = help: the following other types implement trait `BorshSerialize`:
+            &T
+            ()
+            (T0, T1)
+            (T0, T1, T2)
+            (T0, T1, T2, T3)
+            (T0, T1, T2, T3, T4)
+            (T0, T1, T2, T3, T4, T5)
+            (T0, T1, T2, T3, T4, T5, T6)
+          and $N others
+note: required by a bound in `sov_modules_api::RuntimeEventProcessor::RuntimeEvent`
+ --> $WORKSPACE/crates/module-system/sov-modules-api/src/module/event.rs
+  |
+  |     type RuntimeEvent: borsh::BorshDeserialize
+  |          ------------ required by a bound in this associated type
+  |         + borsh::BorshSerialize
+  |           ^^^^^^^^^^^^^^^^^^^^^ required by this bound in `RuntimeEventProcessor::RuntimeEvent`
+  = note: this error originates in the derive macro `Event` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `RuntimeEvent<S>: BorshDeserialize` is not satisfied
+ --> tests/integration/trybuild/dispatch/derive_event_no_default_attrs.rs:6:42
+  |
+6 | #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
+  |                                          ^^^^^ the trait `BorshDeserialize` is not implemented for `RuntimeEvent<S>`
+  |
+  = help: the following other types implement trait `BorshDeserialize`:
+            ()
+            (T0, T1)
+            (T0, T1, T2)
+            (T0, T1, T2, T3)
+            (T0, T1, T2, T3, T4)
+            (T0, T1, T2, T3, T4, T5)
+            (T0, T1, T2, T3, T4, T5, T6)
+            (T0, T1, T2, T3, T4, T5, T6, T7)
+          and $N others
+note: required by a bound in `sov_modules_api::RuntimeEventProcessor::RuntimeEvent`
+ --> $WORKSPACE/crates/module-system/sov-modules-api/src/module/event.rs
+  |
+  |     type RuntimeEvent: borsh::BorshDeserialize
+  |                        ^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `RuntimeEventProcessor::RuntimeEvent`
+  = note: this error originates in the derive macro `Event` (in Nightly builds, run with -Z macro-backtrace for more info)

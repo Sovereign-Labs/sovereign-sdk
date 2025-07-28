@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ProverIncentivesConfig",
+  "description": "Configuration of the prover incentives module. Specifies the minimum bond, the commitment to the allowed verifier method and a set of initial provers with their bonding amount.",
+  "type": "object",
+  "required": [
+    "initial_provers",
+    "minimum_bond",
+    "proving_penalty"
+  ],
+  "properties": {
+    "initial_provers": {
+      "description": "A list of initial provers and their bonded amount.",
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": [
+          {
+            "$ref": "#/definitions/Address"
+          },
+          {
+            "$ref": "#/definitions/Amount"
+          }
+        ],
+        "maxItems": 2,
+        "minItems": 2
+      }
+    },
+    "minimum_bond": {
+      "description": "The minimum bond for a prover.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/GasUnit(2)"
+        }
+      ]
+    },
+    "proving_penalty": {
+      "description": "A penalty for provers who submit a proof for transitions that were already proven",
+      "allOf": [
+        {
+          "$ref": "#/definitions/GasUnit(2)"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "Address": {
+      "description": "Address",
+      "type": "string",
+      "pattern": "^sov1[a-zA-Z0-9]+$"
+    },
+    "Amount": {
+      "description": "A token amount.",
+      "type": "integer",
+      "format": "uint128",
+      "minimum": 0.0
+    },
+    "GasUnit(2)": {
+      "description": "GasUnit is an array of size 2",
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "maxItems": 2,
+      "minItems": 2
+    }
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CallMessage",
+  "description": "This enumeration represents the available call messages for interacting with the `sov-sequencer-registry` module.",
+  "oneOf": [
+    {
+      "description": "Add a new sequencer to the sequencer registry.",
+      "type": "object",
+      "required": [
+        "register"
+      ],
+      "properties": {
+        "register": {
+          "type": "object",
+          "required": [
+            "amount",
+            "da_address"
+          ],
+          "properties": {
+            "amount": {
+              "description": "The initial balance of the sequencer.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Amount"
+                }
+              ]
+            },
+            "da_address": {
+              "description": "The Da address of the sequencer you're registering.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/MockAddress"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Increases the balance of the sequencer, transferring the funds from the sequencer account to the rollup.",
+      "type": "object",
+      "required": [
+        "deposit"
+      ],
+      "properties": {
+        "deposit": {
+          "type": "object",
+          "required": [
+            "amount",
+            "da_address"
+          ],
+          "properties": {
+            "amount": {
+              "description": "The amount to increase.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Amount"
+                }
+              ]
+            },
+            "da_address": {
+              "description": "The DA address of the sequencer.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/MockAddress"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Initiate a withdrawal of a sequencer's balance.",
+      "type": "object",
+      "required": [
+        "initiate_withdrawal"
+      ],
+      "properties": {
+        "initiate_withdrawal": {
+          "type": "object",
+          "required": [
+            "da_address"
+          ],
+          "properties": {
+            "da_address": {
+              "description": "The DA address of the sequencer you're removing.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/MockAddress"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Withdraw a sequencer's balance after waiting for the withdrawal period.",
+      "type": "object",
+      "required": [
+        "withdraw"
+      ],
+      "properties": {
+        "withdraw": {
+          "type": "object",
+          "required": [
+            "da_address"
+          ],
+          "properties": {
+            "da_address": {
+              "description": "The DA address of the sequencer you're removing.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/MockAddress"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "definitions": {
+    "Amount": {
+      "description": "A token amount.",
+      "type": "integer",
+      "format": "uint128",
+      "minimum": 0.0
+    },
+    "MockAddress": {
+      "description": "Mock address; 32 bytes in hex-encoded format",
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+    "Servers": {
+        "1": {
+            "Name": "Sequencer",
+            "Group": "Servers",
+            "Host": "postgres",
+            "Port": 5432,
+            "MaintenanceDB": "sov",
+            "Username": "sov",
+            "Password": "admin123",
+            "SavePassword": true,
+            "SSLMode": "prefer"
+        }
+    }
+}

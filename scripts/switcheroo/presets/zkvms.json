@@ -1,0 +1,4 @@
+[
+	"crates/adapters/risc0",
+	"crates/adapters/sp1"
+]

@@ -1,0 +1,1123 @@
+# ATTENTION TO MAINTAINERS OF THIS FILE
+#
+# We're using progenitor for generating a rust client to test our spec.
+# There is currently a bug where return types used for 2xx responses and 4xx responses CANNOT
+# be different. See open issue: https://github.com/oxidecomputer/progenitor/issues/928
+#
+# Because of this `data` & `errors` fields MUST be optional for types used by
+# progenitor when the endpoint can return an error and a success.
+openapi: 3.0.2
+info:
+  title: Sovereign Full Node API
+  version: 0.1.0
+  description: |-
+    This is the REST API for the Sovereign SDK full node.
+  contact:
+    name: Sovereign Labs
+    url: https://github.com/Sovereign-Labs/sovereign-sdk-wip
+    email: info@sovereign.xyz
+  license:
+    name: Apache-2.0
+    url: https://github.com/Sovereign-Labs/sovereign-sdk-wip/blob/nightly/LICENSE.md
+servers:
+  - url: http://localhost:12346
+    description: Localhost
+security: []
+paths:
+  /ledger/slots/latest:
+    get:
+      tags:
+        - Ledger
+      summary: Get the latest slot.
+      operationId: get_latest_slot
+      parameters:
+        - $ref: "#/components/parameters/includeChildren"
+      responses:
+        "200":
+          $ref: "#/components/responses/Slot"
+  /ledger/slots/finalized:
+    get:
+      tags:
+        - Ledger
+      summary: Get the latest finalized slot.
+      operationId: get_finalized_slot
+      parameters:
+        - $ref: "#/components/parameters/includeChildren"
+      responses:
+        "200":
+          $ref: "#/components/responses/Slot"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /ledger/slots/{slotId}:
+    get:
+      tags:
+        - Ledger
+      summary: Get a slot by ID.
+      operationId: get_slot_by_id
+      parameters:
+        - $ref: "#/components/parameters/slotId"
+        - $ref: "#/components/parameters/includeChildren"
+      responses:
+        "200":
+          $ref: "#/components/responses/Slot"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /ledger/slots/{slotId}/events:
+    get:
+      tags:
+        - Ledger
+      summary: Get all the events for a slot, optionally filtered by key prefix.
+      operationId: get_slot_filtered_events
+      parameters:
+        - $ref: "#/components/parameters/slotId"
+        - name: prefix
+          in: query
+          description: The key prefix to filter by.
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/LedgerEventResponse"
+  /ledger/slots/{slotId}/batches/{batchOffset}:
+    get:
+      tags:
+        - Ledger
+      summary: Get a batch by slot ID and batch offset.
+      operationId: get_batch_by_slot_id_and_offset
+      parameters:
+        - $ref: "#/components/parameters/slotId"
+        - $ref: "#/components/parameters/batchOffset"
+        - $ref: "#/components/parameters/includeChildren"
+      responses:
+        "200":
+          $ref: "#/components/responses/LedgerBatch"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /ledger/slots/{slotId}/batches/{batchOffset}/txs/{txOffset}:
+    get:
+      tags:
+        - Ledger
+      summary: Get a transaction by slot ID, batch offset, and transaction offset.
+      operationId: get_tx_by_slot_id_and_offset
+      parameters:
+        - $ref: "#/components/parameters/slotId"
+        - $ref: "#/components/parameters/batchOffset"
+        - $ref: "#/components/parameters/txOffset"
+        - $ref: "#/components/parameters/includeChildren"
+      responses:
+        "200":
+          $ref: "#/components/responses/LedgerTx"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /ledger/slots/{slotId}/batches/{batchOffset}/txs/{txOffset}/events/{eventOffset}:
+    get:
+      tags:
+        - Ledger
+      summary: >-
+        Get an event by slot ID, batch offset, transaction offset, and event offset.
+      operationId: get_event_by_slot_id_and_offset
+      parameters:
+        - $ref: "#/components/parameters/slotId"
+        - $ref: "#/components/parameters/batchOffset"
+        - $ref: "#/components/parameters/txOffset"
+        - $ref: "#/components/parameters/eventOffset"
+      responses:
+        "200":
+          $ref: "#/components/responses/LedgerEvent"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /ledger/batches/{batchId}:
+    get:
+      tags:
+        - Ledger
+      summary: Get a batch by ID.
+      operationId: get_batch_by_id
+      parameters:
+        - $ref: "#/components/parameters/batchId"
+        - $ref: "#/components/parameters/includeChildren"
+      responses:
+        "200":
+          $ref: "#/components/responses/LedgerBatch"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /ledger/batches/{batchId}/txs/{txOffset}:
+    get:
+      tags:
+        - Ledger
+      summary: Get a transaction by batch ID and transaction offset.
+      operationId: get_tx_by_batch_id_and_offset
+      parameters:
+        - $ref: "#/components/parameters/batchId"
+        - $ref: "#/components/parameters/txOffset"
+        - $ref: "#/components/parameters/includeChildren"
+      responses:
+        "200":
+          $ref: "#/components/responses/LedgerTx"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /ledger/batches/{batchId}/txs/{txOffset}/events/{eventOffset}:
+    get:
+      tags:
+        - Ledger
+      summary: Get an event by batch ID, transaction offset, and event offset.
+      operationId: get_event_by_batch_id_and_offset
+      parameters:
+        - $ref: "#/components/parameters/batchId"
+        - $ref: "#/components/parameters/txOffset"
+        - $ref: "#/components/parameters/eventOffset"
+      responses:
+        "200":
+          $ref: "#/components/responses/LedgerEvent"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /ledger/txs/{txId}:
+    get:
+      tags:
+        - Ledger
+      summary: Get a transaction by ID.
+      operationId: get_tx_by_id
+      parameters:
+        - $ref: "#/components/parameters/txId"
+        - $ref: "#/components/parameters/includeChildren"
+      responses:
+        "200":
+          $ref: "#/components/responses/LedgerTx"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /ledger/txs/{txId}/events/{eventOffset}:
+    get:
+      tags:
+        - Ledger
+      summary: Get an event by transaction ID and event offset.
+      operationId: get_event_by_tx_id_and_offset
+      parameters:
+        - $ref: "#/components/parameters/txId"
+        - $ref: "#/components/parameters/eventOffset"
+      responses:
+        "200":
+          $ref: "#/components/responses/LedgerEvent"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /ledger/events:
+    get:
+      tags:
+        - Ledger
+      summary: Lists events.
+      operationId: list_events
+      parameters:
+        - $ref: "#/components/parameters/pageType"
+        - $ref: "#/components/parameters/pageSize"
+        - $ref: "#/components/parameters/pageCursor"
+      responses:
+        "200":
+          description: "Returns a list of events"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LedgerEvent"
+        "400":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /ledger/events/latest:
+    get:
+      tags:
+        - Ledger
+      summary: Gets the latest event.
+      operationId: get_latest_event
+      responses:
+        "200":
+          $ref: "#/components/responses/LedgerEvent"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /ledger/events/{eventId}:
+    get:
+      tags:
+        - Ledger
+      summary: Get an event by ID.
+      operationId: get_event_by_id
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      responses:
+        "200":
+          $ref: "#/components/responses/LedgerEvent"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /ledger/aggregated-proofs/latest:
+    get:
+      tags:
+        - Ledger
+      summary: Get the latest aggregated proof.
+      operationId: get_latest_aggregated_proof
+      description: |
+        Get the latest aggregated proof. You can also subscribe to the latest
+        aggregated proof by using the `/aggregated-proofs/latest/ws` endpoint.
+      responses:
+        "200":
+          $ref: "#/components/responses/AggregatedProof"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /sequencer/txs:
+    post:
+      summary: Submit a transaction to the rollup
+      description: Submit a transaction to the rollup
+      operationId: acceptTx
+      tags:
+        - Sequencer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                body:
+                  type: string
+                  format: base64
+              required:
+                - body
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TxInfoWithConfirmation"
+        "400":
+          "$ref": "#/components/responses/ApiErrorResponse"
+        "403":
+          "$ref": "#/components/responses/ApiErrorResponse"
+        "500":
+          "$ref": "#/components/responses/ApiErrorResponse"
+        "503":
+          "$ref": "#/components/responses/ApiErrorResponse"
+  /sequencer/txs/{txHash}/status:
+    get:
+      summary: Get a transaction status by hash
+      operationId: get_tx_status
+      tags:
+        - Sequencer
+      parameters:
+        - $ref: "#/components/parameters/txHash"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TxInfo"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /sequencer/txs/{txHash}:
+    get:
+      summary: Get a transaction by hash
+      operationId: sequencer_get_tx
+      tags:
+        - Sequencer
+      parameters:
+        - $ref: "#/components/parameters/txHash"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiAcceptedTx"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /sequencer/unstable/events/{eventOffset}:
+    get:
+      summary: |
+        Get a soft-confirmed event by event number.
+
+        Note that this endpoint is unstable and it may not always
+        work as expected, sometimes an event might be missing
+        that was already soft-confirmed.
+      operationId: sequencer_get_event
+      tags:
+        - Sequencer
+      parameters:
+        - $ref: "#/components/parameters/eventOffset"
+      responses:
+        "200":
+          $ref: "#/components/responses/LedgerEvent"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /sequencer/unstable/events:
+    get:
+      summary: |
+        Get a list of soft-confirmed events.
+
+        Note that this endpoint is unstable and it may not always
+        work as expected, sometimes an event might be missing
+        that was already soft-confirmed.
+      operationId: sequencer_list_events
+      parameters:
+        - $ref: "#/components/parameters/pageType"
+        - $ref: "#/components/parameters/pageSize"
+        - $ref: "#/components/parameters/pageCursor"
+      tags:
+        - Sequencer
+      responses:
+        "200":
+          $ref: "#/components/responses/PaginatedLedgerEvents"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /rollup/base-fee-per-gas/latest:
+    get:
+      summary: Retrieve the latest base fee per gas
+      operationId: get_latest_base_fee_per_gas
+      tags:
+        - Rollup
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BaseFeePerGas"
+  /rollup/schema:
+    get:
+      summary: Get schema
+      description: >
+        Returns the current schema used by the rollup.
+
+        This information can be used by web3 SDK and external tools as a description to serialize objects
+        as well as determine if the version of the rollup has changed.
+      operationId: rollup_schema
+      tags:
+        - Rollup
+      responses:
+        "200":
+          $ref: "#/components/responses/Schema"
+        "400":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /rollup/constants:
+    get:
+      summary: Get constants
+      description: >
+        Returns the a subset of the constants used by the rollup.
+
+        This information can be useful for the web3 SDK and external tools.
+      operationId: rollup_constants
+      tags:
+        - Rollup
+      responses:
+        "200":
+          $ref: "#/components/responses/Constants"
+        "400":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /rollup/addresses/{address}/dedup:
+    get:
+      summary: Deduplicate an address
+      description: >
+        This endpoint retireves deduplication information needed for building transactions.
+
+        The exact shape of the data in the response depends on the implementation of the rollup.
+
+      operationId: address_dedup
+      parameters:
+        - in: path
+          name: address
+          required: true
+          schema:
+            type: string
+          description: The address to retrieve deduplication information about
+      tags:
+        - Rollup
+      responses:
+        "200":
+          $ref: "#/components/responses/Dedup"
+        "400":
+          $ref: "#/components/responses/ApiErrorResponse"
+  /rollup/simulate:
+    post:
+      summary: Simulate transaction execution
+      operationId: simulate
+      tags:
+        - Rollup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                body:
+                  $ref: "#/components/schemas/PartialTransaction"
+              required:
+                - body
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimulateExecutionResponse"
+  /rollup/sync-status:
+    get:
+      summary: Get the current sync status of the rollup
+      operationId: get_sync_status
+      tags:
+        - Rollup
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncStatus"
+components:
+  parameters:
+    pageType:
+      name: page
+      in: query
+      description: Pagination type (first, next, or last)
+      schema:
+        type: string
+        enum: [first, next, last]
+        default: first
+    pageSize:
+      name: page[size]
+      in: query
+      description: Number of items per page
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        default: 25
+    pageCursor:
+      name: page[cursor]
+      in: query
+      description: Cursor for next page (required when page=next)
+      schema:
+        type: string
+    slotId:
+      name: slotId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/IntOrHash"
+    batchId:
+      name: batchId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/IntOrHash"
+    txId:
+      name: txId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/IntOrHash"
+    eventId:
+      name: eventId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: uint64
+    batchOffset:
+      name: batchOffset
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: uint64
+    txOffset:
+      name: txOffset
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: uint64
+    eventOffset:
+      name: eventOffset
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: uint64
+    includeChildren:
+      name: children
+      in: query
+      description: |
+        The query mode to use when querying the ledger. If not specified, the
+        default is `Compact`. If this value is "1" then `Full` mode is used.
+
+        `Compact` will return the parent struct but no details about its children.
+        For example, a `Compact` "get_slots" response would simply state the range of batch
+        numbers which occurred in the slot, but not the hashes of the batches themselves.
+
+        `Full` mode returns the parent struct and all its children, recursively fetching its children.
+        For example, a `Full` "get_batch" response would include the `Full` details of all the
+        transactions in the batch, and those would in turn return the event bodies which had occurred in those transactions.
+      required: false
+      schema:
+        type: string
+        default: "0"
+        enum:
+          - "0"
+          - "1"
+    txHash:
+      name: txHash
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/TxHash"
+  responses:
+    AggregatedProof:
+      description: Success
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AggregatedProof"
+    Slot:
+      description: Success
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Slot"
+    LedgerBatch:
+      description: Success
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LedgerBatch"
+    LedgerTx:
+      description: Success
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LedgerTx"
+    LedgerEvent:
+      description: Success
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LedgerEvent"
+    LedgerEventResponse:
+      description: Success
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/LedgerEvent"
+    PaginatedLedgerEvents:
+      description: Success
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              next_cursor:
+                type: string
+              items:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LedgerEvent"
+            required:
+              - items
+    Dedup:
+      description: Successfully calculated dedup details for the provided address.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AnyJsonValue"
+    Schema:
+      description: Schema of the rollup.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AnyJsonValue"
+    Constants:
+      description: Constants of the rollup.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Constants"
+    ApiErrorResponse:
+      description: The request sent was invalid.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+  schemas:
+    RewardedAddresses:
+      type: array
+      items:
+        type: string
+        format: byte
+    IntOrHash:
+      oneOf:
+        - type: integer
+          title: Integer
+          description: Number
+          format: uint64
+        - $ref: "#/components/schemas/Hash"
+    CodeCommitment:
+      type: string
+      format: byte
+    AggregatedProof:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - aggregatedProof
+        proof:
+          type: string
+          format: byte
+          description: Serialized aggregated proof, in Base64.
+      required:
+        - type
+        - proof
+    Uint64Range:
+      type: object
+      properties:
+        start:
+          type: integer
+          format: uint64
+        end:
+          type: integer
+          format: uint64
+      required:
+        - start
+        - end
+    Slot:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - slot
+        number:
+          type: integer
+          format: uint64
+        hash:
+          $ref: "#/components/schemas/Hash"
+        state_root:
+          $ref: "#/components/schemas/HexString"
+        batch_range:
+          $ref: "#/components/schemas/Uint64Range"
+        batches:
+          type: array
+          items:
+            $ref: "#/components/schemas/LedgerBatch"
+        timestamp:
+          $ref: "#/components/schemas/Time"
+        finality_status:
+          type: string
+          enum:
+            - pending
+            - finalized
+      required:
+        - type
+        - number
+        - hash
+        - state_root
+        - batch_range
+        - finality_status
+        - timestamp
+    LedgerBatch:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - batch
+        number:
+          type: integer
+          format: uint64
+        hash:
+          $ref: "#/components/schemas/Hash"
+        tx_range:
+          $ref: "#/components/schemas/Uint64Range"
+        receipt:
+          $ref: "#/components/schemas/AnyJsonValue"
+        txs:
+          type: array
+          items:
+            $ref: "#/components/schemas/LedgerTx"
+        slot_number:
+          type: integer
+          format: uint64
+      required:
+        - type
+        - number
+        - hash
+        - tx_range
+        - receipt
+        - slot_number
+    TxReceipt:
+      type: object
+      properties:
+        result:
+          type: string
+          enum:
+            - successful
+            - reverted
+            - skipped
+      required:
+        - result
+    LedgerTx:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - tx
+        hash:
+          $ref: "#/components/schemas/Hash"
+        number:
+          type: integer
+          format: uint64
+        event_range:
+          $ref: "#/components/schemas/Uint64Range"
+        body:
+          type: string
+          format: byte
+        receipt:
+          $ref: "#/components/schemas/TxReceipt"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/LedgerEvent"
+        batch_number:
+          type: integer
+          format: uint64
+      required:
+        - type
+        - hash
+        - number
+        - event_range
+        - body
+        - receipt
+        - batch_number
+    LedgerEvent:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - event
+        number:
+          type: integer
+          format: uint64
+        key:
+          type: string
+        value:
+          type: object
+          additionalProperties: true
+        module:
+          $ref: "#/components/schemas/ModuleRef"
+        tx_hash:
+          $ref: "#/components/schemas/Hash"
+      required:
+        - type
+        - number
+        - key
+        - value
+        - module
+    ModuleRef:
+      type: object
+      properties:
+        name:
+          type: string
+      required:
+        - name
+    Constants:
+      type: object
+      properties:
+        chain_name:
+          type: string
+        chain_id:
+          type: integer
+        hyperlane_domain:
+          type: integer
+      required:
+        - chain_name
+        - chain_id
+        - hyperlane_domain
+    Hash:
+      type: string
+      title: Hash
+      pattern: ^0x[a-fA-F0-9]{64}$
+      description: Hash
+    HexString:
+      type: string
+      pattern: ^0x[a-fA-F0-9]+$
+      description: Hex-encoded byte sequence
+      example: "0x71c7656ec7ab88b098defb751b7401b5f6d8976f"
+    TxHash:
+      type: string
+      pattern: ^0x[a-fA-F0-9]+$
+      description: The hash of a transaction
+    TxInfo:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/TxHash"
+        status:
+          $ref: "#/components/schemas/TxStatus"
+      required:
+        - id
+        - status
+    TxInfoWithConfirmation:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/TxHash"
+        status:
+          $ref: "#/components/schemas/TxStatus"
+        tx_number:
+          type: integer
+          format: uint64
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/LedgerEvent"
+        receipt:
+          $ref: "#/components/schemas/TxReceipt"
+      required:
+        - id
+        - status
+    ApiAcceptedTx:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/TxHash"
+        tx_number:
+          type: integer
+          format: uint64
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/LedgerEvent"
+        receipt:
+          $ref: "#/components/schemas/TxReceipt"
+      required:
+        - id
+        - tx_number
+        - events
+        - receipt
+    TxStatus:
+      type: string
+      enum:
+        - unknown
+        - dropped
+        - submitted
+        - published
+        - processed
+        - finalized
+    BaseFeePerGas:
+      type: object
+      properties:
+        base_fee_per_gas:
+          $ref: "#/components/schemas/GasPrice"
+      required:
+        - base_fee_per_gas
+    GasPrice:
+      description: GasPrice is an array of u64
+      type: array
+      items:
+        type: string
+        description: A decimal string representation of a u128 value
+        pattern: ^\d+$
+        example: "340282366920938463463374607431768211455"
+    GasUnit:
+      description: GasUnit is an array of u64
+      type: array
+      items:
+        type: integer
+        format: uint64
+    PartialTransaction:
+      type: object
+      properties:
+        sender_pub_key:
+          type: string
+          format: byte
+        generation:
+          type: integer
+          format: uint64
+        gas_price:
+          $ref: "#/components/schemas/GasPrice"
+        sequencer:
+          type: string
+          format: byte
+        sequencer_rollup_address:
+          type: string
+          format: byte
+        encoded_call_message:
+          type: string
+          format: byte
+        details:
+          $ref: "#/components/schemas/TxDetails"
+      required:
+        - sender_pub_key
+        - generation
+        - encoded_call_message
+        - details
+    TxDetails:
+      type: object
+      properties:
+        max_priority_fee_bips:
+          type: integer
+          format: uint64
+        max_fee:
+          type: string
+          description: A decimal string representation of a u128 value
+          pattern: ^\d+$
+          example: "340282366920938463463374607431768211455"
+        gas_limit:
+          $ref: "#/components/schemas/GasUnit"
+        chain_id:
+          type: integer
+          format: uint64
+      required:
+        - max_priority_fee_bips
+        - max_fee
+        - chain_id
+    SimulateExecutionResponse:
+      type: object
+      properties:
+        apply_tx_result:
+          $ref: "#/components/schemas/ApplyTxResult"
+      required:
+        - apply_tx_result
+    ApplyTxResult:
+      type: object
+      properties:
+        receipt:
+          $ref: "#/components/schemas/TxReceiptRollup"
+        transaction_consumption:
+          $ref: "#/components/schemas/TransactionConsumption"
+      required:
+        - receipt
+        - transaction_consumption
+    TransactionConsumption:
+      type: object
+      properties:
+        remaining_funds:
+          type: string
+          description: A decimal string representation of a u128 value
+          pattern: ^\d+$
+          example: "340282366920938463463374607431768211455"
+        base_fee:
+          $ref: "#/components/schemas/GasUnit"
+        priority_fee:
+          type: string
+          description: A decimal string representation of a u128 value
+          pattern: ^\d+$
+          example: "340282366920938463463374607431768211455"
+        gas_price:
+          $ref: "#/components/schemas/GasPrice"
+      required:
+        - remaining_funds
+        - base_fee
+        - priority_fee
+        - gas_price
+    TxReceiptRollup:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoredEvent"
+        receipt:
+          $ref: "#/components/schemas/TxEffect"
+      required:
+        - events
+        - receipt
+    StoredEvent:
+      type: object
+      properties:
+        key:
+          type: string
+          format: byte
+        value:
+          type: string
+          format: byte
+      required:
+        - key
+        - value
+    TxEffect:
+      type: object
+      properties:
+        outcome:
+          type: string
+          enum:
+            - successful
+            - reverted
+            - skipped
+        content:
+          type: string
+          format: byte
+      required:
+        - outcome
+        - content
+    Time:
+      type: number
+      description: A UNIX timestamp in milliseconds
+    AnyJsonValue:
+      oneOf:
+        - type: string
+          title: String
+        - type: number
+          title: Number
+        - type: boolean
+          title: Boolean
+        - type: array
+          title: Array
+          items:
+            x-stainless-any: true
+        - type: object
+          title: Object
+          additionalProperties: true
+    ApiError:
+      type: object
+      properties:
+        status:
+          type: integer
+          format: int32
+          description: HTTP status code related to this error
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+      required:
+        - status
+        - message
+        - details
+    SyncStatus:
+      oneOf:
+        - type: object
+          title: "synced"
+          description: "The height of the fully synced node"
+          properties:
+            synced:
+              type: object
+              properties:
+                synced_da_height:
+                  type: integer
+              required:
+                - synced_da_height
+          required:
+            - synced
+        - type: object
+          title: "syncing"
+          description: "The synced height and target height of the syncing node"
+          properties:
+            syncing:
+              type: object
+              properties:
+                synced_da_height:
+                  type: integer
+                target_da_height:
+                  type: integer
+              required:
+                - synced_da_height
+                - target_da_height
+          required:
+            - syncing

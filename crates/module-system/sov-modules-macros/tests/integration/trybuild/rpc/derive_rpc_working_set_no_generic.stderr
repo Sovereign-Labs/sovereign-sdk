@@ -1,0 +1,9 @@
+error: The `api_state_accessor` argument to the `#[rpc_method]`-annotated function has the wrong type. It should be a mutable reference to a `ApiStateAccessor<...>`. Either fix the type or remove the `api_state_accessor` argument.
+  --> tests/integration/trybuild/rpc/derive_rpc_working_set_no_generic.rs:16:9
+   |
+16 |       pub fn foo(
+   |  _________^
+17 | |         &self,
+18 | |         _state: &mut sov_modules_api::ApiStateAccessor,
+19 | |     ) -> jsonrpsee::core::RpcResult<u32> {
+   | |________________________________________^

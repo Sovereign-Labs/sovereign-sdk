@@ -1,0 +1,72 @@
+[package]
+name = "sov-address"
+description = "Provides an address enum for a rollup's Spec:Address type, supporting both standard Sov SDK and custom VM addresses"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sov-modules-api = { workspace = true }
+sov-rollup-interface = { workspace = true }
+
+anyhow = { workspace = true }
+arbitrary = { workspace = true, optional = true }
+borsh = { workspace = true, features = ["rc", "bytes"] }
+
+hex = { workspace = true }
+sha2 = { workspace = true }
+serde = { workspace = true }
+# For schema
+serde_json = { workspace = true }
+schemars = { workspace = true }
+rand = { workspace = true, optional = true }
+proptest = { workspace = true, optional = true }
+
+# EVM dependencies
+alloy-primitives = { workspace = true, default-features = false, features = [
+    "rlp",
+    "serde",
+    "std",
+    "k256"
+], optional = true }
+k256 = { workspace = true, features = ["serde", "ecdsa", "ecdsa-core"], optional = true }
+
+[dev-dependencies]
+sov-address = { path = ".", features = ["native"] }
+secp256k1 = { workspace = true, features = ["serde", "rand-std"] }
+sov-test-utils = { workspace = true }
+
+bincode = { workspace = true }
+jsonschema = { workspace = true }
+
+[features]
+default = []
+evm = [
+    "dep:alloy-primitives",
+    "dep:k256",
+]
+arbitrary = [
+    "dep:arbitrary",
+    "dep:rand",
+    "dep:proptest",
+    "alloy-primitives?/arbitrary",
+    "sov-address/arbitrary",
+    "sov-modules-api/arbitrary",
+    "sov-rollup-interface/arbitrary",
+    "sov-test-utils/arbitrary"
+]
+native = [
+    "dep:rand",
+    "alloy-primitives?/std",
+    "sov-rollup-interface/native",
+    "sov-address/native",
+    "sov-modules-api/native"
+]

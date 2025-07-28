@@ -1,0 +1,40 @@
+[package]
+name = "sov-api-spec"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+openapiv3 = { workspace = true }
+sov-modules-api = { workspace = true, features = ["native"] }
+
+# These dependencies are not defined through workspace inheritance because
+# `progenitor` demands very specific version ranges for its dependencies. Read
+# more here: <https://github.com/oxidecomputer/progenitor>.
+chrono = { workspace = true, features = ["serde"] }
+futures = "0.3"
+progenitor = { version = "0.8" }
+regress = "0.4.1"
+reqwest = { version = "0.12", features = ["rustls-tls", "json", "stream"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# Custom extensions for WebSockets and our own code additions.
+anyhow = { workspace = true }
+base64 = { workspace = true }
+borsh = { workspace = true }
+backon = { workspace = true }
+sov-rollup-interface = { workspace = true, features = ["native"] }
+tokio = { workspace = true }
+tokio-tungstenite = "0.23"
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

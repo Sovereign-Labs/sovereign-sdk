@@ -1,0 +1,20 @@
+{
+	// See https://go.microsoft.com/fwlink/?LinkId=827846 to learn about workspace recommendations.
+	// Extension identifier format: ${publisher}.${name}. Example: vscode.csharp
+	// List of extensions which should be recommended for users of this workspace.
+	"recommendations": [
+		"rust-lang.rust-analyzer",
+		"tamasfe.even-better-toml",
+		"usernamehw.errorlens",
+		// Other potentially useful ones:
+		//"jscearcy.rust-doc-viewer",
+		//"panicbit.cargo",
+		//"vadimcn.vscode-lldb",
+		//"ryanluker.vscode-coverage-gutters",
+		//"swellaby.vscode-rust-test-adapter",
+		//"mitsuhiko.insta", // Useful for <https://github.com/mitsuhiko/insta>.
+		//"42crunch.vscode-openapi",
+	],
+	// List of extensions recommended by VS Code that should not be recommended for users of this workspace.
+	"unwantedRecommendations": []
+}

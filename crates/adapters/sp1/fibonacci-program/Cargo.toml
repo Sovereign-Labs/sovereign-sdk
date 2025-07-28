@@ -1,0 +1,11 @@
+# https://github.com/succinctlabs/sp1/tree/3aa80e7e24b350ca31344bf4f63f21403b37bb2b/examples/fibonacci
+[workspace]
+
+[package]
+name = "fibonacci-program"
+version = "1.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+sp1-zkvm = { version = "5.0.8", features = ["embedded"] }

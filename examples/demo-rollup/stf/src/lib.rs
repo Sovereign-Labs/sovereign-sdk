@@ -3,15 +3,13 @@
 
 #[cfg(feature = "native")]
 pub mod genesis_config;
-mod hooks_impl;
 pub mod runtime;
-#[cfg(test)]
-mod tests;
+#[cfg(feature = "test-utils")]
+mod test_utils;
 
 use sov_modules_stf_blueprint::StfBlueprint;
-use sov_rollup_interface::da::DaVerifier;
-use sov_stf_runner::verifier::StateTransitionVerifier;
+use sov_rollup_interface::stf::StateTransitionVerifier;
 
 /// Alias for StateTransitionVerifier.
-pub type StfVerifier<DA, Vm, ZkContext, RT, K> =
-    StateTransitionVerifier<StfBlueprint<ZkContext, <DA as DaVerifier>::Spec, Vm, RT, K>, DA, Vm>;
+pub type StfVerifier<DA, ZkSpec, RT, InnerVm, OuterVm> =
+    StateTransitionVerifier<StfBlueprint<ZkSpec, RT>, DA, InnerVm, OuterVm>;

@@ -6,4 +6,4 @@ to packages at compile time, so that it is baked into the binary which is fed to
 prover might be able to overwrite this configuration at runtime and create valid-looking proofs that were run
 over the wrong namespace.
 
-This package demonstrates how you can accomplish such configuration. You can see its usage in the [`main` function of demo-rollup](../demo-rollup/src/main.rs).
+This package demonstrates how you can accomplish such configuration. You can see its usage in the [`main` function of demo-rollup](../demo-rollup/src/lib.rs).

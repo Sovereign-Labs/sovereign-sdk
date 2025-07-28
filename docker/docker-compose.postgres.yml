@@ -1,0 +1,46 @@
+version: "3.8"
+services:
+  postgres:
+    image: postgres:14
+    container_name: postgres-db
+    restart: always
+    environment:
+      POSTGRES_USER: sov
+      POSTGRES_PASSWORD: admin123
+      POSTGRES_DB: sov
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - postgres-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sov"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_SERVER_JSON_FILE: /pgadmin4/servers.json
+    ports:
+      - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+      - ./postgres/servers.json:/pgadmin4/servers.json
+    networks:
+      - postgres-network
+    depends_on:
+      - postgres
+networks:
+  postgres-network:
+    driver: bridge
+volumes:
+  postgres-data:
+    driver: local
+  pgadmin-data:
+    driver: local

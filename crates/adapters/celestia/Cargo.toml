@@ -1,0 +1,102 @@
+[package]
+name = "sov-celestia-adapter"
+description = "Celestia DA adapter for Sovereign SDK rollups"
+version = "0.3.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lints]
+workspace = true
+
+[dependencies]
+borsh = { workspace = true, features = ["derive", "bytes"] }
+bech32 = { workspace = true }
+prost = "0.13"
+
+celestia-rpc = { version = "0.11.2", default-features = false, optional = true }
+celestia-types = { version = "0.12.0", default-features = false }
+tendermint = { version = "0.40.4", default-features = false }
+tendermint-proto = { version = "0.40.4" }
+nmt-rs = { workspace = true, features = ["serde", "borsh"] }
+
+# Convenience
+anyhow = { workspace = true }
+arbitrary = { workspace = true, features = ["derive"], optional = true }
+async-trait = { workspace = true }
+backon = { workspace = true, optional = true }
+derive_more = { workspace = true, default-features = false, features = ["std"] }
+futures = { workspace = true, default-features = false, optional = true }
+hex = { workspace = true, features = ["serde"] }
+jsonrpsee = { workspace = true, features = ["http-client"], optional = true }
+proptest = { workspace = true, features = ["alloc", "std"], optional = true }
+schemars = { workspace = true, features = ["derive"] }
+serde = { workspace = true, default-features = false, features = [
+    "alloc",
+    "derive",
+] }
+serde_json = { workspace = true, features = ["alloc"] }
+
+thiserror = { workspace = true }
+tokio = { workspace = true, optional = true, features = ["sync"] }
+tower = { workspace = true, optional = true }
+tracing = { workspace = true }
+# Used by the checker.
+rand = { workspace = true, optional = true }
+
+sov-metrics = { workspace = true, optional = true }
+sov-modules-macros = { workspace = true, optional = true }
+sov-rollup-interface = { workspace = true }
+
+[dev-dependencies]
+postcard = { version = "1", features = ["use-std"] }
+reltester = { workspace = true }
+sov-celestia-adapter = { path = ".", features = ["native", "arbitrary"] }
+sov-test-utils = { workspace = true, features = ["arbitrary"] }
+wiremock = "0.6"
+test-strategy = "0.4.0"
+tokio = { workspace = true, features = [
+    "test-util",
+    "macros",
+    "rt-multi-thread",
+] }
+# For serialization testing
+risc0-zkvm = { workspace = true, features = ["std"] }
+risc0-zkvm-platform = { workspace = true }
+bincode = { workspace = true }
+rand = { workspace = true, features = ["small_rng"] }
+
+[features]
+default = []
+native = [
+    "backon",
+    "tendermint/default",
+    "dep:celestia-rpc",
+    "dep:futures",
+    "dep:jsonrpsee",
+    "dep:tokio",
+    "sov-celestia-adapter/native",
+    "sov-rollup-interface/native",
+    "sov-metrics?/native",
+    "dep:tower",
+    "sov-modules-macros?/native",
+    "dep:rand",
+]
+bench = [
+    "dep:sov-metrics",
+    "sov-modules-macros/bench",
+    "sov-celestia-adapter/bench",
+]
+arbitrary = [
+    "dep:arbitrary",
+    "dep:proptest",
+    "sov-celestia-adapter/arbitrary",
+    "sov-rollup-interface/arbitrary",
+    "sov-test-utils/arbitrary",
+    "sov-modules-macros?/arbitrary"
+]

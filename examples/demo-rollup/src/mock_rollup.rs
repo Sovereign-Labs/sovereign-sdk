@@ -1,115 +1,165 @@
-use async_trait::async_trait;
-use demo_stf::genesis_config::StorageConfig;
-use demo_stf::runtime::Runtime;
-use sov_db::ledger_db::LedgerDB;
-use sov_mock_da::{MockDaConfig, MockDaService, MockDaSpec};
-use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
-use sov_modules_api::{Address, Spec};
-use sov_modules_rollup_blueprint::RollupBlueprint;
-use sov_modules_stf_blueprint::kernels::basic::BasicKernel;
-use sov_modules_stf_blueprint::StfBlueprint;
-use sov_prover_storage_manager::ProverStorageManager;
-use sov_risc0_adapter::host::Risc0Host;
-use sov_rollup_interface::zk::ZkvmHost;
-use sov_state::{DefaultStorageSpec, Storage, ZkStorage};
-use sov_stf_runner::{ParallelProverService, RollupConfig, RollupProverConfig};
+use std::sync::Arc;
 
-/// Rollup with MockDa
-pub struct MockDemoRollup {}
+use async_trait::async_trait;
+use demo_stf::runtime::Runtime;
+use sov_address::{EthereumAddress, FromVmAddress, MultiAddressEvm};
+use sov_db::ledger_db::LedgerDb;
+use sov_db::storage_manager::NativeStorageManager;
+use sov_ethereum::{EthRpcConfig, GasPriceOracleConfig};
+use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::MockDaSpec;
+use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
+use sov_modules_api::configurable_spec::ConfigurableSpec;
+use sov_modules_api::execution_mode::{Native, WitnessGeneration};
+use sov_modules_api::rest::StateUpdateReceiver;
+use sov_modules_api::{NodeEndpoints, Spec, Storage, SyncStatus, ZkVerifier};
+use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
+use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
+use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
+use sov_risc0_adapter::host::Risc0Host;
+use sov_risc0_adapter::Risc0;
+use sov_rollup_interface::zk::aggregated_proof::CodeCommitment;
+use sov_sequencer::{ProofBlobSender, Sequencer};
+use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
+use sov_stf_runner::RollupConfig;
+
+use crate::eth_dev_signer;
+
+/// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, [`Risc0`] inner vm and [`MockZkvm`] for outer vm
+#[derive(Default)]
+pub struct MockDemoRollup<M> {
+    phantom: std::marker::PhantomData<M>,
+}
+
+/// The default spec of the rollup
+pub type MockRollupSpec<M> = ConfigurableSpec<MockDaSpec, Risc0, MockZkvm, MultiAddressEvm, M>;
+
+impl RollupBlueprint<Native> for MockDemoRollup<Native>
+where
+    MockRollupSpec<Native>: PluggableSpec,
+    <MockRollupSpec<Native> as Spec>::Address: FromVmAddress<EthereumAddress>,
+{
+    type Spec = MockRollupSpec<Native>;
+    type Runtime = Runtime<Self::Spec>;
+}
+
+impl RollupBlueprint<WitnessGeneration> for MockDemoRollup<WitnessGeneration>
+where
+    MockRollupSpec<WitnessGeneration>: PluggableSpec,
+    <MockRollupSpec<WitnessGeneration> as Spec>::Address: FromVmAddress<EthereumAddress>,
+{
+    type Spec = MockRollupSpec<WitnessGeneration>;
+    type Runtime = Runtime<Self::Spec>;
+}
 
 #[async_trait]
-impl RollupBlueprint for MockDemoRollup {
-    type DaService = MockDaService;
-    type DaSpec = MockDaSpec;
-    type DaConfig = MockDaConfig;
-    type Vm = Risc0Host<'static>;
+impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
+    type DaService = StorableMockDaService;
 
-    type ZkContext = ZkDefaultContext;
-    type NativeContext = DefaultContext;
-
-    type StorageManager = ProverStorageManager<MockDaSpec, DefaultStorageSpec>;
-
-    type ZkRuntime = Runtime<Self::ZkContext, Self::DaSpec>;
-    type NativeRuntime = Runtime<Self::NativeContext, Self::DaSpec>;
-
-    type NativeKernel = BasicKernel<Self::NativeContext, Self::DaSpec>;
-    type ZkKernel = BasicKernel<Self::ZkContext, Self::DaSpec>;
+    type StorageManager =
+        NativeStorageManager<MockDaSpec, <MockRollupSpec<Native> as Spec>::Storage>;
 
     type ProverService = ParallelProverService<
-        <<Self::NativeContext as Spec>::Storage as Storage>::Root,
-        <<Self::NativeContext as Spec>::Storage as Storage>::Witness,
+        <Self::Spec as Spec>::Address,
+        <<Self::Spec as Spec>::Storage as Storage>::Root,
+        <<Self::Spec as Spec>::Storage as Storage>::Witness,
         Self::DaService,
-        Self::Vm,
-        StfBlueprint<
-            Self::ZkContext,
-            Self::DaSpec,
-            <Self::Vm as ZkvmHost>::Guest,
-            Self::ZkRuntime,
-            Self::ZkKernel,
-        >,
+        <Self::Spec as Spec>::InnerZkvm,
+        <Self::Spec as Spec>::OuterZkvm,
     >;
 
-    fn create_rpc_methods(
+    type ProofSender = SovApiProofSender<Self::Spec>;
+
+    fn create_outer_code_commitment(
         &self,
-        storage: &<Self::NativeContext as Spec>::Storage,
-        ledger_db: &LedgerDB,
-        da_service: &Self::DaService,
-    ) -> Result<jsonrpsee::RpcModule<()>, anyhow::Error> {
-        // TODO set the sequencer address
-        let sequencer = Address::new([0; 32]);
+    ) -> <<Self::ProverService as ProverService>::Verifier as ZkVerifier>::CodeCommitment {
+        MockCodeCommitment::default()
+    }
 
-        #[allow(unused_mut)]
-        let mut rpc_methods = sov_modules_rollup_blueprint::register_rpc::<
-            Self::NativeRuntime,
-            Self::NativeContext,
-            Self::DaService,
-        >(storage, ledger_db, da_service, sequencer)?;
+    async fn create_endpoints(
+        &self,
+        state_update_receiver: StateUpdateReceiver<<Self::Spec as Spec>::Storage>,
+        sync_status_receiver: tokio::sync::watch::Receiver<SyncStatus>,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        ledger_db: &LedgerDb,
+        sequencer: &SequencerCreationReceipt<Self::Spec>,
+        _da_service: &Self::DaService,
+        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+    ) -> anyhow::Result<NodeEndpoints> {
+        sov_modules_rollup_blueprint::register_endpoints::<Self, Native>(
+            state_update_receiver.clone(),
+            sync_status_receiver,
+            shutdown_receiver,
+            ledger_db,
+            sequencer,
+            rollup_config,
+        )
+        .await
+    }
 
-        #[cfg(feature = "experimental")]
-        crate::eth::register_ethereum::<Self::DaService>(
-            da_service.clone(),
-            storage.clone(),
-            &mut rpc_methods,
-        )?;
+    async fn sequencer_additional_apis<Seq>(
+        &self,
+        sequencer: Arc<Seq>,
+        _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+    ) -> anyhow::Result<NodeEndpoints>
+    where
+        Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
+    {
+        let eth_signer = eth_dev_signer();
+        let eth_rpc_config = EthRpcConfig {
+            eth_signer,
+            gas_price_oracle_config: GasPriceOracleConfig::default(),
+        };
 
-        Ok(rpc_methods)
+        Ok(NodeEndpoints {
+            jsonrpsee_module: sov_ethereum::get_ethereum_rpc(eth_rpc_config, sequencer)
+                .remove_context(),
+            ..Default::default()
+        })
     }
 
     async fn create_da_service(
         &self,
-        rollup_config: &RollupConfig<Self::DaConfig>,
+        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> Self::DaService {
-        MockDaService::new(rollup_config.da.sender_address)
+        StorableMockDaService::from_config(rollup_config.da.clone(), shutdown_receiver).await
     }
 
     async fn create_prover_service(
         &self,
-        prover_config: RollupProverConfig,
-        rollup_config: &RollupConfig<Self::DaConfig>,
+        prover_config: RollupProverConfig<Risc0>,
+        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
-        let vm = Risc0Host::new(risc0::MOCK_DA_ELF);
-        let zk_stf = StfBlueprint::new();
-        let zk_storage = ZkStorage::new();
+        let (host_args, prover_config_discriminant) = prover_config.split();
+        let inner_vm = Risc0Host::new(*host_args);
+
+        let outer_vm = MockZkvmHost::new_non_blocking();
         let da_verifier = Default::default();
 
         ParallelProverService::new_with_default_workers(
-            vm,
-            zk_stf,
+            inner_vm,
+            outer_vm,
             da_verifier,
-            prover_config,
-            zk_storage,
-            rollup_config.prover_service,
+            prover_config_discriminant,
+            CodeCommitment::default(),
+            rollup_config.proof_manager.prover_address,
         )
     }
 
     fn create_storage_manager(
         &self,
-        rollup_config: &RollupConfig<Self::DaConfig>,
+        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
     ) -> anyhow::Result<Self::StorageManager> {
-        let storage_config = StorageConfig {
-            path: rollup_config.storage.path.clone(),
-        };
-        ProverStorageManager::new(storage_config)
+        NativeStorageManager::new(&rollup_config.storage.path)
+    }
+
+    fn create_proof_sender(
+        &self,
+        _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        sequence_number_provider: Arc<dyn ProofBlobSender>,
+    ) -> anyhow::Result<Self::ProofSender> {
+        Ok(Self::ProofSender::new(sequence_number_provider))
     }
 }

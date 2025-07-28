@@ -1,19 +1,75 @@
 [da]
+# Connection string for SQL database to have stored blocks, for example":
+#  - "sqlite://demo_data/da.sqlite?mode=rwc"
+#  - "sqlite::memory:"
+#  - "postgresql://root:hunter2@aws.amazon.com/mock-da"
+connection_string = "sqlite://mock_da.sqlite?mode=rwc"
+# String representation of sequencer address.
+# For initial full node should match genesis of sequencer-registry.
+# It is going to be a DA address that blobs from this node will be associated with.
 sender_address = "0000000000000000000000000000000000000000000000000000000000000000"
+finalization = 40
+[da.block_producing.periodic]
+block_time_ms = 1_000
+# Disable reorg for now, for better stability
+#[da.randomization]
+#seed = "0x0000000000000000000000000000000000000000000000000000000000000012"
+#reorg_interval = [10, 20]
+#[da.randomization.behaviour.shuffle_and_resize]
+## No drop
+#drop_percent = 0
+## No resize
+# adjust_head_height = [0, 1]
 
 [storage]
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "demo_data"
 
-# We define the rollup's genesis to occur at block number `start_height`. The rollup will ignore
-# any blocks before this height
+# We define the rollup's genesis to occur at block number `genesis_height`. The rollup will ignore
+# any blocks before this height, and any blobs at this height will not be processed
 [runner]
-start_height = 1
+genesis_height = 0
 
-[runner.rpc_config]
-# the host and port to bind the rpc server for
+# da.block_time is 1s, so status updater will try to poll it 20 times during it.
+da_polling_interval_ms = 50
+
+[runner.http_config]
 bind_host = "127.0.0.1"
-bind_port = 12345
+bind_port = 12346
+# In case of the arollup is running behind a proxy
+# public_address = "http://rollup.sovereign.xyz"
 
-[prover_service]
+[monitoring]
+telegraf_address = "udp://127.0.0.1:8094"
+# Defines how many measurements a rollup node will accumulate before sending it to the Telegraf.
+# It is expected from the rollup node to produce metrics all the time,
+# so measurements are buffered by size and not sent by time.
+# and below 67 KB, which is the maximal UDP packet size.
+# It also means that if a single serialized metric is larger than this value, a UDP packet will be larger.
+# The default value is 508.
+# max_datagram_size = 508
+# How many metrics are allowed to be in pending state, before new metrics will be dropped.
+# This is a number of metrics, not serialized bytes.
+# The total number of bytes to be held in memory might vary per metric + `max_datagram_size`
+# max_pending_metrics = 100
+
+[proof_manager]
 aggregated_proof_block_jump = 1
+prover_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+max_number_of_transitions_in_db = 100
+max_number_of_transitions_in_memory = 30
+
+[sequencer]
+blob_processing_timeout_secs = 3000
+max_batch_size_bytes = 1048576
+max_concurrent_blobs = 128
+max_allowed_node_distance_behind = 10
+rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+[sequencer.preferred]
+# TODO: Remove it when https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2814 is resolved
+disable_state_root_consistency_checks = true
+# Strategy for handling recovery scenarios when the sequencer is too far behind.
+# "None" - Shutdown the sequencer instead of attempting recovery (default)
+# "TryToSave" - Attempt to recover by flushing batches and catching up with the chain
+recovery_strategy = "TryToSave"
+batch_execution_time_limit_millis = 2000 # Do no more than 2000ms of work per batch, even if the DA layer isn't producing blocks regularly

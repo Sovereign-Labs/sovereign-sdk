@@ -1,0 +1,14 @@
+[package]
+name = "switcheroo"
+version = "0.1.0"
+publish = false
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+[dependencies]
+clap = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
+toml_edit = "0.22"

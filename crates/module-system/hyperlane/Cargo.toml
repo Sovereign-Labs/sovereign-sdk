@@ -1,0 +1,88 @@
+[package]
+name = "sov-hyperlane-integration"
+description = "A Sovereign SDK module implementing a Hyperlane Mailbox"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+publish = false
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+sov-address = { workspace = true }
+sov-api-spec = { workspace = true }
+sov-hyperlane-integration = { path = ".", features = ["test-utils", "native"] }
+sov-mock-da = { workspace = true }
+sov-modules-api = { workspace = true, features = ["native"] }
+sov-sequencer = { workspace = true }
+sov-state = { workspace = true, features = ["native"] }
+sov-test-utils = { workspace = true }
+sov-value-setter = { workspace = true, features = ["native"] }
+secp256k1 = { workspace = true }
+
+base64 = { workspace = true }
+futures = { workspace = true }
+hex = { workspace = true }
+indoc = "2"
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+strum = { workspace = true }
+tempfile = { workspace = true }
+testcontainers = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+workspace-hack = { workspace = true } # required for feature unification with arbitrary
+
+[dependencies]
+sov-address = { workspace = true, optional = true }
+sov-bank = { workspace = true }
+sov-modules-api = { workspace = true }
+sov-state = { workspace = true }
+anyhow = { workspace = true }
+arbitrary = { workspace = true, optional = true }
+borsh = { workspace = true, features = ["rc"] }
+proptest-derive = { workspace = true, optional = true }
+proptest = { workspace = true, optional = true }
+derive_more = { workspace = true }
+schemars = { workspace = true }
+k256 = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+sha3 = { workspace = true }
+ruint = { workspace = true }
+strum = { workspace = true }
+tracing = { workspace = true, optional = true }
+
+[features]
+default = []
+evm = ["sov-address/evm"]
+arbitrary = [
+	"dep:proptest-derive",
+	"dep:arbitrary",
+	"dep:proptest",
+	"sov-address/arbitrary",
+	"sov-bank/arbitrary",
+	"sov-hyperlane-integration/arbitrary",
+	"sov-modules-api/arbitrary",
+	"sov-state/arbitrary",
+	"sov-test-utils/arbitrary",
+	"ruint/arbitrary",
+	"sov-mock-da/arbitrary",
+]
+test-utils = ["arbitrary"]
+native = [
+	"sov-modules-api/native",
+	"sov-value-setter/native",
+	"sov-state/native",
+	"sov-address/native",
+	"sov-bank/native",
+	"sov-hyperlane-integration/native",
+	"sov-mock-da/native",
+	"dep:tracing",
+]

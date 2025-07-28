@@ -1,0 +1,5 @@
+error: The `ModuleInfo` macro supports structs only.
+ --> tests/integration/trybuild/module_info/derive_on_enum_not_supported.rs:4:1
+  |
+4 | enum TestStruct<S: sov_modules_api::Spec> {
+  | ^^^^

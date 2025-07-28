@@ -1,0 +1,5 @@
+error[E0080]: evaluation of constant value failed
+ --> tests/integration/trybuild/constants/bech32_constant_prefix_too_long.rs:6:26
+  |
+6 | const TOKEN: MyTokenId = config_value!("CONST_TOKEN_ID");
+  |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation panicked: The constant named `CONST_TOKEN_ID` with value `token_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqnfxkwm` is a valid bech32 string but its prefix `token_` does not match the expected prefix for the type `MyTokenId`.

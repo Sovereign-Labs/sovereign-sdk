@@ -1,7 +1,0 @@
-error: The `ModuleInfo` macro requires `[address]` attribute.
- --> tests/module_info/missing_address.rs:3:10
-  |
-3 | #[derive(ModuleInfo)]
-  |          ^^^^^^^^^^
-  |
-  = note: this error originates in the derive macro `ModuleInfo` (in Nightly builds, run with -Z macro-backtrace for more info)

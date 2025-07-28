@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 6db37c59a5bb5f3c9d80f2f7da751587a2e4a0facadde510b64db874c0a84212 # shrinks to item = SP1PublicKey { pub_key: VerificationKey("434fc8b07204da50467e7050237926585872bf85f8961222c25fd58b68eb80e6") }

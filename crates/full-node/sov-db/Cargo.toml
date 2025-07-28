@@ -1,0 +1,91 @@
+[package]
+name = "sov-db"
+description = "A high-level DB interface for the Sovereign SDK"
+license = "Sovereign Labs Community Software License"
+edition = { workspace = true }
+authors = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+# Maintained by sovereign labs
+jmt = { workspace = true }
+rockbound = { workspace = true }
+sov-rollup-interface = { workspace = true, features = ["native"] }
+nomt = { workspace = true }
+sov-metrics = { workspace = true, features = ["native"] }
+
+# External
+anyhow = { workspace = true, default-features = true }
+arbitrary = { workspace = true, features = ["derive"], optional = true }
+async-trait = { workspace = true }
+byteorder = { workspace = true, default-features = true }
+borsh = { workspace = true, default-features = true, features = ["bytes", "rc"] }
+futures = { workspace = true, default-features = true }
+proptest = { workspace = true, optional = true, features = ["std"] }
+proptest-derive = { workspace = true, optional = true }
+serde = { workspace = true, default-features = true, features = ["rc"] }
+tempfile = { workspace = true, optional = true }
+bincode = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+tokio-stream = { workspace = true }
+hex = { workspace = true }
+tracing = { workspace = true }
+rand = { workspace = true, optional = true }
+schemars = { workspace = true }
+uuid = { workspace = true, features = ["std", "v7"] }
+
+[dev-dependencies]
+test-strategy = { workspace = true }
+sov-db = { path = ".", features = ["test-utils"] }
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-mock-zkvm = { workspace = true }
+sov-test-utils = { workspace = true }
+tempfile = { workspace = true }
+criterion = "0.5.1"
+rand = { workspace = true }
+sha2 = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+test-log = "0.2.16"
+proptest = { workspace = true }
+
+[features]
+arbitrary = [
+    "dep:arbitrary",
+    "dep:proptest",
+    "dep:proptest-derive",
+    "dep:tempfile",
+    "rockbound/arbitrary",
+    "sov-mock-zkvm/arbitrary",
+    "sov-rollup-interface/arbitrary",
+    "sov-test-utils/arbitrary",
+    "sov-mock-da/arbitrary",
+    "sov-db/arbitrary",
+    "uuid/arbitrary"
+]
+test-utils = ["dep:rand"]
+
+[[bench]]
+name = "state_db_single_snapshot"
+path = "benches/state_db_bench.rs"
+harness = false
+required-features = ["test-utils"]
+
+[[bench]]
+name = "native_storage_manager"
+path = "benches/native_storage_manager.rs"
+harness = false
+required-features = ["test-utils"]
+
+
+[[bench]]
+name = "pruner"
+path = "benches/pruner_bench.rs"
+harness = false
+required-features = ["test-utils"]

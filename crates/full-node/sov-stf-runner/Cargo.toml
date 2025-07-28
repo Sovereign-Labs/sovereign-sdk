@@ -1,0 +1,71 @@
+[package]
+name = "sov-stf-runner"
+authors = { workspace = true }
+description = "Runs Sovereign SDK rollups and their verifiers"
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+axum = { workspace = true, features = ["tokio", "http1", "http2"] }
+rockbound = { workspace = true }
+bincode = { workspace = true }
+derivative = { workspace = true }
+backon = { workspace = true }
+num_cpus = { workspace = true }
+thiserror = { workspace = true }
+borsh = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+strum = { version = "0.26", features = ["derive"] }
+toml = { workspace = true }
+tower = { workspace = true, features = ["util"] }
+sov-sequencer = { workspace = true }
+jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+tokio = { workspace = true, features = ["net", "sync", "rt-multi-thread", "time"] }
+hex = { workspace = true }
+tracing = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+rayon = { workspace = true }
+sov-db = { workspace = true }
+sov-rollup-interface = { workspace = true }
+sov-metrics = { workspace = true }
+tower-http = { workspace = true, features = ["normalize-path"] }
+tower-layer = "0.3.3"
+futures-util = "0.3.31"
+
+
+[dev-dependencies]
+backon = { workspace = true }
+insta = { workspace = true }
+tempfile = { workspace = true }
+sha2 = { workspace = true }
+proptest = { workspace = true }
+derive_more = { workspace = true }
+jsonrpsee = { workspace = true, features = ["client", "ws-client"] }
+
+sov-sequencer-registry = { workspace = true, features = ["native"] }
+sov-bank = { workspace = true, features = ["native"] }
+sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
+sov-modules-rollup-blueprint = { workspace = true, features = ["native"] }
+
+sov-accounts = { workspace = true, features = ["native"] }
+sov-sequencer = { workspace = true }
+
+sov-state = { workspace = true, features = ["native"] }
+sov-modules-api = { workspace = true, features = ["native"] }
+
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-test-utils = { workspace = true }
+rand = { workspace = true, features = ["small_rng"] }
+
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }

@@ -1,0 +1,3 @@
+config.env
+*.log
+data

@@ -1,0 +1,50 @@
+[package]
+name = "sov-modules-stf-blueprint"
+description = "Defines a generic state transition function for use with the Sovereign SDK module system"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = "Sovereign Labs Community Software License"
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+axum = { workspace = true, optional = true }
+thiserror = { workspace = true }
+borsh = { workspace = true }
+jsonrpsee = { workspace = true, features = ["server"], optional = true }
+serde = { workspace = true, features = ["derive"] }
+schemars = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, features = ["sync"], optional = true }
+hex = { workspace = true }
+
+# WARNING: The `stf-blueprint` crate should NOT depend on any Sovereign module.
+sov-rollup-interface = { workspace = true }
+sov-state = { workspace = true }
+sov-modules-api = { workspace = true }
+sov-metrics = { workspace = true }
+
+[features]
+default = []
+bench = [
+    "sov-modules-api/bench",
+    "sov-state/bench",
+]
+native = [
+    "axum",
+    "jsonrpsee",
+    "sov-modules-api/native",
+    "sov-rollup-interface/native",
+    "sov-state/native",
+    "tokio",
+    "sov-metrics/native",
+]
+test-utils = []
+gas-constant-estimation = ["bench", "sov-modules-api/gas-constant-estimation", "sov-metrics/gas-constant-estimation"] 

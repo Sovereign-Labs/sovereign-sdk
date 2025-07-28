@@ -1,0 +1,32 @@
+[package]
+name = "sov-module-schemas"
+description = "A dummy crate that stores as files the JSON Schemas for all Sovereign modules"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+publish = false
+
+[lints]
+workspace = true
+
+[build-dependencies]
+schemars = { workspace = true }
+serde_json = { workspace = true }
+sov-modules-api = { workspace = true, features = ["native"] }
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-mock-zkvm = { workspace = true, features = ["native"]  }
+sov-rollup-interface = { workspace = true, features = ["native"] }
+sov-stf-runner = { workspace = true }
+
+# Modules
+sov-accounts = { workspace = true, features = ["native"] }
+sov-bank = { workspace = true, features = ["native"] }
+sov-prover-incentives = { workspace = true, features = ["native"] }
+sov-sequencer-registry = { workspace = true, features = ["native"] }
+sov-evm = { workspace = true, features = ["native"] }
+sov-value-setter = { workspace = true, features = ["native"] }

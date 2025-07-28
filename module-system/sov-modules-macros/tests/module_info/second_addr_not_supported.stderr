@@ -1,5 +1,0 @@
-error: The `address` attribute is defined more than once, revisit field: address_2
- --> tests/module_info/second_addr_not_supported.rs:9:5
-  |
-9 |     address_2: C::Address,
-  |     ^^^^^^^^^

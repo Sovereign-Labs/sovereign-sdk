@@ -1,0 +1,183 @@
+[gas.Bank]
+create_token = [4, 4]
+transfer = [5, 5]
+burn = [2, 2]
+mint = [2, 2]
+freeze = [1, 1]
+
+[constants]
+# We use the ID 4321 for demo purposes. Change this value before deploying!
+CHAIN_ID = 4321
+CHAIN_NAME = "TestChain"
+# When using soft-confirmations, this parameter sets the maximum number of slots that a transaction can be deferred by the sequencer before
+# being force-executed by the rollup. Decreasing the number of slots means that "forced" transactions are processed
+# more quickly in the worst case, but increases the likelihood that some soft confirmations
+# will be invalidated due to congestion on the DA layer. (Note that with an honest sequencer, this parameter has no effect
+# on the speed of inclusion for forced transactions, since they will always be included ASAP.)
+# Setting this parameter to 0 disables soft-confirmations entirely.
+DEFERRED_SLOTS_COUNT = 5
+# How many *rollup blocks* we wait before making a state root visible to the rollup.
+STATE_ROOT_DELAY_BLOCKS = 5
+# The maximum number of visible slots that the sequencer can advance the rollup in a single slot.
+# Larger values of this parameter mean that the soft-confirmations are less vulnerable to congestion on the DA layer,
+# but make it correspondingly easier for a malicious sequencer to grief other sequencers.
+MAX_VISIBLE_HEIGHT_INCREASE_PER_SLOT = 10
+# How many blobs from unregistered sequencers we will accept per slot
+# We can't slash misbehaving senders because they aren't a registered sequencer with a stake so
+# this serves as protection against spam.
+UNREGISTERED_BLOBS_PER_SLOT = 5
+# How many past transaction generations into the past to keep per-account buckets for
+# Higher numbers give more flexibility to avoid collisions, lower numbers reduce the maximum amount of storage used
+PAST_TRANSACTION_GENERATIONS = 5
+# The maximum number of transactions hashes we remember per credential. 
+# Higher numbers allow accounts to send more transactions without updating their generation number. 
+# This is more user friendly for power users, but increases the worst case cost of the uniqueness check.
+MAX_STORED_TX_HASHES_PER_CREDENTIAL = 1700
+# The maximum size of data that can be returned by the blob selector. 
+MAX_ALLOWED_DATA_SIZE_RETURNED_BY_BLOB_STORAGE = 50331648 # 48MB
+# Number of gas dimensions
+GAS_DIMENSIONS = { const = 2 }
+# The fixed gas price of checking forced sequencer registration transactions.
+# This price is added to regular transaction checks & execution costs.
+# This should be set in such a way that forced sequencer registration is more expensive
+# than regular registration to prevent this mechanism being gamed instead of
+# used only when users feel they are being censored.
+GAS_FORCED_SEQUENCER_REGISTRATION_COST = [100000, 100000]
+# The ID of the "native token" of the rollup, which is used to pay gas fees.
+GAS_TOKEN_ID = { bech32 = "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7", type = "TokenId" }
+# The HRP prefix that appears in all rollup addresses.
+ADDRESS_PREFIX = { const = "sov" }
+# The cost of credential id calculation.
+GAS_TO_CHARGE_FOR_CREDENTIAL_CALCULATION = [0, 0]
+# The cost of a storage access operation.
+GAS_TO_CHARGE_PER_STORAGE_ACCESS = [1, 1]
+GAS_TO_CHARGE_PER_READ = [1, 1]
+GAS_TO_CHARGE_PER_BYTE_READ = [1, 1]
+GAS_TO_CHARGE_PER_BYTE_STORAGE_UPDATE = [1, 1]
+BIAS_STORAGE_UPDATE = [1, 1]
+EXAMPLE_CUSTOM_GAS_PRICE = [5, 5]
+
+# --- End Gas parameters to charge for state accesses ---
+# --- Gas parameters to specify how to charge gas for hashing ---
+# The base cost of updating a hash.
+GAS_TO_CHARGE_HASH_UPDATE = [30, 30]
+# The cost of updating a hash.
+GAS_TO_CHARGE_PER_BYTE_HASH_UPDATE = [10, 10]
+# --- End Gas parameters to specify how to charge gas for hashing ---
+# --- Gas parameters to specify how to charge gas for signature verification ---
+# The cost of verifying a signature per byte of the signature
+DEFAULT_GAS_TO_CHARGE_PER_BYTE_SIGNATURE_VERIFICATION = [1, 1]
+# The fixed cost of verifying a signature
+DEFAULT_FIXED_GAS_TO_CHARGE_PER_SIGNATURE_VERIFICATION = [100, 100]
+# --- End Gas parameters to specify how to charge gas for hashing ---
+
+# Maximum amount of gas the sequencer can pay for the tx execution ---
+MAX_SEQUENCER_EXEC_GAS_PER_TX = [1_000_000_000, 1_000_000_000]
+
+# Maximum amount of gas the unregistered sequencer can pay for the tx execution ---
+MAX_UNREGISTERED_SEQUENCER_EXEC_GAS_PER_TX = [50000, 50000]
+# Gas parameters to specify tx pre execution costs ---
+PROCESS_TX_PRE_EXEC_GAS = [1, 1]
+# Gas parameter to specify tx pre execution costs per tx byte
+PROCESS_TX_PRE_EXEC_GAS_PER_TX_BYTE = [1, 1]
+# --- End Gas parameters to specify how to charge gas for signature verification ---
+
+# The cost of deserializing a message using Borsh
+DEFAULT_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION = [1, 1]
+BIAS_BORSH_DESERIALIZATION = [1, 1]
+
+# The cost of deserializing a tx using Borsh
+TX_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION = [1, 1]
+TX_BIAS_BORSH_DESERIALIZATION = [1, 1]
+
+# The cost of deserializing a proof using Borsh
+PROOF_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION = [1, 1]
+PROOF_BIAS_BORSH_DESERIALIZATION = [1, 1]
+
+# The cost of deserializing a string using Borsh
+STRING_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION = [1, 1]
+STRING_BIAS_BORSH_DESERIALIZATION = [1, 1]
+
+# The amount of gas to charge per zk-proof byte
+GAS_TO_CHARGE_PER_PROOF_BYTE = [1, 1]
+# The amount of gas to charge per zk-proof
+FIXED_GAS_TO_CHARGE_PER_PROOF = [100, 100]
+
+
+# The percentage of the "base fee" that is burned when a transaction is processed.
+# The portion that is not burned is awarded to provers and/or attesters on the network.
+PERCENT_BASE_FEE_TO_BURN = 10
+# --- Gas fee adjustment parameters: See https://eips.ethereum.org/EIPS/eip-1559 for a detailed description ---
+# The initial gas limit of the rollup.
+INITIAL_GAS_LIMIT = [100_000_000_000, 100_000_000_000]
+# The initial "base fee" that every transaction emits when executed.
+INITIAL_BASE_FEE_PER_GAS = [10, 10]
+# The maximum change denominator of the base fee.
+BASE_FEE_MAX_CHANGE_DENOMINATOR = 8
+# The elasticity multiplier of the base fee.
+ELASTICITY_MULTIPLIER = 2
+# --- End Gas fee adjustment parameters ---
+
+# --- Hyperlane constants ---
+HYPERLANE_BRIDGE_DOMAIN = 5555
+# --- End Hyperlane constants ---
+
+CONST_TOKEN_ID = { const = { bech32 = "token_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqnfxkwm", type = "MyTokenId" } }
+CONST_TOKEN_ID_INVALID_CHECKSUM = { const = { bech32 = "token_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqabcdef", type = "MyTokenId" } }
+CONST_TOKEN_ID_WITHOUT_PREFIX = { const = { bech32 = "1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqabcdef", type = "MyTokenId" } }
+
+TOKEN_ID = { bech32 = "token_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqnfxkwm", type = "MyTokenId" }
+TOKEN_ID_INVALID_CHECKSUM = { bech32 = "token_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqabcdef", type = "MyTokenId" }
+TOKEN_ID_WITHOUT_PREFIX = { bech32 = "1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqabcdef", type = "MyTokenId" }
+
+CONST_I64_MAX = { const = 9_223_372_036_854_775_807 }
+I64_MIN = -9_223_372_036_854_775_808
+
+CONST_BOOL = { const = true }
+NON_CONST_BOOL = true
+
+CONST_STRING = { const = "foo" }
+NON_CONST_STRING = "bar"
+
+CONST_MATRIX_2x3 = { const = [[7, 7, 7], [7, 7, 7]] }
+MATRIX_2x3 = [[7, 7, 7], [7, 7, 7]]
+
+EMPTY_ARRAY = []
+ARRAY_OF_BECH32 = [
+    { bech32 = "token_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqnfxkwm", type = "MyTokenId" },
+    { bech32 = "token_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqnfxkwm", type = "MyTokenId" },
+]
+ARRAY_OF_U8 = [
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+]

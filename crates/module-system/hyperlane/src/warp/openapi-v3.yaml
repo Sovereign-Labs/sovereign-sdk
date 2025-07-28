@@ -1,0 +1,134 @@
+# Specification for custom bank REST API endpoints
+openapi: "3.0.2"
+info:
+  title: warp route custom endpoints
+  version: 0.1.0
+paths:
+  /route/{route}/routers:
+    get:
+      summary: Get routers for a warp route
+      description: Returns all remote routers enrolled in the specified warp route
+      operationId: "warp_route_get_routers"
+      tags: [Warp]
+      parameters:
+        - name: route
+          in: path
+          required: true
+          description: The warp route identifier
+          schema:
+            $ref: "#/components/schemas/HexHash"
+      responses:
+        '200':
+          $ref: '#/components/responses/RoutersResponse'
+        '404':
+          # Referring type from `runtime-base.yaml`
+          $ref: '#/components/responses/StateNotFound'
+        '500':
+          description: Internal server error
+  /route/{route}/limits:
+    get:
+      summary: Get transfer limits of a warp route
+      description: Returns current inbound and outbound transfer limits of a specified warp route
+      operationId: "warp_route_get_limits"
+      tags: [Warp]
+      parameters:
+        - name: route
+          in: path
+          required: true
+          description: The warp route identifier
+          schema:
+            $ref: "#/components/schemas/HexHash"
+      responses:
+        '200':
+          $ref: '#/components/responses/RouteLimitsResponse'
+        '404':
+          # Referring type from `runtime-base.yaml`
+          $ref: '#/components/responses/StateNotFound'
+        '500':
+          description: Internal server error
+
+components:
+  schemas:
+    Meta:
+      type: object
+    HexHash:
+      type: string
+      pattern: "^0x[a-fA-F0-9]{64}$"
+      description: 32-byte hex-encoded hash
+      example: "0x71c7656ec7ab88b098defb751b7401b5f6d8976fae23aeb2342aedac24843ead3"
+    RemoteRouter:
+      type: object
+      properties:
+        domain:
+          type: integer
+          format: uint32
+          description: The remote domain identifier
+        address:
+          $ref: "#/components/schemas/HexHash"
+          description: The router address on the remote domain
+      required:
+        - domain
+        - address
+    RouteLimits:
+      type: object
+      properties:
+        inbound:
+          $ref: "#/components/schemas/TransfersLimits"
+          description: Inbound transfers limits
+        outbound:
+          $ref: "#/components/schemas/TransfersLimits"
+          description: Outbound transfers limits
+      required:
+        - inbound
+        - outbound
+    TransfersLimits:
+      type: object
+      properties:
+        current_transferrable_tokens:
+          description: >
+            Amount of tokens that can be currently transferred using this route,
+            as a decimal string representation of a u128 value
+          type: string
+          pattern: ^\d+$
+          example: "340282366920938463463374607431768211455"
+        max_transferrable_tokens:
+          description: >
+            Amount of tokens that can be transferred using this route when rate limiter is at full
+            capacity, as a decimal string representation of a u128 value
+          type: string
+          pattern: ^\d+$
+          example: "340282366920938463463374607431768211455"
+        limit_replenishment_per_slot:
+          description: >
+            Amount of tokens that is added to current limit per each slot,
+            as a decimal string representation of a u128 value
+          type: string
+          pattern: ^\d+$
+          example: "340282366920938463463374607431768211455"
+      required:
+        - current_transferrable_tokens
+        - max_transferrable_tokens
+        - limit_replenishment_per_slot
+  responses:
+    RoutersResponse:
+      description: OK
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              meta:
+                $ref: '#/components/schemas/Meta'
+              data:
+                $ref: '#/components/schemas/RemoteRouter'
+    RouteLimitsRensponse:
+      description: OK
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              meta:
+                $ref: '#/components/schemas/Meta'
+              data:
+                $ref: '#/components/schemas/RouteLimits'

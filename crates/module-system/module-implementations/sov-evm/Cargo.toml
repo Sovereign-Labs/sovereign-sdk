@@ -1,0 +1,122 @@
+[package]
+name = "sov-evm"
+description = "A Sovereign SDK managing fungible tokens"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sov-modules-api = { workspace = true, features = ["evm"] }
+sov-rollup-interface = { workspace = true }
+sov-kernels = { workspace = true }
+sov-state = { workspace = true }
+sov-address = { workspace = true, features = ["evm"] }
+sov-bank = { workspace = true }
+
+anyhow = { workspace = true }
+arbitrary = { workspace = true, optional = true }
+thiserror = { workspace = true }
+bytes = { workspace = true }
+derive_more = { workspace = true }
+serde = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+hex = { workspace = true }
+jsonrpsee = { workspace = true, features = [
+	"macros",
+	"client-core",
+	"server",
+], optional = true }
+schemars = { workspace = true }
+tracing = { workspace = true }
+
+alloy-sol-types = { version = "0.7.7", default-features = false }
+alloy-eips = { version = "0.2", default-features = false }
+# `rlp` feature implicitly enabled via `reth-` crates, but this allows us to explicitly access Error type from there
+alloy-primitives = { workspace = true, default-features = false, features = [
+	"rlp",
+] }
+
+alloy-rpc-types = { workspace = true, optional = true }
+digest = { workspace = true }
+sha2 = { workspace = true }
+revm = { workspace = true, features = [
+	"optional_block_gas_limit",
+	"optional_eip3607",
+	"optional_no_base_fee",
+	"std",
+] }
+reth-primitives = { workspace = true }
+reth-rpc-types = { workspace = true }
+revm-inspectors = { workspace = true, default-features = false, optional = true }
+reth-rpc-eth-types = { workspace = true, optional = true }
+rand = { workspace = true, optional = true }
+proptest = { workspace = true, optional = true }
+
+[dev-dependencies]
+sov-evm = { path = ".", features = ["native"] }
+strum = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+tempfile = { workspace = true }
+bytes = { workspace = true }
+ethers-signers = { workspace = true }
+ethers-core = { workspace = true }
+secp256k1 = { workspace = true, features = ["rand-std"] }
+lazy_static = "1.5.0"
+jsonschema = { workspace = true }
+bincode = { workspace = true }
+
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-test-utils = { workspace = true }
+sov-eth-dev-signer = { workspace = true }
+sov-modules-api = { workspace = true, features = ["test-utils"] }
+
+[features]
+arbitrary = [
+	"dep:arbitrary",
+	"dep:rand",
+	"dep:proptest",
+	"alloy-eips/arbitrary",
+	"alloy-primitives/arbitrary",
+	"alloy-rpc-types?/arbitrary",
+	"alloy-sol-types/arbitrary",
+	"reth-primitives/arbitrary",
+	"reth-rpc-types/arbitrary",
+	"revm/arbitrary",
+	"sov-address/arbitrary",
+	"sov-evm/arbitrary",
+	"sov-mock-da/arbitrary",
+	"sov-modules-api/arbitrary",
+	"sov-rollup-interface/arbitrary",
+	"sov-state/arbitrary",
+	"sov-test-utils/arbitrary",
+	"sov-bank/arbitrary"
+]
+native = [
+	"alloy-rpc-types",
+	"jsonrpsee",
+	"dep:rand",
+	"revm-inspectors",
+	"alloy-primitives/std",
+	"reth-primitives/std",
+	"reth-rpc-types/default",
+	"dep:reth-rpc-eth-types",
+	# Optional for speed up in native mode
+	# "revm/asm-keccak"
+	"sov-evm/native",
+	"sov-address/native",
+	"sov-mock-da/native",
+	"sov-modules-api/native",
+	"sov-state/native",
+	"sov-rollup-interface/native",
+	"sov-kernels/native",
+	"sov-bank/native"
+]

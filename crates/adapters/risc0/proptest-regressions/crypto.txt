@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc d58f4018986fa07b4a989af7c077ddf970e37762b6160b0972a76a2c395a4bb5 # shrinks to item = Risc0PublicKey { pub_key: VerifyingKey(CompressedEdwardsY: [185, 198, 238, 22, 48, 239, 62, 113, 17, 68, 166, 72, 219, 6, 187, 178, 40, 79, 114, 116, 207, 190, 229, 63, 252, 238, 80, 60, 193, 164, 146, 0]), EdwardsPoint{ 	X: FieldElement51([1763077487382979, 358941633486474, 1400892363273397, 1783235494656275, 884828019558883]), 	Y: FieldElement51([538696208906610, 2072854815953131, 716994537139865, 923029299687151, 1285841899613794]), 	Z: FieldElement51([2157134835049950, 934328583730191, 1916601507684937, 111682060231848, 2102250141094461]), 	T: FieldElement51([974864847561604, 1397942013270053, 2087678845449191, 1984654315692576, 2030406638859226]) }) }
