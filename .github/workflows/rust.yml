@@ -85,8 +85,8 @@ jobs:
       - nextest_all_features
       - coverage
       - cargo-deny-check-licenses
-      - cargo-doc-artifact
-      - deploy-github-pages
+      # - cargo-doc-artifact
+      # - deploy-github-pages
       - check-demo-rollup-table-of-contents
       - check-demo-rollup-bash-commands-mock-da
       - check-demo-rollup-bash-commands
@@ -98,7 +98,7 @@ jobs:
       - name: Compute whether the needed jobs succeeded or failed
         uses: re-actors/alls-green@release/v1
         with:
-          allowed-skips: deploy-github-pages
+        #   allowed-skips: deploy-github-pages
           jobs: ${{ toJSON(needs) }}
 
   check:
@@ -422,23 +422,23 @@ jobs:
   #         aws --quiet s3 sync target/doc "s3://${S3_BUCKET_NAME}/${TARGET_DIR}" && \
   #         echo "Docs are available at https://${S3_BUCKET_NAME}.${AWS_REGION}.amazonaws.com/${TARGET_DIR}/index.html";
 
-  deploy-github-pages:
-    runs-on: nscloud-ubuntu-22.04-amd64-2x4
-    needs: cargo-doc-artifact
-    timeout-minutes: 5
-    if: github.ref == 'refs/heads/stable'
-    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
-    permissions:
-      pages: write # to deploy to Pages
-      id-token: write # to verify the deployment originates from an appropriate source
-    # Deploy to the github-pages environment
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+  # deploy-github-pages:
+  #   runs-on: nscloud-ubuntu-22.04-amd64-2x4
+  #   needs: cargo-doc-artifact
+  #   timeout-minutes: 5
+  #   if: github.ref == 'refs/heads/stable'
+  #   # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
+  #   permissions:
+  #     pages: write # to deploy to Pages
+  #     id-token: write # to verify the deployment originates from an appropriate source
+  #   # Deploy to the github-pages environment
+  #   environment:
+  #     name: github-pages
+  #     url: ${{ steps.deployment.outputs.page_url }}
+  #   steps:
+  #     - name: Deploy to GitHub Pages
+  #       id: deployment
+  #       uses: actions/deploy-pages@v4
 
   check-demo-rollup-table-of-contents:
     runs-on: nscloud-ubuntu-22.04-amd64-2x4
