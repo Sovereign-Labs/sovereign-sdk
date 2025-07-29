@@ -591,19 +591,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
-      - uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.SELF_ACCESS_TOKEN }}
-            ${{ secrets.SOV_SDK_WEB3_JS_ACCESS_TOKEN }}
       - name: Checkout web3-js SDK
         uses: actions/checkout@v4
         with:
           repository: "Sovereign-Labs/sovereign-sdk-web3-js"
           path: "examples/demo-rollup/web3-js-sdk"
           ref: "493795cb30bdea3b840253a5888467177b64cc93"
-          ssh-key: |
-            ${{ secrets.SOV_SDK_WEB3_JS_ACCESS_TOKEN }}
       - name: Run web3-js SDK tests against demo-rollup
         # See script for more details about what to do if job
         run: |
