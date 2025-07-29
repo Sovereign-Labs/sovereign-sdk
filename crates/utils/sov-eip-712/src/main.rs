@@ -1,9 +1,10 @@
 //! Example of EIP-712 signatures for Sovereign SDK rollup operations.
 
 use alloy_primitives::{address, B256};
-use alloy_sol_types::{eip712_domain, SolStruct, sol};
+use alloy_sol_types::{eip712_domain, sol, SolStruct};
 use anyhow::Result;
-use k256::ecdsa::{SigningKey, signature::hazmat::{PrehashSigner, PrehashVerifier}};
+use k256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
+use k256::ecdsa::SigningKey;
 
 sol! {
     #[derive(Debug)]
@@ -19,7 +20,9 @@ sol! {
 }
 
 fn main() -> Result<()> {
-    let signing_key = SigningKey::from_slice(&hex::decode("0000000000000000000000000000000000000000000000000000000000000001")?)?;
+    let signing_key = SigningKey::from_slice(&hex::decode(
+        "0000000000000000000000000000000000000000000000000000000000000001",
+    )?)?;
 
     let domain = eip712_domain! {
         name: "CallMessage",
@@ -43,8 +46,10 @@ fn main() -> Result<()> {
     println!("Signature: 0x{}", hex::encode(signature.to_bytes()));
 
     let verifying_key = signing_key.verifying_key();
-    let is_valid = verifying_key.verify_prehash(hash.as_slice(), &signature).is_ok();
+    let is_valid = verifying_key
+        .verify_prehash(hash.as_slice(), &signature)
+        .is_ok();
     println!("Signature valid: {}", is_valid);
-    
+
     Ok(())
 }
