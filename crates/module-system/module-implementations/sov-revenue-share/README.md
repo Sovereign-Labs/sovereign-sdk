@@ -84,4 +84,4 @@ in production. Your email must include any information necessary for Sovereign L
 
 ## License
 
-This crate is distributed under the Sovereign Commercial License and is only available to rollups that have purchased premium features.
+This crate is distributed under the Sovereign Permissionless Commercial License and is only available to rollups that have purchased premium features.
