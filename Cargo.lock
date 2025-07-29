@@ -10731,6 +10731,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-eip-712"
+version = "0.3.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-sol-types",
+ "anyhow",
+ "hex",
+ "k256",
+]
+
+[[package]]
 name = "sov-eth-client"
 version = "0.3.0"
 dependencies = [
