@@ -3,11 +3,10 @@
 This is a demo full node running a simple Sovereign SDK rollup on [Celestia](https://celestia.org/).
 
 <p align="center">
-  <img width="50%" src="../../docs/assets/discord-banner.png">
   <br>
   <i>Stuck, facing problems, or unsure about something?</i>
   <br>
-  <i>Join our <a href="https://discord.gg/kbykCcPrcA">Discord</a> and ask your questions in <code>#support</code>!</i>
+  <i>Join our <a href="https://join.slack.com/t/sovereigndevelopers/shared_invite/zt-39aolimfp-XsFK6dL6LhOFHhtXsD_kCA">Slack</a> and ask your questions in <code>#support</code>!</i>
 </p>
 
 You can follow the steps below to run the demo rollup on a local Celestia devnet instance. However, due to numerous users encountering failures because of basic local setup or Docker issues, we strongly suggest using the plain demo rollup with mock Data Availability (DA) for testing.
