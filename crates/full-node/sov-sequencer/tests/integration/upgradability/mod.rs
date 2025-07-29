@@ -187,8 +187,11 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
         assert!(err.contains(&expected_error));
     }
 
-    test_rollup.da_service.produce_block_now().await.unwrap();
-    slot_subscription.next().await;
+    for _ in 0..3 {
+        test_rollup.da_service.produce_block_now().await.unwrap();
+        slot_subscription.next().await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
 
     test_rollup
         .wait_for_rollup_to_shutdown(Duration::from_secs(1))
