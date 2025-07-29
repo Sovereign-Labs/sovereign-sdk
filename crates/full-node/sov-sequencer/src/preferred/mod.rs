@@ -958,6 +958,17 @@ where
                     BatchCreationError::DatabaseError(e) => {
                         return Err(database_error_500(e));
                     }
+                    BatchCreationError::PreferredSequencerAtStopHeight {
+                        height_to_stop_at,
+                        current_height,
+                    } => {
+                        return Err(error_not_fully_synced(
+                            SequencerNotReadyDetails::PreferredSequencerAtStopHeight {
+                                height_to_stop_at,
+                                current_height,
+                            },
+                        ));
+                    }
                 },
                 AcceptTxError::TxTooBig {
                     current_batch_size,
@@ -1251,6 +1262,16 @@ pub enum BatchCreationError {
     /// The sequencer was not able to start a batch because it has consumed its whole buffer of finalized slots.
     #[error("The sequencer is temporarily overloaded. Try again in a few seconds")]
     NoFinalizedSlotAvailable,
+    /// The prefered sequencer has reached the stop height and is no longer creating new batches.
+    #[error(
+        "The sequencer is halted for a chain upgrade. Please wait for the upgrade to complete. height_to_stop_at: {height_to_stop_at}, current_height: {current_height}" 
+    )]
+    PreferredSequencerAtStopHeight {
+        /// The current rollup height of the preferred sequencer.
+        current_height: RollupHeight,
+        /// The rollup height at which the preferred sequencer will stop creating new batches.
+        height_to_stop_at: RollupHeight,
+    },
 }
 
 #[cfg(test)]
