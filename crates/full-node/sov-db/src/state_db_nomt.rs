@@ -376,15 +376,16 @@ where
                 };
                 overlay = returned;
                 std::thread::sleep(current_wait);
-                // Apply exponential backoff with factor 1.5
+                // Apply exponential backoff with factor 1.5:
+                // multiply by 3 then divide by 2 to get 1.5x
                 // Use saturating operations to prevent overflow
-                let next_nanos = current_wait
-                    .as_nanos()
-                    .saturating_mul(3) // multiply by 3
-                    .saturating_div(2); // then divide by 2 to get 1.5x
+                let next_nanos = current_wait.as_nanos().saturating_mul(3).saturating_div(2);
 
-                current_wait =
-                    std::time::Duration::from_nanos(next_nanos.min(u64::MAX as u128) as u64);
+                current_wait = std::time::Duration::from_nanos(
+                    next_nanos
+                        .try_into()
+                        .expect("Nanos overflow for NOMT commit retry"),
+                );
             }
         }
     }
