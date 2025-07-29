@@ -407,6 +407,7 @@ where
         witness: &Self::Witness,
         prev_state_root: Self::Root,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
+        let start = std::time::Instant::now();
         let next_version = self.historical_state.get_next_version();
         tracing::trace!(%prev_state_root, %next_version, "NomtProverStorage, computing state update");
         // Open 2 sessions close to each other
@@ -459,7 +460,7 @@ where
         let kernel_root = kernel_finished_session.root();
         let root = StorageRoot::new(user_root.into_inner(), kernel_root.into_inner());
 
-        tracing::debug!(state_root = %root, %next_version, "computed next state root");
+        tracing::debug!(state_root = %root, %next_version, time = ?start.elapsed(), "computed next state root");
 
         let state_update = NomtStateUpdate {
             user: user_finished_session,
