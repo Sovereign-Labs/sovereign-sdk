@@ -26,7 +26,7 @@ jobs:
           # PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         with:
           path-to-signatures: 'signatures/version1/cla.json'
-          path-to-document: 'https://github.com/sovereign-labs/sovereign-sdk-wip/blob/nightly/CLA.md' # e.g. a CLA or a DCO document
+          path-to-document: 'https://github.com/sovereign-labs/sovereign-sdk/blob/nightly/CLA.md' # e.g. a CLA or a DCO document
           # branch should not be protected
           branch: 'cla/signatures'
           allowlist: user1,bot*
