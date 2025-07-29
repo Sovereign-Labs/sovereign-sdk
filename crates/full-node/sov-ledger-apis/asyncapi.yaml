@@ -9,8 +9,8 @@ info:
     url: https://github.com/Sovereign-Labs/sovereign-sdk
     email: info@sovereign.xyz
   license:
-    name: Apache 2.0
-    url: https://www.apache.org/licenses/LICENSE-2.0.html
+    name: Sovereign Labs Community Software License
+    url: https://github.com/Sovereign-Labs/sovereign-sdk/blob/nightly/LICENSE.md
 defaultContentType: application/json
 servers:
   local:
