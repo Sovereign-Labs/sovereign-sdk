@@ -75,7 +75,7 @@ The Sovereign Admin can manage the module through the following call messages:
 
 ## Notification Obligations
 
-In addition to integrating the revenue share module, the Sovereign Commercial License requires that you reach out to Sovereign Labs in writing at <info@sovereign.xyz> before deploying your rollup
+In addition to integrating the revenue share module, the Sovereign Commercial License requires that you reach out to Sovereign Labs in writing at <info@sovlabs.io> before deploying your rollup
 in production. Your email must include any information necessary for Sovereign Labs to enable/disable revenue share at its discretion. This includes...
 1. A link to or copy of any documentation necessary for interacting with your rollup
 2. An API endpoint where Sovereign can submit transactions to enable/disable revenue share. If applicable, this endpoint must ensure that the reasonable gas costs of enabling/disabling revenue share are covered. This may be done by transferring gas tokens directly to the address listed in the revenue share module, by providing a sequencer endpoint which uses the paymaster to cover gas costs, or in any other manner that may be mutually agreed between you and Sovereign Labs.
