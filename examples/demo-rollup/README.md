@@ -1,11 +1,10 @@
 # Demo Rollup ![Time - ~5 mins](https://img.shields.io/badge/Time-~5_mins-informational)
 
 <p align="center">
-  <img width="50%" src="../../docs/assets/discord-banner.png">
   <br>
   <i>Stuck, facing problems, or unsure about something?</i>
   <br>
-  <i>Join our <a href="https://discord.gg/kbykCcPrcA">Discord</a> and ask your questions in <code>#support</code>!</i>
+  <i>Join our <a href="https://join.slack.com/t/sovereigndevelopers/shared_invite/zt-39aolimfp-XsFK6dL6LhOFHhtXsD_kCA">Slack</a> and ask your questions in <code>#support</code>!</i>
 </p>
 
 #### Table of Contents

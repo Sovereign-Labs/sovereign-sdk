@@ -1,9 +1,6 @@
 ![](./docs/assets/banner.jpg)
 
 <div align="center">
-  <a href="https://discord.gg/kbykCcPrcA" > 
-      <img alt="Discord" src="https://img.shields.io/discord/1050059327626555462?label=discord"/> 
-  </a>
   <a href="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk" > 
       <img alt="Coverage" src="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk/branch/nightly/graph/badge.svg"/> 
   </a>
