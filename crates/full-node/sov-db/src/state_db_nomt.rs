@@ -14,7 +14,7 @@ const KERNEL: &str = "kernel_state";
 const USER: &str = "user_state";
 
 const COMMIT_START_DELAY: std::time::Duration = std::time::Duration::from_millis(1);
-const COMMIT_RETRY_ATTEMPTS: usize = 15;
+const COMMIT_RETRY_ATTEMPTS: usize = 26;
 
 /// Contains all the most recent rollup data.
 pub struct NomtStateDb<H> {
