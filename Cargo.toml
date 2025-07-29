@@ -82,7 +82,7 @@ default-members = ["crates/rollup-interface", "crates/adapters/mock-da", "crates
 [workspace.package]
 version = "0.3.0"
 edition = "2021"
-license = "Sovereign Labs Community Software License"
+license = "Sovereign Permissionless Commercial License"
 authors = ["Sovereign Labs <info@sovereign.xyz>"]
 homepage = "https://www.sovereign.xyz"
 publish = false

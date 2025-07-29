@@ -2,7 +2,7 @@
 name = "sov-kernels"
 version.workspace = true
 edition.workspace = true
-license = "Sovereign Labs Community Software License"
+license = "Sovereign Permissionless Commercial License"
 authors.workspace = true
 homepage.workspace = true
 publish.workspace = true
