@@ -147,10 +147,14 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
 
     let client = test_rollup.client.clone();
 
+    let da = test_rollup.da_service.clone();
+    let mut da_sub = da.subscribe_finalized_header().await.unwrap();
+    // We just need at least one finalized block to proceed with the tests.
     for _ in 0..finalization_blocks + 3 {
         test_rollup.da_service.produce_block_now().await.unwrap();
         tokio::time::sleep(Duration::from_millis(300)).await;
     }
+    da_sub.next().await;
 
     let api_client = test_rollup.api_client.clone();
 
