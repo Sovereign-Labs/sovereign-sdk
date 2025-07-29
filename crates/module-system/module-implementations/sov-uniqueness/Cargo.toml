@@ -3,7 +3,7 @@ name = "sov-uniqueness"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }
-license = "Sovereign Labs Community Software License"
+license = "Sovereign Permissionless Commercial License"
 repository = { workspace = true }
 description = "Sovereign SDK module for managing and tracking transaction uniqueness"
 

@@ -1,55 +1,67 @@
-# Sovereign Labs Community Software License
+# Sovereign Permissionless Commercial License
 
-This Sovereign Labs Community License Agreement (the “Agreement”) sets forth the terms on which Sovereign Labs (“Sovereign Labs”) makes available certain software made available by Sovereign Labs under this Agreement (the “Software”). 
+**EFFECTIVE DATE: JULY 29, 2025**
 
-**BY INSTALLING, DOWNLOADING, ACCESSING, USING OR DISTRIBUTING ANY OF THE SOFTWARE, YOU AGREE TO THE TERMS AND CONDITIONS OF THIS AGREEMENT. IF YOU DO NOT AGREE TO SUCH TERMS AND CONDITIONS, YOU MUST NOT USE THE SOFTWARE.** If you are receiving the Software on behalf of a legal entity, you represent and warrant that you have the actual authority to agree to the terms and conditions of this Agreement on behalf of such entity. 
+## 1. Overview
 
-**“Licensee”** means you, an individual, or the entity on whose behalf you are receiving the Software.
+This Sovereign Permissionless Commercial License (the "Agreement") is made by and between you and Sovereign Labs, Inc. ("Sovereign"). This Agreement takes effect on the earlier of: (a) when you access or use certain components of Sovereign's proprietary software development kit, which are identified as being subject to the Sovereign Permissionless Commercial License (the "Commercial SDK Components"); or (b) when you notify Sovereign that you will be using the Commercial SDK Components in accordance with the process set forth in Section 2 (Your Notification Obligations). By accessing or using the Commercial SDK Components, you: (a) acknowledge that you have read and understand this Agreement; (b) represent and warrant that you have the right, power, and authority to enter into this Agreement and that, if you are entering into this Agreement for an organization, that you have the legal authority to bind that organization; and (c) accept this Agreement and agree that you are legally bound by its terms. You may not access the Commercial SDK Components if you do not agree to the terms of this Agreement. 
 
-## 1. LICENSE GRANT AND CONDITIONS
+**YOU WILL NOT BE SUBJECT TO THE REVENUE SHARE OBLIGATIONS SET FORTH IN SECTION 5 IF YOU ONLY USE THE COMMERCIAL SDK COMPONENTS AND ANY ROLLUP (DEFINED BELOW) IN A NON-PRODUCTION, NON-COMMERCIAL ENVIRONMENT FOR INTERNAL RESEARCH AND DEVELOPMENT PURPOSES.**
 
-### 1.1 License
-Subject to the terms and conditions of this Agreement, Sovereign Labs hereby grants to Licensee a non-exclusive, royalty-free, worldwide, non-transferable, non-sublicenseable license during the term of this Agreement to:
-- (a) internally use the Software;
-- (b) prepare modifications and derivative works of the Software; and
-- (c) reproduce copies of the Software (the “License”).
+## 2. Your Notification Obligations
 
-Licensee is not granted the right to, and Licensee shall not, exercise the License for an **Excluded Purpose**. For purposes of this Agreement, **“Excluded Purpose”** means:
-- (i) making available any software-as-a-service, platform-as-a-service, infrastructure-as-a-service or other online or other service, application, offering, platform, infrastructure or
-- (ii) use of the Software for any commercial purpose, including, without limitation, offering, distributing or making available any commercial or production application or offering.
+If you intend to use the Commercial SDK Components in a production environment, prior to accessing or using the Commercial SDK Components, you must: (a) comply with any steps or requirements detailed at [this link](https://docs.sovereign.xyz/8-0-complying-with-revenue-share.html) and (b) notify Sovereign in writing by e-mailing info@sovlabs.io before deploying the first production version of your application. If Sovereign reaches out for additional details, you agree to promptly respond and provide Sovereign with any additional information that is reasonably requested.
 
-### 1.2 Conditions
-In consideration of the License, Licensee’s use of the Software is subject to the following conditions:
-- **a.** Licensee must cause any Software modified by Licensee to carry prominent notices stating that Licensee modified the Software.
-- **b.** On each Software copy, Licensee shall reproduce and not remove or alter all Sovereign Labs or third-party copyright or other proprietary notices contained in the Software, and Licensee must provide the notice below with each copy:
+## 3. License
 
-### 1.3 Licensee Modifications
-Licensee may add its own copyright notices to modifications made by Licensee.
+Subject to the terms of, and your compliance with, this Agreement, Sovereign hereby grants to you a non-exclusive, non-sublicensable, world-wide, license to copy, modify, perform, access, create derivative works of, and otherwise use the Commercial SDK Components for the sole purpose of building a layer 2 blockchain rollup solution, which aggregates multiple transactions and then posts such transaction data onto a layer 1 blockchain or otherwise enables or facilitates a similar functionality (a "Rollup").
 
-### 1.4 No Sublicensing
-The License does not include the right to sublicense the Software.
+## 4. Conditions
 
-## 2. TERM AND TERMINATION
-This Agreement will continue unless and until earlier terminated as set forth herein. If Licensee breaches any of its conditions or obligations under this Agreement, this Agreement will terminate automatically and the License will terminate automatically and permanently.
+Your use of the Commercial SDK Components is subject to the following conditions: (a) you must not deploy any blockchain unless any Sequencer (defined further below) that you operate, that you contract to operate, or that you permit to operate is in compliance with OFAC (including, without limitation, by implementing geofencing and the blocking of wallet addresses from OFAC-sanctioned jurisdictions); (b) you may not take any action to circumvent or otherwise avoid the revenue share obligations set forth in Section 5 (Revenue Share); (c) you may not use the Commercial SDK Components for any purpose other than as expressly permitted in Section 3 (License), and (d) you will not remove or alter any Sovereign copyright or proprietary notices. A "Sequencer" is a system or mechanism that is responsible for ordering transactions on the Rollup.
 
-## 3. INTELLECTUAL PROPERTY
-As between the parties, Sovereign Labs will retain all right, title, and interest in the Software, and all intellectual property rights therein. Sovereign Labs hereby reserves all rights not expressly granted to Licensee in this Agreement. Sovereign Labs hereby reserves all rights in its trademarks and service marks, and no licenses therein are granted in this Agreement.
+## 5. Revenue Share
 
-## 4. DISCLAIMER
-**SOVEREIGN LABS HEREBY DISCLAIMS ANY AND ALL WARRANTIES AND CONDITIONS, EXPRESS, IMPLIED, STATUTORY, OR OTHERWISE, AND SPECIFICALLY DISCLAIMS ANY WARRANTY OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, WITH RESPECT TO THE SOFTWARE.**
+### a. Revenue Share
 
-## 5. LIMITATION OF LIABILITY
-**SOVEREIGN LABS WILL NOT BE LIABLE FOR ANY DAMAGES OF ANY KIND, INCLUDING BUT NOT LIMITED TO, LOST PROFITS OR ANY CONSEQUENTIAL, SPECIAL, INCIDENTAL, INDIRECT, OR DIRECT DAMAGES, HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, ARISING OUT OF THIS AGREEMENT. THE FOREGOING SHALL APPLY TO THE EXTENT PERMITTED BY APPLICABLE LAW.**
+In consideration of the license granted hereunder, subject to the remainder of this Section 5, you agree to promptly transfer ten percent (10%) of all consideration or revenues generated from or relating to the operation of the Rollup, including, for the avoidance of doubt and without limitation, any amounts generated (i) in connection with operating a Sequencer, or (ii) in connection with any features or functionality that utilize, incorporate or enable the Rollup's features or functionality in any applications that you or your affiliates operate (the "Revenue Share"). The Revenue Share shall exclude any revenues generated by bridging providers or any on-ramp or off-ramp service providers, in each case solely with respect to such bridging, on-ramp or off-ramp services. For the avoidance of doubt, the Revenue Shares are calculated on a gross basis and will not be subject to deductions for gas or other transaction fees, fees attributable to a data availability solution, or other costs relating to the Rollup. The Revenue Share does not apply to use of the Commercial SDK Components only in a non-production, non-commercial environment for internal research and development purposes. For the avoidance of doubt, regardless of your compliance with Section 2 (Your Notification Obligations), you must pay all Revenue Shares owed to Sovereign in accordance with this Section 5.
 
-## 6. GENERAL
+### b. Verification
 
-### 6.1 Governing Law
-This Agreement will be governed by and interpreted in accordance with the laws of the state of New York, without reference to its conflict of laws principles. 
-- If Licensee is located within the United States, all disputes arising out of this Agreement are subject to the exclusive jurisdiction of courts located in New York City, New York County, New York, USA. 
-- If Licensee is located outside of the United States, any dispute, controversy, or claim arising out of or relating to this Agreement will be referred to and finally determined by arbitration in accordance with the JAMS International Arbitration Rules. The tribunal will consist of one neutral arbitrator. The place of arbitration will be New York City, New York. The language to be used in the arbitral proceedings will be English. Judgment upon the award rendered by the arbitrator may be entered in any court having jurisdiction thereof.
+You agree to promptly provide to Sovereign information reasonably necessary to calculate and verify the Revenue Share to the extent it is not publicly available (i.e., information regarding revenues that are received off-chain), and to ensure that Sovereign promptly receives a Revenue Share pursuant to Section 6 (Transfer Functionality) or otherwise via mutually agreed-upon means (if it is not already captured pursuant to Section 6).
 
-### 6.2 Assignment
-Licensee may not assign its rights under this Agreement to any third party. Sovereign Labs may freely assign its rights under this Agreement to any third party.
+## 6. Transfer Functionality
 
-### 6.3 Other
-This Agreement is the entire agreement between the parties regarding the subject matter hereof. No amendment or modification of this Agreement will be valid or binding upon the parties unless made in writing and signed by the duly authorized representatives of both parties. In the event that any provision, including without limitation any condition, of this Agreement is held to be unenforceable, this Agreement and all licenses and rights granted hereunder will immediately terminate. Waiver by Sovereign Labs of a breach of any provision of this Agreement or the failure by Sovereign Labs to exercise any right hereunder will not be construed as a waiver of any subsequent breach of that right or as a waiver of any other right.
+The Commercial SDK Components include a module that is designed to automatically effect Revenue Share transfers (the "RevenueShare Module"). Further details regarding the RevenueShare Module are set forth [here](https://docs.sovereign.xyz/8-0-complying-with-revenue-share.html). You agree that, when utilizing the Commercial SDK Component, you shall integrate the RevenueShare Module in a manner that is reasonably designed to effect, and does actually effect, the Revenue Share as described herein in a manner reasonably acceptable to Sovereign (such implementation of the RevenueShare Module, the "Transfer Functionality"). You agree that failing to incorporate the RevenueShare Module into your Rollup's software, or tampering with or modifying the RevenueShare Module, or otherwise circumventing or frustrating the RevenueShare Module or Transfer Functionality in any way whatsoever will be considered a material breach of this Agreement. If the Transfer Functionality fails to enact transfers for any reason whatsoever, your obligations in Section 5 (Revenue Share) will survive, and you will pay Sovereign the Revenue Share by manually transferring the amount owed to the RevenueShare Module. Sovereign may enable or disable the Transfer Functionality at any time in its sole discretion.
+
+## 7. Indemnification
+
+You will indemnify, defend (at Sovereign's option), and hold harmless Sovereign and its current and former directors, supervisors, officers, employees, and agents, to the fullest extent permitted by law, from and against any damage, cost, loss, or expense incurred in connection with any claim by any third party arising out of or related to your use of the Commercial SDK Components. You may not settle any claim without Sovereign's written permission.
+
+## 8. Term; Termination
+
+This Agreement will continue unless and until earlier terminated as set forth in this Section 8. If you breach any of your conditions or obligations under this Agreement and such breach is not cured within fifteen (15) days after notice of such breach, this Agreement will terminate automatically. Sovereign may terminate this Agreement at any time in its sole discretion. Upon termination of this Agreement, all licenses granted hereunder shall terminate, and you must immediately cease use of the Commercial SDK Components.
+
+## 9. Your Obligations
+
+You are responsible for complying with all applicable tax laws, rules, and regulations, (including, without limitation, any tax reporting obligations) in connection with your use of the Commercial SDK Components, and the Revenue Share shall be calculated net of any withholding tax required to be collected under applicable law.
+
+## 10. Warranty Disclaimer
+
+TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW, THE COMMERCIAL SDK COMPONENTS ARE PROVIDED ON AN "AS IS" BASIS. SOVEREIGN HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE, OR THE ABSENCE OF LATENT OR OTHER DEFECTS, ACCURACY, OR THE PRESENCE OF ABSENCE OF ERRORS, WHETHER OR NOT DISCOVERABLE. YOU ARE SOLELY RESPONSIBLE FOR DETERMINING THE APPROPRIATENESS AND COMMERCIAL VIABILITY OF USING THE COMMERCIAL SDK COMPONENTS, AND ASSUME ANY RISKS ASSOCIATED WITH THE COMMERCIAL SDK COMPONENTS, AS WELL AS ANY ROLLUP OR OTHER SOLUTION THAT YOU MAY DEVELOP IN CONNECTION WITH THIS AGREEMENT.
+
+## 11. LIMITATION OF LIABILITY
+
+TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT AND UNDER NO LEGAL THEORY, WHETHER IN TORT (INCLUDING NEGLIGENCE), CONTRACT, OR OTHERWISE, SHALL SOVEREIGN BE LIABLE TO YOU FOR: (X) ANY INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL OR PUNITIVE DAMAGES OF ANY CHARACTER ARISING AS A RESULT OF THIS AGREEMENT OR OUT OF THE USE OR INABILITY TO USE THE COMMERCIAL SDK COMPONENTS (INCLUDING BUT NOT LIMITED TO DAMAGES FOR LOSS OF PROFITS, REVENUE OR GOODWILL, WORK STOPPAGE, COMPUTER FAILURE OR MALFUNCTION, COST OF PROCURING REPLACEMENT TECHNOLOGY OR ANY AND ALL OTHER COMMERCIAL DAMAGES OR LOSSES), EVEN IF SOVEREIGN HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES; OR (Y) ANY DAMAGES OR LIABILITY IN EXCESS OF THE AMOUNTS OWED BY YOU TO SOVEREIGN DURING THE TWELVE (12) MONTHS PRIOR TO THE OCCURRENCE GIVING RISE TO SUCH DAMAGES OR LIABILITY (OR, IF GREATER, ONE HUNDRED DOLLARS).
+
+## 12. GOVERNING LAW AND ARBITRATION
+
+This Agreement will be governed by and interpreted in accordance with the laws of the state of New York, without reference to its conflict of laws principles. If you are located within the United States, all disputes arising out of this Agreement are subject to the exclusive jurisdiction of courts located in New York City, New York County, New York. If you are located outside of the United States, any dispute, controversy or claim arising out of or relating to this Agreement will be referred to and finally determined by arbitration in accordance with the JAMS International Arbitration Rules. The tribunal will consist of one neutral arbitrator. The place of arbitration will be New York City, New York. The language to be used in the arbitral proceedings will be English. Judgment upon the award rendered by the arbitrator may be entered in any court having jurisdiction thereof.
+
+## 13. ASSIGNMENT
+
+You may not assign your rights under this Agreement to any third party. Sovereign may freely assign this Agreement or any rights hereunder to any third party.
+
+## 14. MISCELLANEOUS
+
+This Agreement is the entire agreement between the parties regarding the subject matter hereof and supersedes and merges all prior discussions between the parties with respect to such subject matters. No amendment or modification of this Agreement will be valid or binding upon the parties unless made in writing and signed by the duly authorized representatives of both parties. If any provision for this Agreement is, for any reason, held to be invalid or unenforceable, the other provisions of this Agreement will remain enforceable and the invalid or unenforceable provision will be deemed modified so that it is valid and enforceable to the maximum extent permitted by law. Waiver by Sovereign of a breach of any provision of this Agreement or the failure by Sovereign to exercise any right hereunder will not be construed as a waiver of any subsequent breach of that right or as a waiver of any other right. You agree that breach of this Agreement may cause damage to Sovereign for which recovery of damages would be inadequate, and that Sovereign will be entitled to seek timely injunctive relief under this Agreement.
