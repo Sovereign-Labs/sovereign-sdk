@@ -98,7 +98,7 @@ jobs:
       - name: Compute whether the needed jobs succeeded or failed
         uses: re-actors/alls-green@release/v1
         with:
-        #   allowed-skips: deploy-github-pages
+          #   allowed-skips: deploy-github-pages
           jobs: ${{ toJSON(needs) }}
 
   check:
@@ -362,7 +362,7 @@ jobs:
       - uses: taiki-e/install-action@cargo-deny
       - run: make cargo-deny-check-licenses
 
-# Temporarily disabled until AWS credentials can be re-issued
+  # Temporarily disabled until AWS credentials can be re-issued
   # cargo-doc-artifact:
   #   runs-on:
   #     - nscloud-ubuntu-22.04-amd64-8x32-with-cache
@@ -596,7 +596,7 @@ jobs:
         with:
           repository: "Sovereign-Labs/sovereign-sdk-web3-js"
           path: "examples/demo-rollup/web3-js-sdk"
-          ref: "493795cb30bdea3b840253a5888467177b64cc93"
+          ref: "45b227eab7ee280a98baf08f8302b7425fa88a2a"
       - name: Run web3-js SDK tests against demo-rollup
         # See script for more details about what to do if job
         run: |
