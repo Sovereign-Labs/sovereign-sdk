@@ -14,11 +14,11 @@ info:
     This is the REST API for the Sovereign SDK full node.
   contact:
     name: Sovereign Labs
-    url: https://github.com/Sovereign-Labs/sovereign-sdk-wip
+    url: https://github.com/Sovereign-Labs/sovereign-sdk
     email: info@sovereign.xyz
   license:
-    name: Apache-2.0
-    url: https://github.com/Sovereign-Labs/sovereign-sdk-wip/blob/nightly/LICENSE.md
+    name: Sovereign Labs Community Software License
+    url: https://github.com/Sovereign-Labs/sovereign-sdk/blob/nightly/LICENSE.md
 servers:
   - url: http://localhost:12346
     description: Localhost
