@@ -19,8 +19,8 @@ To set up Celestia nodes, please refer to the official documentation provided by
 ## How it Works
 
 All of `sov-celestia-adapter` boils down to two trait implementations: 
- - [`DaVerifier`](https://github.com/Sovereign-Labs/sovereign-sdk-wip/blob/9be27233219959e8555402807e75b0c6d1f5f0e0/crates/rollup-interface/src/state_machine/da.rs#L58)
- - [`DaService`](https://github.com/Sovereign-Labs/sovereign-sdk-wip/blob/9be27233219959e8555402807e75b0c6d1f5f0e0/crates/rollup-interface/src/node/da.rs#L130)
+ - [`DaVerifier`](https://github.com/Sovereign-Labs/sovereign-sdk/blob/545c93c6adfe650d19604cf3413e013a62889f46/crates/rollup-interface/src/state_machine/da.rs#L56)
+ - [`DaService`](https://github.com/Sovereign-Labs/sovereign-sdk/blob/545c93c6adfe650d19604cf3413e013a62889f46/crates/rollup-interface/src/node/da.rs#L112)
 
 ### The `DaVerifier` Trait
 
