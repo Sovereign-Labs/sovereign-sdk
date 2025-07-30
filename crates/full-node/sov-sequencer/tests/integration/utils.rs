@@ -259,6 +259,7 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
         c.max_concurrent_blobs = TEST_MAX_CONCURRENT_BLOBS;
     })
     .set_da_config(|c| c.sender_address = seq_da_address)
+    .set_persistent_da()
     .with_preferred_seq_min_profit_per_tx(minimum_profit_per_tx)
     .with_preferred_seq_recovery_strategy(sov_sequencer::preferred::RecoveryStrategy::TryToSave);
 
