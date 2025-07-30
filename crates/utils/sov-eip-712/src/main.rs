@@ -41,7 +41,7 @@ fn main() -> Result<()> {
     let hash = msg.eip712_signing_hash(&domain);
     let signature: k256::ecdsa::Signature = signing_key.sign_prehash(hash.as_slice())?;
 
-    println!("Message: {:?}", msg);
+    println!("Message: {msg:?}");
     println!("Hash: 0x{}", hex::encode(hash));
     println!("Signature: 0x{}", hex::encode(signature.to_bytes()));
 
@@ -49,7 +49,7 @@ fn main() -> Result<()> {
     let is_valid = verifying_key
         .verify_prehash(hash.as_slice(), &signature)
         .is_ok();
-    println!("Signature valid: {}", is_valid);
+    println!("Signature valid: {is_valid}");
 
     Ok(())
 }
