@@ -27,7 +27,7 @@ serde = { workspace = true }
 strum = { version = "0.26", features = ["derive"] }
 toml = { workspace = true }
 tower = { workspace = true, features = ["util"] }
-sov-sequencer = { workspace = true }
+full-node-configs = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
 tokio = { workspace = true, features = ["net", "sync", "rt-multi-thread", "time"] }
 hex = { workspace = true }

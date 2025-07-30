@@ -10,6 +10,7 @@ use std::time::Duration;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
+use full_node_configs::sequencer::default_ideal_lag_behind_finalized_slot;
 use futures::future;
 use sov_api_spec::types::{
     self as api_types, SequencerListEventsPage, SequencerListEventsResponse, TxReceiptResult,
@@ -25,7 +26,6 @@ use sov_node_client::NodeClient;
 use sov_paymaster::{Paymaster, PaymasterConfig};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::ledger_api::IncludeChildren;
-use sov_sequencer::preferred::default_ideal_lag_behind_finalized_slot;
 use sov_sequencer::StateUpdateNotification;
 use sov_test_modules::hooks_count::HooksCount;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;

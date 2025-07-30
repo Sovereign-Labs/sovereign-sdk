@@ -445,23 +445,6 @@ where
     }
 
     #[tracing::instrument(skip_all, level = "info")]
-    pub async fn insert_tx(
-        &mut self,
-        tx: FullyBakedTx,
-        hash: TxHash,
-        sequence_number: SequenceNumber,
-        tx_idx_within_batch: u64,
-    ) -> anyhow::Result<()> {
-        if !self.is_replica {
-            self.backend
-                .add_tx(sequence_number, tx_idx_within_batch, tx.clone(), hash)
-                .await?;
-        }
-
-        Ok(())
-    }
-
-    #[tracing::instrument(skip_all, level = "info")]
     pub async fn start_batch(
         &mut self,
         visible_slot_number_after_increase: VisibleSlotNumber,

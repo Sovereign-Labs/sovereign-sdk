@@ -1,12 +1,12 @@
 use std::num::NonZero;
 use std::path::Path;
 
+use full_node_configs::sequencer::{SequencerConfig, SequencerKindConfig};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_db::config::RollupDbConfig;
 use sov_rollup_interface::node::da::DaService;
-use sov_sequencer::{SequencerConfig, SequencerKindConfig};
 
 pub const DEFAULT_CONCURRENT_SYNC_TASKS: u8 = 5;
 pub use sov_metrics::{MonitoringConfig, TelegrafSocketConfig};

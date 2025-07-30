@@ -30,11 +30,11 @@ use db::{
     PreferredSequencerDb, PreferredSequencerDbBackend, PreferredSequencerReadBatch,
     PreferredSequencerReadBlob,
 };
+pub use full_node_configs::sequencer::{PreferredSequencerConfig, RecoveryStrategy};
 use futures::Stream;
 use inner::*;
 use preferred_blob_sender::PreferredBlobSender;
 use replica_sync_task::spawn_replica_sync_task;
-use schemars::JsonSchema;
 use serde_with::serde_as;
 use side_effects::SideEffectsTask;
 use sov_blob_sender::{new_blob_id, BlobExecutionStatus, BlobSender};
@@ -83,23 +83,6 @@ type VisibleSlotNumberIncrease = NonZero<u8>;
 
 // Big infodump for the user that wouldmake the code hard to read if it were inline.
 const RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY: &str = "The preferred sequencer is too far behind, and the visible slot number has lagged more than the allowed deferred slots count. This means some non-preferred batches may have been included by the node, if there were any. If this happened, already provided soft confirmations may now no longer be valid. Because the recovery_strategy config was set to None, we are not attempting recovery at this point. You should either: a) delete everything from the preferred_sequencer database (thus annulling all currently pending soft confirmations), which will allow you to restart the sequencer fresh; or b) set the recovery_strategy config value to TryToSave, in which case all pending batches will be flushed to be executed on a best-effort basis. The latter may save some soft-confirmations if they have not been invalidated yet. However, IF a non-preferred batch has been included, AND some soft-confirmations have been invalidated by it, this will cause the sequencer to be penalised for every invalid batch; ensure your sequencer bond is sufficient to cover any penalties to be able to continue operating uninterrupted.";
-
-/// Strategy for handling the scenario where the preferred sequencer finds itself close to or past
-/// deferred_slots_count in the past, i.e. risking its soft confirmations being invalidated due to
-/// the possibility of a non-preferred (deferred) batch having been included.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
-#[serde(rename_all = "PascalCase")]
-pub enum RecoveryStrategy {
-    /// Do not attempt recovery, shutdown the sequencer instead. The user may attempt to resume
-    /// operation either by swapping to TryToSave, or deleting everything from the preferred
-    /// sequencer database (cancelling ALL pending soft confirmations!).
-    None,
-    /// Attempt to recover by flushing batches and catching up with the chain. Triggers a bit more
-    /// conservatively to attempt to preserve soft confirmations (but if the sequencer was offline,
-    /// this will likely make no difference). If some soft confirmations have indeed been
-    /// invalidated, the sequencer will be penalized for every invalid batch!
-    TryToSave,
-}
 
 /// A [`Sequencer`] with instant transaction confirmation.
 pub struct PreferredSequencer<S, Rt, Da>
@@ -1020,75 +1003,6 @@ pub(crate) struct PreferredBatchToReplay {
     is_in_progress: bool,
     visible_slot_number_after_increase: VisibleSlotNumber,
     batch: WithCachedTxHashes<PreferredBatchData>,
-}
-
-/// Configuration for [`PreferredSequencer`].
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
-pub struct PreferredSequencerConfig {
-    /// The minimum fee that the preferred sequencer is willing to accept, denominated in rollup tokens. Defaults to zero.
-    /// Sequencers should set this to a non-zero value if they wish to cover their DA costs.
-    #[serde(default)]
-    pub minimum_profit_per_tx: u128,
-    /// The size of the Tokio channel used to stream events.
-    ///
-    /// Don't deviate from the default unless you know what you're doing.
-    #[serde(default = "default_events_channel_size")]
-    pub events_channel_size: usize,
-    /// Optional. When present, Postgres will be used as a database instead of
-    /// RocksDB.
-    #[serde(default)]
-    pub postgres_connection_string: Option<String>,
-    /// When enabled, the sequencer will skip some expensive consistency checks
-    /// on the state root. This means that bugs in the implementation are less likely to be detected
-    /// but may improve performance and allows the sequencer to continue operating in case of known bugs.
-    #[serde(default)]
-    pub disable_state_root_consistency_checks: bool,
-    /// The ideal lag behind the finalized slot number.
-    #[serde(default = "default_ideal_lag_behind_finalized_slot")]
-    pub ideal_lag_behind_finalized_slot: u64,
-    #[serde(default = "default_db_event_channel_size")]
-    /// The number of events that can be buffered in the database event channel while `update_state` is running.
-    /// This value needs to be increased at higher TPS to avoid blocking the sequencer.
-    pub db_event_channel_size: usize,
-    /// Strategy for handling recovery scenarios in the preferred sequencer.
-    pub recovery_strategy: RecoveryStrategy,
-    /// Target time in milliseconds to spend executing all the txs in a single batch. Batches will be closed when they exceed this value.
-    pub batch_execution_time_limit_millis: u64,
-    /// When enabled, the sequencer runs in replica mode and cannot accept transactions.
-    /// It will sync from the master sequencer's database but remain read-only.
-    #[serde(default)]
-    pub is_replica: bool,
-}
-
-impl Default for PreferredSequencerConfig {
-    fn default() -> Self {
-        Self {
-            minimum_profit_per_tx: 0,
-            events_channel_size: default_events_channel_size(),
-            postgres_connection_string: None,
-            disable_state_root_consistency_checks: false,
-            ideal_lag_behind_finalized_slot: default_ideal_lag_behind_finalized_slot(),
-            recovery_strategy: RecoveryStrategy::None,
-            is_replica: false,
-            db_event_channel_size: default_db_event_channel_size(),
-            batch_execution_time_limit_millis: 6_000, // 6 seconds
-        }
-    }
-}
-
-/// The ideal buffer of finalized slots that the sequencer should maintain. The larger this number,
-/// the longer forced transactions will take to be included but the more the sequencer is able to buffer
-/// instability on the DA layer.
-pub const fn default_ideal_lag_behind_finalized_slot() -> u64 {
-    10
-}
-
-fn default_events_channel_size() -> usize {
-    10_000
-}
-
-fn default_db_event_channel_size() -> usize {
-    10_000
 }
 
 #[async_trait]

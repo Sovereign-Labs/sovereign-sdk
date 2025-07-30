@@ -27,6 +27,7 @@ futures = { workspace = true }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["client", "server"] }
 mini-moka = "0.10"
+full-node-configs = { workspace = true }
 rockbound = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

@@ -2,7 +2,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_bank::Amount;
 #[cfg(feature = "native")]
-use sov_modules_api::prelude::tracing::{self, instrument};
+use sov_modules_api::prelude::tracing::instrument;
 use sov_modules_api::{
     BorrowedMut, Context, DaSpec, EventEmitter, GenesisState, HexHash, HexString, Module, ModuleId,
     ModuleInfo, ModuleRestApi, Spec, StateValue, TxState,
