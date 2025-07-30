@@ -91,6 +91,11 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
+name = "sov-eip-712"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
 name = "sov-eth-client"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []

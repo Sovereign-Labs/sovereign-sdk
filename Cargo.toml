@@ -24,6 +24,7 @@ members = [
     "crates/utils/nearly-linear",
     "crates/utils/sov-zkvm-utils",
     "crates/utils/sov-build",
+    "crates/utils/sov-eip-712",
     # Module System
     "crates/module-system/sov-cli",
     "crates/module-system/sov-modules-stf-blueprint",
@@ -267,6 +268,7 @@ ethers-signers = { version = "=2.0.14", default-features = false }
 ethers-middleware = { version = "=2.0.14", default-features = false }
 # ea25df7ed3b02c951c1d6ed49cee1ba40728f3f9, just couple days after 1.0.4
 alloy-primitives = { version = "=0.7.7", default-features = false }
+alloy-sol-types = { version = "=0.7.7", default-features = false }
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "ea25df7ed3b02c951c1d6ed49cee1ba40728f3f9", default-features = false }
 reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", rev = "ea25df7ed3b02c951c1d6ed49cee1ba40728f3f9", default-features = false }
 reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "ea25df7ed3b02c951c1d6ed49cee1ba40728f3f9", default-features = false }

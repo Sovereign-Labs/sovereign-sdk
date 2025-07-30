@@ -1,0 +1,19 @@
+[package]
+name = "sov-eip-712"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+alloy-primitives.workspace = true
+alloy-sol-types.workspace = true
+anyhow.workspace = true
+k256 = { workspace = true, features = ["ecdsa"] }
+hex.workspace = true
+
+[lints]
+workspace = true
