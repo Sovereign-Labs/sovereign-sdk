@@ -355,7 +355,7 @@ fn try_commit_overlay_with_backoff<H>(
 where
     H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
 {
-    let mut start_wait = COMMIT_START_DELAY;
+    let mut current_wait = COMMIT_START_DELAY;
     for attempt in 0..COMMIT_RETRY_ATTEMPTS {
         match overlay.try_commit_nonblocking(nomt)? {
             None => {
@@ -365,18 +365,27 @@ where
             Some(returned) => {
                 match attempt {
                     n if n > 20 => {
-                        tracing::warn!(%attempt, wait_time = ?start_wait, "Failed to commit overlay, retrying...");
+                        tracing::warn!(%attempt, wait_time = ?current_wait, "Failed to commit overlay, retrying...");
                     }
                     n if n > 10 => {
-                        tracing::info!(%attempt, wait_time = ?start_wait, "Failed to commit overlay, retrying...");
+                        tracing::info!(%attempt, wait_time = ?current_wait, "Failed to commit overlay, retrying...");
                     }
                     _ => {
-                        tracing::debug!(%attempt, wait_time = ?start_wait, "Failed to commit overlay, retrying...");
+                        tracing::debug!(%attempt, wait_time = ?current_wait, "Failed to commit overlay, retrying...");
                     }
                 };
                 overlay = returned;
-                std::thread::sleep(start_wait);
-                start_wait *= 2;
+                std::thread::sleep(current_wait);
+                // Apply exponential backoff with factor 1.5:
+                // multiply by 3 then divide by 2 to get 1.5x
+                // Use saturating operations to prevent overflow
+                let next_nanos = current_wait.as_nanos().saturating_mul(3).saturating_div(2);
+
+                current_wait = std::time::Duration::from_nanos(
+                    next_nanos
+                        .try_into()
+                        .expect("Nanos overflow for NOMT commit retry"),
+                );
             }
         }
     }
