@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use tracing::{Event, Level, Subscriber};
 use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter, Layer};
 
 /// Collects logs from the rollup.
@@ -55,11 +56,13 @@ impl tracing::field::Visit for MessageVisitor<'_> {
 
 /// Initialize logging with an explicit filter.
 /// When guard is deallocated, different subscriber can be used again.
-pub fn initialize_logging_with_filter(filter: &str) -> tracing::subscriber::DefaultGuard {
+pub fn initialize_logging_with_filter(filter: &str) {
     let enf_filter = EnvFilter::from_str(filter).unwrap();
     let fmt_layer = fmt::layer().with_filter(enf_filter);
 
-    let subscriber = tracing_subscriber::registry().with(fmt_layer);
-
-    tracing::subscriber::set_default(subscriber)
+    // I want something like this, but across all threads
+    // tracing::subscriber::set_default(subscriber)
+    if let Err(error) = tracing_subscriber::registry().with(fmt_layer).try_init() {
+        tracing::warn!(%error, "Cannot init logging, already happened.");
+    }
 }
