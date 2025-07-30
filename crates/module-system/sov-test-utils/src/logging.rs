@@ -1,10 +1,14 @@
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use tracing::{Event, Level, Subscriber};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{fmt, EnvFilter, Layer};
+use tracing_subscriber::{fmt, reload, EnvFilter, Layer};
+
+// Global handle to reload the filter
+static FILTER_RELOAD_HANDLE: OnceLock<reload::Handle<EnvFilter, tracing_subscriber::Registry>> =
+    OnceLock::new();
 
 /// Collects logs from the rollup.
 #[derive(Clone)]
@@ -56,13 +60,29 @@ impl tracing::field::Visit for MessageVisitor<'_> {
 
 /// Initialize logging with an explicit filter.
 /// When guard is deallocated, different subscriber can be used again.
-pub fn initialize_logging_with_filter(filter: &str) {
-    let enf_filter = EnvFilter::from_str(filter).unwrap();
-    let fmt_layer = fmt::layer().with_filter(enf_filter);
+pub fn initialize_or_change_logging_with_filter(filter: &str) {
+    if let Some(handle) = FILTER_RELOAD_HANDLE.get() {
+        let new_env_filter = EnvFilter::from_str(filter).unwrap();
+        handle.modify(|filter| *filter = new_env_filter).unwrap();
+    } else {
+        initialize_logging_with_filter(filter);
+    }
+}
 
-    // I want something like this, but across all threads
-    // tracing::subscriber::set_default(subscriber)
-    if let Err(error) = tracing_subscriber::registry().with(fmt_layer).try_init() {
+fn initialize_logging_with_filter(filter: &str) {
+    let env_filter = EnvFilter::from_str(filter).unwrap();
+    let (filter_layer, reload_handle) = reload::Layer::new(env_filter);
+
+    // Store the reload handle globally so we can update the filter later
+    FILTER_RELOAD_HANDLE.set(reload_handle).ok();
+
+    let fmt_layer = fmt::layer();
+
+    if let Err(error) = tracing_subscriber::registry()
+        .with(filter_layer)
+        .with(fmt_layer)
+        .try_init()
+    {
         tracing::warn!(%error, "Cannot init logging, already happened.");
     }
 }
