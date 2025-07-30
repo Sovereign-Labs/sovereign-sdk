@@ -601,14 +601,10 @@ where
         };
         let storage_root_historical = self.get_root_hash_unbound(version_to_use)?;
         if self.should_check_dbs_sync(version_to_use) {
-            let SessionsContainer {
-                user: user_session,
-                kernel: kernel_session,
-            } = self.state_session_builder.begin_both_sessions()?;
-            let user_root = user_session.prev_root();
-            let kernel_root = kernel_session.prev_root();
-            drop(user_session);
-            drop(kernel_session);
+            let session_container = self.state_session_builder.begin_both_sessions()?;
+            let user_root = session_container.user.prev_root();
+            let kernel_root = session_container.kernel.prev_root();
+            drop(session_container);
             let prev_root_nomt = StorageRoot::new(user_root.into_inner(), kernel_root.into_inner());
             assert_eq!(
                 storage_root_historical, prev_root_nomt,
