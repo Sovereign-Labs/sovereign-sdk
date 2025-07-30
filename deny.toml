@@ -375,6 +375,11 @@ name = "sov-build"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
+[[licenses.clarify]]
+name = "full-node-configs"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
 [[licenses.exceptions]]
 allow = ["LGPL-3.0"]
 # Used by `risc0-circuit-recursion` in its build script: <https://github.com/risc0/risc0/blob/3177cdedda8fad56d7acd71fe2439e8dd0d93413/risc0/circuit/recursion/build.rs>.

@@ -10671,6 +10671,7 @@ dependencies = [
  "ethers-middleware",
  "ethers-providers",
  "ethers-signers",
+ "full-node-configs",
  "futures",
  "hex",
  "jsonrpsee",

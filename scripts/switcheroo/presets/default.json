@@ -10,6 +10,7 @@
     "crates/full-node/sov-stf-runner",
     "crates/full-node/sov-metrics",
     "crates/full-node/sov-api-spec",
+    "crates/full-node/full-node-configs",
     "crates/utils/sov-rest-utils",
     "crates/utils/nearly-linear",
     "crates/utils/sov-zkvm-utils",
