@@ -1,6 +1,6 @@
 use std::num::NonZero;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicU64, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -812,7 +812,7 @@ where
         stop_at_rollup_height,
     };
 
-    let channel_size =  Arc::new(AtomicU32::new(0));
+    let channel_size = Arc::new(AtomicU32::new(0));
     (
         SynchronizedSequencerState {
             inner,
@@ -1061,8 +1061,7 @@ where
     }
 
     async fn send(&self, message: Message<S, Rt>) {
-        self.channel_size
-            .fetch_add(1, Ordering::Relaxed);
+        self.channel_size.fetch_add(1, Ordering::Relaxed);
         if self.message_sender.send(message).await.is_err() {
             info!("SynchronizedSequencerState(send) task exited, this is ok if the sequencer is shutting down.");
             exit_rollup(&self.shutdown_sender).await;
