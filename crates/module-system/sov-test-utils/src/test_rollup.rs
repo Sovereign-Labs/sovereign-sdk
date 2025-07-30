@@ -196,7 +196,7 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
             // This will be set later based on the storage path. In case of a bug,
             // SQLite will simply fail to open the file and we'll immediately get a
             // panic, so it's not dangerous.
-            connection_string: "WILL_BE_SET_LATER".to_string(),
+            connection_string: MockDaConfig::sqlite_in_memory(),
             // This value is important and should match `examples/test-data/genesis/integration-tests/sequencer_registry.json`
             // Otherwise batches are going to be rejected in `examples/demo-rollup` tests.
             sender_address: MockAddress::new([0; 32]),
@@ -316,13 +316,13 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
         self
     }
 
-    fn set_da_connection_string(mut self) -> Self {
+    fn set_da_connection_string(self) -> Self {
         // We store DA data in the same directory as the rollup data. This
         // ensures that, when reusing the same path, we restore not only node
         // data but also DA history.
-        self.da_config.connection_string =
-            MockDaConfig::sqlite_in_dir(self.config.storage.as_path())
-                .expect("storage folder should exist by this time");
+        // self.da_config.connection_string =
+        //     MockDaConfig::sqlite_in_dir(self.config.storage.as_path())
+        //         .expect("storage folder should exist by this time");
         self
     }
 }
