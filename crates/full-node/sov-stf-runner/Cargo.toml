@@ -22,7 +22,6 @@ backon = { workspace = true }
 num_cpus = { workspace = true }
 thiserror = { workspace = true }
 borsh = { workspace = true }
-schemars = { workspace = true }
 serde = { workspace = true }
 strum = { version = "0.26", features = ["derive"] }
 toml = { workspace = true }

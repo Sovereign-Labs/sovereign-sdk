@@ -19,9 +19,10 @@ schemars = { workspace = true }
 serde_json = { workspace = true }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-mock-da = { workspace = true, features = ["native"] }
-sov-mock-zkvm = { workspace = true, features = ["native"]  }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
 sov-rollup-interface = { workspace = true, features = ["native"] }
-sov-stf-runner = { workspace = true }
+full-node-configs = { workspace = true }
+sov-metrics = { workspace = true, features = ["native"] }
 
 # Modules
 sov-accounts = { workspace = true, features = ["native"] }
