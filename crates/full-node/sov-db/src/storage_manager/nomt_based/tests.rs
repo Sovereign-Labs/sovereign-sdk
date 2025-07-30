@@ -300,7 +300,6 @@ async fn test_root_hashes_match_after_crash() {
         let user_key = height.to_be_bytes().to_vec();
         let kernel_key = height.to_le_bytes().to_vec();
         let raw_value = da_header.hash.0.to_vec();
-        // let stf_changes = stf_storage.materialize_from_key_values(&[(key, Some(value))]);
 
         let user_key_path = KeyPath::from(sha2::Sha256::digest(user_key.clone()));
         let kernel_key_path = KeyPath::from(sha2::Sha256::digest(kernel_key.clone()));
@@ -327,7 +326,7 @@ async fn test_root_hashes_match_after_crash() {
             user_historical_values,
             kernel_historical_values,
             root_hash,
-            SlotNumber::new(height),
+            SlotNumber::new(height - 1),
         )
         .unwrap();
 
