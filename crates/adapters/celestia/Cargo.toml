@@ -19,8 +19,8 @@ borsh = { workspace = true, features = ["derive", "bytes"] }
 bech32 = { workspace = true }
 prost = "0.13"
 
-celestia-rpc = { version = "0.11.2", default-features = false, optional = true }
-celestia-types = { version = "0.12.0", default-features = false }
+celestia-rpc = { version = "0.11.3", default-features = false, optional = true }
+celestia-types = { version = "0.13.0", default-features = false }
 tendermint = { version = "0.40.4", default-features = false }
 tendermint-proto = { version = "0.40.4" }
 nmt-rs = { workspace = true, features = ["serde", "borsh"] }
