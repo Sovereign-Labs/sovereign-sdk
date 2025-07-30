@@ -15,7 +15,7 @@ allow = [
   "BSD-3-Clause",
   "OpenSSL",
   "Apache-2.0 WITH LLVM-exception",
-  "LicenseRef-Sovereign-Labs-Community-Software-License",
+  "LicenseRef-Sovereign-Permissionless-Commercial-License",
   "Zlib",
   "BSL-1.0",                                              # Relevant discussion: <https://github.com/Sovereign-Labs/sovereign-sdk-wip/pull/985#issuecomment-2242712349>.
 ]
@@ -37,337 +37,337 @@ license-files = [{ path = "COPYING", hash = 0x106164e0 }]
 # Sovereign SDK packages use a custom community license
 [[licenses.clarify]]
 name = "sov-blob-sender"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-blob-storage"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-db"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-kernels"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-modules-rollup-blueprint"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-modules-stf-blueprint"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-paymaster"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-sequencer"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-state"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-uniqueness"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "demo-stf"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-eth-client"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-celestia-adapter"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-risc0-adapter"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-sp1-adapter"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-ethereum"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-mock-da"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-mock-zkvm"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-bank"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-sequencer-registry"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-node-client"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-operator-incentives"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-prover-incentives"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-value-setter"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-synthetic-load"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-test-modules"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-chain-state"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-evm"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-accounts"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-ledger-apis"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-rollup-apis"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-api-spec"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-eth-dev-signer"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-modules-api"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-rollup-interface"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-stf-runner"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-attester-incentives"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-revenue-share"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-capabilities"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-address"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-rest-utils"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-transaction-generator"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-metrics"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-cli"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-modules-macros"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-test-utils"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "rest-api-load-testing"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-universal-wallet"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-universal-wallet-macros"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-universal-wallet-macro-helpers"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "workspace-hack"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "nearly-linear"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "demo-simple-stf"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "demo-stf-json-client"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "integration-tests"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "module-template"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-benchmarks"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-demo-rollup"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-demo-rollup-rest-api-load-testing"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-modules-schemas"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-soak-testing"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "switcheroo"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-hyperlane-integration"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-hyperlane-integration"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-module-schemas"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-zkvm-utils"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-build"
-expression = "LicenseRef-Sovereign-Labs-Community-Software-License"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.exceptions]]

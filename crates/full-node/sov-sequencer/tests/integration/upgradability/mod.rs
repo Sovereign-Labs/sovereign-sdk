@@ -126,7 +126,7 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
 }
 
 async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
-    let stop_at_height = RollupHeight::new(15);
+    let stop_at_height = RollupHeight::new((finalization_blocks + 12) as u64);
 
     let (test_rollup, admin) = create_test_rollup(
         0,
@@ -143,43 +143,55 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
     );
 
     let test_rollup = test_rollup.unwrap();
+    let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
 
     let client = test_rollup.client.clone();
 
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(10)
-        .await
-        .unwrap();
+    let da = test_rollup.da_service.clone();
+    let mut da_sub = da.subscribe_finalized_header().await.unwrap();
+    // We just need at least one finalized block to proceed with the tests.
+    for _ in 0..finalization_blocks + 3 {
+        test_rollup.da_service.produce_block_now().await.unwrap();
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+    da_sub.next().await;
 
     let api_client = test_rollup.api_client.clone();
 
     let mut nonce = 0;
     let mut current_height = get_height(&client).await.unwrap();
 
-    let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
     while current_height.get() < stop_at_height.get() {
-        test_rollup.da_service.produce_block_now().await.unwrap();
-        slot_subscription.next().await;
-        tokio::time::sleep(Duration::from_millis(300)).await;
-        current_height = get_height(&client).await.unwrap();
         // All transactions should be accepted until the stop height is reached.
         send_tx(&admin, nonce, &api_client).await.unwrap();
         nonce += 1;
+
+        test_rollup.da_service.produce_block_now().await.unwrap();
+        slot_subscription.next().await;
+
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        current_height = get_height(&client).await.unwrap();
     }
 
     // After the stop height is reached, the sequencer should not accept any transactions. Until the height is finalized.
     for _ in 0..finalization_blocks {
+        let current_height = get_height(&client).await.unwrap();
+        assert_eq!(current_height, stop_at_height);
+
         test_rollup.da_service.produce_block_now().await.unwrap();
         slot_subscription.next().await;
+
         tokio::time::sleep(Duration::from_millis(300)).await;
         let err = send_tx(&admin, nonce, &api_client).await.unwrap_err();
         nonce += 1;
         assert!(err.contains(&expected_error));
     }
 
-    test_rollup.da_service.produce_block_now().await.unwrap();
-    slot_subscription.next().await;
+    for _ in 0..3 {
+        test_rollup.da_service.produce_block_now().await.unwrap();
+        slot_subscription.next().await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
 
     test_rollup
         .wait_for_rollup_to_shutdown(Duration::from_secs(1))
@@ -211,7 +223,7 @@ async fn rollup_operates_only_on_finalized_blocks_if_stop_at_height_set(finaliza
 
     let mut current_height = get_height(&client).await.unwrap();
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
-    while current_height.get() < stop_at_height.get() + finalization_blocks as u64 {
+    while current_height < stop_at_height {
         test_rollup.da_service.produce_block_now().await.unwrap();
         slot_subscription.next().await;
         // We need to wait a bit so the new block is visible to the sequencer.
@@ -220,12 +232,16 @@ async fn rollup_operates_only_on_finalized_blocks_if_stop_at_height_set(finaliza
         current_height = get_height(&client).await.unwrap();
     }
 
-    test_rollup.da_service.produce_block_now().await.unwrap();
-    slot_subscription.next().await;
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    for _ in 0..finalization_blocks + 1 {
+        current_height = get_height(&client).await.unwrap();
+        assert_eq!(current_height, stop_at_height);
+        test_rollup.da_service.produce_block_now().await.unwrap();
+        slot_subscription.next().await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
 
     test_rollup
-        .wait_for_rollup_to_shutdown(Duration::from_secs(1))
+        .wait_for_rollup_to_shutdown(Duration::from_secs(3))
         .await;
 }
 
@@ -253,17 +269,21 @@ async fn check_start_at(finalization_blocks: u32) {
     let mut shutdown_rec = test_rollup.shutdown_sender.subscribe();
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
 
+    let mut last_height = RollupHeight::new(0);
     tokio::time::timeout(Duration::from_secs(25), async {
         // Wait until the rollup reaches `stop_at_height`. At that point, we shutdown and `get_height` is expected to return errors.
         // The sleep is used to prevent a busy loop, not for correctness.
-        while let Ok(_ok) = get_height(&client).await {
+        while let Ok(height) = get_height(&client).await {
             test_rollup.da_service.produce_block_now().await.unwrap();
             slot_subscription.next().await;
             tokio::time::sleep(Duration::from_millis(100)).await;
+            last_height = height;
         }
     })
     .await
     .unwrap();
+
+    assert_eq!(last_height, stop_at_height);
 
     // Let's wait for the shutdown.
     shutdown_rec.changed().await.unwrap();

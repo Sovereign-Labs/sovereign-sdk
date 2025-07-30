@@ -1,7 +1,7 @@
 [package]
 name = "sov-db"
 description = "A high-level DB interface for the Sovereign SDK"
-license = "Sovereign Labs Community Software License"
+license = "Sovereign Permissionless Commercial License"
 edition = { workspace = true }
 authors = { workspace = true }
 homepage = { workspace = true }
