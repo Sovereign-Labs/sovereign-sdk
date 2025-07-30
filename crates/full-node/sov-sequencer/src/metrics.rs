@@ -54,6 +54,7 @@ impl Metric for PreferredSequencerUpdateStateMetrics {
 pub struct PreferredSequencerChannelMetrics {
     pub duration: std::time::Duration,
     pub reason: &'static str,
+    pub channel_size: u32,
 }
 
 impl Metric for PreferredSequencerChannelMetrics {
@@ -64,10 +65,11 @@ impl Metric for PreferredSequencerChannelMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},reason={} duration_us={}",
+            "{},reason={} duration_us={},channel_size={}",
             self.measurement_name(),
             self.reason,
             self.duration.as_micros(),
+            self.channel_size,
         )
     }
 }

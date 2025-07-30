@@ -1,6 +1,6 @@
 use std::num::NonZero;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicU32, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -95,6 +95,7 @@ where
     inner: &'a mut Inner<S, Rt>,
     reason: &'static str,
     start_time: std::time::Instant,
+    channel_size: u32,
 }
 
 impl<'a, S, Rt> InnerGuard<'a, S, Rt>
@@ -103,11 +104,12 @@ where
     Rt: Runtime<S>,
 {
     /// Create a new inner guard.
-    pub fn new(inner: &'a mut Inner<S, Rt>, reason: &'static str) -> Self {
+    pub fn new(inner: &'a mut Inner<S, Rt>, reason: &'static str, channel_size: u32) -> Self {
         Self {
             inner,
             reason,
             start_time: std::time::Instant::now(),
+            channel_size,
         }
     }
 }
@@ -142,6 +144,7 @@ where
         self.inner.metrics.push(PreferredSequencerChannelMetrics {
             duration: self.start_time.elapsed(),
             reason: self.reason,
+            channel_size: self.channel_size,
         });
         if self.inner.metrics.len() >= METRICS_BATCH_SIZE {
             sov_metrics::track_metrics(|t| {
@@ -809,13 +812,16 @@ where
         stop_at_rollup_height,
     };
 
+    let channel_size =  Arc::new(AtomicU32::new(0));
     (
         SynchronizedSequencerState {
             inner,
+            channel_size: channel_size.clone(),
             message_receiver,
         },
         SequencerStateUpdator {
             message_sender,
+            channel_size,
             shutdown_sender,
         },
     )
@@ -826,6 +832,7 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
+    channel_size: Arc<AtomicU32>,
     message_sender: mpsc::Sender<Message<S, Rt>>,
     shutdown_sender: watch::Sender<()>,
 }
@@ -1054,6 +1061,8 @@ where
     }
 
     async fn send(&self, message: Message<S, Rt>) {
+        self.channel_size
+            .fetch_add(1, Ordering::Relaxed);
         if self.message_sender.send(message).await.is_err() {
             info!("SynchronizedSequencerState(send) task exited, this is ok if the sequencer is shutting down.");
             exit_rollup(&self.shutdown_sender).await;
@@ -1077,6 +1086,7 @@ where
     Rt: Runtime<S>,
 {
     inner: Inner<S, Rt>,
+    channel_size: Arc<AtomicU32>,
     message_receiver: mpsc::Receiver<Message<S, Rt>>,
 }
 
@@ -1270,7 +1280,8 @@ where
 
     #[tracing::instrument(skip_all, level = "debug")]
     async fn get_inner_with_timing(&mut self, reason: &'static str) -> InnerGuard<S, Rt> {
-        InnerGuard::new(&mut self.inner, reason)
+        let channel_size = self.channel_size.fetch_sub(1, Ordering::Relaxed);
+        InnerGuard::new(&mut self.inner, reason, channel_size)
     }
 
     async fn process_next_sequence_number(&mut self, reason: &'static str) -> SequenceNumber {
