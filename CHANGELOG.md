@@ -1,3 +1,6 @@
+# 2025-07-30
+- #1444 Updates in `TestRollup`
+
 # 2025-07-23
 - #3283 **BREAKING CHANGE** Update the mock `code-commitment` to 8 bytes. This change requires modifying the `chain_state_xx.json` genesis files accordingly.
 - #3293 Extends `get_runtime_schema` to work with types which haven't implemented `Runtime` trait yet.
