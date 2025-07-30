@@ -49,6 +49,7 @@ impl<S: Spec> StateRootCacheEntry<S> {
             compute_state_root::<S>(state_accesses, storage.clone(), rollup_height, slot_number)
                 .await;
         if user_roots_match(&self.root, &new_root) {
+            tracing::trace!(%rollup_height, %slot_number, "User state root is consistent");
             return (rollup_height, new_root);
         }
         tracing::debug!("User roots don't match, verify if storage became stale");
@@ -401,7 +402,7 @@ mod tests {
         received_root
     }
 
-    // Start background task, sender compute request, shutdown, return root computed.
+    // Start a background task, sender compute request, shutdown, return root computed.
     async fn one_off_check_state_root_computation<S: Spec>(
         storage: S::Storage,
         state_accesses: StateAccesses,
@@ -547,6 +548,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_nomt_state_compute_competing_storages_repro_real_storage_manager() {
+        sov_test_utils::logging::initialize_or_change_logging_with_filter("error,sov_sequencer::preferred=trace,sov_db::state_db_nomt=trace,sov_state::nomt::prover_storage=debug");
         let storage_manager =
             CommitingStorageManager::<NomtStorageManager<MockDaSpec, TestHasher, _>, _>::new();
         test_compute_competing_storages::<TestNomtSpec, _>(storage_manager, 3).await;
@@ -620,6 +622,7 @@ mod tests {
             let end = seq_idx;
             let range = start..end;
             let sequencer_storage = storage_manager.create_api_storage();
+            let mut sent = 0;
             for (idx, cumulative_batch) in range.zip(seq_batches.into_iter()) {
                 let rollup_height = RollupHeight::new(idx as u64 + 1);
                 let slot_number = SlotNumber::new(idx as u64 + 1);
@@ -636,9 +639,11 @@ mod tests {
                     })
                     .await
                     .unwrap();
-
+                tracing::info!("sent state root compute request");
+                sent += 1;
                 receivers.push(response_receiver);
             }
+            tracing::info!(%seq_idx, %sent, "All state root compute requests this iteration has been sent");
             // Emulates part where node receives something from the DA layer, executes it and commits
             if let Some(idx_for_node) = seq_idx.checked_sub(seq_ahead_by) {
                 let start = std::time::Instant::now();

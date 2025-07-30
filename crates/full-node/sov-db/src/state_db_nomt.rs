@@ -14,7 +14,7 @@ const KERNEL: &str = "kernel_state";
 const USER: &str = "user_state";
 
 const COMMIT_START_DELAY: std::time::Duration = std::time::Duration::from_millis(1);
-const COMMIT_RETRY_ATTEMPTS: usize = 15;
+const COMMIT_RETRY_ATTEMPTS: usize = 26;
 
 /// Contains all the most recent rollup data.
 pub struct NomtStateDb<H> {
@@ -91,7 +91,12 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
 
         let in_progress_commit_status = CommitStatus::InProgress(kernel.root().into_inner());
 
-        try_commit_overlay_with_backoff(&self.kernel, kernel).context("kernel namespace commit")?;
+        {
+            let _span = tracing::debug_span!("namespace_commit", namespace = "kernel").entered();
+            try_commit_overlay_with_backoff(&self.kernel, kernel)
+                .context("kernel namespace commit")?;
+        }
+
         // If the kernel commit fails, the flag is untouched, meaning DB remains synced on previous state.
         // Write IN-PROGRESS status after kernel committed successfully.
 
@@ -127,7 +132,11 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
 
         debug_assert_eq!(self.commit_flag.read_status()?, in_progress_commit_status);
 
-        try_commit_overlay_with_backoff(&self.user, user).context("user namespace commit")?;
+        {
+            let _span = tracing::debug_span!("namespace_commit", namespace = "user").entered();
+            try_commit_overlay_with_backoff(&self.user, user).context("user namespace commit")?;
+        }
+
         self.commit_flag
             .write_status(CommitStatus::Completed)
             .with_context(|| {
