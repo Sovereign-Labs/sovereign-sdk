@@ -409,10 +409,11 @@ where
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
         let start = std::time::Instant::now();
         let next_version = self.historical_state.get_next_version();
-        tracing::trace!(%prev_state_root, %next_version, "NomtProverStorage, computing state update");
         // Open 2 sessions close to each other
         let user_session = self.state_session_builder.begin_user_session()?;
         let kernel_session = self.state_session_builder.begin_kernel_session()?;
+        let starting_session_time = start.elapsed();
+        tracing::debug!(%prev_state_root, %next_version, sesssion_starting_time = ?starting_session_time, "computing state update, sessions are live");
 
         let current_prev_user_root = user_session.prev_root().into_inner();
         let current_prev_kernel_root = kernel_session.prev_root().into_inner();
