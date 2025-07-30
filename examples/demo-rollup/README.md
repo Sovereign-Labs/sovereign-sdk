@@ -1,11 +1,10 @@
 # Demo Rollup ![Time - ~5 mins](https://img.shields.io/badge/Time-~5_mins-informational)
 
 <p align="center">
-  <img width="50%" src="../../docs/assets/discord-banner.png">
   <br>
   <i>Stuck, facing problems, or unsure about something?</i>
   <br>
-  <i>Join our <a href="https://discord.gg/kbykCcPrcA">Discord</a> and ask your questions in <code>#support</code>!</i>
+  <i>Join our <a href="https://join.slack.com/t/sovereigndevelopers/shared_invite/zt-39aolimfp-XsFK6dL6LhOFHhtXsD_kCA">Slack</a> and ask your questions in <code>#support</code>!</i>
 </p>
 
 #### Table of Contents
@@ -77,6 +76,8 @@ This setup works with an in-memory DA that is easy to set up for testing purpose
 
 ```shell,test-ci
 $ cd examples/demo-rollup/
+$ export RISC0_DEV_MODE=true
+$ export SOV_PROVER_MODE=execute
 $ make build
 ```
 
@@ -89,12 +90,8 @@ $ make clean
 
 3. Now run the demo-rollup full node, as shown below.
 
-```sh,test-ci
-$ export SOV_PROVER_MODE=execute
-```
-
 ```sh,test-ci,bashtestmd:long-running,bashtestmd:wait-until=rest_address
-$ cargo run --release
+$ RISC0_DEV_MODE=true ../../target/debug/sov-demo-rollup
 ```
 
 Leave it running while you proceed with the rest of the demo.

@@ -40,7 +40,7 @@ help:
   text: |
     Sovereign Labs uses the Zepter CLI to detect abnormalities in the feature configuration.
     It looks like one more more checks failed; please check the console output. You can try to automatically address them by running `zepter`.
-    Otherwise please ask directly in a GitHub issue or on Discord, thank you.
+    Otherwise please ask directly in a GitHub issue or on Slack, thank you.
   links:
     - "https://github.com/sovereign-labs/sovereign-sdk"
     - "https://github.com/ggwpez/zepter"

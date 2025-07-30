@@ -205,6 +205,17 @@ where
             return Ok(());
         }
 
+        if let Some(height_to_stop_at) = self.stop_at_rollup_height {
+            let current_height = self.current_height();
+            if current_height >= height_to_stop_at {
+                debug!(%current_height, %height_to_stop_at,"The sequencer is at stop height and tried to create a batch (aborted due to stop height).");
+                return Err(BatchCreationError::PreferredSequencerAtStopHeight {
+                    current_height,
+                    height_to_stop_at,
+                });
+            }
+        }
+
         if self.blob_sender_busy().is_some() {
             warn!("The blob sender is busy, no batch could be started at this time.");
             return Err(BatchCreationError::BlobSenderBusy);
@@ -589,7 +600,7 @@ where
 
         if let Some(height_to_stop_at) = height_to_stop_at {
             let current_height = self.current_height();
-            if current_height > height_to_stop_at {
+            if current_height >= height_to_stop_at {
                 return Err(SequencerNotReadyDetails::PreferredSequencerAtStopHeight {
                     current_height,
                     height_to_stop_at,

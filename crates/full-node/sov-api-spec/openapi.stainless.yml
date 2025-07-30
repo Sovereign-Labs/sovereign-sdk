@@ -118,7 +118,7 @@ targets:
     publish:
       pypi: false
 settings:
-  license: Apache-2.0
+  license: Sovereign Labs Community Software License
 client_settings: {}
 environments:
   local: http://localhost:12346

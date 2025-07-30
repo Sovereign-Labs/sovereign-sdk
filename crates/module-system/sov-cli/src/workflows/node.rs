@@ -172,7 +172,7 @@ impl<S: sov_modules_api::Spec + Serialize + DeserializeOwned> NodeWorkflows<S> {
                     .await?;
             }
             NodeWorkflows::WaitForAggregatedProof { timeout_secs } => {
-                let timeout = std::time::Duration::from_secs(timeout_secs.unwrap_or(120));
+                let timeout = std::time::Duration::from_secs(timeout_secs.unwrap_or(300));
                 tracing::info!(?timeout, "Subscribing for aggregated proofs");
                 let mut aggregated_proofs = api_client.client.subscribe_aggregated_proof().await?;
                 let aggregated_proof = tokio::time::timeout(timeout, aggregated_proofs.next())
