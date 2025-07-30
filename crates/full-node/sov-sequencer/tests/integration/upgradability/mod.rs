@@ -156,7 +156,7 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
     }
     da_sub.next().await;
 
-    let api_client = test_rollup.api_client.clone();
+    let api_client = test_rollup.api_client().clone();
 
     let mut nonce = 0;
     let mut current_height = get_height(&client).await.unwrap();

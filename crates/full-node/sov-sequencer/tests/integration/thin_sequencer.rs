@@ -79,20 +79,20 @@ async fn test_thin_direct_same_transactions() {
         .await
         .unwrap()
         .height;
-    let mut slots = test_rollup.api_client.subscribe_slots().await.unwrap();
+    let mut slots = test_rollup.api_client().subscribe_slots().await.unwrap();
 
     let user = genesis_config.additional_accounts().first().unwrap();
     // TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/947
     //    Ideally we want to test multiple transactions, but this bug prevents it
     // let all_txs = generate_txs(user, 10);
     // for tx in &all_txs {
-    //     let tx_hash_accepted_a = accept_tx_in_rollup(&test_rollup.api_client, &tx).await?;
+    //     let tx_hash_accepted_a = accept_tx_in_rollup(&test_rollup.api_client(), &tx).await?;
     //     let tx_hash_accepted_b = accept_tx_in_rollup(test_sequencer_client, &tx).await?;
     //     assert_eq!(tx_hash_accepted_a, tx_hash_accepted_b);
     // }
 
     let tx = generate_tx_with_nonce(user, 1);
-    let tx_hash_accepted_a = accept_tx_in_rollup(&test_rollup.api_client, &tx)
+    let tx_hash_accepted_a = accept_tx_in_rollup(test_rollup.api_client(), &tx)
         .await
         .unwrap();
     let tx_hash_accepted_b = accept_tx_in_rollup(test_sequencer_client, &tx)

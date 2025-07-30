@@ -28,5 +28,4 @@ sov-accounts = { workspace = true, features = ["native"] }
 sov-bank = { workspace = true, features = ["native"] }
 sov-prover-incentives = { workspace = true, features = ["native"] }
 sov-sequencer-registry = { workspace = true, features = ["native"] }
-sov-evm = { workspace = true, features = ["native"] }
 sov-value-setter = { workspace = true, features = ["native"] }

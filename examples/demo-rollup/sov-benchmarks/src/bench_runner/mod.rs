@@ -233,7 +233,7 @@ async fn runner(
         assert_logs_against_state(
             log_accumulator,
             Arc::new(BasicClientConfig {
-                url: rollup.api_client.baseurl().clone(),
+                url: rollup.api_client().baseurl().clone(),
                 rollup_height: None,
             }),
             assert_logs,
