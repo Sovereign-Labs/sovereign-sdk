@@ -12,6 +12,7 @@ use crate::metrics::nomt::{NomtBeginSessionMetric, NomtDbMetric};
 
 const KERNEL: &str = "kernel_state";
 const USER: &str = "user_state";
+const BOTH: &str = "user_and_kernel_state";
 
 const COMMIT_START_DELAY: std::time::Duration = std::time::Duration::from_millis(1);
 const COMMIT_RETRY_ATTEMPTS: usize = 26;
@@ -261,6 +262,14 @@ impl<H, K> NomtSessionBuilder<H, K> {
     }
 }
 
+/// Container for both sessions, to remove error in passing them
+pub struct SessionsContainer<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> {
+    #[allow(missing_docs)]
+    pub user: nomt::Session<BinaryHasher<H>>,
+    #[allow(missing_docs)]
+    pub kernel: nomt::Session<BinaryHasher<H>>,
+}
+
 impl<H, K> NomtSessionBuilder<H, K>
 where
     K: Eq + std::hash::Hash,
@@ -348,6 +357,62 @@ where
             });
         });
         Ok(session)
+    }
+
+    /// Begins both sessions at the same time.
+    /// Should be used if both sessions are needed in same context. Prevents dead lock.
+    pub fn begin_both_sessions(&self) -> anyhow::Result<SessionsContainer<H>> {
+        let start = std::time::Instant::now();
+        let (kernel_params, user_params) = {
+            let mut kernel_overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+            let mut user_overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+            let snapshots = self.all_snapshots.read().expect("Snapshots lock poisoned");
+            for overlay_ref in &self.relevant_snapshot_refs {
+                let Some(state_overlay) = snapshots.get(overlay_ref) else {
+                    tracing::debug!(
+                        "Cannot find snapshot from reference, assuming it has been committed"
+                    );
+                    continue;
+                };
+                kernel_overlays.push(&state_overlay.kernel);
+                user_overlays.push(&state_overlay.user);
+            }
+            let kernel_params = SessionParams::default()
+                .overlay(kernel_overlays)
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "Failed to construct session params for kernel session: {:?}",
+                        e
+                    )
+                })?
+                .witness_mode(WitnessMode::read_write());
+            let user_params = SessionParams::default()
+                .overlay(user_overlays)
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "Failed to construct session params for user session: {:?}",
+                        e
+                    )
+                })?
+                .witness_mode(WitnessMode::read_write());
+            (kernel_params, user_params)
+        };
+        let kernel_session = self.state_db.kernel.begin_session(kernel_params);
+        let user_session = self.state_db.user.begin_session(user_params);
+        let init_time = start.elapsed();
+        let overlays = self.relevant_snapshot_refs.len();
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(NomtBeginSessionMetric {
+                db: BOTH,
+                overlays,
+                init_time,
+            });
+        });
+
+        Ok(SessionsContainer {
+            user: user_session,
+            kernel: kernel_session,
+        })
     }
 }
 

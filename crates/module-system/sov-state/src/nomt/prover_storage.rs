@@ -10,7 +10,7 @@ use nomt::FinishedSession;
 use sov_db::accessory_db::AccessoryDb;
 use sov_db::historical_state::HistoricalStateReader;
 use sov_db::namespaces::{KernelNamespace, UserNamespace};
-use sov_db::state_db_nomt::NomtSessionBuilder;
+use sov_db::state_db_nomt::{NomtSessionBuilder, SessionsContainer};
 use sov_db::storage_manager::{
     InitializableNativeNomtStorage, NomtChangeSet, StateFinishedSession,
 };
@@ -409,9 +409,11 @@ where
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
         let start = std::time::Instant::now();
         let next_version = self.historical_state.get_next_version();
-        // Open 2 sessions close to each other
-        let user_session = self.state_session_builder.begin_user_session()?;
-        let kernel_session = self.state_session_builder.begin_kernel_session()?;
+        // Open 2 sessions at the same time
+        let SessionsContainer {
+            user: user_session,
+            kernel: kernel_session,
+        } = self.state_session_builder.begin_both_sessions()?;
         let starting_session_time = start.elapsed();
         tracing::debug!(%prev_state_root, %next_version, sesssion_starting_time = ?starting_session_time, "computing state update, sessions are live");
 
@@ -599,11 +601,13 @@ where
         };
         let storage_root_historical = self.get_root_hash_unbound(version_to_use)?;
         if self.should_check_dbs_sync(version_to_use) {
-            let user_session = self.state_session_builder.begin_user_session()?;
+            let SessionsContainer {
+                user: user_session,
+                kernel: kernel_session,
+            } = self.state_session_builder.begin_both_sessions()?;
             let user_root = user_session.prev_root();
-            drop(user_session);
-            let kernel_session = self.state_session_builder.begin_kernel_session()?;
             let kernel_root = kernel_session.prev_root();
+            drop(user_session);
             drop(kernel_session);
             let prev_root_nomt = StorageRoot::new(user_root.into_inner(), kernel_root.into_inner());
             assert_eq!(
