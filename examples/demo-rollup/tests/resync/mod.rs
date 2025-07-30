@@ -320,6 +320,7 @@ async fn sync_rollup_with_path(
             c.aggregated_proof_block_jump = 10;
             c.max_concurrent_blobs = 92;
         })
+        .set_persistent_da()
         .start(),
     )
     .await

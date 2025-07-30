@@ -51,14 +51,14 @@ impl Metric for PreferredSequencerUpdateStateMetrics {
 }
 
 #[derive(Debug)]
-pub struct PreferredSequencerLockMetrics {
+pub struct PreferredSequencerChannelMetrics {
     pub duration: std::time::Duration,
     pub reason: &'static str,
 }
 
-impl Metric for PreferredSequencerLockMetrics {
+impl Metric for PreferredSequencerChannelMetrics {
     fn measurement_name(&self) -> &'static str {
-        "sov_rollup_preferred_sequencer_lock"
+        "sov_rollup_preferred_sequencer_channel"
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
@@ -73,13 +73,13 @@ impl Metric for PreferredSequencerLockMetrics {
 }
 
 #[derive(Debug)]
-pub struct PreferredSequencerLockMetricsBatch {
-    pub metrics: Vec<PreferredSequencerLockMetrics>,
+pub struct PreferredSequencerChannelMetricsBatch {
+    pub metrics: Vec<PreferredSequencerChannelMetrics>,
 }
 
-impl Metric for PreferredSequencerLockMetricsBatch {
+impl Metric for PreferredSequencerChannelMetricsBatch {
     fn measurement_name(&self) -> &'static str {
-        "sov_rollup_preferred_sequencer_lock"
+        "sov_rollup_preferred_sequencer_channel"
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {

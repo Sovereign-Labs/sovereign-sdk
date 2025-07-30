@@ -90,6 +90,7 @@ async fn start_stop_empty(
                 }
                 c.aggregated_proof_block_jump = 10;
             })
+            .set_persistent_da()
             .start(),
         )
         .await

@@ -10,7 +10,7 @@ use nomt::FinishedSession;
 use sov_db::accessory_db::AccessoryDb;
 use sov_db::historical_state::HistoricalStateReader;
 use sov_db::namespaces::{KernelNamespace, UserNamespace};
-use sov_db::state_db_nomt::NomtSessionBuilder;
+use sov_db::state_db_nomt::{NomtSessionBuilder, SessionsContainer};
 use sov_db::storage_manager::{
     InitializableNativeNomtStorage, NomtChangeSet, StateFinishedSession,
 };
@@ -422,11 +422,15 @@ where
         witness: &Self::Witness,
         prev_state_root: Self::Root,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
+        let start = std::time::Instant::now();
         let next_version = self.historical_state.get_next_version();
-        tracing::trace!(%prev_state_root, %next_version, "NomtProverStorage, computing state update");
-        // Open 2 sessions close to each other
-        let user_session = self.state_session_builder.begin_user_session()?;
-        let kernel_session = self.state_session_builder.begin_kernel_session()?;
+        // Open 2 sessions at the same time
+        let SessionsContainer {
+            user: user_session,
+            kernel: kernel_session,
+        } = self.state_session_builder.begin_both_sessions()?;
+        let starting_session_time = start.elapsed();
+        tracing::debug!(%prev_state_root, %next_version, sesssion_starting_time = ?starting_session_time, "computing state update, sessions are live");
 
         let current_prev_user_root = user_session.prev_root().into_inner();
         let current_prev_kernel_root = kernel_session.prev_root().into_inner();
@@ -474,7 +478,7 @@ where
         let kernel_root = kernel_finished_session.root();
         let root = StorageRoot::new(user_root.into_inner(), kernel_root.into_inner());
 
-        tracing::debug!(state_root = %root, %next_version, "computed next state root");
+        tracing::debug!(state_root = %root, %next_version, time = ?start.elapsed(), "computed next state root");
 
         let state_update = NomtStateUpdate {
             user: user_finished_session,
@@ -602,12 +606,10 @@ where
         .unwrap_or(self.latest_version());
         let storage_root_historical = self.get_root_hash_unbound(version_to_use)?;
         if self.should_check_dbs_sync(version_to_use) {
-            let user_session = self.state_session_builder.begin_user_session()?;
-            let user_root = user_session.prev_root();
-            drop(user_session);
-            let kernel_session = self.state_session_builder.begin_kernel_session()?;
-            let kernel_root = kernel_session.prev_root();
-            drop(kernel_session);
+            let session_container = self.state_session_builder.begin_both_sessions()?;
+            let user_root = session_container.user.prev_root();
+            let kernel_root = session_container.kernel.prev_root();
+            drop(session_container);
             let prev_root_nomt = StorageRoot::new(user_root.into_inner(), kernel_root.into_inner());
             assert_eq!(
                 storage_root_historical, prev_root_nomt,

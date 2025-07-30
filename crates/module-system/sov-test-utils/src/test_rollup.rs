@@ -196,7 +196,7 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
             // This will be set later based on the storage path. In case of a bug,
             // SQLite will simply fail to open the file and we'll immediately get a
             // panic, so it's not dangerous.
-            connection_string: "WILL_BE_SET_LATER".to_string(),
+            connection_string: MockDaConfig::sqlite_in_memory(),
             // This value is important and should match `examples/test-data/genesis/integration-tests/sequencer_registry.json`
             // Otherwise batches are going to be rejected in `examples/demo-rollup` tests.
             sender_address: MockAddress::new([0; 32]),
@@ -232,7 +232,6 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
             },
             with_secondary_sequencer: None,
         }
-        .set_da_connection_string()
     }
 
     /// See [`PreferredSequencerConfig::minimum_profit_per_tx`].
@@ -292,8 +291,7 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
         config_f: impl FnOnce(&mut RollupBuilderConfig<R::Spec, StoragePath>),
     ) -> Self {
         config_f(&mut self.config);
-        // Storage path might have changed.
-        self.set_da_connection_string()
+        self
     }
 
     /// Allows to modify DA configuration options.
@@ -316,7 +314,8 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
         self
     }
 
-    fn set_da_connection_string(mut self) -> Self {
+    /// If rollup needs to be restarted, this needs to be activated.
+    pub fn set_persistent_da(mut self) -> Self {
         // We store DA data in the same directory as the rollup data. This
         // ensures that, when reusing the same path, we restore not only node
         // data but also DA history.
@@ -799,6 +798,10 @@ where
         stop_at_height: Option<RollupHeight>,
     ) -> anyhow::Result<Self> {
         let builder = self.shutdown().await?;
+        let in_memory = MockDaConfig::sqlite_in_memory();
+        if builder.da_config.connection_string.contains(&in_memory) {
+            anyhow::bail!("Cannot restart in-memory DA, call `set_persistent_da` on RollupBuilder before starting");
+        }
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         let builder = builder.set_config(|c| {
             c.start_at_rollup_height = start_at_height;

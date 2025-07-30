@@ -19,7 +19,7 @@ use tracing::{debug, error, info, warn};
 
 use super::batch_size_tracker::BatchSizeTracker;
 use crate::metrics::{
-    track_sequence_number, PreferredSequencerLockMetrics, PreferredSequencerLockMetricsBatch,
+    track_sequence_number, PreferredSequencerChannelMetrics, PreferredSequencerChannelMetricsBatch,
     PreferredSequencerPruneMetrics,
 };
 use crate::preferred::block_executor::{
@@ -80,7 +80,7 @@ where
     /// We need this rather than relying on `SequencerNotReadyDetails::Startup` because that state
     /// can be overwritten when the node is resyncing.
     has_finished_startup: bool,
-    metrics: Vec<PreferredSequencerLockMetrics>,
+    metrics: Vec<PreferredSequencerChannelMetrics>,
     // Shared between sequencer and Inner.
     tx_queue_id: Arc<AtomicU64>,
     stop_at_rollup_height: Option<RollupHeight>,
@@ -139,13 +139,13 @@ where
     Rt: Runtime<S>,
 {
     fn drop(&mut self) {
-        self.inner.metrics.push(PreferredSequencerLockMetrics {
+        self.inner.metrics.push(PreferredSequencerChannelMetrics {
             duration: self.start_time.elapsed(),
             reason: self.reason,
         });
         if self.inner.metrics.len() >= METRICS_BATCH_SIZE {
             sov_metrics::track_metrics(|t| {
-                t.submit(PreferredSequencerLockMetricsBatch {
+                t.submit(PreferredSequencerChannelMetricsBatch {
                     metrics: std::mem::replace(
                         &mut self.inner.metrics,
                         Vec::with_capacity(METRICS_BATCH_SIZE),
@@ -203,6 +203,17 @@ where
     ) -> Result<(), BatchCreationError> {
         if self.executor.has_in_progress_batch() {
             return Ok(());
+        }
+
+        if let Some(height_to_stop_at) = self.stop_at_rollup_height {
+            let current_height = self.current_height();
+            if current_height >= height_to_stop_at {
+                debug!(%current_height, %height_to_stop_at,"The sequencer is at stop height and tried to create a batch (aborted due to stop height).");
+                return Err(BatchCreationError::PreferredSequencerAtStopHeight {
+                    current_height,
+                    height_to_stop_at,
+                });
+            }
         }
 
         if self.blob_sender_busy().is_some() {
@@ -589,7 +600,7 @@ where
 
         if let Some(height_to_stop_at) = height_to_stop_at {
             let current_height = self.current_height();
-            if current_height > height_to_stop_at {
+            if current_height >= height_to_stop_at {
                 return Err(SequencerNotReadyDetails::PreferredSequencerAtStopHeight {
                     current_height,
                     height_to_stop_at,

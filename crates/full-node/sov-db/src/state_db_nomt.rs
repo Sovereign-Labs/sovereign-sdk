@@ -12,9 +12,10 @@ use crate::metrics::nomt::{NomtBeginSessionMetric, NomtDbMetric};
 
 const KERNEL: &str = "kernel_state";
 const USER: &str = "user_state";
+const BOTH: &str = "user_and_kernel_state";
 
 const COMMIT_START_DELAY: std::time::Duration = std::time::Duration::from_millis(1);
-const COMMIT_RETRY_ATTEMPTS: usize = 15;
+const COMMIT_RETRY_ATTEMPTS: usize = 26;
 
 /// Contains all the most recent rollup data.
 pub struct NomtStateDb<H> {
@@ -91,7 +92,12 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
 
         let in_progress_commit_status = CommitStatus::InProgress(kernel.root().into_inner());
 
-        try_commit_overlay_with_backoff(&self.kernel, kernel).context("kernel namespace commit")?;
+        {
+            let _span = tracing::debug_span!("namespace_commit", namespace = "kernel").entered();
+            try_commit_overlay_with_backoff(&self.kernel, kernel)
+                .context("kernel namespace commit")?;
+        }
+
         // If the kernel commit fails, the flag is untouched, meaning DB remains synced on previous state.
         // Write IN-PROGRESS status after kernel committed successfully.
 
@@ -127,7 +133,11 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
 
         debug_assert_eq!(self.commit_flag.read_status()?, in_progress_commit_status);
 
-        try_commit_overlay_with_backoff(&self.user, user).context("user namespace commit")?;
+        {
+            let _span = tracing::debug_span!("namespace_commit", namespace = "user").entered();
+            try_commit_overlay_with_backoff(&self.user, user).context("user namespace commit")?;
+        }
+
         self.commit_flag
             .write_status(CommitStatus::Completed)
             .with_context(|| {
@@ -252,6 +262,14 @@ impl<H, K> NomtSessionBuilder<H, K> {
     }
 }
 
+/// Container for both sessions, to remove error in passing them
+pub struct SessionsContainer<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> {
+    #[allow(missing_docs)]
+    pub user: nomt::Session<BinaryHasher<H>>,
+    #[allow(missing_docs)]
+    pub kernel: nomt::Session<BinaryHasher<H>>,
+}
+
 impl<H, K> NomtSessionBuilder<H, K>
 where
     K: Eq + std::hash::Hash,
@@ -340,6 +358,62 @@ where
         });
         Ok(session)
     }
+
+    /// Begins both sessions at the same time.
+    /// Should be used if both sessions are needed in same context. Prevents dead lock.
+    pub fn begin_both_sessions(&self) -> anyhow::Result<SessionsContainer<H>> {
+        let start = std::time::Instant::now();
+        let (kernel_params, user_params) = {
+            let mut kernel_overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+            let mut user_overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+            let snapshots = self.all_snapshots.read().expect("Snapshots lock poisoned");
+            for overlay_ref in &self.relevant_snapshot_refs {
+                let Some(state_overlay) = snapshots.get(overlay_ref) else {
+                    tracing::debug!(
+                        "Cannot find snapshot from reference, assuming it has been committed"
+                    );
+                    continue;
+                };
+                kernel_overlays.push(&state_overlay.kernel);
+                user_overlays.push(&state_overlay.user);
+            }
+            let kernel_params = SessionParams::default()
+                .overlay(kernel_overlays)
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "Failed to construct session params for kernel session: {:?}",
+                        e
+                    )
+                })?
+                .witness_mode(WitnessMode::read_write());
+            let user_params = SessionParams::default()
+                .overlay(user_overlays)
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "Failed to construct session params for user session: {:?}",
+                        e
+                    )
+                })?
+                .witness_mode(WitnessMode::read_write());
+            (kernel_params, user_params)
+        };
+        let kernel_session = self.state_db.kernel.begin_session(kernel_params);
+        let user_session = self.state_db.user.begin_session(user_params);
+        let init_time = start.elapsed();
+        let overlays = self.relevant_snapshot_refs.len();
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(NomtBeginSessionMetric {
+                db: BOTH,
+                overlays,
+                init_time,
+            });
+        });
+
+        Ok(SessionsContainer {
+            user: user_session,
+            kernel: kernel_session,
+        })
+    }
 }
 
 /// An attempt to commit an overlay to the given `nomt` instance.
@@ -355,7 +429,7 @@ fn try_commit_overlay_with_backoff<H>(
 where
     H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
 {
-    let mut start_wait = COMMIT_START_DELAY;
+    let mut current_wait = COMMIT_START_DELAY;
     for attempt in 0..COMMIT_RETRY_ATTEMPTS {
         match overlay.try_commit_nonblocking(nomt)? {
             None => {
@@ -365,18 +439,27 @@ where
             Some(returned) => {
                 match attempt {
                     n if n > 20 => {
-                        tracing::warn!(%attempt, wait_time = ?start_wait, "Failed to commit overlay, retrying...");
+                        tracing::warn!(%attempt, wait_time = ?current_wait, "Failed to commit overlay, retrying...");
                     }
                     n if n > 10 => {
-                        tracing::info!(%attempt, wait_time = ?start_wait, "Failed to commit overlay, retrying...");
+                        tracing::info!(%attempt, wait_time = ?current_wait, "Failed to commit overlay, retrying...");
                     }
                     _ => {
-                        tracing::debug!(%attempt, wait_time = ?start_wait, "Failed to commit overlay, retrying...");
+                        tracing::debug!(%attempt, wait_time = ?current_wait, "Failed to commit overlay, retrying...");
                     }
                 };
                 overlay = returned;
-                std::thread::sleep(start_wait);
-                start_wait *= 2;
+                std::thread::sleep(current_wait);
+                // Apply exponential backoff with factor 1.5:
+                // multiply by 3 then divide by 2 to get 1.5x
+                // Use saturating operations to prevent overflow
+                let next_nanos = current_wait.as_nanos().saturating_mul(3).saturating_div(2);
+
+                current_wait = std::time::Duration::from_nanos(
+                    next_nanos
+                        .try_into()
+                        .expect("Nanos overflow for NOMT commit retry"),
+                );
             }
         }
     }

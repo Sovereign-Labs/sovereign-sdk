@@ -36,19 +36,29 @@ macro_rules! encode_decode_tests_simple {
         let json = serde_json::to_string(&$item).unwrap();
 
         if cfg!(feature = "test-vectors") {
+            use std::time::{SystemTime, UNIX_EPOCH};
+
+            let timestamp_nanos = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
             let dir = std::env::var("SOV_UNIVERSAL_WALLET_TEST_VECTORS_DIR")
                 .unwrap_or_else(|_| "test-vectors".to_string());
             std::fs::create_dir_all(&dir).unwrap();
 
             let th = std::thread::current();
-            let test_name = th.name().unwrap();
+            let test_path = th.name().unwrap();
+            let test_name = test_path
+                .split("::")
+                .last()
+                .expect("this shouldnt be possible");
             let vector = TestVector {
                 input: json.clone(),
                 output: hex::encode(&borsh_ser),
                 schema: serde_json::to_string(&$schema).unwrap(),
             };
 
-            let file = format!("{dir}/{test_name}.json");
+            let file = format!("{dir}/{test_name}-{timestamp_nanos}.json");
             std::fs::write(file, serde_json::to_string_pretty(&vector).unwrap()).unwrap();
         }
 

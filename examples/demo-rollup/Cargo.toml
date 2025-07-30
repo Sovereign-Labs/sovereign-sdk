@@ -4,7 +4,7 @@ version = "0.3.0"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }
-license = "Sovereign Labs Community Software License"
+license = "Sovereign Permissionless Commercial License"
 repository = { workspace = true }
 publish = false
 default-run = "sov-demo-rollup"
