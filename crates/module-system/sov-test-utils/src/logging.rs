@@ -1,7 +1,9 @@
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use tracing::{Event, Level, Subscriber};
-use tracing_subscriber::Layer;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::{fmt, EnvFilter, Layer};
 
 /// Collects logs from the rollup.
 #[derive(Clone)]
@@ -49,4 +51,15 @@ impl tracing::field::Visit for MessageVisitor<'_> {
             self.0.push_str(&format!("{value:?}"));
         }
     }
+}
+
+/// Initialize logging with an explicit filter.
+/// When guard is deallocated, different subscriber can be used again.
+pub fn initialize_logging_with_filter(filter: &str) -> tracing::subscriber::DefaultGuard {
+    let enf_filter = EnvFilter::from_str(filter).unwrap();
+    let fmt_layer = fmt::layer().with_filter(enf_filter);
+
+    let subscriber = tracing_subscriber::registry().with(fmt_layer);
+
+    tracing::subscriber::set_default(subscriber)
 }

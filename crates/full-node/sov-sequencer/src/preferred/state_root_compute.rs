@@ -547,6 +547,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_nomt_state_compute_competing_storages_repro_real_storage_manager() {
+        let _guard = sov_test_utils::logging::initialize_logging_with_filter("error,sov_sequencer::preferred::state_root_compute=trace,sov_db::state_db_nomt=trace,sov_state::nomt::prover_storage=debug");
         let storage_manager =
             CommitingStorageManager::<NomtStorageManager<MockDaSpec, TestHasher, _>, _>::new();
         test_compute_competing_storages::<TestNomtSpec, _>(storage_manager, 3).await;
