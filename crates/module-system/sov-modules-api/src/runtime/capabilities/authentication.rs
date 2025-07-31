@@ -1,5 +1,6 @@
 //! This module defines abstractions and workflows around authenticating and authorizing
 //! transactions within a rollup.
+
 use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSerialize};

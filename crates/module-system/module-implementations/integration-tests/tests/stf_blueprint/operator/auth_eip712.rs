@@ -1,6 +1,7 @@
 use alloy_primitives::address;
 use alloy_sol_types::{eip712_domain, sol, Eip712Domain, SolStruct};
 use sov_address::{EthereumAddress, EvmCryptoSpec};
+use sov_evm::Eip712Authenticator;
 use sov_mock_da::{MockBlob, MockDaSpec};
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::capabilities::TransactionAuthenticator;
@@ -24,9 +25,9 @@ generate_runtime! {
     modules: [value_setter: ValueSetter<S>],
     operating_mode: sov_modules_api::OperatingMode::Optimistic,
     minimal_genesis_config_type: sov_test_utils::runtime::genesis::optimistic::MinimalOptimisticGenesisConfig<S>,
-    runtime_trait_impl_bounds: [],
+    runtime_trait_impl_bounds: [S: ::sov_modules_api::Spec<CryptoSpec = EvmCryptoSpec>],
     kernel_type: sov_kernels::basic::BasicKernel<'a, S>,
-    auth_type: sov_modules_api::capabilities::RollupAuthenticator<S, TestRuntime<S>>,
+    auth_type: Eip712Authenticator<S, TestRuntime<S>>,
     auth_call_wrapper: |call| call,
 }
 type RT = TestRuntime<S>;
