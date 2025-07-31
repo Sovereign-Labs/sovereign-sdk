@@ -146,6 +146,17 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
         }
     }
 
+    pub async fn clean_and_overwrite_next_tx_number(&self, tx_number: u64) {
+        tracing::debug!(
+            "Cleaning and overwriting transaction cache up to {}",
+            tx_number
+        );
+        let mut transaction_cache = self.inner.write().await;
+        transaction_cache.next_tx_number = tx_number;
+        transaction_cache.cache.clear();
+        transaction_cache.tx_hash_index.clear();
+    }
+
     pub async fn list_events(
         &self,
         event_numbers: std::ops::Range<u64>,

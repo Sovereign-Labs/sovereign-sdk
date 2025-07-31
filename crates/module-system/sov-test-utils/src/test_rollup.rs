@@ -324,6 +324,11 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
                 .expect("storage folder should exist by this time");
         self
     }
+
+    /// A reference to the storage directory the rollup will run in
+    pub fn storage_path(&self) -> StoragePath {
+        self.config.storage.clone()
+    }
 }
 
 impl<R, StoragePath> RollupBuilder<R, StoragePath>

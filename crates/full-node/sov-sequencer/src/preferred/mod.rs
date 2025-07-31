@@ -746,13 +746,13 @@ where
         }
 
         PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeState(
-            is_startup,
+            is_startup_or_resync,
             time_spent_fetching_batches,
         ) => {
             seq.replay_soft_confirmations_on_top_of_node_state(
                 info,
                 timer_start,
-                is_startup,
+                is_startup_or_resync,
                 time_spent_fetching_batches,
             )
             .await?;

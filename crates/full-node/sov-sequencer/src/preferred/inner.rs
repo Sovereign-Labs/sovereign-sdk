@@ -1344,6 +1344,12 @@ where
                 !inner.has_finished_startup,
             )
         };
+
+        let is_resync = matches!(
+            inner.is_ready,
+            Err(SequencerNotReadyDetails::Syncing { .. })
+        );
+
         let time_spent_fetching_batches = fetch_batches_to_replay_metrics.duration;
         sov_metrics::track_metrics(|t| {
             t.submit(fetch_batches_to_replay_metrics);
@@ -1410,7 +1416,7 @@ where
             }
             (false, false, false, _) => {
                 PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeState(
-                    is_startup,
+                    is_startup || is_resync,
                     time_spent_fetching_batches,
                 )
             }
