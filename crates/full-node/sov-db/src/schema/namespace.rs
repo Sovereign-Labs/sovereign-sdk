@@ -8,7 +8,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use jmt::storage::{NibblePath, Node, NodeKey};
 use rockbound::schema::{ColumnFamilyName, KeyDecoder, KeyEncoder, ValueCodec};
-use rockbound::versioned_db::{EmptyKey, PrunableKey, SchemaWithVersion, VersionedKey};
+use rockbound::versioned_db::{VersionedTableMetadataKey, PrunableKey, SchemaWithVersion, VersionedKey};
 use rockbound::{CodecError, Schema, SchemaKey, SchemaValue, SeekKeyEncoder};
 use sov_rollup_interface::common::SlotNumber;
 
@@ -82,7 +82,7 @@ impl<N: Namespace> Schema for NomtStateValues<N> {
 impl<N: Namespace> SchemaWithVersion for NomtStateValues<N> {
     type HistoricalColumnFamily = NomtHistoricalState<N>;
     type PruningColumnFamily = NomtPruningState<N>;
-    type CommittedVersionColumn = NomtCommittedVersion<N>;
+    type VersionMetadatacolumn = NomtCommittedVersion<N>;
 }
 
 impl<N: Namespace> Schema for NomtHistoricalState<N> {
@@ -123,26 +123,19 @@ impl<N: Namespace> Schema for NomtCommittedVersion<N> {
     const COLUMN_FAMILY_NAME: ColumnFamilyName = N::COMITTED_VERSION_COLUMN;
     const SHOULD_CACHE: bool = true;
 
-    type Key = EmptyKey;
+    type Key = VersionedTableMetadataKey;
     type Value = u64;
 }
 
-impl<N: Namespace> KeyEncoder<NomtCommittedVersion<N>> for EmptyKey {
+impl<N: Namespace> KeyEncoder<NomtCommittedVersion<N>> for VersionedTableMetadataKey {
     fn encode_key(&self) -> Result<Vec<u8>, CodecError> {
-        Ok(Vec::new())
+        self.encode()
     }
 }
 
-impl<N: Namespace> KeyDecoder<NomtCommittedVersion<N>> for EmptyKey {
+impl<N: Namespace> KeyDecoder<NomtCommittedVersion<N>> for VersionedTableMetadataKey {
     fn decode_key(data: &[u8]) -> Result<Self, CodecError> {
-        if data.is_empty() {
-            Ok(EmptyKey)
-        } else {
-            Err(CodecError::InvalidKeyLength {
-                expected: 0,
-                got: data.len(),
-            })
-        }
+        Self::decode(data)
     }
 }
 

@@ -423,14 +423,20 @@ async fn test_historical_state_with_pruning() {
 
     // Initialize storage manager
     let mut config = RollupDbConfig::default_in_path(db_path.clone());
-    config.pruner_block_interval = Some(1);
-    config.pruner_versions_to_keep = Some(5);
+    let versions_to_keep = 5;
+    let pruning_frequency = 1;
+    config.pruner_block_interval = Some(pruning_frequency);
+    config.pruner_versions_to_keep = Some(versions_to_keep);
     let mut storage_manager =
         NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config.clone()).unwrap();
 
-    let blocks: u64 = 11;
+    let blocks: u64 = 14;
 
     // A list of the keys to write in each block.
+    //  - At block 0, we write nothing.
+    //  - At block 1, we write keys '1'-'10'
+    //  - At block 2, we write keys '2'-'10'
+    //  - etc.
     let keys_to_write = [
         vec![],
         vec![1u64, 2, 3, 4, 5, 6, 7, 8, 9, 10],
@@ -443,11 +449,14 @@ async fn test_historical_state_with_pruning() {
         vec![8, 9, 10],
         vec![9, 10],
         vec![10],
+        vec![u64::MAX], // Write a dummy value
+        vec![u64::MAX], // Write a dummy value
+        vec![u64::MAX], // Write a dummy value. Currently, these dummy values are needed to trigger pruning. If pruning is made to run every block, these can be removed.
     ];
 
+    // We're just writing the keys in this loop. At each height, we set the value of each modified key to the current height.
     for height in 0u64..blocks {
         let da_header = MockBlockHeader::from_height(height+1);
-
         // Create state for the block
         let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
 
@@ -455,9 +464,9 @@ async fn test_historical_state_with_pruning() {
         let mut values = vec![];
         // For each key to write, set its value to the current height
         for key in keys_to_write[height as usize].iter() {
-            let user_key = format!("user_{}", key);
+            let user_key = vec![*key as u8];
             let value = height.to_be_bytes().to_vec();
-            values.push((user_key.as_bytes().to_vec(), Some(value)));
+            values.push((user_key, Some(value)));
         }
         let stf_changes = stf_storage.materialize_from_key_values(&values, height);
 
@@ -470,15 +479,24 @@ async fn test_historical_state_with_pruning() {
         storage_manager.finalize(&da_header).unwrap();
     }
 
+    // Create a storage to read from
     let da_header = MockBlockHeader::from_height(blocks);
     let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
-    let versions_to_keep = config.pruner_versions_to_keep.unwrap();
-    for key in keys_to_write[1].iter() {
-        let user_key = format!("user_{}", key);
-        let value = stf_storage.historical_state.get_user_value_option_by_key(&user_key.as_bytes().to_vec()).unwrap();
+    // Note: Sleep here to give time for the pruner to run since it's in a background thread.
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // This is where the interesting logic happens.
+    for key in 1..=10u64 {
+        let user_key = vec![key as u8];
+        // First, get the live value and assert that it's what we expect.
+        let value = stf_storage.historical_state.get_user_value_option_by_key(&user_key).unwrap();
+        assert_eq!(value, Some(key.to_be_bytes().to_vec()));
+
+        // Now, check that the value is pruned at the correct versions.
         for version in 0..keys_to_write.len() as u64 {
-            let value_at_version = stf_storage.historical_state.get_user_value_option_by_key_historical(&user_key.as_bytes().to_vec(), SlotNumber::new(version));
-            if version < key.saturating_sub(versions_to_keep as u64) {
+            let value_at_version = stf_storage.historical_state.get_user_value_option_by_key_historical(&user_key, SlotNumber::new(version));
+            // Everything below the pruning threshold should be pruned. Since pruning doesn't 
+            if version < blocks - (versions_to_keep as u64 + pruning_frequency) {
                 assert!(value_at_version.is_err(), "Unexpected value for key {} at version {}. Expected error, found {:?}", key, version, value_at_version);
             } else {
                 let value_at_version = value_at_version.expect("Query for unpruned version return error");
@@ -486,14 +504,10 @@ async fn test_historical_state_with_pruning() {
                     assert_eq!(value_at_version, None, "All keys should be none at version 0, since we wrote nothing in that block. Key {} was {:?} instead.", key, value_at_version);
                 } else {
                     // We stop writing each key at its own version. (I.e. key '1' is written in block 1, key '2' is written in blocks, 1 and 2, etc.)
-                    let expected_value = std::cmp::min(version, *key);
+                    let expected_value = std::cmp::min(version,key);
                     assert_eq!(value_at_version, Some(expected_value.to_be_bytes().to_vec()), "Unexpected value for key {} at version {}. Expected {:?}, found {:?}", key, version, expected_value.to_be_bytes().to_vec(), value_at_version);
                 }
             }
         }
-        assert_eq!(value, Some(key.to_be_bytes().to_vec()));
     }
-
-
-
 }

@@ -9215,7 +9215,6 @@ dependencies = [
 [[package]]
 name = "rockbound"
 version = "1.0.0"
-source = "git+https://github.com/sovereign-labs/rockbound?rev=89ad621994b582baf64081cd5d16f4ca52b16a5f#89ad621994b582baf64081cd5d16f4ca52b16a5f"
 dependencies = [
  "anyhow",
  "once_cell",

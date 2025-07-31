@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
+use rockbound::versioned_db::VersionedTableMetadataKey;
 
 use anyhow::Context;
 use rockbound::cache::delta_reader::DeltaReader;
@@ -17,7 +18,7 @@ use crate::ledger_db::LedgerDb;
 use crate::metrics::nomt::PrunerMetric;
 use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::pruner::Pruner;
-use crate::schema::namespace::{NomtHistoricalState, NomtPruningState, NomtStateValues};
+use crate::schema::namespace::{NomtCommittedVersion, NomtHistoricalState, NomtPruningState, NomtStateValues};
 use crate::schema::tables::{ModuleAccessoryState, StateRootHashes};
 use crate::state_db_nomt::{NomtSessionBuilder, NomtStateDb, StateOverlay};
 use crate::storage_manager::{update_ledger_finalized_height, InitializableNativeNomtStorage};
@@ -276,10 +277,11 @@ where
                         key.1 = previous_version;
                         batch.delete::<NomtHistoricalState<UserNamespace>>(&key)?;
                         keys_to_prune += 1;
-                    }
+                    } 
                 }
+                batch.put::<NomtCommittedVersion<UserNamespace>>(&VersionedTableMetadataKey::PrunedVersion, &user_version)?;
             }
-            if let Some(kernel_version) = current_kernel_version.and_then(|v| v.checked_sub(versions_to_keep as u64)) {
+            if let Some(kernel_version) = current_kernel_version.and_then(|v| v.checked_sub(versions_to_keep as u64))  {
                 let prunable_keys = kernel.iter_pruning_keys_up_to_version(kernel_version)?;
                 for key in prunable_keys {
                     // Prune the pruning table.
@@ -296,7 +298,9 @@ where
                         keys_to_prune += 1;
                     }
                 }
+                batch.put::<NomtCommittedVersion<KernelNamespace>>(&VersionedTableMetadataKey::PrunedVersion, &kernel_version)?;
             }
+            
             let pruning_time = pruning_time.elapsed();
             sov_metrics::track_metrics(|tracker| {
                 tracker.submit(PrunerMetric {

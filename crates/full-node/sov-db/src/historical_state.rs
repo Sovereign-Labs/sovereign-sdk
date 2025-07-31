@@ -162,32 +162,6 @@ impl HistoricalStateReader {
         Self::last_version_from_reader(&self.other).map(|v| v.unwrap_or(SlotNumber::GENESIS))
     }
 
-    // /// Get an optional value from the database, given a version and a key hash.
-    // pub fn get_value_option_by_key<N: Namespace>(
-    //     &self,
-    //     key: &SchemaKey,
-    // ) -> anyhow::Result<Option<SchemaValue>> {
-    //     // Defense programming
-    //     if version >= self.next_version {
-    //         // The future is not set.
-    //         return Ok(None);
-    //     }
-    //     ensure_version_is_correct(
-    //         key,
-    //         version,
-    //         self.other
-    //             .get_prev::<<N>>(&(key.to_vec(), version))?,
-    //     )
-    // }
-
-    // pub fn get_historical_value_option_by_key(
-    //     &self,
-    //     key: &SchemaKey,
-    //     version: SlotNumber,
-    // ) -> anyhow::Result<Option<SchemaValue>> {
-    //     self.other.get_prev::<NomtHistoricalState<UserNamespace>>(key)
-    // }
-
     /// Get an optional value from the database, given a version and a key hash.
     pub fn get_user_value_option_by_key(
         &self,
