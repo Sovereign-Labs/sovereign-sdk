@@ -54,7 +54,11 @@ where
         // During startup, we need to repopulate the transaction cache with any transactions from the soft-confirmed batches
         // Outside of this edge case, we don't want replay to affect the transaction cache, so we don't pass a writer.
         let startup_transaction_cache_writer = if is_startup_or_resync {
-            Some(self.transaction_cache.write_handle())
+            let tx_cache_writer = self.transaction_cache.write_handle();
+            tx_cache_writer
+                .clean_and_overwrite_next_tx_number(info.next_tx_number)
+                .await;
+            Some(tx_cache_writer)
         } else {
             None
         };
@@ -74,12 +78,6 @@ where
 
         let node_state_root = tracing::trace_span!("root_hash")
             .in_scope(|| info.storage.get_root_hash(info.slot_number))?;
-
-        if is_startup_or_resync {
-            self.transaction_cache
-                .clean_and_overwrite_next_tx_number(info.next_tx_number)
-                .await;
-        }
 
         // Repeatedly fetch all completed batches from the database that haven't yet been played on this sequencer and replay them
         let (in_progress_batch, mut db_event_subscription) = loop {
