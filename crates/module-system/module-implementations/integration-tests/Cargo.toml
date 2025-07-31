@@ -30,6 +30,7 @@ hex = { workspace = true }
 sov-modules-api = { workspace = true, features = ["native", "test-utils"] }
 sov-state = { workspace = true }
 
+sov-address = { workspace = true, features = ["native", "evm"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 sov-test-utils = { workspace = true }
 sov-rollup-interface = { workspace = true, features = ["native"] }
