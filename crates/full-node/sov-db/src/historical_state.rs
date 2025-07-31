@@ -292,7 +292,6 @@ mod tests {
             vec![(key1.to_vec(), Some(vec![4, 4, 4]))],
         ];
         for (idx, kernel_writes) in writes.into_iter().enumerate() {
-            println!("Iter {}", idx);
             let historical_state = HistoricalStateReader::new_empty(&rocksdb);
             let slot_number = SlotNumber::new(idx as u64);
             assert_eq!(slot_number.checked_sub(1), historical_state.last_version());

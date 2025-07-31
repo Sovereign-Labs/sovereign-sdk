@@ -80,7 +80,7 @@ fn prepare_data(size: usize, rocksdb: DB) -> TestData {
     let version = 0;
     let data = put_data(&db, raw_data.clone(), version);
 
-    rocksdb.write_schemas(&data).unwrap();
+    rocksdb.write_schemas(data).unwrap();
 
     // re-initialize `StateDb` so the latest version is updated.
     let reader = DeltaReader::new(rocksdb.clone(), Vec::new());

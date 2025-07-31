@@ -503,27 +503,21 @@ async fn test_historical_state_with_pruning() {
             if version < blocks - (versions_to_keep as u64 + pruning_frequency) {
                 assert!(
                     value_at_version.is_err(),
-                    "Unexpected value for key {} at version {}. Expected error, found {:?}",
-                    key,
-                    version,
-                    value_at_version
+                    "Unexpected value for key {key} at version {version}. Expected error, found {value_at_version:?}",
                 );
             } else {
                 let value_at_version =
                     value_at_version.expect("Query for unpruned version return error");
                 if version == 0 {
-                    assert_eq!(value_at_version, None, "All keys should be none at version 0, since we wrote nothing in that block. Key {} was {:?} instead.", key, value_at_version);
+                    assert_eq!(value_at_version, None, "All keys should be none at version 0, since we wrote nothing in that block. Key {key} was {value_at_version:?} instead.");
                 } else {
                     // We stop writing each key at its own version. (I.e. key '1' is written in block 1, key '2' is written in blocks, 1 and 2, etc.)
                     let expected_value = std::cmp::min(version, key);
                     assert_eq!(
                         value_at_version,
                         Some(expected_value.to_be_bytes().to_vec()),
-                        "Unexpected value for key {} at version {}. Expected {:?}, found {:?}",
-                        key,
-                        version,
+                        "Unexpected value for key {key} at version {version}. Expected {:?}, found {value_at_version:?}",
                         expected_value.to_be_bytes().to_vec(),
-                        value_at_version
                     );
                 }
             }

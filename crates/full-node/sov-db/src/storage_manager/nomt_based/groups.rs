@@ -266,6 +266,7 @@ where
 
             let mut batch = SchemaBatch::new();
             let mut keys_to_prune = 0;
+            let mut keys_inspected = 0;
 
             if let Some(user_version) =
                 current_user_version.and_then(|v| v.checked_sub(versions_to_keep as u64))
@@ -276,14 +277,16 @@ where
                     let key = key?;
                     batch.delete::<NomtPruningState<UserNamespace>>(&key)?;
                     keys_to_prune += 1;
+                    keys_inspected += 1;
                     // Prune the historical state table. This is the main table that we want to prune.
                     // We want to make sure that the the newest version of the key is accessible. The pruning table
                     // records that we wrote key K at time T, so delete key K at time T-1. Recursively, this will ensure
                     // that no keys are pruned that are still live, and all old keys are pruned as soon as possible.
                     let mut key = key.into_versioned_key();
-                    let previous_version = key.1.checked_sub(1).unwrap_or(0);
+                    let previous_version = key.1.saturating_sub(1);
                     let prev_written_version =
                         user.get_version_for_key(&key.0, previous_version)?;
+                    keys_inspected += 1;
                     if let Some(previous_version) = prev_written_version {
                         key.1 = previous_version;
                         batch.delete::<NomtHistoricalState<UserNamespace>>(&key)?;
@@ -304,11 +307,13 @@ where
                     let key = key?;
                     batch.delete::<NomtPruningState<KernelNamespace>>(&key)?;
                     keys_to_prune += 1;
+                    keys_inspected += 1;
                     // Prune the historical state table.
                     let mut key = key.into_versioned_key();
-                    let previous_version = key.1.checked_sub(1).unwrap_or(0);
+                    let previous_version = key.1.saturating_sub(1);
                     let prev_written_version =
                         kernel.get_version_for_key(&key.0, previous_version)?;
+                    keys_inspected += 1;
                     if let Some(previous_version) = prev_written_version {
                         key.1 = previous_version;
                         batch.delete::<NomtHistoricalState<KernelNamespace>>(&key)?;
@@ -325,8 +330,8 @@ where
             sov_metrics::track_metrics(|tracker| {
                 tracker.submit(PrunerMetric {
                     db: "versioned_dbs",
-                    keys_inspected: keys_to_prune,
-                    keys_to_prune: keys_to_prune,
+                    keys_inspected,
+                    keys_to_prune,
                     time: pruning_time,
                 });
             });
