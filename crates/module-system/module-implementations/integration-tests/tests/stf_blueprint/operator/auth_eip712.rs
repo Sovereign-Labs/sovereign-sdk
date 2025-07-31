@@ -13,13 +13,22 @@ use sov_rollup_interface::da::RelevantBlobs;
 use sov_rollup_interface::stf::{TxEffect, TxReceiptContents};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::{TestRunner, ValueSetter};
-use sov_test_utils::{generate_optimistic_runtime, EncodeCall, TestUser, TEST_DEFAULT_MAX_FEE};
+use sov_test_utils::{generate_runtime, EncodeCall, TestUser, TEST_DEFAULT_MAX_FEE};
 use sov_value_setter::CallMessage;
 
 type TestSpec =
     ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, EthereumAddress, Native, EvmCryptoSpec>;
 type S = TestSpec;
-generate_optimistic_runtime!(TestRuntime <= value_setter: ValueSetter<S>);
+generate_runtime! {
+    name: TestRuntime,
+    modules: [value_setter: ValueSetter<S>],
+    operating_mode: sov_modules_api::OperatingMode::Optimistic,
+    minimal_genesis_config_type: sov_test_utils::runtime::genesis::optimistic::MinimalOptimisticGenesisConfig<S>,
+    runtime_trait_impl_bounds: [],
+    kernel_type: sov_kernels::basic::BasicKernel<'a, S>,
+    auth_type: sov_modules_api::capabilities::RollupAuthenticator<S, TestRuntime<S>>,
+    auth_call_wrapper: |call| call,
+}
 type RT = TestRuntime<S>;
 
 fn setup() -> (TestRunner<RT, S>, TestUser<S>) {
