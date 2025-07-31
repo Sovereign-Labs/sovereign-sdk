@@ -4860,6 +4860,8 @@ dependencies = [
 name = "integration-tests"
 version = "0.3.0"
 dependencies = [
+ "alloy-primitives",
+ "alloy-sol-types",
  "anyhow",
  "borsh",
  "derive_more 1.0.0",
