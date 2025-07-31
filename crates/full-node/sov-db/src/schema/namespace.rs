@@ -121,7 +121,7 @@ impl<N: Namespace> ValueCodec<NomtPruningState<N>> for () {
 
 impl<N: Namespace> Schema for NomtCommittedVersion<N> {
     const COLUMN_FAMILY_NAME: ColumnFamilyName = N::COMITTED_VERSION_COLUMN;
-    const SHOULD_CACHE: bool = false;
+    const SHOULD_CACHE: bool = true;
 
     type Key = EmptyKey;
     type Value = u64;

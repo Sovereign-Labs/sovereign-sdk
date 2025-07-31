@@ -67,7 +67,7 @@ fn bench_pruner(c: &mut Criterion) {
                 let pruning_batch = pruner
                     .collect_pruning_batch_for_module_accessory_state(100)
                     .unwrap();
-                rocksdb.write_schemas(&pruning_batch).unwrap();
+                rocksdb.write_schemas(pruning_batch).unwrap();
             },
         );
     });

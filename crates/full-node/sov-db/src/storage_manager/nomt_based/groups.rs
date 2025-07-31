@@ -14,10 +14,11 @@ use crate::accessory_db::AccessoryDb;
 use crate::config::RollupDbConfig;
 use crate::historical_state::{HistoricalStateReader, StateChanges};
 use crate::ledger_db::LedgerDb;
+use crate::metrics::nomt::PrunerMetric;
 use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::pruner::Pruner;
-use crate::schema::namespace::{ NomtStateValues, };
-use crate::schema::tables::{StateRootHashes};
+use crate::schema::namespace::{NomtHistoricalState, NomtPruningState, NomtStateValues};
+use crate::schema::tables::{ModuleAccessoryState, StateRootHashes};
 use crate::state_db_nomt::{NomtSessionBuilder, NomtStateDb, StateOverlay};
 use crate::storage_manager::{update_ledger_finalized_height, InitializableNativeNomtStorage};
 use crate::DbOptions;
@@ -163,7 +164,6 @@ where
         Ok(())
     }
 
-    // TODO: Remove this method.
     // Flush pruning schema batches to disk.
     pub(crate) fn commit_pruning(&mut self, group: PruneGroup) -> anyhow::Result<()> {
         self.plain_state
@@ -245,25 +245,74 @@ where
 
     pub(crate) fn start_pruner(&self, versions_to_keep: usize) -> PrunerJob {
         tracing::info!(versions_to_keep, "Starting pruner task");
-        // let state_pruner = Pruner::new(self.historical_state.clone());
-        // TODO: Re-enable state pruner
-        // let accessory_pruner = Pruner::new(self.accessory.clone());
+        let user = self.plain_state.get_user_db().clone();
+        let kernel = self.plain_state.get_kernel_db().clone();
+        let accessory_pruner = Pruner::new(self.accessory.clone());
 
-        // // Spawn historical state pruner thread
-        // let historical_state = std::thread::spawn(move || -> anyhow::Result<SchemaBatch> {
-        //     let mut kernel_prune_batch = state_pruner
-        //         .collect_pruning_batch::<StateValues<KernelNamespace>>(versions_to_keep as u64)?;
-        //     let user_prune_batch = state_pruner
-        //         .collect_pruning_batch::<StateValues<UserNamespace>>(versions_to_keep as u64)?;
-        //     kernel_prune_batch.merge(user_prune_batch);
-        //     Ok(kernel_prune_batch)
-        // });
-        let historical_state =
-            std::thread::spawn(move || -> anyhow::Result<SchemaBatch> { Ok(SchemaBatch::new()) });
+        // Spawn historical state pruner thread
+        let historical_state = std::thread::spawn(move || -> anyhow::Result<SchemaBatch> {
+            let pruning_time = std::time::Instant::now();
+            let current_user_version = user.get_committed_version()?;
+            let current_kernel_version = kernel.get_committed_version()?;
+            
+            let mut batch = SchemaBatch::new();
+            let mut keys_to_prune = 0;
+
+            if let Some(user_version) = current_user_version.and_then(|v| v.checked_sub(versions_to_keep as u64)) {
+                let prunable_keys = user.iter_pruning_keys_up_to_version(user_version)?;
+                for key in prunable_keys {
+                    // Prune the pruning table.
+                    let key = key?;
+                    batch.delete::<NomtPruningState<UserNamespace>>(&key)?;
+                    keys_to_prune += 1;
+                    // Prune the historical state table. This is the main table that we want to prune.
+                    // We want to make sure that the the newest version of the key is accessible. The pruning table
+                    // records that we wrote key K at time T, so delete key K at time T-1. Recursively, this will ensure
+                    // that no keys are pruned that are still live, and all old keys are pruned as soon as possible.
+                    let mut key = key.into_versioned_key();
+                    let previous_version = key.1.checked_sub(1).unwrap_or(0);
+                    let prev_written_version = user.get_version_for_key(&key.0, previous_version)?;
+                    if let Some(previous_version) = prev_written_version {
+                        key.1 = previous_version;
+                        batch.delete::<NomtHistoricalState<UserNamespace>>(&key)?;
+                        keys_to_prune += 1;
+                    }
+                }
+            }
+            if let Some(kernel_version) = current_kernel_version.and_then(|v| v.checked_sub(versions_to_keep as u64)) {
+                let prunable_keys = kernel.iter_pruning_keys_up_to_version(kernel_version)?;
+                for key in prunable_keys {
+                    // Prune the pruning table.
+                    let key = key?;
+                    batch.delete::<NomtPruningState<KernelNamespace>>(&key)?;
+                    keys_to_prune += 1;
+                    // Prune the historical state table.
+                    let mut key = key.into_versioned_key();
+                    let previous_version = key.1.checked_sub(1).unwrap_or(0);
+                    let prev_written_version = kernel.get_version_for_key(&key.0, previous_version)?;
+                    if let Some(previous_version) = prev_written_version {
+                        key.1 = previous_version;
+                        batch.delete::<NomtHistoricalState<KernelNamespace>>(&key)?;
+                        keys_to_prune += 1;
+                    }
+                }
+            }
+            let pruning_time = pruning_time.elapsed();
+            sov_metrics::track_metrics(|tracker| {
+                tracker.submit(PrunerMetric {
+                    db: "versioned_dbs",
+                    keys_inspected: keys_to_prune,
+                    keys_to_prune: keys_to_prune,
+                    time: pruning_time,
+                });
+            });
+            Ok(batch)
+        });
+        
 
         // Spawn accessory pruner thread
         let accessory_state = std::thread::spawn(move || -> anyhow::Result<SchemaBatch> {
-            // accessory_pruner.collect_pruning_batch::<ModuleAccessoryState>(versions_to_keep as u64)
+            accessory_pruner.collect_pruning_batch::<ModuleAccessoryState>(versions_to_keep as u64)?;
             Ok(SchemaBatch::new())
         });
 

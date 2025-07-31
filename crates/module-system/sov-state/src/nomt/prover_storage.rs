@@ -9,7 +9,6 @@ use nomt::proof::MultiProof;
 use nomt::FinishedSession;
 use sov_db::accessory_db::AccessoryDb;
 use sov_db::historical_state::HistoricalStateReader;
-use sov_db::namespaces::{KernelNamespace, UserNamespace};
 use sov_db::state_db_nomt::{NomtSessionBuilder, SessionsContainer};
 use sov_db::storage_manager::{
     InitializableNativeNomtStorage, NomtChangeSet, StateFinishedSession,
