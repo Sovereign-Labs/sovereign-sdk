@@ -8,7 +8,9 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use jmt::storage::{NibblePath, Node, NodeKey};
 use rockbound::schema::{ColumnFamilyName, KeyDecoder, KeyEncoder, ValueCodec};
-use rockbound::versioned_db::{VersionedTableMetadataKey, PrunableKey, SchemaWithVersion, VersionedKey};
+use rockbound::versioned_db::{
+    PrunableKey, SchemaWithVersion, VersionedKey, VersionedTableMetadataKey,
+};
 use rockbound::{CodecError, Schema, SchemaKey, SchemaValue, SeekKeyEncoder};
 use sov_rollup_interface::common::SlotNumber;
 

@@ -2,12 +2,11 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
-use rockbound::versioned_db::VersionedTableMetadataKey;
 
 use anyhow::Context;
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::rocksdb::ColumnFamilyDescriptor;
-use rockbound::versioned_db::{ VersionedDB, VersionedDeltaReader};
+use rockbound::versioned_db::{VersionedDB, VersionedDeltaReader, VersionedTableMetadataKey};
 use rockbound::{default_cf_descriptor, SchemaBatch};
 use sov_rollup_interface::reexports::digest;
 
@@ -18,7 +17,9 @@ use crate::ledger_db::LedgerDb;
 use crate::metrics::nomt::PrunerMetric;
 use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::pruner::Pruner;
-use crate::schema::namespace::{NomtCommittedVersion, NomtHistoricalState, NomtPruningState, NomtStateValues};
+use crate::schema::namespace::{
+    NomtCommittedVersion, NomtHistoricalState, NomtPruningState, NomtStateValues,
+};
 use crate::schema::tables::{ModuleAccessoryState, StateRootHashes};
 use crate::state_db_nomt::{NomtSessionBuilder, NomtStateDb, StateOverlay};
 use crate::storage_manager::{update_ledger_finalized_height, InitializableNativeNomtStorage};
@@ -79,7 +80,7 @@ impl PlainStateDb {
         }
     }
 
-    /// Coalesce all the changes into a single schema batch. 
+    /// Coalesce all the changes into a single schema batch.
     /// Assumption: only a single thread is committing at a time. Calling prepare_commit multiple times
     /// will result in a version mismatch.
     fn prepare_commit(&self, state: StateChanges) -> anyhow::Result<SchemaBatch> {
@@ -90,13 +91,22 @@ impl PlainStateDb {
         } = state;
 
         let mut other_changes = Arc::try_unwrap(other).unwrap_or_else(|arc| (*arc).clone());
-        let version = self.kernel.get_committed_version()?.and_then(|v| v.checked_add(1)).unwrap_or(0);
+        let version = self
+            .kernel
+            .get_committed_version()?
+            .and_then(|v| v.checked_add(1))
+            .unwrap_or(0);
         if cfg!(debug_assertions) {
-            let user_version = self.user.get_committed_version()?.and_then(|v| v.checked_add(1)).unwrap_or(0);
+            let user_version = self
+                .user
+                .get_committed_version()?
+                .and_then(|v| v.checked_add(1))
+                .unwrap_or(0);
             assert_eq!(user_version, version);
         }
         self.user.materialize(&user, &mut other_changes, version)?;
-        self.kernel.materialize(&kernel, &mut other_changes, version)?;
+        self.kernel
+            .materialize(&kernel, &mut other_changes, version)?;
 
         Ok(other_changes)
     }
@@ -152,7 +162,8 @@ where
 
         // Note: failure handling and data recovery will be implemented later.
         self.state.commit(state)?;
-        self.accessory.write_schemas(Arc::unwrap_or_clone(accessory))?;
+        self.accessory
+            .write_schemas(Arc::unwrap_or_clone(accessory))?;
         // Ledger goes last, as its data is used during the start.
         // So if ledger save failed, state and accessory will be synced from DA
         self.ledger.write_schemas(Arc::unwrap_or_clone(ledger))?;
@@ -206,10 +217,7 @@ where
             NomtSessionBuilder::new(self.state.clone(), relevant_snapshot_refs, nomt_snapshots);
         let historical_state_reader =
             DeltaReader::new(self.plain_state.other.clone(), historical_state_snapshots);
-        let version = self
-            .plain_state
-            .get_kernel_db()
-            .get_committed_version()?;
+        let version = self.plain_state.get_kernel_db().get_committed_version()?;
 
         let user_state_reader = VersionedDeltaReader::<NomtStateValues<UserNamespace>>::new(
             self.plain_state.user.clone(),
@@ -255,11 +263,13 @@ where
             let pruning_time = std::time::Instant::now();
             let current_user_version = user.get_committed_version()?;
             let current_kernel_version = kernel.get_committed_version()?;
-            
+
             let mut batch = SchemaBatch::new();
             let mut keys_to_prune = 0;
 
-            if let Some(user_version) = current_user_version.and_then(|v| v.checked_sub(versions_to_keep as u64)) {
+            if let Some(user_version) =
+                current_user_version.and_then(|v| v.checked_sub(versions_to_keep as u64))
+            {
                 let prunable_keys = user.iter_pruning_keys_up_to_version(user_version)?;
                 for key in prunable_keys {
                     // Prune the pruning table.
@@ -272,16 +282,22 @@ where
                     // that no keys are pruned that are still live, and all old keys are pruned as soon as possible.
                     let mut key = key.into_versioned_key();
                     let previous_version = key.1.checked_sub(1).unwrap_or(0);
-                    let prev_written_version = user.get_version_for_key(&key.0, previous_version)?;
+                    let prev_written_version =
+                        user.get_version_for_key(&key.0, previous_version)?;
                     if let Some(previous_version) = prev_written_version {
                         key.1 = previous_version;
                         batch.delete::<NomtHistoricalState<UserNamespace>>(&key)?;
                         keys_to_prune += 1;
-                    } 
+                    }
                 }
-                batch.put::<NomtCommittedVersion<UserNamespace>>(&VersionedTableMetadataKey::PrunedVersion, &user_version)?;
+                batch.put::<NomtCommittedVersion<UserNamespace>>(
+                    &VersionedTableMetadataKey::PrunedVersion,
+                    &user_version,
+                )?;
             }
-            if let Some(kernel_version) = current_kernel_version.and_then(|v| v.checked_sub(versions_to_keep as u64))  {
+            if let Some(kernel_version) =
+                current_kernel_version.and_then(|v| v.checked_sub(versions_to_keep as u64))
+            {
                 let prunable_keys = kernel.iter_pruning_keys_up_to_version(kernel_version)?;
                 for key in prunable_keys {
                     // Prune the pruning table.
@@ -291,16 +307,20 @@ where
                     // Prune the historical state table.
                     let mut key = key.into_versioned_key();
                     let previous_version = key.1.checked_sub(1).unwrap_or(0);
-                    let prev_written_version = kernel.get_version_for_key(&key.0, previous_version)?;
+                    let prev_written_version =
+                        kernel.get_version_for_key(&key.0, previous_version)?;
                     if let Some(previous_version) = prev_written_version {
                         key.1 = previous_version;
                         batch.delete::<NomtHistoricalState<KernelNamespace>>(&key)?;
                         keys_to_prune += 1;
                     }
                 }
-                batch.put::<NomtCommittedVersion<KernelNamespace>>(&VersionedTableMetadataKey::PrunedVersion, &kernel_version)?;
+                batch.put::<NomtCommittedVersion<KernelNamespace>>(
+                    &VersionedTableMetadataKey::PrunedVersion,
+                    &kernel_version,
+                )?;
             }
-            
+
             let pruning_time = pruning_time.elapsed();
             sov_metrics::track_metrics(|tracker| {
                 tracker.submit(PrunerMetric {
@@ -312,11 +332,11 @@ where
             });
             Ok(batch)
         });
-        
 
         // Spawn accessory pruner thread
         let accessory_state = std::thread::spawn(move || -> anyhow::Result<SchemaBatch> {
-            accessory_pruner.collect_pruning_batch::<ModuleAccessoryState>(versions_to_keep as u64)?;
+            accessory_pruner
+                .collect_pruning_batch::<ModuleAccessoryState>(versions_to_keep as u64)?;
             Ok(SchemaBatch::new())
         });
 

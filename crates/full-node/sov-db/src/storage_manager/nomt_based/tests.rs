@@ -411,7 +411,6 @@ async fn test_root_hashes_match_after_crash() {
     assert_eq!(state_root_hashes.user, state_root_hashes_after.user);
 }
 
-
 /// Test the pruning behavior of the historical state. We want to check that...
 ///  - Queries for pruned versions return an error.
 ///  - Queries for unpruned versions return the correct value as of that version.
@@ -456,7 +455,7 @@ async fn test_historical_state_with_pruning() {
 
     // We're just writing the keys in this loop. At each height, we set the value of each modified key to the current height.
     for height in 0u64..blocks {
-        let da_header = MockBlockHeader::from_height(height+1);
+        let da_header = MockBlockHeader::from_height(height + 1);
         // Create state for the block
         let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
 
@@ -489,23 +488,43 @@ async fn test_historical_state_with_pruning() {
     for key in 1..=10u64 {
         let user_key = vec![key as u8];
         // First, get the live value and assert that it's what we expect.
-        let value = stf_storage.historical_state.get_user_value_option_by_key(&user_key).unwrap();
+        let value = stf_storage
+            .historical_state
+            .get_user_value_option_by_key(&user_key)
+            .unwrap();
         assert_eq!(value, Some(key.to_be_bytes().to_vec()));
 
         // Now, check that the value is pruned at the correct versions.
         for version in 0..keys_to_write.len() as u64 {
-            let value_at_version = stf_storage.historical_state.get_user_value_option_by_key_historical(&user_key, SlotNumber::new(version));
-            // Everything below the pruning threshold should be pruned. Since pruning doesn't 
+            let value_at_version = stf_storage
+                .historical_state
+                .get_user_value_option_by_key_historical(&user_key, SlotNumber::new(version));
+            // Everything below the pruning threshold should be pruned. Since pruning doesn't
             if version < blocks - (versions_to_keep as u64 + pruning_frequency) {
-                assert!(value_at_version.is_err(), "Unexpected value for key {} at version {}. Expected error, found {:?}", key, version, value_at_version);
+                assert!(
+                    value_at_version.is_err(),
+                    "Unexpected value for key {} at version {}. Expected error, found {:?}",
+                    key,
+                    version,
+                    value_at_version
+                );
             } else {
-                let value_at_version = value_at_version.expect("Query for unpruned version return error");
+                let value_at_version =
+                    value_at_version.expect("Query for unpruned version return error");
                 if version == 0 {
                     assert_eq!(value_at_version, None, "All keys should be none at version 0, since we wrote nothing in that block. Key {} was {:?} instead.", key, value_at_version);
                 } else {
                     // We stop writing each key at its own version. (I.e. key '1' is written in block 1, key '2' is written in blocks, 1 and 2, etc.)
-                    let expected_value = std::cmp::min(version,key);
-                    assert_eq!(value_at_version, Some(expected_value.to_be_bytes().to_vec()), "Unexpected value for key {} at version {}. Expected {:?}, found {:?}", key, version, expected_value.to_be_bytes().to_vec(), value_at_version);
+                    let expected_value = std::cmp::min(version, key);
+                    assert_eq!(
+                        value_at_version,
+                        Some(expected_value.to_be_bytes().to_vec()),
+                        "Unexpected value for key {} at version {}. Expected {:?}, found {:?}",
+                        key,
+                        version,
+                        expected_value.to_be_bytes().to_vec(),
+                        value_at_version
+                    );
                 }
             }
         }
