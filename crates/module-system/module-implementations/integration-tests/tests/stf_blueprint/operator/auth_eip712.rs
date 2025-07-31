@@ -1,49 +1,38 @@
+use sov_address::{EthereumAddress, EvmCryptoSpec};
 use sov_mock_da::{MockBlob, MockDaSpec};
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::macros::config_value;
-use sov_modules_api::Spec;
 use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
-use sov_modules_api::{DispatchCall, FullyBakedTx, RawTx, Runtime};
+use sov_modules_api::{DispatchCall, FullyBakedTx, RawTx, Runtime, Spec};
 use sov_rollup_interface::da::RelevantBlobs;
+use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::{TestRunner, ValueSetter};
 use sov_test_utils::{generate_optimistic_runtime, EncodeCall, TestUser, TEST_DEFAULT_MAX_FEE};
 use sov_value_setter::CallMessage;
-use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
-use sov_address::{EthereumAddress, EvmCryptoSpec};
 
-
-type TestSpec = ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, EthereumAddress, Native, EvmCryptoSpec>;
+type TestSpec =
+    ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, EthereumAddress, Native, EvmCryptoSpec>;
 type S = TestSpec;
 generate_optimistic_runtime!(TestRuntime <= value_setter: ValueSetter<S>);
 type RT = TestRuntime<S>;
 
-#[allow(clippy::type_complexity)]
-fn setup() -> (TestRunner<RT, S>, TestUser<S>, TestUser<S>) {
+fn setup() -> (TestRunner<RT, S>, TestUser<S>) {
     let genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(2);
 
-    let extra_account = genesis_config
-        .additional_accounts()
-        .get(0)
-        .unwrap()
-        .clone();
-    let admin_account = genesis_config.additional_accounts().get(1).unwrap().clone();
+    let accounts = genesis_config.additional_accounts();
+    let admin = accounts.get(0).unwrap().clone();
 
-    let genesis = GenesisConfig::from_minimal_config(
-        genesis_config.clone().into(),
-        sov_value_setter::ValueSetterConfig {
-            admin: admin_account.address(),
-        },
-    );
+    let module_config = sov_value_setter::ValueSetterConfig {
+        admin: admin.address(),
+    };
 
-    (
-        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default()),
-        admin_account,
-        extra_account,
-    )
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.clone().into(), module_config);
+    let runner = TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+    (runner, admin)
 }
 
 pub fn create_tx_valid<S: Spec, RT: Runtime<S>>(
@@ -79,13 +68,12 @@ pub fn encode<S: Spec, RT: Runtime<S>>(tx: Transaction<RT, S>) -> FullyBakedTx {
 
 #[test]
 fn test_eip712() {
-    let (mut runner, admin_account, _extra_account) = setup();
-    let generation = 10;
+    let (mut runner, admin) = setup();
 
     let tx = create_tx_valid::<_, RT>(
-        generation,
+        0,
         PriorityFeeBips::ZERO,
-        &admin_account,
+        &admin,
         config_value!("CHAIN_ID"),
         encode_message::<_, RT>(),
     );
