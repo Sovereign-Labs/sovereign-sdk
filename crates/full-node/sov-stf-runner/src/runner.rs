@@ -29,7 +29,8 @@ use tracing::{debug, info, trace};
 use crate::da_pre_fetcher::FinalizedBlocksBulkFetcher;
 use crate::processes::{new_stf_info_channel, Receiver};
 use crate::state_manager::StateManager;
-use crate::{CorsConfiguration, MonitoringConfig, ProofManagerConfig, RunnerConfig};
+use full_node_configs::runner::{CorsConfiguration, ProofManagerConfig, RunnerConfig};
+use sov_metrics::MonitoringConfig;
 
 type GenesisParams<ST, InnerVm, OuterVm, Da> =
     <ST as StateTransitionFunction<InnerVm, OuterVm, Da>>::GenesisParams;
