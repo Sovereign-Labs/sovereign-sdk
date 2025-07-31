@@ -17,10 +17,7 @@ use sov_address::{EthereumAddress, EvmCryptoSpec};
 
 type TestSpec = ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, EthereumAddress, Native, EvmCryptoSpec>;
 type S = TestSpec;
-
-
 generate_optimistic_runtime!(TestRuntime <= value_setter: ValueSetter<S>);
-
 type RT = TestRuntime<S>;
 
 #[allow(clippy::type_complexity)]
