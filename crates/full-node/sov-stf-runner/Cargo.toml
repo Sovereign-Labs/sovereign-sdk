@@ -14,7 +14,7 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-axum = { workspace = true, features = ["tokio", "http1", "http2"] }
+axum = { workspace = true, features = ["tokio", "http1", "http2", "ws",] }
 rockbound = { workspace = true }
 bincode = { workspace = true }
 derivative = { workspace = true }
@@ -37,7 +37,7 @@ rayon = { workspace = true }
 sov-db = { workspace = true }
 sov-rollup-interface = { workspace = true }
 sov-metrics = { workspace = true }
-tower-http = { workspace = true, features = ["normalize-path"] }
+tower-http = { workspace = true, features = ["normalize-path", "cors"] }
 tower-layer = "0.3.3"
 futures-util = "0.3.31"
 
