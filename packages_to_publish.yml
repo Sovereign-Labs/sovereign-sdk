@@ -21,6 +21,7 @@
 - sov-rollup-apis
 - sov-zkvm-utils
 - sov-build
+- full-node-configs
 
 # Modules
 - sov-accounts

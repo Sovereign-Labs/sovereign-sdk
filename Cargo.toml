@@ -136,7 +136,7 @@ sov-accounts = { path = "crates/module-system/module-implementations/sov-account
 sov-ledger-apis = { path = "crates/full-node/sov-ledger-apis", default-features = false, version = "0.3" }
 sov-rollup-apis = { path = "crates/full-node/sov-rollup-apis", default-features = false, version = "0.3" }
 sov-api-spec = { path = "crates/full-node/sov-api-spec", default-features = false, version = "0.3" }
-full-node-configs = { path = "crates/full-node/full-node-configs" }
+full-node-configs = { path = "crates/full-node/full-node-configs", version = "0.3" }
 sov-eth-dev-signer = { path = "crates/full-node/sov-eth-dev-signer", default-features = false, version = "0.3" }
 sov-modules-api = { path = "crates/module-system/sov-modules-api", default-features = false, version = "0.3" }
 sov-uniqueness = { path = "crates/module-system/module-implementations/sov-uniqueness", default-features = false, version = "0.3" }

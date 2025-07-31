@@ -1,5 +1,6 @@
 [package]
 name = "sov-build"
+description = "Build utilities for rollup, excluding ZKVM"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
