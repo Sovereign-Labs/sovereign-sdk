@@ -84,14 +84,14 @@ impl From<TendermintHeader> for CompactHeader {
             last_block_id: Protobuf::<celestia_tm_version::types::BlockId>::encode_vec(
                 value.last_block_id.unwrap_or_default(),
             ),
-            last_commit_hash: value.last_commit_hash.unwrap().encode_vec(),
+            last_commit_hash: value.last_commit_hash.unwrap_or_default().encode_vec(),
             data_hash,
             validators_hash: value.validators_hash.encode_vec(),
             next_validators_hash: value.next_validators_hash.encode_vec(),
             consensus_hash: value.consensus_hash.encode_vec(),
             app_hash: value.app_hash.encode_vec(),
-            last_results_hash: value.last_results_hash.unwrap().encode_vec(),
-            evidence_hash: value.evidence_hash.unwrap().encode_vec(),
+            last_results_hash: value.last_results_hash.unwrap_or_default().encode_vec(),
+            evidence_hash: value.evidence_hash.unwrap_or_default().encode_vec(),
             proposer_address: value.proposer_address.encode_vec(),
         }
     }
@@ -231,7 +231,8 @@ impl BlockHeader for CelestiaHeader {
     type Hash = TmHash;
 
     fn prev_hash(&self) -> Self::Hash {
-        let mut cached_hash = self.cached_prev_hash.lock().unwrap();
+        let mut cached_hash = self.cached_prev_hash.lock()
+            .expect("Failed to acquire mutex lock for cached_prev_hash");
         if let Some(hash) = cached_hash.as_ref() {
             return hash.clone();
         }
