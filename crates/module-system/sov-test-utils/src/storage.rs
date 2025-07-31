@@ -14,7 +14,7 @@ use sov_db::schema::namespace::NomtStateValues;
 use sov_db::state_db::StateDb;
 use sov_db::state_db_nomt::get_session_builder_from_committed;
 use sov_db::storage_manager::{
-    InitializableNativeNomtStorage, InitializableNativeStorage, PlainStateDb,
+    FlatStateDb, InitializableNativeNomtStorage, InitializableNativeStorage,
 };
 pub use sov_db::storage_manager::{
     NativeChangeSet, NativeStorageManager, NomtChangeSet, NomtStorageManager,
@@ -151,7 +151,7 @@ pub struct SimpleNomtStorageManager<S: MerkleProofSpec> {
     // Holds ownership of [`Tempdir`] so it is not removed prematurely
     _dir: TempDir,
     state: Arc<sov_db::state_db_nomt::NomtStateDb<S::Hasher>>,
-    historical_state: PlainStateDb,
+    historical_state: FlatStateDb,
     accessory: Arc<rockbound::DB>,
     root: StorageRoot<S>,
     is_strict_mode: bool,
@@ -164,7 +164,7 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
         let config = RollupDbConfig::default_in_path(dir.path().to_path_buf());
         let state_db = sov_db::state_db_nomt::NomtStateDb::new(config)
             .expect("Failed to initialize StateDb for NOMT");
-        let historical_state = PlainStateDb::new(dir.path().to_path_buf()).unwrap();
+        let historical_state = FlatStateDb::new(dir.path().to_path_buf()).unwrap();
         let accessory_rocksdb = AccessoryDb::get_rockbound_options()
             .default_setup_db_in_path(dir.path())
             .unwrap();
@@ -186,19 +186,19 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
 
     /// Create a new [`NomtProverStorage`] that has a view only on data written to disc.
     pub fn create_storage(&self) -> NomtProverStorage<S, TestSlotHash> {
-        let plain_state = &self.historical_state;
+        let flat_state = &self.historical_state;
         let other_data_reader =
             DeltaReader::new(self.historical_state.get_db().clone(), Vec::new());
         let version = HistoricalStateReader::last_version_from_reader(&other_data_reader)
             .unwrap()
             .map(|v| v.get());
         let user_state_reader = VersionedDeltaReader::<NomtStateValues<UserNamespace>>::new(
-            plain_state.get_user_db().clone(),
+            flat_state.get_user_db().clone(),
             version,
             vec![],
         );
         let kernel_state_reader = VersionedDeltaReader::<NomtStateValues<KernelNamespace>>::new(
-            plain_state.get_kernel_db().clone(),
+            flat_state.get_kernel_db().clone(),
             version,
             vec![],
         );

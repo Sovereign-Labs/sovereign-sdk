@@ -26,17 +26,17 @@ use crate::storage_manager::{update_ledger_finalized_height, InitializableNative
 use crate::DbOptions;
 
 /// A database to store the flat state of the rollup (i.e. the raw key-value pairs)
-pub struct PlainStateDb {
+pub struct FlatStateDb {
     user: VersionedDB<NomtStateValues<UserNamespace>>,
     kernel: VersionedDB<NomtStateValues<KernelNamespace>>,
     other: Arc<rockbound::DB>,
 }
 
-impl PlainStateDb {
+impl FlatStateDb {
     const DB_NAME: &'static str = "state";
     const DB_PATH_SUFFIX: &'static str = "state";
 
-    /// Create a new [`PlainStateDb`] from a path.
+    /// Create a new [`FlatStateDb`] from a path.
     pub fn new(path: std::path::PathBuf) -> anyhow::Result<Self> {
         let mut columns = vec![default_cf_descriptor(StateRootHashes::table_name())];
         VersionedDB::<NomtStateValues<UserNamespace>>::add_column_families(&mut columns)?;
@@ -120,9 +120,8 @@ impl PlainStateDb {
 }
 
 pub(crate) struct DbGroup<H, K> {
-    // TODO: Rename this! This is a dumb name
-    state: Arc<NomtStateDb<H>>,
-    plain_state: PlainStateDb,
+    merklized_state: Arc<NomtStateDb<H>>,
+    flat_state: FlatStateDb,
     accessory: Arc<rockbound::DB>,
     ledger: Arc<rockbound::DB>,
     phantom_ref: PhantomData<K>,
@@ -139,10 +138,10 @@ where
         let accessory_rocksdb =
             AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?;
         let ledger_rocksdb = LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?;
-        let plain_state = PlainStateDb::new(path)?;
+        let flat_state = FlatStateDb::new(path)?;
         Ok(Self {
-            state: Arc::new(state_db),
-            plain_state,
+            merklized_state: Arc::new(state_db),
+            flat_state,
             accessory: Arc::new(accessory_rocksdb),
             ledger: Arc::new(ledger_rocksdb),
             phantom_ref: Default::default(),
@@ -161,7 +160,7 @@ where
         } = group;
 
         // Note: failure handling and data recovery will be implemented later.
-        self.state.commit(state)?;
+        self.merklized_state.commit(state)?;
         self.accessory
             .write_schemas(Arc::unwrap_or_clone(accessory))?;
         // Ledger goes last, as its data is used during the start.
@@ -169,16 +168,16 @@ where
         self.ledger.write_schemas(Arc::unwrap_or_clone(ledger))?;
         // Historical data is committed the last, as in case of failure, it can be synced from the normal state,
         // as it duplicates the last written data to `self.state`.
-        self.plain_state.commit(historical_state)?;
+        self.flat_state.commit(historical_state)?;
 
-        self.state.send_metrics();
+        self.merklized_state.send_metrics();
 
         Ok(())
     }
 
     // Flush pruning schema batches to disk.
     pub(crate) fn commit_pruning(&mut self, group: PruneGroup) -> anyhow::Result<()> {
-        self.plain_state
+        self.flat_state
             .other
             .write_schemas(group.historical_state)?;
         self.accessory.write_schemas(group.accessory)?;
@@ -213,19 +212,22 @@ where
 
         // NOMT-based readers expect snapshots in reversed chronological order,
         // the same as it was passed to the function.
-        let state_session_builder =
-            NomtSessionBuilder::new(self.state.clone(), relevant_snapshot_refs, nomt_snapshots);
+        let state_session_builder = NomtSessionBuilder::new(
+            self.merklized_state.clone(),
+            relevant_snapshot_refs,
+            nomt_snapshots,
+        );
         let historical_state_reader =
-            DeltaReader::new(self.plain_state.other.clone(), historical_state_snapshots);
-        let version = self.plain_state.get_kernel_db().get_committed_version()?;
+            DeltaReader::new(self.flat_state.other.clone(), historical_state_snapshots);
+        let version = self.flat_state.get_kernel_db().get_committed_version()?;
 
         let user_state_reader = VersionedDeltaReader::<NomtStateValues<UserNamespace>>::new(
-            self.plain_state.user.clone(),
+            self.flat_state.user.clone(),
             version,
             user_state_snapshots,
         );
         let kernel_state_reader = VersionedDeltaReader::<NomtStateValues<KernelNamespace>>::new(
-            self.plain_state.kernel.clone(),
+            self.flat_state.kernel.clone(),
             version,
             kernel_state_snapshots,
         );
@@ -254,8 +256,8 @@ where
 
     pub(crate) fn start_pruner(&self, versions_to_keep: usize) -> PrunerJob {
         tracing::info!(versions_to_keep, "Starting pruner task");
-        let user = self.plain_state.get_user_db().clone();
-        let kernel = self.plain_state.get_kernel_db().clone();
+        let user = self.flat_state.get_user_db().clone();
+        let kernel = self.flat_state.get_kernel_db().clone();
         let accessory_pruner = Pruner::new(self.accessory.clone());
 
         // Spawn historical state pruner thread
@@ -353,11 +355,9 @@ where
 
     fn are_root_hashes_match(&self) -> anyhow::Result<bool> {
         let historical_state_delta_reader =
-            DeltaReader::new(self.plain_state.other.clone(), Vec::new());
-        // let historical_state_reader =
-        //     HistoricalStateReader::with_delta_reader(historical_state_delta_reader)?;
+            DeltaReader::new(self.flat_state.other.clone(), Vec::new());
 
-        let nomt_root_hashes = self.state.get_root_hashes();
+        let nomt_root_hashes = self.merklized_state.get_root_hashes();
         let last_version =
             HistoricalStateReader::last_version_from_reader(&historical_state_delta_reader)?;
 
@@ -397,7 +397,7 @@ where
     pub(crate) fn verify_and_fix_commited_root_hashes(&self) -> anyhow::Result<()> {
         if !self.are_root_hashes_match()? {
             tracing::warn!("Historical state root hashes are not equal to NOMT state root hashes, attempt to fix it");
-            self.state.full_rollback()?;
+            self.merklized_state.full_rollback()?;
             if !self.are_root_hashes_match()? {
                 return Err(anyhow::anyhow!("Fix didn't help, historical state root hashes are not equal to NOMT state root hashes. Manual intervention is required."));
             }

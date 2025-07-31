@@ -56,15 +56,14 @@ pub trait Namespace: Sync + Send + Debug + Clone + Copy + 'static + Default {
     const PRUNING_COLUMN_FAMILY: ColumnFamilyName;
 
     /// The column family used for committed versions.
-    const COMITTED_VERSION_COLUMN: ColumnFamilyName;
+    const VERSION_METADATA_COLUMN: ColumnFamilyName;
 
     /// The column family used for historical data.
     const HISTORICAL_COLUMN_FAMILY: ColumnFamilyName;
 
     /// Returns the table names for this namespace.
     // Note: This intentionally does not include the column families for the versioned DB. Those are handled by the `SchemaWithVersion` trait.
-    // TODO: Clean up this trait.
-    fn get_table_names() -> [ColumnFamilyName; 3] {
+    fn get_jmt_table_names() -> [ColumnFamilyName; 3] {
         [
             Self::KEY_HASH_TO_KEY_TABLE_NAME,
             Self::JMT_NODES_TABLE_NAME,
@@ -122,7 +121,7 @@ impl<N: Namespace> ValueCodec<NomtPruningState<N>> for () {
 }
 
 impl<N: Namespace> Schema for NomtCommittedVersion<N> {
-    const COLUMN_FAMILY_NAME: ColumnFamilyName = N::COMITTED_VERSION_COLUMN;
+    const COLUMN_FAMILY_NAME: ColumnFamilyName = N::VERSION_METADATA_COLUMN;
     const SHOULD_CACHE: bool = true;
 
     type Key = VersionedTableMetadataKey;

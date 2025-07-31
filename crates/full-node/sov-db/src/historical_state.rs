@@ -44,12 +44,12 @@ impl HistoricalStateReader {
 
     // Used for testing only.
     #[allow(dead_code)]
-    fn new_empty(plain_state: &crate::storage_manager::PlainStateDb) -> Self {
-        let kernel_version = plain_state
+    fn new_empty(flat_state: &crate::storage_manager::FlatStateDb) -> Self {
+        let kernel_version = flat_state
             .get_kernel_db()
             .load_latest_committed_version()
             .unwrap();
-        let user_version = plain_state
+        let user_version = flat_state
             .get_user_db()
             .load_latest_committed_version()
             .unwrap();
@@ -58,10 +58,10 @@ impl HistoricalStateReader {
             "Kernel and user should always have the same latest version"
         );
         let kernel =
-            VersionedDeltaReader::new(plain_state.get_kernel_db().clone(), kernel_version, vec![]);
+            VersionedDeltaReader::new(flat_state.get_kernel_db().clone(), kernel_version, vec![]);
         let user =
-            VersionedDeltaReader::new(plain_state.get_user_db().clone(), user_version, vec![]);
-        let other = DeltaReader::new(plain_state.get_db(), vec![]);
+            VersionedDeltaReader::new(flat_state.get_user_db().clone(), user_version, vec![]);
+        let other = DeltaReader::new(flat_state.get_db(), vec![]);
         let next_version = match user.latest_version() {
             Some(latest_version) => SlotNumber::new(
                 latest_version
@@ -121,26 +121,14 @@ impl HistoricalStateReader {
         Ok(last_root_hash_version)
     }
 
-    // /// Get the next version from the database snapshot
-    // fn next_version_from(reader: &DeltaReader) -> anyhow::Result<SlotNumber> {
-    //     let last_root_hash_version = Self::last_version_from_reader(reader)?;
-
-    //     Ok(match last_root_hash_version {
-    //         None => SlotNumber::GENESIS,
-    //         Some(existing_version) => existing_version
-    //             .checked_add(1)
-    //             .expect("State version overflow. Is is over"),
-    //     })
-    // }
-
     /// [`DbOptions`] for [`HistoricalStateReader`].
     pub fn get_rockbound_options() -> DbOptions {
         DbOptions {
             name: Self::DB_NAME,
             path_suffix: Self::DB_PATH_SUFFIX,
-            columns: UserNamespace::get_table_names()
+            columns: UserNamespace::get_jmt_table_names()
                 .into_iter()
-                .chain(KernelNamespace::get_table_names())
+                .chain(KernelNamespace::get_jmt_table_names())
                 .chain(vec![StateRootHashes::table_name()])
                 .collect(),
         }
@@ -275,12 +263,12 @@ impl HistoricalStateReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage_manager::PlainStateDb;
+    use crate::storage_manager::FlatStateDb;
 
     #[test]
     fn verify_last_version_bumped_properly() {
         let tempdir = tempfile::tempdir().unwrap();
-        let rocksdb = PlainStateDb::new(tempdir.path().to_path_buf()).unwrap();
+        let rocksdb = FlatStateDb::new(tempdir.path().to_path_buf()).unwrap();
 
         let key1 = b"AAA";
         let key2 = b"BBB";
@@ -314,7 +302,7 @@ mod tests {
     fn test_no_bound_on_passed_version() {
         let tempdir = tempfile::tempdir().unwrap();
         let db_path = tempdir.path();
-        let rocksdb = PlainStateDb::new(db_path.to_path_buf()).unwrap();
+        let rocksdb = FlatStateDb::new(db_path.to_path_buf()).unwrap();
 
         // Create two independent readers on the same database.
         let reader1 = HistoricalStateReader::new_empty(&rocksdb);
@@ -385,7 +373,7 @@ mod tests {
     #[test]
     fn test_unbound_last_version() {
         let tempdir = tempfile::tempdir().unwrap();
-        let rocksdb = PlainStateDb::new(tempdir.path().to_path_buf()).unwrap();
+        let rocksdb = FlatStateDb::new(tempdir.path().to_path_buf()).unwrap();
 
         let reader1 = HistoricalStateReader::new_empty(&rocksdb);
         let reader2 = HistoricalStateReader::new_empty(&rocksdb);

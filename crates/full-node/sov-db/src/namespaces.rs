@@ -17,7 +17,7 @@ impl Namespace for KernelNamespace {
 
     const PRUNING_COLUMN_FAMILY: ColumnFamilyName = "kernel_pruning";
 
-    const COMITTED_VERSION_COLUMN: ColumnFamilyName = "kernel_committed_version";
+    const VERSION_METADATA_COLUMN: ColumnFamilyName = "kernel_version_metadata";
 
     const HISTORICAL_COLUMN_FAMILY: ColumnFamilyName = "kernel_historical_state_values";
 }
@@ -35,7 +35,7 @@ impl Namespace for UserNamespace {
 
     const PRUNING_COLUMN_FAMILY: ColumnFamilyName = "user_pruning";
 
-    const COMITTED_VERSION_COLUMN: ColumnFamilyName = "user_committed_version";
+    const VERSION_METADATA_COLUMN: ColumnFamilyName = "user_version_metadata";
 
     const HISTORICAL_COLUMN_FAMILY: ColumnFamilyName = "user_historical_state_values";
 }

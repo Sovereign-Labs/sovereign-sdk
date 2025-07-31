@@ -6,7 +6,7 @@ pub mod tests;
 
 pub use delta_reader_based::*;
 pub use nomt_based::{
-    InitializableNativeNomtStorage, NomtChangeSet, NomtStorageManager, PlainStateDb,
+    FlatStateDb, InitializableNativeNomtStorage, NomtChangeSet, NomtStorageManager,
     StateFinishedSession,
 };
 use rockbound::cache::delta_reader::DeltaReader;
