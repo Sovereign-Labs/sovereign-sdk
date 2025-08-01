@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use sov_address::EvmCryptoSpec;
 use sov_modules_api::capabilities::{
-    self, BatchFromUnregisteredSequencer, TransactionAuthenticator,
+    self, BatchFromUnregisteredSequencer, FatalError, TransactionAuthenticator,
 };
 #[cfg(feature = "native")]
 use sov_modules_api::FullyBakedTx;
@@ -22,9 +22,12 @@ where
 
     #[cfg(feature = "native")]
     fn decode_serialized_tx(
-        _tx: &FullyBakedTx,
+        tx: &FullyBakedTx,
     ) -> Result<Self::Decodable, sov_modules_api::capabilities::FatalError> {
-        todo!();
+        let tx: RawTx = borsh::from_slice(&tx.data)
+            .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
+
+        capabilities::decode_sov_tx::<S, Rt>(&tx.data)
     }
 
     fn authenticate<Accessor: ProvableStateReader<User, Spec = S>>(
@@ -34,14 +37,17 @@ where
         capabilities::AuthenticationOutput<S, Self::Decodable>,
         capabilities::AuthenticationError,
     > {
-        todo!();
+        unimplemented!("authenticate");
     }
 
     #[cfg(feature = "native")]
     fn compute_tx_hash(
-        _tx: &sov_modules_api::FullyBakedTx,
+        tx: &sov_modules_api::FullyBakedTx,
     ) -> anyhow::Result<sov_modules_api::TxHash> {
-        todo!();
+        use sov_modules_api::capabilities::calculate_hash;
+
+        let tx: RawTx = borsh::from_slice(&tx.data)?;
+        Ok(calculate_hash::<S>(&tx.data))
     }
 
     fn authenticate_unregistered<Accessor: ProvableStateReader<User, Spec = S>>(
@@ -51,7 +57,7 @@ where
         capabilities::AuthenticationOutput<S, Self::Decodable>,
         capabilities::UnregisteredAuthenticationError,
     > {
-        todo!();
+        unimplemented!("authenticate_unregistered");
     }
 
     fn add_standard_auth(tx: RawTx) -> Self::Input {
