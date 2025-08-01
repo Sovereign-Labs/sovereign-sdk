@@ -67,6 +67,9 @@ async fn test_start_at_immediate_finality() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_start_at() {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter(
+        "info,sov_metrics=error,integration=debug",
+    );
     check_start_at(TEST_FINALIZATION_BLOCKS - 1).await;
     check_start_at(TEST_FINALIZATION_BLOCKS).await;
     check_start_at(TEST_FINALIZATION_BLOCKS + 1).await;
