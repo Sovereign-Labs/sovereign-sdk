@@ -137,7 +137,7 @@ impl<S: Storage> Delta<S> {
                 Some(Some(value)) => Some(value.size()),
                 Some(None) => None,
                 None => {
-                    let val = self.inner.get_accessory(key, None);
+                    let val = self.inner.get_accessory(key);
                     val.map(|v| v.size())
                 }
             },
@@ -155,7 +155,7 @@ impl<S: Storage> Delta<S> {
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
                 Some(Some(value)) => Some(value),
                 Some(None) => None,
-                None => self.inner.get_accessory(key, None),
+                None => self.inner.get_accessory(key),
             },
         }
     }
@@ -206,7 +206,7 @@ impl<S: Storage> UniversalStateAccessor for AccessoryDelta<S> {
             return value.clone().map(|v| v.size());
         }
 
-        let val = self.storage.get_accessory(key, None);
+        let val = self.storage.get_accessory(key);
         val.map(|v| v.size())
     }
 
@@ -215,7 +215,7 @@ impl<S: Storage> UniversalStateAccessor for AccessoryDelta<S> {
             return value.clone();
         }
 
-        self.storage.get_accessory(key, None)
+        self.storage.get_accessory(key)
     }
 
     fn set_value(&mut self, _namespace: Namespace, key: &SlotKey, value: SlotValue) {

@@ -455,7 +455,7 @@ pub trait Storage: Clone + core::fmt::Debug {
     ) -> Option<SlotValue>;
 
     /// Returns the value corresponding to the key or None if key is absent.
-    fn get_accessory(&self, _key: &SlotKey, _version: Option<SlotNumber>) -> Option<SlotValue>;
+    fn get_accessory(&self, _key: &SlotKey) -> Option<SlotValue>;
 
     /// Calculates new state root but does not commit any changes to the database.
     fn compute_state_update(
@@ -501,7 +501,7 @@ pub trait NativeStorage: Storage {
         key: &SlotKey,
         version: Option<SlotNumber>,
         witness: &Self::Witness,
-    ) -> Option<SlotValue>;
+    ) -> anyhow::Result<Option<SlotValue>>;
 
     /// Get the node leaf. This method does not need to load the full value into memory.
     fn get_leaf_historical<N: ProvableCompileTimeNamespace>(
@@ -509,7 +509,14 @@ pub trait NativeStorage: Storage {
         key: &SlotKey,
         version: Option<SlotNumber>,
         witness: &Self::Witness,
-    ) -> Option<NodeLeafAndMaybeValue>;
+    ) -> anyhow::Result<Option<NodeLeafAndMaybeValue>>;
+
+    /// Get the accessory value at the given version or None if the key is absent.
+    fn get_accessory_historical(
+        &self,
+        key: &SlotKey,
+        version: Option<SlotNumber>,
+    ) -> anyhow::Result<Option<SlotValue>>;
 
     /// Returns the value corresponding to the key or None if the key is absent and a proof to
     /// get the value.
