@@ -4,10 +4,9 @@
 use std::marker::PhantomData;
 
 use sov_modules_api::capabilities::mocks::MockKernel;
-use sov_modules_api::{DaSpec, ModuleId, ModuleInfo, Spec, StateCheckpoint, StateValue};
-use sov_state::nomt::zk_storage::NomtVerifierStorage;
-use sov_state::{DefaultStorageSpec, StateCodec, StateItemDecoder, StateItemEncoder};
-use sov_test_utils::{MockDaSpec, TestHasher, ZkTestSpec};
+use sov_modules_api::{ModuleId, ModuleInfo, Spec, StateCheckpoint, StateValue};
+use sov_state::{DefaultStorageSpec, StateCodec, StateItemDecoder, StateItemEncoder, ZkStorage};
+use sov_test_utils::{TestHasher, ZkTestSpec};
 
 #[derive(Clone, ModuleInfo)]
 struct TestModule<S: Spec> {
@@ -57,10 +56,10 @@ impl<V> StateItemDecoder<V> for CustomCodec {
 
 #[test]
 fn custom_builder_works() {
-    let storage: NomtVerifierStorage<DefaultStorageSpec<TestHasher>, <MockDaSpec as DaSpec>::SlotHash> = NomtVerifierStorage::new();
+    let storage: ZkStorage<DefaultStorageSpec<TestHasher>> = ZkStorage::new();
     let mut module: TestModule<ZkTestSpec> = TestModule::default();
 
-    let mut state =
+    let mut state: StateCheckpoint<ZkTestSpec> =
         StateCheckpoint::new(storage, &MockKernel::<ZkTestSpec>::default());
     module.state_value.set(&0u32, &mut state).unwrap();
 

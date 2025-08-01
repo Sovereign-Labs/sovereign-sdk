@@ -86,7 +86,7 @@ where
     type Gas = GasUnit<2>;
 
     type Storage =
-        sov_state::nomt::prover_storage::NomtProverStorage<DefaultStorageSpec<<Self::CryptoSpec as CryptoSpec>::Hasher>, <Da as DaSpec>::SlotHash>;
+        sov_state::ProverStorage<DefaultStorageSpec<<Self::CryptoSpec as CryptoSpec>::Hasher>>;
 
     type InnerZkvm = InnerZkvm;
     type OuterZkvm = OuterZkvm;
@@ -107,7 +107,7 @@ where
     // This TODO is for performance enhancement, not a security concern.
     // TODO: Replace ProverStorage with an optimized impl!
     type Storage =
-        sov_state::nomt::prover_storage::NomtProverStorage<DefaultStorageSpec<<Self::CryptoSpec as CryptoSpec>::Hasher>, <Da as DaSpec>::SlotHash>;
+        sov_state::ProverStorage<DefaultStorageSpec<<Self::CryptoSpec as CryptoSpec>::Hasher>>;
 
     type InnerZkvm = InnerZkvm;
     type OuterZkvm = OuterZkvm;
@@ -126,7 +126,7 @@ where
     type Gas = GasUnit<2>;
 
     type Storage =
-        sov_state::nomt::zk_storage::NomtVerifierStorage<DefaultStorageSpec<<Self::CryptoSpec as CryptoSpec>::Hasher>, <Da as DaSpec>::SlotHash>;
+        sov_state::ZkStorage<DefaultStorageSpec<<Self::CryptoSpec as CryptoSpec>::Hasher>>;
 
     type InnerZkvm = InnerZkvm;
     type OuterZkvm = OuterZkvm;

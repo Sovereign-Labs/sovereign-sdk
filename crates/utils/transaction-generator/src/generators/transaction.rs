@@ -1,7 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use sov_state::nomt::prover_storage::NomtProverStorage;
-use sov_modules_api::DaSpec;
 
 use sov_mock_da::MockDaSpec;
 use sov_modules_api::capabilities::config_chain_id;
@@ -11,7 +9,7 @@ use sov_modules_api::{
     Amount, CryptoSpec, DispatchCall, Gas, GasArray, PrivateKey as _, Runtime, Spec, TxEffect,
 };
 use sov_modules_stf_blueprint::get_gas_used;
-use sov_state::{DefaultStorageSpec};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 use sov_test_utils::runtime::traits::MinimalGenesis;
 use sov_test_utils::runtime::TestRunner;
 use sov_test_utils::{
@@ -161,7 +159,7 @@ type DefaultSpecWithHasher<S> = DefaultStorageSpec<<<S as Spec>::CryptoSpec as C
 /// Generated transaction implementation using the standard Sovereign SDK transaction struct.
 #[derive(Clone)]
 pub struct SovereignGeneratedTransaction<
-    S: Spec<Storage = NomtProverStorage<DefaultSpecWithHasher<S>, <MockDaSpec as DaSpec>::SlotHash>, Da = MockDaSpec>,
+    S: Spec<Storage = ProverStorage<DefaultSpecWithHasher<S>>, Da = MockDaSpec>,
     RT: Runtime<S> + MinimalGenesis<S> + DispatchCall,
 > {
     /// The generated transaction to be executed by the test runner.
@@ -175,7 +173,7 @@ pub struct SovereignGeneratedTransaction<
 impl<S, RT> PrepareEnv<S> for SovereignGeneratedTransaction<S, RT>
 where
     RT: Runtime<S> + MinimalGenesis<S> + DispatchCall,
-    S: Spec<Storage = NomtProverStorage<DefaultSpecWithHasher<S>, <MockDaSpec as DaSpec>::SlotHash>, Da = MockDaSpec>,
+    S: Spec<Storage = ProverStorage<DefaultSpecWithHasher<S>>, Da = MockDaSpec>,
 {
     type Input = TestRunner<RT, S>;
 
@@ -201,7 +199,7 @@ where
 
 impl<S, RT> AssertOutcome<S> for SovereignGeneratedTransaction<S, RT>
 where
-    S: Spec<Storage = NomtProverStorage<DefaultSpecWithHasher<S>, <MockDaSpec as DaSpec>::SlotHash>, Da = MockDaSpec>,
+    S: Spec<Storage = ProverStorage<DefaultSpecWithHasher<S>>, Da = MockDaSpec>,
     RT: Runtime<S> + MinimalGenesis<S> + DispatchCall,
 {
     type Output = TransactionAssertContext<S, RT>;
@@ -233,7 +231,7 @@ pub struct SovereignContext<'a, S: Spec, RT: DispatchCall + Runtime<S>> {
 impl<S, RT> GeneratedTransaction for SovereignGeneratedTransaction<S, RT>
 where
     RT: Runtime<S> + MinimalGenesis<S> + DispatchCall,
-    S: Spec<Storage = NomtProverStorage<DefaultSpecWithHasher<S>, <MockDaSpec as DaSpec>::SlotHash>, Da = MockDaSpec>,
+    S: Spec<Storage = ProverStorage<DefaultSpecWithHasher<S>>, Da = MockDaSpec>,
 {
     type Transaction = TransactionType<RT, S>;
 
@@ -278,7 +276,7 @@ where
 impl<S, RT> RunTest<S, RT> for SovereignGeneratedTransaction<S, RT>
 where
     RT: Runtime<S> + MinimalGenesis<S> + DispatchCall,
-    S: Spec<Storage = NomtProverStorage<DefaultSpecWithHasher<S>, <MockDaSpec as DaSpec>::SlotHash>, Da = MockDaSpec>,
+    S: Spec<Storage = ProverStorage<DefaultSpecWithHasher<S>>, Da = MockDaSpec>,
 {
     fn run_test(mut self, runner: &mut TestRunner<RT, S>) {
         self.prepare_env(runner);

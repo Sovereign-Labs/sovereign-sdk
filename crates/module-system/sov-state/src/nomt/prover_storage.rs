@@ -26,8 +26,6 @@ use crate::{
 type NomtSession<H> = nomt::Session<BinaryHasher<H>>;
 
 /// A [`Storage`] implementation to be used by the prover in a native execution based on NOMT.
-/// 
-/// Note: K is the Da block hash type
 #[derive(derivative::Derivative)]
 #[derivative(Clone(bound = "S: MerkleProofSpec"))]
 pub struct NomtProverStorage<S: MerkleProofSpec, K>

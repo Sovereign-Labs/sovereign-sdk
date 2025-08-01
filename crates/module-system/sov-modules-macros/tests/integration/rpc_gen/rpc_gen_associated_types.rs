@@ -8,7 +8,7 @@ use sov_modules_api::{
     Genesis, MessageCodec, Module, ModuleId, ModuleInfo, Spec, StateCheckpoint, StateValue,
     TxState,
 };
-use sov_state::nomt::zk_storage::NomtVerifierStorage;
+use sov_state::ZkStorage;
 use sov_test_utils::ZkTestSpec;
 
 pub trait TestSpec: Default + std::fmt::Debug + Clone + PartialEq + Eq + 'static {
@@ -124,7 +124,7 @@ impl TestSpec for ActualSpec {
 fn associated_types() {
     type S = ZkTestSpec;
     type RT = Runtime<S, ActualSpec>;
-    let storage = NomtVerifierStorage::new();
+    let storage = ZkStorage::new();
     let mut state = StateCheckpoint::new(storage, &MockKernel::<S>::default());
     let runtime = &mut Runtime::<S, ActualSpec>::default();
     let config = GenesisConfig::new(22);

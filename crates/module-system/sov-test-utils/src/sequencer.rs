@@ -6,23 +6,20 @@ use std::sync::Arc;
 use sov_api_spec::Client;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::SchemaBatch;
-use sov_db::config::RollupDbConfig;
+use sov_db::storage_manager::NativeStorageManager;
 use sov_mock_da::storable::service::StorableMockDaService;
 use sov_mock_da::{MockAddress, MockBlock, MockDaSpec};
 use sov_modules_api::{DaSyncState, Runtime, SlotData, Spec, SyncStatus};
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_paymaster::{PaymasterConfig, SafeVec};
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_modules_api::DaSpec;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::StateUpdateInfo;
 use sov_sequencer::standard::{StdSequencer, StdSequencerConfig};
 pub use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::{SequencerApis, SequencerConfig};
-use sov_state::{DefaultStorageSpec};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 use sov_stf_runner::query_state_update_info;
-use sov_db::storage_manager::NomtStorageManager;
-use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_value_setter::ValueSetterConfig;
 use tempfile::TempDir;
 use tokio::sync::watch;
@@ -75,10 +72,9 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
         da_service: StorableMockDaService,
         sequencer_config: StdSequencerConfig,
         register_admin: bool,
-        mut storage_manager: NomtStorageManager<
+        mut storage_manager: NativeStorageManager<
             MockDaSpec,
-            TestHasher, 
-            NomtProverStorage<DefaultStorageSpec<TestHasher>, <MockDaSpec as DaSpec>::SlotHash>,
+            ProverStorage<DefaultStorageSpec<TestHasher>>,
         >,
     ) -> anyhow::Result<Self> {
         // Generate a genesis config, then overwrite the attester key/address with ones that
@@ -215,11 +211,10 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
         sequencer_config: StdSequencerConfig,
         register_admin: bool,
     ) -> anyhow::Result<Self> {
-        let storage_manager = NomtStorageManager::<
+        let storage_manager = NativeStorageManager::<
             MockDaSpec,
-            _,
-            _
-        >::new(RollupDbConfig::default_in_path(dir.path().to_path_buf()))?;
+            ProverStorage<DefaultStorageSpec<TestHasher>>,
+        >::new(dir.path())?;
 
         Self::with_storage_manager(
             dir,

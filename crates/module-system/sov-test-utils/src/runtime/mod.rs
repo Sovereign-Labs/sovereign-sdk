@@ -15,7 +15,6 @@ pub use sov_bank::{
 pub use sov_blob_storage::BlobStorage;
 use sov_blob_storage::PreferredBatchData;
 pub use sov_capabilities::StandardProvenRollupCapabilities;
-use crate::storage::SimpleNomtStorageManager;
 pub use sov_chain_state::{ChainState, ChainStateConfig};
 use sov_db::storage_manager::NativeChangeSet;
 pub use sov_kernels::basic::BasicKernel;
@@ -165,7 +164,7 @@ pub struct RunnerConfig<Da: DaSpec> {
 pub struct TestRunner<
     RT: Runtime<S>,
     S: Spec,
-    Sm: ForklessStorageManager = SimpleNomtStorageManager<
+    Sm: ForklessStorageManager = SimpleStorageManager<
         DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
     >,
 > {
@@ -268,7 +267,7 @@ where
     RT: Runtime<S> + MinimalGenesis<S>,
     Sm: ForklessStorageManager,
     S: Spec<Storage = Sm::Storage, Da = MockDaSpec>,
-    // <S::Storage as Storage>::ChangeSet: Clone,
+    <S::Storage as Storage>::ChangeSet: Clone,
     <S::Storage as Storage>::Root: Clone,
 {
     /// Returns the runtime of the test runner.
@@ -880,7 +879,7 @@ impl<RT, S, Sm> TestRunner<RT, S, Sm>
 where
     RT: Runtime<S> + MinimalGenesis<S> + HasRestApi<S>,
     S: Spec<Da = MockDaSpec>,
-    // <S::Storage as Storage>::ChangeSet: Clone,
+    <S::Storage as Storage>::ChangeSet: Clone,
     Sm: ForklessStorageManager<Storage = S::Storage>,
 {
     /// Sets up a REST-api server for frameworks whose runtime that implements [`HasRestApi`].

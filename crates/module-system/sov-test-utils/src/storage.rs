@@ -235,31 +235,6 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
         tracing::trace!("Committed historical state changes to disk");
         tracing::trace!("Committed all changes to disk");
     }
-
-    /// Do NOMT genesis;
-    pub fn genesis(&mut self) {
-        if self.root != <NomtProverStorage<S, TestSlotHash> as Storage>::PRE_GENESIS_ROOT {
-            panic!("Cannot call genesis on non empty storage");
-        }
-        let prover_storage = self.create_storage();
-        let witness = S::Witness::default();
-        let state_accesses_genesis = StateAccesses {
-            user: Default::default(),
-            kernel: Default::default(),
-        };
-
-        let (root, change_set) = prover_storage
-            .compute_state_update(
-                state_accesses_genesis,
-                &witness,
-                <ProverStorage<S> as Storage>::PRE_GENESIS_ROOT,
-            )
-            .expect("state update computation must succeed");
-
-        let changes = prover_storage.materialize_changes(change_set);
-        self.commit(changes);
-        self.root = root;
-    }
 }
 
 impl<S: MerkleProofSpec> Default for SimpleNomtStorageManager<S> {

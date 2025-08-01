@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
-use sov_db::storage_manager::{NativeStorageManager, NomtStorageManager};
+use sov_db::storage_manager::NativeStorageManager;
 use sov_mock_da::storable::service::StorableMockDaService;
 use sov_mock_da::{
     BlockProducingConfig, MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaConfig,
@@ -20,7 +19,7 @@ use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::storage::NativeStorage;
 use sov_state::{ArrayWitness, ProverStorage, Storage, StorageRoot};
 use sov_stf_runner::StateTransitionRunner;
-use sov_test_utils::storage::{SimpleNomtStorageManager, SimpleStorageManager};
+use sov_test_utils::storage::SimpleStorageManager;
 use tempfile::TempDir;
 use tokio::sync::watch;
 
@@ -119,7 +118,7 @@ async fn test_runner_with_background_da_service(
     let stf = HashStf::new();
 
     let mut storage_manager: crate::helpers::runner_init::StorageManager =
-        NomtStorageManager::new(RollupDbConfig::default_in_path(tempdir.path().to_path_buf()))?;
+        NativeStorageManager::new(tempdir.path())?;
 
     let (state_update_sender, _state_update_recv) =
         watch::channel(bootstrap_state_update_info(&mut storage_manager).await?);
@@ -365,7 +364,7 @@ fn get_result_from_blocks(
     genesis_params: &[u8],
     blocks: &[MockBlock],
 ) -> (StorageRoot<S>, <ProverStorage<S> as Storage>::Root) {
-    let mut storage_manager = SimpleNomtStorageManager::new();
+    let mut storage_manager = SimpleStorageManager::new();
     let storage = storage_manager.create_storage();
 
     let stf = HashStf::new();

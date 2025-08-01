@@ -17,11 +17,11 @@ use crate::{
 /// A [`Storage`] implementation designed to be used inside the zkVM, based on NOMT.
 #[derive(Default, derivative::Derivative)]
 #[derivative(Clone(bound = "S: MerkleProofSpec"), Debug(bound = ""))]
-pub struct NomtVerifierStorage<S: MerkleProofSpec, H = ()> {
-    _phantom_hasher: PhantomData<(S::Hasher, H)>,
+pub struct NomtVerifierStorage<S: MerkleProofSpec> {
+    _phantom_hasher: PhantomData<S::Hasher>,
 }
 
-impl<S: MerkleProofSpec, H> NomtVerifierStorage<S, H> {
+impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
     /// Creates a new [`NomtVerifierStorage`] instance. Identical to [`Default::default`].
     pub fn new() -> Self {
         Self {
@@ -101,7 +101,7 @@ impl<S: MerkleProofSpec, H> NomtVerifierStorage<S, H> {
     }
 }
 
-impl<S: MerkleProofSpec, H> Storage for NomtVerifierStorage<S, H> {
+impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
     type Hasher = S::Hasher;
     type Witness = S::Witness;
     type Proof = ();
@@ -168,7 +168,7 @@ impl<S: MerkleProofSpec, H> Storage for NomtVerifierStorage<S, H> {
 // `NativeStorage`` is implemented for `ZkStorage` solely for testing purposes.
 // In some tests, we use both `ProverStorage`` and `ZkStorage`.
 // Due to feature unification, we must provide this implementation even though it is not used.
-impl<S: MerkleProofSpec, H> crate::storage::NativeStorage for NomtVerifierStorage<S, H> {
+impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S> {
     fn latest_version(&self) -> SlotNumber {
         unimplemented!("Latest version is not available for NomtVerifierStorage.");
     }
