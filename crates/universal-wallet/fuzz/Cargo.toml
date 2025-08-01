@@ -42,6 +42,13 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "fuzz_js_impl"
+path = "fuzz_targets/fuzz_js_impl.rs"
+test = false
+doc = false
+bench = false
+
 [features]
 default = []
 js-compat = []
