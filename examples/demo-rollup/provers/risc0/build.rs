@@ -17,6 +17,8 @@ fn main() {
             pub const MOCK_DA_PATH: &str = "";
             pub const MOCK_DA_ELF: &[u8] = b"";
             pub const ROLLUP_ELF: &[u8] = b"";
+            pub const AVAIL_DA_PATH: &str = "";
+            pub const AVAIL_DA_ELF: &[u8] = b"";
         "#;
 
         std::fs::write(methods_path, elf).expect("Failed to write mock rollup elf");

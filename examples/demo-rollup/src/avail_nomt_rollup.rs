@@ -69,7 +69,7 @@ where
 
 #[async_trait]
 impl FullNodeBlueprint<Native> for AvailNomtDemoRollup<Native> {
-    type DaService = StorableMockDaService;
+    type DaService = AvailDAService;
 
     type StorageManager = NomtStorageManager<AvailDASpec, Hasher, NativeStorage>;
 
@@ -137,7 +137,7 @@ impl FullNodeBlueprint<Native> for AvailNomtDemoRollup<Native> {
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> Self::DaService {
-        AvailDAService::new_from_config(rollup_config.da)
+        AvailDAService::new_from_config(rollup_config.da.clone())
             .await
             .expect("Failed to intialize AvailDAService")
     }
@@ -168,7 +168,7 @@ impl FullNodeBlueprint<Native> for AvailNomtDemoRollup<Native> {
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
     ) -> anyhow::Result<Self::StorageManager> {
-        NomtStorageManager::new(&rollup_config.storage.path)
+        NomtStorageManager::new(rollup_config.storage.clone())
     }
 
     fn create_proof_sender(
