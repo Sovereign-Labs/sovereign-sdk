@@ -3,8 +3,9 @@ use axum::response::IntoResponse as _;
 use axum::routing::get;
 use axum::Router;
 use serde::Serialize;
+use sov_modules_api::prelude::anyhow;
 use sov_modules_api::sov_universal_wallet::schema::Schema;
-use sov_modules_api::{prelude::anyhow, HexHash};
+use sov_modules_api::HexHash;
 use sov_rest_utils::{errors, preconfigured_router_layers};
 
 /// Trait for the `/rollup/schema` endpoint.
