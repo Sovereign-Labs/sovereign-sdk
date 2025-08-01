@@ -1,3 +1,6 @@
+# 2025-08-01
+- #1460 Adds `chain_hash` to the `/rollup/schema` endpoint response, this requires passing the chain hash during endpoint initialization.
+
 # 2025-07-30
 - #1444 Updates in `TestRollup`
 
