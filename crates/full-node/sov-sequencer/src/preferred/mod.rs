@@ -1090,7 +1090,7 @@ pub enum BatchCreationError {
     NoFinalizedSlotAvailable,
     /// The prefered sequencer has reached the stop height and is no longer creating new batches.
     #[error(
-        "The sequencer is halted for a chain upgrade. Please wait for the upgrade to complete. height_to_stop_at: {height_to_stop_at}, current_height: {current_height}" 
+        "The sequencer is halted for a chain upgrade. Please wait for the upgrade to complete. height_to_stop_at: {height_to_stop_at}, current_height: {current_height}"
     )]
     PreferredSequencerAtStopHeight {
         /// The current rollup height of the preferred sequencer.

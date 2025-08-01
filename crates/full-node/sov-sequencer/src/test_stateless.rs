@@ -215,8 +215,10 @@ where
         let mut inner = self.inner.lock().await;
         inner.storage = update_info.storage;
 
-        self.api_ledger_db
-            .replace_reader(update_info.ledger_reader.clone());
+        tokio::task::block_in_place(|| {
+            self.api_ledger_db
+                .replace_reader(update_info.ledger_reader.clone());
+        });
         self.api_ledger_db
             .send_notifications_for_slot(update_info.slot_number);
 

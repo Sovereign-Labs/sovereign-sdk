@@ -719,15 +719,18 @@ pub async fn query_state_update_info<S>(
         .await?
         .map(|x| x + 1)
         .unwrap_or_default();
-    let next_tx_number = ledger_db.get_next_items_numbers()?.tx_number;
+    let next_tx_number =
+        tokio::task::block_in_place(|| ledger_db.get_next_items_numbers())?.tx_number;
     let latest_finalized_slot_number = ledger_db
         .get_latest_finalized_slot_number()
         .await?
         .min(slot_number);
 
+    let ledger_reader = tokio::task::block_in_place(|| ledger_db.clone_reader());
+
     Ok(StateUpdateInfo {
         storage,
-        ledger_reader: ledger_db.clone_reader(),
+        ledger_reader,
         next_event_number,
         next_tx_number,
         slot_number,
