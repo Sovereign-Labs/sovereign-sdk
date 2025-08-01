@@ -3759,6 +3759,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "full-node-configs"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "insta",
+ "schemars",
+ "serde",
+ "sov-db",
+ "sov-metrics",
+ "sov-mock-da",
+ "sov-modules-api",
+ "sov-rollup-interface",
+ "toml",
+ "tracing",
+]
+
+[[package]]
 name = "funty"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10659,6 +10676,7 @@ dependencies = [
  "ethers-middleware",
  "ethers-providers",
  "ethers-signers",
+ "full-node-configs",
  "futures",
  "hex",
  "jsonrpsee",
@@ -11039,17 +11057,18 @@ dependencies = [
 name = "sov-module-schemas"
 version = "0.3.0"
 dependencies = [
+ "full-node-configs",
  "schemars",
  "serde_json",
  "sov-accounts",
  "sov-bank",
+ "sov-metrics",
  "sov-mock-da",
  "sov-mock-zkvm",
  "sov-modules-api",
  "sov-prover-incentives",
  "sov-rollup-interface",
  "sov-sequencer-registry",
- "sov-stf-runner",
  "sov-value-setter",
 ]
 
@@ -11440,6 +11459,7 @@ dependencies = [
  "borsh",
  "derivative",
  "derive_more 1.0.0",
+ "full-node-configs",
  "futures",
  "hex",
  "jsonrpsee",
@@ -11616,7 +11636,7 @@ dependencies = [
  "bincode",
  "borsh",
  "derivative",
- "derive_more 1.0.0",
+ "full-node-configs",
  "futures",
  "futures-util",
  "hex",
@@ -11627,21 +11647,15 @@ dependencies = [
  "rand 0.8.5",
  "rayon",
  "rockbound",
- "schemars",
  "serde",
  "sha2 0.10.8",
- "sov-accounts",
- "sov-bank",
  "sov-db",
  "sov-metrics",
  "sov-mock-da",
  "sov-mock-zkvm",
  "sov-modules-api",
- "sov-modules-rollup-blueprint",
- "sov-modules-stf-blueprint",
  "sov-rollup-interface",
  "sov-sequencer",
- "sov-sequencer-registry",
  "sov-state",
  "sov-test-utils",
  "strum",
