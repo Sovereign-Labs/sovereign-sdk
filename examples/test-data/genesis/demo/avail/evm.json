@@ -1,0 +1,46 @@
+{
+  "data": [
+    {
+      "address": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+      "balance": "0xffffffffffffffff",
+      "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+      "code": "0x",
+      "nonce": 0
+    },
+    {
+      "address": "0x3FE0233e6cf3c9753fcB7449987EC49C88aDDE71",
+      "balance": "0xffffffffffffffff",
+      "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+      "code": "0x",
+      "nonce": 0
+    },
+    {
+      "address": "0x4Fa6c577eE74B4F3C5309Af1b6313dd6D525e694",
+      "balance": "0xffffffffffffffff",
+      "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+      "code": "0x",
+      "nonce": 0
+    },
+    {
+      "address": "0xa80749aD39A047603cbc5D0f46a03A1c6B2Db6c9",
+      "balance": "0xffffffffffffffff",
+      "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+      "code": "0x",
+      "nonce": 0
+    }
+  ],
+  "chain_id": 4321,
+  "limit_contract_code_size": null,
+  "spec": {
+    "0": "SHANGHAI"
+  },
+  "coinbase": "0x0000000000000000000000000000000000000000",
+  "starting_base_fee": 7,
+  "block_gas_limit": 30000000,
+  "genesis_timestamp": 0,
+  "block_timestamp_delta": 1,
+  "base_fee_params": {
+    "max_change_denominator": 8,
+    "elasticity_multiplier": 2
+  }
+}
