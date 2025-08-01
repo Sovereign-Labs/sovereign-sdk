@@ -28,13 +28,17 @@ impl DaSpec for AvailDASpec {
     type ChainParams = AppId;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct AvailDAVerifier;
 
 impl DaVerifier for AvailDAVerifier {
     type Spec = AvailDASpec;
 
-    type Error = ();
+    type Error = anyhow::Error;
+
+    fn new(_params: <Self::Spec as DaSpec>::ChainParams) -> Self {
+        Self {}
+    }
 
     // Verify that the given list of blob transactions is complete and correct.
     // NOTE: Function return unit since application client already verifies application data.
@@ -47,10 +51,6 @@ impl DaVerifier for AvailDAVerifier {
             <Self::Spec as DaSpec>::CompletenessProof,
         >,
     ) -> Result<(), Self::Error> {
-        todo!()
-    }
-
-    fn new(_params: <Self::Spec as DaSpec>::ChainParams) -> Self {
-        AvailDAVerifier {}
+        Ok(())
     }
 }

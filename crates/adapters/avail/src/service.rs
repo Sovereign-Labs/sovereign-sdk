@@ -24,7 +24,6 @@ use crate::types::blob::AvailDABlob;
 use crate::types::block::AvailBlock;
 use crate::types::config::AvailDAConfig;
 use crate::types::data::AvailData;
-use crate::types::error::AvailError;
 use crate::types::header::CustomAvailHeader;
 use crate::types::utils::CustomTransaction;
 use crate::verifier::{AvailDASpec, AvailDAVerifier};
@@ -44,7 +43,7 @@ impl DaService for AvailDAService {
     type Config = AvailDAConfig;
     type Verifier = AvailDAVerifier;
     type FilteredBlock = AvailBlock;
-    type Error = AvailError;
+    type Error = anyhow::Error;
 
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         run_maybe_retryable_async_fn_with_retries(
@@ -153,9 +152,9 @@ impl DaService for AvailDAService {
     }
 
     async fn get_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
-        Err(AvailError(Error::Custom(
+        Err(anyhow::anyhow!(
             "get_proofs_at method is not implemented yet".to_string(),
-        )))
+        ))
     }
     async fn get_extraction_proof(
         &self,
@@ -191,11 +190,10 @@ impl DaService for AvailDAService {
 }
 
 impl AvailDAService {
-    pub async fn new_from_config(config: AvailDAConfig) -> Result<Self, AvailError> {
+    pub async fn new_from_config(config: AvailDAConfig) -> Result<Self, anyhow::Error> {
         let client = Client::new(&config.http_api_url).await?;
 
-        let account =
-            Keypair::from_str(&config.signer_key).map_err(|err| AvailError(Error::Custom(err)))?;
+        let account = Keypair::from_str(&config.signer_key).map_err(|err| anyhow::anyhow!(err))?;
 
         // NOTE: Current exponential backoff policy defaults:
         // jitter: false, factor: 2, min_delay: 1s, max_delay: 60s, max_times: 3,
@@ -210,17 +208,17 @@ impl AvailDAService {
         })
     }
 
-    async fn get_finalized_block_header(&self) -> Result<CustomAvailHeader, AvailError> {
+    async fn get_finalized_block_header(&self) -> Result<CustomAvailHeader, anyhow::Error> {
         let header = self.client.finalized_block_header().await?;
         Ok(CustomAvailHeader { header })
     }
 
-    async fn get_best_block_header(&self) -> Result<CustomAvailHeader, AvailError> {
+    async fn get_best_block_header(&self) -> Result<CustomAvailHeader, anyhow::Error> {
         let header = self.client.best_block_header().await?;
         Ok(CustomAvailHeader { header })
     }
 
-    async fn get_block_at_height(&self, block_number: u32) -> Result<AvailBlock, AvailError> {
+    async fn get_block_at_height(&self, block_number: u32) -> Result<AvailBlock, anyhow::Error> {
         let block_hash = self.client.block_hash(block_number).await?;
 
         let block_client = self.client.block_client();
@@ -297,7 +295,7 @@ impl AvailDAService {
         account: &Keypair,
         app_id: AppId,
         data: &[u8],
-    ) -> Result<H256, AvailError> {
+    ) -> Result<H256, anyhow::Error> {
         let submittable_tx = client.tx().data_availability().submit_data(data.to_vec());
         let submitted_tx = submittable_tx
             .sign_and_submit(account, Options::new(Some(app_id.0)))

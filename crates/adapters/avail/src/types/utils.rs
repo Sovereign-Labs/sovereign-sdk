@@ -1,6 +1,6 @@
 use avail_rust_core::HasTxDispatchIndex;
 
-#[derive(codec::Decode, codec::Encode, PartialEq, Eq)]
+#[derive(codec::Decode, codec::Encode, PartialEq, Eq, Debug)]
 pub struct CustomTransaction {
     #[codec(compact)]
     pub set: u64,

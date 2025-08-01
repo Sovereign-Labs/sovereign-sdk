@@ -3,7 +3,6 @@ pub mod blob;
 pub mod block;
 pub mod config;
 pub mod data;
-pub mod error;
 pub mod hash;
 pub mod header;
 pub mod utils;
