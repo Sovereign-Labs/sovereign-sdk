@@ -1350,6 +1350,11 @@ where
             Err(SequencerNotReadyDetails::Syncing { .. })
         );
 
+        let is_recover = matches!(
+            inner.is_ready,
+            Err(SequencerNotReadyDetails::PreferredSequencerRecovering { .. })
+        );
+
         let time_spent_fetching_batches = fetch_batches_to_replay_metrics.duration;
         sov_metrics::track_metrics(|t| {
             t.submit(fetch_batches_to_replay_metrics);
@@ -1416,7 +1421,7 @@ where
             }
             (false, false, false, _) => {
                 PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeState(
-                    is_startup || is_resync,
+                    is_startup || is_resync || is_recover,
                     time_spent_fetching_batches,
                 )
             }
