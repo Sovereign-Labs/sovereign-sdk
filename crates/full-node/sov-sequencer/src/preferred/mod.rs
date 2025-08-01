@@ -658,8 +658,18 @@ pub(crate) async fn update_api_ledger<S: Spec, Rt: Runtime<S>>(
     transaction_cache: TxResultWriter<S, Rt>,
     info: &StateUpdateInfo<S::Storage>,
 ) {
+    let start = std::time::Instant::now();
+    tracing::trace!(
+        slot_number = %info.slot_number,
+        latest_finalized_slot_number = %info.latest_finalized_slot_number,
+        "Starting LedgerAPI storage update");
     api_ledger_db.replace_reader(info.ledger_reader.clone());
     api_ledger_db.send_notifications_for_slot(info.slot_number);
+    tracing::trace!(
+        time = ?start.elapsed(),
+        slot_number = %info.slot_number,
+        latest_finalized_slot_number = %info.latest_finalized_slot_number,
+        "LedgerAPI storage updated, notification has been sent");
     prune_transactions_cache(info.next_tx_number, transaction_cache).await;
 }
 
