@@ -61,7 +61,7 @@ impl RollupDbConfig {
             kernel_hashtable_buckets: None,
             kernel_page_cache_size: None,
             kernel_leaf_cache_size: None,
-            pruner_block_interval: Some(1000),
+            pruner_block_interval: Some(100),
             pruner_versions_to_keep: Some(20),
         }
     }

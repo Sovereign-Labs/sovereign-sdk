@@ -6,6 +6,7 @@ use sov_state::{
     namespaces, EventContainer, Namespace, NativeStorage, ProvableStorageCache, SlotKey, SlotValue,
     Storage, TypeErasedEvent,
 };
+use sov_state::CompileTimeNamespace;
 
 use super::temp_cache::{CacheLookup, TempCache};
 use super::{BorshSerializedSize, StateCheckpoint, UniversalStateAccessor};
@@ -259,7 +260,7 @@ impl<S: Spec> EventContainer for ApiStateAccessor<S> {
 #[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
 pub enum ApiStateAccessorError {
     /// The requested height is not accessible.
-    #[error("Impossible to get the rollup state at the specified height. Please ensure you have queried the correct height.")]
+    #[error("Impossible to get the rollup state at the specified height. The requested height may have been pruned, or it may be in the future. Please ensure you have queried the correct height.")]
     HeightNotAccessible,
 }
 
@@ -395,9 +396,6 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
             }
             StateToAccess::TrueSlotNumber(slot_number, _) => Some(slot_number),
         };
-        if out.encountered_pruning_error.is_some() {
-            return Err(ApiStateAccessorError::HeightNotAccessible);
-        }
 
         if let StateToAccess::TrueSlotNumber(slot_number, _) = state_to_access {
             let Some(rollup_height) =
@@ -412,9 +410,6 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
             return Err(ApiStateAccessorError::HeightNotAccessible);
         };
 
-        if out.encountered_pruning_error.is_some() {
-            return Err(ApiStateAccessorError::HeightNotAccessible);
-        }
         out.visible_slot_number = Some(visible_slot_number);
 
         Ok(out)
@@ -520,25 +515,23 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         };
         // Use the slot number to find the visible slot number.
         let result = kernel.visible_slot_number_at(true_slot_number, &mut state);
-        if state.encountered_pruning_error.is_some() {
-            return Err(ApiStateAccessorError::HeightNotAccessible);
-        }
         
         let Some(visible_slot_number) = result else {
             panic!("Visible slot number not available at slot number {true_slot_number}, but that height exist in storage. This is a bug. Please report it.");
         };
         // Use the rollup height to find the base fee per gas.
         let result = kernel.base_fee_per_gas_at(rollup_height, &mut state);
-        if state.encountered_pruning_error.is_some() {
-            return Err(ApiStateAccessorError::HeightNotAccessible);
-        }
-
         let Some(base_fee_per_gas) = result else {
             panic!("Base fee per gas not available at height {rollup_height}, but that height exist in storage. This is a bug. Please report it.");
         };
         state.visible_slot_number = Some(visible_slot_number);
         state.safe_true_slot_number_to_use = Some(true_slot_number);
         state.set_gas_price(base_fee_per_gas);
+        // Run a test query at the requested height to ensure that the state is accessible. 
+        let _test_query_result = state.get_value(namespaces::User::NAMESPACE, &SlotKey::from_slice(b"test-key"));
+        if state.encountered_pruning_error.is_some() {
+            return Err(ApiStateAccessorError::HeightNotAccessible);
+        }
 
         // Clear out any new values that were put in cache during initialization. Otherwise, we'd incorrectly estimate gas costs for
         // the first accesses to those values since they would be incorrectly shown as cached.
