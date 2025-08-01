@@ -67,9 +67,6 @@ async fn test_start_at_immediate_finality() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_start_at() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter(
-        "info,sov_metrics=error,integration=debug",
-    );
     check_start_at(TEST_FINALIZATION_BLOCKS - 1).await;
     check_start_at(TEST_FINALIZATION_BLOCKS).await;
     check_start_at(TEST_FINALIZATION_BLOCKS + 1).await;
@@ -299,6 +296,8 @@ async fn check_start_at(finalization_blocks: u32) {
         .restart_with_heights(Some(start_at), None)
         .await
         .unwrap();
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     let client = test_rollup.client.clone();
     let current_height = get_height(&client).await.unwrap();
