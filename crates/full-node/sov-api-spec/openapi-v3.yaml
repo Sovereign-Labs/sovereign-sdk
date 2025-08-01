@@ -630,9 +630,12 @@ components:
         application/json:
           schema:
             type: object
-            additionalProperties: true
-          chain_hash:
-            $ref: "#/components/schemas/HexString"
+            properties:
+              schema:
+                type: object
+                additionalProperties: true
+              chain_hash:
+                $ref: "#/components/schemas/HexString"
     Constants:
       description: Constants of the rollup.
       content:
