@@ -132,7 +132,6 @@ where
         capabilities::AuthenticationOutput<S, Self::Decodable>,
         capabilities::AuthenticationError,
     > {
-        println!("== AUTH ==");
         let AuthenticatorInput::Standard(input) = borsh::from_slice(&tx.data).map_err(|e| {
             capabilities::fatal_deserialization_error::<_, S, _>(&tx.data, e, pre_exec_ws)
         })?;
