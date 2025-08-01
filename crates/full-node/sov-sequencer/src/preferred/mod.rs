@@ -464,7 +464,7 @@ where
 
                 let rollup_exec_config = self.create_bloc_exec_config_for_recovery();
                 self.synchronized_state_updator
-                    .flush_tx_cache_msg(
+                    .force_overite_state_msg(
                         self.api_ledger_db.clone(),
                         self.transaction_cache.write_handle(),
                         info.clone(),

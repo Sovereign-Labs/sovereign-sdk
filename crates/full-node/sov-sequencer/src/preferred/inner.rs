@@ -707,7 +707,7 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     PruneSequencerDb {
         reason: &'static str,
     },
-    FlushTxCache {
+    ForceOverwriteState {
         api_ledger_db: LedgerDb,
         transaction_cache_write_handle: TxResultWriter<S, Rt>,
         info: StateUpdateInfo<S::Storage>,
@@ -981,7 +981,7 @@ where
         self.send(Message::PruneSequencerDb { reason }).await;
     }
 
-    pub(crate) async fn flush_tx_cache_msg(
+    pub(crate) async fn force_overite_state_msg(
         &self,
         api_ledger_db: LedgerDb,
         transaction_cache_write_handle: TxResultWriter<S, Rt>,
@@ -989,7 +989,7 @@ where
         rollup_exec_config: RollupBlockExecutorConfig<S, Rt>,
         reason: &'static str,
     ) {
-        self.send(Message::FlushTxCache {
+        self.send(Message::ForceOverwriteState {
             api_ledger_db,
             transaction_cache_write_handle,
             info,
@@ -1217,14 +1217,14 @@ where
                     Message::PruneSequencerDb { reason } => {
                         self.process_prune_sequencer_db(reason).await;
                     }
-                    Message::FlushTxCache {
+                    Message::ForceOverwriteState {
                         api_ledger_db,
                         transaction_cache_write_handle,
                         info,
                         rollup_exec_config,
                         reason,
                     } => {
-                        self.process_flush_tx_cache(
+                        self.process_force_overwrite_state(
                             api_ledger_db,
                             transaction_cache_write_handle,
                             info,
@@ -1352,7 +1352,7 @@ where
 
         let is_recover = matches!(
             inner.is_ready,
-            Err(SequencerNotReadyDetails::PreferredSequencerRecovering { .. })
+            Err(SequencerNotReadyDetails::PreferredSequencerRecovering)
         );
 
         let time_spent_fetching_batches = fetch_batches_to_replay_metrics.duration;
@@ -1420,8 +1420,17 @@ where
                 PreferredSeqOperation::RecoverAndCatchUp
             }
             (false, false, false, _) => {
+                let should_flush_tx_cache = is_startup || is_resync || is_recover;
+
+                if should_flush_tx_cache {
+                    inner
+                        .executor_events_sender
+                        .flush_transactions_cache(info.next_tx_number)
+                        .await;
+                }
+
                 PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeState(
-                    is_startup || is_resync || is_recover,
+                    should_flush_tx_cache,
                     time_spent_fetching_batches,
                 )
             }
@@ -1640,7 +1649,7 @@ where
         });
     }
 
-    async fn process_flush_tx_cache(
+    async fn process_force_overwrite_state(
         &mut self,
         api_ledger_db: LedgerDb,
         transaction_cache_write_handle: TxResultWriter<S, Rt>,
@@ -1649,11 +1658,6 @@ where
         reason: &'static str,
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
-        inner
-            .executor_events_sender
-            .flush_transactions_cache(info.next_tx_number)
-            .await;
-
         let executor_from_info = RollupBlockExecutor::<_, Rt>::new(&info, rollup_exec_config);
 
         inner
@@ -1708,15 +1712,6 @@ where
         if node_sequence_number > our_sequence_number {
             inner
                 .overwrite_next_sequence_number_for_recovery(node_sequence_number)
-                .await;
-            inner
-                .executor_events_sender
-                .flush_transactions_cache(info.next_tx_number)
-                .await;
-        } else if !inner.has_finished_startup {
-            inner
-                .executor_events_sender
-                .flush_transactions_cache(info.next_tx_number)
                 .await;
         }
 
