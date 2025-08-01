@@ -24,7 +24,7 @@ fn setup() -> (TestRunner<RT, S>, TestUser<S>) {
         HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(2);
 
     let accounts = genesis_config.additional_accounts();
-    let admin = accounts.get(0).unwrap().clone();
+    let admin = accounts.first().unwrap().clone();
 
     let module_config = sov_value_setter::ValueSetterConfig {
         admin: admin.address(),
