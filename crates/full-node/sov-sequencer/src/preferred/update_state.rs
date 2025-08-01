@@ -33,7 +33,7 @@ where
         &self,
         info: StateUpdateInfo<S::Storage>,
         timer_start: Instant,
-        is_startup: bool,
+        is_startup_or_resync: bool,
         mut time_spent_fetching_batches: std::time::Duration, // The time already spent fetching batches to replay
     ) -> anyhow::Result<()> {
         // On shutdown exit early. This prevents duplicate subscriptions to the DB events channel, which would cause spurious warnings.
@@ -53,7 +53,7 @@ where
 
         // During startup, we need to repopulate the transaction cache with any transactions from the soft-confirmed batches
         // Outside of this edge case, we don't want replay to affect the transaction cache, so we don't pass a writer.
-        let startup_transaction_cache_writer = if is_startup {
+        let startup_transaction_cache_writer = if is_startup_or_resync {
             Some(self.transaction_cache.write_handle())
         } else {
             None
@@ -74,6 +74,12 @@ where
 
         let node_state_root = tracing::trace_span!("root_hash")
             .in_scope(|| info.storage.get_root_hash(info.slot_number))?;
+
+        if is_startup_or_resync {
+            self.transaction_cache
+                .clean_and_overwrite_next_tx_number(info.next_tx_number)
+                .await;
+        }
 
         // Repeatedly fetch all completed batches from the database that haven't yet been played on this sequencer and replay them
         let (in_progress_batch, mut db_event_subscription) = loop {

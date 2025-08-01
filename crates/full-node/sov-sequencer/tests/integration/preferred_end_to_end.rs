@@ -1897,6 +1897,73 @@ async fn events_are_returned_in_tx_response() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_no_crashes_on_resync_with_transactions() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+    )
+    .await;
+
+    let Some(test_rollup) = test_rollup else {
+        return;
+    };
+
+    let (test_rollup, state) = setup_test_rollup_with_initial_state(test_rollup, &admin).await;
+
+    let actions = vec![
+        TestingAction::AcceptTx,
+        TestingAction::AcceptTx,
+        TestingAction::NewDaSlot,
+        TestingAction::Sleep { duration_ms: 100 },
+    ];
+    let (test_rollup, state) =
+        run_actions_against_test_rollup(actions, test_rollup, &admin.clone(), state).await;
+
+    let actions = vec![
+        TestingAction::AcceptTx,
+        TestingAction::AcceptTx,
+        TestingAction::NewDaSlot,
+        TestingAction::Sleep { duration_ms: 100 },
+    ]
+    .into_iter()
+    .cycle()
+    .take(160)
+    .collect(); // repeat for 40 blocks
+    let (test_rollup, state) =
+        run_actions_against_test_rollup(actions, test_rollup, &admin.clone(), state).await;
+
+    let builder = test_rollup.shutdown().await.unwrap();
+
+    let rollup_storage_path = builder.storage_path();
+    // Next, delete everything except the preferred sequencer DB. Resync again to verify that this
+    // doesn't interfere
+    for path in ["state", "accessory", "ledger", "blob_sender"] {
+        std::fs::remove_dir_all(rollup_storage_path.path().join(path)).unwrap();
+    }
+
+    let test_rollup = builder.start().await.unwrap();
+
+    // Let it resync
+    tokio::time::sleep(Duration::from_secs(5)).await;
+
+    // Verify accepting actions works
+    let actions = vec![
+        TestingAction::AcceptTx,
+        TestingAction::AcceptTx,
+        TestingAction::NewDaSlot,
+        TestingAction::Sleep { duration_ms: 100 },
+        TestingAction::QuerySetValue,
+    ];
+
+    let (test_rollup, _state) =
+        run_actions_against_test_rollup(actions, test_rollup, &admin.clone(), state).await;
+
+    test_rollup.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn delayed_tx_is_processed_after_delay() {
     let (test_rollup, admin) = create_test_rollup(
         0,

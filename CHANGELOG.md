@@ -1,3 +1,6 @@
+# 2025-07-30
+- #1447 Improved resync behaviour: fixed an edge case when resyncing under heavy rollup load, and fixed a bug that prevented replicas from syncing on startup. This should make replica sequencers usable for horizontal scaling of API queries.
+
 # 2025-07-23
 - #3283 **BREAKING CHANGE** Update the mock `code-commitment` to 8 bytes. This change requires modifying the `chain_state_xx.json` genesis files accordingly.
 - #3293 Extends `get_runtime_schema` to work with types which haven't implemented `Runtime` trait yet.

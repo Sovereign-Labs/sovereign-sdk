@@ -324,6 +324,11 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
                 .expect("storage folder should exist by this time");
         self
     }
+
+    /// A reference to the storage directory the rollup will run in
+    pub fn storage_path(&self) -> StoragePath {
+        self.config.storage.clone()
+    }
 }
 
 impl<R, StoragePath> RollupBuilder<R, StoragePath>
@@ -586,6 +591,38 @@ where
         self,
         num_replicas: u64,
     ) -> anyhow::Result<Vec<TestRollup<R, Arc<tempfile::TempDir>>>> {
+        let da = self.shared_da_for_replicas().await?;
+        self.launch_n_replicas(num_replicas, da, true).await
+    }
+
+    fn shared_da_connection_string(&self) -> String {
+        let base_path = self.config.storage.as_path();
+
+        format!(
+            "sqlite://{}?mode=rwc",
+            base_path.join("shared_mock_da.sqlite").to_string_lossy()
+        )
+    }
+
+    /// Create a mockda suitable for passing to launch_n_replicas().
+    /// Should be created once, then stored and cloned.
+    pub async fn shared_da_for_replicas(&self) -> anyhow::Result<Arc<RwLock<StorableMockDaLayer>>> {
+        Ok(Arc::new(RwLock::new(
+            StorableMockDaLayer::new_from_connection(
+                &self.shared_da_connection_string(),
+                self.da_config.finalization_blocks,
+            )
+            .await?,
+        )))
+    }
+
+    /// Create several replicas with the provided DA.
+    pub async fn launch_n_replicas(
+        &self,
+        num_replicas: u64,
+        shared_da: Arc<RwLock<StorableMockDaLayer>>,
+        with_master: bool,
+    ) -> anyhow::Result<Vec<TestRollup<R, Arc<tempfile::TempDir>>>> {
         if num_replicas == 0 {
             anyhow::bail!("num_replicas must be at least 1 (master + replicas)");
         }
@@ -610,17 +647,7 @@ where
         })?;
 
         // Create shared MockDA sqlite file in base directory
-        let shared_da_connection = format!(
-            "sqlite://{}?mode=rwc",
-            base_path.join("shared_mock_da.sqlite").to_string_lossy()
-        );
-        let da_layer = Arc::new(RwLock::new(
-            StorableMockDaLayer::new_from_connection(
-                &shared_da_connection,
-                self.da_config.finalization_blocks,
-            )
-            .await?,
-        ));
+        let shared_da_connection = self.shared_da_connection_string();
 
         let mut rollups = Vec::new();
 
@@ -634,7 +661,7 @@ where
                 genesis: self.genesis.clone(),
                 da_config: MockDaConfig {
                     connection_string: shared_da_connection.clone(),
-                    da_layer: Some(da_layer.clone()),
+                    da_layer: Some(shared_da.clone()),
                     ..self.da_config.clone()
                 },
                 config: RollupBuilderConfig {
@@ -646,7 +673,7 @@ where
             };
 
             // Set replica mode for non-master instances
-            if i > 0 {
+            if i > 0 || !with_master {
                 if let SequencerKindConfig::Preferred(ref mut preferred_config) =
                     instance_builder.config.sequencer_config
                 {

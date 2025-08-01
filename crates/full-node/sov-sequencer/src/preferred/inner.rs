@@ -76,10 +76,13 @@ where
     in_flight_blobs: Arc<AtomicUsize>,
     executor_events_sender: ExecutorEventsSender<S, Rt>,
     sequence_number_of_next_blob: SequenceNumber,
-    /// A boolean that indicates whether the sequencer has finished its startup phase.
+    /// Indicates whether the sequencer has finished its startup phase.
     /// We need this rather than relying on `SequencerNotReadyDetails::Startup` because that state
     /// can be overwritten when the node is resyncing.
     has_finished_startup: bool,
+    /// Channel that sends a notification every time the executor is replaced after batch replay
+    /// finishes (at the end of update_state).
+    replay_notifier: watch::Sender<Option<SequenceNumber>>,
     metrics: Vec<PreferredSequencerChannelMetrics>,
     // Shared between sequencer and Inner.
     tx_queue_id: Arc<AtomicU64>,
@@ -300,7 +303,7 @@ where
                     target_visible_slot_number = %visible_slot_number_after_increase,
                     "Cannot calculate visible slots to advance for replica: target is not greater than current"
                 );
-                anyhow!("Invalid visible slot number progression for replica".to_string())
+                anyhow!(format!("Invalid visible slot number progression for replica: target is not greater than current. visible_slot_number_after_increase: {visible_slot_number_after_increase}, current_visible_slot_number: {current_visible_slot_number}"))
             })?;
 
         assert_eq!(
@@ -777,6 +780,7 @@ pub(crate) fn create<S, Rt>(
     executor_events_sender: ExecutorEventsSender<S, Rt>,
     sequence_number_of_next_blob: SequenceNumber,
     in_flight_blobs: Arc<AtomicUsize>,
+    replay_notifier: watch::Sender<Option<SequenceNumber>>,
     stop_at_rollup_height: Option<RollupHeight>,
 ) -> (
     SynchronizedSequencerState<S, Rt>,
@@ -807,6 +811,7 @@ where
         sequence_number_of_next_blob,
         in_flight_blobs,
         has_finished_startup: false,
+        replay_notifier,
         metrics: Vec::with_capacity(128),
         is_ready,
         stop_at_rollup_height,
@@ -1344,6 +1349,11 @@ where
                 !inner.has_finished_startup,
             )
         };
+        let is_resync = matches!(
+            inner.is_ready,
+            Err(SequencerNotReadyDetails::Syncing { .. })
+        );
+
         let time_spent_fetching_batches = fetch_batches_to_replay_metrics.duration;
         sov_metrics::track_metrics(|t| {
             t.submit(fetch_batches_to_replay_metrics);
@@ -1359,6 +1369,7 @@ where
         // `update_state`. That's no good.
         let current_visible_slot_number =
             current_visible_slot_number_according_to_node::<S, Rt>(info);
+
         let condition_too_close_to_deferred_slots_count_for_comfort =
             info.slot_number.delta(current_visible_slot_number)
                 > slot_count_delta_acceptable_lower_bound(
@@ -1410,7 +1421,7 @@ where
             }
             (false, false, false, _) => {
                 PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeState(
-                    is_startup,
+                    is_startup || is_resync,
                     time_spent_fetching_batches,
                 )
             }
@@ -1570,6 +1581,10 @@ where
         inner.executor.replace_state(*executor).await;
         inner.is_ready = Ok(());
         inner.has_finished_startup = true;
+        let last_replayed_sequence_number = inner.sequence_number_of_next_blob.checked_sub(1);
+        inner
+            .replay_notifier
+            .send_replace(last_replayed_sequence_number);
         inner.latest_info = info;
         let checkpoint = inner
             .executor
