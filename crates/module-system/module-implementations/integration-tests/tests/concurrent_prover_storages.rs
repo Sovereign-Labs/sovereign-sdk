@@ -494,7 +494,9 @@ fn assert_values<S: NativeStorage>(
                 just_value
             }
             ValueNamespace::StateUser => {
-                let just_value = storage.get_historical::<User>(key, version, &witness_stub).unwrap();
+                let just_value = storage
+                    .get_historical::<User>(key, version, &witness_stub)
+                    .unwrap();
                 let with_proof = storage
                     .get_with_proof::<User>(key.clone(), version)
                     .ok()

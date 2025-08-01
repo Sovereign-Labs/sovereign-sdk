@@ -336,7 +336,8 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             witness,
             |key, witness, _args| Ok::<_, Infallible>(storage.get::<N>(key, witness)),
             (),
-        ).expect("Unwrapping an infallible type cannot fail")
+        )
+        .expect("Unwrapping an infallible type cannot fail")
     }
 
     fn get_or_fetch_with_fn<S: Storage, F, Args, E>(

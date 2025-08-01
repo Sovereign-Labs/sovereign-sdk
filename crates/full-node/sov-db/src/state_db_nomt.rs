@@ -4,8 +4,8 @@ use std::sync::{Arc, RwLock};
 use anyhow::Context;
 use nomt::hasher::BinaryHasher;
 use nomt::{Nomt, Overlay, SessionParams, WitnessMode};
-use sov_rollup_interface::reexports::digest;
 pub use rockbound::versioned_db::HistoricalValueError;
+use sov_rollup_interface::reexports::digest;
 
 use super::commit_flag::{CommitFlag, CommitStatus};
 use crate::config::RollupDbConfig;

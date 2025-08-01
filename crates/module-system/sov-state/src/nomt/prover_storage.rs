@@ -202,7 +202,6 @@ where
         }
         .map(Into::into);
         Ok(val)
-        
     }
 
     fn do_get_leaf<N: ProvableCompileTimeNamespace>(
@@ -427,9 +426,7 @@ where
     // TODO: Split accessory get versioned into separate function
     fn get_accessory(&self, key: &SlotKey) -> Option<SlotValue> {
         match self.read_value::<Accessory>(key, None) {
-            Ok(val) => {
-                val
-            }
+            Ok(val) => val,
             Err(e) => {
                 // Historical errors are not allowed when fetching without a version
                 panic!("Database error while getting value for accessory key {key}. error: {e:?}");

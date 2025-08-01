@@ -3,10 +3,9 @@ use std::sync::Arc;
 
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::{
-    namespaces, EventContainer, Namespace, NativeStorage, ProvableStorageCache, SlotKey, SlotValue,
-    Storage, TypeErasedEvent,
+    namespaces, CompileTimeNamespace, EventContainer, Namespace, NativeStorage,
+    ProvableStorageCache, SlotKey, SlotValue, Storage, TypeErasedEvent,
 };
-use sov_state::CompileTimeNamespace;
 
 use super::temp_cache::{CacheLookup, TempCache};
 use super::{BorshSerializedSize, StateCheckpoint, UniversalStateAccessor};
@@ -59,7 +58,7 @@ impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
                 }
             },
         };
-       match result {
+        match result {
             Ok(value) => value,
             Err(e) => {
                 tracing::debug!(error = ?e, queried_slot_number = ?self.safe_true_slot_number_to_use, "Error encountered while fetching data from ApiStateAccessor");
@@ -499,14 +498,13 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
                 slot_number
             }
         };
-       
 
         // If the caller provided a true slot number, find the associated rollup height.
         let rollup_height = match height {
-            StateToAccess::RollupHeight(rollup_height) | StateToAccess::TrueSlotNumber(_, Some(rollup_height))=> rollup_height,
+            StateToAccess::RollupHeight(rollup_height)
+            | StateToAccess::TrueSlotNumber(_, Some(rollup_height)) => rollup_height,
             StateToAccess::TrueSlotNumber(slot_number, None) => {
-                let result = kernel
-                .true_slot_number_to_rollup_height(slot_number, &mut state);
+                let result = kernel.true_slot_number_to_rollup_height(slot_number, &mut state);
                 if state.encountered_pruning_error.is_some() {
                     return Err(ApiStateAccessorError::HeightNotAccessible);
                 }
@@ -515,7 +513,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         };
         // Use the slot number to find the visible slot number.
         let result = kernel.visible_slot_number_at(true_slot_number, &mut state);
-        
+
         let Some(visible_slot_number) = result else {
             panic!("Visible slot number not available at slot number {true_slot_number}, but that height exist in storage. This is a bug. Please report it.");
         };
@@ -527,8 +525,11 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         state.visible_slot_number = Some(visible_slot_number);
         state.safe_true_slot_number_to_use = Some(true_slot_number);
         state.set_gas_price(base_fee_per_gas);
-        // Run a test query at the requested height to ensure that the state is accessible. 
-        let _test_query_result = state.get_value(namespaces::User::NAMESPACE, &SlotKey::from_slice(b"test-key"));
+        // Run a test query at the requested height to ensure that the state is accessible.
+        let _test_query_result = state.get_value(
+            namespaces::User::NAMESPACE,
+            &SlotKey::from_slice(b"test-key"),
+        );
         if state.encountered_pruning_error.is_some() {
             return Err(ApiStateAccessorError::HeightNotAccessible);
         }

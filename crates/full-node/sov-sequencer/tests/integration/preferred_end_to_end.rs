@@ -331,8 +331,8 @@ async fn txs_below_min_fee_are_rejected() {
     );
 }
 
-
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "This test covers pruning behavior, which is only relevant for NOMT. Enable it when we switch to NOMT for the sequencer tests."]
 async fn test_archival_state_with_pruning() {
     let (test_rollup, admin) = create_test_rollup(
         0,
@@ -373,24 +373,31 @@ async fn test_archival_state_with_pruning() {
     let mut success_count = 0;
     let mut pruned_count = 0;
     for i in 0..150 {
-        let state = test_rollup.client.query_rest_endpoint::<serde_json::Value>(format!("/modules/value-setter/state/value?slot_number={}", i).as_str()).await;
-        assert!(state.is_ok(), "Error from archival state query: {:?}", state);
+        let state = test_rollup
+            .client
+            .query_rest_endpoint::<serde_json::Value>(
+                format!("/modules/value-setter/state/value?slot_number={i}").as_str(),
+            )
+            .await;
+        assert!(state.is_ok(), "Error from archival state query: {state:?}",);
         let state = state.unwrap();
-        if state.to_string().contains("The requested height may have been pruned") {
+        if state
+            .to_string()
+            .contains("The requested height may have been pruned")
+        {
             pruned_count += 1;
         } else {
-            let value: ValueResponse = serde_json::from_value(state).expect("Failed to deserialize into ValueResponse");
+            let value: ValueResponse =
+                serde_json::from_value(state).expect("Failed to deserialize into ValueResponse");
             assert!(value.value < 150);
             success_count += 1;
         }
-        
     }
 
     // Check that we ran into some pruned slots to sanity check that the test is working. If this fails, we just need to update the test logic
     assert!(pruned_count > 0, "No pruned slots found");
     assert!(success_count > 0, "No successful queries found");
     test_rollup.shutdown().await.unwrap();
-
 }
 
 /// Test what happens when the sequencer fills up its gas limit. This tests that...

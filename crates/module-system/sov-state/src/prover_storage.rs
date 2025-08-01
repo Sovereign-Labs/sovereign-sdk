@@ -456,12 +456,11 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
         Ok(self.read_value::<N>(key, version))
     }
 
-
     fn get_accessory_historical(
-            &self,
-            key: &SlotKey,
-            version: Option<SlotNumber>,
-        ) -> anyhow::Result<Option<SlotValue>> {
+        &self,
+        key: &SlotKey,
+        version: Option<SlotNumber>,
+    ) -> anyhow::Result<Option<SlotValue>> {
         Ok(self.read_value::<Accessory>(key, version))
     }
 
