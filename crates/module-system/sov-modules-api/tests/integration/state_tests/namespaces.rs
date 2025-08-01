@@ -6,14 +6,14 @@ use sov_modules_api::{
     KernelStateValue, Spec, StateCheckpoint, StateMap, StateValue, VersionedStateValue,
 };
 use sov_state::{BorshCodec, Prefix, ProvableNamespace, StateRoot};
-use sov_test_utils::storage::{SimpleNomtStorageManager, SimpleStorageManager};
+use sov_test_utils::storage::SimpleNomtStorageManager;
 use sov_test_utils::{TestNomtSpec, TestSpec};
 
 use crate::state_tests::{commit_to_storage, ForklessStorageManager};
 
 #[test]
 fn test_jmt_state_value_user_namespace() -> Result<(), Infallible> {
-    let mut storage_manager = SimpleStorageManager::new();
+    let mut storage_manager = SimpleNomtStorageManager::new();
     storage_manager.genesis();
     test_state_value_user_namespace::<TestSpec, _>(storage_manager)
 }
@@ -60,7 +60,7 @@ where
 
 #[test]
 fn test_jmt_state_value_kernel_namespace() -> Result<(), Infallible> {
-    let storage_manager = SimpleStorageManager::new();
+    let storage_manager = SimpleNomtStorageManager::new();
     test_state_value_kernel_namespace::<TestSpec, _>(storage_manager)
 }
 
@@ -113,7 +113,7 @@ where
 
 #[test]
 fn test_jmt_state_map_user_namespace() -> Result<(), Infallible> {
-    let storage_manager = SimpleStorageManager::new();
+    let storage_manager = SimpleNomtStorageManager::new();
     test_state_map_user_namespace::<TestSpec, _>(storage_manager)
 }
 
@@ -160,7 +160,7 @@ where
 
 #[test]
 fn test_jmt_versioned_state_value_kernel_namespace() -> Result<(), Infallible> {
-    let storage_manager = SimpleStorageManager::new();
+    let storage_manager = SimpleNomtStorageManager::new();
     test_versioned_state_value_kernel_namespace::<TestSpec, _>(storage_manager)
 }
 

@@ -304,17 +304,17 @@ mod tests {
 
     use super::*;
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_jmt_new_rollup_height_state_root_on_stale_storage() {
-        let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
-        new_rollup_height_state_root_on_stale_storage::<TestSpec, _>(storage_manager).await;
-    }
+    // #[tokio::test(flavor = "multi_thread")]
+    // async fn test_jmt_new_rollup_height_state_root_on_stale_storage() {
+    //     let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
+    //     new_rollup_height_state_root_on_stale_storage::<TestSpec, _>(storage_manager).await;
+    // }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_jmt_known_rollup_height_state_root_on_stale_storage() {
-        let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
-        known_rollup_height_state_root_on_stale_storage::<TestSpec, _>(storage_manager).await;
-    }
+    // #[tokio::test(flavor = "multi_thread")]
+    // async fn test_jmt_known_rollup_height_state_root_on_stale_storage() {
+    //     let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
+    //     known_rollup_height_state_root_on_stale_storage::<TestSpec, _>(storage_manager).await;
+    // }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_nomt_new_rollup_height_state_root_on_stale_storage() {
@@ -529,11 +529,11 @@ mod tests {
         handle.await.unwrap();
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_jmt_state_compute_competing_storages_repro() {
-        let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
-        test_compute_competing_storages::<TestSpec, _>(storage_manager, 3).await;
-    }
+    // #[tokio::test(flavor = "multi_thread")]
+    // async fn test_jmt_state_compute_competing_storages_repro() {
+    //     let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
+    //     test_compute_competing_storages::<TestSpec, _>(storage_manager, 3).await;
+    // }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_nomt_state_compute_competing_storages_repro() {

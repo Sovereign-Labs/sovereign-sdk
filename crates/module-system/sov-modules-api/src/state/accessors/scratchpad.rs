@@ -649,7 +649,7 @@ mod tests {
     use sov_state::codec::BcsCodec;
     use sov_state::namespaces::User;
     use sov_state::{Kernel, SlotKey, SlotValue};
-    use sov_test_utils::storage::SimpleStorageManager;
+    use sov_test_utils::storage::SimpleNomtStorageManager;
     use sov_test_utils::{MockDaSpec, MockZkvm};
 
     use crate::capabilities::mocks::MockKernel;
@@ -665,7 +665,7 @@ mod tests {
     #[test]
     fn test_workingset_get() {
         let codec = BcsCodec {};
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleNomtStorageManager::new();
         let storage = storage_manager.create_storage();
 
         let prefix = sov_state::Prefix::new(vec![1, 2, 3]);
@@ -683,7 +683,7 @@ mod tests {
     #[test]
     fn test_kernel_workingset_get() {
         let codec = BcsCodec {};
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleNomtStorageManager::new();
         let storage = storage_manager.create_storage();
 
         let prefix = sov_state::Prefix::new(vec![1, 2, 3]);
@@ -715,7 +715,7 @@ mod tests {
     #[test]
     fn test_pre_exec_ws() {
         let codec = BcsCodec {};
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleNomtStorageManager::new();
         let storage = storage_manager.create_storage();
         let kernel: MockKernel<TestSpec> = MockKernel::new(4, 1);
 

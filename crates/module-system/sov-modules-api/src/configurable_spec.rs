@@ -13,10 +13,10 @@ use crate::higher_kinded_types::{Generic, HigherKindedHelper};
 use crate::{CryptoSpecExt, GasUnit, Spec};
 
 #[cfg(feature = "native")]
-type DefaultStorage<StorageSpec> = sov_state::ProverStorage<StorageSpec>;
+type DefaultStorage<StorageSpec, H> = sov_state::nomt::prover_storage::NomtProverStorage<StorageSpec, H>;
 
 #[cfg(not(feature = "native"))]
-type DefaultStorage<StorageSpec> = sov_state::ZkStorage<StorageSpec>;
+type DefaultStorage<StorageSpec, H> = sov_state::nomt::zk_storage::NomtVerifierStorage<StorageSpec, H>;
 
 /// A default implementation of the [`Spec`] trait. Used for testing but can also be a good
 /// starting point for implementing a custom rollup.
@@ -36,7 +36,7 @@ pub struct ConfigurableSpec<
     Address,
     Mode,
     CryptoSpec = <<InnerZkvm as Zkvm>::Verifier as ZkVerifier>::CryptoSpec,
-    Storage = DefaultStorage<DefaultStorageSpec<<CryptoSpec as CryptoSpecTrait>::Hasher>>,
+    Storage = DefaultStorage<DefaultStorageSpec<<CryptoSpec as CryptoSpecTrait>::Hasher>, <Da as DaSpec>::SlotHash>,
 >(PhantomData<(Da, InnerZkvm, OuterZkvm, CryptoSpec, Address, Mode, Storage)>);
 
 impl<Da, InnerZkvm, OuterZkvm, Address, Mode, CryptoSpec, Storage> Default

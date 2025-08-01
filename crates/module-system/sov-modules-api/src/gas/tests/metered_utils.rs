@@ -5,7 +5,7 @@ use sov_mock_zkvm::crypto::Ed25519Signature;
 use sov_mock_zkvm::MockZkvm;
 use sov_rollup_interface::crypto::PrivateKey;
 use sov_rollup_interface::execution_mode::Native;
-use sov_test_utils::storage::SimpleStorageManager;
+use sov_test_utils::storage::SimpleNomtStorageManager;
 use sov_test_utils::MockDaSpec;
 
 use crate::default_spec::DefaultSpec;
@@ -21,7 +21,7 @@ fn create_working_set(
     remaining_funds: Amount,
     gas_price: &<<S as Spec>::Gas as Gas>::Price,
 ) -> WorkingSet<S, StateCheckpoint<S>> {
-    let storage_manager = SimpleStorageManager::new();
+    let storage_manager = SimpleNomtStorageManager::new();
     let storage = storage_manager.create_storage();
     WorkingSet::new_with_gas_meter(storage, remaining_funds, gas_price)
 }

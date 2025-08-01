@@ -1,10 +1,11 @@
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::execution_mode;
+use sov_state::nomt::zk_storage::NomtVerifierStorage;
 use sov_state::{
     AccessSize, ArrayWitness, BorshCodec, IsValueCached, Namespace, OrderedReadsAndWrites, Prefix,
     StateAccesses, Storage, ZkStorage,
 };
-use sov_test_utils::storage::SimpleStorageManager;
+use sov_test_utils::storage::SimpleNomtStorageManager;
 use sov_test_utils::{validate_and_materialize, MockDaSpec, TestStorageSpec};
 
 use super::seal::UniversalStateAccessor;
@@ -24,11 +25,11 @@ const NAMESPACE: Namespace = Namespace::User;
 fn create_storage_manager(
     initial_values: Vec<(Vec<u8>, u64)>,
 ) -> (
-    SimpleStorageManager<TestStorageSpec>,
+    SimpleNomtStorageManager<TestStorageSpec>,
     <<Native as Spec>::Storage as Storage>::Root,
 ) /*ProverStorage<DefaultStorageSpec<sha2::Sha256>>*/
 {
-    let mut storage_manager = SimpleStorageManager::new();
+    let mut storage_manager = SimpleNomtStorageManager::new();
     let storage = storage_manager.create_storage();
 
     let (root, genesis_change_set) = validate_and_materialize(
@@ -49,7 +50,7 @@ fn create_storage_manager(
         &ArrayWitness::default(),
         <Native as Spec>::Storage::PRE_GENESIS_ROOT,
     )
-    .expect("Native jmt validation should succeed");
+    .expect("Native nomt validation should succeed");
     storage_manager.commit(genesis_change_set);
     (storage_manager, root)
 }
@@ -76,7 +77,7 @@ fn test_witness_generation() {
 
     // Run the test with Zk storage and consume the witness.
     {
-        let storage = ZkStorage::new();
+        let storage = NomtVerifierStorage::new();
         let mut state =
             StateCheckpoint::with_witness(storage.clone(), witness, &MockKernel::<Zk>::default());
 

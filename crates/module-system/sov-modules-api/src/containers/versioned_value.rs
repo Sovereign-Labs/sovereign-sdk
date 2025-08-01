@@ -129,7 +129,7 @@ mod tests {
     use sov_rollup_interface::common::IntoSlotNumber;
     use sov_rollup_interface::execution_mode::Native;
     use sov_state::{BorshCodec, Prefix};
-    use sov_test_utils::storage::SimpleStorageManager;
+    use sov_test_utils::storage::SimpleNomtStorageManager;
     use sov_test_utils::MockDaSpec;
     use unwrap_infallible::UnwrapInfallible;
 
@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn test_kernel_state_value_as_value() {
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleNomtStorageManager::new();
         let storage = storage_manager.create_storage();
 
         let kernel = MockKernel::<TestSpec>::new(4, 1);
@@ -176,7 +176,7 @@ mod tests {
 
     #[test]
     fn test_kernel_state_value_as_map() {
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleNomtStorageManager::new();
         let storage = storage_manager.create_storage();
 
         let kernel = MockKernel::<TestSpec>::new(4, 1);

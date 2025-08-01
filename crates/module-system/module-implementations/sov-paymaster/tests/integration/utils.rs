@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use sov_modules_api::{Amount, CryptoSpec, PrivateKey, SafeVec, Spec};
+use sov_modules_api::DaSpec;
 use sov_paymaster::{PayeePolicy, PayerGenesisConfig, PaymasterConfig, PaymasterPolicyInitializer};
+use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, ProverStorage};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::traits::MinimalGenesis;
@@ -54,8 +56,9 @@ impl<RT: Runtime<S>, S: Spec> DoValueSetterTx<S> for TestRunner<RT, S>
 where
     RT: 'static + Runtime<S> + MinimalGenesis<S> + EncodeCall<ValueSetter<S>>,
     S: Spec<
-        Storage = ProverStorage<
+        Storage = NomtProverStorage<
             DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
+            <MockDaSpec as DaSpec>::SlotHash,
         >,
         Da = MockDaSpec,
     >,

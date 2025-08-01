@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use sov_db::ledger_db::LedgerDb;
-use sov_db::storage_manager::NativeStorageManager;
+use sov_db::storage_manager::{NomtStorageManager};
 use sov_mock_da::storable::service::StorableMockDaService;
 use sov_mock_da::MockDaSpec;
 use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
@@ -10,7 +10,7 @@ use sov_modules_api::capabilities::{HasCapabilities, HasKernel};
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::prelude::axum::async_trait;
 use sov_modules_api::rest::{HasRestApi, StateUpdateReceiver};
-use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec, SyncStatus, ZkVerifier, Zkvm};
+use sov_modules_api::{CryptoSpec, DaSpec, NodeEndpoints, Spec, SyncStatus, ZkVerifier, Zkvm};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
@@ -18,7 +18,8 @@ use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_rollup_interface::zk::aggregated_proof::CodeCommitment;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_sequencer::ProofBlobSender;
-use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::{DefaultStorageSpec, Storage};
 use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
@@ -43,17 +44,22 @@ where
     S: Spec<
             Da = MockDaSpec,
             OuterZkvm = MockZkvm,
-            Storage = ProverStorage<
-                DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
-            >,
+            Storage = NomtProverStorage<
+            DefaultStorageSpec<<<Self::Spec as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
+            <<Self::Spec as Spec>::Da as DaSpec>::SlotHash,
+        >,
         > + PluggableSpec,
     R: RuntimeTrait<S> + HasRestApi<S> + HasCapabilities<S> + HasKernel<S> + 'static,
 {
     type DaService = StorableMockDaService;
 
-    type StorageManager = NativeStorageManager<
+    type StorageManager = NomtStorageManager<
         MockDaSpec,
-        ProverStorage<DefaultStorageSpec<<<Self::Spec as Spec>::CryptoSpec as CryptoSpec>::Hasher>>,
+        <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher,
+        NomtProverStorage<
+            DefaultStorageSpec<<<Self::Spec as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
+            <<Self::Spec as Spec>::Da as DaSpec>::SlotHash,
+        >,
     >;
 
     type ProverService = ParallelProverService<
@@ -131,7 +137,10 @@ where
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
     ) -> anyhow::Result<Self::StorageManager> {
-        NativeStorageManager::new(&rollup_config.storage.path)
+        NomtStorageManager::new(
+            rollup_config.storage.clone()
+        )
+            
     }
 
     fn create_proof_sender(

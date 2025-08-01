@@ -91,6 +91,7 @@ where
 }
 
 /// Implementation of [`HierarchicalStorageManager`] based on NOMT.
+/// Note that H is the hasher generic - it should almost always be the CryptoSpec::Hasher.
 pub struct NomtStorageManager<Da: DaSpec, H, S: InitializableNativeNomtStorage<H, Da::SlotHash>> {
     // L1 forks representation
     // Chain: prev_block -> child_blocks

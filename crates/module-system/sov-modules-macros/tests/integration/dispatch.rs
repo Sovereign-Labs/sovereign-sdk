@@ -288,6 +288,7 @@ mod derive_event {
 // to avoid proc-macro resolution fallback error: https://github.com/rust-lang/rust/issues/83583
 mod derive_genesis {
     use super::*;
+    use sov_state::nomt::zk_storage::NomtVerifierStorage;
     #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     struct Runtime<S, T>
     where
@@ -301,7 +302,7 @@ mod derive_genesis {
 
     #[test]
     fn derive_genesis() {
-        let storage = ZkStorage::new();
+        let storage = NomtVerifierStorage::new();
         let mut state =
             sov_modules_api::StateCheckpoint::new(storage, &MockKernel::<ZkTestSpec>::default());
         let runtime = &mut Runtime::<ZkTestSpec, u32>::default();
@@ -345,6 +346,7 @@ mod derive_dispatch {
     use sov_modules_api::NestedEnumUtils;
 
     use super::*;
+    use sov_state::nomt::zk_storage::NomtVerifierStorage;
     #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     struct Runtime<S, T>
     where
@@ -363,7 +365,7 @@ mod derive_dispatch {
 
         let runtime = &mut RT::default();
 
-        let storage = ZkStorage::new();
+        let storage = NomtVerifierStorage::new();
 
         let mut state =
             sov_modules_api::StateCheckpoint::new(storage, &MockKernel::<ZkTestSpec>::default());

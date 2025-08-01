@@ -235,15 +235,19 @@ mod test {
     use sov_mock_zkvm::MockZkvm;
     use sov_rollup_interface::common::{IntoSlotNumber, SlotNumber};
     use sov_state::namespaces::User;
+    use sov_state::nomt::prover_storage::NomtProverStorage;
     use sov_state::{
         DefaultStorageSpec, NativeStorage, ProverStorage, SlotKey, SlotValue, Storage,
     };
     use sov_test_utils::storage::SimpleStorageManager;
+    use sov_test_utils::storage::SimpleNomtStorageManager;
     use sov_test_utils::validate_and_materialize;
 
     use crate::capabilities::mocks::MockKernel;
     use crate::execution_mode::Native;
     use crate::{CryptoSpec, StateWriter, WorkingSet};
+    use sov_modules_api::DaSpec;
+
 
     type StorageSpec = DefaultStorageSpec<TestHasher>;
     type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
@@ -282,9 +286,9 @@ mod test {
     }
 
     #[test]
-    fn test_jmt_storage() -> anyhow::Result<()> {
-        let mut storage_manager = SimpleStorageManager::<StorageSpec>::new();
-        let mut prev_root = <ProverStorage<StorageSpec> as Storage>::PRE_GENESIS_ROOT;
+    fn test_nomt_storage() -> anyhow::Result<()> {
+        let mut storage_manager = SimpleNomtStorageManager::new();
+        let mut prev_root = <NomtProverStorage<StorageSpec, <MockDaSpec as DaSpec>::SlotHash> as Storage>::PRE_GENESIS_ROOT;
         let tests = create_tests();
         {
             let mut kernel = MockKernel::<TestSpec>::default();
@@ -333,7 +337,7 @@ mod test {
 
     #[test]
     fn test_restart_lifecycle() -> anyhow::Result<()> {
-        let mut storage_manager = SimpleStorageManager::new();
+        let mut storage_manager = SimpleNomtStorageManager::new();
         {
             let storage = storage_manager.create_storage();
             assert!(storage.is_empty());

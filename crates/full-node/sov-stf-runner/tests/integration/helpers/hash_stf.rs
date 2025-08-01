@@ -1,6 +1,6 @@
 use sha2::Digest;
-use sov_db::storage_manager::NativeChangeSet;
-use sov_mock_da::MockAddress;
+use sov_db::storage_manager::{NativeChangeSet, NomtChangeSet};
+use sov_mock_da::{MockAddress, MockDaSpec};
 use sov_mock_zkvm::{MockCodeCommitment, MockZkVerifier};
 use sov_modules_api::{
     AggregatedProofPublicData, ProofOutcome, ProofReceipt, ProofReceiptContents, Storage,
@@ -11,6 +11,7 @@ use sov_rollup_interface::stf::{ApplySlotOutput, StateTransitionFunction};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::{ZkVerifier, Zkvm};
 use sov_state::namespaces::User;
+use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::storage::{NativeStorage, SlotKey, SlotValue};
 use sov_state::{
     ArrayWitness, DefaultStorageSpec, OrderedReadsAndWrites, Prefix, ProverStorage, StateAccesses,
@@ -34,10 +35,10 @@ impl HashStf {
 
     fn save_from_hasher(
         hasher: sha2::Sha256,
-        storage: ProverStorage<S>,
+        storage: NomtProverStorage<S, <MockDaSpec as DaSpec>::SlotHash>,
         witness: &ArrayWitness,
         root: StorageRoot<S>,
-    ) -> (StorageRoot<S>, NativeChangeSet) {
+    ) -> (StorageRoot<S>, NomtChangeSet) {
         let result = hasher.finalize();
 
         let hash_key = HashStf::hash_key();
@@ -68,8 +69,8 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
     type Address = MockAddress;
     type StateRoot = StorageRoot<S>;
     type GenesisParams = Vec<u8>;
-    type PreState = ProverStorage<S>;
-    type ChangeSet = NativeChangeSet;
+    type PreState = NomtProverStorage<S, <MockDaSpec as DaSpec>::SlotHash>;
+    type ChangeSet = NomtChangeSet;
     type TxReceiptContents = ();
     type StorageProof = ();
     type GasPrice = ();
@@ -90,7 +91,7 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
             hasher,
             genesis_state,
             &ArrayWitness::default(),
-            <ProverStorage<S> as Storage>::PRE_GENESIS_ROOT,
+            <NomtProverStorage<S, <Da as DaSpec>::SlotHash> as Storage>::PRE_GENESIS_ROOT,
         )
     }
 

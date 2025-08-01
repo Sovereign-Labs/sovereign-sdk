@@ -9,7 +9,9 @@ use sha2::Sha256;
 use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::DeltaReader;
-use sov_db::storage_manager::NativeStorageManager;
+use sov_db::storage_manager::{NativeStorageManager, NomtStorageManager};
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_test_utils::storage::ForklessStorageManager;
 use sov_metrics::MonitoringConfig;
 use sov_mock_da::{
     BlockProducingConfig, MockAddress, MockBlockHeader, MockDaConfig, MockDaService, MockDaSpec,
@@ -49,7 +51,7 @@ use crate::helpers::hash_stf::HashStf;
 type MockInitVariant = InitVariant<HashStf, MockZkvm, MockZkvm, MockDaService>;
 
 pub type S = DefaultStorageSpec<Sha256>;
-pub type StorageManager = NativeStorageManager<MockDaSpec, ProverStorage<S>>;
+pub type StorageManager = NomtStorageManager<MockDaSpec, Sha256, NomtProverStorage<S, <MockDaSpec as DaSpec>::SlotHash>>;
 pub type HashStfRunner<Da> = StateTransitionRunner<HashStf, StorageManager, Da, MockZkvm, MockZkvm>;
 
 /// TestNode simulates a full-node.
@@ -149,9 +151,9 @@ impl ProofSender for MockProofSender {
 }
 
 // Returns genesis state root, prev state root for given init variant and initial value for state update info.
-pub async fn bootstrap_state_update_info(
-    storage_manager: &mut StorageManager,
-) -> anyhow::Result<StateUpdateInfo<ProverStorage<S>>> {
+pub async fn bootstrap_state_update_info<Sm: HierarchicalStorageManager<MockDaSpec, LedgerState = DeltaReader>>(
+    storage_manager: &mut Sm,
+) -> anyhow::Result<StateUpdateInfo<Sm::StfState>> {
     let genesis_block_header = MockBlockHeader::from_height(0);
     let (stf_storage, ledger_state) = storage_manager.create_state_after(&genesis_block_header)?;
     let ledger_db = LedgerDb::with_reader(ledger_state)?;
@@ -172,7 +174,11 @@ pub async fn initialize_runner(
     let verifier = MockDaVerifier::default();
 
     let rollup_config = rollup_config(&da_service, path, aggregated_proof_block_jump);
-    let mut storage_manager: StorageManager = NativeStorageManager::new(path).unwrap();
+    let mut storage_manager: StorageManager = NomtStorageManager::<
+        MockDaSpec,
+        _,
+        _,
+    >::new(RollupDbConfig::default_in_path(path.to_path_buf())).unwrap();
 
     let (state_update_sender, state_update_recv) = watch::channel(
         bootstrap_state_update_info(&mut storage_manager)

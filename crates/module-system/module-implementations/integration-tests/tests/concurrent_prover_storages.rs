@@ -11,18 +11,18 @@ use sov_test_utils::storage::{
 };
 use sov_test_utils::{TestHasher, TestNomtSpec, TestSpec};
 
-#[test]
-fn jmt_concurrent_prover_storages() {
-    let storage_manager = SimpleStorageManager::new();
-    concurrent_prover_storages::<TestSpec, _>(storage_manager);
-}
+// #[test]
+// fn jmt_concurrent_prover_storages() {
+//     let storage_manager = SimpleStorageManager::new();
+//     concurrent_prover_storages::<TestSpec, _>(storage_manager);
+// }
 
-#[test]
-fn jmt_concurrent_prover_in_memory_storages() {
-    let storage_manager =
-        NonCommitingStorageManager::<NativeStorageManager<MockDaSpec, _>, _>::new();
-    concurrent_prover_storages::<TestSpec, _>(storage_manager);
-}
+// #[test]
+// fn jmt_concurrent_prover_in_memory_storages() {
+//     let storage_manager =
+//         NonCommitingStorageManager::<NativeStorageManager<MockDaSpec, _>, _>::new();
+//     concurrent_prover_storages::<TestSpec, _>(storage_manager);
+// }
 
 #[test]
 fn nomt_concurrent_prover_storages() {
@@ -38,18 +38,18 @@ fn nomt_concurrent_prover_in_memory_storages() {
     concurrent_prover_storages::<TestNomtSpec, _>(storage_manager);
 }
 
-#[test]
-fn jmt_node_sequencer_concurrent_state_update() {
-    let storage_manager = SimpleStorageManager::new();
-    node_sequencer_compute_state_update_concurrency::<TestSpec, _>(storage_manager);
-}
+// #[test]
+// fn jmt_node_sequencer_concurrent_state_update() {
+//     let storage_manager = SimpleStorageManager::new();
+//     node_sequencer_compute_state_update_concurrency::<TestSpec, _>(storage_manager);
+// }
 
-#[test]
-fn jmt_node_sequencer_concurrent_state_update_in_memory() {
-    let storage_manager =
-        NonCommitingStorageManager::<NativeStorageManager<MockDaSpec, _>, _>::new();
-    node_sequencer_compute_state_update_concurrency::<TestSpec, _>(storage_manager);
-}
+// #[test]
+// fn jmt_node_sequencer_concurrent_state_update_in_memory() {
+//     let storage_manager =
+//         NonCommitingStorageManager::<NativeStorageManager<MockDaSpec, _>, _>::new();
+//     node_sequencer_compute_state_update_concurrency::<TestSpec, _>(storage_manager);
+// }
 
 #[test]
 fn nomt_node_sequencer_concurrent_state_update() {

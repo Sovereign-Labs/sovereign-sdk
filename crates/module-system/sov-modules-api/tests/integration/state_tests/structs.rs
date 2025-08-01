@@ -3,8 +3,9 @@ use std::convert::Infallible;
 use capabilities::mocks::MockKernel;
 use sov_modules_api::*;
 use sov_state::{
-    ArrayWitness, BorshCodec, Prefix, ProverStorage, StateAccesses, Storage, ZkStorage,
+    nomt::{prover_storage::NomtProverStorage, zk_storage::NomtVerifierStorage}, ArrayWitness, BorshCodec, Prefix, ProverStorage, StateAccesses, Storage, ZkStorage
 };
+use sov_test_utils::storage::SimpleNomtStorageManager;
 use unwrap_infallible::UnwrapInfallible;
 
 use crate::state_tests::*;
@@ -180,11 +181,11 @@ const CONDITIONS: [Condition; 8] = [
 ];
 
 /// Creates thing and checks it with all condition combinations
-pub fn test_state_thing<S: Spec<Storage = ProverStorage<StorageSpec>>, St: StateThing>(
+pub fn test_state_thing<S: Spec<Storage = NomtProverStorage<StorageSpec, <MockDaSpec as DaSpec>::SlotHash>>, St: StateThing>(
     conditions: &[Condition],
 ) {
-    let simple_storage_manager = SimpleStorageManager::new();
-    let storage: ProverStorage<StorageSpec> = simple_storage_manager.create_storage();
+    let simple_storage_manager = SimpleNomtStorageManager::new();
+    let storage  = simple_storage_manager.create_storage();
     let mut state = StateCheckpoint::<S>::new(storage, &MockKernel::<S>::default());
     let mut thing = St::create(&mut state);
     let mut working_set = state.to_working_set_unmetered();
@@ -216,7 +217,7 @@ fn test_state_vec_remove() {
 
 #[test]
 fn test_witness_round_trip() -> Result<(), Infallible> {
-    let mut storage_manager = SimpleStorageManager::<StorageSpec>::new();
+    let mut storage_manager = SimpleNomtStorageManager::<StorageSpec>::new();
 
     let mut state_value = StateValue::with_codec(Prefix::new(vec![0]), BorshCodec);
 
@@ -254,7 +255,7 @@ fn test_witness_round_trip() -> Result<(), Infallible> {
     };
 
     {
-        let storage = ZkStorage::<StorageSpec>::new();
+        let storage = NomtVerifierStorage::<StorageSpec, <MockDaSpec as DaSpec>::SlotHash>::new();
         let mut state_checkpoint: StateCheckpoint<Zk> =
             StateCheckpoint::with_witness(storage.clone(), witness, &MockKernel::<Zk>::default());
         state_value.set(&11, &mut state_checkpoint)?;
@@ -273,7 +274,7 @@ fn test_witness_round_trip() -> Result<(), Infallible> {
 /// for a `StateValue`
 #[test]
 fn test_borrow_and_get_state_value() {
-    let storage_manager = SimpleStorageManager::<StorageSpec>::new();
+    let storage_manager = SimpleNomtStorageManager::<StorageSpec>::new();
     let storage = storage_manager.create_storage();
     let mut state = StateCheckpoint::<TestSpec>::new(storage, &MockKernel::<TestSpec>::default());
     let mut state_value = StateValue::with_codec(Prefix::new(vec![0]), BorshCodec);
@@ -297,7 +298,7 @@ fn test_borrow_and_get_state_value() {
 /// for a `StateValue`
 #[test]
 fn test_borrow_and_save_state_value() {
-    let storage_manager = SimpleStorageManager::<StorageSpec>::new();
+    let storage_manager = SimpleNomtStorageManager::<StorageSpec>::new();
     let storage = storage_manager.create_storage();
     let mut state = StateCheckpoint::<TestSpec>::new(storage, &MockKernel::<TestSpec>::default());
     let mut state_value = StateValue::<i32>::with_codec(Prefix::new(vec![0]), BorshCodec);
@@ -336,7 +337,7 @@ fn test_borrow_and_save_state_value() {
 /// for a `StateMap`
 #[test]
 fn test_borrow_and_get_state_map() {
-    let storage_manager = SimpleStorageManager::<StorageSpec>::new();
+    let storage_manager = SimpleNomtStorageManager::<StorageSpec>::new();
     let storage = storage_manager.create_storage();
     let mut state = StateCheckpoint::<TestSpec>::new(storage, &MockKernel::<TestSpec>::default());
     let mut state_map = StateMap::with_codec(Prefix::new(vec![0]), BorshCodec);
@@ -366,7 +367,7 @@ fn test_borrow_and_get_state_map() {
 /// for a `StateValue`
 #[test]
 fn test_borrow_and_save_state_map() {
-    let storage_manager = SimpleStorageManager::<StorageSpec>::new();
+    let storage_manager = SimpleNomtStorageManager::<StorageSpec>::new();
     let storage = storage_manager.create_storage();
     let mut state = StateCheckpoint::<TestSpec>::new(storage, &MockKernel::<TestSpec>::default());
     let mut state_map = StateMap::with_codec(Prefix::new(vec![0]), BorshCodec);

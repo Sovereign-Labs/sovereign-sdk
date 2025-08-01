@@ -5,14 +5,14 @@ use sov_modules_api::capabilities::mocks::MockKernel;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::{ApiStateAccessor, KernelStateValue, StateCheckpoint};
 use sov_state::{BorshCodec, Prefix};
-use sov_test_utils::storage::{SimpleNomtStorageManager, SimpleStorageManager};
+use sov_test_utils::storage::{SimpleNomtStorageManager};
 use sov_test_utils::TestNomtSpec;
 
 use crate::state_tests::*;
 
 #[test]
 fn test_jmt_archival_state_updates_correctly() -> Result<(), Infallible> {
-    let storage_manager = SimpleStorageManager::new();
+    let storage_manager = SimpleNomtStorageManager::new();
     archival_state_updates_correctly::<TestSpec, _>(storage_manager)
 }
 
