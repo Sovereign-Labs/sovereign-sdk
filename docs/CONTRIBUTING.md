@@ -1,6 +1,6 @@
 # Contributing to Sovereign SDK
 
-We welcome contributions from the entire community to enhance the Sovereign SDK. Feel free to submit suggestions, report bugs, propose pull requests, or provide valuable feedback following the guidelines outlined in this document.
+We welcome contributions from the entire community to enhance the Sovereign SDK. Feel free to submit suggestions, report bugs, propose pull requests, or provide feedback following the guidelines outlined in this document. Unfortunately, we are unable to accept typo fixes and other cosmetic changes from first-time contributors due to spam.
 
 ## Setting up your editor
 

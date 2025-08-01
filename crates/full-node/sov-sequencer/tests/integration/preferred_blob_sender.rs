@@ -85,7 +85,7 @@ async fn test_discard_oversized_blobs() {
 
     test_rollup.da_service.produce_block_now().await.unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
 
     // Blob with this transaction will be discarded becuse the blob is bigger than `MAX_ALLOWED_DATA_SIZE_RETURNED_BY_BLOB_STORAGE`
     let tx = tx_set_many_values(&admin.private_key, 0, vec![7; 10000]);

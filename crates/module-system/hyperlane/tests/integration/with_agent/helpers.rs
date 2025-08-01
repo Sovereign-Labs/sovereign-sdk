@@ -174,7 +174,7 @@ pub async fn setup_rollup(
     if wait_for_finalized_slot {
         // Give rollup to process a couple finalized blocks before starting accepting transactions.
         let mut finalized_slots_sub = rollup
-            .api_client
+            .api_client()
             .subscribe_finalized_slots()
             .await
             .expect("failed to subscribe to finalized slots");

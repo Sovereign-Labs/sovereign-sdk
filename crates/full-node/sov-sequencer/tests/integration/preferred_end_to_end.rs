@@ -87,7 +87,7 @@ impl DaLayerWithSubscription {
         let da_layer = test_rollup.da_service.da_layer().clone();
         let state_update_subscription = test_rollup.subscribe_state_updates().await;
         let slot_subscription = test_rollup
-            .api_client
+            .api_client()
             .subscribe_slots_with_children(IncludeChildren::new(true))
             .await;
         Self {
@@ -314,7 +314,7 @@ async fn txs_below_min_fee_are_rejected() {
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(5).await;
 
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
     let tx = tx_set_value(&admin.private_key, 0, 7);
     let Err(e) = client
         .accept_tx(&api_types::AcceptTxBody {
@@ -405,7 +405,7 @@ async fn sequencer_filled_up_block() {
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(5).await;
 
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
 
     {
         let gas_to_charge = gas_limit
@@ -505,7 +505,7 @@ async fn flaky_seq_behind_deferred_slots_count_simple_lagging() {
     let Some(test_rollup) = test_rollup else {
         return;
     };
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
     // Sleep for the rollup to start up
     sleep(Duration::from_millis(500)).await;
 
@@ -654,7 +654,7 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     let Some(test_rollup) = test_rollup else {
         return;
     };
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
     // Sleep for the rollup to start up
     sleep(Duration::from_millis(500)).await;
 
@@ -699,7 +699,7 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     // Restart the rollup
     tracing::info!("Restarting rollup after exceeding deferred_slots_count");
     let test_rollup = builder.start().await.unwrap();
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
 
     // Give the rollup time to process the backlog and enter recovery mode
     tokio::time::sleep(Duration::from_millis(1000)).await;
@@ -858,7 +858,7 @@ async fn seq_out_of_gas_for_pre_checks() {
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(5).await;
 
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
     test_rollup.pause_preferred_batches().await;
 
     // Produce the first transaction that nearly exhausts the gas slot limit.
@@ -919,7 +919,7 @@ async fn max_batch_size() {
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(5).await;
 
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
 
     // The transaction is rejected because it is too large.
     {
@@ -1008,7 +1008,7 @@ async fn test_sequencer_getters() {
     };
 
     // Set up the rollup the usual way.
-    let mut slot_subscription = test_rollup.api_client.subscribe_slots().await.unwrap();
+    let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     test_rollup
         .da_service
         .produce_n_blocks_now(5)
@@ -1052,7 +1052,7 @@ async fn test_sequencer_getters() {
         for _ in 0..7 {
             let tx = tx_set_value(&admin.private_key, tx_number, tx_number);
             let resp = test_rollup
-                .api_client
+                .api_client()
                 .send_raw_tx_to_sequencer_with_retry(&tx)
                 .await
                 .unwrap();
@@ -1061,18 +1061,18 @@ async fn test_sequencer_getters() {
         }
         test_rollup.da_service.produce_block_now().await.unwrap();
         slot_subscription.next().await;
-        check_responses(0, responses.clone(), test_rollup.api_client.clone()).await;
-        check_responses(5, responses.clone(), test_rollup.api_client.clone()).await;
+        check_responses(0, responses.clone(), test_rollup.api_client().clone()).await;
+        check_responses(5, responses.clone(), test_rollup.api_client().clone()).await;
     }
 
-    check_responses(0, responses.clone(), test_rollup.api_client.clone()).await;
-    check_responses(5, responses.clone(), test_rollup.api_client.clone()).await;
+    check_responses(0, responses.clone(), test_rollup.api_client().clone()).await;
+    check_responses(5, responses.clone(), test_rollup.api_client().clone()).await;
 
     // Now, check the `get_tx` endpoint by iterating through all the txs we generated.
     // And fetching each tx by its id.
     for response in responses.iter() {
         let tx_response = test_rollup
-            .api_client
+            .api_client()
             .sequencer_get_tx(&response.id)
             .await
             .unwrap();
@@ -1093,7 +1093,7 @@ async fn test_sequencer_getters() {
     let mut page_cursor: Option<String> = None;
     while i < all_events.len() {
         let response = test_rollup
-            .api_client
+            .api_client()
             .sequencer_list_events(Some(page), page_cursor.as_deref(), Some(9)) // Use page size 9 because it's relatively prime to our number of events. This should trigger more edge cases
             .await
             .unwrap()
@@ -1123,7 +1123,7 @@ async fn test_sequencer_event_stream_filtering() {
     };
 
     // Set up the rollup the usual way.
-    let mut slot_subscription = test_rollup.api_client.subscribe_slots().await.unwrap();
+    let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     test_rollup
         .da_service
         .produce_n_blocks_now(5)
@@ -1133,25 +1133,29 @@ async fn test_sequencer_event_stream_filtering() {
         let _ = slot_subscription.next().await.unwrap().unwrap();
     }
 
-    let mut all_events = test_rollup.api_client.subscribe_to_events().await.unwrap();
+    let mut all_events = test_rollup
+        .api_client()
+        .subscribe_to_events()
+        .await
+        .unwrap();
     let mut value_setter_cpu_heavy_events = test_rollup
-        .api_client
+        .api_client()
         .subscribe_to_events_with_filter("ValueSetter/RanCPUHeavyOperation")
         .await
         .unwrap();
     let mut bank_events = test_rollup
-        .api_client
+        .api_client()
         .subscribe_to_events_with_filter("Bank/*")
         .await
         .unwrap();
     let mut value_setter_and_bank_events = test_rollup
-        .api_client
+        .api_client()
         .subscribe_to_events_with_filter("Bank/*,ValueSetter/*")
         .await
         .unwrap();
     let tx = tx_set_value(&admin.private_key, 0, 1000);
     let _ = test_rollup
-        .api_client
+        .api_client()
         .accept_tx(&api_types::AcceptTxBody {
             body: BASE64_STANDARD.encode(&tx),
         })
@@ -1203,7 +1207,7 @@ async fn max_batch_execution_time() {
         return;
     };
 
-    let mut slot_subscription = test_rollup.api_client.subscribe_slots().await.unwrap();
+    let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     test_rollup
         .da_service
         .produce_n_blocks_now(5)
@@ -1214,7 +1218,7 @@ async fn max_batch_execution_time() {
     }
     tokio::time::sleep(Duration::from_millis(10)).await; // Ensure that the slots have propagated to the sequencer
 
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
 
     // A helper function to get the next block and assert that it has the expected number of batches.
     // Because it's async, we pass a clone of the client to avoid borrow checking headaches.
@@ -1381,8 +1385,8 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
     sleep(Duration::from_millis(200)).await;
     test_rollup.da_service.set_delay_blobs_by(100).await;
 
-    let client = test_rollup.api_client.clone();
-    let mut slot_subscription = test_rollup.api_client.subscribe_slots().await.unwrap();
+    let client = test_rollup.api_client().clone();
+    let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     for i in 0..100 {
         let tx = tx_set_value(&admin.private_key, i, i);
         client
@@ -1420,7 +1424,7 @@ async fn test_rollup_emits_all_slot_notifications() {
     };
 
     let nb_of_blocks = 10;
-    let mut slot_subscription = test_rollup.api_client.subscribe_slots().await.unwrap();
+    let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     test_rollup
         .da_service
         .produce_n_blocks_now(nb_of_blocks)
@@ -1451,7 +1455,7 @@ async fn rollup_shuts_down_if_blob_sender_fails() {
     };
 
     let nb_of_blocks = 5 + default_ideal_lag_behind_finalized_slot() as usize;
-    let mut slot_subscription = test_rollup.api_client.subscribe_slots().await.unwrap();
+    let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     test_rollup
         .da_service
         .produce_n_blocks_now(nb_of_blocks)
@@ -1463,7 +1467,7 @@ async fn rollup_shuts_down_if_blob_sender_fails() {
         slot_subscription.next().await.unwrap().unwrap();
     }
 
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
     let tx = tx_set_value(&admin.private_key, 0, 9);
 
     tracing::warn!("accepting tx");
@@ -1494,7 +1498,7 @@ async fn rollup_shuts_down_if_blob_processing_timeouts() {
     };
 
     let nb_of_blocks = 5;
-    let mut slot_subscription = test_rollup.api_client.subscribe_slots().await.unwrap();
+    let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     test_rollup
         .da_service
         .produce_n_blocks_now(nb_of_blocks)
@@ -1508,7 +1512,7 @@ async fn rollup_shuts_down_if_blob_processing_timeouts() {
     // Send a transaction to ensure a batch is created.
     let tx = tx_set_value(&admin.private_key, 0, 9);
     test_rollup
-        .api_client
+        .api_client()
         .accept_tx(&api_types::AcceptTxBody {
             body: BASE64_STANDARD.encode(&tx),
         })
@@ -1533,7 +1537,7 @@ async fn rollup_shuts_down_if_panic_is_triggered() {
     };
 
     let nb_of_blocks = 5;
-    let mut slot_subscription = test_rollup.api_client.subscribe_slots().await.unwrap();
+    let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     test_rollup
         .da_service
         .produce_n_blocks_now(nb_of_blocks)
@@ -1544,7 +1548,7 @@ async fn rollup_shuts_down_if_panic_is_triggered() {
         slot_subscription.next().await.unwrap().unwrap();
     }
 
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
     sleep(Duration::from_millis(500)).await;
 
     // Send a test transaction to make sure everything is working.
@@ -1590,7 +1594,7 @@ async fn flaky_seq_back_pressure() {
 
     sleep(Duration::from_millis(200)).await;
 
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
     let tx = tx_set_value(&admin.private_key, 0, 9);
 
     client
@@ -1660,12 +1664,12 @@ async fn seq_many_invalid_txs() {
         .produce_n_blocks_now(5)
         .await
         .unwrap();
-    let mut slot_subscription = test_rollup.api_client.subscribe_slots().await.unwrap();
+    let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     for _ in 0..5 {
         slot_subscription.next().await.unwrap().unwrap();
     }
 
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
     let tx = tx_set_value(&admin.private_key, 100, 0);
 
     client
@@ -1817,7 +1821,7 @@ async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
     // at the time we submit the transaction - if we change the sequencer logic, this number may need to be updated.
     let tx = tx_set_value(&admin.private_key, 0, 0);
     test_rollup
-        .api_client
+        .api_client()
         .accept_tx(&api_types::AcceptTxBody {
             body: BASE64_STANDARD.encode(&tx),
         })
@@ -1831,7 +1835,7 @@ async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
     // at the time we submit the transaction - if we change the sequencer logic, this number may need to be updated.
     let tx = tx_builder(admin.private_key.clone());
     test_rollup
-        .api_client
+        .api_client()
         .accept_tx(&api_types::AcceptTxBody {
             body: BASE64_STANDARD.encode(&tx),
         })
@@ -1884,7 +1888,7 @@ async fn events_are_returned_in_tx_response() {
         .unwrap();
     sleep(Duration::from_millis(200)).await;
 
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
     let tx = tx_set_value(&admin.private_key, 0, 7);
     let response = client
         .accept_tx(&api_types::AcceptTxBody {
@@ -1918,7 +1922,7 @@ async fn delayed_tx_is_processed_after_delay() {
         .unwrap();
     sleep(Duration::from_millis(200)).await;
 
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
 
     let delayed_tx = tx_delayed_call(&admin.private_key, 0);
     let regular_tx = tx_set_value(&admin.private_key, 0, 7);
@@ -1980,7 +1984,7 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
         .unwrap();
     sleep(Duration::from_millis(200)).await;
 
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
 
     let first_tx = tx_set_value_and_sleep(&admin.private_key, 0, 0, 1200);
     let delayed_tx = tx_delayed_call(&admin.private_key, 1);
@@ -2149,7 +2153,7 @@ async fn visible_hashes_match_across_node_and_sequencer() {
 
     let mut state_update_subscription = test_rollup.subscribe_state_updates().await.unwrap();
     let mut slot_subscription = test_rollup
-        .api_client
+        .api_client()
         .subscribe_slots_with_children(IncludeChildren::new(true))
         .await
         .unwrap();
@@ -2165,10 +2169,10 @@ async fn visible_hashes_match_across_node_and_sequencer() {
     async fn get_state_root(test_rollup: &TestRollup<TestBlueprint>) -> StateRootResponse {
         let state_root_url = format!(
             "{}/modules/hooks-count/state/latest-state-root/",
-            test_rollup.api_client.baseurl()
+            test_rollup.api_client().baseurl()
         );
         let response = test_rollup
-            .api_client
+            .api_client()
             .client()
             .get(state_root_url)
             .send()
@@ -2195,7 +2199,7 @@ async fn visible_hashes_match_across_node_and_sequencer() {
         // because we start a new rollup block (with a new visible hash) each time we start a batch.
         let tx = tx_set_value(&admin.private_key, current_nonce, i).clone();
         test_rollup
-            .api_client
+            .api_client()
             .accept_tx(&api_types::AcceptTxBody {
                 body: BASE64_STANDARD.encode(&tx),
             })
@@ -2214,7 +2218,7 @@ async fn visible_hashes_match_across_node_and_sequencer() {
         let tx = tx_assert_state_root(&admin.private_key, current_nonce, root.root_hashes.clone())
             .clone();
         test_rollup
-            .api_client
+            .api_client()
             .accept_tx(&api_types::AcceptTxBody {
                 body: BASE64_STANDARD.encode(&tx),
             })
@@ -2311,7 +2315,7 @@ async fn heavy_blob_submission_long_delay() {
     // Spawn 20 workers to spam the sequencer with load.
     let workers = (0..50)
         .map(|_| {
-            let client = test_rollup.api_client.clone();
+            let client = test_rollup.api_client().clone();
             let nonce = nonce.clone();
             let key = admin.private_key.clone();
             tokio::spawn(async move {
@@ -2417,7 +2421,7 @@ async fn flaky_test_hooks_state_is_visible() {
     sleep(Duration::from_millis(200)).await;
 
     // By the time we query here, the sequencer has *started* the next slot, so it has run the begin slot hook a second time.
-    let client = NodeClient::new(test_rollup.api_client.baseurl())
+    let client = NodeClient::new(test_rollup.api_client().baseurl())
         .await
         .unwrap();
 
@@ -2787,7 +2791,7 @@ pub(crate) async fn setup_test_rollup_with_initial_state(
     // logic not prone to race conditions.
     sleep(Duration::from_millis(500)).await;
 
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
 
     let mut test_state = TestState::default();
 
@@ -2895,7 +2899,7 @@ pub(crate) async fn run_action_against_test_rollup(
             };
 
             anyhow::ensure!(test_rollup
-                .api_client
+                .api_client()
                 .accept_tx(&api_types::AcceptTxBody {
                     body: BASE64_STANDARD.encode(&tx),
                 })
@@ -2913,7 +2917,7 @@ pub(crate) async fn run_action_against_test_rollup(
             test_state.current_value += 1;
 
             test_rollup
-                .api_client
+                .api_client()
                 .accept_tx(&api_types::AcceptTxBody {
                     body: BASE64_STANDARD.encode(&tx),
                 })
@@ -2931,7 +2935,7 @@ pub(crate) async fn run_action_against_test_rollup(
                 test_state.current_value += 1;
 
                 test_rollup
-                    .api_client
+                    .api_client()
                     .accept_tx(&api_types::AcceptTxBody {
                         body: BASE64_STANDARD.encode(&tx),
                     })
