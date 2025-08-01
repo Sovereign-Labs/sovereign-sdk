@@ -144,7 +144,8 @@ macro_rules! generate_runtime_without_capabilities {
                 .unwrap();
 
                 let schema_endpoint = StandardSchemaEndpoint::new(
-                    &schema
+                    &schema,
+                    Self::CHAIN_HASH.into(),
                 )
                 .expect("Failed to initialize StandardSchemaEndpoint");
                 let axum_router = axum_router.merge(schema_endpoint.axum_router());

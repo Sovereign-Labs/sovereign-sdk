@@ -116,6 +116,7 @@ where
         let schema_endpoint = StandardSchemaEndpoint::new(
             &serde_json::from_str(__generated::SCHEMA_JSON)
                 .expect("Failed to deserialize schema json"),
+            Self::CHAIN_HASH.into(),
         )
         .expect("Failed to initialize StandardSchemaEndpoint");
         let axum_router = axum_router.merge(schema_endpoint.axum_router());
