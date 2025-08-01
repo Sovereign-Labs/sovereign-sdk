@@ -1,4 +1,6 @@
 #![no_main]
+// A function inside the `fuzz_target` macro raises this warning
+#![allow(non_snake_case)]
 
 use std::process::Command;
 
