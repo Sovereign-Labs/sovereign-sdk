@@ -55,7 +55,7 @@ impl PostgresBackend {
             .with_min_delay(Duration::from_millis(2))
             .with_max_delay(Duration::from_millis(500))
             .with_factor(2.0)
-            .with_max_times(8);
+            .with_max_times(10);
 
         let pool = run_with_retries!(
             &backoff_policy,
