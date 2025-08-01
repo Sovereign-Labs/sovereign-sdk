@@ -48,7 +48,8 @@ total-clean:
     	echo "Running cargo clean in $$dir"; \
     	(cargo clean --manifest-path "$$dir/Cargo.toml"); \
     done;
-	rm -rf "examples/demo-rollup/tests/evm/uniswap/node_modules"
+	rm -rf "examples/demo-rollup/tests/evm/uniswap/node_modules";
+	rm -rf "soak_data/examples/demo-rollup/sov-soak-testing/soak_data"
 
 test:  ## Runs test suite using next test
 	@cargo nextest run --no-fail-fast --status-level skip --all-features

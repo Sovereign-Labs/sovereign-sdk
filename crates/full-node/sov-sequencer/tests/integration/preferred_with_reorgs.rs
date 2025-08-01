@@ -145,20 +145,24 @@ impl TestState {
         client: &sov_api_spec::Client,
         max_slots_to_wait: u64,
     ) -> anyhow::Result<Vec<(TxHash, TxStatus)>> {
+        let head_slot = client.get_latest_slot(None).await?;
         tracing::info!(
             txs_to_wait = self.txs_to_wait.len(),
+            head_slot_number = head_slot.number,
+            head_slot_hash = ?head_slot.hash,
             "Start gathering statuses"
         );
-        let head_slot = client.get_latest_slot(None).await?;
         let head_slot = head_slot.number;
+
         let wait_to = head_slot + config_deferred_slots_count() + 5;
         tracing::info!(current_head_slot = head_slot, wait_max_till_slot= %wait_to, "Start gathering all statuses");
         let mut last_tx_statuses: Vec<(HexHash, TxStatus)> =
             Vec::with_capacity(self.txs_to_wait.len());
 
         let mut slots = 0;
+        let mut last_inspected_slot_number = head_slot;
+        let mut empty_subs = 0;
         while !self.txs_to_wait.is_empty() {
-            slots += 1;
             if slots > max_slots_to_wait {
                 anyhow::bail!(
                     "Didn't receive status for all transactions in {} slots. Remaining txs: {:?}",
@@ -166,10 +170,26 @@ impl TestState {
                     self.txs_to_wait,
                 );
             }
-            let Some(next_slot) = self.slots_subscription.try_next().await? else {
-                continue;
+            if empty_subs >= 10 {
+                anyhow::bail!(
+                    "No data received via subscription in {} subscriptions",
+                    empty_subs
+                );
+            }
+            let next_slot = match self.slots_subscription.try_next().await? {
+                None => {
+                    tracing::warn!(%last_inspected_slot_number, "No slot received, problem with node");
+                    // Need to resubscribe from the last inspected slot,
+                    // but for now we just tolerate empty
+                    empty_subs += 1;
+                    continue;
+                }
+                Some(n) => n,
             };
-            tracing::info!(slot_number = next_slot.number, "Received slot");
+            empty_subs = 0;
+            slots += 1;
+            last_inspected_slot_number = next_slot.number;
+            tracing::info!(slot_number = next_slot.number, hash = ?next_slot.hash, "Received slot");
             if next_slot.number > wait_to {
                 break;
             }
