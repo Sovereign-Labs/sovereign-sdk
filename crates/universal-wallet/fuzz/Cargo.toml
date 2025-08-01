@@ -1,0 +1,47 @@
+[package]
+name = "universal-wallet-fuzz"
+publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { workspace = true, features = ["derive"] }
+borsh = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true, features = ["alloc", "derive"] }
+serde_json = { workspace = true }
+sov-universal-wallet = { workspace = true, package = "sov-universal-wallet", features = [
+  "serde",
+] }
+sov-modules-api = { workspace = true, features = ["arbitrary"] }
+sov-rollup-interface = { workspace = true, features = ["arbitrary"] }
+
+[lib]
+name = "universal_wallet_fuzz"
+path = "src/lib.rs"
+
+[[bin]]
+name = "fuzz_display"
+path = "fuzz_targets/fuzz_display.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_json_to_borsh"
+path = "fuzz_targets/fuzz_json_to_borsh.rs"
+test = false
+doc = false
+bench = false
+
+[features]
+default = []
+js-compat = []

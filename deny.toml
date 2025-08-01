@@ -17,7 +17,7 @@ allow = [
   "Apache-2.0 WITH LLVM-exception",
   "LicenseRef-Sovereign-Permissionless-Commercial-License",
   "Zlib",
-  "BSL-1.0",                                              # Relevant discussion: <https://github.com/Sovereign-Labs/sovereign-sdk-wip/pull/985#issuecomment-2242712349>.
+  "BSL-1.0",                                                # Relevant discussion: <https://github.com/Sovereign-Labs/sovereign-sdk-wip/pull/985#issuecomment-2242712349>.
 ]
 
 [[licenses.clarify]]
@@ -372,6 +372,11 @@ license-files = []
 
 [[licenses.clarify]]
 name = "sov-build"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "universal-wallet-fuzz"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 

@@ -60,6 +60,7 @@ members = [
     "crates/universal-wallet/schema",
     "crates/universal-wallet/macros",
     "crates/universal-wallet/macro-helpers",
+    "crates/universal-wallet/fuzz",
     "crates/utils/sov-eth-client",
     "crates/utils/workspace-hack",
     # Hyperlane
