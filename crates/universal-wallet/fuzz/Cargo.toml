@@ -18,9 +18,7 @@ borsh = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true, features = ["alloc", "derive"] }
 serde_json = { workspace = true }
-sov-universal-wallet = { workspace = true, package = "sov-universal-wallet", features = [
-  "serde",
-] }
+sov-universal-wallet = { workspace = true, features = ["serde"] }
 sov-modules-api = { workspace = true, features = ["arbitrary"] }
 sov-rollup-interface = { workspace = true, features = ["arbitrary"] }
 
