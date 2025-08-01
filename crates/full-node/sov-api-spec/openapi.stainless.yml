@@ -118,7 +118,9 @@ targets:
     publish:
       pypi: false
 settings:
-  license: Sovereign Labs Community Software License
+  license:
+    name: Sovereign Labs Community Software License
+    contents: https://github.com/Sovereign-Labs/sovereign-sdk/blob/nightly/LICENSE.md
 client_settings: {}
 environments:
   local: http://localhost:12346
