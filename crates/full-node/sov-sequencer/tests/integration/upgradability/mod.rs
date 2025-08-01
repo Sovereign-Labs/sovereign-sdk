@@ -297,8 +297,6 @@ async fn check_start_at(finalization_blocks: u32) {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
     let client = test_rollup.client.clone();
     let current_height = get_height(&client).await.unwrap();
 
@@ -307,6 +305,7 @@ async fn check_start_at(finalization_blocks: u32) {
     // Verify that the last processed height was `stop_at_height`. Since we called `pause_update_state`,
     // we should see the final height before the shutdown.
     assert_eq!(current_height, stop_at_height);
+    test_rollup.shutdown().await.unwrap();
 }
 
 async fn assert_rollup_processes_only_finalized_blocks(client: &NodeClient) {
