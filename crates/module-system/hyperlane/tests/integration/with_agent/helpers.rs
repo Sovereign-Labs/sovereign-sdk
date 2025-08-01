@@ -203,7 +203,7 @@ impl HyperlaneBuilder {
         let has_custom_image = !matches!(docker_image, Err(env::VarError::NotPresent));
 
         let docker_image =
-            docker_image.unwrap_or_else(|_| "ghcr.io/eigerco/hyperlane:latest".into());
+            docker_image.unwrap_or_else(|_| "ghcr.io/ross-weir/hyperlane:latest".into());
         let (name, tag) = docker_image
             .split_once(':')
             .unwrap_or((&docker_image, "latest"));
