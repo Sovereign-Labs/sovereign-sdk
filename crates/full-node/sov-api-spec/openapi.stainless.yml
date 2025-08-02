@@ -112,11 +112,6 @@ targets:
     options:
       browser:
         state: allow
-  python:
-    package_name: sovereign_sdk
-    production_repo: null
-    publish:
-      pypi: false
 settings:
   license:
     name: Sovereign Labs Community Software License

@@ -636,6 +636,9 @@ components:
                 additionalProperties: true
               chain_hash:
                 $ref: "#/components/schemas/HexString"
+            required:
+              - schema
+              - chain_hash
     Constants:
       description: Constants of the rollup.
       content:
