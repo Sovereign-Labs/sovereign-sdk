@@ -61,7 +61,7 @@ async fn start_stop_empty(
     rollup_prover_config: RollupProverConfig<Risc0>,
 ) -> anyhow::Result<()> {
     let collector = LogCollector::new(Level::WARN);
-    let new_env_filter = EnvFilter::from_str("debug")?;
+    let new_env_filter = EnvFilter::from_str("debug,jmt=warn")?;
     let fmt_layer = fmt::layer().with_filter(new_env_filter);
     let subscriber = registry().with(fmt_layer).with(collector.clone());
     subscriber.init();

@@ -162,7 +162,7 @@ pub const TEST_DEFAULT_SEQUENCER_ADDRESS: &str =
     "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf";
 
 /// Default wait time value for different [`sov_mock_da::BlockProducingConfig`] value in tests.
-pub const TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS: u64 = 100;
+pub const TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS: u64 = 300;
 /// Default [`BlockProducingConfig`] for tests that need periodic block producing.
 pub const TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING: BlockProducingConfig =
     BlockProducingConfig::Periodic {
