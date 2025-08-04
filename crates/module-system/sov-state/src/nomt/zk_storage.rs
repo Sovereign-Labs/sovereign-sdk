@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use nomt_core::hasher::BinaryHasher;
 use nomt_core::proof::MultiProof;
 use nomt_core::trie::{KeyPath, LeafData, Node, ValueHash};
+#[cfg(feature = "test-utils")]
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
 

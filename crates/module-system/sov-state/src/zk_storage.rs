@@ -4,6 +4,7 @@ use jmt::storage::TreeReader;
 use jmt::JellyfishMerkleTree;
 #[cfg(feature = "bench")]
 use sov_modules_macros::cycle_tracker;
+#[cfg(feature = "test-utils")]
 use sov_rollup_interface::common::SlotNumber;
 
 use crate::cache::{OrderedReadsAndWrites, StateAccesses};

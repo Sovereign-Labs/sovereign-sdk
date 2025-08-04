@@ -9,6 +9,7 @@ use derivative::Derivative;
 use jmt::KeyHash;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+#[cfg(feature = "native")]
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::{typenum, Digest};
 use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
