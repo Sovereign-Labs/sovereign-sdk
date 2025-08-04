@@ -349,7 +349,7 @@ async fn test_archival_state_with_pruning() {
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(5).await;
-    let client = test_rollup.api_client.clone();
+    let client = test_rollup.api_client().clone();
 
     for i in 0..150 {
         let tx = tx_set_value(&admin.private_key, i, i);
