@@ -1,3 +1,6 @@
+# 2025-08-04
+- **BREAKING CHANGE** #1430 changes the layout of the state database to support more efficient caching and pruning. **This requires resyncing any existing nodes on upgrade**. 
+
 # 2025-08-01
 - #1460 Adds `chain_hash` to the `/rollup/schema` endpoint response, this requires passing the chain hash during endpoint initialization.
 
