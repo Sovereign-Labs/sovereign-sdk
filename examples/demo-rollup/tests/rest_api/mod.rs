@@ -341,7 +341,7 @@ async fn check_historical_data(client: &demo_stf_json_client::Client) -> anyhow:
         state_vec_element_response,
         "invalid rollup height",
         "error",
-        "Impossible to get the rollup state at the specified height. Please ensure you have queried the correct height.",
+        "Impossible to get the rollup state at the specified height. The requested height may have been pruned, or it may be in the future. Please ensure you have queried the correct height.",
     );
     Ok(())
 }
