@@ -49,7 +49,7 @@ fn setup() -> (TestRunner<RT, S>, TestUser<S>) {
 }
 
 const DOMAIN: Eip712Domain = eip712_domain! {
-    name: "CallMessage",
+    name: "Transaction",
     version: "1",
     chain_id: 4321,
     verifying_contract: address!("0000000000000000000000000000000000000000"),

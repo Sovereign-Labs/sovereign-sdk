@@ -6,7 +6,9 @@ use sov_modules_api::capabilities::{
     AuthenticationOutput, BatchFromUnregisteredSequencer, FatalError, TransactionAuthenticator,
     UnregisteredAuthenticationError,
 };
-use sov_modules_api::transaction::{AuthenticatedTransactionAndRawHash, Transaction, VersionedTx};
+use sov_modules_api::transaction::{
+    AuthenticatedTransactionAndRawHash, Transaction, TransactionVerificationError, VersionedTx,
+};
 #[cfg(feature = "native")]
 use sov_modules_api::FullyBakedTx;
 use sov_modules_api::{
@@ -123,7 +125,7 @@ fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
     match &tx.versioned_tx {
         VersionedTx::V0(tx_v0) => {
             verify_chain_id(tx_v0, raw_tx_hash)?;
-            // verify_signature(&tx, chain_hash, raw_tx_hash, meter)?;
+            verify_eip712_signature(&tx, chain_hash, raw_tx_hash, meter)?;
             let authorization_data = extract_authorization_data::<S, D>(tx_v0, raw_tx_hash, meter)?;
 
             let runtime_call = tx_v0.runtime_call.clone();
@@ -135,4 +137,20 @@ fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
             Ok((tx_and_raw_hash, authorization_data, runtime_call))
         }
     }
+}
+
+/// Verifies the EIP712 transaction signature.
+fn verify_eip712_signature<S: Spec, D: DispatchCall<Spec = S>>(
+    tx: &Transaction<D, S>,
+    chain_hash: &[u8; 32],
+    raw_tx_hash: TxHash,
+    meter: &mut impl GasMeter<Spec = S>,
+) -> Result<(), AuthenticationError> {
+    tx.verify_eip712(chain_hash, meter).map_err(|e| match e {
+        TransactionVerificationError::GasError(_) => AuthenticationError::OutOfGas(e.to_string()),
+        _ => AuthenticationError::FatalError(
+            FatalError::SigVerificationFailed(e.to_string()),
+            raw_tx_hash,
+        ),
+    })
 }
