@@ -63,9 +63,7 @@ async fn start_stop_empty(
     let collector = LogCollector::new(Level::WARN);
     let new_env_filter = EnvFilter::from_str("debug")?;
     let fmt_layer = fmt::layer().with_filter(new_env_filter);
-    let subscriber = registry()
-        .with(fmt_layer)
-        .with(collector.clone());
+    let subscriber = registry().with(fmt_layer).with(collector.clone());
     subscriber.init();
 
     let rollup_storage_dir = Arc::new(tempfile::tempdir()?);
