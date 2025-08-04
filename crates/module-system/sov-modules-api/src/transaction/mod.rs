@@ -336,12 +336,12 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
     derive_more::Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, UniversalWallet,
 )]
 pub struct UnsignedTransaction<R: TransactionCallable, S: Spec> {
-    // The runtime call
-    runtime_call: R::Call,
-    // The generation number
-    generation: u64,
-    // Data related to fees and gas handling.
-    details: TxDetails<S>,
+    /// The runtime call
+    pub runtime_call: R::Call,
+    /// The generation number
+    pub generation: u64,
+    /// Data related to fees and gas handling.
+    pub details: TxDetails<S>,
 }
 // Manually implemented to ensure correct trait bounds for the same reason as for `Transaction`
 // above

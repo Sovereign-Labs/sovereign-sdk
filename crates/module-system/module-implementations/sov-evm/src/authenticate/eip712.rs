@@ -9,10 +9,8 @@ use sov_modules_api::capabilities::{
 use sov_modules_api::transaction::{
     AuthenticatedTransactionAndRawHash, Transaction, TransactionVerificationError, VersionedTx,
 };
-#[cfg(feature = "native")]
-use sov_modules_api::FullyBakedTx;
 use sov_modules_api::{
-    DispatchCall, GasMeter, MeteredBorshDeserialize, MeteredBorshDeserializeError,
+    DispatchCall, FullyBakedTx, GasMeter, MeteredBorshDeserialize, MeteredBorshDeserializeError,
     ProvableStateReader, RawTx, Runtime, Spec, TxHash,
 };
 use sov_state::User;

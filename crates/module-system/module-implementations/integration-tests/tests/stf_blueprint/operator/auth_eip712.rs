@@ -1,5 +1,5 @@
 use alloy_primitives::address;
-use alloy_sol_types::{eip712_domain, sol, Eip712Domain, SolStruct};
+use alloy_sol_types::{eip712_domain, Eip712Domain, SolStruct};
 use sov_address::{EthereumAddress, EvmCryptoSpec};
 use sov_evm::Eip712Authenticator;
 use sov_mock_da::{MockBlob, MockDaSpec};
@@ -8,6 +8,7 @@ use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::macros::config_value;
+use sov_modules_api::transaction::TxDetails;
 use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
 use sov_modules_api::{FullyBakedTx, PrivateKey, RawTx, Runtime, Spec, SuccessfulTxContents};
 use sov_rollup_interface::da::RelevantBlobs;
@@ -20,6 +21,7 @@ use sov_value_setter::CallMessage;
 type TestSpec =
     ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, EthereumAddress, Native, EvmCryptoSpec>;
 type S = TestSpec;
+
 generate_runtime! {
     name: TestRuntime,
     modules: [value_setter: ValueSetter<S>],
@@ -55,36 +57,43 @@ const DOMAIN: Eip712Domain = eip712_domain! {
     verifying_contract: address!("0000000000000000000000000000000000000000"),
 };
 
-sol! {
-    #[derive(Debug)]
-    struct TxDetails {
-        uint64 chain_id;
+pub mod sol_struct {
+    use alloy_sol_types::sol;
+
+    sol! {
+        #[derive(Debug)]
+        struct TxDetails {
+            uint64 chain_id;
+        }
     }
 }
 
-pub fn create_tx<S: Spec, RT: Runtime<S>>(
-    nonce: u64,
-    max_priority_fee_bips: PriorityFeeBips,
+pub fn create_utx<S: Spec, RT: Runtime<S>>(message: RT::Decodable) -> UnsignedTransaction<RT, S> {
+    let details = TxDetails {
+        max_priority_fee_bips: PriorityFeeBips::ZERO,
+        max_fee: TEST_DEFAULT_MAX_FEE,
+        gas_limit: None,
+        chain_id: config_value!("CHAIN_ID"),
+    };
+    UnsignedTransaction::new_with_details(message, 0, details)
+}
+
+pub fn sign_utx<S: Spec, RT: Runtime<S>>(
+    utx: UnsignedTransaction<RT, S>,
     signer: &TestUser<S>,
-    chain_id: u64,
-    message: RT::Decodable,
 ) -> Transaction<RT, S> {
-    let utx = UnsignedTransaction::new(
-        message,
-        chain_id,
-        max_priority_fee_bips,
-        TEST_DEFAULT_MAX_FEE,
-        nonce,
-        None,
-    );
-
-    let tx_details = TxDetails { chain_id };
-    let hash = tx_details.eip712_signing_hash(&DOMAIN);
+    let hash = utx.details.as_sol_struct().eip712_signing_hash(&DOMAIN);
     let pk = signer.private_key();
-
     let signature = pk.sign(hash.as_slice());
-    let signed_tx = utx.to_signed_tx(pk.pub_key(), signature);
-    signed_tx
+    utx.to_signed_tx(pk.pub_key(), signature)
+}
+
+pub fn create_tx<S: Spec, RT: Runtime<S>>(
+    message: RT::Decodable,
+    signer: &TestUser<S>,
+) -> Transaction<RT, S> {
+    let utx = create_utx::<S, RT>(message);
+    sign_utx::<S, RT>(utx, signer)
 }
 
 pub fn encode_message<S: Spec, RT: Runtime<S> + EncodeCall<ValueSetter<S>>>() -> RT::Decodable {
@@ -120,18 +129,13 @@ fn execute_tx(
 }
 
 #[test]
-fn test_eip712() {
+fn correct_signature_is_accepted() {
     let (runner, admin) = setup();
-    let tx = create_tx::<_, RT>(
-        0,
-        PriorityFeeBips::ZERO,
-        &admin,
-        config_value!("CHAIN_ID"),
-        encode_message::<_, RT>(),
-    );
+    let call = encode_message::<_, RT>();
+    let tx = create_tx::<_, RT>(call, &admin);
 
     let receipt = execute_tx(runner, tx);
     let TxEffect::Successful(SuccessfulTxContents { .. }) = receipt else {
-        panic!("Expected transaction to succeed, got: {:?}", receipt);
+        panic!("Expected transaction to succeed, got: {receipt:?}");
     };
 }

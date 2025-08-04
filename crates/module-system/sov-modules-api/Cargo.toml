@@ -96,7 +96,9 @@ arbitrary = [
 	"sov-test-utils/arbitrary",
 	"sov-mock-da/arbitrary",
 	"sov-bank/arbitrary",
-	"sov-modules-macros/arbitrary"
+	"sov-modules-macros/arbitrary",
+	"alloy-primitives/arbitrary",
+	"alloy-sol-types/arbitrary"
 ]
 bench = [
     "sov-metrics",
