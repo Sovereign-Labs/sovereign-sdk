@@ -9,7 +9,7 @@ use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
-use sov_modules_api::{FullyBakedTx, PrivateKey, RawTx, Runtime, Spec};
+use sov_modules_api::{FullyBakedTx, PrivateKey, RawTx, Runtime, Spec, SuccessfulTxContents};
 use sov_rollup_interface::da::RelevantBlobs;
 use sov_rollup_interface::stf::{TxEffect, TxReceiptContents};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
@@ -103,7 +103,7 @@ pub fn encode<S: Spec, RT: Runtime<S>>(tx: Transaction<RT, S>) -> FullyBakedTx {
 fn execute_tx(
     mut runner: TestRunner<RT, S>,
     tx: Transaction<RT, S>,
-) -> TxEffect<impl TxReceiptContents> {
+) -> TxEffect<impl TxReceiptContents<Successful = SuccessfulTxContents<S>>> {
     let serialized_tx = encode(tx);
     let txs: Vec<FullyBakedTx> = vec![serialized_tx];
     let blob = borsh::to_vec(&txs).unwrap();
@@ -131,5 +131,7 @@ fn test_eip712() {
     );
 
     let receipt = execute_tx(runner, tx);
-    dbg!(receipt);
+    let TxEffect::Successful(SuccessfulTxContents { .. }) = receipt else {
+        panic!("Expected transaction to succeed, got: {:?}", receipt);
+    };
 }

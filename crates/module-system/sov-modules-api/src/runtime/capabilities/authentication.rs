@@ -242,7 +242,7 @@ impl From<AuthenticationError> for UnregisteredAuthenticationError {
 }
 
 /// Verifies that the transaction has the correct chain ID.
-fn verify_chain_id<S: Spec, Call>(
+pub fn verify_chain_id<S: Spec, Call>(
     tx_v0: &crate::transaction::Version0<Call, S>,
     raw_tx_hash: TxHash,
 ) -> Result<(), AuthenticationError> {
@@ -275,7 +275,7 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
 }
 
 /// Extracts authorization data from a verified transaction.
-fn extract_authorization_data<S: Spec, D: DispatchCall<Spec = S>>(
+pub fn extract_authorization_data<S: Spec, D: DispatchCall<Spec = S>>(
     tx_v0: &crate::transaction::Version0<D::Decodable, S>,
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,

@@ -2,16 +2,16 @@ use std::marker::PhantomData;
 
 use sov_address::EvmCryptoSpec;
 use sov_modules_api::capabilities::{
-    self, calculate_hash_metered, AuthenticationError, AuthenticationOutput,
-    BatchFromUnregisteredSequencer, FatalError, TransactionAuthenticator,
+    self, calculate_hash_metered, extract_authorization_data, verify_chain_id, AuthenticationError,
+    AuthenticationOutput, BatchFromUnregisteredSequencer, FatalError, TransactionAuthenticator,
     UnregisteredAuthenticationError,
 };
-use sov_modules_api::transaction::Transaction;
+use sov_modules_api::transaction::{AuthenticatedTransactionAndRawHash, Transaction, VersionedTx};
 #[cfg(feature = "native")]
 use sov_modules_api::FullyBakedTx;
 use sov_modules_api::{
-    DispatchCall, MeteredBorshDeserialize, MeteredBorshDeserializeError, ProvableStateReader,
-    RawTx, Runtime, Spec,
+    DispatchCall, GasMeter, MeteredBorshDeserialize, MeteredBorshDeserializeError,
+    ProvableStateReader, RawTx, Runtime, Spec, TxHash,
 };
 use sov_state::User;
 
@@ -111,7 +111,28 @@ pub fn authenticate<
                 ));
             }
         };
+    verify_and_decode_tx::<S, D>(raw_tx_hash, tx, chain_hash, state)
+}
 
-    unimplemented!("verify_and_decode_tx");
-    // verify_and_decode_tx::<S, D>(raw_tx_hash, tx, chain_hash, state)
+fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
+    raw_tx_hash: TxHash,
+    tx: Transaction<D, S>,
+    chain_hash: &[u8; 32],
+    meter: &mut impl GasMeter<Spec = S>,
+) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
+    match &tx.versioned_tx {
+        VersionedTx::V0(tx_v0) => {
+            verify_chain_id(tx_v0, raw_tx_hash)?;
+            // verify_signature(&tx, chain_hash, raw_tx_hash, meter)?;
+            let authorization_data = extract_authorization_data::<S, D>(tx_v0, raw_tx_hash, meter)?;
+
+            let runtime_call = tx_v0.runtime_call.clone();
+            let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
+                raw_tx_hash,
+                authenticated_tx: tx_v0.details.clone().into(),
+            };
+
+            Ok((tx_and_raw_hash, authorization_data, runtime_call))
+        }
+    }
 }
