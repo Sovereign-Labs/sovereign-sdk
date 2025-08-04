@@ -231,14 +231,7 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
         })?;
         serialized_tx.extend_from_slice(chain_hash);
 
-        match &self.versioned_tx {
-            VersionedTx::V0(inner) => {
-                MeteredSignature::new::<S>(inner.signature.clone())
-                    .verify(&inner.pub_key, &serialized_tx, meter)
-                    .map_err(TransactionVerificationError::from)?;
-            }
-        }
-        Ok(())
+        self.verify_inner(&serialized_tx, meter)
     }
 
     /// Check whether the transaction has been signed correctly using EIP712.
@@ -264,14 +257,7 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
         };
         let eip712_hash = tx_details.eip712_signing_hash(&DOMAIN);
 
-        match &self.versioned_tx {
-            VersionedTx::V0(inner) => {
-                MeteredSignature::new::<S>(inner.signature.clone())
-                    .verify(&inner.pub_key, eip712_hash.as_slice(), meter)
-                    .map_err(TransactionVerificationError::from)?;
-            }
-        }
-        Ok(())
+        self.verify_inner(eip712_hash.as_slice(), meter)
     }
 
     /// Creates a new transaction with the provided metadata.
@@ -298,6 +284,21 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
         match self.versioned_tx {
             VersionedTx::V0(inner) => inner.runtime_call.clone(),
         }
+    }
+
+    fn verify_inner(
+        &self,
+        msg: &[u8],
+        meter: &mut impl GasMeter<Spec = S>,
+    ) -> Result<(), TransactionVerificationError<S::Gas>> {
+        match &self.versioned_tx {
+            VersionedTx::V0(inner) => {
+                MeteredSignature::new::<S>(inner.signature.clone())
+                    .verify(&inner.pub_key, msg, meter)
+                    .map_err(TransactionVerificationError::from)?;
+            }
+        }
+        Ok(())
     }
 
     fn to_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
