@@ -148,7 +148,7 @@ async fn test_generate_mockda_dataset_for_resync() -> anyhow::Result<()> {
                 known_values_to_set.next();
                 let tx = tx_set_value_for_check(tx_signer_key.clone(), *value, current_slot_number);
                 test_rollup
-                    .api_client
+                    .api_client()
                     .accept_tx(&sov_api_spec::types::AcceptTxBody {
                         body: BASE64_STANDARD.encode(&tx),
                     })
@@ -326,7 +326,7 @@ async fn sync_rollup_with_path(
     .await
     .context("Starting rollup failed")??;
 
-    let mut slot_subscription = test_rollup.api_client.subscribe_slots().await?;
+    let mut slot_subscription = test_rollup.api_client().subscribe_slots().await?;
     let demo_client = demo_stf_json_client::Client::new(&test_rollup.client.base_url);
 
     // Validate state at each sync height
@@ -356,7 +356,7 @@ async fn sync_rollup_with_path(
 
     tokio::time::timeout(ROLLUP_SYNC_TIMEOUT, async {
         while let SyncStatus::Syncing { .. } =
-            *test_rollup.api_client.get_sync_status().await.unwrap()
+            *test_rollup.api_client().get_sync_status().await.unwrap()
         {
             tokio::time::sleep(Duration::from_secs(2)).await;
         }
@@ -373,7 +373,7 @@ async fn sync_rollup_with_path(
         read_private_key::<DemoRollupSpec>("tx_signer_private_key.json").private_key;
     let tx = tx_set_value_for_check(tx_signer_key.clone(), CHECK_TRANSACTION_VALUE, nonce_to_use);
     let accept_tx = test_rollup
-        .api_client
+        .api_client()
         .accept_tx(&sov_api_spec::types::AcceptTxBody {
             body: BASE64_STANDARD.encode(&tx),
         })
@@ -382,7 +382,7 @@ async fn sync_rollup_with_path(
     let tx_hash = accept_tx.id.clone();
     let hex_tx_hash = TxHash::from_str(tx_hash.as_str()).unwrap(); // I wonder if there's a better way
     let mut tx_subscription = test_rollup
-        .api_client
+        .api_client()
         .subscribe_to_tx_status_updates(hex_tx_hash)
         .await
         .unwrap();

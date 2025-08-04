@@ -11,8 +11,7 @@ use sov_modules_api::capabilities::{
 use sov_modules_api::macros::config_value;
 use sov_modules_api::runtime::capabilities::AuthenticationError;
 use sov_modules_api::transaction::{
-    AuthenticatedTransactionAndRawHash, AuthenticatedTransactionData, Credentials, PriorityFeeBips,
-    TxDetails,
+    AuthenticatedTransactionAndRawHash, Credentials, PriorityFeeBips, TxDetails,
 };
 use sov_modules_api::{
     Amount, DispatchCall, FullyBakedTx, ProvableStateReader, RawTx, Runtime, Spec,
@@ -22,6 +21,49 @@ use sov_state::User;
 
 use crate::conversions::RlpConversionError;
 use crate::{call, CallMessage, RlpEvmTransaction};
+
+/// Recovers the signer from an EVM transaction.
+fn recover_evm_signer(
+    tx: &TransactionSigned,
+    tx_hash: TxHash,
+) -> Result<reth_primitives::Address, AuthenticationError> {
+    tx.recover_signer().ok_or(AuthenticationError::FatalError(
+        FatalError::SigVerificationFailed(format!("Invalid ethereum signature: tx hash {tx_hash}")),
+        tx_hash,
+    ))
+}
+
+/// Creates the transaction details for an EVM transaction.
+fn create_evm_tx_details<S: Spec>() -> TxDetails<S> {
+    TxDetails {
+        chain_id: config_value!("CHAIN_ID"),
+        max_priority_fee_bips: PriorityFeeBips::ZERO,
+        max_fee: Amount::new(10_000_000),
+        gas_limit: None,
+    }
+}
+
+/// Extracts EVM authorization data from a verified transaction.
+fn extract_evm_authorization_data<S: Spec>(
+    signer: reth_primitives::Address,
+    tx_hash: TxHash,
+    nonce: u64,
+) -> AuthorizationData<S>
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    let credentials = Credentials::new(signer);
+    let credential_id = signer.into_word().0.into();
+    let ethereum_address: EthereumAddress = signer.into();
+
+    AuthorizationData {
+        uniqueness: UniquenessData::Nonce(nonce),
+        tx_hash,
+        credential_id,
+        credentials,
+        default_address: S::Address::from_vm_address(ethereum_address),
+    }
+}
 
 /// Authenticates a raw evm transaction.
 /// # Security
@@ -40,42 +82,19 @@ where
     let (rlp, tx) = decode_evm_tx(raw_tx)
         .map_err(|e| fatal_deserialization_error::<Accessor, S, _>(raw_tx, e, state))?;
     let hash = TxHash::new(tx.hash().into());
-    let signer = tx.recover_signer().ok_or(AuthenticationError::FatalError(
-        FatalError::SigVerificationFailed(format!("Invalid ethereum signature: tx hash {hash}")),
-        hash,
-    ))?;
 
-    let chain_id = config_value!("CHAIN_ID");
-    let max_priority_fee_bips = PriorityFeeBips::ZERO;
-    let max_fee = Amount::new(10_000_000);
-    let gas_limit = None;
-
-    let nonce = tx.nonce();
-
-    let credentials = Credentials::new(signer);
-    let credential_id = signer.into_word().0.into();
-
-    let authenticated_tx = AuthenticatedTransactionData::<S>(TxDetails {
-        chain_id,
-        max_priority_fee_bips,
-        max_fee,
-        gas_limit,
-    });
+    let signer = recover_evm_signer(&tx, hash)?;
 
     let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
         raw_tx_hash: hash,
-        authenticated_tx,
+        authenticated_tx: create_evm_tx_details().into(),
     };
 
-    let ethereum_address: EthereumAddress = signer.into();
-    let auth_data = AuthorizationData {
-        uniqueness: UniquenessData::Nonce(nonce),
-        tx_hash: hash,
-        credential_id,
-        credentials,
-        default_address: S::Address::from_vm_address(ethereum_address),
-    };
+    let nonce = tx.nonce();
+    let auth_data = extract_evm_authorization_data::<S>(signer, hash, nonce);
+
     let call = CallMessage { rlp };
+
     Ok((tx_and_raw_hash, auth_data, call))
 }
 
@@ -205,10 +224,7 @@ where
                 let (_rlp, tx) = decode_evm_tx(&tx.data)?;
                 Ok(TxHash::new(tx.hash().into()))
             }
-            EvmAuthenticatorInput::Standard(tx) => Ok(capabilities::calculate_hash(
-                &tx.data,
-                &mut sov_modules_api::gas::UnlimitedGasMeter::<S>::default(),
-            )?),
+            EvmAuthenticatorInput::Standard(tx) => Ok(capabilities::calculate_hash::<S>(&tx.data)),
         }
     }
 

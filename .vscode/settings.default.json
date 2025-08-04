@@ -20,7 +20,7 @@
     "--message-format=json",
     "--keep-going"
   ],
-  "rust-analyzer.rustfmt.extraArgs": ["+nightly"],
+  "rust-analyzer.rustfmt.overrideCommand": ["rustfmt", "+nightly", "--edition=2024", "--config-path=${workspaceFolder}/rustfmt.nightly.toml"],
   "json.schemas": [
     {
       "fileMatch": ["bank.json"],

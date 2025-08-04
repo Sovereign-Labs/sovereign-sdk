@@ -36,7 +36,7 @@ clean: ## Cleans compiled
 check-provers:   ## cargo check in non attached crates
 	@set -e; for dir in $(PROVER_DIRS); do \
 		echo "$$(date) Running cargo fmt + check in $$dir"; \
-		cargo +nightly fmt --all --check --quiet --manifest-path "$$dir/Cargo.toml"; \
+		cargo fmt --all --check --quiet --manifest-path "$$dir/Cargo.toml"; \
 		cargo check --all-targets --all-features --manifest-path "$$dir/Cargo.toml"; \
 	done
 
@@ -48,7 +48,8 @@ total-clean:
     	echo "Running cargo clean in $$dir"; \
     	(cargo clean --manifest-path "$$dir/Cargo.toml"); \
     done;
-	rm -rf "examples/demo-rollup/tests/evm/uniswap/node_modules"
+	rm -rf "examples/demo-rollup/tests/evm/uniswap/node_modules";
+	rm -rf "soak_data/examples/demo-rollup/sov-soak-testing/soak_data"
 
 test:  ## Runs test suite using next test
 	@cargo nextest run --no-fail-fast --status-level skip --all-features
@@ -62,8 +63,8 @@ test-all: ## Runs test suite using nextest, across the whole workspace
 test-default-features:  ## Runs test suite using default features
 	@cargo nextest run --no-fail-fast --status-level skip
 
-install-dev-tools:  ## Installs all necessary cargo helpers
-install-dev-tools: install-risc0-toolchain install-sp1-toolchain
+install-dev-tools:  ## Installs all necessary dev tools
+install-dev-tools: install-cargo-tools install-risc0-toolchain install-sp1-toolchain
 	rustup update nightly
 	## Backup VS Code settings to `.vscode/settings.json.bak`.
 	cp .vscode/settings.json .vscode/settings.json.bak || true
@@ -79,6 +80,16 @@ install-dev-tools: install-risc0-toolchain install-sp1-toolchain
 	cargo install zepter
 	cargo +stable install cargo-dylint dylint-link
 	rustup target add wasm32-unknown-unknown
+
+install-cargo-tools:  ## Installs all necessary cargo helpers
+	cargo install cargo-llvm-cov
+	cargo install cargo-hack
+	cargo install cargo-udeps
+	cargo install cargo-deny
+	cargo install flaky-finder
+	cargo install cargo-insta
+	cargo install cargo-nextest --locked
+	cargo install zepter
 
 install-risc0-toolchain:  ## install risc0 toolchain
 	curl -L https://risczero.com/install | bash
@@ -98,7 +109,7 @@ install-sp1-toolchain:  ## install SP1 toolchain
 
 lint:  ## cargo fmt, check and clippy.
 	## fmt first, because it's the cheapest
-	cargo +nightly fmt --all --check
+	cargo fmt --all --check
 	cargo check --all-targets --all-features
 	## Invokes Zepter multiple times because fixes sometimes unveal more underlying issues.
 	zepter
@@ -127,7 +138,7 @@ cargo-deny-check:   ## Runs a global cargo-deny check, not just the licenses.
 	cargo deny check --hide-inclusion-graph
 
 lint-fix:  ## cargo fmt, fix and clippy. Skip clippy on guest code since it's not supported by risc0
-	cargo +nightly fmt --all
+	cargo fmt --all
 	cargo fix --allow-dirty
 	SKIP_GUEST_BUILD=1 cargo clippy --fix --allow-dirty -- -A clippy::too_many_arguments
 
@@ -146,9 +157,6 @@ check-constant-overriding-is-disabled-in-release-mode:
 		exit 1; \
 	fi
 	@echo "Check succeeded!"
-
-find-unused-deps: ## Prints unused dependencies for project. Note: requires nightly
-	cargo +nightly udeps --all-targets --all-features
 
 find-flaky-tests:  ## Runs tests over and over to find if there's flaky tests
 	flaky-finder -j16 -r320 --continue "cargo test -- --nocapture"

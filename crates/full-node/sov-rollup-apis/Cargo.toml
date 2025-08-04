@@ -1,5 +1,6 @@
 [package]
 name = "sov-rollup-apis"
+description = "This crate contains API specification to interact with the gas interface and simulate transactions within the full node"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }

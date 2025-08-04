@@ -27,6 +27,7 @@ derive_more = { workspace = true, default-features = true, features = [
     "debug",
     "display",
     "into",
+    "from"
 ] }
 serde_yaml = { workspace = true, optional = true }
 sov-rest-utils = { workspace = true, optional = true }

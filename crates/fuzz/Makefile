@@ -15,7 +15,7 @@ clean:
 
 # Needs nightly for `-Z sanitizer=address`
 build-target: ## Build the target fuzz
-	cargo +nightly rustc --bin $(TARGET) $(ARGS) -- \
+	cargo rustc --bin $(TARGET) $(ARGS) -- \
 		-C debuginfo=full \
 		-C debug-assertions \
 		-C passes='sancov-module' \

@@ -5,6 +5,7 @@ use axum::Router;
 use serde::Serialize;
 use sov_modules_api::prelude::anyhow;
 use sov_modules_api::sov_universal_wallet::schema::Schema;
+use sov_modules_api::HexHash;
 use sov_rest_utils::{errors, preconfigured_router_layers};
 
 /// Trait for the `/rollup/schema` endpoint.
@@ -20,9 +21,8 @@ pub trait SchemaEndpoint: Clone + Send + Sync + 'static {
     type Error: std::fmt::Display;
 
     /// Handles the `schema` request.
-    /// Should return the [`Schema`] as a JSON object string.
-    /// We return a `String` because [`Schema`] is not thread-safe or clonable even when wrapped in
-    /// `Arc`.
+    /// Should return the [`Schema`] as a JSON object string along with the chain hash as a hex
+    /// string.
     fn handler(&self) -> Result<Self::Response, Self::Error>;
 
     /// Returns a configured axum router for the schema endpoint.
@@ -53,26 +53,28 @@ pub trait SchemaEndpoint: Clone + Send + Sync + 'static {
 }
 
 /// Provides a implementation of the `schema` endpoint using the schema JSON provided.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct StandardSchemaEndpoint {
-    schema_json: String,
+    schema: serde_json::Value,
+    chain_hash: HexHash,
 }
 
 impl StandardSchemaEndpoint {
     /// Creates a new `StandardSchemaEndpoint` using the provided [`Schema`] as the JSON.
-    pub fn new(schema: &Schema) -> anyhow::Result<Self> {
+    pub fn new(schema: &Schema, chain_hash: HexHash) -> anyhow::Result<Self> {
         Ok(Self {
-            schema_json: serde_json::to_string(schema)?,
+            schema: serde_json::to_value(schema)?,
+            chain_hash,
         })
     }
 }
 
 impl SchemaEndpoint for StandardSchemaEndpoint {
-    type Response = serde_json::Value;
+    type Response = StandardSchemaEndpoint;
 
     type Error = anyhow::Error;
 
     fn handler(&self) -> Result<Self::Response, Self::Error> {
-        Ok(serde_json::from_str(&self.schema_json)?)
+        Ok(self.clone())
     }
 }

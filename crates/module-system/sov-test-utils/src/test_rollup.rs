@@ -324,6 +324,11 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
                 .expect("storage folder should exist by this time");
         self
     }
+
+    /// A reference to the storage directory the rollup will run in
+    pub fn storage_path(&self) -> StoragePath {
+        self.config.storage.clone()
+    }
 }
 
 impl<R, StoragePath> RollupBuilder<R, StoragePath>
@@ -436,7 +441,6 @@ where
         Ok(TestRollup {
             builder: self,
             rollup_task,
-            api_client: sov_api_spec::client::Client::new(&client.base_url),
             http_addr: rest_addr,
             rollup_config,
             client,
@@ -670,8 +674,6 @@ pub struct TestRollup<R: FullNodeBlueprint<Native>, StoragePath = Arc<tempfile::
     /// A wallet client that can be used to interact with the node and submit
     /// txs to the sequencer.
     pub client: NodeClient,
-    /// Auto-generated API client for the rollup.
-    pub api_client: sov_api_spec::client::Client,
     /// Address of the HTTP server.
     pub http_addr: SocketAddr,
     /// The rollup config used to run the rollup.
@@ -713,6 +715,11 @@ where
     /// same batch.
     pub async fn pause_preferred_batches(&self) {
         std::env::set_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE", "1");
+    }
+
+    /// Helper to get api_client
+    pub fn api_client(&self) -> &sov_api_spec::client::Client {
+        &self.client.client
     }
 
     /// Resumes batch production after [`TestRollup::pause_preferred_batches`].

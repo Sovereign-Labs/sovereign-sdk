@@ -20,13 +20,6 @@ runs:
       # See <https://github.com/rust-lang/rustup/issues/3635>.
       run: rustup show && rustup toolchain install nightly --component rustfmt --profile minimal
     # Install ZKVM toolchains
-    - name: Install cargo-risczero toolchain
-      uses: taiki-e/install-action@v2
-      if: ${{ inputs.install_zkvm == '1' }}
-      env:
-        GITHUB_TOKEN: ${{ inputs.github_token }}
-      with:
-        tool: cargo-risczero@2.0
     - name: Install risc0-zkvm toolchain # Use the risc0 cargo extension to install the risc0 std library for the current toolchain
       shell: bash
       if: ${{ inputs.install_zkvm == '1' }}

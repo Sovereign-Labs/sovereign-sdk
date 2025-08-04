@@ -4,10 +4,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
+use full_node_configs::runner::{CorsConfiguration, ProofManagerConfig, RunnerConfig};
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
 use sov_db::schema::{DeltaReader, SchemaBatch};
-use sov_metrics::RunnerMetrics;
+use sov_metrics::{MonitoringConfig, RunnerMetrics};
 use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
@@ -29,7 +30,6 @@ use tracing::{debug, info, trace};
 use crate::da_pre_fetcher::FinalizedBlocksBulkFetcher;
 use crate::processes::{new_stf_info_channel, Receiver};
 use crate::state_manager::StateManager;
-use crate::{CorsConfiguration, MonitoringConfig, ProofManagerConfig, RunnerConfig};
 
 type GenesisParams<ST, InnerVm, OuterVm, Da> =
     <ST as StateTransitionFunction<InnerVm, OuterVm, Da>>::GenesisParams;

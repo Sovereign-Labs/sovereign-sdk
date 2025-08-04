@@ -139,8 +139,8 @@ where
                         .insert(contents.accepted_tx.clone())
                         .await;
                     // If the receiver is no longer listening, just don't send the confirmation.
-                    let _ = contents.oneshot_sender.send(contents.accepted_tx);
                     self.update_api_state_with_changes(contents.tx_changes);
+                    let _ = contents.oneshot_sender.send(contents.accepted_tx);
                 }
             }
             ExecutorEvent::CloseBatch(batch, checkpoint) => {

@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
 
 use crate::{Amount, BasicGasMeter, Gas, GasArray, Spec};
@@ -13,6 +14,8 @@ use crate::{Amount, BasicGasMeter, Gas, GasArray, Spec};
 /// # Note
 /// The priority fee is expressed as a basis point. Ie, `1%` is represented as `10_000`.
 #[derive(
+    From,
+    Into,
     Serialize,
     Deserialize,
     BorshSerialize,
@@ -44,18 +47,6 @@ impl PriorityFeeBips {
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 #[error("Applying the priority fee to this quantity causes an overflow")]
 pub struct PriorityFeeApplyOverflowError;
-
-impl From<u64> for PriorityFeeBips {
-    fn from(value: u64) -> Self {
-        Self(value)
-    }
-}
-
-impl From<PriorityFeeBips> for u64 {
-    fn from(value: PriorityFeeBips) -> Self {
-        value.0
-    }
-}
 
 impl PriorityFeeBips {
     const BASIS_POINTS: u128 = 10_000;
@@ -120,12 +111,6 @@ pub struct TxDetails<S: Spec> {
     pub chain_id: u64,
 }
 
-impl<S: Spec> From<TxDetails<S>> for AuthenticatedTransactionData<S> {
-    fn from(details: TxDetails<S>) -> Self {
-        Self(details)
-    }
-}
-
 /// Holds the original credentials to authenticate the transaction.
 /// For example, this could be a public key of the sender of the transaction.
 #[derive(Clone, Debug, Default)]
@@ -160,6 +145,7 @@ impl Credentials {
 
 /// Transaction data that has been authenticated.
 /// This is the output of the `TransactionAuthenticator`.
+#[derive(From)]
 pub struct AuthenticatedTransactionData<S: Spec>(pub TxDetails<S>);
 
 impl<S: Spec> AuthenticatedTransactionData<S> {

@@ -195,7 +195,7 @@ pub(crate) fn apply_batch_logs<'a, S: Spec>(
     for (i, tx_receipt) in batch_receipt.tx_receipts.iter().enumerate() {
         debug!(
             tx_idx = i,
-            tx_hash = hex::encode(tx_receipt.tx_hash),
+            tx_hash = %tx_receipt.tx_hash,
             receipt = ?tx_receipt.receipt,
             gas_used = %get_gas_used(tx_receipt),
             "Tx receipt"

@@ -156,7 +156,7 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
     }
     da_sub.next().await;
 
-    let api_client = test_rollup.api_client.clone();
+    let api_client = test_rollup.api_client().clone();
 
     let mut nonce = 0;
     let mut current_height = get_height(&client).await.unwrap();
@@ -305,6 +305,7 @@ async fn check_start_at(finalization_blocks: u32) {
     // Verify that the last processed height was `stop_at_height`. Since we called `pause_update_state`,
     // we should see the final height before the shutdown.
     assert_eq!(current_height, stop_at_height);
+    test_rollup.shutdown().await.unwrap();
 }
 
 async fn assert_rollup_processes_only_finalized_blocks(client: &NodeClient) {

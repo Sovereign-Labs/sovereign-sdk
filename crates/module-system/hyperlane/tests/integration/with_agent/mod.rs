@@ -62,7 +62,7 @@ async fn test_validator_announces_itself() {
     let validator = setup.validators[0].clone();
     let rollup = setup_rollup(dir.path().to_path_buf(), setup, false).await;
 
-    let mut slot_subscription = rollup.api_client.subscribe_slots().await.unwrap();
+    let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
 
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
@@ -72,7 +72,7 @@ async fn test_validator_announces_itself() {
 
     // wait for the first finalized block
     for i in 0..DEFAULT_FINALIZATION_BLOCKS * 30 {
-        let events = next_slot_events(&rollup.api_client, &mut slot_subscription).await;
+        let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
         println!("ROUND {i}, events: {events:?}");
         if let Some(process_event) = find_event(&events, "Mailbox/ValidatorAnnouncement") {
             assert_eq!(
@@ -111,14 +111,14 @@ async fn test_relayer_basic_dispatch_process() {
         .await;
 
     // wait for first finalized block
-    let mut slot_subscription = rollup.api_client.subscribe_slots().await.unwrap();
+    let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS {
         slot_subscription.next().await.unwrap().unwrap();
     }
 
     // set relayer igp config
     let relayer_config_tx = tx_set_relayer_config(&relayer);
-    submit_tx(&rollup.api_client, relayer_config_tx).await;
+    submit_tx(rollup.api_client(), relayer_config_tx).await;
 
     // register prover as a recipient
     let register_call = TestRuntimeCall::TestRecipient(test_recipient::CallMessage::Register {
@@ -126,15 +126,15 @@ async fn test_relayer_basic_dispatch_process() {
         ism: Ism::AlwaysTrust,
     });
     let register_tx = encode_call(prover.user_info.private_key(), &register_call);
-    submit_tx(&rollup.api_client, register_tx).await;
+    submit_tx(rollup.api_client(), register_tx).await;
 
     // dispatch message to prover
     let dispatch_tx = tx_send_message(&relayer, prover_addr.to_sender(), None, b"Hello there");
-    submit_tx(&rollup.api_client, dispatch_tx).await;
+    submit_tx(rollup.api_client(), dispatch_tx).await;
 
     // look for `process` event
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
-        let events = next_slot_events(&rollup.api_client, &mut slot_subscription).await;
+        let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
 
         if let Some(process_event) = find_event(&events, "Mailbox/Process") {
             assert_eq!(
@@ -182,14 +182,14 @@ async fn test_multisig_ism() {
         .await;
 
     // wait for first finalized block
-    let mut slot_subscription = rollup.api_client.subscribe_slots().await.unwrap();
+    let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS {
         slot_subscription.next().await.unwrap().unwrap();
     }
 
     // set relayer igp config
     let relayer_config_tx = tx_set_relayer_config(&relayer);
-    submit_tx(&rollup.api_client, relayer_config_tx).await;
+    submit_tx(rollup.api_client(), relayer_config_tx).await;
 
     // register prover as a recipient with first 3 validators addresses for multisig
     let val_addresses: Vec<_> = ANVIL_ACCOUNTS[1..4]
@@ -204,15 +204,15 @@ async fn test_multisig_ism() {
         },
     });
     let register_tx = encode_call(prover.user_info.private_key(), &register_call);
-    submit_tx(&rollup.api_client, register_tx).await;
+    submit_tx(rollup.api_client(), register_tx).await;
 
     // dispatch message to prover
     let dispatch_tx = tx_send_message(&relayer, prover_addr.to_sender(), None, b"Hello there");
-    submit_tx(&rollup.api_client, dispatch_tx).await;
+    submit_tx(rollup.api_client(), dispatch_tx).await;
 
     // look for `process` event
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
-        let events = next_slot_events(&rollup.api_client, &mut slot_subscription).await;
+        let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
 
         if let Some(process_event) = find_event(&events, "Mailbox/Process") {
             assert_eq!(
@@ -247,12 +247,12 @@ async fn test_process_message_from_evm_counterparty() {
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
         .with_relayer(&relayer)
-        .with_evm_counterparty(prover_addr.to_sender())
+        .with_evm_counterparty()
         .start()
         .await;
 
     // wait for first finalized block
-    let mut slot_subscription = rollup.api_client.subscribe_slots().await.unwrap();
+    let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS {
         slot_subscription.next().await.unwrap().unwrap();
     }
@@ -263,26 +263,28 @@ async fn test_process_message_from_evm_counterparty() {
         ism: Ism::AlwaysTrust,
     });
     let register_tx = encode_call(prover.user_info.private_key(), &register_call);
-    submit_tx(&rollup.api_client, register_tx).await;
+    submit_tx(rollup.api_client(), register_tx).await;
 
     // dispatch test message to prover from evm
-    let (expected_message, expected_message_id) = hyperlane.dispatch_msg_from_counterparty().await;
+    let evm_dispatch = hyperlane
+        .dispatch_msg_from_counterparty(prover_addr.to_sender())
+        .await;
     let sender_addr = parse_eth_addr(ANVIL_ACCOUNTS[0].0);
 
-    assert_eq!(expected_message.origin_domain, EVM_DOMAIN);
+    assert_eq!(evm_dispatch.message.origin_domain, EVM_DOMAIN);
     assert_eq!(
-        expected_message.dest_domain,
+        evm_dispatch.destination_domain,
         config_value!("HYPERLANE_BRIDGE_DOMAIN")
     );
-    assert_eq!(expected_message.sender, sender_addr);
-    assert_eq!(expected_message.recipient, prover_addr.to_sender());
+    assert_eq!(evm_dispatch.sender_address, sender_addr);
+    assert_eq!(evm_dispatch.recipient_address, prover_addr.to_sender());
 
     // finalize the block with dispatched message
     hyperlane.mine_next_block_on_counterparty().await;
 
     // look for `process` event
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
-        let events = next_slot_events(&rollup.api_client, &mut slot_subscription).await;
+        let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
 
         if let Some(process_event) = find_event(&events, "Mailbox/Process") {
             assert_eq!(
@@ -298,13 +300,13 @@ async fn test_process_message_from_evm_counterparty() {
                 find_event(&events, "TestRecipient/MessageReceivedGeneric").unwrap();
             assert_eq!(
                 test_recipient_event["MessageReceivedGeneric"]["body"],
-                expected_message.body.to_string(),
+                evm_dispatch.message.body.to_string(),
             );
 
             let process_id_event = find_event(&events, "Mailbox/ProcessId").unwrap();
             assert_eq!(
                 process_id_event["process_id"]["id"],
-                expected_message_id.to_string()
+                evm_dispatch.message_id.to_string()
             );
 
             rollup.shutdown().await.unwrap();
@@ -323,35 +325,33 @@ async fn test_dispatch_message_to_evm_counterparty() {
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
     let relayer = setup.relayer.clone();
-    let prover = setup.prover.clone();
-    let prover_addr = prover.user_info.address();
     let rollup = setup_rollup(dir.path().to_path_buf(), setup, true).await;
 
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
         .with_relayer(&relayer)
-        .with_evm_counterparty(prover_addr.to_sender())
+        .with_evm_counterparty()
         .start()
         .await;
 
     // wait for first finalized block
-    let mut slot_subscription = rollup.api_client.subscribe_slots().await.unwrap();
+    let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS {
         slot_subscription.next().await.unwrap().unwrap();
     }
 
     // set relayer igp config
     let relayer_config_tx = tx_set_relayer_config(&relayer);
-    submit_tx(&rollup.api_client, relayer_config_tx).await;
+    submit_tx(rollup.api_client(), relayer_config_tx).await;
 
     let evm_recipient = hyperlane.evm_recipient.unwrap();
     // dispatch message to evm test recipient
     let dispatch_tx = tx_send_message(&relayer, evm_recipient, Some(EVM_DOMAIN), b"Hello there");
-    submit_tx(&rollup.api_client, dispatch_tx).await;
+    submit_tx(rollup.api_client(), dispatch_tx).await;
 
     // look for `dispatch` event
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
-        let events = next_slot_events(&rollup.api_client, &mut slot_subscription).await;
+        let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
 
         if let Some(process_event) = find_event(&events, "Mailbox/Dispatch") {
             assert_eq!(process_event["dispatch"]["destination_domain"], EVM_DOMAIN,);
@@ -400,25 +400,24 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
     let setup = generate_setup();
     let relayer = setup.relayer.clone();
     let prover = setup.prover.clone();
-    let prover_addr = prover.user_info.address();
     let rollup = setup_rollup(dir.path().to_path_buf(), setup, true).await;
 
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
         .with_relayer(&relayer)
-        .with_evm_counterparty(prover_addr.to_sender())
+        .with_evm_counterparty()
         .start()
         .await;
 
     // wait for first finalized block
-    let mut slot_subscription = rollup.api_client.subscribe_slots().await.unwrap();
+    let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS {
         slot_subscription.next().await.unwrap().unwrap();
     }
 
     // set relayer igp config
     let relayer_config_tx = tx_set_relayer_config(&relayer);
-    submit_tx(&rollup.api_client, relayer_config_tx).await;
+    submit_tx(rollup.api_client(), relayer_config_tx).await;
 
     // native ETH doesn't have its own address, so let's create a dummy one
     let addr = format!(
@@ -447,14 +446,14 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
         outbound_limit_replenishment_per_slot: Amount::MAX,
     });
     let register_tx = encode_call(relayer.private_key(), &register_call);
-    submit_tx(&rollup.api_client, register_tx).await;
+    submit_tx(rollup.api_client(), register_tx).await;
 
     let mut route_deployed = false;
     let mut local_route_id = HexString([0; 32]);
     let mut remote_route_id = HexString([0; 32]);
     // look for `route registered` event
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
-        let events = next_slot_events(&rollup.api_client, &mut slot_subscription).await;
+        let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
 
         if let Some(route_registered_event) = find_event(&events, "Warp/RouteRegistered") {
             assert_eq!(
@@ -480,7 +479,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
                 remote_router_address: remote_route_id,
             });
             let enroll_router_tx = encode_call(relayer.private_key(), &enroll_router_call);
-            submit_tx(&rollup.api_client, enroll_router_tx).await;
+            submit_tx(rollup.api_client(), enroll_router_tx).await;
 
             route_deployed = true;
             break;
@@ -496,13 +495,17 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
     // transfer native eth from evm counterparty to prover
     let prover_addr = prover.user_info.address().to_sender();
     hyperlane
-        .send_warp_token_transfer_from_counterparty(prover_addr, inbound_sent_amount)
+        .send_warp_token_transfer_from_counterparty(
+            remote_route_id,
+            prover_addr,
+            inbound_sent_amount,
+        )
         .await;
     hyperlane.mine_next_block_on_counterparty().await;
 
     let mut transfer_received = false;
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
-        let events = next_slot_events(&rollup.api_client, &mut slot_subscription).await;
+        let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
 
         if let Some(token_recv_event) = find_event(&events, "Warp/TokenTransferReceived") {
             assert_eq!(
@@ -552,10 +555,10 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
         gas_payment_limit: Amount::MAX,
     });
     let transfer_tx = encode_call(prover.user_info.private_key(), &transfer_call);
-    submit_tx(&rollup.api_client, transfer_tx).await;
+    submit_tx(rollup.api_client(), transfer_tx).await;
 
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
-        let events = next_slot_events(&rollup.api_client, &mut slot_subscription).await;
+        let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
 
         // look for event that sent outbound transfer
         if let Some(token_sent_event) = find_event(&events, "Warp/TokenTransferredRemote") {

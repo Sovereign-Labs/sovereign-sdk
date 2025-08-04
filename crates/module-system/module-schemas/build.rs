@@ -1,14 +1,15 @@
 use std::fs::File;
 use std::io::{self, Write};
 
+use full_node_configs::runner::RollupConfig;
 use schemars::schema_for;
+use sov_metrics::MonitoringConfig;
 use sov_mock_da::verifier::MockDaSpec;
 use sov_mock_da::MockDaService;
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::default_spec::DefaultSpec;
 use sov_modules_api::{ModuleCallJsonSchema, Spec};
 use sov_rollup_interface::execution_mode;
-use sov_stf_runner::RollupConfig;
 
 type S = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, execution_mode::Native>;
 
@@ -44,7 +45,7 @@ fn main() -> io::Result<()> {
 }
 
 fn store_rollup_config_json_schema(filename: &str) -> io::Result<()> {
-    let schema = schema_for!(RollupConfig<<S as Spec>::Address, MockDaService>);
+    let schema = schema_for!(RollupConfig<<S as Spec>::Address, MockDaService, MonitoringConfig>);
     let schema_string = serde_json::to_string_pretty(&schema)?;
 
     let mut file = File::create(filename)?;

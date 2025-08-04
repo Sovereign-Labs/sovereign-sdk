@@ -1,12 +1,12 @@
 use std::time::Duration;
 
+use full_node_configs::sequencer::default_ideal_lag_behind_finalized_slot;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockRollupSpec};
 use sov_eth_client::TestClient;
 use sov_mock_da::storable::service::StorableMockDaService;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::Spec;
 use sov_modules_macros::config_value;
-use sov_sequencer::preferred::default_ideal_lag_behind_finalized_slot;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::initialize_logging;
 use sov_test_utils::test_rollup::get_appropriate_rollup_prover_config;

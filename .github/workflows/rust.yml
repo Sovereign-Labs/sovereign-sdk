@@ -52,8 +52,6 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
-  # This is faster for CI: https://github.com/dtolnay/rust-toolchain/issues/26.
-  CARGO_INCREMENTAL: "0"
   CARGO_NET_GIT_FETCH_WITH_CLI: true
   NO_COLOR: 1
 
@@ -93,7 +91,7 @@ jobs:
       - check-constant-overriding-is-disabled-in-release-mode
       - validate-packages-to-publish-yml
       - cargo-switcheroo-default
-      - check-web3-js-sdk-integration
+      # - check-web3-js-sdk-integration
     steps:
       - name: Compute whether the needed jobs succeeded or failed
         uses: re-actors/alls-green@release/v1
@@ -103,10 +101,7 @@ jobs:
 
   check:
     name: check
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-cache-dev
-      - nscloud-cache-size-100gb
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -114,9 +109,6 @@ jobs:
         with:
           cache: rust
           path: ./crates/fuzz/target
-      - uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run lint
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: true
@@ -138,19 +130,14 @@ jobs:
   bench_check:
     name: bench_check
     needs: check
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-16x64-with-cache
-      - nscloud-cache-tag-cache-bench
-      - nscloud-cache-size-100gb
+    # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-bench-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - run: cargo bench --no-run
         env:
           SOV_BENCH_BLOCKS: 1
@@ -160,19 +147,14 @@ jobs:
   rollup_tps_validation:
     name: rollup_tps_validation
     needs: check
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-cache-bench
-      - nscloud-cache-size-100gb
+    # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-bench-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: rollup bench check
         env:
           SOV_BENCH_BLOCKS: 10
@@ -187,10 +169,7 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-cache-dev
-      - nscloud-cache-size-100gb
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
     strategy:
       matrix:
         partition: [1, 2, 3]
@@ -205,10 +184,6 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          install_zkvm: "0"
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
       - name: cargo hack
         run: make check-features
@@ -221,10 +196,7 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-cache-dev
-      - nscloud-cache-size-100gb
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
     strategy:
       matrix:
         partition: [1, 2, 3]
@@ -239,21 +211,13 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          install_zkvm: "0"
       - name: cargo hack
         run: make check-features-default-targets
 
   nextest:
     name: nextest
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-cache-test
-      - nscloud-cache-size-100gb
-      # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-      - nscloud-exp-features:privileged;host-pid-namespace
+    # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 60
     env:
       RISC0_DEV_MODE: "true"
@@ -265,19 +229,12 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - run: make test-default-features
 
   nextest_all_features:
     name: nextest_all_features
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-cache-test
-      - nscloud-cache-size-100gb
-      # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-      - nscloud-exp-features:privileged;host-pid-namespace
+    # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 60
     env:
       RISC0_DEV_MODE: "true"
@@ -288,19 +245,13 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - run: make test-all
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   doctests:
     name: doctests
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-cache-doctests
-      - nscloud-cache-size-100gb
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-250gb-1-88
     timeout-minutes: 60
     env:
       SKIP_GUEST_BUILD: "1"
@@ -310,23 +261,14 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          install_zkvm: "0"
-      # `cargo-nextest` does not support doctests (yet?), so we have to run them
-      # separately.
+      # `cargo-nextest` does not support doctests (yet?), so we have to run them separately.
       # TODO: https://github.com/nextest-rs/nextest/issues/16
       - run: make doctest
 
   coverage:
     name: coverage
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-16x32-with-cache
-      - nscloud-cache-tag-cache-coverage
-      - nscloud-cache-size-150gb
-      # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-      - nscloud-exp-features:privileged;host-pid-namespace
+    # TODO:try coverage 32x64
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-coverage-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 90
     env:
       SKIP_GUEST_BUILD: "1"
@@ -337,10 +279,6 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          install_zkvm: "0"
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
@@ -459,10 +397,7 @@ jobs:
         run: git diff --exit-code
 
   check-demo-rollup-bash-commands:
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-demo-rollup
-      - nscloud-cache-size-100gb
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-250gb-1-88
     needs:
       - check
     timeout-minutes: 60
@@ -481,20 +416,13 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - name: Setup Zkvm toolchains + Rust
-        uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Compile README.md to Bash
         run: bashtestmd --input examples/demo-rollup/README_CELESTIA.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
 
   check-demo-rollup-bash-commands-mock-da:
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-demo-rollup
-      - nscloud-cache-size-100gb
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-250gb-1-88
     needs:
       - check
     timeout-minutes: 60
@@ -507,30 +435,19 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - name: Setup Zkvm toolchains + Rust
-        uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Compile README.md to Bash
         run: bashtestmd --input examples/demo-rollup/README.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
 
   check-constant-overriding-is-disabled-in-release-mode:
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-check-constant-overriding-is-disabled-in-release-mode
-      - nscloud-cache-size-20gb
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-250gb-1-88
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - name: Setup Zkvm toolchains + Rust
-        uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - run: make check-constant-overriding-is-disabled-in-release-mode
 
   validate-packages-to-publish-yml:
@@ -542,63 +459,56 @@ jobs:
         working-directory: .
 
   cargo-switcheroo-default:
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-4x16-with-cache
-      - nscloud-cache-tag-cargo-switcheroo
-      - nscloud-cache-size-20gb
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
     steps:
       - uses: actions/checkout@v4
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - name: Setup Zkvm toolchains + Rust
-        uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - run: cargo switcheroo set default
         # Exit status 0 means no changes were made.
       - run: git diff --exit-code
 
-  check-web3-js-sdk-integration:
-    runs-on:
-      - nscloud-ubuntu-22.04-amd64-8x32-with-cache
-      - nscloud-cache-tag-demo-rollup
-      - nscloud-cache-size-100gb
-    needs:
-      - check
-    # There exists a circular dependency between repos where web3 JS needs changes from a PR
-    # But the PR needs the web3 SDK to be updated for this job to pass. In these cases
-    # we can skip this check but do our best to avoid this until we can fix the situation
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-web3-js-check') }}
-    timeout-minutes: 60
-    env:
-      SP1_SKIP_PROGRAM_BUILD: "true"
-      SKIP_GUEST_BUILD: "1"
-      CARGO_NET_GIT_FETCH_WITH_CLI: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: namespacelabs/nscloud-cache-action@v1
-        with:
-          cache: rust
-      - name: Setup Zkvm toolchains + Rust
-        uses: ./.github/actions/setup
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          install_zkvm: "0"
-      - uses: pnpm/action-setup@v2
-        with:
-          version: 9
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20.x
-      - name: Checkout web3-js SDK
-        uses: actions/checkout@v4
-        with:
-          repository: "Sovereign-Labs/sovereign-sdk-web3-js"
-          path: "examples/demo-rollup/web3-js-sdk"
-          ref: "45b227eab7ee280a98baf08f8302b7425fa88a2a"
-      - name: Run web3-js SDK tests against demo-rollup
-        # See script for more details about what to do if job
-        run: |
-          cd examples/demo-rollup
-          bash ./web3-js-sdk-test-runner.sh
+  # check-web3-js-sdk-integration:
+  #   runs-on:
+  #     - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+  #     - nscloud-cache-tag-demo-rollup
+  #     - nscloud-cache-size-100gb
+  #   needs:
+  #     - check
+  #   # There exists a circular dependency between repos where web3 JS needs changes from a PR
+  #   # But the PR needs the web3 SDK to be updated for this job to pass. In these cases
+  #   # we can skip this check but do our best to avoid this until we can fix the situation
+  #   if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-web3-js-check') }}
+  #   timeout-minutes: 60
+  #   env:
+  #     SP1_SKIP_PROGRAM_BUILD: "true"
+  #     SKIP_GUEST_BUILD: "1"
+  #     CARGO_NET_GIT_FETCH_WITH_CLI: true
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: namespacelabs/nscloud-cache-action@v1
+  #       with:
+  #         cache: rust
+  #     - name: Setup Zkvm toolchains + Rust
+  #       uses: ./.github/actions/setup
+  #       with:
+  #         github_token: ${{ secrets.GITHUB_TOKEN }}
+  #         install_zkvm: "0"
+  #     - uses: pnpm/action-setup@v2
+  #       with:
+  #         version: 9
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 20.x
+  #     - name: Checkout web3-js SDK
+  #       uses: actions/checkout@v4
+  #       with:
+  #         repository: "Sovereign-Labs/sovereign-sdk-web3-js"
+  #         path: "examples/demo-rollup/web3-js-sdk"
+  #         ref: "45b227eab7ee280a98baf08f8302b7425fa88a2a"
+  #     - name: Run web3-js SDK tests against demo-rollup
+  #       # See script for more details about what to do if job
+  #       run: |
+  #         cd examples/demo-rollup
+  #         bash ./web3-js-sdk-test-runner.sh

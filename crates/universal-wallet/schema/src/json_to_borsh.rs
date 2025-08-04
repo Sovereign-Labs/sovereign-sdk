@@ -120,6 +120,43 @@ macro_rules! serialize_primitive {
     }};
 }
 
+// We allow serializing floats as bytes from `0x` prefixed hex strings.
+// This is to avoid precision loss when working with floats in JSON.
+macro_rules! serialize_float {
+    ($self:ident, $val:expr, $as_fn:ident, $expected_type:ty) => {{
+        let value = $val
+            .$as_fn()
+            .and_then(|v| {
+                #[allow(clippy::unnecessary_cast)]
+                let f = v as $expected_type;
+                if f.is_nan() {
+                    None
+                } else {
+                    Some(f)
+                }
+            })
+            .or_else(|| {
+                $val.as_str().and_then(|str_val| {
+                    if str_val.starts_with("0x") {
+                        <$expected_type as FromHex>::from_hex(
+                            str_val
+                                .strip_prefix("0x")
+                                .expect("impossible, we checked prefix"),
+                        )
+                    } else {
+                        <$expected_type as FromStr>::from_str(str_val).ok()
+                    }
+                })
+            })
+            .ok_or(EncodeError::InvalidType {
+                schema_type: stringify!($expected_type).to_string(),
+                value: $val.to_string(),
+            })?;
+        borsh::to_writer(&mut $self.out, &value)?;
+        Ok(()) as Self::ReturnType
+    }};
+}
+
 impl<W: std::io::Write, L: LinkingScheme> TypeVisitor<L, ContainerSerdeMetadata>
     for EncodeVisitor<'_, W>
 {
@@ -290,17 +327,8 @@ impl<W: std::io::Write, L: LinkingScheme> TypeVisitor<L, ContainerSerdeMetadata>
         context: Context<L>,
     ) -> Self::ReturnType {
         match p {
-            Primitive::Float32 => {
-                serialize_primitive!(self, context.value, as_f64, f32, |f| {
-                    let f = f as f32;
-                    if f.is_finite() {
-                        Some(f)
-                    } else {
-                        None
-                    }
-                })
-            }
-            Primitive::Float64 => serialize_primitive!(self, context.value, as_f64, f64),
+            Primitive::Float32 => serialize_float!(self, context.value, as_f64, f32),
+            Primitive::Float64 => serialize_float!(self, context.value, as_f64, f64),
             Primitive::Boolean => serialize_primitive!(self, context.value, as_bool, bool),
             Primitive::Integer(int, _) => match int {
                 IntegerType::i8 => serialize_primitive!(self, context.value, as_i64, i8),
@@ -458,5 +486,35 @@ impl<W: std::io::Write, L: LinkingScheme> TypeVisitor<L, ContainerSerdeMetadata>
             value_type.visit(schema, self, Context::from_val(val.1.clone(), value))?;
         }
         Ok(())
+    }
+}
+
+trait FromHex {
+    fn from_hex(hex_str: &str) -> Option<Self>
+    where
+        Self: Sized;
+}
+
+impl FromHex for f32 {
+    fn from_hex(hex_str: &str) -> Option<Self> {
+        let bytes = hex::decode(hex_str).ok()?;
+        if bytes.len() == 4 {
+            let byte_array: [u8; 4] = bytes.try_into().ok()?;
+            Some(f32::from_le_bytes(byte_array))
+        } else {
+            None
+        }
+    }
+}
+
+impl FromHex for f64 {
+    fn from_hex(hex_str: &str) -> Option<Self> {
+        let bytes = hex::decode(hex_str).ok()?;
+        if bytes.len() == 8 {
+            let byte_array: [u8; 8] = bytes.try_into().ok()?;
+            Some(f64::from_le_bytes(byte_array))
+        } else {
+            None
+        }
     }
 }

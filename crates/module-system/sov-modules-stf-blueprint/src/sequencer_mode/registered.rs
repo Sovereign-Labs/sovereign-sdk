@@ -329,7 +329,7 @@ where
     B: IncrementalBatch<S>,
 {
     let span = if let Some(id) = batch_with_id.id() {
-        tracing::info_span!("batch", batch_id = hex::encode(id)).entered()
+        tracing::info_span!("batch", batch_id = %HexHash::from(id)).entered()
     } else {
         tracing::info_span!("sequencer-batch").entered()
     };

@@ -10,8 +10,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use axum::http::StatusCode;
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+pub use full_node_configs::sequencer::StdSequencerConfig;
 use sov_blob_sender::{new_blob_id, BlobSender};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::capabilities::{AuthenticationError, ChainState};
@@ -50,17 +49,6 @@ where
     checkpoint: Option<StateCheckpoint<S>>,
     mempool: Mempool<Da::Spec>,
     phantom: PhantomData<Rt>, // TODO(@neysofu): remove this if possible.
-}
-
-/// Configuration for [`StdSequencer`].
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
-pub struct StdSequencerConfig {
-    /// Maximum number of transactions in mempool. Once this limit is reached,
-    /// the batch builder will evict older transactions.
-    pub mempool_max_txs_count: Option<NonZero<usize>>,
-    /// Maximum size of a batch. The sequencer will not build batches larger
-    /// than this size.
-    pub max_batch_size_bytes: Option<NonZero<usize>>,
 }
 
 /// A [`Sequencer`] that creates batches of transactions in a way that's

@@ -1,5 +1,5 @@
 ---
-source: crates/full-node/sov-stf-runner/src/config.rs
+source: crates/full-node/full-node-configs/src/runner.rs
 expression: config
 ---
 {

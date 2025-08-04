@@ -1,6 +1,6 @@
 use std::num::NonZero;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -95,6 +95,7 @@ where
     inner: &'a mut Inner<S, Rt>,
     reason: &'static str,
     start_time: std::time::Instant,
+    channel_size: u32,
 }
 
 impl<'a, S, Rt> InnerGuard<'a, S, Rt>
@@ -103,11 +104,12 @@ where
     Rt: Runtime<S>,
 {
     /// Create a new inner guard.
-    pub fn new(inner: &'a mut Inner<S, Rt>, reason: &'static str) -> Self {
+    pub fn new(inner: &'a mut Inner<S, Rt>, reason: &'static str, channel_size: u32) -> Self {
         Self {
             inner,
             reason,
             start_time: std::time::Instant::now(),
+            channel_size,
         }
     }
 }
@@ -142,6 +144,7 @@ where
         self.inner.metrics.push(PreferredSequencerChannelMetrics {
             duration: self.start_time.elapsed(),
             reason: self.reason,
+            channel_size: self.channel_size,
         });
         if self.inner.metrics.len() >= METRICS_BATCH_SIZE {
             sov_metrics::track_metrics(|t| {
@@ -704,7 +707,7 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     PruneSequencerDb {
         reason: &'static str,
     },
-    FlushTxCache {
+    ForceOverwriteState {
         api_ledger_db: LedgerDb,
         transaction_cache_write_handle: TxResultWriter<S, Rt>,
         info: StateUpdateInfo<S::Storage>,
@@ -809,13 +812,16 @@ where
         stop_at_rollup_height,
     };
 
+    let channel_size = Arc::new(AtomicU32::new(0));
     (
         SynchronizedSequencerState {
             inner,
+            channel_size: channel_size.clone(),
             message_receiver,
         },
         SequencerStateUpdator {
             message_sender,
+            channel_size,
             shutdown_sender,
         },
     )
@@ -826,6 +832,7 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
+    channel_size: Arc<AtomicU32>,
     message_sender: mpsc::Sender<Message<S, Rt>>,
     shutdown_sender: watch::Sender<()>,
 }
@@ -974,7 +981,7 @@ where
         self.send(Message::PruneSequencerDb { reason }).await;
     }
 
-    pub(crate) async fn flush_tx_cache_msg(
+    pub(crate) async fn force_overite_state_msg(
         &self,
         api_ledger_db: LedgerDb,
         transaction_cache_write_handle: TxResultWriter<S, Rt>,
@@ -982,7 +989,7 @@ where
         rollup_exec_config: RollupBlockExecutorConfig<S, Rt>,
         reason: &'static str,
     ) {
-        self.send(Message::FlushTxCache {
+        self.send(Message::ForceOverwriteState {
             api_ledger_db,
             transaction_cache_write_handle,
             info,
@@ -1054,6 +1061,7 @@ where
     }
 
     async fn send(&self, message: Message<S, Rt>) {
+        self.channel_size.fetch_add(1, Ordering::Relaxed);
         if self.message_sender.send(message).await.is_err() {
             info!("SynchronizedSequencerState(send) task exited, this is ok if the sequencer is shutting down.");
             exit_rollup(&self.shutdown_sender).await;
@@ -1077,6 +1085,7 @@ where
     Rt: Runtime<S>,
 {
     inner: Inner<S, Rt>,
+    channel_size: Arc<AtomicU32>,
     message_receiver: mpsc::Receiver<Message<S, Rt>>,
 }
 
@@ -1208,14 +1217,14 @@ where
                     Message::PruneSequencerDb { reason } => {
                         self.process_prune_sequencer_db(reason).await;
                     }
-                    Message::FlushTxCache {
+                    Message::ForceOverwriteState {
                         api_ledger_db,
                         transaction_cache_write_handle,
                         info,
                         rollup_exec_config,
                         reason,
                     } => {
-                        self.process_flush_tx_cache(
+                        self.process_force_overwrite_state(
                             api_ledger_db,
                             transaction_cache_write_handle,
                             info,
@@ -1270,7 +1279,8 @@ where
 
     #[tracing::instrument(skip_all, level = "debug")]
     async fn get_inner_with_timing(&mut self, reason: &'static str) -> InnerGuard<S, Rt> {
-        InnerGuard::new(&mut self.inner, reason)
+        let channel_size = self.channel_size.fetch_sub(1, Ordering::Relaxed);
+        InnerGuard::new(&mut self.inner, reason, channel_size)
     }
 
     async fn process_next_sequence_number(&mut self, reason: &'static str) -> SequenceNumber {
@@ -1334,6 +1344,17 @@ where
                 !inner.has_finished_startup,
             )
         };
+
+        let is_resync = matches!(
+            inner.is_ready,
+            Err(SequencerNotReadyDetails::Syncing { .. })
+        );
+
+        let is_recover = matches!(
+            inner.is_ready,
+            Err(SequencerNotReadyDetails::PreferredSequencerRecovering)
+        );
+
         let time_spent_fetching_batches = fetch_batches_to_replay_metrics.duration;
         sov_metrics::track_metrics(|t| {
             t.submit(fetch_batches_to_replay_metrics);
@@ -1399,8 +1420,17 @@ where
                 PreferredSeqOperation::RecoverAndCatchUp
             }
             (false, false, false, _) => {
+                let should_flush_tx_cache = is_startup || is_resync || is_recover;
+
+                if should_flush_tx_cache {
+                    inner
+                        .executor_events_sender
+                        .flush_transactions_cache(info.next_tx_number)
+                        .await;
+                }
+
                 PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeState(
-                    is_startup,
+                    should_flush_tx_cache,
                     time_spent_fetching_batches,
                 )
             }
@@ -1619,7 +1649,7 @@ where
         });
     }
 
-    async fn process_flush_tx_cache(
+    async fn process_force_overwrite_state(
         &mut self,
         api_ledger_db: LedgerDb,
         transaction_cache_write_handle: TxResultWriter<S, Rt>,
@@ -1628,11 +1658,6 @@ where
         reason: &'static str,
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
-        inner
-            .executor_events_sender
-            .flush_transactions_cache(info.next_tx_number)
-            .await;
-
         let executor_from_info = RollupBlockExecutor::<_, Rt>::new(&info, rollup_exec_config);
 
         inner
@@ -1687,15 +1712,6 @@ where
         if node_sequence_number > our_sequence_number {
             inner
                 .overwrite_next_sequence_number_for_recovery(node_sequence_number)
-                .await;
-            inner
-                .executor_events_sender
-                .flush_transactions_cache(info.next_tx_number)
-                .await;
-        } else if !inner.has_finished_startup {
-            inner
-                .executor_events_sender
-                .flush_transactions_cache(info.next_tx_number)
                 .await;
         }
 

@@ -378,7 +378,9 @@ async fn check_with_increasing_stf_infos(
             shutdown_sender,
             rollup_task,
             da_service,
-            api_client,
+            client: sov_cli::NodeClient {
+                client: api_client, ..
+            },
             ..
         } = test_rollup;
         let da_service_ref = da_service.clone();
