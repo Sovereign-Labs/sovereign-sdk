@@ -99,20 +99,8 @@ async fn start_stop_empty(
         // Let rollup run for some time
         tokio::time::sleep(sleep_duration).await;
 
-        let TestRollup {
-            shutdown_sender,
-            rollup_task,
-            da_service,
-            ..
-        } = test_rollup;
-
-        drop(da_service);
         tracing::info!("Triggering shutdown....");
-        shutdown_sender.send(())?;
-        tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, rollup_task)
-            .await
-            .context("Joining rollup task failed")???;
-
+        tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, test_rollup.shutdown()).await??;
         // // By design, child tasks don't always report back to their parents when they finish shutting down. This is fine
         // // during normal operation, but it means that we can't "await" until every spawned task is shutdown for this test. That makes
         // // the test flaky, since we sometimes try to restart the rollup before we finish shutting it down, causing rocksdb locks to trigger.
