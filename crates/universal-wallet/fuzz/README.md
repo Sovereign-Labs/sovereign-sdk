@@ -29,6 +29,9 @@ SOV_UNIVERSAL_WALLET_FUZZ_JS_DIR="../../../../sovereign-sdk-web3-js/packages/ser
 
 Where `SOV_UNIVERSAL_WALLET_FUZZ_JS_DIR` is the path to the `serializers` package in the [web3 js repo](https://github.com/Sovereign-Labs/sovereign-sdk-web3-js/tree/master).
 
+**NOTE:** If updating `FuzzInput` you should _not_ use `u64`, `i64`, `u128`, `i128` types directly as this will cause testing to fail against the JS implementations
+due to precision loss. Use the wrapper `U64`, `I64`, etc types for JS compatibility.
+
 ### Features
 
 - `js-compat` serializes numbers in a way that is compatible with JS/JSON, big ints as strings, etc.

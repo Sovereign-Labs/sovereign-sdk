@@ -93,7 +93,7 @@ pub struct ComplexStruct {
     field_a: Vec<(Option<u8>, [i8; 32])>,
     needs_more_vecs: Vec<Vec<Vec<Vec<U128>>>>,
     never: (),
-    bulk_tuple: (i32, i32, u64, I128, ArbitrarySafeString, Option<bool>),
+    bulk_tuple: (i32, i32, U64, I128, ArbitrarySafeString, Option<bool>),
 }
 
 #[derive(
