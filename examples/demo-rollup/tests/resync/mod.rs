@@ -119,17 +119,17 @@ async fn test_generate_mockda_dataset_for_resync() -> anyhow::Result<()> {
             FINALIZATION_SLOTS,
             rollup_storage_path.clone(),
         )
-            .with_zkvm_host_args(mock_da_risc0_host_args())
-            .set_config(|c| {
-                c.rollup_prover_config = Some(RollupProverConfig::Skip);
-                c.aggregated_proof_block_jump = 10;
-                c.max_concurrent_blobs = 92;
-            })
-            .set_persistent_da()
-            .start(),
+        .with_zkvm_host_args(mock_da_risc0_host_args())
+        .set_config(|c| {
+            c.rollup_prover_config = Some(RollupProverConfig::Skip);
+            c.aggregated_proof_block_jump = 10;
+            c.max_concurrent_blobs = 92;
+        })
+        .set_persistent_da()
+        .start(),
     )
-        .await
-        .context("Starting rollup failed")??;
+    .await
+    .context("Starting rollup failed")??;
 
     let tx_signer_key =
         read_private_key::<DemoRollupSpec>("tx_signer_private_key.json").private_key;
@@ -186,7 +186,8 @@ async fn test_generate_mockda_dataset_for_resync() -> anyhow::Result<()> {
     for file in &sqlite_files {
         let file_path = target_folder.join(file);
         if file_path.exists() {
-            std::fs::remove_file(&file_path).with_context(|| format!("Failed to clean up file {}", file_path.display()))?;
+            std::fs::remove_file(&file_path)
+                .with_context(|| format!("Failed to clean up file {}", file_path.display()))?;
         }
     }
 
@@ -335,17 +336,17 @@ async fn sync_rollup_with_path(
             5,
             rollup_storage_path.clone(),
         )
-            .with_zkvm_host_args(mock_da_risc0_host_args())
-            .set_config(|c| {
-                c.rollup_prover_config = Some(RollupProverConfig::Skip);
-                c.aggregated_proof_block_jump = 10;
-                c.max_concurrent_blobs = 92;
-            })
-            .set_persistent_da()
-            .start(),
+        .with_zkvm_host_args(mock_da_risc0_host_args())
+        .set_config(|c| {
+            c.rollup_prover_config = Some(RollupProverConfig::Skip);
+            c.aggregated_proof_block_jump = 10;
+            c.max_concurrent_blobs = 92;
+        })
+        .set_persistent_da()
+        .start(),
     )
-        .await
-        .context("Starting rollup failed")??;
+    .await
+    .context("Starting rollup failed")??;
 
     let mut slot_subscription = test_rollup.api_client().subscribe_slots().await?;
     let demo_client = demo_stf_json_client::Client::new(&test_rollup.client.base_url);
@@ -382,8 +383,8 @@ async fn sync_rollup_with_path(
             tokio::time::sleep(Duration::from_secs(2)).await;
         }
     })
-        .await
-        .context("Fully resyncing to the DA tip timed out")?;
+    .await
+    .context("Fully resyncing to the DA tip timed out")?;
     // We need to sleep because the sync status is based on the DA service updated by the node,
     // but the sequencer needs to run update_state() first.
     tokio::time::sleep(Duration::from_millis(1000)).await;
@@ -423,8 +424,8 @@ async fn sync_rollup_with_path(
             }
         }
     })
-        .await
-        .context("Finalizing the transaction failed")??;
+    .await
+    .context("Finalizing the transaction failed")??;
     check_value(&demo_client, CHECK_TRANSACTION_VALUE).await;
 
     let TestRollup {
