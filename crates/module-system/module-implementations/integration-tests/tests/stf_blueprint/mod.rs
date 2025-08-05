@@ -250,19 +250,18 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
     // Create a signature for a different message so it won't verify in the stf.
     let bad_signature = signer.private_key.sign(&[1, 2, 3]);
 
-    let details = TxDetails {
-        max_priority_fee_bips,
-        max_fee: Amount::new(200_000),
-        gas_limit: None,
-        chain_id,
-    };
     match signed_tx.versioned_tx {
         VersionedTx::V0(inner) => Transaction::new_with_details_v0(
             inner.pub_key,
             inner.runtime_call,
             bad_signature,
             inner.uniqueness,
-            details,
+            TxDetails {
+                max_priority_fee_bips,
+                max_fee: Amount::new(200_000),
+                gas_limit: None,
+                chain_id,
+            },
         ),
     }
 }

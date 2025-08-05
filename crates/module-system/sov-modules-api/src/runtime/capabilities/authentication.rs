@@ -275,16 +275,16 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
 
 /// Extracts authorization data from a verified transaction.
 fn extract_authorization_data<S: Spec, D: DispatchCall<Spec = S>>(
-    tx: &VersionedTx<D::Decodable, S>,
+    tx_v0: &crate::transaction::Version0<D::Decodable, S>,
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthorizationData<S>, AuthenticationError> {
-    let pub_key = tx.get_pubkey().clone();
+    let pub_key = tx_v0.pub_key.clone();
     let credential_id = metered_credential(&pub_key, meter)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
     Ok(AuthorizationData {
-        uniqueness: tx.get_uniqueness(),
+        uniqueness: tx_v0.uniqueness,
         tx_hash: raw_tx_hash,
         credential_id,
         credentials: Credentials::new(pub_key),
@@ -298,18 +298,21 @@ fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
     chain_hash: &[u8; 32],
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
-    let tx_details = tx.versioned_tx.get_details();
-    verify_chain_id(tx_details, raw_tx_hash)?;
-    verify_signature(&tx, chain_hash, raw_tx_hash, meter)?;
-    let authorization_data =
-        extract_authorization_data::<S, D>(&tx.versioned_tx, raw_tx_hash, meter)?;
-    let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
-        raw_tx_hash,
-        authenticated_tx: tx_details.clone().into(),
-    };
-    let runtime_call = tx.versioned_tx.into_runtime_call();
+    match &tx.versioned_tx {
+        VersionedTx::V0(tx_v0) => {
+            verify_chain_id(&tx_v0.details, raw_tx_hash)?;
+            verify_signature(&tx, chain_hash, raw_tx_hash, meter)?;
+            let authorization_data = extract_authorization_data::<S, D>(tx_v0, raw_tx_hash, meter)?;
 
-    Ok((tx_and_raw_hash, authorization_data, runtime_call))
+            let runtime_call = tx_v0.runtime_call.clone();
+            let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
+                raw_tx_hash,
+                authenticated_tx: tx_v0.details.clone().into(),
+            };
+
+            Ok((tx_and_raw_hash, authorization_data, runtime_call))
+        }
+    }
 }
 
 /// Authenticate raw sov-transaction.
