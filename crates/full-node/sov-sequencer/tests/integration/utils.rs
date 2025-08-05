@@ -297,7 +297,7 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
 
 pub fn encode_call_with_fee<RT: Runtime<TestSpec>>(
     key: &Ed25519PrivateKey,
-    nonce: u64,
+    generation: u64,
     call_message: &<RT as DispatchCall>::Decodable,
     max_fee: Amount,
 ) -> RawTx {
@@ -306,7 +306,7 @@ pub fn encode_call_with_fee<RT: Runtime<TestSpec>>(
     let tx = test_signed_transaction::<RT, TestSpec>(
         key,
         call_message,
-        nonce,
+        generation,
         &<RT as Runtime<TestSpec>>::CHAIN_HASH,
         tx_details,
     );
@@ -316,7 +316,7 @@ pub fn encode_call_with_fee<RT: Runtime<TestSpec>>(
 
 pub fn tx_set_value_with_gas<RT: Runtime<TestSpec> + EncodeCall<ValueSetter<TestSpec>>>(
     key: &Ed25519PrivateKey,
-    nonce: u64,
+    generation: u64,
     value_to_set: u64,
     gas: Option<GasUnit<2>>,
     max_fee: Amount,
@@ -328,7 +328,7 @@ pub fn tx_set_value_with_gas<RT: Runtime<TestSpec> + EncodeCall<ValueSetter<Test
         },
     );
 
-    encode_call_with_fee::<RT>(key, nonce, &msg, max_fee)
+    encode_call_with_fee::<RT>(key, generation, &msg, max_fee)
 }
 
 // This allows for easily setting file sharing when using Docker Desktop.
