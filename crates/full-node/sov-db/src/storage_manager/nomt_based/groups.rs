@@ -5,13 +5,13 @@ use std::thread::JoinHandle;
 
 use anyhow::Context;
 use rockbound::cache::delta_reader::DeltaReader;
-use rockbound::rocksdb::ColumnFamilyDescriptor;
-use rockbound::versioned_db::{VersionedDB, VersionedDeltaReader, VersionedTableMetadataKey};
-use rockbound::{default_cf_descriptor, SchemaBatch};
+use rockbound::versioned_db::{VersionedDeltaReader, VersionedTableMetadataKey};
+use rockbound::SchemaBatch;
 use sov_rollup_interface::reexports::digest;
 
 use crate::accessory_db::AccessoryDb;
 use crate::config::RollupDbConfig;
+use crate::flat_db::FlatStateDb;
 use crate::historical_state::{HistoricalStateReader, StateChanges};
 use crate::ledger_db::LedgerDb;
 use crate::metrics::nomt::PrunerMetric;
@@ -20,104 +20,9 @@ use crate::pruner::Pruner;
 use crate::schema::namespace::{
     NomtCommittedVersion, NomtHistoricalState, NomtPruningState, NomtStateValues,
 };
-use crate::schema::tables::{ModuleAccessoryState, StateRootHashes};
+use crate::schema::tables::ModuleAccessoryState;
 use crate::state_db_nomt::{NomtSessionBuilder, NomtStateDb, StateOverlay};
 use crate::storage_manager::{update_ledger_finalized_height, InitializableNativeNomtStorage};
-use crate::DbOptions;
-
-/// A database to store the flat state of the rollup (i.e. the raw key-value pairs)
-pub struct FlatStateDb {
-    user: VersionedDB<NomtStateValues<UserNamespace>>,
-    kernel: VersionedDB<NomtStateValues<KernelNamespace>>,
-    other: Arc<rockbound::DB>,
-}
-
-impl FlatStateDb {
-    const DB_NAME: &'static str = "state";
-    const DB_PATH_SUFFIX: &'static str = "state-db";
-
-    /// Create a new [`FlatStateDb`] from a path.
-    pub fn new(path: std::path::PathBuf) -> anyhow::Result<Self> {
-        let mut columns = vec![default_cf_descriptor(StateRootHashes::table_name())];
-        VersionedDB::<NomtStateValues<UserNamespace>>::add_column_families(&mut columns)?;
-        VersionedDB::<NomtStateValues<KernelNamespace>>::add_column_families(&mut columns)?;
-        let other =
-            Self::get_rockbound_options(columns).setup_db_in_path_with_column_descriptors(path)?;
-        let other = Arc::new(other);
-        let user = VersionedDB::<NomtStateValues<UserNamespace>>::from_db(other.clone())?;
-        let kernel = VersionedDB::<NomtStateValues<KernelNamespace>>::from_db(other.clone())?;
-        Ok(Self {
-            user,
-            kernel,
-            other,
-        })
-    }
-
-    #[allow(dead_code)]
-    /// Get the underlying [`rockbound::DB`] for the historical state. Used for testing only.
-    pub fn get_db(&self) -> Arc<rockbound::DB> {
-        self.other.clone()
-    }
-
-    /// Get the underlying [`VersionedDB`] for the user state.
-    pub fn get_user_db(&self) -> &VersionedDB<NomtStateValues<UserNamespace>> {
-        &self.user
-    }
-
-    /// Get the underlying [`VersionedDB`] for the kernel state.
-    pub fn get_kernel_db(&self) -> &VersionedDB<NomtStateValues<KernelNamespace>> {
-        &self.kernel
-    }
-
-    /// [`DbOptions`] for [`HistoricalStateReader`].
-    pub fn get_rockbound_options(
-        columns: Vec<ColumnFamilyDescriptor>,
-    ) -> DbOptions<ColumnFamilyDescriptor> {
-        DbOptions {
-            name: Self::DB_NAME,
-            path_suffix: Self::DB_PATH_SUFFIX,
-            columns,
-        }
-    }
-
-    /// Coalesce all the changes into a single schema batch.
-    /// Assumption: only a single thread is committing at a time. Calling prepare_commit multiple times
-    /// will result in a version mismatch.
-    fn prepare_commit(&self, state: StateChanges) -> anyhow::Result<SchemaBatch> {
-        let StateChanges {
-            user,
-            kernel,
-            other,
-        } = state;
-
-        let mut other_changes = Arc::try_unwrap(other).unwrap_or_else(|arc| (*arc).clone());
-        let version = self
-            .kernel
-            .get_committed_version()?
-            .and_then(|v| v.checked_add(1))
-            .unwrap_or(0);
-        if cfg!(debug_assertions) {
-            let user_version = self
-                .user
-                .get_committed_version()?
-                .and_then(|v| v.checked_add(1))
-                .unwrap_or(0);
-            assert_eq!(user_version, version);
-        }
-        self.user.materialize(&user, &mut other_changes, version)?;
-        self.kernel
-            .materialize(&kernel, &mut other_changes, version)?;
-
-        Ok(other_changes)
-    }
-
-    /// Coalesce all the changes into a single schema batch and write it atomically.
-    pub fn commit(&self, state: StateChanges) -> anyhow::Result<()> {
-        let commit = self.prepare_commit(state)?;
-        self.other.write_schemas(commit)?;
-        Ok(())
-    }
-}
 
 pub(crate) struct DbGroup<H, K> {
     merklized_state: Arc<NomtStateDb<H>>,
@@ -161,14 +66,14 @@ where
 
         // Note: failure handling and data recovery will be implemented later.
         self.merklized_state.commit(state)?;
-        self.accessory
-            .write_schemas(Arc::unwrap_or_clone(accessory))?;
-        // Ledger goes last, as its data is used during the start.
-        // So if ledger save failed, state and accessory will be synced from DA
-        self.ledger.write_schemas(Arc::unwrap_or_clone(ledger))?;
-        // Historical data is committed the last, as in case of failure, it can be synced from the normal state,
+        // Historical data is committed after merklized state, as in case of failure, it can be synced from the normal state,
         // as it duplicates the last written data to `self.state`.
         self.flat_state.commit(historical_state)?;
+        self.accessory
+            .write_schemas(Arc::unwrap_or_clone(accessory))?;
+        // Ledger goes after last, as its data is used during the start.
+        // So if ledger save failed, state and accessory will be synced from DA
+        self.ledger.write_schemas(Arc::unwrap_or_clone(ledger))?;
 
         self.merklized_state.send_metrics();
 

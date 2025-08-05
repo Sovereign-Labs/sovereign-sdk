@@ -81,6 +81,9 @@ where
         self.is_strict_mode = use_strict_mode;
     }
 
+    /// Returns a double option: The outer option is `None` if there is no reasonable version to use,
+    /// while the inner option is None if we want to get the latest state rather than querying for a
+    /// particular version.
     fn get_version_to_use(&self, version: Option<SlotNumber>) -> Option<Option<SlotNumber>> {
         if self.is_empty() {
             return None;
@@ -423,7 +426,6 @@ where
         }
     }
 
-    // TODO: Split accessory get versioned into separate function
     fn get_accessory(&self, key: &SlotKey) -> Option<SlotValue> {
         match self.read_value::<Accessory>(key, None) {
             Ok(val) => val,

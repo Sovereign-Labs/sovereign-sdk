@@ -43,7 +43,7 @@ impl HistoricalStateReader {
     const DB_NAME: &'static str = "historical-state-db";
 
     // Used for testing only.
-    #[allow(dead_code)]
+    #[cfg(test)]
     fn new_empty(flat_state: &crate::storage_manager::FlatStateDb) -> Self {
         let kernel_version = flat_state
             .get_kernel_db()

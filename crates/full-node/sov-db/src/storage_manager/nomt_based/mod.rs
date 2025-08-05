@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
-pub use groups::FlatStateDb;
+pub use crate::flat_db::FlatStateDb;
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::SchemaBatch;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};

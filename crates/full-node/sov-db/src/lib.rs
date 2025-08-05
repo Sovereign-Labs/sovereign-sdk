@@ -10,6 +10,7 @@
 use rockbound::rocksdb::ColumnFamilyDescriptor;
 use rockbound::{SchemaKey, SchemaValue};
 
+pub(crate) mod flat_db;
 /// Simpler version of `StateDb`, that stores key-values with versions for historical queries.
 pub mod historical_state;
 /// Implements a wrapper around RocksDB meant for storing rollup history ("the ledger").
