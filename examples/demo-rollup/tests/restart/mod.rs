@@ -103,11 +103,6 @@ async fn start_stop_empty(
 
         tracing::info!("Triggering shutdown....");
         tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, test_rollup.shutdown()).await??;
-        // By design, child tasks don't always report back to their parents when they finish shutting down. This is fine
-        // during normal operation, but it means that we can't "await" until every spawned task is shutdown for this test. That makes
-        // the test flaky, since we sometimes try to restart the rollup before we finish shutting it down, causing rocksdb locks to trigger.
-        // A small sleep prevents this.
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
 
     let known = [
