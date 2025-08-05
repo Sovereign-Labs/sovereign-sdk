@@ -3016,7 +3016,7 @@ pub(crate) async fn run_action_against_test_rollup(
             // startup until a StateUpdateInfo from the node has been processed.
             let test_rollup = test_rollup.restart().await?;
             test_rollup.da_service.produce_block_now().await.unwrap();
-            sleep(Duration::from_millis(500)).await;
+            sleep(Duration::from_millis(1500)).await;
             return Ok(test_rollup);
         }
         TestingAction::TryAcceptBadTx { invalid_reason } => {
