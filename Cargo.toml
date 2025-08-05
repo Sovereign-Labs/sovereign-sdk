@@ -258,7 +258,7 @@ uuid = { version = "1.10", default-features = false } # v1.9 is important becaus
 lazy_static = "1.5.0"
 num_cpus = "1.16"
 ruint = "1"
-risc0-zkvm = { version = "2.1", default-features = false }
+risc0-zkvm = { version = "2.2", default-features = false }
 risc0-zkvm-platform = "2.0"
 risc0-build = "2.1"
 
