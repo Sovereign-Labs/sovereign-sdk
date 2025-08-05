@@ -34,7 +34,7 @@ pub struct FlatStateDb {
 
 impl FlatStateDb {
     const DB_NAME: &'static str = "state";
-    const DB_PATH_SUFFIX: &'static str = "state";
+    const DB_PATH_SUFFIX: &'static str = "state-db";
 
     /// Create a new [`FlatStateDb`] from a path.
     pub fn new(path: std::path::PathBuf) -> anyhow::Result<Self> {
