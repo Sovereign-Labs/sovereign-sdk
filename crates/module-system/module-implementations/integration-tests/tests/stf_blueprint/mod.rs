@@ -287,7 +287,7 @@ pub fn create_tx_bad_sender<RT: Runtime<S>>(
 }
 
 pub fn create_tx_valid<RT: Runtime<S>>(
-    nonce: u64,
+    generation: u64,
     max_priority_fee_bips: PriorityFeeBips,
     signer: &TestUser<S>,
     chain_id: u64,
@@ -298,7 +298,7 @@ pub fn create_tx_valid<RT: Runtime<S>>(
         chain_id,
         max_priority_fee_bips,
         TEST_DEFAULT_MAX_FEE,
-        UniquenessData::Nonce(nonce),
+        UniquenessData::Generation(generation),
         None,
     );
 

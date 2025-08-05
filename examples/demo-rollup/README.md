@@ -111,9 +111,9 @@ Once a batch is submitted, the output should also contain the transaction hashes
 ```text
 2025-06-29T19:32:39.786604Z  INFO sov_cli::workflows::node: Executing node workflow
 2025-06-29T19:32:39.823949Z DEBUG sov_node_client: Queried nonce url="http://127.0.0.1:12346/modules/nonces/state/nonces/items/0xf8ad2437a279e1c8932c07358c91dc4fe34864a98c6c25f298e2a0199c1509ff" nonce=0
-2025-06-29T19:32:39.824189Z  INFO sov_cli::workflows::node: Submitting tx index=0 tx_hash=0x1846983d3d7ff20a78e0d514d1f95576bcb8b33971b1ca7eb9e327443085a090
+2025-06-29T19:32:39.824189Z  INFO sov_cli::workflows::node: Submitting tx index=0 tx_hash=0x031916a3cabcdf091fa4350874aa840feb05fa206d2ec2e740059e7d574b5636
 2025-06-29T19:32:39.824203Z  INFO sov_node_client: Calling `publish_batch` sequencer endpoint txs_included=1
-2025-06-29T19:32:39.826676Z  INFO sov_node_client: Submitted tx hash="0xfccb11073ac92ff06394a681b67c29939e7d3aff7d79a3681ba8f00ebe63add9"
+2025-06-29T19:32:39.826676Z  INFO sov_node_client: Submitted tx hash="0x031916a3cabcdf091fa4350874aa840feb05fa206d2ec2e740059e7d574b5636"
 2025-06-29T19:32:39.826700Z  INFO sov_node_client: Going to wait for batch to be processed max_waiting_time=300s
 2025-06-29T19:32:48.303757Z  INFO sov_node_client: Rollup has processed the submitted batch!
 ```
@@ -123,7 +123,7 @@ this case have the TokenCreated Event
 
 ```sh,test-ci,bashtestmd:compare-output
 $ sleep 5
-$ curl -sS http://127.0.0.1:12346/ledger/txs/0xfccb11073ac92ff06394a681b67c29939e7d3aff7d79a3681ba8f00ebe63add9/events | jq
+$ curl -sS http://127.0.0.1:12346/ledger/txs/0x031916a3cabcdf091fa4350874aa840feb05fa206d2ec2e740059e7d574b5636/events | jq
 [
   {
     "type": "event",
@@ -331,7 +331,7 @@ Adding the following transaction to batch:
       }
     }
   },
-  "chain_hash": "0xfeef0294ec9be88149bc818cf2342d8e6f83b10edc3221eee028466ab04241af",
+  "chain_hash": "0x143f44a0d2fd373a614ad32df7b4cefa324890c64af57b7b063ec3407198fbfc",
   "details": {
     "max_priority_fee_bips": 0,
     "max_fee": "100000000",
