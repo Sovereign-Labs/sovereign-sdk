@@ -1919,7 +1919,7 @@ async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
 
     // Close the batch and submit to DA
     test_rollup.force_close_batch().await.unwrap();
-    tokio::time::sleep(Duration::from_millis(200)).await; // Sleep to make sure the batch is published before we produce a block. If this gets flaky, we'll need to add a blob_sender subscription.
+    tokio::time::sleep(Duration::from_millis(500)).await; // Sleep to make sure the batch is published before we produce a block. If this gets flaky, we'll need to add a blob_sender subscription.
 
     // Ensure that the sequencer has time to see the updated state and submit its batch containing the transaction to DA.
     let next = da_layer.produce_and_wait_for_slot().await;
