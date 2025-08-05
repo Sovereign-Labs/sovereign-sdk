@@ -326,11 +326,10 @@ where
         );
 
         let ledger_materialization_start = std::time::Instant::now();
-        let mut ledger_change_set = tokio::task::block_in_place(|| {
-            self.ledger_db
-                .materialize_slot(slot_commit, new_state_root.as_ref())
-        })?;
-        tracing::trace!(time = ?ledger_materialization_start.elapsed(), "Initial Ledger ChangeSet is materialized");
+        let mut ledger_change_set = self
+            .ledger_db
+            .materialize_slot(slot_commit, new_state_root.as_ref())?;
+        tracing::trace!("Initial Ledger ChangeSet is materialized");
 
         if let Some(finalized_transition) = finalized_transitions.iter().last() {
             let last_processed_finalized_header = &finalized_transition.block_header;
@@ -452,12 +451,7 @@ where
         stf_state: Sm::StfState,
         ledger_state: DeltaReader,
     ) -> anyhow::Result<()> {
-        tokio::task::spawn_blocking({
-            let ledger_db = self.ledger_db.clone();
-            move || ledger_db.replace_reader(ledger_state)
-        })
-        .await
-        .expect("spawn_blocking failed");
+        self.ledger_db.replace_reader(ledger_state);
         let state_update_info =
             query_state_update_info(&self.ledger_db, stf_state, self.da_sync_state.as_ref())
                 .await?;
