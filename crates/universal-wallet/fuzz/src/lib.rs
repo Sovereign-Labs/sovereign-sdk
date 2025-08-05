@@ -55,7 +55,10 @@ impl Arbitrary<'_> for ArbitrarySafeString {
 )]
 pub enum ByteVecInput {
     Hex(#[sov_wallet(display(hex))] Vec<u8>),
-    Base58(#[sov_wallet(display(base58))] Vec<u8>),
+    Base58 {
+        #[sov_wallet(display(base58))]
+        address: Vec<u8>,
+    },
     Decimal(#[sov_wallet(display(decimal))] Vec<u8>),
 }
 

@@ -773,10 +773,22 @@ fn build_virtual_struct(
                 Some(ty) => quote!{#[sov_wallet(template_override_ty = #ty)]},
                 None => quote!{}
             };
+            let display_attribute = match &field.display {
+                Some(display_type) => {
+                    match display_type {
+                        ByteDisplayType::Hex => quote! {#[sov_wallet(display(hex))]},
+                        ByteDisplayType::Decimal => quote! {#[sov_wallet(display(decimal))]},
+                        ByteDisplayType::Base58 => quote! {#[sov_wallet(display(base58))]},
+                        ByteDisplayType::Bech32 { prefix } => quote! {#[sov_wallet(display(bech32(prefix = #prefix)))]},
+                        ByteDisplayType::Bech32m { prefix } => quote! {#[sov_wallet(display(bech32m(prefix = #prefix)))]},
+                    }
+                },
+                None => quote!{}
+            };
             // TODO: propagate `#[serde(rename)]` attributes to each field here if support for it
             // is required
             quote! {
-                #template_attribute #template_override_attribute #bounds_attribute #name: #field_type
+                #template_attribute #template_override_attribute #bounds_attribute #display_attribute #name: #field_type
             }
         })
         .collect::<Vec<_>>();
@@ -846,8 +858,20 @@ fn build_virtual_tuple(
                 Some(ty) => quote! {#[sov_wallet(template_override_ty = #ty)]},
                 None => quote! {},
             };
+            let display_attribute = match &field.display {
+                Some(display_type) => {
+                    match display_type {
+                        ByteDisplayType::Hex => quote! {#[sov_wallet(display(hex))]},
+                        ByteDisplayType::Decimal => quote! {#[sov_wallet(display(decimal))]},
+                        ByteDisplayType::Base58 => quote! {#[sov_wallet(display(base58))]},
+                        ByteDisplayType::Bech32 { prefix } => quote! {#[sov_wallet(display(bech32(prefix = #prefix)))]},
+                        ByteDisplayType::Bech32m { prefix } => quote! {#[sov_wallet(display(bech32m(prefix = #prefix)))]},
+                    }
+                },
+                None => quote!{}
+            };
             quote! {
-                #template_attribute #template_override_attribute #bounds_attribute #field_type
+                #template_attribute #template_override_attribute #bounds_attribute #display_attribute #field_type
             }
         })
         .collect::<Vec<_>>();
