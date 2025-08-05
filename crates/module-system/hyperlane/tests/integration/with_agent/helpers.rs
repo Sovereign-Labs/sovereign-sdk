@@ -205,7 +205,7 @@ impl HyperlaneBuilder {
         // Current image is based on https://github.com/citizen-stig/hyperlane-monorepo/tree/nikolai/for-test
         // TODO: Migrate it to https://github.com/Sovereign-Labs/hyperlane-monorepo/ and later to upstream.
         let docker_image =
-            docker_image.unwrap_or_else(|_| "ghcr.io/citizen-stig/hyperlane:latest".into());
+            docker_image.unwrap_or_else(|_| "ghcr.io/citizen-stig/hyperlane:uniquenes".into());
         let (name, tag) = docker_image
             .split_once(':')
             .unwrap_or((&docker_image, "latest"));

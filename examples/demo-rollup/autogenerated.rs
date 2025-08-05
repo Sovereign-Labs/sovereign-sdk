@@ -1,4 +1,4 @@
-pub const CHAIN_HASH: [u8; 32] = [254, 239, 2, 148, 236, 155, 232, 129, 73, 188, 129, 140, 242, 52, 45, 142, 111, 131, 177, 14, 220, 50, 33, 238, 224, 40, 70, 106, 176, 66, 65, 175];
+pub const CHAIN_HASH: [u8; 32] = [20, 63, 68, 160, 210, 253, 55, 58, 97, 74, 211, 45, 247, 180, 206, 250, 50, 72, 144, 198, 74, 245, 123, 123, 6, 62, 195, 64, 113, 152, 251, 252];
 
 #[allow(dead_code)]
 pub const SCHEMA_JSON: &str = r#"{
@@ -30,14 +30,6 @@ pub const SCHEMA_JSON: &str = r#"{
             "template": null,
             "value": {
               "ByIndex": 2
-            }
-          },
-          {
-            "name": "V1",
-            "discriminant": 1,
-            "template": null,
-            "value": {
-              "ByIndex": 115
             }
           }
         ],
@@ -90,15 +82,10 @@ pub const SCHEMA_JSON: &str = r#"{
             "doc": ""
           },
           {
-            "display_name": "generation",
+            "display_name": "uniqueness",
             "silent": false,
             "value": {
-              "Immediate": {
-                "Integer": [
-                  "u64",
-                  "Decimal"
-                ]
-              }
+              "ByIndex": 113
             },
             "doc": ""
           },
@@ -106,7 +93,7 @@ pub const SCHEMA_JSON: &str = r#"{
             "display_name": "details",
             "silent": false,
             "value": {
-              "ByIndex": 113
+              "ByIndex": 116
             },
             "doc": ""
           }
@@ -2621,6 +2608,70 @@ pub const SCHEMA_JSON: &str = r#"{
       }
     },
     {
+      "Enum": {
+        "type_name": "UniquenessData",
+        "variants": [
+          {
+            "name": "Nonce",
+            "discriminant": 0,
+            "template": null,
+            "value": {
+              "ByIndex": 114
+            }
+          },
+          {
+            "name": "Generation",
+            "discriminant": 1,
+            "template": null,
+            "value": {
+              "ByIndex": 115
+            }
+          }
+        ],
+        "hide_tag": false
+      }
+    },
+    {
+      "Tuple": {
+        "template": null,
+        "peekable": false,
+        "fields": [
+          {
+            "value": {
+              "Immediate": {
+                "Integer": [
+                  "u64",
+                  "Decimal"
+                ]
+              }
+            },
+            "silent": false,
+            "doc": ""
+          }
+        ]
+      }
+    },
+    {
+      "Tuple": {
+        "template": null,
+        "peekable": false,
+        "fields": [
+          {
+            "value": {
+              "Immediate": {
+                "Integer": [
+                  "u64",
+                  "Decimal"
+                ]
+              }
+            },
+            "silent": false,
+            "doc": ""
+          }
+        ]
+      }
+    },
+    {
       "Struct": {
         "type_name": "TxDetails",
         "template": null,
@@ -2630,7 +2681,7 @@ pub const SCHEMA_JSON: &str = r#"{
             "display_name": "max_priority_fee_bips",
             "silent": false,
             "value": {
-              "ByIndex": 114
+              "ByIndex": 117
             },
             "doc": ""
           },
@@ -2687,75 +2738,6 @@ pub const SCHEMA_JSON: &str = r#"{
       }
     },
     {
-      "Tuple": {
-        "template": null,
-        "peekable": false,
-        "fields": [
-          {
-            "value": {
-              "ByIndex": 116
-            },
-            "silent": false,
-            "doc": ""
-          }
-        ]
-      }
-    },
-    {
-      "Struct": {
-        "type_name": "Version1",
-        "template": null,
-        "peekable": false,
-        "fields": [
-          {
-            "display_name": "signature",
-            "silent": false,
-            "value": {
-              "ByIndex": 4
-            },
-            "doc": ""
-          },
-          {
-            "display_name": "pub_key",
-            "silent": false,
-            "value": {
-              "ByIndex": 5
-            },
-            "doc": ""
-          },
-          {
-            "display_name": "runtime_call",
-            "silent": false,
-            "value": {
-              "ByIndex": 6
-            },
-            "doc": ""
-          },
-          {
-            "display_name": "nonce",
-            "silent": false,
-            "value": {
-              "Immediate": {
-                "Integer": [
-                  "u64",
-                  "Decimal"
-                ]
-              }
-            },
-            "doc": ""
-          },
-          {
-            "display_name": "details",
-            "silent": false,
-            "value": {
-              "ByIndex": 113
-            },
-            "doc": ""
-          }
-        ]
-      }
-    },
-    {
       "Struct": {
         "type_name": "UnsignedTransaction",
         "template": null,
@@ -2773,7 +2755,7 @@ pub const SCHEMA_JSON: &str = r#"{
             "display_name": "uniqueness",
             "silent": false,
             "value": {
-              "ByIndex": 118
+              "ByIndex": 113
             },
             "doc": ""
           },
@@ -2781,72 +2763,8 @@ pub const SCHEMA_JSON: &str = r#"{
             "display_name": "details",
             "silent": false,
             "value": {
-              "ByIndex": 113
+              "ByIndex": 116
             },
-            "doc": ""
-          }
-        ]
-      }
-    },
-    {
-      "Enum": {
-        "type_name": "UniquenessData",
-        "variants": [
-          {
-            "name": "Nonce",
-            "discriminant": 0,
-            "template": null,
-            "value": {
-              "ByIndex": 119
-            }
-          },
-          {
-            "name": "Generation",
-            "discriminant": 1,
-            "template": null,
-            "value": {
-              "ByIndex": 120
-            }
-          }
-        ],
-        "hide_tag": false
-      }
-    },
-    {
-      "Tuple": {
-        "template": null,
-        "peekable": false,
-        "fields": [
-          {
-            "value": {
-              "Immediate": {
-                "Integer": [
-                  "u64",
-                  "Decimal"
-                ]
-              }
-            },
-            "silent": false,
-            "doc": ""
-          }
-        ]
-      }
-    },
-    {
-      "Tuple": {
-        "template": null,
-        "peekable": false,
-        "fields": [
-          {
-            "value": {
-              "Immediate": {
-                "Integer": [
-                  "u64",
-                  "Decimal"
-                ]
-              }
-            },
-            "silent": false,
             "doc": ""
           }
         ]
@@ -2855,7 +2773,7 @@ pub const SCHEMA_JSON: &str = r#"{
   ],
   "root_type_indices": [
     0,
-    117,
+    118,
     6,
     12
   ],
@@ -2931,9 +2849,6 @@ pub const SCHEMA_JSON: &str = r#"{
       "fields_or_variants": [
         {
           "name": "V0"
-        },
-        {
-          "name": "V1"
         }
       ]
     },
@@ -2954,7 +2869,7 @@ pub const SCHEMA_JSON: &str = r#"{
           "name": "runtime_call"
         },
         {
-          "name": "generation"
+          "name": "uniqueness"
         },
         {
           "name": "details"
@@ -3902,6 +3817,25 @@ pub const SCHEMA_JSON: &str = r#"{
       ]
     },
     {
+      "name": "UniquenessData",
+      "fields_or_variants": [
+        {
+          "name": "nonce"
+        },
+        {
+          "name": "generation"
+        }
+      ]
+    },
+    {
+      "name": "",
+      "fields_or_variants": []
+    },
+    {
+      "name": "",
+      "fields_or_variants": []
+    },
+    {
       "name": "TxDetails",
       "fields_or_variants": [
         {
@@ -3923,30 +3857,6 @@ pub const SCHEMA_JSON: &str = r#"{
       "fields_or_variants": []
     },
     {
-      "name": "",
-      "fields_or_variants": []
-    },
-    {
-      "name": "Version1",
-      "fields_or_variants": [
-        {
-          "name": "signature"
-        },
-        {
-          "name": "pub_key"
-        },
-        {
-          "name": "runtime_call"
-        },
-        {
-          "name": "nonce"
-        },
-        {
-          "name": "details"
-        }
-      ]
-    },
-    {
       "name": "UnsignedTransaction",
       "fields_or_variants": [
         {
@@ -3959,25 +3869,6 @@ pub const SCHEMA_JSON: &str = r#"{
           "name": "details"
         }
       ]
-    },
-    {
-      "name": "UniquenessData",
-      "fields_or_variants": [
-        {
-          "name": "nonce"
-        },
-        {
-          "name": "generation"
-        }
-      ]
-    },
-    {
-      "name": "",
-      "fields_or_variants": []
-    },
-    {
-      "name": "",
-      "fields_or_variants": []
     }
   ]
 }"#;

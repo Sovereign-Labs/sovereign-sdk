@@ -202,12 +202,12 @@ fn transaction_signed_properly_from_file() {
 
     let default_pubkey = &wallet_state.addresses.default_address().unwrap().pub_key;
 
-    if let VersionedTx::V0(inner) = &signed_tx.versioned_tx {
-        assert_eq!(default_pubkey, &inner.pub_key);
-        assert_eq!(generation, inner.generation);
-    } else {
-        panic!("Unexpected version of transaction");
-    }
+    match &signed_tx.versioned_tx {
+        VersionedTx::V0(inner) => {
+            assert_eq!(default_pubkey, &inner.pub_key);
+            assert_eq!(UniquenessData::Generation(generation), inner.uniqueness);
+        }
+    };
 
     assert_eq!(&runtime_call, signed_tx.runtime_call());
 }
@@ -323,9 +323,6 @@ fn transaction_signed_by_account_nickname() {
 
     match signed_tx.versioned_tx {
         VersionedTx::V0(inner) => {
-            assert_eq!(&key2.pub_key, &inner.pub_key);
-        }
-        VersionedTx::V1(inner) => {
             assert_eq!(&key2.pub_key, &inner.pub_key);
         }
     }

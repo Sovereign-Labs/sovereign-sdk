@@ -61,34 +61,7 @@ pub struct Version0<Call, S: Spec> {
     )]
     pub runtime_call: Call,
     /// The generation of the transaction (for uniqueness).
-    pub generation: u64,
-    /// The transaction metadata. Contains gas parameters and the chain ID.
-    pub details: TxDetails<S>,
-}
-
-#[derive(
-    derive_more::Debug,
-    Clone,
-    borsh::BorshDeserialize,
-    serde::Serialize,
-    serde::Deserialize,
-    borsh::BorshSerialize,
-    UniversalWallet,
-)]
-#[serde(bound = "Call: serde::Serialize + serde::de::DeserializeOwned")]
-/// V1 transaction, nonce based
-pub struct Version1<Call, S: Spec> {
-    /// The signature of the transaction.
-    pub signature: <S::CryptoSpec as CryptoSpec>::Signature,
-    /// The public key of the sender of the transaction.
-    pub pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
-    /// The runtime call of the transaction.
-    #[sov_wallet(
-        bound = "Call: sov_rollup_interface::sov_universal_wallet::schema::UniversalWallet"
-    )]
-    pub runtime_call: Call,
-    /// The nonce of the transaction (for uniqueness).
-    pub nonce: u64,
+    pub uniqueness: UniquenessData,
     /// The transaction metadata. Contains gas parameters and the chain ID.
     pub details: TxDetails<S>,
 }
@@ -106,7 +79,6 @@ pub struct Version1<Call, S: Spec> {
 #[allow(missing_docs)]
 pub enum VersionedTx<Call, S: Spec> {
     V0(Version0<Call, S>),
-    V1(Version1<Call, S>),
 }
 
 #[allow(missing_docs)]
@@ -114,28 +86,24 @@ impl<Call, S: Spec> VersionedTx<Call, S> {
     pub fn get_details(&self) -> &TxDetails<S> {
         match self {
             VersionedTx::V0(inner) => &inner.details,
-            VersionedTx::V1(inner) => &inner.details,
         }
     }
 
     pub fn get_uniqueness(&self) -> UniquenessData {
         match self {
-            VersionedTx::V0(inner) => UniquenessData::Generation(inner.generation),
-            VersionedTx::V1(inner) => UniquenessData::Generation(inner.nonce),
+            VersionedTx::V0(inner) => inner.uniqueness,
         }
     }
 
     pub fn get_pubkey(&self) -> &<S::CryptoSpec as CryptoSpec>::PublicKey {
         match self {
             VersionedTx::V0(inner) => &inner.pub_key,
-            VersionedTx::V1(inner) => &inner.pub_key,
         }
     }
 
     pub fn into_runtime_call(self) -> Call {
         match self {
             VersionedTx::V0(inner) => inner.runtime_call,
-            VersionedTx::V1(inner) => inner.runtime_call,
         }
     }
 }
@@ -221,17 +189,9 @@ impl<R: TransactionCallable, S: Spec> PartialEq for Transaction<R, S> {
                 self_inner.signature == other_inner.signature
                     && self_inner.pub_key == other_inner.pub_key
                     && self_inner.runtime_call == other_inner.runtime_call
-                    && self_inner.generation == other_inner.generation
+                    && self_inner.uniqueness == other_inner.uniqueness
                     && self_inner.details == other_inner.details
             }
-            (VersionedTx::V1(self_inner), VersionedTx::V1(other_inner)) => {
-                self_inner.signature == other_inner.signature
-                    && self_inner.pub_key == other_inner.pub_key
-                    && self_inner.runtime_call == other_inner.runtime_call
-                    && self_inner.nonce == other_inner.nonce
-                    && self_inner.details == other_inner.details
-            }
-            _ => false,
         }
     }
 }
@@ -270,7 +230,6 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
     pub fn runtime_call(&self) -> &R::Call {
         match &self.versioned_tx {
             VersionedTx::V0(inner) => &inner.runtime_call,
-            VersionedTx::V1(inner) => &inner.runtime_call,
         }
     }
 
@@ -278,7 +237,6 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
     pub fn chain_id(&self) -> u64 {
         match &self.versioned_tx {
             VersionedTx::V0(inner) => inner.details.chain_id,
-            VersionedTx::V1(inner) => inner.details.chain_id,
         }
     }
 
@@ -305,11 +263,6 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
                     .verify(&inner.pub_key, &serialized_tx, meter)
                     .map_err(TransactionVerificationError::from)?;
             }
-            VersionedTx::V1(inner) => {
-                MeteredSignature::new::<S>(inner.signature.clone())
-                    .verify(&inner.pub_key, &serialized_tx, meter)
-                    .map_err(TransactionVerificationError::from)?;
-            }
         }
         Ok(())
     }
@@ -319,7 +272,7 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
         pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
         runtime_call: R::Call,
         signature: <S::CryptoSpec as CryptoSpec>::Signature,
-        generation: u64,
+        uniqueness: UniquenessData,
         details: TxDetails<S>,
     ) -> Self {
         Self {
@@ -327,26 +280,7 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
                 signature,
                 pub_key,
                 runtime_call,
-                generation,
-                details,
-            }),
-        }
-    }
-
-    /// Creates a new transaction with the provided metadata.
-    pub fn new_with_details_v1(
-        pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
-        runtime_call: R::Call,
-        signature: <S::CryptoSpec as CryptoSpec>::Signature,
-        nonce: u64,
-        details: TxDetails<S>,
-    ) -> Self {
-        Self {
-            versioned_tx: VersionedTx::V1(Version1 {
-                signature,
-                pub_key,
-                runtime_call,
-                nonce,
+                uniqueness,
                 details,
             }),
         }
@@ -355,8 +289,7 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
     /// Extract the runtime call from the transaction
     pub fn call(self) -> R::Call {
         match self.versioned_tx {
-            VersionedTx::V0(inner) => inner.runtime_call.clone(),
-            VersionedTx::V1(inner) => inner.runtime_call.clone(),
+            VersionedTx::V0(inner) => inner.runtime_call,
         }
     }
 
@@ -364,12 +297,7 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
         match &self.versioned_tx {
             VersionedTx::V0(inner) => UnsignedTransaction::new_with_details(
                 inner.runtime_call.clone(),
-                UniquenessData::Generation(inner.generation),
-                inner.details.clone(),
-            ),
-            VersionedTx::V1(inner) => UnsignedTransaction::new_with_details(
-                inner.runtime_call.clone(),
-                UniquenessData::Nonce(inner.nonce),
+                inner.uniqueness,
                 inner.details.clone(),
             ),
         }
@@ -459,22 +387,13 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
         pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
         signature: <S::CryptoSpec as CryptoSpec>::Signature,
     ) -> Transaction<R, S> {
-        match self.uniqueness {
-            UniquenessData::Generation(generation) => Transaction::new_with_details_v0(
-                pub_key,
-                self.runtime_call,
-                signature,
-                generation,
-                self.details,
-            ),
-            UniquenessData::Nonce(nonce) => Transaction::new_with_details_v1(
-                pub_key,
-                self.runtime_call,
-                signature,
-                nonce,
-                self.details,
-            ),
-        }
+        Transaction::new_with_details_v0(
+            pub_key,
+            self.runtime_call,
+            signature,
+            self.uniqueness,
+            self.details,
+        )
     }
 }
 
