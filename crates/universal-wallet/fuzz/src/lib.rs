@@ -50,6 +50,10 @@ impl Arbitrary<'_> for ArbitrarySafeString {
     }
 }
 
+fn bech_prefix() -> &'static str {
+    "test"
+}
+
 #[derive(
     Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize, UniversalWallet, Arbitrary,
 )]
@@ -60,6 +64,7 @@ pub enum ByteVecInput {
         address: Vec<u8>,
     },
     Decimal(#[sov_wallet(display(decimal))] Vec<u8>),
+    Bechm(#[sov_wallet(display(bech32m(prefix = "bech_prefix()")))] Vec<u8>),
 }
 
 #[derive(
@@ -69,6 +74,7 @@ pub enum ByteArrayInput {
     Hex(#[sov_wallet(display(hex))] [u8; 32]),
     Base58(#[sov_wallet(display(base58))] [u8; 32]),
     Decimal(#[sov_wallet(display(decimal))] [u8; 32]),
+    Bech(#[sov_wallet(display(bech32(prefix = "bech_prefix()")))] [u8; 32]),
 }
 
 #[derive(
