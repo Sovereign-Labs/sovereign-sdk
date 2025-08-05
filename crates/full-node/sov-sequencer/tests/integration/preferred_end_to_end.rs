@@ -2019,7 +2019,7 @@ async fn test_no_crashes_on_resync_with_transactions() {
     let test_rollup = builder.start().await.unwrap();
 
     // Let it resync
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    tokio::time::sleep(Duration::from_secs(15)).await;
 
     // Verify accepting actions works
     let actions = vec![
