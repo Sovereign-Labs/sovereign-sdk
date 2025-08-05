@@ -556,7 +556,7 @@ impl LedgerStateProvider for LedgerDb {
     type Error = anyhow::Error;
 
     async fn get_head_slot_number(&self) -> Result<SlotNumber, Self::Error> {
-        let rpc_reader = tokio::task::block_in_place(|| self.get_rpc_reader());
+        let rpc_reader = self.get_rpc_reader().await?;
         rpc_reader
             .get_head_slot_number()
             .await
@@ -564,7 +564,7 @@ impl LedgerStateProvider for LedgerDb {
     }
 
     async fn get_latest_finalized_slot_number(&self) -> Result<SlotNumber, Self::Error> {
-        let rpc_reader = tokio::task::block_in_place(|| self.get_rpc_reader());
+        let rpc_reader = self.get_rpc_reader().await?;
         rpc_reader.get_latest_finalized_slot_number().await
     }
 
@@ -578,7 +578,7 @@ impl LedgerStateProvider for LedgerDb {
         T: TxReceiptContents,
         E: for<'a> TryFrom<(u64, &'a StoredEvent), Error = anyhow::Error> + Send + Sync,
     {
-        let rpc_reader = tokio::task::block_in_place(|| self.get_rpc_reader());
+        let rpc_reader = self.get_rpc_reader().await?;
         rpc_reader.get_slots(slot_ids, query_mode).await
     }
 
@@ -598,7 +598,7 @@ impl LedgerStateProvider for LedgerDb {
             batch_ids.len(),
             MAX_BATCHES_PER_REQUEST
         );
-        let rpc_reader = tokio::task::block_in_place(|| self.get_rpc_reader());
+        let rpc_reader = self.get_rpc_reader().await?;
         rpc_reader.get_batches(batch_ids, query_mode).await
     }
 
@@ -617,7 +617,7 @@ impl LedgerStateProvider for LedgerDb {
             tx_ids.len(),
             MAX_TRANSACTIONS_PER_REQUEST
         );
-        let rpc_reader = tokio::task::block_in_place(|| self.get_rpc_reader());
+        let rpc_reader = self.get_rpc_reader().await?;
         rpc_reader.get_transactions(tx_ids, query_mode).await
     }
 
@@ -634,7 +634,7 @@ impl LedgerStateProvider for LedgerDb {
             event_ids.len(),
             MAX_EVENTS_PER_REQUEST
         );
-        let rpc_reader = tokio::task::block_in_place(|| self.get_rpc_reader());
+        let rpc_reader = self.get_rpc_reader().await?;
         rpc_reader.get_events(event_ids).await
     }
 
@@ -734,7 +734,7 @@ impl LedgerStateProvider for LedgerDb {
     }
 
     async fn get_tx_numbers_by_hash(&self, hash: &[u8; 32]) -> Result<Vec<u64>, Self::Error> {
-        let rpc_reader = tokio::task::block_in_place(|| self.get_rpc_reader());
+        let rpc_reader = self.get_rpc_reader().await?;
         rpc_reader.get_tx_numbers_by_hash(hash).await
     }
 
@@ -779,7 +779,7 @@ impl LedgerStateProvider for LedgerDb {
     }
 
     async fn get_latest_event_number(&self) -> Result<Option<u64>, Self::Error> {
-        let rpc_reader = tokio::task::block_in_place(|| self.get_rpc_reader());
+        let rpc_reader = self.get_rpc_reader().await?;
         rpc_reader.get_latest_event_number().await
     }
 
@@ -787,7 +787,7 @@ impl LedgerStateProvider for LedgerDb {
     where
         E: for<'a> TryFrom<(u64, &'a StoredEvent), Error = anyhow::Error> + Send + Sync,
     {
-        let rpc_reader = tokio::task::block_in_place(|| self.get_rpc_reader());
+        let rpc_reader = self.get_rpc_reader().await?;
         rpc_reader.get_events_by_txn_hash(txn_hash).await
     }
 
@@ -795,7 +795,7 @@ impl LedgerStateProvider for LedgerDb {
     where
         E: for<'a> TryFrom<(u64, &'a StoredEvent), Error = anyhow::Error> + Send + Sync,
     {
-        let rpc_reader = tokio::task::block_in_place(|| self.get_rpc_reader());
+        let rpc_reader = self.get_rpc_reader().await?;
         rpc_reader.get_events_by_txn_number(txn_num).await
     }
 
@@ -867,7 +867,7 @@ impl LedgerStateProvider for LedgerDb {
         &self,
         slot_id: &SlotIdentifier,
     ) -> Result<Option<SlotNumber>, Self::Error> {
-        let rpc_reader = tokio::task::block_in_place(|| self.get_rpc_reader());
+        let rpc_reader = self.get_rpc_reader().await?;
         rpc_reader.resolve_slot_identifier(slot_id).await
     }
 
@@ -875,7 +875,7 @@ impl LedgerStateProvider for LedgerDb {
         &self,
         batch_id: &BatchIdentifier,
     ) -> Result<Option<u64>, Self::Error> {
-        let rpc_reader = tokio::task::block_in_place(|| self.get_rpc_reader());
+        let rpc_reader = self.get_rpc_reader().await?;
         rpc_reader.resolve_batch_identifier(batch_id).await
     }
 
@@ -883,7 +883,7 @@ impl LedgerStateProvider for LedgerDb {
         &self,
         tx_id: &TxIdentifier,
     ) -> Result<Option<u64>, Self::Error> {
-        let rpc_reader = tokio::task::block_in_place(|| self.get_rpc_reader());
+        let rpc_reader = self.get_rpc_reader().await?;
         rpc_reader.resolve_tx_identifier(tx_id).await
     }
 
@@ -891,7 +891,7 @@ impl LedgerStateProvider for LedgerDb {
         &self,
         event_id: &EventIdentifier,
     ) -> Result<Option<u64>, Self::Error> {
-        let rpc_reader = tokio::task::block_in_place(|| self.get_rpc_reader());
+        let rpc_reader = self.get_rpc_reader().await?;
         rpc_reader.resolve_event_identifier(event_id).await
     }
 
@@ -938,10 +938,9 @@ impl LedgerStateProvider for LedgerDb {
 }
 
 impl LedgerDb {
-    // This method is blocking via std::sync::RwLock
-    pub(crate) fn get_rpc_reader(&self) -> LedgerRpcReader {
-        LedgerRpcReader {
-            db: self.clone_reader(),
-        }
+    pub(crate) async fn get_rpc_reader(&self) -> anyhow::Result<LedgerRpcReader> {
+        let this = self.clone();
+        let db = tokio::task::spawn_blocking(move || this.clone_reader()).await?;
+        Ok(LedgerRpcReader { db })
     }
 }

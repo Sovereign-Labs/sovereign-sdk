@@ -452,7 +452,12 @@ where
         stf_state: Sm::StfState,
         ledger_state: DeltaReader,
     ) -> anyhow::Result<()> {
-        tokio::task::block_in_place(|| self.ledger_db.replace_reader(ledger_state));
+        tokio::task::spawn_blocking({
+            let ledger_db = self.ledger_db.clone();
+            move || ledger_db.replace_reader(ledger_state)
+        })
+        .await
+        .expect("spawn_blocking failed");
         let state_update_info =
             query_state_update_info(&self.ledger_db, stf_state, self.da_sync_state.as_ref())
                 .await?;

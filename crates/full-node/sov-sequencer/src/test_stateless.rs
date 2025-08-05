@@ -215,10 +215,13 @@ where
         let mut inner = self.inner.lock().await;
         inner.storage = update_info.storage;
 
-        tokio::task::block_in_place(|| {
-            self.api_ledger_db
-                .replace_reader(update_info.ledger_reader.clone());
-        });
+        tokio::task::spawn_blocking({
+            let api_ledger_db = self.api_ledger_db.clone();
+            let ledger_reader = update_info.ledger_reader.clone();
+            move || api_ledger_db.replace_reader(ledger_reader)
+        })
+        .await
+        .expect("spawn_blocking failed");
         self.api_ledger_db
             .send_notifications_for_slot(update_info.slot_number);
 

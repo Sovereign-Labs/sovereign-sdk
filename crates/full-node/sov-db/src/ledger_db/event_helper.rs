@@ -204,6 +204,7 @@ where
 {
     ledger_db
         .get_rpc_reader()
+        .await?
         .get_events_by_key_helper(event_key, txn_range, num_events, next)
         .await
 }
@@ -236,6 +237,7 @@ where
 {
     ledger_db
         .get_rpc_reader()
+        .await?
         .get_events_by_key_slot_range_helper(
             event_key,
             slot_height_start,

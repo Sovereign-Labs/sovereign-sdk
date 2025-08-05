@@ -556,7 +556,13 @@ where
             inner.checkpoint = Some(checkpoint);
         }
 
-        tokio::task::block_in_place(|| self.api_ledger_db.replace_reader(ledger_reader.clone()));
+        tokio::task::spawn_blocking({
+            let api_ledger_db = self.api_ledger_db.clone();
+            let ledger_reader = ledger_reader.clone();
+            move || api_ledger_db.replace_reader(ledger_reader)
+        })
+        .await
+        .expect("spawn_blocking failed");
         self.api_ledger_db.send_notifications_for_slot(*slot_number);
 
         if self.config.automatic_batch_production {
