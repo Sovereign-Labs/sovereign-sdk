@@ -3,8 +3,6 @@ mod rewards;
 use std::fmt::Debug;
 use std::io;
 
-use alloy_primitives::address;
-use alloy_sol_types::{eip712_domain, Eip712Domain, SolStruct};
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use data::{AuthenticatedTransactionData, Credentials, PriorityFeeBips, TxDetails};
 pub(crate) use rewards::transaction_consumption_helper;
@@ -231,33 +229,7 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
         })?;
         serialized_tx.extend_from_slice(chain_hash);
 
-        self.verify_inner(&serialized_tx, meter)
-    }
-
-    /// Check whether the transaction has been signed correctly using EIP712.
-    ///
-    /// # Errors
-    /// Returns an error if:
-    ///  * The signature is wrong
-    ///  * Serializing or hashing the transaction fails
-    ///  * Any operation runs out of gas
-    pub fn verify_eip712(
-        &self,
-        _chain_hash: &[u8; 32],
-        meter: &mut impl GasMeter<Spec = S>,
-    ) -> Result<(), TransactionVerificationError<S::Gas>> {
-        let unsigned = self.to_unsigned_transaction();
-        let tx_details = unsigned.details.as_sol_struct();
-
-        pub const DOMAIN: Eip712Domain = eip712_domain! {
-            name: "Transaction",
-            version: "1",
-            chain_id: 4321,
-            verifying_contract: address!("0000000000000000000000000000000000000000"),
-        };
-        let eip712_hash = tx_details.eip712_signing_hash(&DOMAIN);
-
-        self.verify_inner(eip712_hash.as_slice(), meter)
+        self.verify_signature(&serialized_tx, meter)
     }
 
     /// Creates a new transaction with the provided metadata.
@@ -286,7 +258,8 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
         }
     }
 
-    fn verify_inner(
+    /// Verify the transaction signature against the provided message.
+    pub fn verify_signature(
         &self,
         msg: &[u8],
         meter: &mut impl GasMeter<Spec = S>,
@@ -301,7 +274,8 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
         Ok(())
     }
 
-    fn to_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
+    /// Converts the transaction to an unsigned transaction.
+    pub fn to_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
         match &self.versioned_tx {
             VersionedTx::V0(inner) => UnsignedTransaction::new_with_details(
                 inner.runtime_call.clone(),
