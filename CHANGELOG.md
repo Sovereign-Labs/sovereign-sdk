@@ -1,6 +1,6 @@
 # 2025-08-04
-- #1466 Adds `VersionedTx::V1` variant. 
-  Replaces `generation: u64` attribute of `UnsignedTransaction` with `uniqueness: sov_modules_api::capabilities::UniquenessData`
+- #1477 **BREAKING CHANGE**: Replaces `generation: u64` with `uniqueness: sov_modules_api::capabilities::UniquenessData` enum for `Version0` transaction. 
+  Replaces `generation: u64` attribute of `UnsignedTransaction` with `uniqueness: UniquenessData`
   Update to client libraries that use `UnsignedTransaction` is needed.
 
 # 2025-08-01
