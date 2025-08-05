@@ -60,7 +60,7 @@ pub struct Version0<Call, S: Spec> {
         bound = "Call: sov_rollup_interface::sov_universal_wallet::schema::UniversalWallet"
     )]
     pub runtime_call: Call,
-    /// The generation of the transaction (for uniqueness).
+    /// Uniqueness identifier of this transaction. see [`UniquenessData`] for more details.
     pub uniqueness: UniquenessData,
     /// The transaction metadata. Contains gas parameters and the chain ID.
     pub details: TxDetails<S>,
@@ -79,33 +79,6 @@ pub struct Version0<Call, S: Spec> {
 #[allow(missing_docs)]
 pub enum VersionedTx<Call, S: Spec> {
     V0(Version0<Call, S>),
-}
-
-#[allow(missing_docs)]
-impl<Call, S: Spec> VersionedTx<Call, S> {
-    pub fn get_details(&self) -> &TxDetails<S> {
-        match self {
-            VersionedTx::V0(inner) => &inner.details,
-        }
-    }
-
-    pub fn get_uniqueness(&self) -> UniquenessData {
-        match self {
-            VersionedTx::V0(inner) => inner.uniqueness,
-        }
-    }
-
-    pub fn get_pubkey(&self) -> &<S::CryptoSpec as CryptoSpec>::PublicKey {
-        match self {
-            VersionedTx::V0(inner) => &inner.pub_key,
-        }
-    }
-
-    pub fn into_runtime_call(self) -> Call {
-        match self {
-            VersionedTx::V0(inner) => inner.runtime_call,
-        }
-    }
 }
 
 #[derive(
