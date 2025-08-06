@@ -442,8 +442,7 @@ where
             .trigger_recovery(next_sequence_number_according_to_node, recovery_strategy)
             .await;
 
-        // Creates a new executor  for recovery. This must *not* be called to create executors
-        // under other circumstances, since it causes side effects on the transaction cache.
+        // Creates a new executor for recovery, which will cause side effects on the transaction cache.
         let recovery_executor = RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
             info,
             self.tx_cache_writer.clone(), // Recovery executor fills the cache
