@@ -5757,6 +5757,7 @@ dependencies = [
  "sov-rollup-interface",
  "sp-core",
  "thiserror 1.0.69",
+ "tracing",
 ]
 
 [[package]]

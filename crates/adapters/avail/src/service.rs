@@ -259,7 +259,14 @@ impl AvailDAService {
         info!("Fetching finalized block header");
         let header = self.client.finalized_block_header().await?;
         debug!("Finalized block header retrieved: {:?}", header.number);
-        Ok(CustomAvailHeader { header })
+        let block_hash = self
+            .client
+            .block_hash(header.number)
+            .await?
+            .ok_or_else(|| {
+                anyhow::anyhow!("Block hash not found for block number {}", header.number)
+            })?;
+        Ok(CustomAvailHeader { header, block_hash })
     }
 
     #[instrument(skip(self))]
@@ -267,7 +274,14 @@ impl AvailDAService {
         info!("Fetching best block header");
         let header = self.client.best_block_header().await?;
         debug!("Best block header retrieved: {:?}", header.number);
-        Ok(CustomAvailHeader { header })
+        let block_hash = self
+            .client
+            .block_hash(header.number)
+            .await?
+            .ok_or_else(|| {
+                anyhow::anyhow!("Block hash not found for block number {}", header.number)
+            })?;
+        Ok(CustomAvailHeader { header, block_hash })
     }
 
     #[instrument(skip(self))]
@@ -386,6 +400,7 @@ impl AvailDAService {
         Ok(AvailBlock::new(
             CustomAvailHeader {
                 header: block_header,
+                block_hash: block_hash.clone(),
             },
             block_hash,
             Time::from_secs(custom_tx.set as i64),
