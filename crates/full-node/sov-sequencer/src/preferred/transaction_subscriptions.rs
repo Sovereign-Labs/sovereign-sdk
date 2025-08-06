@@ -38,6 +38,14 @@ pub struct TxResultWriter<S: Spec, Rt: Runtime<S>> {
     inner: ArcInner<S, Rt>,
 }
 
+impl<S: Spec, Rt: Runtime<S>> Clone for TxResultWriter<S, Rt> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
 type ArcInner<S, Rt> = Arc<tokio::sync::RwLock<TransactionCacheInner<S, Rt>>>;
 
 impl<S: Spec, Rt: Runtime<S>> TxResultWriter<S, Rt> {

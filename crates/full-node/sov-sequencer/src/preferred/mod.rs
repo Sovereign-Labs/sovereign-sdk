@@ -21,6 +21,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::preferred::block_executor::RollupBlockExecutorConfig;
 use async_trait::async_trait;
 use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
@@ -54,7 +55,7 @@ use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::DaSyncState;
 use sov_rollup_interface::TxHash;
 use state_root_compute::StateRootBackgroundTaskState;
-use tokio::sync::mpsc::{self, Sender};
+use tokio::sync::mpsc::{self};
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
@@ -67,9 +68,7 @@ use crate::common::{
     TxStatusBlobSenderHooks, WithCachedTxHashes,
 };
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerFetchBatchesToReplayMetrics};
-use crate::preferred::block_executor::{
-    RollupBlockExecutor, RollupBlockExecutorConfig, RollupBlockExecutorError,
-};
+use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
 use crate::preferred::db::DbEvent;
 use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::preferred_blob_sender::create_blobs_to_send;
@@ -98,9 +97,9 @@ where
     da_sync_state: Arc<DaSyncState>,
     _runtime: PhantomData<(Rt, Da)>,
     config: SequencerConfig<S::Address, PreferredSequencerConfig>,
-    da_address: <S::Da as DaSpec>::Address,
-    block_executors_shutdown_notifier: Sender<()>,
-    state_root_compute_task: StateRootBackgroundTaskState<S>,
+    //da_address: <S::Da as DaSpec>::Address,
+    //block_executors_shutdown_notifier: Sender<()>,
+    //state_root_compute_task: StateRootBackgroundTaskState<S>,
     shutdown_receiver: watch::Receiver<()>,
     transaction_cache: TransactionCache<S, Rt>,
     // This ledgerdb is used specifically for REST API and websocket subscriptions.
@@ -249,13 +248,11 @@ where
             * 1000;
 
         let rollup_exec_config = RollupBlockExecutorConfig {
-            config: config.clone(),
             da_address: da_address.clone(),
             shutdown_notifier: block_executors_shutdown_notifier.clone(),
             state_root_request_sender: state_root_compute_task.request_sender.clone(),
             shutdown_receiver: shutdown_receiver.clone(),
             shutdown_sender: shutdown_sender.clone(),
-            startup_transaction_cache_writer: None, // The main executor must *not* write to the tx cache. That's handled by the side effects task
         };
 
         let tx_queue_id = Arc::new(AtomicU64::new(0));
@@ -266,11 +263,12 @@ where
             config.clone(),
             shutdown_receiver.clone(),
             shutdown_sender.clone(),
-            rollup_exec_config,
             executor_events_sender,
             next_sequence_number,
             in_flight_blobs,
             stop_at_rollup_height,
+            rollup_exec_config.clone(),
+            cached_txs.write_handle(),
         );
 
         let synchronized_state_task = synchronized_state.start().await;
@@ -295,16 +293,16 @@ where
             da_sync_state,
             api_state,
             _runtime: PhantomData,
-            block_executors_shutdown_notifier,
+            //block_executors_shutdown_notifier,
             config: config.clone(),
-            state_root_compute_task,
+            //state_root_compute_task,
             shutdown_receiver: shutdown_receiver.clone(),
             api_ledger_db,
             shutdown_sender,
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_sender: broadcast::channel(100).0,
-            da_address,
+            //da_address,
         });
 
         // Launch replica sync task only for replicas
@@ -445,13 +443,10 @@ where
                 )
                 .await?;
 
-                let rollup_exec_config = self.create_bloc_exec_config_for_recovery();
                 self.synchronized_state_updator
-                    .force_overite_state_msg(
+                    .force_overite_state_for_recovery_msg(
                         self.api_ledger_db.clone(),
-                        self.transaction_cache.write_handle(),
                         info.clone(),
-                        rollup_exec_config,
                         "recover_and_catch_up:overwrite_executor",
                     )
                     .await;
@@ -463,23 +458,6 @@ where
             "Sequencer exiting recovery and resuming normal operation."
         );
         Ok(())
-    }
-
-    // Creates a new executor config for recovery. This must *not* be called to create executors
-    // under other circumstances, since it causes side effects on the transaction cache.
-    //
-    // If you need an executor for normal "replay" use a different constructor which does
-    // not pass a transaction cache writer.
-    fn create_bloc_exec_config_for_recovery(&self) -> RollupBlockExecutorConfig<S, Rt> {
-        RollupBlockExecutorConfig {
-            config: self.config.clone(),
-            da_address: self.da_address.clone(),
-            shutdown_notifier: self.block_executors_shutdown_notifier.clone(),
-            state_root_request_sender: self.state_root_compute_task.request_sender.clone(),
-            shutdown_receiver: self.shutdown_receiver.clone(),
-            shutdown_sender: self.shutdown_sender.clone(),
-            startup_transaction_cache_writer: Some(self.transaction_cache.write_handle()), // update the tx cache as we go
-        }
     }
 
     /// How far to catch back up if we need to recover/fast-forward due to being too close to (or
@@ -515,7 +493,6 @@ where
             self.synchronized_state_updator
                 .wait_for_node_resync_msg(
                     self.api_ledger_db.clone(),
-                    self.transaction_cache.write_handle(),
                     info,
                     self.da_sync_state.clone(),
                     "wait_for_node_resync",
@@ -632,8 +609,7 @@ fn current_visible_slot_number_according_to_node<S: Spec, Rt: Runtime<S>>(
     node_checkpoint.current_visible_slot_number().as_true()
 }
 
-#[derive(Debug)]
-pub(crate) enum PreferredSeqOperation {
+pub(crate) enum PreferredSeqOperation<S: Spec, Rt: Runtime<S>> {
     // Something has gone terribly wrong, and I don't see a way for us
     // to meaningfully recover without nuking the sequencer DB.
     Unreachable,
@@ -650,7 +626,7 @@ pub(crate) enum PreferredSeqOperation {
     // This is by far the most common scenario, i.e. a nominal
     // `update_state` call during sequencer execution with no unusual
     // conditions.
-    ReplaySoftConfirmationsOnTopOfNodeState(bool, Duration),
+    ReplaySoftConfirmationsOnTopOfNodeState(Box<RollupBlockExecutor<S, Rt>>, Duration),
 }
 
 pub(crate) async fn update_api_ledger<S: Spec, Rt: Runtime<S>>(
@@ -702,15 +678,12 @@ where
     let next_sequence_number_according_to_node =
         get_next_sequence_number_according_to_node(&info, &mut rt);
 
-    let recovery_rollup_exec_config = seq.create_bloc_exec_config_for_recovery();
-
     let operation = seq
         .synchronized_state_updator
         .sequencer_conditions_msg(
             &info,
             seq.da_sync_state.clone(),
             next_sequence_number_according_to_node,
-            recovery_rollup_exec_config,
             "update_state::fetch_initial_batches_to_replay",
         )
         .await;
@@ -739,14 +712,14 @@ where
         }
 
         PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeState(
-            should_clean_tx_cache,
+            executor,
             time_spent_fetching_batches,
         ) => {
             seq.replay_soft_confirmations_on_top_of_node_state(
                 info,
                 timer_start,
-                should_clean_tx_cache,
                 time_spent_fetching_batches,
+                executor,
             )
             .await?;
         }

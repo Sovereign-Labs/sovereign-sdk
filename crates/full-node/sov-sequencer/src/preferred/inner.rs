@@ -1,9 +1,11 @@
+#![allow(dead_code)]
 use std::num::NonZero;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::preferred::RollupBlockExecutorConfig;
 use anyhow::anyhow;
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
@@ -34,7 +36,7 @@ use crate::preferred::{
     next_visible_slot_number_increase, slot_count_delta_acceptable_lower_bound, update_api_ledger,
     AcceptedTx, BatchCreationError, Confirmation, DbEvent, LedgerDb, PreferredBatchToReplay,
     PreferredSeqOperation, PreferredSequencerConfig, PreferredSequencerFetchBatchesToReplayMetrics,
-    PreferredSequencerReadBatch, RecoveryStrategy, RollupBlockExecutorConfig, TxResultWriter,
+    PreferredSequencerReadBatch, RecoveryStrategy, TxResultWriter,
 };
 use crate::{SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash};
 
@@ -65,12 +67,13 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    latest_info: StateUpdateInfo<S::Storage>,
-    batch_execution_time_limit_micros: u64,
-    config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+    seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     shutdown_receiver: watch::Receiver<()>,
     shutdown_sender: watch::Sender<()>,
+
     executor: RollupBlockExecutor<S, Rt>,
+    latest_info: StateUpdateInfo<S::Storage>,
+    batch_execution_time_limit_micros: u64,
     batch_size_tracker: BatchSizeTracker,
     is_ready: Result<(), SequencerNotReadyDetails>,
     in_flight_blobs: Arc<AtomicUsize>,
@@ -84,6 +87,8 @@ where
     // Shared between sequencer and Inner.
     tx_queue_id: Arc<AtomicU64>,
     stop_at_rollup_height: Option<RollupHeight>,
+    rollup_exec_config: RollupBlockExecutorConfig<S>,
+    tx_cache_writer: TxResultWriter<S, Rt>,
 }
 
 // We submit metrics when this guard is dropped.
@@ -180,7 +185,7 @@ where
     fn blob_sender_busy(&self) -> Option<usize> {
         let num_current_in_flight = self.nb_of_concurrent_blob_submissions();
 
-        if num_current_in_flight > self.config.max_concurrent_blobs {
+        if num_current_in_flight > self.seq_config.max_concurrent_blobs {
             Some(num_current_in_flight)
         } else {
             None
@@ -228,7 +233,7 @@ where
             &self.executor.checkpoint,
             &self.latest_info,
             leave_space_for_next_batch,
-            self.config
+            self.seq_config
                 .sequencer_kind_config
                 .ideal_lag_behind_finalized_slot,
         ) {
@@ -255,7 +260,7 @@ where
         // DB operations handled by replica-aware db implementation
         let sequence_number = self.get_and_inc_next_sequence_number();
 
-        let min_profit_per_tx = self.config.sequencer_kind_config.minimum_profit_per_tx;
+        let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
         self.executor
             .start_rollup_block(
                 visible_slot_number_after_increase,
@@ -312,7 +317,7 @@ where
         let node_state_root = self.node_root_hash()?;
         let sequence_number = self.get_and_inc_next_sequence_number();
 
-        let min_profit_per_tx = self.config.sequencer_kind_config.minimum_profit_per_tx;
+        let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
         self.executor
             .start_rollup_block(
                 visible_slot_number_after_increase,
@@ -408,7 +413,6 @@ where
         &mut self,
         recovery_strategy: RecoveryStrategy,
         info: &StateUpdateInfo<S::Storage>,
-        rollup_exec_config: RollupBlockExecutorConfig<S, Rt>,
     ) {
         if self.is_replica() {
             // Replicas don't run recovery. We let the main sequencer run catchup. If we fail-over
@@ -432,13 +436,21 @@ where
         self.is_ready = Err(SequencerNotReadyDetails::PreferredSequencerRecovering);
         let next_sequence_number_according_to_node =
             get_next_sequence_number_according_to_node(info, &mut Rt::default());
+
         self.executor_events_sender
             .trigger_recovery(next_sequence_number_according_to_node, recovery_strategy)
             .await;
 
-        let executor_from_info = RollupBlockExecutor::<_, Rt>::new(info, rollup_exec_config);
+        // Creates a new executor  for recovery. This must *not* be called to create executors
+        // under other circumstances, since it causes side effects on the transaction cache.
+        let recovery_executor = RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
+            info,
+            self.tx_cache_writer.clone(), // Recovery executor fills the cache
+            self.rollup_exec_config.clone(),
+            self.seq_config.clone(),
+        );
 
-        self.force_overwrite_state(info.clone(), executor_from_info)
+        self.force_overwrite_state(info.clone(), recovery_executor)
             .await;
 
         info!(?info, current_visible_slot_number = %current_visible_slot_number_according_to_node::<S,Rt>(info), "Beginning sequencer recovery");
@@ -516,7 +528,7 @@ where
 
     #[tracing::instrument(skip_all, level = "trace")]
     async fn trigger_batch_production_if_convenient(&mut self) {
-        if !self.config.automatic_batch_production {
+        if !self.seq_config.automatic_batch_production {
             warn!("Skipping batch production due to settings");
             return;
         }
@@ -525,7 +537,7 @@ where
         if is_lagging_less_than_ideal_amount(
             self.executor.checkpoint.current_visible_slot_number(),
             self.latest_info.latest_finalized_slot_number,
-            self.config
+            self.seq_config
                 .sequencer_kind_config
                 .ideal_lag_behind_finalized_slot,
         ) {
@@ -570,7 +582,7 @@ where
     async fn close_current_batch(&mut self) {
         // Terminate the batch.
         self.executor.end_rollup_block().await;
-        self.batch_size_tracker = BatchSizeTracker::new(self.config.max_batch_size_bytes);
+        self.batch_size_tracker = BatchSizeTracker::new(self.seq_config.max_batch_size_bytes);
         let checkpoint = self
             .executor
             .checkpoint
@@ -616,7 +628,7 @@ where
     }
 
     fn is_replica(&self) -> bool {
-        self.config.sequencer_kind_config.is_replica
+        self.seq_config.sequencer_kind_config.is_replica
     }
 
     async fn inner_do_batch_start(
@@ -662,11 +674,10 @@ enum Message<S: Spec, Rt: Runtime<S>> {
         reason: &'static str,
     },
     SequencerConditions {
-        resp: oneshot::Sender<PreferredSeqOperation>,
+        resp: oneshot::Sender<PreferredSeqOperation<S, Rt>>,
         info: StateUpdateInfo<S::Storage>,
         da_sync_state: Arc<DaSyncState>,
         next_sequence_number_according_to_node: u64,
-        recovery_rollup_exec_config: RollupBlockExecutorConfig<S, Rt>,
         reason: &'static str,
     },
     CheckReadiness {
@@ -691,7 +702,6 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     FinalCatchup {
         resp: oneshot::Sender<anyhow::Result<ProcessFinalCatchupData>>,
         api_ledger_db: LedgerDb,
-        transaction_cache_write_handle: TxResultWriter<S, Rt>,
         info: StateUpdateInfo<S::Storage>,
         db_event_subscription: mpsc::Receiver<DbEvent>,
         executor: Box<RollupBlockExecutor<S, Rt>>,
@@ -707,11 +717,9 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     PruneSequencerDb {
         reason: &'static str,
     },
-    ForceOverwriteState {
+    ForceOverwriteStateForRecovery {
         api_ledger_db: LedgerDb,
-        transaction_cache_write_handle: TxResultWriter<S, Rt>,
         info: StateUpdateInfo<S::Storage>,
-        rollup_exec_config: RollupBlockExecutorConfig<S, Rt>,
         reason: &'static str,
     },
     DoNewTx {
@@ -721,7 +729,6 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     },
     WaitNodeResync {
         api_ledger_db: LedgerDb,
-        transaction_cache_write_handle: TxResultWriter<S, Rt>,
         info: StateUpdateInfo<S::Storage>,
         da_sync_state: Arc<DaSyncState>,
         reason: &'static str,
@@ -770,14 +777,15 @@ pub(crate) fn create<S, Rt>(
     latest_info: StateUpdateInfo<S::Storage>,
     tx_queue_id: Arc<AtomicU64>,
     batch_execution_time_limit_micros: u64,
-    config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+    seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     shutdown_receiver: watch::Receiver<()>,
     shutdown_sender: watch::Sender<()>,
-    rollup_exec_config: RollupBlockExecutorConfig<S, Rt>,
     executor_events_sender: ExecutorEventsSender<S, Rt>,
     sequence_number_of_next_blob: SequenceNumber,
     in_flight_blobs: Arc<AtomicUsize>,
     stop_at_rollup_height: Option<RollupHeight>,
+    rollup_exec_config: RollupBlockExecutorConfig<S>,
+    tx_cache_writer: TxResultWriter<S, Rt>,
 ) -> (
     SynchronizedSequencerState<S, Rt>,
     SequencerStateUpdator<S, Rt>,
@@ -788,19 +796,23 @@ where
 {
     let (message_sender, message_receiver) = mpsc::channel(CHANNEL_SIZE);
 
-    let is_ready = if config.sequencer_kind_config.is_replica {
+    let is_ready = if seq_config.sequencer_kind_config.is_replica {
         Err(SequencerNotReadyDetails::ReplicaMode)
     } else {
         Err(SequencerNotReadyDetails::Startup)
     };
 
     let inner = Inner {
-        executor: RollupBlockExecutor::new(&latest_info, rollup_exec_config),
+        executor: RollupBlockExecutor::new(
+            &latest_info,
+            rollup_exec_config.clone(),
+            seq_config.clone(),
+        ),
         latest_info,
         tx_queue_id,
         batch_execution_time_limit_micros,
-        batch_size_tracker: BatchSizeTracker::new(config.max_batch_size_bytes),
-        config,
+        batch_size_tracker: BatchSizeTracker::new(seq_config.max_batch_size_bytes),
+        seq_config: seq_config.clone(),
         shutdown_receiver,
         shutdown_sender: shutdown_sender.clone(),
         executor_events_sender,
@@ -810,6 +822,8 @@ where
         metrics: Vec::with_capacity(128),
         is_ready,
         stop_at_rollup_height,
+        rollup_exec_config,
+        tx_cache_writer,
     };
 
     let channel_size = Arc::new(AtomicU32::new(0));
@@ -872,16 +886,14 @@ where
         info: &StateUpdateInfo<S::Storage>,
         da_sync_state: Arc<DaSyncState>,
         next_sequence_number_according_to_node: u64,
-        recovery_rollup_exec_config: RollupBlockExecutorConfig<S, Rt>,
         reason: &'static str,
-    ) -> PreferredSeqOperation {
+    ) -> PreferredSeqOperation<S, Rt> {
         let (resp, recv) = oneshot::channel();
         self.send(Message::SequencerConditions {
             resp,
             info: info.clone(),
             da_sync_state,
             next_sequence_number_according_to_node,
-            recovery_rollup_exec_config,
             reason,
         })
         .await;
@@ -937,10 +949,9 @@ where
     pub(crate) async fn final_catchup_msg(
         &self,
         api_ledger_db: LedgerDb,
-        transaction_cache_write_handle: TxResultWriter<S, Rt>,
         info: StateUpdateInfo<S::Storage>,
         db_event_subscription: mpsc::Receiver<DbEvent>,
-        executor: RollupBlockExecutor<S, Rt>,
+        executor: Box<RollupBlockExecutor<S, Rt>>,
         node_state_root: <S::Storage as Storage>::Root,
         data: ProcessFinalCatchupData,
         reason: &'static str,
@@ -950,10 +961,9 @@ where
         self.send(Message::FinalCatchup {
             resp,
             api_ledger_db,
-            transaction_cache_write_handle,
             info,
             db_event_subscription,
-            executor: Box::new(executor),
+            executor: executor,
             node_state_root,
             data,
             reason,
@@ -981,19 +991,15 @@ where
         self.send(Message::PruneSequencerDb { reason }).await;
     }
 
-    pub(crate) async fn force_overite_state_msg(
+    pub(crate) async fn force_overite_state_for_recovery_msg(
         &self,
         api_ledger_db: LedgerDb,
-        transaction_cache_write_handle: TxResultWriter<S, Rt>,
         info: StateUpdateInfo<S::Storage>,
-        rollup_exec_config: RollupBlockExecutorConfig<S, Rt>,
         reason: &'static str,
     ) {
-        self.send(Message::ForceOverwriteState {
+        self.send(Message::ForceOverwriteStateForRecovery {
             api_ledger_db,
-            transaction_cache_write_handle,
             info,
-            rollup_exec_config,
             reason,
         })
         .await;
@@ -1016,14 +1022,12 @@ where
     pub(crate) async fn wait_for_node_resync_msg(
         &self,
         api_ledger_db: LedgerDb,
-        transaction_cache_write_handle: TxResultWriter<S, Rt>,
         info: StateUpdateInfo<S::Storage>,
         da_sync_state: Arc<DaSyncState>,
         reason: &'static str,
     ) {
         self.send(Message::WaitNodeResync {
             api_ledger_db,
-            transaction_cache_write_handle,
             info,
             da_sync_state,
             reason,
@@ -1128,7 +1132,6 @@ where
                         info,
                         da_sync_state,
                         next_sequence_number_according_to_node,
-                        recovery_rollup_exec_config,
                         reason,
                     } => {
                         let ret = self
@@ -1136,7 +1139,6 @@ where
                                 &info,
                                 da_sync_state,
                                 next_sequence_number_according_to_node,
-                                recovery_rollup_exec_config,
                                 reason,
                             )
                             .await;
@@ -1179,7 +1181,6 @@ where
                     Message::FinalCatchup {
                         resp,
                         api_ledger_db,
-                        transaction_cache_write_handle,
                         info,
                         db_event_subscription,
                         executor,
@@ -1190,7 +1191,6 @@ where
                         let ret = self
                             .process_final_catchup(
                                 api_ledger_db,
-                                transaction_cache_write_handle,
                                 info,
                                 db_event_subscription,
                                 executor,
@@ -1217,18 +1217,14 @@ where
                     Message::PruneSequencerDb { reason } => {
                         self.process_prune_sequencer_db(reason).await;
                     }
-                    Message::ForceOverwriteState {
+                    Message::ForceOverwriteStateForRecovery {
                         api_ledger_db,
-                        transaction_cache_write_handle,
                         info,
-                        rollup_exec_config,
                         reason,
                     } => {
-                        self.process_force_overwrite_state(
+                        self.process_force_overwrite_state_for_recovery(
                             api_ledger_db,
-                            transaction_cache_write_handle,
                             info,
-                            rollup_exec_config,
                             reason,
                         )
                         .await;
@@ -1242,14 +1238,13 @@ where
                     }
                     Message::WaitNodeResync {
                         api_ledger_db,
-                        transaction_cache_write_handle,
+
                         info,
                         da_sync_state,
                         reason,
                     } => {
                         self.process_wait_for_node_resync(
                             api_ledger_db,
-                            transaction_cache_write_handle,
                             info,
                             da_sync_state,
                             reason,
@@ -1300,7 +1295,7 @@ where
 
         // Once we've caught up to the in-progress batch, we're done.
         let (db_events_sender, subscription) =
-            mpsc::channel(inner.config.sequencer_kind_config.db_event_channel_size);
+            mpsc::channel(inner.seq_config.sequencer_kind_config.db_event_channel_size);
         if completed_batches.is_empty() {
             inner
                 .executor_events_sender
@@ -1333,9 +1328,8 @@ where
         info: &StateUpdateInfo<S::Storage>,
         da_sync_state: Arc<DaSyncState>,
         next_sequence_number_according_to_node: u64,
-        recovery_rollup_exec_config: RollupBlockExecutorConfig<S, Rt>,
         reason: &'static str,
-    ) -> PreferredSeqOperation {
+    ) -> PreferredSeqOperation<S, Rt> {
         let mut inner = self.get_inner_with_timing(reason).await;
         let next_sequence_number = inner.sequence_number_of_next_blob;
         let ((batches_to_replay, fetch_batches_to_replay_metrics), is_startup) = {
@@ -1373,13 +1367,14 @@ where
         let condition_too_close_to_deferred_slots_count_for_comfort =
             info.slot_number.delta(current_visible_slot_number)
                 > slot_count_delta_acceptable_lower_bound(
-                    inner.config.max_allowed_node_distance_behind,
+                    inner.seq_config.max_allowed_node_distance_behind,
                 );
 
         // Resuming operations while the node is
         // lagging can cause issues e.g. during failover or after sequencer DB
         // deletion due to in-flight blobs that are not yet processed.
-        let condition_node_is_lagging = distance > inner.config.max_allowed_node_distance_behind;
+        let condition_node_is_lagging =
+            distance > inner.seq_config.max_allowed_node_distance_behind;
 
         // Are there ANY soft confirmations to replay at all?
         // Note that we're holding a lock on the sequencer, so this is guaranteed to be up to date.
@@ -1410,27 +1405,44 @@ where
             }
             (false, true, false, _) => {
                 error!(slot_number_according_to_node=%info.slot_number, %current_visible_slot_number, "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Normal operation will be suspended until this can be remedied.");
-                let recovery_strategy =
-                    inner.config.sequencer_kind_config.recovery_strategy.clone();
+                let recovery_strategy = inner
+                    .seq_config
+                    .sequencer_kind_config
+                    .recovery_strategy
+                    .clone();
 
-                inner
-                    .trigger_recovery(recovery_strategy, info, recovery_rollup_exec_config)
-                    .await;
+                inner.trigger_recovery(recovery_strategy, info).await;
 
                 PreferredSeqOperation::RecoverAndCatchUp
             }
             (false, false, false, _) => {
                 let should_flush_tx_cache = is_startup || is_resync || is_recover;
 
-                if should_flush_tx_cache {
+                let executor = if should_flush_tx_cache {
                     inner
                         .executor_events_sender
                         .flush_transactions_cache(info.next_tx_number)
                         .await;
-                }
+
+                    // On `should_flush_tx_cache` we have to refill the cache the first time we `replay_soft_confirmations_on_top_of_node_state`
+                    let tx_cache_writer = inner.tx_cache_writer.clone();
+
+                    RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
+                        &info,
+                        tx_cache_writer,
+                        inner.rollup_exec_config.clone(),
+                        inner.seq_config.clone(),
+                    )
+                } else {
+                    RollupBlockExecutor::<_, Rt>::new(
+                        &info,
+                        inner.rollup_exec_config.clone(),
+                        inner.seq_config.clone(),
+                    )
+                };
 
                 PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeState(
-                    should_flush_tx_cache,
+                    Box::new(executor),
                     time_spent_fetching_batches,
                 )
             }
@@ -1469,7 +1481,7 @@ where
 
         inner
             .check_readiness(
-                inner.config.max_concurrent_blobs,
+                inner.seq_config.max_concurrent_blobs,
                 inner.stop_at_rollup_height,
             )
             .await
@@ -1558,7 +1570,6 @@ where
     async fn process_final_catchup(
         &mut self,
         api_ledger_db: LedgerDb,
-        transaction_cache_write_handle: TxResultWriter<S, Rt>,
         info: StateUpdateInfo<S::Storage>,
         mut db_event_subscription: mpsc::Receiver<DbEvent>,
         mut executor: Box<RollupBlockExecutor<S, Rt>>,
@@ -1603,7 +1614,7 @@ where
 
         update_api_ledger(
             &api_ledger_db,
-            transaction_cache_write_handle,
+            inner.tx_cache_writer.clone(),
             &inner.latest_info,
         )
         .await;
@@ -1649,19 +1660,26 @@ where
         });
     }
 
-    async fn process_force_overwrite_state(
+    async fn process_force_overwrite_state_for_recovery(
         &mut self,
         api_ledger_db: LedgerDb,
-        transaction_cache_write_handle: TxResultWriter<S, Rt>,
         info: StateUpdateInfo<S::Storage>,
-        rollup_exec_config: RollupBlockExecutorConfig<S, Rt>,
         reason: &'static str,
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let executor_from_info = RollupBlockExecutor::<_, Rt>::new(&info, rollup_exec_config);
+
+        // Creates a new executor  for recovery. This must *not* be called to create executors
+        // under other circumstances, since it causes side effects on the transaction cache.
+        let transaction_cache_write_handle = inner.tx_cache_writer.clone();
+        let recovery_executor = RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
+            &info,
+            transaction_cache_write_handle.clone(),
+            inner.rollup_exec_config.clone(),
+            inner.seq_config.clone(),
+        );
 
         inner
-            .force_overwrite_state(info.clone(), executor_from_info)
+            .force_overwrite_state(info.clone(), recovery_executor)
             .await;
         update_api_ledger(&api_ledger_db, transaction_cache_write_handle, &info).await;
     }
@@ -1694,7 +1712,6 @@ where
     async fn process_wait_for_node_resync(
         &mut self,
         api_ledger_db: LedgerDb,
-        transaction_cache_write_handle: TxResultWriter<S, Rt>,
         info: StateUpdateInfo<S::Storage>,
         da_sync_state: Arc<DaSyncState>,
         reason: &'static str,
@@ -1723,7 +1740,7 @@ where
             .update_state_for_recovery(checkpoint)
             .await;
 
-        update_api_ledger(&api_ledger_db, transaction_cache_write_handle, &info).await;
+        update_api_ledger(&api_ledger_db, inner.tx_cache_writer.clone(), &info).await;
     }
 
     /// Closes the current batch
