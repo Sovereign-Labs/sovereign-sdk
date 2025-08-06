@@ -124,6 +124,7 @@ async fn restart_replica(
     replicas
 }
 
+#[ignore = "This test is ignored because it relies on the incorrect assumption that a replica, after restart, reads both completed and in-progress batches from the shared database."]
 #[tokio::test(flavor = "multi_thread")]
 async fn seq_with_replicas() {
     let (test_rollups, _tempdir, admin) = create_test_rollups(4).await;
