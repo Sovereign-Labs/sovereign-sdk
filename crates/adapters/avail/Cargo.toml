@@ -29,6 +29,7 @@ codec = { package = "parity-scale-codec", version = "3.0.0", default-features = 
     "full",
     "bit-vec",
 ] }
+tracing = { workspace = true }
 
 # Optional dependencies used only in native mode or for testing
 avail-rust-client = { git = "https://github.com/availproject/avail-rust", tag = "v0.2.9", optional = true }

@@ -17,7 +17,7 @@ path = "demo_data"
 # We define the rollup's genesis to occur at block number `genesis_height`. The rollup will ignore
 # any blocks before this height, and any blobs at this height will not be processed
 [runner]
-genesis_height = 0
+genesis_height = 2115830
 
 # da.block_time is 20s, so status updater will try to poll it 20 times during it.
 da_polling_interval_ms = 1000
@@ -53,7 +53,7 @@ blob_processing_timeout_secs = 300
 max_batch_size_bytes = 1048576
 max_concurrent_blobs = 128
 max_allowed_node_distance_behind = 10
-da_address = "0000000000000000000000000000000000000000000000000000000000000000"
+da_address = "5EHFCcdHrpvyveoPm8TRreQcshPwbfSMkyP2eh4HV1VsGyC8"
 rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
 [sequencer.preferred]
 # TODO: Remove it when https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2814 is resolved
@@ -62,3 +62,4 @@ disable_state_root_consistency_checks = true
 # "None" - Shutdown the sequencer instead of attempting recovery (default)
 # "TryToSave" - Attempt to recover by flushing batches and catching up with the chain
 recovery_strategy = "TryToSave"
+batch_execution_time_limit_millis = 2000
