@@ -1604,7 +1604,7 @@ where
         drop(db_event_subscription);
 
         let info = &inner.latest_info;
-        inner.update_api_ledger(&info).await;
+        inner.update_api_ledger(info).await;
 
         drop(inner);
 
