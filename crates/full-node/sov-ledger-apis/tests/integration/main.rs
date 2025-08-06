@@ -37,11 +37,14 @@ async fn get_latest_slot() {
     );
 }
 
-
 #[tokio::test(flavor = "multi_thread")]
 async fn get_latest_slot_include_children() {
     let slot = ledger_response_body(|client| async move {
-        client.get_latest_slot(Some(types::GetLatestSlotChildren::_1)).await.unwrap().into_inner()
+        client
+            .get_latest_slot(Some(types::GetLatestSlotChildren::_1))
+            .await
+            .unwrap()
+            .into_inner()
     })
     .await;
 
@@ -56,7 +59,10 @@ async fn get_latest_slot_include_children() {
         slot,
         ledger_response_body(move |client| async move {
             client
-                .get_slot_by_id(&IntOrHash::Integer(rollup_height), Some(types::GetSlotByIdChildren::_1))
+                .get_slot_by_id(
+                    &IntOrHash::Integer(rollup_height),
+                    Some(types::GetSlotByIdChildren::_1),
+                )
                 .await
                 .unwrap()
                 .into_inner()
@@ -95,7 +101,11 @@ async fn get_finalized_slot() {
 #[tokio::test(flavor = "multi_thread")]
 async fn get_finalized_slot_include_children() {
     let slot = ledger_response_body(|client| async move {
-        client.get_finalized_slot(Some(types::GetFinalizedSlotChildren::_1)).await.unwrap().into_inner()
+        client
+            .get_finalized_slot(Some(types::GetFinalizedSlotChildren::_1))
+            .await
+            .unwrap()
+            .into_inner()
     })
     .await;
 
@@ -110,7 +120,10 @@ async fn get_finalized_slot_include_children() {
         slot,
         ledger_response_body(move |client| async move {
             client
-                .get_slot_by_id(&IntOrHash::Integer(rollup_height), Some(types::GetSlotByIdChildren::_1))
+                .get_slot_by_id(
+                    &IntOrHash::Integer(rollup_height),
+                    Some(types::GetSlotByIdChildren::_1),
+                )
                 .await
                 .unwrap()
                 .into_inner()
@@ -167,7 +180,10 @@ async fn get_batch() {
 async fn get_batch_include_children() {
     let batch = ledger_response_body(|client| async move {
         client
-            .get_batch_by_id(&IntOrHash::Integer(3), Some(types::GetBatchByIdChildren::_1))
+            .get_batch_by_id(
+                &IntOrHash::Integer(3),
+                Some(types::GetBatchByIdChildren::_1),
+            )
             .await
             .unwrap()
             .into_inner()
@@ -185,7 +201,10 @@ async fn get_batch_include_children() {
         batch,
         ledger_response_body(|client| async move {
             client
-                .get_batch_by_id(&IntOrHash::Hash(hash), Some(types::GetBatchByIdChildren::_1))
+                .get_batch_by_id(
+                    &IntOrHash::Hash(hash),
+                    Some(types::GetBatchByIdChildren::_1),
+                )
                 .await
                 .unwrap()
                 .into_inner()
@@ -198,7 +217,11 @@ async fn get_batch_include_children() {
         batch,
         ledger_response_body(|client| async move {
             client
-                .get_batch_by_slot_id_and_offset(&IntOrHash::Integer(1), 1, Some(types::GetBatchBySlotIdAndOffsetChildren::_1))
+                .get_batch_by_slot_id_and_offset(
+                    &IntOrHash::Integer(1),
+                    1,
+                    Some(types::GetBatchBySlotIdAndOffsetChildren::_1),
+                )
                 .await
                 .unwrap()
                 .into_inner()
@@ -326,7 +349,12 @@ async fn get_tx_include_children() {
         tx,
         ledger_response_body(|client| async move {
             client
-                .get_tx_by_slot_id_and_offset(&IntOrHash::Integer(1), 1, 1, Some(types::GetTxBySlotIdAndOffsetChildren::_1))
+                .get_tx_by_slot_id_and_offset(
+                    &IntOrHash::Integer(1),
+                    1,
+                    1,
+                    Some(types::GetTxBySlotIdAndOffsetChildren::_1),
+                )
                 .await
                 .unwrap()
                 .into_inner()
@@ -339,7 +367,11 @@ async fn get_tx_include_children() {
         tx,
         ledger_response_body(|client| async move {
             client
-                .get_tx_by_batch_id_and_offset(&IntOrHash::Integer(3), 1, Some(types::GetTxByBatchIdAndOffsetChildren::_1))
+                .get_tx_by_batch_id_and_offset(
+                    &IntOrHash::Integer(3),
+                    1,
+                    Some(types::GetTxByBatchIdAndOffsetChildren::_1),
+                )
                 .await
                 .unwrap()
                 .into_inner()

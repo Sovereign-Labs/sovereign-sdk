@@ -99,7 +99,10 @@ fn events(number: u64) -> Vec<StoredEvent> {
 }
 
 /// Materialize some complex data for the [`LedgerDb`]. Returns a [`SchemaBatch`] containing the description of the data to be stored.
-pub fn materialize_and_commit_complex_ledger_db_data(ledger_db: &LedgerDb, storage_manager: &mut SimpleLedgerStorageManager) -> anyhow::Result<()> {
+pub fn materialize_and_commit_complex_ledger_db_data(
+    ledger_db: &LedgerDb,
+    storage_manager: &mut SimpleLedgerStorageManager,
+) -> anyhow::Result<()> {
     let mut slots: Vec<SlotCommit<MockBlock, u32, TestTxReceiptContents>> = vec![
         SlotCommit::new(
             MockBlock {
@@ -272,12 +275,14 @@ impl LedgerTestService {
         let ledger_db = LedgerDb::with_reader(reader)?;
 
         match data {
-            LedgerTestServiceData::Simple => { 
+            LedgerTestServiceData::Simple => {
                 let ledger_data = materialize_simple_ledger_db_data(&ledger_db).await?;
                 ledger_db.send_notifications();
                 storage_manager.commit(ledger_data);
-            } ,
-            LedgerTestServiceData::Complex => materialize_and_commit_complex_ledger_db_data(&ledger_db, &mut storage_manager)?
+            }
+            LedgerTestServiceData::Complex => {
+                materialize_and_commit_complex_ledger_db_data(&ledger_db, &mut storage_manager)?;
+            }
         };
 
         let (_, shutdown_receiver) = watch::channel(());

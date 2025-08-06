@@ -832,7 +832,6 @@ struct Slot<B, TxReceipt: TxReceiptContents, E> {
 
 impl<B, TxReceipt: TxReceiptContents, E> Slot<B, TxReceipt, E> {
     fn new(slot: SlotResponse<B, TxReceipt, RuntimeEventResponse<E>>) -> Self {
-
         let batches = match slot.batches {
             Some(batches) => {
                 let mut output = vec![];
@@ -884,7 +883,6 @@ struct Batch<B, TxReceipt: TxReceiptContents, E> {
 
 impl<B, TxReceipt: TxReceiptContents, E> Batch<B, TxReceipt, E> {
     fn new(batch: BatchResponse<B, TxReceipt, RuntimeEventResponse<E>>, number: u64) -> Self {
-
         let txs = match batch.txs {
             Some(txs) => {
                 let mut output = vec![];
