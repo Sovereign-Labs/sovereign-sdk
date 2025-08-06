@@ -901,7 +901,8 @@ struct Transaction<TxReceipt: TxReceiptContents, E> {
     #[serde_as(as = "serde_with::base64::Base64")]
     pub body: Vec<u8>,
     pub receipt: TxEffect<TxReceipt>,
-    pub events: Vec<RuntimeEventResponse<E>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub events: Option<Vec<RuntimeEventResponse<E>>>,
     pub batch_number: u64,
 }
 
@@ -913,7 +914,7 @@ impl<TxReceipt: TxReceiptContents, E> Transaction<TxReceipt, E> {
             event_range: tx.event_range,
             body: tx.body.unwrap_or_default(),
             receipt: tx.receipt.into(),
-            events: tx.events.unwrap_or_default(),
+            events: tx.events,
             batch_number: tx.batch_number,
         }
     }
