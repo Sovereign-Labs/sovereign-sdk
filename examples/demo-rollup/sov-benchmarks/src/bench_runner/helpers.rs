@@ -31,9 +31,9 @@ const PROOF_TIMEOUT_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 pub struct BatchSender {
     /// The name of the benchmark to execute
     bench_name: String,
-    /// The nonces used to send transactions
-    nonces: HashMap<<<S as Spec>::CryptoSpec as CryptoSpec>::PublicKey, u64>,
-    /// Channel used to send transactions to wait for to the receiver task
+    /// The generation numbers used to send transactions
+    generation_numbers: HashMap<<<S as Spec>::CryptoSpec as CryptoSpec>::PublicKey, u64>,
+    /// Channel used to send transactions to wait for the receiver task
     tx_sender: Sender<HashSet<HexHash>>,
     /// The client used to send transactions to the sequencer
     client: NodeClient,
@@ -210,7 +210,7 @@ impl BatchSender {
     ) -> Self {
         Self {
             bench_name,
-            nonces: Default::default(),
+            generation_numbers: Default::default(),
             tx_sender,
             client,
         }
@@ -235,7 +235,7 @@ impl BatchSender {
                             gas_limit: None,
                             chain_id: config_chain_id(),
                         },
-                        &mut self.nonces,
+                        &mut self.generation_numbers,
                     ),
                     output.outcome.unwrap_changes(),
                 )

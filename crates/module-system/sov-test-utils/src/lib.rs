@@ -15,6 +15,7 @@ pub use sov_db::schema::SchemaBatch;
 pub use sov_mock_da::verifier::MockDaSpec;
 use sov_mock_da::BlockProducingConfig;
 pub use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec};
+use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::default_spec::DefaultSpec;
 use sov_modules_api::macros::config_value;
@@ -196,18 +197,18 @@ pub fn default_test_tx_details<S: Spec>() -> TxDetails<S> {
 pub fn default_test_signed_transaction<T: TransactionCallable, S: Spec>(
     key: &<<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
     msg: &T::Call,
-    nonce: u64,
+    generation: u64,
     chain_hash: &[u8; 32],
 ) -> Transaction<T, S> {
     let tx_details = default_test_tx_details::<S>();
-    test_signed_transaction(key, msg, nonce, chain_hash, tx_details)
+    test_signed_transaction(key, msg, generation, chain_hash, tx_details)
 }
 
 /// Creates signed transaction.
 pub fn test_signed_transaction<T: TransactionCallable, S: Spec>(
     key: &<<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
     msg: &T::Call,
-    nonce: u64,
+    generation: u64,
     chain_hash: &[u8; 32],
     tx_details: TxDetails<S>,
 ) -> Transaction<T, S> {
@@ -219,7 +220,7 @@ pub fn test_signed_transaction<T: TransactionCallable, S: Spec>(
             tx_details.chain_id,
             tx_details.max_priority_fee_bips,
             tx_details.max_fee,
-            nonce,
+            UniquenessData::Generation(generation),
             tx_details.gas_limit,
         ),
     )

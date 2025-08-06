@@ -1,4 +1,7 @@
 # 2025-08-04
+- #1477 **BREAKING CHANGE**: Replaces `generation: u64` with `uniqueness: sov_modules_api::capabilities::UniquenessData` enum for `Version0` transaction. 
+  Replaces `generation: u64` attribute of `UnsignedTransaction` with `uniqueness: UniquenessData`
+  Update to client libraries that use `UnsignedTransaction` is needed.
 - **BREAKING CHANGE** #1430 changes the layout of the state database to support more efficient caching and pruning. **This requires resyncing any existing nodes on upgrade**. 
 
 # 2025-08-01

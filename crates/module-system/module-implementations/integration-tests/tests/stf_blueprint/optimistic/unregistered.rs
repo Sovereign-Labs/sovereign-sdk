@@ -240,6 +240,7 @@ fn blob_test_max_allowed_data_size() {
 }
 
 mod helpers {
+    use sov_modules_api::capabilities::UniquenessData;
     use sov_modules_api::FullyBakedTx;
     use sov_modules_stf_blueprint::Runtime;
     use sov_test_utils::TEST_DEFAULT_MAX_FEE;
@@ -293,7 +294,7 @@ mod helpers {
             chain_id,
             max_priority_fee_bips,
             Amount::new(200_000),
-            nonce,
+            UniquenessData::Nonce(nonce),
             None,
         );
 
@@ -327,7 +328,7 @@ mod helpers {
             chain_id,
             max_priority_fee_bips,
             TEST_DEFAULT_MAX_FEE,
-            nonce,
+            UniquenessData::Nonce(nonce),
             None,
         );
 

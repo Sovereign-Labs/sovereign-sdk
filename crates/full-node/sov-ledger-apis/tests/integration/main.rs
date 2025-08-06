@@ -38,6 +38,40 @@ async fn get_latest_slot() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn get_latest_slot_include_children() {
+    let slot = ledger_response_body(|client| async move {
+        client
+            .get_latest_slot(Some(types::GetLatestSlotChildren::_1))
+            .await
+            .unwrap()
+            .into_inner()
+    })
+    .await;
+
+    // Check for regressions in the response format.
+    insta::with_settings!({sort_maps => true}, {
+        insta::assert_json_snapshot!(&slot);
+    });
+
+    // By number.
+    let rollup_height = slot["number"].as_u64().unwrap();
+    assert_json_eq!(
+        slot,
+        ledger_response_body(move |client| async move {
+            client
+                .get_slot_by_id(
+                    &IntOrHash::Integer(rollup_height),
+                    Some(types::GetSlotByIdChildren::_1),
+                )
+                .await
+                .unwrap()
+                .into_inner()
+        })
+        .await
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn get_finalized_slot() {
     let slot = ledger_response_body(|client| async move {
         client.get_finalized_slot(None).await.unwrap().into_inner()
@@ -65,10 +99,44 @@ async fn get_finalized_slot() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn get_finalized_slot_include_children() {
+    let slot = ledger_response_body(|client| async move {
+        client
+            .get_finalized_slot(Some(types::GetFinalizedSlotChildren::_1))
+            .await
+            .unwrap()
+            .into_inner()
+    })
+    .await;
+
+    // Check for regressions in the response format.
+    insta::with_settings!({sort_maps => true}, {
+        insta::assert_json_snapshot!(&slot);
+    });
+
+    // By number.
+    let rollup_height = slot["number"].as_u64().unwrap();
+    assert_json_eq!(
+        slot,
+        ledger_response_body(move |client| async move {
+            client
+                .get_slot_by_id(
+                    &IntOrHash::Integer(rollup_height),
+                    Some(types::GetSlotByIdChildren::_1),
+                )
+                .await
+                .unwrap()
+                .into_inner()
+        })
+        .await
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn get_batch() {
     let batch = ledger_response_body(|client| async move {
         client
-            .get_batch_by_id(&IntOrHash::Integer(0), None)
+            .get_batch_by_id(&IntOrHash::Integer(3), None)
             .await
             .unwrap()
             .into_inner()
@@ -99,7 +167,61 @@ async fn get_batch() {
         batch,
         ledger_response_body(|client| async move {
             client
-                .get_batch_by_slot_id_and_offset(&IntOrHash::Integer(0), 0, None)
+                .get_batch_by_slot_id_and_offset(&IntOrHash::Integer(1), 1, None)
+                .await
+                .unwrap()
+                .into_inner()
+        })
+        .await
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_batch_include_children() {
+    let batch = ledger_response_body(|client| async move {
+        client
+            .get_batch_by_id(
+                &IntOrHash::Integer(3),
+                Some(types::GetBatchByIdChildren::_1),
+            )
+            .await
+            .unwrap()
+            .into_inner()
+    })
+    .await;
+
+    // Check for regressions in the response format.
+    insta::with_settings!({sort_maps => true}, {
+        insta::assert_json_snapshot!(&batch);
+    });
+
+    // By hash.
+    let hash = types::Hash::from_str(batch["hash"].as_str().unwrap()).unwrap();
+    assert_json_eq!(
+        batch,
+        ledger_response_body(|client| async move {
+            client
+                .get_batch_by_id(
+                    &IntOrHash::Hash(hash),
+                    Some(types::GetBatchByIdChildren::_1),
+                )
+                .await
+                .unwrap()
+                .into_inner()
+        })
+        .await
+    );
+
+    // By slot offset.
+    assert_json_eq!(
+        batch,
+        ledger_response_body(|client| async move {
+            client
+                .get_batch_by_slot_id_and_offset(
+                    &IntOrHash::Integer(1),
+                    1,
+                    Some(types::GetBatchBySlotIdAndOffsetChildren::_1),
+                )
                 .await
                 .unwrap()
                 .into_inner()
@@ -113,7 +235,7 @@ async fn get_batch() {
 async fn get_tx() {
     let tx = ledger_response_body(|client| async move {
         client
-            .get_tx_by_id(&IntOrHash::Integer(0), None)
+            .get_tx_by_id(&IntOrHash::Integer(7), None)
             .await
             .unwrap()
             .into_inner()
@@ -130,7 +252,7 @@ async fn get_tx() {
         tx,
         ledger_response_body(|client| async move {
             client
-                .get_tx_by_id(&IntOrHash::Integer(0), None)
+                .get_tx_by_id(&IntOrHash::Integer(7), None)
                 .await
                 .unwrap()
                 .into_inner()
@@ -157,7 +279,7 @@ async fn get_tx() {
         tx,
         ledger_response_body(|client| async move {
             client
-                .get_tx_by_slot_id_and_offset(&IntOrHash::Integer(0), 0, 0, None)
+                .get_tx_by_slot_id_and_offset(&IntOrHash::Integer(1), 1, 1, None)
                 .await
                 .unwrap()
                 .into_inner()
@@ -170,7 +292,86 @@ async fn get_tx() {
         tx,
         ledger_response_body(|client| async move {
             client
-                .get_tx_by_batch_id_and_offset(&IntOrHash::Integer(0), 0, None)
+                .get_tx_by_batch_id_and_offset(&IntOrHash::Integer(3), 1, None)
+                .await
+                .unwrap()
+                .into_inner()
+        })
+        .await
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_tx_include_children() {
+    let tx = ledger_response_body(|client| async move {
+        client
+            .get_tx_by_id(&IntOrHash::Integer(7), Some(types::GetTxByIdChildren::_1))
+            .await
+            .unwrap()
+            .into_inner()
+    })
+    .await;
+
+    // Check for regressions in the response format.
+    insta::with_settings!({sort_maps => true}, {
+        insta::assert_json_snapshot!(&tx);
+    });
+
+    // By number.
+    assert_json_eq!(
+        tx,
+        ledger_response_body(|client| async move {
+            client
+                .get_tx_by_id(&IntOrHash::Integer(7), Some(types::GetTxByIdChildren::_1))
+                .await
+                .unwrap()
+                .into_inner()
+        })
+        .await
+    );
+
+    // By hash.
+    let hash = types::Hash::from_str(tx["hash"].as_str().unwrap()).unwrap();
+    assert_json_eq!(
+        tx,
+        ledger_response_body(|client| async move {
+            client
+                .get_tx_by_id(&IntOrHash::Hash(hash), Some(types::GetTxByIdChildren::_1))
+                .await
+                .unwrap()
+                .into_inner()
+        })
+        .await
+    );
+
+    // By slot offset.
+    assert_json_eq!(
+        tx,
+        ledger_response_body(|client| async move {
+            client
+                .get_tx_by_slot_id_and_offset(
+                    &IntOrHash::Integer(1),
+                    1,
+                    1,
+                    Some(types::GetTxBySlotIdAndOffsetChildren::_1),
+                )
+                .await
+                .unwrap()
+                .into_inner()
+        })
+        .await
+    );
+
+    // By batch offset.
+    assert_json_eq!(
+        tx,
+        ledger_response_body(|client| async move {
+            client
+                .get_tx_by_batch_id_and_offset(
+                    &IntOrHash::Integer(3),
+                    1,
+                    Some(types::GetTxByBatchIdAndOffsetChildren::_1),
+                )
                 .await
                 .unwrap()
                 .into_inner()
@@ -186,7 +387,7 @@ async fn get_event() {
         .unwrap();
     let client = ledger_service.axum_client;
 
-    let response = client.get_event_by_id(0).await.unwrap();
+    let response = client.get_event_by_id(1).await.unwrap();
 
     assert_eq!(response.status(), 200);
     insta::with_settings!({sort_maps => true}, {

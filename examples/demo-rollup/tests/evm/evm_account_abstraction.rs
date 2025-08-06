@@ -2,6 +2,7 @@ use demo_stf::runtime::{Runtime, RuntimeCall};
 use ethers_core::abi::Address;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockRollupSpec};
 use sov_eth_client::TestClient;
+use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
 use sov_modules_macros::config_value;
@@ -73,7 +74,7 @@ fn create_insert_credentials(
             chain_id,
             max_priority_fee_bips,
             max_fee,
-            nonce,
+            UniquenessData::Nonce(nonce),
             gas_limit,
         ),
     )

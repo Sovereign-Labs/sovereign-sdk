@@ -14,7 +14,7 @@ use sov_rollup_interface::common::HexString;
 
 use crate::wallet_state::{sign_tx, KeyIdentifier, WalletState};
 use crate::workflows::keys::load_key;
-use crate::UnsignedTransactionWithoutNonce;
+use crate::UnsignedTransactionWithoutUniqueness;
 
 #[derive(clap::Parser, Clone)]
 /// Generate, sign, list and remove transactions.
@@ -27,9 +27,9 @@ pub enum TransactionWorkflow<File: Subcommand, Json: Subcommand> {
         #[clap(subcommand)]
         /// Transaction to sign.
         transaction: TransactionLoadWorkflow<File, Json>,
-        /// Nonce to use.
+        /// Generation number to use.
         #[clap(short, long)]
-        nonce: u64,
+        generation: u64,
         /// Optional nickname of the imported key.
         #[clap(short, long)]
         key_nickname: Option<String>,
@@ -100,10 +100,10 @@ where
             TransactionWorkflow::Sign {
                 transaction,
                 key_nickname,
-                nonce,
+                generation,
                 json_output,
             } => {
-                let tx: UnsignedTransactionWithoutNonce<S, RT> = transaction.load()?;
+                let tx: UnsignedTransactionWithoutUniqueness<S, RT> = transaction.load()?;
                 let id = key_nickname.map(|nickname| KeyIdentifier::<S>::ByNickname { nickname });
                 let account = wallet_state.resolve_account(id.as_ref())?;
 
@@ -111,11 +111,11 @@ where
                     format!("Unable to load key {}", account.location.display())
                 })?;
 
-                let signed_tx = HexString::new(sign_tx(&private_key, &tx, nonce)?);
+                let signed_tx = HexString::new(sign_tx(&private_key, &tx, generation)?);
 
                 if json_output {
                     let output = SignTransactionOutput {
-                        nonce,
+                        generation,
                         input_tx: tx,
                         signed_tx,
                     };
@@ -124,8 +124,8 @@ where
                 } else {
                     writeln!(
                         &mut out,
-                        "Signing the following transaction to batch with address {} nonce {}:",
-                        account.address, nonce
+                        "Signing the following transaction to batch with address {} generation number {}:",
+                        account.address, generation
                     )?;
                     writeln!(&mut out, "{}", serde_json::to_string_pretty(&tx)?)?;
                     writeln!(&mut out, "Signed Transaction (borsh encoded):")?;
@@ -161,7 +161,7 @@ where
     /// Parse from a file or a json string
     pub fn load<RT: CliWallet + Runtime<S>, S: sov_modules_api::Spec, U, E1, E2, E3>(
         self,
-    ) -> anyhow::Result<UnsignedTransactionWithoutNonce<S, RT>>
+    ) -> anyhow::Result<UnsignedTransactionWithoutUniqueness<S, RT>>
     where
         Json: CliFrontEnd<RT> + CliTxImportArg,
         File: CliFrontEnd<RT> + CliTxImportArg,
@@ -205,7 +205,7 @@ where
             .transpose()
             .map_err(Into::<anyhow::Error>::into)?;
 
-        Ok(UnsignedTransactionWithoutNonce::new(
+        Ok(UnsignedTransactionWithoutUniqueness::new(
             tx,
             chain_id,
             RT::CHAIN_HASH,
@@ -219,7 +219,7 @@ where
 #[derive(serde::Serialize)]
 #[serde(bound = "Tx::Decodable: serde::Serialize + serde::de::DeserializeOwned")]
 struct SignTransactionOutput<S: Spec, Tx: DispatchCall> {
-    nonce: u64,
-    input_tx: UnsignedTransactionWithoutNonce<S, Tx>,
+    generation: u64,
+    input_tx: UnsignedTransactionWithoutUniqueness<S, Tx>,
     signed_tx: HexString,
 }

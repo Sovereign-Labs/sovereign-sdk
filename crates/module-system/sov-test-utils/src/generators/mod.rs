@@ -8,7 +8,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use sov_blob_storage::PreferredBatchData;
-use sov_modules_api::capabilities::TransactionAuthenticator;
+use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::{PriorityFeeBips, Transaction, TxDetails, UnsignedTransaction};
 use sov_modules_api::{Amount, CryptoSpec, EncodeCall, FullyBakedTx, Module, RawTx, Spec};
@@ -70,7 +70,7 @@ impl<S: Spec, Mod: Module> Message<S, Mod> {
                 self.details.chain_id,
                 self.details.max_priority_fee_bips,
                 self.details.max_fee,
-                self.generation,
+                UniquenessData::Generation(self.generation),
                 self.details.gas_limit,
             ),
         )

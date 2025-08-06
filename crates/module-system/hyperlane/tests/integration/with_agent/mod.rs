@@ -669,7 +669,7 @@ fn encode_call(
     let tx = default_test_signed_transaction::<TestRuntime<TestSpec>, TestSpec>(
         key,
         call_message,
-        nonce(),
+        generation(),
         &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
     );
 
@@ -738,7 +738,7 @@ fn tx_set_relayer_config(relayer: &TestUser<TestSpec>) -> RawTx {
     encode_call(relayer.private_key(), &call)
 }
 
-fn nonce() -> u64 {
-    static NONCE: AtomicU64 = AtomicU64::new(0);
-    NONCE.fetch_add(1, Ordering::Relaxed)
+fn generation() -> u64 {
+    static GENERATION: AtomicU64 = AtomicU64::new(0);
+    GENERATION.fetch_add(1, Ordering::Relaxed)
 }

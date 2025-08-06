@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use demo_stf::runtime::{Runtime, RuntimeCall};
 use sov_bank::{CallMessage, Coins, TokenId};
+use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::sov_universal_wallet::schema::{ChainData, RollupRoots, Schema};
 use sov_modules_api::transaction::{Transaction, UnsignedTransaction, VersionedTx};
 use sov_modules_api::{Address, Amount, DispatchCall, PrivateKey, Spec};
@@ -33,7 +34,7 @@ fn make_unsigned_tx() -> UnsignedTransaction<Runtime<S>, S> {
         config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
-        0,
+        UniquenessData::Generation(0),
         Some(TEST_DEFAULT_GAS_LIMIT.into()),
     )
 }
@@ -103,7 +104,7 @@ fn test_display_unsigned_tx() {
                 &unsigned_data
             )
             .unwrap(),
-        r#"{ runtime_call: Bank.Mint { coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }, generation: 0, details: { max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000], chain_id: 4321 } }"#
+        r#"{ runtime_call: Bank.Mint { coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }, uniqueness: Generation(0), details: { max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000], chain_id: 4321 } }"#
     );
 }
 
@@ -139,7 +140,7 @@ fn test_display_signed_tx() {
                 &signed_data
             )
             .unwrap(),
-        format!("{{ versioned_tx: V0 {{ signature: {{ msg_sig: 0x{signature_display} }}, pub_key: {{ pub_key: 0x{pubkey_display} }}, runtime_call: Bank.Mint {{ coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }}, generation: 0, details: {{ max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000], chain_id: 4321 }} }} }}")
+        format!("{{ versioned_tx: V0 {{ signature: {{ msg_sig: 0x{signature_display} }}, pub_key: {{ pub_key: 0x{pubkey_display} }}, runtime_call: Bank.Mint {{ coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }}, uniqueness: Generation(0), details: {{ max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000], chain_id: 4321 }} }} }}")
     );
 }
 

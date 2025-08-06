@@ -8,7 +8,7 @@ use crate::metrics::PreferredSequencerUpdateStateMetrics;
 use crate::preferred::{
     get_next_sequence_number_according_to_node, DbEvent, FetchBatches, Flow,
     PreferredBatchToReplay, PreferredSequencer, ProcessFinalCatchupData, RollupBlockExecutor,
-    RollupBlockExecutorConfig, StateUpdateInfo,
+    StateUpdateInfo,
 };
 
 impl<S, Rt, Da> PreferredSequencer<S, Rt, Da>
@@ -33,8 +33,8 @@ where
         &self,
         info: StateUpdateInfo<S::Storage>,
         timer_start: Instant,
-        should_clean_tx_cache: bool,
         mut time_spent_fetching_batches: std::time::Duration, // The time already spent fetching batches to replay
+        mut executor: Box<RollupBlockExecutor<S, Rt>>,
     ) -> anyhow::Result<()> {
         // On shutdown exit early. This prevents duplicate subscriptions to the DB events channel, which would cause spurious warnings.
         // Note that we only need to detect whether a previous `replay_soft_confirmations_on_top_of_node_state` was aborted due to shutdown
@@ -51,28 +51,7 @@ where
         // Total time to update the state for `replay_soft_confirmations_on_top_of_node_stat`e, including time spent in the `Message` channel.
         let mut total_message_processing_duration = std::time::Duration::ZERO;
 
-        let startup_transaction_cache_writer = if should_clean_tx_cache {
-            let tx_cache_writer = self.transaction_cache.write_handle();
-            tx_cache_writer
-                .clean_and_overwrite_next_tx_number(info.next_tx_number)
-                .await;
-            Some(tx_cache_writer)
-        } else {
-            None
-        };
-
-        let rollup_exec_config = RollupBlockExecutorConfig {
-            config: self.config.clone(),
-            da_address: self.da_address.clone(),
-            shutdown_notifier: self.block_executors_shutdown_notifier.clone(),
-            state_root_request_sender: self.state_root_compute_task.request_sender.clone(),
-            shutdown_receiver: self.shutdown_receiver.clone(),
-            shutdown_sender: self.shutdown_sender.clone(),
-            startup_transaction_cache_writer,
-        };
-
         // Now that we're not locking on the sequencer state anymore, we can replay all the batches.
-        let mut executor = RollupBlockExecutor::<_, Rt>::new(&info, rollup_exec_config);
 
         let node_state_root = tracing::trace_span!("root_hash")
             .in_scope(|| info.storage.get_root_hash(info.slot_number))?;
@@ -180,8 +159,6 @@ where
         let (maybe_data, message_processing_duration) = self
             .synchronized_state_updator
             .final_catchup_msg(
-                self.api_ledger_db.clone(),
-                self.transaction_cache.write_handle(),
                 info,
                 db_event_subscription,
                 executor,

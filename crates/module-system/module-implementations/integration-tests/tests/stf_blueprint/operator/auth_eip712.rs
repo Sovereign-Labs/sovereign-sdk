@@ -4,7 +4,7 @@ use sov_address::{EthereumAddress, EvmCryptoSpec};
 use sov_evm::Eip712Authenticator;
 use sov_mock_da::{MockBlob, MockDaSpec};
 use sov_mock_zkvm::MockZkvm;
-use sov_modules_api::capabilities::TransactionAuthenticator;
+use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::macros::config_value;
@@ -75,7 +75,7 @@ pub fn create_utx<S: Spec, RT: Runtime<S>>(message: RT::Decodable) -> UnsignedTr
         gas_limit: None,
         chain_id: config_value!("CHAIN_ID"),
     };
-    UnsignedTransaction::new_with_details(message, 0, details)
+    UnsignedTransaction::new_with_details(message, UniquenessData::Generation(0), details)
 }
 
 pub fn sign_utx<S: Spec, RT: Runtime<S>>(

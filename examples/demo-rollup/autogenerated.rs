@@ -1,4 +1,4 @@
-pub const CHAIN_HASH: [u8; 32] = [202, 84, 140, 158, 107, 184, 67, 77, 153, 178, 213, 63, 168, 67, 80, 209, 240, 22, 246, 121, 123, 6, 132, 180, 79, 3, 197, 23, 4, 203, 43, 169];
+pub const CHAIN_HASH: [u8; 32] = [19, 187, 239, 92, 27, 20, 136, 146, 186, 152, 44, 71, 77, 136, 145, 243, 187, 238, 119, 247, 246, 244, 222, 188, 89, 93, 125, 241, 123, 78, 69, 228];
 
 #[allow(dead_code)]
 pub const SCHEMA_JSON: &str = r#"{
@@ -82,15 +82,10 @@ pub const SCHEMA_JSON: &str = r#"{
             "doc": ""
           },
           {
-            "display_name": "generation",
+            "display_name": "uniqueness",
             "silent": false,
             "value": {
-              "Immediate": {
-                "Integer": [
-                  "u64",
-                  "Decimal"
-                ]
-              }
+              "ByIndex": 114
             },
             "doc": ""
           },
@@ -98,7 +93,7 @@ pub const SCHEMA_JSON: &str = r#"{
             "display_name": "details",
             "silent": false,
             "value": {
-              "ByIndex": 114
+              "ByIndex": 117
             },
             "doc": ""
           }
@@ -2627,6 +2622,70 @@ pub const SCHEMA_JSON: &str = r#"{
       }
     },
     {
+      "Enum": {
+        "type_name": "UniquenessData",
+        "variants": [
+          {
+            "name": "Nonce",
+            "discriminant": 0,
+            "template": null,
+            "value": {
+              "ByIndex": 115
+            }
+          },
+          {
+            "name": "Generation",
+            "discriminant": 1,
+            "template": null,
+            "value": {
+              "ByIndex": 116
+            }
+          }
+        ],
+        "hide_tag": false
+      }
+    },
+    {
+      "Tuple": {
+        "template": null,
+        "peekable": false,
+        "fields": [
+          {
+            "value": {
+              "Immediate": {
+                "Integer": [
+                  "u64",
+                  "Decimal"
+                ]
+              }
+            },
+            "silent": false,
+            "doc": ""
+          }
+        ]
+      }
+    },
+    {
+      "Tuple": {
+        "template": null,
+        "peekable": false,
+        "fields": [
+          {
+            "value": {
+              "Immediate": {
+                "Integer": [
+                  "u64",
+                  "Decimal"
+                ]
+              }
+            },
+            "silent": false,
+            "doc": ""
+          }
+        ]
+      }
+    },
+    {
       "Struct": {
         "type_name": "TxDetails",
         "template": null,
@@ -2636,7 +2695,7 @@ pub const SCHEMA_JSON: &str = r#"{
             "display_name": "max_priority_fee_bips",
             "silent": false,
             "value": {
-              "ByIndex": 115
+              "ByIndex": 118
             },
             "doc": ""
           },
@@ -2707,15 +2766,10 @@ pub const SCHEMA_JSON: &str = r#"{
             "doc": ""
           },
           {
-            "display_name": "generation",
+            "display_name": "uniqueness",
             "silent": false,
             "value": {
-              "Immediate": {
-                "Integer": [
-                  "u64",
-                  "Decimal"
-                ]
-              }
+              "ByIndex": 114
             },
             "doc": ""
           },
@@ -2723,7 +2777,7 @@ pub const SCHEMA_JSON: &str = r#"{
             "display_name": "details",
             "silent": false,
             "value": {
-              "ByIndex": 114
+              "ByIndex": 117
             },
             "doc": ""
           }
@@ -2733,7 +2787,7 @@ pub const SCHEMA_JSON: &str = r#"{
   ],
   "root_type_indices": [
     0,
-    116,
+    119,
     6,
     12
   ],
@@ -2829,7 +2883,7 @@ pub const SCHEMA_JSON: &str = r#"{
           "name": "runtime_call"
         },
         {
-          "name": "generation"
+          "name": "uniqueness"
         },
         {
           "name": "details"
@@ -3785,6 +3839,25 @@ pub const SCHEMA_JSON: &str = r#"{
       ]
     },
     {
+      "name": "UniquenessData",
+      "fields_or_variants": [
+        {
+          "name": "nonce"
+        },
+        {
+          "name": "generation"
+        }
+      ]
+    },
+    {
+      "name": "",
+      "fields_or_variants": []
+    },
+    {
+      "name": "",
+      "fields_or_variants": []
+    },
+    {
       "name": "TxDetails",
       "fields_or_variants": [
         {
@@ -3812,7 +3885,7 @@ pub const SCHEMA_JSON: &str = r#"{
           "name": "runtime_call"
         },
         {
-          "name": "generation"
+          "name": "uniqueness"
         },
         {
           "name": "details"

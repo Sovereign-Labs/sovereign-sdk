@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use derivative::Derivative;
 use sov_mock_da::{MockAddress, MockBlob};
-use sov_modules_api::capabilities::TransactionAuthenticator;
+use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
 use sov_modules_api::transaction::{PriorityFeeBips, Transaction, TxDetails, UnsignedTransaction};
 use sov_modules_api::{Amount, CryptoSpec, DispatchCall, FullyBakedTx, PrivateKey, RawTx, Spec};
 use sov_rollup_interface::da::RelevantBlobs;
@@ -135,11 +135,11 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
         key: <S::CryptoSpec as CryptoSpec>::PrivateKey,
         chain_hash: &[u8; 32],
         details: TxDetails<S>,
-        nonces: &mut HashMap<<S::CryptoSpec as CryptoSpec>::PublicKey, u64>,
+        generation_numbers: &mut HashMap<<S::CryptoSpec as CryptoSpec>::PublicKey, u64>,
     ) -> Transaction<RT, S> {
         let pub_key = key.pub_key();
-        let nonce = *nonces.get(&pub_key).unwrap_or(&0);
-        nonces.insert(pub_key, nonce + 1);
+        let generation = *generation_numbers.get(&pub_key).unwrap_or(&0);
+        generation_numbers.insert(pub_key, generation + 1);
         Transaction::<RT, S>::new_signed_tx(
             &key,
             chain_hash,
@@ -148,7 +148,7 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
                 details.chain_id,
                 details.max_priority_fee_bips,
                 details.max_fee,
-                nonce,
+                UniquenessData::Generation(generation),
                 details.gas_limit,
             ),
         )
@@ -160,9 +160,9 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
         key: <S::CryptoSpec as CryptoSpec>::PrivateKey,
         chain_hash: &[u8; 32],
         details: TxDetails<S>,
-        nonces: &mut HashMap<<S::CryptoSpec as CryptoSpec>::PublicKey, u64>,
+        generations: &mut HashMap<<S::CryptoSpec as CryptoSpec>::PublicKey, u64>,
     ) -> RawTx {
-        let tx = Self::sign(msg, key, chain_hash, details, nonces);
+        let tx = Self::sign(msg, key, chain_hash, details, generations);
 
         RawTx {
             data: borsh::to_vec(&tx).unwrap(),

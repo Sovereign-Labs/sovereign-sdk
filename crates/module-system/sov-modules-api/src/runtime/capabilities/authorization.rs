@@ -1,8 +1,13 @@
 //! This module defines abstractions and workflows around authenticating and authorizing
 //! transactions within a rollup.
+
+use borsh::{BorshDeserialize, BorshSerialize};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use sov_rollup_interface::crypto::CredentialId;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::TxHash;
+use sov_universal_wallet::UniversalWallet;
 
 use crate::transaction::Credentials;
 use crate::{Context, Spec, StateAccessor};
@@ -44,7 +49,20 @@ pub trait TransactionAuthorizer<S: Spec> {
 }
 
 /// The different types of data that can be used to verify transaction uniqueness
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    BorshSerialize,
+    BorshDeserialize,
+    UniversalWallet,
+    JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
 pub enum UniquenessData {
     /// Nonce-based uniqueness: an account's transactions must have a unique and consecutive nonces
     Nonce(u64),

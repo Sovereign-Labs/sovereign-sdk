@@ -6,7 +6,7 @@ use sov_blob_storage::config_deferred_slots_count;
 use sov_cli::NodeClient;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_mock_da::{MockAddress, MockDaSpec};
-use sov_modules_api::capabilities::TransactionAuthenticator;
+use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
 use sov_modules_api::{Amount, CryptoSpec, OperatingMode, RawTx, Runtime as RuntimeT, Spec};
@@ -133,7 +133,7 @@ fn build_register_sequencer_tx(
             chain_id,
             max_priority_fee_bips,
             max_fee,
-            nonce,
+            UniquenessData::Nonce(nonce),
             gas_limit,
         ),
     )

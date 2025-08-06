@@ -122,7 +122,7 @@ fn verify_and_decode_tx<S: Spec<CryptoSpec = EvmCryptoSpec>, D: DispatchCall<Spe
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
     match &tx.versioned_tx {
         VersionedTx::V0(tx_v0) => {
-            verify_chain_id(tx_v0, raw_tx_hash)?;
+            verify_chain_id(&tx_v0.details, raw_tx_hash)?;
             verify_eip712_signature(&tx, raw_tx_hash, meter)?;
             let authorization_data = extract_authorization_data::<S, D>(tx_v0, raw_tx_hash, meter)?;
 

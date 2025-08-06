@@ -93,7 +93,7 @@ pub(crate) fn generate_value_setter_tx(
         config_chain_id(),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
-        generation,
+        UniquenessData::Generation(generation),
         None,
     );
 

@@ -45,7 +45,9 @@ mod web3_compatibility {
                 }
             }
         },
-        "generation": 2,
+        "uniqueness": {
+            "generation": 3
+        },
         "details": {
             "max_priority_fee_bips": 1,
             "max_fee": 10000,
@@ -69,7 +71,9 @@ mod web3_compatibility {
                 }
             }
         },
-        "generation": 2,
+        "uniqueness": {
+            "generation": 3
+        },
         "details": {
             "max_priority_fee_bips": 1,
             "max_fee": 10000,
@@ -110,15 +114,17 @@ mod web3_compatibility {
                         }
                     }
                 },
-                "generation": 2,
+                "uniqueness": {
+                    "generation": 2
+                },
                 "details": {
                     "max_priority_fee_bips": 1,
                     "max_fee": 10000,
                     "gas_limit": [500, 500],
                     "chain_id": 1337
                 }
-    }}
-         }"#;
+            }}
+        }"#;
         let schema = Schema::of_single_type::<Transaction<Runtime, TestSpec>>().unwrap();
 
         assert!(schema.json_to_borsh(0, json).is_ok(), "{ASSERT_MSG}");
@@ -152,7 +158,9 @@ mod web3_compatibility {
                         }
                     }
                 },
-                "generation": 2,
+                "uniqueness": {
+                    "generation": 2
+                },
                 "details": {
                     "max_priority_fee_bips": 1,
                     "max_fee": 10000,

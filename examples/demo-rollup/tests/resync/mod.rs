@@ -109,7 +109,7 @@ async fn check_value(client: &demo_stf_json_client::Client, expected: u64) {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn test_generate_mockda_dataset_for_resync() -> anyhow::Result<()> {
-    let rollup_storage_path = Arc::new(TempDir::new_in("tests/resync/data/")?);
+    let rollup_storage_path = Arc::new(TempDir::new()?);
 
     let test_rollup = tokio::time::timeout(
         ROLLUP_START_TIMEOUT,
@@ -126,6 +126,7 @@ async fn test_generate_mockda_dataset_for_resync() -> anyhow::Result<()> {
             c.aggregated_proof_block_jump = 10;
             c.max_concurrent_blobs = 92;
         })
+        .set_persistent_da()
         .start(),
     )
     .await
@@ -170,26 +171,30 @@ async fn test_generate_mockda_dataset_for_resync() -> anyhow::Result<()> {
         .await?;
     tracing::debug!("Finalized slot response: {finalized_slot:?}");
 
-    let TestRollup {
-        shutdown_sender,
-        rollup_task,
-        da_service,
-        ..
-    } = test_rollup;
-
-    drop(da_service);
     tracing::info!("Triggering shutdown....");
-    shutdown_sender.send(())?;
-    tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, rollup_task)
+    tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, test_rollup.shutdown())
         .await
-        .context("Joining rollup task failed")???;
+        .context("Joining rollup task failed")??;
 
     // Sleep to let the rollup clean up and possibly close the sqlite DB more gracefully
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
+    let target_folder =
+        std::path::PathBuf::from_str(&format!("{}/tests/resync/data", env!("CARGO_MANIFEST_DIR")))?;
+
+    // Clean up previous files before proceeding.
+    let sqlite_files = ["mock_da.sqlite", "mock_da.sqlite-wal", "mock_da.sqlite-shm"];
+    for file in &sqlite_files {
+        let file_path = target_folder.join(file);
+        if file_path.exists() {
+            std::fs::remove_file(&file_path)
+                .with_context(|| format!("Failed to clean up file {}", file_path.display()))?;
+        }
+    }
+
     std::fs::copy(
         rollup_storage_path.path().join("mock_da.sqlite"),
-        "tests/resync/data/mock_da.sqlite",
+        target_folder.join("mock_da.sqlite"),
     )?;
 
     // Sometimes this test still leaves the sqlite WAL unflushed. So we copy it too.
@@ -197,11 +202,11 @@ async fn test_generate_mockda_dataset_for_resync() -> anyhow::Result<()> {
     // enough.
     let wal_path = rollup_storage_path.path().join("mock_da.sqlite-wal");
     if wal_path.exists() {
-        std::fs::copy(wal_path, "tests/resync/data/mock_da.sqlite-wal")?;
+        std::fs::copy(wal_path, target_folder.join("mock_da.sqlite-wal"))?;
     }
     let shm_path = rollup_storage_path.path().join("mock_da.sqlite-shm");
     if shm_path.exists() {
-        std::fs::copy(shm_path, "tests/resync/data/mock_da.sqlite-shm")?;
+        std::fs::copy(shm_path, target_folder.join("mock_da.sqlite-shm"))?;
     }
     Ok(())
 }
@@ -221,13 +226,30 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_resync(collector.clone(), false); // Set to true to see logs
 
-    let rollup_storage_path = Arc::new(TempDir::new_in("tests/resync/data/")?);
+    let rollup_storage_path = Arc::new(TempDir::new()?);
 
+    let source_folder =
+        std::path::PathBuf::from_str(&format!("{}/tests/resync/data", env!("CARGO_MANIFEST_DIR")))?;
     // First, simple test: resync from the existing DA storage
     std::fs::copy(
-        "tests/resync/data/mock_da.sqlite",
+        source_folder.join("mock_da.sqlite"),
         rollup_storage_path.path().join("mock_da.sqlite"),
     )?;
+    let wal_path = source_folder.join("mock_da.sqlite-wal");
+    if wal_path.exists() {
+        std::fs::copy(
+            wal_path,
+            rollup_storage_path.path().join("mock_da.sqlite-wal"),
+        )?;
+    }
+    let shm_path = source_folder.join("mock_da.sqlite-shm");
+    if shm_path.exists() {
+        std::fs::copy(
+            shm_path,
+            rollup_storage_path.path().join("mock_da.sqlite-shm"),
+        )?;
+    }
+
     sync_rollup_with_path(rollup_storage_path.clone(), 10_000).await?;
 
     // Next, delete everything except the preferred sequencer DB. Resync again to verify that this

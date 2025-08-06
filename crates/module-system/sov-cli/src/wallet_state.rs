@@ -9,7 +9,7 @@ use serde_json::Value;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{clap, CredentialId, CryptoSpec, DispatchCall, PrivateKey, PublicKey};
 
-use crate::UnsignedTransactionWithoutNonce;
+use crate::UnsignedTransactionWithoutUniqueness;
 
 const NO_ACCOUNTS_FOUND: &str =
     "No accounts found. You can generate one with the `keys generate` subcommand";
@@ -24,7 +24,7 @@ where
     Tx: DispatchCall,
 {
     /// The accumulated transactions to be submitted to the DA layer.
-    pub unsent_transactions: Vec<UnsignedTransactionWithoutNonce<S, Tx>>,
+    pub unsent_transactions: Vec<UnsignedTransactionWithoutUniqueness<S, Tx>>,
     /// The addresses in the wallet
     pub addresses: AddressList<S>,
     /// The REST API URL
@@ -118,18 +118,20 @@ This discrepancy may result in data layout inconsistency. Consider one of the fo
     /// Returns the serialized, signed transactions of the state.
     ///
     /// Consumes unsigned transactions, signing them with the provided key and using the supplied
-    /// nonce for each transaction, incrementally.
+    /// generation number for each transaction, incrementally.
     pub fn take_signed_transactions(
         &mut self,
         signing_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
-        nonce: u64,
+        generation: u64,
     ) -> Vec<Vec<u8>> {
         mem::take(&mut self.unsent_transactions)
             .into_iter()
             .enumerate()
             .map(|(offset, tx)| {
-                let nonce = nonce.checked_add(offset as u64).expect("Nonce overflow");
-                sign_tx(signing_key, &tx, nonce).expect("Tx signing failed")
+                let generation = generation
+                    .checked_add(offset as u64)
+                    .expect("Generation number overflow");
+                sign_tx(signing_key, &tx, generation).expect("Tx signing failed")
             })
             .collect()
     }
@@ -158,8 +160,8 @@ This discrepancy may result in data layout inconsistency. Consider one of the fo
 /// Returns borsh serialized [`Transaction`].
 pub(crate) fn sign_tx<S, Tx>(
     signing_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
-    tx: &UnsignedTransactionWithoutNonce<S, Tx>,
-    nonce: u64,
+    tx: &UnsignedTransactionWithoutUniqueness<S, Tx>,
+    generation: u64,
 ) -> anyhow::Result<Vec<u8>>
 where
     S: sov_modules_api::Spec,
@@ -168,7 +170,7 @@ where
     let tx = Transaction::<Tx, S>::new_signed_tx(
         signing_key,
         &tx.chain_hash.into(),
-        tx.with_nonce(nonce),
+        tx.with_generation(generation),
     );
     let tx = borsh::to_vec(&tx)?;
     Ok(tx)

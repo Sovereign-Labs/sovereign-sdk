@@ -11,10 +11,10 @@ use sov_rollup_interface::TxHash;
 use sov_state::User;
 use thiserror::Error;
 
-use crate::capabilities::{AuthorizationData, UniquenessData};
+use crate::capabilities::AuthorizationData;
 use crate::transaction::{
     AuthenticatedTransactionAndRawHash, Credentials, Transaction, TransactionVerificationError,
-    VersionedTx,
+    TxDetails, VersionedTx,
 };
 use crate::{
     capabilities, metered_credential, CryptoSpec, DispatchCall, FullyBakedTx, GasMeter,
@@ -242,15 +242,15 @@ impl From<AuthenticationError> for UnregisteredAuthenticationError {
 }
 
 /// Verifies that the transaction has the correct chain ID.
-pub fn verify_chain_id<S: Spec, Call>(
-    tx_v0: &crate::transaction::Version0<Call, S>,
+pub fn verify_chain_id<S: Spec>(
+    tx_details: &TxDetails<S>,
     raw_tx_hash: TxHash,
 ) -> Result<(), AuthenticationError> {
-    if tx_v0.details.chain_id != config_chain_id() {
+    if tx_details.chain_id != config_chain_id() {
         return Err(AuthenticationError::FatalError(
             FatalError::InvalidChainId {
                 expected: config_chain_id(),
-                got: tx_v0.details.chain_id,
+                got: tx_details.chain_id,
             },
             raw_tx_hash,
         ));
@@ -285,7 +285,7 @@ pub fn extract_authorization_data<S: Spec, D: DispatchCall<Spec = S>>(
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
     Ok(AuthorizationData {
-        uniqueness: UniquenessData::Generation(tx_v0.generation),
+        uniqueness: tx_v0.uniqueness,
         tx_hash: raw_tx_hash,
         credential_id,
         credentials: Credentials::new(pub_key),
@@ -301,7 +301,7 @@ fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
     match &tx.versioned_tx {
         VersionedTx::V0(tx_v0) => {
-            verify_chain_id(tx_v0, raw_tx_hash)?;
+            verify_chain_id(&tx_v0.details, raw_tx_hash)?;
             verify_signature(&tx, chain_hash, raw_tx_hash, meter)?;
             let authorization_data = extract_authorization_data::<S, D>(tx_v0, raw_tx_hash, meter)?;
 

@@ -3161,10 +3161,10 @@ async fn query_set_value_helper(
     Ok(())
 }
 
-pub(super) fn tx_set_value(key: &Ed25519PrivateKey, nonce: u64, value_to_set: u64) -> RawTx {
+pub(super) fn tx_set_value(key: &Ed25519PrivateKey, generation: u64, value_to_set: u64) -> RawTx {
     tx_set_value_with_gas::<TestRuntime<TestSpec>>(
         key,
-        nonce,
+        generation,
         value_to_set,
         None,
         sov_test_utils::TEST_DEFAULT_MAX_FEE,

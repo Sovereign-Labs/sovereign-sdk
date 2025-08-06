@@ -98,14 +98,13 @@ impl<S: Spec> RollupBlockExecutorError<S> {
 type StateRootReceiver<S> =
     oneshot::Receiver<(RollupHeight, <<S as Spec>::Storage as Storage>::Root)>;
 
-pub struct RollupBlockExecutorConfig<S: Spec, Rt: Runtime<S>> {
-    pub config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+#[derive(Clone)]
+pub struct RollupBlockExecutorConfig<S: Spec> {
     pub da_address: <S::Da as DaSpec>::Address,
     pub shutdown_notifier: Sender<()>,
-    pub state_root_request_sender: tokio::sync::mpsc::Sender<StateRootComputeRequest<S>>,
     pub shutdown_receiver: watch::Receiver<()>,
     pub shutdown_sender: watch::Sender<()>,
-    pub startup_transaction_cache_writer: Option<TxResultWriter<S, Rt>>,
+    pub state_root_request_sender: Sender<StateRootComputeRequest<S>>,
 }
 
 pub struct RollupBlockExecutor<S, Rt>
@@ -114,11 +113,13 @@ where
     Rt: Runtime<S>,
 {
     pub checkpoint: StateCheckpoint<S>,
-    rollup_block_task_state: Option<BackgroundTaskState<S>>,
+    seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+    shutdown_receiver: watch::Receiver<()>,
+    shutdown_sender: watch::Sender<()>,
 
+    rollup_block_task_state: Option<BackgroundTaskState<S>>,
     next_event_number: u64,
     next_tx_number: u64,
-    config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     da_address: <S::Da as DaSpec>::Address,
     // A sender notifying that this acceptor has successfully shut down. We give a handle to
     // each background task when it is spawned, ensuring that this channel remains open as long
@@ -127,11 +128,7 @@ where
     state_root_request_sender: tokio::sync::mpsc::Sender<StateRootComputeRequest<S>>,
     state_roots: BTreeMap<RollupHeight, <S::Storage as Storage>::Root>,
     state_root_responses: VecDeque<StateRootReceiver<S>>,
-    shutdown_receiver: watch::Receiver<()>,
-    shutdown_sender: watch::Sender<()>,
     id: Uuid,
-    /// A handle to the tx cache for repopulating it on startup. This is `None` except during startup.
-    // TODO: This should become part of the "local side effects" task of the executor; passing it here is messy
     startup_transaction_cache_writer: Option<TxResultWriter<S, Rt>>,
     phantom: PhantomData<Rt>,
 }
@@ -144,19 +141,36 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         info: &StateUpdateInfo<S::Storage>,
-        rollup_exec_config: RollupBlockExecutorConfig<S, Rt>,
+        rollup_exec_config: RollupBlockExecutorConfig<S>,
+        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     ) -> RollupBlockExecutor<S, Rt> {
+        Self::new_helper(info, None, rollup_exec_config, seq_config)
+    }
+
+    pub fn new_with_tx_cache_writer(
+        info: &StateUpdateInfo<S::Storage>,
+        tx_cache_writer: TxResultWriter<S, Rt>,
+        rollup_exec_config: RollupBlockExecutorConfig<S>,
+        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+    ) -> RollupBlockExecutor<S, Rt> {
+        Self::new_helper(info, Some(tx_cache_writer), rollup_exec_config, seq_config)
+    }
+
+    fn new_helper(
+        info: &StateUpdateInfo<S::Storage>,
+        tx_cache_writer: Option<TxResultWriter<S, Rt>>,
+        rollup_exec_config: RollupBlockExecutorConfig<S>,
+        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+    ) -> Self {
         let mut rt = Rt::default();
         let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel());
 
         let RollupBlockExecutorConfig {
-            config,
             da_address,
             shutdown_notifier,
             state_root_request_sender,
             shutdown_receiver,
             shutdown_sender,
-            startup_transaction_cache_writer,
         } = rollup_exec_config;
 
         Self {
@@ -164,7 +178,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             rollup_block_task_state: None,
             next_event_number: info.next_event_number,
             next_tx_number: info.next_tx_number,
-            config,
+            seq_config,
             da_address,
             shutdown_notifier,
             state_root_request_sender,
@@ -173,7 +187,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             id: Uuid::now_v7(),
             shutdown_receiver,
             shutdown_sender,
-            startup_transaction_cache_writer,
+            startup_transaction_cache_writer: tx_cache_writer,
             phantom: PhantomData,
         }
     }
@@ -452,8 +466,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 shutdown_notifier: self.shutdown_notifier.clone(),
                 old_rollup_height: self.checkpoint.rollup_height_to_access(),
                 minimum_profit_per_tx,
-                admin_addresses: self.config.admin_addresses.clone().into(),
-                sequencer_rollup_address: self.config.rollup_address.clone(),
+                admin_addresses: self.seq_config.admin_addresses.clone().into(),
+                sequencer_rollup_address: self.seq_config.rollup_address.clone(),
                 sequencer_da_address: self.da_address.clone(),
             };
 

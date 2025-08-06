@@ -111,7 +111,7 @@ pub type StorageLocation = SizedSafeString<256>;
 /// Representation of ethereum address.
 pub type EthAddress = HexString<[u8; 20]>;
 
-/// Represantation of a single validator signature.
+/// Representation of a single validator signature.
 pub type ValidatorSignature = HexString<[u8; 65]>;
 
 #[cfg(test)]

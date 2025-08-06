@@ -16,6 +16,7 @@ pub mod wallet_state;
 pub mod workflows;
 
 pub use node_client::NodeClient;
+use sov_modules_api::capabilities::UniquenessData;
 
 const SOV_WALLET_DIR_ENV_VAR: &str = "SOV_WALLET_DIR";
 
@@ -38,7 +39,7 @@ pub fn wallet_dir() -> anyhow::Result<impl AsRef<Path>> {
 /// An unsent transaction with the required data to be submitted to the DA layer
 #[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 #[serde(bound = "Tx::Decodable: serde::Serialize + serde::de::DeserializeOwned")]
-pub struct UnsignedTransactionWithoutNonce<S: Spec, Tx>
+pub struct UnsignedTransactionWithoutUniqueness<S: Spec, Tx>
 where
     Tx: DispatchCall,
 {
@@ -50,11 +51,11 @@ where
     details: TxDetails<S>,
 }
 
-impl<S: Spec, Tx> UnsignedTransactionWithoutNonce<S, Tx>
+impl<S: Spec, Tx> UnsignedTransactionWithoutUniqueness<S, Tx>
 where
     Tx: DispatchCall,
 {
-    /// Creates a new [`UnsignedTransactionWithoutNonce`] with the given arguments.
+    /// Creates a new [`UnsignedTransactionWithoutUniqueness`] with the given arguments.
     pub const fn new(
         tx: Tx::Decodable,
         chain_id: u64,
@@ -75,15 +76,15 @@ where
         }
     }
 
-    /// Creates a new [`UnsignedTransaction`] from this [`UnsignedTransactionWithoutNonce`] when
-    /// given a nonce.
-    pub fn with_nonce(&self, nonce: u64) -> UnsignedTransaction<Tx, S> {
+    /// Creates a new [`UnsignedTransaction`] from this [`UnsignedTransactionWithoutUniqueness`] when
+    /// given generation number.
+    pub fn with_generation(&self, generation: u64) -> UnsignedTransaction<Tx, S> {
         UnsignedTransaction::new(
             self.tx.clone(),
             self.details.chain_id,
             self.details.max_priority_fee_bips,
             self.details.max_fee,
-            nonce,
+            UniquenessData::Generation(generation),
             self.details.gas_limit.clone(),
         )
     }
