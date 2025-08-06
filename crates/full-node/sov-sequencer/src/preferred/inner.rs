@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::num::NonZero;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
@@ -409,11 +408,7 @@ where
             .await;
     }
 
-    async fn trigger_recovery(
-        &mut self,
-        recovery_strategy: RecoveryStrategy,
-        info: &StateUpdateInfo<S::Storage>,
-    ) {
+    async fn trigger_recovery(&mut self, info: &StateUpdateInfo<S::Storage>) {
         if self.is_replica() {
             // Replicas don't run recovery. We let the main sequencer run catchup. If we fail-over
             // midway, update_state() will automatically re-trigger recovery on this instance if
@@ -432,6 +427,12 @@ where
             exit_rollup(&self.shutdown_sender).await;
             unreachable!();
         }
+
+        let recovery_strategy = self
+            .seq_config
+            .sequencer_kind_config
+            .recovery_strategy
+            .clone();
 
         self.is_ready = Err(SequencerNotReadyDetails::PreferredSequencerRecovering);
         let next_sequence_number_according_to_node =
@@ -1405,13 +1406,7 @@ where
             }
             (false, true, false, _) => {
                 error!(slot_number_according_to_node=%info.slot_number, %current_visible_slot_number, "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Normal operation will be suspended until this can be remedied.");
-                let recovery_strategy = inner
-                    .seq_config
-                    .sequencer_kind_config
-                    .recovery_strategy
-                    .clone();
-
-                inner.trigger_recovery(recovery_strategy, info).await;
+                inner.trigger_recovery(info).await;
 
                 PreferredSeqOperation::RecoverAndCatchUp
             }
