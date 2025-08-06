@@ -8,7 +8,7 @@ expression: "&slot"
     "start": 0
   },
   "finality_status": "finalized",
-  "hash": "0xd1231a38586e68d0405dc55ae6775e219f29fff1f7e0c6410d0ac069201e550b",
+  "hash": "0x297542c7e17d3a07d8c381ab77b19d1e2df29ab830fe5cb60d75e362fd8f590f",
   "number": 0,
   "state_root": "0x73746174652d726f6f742d30",
   "timestamp": 100000.0,

@@ -1,0 +1,280 @@
+---
+source: crates/full-node/sov-ledger-apis/tests/integration/main.rs
+expression: "&slot"
+---
+{
+  "batch_range": {
+    "end": 2,
+    "start": 0
+  },
+  "batches": [
+    {
+      "hash": "0xafd7994f4e6225d0ba9063db9000a6a194e0f0dbbfb90ed0c47fe3e23571770e",
+      "number": 0,
+      "receipt": 0.0,
+      "slot_number": 0,
+      "tx_range": {
+        "end": 2,
+        "start": 0
+      },
+      "txs": [
+        {
+          "batch_number": 0,
+          "body": "dHgwIGJvZHk=",
+          "event_range": {
+            "end": 2,
+            "start": 0
+          },
+          "events": [
+            {
+              "key": "foo0",
+              "module": {
+                "name": "Bank"
+              },
+              "number": 0,
+              "tx_hash": "0x95cd603fe577fa9548ec0c9b50b067566fe07c8af6acba45f6196f3a15d511f6",
+              "type": "event",
+              "value": {
+                "token_created": {
+                  "admins": [],
+                  "coins": {
+                    "amount": "0",
+                    "token_id": "token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6"
+                  },
+                  "mint_to_address": {
+                    "module": "module_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn7stmj"
+                  },
+                  "minter": {
+                    "module": "module_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn7stmj"
+                  },
+                  "supply_cap": "340282366920938463463374607431768211455",
+                  "token_name": "token0"
+                }
+              }
+            },
+            {
+              "key": "bar0",
+              "module": {
+                "name": "Bank"
+              },
+              "number": 1,
+              "tx_hash": "0x95cd603fe577fa9548ec0c9b50b067566fe07c8af6acba45f6196f3a15d511f6",
+              "type": "event",
+              "value": {
+                "token_frozen": {
+                  "freezer": {
+                    "module": "module_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn7stmj"
+                  },
+                  "token_id": "token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6"
+                }
+              }
+            }
+          ],
+          "hash": "0x95cd603fe577fa9548ec0c9b50b067566fe07c8af6acba45f6196f3a15d511f6",
+          "number": 0,
+          "receipt": {
+            "result": "successful"
+          },
+          "type": "tx"
+        },
+        {
+          "batch_number": 0,
+          "body": "dHgxIGJvZHk=",
+          "event_range": {
+            "end": 4,
+            "start": 2
+          },
+          "events": [
+            {
+              "key": "foo1",
+              "module": {
+                "name": "Bank"
+              },
+              "number": 2,
+              "tx_hash": "0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b",
+              "type": "event",
+              "value": {
+                "token_created": {
+                  "admins": [],
+                  "coins": {
+                    "amount": "0",
+                    "token_id": "token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6"
+                  },
+                  "mint_to_address": {
+                    "module": "module_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn7stmj"
+                  },
+                  "minter": {
+                    "module": "module_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn7stmj"
+                  },
+                  "supply_cap": "340282366920938463463374607431768211455",
+                  "token_name": "token1"
+                }
+              }
+            },
+            {
+              "key": "bar1",
+              "module": {
+                "name": "Bank"
+              },
+              "number": 3,
+              "tx_hash": "0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b",
+              "type": "event",
+              "value": {
+                "token_frozen": {
+                  "freezer": {
+                    "module": "module_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn7stmj"
+                  },
+                  "token_id": "token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6"
+                }
+              }
+            }
+          ],
+          "hash": "0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b",
+          "number": 1,
+          "receipt": {
+            "result": "successful"
+          },
+          "type": "tx"
+        }
+      ],
+      "type": "batch"
+    },
+    {
+      "hash": "0x52009f18a8f88c5e14d5b73a734de2c06426e81fcf2397a70ea7b060a809bf3c",
+      "number": 1,
+      "receipt": 1.0,
+      "slot_number": 0,
+      "tx_range": {
+        "end": 4,
+        "start": 2
+      },
+      "txs": [
+        {
+          "batch_number": 1,
+          "body": "dHgyIGJvZHk=",
+          "event_range": {
+            "end": 6,
+            "start": 4
+          },
+          "events": [
+            {
+              "key": "foo2",
+              "module": {
+                "name": "Bank"
+              },
+              "number": 4,
+              "tx_hash": "0x27ca64c092a959c7edc525ed45e845b1de6a7590d173fd2fad9133c8a779a1e3",
+              "type": "event",
+              "value": {
+                "token_created": {
+                  "admins": [],
+                  "coins": {
+                    "amount": "0",
+                    "token_id": "token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6"
+                  },
+                  "mint_to_address": {
+                    "module": "module_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn7stmj"
+                  },
+                  "minter": {
+                    "module": "module_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn7stmj"
+                  },
+                  "supply_cap": "340282366920938463463374607431768211455",
+                  "token_name": "token2"
+                }
+              }
+            },
+            {
+              "key": "bar2",
+              "module": {
+                "name": "Bank"
+              },
+              "number": 5,
+              "tx_hash": "0x27ca64c092a959c7edc525ed45e845b1de6a7590d173fd2fad9133c8a779a1e3",
+              "type": "event",
+              "value": {
+                "token_frozen": {
+                  "freezer": {
+                    "module": "module_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn7stmj"
+                  },
+                  "token_id": "token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6"
+                }
+              }
+            }
+          ],
+          "hash": "0x27ca64c092a959c7edc525ed45e845b1de6a7590d173fd2fad9133c8a779a1e3",
+          "number": 2,
+          "receipt": {
+            "result": "successful"
+          },
+          "type": "tx"
+        },
+        {
+          "batch_number": 1,
+          "body": "dHgzIGJvZHk=",
+          "event_range": {
+            "end": 8,
+            "start": 6
+          },
+          "events": [
+            {
+              "key": "foo3",
+              "module": {
+                "name": "Bank"
+              },
+              "number": 6,
+              "tx_hash": "0x1f3cb18e896256d7d6bb8c11a6ec71f005c75de05e39beae5d93bbd1e2c8b7a9",
+              "type": "event",
+              "value": {
+                "token_created": {
+                  "admins": [],
+                  "coins": {
+                    "amount": "0",
+                    "token_id": "token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6"
+                  },
+                  "mint_to_address": {
+                    "module": "module_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn7stmj"
+                  },
+                  "minter": {
+                    "module": "module_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn7stmj"
+                  },
+                  "supply_cap": "340282366920938463463374607431768211455",
+                  "token_name": "token3"
+                }
+              }
+            },
+            {
+              "key": "bar3",
+              "module": {
+                "name": "Bank"
+              },
+              "number": 7,
+              "tx_hash": "0x1f3cb18e896256d7d6bb8c11a6ec71f005c75de05e39beae5d93bbd1e2c8b7a9",
+              "type": "event",
+              "value": {
+                "token_frozen": {
+                  "freezer": {
+                    "module": "module_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn7stmj"
+                  },
+                  "token_id": "token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6"
+                }
+              }
+            }
+          ],
+          "hash": "0x1f3cb18e896256d7d6bb8c11a6ec71f005c75de05e39beae5d93bbd1e2c8b7a9",
+          "number": 3,
+          "receipt": {
+            "result": "successful"
+          },
+          "type": "tx"
+        }
+      ],
+      "type": "batch"
+    }
+  ],
+  "finality_status": "finalized",
+  "hash": "0x297542c7e17d3a07d8c381ab77b19d1e2df29ab830fe5cb60d75e362fd8f590f",
+  "number": 0,
+  "state_root": "0x73746174652d726f6f742d30",
+  "timestamp": 100000.0,
+  "type": "slot"
+}

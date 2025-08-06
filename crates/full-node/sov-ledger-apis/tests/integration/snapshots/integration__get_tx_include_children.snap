@@ -1,0 +1,63 @@
+---
+source: crates/full-node/sov-ledger-apis/tests/integration/main.rs
+expression: "&tx"
+---
+{
+  "batch_number": 3,
+  "body": "dHg3IGJvZHk=",
+  "event_range": {
+    "end": 16,
+    "start": 14
+  },
+  "events": [
+    {
+      "key": "foo7",
+      "module": {
+        "name": "Bank"
+      },
+      "number": 14,
+      "tx_hash": "0x281b9dba10658c86d0c3c267b82b8972b6c7b41285f60ce2054211e69dd89e15",
+      "type": "event",
+      "value": {
+        "token_created": {
+          "admins": [],
+          "coins": {
+            "amount": "0",
+            "token_id": "token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6"
+          },
+          "mint_to_address": {
+            "module": "module_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn7stmj"
+          },
+          "minter": {
+            "module": "module_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn7stmj"
+          },
+          "supply_cap": "340282366920938463463374607431768211455",
+          "token_name": "token7"
+        }
+      }
+    },
+    {
+      "key": "bar7",
+      "module": {
+        "name": "Bank"
+      },
+      "number": 15,
+      "tx_hash": "0x281b9dba10658c86d0c3c267b82b8972b6c7b41285f60ce2054211e69dd89e15",
+      "type": "event",
+      "value": {
+        "token_frozen": {
+          "freezer": {
+            "module": "module_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn7stmj"
+          },
+          "token_id": "token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6"
+        }
+      }
+    }
+  ],
+  "hash": "0x281b9dba10658c86d0c3c267b82b8972b6c7b41285f60ce2054211e69dd89e15",
+  "number": 7,
+  "receipt": {
+    "result": "skipped"
+  },
+  "type": "tx"
+}
