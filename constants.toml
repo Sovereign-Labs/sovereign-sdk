@@ -10,6 +10,9 @@ freeze = [1, 1]
 # We use the ID 4321 for demo purposes. Change this value before deploying!
 CHAIN_ID = 4321
 CHAIN_NAME = "TestChain"
+# How many rollup blocks to wait before terminating setup mode. While setup mode is enabled,
+# the rollup does not charge gas. This is useful when initializing the rollup with a bridged gas token.
+SETUP_MODE_TERMINATION_HEIGHT = 0 # Disable setup mode entirely by default.
 # When using soft-confirmations, this parameter sets the maximum number of slots that a transaction can be deferred by the sequencer before
 # being force-executed by the rollup. Decreasing the number of slots means that "forced" transactions are processed
 # more quickly in the worst case, but increases the likelihood that some soft confirmations

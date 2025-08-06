@@ -7,8 +7,10 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+use rockbound::rocksdb::ColumnFamilyDescriptor;
 use rockbound::{SchemaKey, SchemaValue};
 
+pub(crate) mod flat_db;
 /// Simpler version of `StateDb`, that stores key-values with versions for historical queries.
 pub mod historical_state;
 /// Implements a wrapper around RocksDB meant for storing rollup history ("the ledger").
@@ -46,13 +48,24 @@ pub mod storage_manager;
 pub mod test_utils;
 
 /// Options on how to setup [`rockbound::DB`] or any other persistence.
-pub struct DbOptions {
+pub struct DbOptions<Columns = rockbound::schema::ColumnFamilyName> {
     /// Name of the database.
     pub(crate) name: &'static str,
     /// Sub-directory name for the [`rockbound::DB`].
     pub(crate) path_suffix: &'static str,
-    /// A set of [`rockbound::schema::ColumnFamilyName`] that this db is going to use.
-    pub(crate) columns: Vec<rockbound::schema::ColumnFamilyName>,
+    /// A set of colums that this db is going to use.
+    pub(crate) columns: Vec<Columns>,
+}
+
+impl<T> DbOptions<T> {
+    /// Setup [`rockbound::DB`] with default options
+    pub fn map_columns<U>(self, f: impl FnMut(T) -> U) -> DbOptions<U> {
+        DbOptions {
+            name: self.name,
+            path_suffix: self.path_suffix,
+            columns: self.columns.into_iter().map(f).collect(),
+        }
+    }
 }
 
 impl DbOptions {
@@ -64,6 +77,18 @@ impl DbOptions {
         let config = rocks_db_config::gen_rocksdb_options(&Default::default(), false);
         let db_path = path.as_ref().join(self.path_suffix);
         rockbound::DB::open(db_path, self.name, self.columns, &config)
+    }
+}
+
+impl DbOptions<ColumnFamilyDescriptor> {
+    /// Setup [`rockbound::DB`] with default options
+    pub fn setup_db_in_path_with_column_descriptors(
+        self,
+        path: impl AsRef<std::path::Path>,
+    ) -> anyhow::Result<rockbound::DB> {
+        let config = rocks_db_config::gen_rocksdb_options(&Default::default(), false);
+        let db_path = path.as_ref().join(self.path_suffix);
+        rockbound::DB::open_with_cfds(&config, db_path, self.name, self.columns)
     }
 }
 

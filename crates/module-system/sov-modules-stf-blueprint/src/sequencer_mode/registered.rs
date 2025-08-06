@@ -379,7 +379,7 @@ where
             .max(1) as u128;
         let amount = sequencer_bond
             .checked_div(Amount::new(divisor))
-            // SAFETY: We know that `divisor` is always greater than because we call ``.max(1)` immediately` above.
+            // SAFETY: We know that `divisor` is always greater than because we call `.max(1)` immediately` above.
             .expect("Divison by zero");
         SequencerBondForTx::Standard(amount)
     };

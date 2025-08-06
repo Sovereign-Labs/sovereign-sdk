@@ -482,7 +482,9 @@ fn assert_values<S: NativeStorage>(
     let get_value = |version: Option<SlotNumber>| -> Option<SlotValue> {
         match namespace {
             ValueNamespace::StateKernel => {
-                let just_value = storage.get_historical::<Kernel>(key, version, &witness_stub);
+                let just_value = storage
+                    .get_historical::<Kernel>(key, version, &witness_stub)
+                    .unwrap();
                 let with_proof = storage
                     .get_with_proof::<Kernel>(key.clone(), version)
                     .ok()
@@ -492,7 +494,9 @@ fn assert_values<S: NativeStorage>(
                 just_value
             }
             ValueNamespace::StateUser => {
-                let just_value = storage.get_historical::<User>(key, version, &witness_stub);
+                let just_value = storage
+                    .get_historical::<User>(key, version, &witness_stub)
+                    .unwrap();
                 let with_proof = storage
                     .get_with_proof::<User>(key.clone(), version)
                     .ok()
@@ -500,7 +504,7 @@ fn assert_values<S: NativeStorage>(
                 assert_eq!(just_value, with_proof);
                 just_value
             }
-            ValueNamespace::Accessory => storage.get_accessory(key, version),
+            ValueNamespace::Accessory => storage.get_accessory_historical(key, version).unwrap(),
         }
     };
     let last_value = expected_values.last().unwrap_or(&None).clone();
@@ -509,7 +513,7 @@ fn assert_values<S: NativeStorage>(
     assert_eq!(
         last_value,
         get_value(None),
-        "Not specifying version should be equal to last version for this storage in {namespace:?}",
+        "Not specifying version should be equal to last version for this storage in {namespace:?}. Expected_values: {expected_values:?}",
     );
 
     let next_version = expected_values.len() as u64;

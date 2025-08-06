@@ -9,8 +9,7 @@ use nomt::proof::MultiProof;
 use nomt::FinishedSession;
 use sov_db::accessory_db::AccessoryDb;
 use sov_db::historical_state::HistoricalStateReader;
-use sov_db::namespaces::{KernelNamespace, UserNamespace};
-use sov_db::state_db_nomt::{NomtSessionBuilder, SessionsContainer};
+use sov_db::state_db_nomt::{HistoricalValueError, NomtSessionBuilder, SessionsContainer};
 use sov_db::storage_manager::{
     InitializableNativeNomtStorage, NomtChangeSet, StateFinishedSession,
 };
@@ -82,22 +81,21 @@ where
         self.is_strict_mode = use_strict_mode;
     }
 
-    fn get_version_to_use(&self, version: Option<SlotNumber>) -> Option<SlotNumber> {
+    /// Returns a double option: The outer option is `None` if there is no reasonable version to use,
+    /// while the inner option is None if we want to get the latest state rather than querying for a
+    /// particular version.
+    fn get_version_to_use(&self, version: Option<SlotNumber>) -> Option<Option<SlotNumber>> {
         if self.is_empty() {
             return None;
         }
         let next_version = self.historical_state.get_next_version();
         match version {
-            None => Some(
-                next_version
-                    .checked_sub(1)
-                    .expect("Next version for non empty storage should be above 0"),
-            ),
+            None => Some(None),
             Some(passed_version) => {
                 if passed_version >= next_version {
                     None
                 } else {
-                    Some(passed_version)
+                    Some(Some(passed_version))
                 }
             }
         }
@@ -127,16 +125,26 @@ where
         &self,
         key: &SlotKey,
         version: Option<SlotNumber>,
-    ) -> Option<SlotValue> {
-        let resolved_version = self.get_version_to_use(version)?;
-        let _span = tracing::debug_span!("version", %resolved_version, passed = ?version).entered();
-        match N::NAMESPACE {
+    ) -> Result<Option<SlotValue>, HistoricalValueError> {
+        // Note that the resolved version is logged but *not* necessarily passed to the backing DB.
+        // Passing a version indicates intent to perform a historical (rather than live) query, which
+        // bypasses the cache. This causes worse read performance, but prevents queries from interfering with
+        // transaction execution by thrashing the cache.
+        let Some(resolved_version) = self.get_version_to_use(version) else {
+            return Ok(None);
+        };
+        let _span = tracing::debug_span!("version", ?resolved_version, passed = ?version).entered();
+        let val = match N::NAMESPACE {
             Namespace::User => {
-                let historical_value = self
-                    .historical_state
-                    .get_value_option_by_key::<UserNamespace>(resolved_version, key.as_ref())
-                    .expect("Underlying user I/O failed");
-                if self.should_check_dbs_sync(resolved_version) {
+                let historical_value = if let Some(version) = resolved_version {
+                    self.historical_state
+                        .get_user_value_option_by_key_historical(key.as_ref(), version)?
+                } else {
+                    self.historical_state
+                        .get_user_value_option_by_key(key.as_ref())?
+                };
+                let version_to_check = resolved_version.unwrap_or(self.latest_version());
+                if self.should_check_dbs_sync(version_to_check) {
                     let key_path = S::Hasher::digest(key.as_ref()).into();
                     tracing::trace!(
                         %key,
@@ -158,11 +166,15 @@ where
                 historical_value
             }
             Namespace::Kernel => {
-                let historical_value = self
-                    .historical_state
-                    .get_value_option_by_key::<KernelNamespace>(resolved_version, key.as_ref())
-                    .expect("Underlying user I/O failed");
-                if self.should_check_dbs_sync(resolved_version) {
+                let historical_value = if let Some(version) = version {
+                    self.historical_state
+                        .get_kernel_value_option_by_key_historical(key.as_ref(), version)?
+                } else {
+                    self.historical_state
+                        .get_kernel_value_option_by_key(key.as_ref())?
+                };
+                let version_to_check = resolved_version.unwrap_or(self.latest_version());
+                if self.should_check_dbs_sync(version_to_check) {
                     let key_path = S::Hasher::digest(key.as_ref()).into();
                     tracing::trace!(
                         %key,
@@ -185,10 +197,14 @@ where
             }
             Namespace::Accessory => self
                 .accessory
-                .get_value_option(key.as_ref(), resolved_version)
+                .get_value_option(
+                    key.as_ref(),
+                    resolved_version.unwrap_or(self.latest_version()),
+                )
                 .expect("Unable to read from AccessoryDb"),
         }
-        .map(Into::into)
+        .map(Into::into);
+        Ok(val)
     }
 
     fn do_get_leaf<N: ProvableCompileTimeNamespace>(
@@ -196,8 +212,8 @@ where
         key: &SlotKey,
         version: Option<SlotNumber>,
         witness: Option<&<Self as Storage>::Witness>,
-    ) -> Option<NodeLeafAndMaybeValue> {
-        let val = self.read_value::<N>(key, version);
+    ) -> Result<Option<NodeLeafAndMaybeValue>, HistoricalValueError> {
+        let val = self.read_value::<N>(key, version)?;
 
         // First, we create a node that we put in the cache. This one contains the value.
         let node_leaf_with_fetched_value = val.map(|v| {
@@ -220,7 +236,7 @@ where
         if let Some(witness) = witness {
             witness.add_hint(&node_leaf_without_value);
         }
-        node_leaf_with_fetched_value
+        Ok(node_leaf_with_fetched_value)
     }
 }
 
@@ -384,7 +400,13 @@ where
         key: &SlotKey,
         witness: &Self::Witness,
     ) -> Option<NodeLeafAndMaybeValue> {
-        self.do_get_leaf::<N>(key, None, Some(witness))
+        match self.do_get_leaf::<N>(key, None, Some(witness)) {
+            Ok(val) => val,
+            Err(e) => {
+                // Historical errors are not expected when fetching without a version
+                panic!("Database error while getting leaf: for key {key}. error: {e:?}");
+            }
+        }
     }
 
     fn get<N: ProvableCompileTimeNamespace>(
@@ -392,13 +414,26 @@ where
         key: &SlotKey,
         witness: &Self::Witness,
     ) -> Option<SlotValue> {
-        let val = self.read_value::<N>(key, None);
-        witness.add_hint(&val);
-        val
+        match self.read_value::<N>(key, None) {
+            Ok(val) => {
+                witness.add_hint(&val);
+                val
+            }
+            Err(e) => {
+                // Historical errors are not allowed when fetching without a version
+                panic!("Database error while getting value for key {key}. error: {e:?}");
+            }
+        }
     }
 
-    fn get_accessory(&self, key: &SlotKey, version: Option<SlotNumber>) -> Option<SlotValue> {
-        self.read_value::<Accessory>(key, version)
+    fn get_accessory(&self, key: &SlotKey) -> Option<SlotValue> {
+        match self.read_value::<Accessory>(key, None) {
+            Ok(val) => val,
+            Err(e) => {
+                // Historical errors are not allowed when fetching without a version
+                panic!("Database error while getting value for accessory key {key}. error: {e:?}");
+            }
+        }
     }
 
     fn compute_state_update(
@@ -547,8 +582,8 @@ where
         key: &SlotKey,
         version: Option<SlotNumber>,
         _witness: &Self::Witness,
-    ) -> Option<SlotValue> {
-        self.read_value::<N>(key, version)
+    ) -> anyhow::Result<Option<SlotValue>> {
+        Ok(self.read_value::<N>(key, version)?)
     }
 
     fn get_leaf_historical<N: ProvableCompileTimeNamespace>(
@@ -556,8 +591,16 @@ where
         key: &SlotKey,
         version: Option<SlotNumber>,
         _witness: &Self::Witness,
-    ) -> Option<NodeLeafAndMaybeValue> {
-        self.do_get_leaf::<N>(key, version, None)
+    ) -> anyhow::Result<Option<NodeLeafAndMaybeValue>> {
+        Ok(self.do_get_leaf::<N>(key, version, None)?)
+    }
+
+    fn get_accessory_historical(
+        &self,
+        key: &SlotKey,
+        version: Option<SlotNumber>,
+    ) -> anyhow::Result<Option<SlotValue>> {
+        Ok(self.read_value::<Accessory>(key, version)?)
     }
 
     fn get_with_proof<N: ProvableCompileTimeNamespace>(
@@ -565,21 +608,10 @@ where
         key: SlotKey,
         slot_number: Option<SlotNumber>,
     ) -> anyhow::Result<StorageProof<Self::Proof>> {
-        let version_to_use = match self.get_version_to_use(slot_number) {
-            None => {
-                anyhow::bail!(
-                    "Proof is not available at version {:?}. Empty storage or future version",
-                    slot_number,
-                )
-            }
-            Some(v) => v,
-        };
         let namespace = N::PROVABLE_NAMESPACE;
         let value = match namespace {
-            ProvableNamespace::User => self.read_value::<crate::User>(&key, Some(version_to_use)),
-            ProvableNamespace::Kernel => {
-                self.read_value::<crate::Kernel>(&key, Some(version_to_use))
-            }
+            ProvableNamespace::User => self.read_value::<crate::User>(&key, slot_number)?,
+            ProvableNamespace::Kernel => self.read_value::<crate::Kernel>(&key, slot_number)?,
         };
 
         Ok(StorageProof {
@@ -598,7 +630,8 @@ where
                 anyhow::bail!("Root node not found for version {}.", version)
             }
             Some(v) => v,
-        };
+        }
+        .unwrap_or(self.latest_version());
         let storage_root_historical = self.get_root_hash_unbound(version_to_use)?;
         if self.should_check_dbs_sync(version_to_use) {
             let session_container = self.state_session_builder.begin_both_sessions()?;

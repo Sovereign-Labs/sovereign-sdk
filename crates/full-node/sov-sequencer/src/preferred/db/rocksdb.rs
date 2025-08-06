@@ -89,7 +89,7 @@ impl PreferredSequencerDbBackend for RocksDbBackend {
         let mut s = SchemaBatch::new();
         s.delete::<tables::InProgressBatch>(&())?;
         s.put::<tables::CompletedBlobs>(&sequence_number, &stored_blob)?;
-        self.db.write_schemas_async(&s).await?;
+        self.db.write_schemas_async(s).await?;
 
         Ok(())
     }

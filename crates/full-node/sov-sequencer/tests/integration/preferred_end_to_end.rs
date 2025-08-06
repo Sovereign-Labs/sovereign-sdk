@@ -1,12 +1,6 @@
 //! Integration tests for the preferred sequencer that use [`RollupBuilder`] and
 //! thus test sequencer + node interactions.
 
-use std::collections::HashMap;
-use std::future::Future;
-use std::sync::atomic::AtomicU64;
-use std::sync::Arc;
-use std::time::Duration;
-
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -17,6 +11,7 @@ use sov_api_spec::types::{
 };
 use sov_api_spec::{Client, WsSubscription};
 use sov_mock_da::storable::layer::StorableMockDaLayer;
+use sov_mock_da::storable::service::StorableMockDaService;
 use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::prelude::*;
@@ -25,16 +20,23 @@ use sov_modules_stf_blueprint::GenesisParams;
 use sov_node_client::NodeClient;
 use sov_paymaster::{Paymaster, PaymasterConfig};
 use sov_rollup_interface::common::SlotNumber;
+use sov_rollup_interface::execution_mode::Native;
 use sov_rollup_interface::node::ledger_api::IncludeChildren;
 use sov_sequencer::StateUpdateNotification;
 use sov_test_modules::hooks_count::HooksCount;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
+use sov_test_utils::test_rollup::FullNodeBlueprint;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, RollupProverConfig, TestRollup};
 use sov_test_utils::{
     default_test_signed_transaction, generate_optimistic_runtime_with_kernel, RtAgnosticBlueprint,
     TestSpec, TestUser, TEST_FINALIZATION_BLOCKS, TEST_MAX_BATCH_SIZE, TEST_MAX_CONCURRENT_BLOBS,
 };
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
+use std::collections::HashMap;
+use std::future::Future;
+use std::sync::atomic::AtomicU64;
+use std::sync::Arc;
+use std::time::Duration;
 use test_strategy::Arbitrary;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
@@ -77,7 +79,11 @@ pub struct DaLayerWithSubscription {
 }
 
 impl DaLayerWithSubscription {
-    pub async fn new(test_rollup: &TestRollup<TestBlueprint>) -> Self {
+    pub async fn new<
+        R: FullNodeBlueprint<Native, DaService = StorableMockDaService, Spec = TestSpec> + Default,
+    >(
+        test_rollup: &TestRollup<R>,
+    ) -> Self {
         assert!(matches!(test_rollup
             .da_service
             .block_producing(),
@@ -329,6 +335,75 @@ async fn txs_below_min_fee_are_rejected() {
         err_message.contains("This transaction did not pay a sufficient net fee."),
         "Full error message does not contain expect part: {err_message}"
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "This test covers pruning behavior, which is only relevant for NOMT. Enable it when we switch to NOMT for the sequencer tests."]
+async fn test_archival_state_with_pruning() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+    )
+    .await;
+
+    let Some(test_rollup) = test_rollup else {
+        return;
+    };
+
+    // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
+    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
+    da_layer.produce_and_wait_for_n_slots(5).await;
+    let client = test_rollup.api_client().clone();
+
+    for i in 0..150 {
+        let tx = tx_set_value(&admin.private_key, i, i);
+        client
+            .accept_tx(&api_types::AcceptTxBody {
+                body: BASE64_STANDARD.encode(&tx),
+            })
+            .await
+            .unwrap();
+        da_layer.produce_and_wait_for_slot().await;
+    }
+
+    // Assert that the earlier transactions sent just before the sequencer went into recovery was
+    // flushed and processed by the node
+    #[derive(Debug, serde::Deserialize)]
+    struct ValueResponse {
+        #[allow(unused)]
+        value: u32,
+    }
+
+    let mut success_count = 0;
+    let mut pruned_count = 0;
+    for i in 0..150 {
+        let state = test_rollup
+            .client
+            .query_rest_endpoint::<serde_json::Value>(
+                format!("/modules/value-setter/state/value?slot_number={i}").as_str(),
+            )
+            .await;
+        assert!(state.is_ok(), "Error from archival state query: {state:?}",);
+        let state = state.unwrap();
+        if state
+            .to_string()
+            .contains("The requested height may have been pruned")
+        {
+            pruned_count += 1;
+        } else {
+            let value: ValueResponse =
+                serde_json::from_value(state).expect("Failed to deserialize into ValueResponse");
+            assert!(value.value < 150);
+            success_count += 1;
+        }
+    }
+
+    // Check that we ran into some pruned slots to sanity check that the test is working. If this fails, we just need to update the test logic
+    assert!(pruned_count > 0, "No pruned slots found");
+    assert!(success_count > 0, "No successful queries found");
+    test_rollup.shutdown().await.unwrap();
 }
 
 /// Test what happens when the sequencer fills up its gas limit. This tests that...
@@ -1850,7 +1925,7 @@ async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
 
     // Close the batch and submit to DA
     test_rollup.force_close_batch().await.unwrap();
-    tokio::time::sleep(Duration::from_millis(200)).await; // Sleep to make sure the batch is published before we produce a block. If this gets flaky, we'll need to add a blob_sender subscription.
+    tokio::time::sleep(Duration::from_millis(500)).await; // Sleep to make sure the batch is published before we produce a block. If this gets flaky, we'll need to add a blob_sender subscription.
 
     // Ensure that the sequencer has time to see the updated state and submit its batch containing the transaction to DA.
     let next = da_layer.produce_and_wait_for_slot().await;
@@ -1950,7 +2025,7 @@ async fn test_no_crashes_on_resync_with_transactions() {
     let test_rollup = builder.start().await.unwrap();
 
     // Let it resync
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    tokio::time::sleep(Duration::from_secs(15)).await;
 
     // Verify accepting actions works
     let actions = vec![
@@ -2947,7 +3022,7 @@ pub(crate) async fn run_action_against_test_rollup(
             // startup until a StateUpdateInfo from the node has been processed.
             let test_rollup = test_rollup.restart().await?;
             test_rollup.da_service.produce_block_now().await.unwrap();
-            sleep(Duration::from_millis(500)).await;
+            sleep(Duration::from_millis(1500)).await;
             return Ok(test_rollup);
         }
         TestingAction::TryAcceptBadTx { invalid_reason } => {
@@ -3086,7 +3161,7 @@ async fn query_set_value_helper(
     Ok(())
 }
 
-fn tx_set_value(key: &Ed25519PrivateKey, generation: u64, value_to_set: u64) -> RawTx {
+pub(super) fn tx_set_value(key: &Ed25519PrivateKey, generation: u64, value_to_set: u64) -> RawTx {
     tx_set_value_with_gas::<TestRuntime<TestSpec>>(
         key,
         generation,

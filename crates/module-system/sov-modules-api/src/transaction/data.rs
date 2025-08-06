@@ -111,6 +111,27 @@ pub struct TxDetails<S: Spec> {
     pub chain_id: u64,
 }
 
+pub mod sol_struct {
+    use alloy_sol_types::sol;
+
+    sol! {
+        #[derive(Debug)]
+        struct TxDetails {
+            uint64 chain_id;
+        }
+    }
+}
+
+impl<S: Spec> TxDetails<S> {
+    /// Converts the `TxDetails` to a SolStruct representation.
+    /// This is useful for EIP-712 signing.
+    pub fn as_sol_struct(&self) -> sol_struct::TxDetails {
+        sol_struct::TxDetails {
+            chain_id: self.chain_id,
+        }
+    }
+}
+
 /// Holds the original credentials to authenticate the transaction.
 /// For example, this could be a public key of the sender of the transaction.
 #[derive(Clone, Debug, Default)]

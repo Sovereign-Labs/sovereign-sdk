@@ -49,28 +49,31 @@ impl<S: Spec> SequencerRegistry<S> {
         config: &<Self as sov_modules_api::Module>::Config,
         state: &mut impl GenesisState<S>,
     ) -> Result<()> {
-        self.minimum_bond.set(&config.minimum_bond, state)?;
-
-        let config = &config.sequencer_config;
+        // Set the minimum bond to 0 to allow for registration of sequencers with no bond only during genesis.
+        // We set the balance to the correct minimum bond after genesis.
+        self.minimum_bond.set(&Amount::ZERO, state)?;
+        let sequencer_config = &config.sequencer_config;
 
         tracing::info!(
-            sequencer_rollup_address = %config.seq_rollup_address,
-            sequencer_da_address = %config.seq_da_address,
-            sequencer_bond = %config.seq_bond,
-            is_preferred_sequencer = config.is_preferred_sequencer,
+            sequencer_rollup_address = %sequencer_config.seq_rollup_address,
+            sequencer_da_address = %sequencer_config.seq_da_address,
+            sequencer_bond = %sequencer_config.seq_bond,
+            is_preferred_sequencer = sequencer_config.is_preferred_sequencer,
             "Starting sequencer registry genesis..."
         );
 
         self.register_staker(
-            &config.seq_da_address,
-            config.seq_bond,
-            config.seq_rollup_address.clone(),
+            &sequencer_config.seq_da_address,
+            sequencer_config.seq_bond,
+            sequencer_config.seq_rollup_address.clone(),
             state,
         )?;
+        // Set the minimum bond to the correct value after genesis.
+        self.minimum_bond.set(&config.minimum_bond, state)?;
 
-        if config.is_preferred_sequencer {
+        if sequencer_config.is_preferred_sequencer {
             self.preferred_sequencer
-                .set(&config.seq_da_address, state)?;
+                .set(&sequencer_config.seq_da_address, state)?;
         }
 
         Ok(())

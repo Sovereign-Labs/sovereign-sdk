@@ -28,15 +28,25 @@ pub trait TestableStorage: Sized {
     fn materialize_from_block(self, da_header: &MockBlockHeader) -> Self::ChangeSet {
         let height = da_header.height().to_be_bytes().to_vec();
         let hash_bytes = da_header.hash().0.to_vec();
-        self.materialize_from_key_value(height, Some(hash_bytes))
+        self.materialize_from_key_value(height, Some(hash_bytes), da_header.height() - 1)
     }
 
-    fn materialize_from_key_value(self, key: Vec<u8>, value: Option<Vec<u8>>) -> Self::ChangeSet {
+    fn materialize_from_key_value(
+        self,
+        key: Vec<u8>,
+        value: Option<Vec<u8>>,
+        version: u64,
+    ) -> Self::ChangeSet {
         let items = [(key, value)];
-        self.materialize_from_key_values(&items)
+        self.materialize_from_key_values(&items, version)
     }
-    fn materialize_from_key_values(self, items: &[(Vec<u8>, Option<Vec<u8>>)]) -> Self::ChangeSet;
+    fn materialize_from_key_values(
+        self,
+        items: &[(Vec<u8>, Option<Vec<u8>>)],
+        version: u64,
+    ) -> Self::ChangeSet;
     fn get_value(&self, key: &[u8]) -> Option<Vec<u8>>;
+    fn get_value_without_consistency_checks(&self, key: &[u8]) -> Option<Vec<u8>>;
 }
 
 pub trait TestableStorageManager:
@@ -604,7 +614,7 @@ where
     for height in 1..=to_height {
         fork_headers.clear();
         for fork_id in 1..=forks_number {
-            let prev_hash = get_block_hash(fork_id, height - 1);
+            let prev_hash = get_block_hash(main_fork_id, height - 1);
             let hash = get_block_hash(fork_id, height);
             fork_headers.push(MockBlockHeader {
                 prev_hash,
@@ -615,12 +625,16 @@ where
         }
         // Create storage for each fork.
         for da_header in &fork_headers {
-            let _ = storage_manager.create_state_for(da_header).unwrap();
-        }
-        // Save storage for each fork.
-        for da_header in &fork_headers {
+            let (stf_storage, _) = storage_manager.create_state_for(da_header).unwrap();
+            // Set the state root hashes table correctly so that the consistency checks between StateRootHash and versioned tables pass
+            let change_set = stf_storage.materialize_from_block(da_header);
+            tracing::info!(
+                "Putting version {} into change_set: da_hash: {}",
+                da_header.height() - 1,
+                da_header.hash()
+            );
             storage_manager
-                .save_change_set(da_header, Default::default(), SchemaBatch::default())
+                .save_change_set(da_header, change_set, SchemaBatch::default())
                 .unwrap();
         }
 
@@ -669,15 +683,18 @@ pub(crate) fn get_parent_and_2_children() -> (MockBlockHeader, MockBlockHeader, 
 // This might be useful to know if there's a long-running task that relies on data from a fork that has been orphaned.
 // Test details.
 // Here is the chain schema:
-//  A -> B
+//  A -> B -> D
 //   \-> C
 // Block A has key=1 value=1.
 // This block is finalized.
-// Blocks B and C are created after block A has been finalized. They both observer key=1 value=1
+// Blocks B and C are created after block A has been finalized. They both observe key=1 value=1
 //
-// Block C observes:
-// - key 1 value "swapped" from 1 to 2, because it was looking at finalized data
-pub fn removed_fork_data_view<Sm: TestableStorageManager>()
+// If the storage manager provides consistent, then block C should observe:
+// - key 1 value 1
+// If the fork is inconsistent, then block C should observe:
+// - key 1 value "swapped" from 1 to 2, because it sees the newly finalized data
+//
+pub fn removed_fork_data_view<Sm: TestableStorageManager>(should_be_consistent: bool)
 where
     <Sm as HierarchicalStorageManager<MockDaSpec>>::StfState: TestableStorage<ChangeSet = <Sm as HierarchicalStorageManager<MockDaSpec>>::StfChangeSet>
         + Send
@@ -697,7 +714,7 @@ where
 
     // Operations in Block A
     let (storage, _) = storage_manager.create_state_for(&block_a).unwrap();
-    let stf_changes = storage.materialize_from_key_value(key.to_vec(), Some(value_1.to_vec()));
+    let stf_changes = storage.materialize_from_key_value(key.to_vec(), Some(value_1.to_vec()), 0);
     storage_manager
         .save_change_set(&block_a, stf_changes, SchemaBatch::default())
         .unwrap();
@@ -707,14 +724,15 @@ where
     // Changes are in rocksdb now, creating readers
     let (stf_reader_b, _) = storage_manager.create_state_for(&block_b).unwrap();
     let (stf_reader_c, _) = storage_manager.create_state_for(&block_c).unwrap();
-    //
+
     let value_at_b = stf_reader_b.get_value(&key);
     assert_eq!(Some(value_1.clone()), value_at_b);
     let value_at_c = stf_reader_c.get_value(&key);
     assert_eq!(Some(value_1.clone()), value_at_c);
 
     // Saving block B, data is correct
-    let stf_changes = stf_reader_b.materialize_from_key_value(key.to_vec(), Some(value_2.to_vec()));
+    let stf_changes =
+        stf_reader_b.materialize_from_key_value(key.to_vec(), Some(value_2.to_vec()), 1);
     storage_manager
         .save_change_set(&block_b, stf_changes, SchemaBatch::default())
         .unwrap();
@@ -726,9 +744,13 @@ where
     storage_manager.finalize(&block_b).unwrap();
     assert_eq!(storage_manager.snapshots_count(), 0);
 
-    let value_at_c = stf_reader_c.get_value(&key);
+    let value_at_c = stf_reader_c.get_value_without_consistency_checks(&key);
     // Now it suddenly has `value_2`, instead of `value_1` that has been observed previously.
-    assert_eq!(Some(value_2), value_at_c);
+    if should_be_consistent {
+        assert_eq!(Some(value_1.clone()), value_at_c);
+    } else {
+        assert_eq!(Some(value_2.clone()), value_at_c);
+    }
 }
 
 /// it is similar to [`linear_progression`], but it writes different data.
@@ -763,7 +785,7 @@ where
 
         let (stf_storage, _) = storage_manager.create_state_for(&da_header).unwrap();
 
-        let stf_changes = stf_storage.materialize_from_key_values(&expected_values);
+        let stf_changes = stf_storage.materialize_from_key_values(&expected_values, height - 1);
 
         storage_manager
             .save_change_set(&da_header, stf_changes, SchemaBatch::default())
@@ -795,7 +817,11 @@ where
         let da_header = MockBlockHeader::from_height(height);
 
         let (stf_state, ledger_reader) = storage_manager.create_state_for(&da_header).unwrap();
-        drop(stf_state);
+        let changes = {
+            let height = da_header.height().to_be_bytes().to_vec();
+            let hash_bytes = da_header.hash().0.to_vec();
+            stf_state.materialize_from_key_value(height, Some(hash_bytes), da_header.height())
+        };
 
         let ledger_db = LedgerDb::with_reader(ledger_reader).unwrap();
 
@@ -823,12 +849,14 @@ where
         }
 
         storage_manager
-            .save_change_set(&da_header, Default::default(), ledger_change_set)
+            .save_change_set(&da_header, changes, ledger_change_set)
             .unwrap();
 
         if let Some(finalized_height) = height.checked_sub(finality) {
-            let finalized_header = MockBlockHeader::from_height(finalized_height);
-            storage_manager.finalize(&finalized_header).unwrap();
+            if finalized_height > 0 {
+                let finalized_header = MockBlockHeader::from_height(finalized_height);
+                storage_manager.finalize(&finalized_header).unwrap();
+            }
         }
     }
 

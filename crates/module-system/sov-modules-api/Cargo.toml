@@ -22,6 +22,8 @@ anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 async-trait = { workspace = true, optional = true }
+alloy-sol-types = { workspace = true }
+alloy-primitives = { workspace = true }
 derive_more = { workspace = true, default-features = true, features = [
     "deref",
     "debug",
@@ -94,7 +96,9 @@ arbitrary = [
 	"sov-test-utils/arbitrary",
 	"sov-mock-da/arbitrary",
 	"sov-bank/arbitrary",
-	"sov-modules-macros/arbitrary"
+	"sov-modules-macros/arbitrary",
+	"alloy-primitives/arbitrary",
+	"alloy-sol-types/arbitrary"
 ]
 bench = [
     "sov-metrics",

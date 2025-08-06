@@ -12,7 +12,6 @@ use super::{NomtChangeSet, NomtStorageManager, StateFinishedSession};
 use crate::accessory_db::AccessoryDb;
 use crate::config::RollupDbConfig;
 use crate::historical_state::HistoricalStateReader;
-use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::state_db_nomt::{get_session_builder_from_committed, NomtStateDb, StateRootHashes};
 use crate::storage_manager::tests::arbitrary::ForkDescription;
 use crate::storage_manager::tests::data_helpers::verify_accessory_db;
@@ -38,7 +37,11 @@ impl std::fmt::Debug for TestNomtStorage {
 impl TestableStorage for TestNomtStorage {
     type ChangeSet = NomtChangeSet;
 
-    fn materialize_from_key_values(self, items: &[(Vec<u8>, Option<Vec<u8>>)]) -> Self::ChangeSet {
+    fn materialize_from_key_values(
+        self,
+        items: &[(Vec<u8>, Option<Vec<u8>>)],
+        version: u64,
+    ) -> Self::ChangeSet {
         let TestNomtStorage {
             state_session_builder,
             historical_state: _,
@@ -67,12 +70,17 @@ impl TestableStorage for TestNomtStorage {
         let accessory_change_set =
             AccessoryDb::materialize_values(accessory_writes.clone(), SlotNumber::GENESIS).unwrap();
 
+        let root_hash = [
+            user_finished_session.root().into_inner(),
+            kernel_finished_session.root().into_inner(),
+        ]
+        .concat();
         let historical_change_set = HistoricalStateReader::materialize_values(
             accessory_writes.clone(),
             accessory_writes.clone(),
             // Not used at the moment,
-            items.len().to_be_bytes().to_vec(),
-            SlotNumber::GENESIS,
+            root_hash,
+            SlotNumber::new(version),
         )
         .unwrap();
 
@@ -107,17 +115,33 @@ impl TestableStorage for TestNomtStorage {
 
         let historical_value_user = self
             .historical_state
-            .get_value_option_by_key::<UserNamespace>(SlotNumber::GENESIS, &schema_key)
+            .get_user_value_option_by_key(&schema_key)
             .unwrap();
         assert_eq!(historical_value_user, kernel_value);
 
         let historical_value_kernel = self
             .historical_state
-            .get_value_option_by_key::<KernelNamespace>(SlotNumber::GENESIS, &schema_key)
+            .get_kernel_value_option_by_key(&schema_key)
             .unwrap();
         assert_eq!(historical_value_kernel, kernel_value);
 
         kernel_value
+    }
+
+    fn get_value_without_consistency_checks(&self, key: &[u8]) -> Option<Vec<u8>> {
+        let schema_key = key.to_vec();
+        let historical_value_user = self
+            .historical_state
+            .get_user_value_option_by_key(&schema_key)
+            .unwrap();
+
+        let historical_value_kernel = self
+            .historical_state
+            .get_kernel_value_option_by_key(&schema_key)
+            .unwrap();
+        assert_eq!(historical_value_user, historical_value_kernel);
+
+        historical_value_kernel
     }
 }
 
@@ -221,7 +245,7 @@ fn test_several_jumping_forks() {
 
 #[test]
 fn test_removed_fork_view() {
-    removed_fork_data_view::<Sm>();
+    removed_fork_data_view::<Sm>(true);
 }
 
 #[test]
@@ -275,7 +299,6 @@ async fn test_root_hashes_match_after_crash() {
         let user_key = height.to_be_bytes().to_vec();
         let kernel_key = height.to_le_bytes().to_vec();
         let raw_value = da_header.hash.0.to_vec();
-        // let stf_changes = stf_storage.materialize_from_key_values(&[(key, Some(value))]);
 
         let user_key_path = KeyPath::from(sha2::Sha256::digest(user_key.clone()));
         let kernel_key_path = KeyPath::from(sha2::Sha256::digest(kernel_key.clone()));
@@ -302,7 +325,7 @@ async fn test_root_hashes_match_after_crash() {
             user_historical_values,
             kernel_historical_values,
             root_hash,
-            SlotNumber::new(height),
+            SlotNumber::new(height - 1),
         )
         .unwrap();
 
@@ -386,4 +409,118 @@ async fn test_root_hashes_match_after_crash() {
     assert_eq!(historical_root_hash, historical_root_hash_after);
     assert_eq!(state_root_hashes.kernel, state_root_hashes_after.kernel);
     assert_eq!(state_root_hashes.user, state_root_hashes_after.user);
+}
+
+/// Test the pruning behavior of the historical state. We want to check that...
+///  - Queries for pruned versions return an error.
+///  - Queries for unpruned versions return the correct value as of that version.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_historical_state_with_pruning() {
+    // Create a temporary directory for the test
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let db_path = temp_dir.path().to_path_buf();
+
+    // Initialize storage manager
+    let mut config = RollupDbConfig::default_in_path(db_path.clone());
+    let versions_to_keep = 5;
+    let pruning_frequency = 1;
+    config.pruner_block_interval = Some(pruning_frequency);
+    config.pruner_versions_to_keep = Some(versions_to_keep);
+    let mut storage_manager =
+        NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config.clone()).unwrap();
+
+    let blocks: u64 = 14;
+
+    // A list of the keys to write in each block.
+    //  - At block 0, we write nothing.
+    //  - At block 1, we write keys '1'-'10'
+    //  - At block 2, we write keys '2'-'10'
+    //  - etc.
+    let keys_to_write = [
+        vec![],
+        vec![1u64, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        vec![2, 3, 4, 5, 6, 7, 8, 9, 10],
+        vec![3, 4, 5, 6, 7, 8, 9, 10],
+        vec![4, 5, 6, 7, 8, 9, 10],
+        vec![5, 6, 7, 8, 9, 10],
+        vec![6, 7, 8, 9, 10],
+        vec![7, 8, 9, 10],
+        vec![8, 9, 10],
+        vec![9, 10],
+        vec![10],
+        vec![u64::MAX], // Write a dummy value
+        vec![u64::MAX], // Write a dummy value
+        vec![u64::MAX], // Write a dummy value. Currently, these dummy values are needed to trigger pruning. If pruning is made to run every block, these can be removed.
+    ];
+
+    // We're just writing the keys in this loop. At each height, we set the value of each modified key to the current height.
+    for height in 0u64..blocks {
+        let da_header = MockBlockHeader::from_height(height + 1);
+        // Create state for the block
+        let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
+
+        // Materialize some test data
+        let mut values = vec![];
+        // For each key to write, set its value to the current height
+        for key in keys_to_write[height as usize].iter() {
+            let user_key = vec![*key as u8];
+            let value = height.to_be_bytes().to_vec();
+            values.push((user_key, Some(value)));
+        }
+        let stf_changes = stf_storage.materialize_from_key_values(&values, height);
+
+        // Does not matter in this test
+        let ledger_changes = SchemaBatch::default();
+        // Save the change set
+        storage_manager
+            .save_change_set(&da_header, stf_changes, ledger_changes)
+            .unwrap();
+        storage_manager.finalize(&da_header).unwrap();
+    }
+
+    // Create a storage to read from
+    let da_header = MockBlockHeader::from_height(blocks);
+    let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
+    // Note: Sleep here to give time for the pruner to run since it's in a background thread.
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // This is where the interesting logic happens.
+    for key in 1..=10u64 {
+        let user_key = vec![key as u8];
+        // First, get the live value and assert that it's what we expect.
+        let value = stf_storage
+            .historical_state
+            .get_user_value_option_by_key(&user_key)
+            .unwrap();
+        assert_eq!(value, Some(key.to_be_bytes().to_vec()));
+
+        // Now, check that the value is pruned at the correct versions.
+        for version in 0..keys_to_write.len() as u64 {
+            let value_at_version = stf_storage
+                .historical_state
+                .get_user_value_option_by_key_historical(&user_key, SlotNumber::new(version));
+            // Everything below the pruning threshold should be pruned. Since pruning doesn't
+            if version < blocks - (versions_to_keep as u64 + pruning_frequency) {
+                assert!(
+                    value_at_version.is_err(),
+                    "Unexpected value for key {key} at version {version}. Expected error, found {value_at_version:?}",
+                );
+            } else {
+                let value_at_version =
+                    value_at_version.expect("Query for unpruned version return error");
+                if version == 0 {
+                    assert_eq!(value_at_version, None, "All keys should be none at version 0, since we wrote nothing in that block. Key {key} was {value_at_version:?} instead.");
+                } else {
+                    // We stop writing each key at its own version. (I.e. key '1' is written in block 1, key '2' is written in blocks, 1 and 2, etc.)
+                    let expected_value = std::cmp::min(version, key);
+                    assert_eq!(
+                        value_at_version,
+                        Some(expected_value.to_be_bytes().to_vec()),
+                        "Unexpected value for key {key} at version {version}. Expected {:?}, found {value_at_version:?}",
+                        expected_value.to_be_bytes().to_vec(),
+                    );
+                }
+            }
+        }
+    }
 }

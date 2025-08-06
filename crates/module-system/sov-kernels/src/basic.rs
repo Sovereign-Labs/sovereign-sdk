@@ -136,6 +136,19 @@ impl<S: Spec> sov_modules_api::capabilities::ChainState for BasicKernel<'_, S> {
         self.chain_state.base_fee_per_gas(state).unwrap_infallible()
     }
 
+    fn is_setup_mode_enabled<
+        Reader: VersionReader
+            + StateReader<User, Error = Infallible>
+            + StateReader<Kernel, Error = Infallible>,
+    >(
+        &self,
+        state: &mut Reader,
+    ) -> bool {
+        self.chain_state
+            .is_setup_mode_active(state.rollup_height_to_access(), state)
+            .unwrap_infallible()
+    }
+
     fn block_gas_limit<
         Reader: VersionReader
             + StateReader<Kernel, Error = Infallible>

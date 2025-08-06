@@ -57,11 +57,12 @@ impl DbGroup {
             ledger,
         } = snapshot;
         // State and accessory go first, as its data can be synced from DA.
-        self.state.write_schemas(&state)?;
-        self.accessory.write_schemas(&accessory)?;
+        self.state.write_schemas(Arc::unwrap_or_clone(state))?;
+        self.accessory
+            .write_schemas(Arc::unwrap_or_clone(accessory))?;
         // Ledger goes last, as its data is used during the start.
         // So if ledger save failed, state and accessory will be synced from DA
-        self.ledger.write_schemas(&ledger)?;
+        self.ledger.write_schemas(Arc::unwrap_or_clone(ledger))?;
         Ok(())
     }
 

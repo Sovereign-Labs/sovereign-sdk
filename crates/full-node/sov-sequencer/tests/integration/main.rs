@@ -2,6 +2,7 @@ mod preferred_blob_sender;
 mod preferred_end_to_end;
 mod preferred_with_reorgs;
 mod preferred_with_replicas;
+mod setup_mode;
 mod standard_sequencer;
 mod thin_sequencer;
 mod upgradability;

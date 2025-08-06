@@ -247,7 +247,7 @@ async fn test_process_message_from_evm_counterparty() {
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
         .with_relayer(&relayer)
-        .with_evm_counterparty(prover_addr.to_sender())
+        .with_evm_counterparty()
         .start()
         .await;
 
@@ -266,16 +266,18 @@ async fn test_process_message_from_evm_counterparty() {
     submit_tx(rollup.api_client(), register_tx).await;
 
     // dispatch test message to prover from evm
-    let (expected_message, expected_message_id) = hyperlane.dispatch_msg_from_counterparty().await;
+    let evm_dispatch = hyperlane
+        .dispatch_msg_from_counterparty(prover_addr.to_sender())
+        .await;
     let sender_addr = parse_eth_addr(ANVIL_ACCOUNTS[0].0);
 
-    assert_eq!(expected_message.origin_domain, EVM_DOMAIN);
+    assert_eq!(evm_dispatch.message.origin_domain, EVM_DOMAIN);
     assert_eq!(
-        expected_message.dest_domain,
+        evm_dispatch.destination_domain,
         config_value!("HYPERLANE_BRIDGE_DOMAIN")
     );
-    assert_eq!(expected_message.sender, sender_addr);
-    assert_eq!(expected_message.recipient, prover_addr.to_sender());
+    assert_eq!(evm_dispatch.sender_address, sender_addr);
+    assert_eq!(evm_dispatch.recipient_address, prover_addr.to_sender());
 
     // finalize the block with dispatched message
     hyperlane.mine_next_block_on_counterparty().await;
@@ -298,13 +300,13 @@ async fn test_process_message_from_evm_counterparty() {
                 find_event(&events, "TestRecipient/MessageReceivedGeneric").unwrap();
             assert_eq!(
                 test_recipient_event["MessageReceivedGeneric"]["body"],
-                expected_message.body.to_string(),
+                evm_dispatch.message.body.to_string(),
             );
 
             let process_id_event = find_event(&events, "Mailbox/ProcessId").unwrap();
             assert_eq!(
                 process_id_event["process_id"]["id"],
-                expected_message_id.to_string()
+                evm_dispatch.message_id.to_string()
             );
 
             rollup.shutdown().await.unwrap();
@@ -323,14 +325,12 @@ async fn test_dispatch_message_to_evm_counterparty() {
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
     let relayer = setup.relayer.clone();
-    let prover = setup.prover.clone();
-    let prover_addr = prover.user_info.address();
     let rollup = setup_rollup(dir.path().to_path_buf(), setup, true).await;
 
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
         .with_relayer(&relayer)
-        .with_evm_counterparty(prover_addr.to_sender())
+        .with_evm_counterparty()
         .start()
         .await;
 
@@ -400,13 +400,12 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
     let setup = generate_setup();
     let relayer = setup.relayer.clone();
     let prover = setup.prover.clone();
-    let prover_addr = prover.user_info.address();
     let rollup = setup_rollup(dir.path().to_path_buf(), setup, true).await;
 
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
         .with_relayer(&relayer)
-        .with_evm_counterparty(prover_addr.to_sender())
+        .with_evm_counterparty()
         .start()
         .await;
 
@@ -496,7 +495,11 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
     // transfer native eth from evm counterparty to prover
     let prover_addr = prover.user_info.address().to_sender();
     hyperlane
-        .send_warp_token_transfer_from_counterparty(prover_addr, inbound_sent_amount)
+        .send_warp_token_transfer_from_counterparty(
+            remote_route_id,
+            prover_addr,
+            inbound_sent_amount,
+        )
         .await;
     hyperlane.mine_next_block_on_counterparty().await;
 

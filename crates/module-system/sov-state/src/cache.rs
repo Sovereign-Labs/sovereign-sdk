@@ -1,6 +1,7 @@
 //! Cache key/value definitions
 
 use std::collections::hash_map::Entry;
+use std::convert::Infallible;
 use std::mem;
 
 use crate::namespaces::ProvableCompileTimeNamespace;
@@ -290,15 +291,15 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         storage: &S,
         witness: &S::Witness,
         version: Option<sov_rollup_interface::common::SlotNumber>,
-    ) -> Option<u32> {
+    ) -> anyhow::Result<Option<u32>> {
         match self.cache.get(key) {
-            Some(Access::Read { original }) => original.as_ref().map(|node| node.leaf.size),
-            Some(Access::Write { modified }) => modified.as_ref().map(SlotValue::size),
+            Some(Access::Read { original }) => Ok(original.as_ref().map(|node| node.leaf.size)),
+            Some(Access::Write { modified }) => Ok(modified.as_ref().map(SlotValue::size)),
             None => {
-                let maybe_leaf = storage.get_leaf_historical::<N>(key, version, witness);
+                let maybe_leaf = storage.get_leaf_historical::<N>(key, version, witness)?;
                 let size = maybe_leaf.as_ref().map(|leaf| leaf.leaf.size);
                 self.add_read(key.clone(), maybe_leaf);
-                size
+                Ok(size)
             }
         }
     }
@@ -333,21 +334,22 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             key,
             storage,
             witness,
-            |key, witness, _args| storage.get::<N>(key, witness),
+            |key, witness, _args| Ok::<_, Infallible>(storage.get::<N>(key, witness)),
             (),
         )
+        .expect("Unwrapping an infallible type cannot fail")
     }
 
-    fn get_or_fetch_with_fn<S: Storage, F, Args>(
+    fn get_or_fetch_with_fn<S: Storage, F, Args, E>(
         &mut self,
         key: &SlotKey,
         storage: &S,
         witness: &S::Witness,
         fetch_fn: F,
         args: Args,
-    ) -> Option<SlotValue>
+    ) -> Result<Option<SlotValue>, E>
     where
-        F: Fn(&SlotKey, &S::Witness, Args) -> Option<SlotValue>,
+        F: Fn(&SlotKey, &S::Witness, Args) -> Result<Option<SlotValue>, E>,
     {
         if let Some(access) = self.cache.get_mut(key) {
             match access {
@@ -355,7 +357,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                     original: Some(node),
                 } => match node.value.clone() {
                     ReadType::GetSizeValueNotFetched => {
-                        let slot_value = fetch_fn(key, witness, args)
+                        let slot_value = fetch_fn(key, witness, args)?
                             // This unwrap is justified because in the `ReadType::GetSizeValueFetched` branch,
                             // we inserted `Some(slot_value)`.
                             .unwrap_or_else(|| {
@@ -366,27 +368,27 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                         assert_eq!(node.leaf, node_leaf);
 
                         node.value = ReadType::Read(slot_value.clone());
-                        Some(slot_value)
+                        Ok(Some(slot_value))
                     }
                     ReadType::GetSizeValueFetched(slot_value) => {
                         // Insert `slot_value` in the witness
                         storage.put_in_witness(Some(slot_value.clone()), witness);
                         node.value = ReadType::Read(slot_value.clone());
-                        Some(slot_value.clone())
+                        Ok(Some(slot_value.clone()))
                     }
-                    ReadType::Read(slot_value) => Some(slot_value),
+                    ReadType::Read(slot_value) => Ok(Some(slot_value)),
                 },
-                Access::Read { original: None } => None,
-                Access::Write { modified } => modified.clone(),
+                Access::Read { original: None } => Ok(None),
+                Access::Write { modified } => Ok(modified.clone()),
             }
         } else {
-            let storage_value = fetch_fn(key, witness, args);
+            let storage_value = fetch_fn(key, witness, args)?;
             let read = storage_value.clone().map(|v| NodeLeafAndMaybeValue {
                 leaf: NodeLeaf::make_leaf::<S::Hasher>(&v),
                 value: ReadType::Read(v),
             });
             self.add_read(key.clone(), read);
-            storage_value
+            Ok(storage_value)
         }
     }
 
@@ -398,7 +400,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         storage: &S,
         witness: &S::Witness,
         version: Option<sov_rollup_interface::common::SlotNumber>,
-    ) -> Option<SlotValue> {
+    ) -> anyhow::Result<Option<SlotValue>> {
         self.get_or_fetch_with_fn(
             key,
             storage,

@@ -199,7 +199,7 @@ mod tests {
             SlotNumber::new(0),
         )
         .unwrap();
-        rocksdb.write_schemas(&data_0).unwrap();
+        rocksdb.write_schemas(data_0).unwrap();
 
         // Version 1: C=1, E=1, F=1
         let data_1 = AccessoryDb::materialize_values(
@@ -211,7 +211,7 @@ mod tests {
             SlotNumber::new(1),
         )
         .unwrap();
-        rocksdb.write_schemas(&data_1).unwrap();
+        rocksdb.write_schemas(data_1).unwrap();
 
         // Version 2: C=2, E=2, F=2
         let data_2 = AccessoryDb::materialize_values(
@@ -223,7 +223,7 @@ mod tests {
             SlotNumber::new(2),
         )
         .unwrap();
-        rocksdb.write_schemas(&data_2).unwrap();
+        rocksdb.write_schemas(data_2).unwrap();
 
         // Version 3: C=3, D=1, F=3
         let data_3 = AccessoryDb::materialize_values(
@@ -235,7 +235,7 @@ mod tests {
             SlotNumber::new(3),
         )
         .unwrap();
-        rocksdb.write_schemas(&data_3).unwrap();
+        rocksdb.write_schemas(data_3).unwrap();
 
         // Version 4: C=4
         let data_4 = AccessoryDb::materialize_values(
@@ -243,7 +243,7 @@ mod tests {
             SlotNumber::new(4),
         )
         .unwrap();
-        rocksdb.write_schemas(&data_4).unwrap();
+        rocksdb.write_schemas(data_4).unwrap();
 
         // Version 5: C=5
         let data_5 = AccessoryDb::materialize_values(
@@ -251,7 +251,7 @@ mod tests {
             SlotNumber::new(5),
         )
         .unwrap();
-        rocksdb.write_schemas(&data_5).unwrap();
+        rocksdb.write_schemas(data_5).unwrap();
 
         // Version 6: A=0, C=6, D=2
         let data_6 = AccessoryDb::materialize_values(
@@ -263,7 +263,7 @@ mod tests {
             SlotNumber::new(6),
         )
         .unwrap();
-        rocksdb.write_schemas(&data_6).unwrap();
+        rocksdb.write_schemas(data_6).unwrap();
 
         // Version 7: A=1, B=0, C=7, G=1
         let data_7 = AccessoryDb::materialize_values(
@@ -276,7 +276,7 @@ mod tests {
             SlotNumber::new(7),
         )
         .unwrap();
-        rocksdb.write_schemas(&data_7).unwrap();
+        rocksdb.write_schemas(data_7).unwrap();
 
         // Version 8: A=2, B=1, C=8, G=2
         let data_8 = AccessoryDb::materialize_values(
@@ -289,7 +289,7 @@ mod tests {
             SlotNumber::new(8),
         )
         .unwrap();
-        rocksdb.write_schemas(&data_8).unwrap();
+        rocksdb.write_schemas(data_8).unwrap();
 
         // Version 9: A=3, B=2, C=9, D=3, G=3
         let data_9 = AccessoryDb::materialize_values(
@@ -303,14 +303,14 @@ mod tests {
             SlotNumber::new(9),
         )
         .unwrap();
-        rocksdb.write_schemas(&data_9).unwrap();
+        rocksdb.write_schemas(data_9).unwrap();
 
         let pruner = Pruner::new(rocksdb.clone());
 
         let keys_to_prune = pruner
             .collect_pruning_batch::<ModuleAccessoryState>(3)
             .unwrap();
-        rocksdb.write_schemas(&keys_to_prune).unwrap();
+        rocksdb.write_schemas(keys_to_prune).unwrap();
 
         // Assert that keys are deleted
         // Key A: has versions [6,7,8,9] -> keep [7,8,9], prune [6]

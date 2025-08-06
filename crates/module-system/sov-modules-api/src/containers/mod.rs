@@ -306,7 +306,9 @@ mod test {
                     let storage = storage_manager.create_storage();
                     assert_eq!(
                         Some(test.value.clone()),
-                        storage.get_historical::<User>(&test.key, None, &witness),
+                        storage
+                            .get_historical::<User>(&test.key, None, &witness)
+                            .unwrap(),
                         "Prover storage does not have correct value"
                     );
                 }
@@ -318,11 +320,9 @@ mod test {
             for test in tests {
                 assert_eq!(
                     Some(test.value),
-                    storage.get_historical::<User>(
-                        &test.key,
-                        Some(test.version),
-                        &Default::default()
-                    )
+                    storage
+                        .get_historical::<User>(&test.key, Some(test.version), &Default::default())
+                        .unwrap()
                 );
             }
         }
@@ -363,7 +363,9 @@ mod test {
             let storage = storage_manager.create_storage();
             assert_eq!(
                 Some(value),
-                storage.get_historical::<User>(&key, None, &Default::default())
+                storage
+                    .get_historical::<User>(&key, None, &Default::default())
+                    .unwrap()
             );
         }
 

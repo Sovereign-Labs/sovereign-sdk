@@ -198,6 +198,7 @@ fn create_test_rt_genesis_config<S: Spec>(
             operating_mode: sov_modules_api::OperatingMode::Optimistic,
             inner_code_commitment,
             outer_code_commitment,
+            admin: None,
         },
 
         accounts: AccountConfig { accounts: vec![] },

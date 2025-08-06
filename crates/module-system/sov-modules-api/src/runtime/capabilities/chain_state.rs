@@ -70,6 +70,16 @@ pub trait ChainState {
         state: &mut Reader,
     ) -> Option<<<Self::Spec as Spec>::Gas as Gas>::Price>;
 
+    /// Returns whether setup mode is currently enabled.
+    fn is_setup_mode_enabled<
+        Reader: VersionReader
+            + StateReader<User, Error = Infallible>
+            + StateReader<Kernel, Error = Infallible>,
+    >(
+        &self,
+        state: &mut Reader,
+    ) -> bool;
+
     /// Returns the slot gas limit accessible at the current *virtual* slot.
     fn block_gas_limit<
         Reader: VersionReader

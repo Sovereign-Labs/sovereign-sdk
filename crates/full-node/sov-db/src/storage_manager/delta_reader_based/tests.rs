@@ -25,7 +25,13 @@ use crate::test_utils::{build_data_to_materialize, TestNativeStorage};
 impl TestableStorage for TestNativeStorage {
     type ChangeSet = NativeChangeSet;
 
-    fn materialize_from_key_values(self, items: &[(Vec<u8>, Option<Vec<u8>>)]) -> Self::ChangeSet {
+    // As of July 23, 2025 the version is not used by the JMT because it doesn't perform enough consistency
+    // checks to detect if you pass the wrong version, so we can always just use Genesis.
+    fn materialize_from_key_values(
+        self,
+        items: &[(Vec<u8>, Option<Vec<u8>>)],
+        _version: u64,
+    ) -> Self::ChangeSet {
         let mut preimages = Vec::with_capacity(items.len());
         let mut batch = Vec::with_capacity(items.len());
         let mut accessory_batch = Vec::with_capacity(items.len());
@@ -83,6 +89,10 @@ impl TestableStorage for TestNativeStorage {
             .unwrap();
         assert_eq!(user_value, kernel_value);
         user_value
+    }
+
+    fn get_value_without_consistency_checks(&self, key: &[u8]) -> Option<Vec<u8>> {
+        self.get_value(key)
     }
 }
 
@@ -203,7 +213,7 @@ fn test_several_jumping_forks() {
 
 #[test]
 fn test_removed_fork_view() {
-    removed_fork_data_view::<Sm>();
+    removed_fork_data_view::<Sm>(false);
 }
 
 // This test is similar to `removed_fork_data_view`,
@@ -223,7 +233,7 @@ fn test_fork_keeps_reference_to_snapshot_after_finalization() {
     let mut storage_manager: Sm = NativeStorageManager::new(tmpdir.path()).unwrap();
     let (storage, _) = storage_manager.create_state_for(&block_a).unwrap();
 
-    let stf_changes = storage.materialize_from_key_value(key.to_vec(), Some(value_1.to_vec()));
+    let stf_changes = storage.materialize_from_key_value(key.to_vec(), Some(value_1.to_vec()), 0);
     storage_manager
         .save_change_set(&block_a, stf_changes, SchemaBatch::default())
         .unwrap();
@@ -237,7 +247,8 @@ fn test_fork_keeps_reference_to_snapshot_after_finalization() {
     assert_eq!(Some(value_1.clone()), value_at_b);
     let value_at_c = stf_reader_c.get_value(&key);
     assert_eq!(Some(value_1.clone()), value_at_c);
-    let stf_changes = stf_reader_b.materialize_from_key_value(key.to_vec(), Some(value_2.to_vec()));
+    let stf_changes =
+        stf_reader_b.materialize_from_key_value(key.to_vec(), Some(value_2.to_vec()), 1);
     storage_manager
         .save_change_set(&block_b, stf_changes, SchemaBatch::default())
         .unwrap();

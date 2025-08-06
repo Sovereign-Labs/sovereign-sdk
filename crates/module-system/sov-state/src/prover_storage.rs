@@ -363,8 +363,8 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         val
     }
 
-    fn get_accessory(&self, key: &SlotKey, version: Option<SlotNumber>) -> Option<SlotValue> {
-        self.read_value::<Accessory>(key, version)
+    fn get_accessory(&self, key: &SlotKey) -> Option<SlotValue> {
+        self.read_value::<Accessory>(key, None)
     }
 
     fn compute_state_update(
@@ -452,8 +452,16 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
         key: &SlotKey,
         version: Option<SlotNumber>,
         _witness: &Self::Witness,
-    ) -> Option<SlotValue> {
-        self.read_value::<N>(key, version)
+    ) -> anyhow::Result<Option<SlotValue>> {
+        Ok(self.read_value::<N>(key, version))
+    }
+
+    fn get_accessory_historical(
+        &self,
+        key: &SlotKey,
+        version: Option<SlotNumber>,
+    ) -> anyhow::Result<Option<SlotValue>> {
+        Ok(self.read_value::<Accessory>(key, version))
     }
 
     fn get_leaf_historical<N: ProvableCompileTimeNamespace>(
@@ -461,8 +469,8 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
         key: &SlotKey,
         version: Option<SlotNumber>,
         witness: &Self::Witness,
-    ) -> Option<NodeLeafAndMaybeValue> {
-        self.do_get_leaf::<N>(key, witness, version)
+    ) -> anyhow::Result<Option<NodeLeafAndMaybeValue>> {
+        Ok(self.do_get_leaf::<N>(key, witness, version))
     }
 
     fn get_with_proof<N: ProvableCompileTimeNamespace>(

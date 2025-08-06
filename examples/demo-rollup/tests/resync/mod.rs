@@ -118,6 +118,7 @@ async fn test_generate_mockda_dataset_for_resync() -> anyhow::Result<()> {
             TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
             FINALIZATION_SLOTS,
             rollup_storage_path.clone(),
+            false,
         )
         .with_zkvm_host_args(mock_da_risc0_host_args())
         .set_config(|c| {
@@ -335,6 +336,7 @@ async fn sync_rollup_with_path(
             TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
             5,
             rollup_storage_path.clone(),
+            false,
         )
         .with_zkvm_host_args(mock_da_risc0_host_args())
         .set_config(|c| {

@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use nomt_core::hasher::BinaryHasher;
 use nomt_core::proof::MultiProof;
 use nomt_core::trie::{KeyPath, LeafData, Node, ValueHash};
+#[cfg(feature = "test-utils")]
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
 
@@ -132,7 +133,7 @@ impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
         witness.get_hint()
     }
 
-    fn get_accessory(&self, _key: &SlotKey, _version: Option<SlotNumber>) -> Option<SlotValue> {
+    fn get_accessory(&self, _key: &SlotKey) -> Option<SlotValue> {
         unimplemented!("The NomtZkStorage does not have the accessory state yet.")
     }
 
@@ -185,12 +186,20 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
         unimplemented!("The NomtVerifierStorage should not be used to generate merkle proofs! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
     }
 
+    fn get_accessory_historical(
+        &self,
+        _key: &SlotKey,
+        _version: Option<SlotNumber>,
+    ) -> anyhow::Result<Option<SlotValue>> {
+        unimplemented!("The NomtVerifierStorage does not support `get_accessory_historical`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
+    }
+
     fn get_historical<N: ProvableCompileTimeNamespace>(
         &self,
         _key: &SlotKey,
         _version: Option<SlotNumber>,
         _witness: &Self::Witness,
-    ) -> Option<SlotValue> {
+    ) -> anyhow::Result<Option<SlotValue>> {
         unimplemented!("The NomtVerifierStorage does not support `get_historical`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
     }
 
@@ -199,7 +208,7 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
         _key: &SlotKey,
         _version: Option<SlotNumber>,
         _witness: &Self::Witness,
-    ) -> Option<NodeLeafAndMaybeValue> {
+    ) -> anyhow::Result<Option<NodeLeafAndMaybeValue>> {
         unimplemented!("The NomtVerifierStorage does not support `get_leaf_historical`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
     }
 

@@ -126,6 +126,7 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
         let hash_key = HashStf::hash_key();
         let existing_cache = pre_state
             .get_historical::<User>(&hash_key, None, &witness)
+            .unwrap()
             .unwrap();
         tracing::debug!(
             pre_state_root = hex::encode(pre_state_root),

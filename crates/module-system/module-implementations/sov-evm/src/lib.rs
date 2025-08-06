@@ -27,7 +27,8 @@ mod event;
 mod helpers;
 
 pub use authenticate::{
-    authenticate, decode_evm_tx, EthereumAuthenticator, EvmAuthenticator, EvmAuthenticatorInput,
+    authenticate, decode_evm_tx, Eip712Authenticator, EthereumAuthenticator, EvmAuthenticator,
+    EvmAuthenticatorInput,
 };
 pub use reth_primitives::revm_primitives::SpecId;
 use reth_primitives::revm_primitives::{Address, BlockEnv, B256};

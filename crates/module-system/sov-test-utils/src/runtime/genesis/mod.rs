@@ -176,6 +176,7 @@ impl<S: Spec> BasicGenesisConfig<S> {
             operating_mode,
             inner_code_commitment,
             outer_code_commitment,
+            admin: None,
         }
     }
 }

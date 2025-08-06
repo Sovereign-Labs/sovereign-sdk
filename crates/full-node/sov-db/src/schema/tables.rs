@@ -97,6 +97,7 @@ macro_rules! define_table_without_codec {
 
         impl ::rockbound::schema::Schema for $table_name {
             const COLUMN_FAMILY_NAME: &'static str = $table_name::table_name();
+            const SHOULD_CACHE: bool = false;
             type Key = $key;
             type Value = $value;
         }

@@ -287,6 +287,7 @@ pub async fn setup_rollup(
         DEFAULT_BLOCK_PRODUCING_CONFIG,
         DEFAULT_FINALIZATION_BLOCKS,
         storage_path,
+        false,
     )
     .set_config(|config| {
         config.telegraf_address = sov_metrics::MonitoringConfig::standard().telegraf_address;

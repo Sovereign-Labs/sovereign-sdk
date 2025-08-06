@@ -1,13 +1,15 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
 
+use schemars::JsonSchema;
 use sov_modules_api::capabilities::{BlockGasInfo, RollupHeight};
 use sov_modules_api::prelude::UnwrapInfallible;
+use sov_modules_api::sov_universal_wallet::UniversalWallet;
 #[cfg(feature = "native")]
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::{
-    AccessoryStateMap, AccessoryStateValue, ModuleRestApi, NotInstantiable,
-    PrivilegedKernelAccessor, StateCheckpoint, StateMap, VersionReader,
+    AccessoryStateMap, AccessoryStateValue, ModuleRestApi, PrivilegedKernelAccessor,
+    StateCheckpoint, StateMap, VersionReader,
 };
 /// Contains the call methods used by the module
 mod call;
@@ -230,6 +232,14 @@ pub struct ChainState<S: Spec> {
     /// This value is used by the `ProverIncentives` module to verify the proofs posted on the DA layer.
     #[state]
     outer_code_commitment: StateValue<CodeCommitmentFor<S::OuterZkvm>, BcsCodec>,
+
+    /// The height at which setup mode will be terminated.
+    #[state]
+    setup_mode_termination_height: StateValue<RollupHeight>,
+
+    /// The admin address. This address is allowed to terminate setup mode early.
+    #[state]
+    admin_address: StateValue<S::Address>,
 }
 
 impl<S: Spec> ChainState<S> {
@@ -488,8 +498,16 @@ impl<S: Spec> ChainState<S> {
         provisional_visible_height_increase: u64,
         state: &mut Reader,
     ) -> Result<<<S as Spec>::Gas as Gas>::Price, <Reader as StateReader<Kernel>>::Error> {
-        use sov_modules_api::GasSpec;
-        if stale_rollup_height.get() == 0 {
+        use sov_modules_api::{GasArray, GasSpec};
+        let next_rollup_height = stale_rollup_height.saturating_add(1);
+        if self.is_setup_mode_active(next_rollup_height, state)? {
+            return Ok(<S::Gas as Gas>::Price::ZEROED);
+        }
+        // If the previous rollup height either didn't exist or was in setup mode, use the initial base fee per gas rather
+        // than computing based on the previous value. We have to special case setup mode, otherwise we'll end up with a zero price.
+        if stale_rollup_height.get() == 0
+            || self.is_setup_mode_active(stale_rollup_height, state)?
+        {
             return Ok(S::initial_base_fee_per_gas());
         }
         let prev_gas_info =
@@ -507,14 +525,58 @@ impl<S: Spec> ChainState<S> {
     }
 }
 
+#[derive(
+    BorshDeserialize,
+    BorshSerialize,
+    Serialize,
+    Deserialize,
+    Debug,
+    PartialEq,
+    Eq,
+    Clone,
+    JsonSchema,
+    UniversalWallet,
+)]
+/// A message for the chain-state module
+#[schemars(rename = "Event")]
+pub enum CallMessage {
+    /// Terminates setup mode as of the next rollup block.
+    TerminateSetupMode,
+}
+
+#[derive(
+    BorshDeserialize,
+    BorshSerialize,
+    Serialize,
+    Deserialize,
+    Debug,
+    PartialEq,
+    Eq,
+    Clone,
+    JsonSchema,
+)]
+#[serde(bound = "S: Spec")]
+#[serde(rename_all = "snake_case")]
+#[schemars(bound = "S: Spec", rename = "Event")]
+/// An event emitted by the chain-state module
+pub enum Event<S: Spec> {
+    /// Indicates that setup mode has been terminated.
+    AdminModeTerminated {
+        /// The rollup height at which the setup mode will be terminated.
+        effective_at_rollup_height: u64,
+        /// The address that terminated setup mode.
+        by: S::Address,
+    },
+}
+
 impl<S: Spec> Module for ChainState<S> {
     type Spec = S;
 
-    type CallMessage = NotInstantiable;
+    type CallMessage = CallMessage;
 
     type Config = ChainStateConfig<S>;
 
-    type Event = ();
+    type Event = Event<S>;
 
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(
@@ -529,10 +591,41 @@ impl<S: Spec> Module for ChainState<S> {
 
     fn call(
         &mut self,
-        _message: Self::CallMessage,
-        _context: &sov_modules_api::Context<Self::Spec>,
-        _state: &mut impl sov_modules_api::TxState<Self::Spec>,
+        message: Self::CallMessage,
+        context: &sov_modules_api::Context<Self::Spec>,
+        state: &mut impl sov_modules_api::TxState<Self::Spec>,
     ) -> anyhow::Result<()> {
+        use sov_modules_api::EventEmitter;
+        match message {
+            CallMessage::TerminateSetupMode => {
+                let Some(allowed_admin) = self.admin_address.get(state)? else {
+                    return Err(anyhow::anyhow!(
+                        "No admin address set. setup mode cannot be terminated early."
+                    ));
+                };
+                anyhow::ensure!(
+                    context.sender() == &allowed_admin,
+                    "Only admins can terminate setup mode"
+                );
+                if self.setup_mode_termination_height.get(state)?.is_some() {
+                    anyhow::bail!("setup mode cannot be terminated twice.");
+                }
+                let termination_height = state.rollup_height_to_access().saturating_add(1);
+                self.setup_mode_termination_height
+                    .set(&termination_height, state)?;
+                self.emit_event(
+                    state,
+                    Event::AdminModeTerminated {
+                        effective_at_rollup_height: termination_height.get(),
+                        by: context.sender().clone(),
+                    },
+                );
+                tracing::debug!(
+                    "setup mode terminated at height {}",
+                    termination_height.get()
+                );
+            }
+        }
         Ok(())
     }
 }

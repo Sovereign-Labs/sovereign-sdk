@@ -112,6 +112,6 @@ async fn query_invalid_rollup_height_returns_error() {
     assert_eq!(error.title, "invalid rollup height");
     assert_eq!(
         error.details.get("message").unwrap(),
-        "Impossible to get the rollup state at the specified height. Please ensure you have queried the correct height."
+        "Impossible to get the rollup state at the specified height. The requested height may have been pruned, or it may be in the future. Please ensure you have queried the correct height."
     );
 }

@@ -22,7 +22,7 @@ use sov_test_utils::test_rollup::{RollupBuilder, TestRollup};
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
 use tracing::Level;
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::{registry, EnvFilter, Layer};
+use tracing_subscriber::{fmt, registry, EnvFilter, Layer};
 
 use crate::test_helpers::test_genesis_source;
 
@@ -61,7 +61,9 @@ async fn start_stop_empty(
     rollup_prover_config: RollupProverConfig<Risc0>,
 ) -> anyhow::Result<()> {
     let collector = LogCollector::new(Level::WARN);
-    let subscriber = registry().with(collector.clone());
+    let new_env_filter = EnvFilter::from_str("debug,jmt=warn")?;
+    let fmt_layer = fmt::layer().with_filter(new_env_filter);
+    let subscriber = registry().with(fmt_layer).with(collector.clone());
     subscriber.init();
 
     let rollup_storage_dir = Arc::new(tempfile::tempdir()?);
@@ -99,25 +101,8 @@ async fn start_stop_empty(
         // Let rollup run for some time
         tokio::time::sleep(sleep_duration).await;
 
-        let TestRollup {
-            shutdown_sender,
-            rollup_task,
-            da_service,
-            ..
-        } = test_rollup;
-
-        drop(da_service);
         tracing::info!("Triggering shutdown....");
-        shutdown_sender.send(())?;
-        tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, rollup_task)
-            .await
-            .context("Joining rollup task failed")???;
-
-        // // By design, child tasks don't always report back to their parents when they finish shutting down. This is fine
-        // // during normal operation, but it means that we can't "await" until every spawned task is shutdown for this test. That makes
-        // // the test flaky, since we sometimes try to restart the rollup before we finish shutting it down, causing rocksdb locks to trigger.
-        // // A small sleep prevents this.
-        // tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, test_rollup.shutdown()).await??;
     }
 
     let known = [

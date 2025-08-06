@@ -230,14 +230,7 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
         })?;
         serialized_tx.extend_from_slice(chain_hash);
 
-        match &self.versioned_tx {
-            VersionedTx::V0(inner) => {
-                MeteredSignature::new::<S>(inner.signature.clone())
-                    .verify(&inner.pub_key, &serialized_tx, meter)
-                    .map_err(TransactionVerificationError::from)?;
-            }
-        }
-        Ok(())
+        self.verify_signature(&serialized_tx, meter)
     }
 
     /// Creates a new transaction with the provided metadata.
@@ -266,7 +259,24 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
         }
     }
 
-    fn to_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
+    /// Verify the transaction signature against the provided message.
+    pub fn verify_signature(
+        &self,
+        msg: &[u8],
+        meter: &mut impl GasMeter<Spec = S>,
+    ) -> Result<(), TransactionVerificationError<S::Gas>> {
+        match &self.versioned_tx {
+            VersionedTx::V0(inner) => {
+                MeteredSignature::new::<S>(inner.signature.clone())
+                    .verify(&inner.pub_key, msg, meter)
+                    .map_err(TransactionVerificationError::from)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Converts the transaction to an unsigned transaction.
+    pub fn to_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
         match &self.versioned_tx {
             VersionedTx::V0(inner) => UnsignedTransaction::new_with_details(
                 inner.runtime_call.clone(),
@@ -301,11 +311,12 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
     derive_more::Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, UniversalWallet,
 )]
 pub struct UnsignedTransaction<R: TransactionCallable, S: Spec> {
-    // The runtime call
-    runtime_call: R::Call,
-    uniqueness: UniquenessData,
-    // Data related to fees and gas handling.
-    details: TxDetails<S>,
+    /// The runtime call
+    pub runtime_call: R::Call,
+    /// The uniqueness identifier
+    pub uniqueness: UniquenessData,
+    /// Data related to fees and gas handling.
+    pub details: TxDetails<S>,
 }
 // Manually implemented to ensure correct trait bounds for the same reason as for `Transaction`
 // above

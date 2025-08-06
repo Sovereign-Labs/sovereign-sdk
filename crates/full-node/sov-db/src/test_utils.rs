@@ -242,7 +242,7 @@ pub fn fill_accessory_db(
             current_batch_size += 1;
 
             if current_batch_size >= BATCH_SIZE {
-                rocksdb.write_schemas(&batch)?;
+                rocksdb.write_schemas(batch)?;
                 batch = SchemaBatch::new();
                 current_batch_size = 0;
             }
@@ -251,7 +251,7 @@ pub fn fill_accessory_db(
 
     // Write remaining entries
     if current_batch_size > 0 {
-        rocksdb.write_schemas(&batch)?;
+        rocksdb.write_schemas(batch)?;
     }
 
     Ok(())

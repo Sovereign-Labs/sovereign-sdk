@@ -4,6 +4,7 @@ use jmt::storage::TreeReader;
 use jmt::JellyfishMerkleTree;
 #[cfg(feature = "bench")]
 use sov_modules_macros::cycle_tracker;
+#[cfg(feature = "test-utils")]
 use sov_rollup_interface::common::SlotNumber;
 
 use crate::cache::{OrderedReadsAndWrites, StateAccesses};
@@ -146,7 +147,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         JellyfishMerkleTree::<EmptyTreeReader, S::Hasher>::EMPTY_ROOT.0,
     );
 
-    fn get_accessory(&self, _key: &SlotKey, _version: Option<SlotNumber>) -> Option<SlotValue> {
+    fn get_accessory(&self, _key: &SlotKey) -> Option<SlotValue> {
         unimplemented!("The ZkStorage does not have access to the accessory state.")
     }
 
@@ -229,12 +230,20 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for ZkStorage<S> {
         self.get_root_hash_unbound(version)
     }
 
+    fn get_accessory_historical(
+        &self,
+        _key: &SlotKey,
+        _version: Option<SlotNumber>,
+    ) -> anyhow::Result<Option<SlotValue>> {
+        unimplemented!("The ZkStorage does not support `get_accessory_historical`! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
+    }
+
     fn get_historical<N: ProvableCompileTimeNamespace>(
         &self,
         _key: &SlotKey,
         _version: Option<SlotNumber>,
         _witness: &Self::Witness,
-    ) -> Option<SlotValue> {
+    ) -> anyhow::Result<Option<SlotValue>> {
         unimplemented!("The ZkStorage does not support `get_historical`! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
     }
 
@@ -243,7 +252,7 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for ZkStorage<S> {
         _key: &SlotKey,
         _version: Option<SlotNumber>,
         _witness: &Self::Witness,
-    ) -> Option<NodeLeafAndMaybeValue> {
+    ) -> anyhow::Result<Option<NodeLeafAndMaybeValue>> {
         unimplemented!("The ZkStorage does not support `get_leaf_historical`! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
     }
 

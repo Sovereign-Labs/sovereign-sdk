@@ -250,13 +250,9 @@ fn test_reserve_gas_no_account() {
                 error: TxProcessingError::CannotReserveGas(reason),
             }) = result.tx_receipt
             {
-                assert_eq!(
-                    reason,
-                    ReserveGasError::AccountDoesNotExist {
-                        account: user_no_account.address().to_string(),
-                    }
-                    .to_string(),
-                    "The inner reserve gas error is incorrect"
+                assert!(
+                    reason.contains("Insufficient balance to pay for the transaction gas"),
+                    "The inner reserve gas error is incorrect. Expected an error about insufficient balance, but got: {reason}"
                 );
             } else {
                 panic!("The transaction should have reverted with a skipped error");

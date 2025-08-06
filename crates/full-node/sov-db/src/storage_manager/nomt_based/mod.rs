@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
+pub use crate::flat_db::FlatStateDb;
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::SchemaBatch;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
@@ -16,7 +17,7 @@ use sov_rollup_interface::storage::HierarchicalStorageManager;
 
 use crate::accessory_db::AccessoryDb;
 use crate::config::RollupDbConfig;
-use crate::historical_state::HistoricalStateReader;
+use crate::historical_state::{HistoricalStateReader, StateChanges};
 use crate::metrics::nomt::StorageManagerFinalizationMetric;
 use crate::state_db_nomt::{NomtSessionBuilder, StateOverlay};
 use crate::storage_manager::nomt_based::groups::{CommitGroup, DbGroup, PrunerJob, SnapshotGroup};
@@ -46,7 +47,7 @@ impl StateFinishedSession {
 #[allow(missing_docs)]
 pub struct NomtChangeSet {
     pub state: StateFinishedSession,
-    pub historical_state: SchemaBatch,
+    pub historical_state: StateChanges,
     pub accessory: SchemaBatch,
 }
 
@@ -295,7 +296,7 @@ where
         let state_overlay = state.into_state_overlay();
 
         let rockbound_snapshot = SnapshotGroup {
-            historical_state: Arc::new(historical_state),
+            historical_state,
             accessory: Arc::new(accessory),
             ledger: Arc::new(ledger_change_set),
         };

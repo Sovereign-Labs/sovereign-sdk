@@ -48,13 +48,16 @@ impl<S: Spec> ProverIncentives<S> {
             "The penalty should be less than the minimum bond"
         );
 
-        self.minimum_bond.set(&config.minimum_bond, state)?;
+        // Set bonds to zero for genesis registration; This way, we can register without any bond only during genesis.
+        self.minimum_bond
+            .set(&<S::Gas as GasArray>::ZEROED, state)?;
         self.proving_penalty.set(&config.proving_penalty, state)?;
         self.last_claimed_reward.set(&SlotNumber::GENESIS, state)?;
 
         for (prover, bond) in config.initial_provers.iter() {
             self.register_staker(prover, prover, *bond, state)?;
         }
+        self.minimum_bond.set(&config.minimum_bond, state)?;
 
         Ok(())
     }

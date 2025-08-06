@@ -13,6 +13,7 @@ fn test_config_serialization() {
         genesis_da_height: 0,
         inner_code_commitment: Default::default(),
         outer_code_commitment: Default::default(),
+        admin: None,
     };
 
     let data = r#"

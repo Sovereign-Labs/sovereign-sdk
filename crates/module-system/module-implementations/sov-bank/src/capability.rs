@@ -1,5 +1,5 @@
 use sov_modules_api::transaction::AuthenticatedTransactionData;
-use sov_modules_api::{Gas, Spec, StateAccessor};
+use sov_modules_api::{Amount, Gas, Spec, StateAccessor};
 use thiserror::Error;
 
 use crate::utils::IntoPayable;
@@ -43,17 +43,10 @@ impl<S: Spec> Bank<S> {
         state: &mut impl StateAccessor,
     ) -> Result<(), ReserveGasError> {
         // We need to do the explicit check (outside of a closure) because otherwise `state_checkpoint` would be captured.
-        let balance = match self
+        let balance = self
             .get_balance_of(&payer.clone(), config_gas_token_id(), state)
             .map_err(|e| ReserveGasError::StateAccessError(e.to_string()))?
-        {
-            Some(balance) => balance,
-            None => {
-                return Err(ReserveGasError::AccountDoesNotExist {
-                    account: payer.to_string(),
-                })
-            }
-        };
+            .unwrap_or(Amount::ZERO);
 
         // the signer must be able to afford the transaction
         if balance < tx.0.max_fee {

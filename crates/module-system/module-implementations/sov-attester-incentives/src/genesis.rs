@@ -30,15 +30,17 @@ impl<S: Spec> AttesterIncentives<S> {
         config: &<Self as Module>::Config,
         state: &mut impl GenesisState<S>,
     ) -> Result<()> {
+        use sov_modules_api::GasArray;
         anyhow::ensure!(
             !config.initial_attesters.is_empty(),
             "At least one prover must be set at genesis!"
         );
 
+        // Set bonds to zero for genesis registration; This way, we can register without any bond only during genesis.
         self.minimum_attester_bond
-            .set(&config.minimum_attester_bond, state)?;
+            .set(&<S::Gas as GasArray>::ZEROED, state)?;
         self.minimum_challenger_bond
-            .set(&config.minimum_challenger_bond, state)?;
+            .set(&<S::Gas as GasArray>::ZEROED, state)?;
 
         self.rollup_finality_period
             .set(&config.rollup_finality_period, state)?;
@@ -46,6 +48,10 @@ impl<S: Spec> AttesterIncentives<S> {
         for (attester, bond) in config.initial_attesters.iter() {
             self.register_attester(*bond, attester, state)?;
         }
+        self.minimum_attester_bond
+            .set(&config.minimum_attester_bond, state)?;
+        self.minimum_challenger_bond
+            .set(&config.minimum_challenger_bond, state)?;
 
         self.maximum_attested_height
             .set(&config.maximum_attested_height, state)?;

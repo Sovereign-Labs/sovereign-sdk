@@ -81,9 +81,9 @@ impl StateDb {
         DbOptions {
             name: Self::DB_NAME,
             path_suffix: Self::DB_PATH_SUFFIX,
-            columns: UserNamespace::get_table_names()
+            columns: UserNamespace::get_jmt_table_names()
                 .into_iter()
-                .chain(KernelNamespace::get_table_names())
+                .chain(KernelNamespace::get_jmt_table_names())
                 .collect(),
         }
     }
