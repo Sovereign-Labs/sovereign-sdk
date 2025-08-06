@@ -25,15 +25,15 @@ async fn get_filtered_slot_events() {
         .unwrap();
 
     assert_eq!(events.len(), 2);
-    assert_eq!(events[0].key, "foo");
+    assert_eq!(events[0].key, "foo0");
 
     let events = &client
-        .get_slot_filtered_events(&IntOrHash::Integer(0), Some("bar"))
+        .get_slot_filtered_events(&IntOrHash::Integer(0), Some("bar0"))
         .await
         .unwrap();
 
     assert_eq!(events.len(), 1);
-    assert_eq!(events[0].key, "bar");
+    assert_eq!(events[0].key, "bar0");
 
     let events = &client
         .get_slot_filtered_events(&IntOrHash::Integer(0), Some("")) // empty prefix
@@ -41,8 +41,8 @@ async fn get_filtered_slot_events() {
         .unwrap();
 
     assert_eq!(events.len(), 2);
-    assert_eq!(events[0].key, "foo");
-    assert_eq!(events[1].key, "bar");
+    assert_eq!(events[0].key, "foo0");
+    assert_eq!(events[1].key, "bar0");
 }
 
 #[tokio::test(flavor = "multi_thread")]

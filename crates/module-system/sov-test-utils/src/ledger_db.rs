@@ -69,7 +69,7 @@ fn events(number: u64) -> Vec<StoredEvent> {
             .unwrap();
 
     let event_value1 = TestEvent::Bank(sov_bank::event::Event::TokenCreated {
-        token_name: format!("token{}", number),
+        token_name: format!("token{number}"),
         coins: Coins {
             amount: Amount::ZERO,
             token_id,
@@ -86,12 +86,12 @@ fn events(number: u64) -> Vec<StoredEvent> {
 
     vec![
         StoredEvent::new(
-            format!("foo{}", number).as_bytes(),
+            format!("foo{number}").as_bytes(),
             &borsh::to_vec(&event_value1).unwrap(),
             [0; 32],
         ),
         StoredEvent::new(
-            format!("bar{}", number).as_bytes(),
+            format!("bar{number}").as_bytes(),
             &borsh::to_vec(&event_value2).unwrap(),
             [0; 32],
         ),
