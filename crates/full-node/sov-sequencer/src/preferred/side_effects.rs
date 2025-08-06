@@ -138,8 +138,8 @@ where
                     self.transaction_cache
                         .insert(contents.accepted_tx.clone())
                         .await;
-                    self.update_api_state_with_changes(contents.tx_changes);
                     // If the receiver is no longer listening, just don't send the confirmation.
+                    self.update_api_state_with_changes(contents.tx_changes);
                     let _ = contents.oneshot_sender.send(contents.accepted_tx);
                 }
             }
@@ -204,6 +204,15 @@ where
             }
             ExecutorEvent::UpdateStateForRecovery(checkpoint) => {
                 self.update_api_state(checkpoint);
+            }
+            ExecutorEvent::FlushTransactionsCache {
+                next_tx_number,
+                oneshot_sender,
+            } => {
+                self.transaction_cache
+                    .clean_and_overwrite_next_tx_number(next_tx_number)
+                    .await;
+                let _ = oneshot_sender.send(());
             }
         }
         let queue_size_after = event_queue.len();

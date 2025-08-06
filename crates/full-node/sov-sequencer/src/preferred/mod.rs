@@ -742,13 +742,6 @@ where
             should_clean_tx_cache,
             time_spent_fetching_batches,
         ) => {
-            if should_clean_tx_cache {
-                seq.transaction_cache
-                    .write_handle()
-                    .clean_and_overwrite_next_tx_number(info.next_tx_number)
-                    .await;
-            }
-
             seq.replay_soft_confirmations_on_top_of_node_state(
                 info,
                 timer_start,

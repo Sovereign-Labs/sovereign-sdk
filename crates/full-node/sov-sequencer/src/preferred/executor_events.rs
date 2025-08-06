@@ -106,6 +106,22 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
         receiver
     }
 
+    pub(crate) async fn flush_transactions_cache(&self, next_tx_number: u64) {
+        // Note: we don't need to update the db cache here - this call is purely for the side effects task
+        let (sender, receiver) = oneshot::channel();
+        self.send(ExecutorEvent::FlushTransactionsCache {
+            next_tx_number,
+            oneshot_sender: sender,
+        })
+        .await;
+        if receiver.await.is_err() {
+            tracing::error!(
+                "Failed to flush transactions cache because the side effects task is no longer available."
+            );
+            self.shutdown_on_error().await;
+        };
+    }
+
     pub(crate) async fn publish_proof_blob(
         &mut self,
         blob_id: BlobInternalId,
@@ -317,6 +333,11 @@ where
     },
     /// During recovery mode, we periodically update the state to the node's state.
     UpdateStateForRecovery(StateCheckpoint<S>),
+    /// Flush transactions cache
+    FlushTransactionsCache {
+        next_tx_number: u64,
+        oneshot_sender: oneshot::Sender<()>,
+    },
 }
 
 pub(crate) struct AcceptedTxEventContents<S: Spec, Rt: Runtime<S>> {

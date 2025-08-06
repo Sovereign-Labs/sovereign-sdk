@@ -1421,6 +1421,14 @@ where
             }
             (false, false, false, _) => {
                 let should_flush_tx_cache = is_startup || is_resync || is_recover;
+
+                if should_flush_tx_cache {
+                    inner
+                        .executor_events_sender
+                        .flush_transactions_cache(info.next_tx_number)
+                        .await;
+                }
+
                 PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeState(
                     should_flush_tx_cache,
                     time_spent_fetching_batches,
