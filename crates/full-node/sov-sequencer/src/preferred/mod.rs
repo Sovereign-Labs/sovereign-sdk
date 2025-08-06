@@ -291,9 +291,7 @@ where
             da_sync_state,
             api_state,
             _runtime: PhantomData,
-            //block_executors_shutdown_notifier,
             config: config.clone(),
-            //state_root_compute_task,
             shutdown_receiver: shutdown_receiver.clone(),
             api_ledger_db,
             shutdown_sender,
@@ -308,13 +306,8 @@ where
         // This is necessary to prevent conflicts with the update_state task.
         if config.sequencer_kind_config.is_replica {
             handles.push(
-                spawn_replica_sync_task(
-                    seq.clone(),
-                    shutdown_receiver.clone(),
-                    latest_state_update.clone(),
-                    latest_db_event_id,
-                )
-                .await,
+                spawn_replica_sync_task(seq.clone(), shutdown_receiver.clone(), latest_db_event_id)
+                    .await,
             );
         }
         handles.push(tokio::spawn({
