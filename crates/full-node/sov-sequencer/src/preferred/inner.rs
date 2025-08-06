@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::num::NonZero;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
@@ -35,7 +36,7 @@ use crate::preferred::{
     next_visible_slot_number_increase, slot_count_delta_acceptable_lower_bound, update_api_ledger,
     AcceptedTx, BatchCreationError, Confirmation, DbEvent, LedgerDb, PreferredBatchToReplay,
     PreferredSeqOperation, PreferredSequencerConfig, PreferredSequencerFetchBatchesToReplayMetrics,
-    PreferredSequencerReadBatch, TxResultWriter,
+    PreferredSequencerReadBatch, RecoveryStrategy, TxResultWriter,
 };
 use crate::{SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash};
 
@@ -408,7 +409,11 @@ where
             .await;
     }
 
-    async fn trigger_recovery(&mut self, info: &StateUpdateInfo<S::Storage>) {
+    async fn trigger_recovery(
+        &mut self,
+        recovery_strategy: RecoveryStrategy,
+        info: &StateUpdateInfo<S::Storage>,
+    ) {
         if self.is_replica() {
             // Replicas don't run recovery. We let the main sequencer run catchup. If we fail-over
             // midway, update_state() will automatically re-trigger recovery on this instance if
@@ -442,7 +447,8 @@ where
             .trigger_recovery(next_sequence_number_according_to_node, recovery_strategy)
             .await;
 
-        // Creates a new executor for recovery, which will cause side effects on the transaction cache.
+        // Creates a new executor  for recovery. This must *not* be called to create executors
+        // under other circumstances, since it causes side effects on the transaction cache.
         let recovery_executor = RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
             info,
             self.tx_cache_writer.clone(), // Recovery executor fills the cache
@@ -963,7 +969,7 @@ where
             api_ledger_db,
             info,
             db_event_subscription,
-            executor,
+            executor: executor,
             node_state_root,
             data,
             reason,
@@ -1405,7 +1411,13 @@ where
             }
             (false, true, false, _) => {
                 error!(slot_number_according_to_node=%info.slot_number, %current_visible_slot_number, "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Normal operation will be suspended until this can be remedied.");
-                inner.trigger_recovery(info).await;
+                let recovery_strategy = inner
+                    .seq_config
+                    .sequencer_kind_config
+                    .recovery_strategy
+                    .clone();
+
+                inner.trigger_recovery(recovery_strategy, info).await;
 
                 PreferredSeqOperation::RecoverAndCatchUp
             }
@@ -1422,14 +1434,14 @@ where
                     let tx_cache_writer = inner.tx_cache_writer.clone();
 
                     RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
-                        info,
+                        &info,
                         tx_cache_writer,
                         inner.rollup_exec_config.clone(),
                         inner.seq_config.clone(),
                     )
                 } else {
                     RollupBlockExecutor::<_, Rt>::new(
-                        info,
+                        &info,
                         inner.rollup_exec_config.clone(),
                         inner.seq_config.clone(),
                     )
@@ -1662,7 +1674,8 @@ where
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
 
-        // Creates a new executor for recovery, which will cause side effects on the transaction cache.
+        // Creates a new executor  for recovery. This must *not* be called to create executors
+        // under other circumstances, since it causes side effects on the transaction cache.
         let transaction_cache_write_handle = inner.tx_cache_writer.clone();
         let recovery_executor = RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
             &info,

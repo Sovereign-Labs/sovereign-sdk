@@ -144,7 +144,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         rollup_exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     ) -> RollupBlockExecutor<S, Rt> {
-        Self::new_helper(info, None, rollup_exec_config, seq_config)
+        Self::new_with_tx_cache_writer_inner(info, None, rollup_exec_config, seq_config)
     }
 
     pub fn new_with_tx_cache_writer(
@@ -153,10 +153,15 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         rollup_exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     ) -> RollupBlockExecutor<S, Rt> {
-        Self::new_helper(info, Some(tx_cache_writer), rollup_exec_config, seq_config)
+        Self::new_with_tx_cache_writer_inner(
+            info,
+            Some(tx_cache_writer),
+            rollup_exec_config,
+            seq_config,
+        )
     }
 
-    fn new_helper(
+    fn new_with_tx_cache_writer_inner(
         info: &StateUpdateInfo<S::Storage>,
         tx_cache_writer: Option<TxResultWriter<S, Rt>>,
         rollup_exec_config: RollupBlockExecutorConfig<S>,

@@ -97,7 +97,9 @@ where
     da_sync_state: Arc<DaSyncState>,
     _runtime: PhantomData<(Rt, Da)>,
     config: SequencerConfig<S::Address, PreferredSequencerConfig>,
-
+    //da_address: <S::Da as DaSpec>::Address,
+    //block_executors_shutdown_notifier: Sender<()>,
+    //state_root_compute_task: StateRootBackgroundTaskState<S>,
     shutdown_receiver: watch::Receiver<()>,
     transaction_cache: TransactionCache<S, Rt>,
     // This ledgerdb is used specifically for REST API and websocket subscriptions.
@@ -291,13 +293,16 @@ where
             da_sync_state,
             api_state,
             _runtime: PhantomData,
+            //block_executors_shutdown_notifier,
             config: config.clone(),
+            //state_root_compute_task,
             shutdown_receiver: shutdown_receiver.clone(),
             api_ledger_db,
             shutdown_sender,
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_sender: broadcast::channel(100).0,
+            //da_address,
         });
 
         // Launch replica sync task only for replicas
