@@ -32,8 +32,8 @@ use crate::preferred::update_state::do_next_event;
 use crate::preferred::{
     current_visible_slot_number_according_to_node, exit_rollup,
     get_next_sequence_number_according_to_node, is_lagging_less_than_ideal_amount,
-    next_visible_slot_number_increase, slot_count_delta_acceptable_lower_bound, update_api_ledger,
-    AcceptedTx, BatchCreationError, Confirmation, DbEvent, LedgerDb, PreferredBatchToReplay,
+    next_visible_slot_number_increase, slot_count_delta_acceptable_lower_bound, AcceptedTx,
+    BatchCreationError, Confirmation, DbEvent, LedgerDb, PreferredBatchToReplay,
     PreferredSeqOperation, PreferredSequencerConfig, PreferredSequencerFetchBatchesToReplayMetrics,
     PreferredSequencerReadBatch, TxResultWriter,
 };
@@ -66,6 +66,11 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
+    // This ledgerdb is used specifically for REST API and websocket subscriptions.
+    // The sequencer controls when it is updated to solve inconsistency issues,
+    // See [`LedgerDb::with_shared_notifications`] for more details.
+    api_ledger_db: LedgerDb,
+
     seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     shutdown_receiver: watch::Receiver<()>,
     shutdown_sender: watch::Sender<()>,
@@ -662,6 +667,25 @@ where
 
         Ok(())
     }
+
+    pub(crate) async fn update_api_ledger(&self, info: &StateUpdateInfo<S::Storage>) {
+        let start = std::time::Instant::now();
+        tracing::trace!(
+            slot_number = %info.slot_number,
+            latest_finalized_slot_number = %info.latest_finalized_slot_number,
+            "Starting LedgerAPI storage update");
+        self.api_ledger_db
+            .replace_reader(info.ledger_reader.clone());
+        self.api_ledger_db
+            .send_notifications_for_slot(info.slot_number);
+        tracing::trace!(
+            time = ?start.elapsed(),
+            slot_number = %info.slot_number,
+            latest_finalized_slot_number = %info.latest_finalized_slot_number,
+            "LedgerAPI storage updated, notification has been sent");
+
+        self.tx_cache_writer.prune(info.next_tx_number).await;
+    }
 }
 
 enum Message<S: Spec, Rt: Runtime<S>> {
@@ -702,7 +726,6 @@ enum Message<S: Spec, Rt: Runtime<S>> {
 
     FinalCatchup {
         resp: oneshot::Sender<anyhow::Result<ProcessFinalCatchupData>>,
-        api_ledger_db: LedgerDb,
         info: StateUpdateInfo<S::Storage>,
         db_event_subscription: mpsc::Receiver<DbEvent>,
         executor: Box<RollupBlockExecutor<S, Rt>>,
@@ -719,7 +742,6 @@ enum Message<S: Spec, Rt: Runtime<S>> {
         reason: &'static str,
     },
     ForceOverwriteStateForRecovery {
-        api_ledger_db: LedgerDb,
         info: StateUpdateInfo<S::Storage>,
         reason: &'static str,
     },
@@ -729,7 +751,6 @@ enum Message<S: Spec, Rt: Runtime<S>> {
         reason: &'static str,
     },
     WaitNodeResync {
-        api_ledger_db: LedgerDb,
         info: StateUpdateInfo<S::Storage>,
         da_sync_state: Arc<DaSyncState>,
         reason: &'static str,
@@ -775,6 +796,7 @@ pub(crate) struct ProcessFinalCatchupData {
 }
 
 pub(crate) fn create<S, Rt>(
+    api_ledger_db: LedgerDb,
     latest_info: StateUpdateInfo<S::Storage>,
     tx_queue_id: Arc<AtomicU64>,
     batch_execution_time_limit_micros: u64,
@@ -804,6 +826,7 @@ where
     };
 
     let inner = Inner {
+        api_ledger_db,
         executor: RollupBlockExecutor::new(
             &latest_info,
             rollup_exec_config.clone(),
@@ -949,7 +972,6 @@ where
 
     pub(crate) async fn final_catchup_msg(
         &self,
-        api_ledger_db: LedgerDb,
         info: StateUpdateInfo<S::Storage>,
         db_event_subscription: mpsc::Receiver<DbEvent>,
         executor: Box<RollupBlockExecutor<S, Rt>>,
@@ -961,7 +983,6 @@ where
         let (resp, recv) = oneshot::channel();
         self.send(Message::FinalCatchup {
             resp,
-            api_ledger_db,
             info,
             db_event_subscription,
             executor: executor,
@@ -994,16 +1015,11 @@ where
 
     pub(crate) async fn force_overite_state_for_recovery_msg(
         &self,
-        api_ledger_db: LedgerDb,
         info: StateUpdateInfo<S::Storage>,
         reason: &'static str,
     ) {
-        self.send(Message::ForceOverwriteStateForRecovery {
-            api_ledger_db,
-            info,
-            reason,
-        })
-        .await;
+        self.send(Message::ForceOverwriteStateForRecovery { info, reason })
+            .await;
     }
 
     pub(crate) async fn do_new_tx_msg(
@@ -1022,13 +1038,11 @@ where
 
     pub(crate) async fn wait_for_node_resync_msg(
         &self,
-        api_ledger_db: LedgerDb,
         info: StateUpdateInfo<S::Storage>,
         da_sync_state: Arc<DaSyncState>,
         reason: &'static str,
     ) {
         self.send(Message::WaitNodeResync {
-            api_ledger_db,
             info,
             da_sync_state,
             reason,
@@ -1181,7 +1195,6 @@ where
                     }
                     Message::FinalCatchup {
                         resp,
-                        api_ledger_db,
                         info,
                         db_event_subscription,
                         executor,
@@ -1191,7 +1204,6 @@ where
                     } => {
                         let ret = self
                             .process_final_catchup(
-                                api_ledger_db,
                                 info,
                                 db_event_subscription,
                                 executor,
@@ -1218,17 +1230,9 @@ where
                     Message::PruneSequencerDb { reason } => {
                         self.process_prune_sequencer_db(reason).await;
                     }
-                    Message::ForceOverwriteStateForRecovery {
-                        api_ledger_db,
-                        info,
-                        reason,
-                    } => {
-                        self.process_force_overwrite_state_for_recovery(
-                            api_ledger_db,
-                            info,
-                            reason,
-                        )
-                        .await;
+                    Message::ForceOverwriteStateForRecovery { info, reason } => {
+                        self.process_force_overwrite_state_for_recovery(info, reason)
+                            .await;
                     }
                     Message::DoNewTx {
                         tx_hash,
@@ -1238,19 +1242,12 @@ where
                         self.process_do_new_tx(tx_hash, baked_tx, reason).await;
                     }
                     Message::WaitNodeResync {
-                        api_ledger_db,
-
                         info,
                         da_sync_state,
                         reason,
                     } => {
-                        self.process_wait_for_node_resync(
-                            api_ledger_db,
-                            info,
-                            da_sync_state,
-                            reason,
-                        )
-                        .await;
+                        self.process_wait_for_node_resync(info, da_sync_state, reason)
+                            .await;
                     }
                     #[cfg(feature = "test-utils")]
                     Message::ForceCloseCurrentBatch { reason: _reason } => {
@@ -1564,7 +1561,6 @@ where
 
     async fn process_final_catchup(
         &mut self,
-        api_ledger_db: LedgerDb,
         info: StateUpdateInfo<S::Storage>,
         mut db_event_subscription: mpsc::Receiver<DbEvent>,
         mut executor: Box<RollupBlockExecutor<S, Rt>>,
@@ -1607,12 +1603,9 @@ where
             .await;
         drop(db_event_subscription);
 
-        update_api_ledger(
-            &api_ledger_db,
-            inner.tx_cache_writer.clone(),
-            &inner.latest_info,
-        )
-        .await;
+        let info = &inner.latest_info;
+        inner.update_api_ledger(&info).await;
+
         drop(inner);
 
         Ok(data)
@@ -1657,7 +1650,6 @@ where
 
     async fn process_force_overwrite_state_for_recovery(
         &mut self,
-        api_ledger_db: LedgerDb,
         info: StateUpdateInfo<S::Storage>,
         reason: &'static str,
     ) {
@@ -1668,7 +1660,7 @@ where
         let transaction_cache_write_handle = inner.tx_cache_writer.clone();
         let recovery_executor = RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
             &info,
-            transaction_cache_write_handle.clone(),
+            transaction_cache_write_handle,
             inner.rollup_exec_config.clone(),
             inner.seq_config.clone(),
         );
@@ -1676,7 +1668,7 @@ where
         inner
             .force_overwrite_state(info.clone(), recovery_executor)
             .await;
-        update_api_ledger(&api_ledger_db, transaction_cache_write_handle, &info).await;
+        inner.update_api_ledger(&info).await;
     }
 
     async fn process_do_new_tx(
@@ -1706,7 +1698,6 @@ where
 
     async fn process_wait_for_node_resync(
         &mut self,
-        api_ledger_db: LedgerDb,
         info: StateUpdateInfo<S::Storage>,
         da_sync_state: Arc<DaSyncState>,
         reason: &'static str,
@@ -1735,7 +1726,7 @@ where
             .update_state_for_recovery(checkpoint)
             .await;
 
-        update_api_ledger(&api_ledger_db, inner.tx_cache_writer.clone(), &info).await;
+        inner.update_api_ledger(&info).await;
     }
 
     /// Closes the current batch

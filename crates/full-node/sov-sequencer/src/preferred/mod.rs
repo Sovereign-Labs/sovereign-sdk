@@ -100,10 +100,6 @@ where
 
     shutdown_receiver: watch::Receiver<()>,
     transaction_cache: TransactionCache<S, Rt>,
-    // This ledgerdb is used specifically for REST API and websocket subscriptions.
-    // The sequencer controls when it is updated to solve inconsistency issues,
-    // See [`LedgerDb::with_shared_notifications`] for more details.
-    api_ledger_db: LedgerDb,
     shutdown_sender: watch::Sender<()>,
     // Used to track which txs need to be ignored after the sequencer had downtime (in the sense of giving out 503s)
     tx_queue_id: Arc<AtomicU64>,
@@ -255,6 +251,7 @@ where
 
         let tx_queue_id = Arc::new(AtomicU64::new(0));
         let (synchronized_state, synchronized_state_updator) = create(
+            api_ledger_db.clone(),
             latest_state_update.clone(),
             tx_queue_id.clone(),
             batch_execution_time_limit_micros,
@@ -293,7 +290,6 @@ where
             _runtime: PhantomData,
             config: config.clone(),
             shutdown_receiver: shutdown_receiver.clone(),
-            api_ledger_db,
             shutdown_sender,
             tx_queue_id,
             stop_at_rollup_height,
@@ -435,7 +431,6 @@ where
 
                 self.synchronized_state_updator
                     .force_overite_state_for_recovery_msg(
-                        self.api_ledger_db.clone(),
                         info.clone(),
                         "recover_and_catch_up:overwrite_executor",
                     )
@@ -481,12 +476,7 @@ where
             let is_synced = self.da_sync_state.status().distance() <= distance_to_tip;
 
             self.synchronized_state_updator
-                .wait_for_node_resync_msg(
-                    self.api_ledger_db.clone(),
-                    info,
-                    self.da_sync_state.clone(),
-                    "wait_for_node_resync",
-                )
+                .wait_for_node_resync_msg(info, self.da_sync_state.clone(), "wait_for_node_resync")
                 .await;
 
             // Exit after processing if we're synced
@@ -617,26 +607,6 @@ pub(crate) enum PreferredSeqOperation<S: Spec, Rt: Runtime<S>> {
     // `update_state` call during sequencer execution with no unusual
     // conditions.
     ReplaySoftConfirmationsOnTopOfNodeState(Box<RollupBlockExecutor<S, Rt>>, Duration),
-}
-
-pub(crate) async fn update_api_ledger<S: Spec, Rt: Runtime<S>>(
-    api_ledger_db: &LedgerDb,
-    transaction_cache: TxResultWriter<S, Rt>,
-    info: &StateUpdateInfo<S::Storage>,
-) {
-    let start = std::time::Instant::now();
-    tracing::trace!(
-        slot_number = %info.slot_number,
-        latest_finalized_slot_number = %info.latest_finalized_slot_number,
-        "Starting LedgerAPI storage update");
-    api_ledger_db.replace_reader(info.ledger_reader.clone());
-    api_ledger_db.send_notifications_for_slot(info.slot_number);
-    tracing::trace!(
-        time = ?start.elapsed(),
-        slot_number = %info.slot_number,
-        latest_finalized_slot_number = %info.latest_finalized_slot_number,
-        "LedgerAPI storage updated, notification has been sent");
-    prune_transactions_cache(info.next_tx_number, transaction_cache).await;
 }
 
 #[tracing::instrument(skip_all, level = "debug")]
@@ -1095,13 +1065,6 @@ fn next_visible_slot_number_increase_inner(
             ),
         }),
     }
-}
-
-async fn prune_transactions_cache<S: Spec, Rt: Runtime<S>>(
-    next_tx_number: u64,
-    cache: TxResultWriter<S, Rt>,
-) {
-    cache.prune(next_tx_number).await;
 }
 
 /// A helper function to allow recovering an associated consant from an *instance* of a type

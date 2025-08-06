@@ -159,7 +159,6 @@ where
         let (maybe_data, message_processing_duration) = self
             .synchronized_state_updator
             .final_catchup_msg(
-                self.api_ledger_db.clone(),
                 info,
                 db_event_subscription,
                 executor,
