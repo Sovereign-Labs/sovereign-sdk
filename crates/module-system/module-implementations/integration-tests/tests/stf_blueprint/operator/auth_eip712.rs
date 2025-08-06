@@ -75,7 +75,7 @@ pub fn create_utx<S: Spec, RT: Runtime<S>>(message: RT::Decodable) -> UnsignedTr
         gas_limit: None,
         chain_id: config_value!("CHAIN_ID"),
     };
-    UnsignedTransaction::new_with_details(message, 0, details)
+    UnsignedTransaction::new_with_details(message, UniquenessData::Generation(0), details)
 }
 
 pub fn sign_utx<S: Spec, RT: Runtime<S>>(
