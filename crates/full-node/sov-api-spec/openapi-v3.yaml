@@ -411,7 +411,7 @@ paths:
     get:
       summary: Deduplicate an address
       description: >
-        This endpoint retireves deduplication information needed for building transactions.
+        This endpoint retrieves deduplication information needed for building transactions.
 
         The exact shape of the data in the response depends on the implementation of the rollup.
 

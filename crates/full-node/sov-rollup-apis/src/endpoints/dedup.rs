@@ -77,7 +77,7 @@ impl<S: Spec> NonceDeDupEndpoint<S> {
 /// The response of the nonce module implementation.
 #[derive(serde::Serialize, Clone)]
 pub struct NonceResponse {
-    /// The current nonce assiociated with the requested address.
+    /// The current nonce associated with the requested address.
     pub nonce: u64,
 }
 
@@ -92,9 +92,7 @@ impl<S: Spec> DeDupEndpoint<S> for NonceDeDupEndpoint<S> {
     ) -> Result<Self::Response, Self::Error> {
         let pub_key = <S::CryptoSpec as CryptoSpec>::PublicKey::from_str(&address)?;
         let credential_id = metered_credential(&pub_key, &mut state)?;
-        let nonce = Uniqueness::<S>::default()
-            .next_generation(&credential_id, &mut state)
-            .unwrap();
+        let nonce = Uniqueness::<S>::default().next_nonce(&credential_id, &mut state)?;
         Ok(NonceResponse { nonce })
     }
 
