@@ -35,7 +35,7 @@ use crate::preferred::{
     next_visible_slot_number_increase, slot_count_delta_acceptable_lower_bound, update_api_ledger,
     AcceptedTx, BatchCreationError, Confirmation, DbEvent, LedgerDb, PreferredBatchToReplay,
     PreferredSeqOperation, PreferredSequencerConfig, PreferredSequencerFetchBatchesToReplayMetrics,
-    PreferredSequencerReadBatch, RecoveryStrategy, TxResultWriter,
+    PreferredSequencerReadBatch, TxResultWriter,
 };
 use crate::{SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash};
 

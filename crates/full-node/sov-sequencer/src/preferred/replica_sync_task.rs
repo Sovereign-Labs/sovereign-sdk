@@ -108,7 +108,6 @@ enum CompletedEvent {
 pub async fn spawn_replica_sync_task<S, Rt, Da>(
     sequencer: Arc<PreferredSequencer<S, Rt, Da>>,
     shutdown_receiver: watch::Receiver<()>,
-    _latest_state_update: StateUpdateInfo<S::Storage>,
     latest_loaded_event_id: Option<u64>,
 ) -> JoinHandle<()>
 where
