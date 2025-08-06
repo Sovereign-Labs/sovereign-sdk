@@ -985,7 +985,7 @@ where
             resp,
             info,
             db_event_subscription,
-            executor: executor,
+            executor,
             node_state_root,
             data,
             reason,
@@ -1420,14 +1420,14 @@ where
                     let tx_cache_writer = inner.tx_cache_writer.clone();
 
                     RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
-                        &info,
+                        info,
                         tx_cache_writer,
                         inner.rollup_exec_config.clone(),
                         inner.seq_config.clone(),
                     )
                 } else {
                     RollupBlockExecutor::<_, Rt>::new(
-                        &info,
+                        info,
                         inner.rollup_exec_config.clone(),
                         inner.seq_config.clone(),
                     )
