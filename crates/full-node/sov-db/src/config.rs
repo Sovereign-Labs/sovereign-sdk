@@ -51,7 +51,7 @@ impl RollupDbConfig {
             path,
             user_commit_concurrency: Some(4),
             user_hashtable_buckets: Some(if cfg!(debug_assertions) {
-                100_000
+                2_500  // 9.77MB
             } else {
                 15_000_000
             }),
