@@ -1328,6 +1328,7 @@ where
         next_sequence_number_according_to_node: u64,
         reason: &'static str,
     ) -> PreferredSeqOperation<S, Rt> {
+        debug!(?info, "Processing state update info from update_state");
         let mut inner = self.get_inner_with_timing(reason).await;
         let next_sequence_number = inner.sequence_number_of_next_blob;
         let ((batches_to_replay, fetch_batches_to_replay_metrics), is_startup) = {
@@ -1409,6 +1410,12 @@ where
             }
             (false, false, false, _) => {
                 let should_flush_tx_cache = is_startup || is_resync || is_recover;
+                debug!(
+                    is_startup,
+                    is_resync,
+                    is_recover,
+                    "Proceeding with `replay_soft_confirmations_on_top_of_node_state`"
+                );
 
                 let executor = if should_flush_tx_cache {
                     inner
