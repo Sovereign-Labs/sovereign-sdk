@@ -489,18 +489,18 @@ jobs:
           cache: |
             rust
             pnpm
-      - uses: pnpm/action-setup@v2
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 9
       - name: Checkout web3-js SDK
         uses: actions/checkout@v4
         with:
           repository: "Sovereign-Labs/sovereign-sdk-web3-js"
           path: "examples/demo-rollup/web3-js-sdk"
-          ref: "0e2376b94edc757585e1557e614c944575bfd5bf"
+          ref: "a2583bf1350c84a0fc8e9dcfcdd058625801d2bb"
       - name: Run web3-js SDK tests against demo-rollup
         # See the script for more details about what to do if job
         run: |
