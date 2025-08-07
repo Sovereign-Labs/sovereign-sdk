@@ -17,8 +17,6 @@
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# Preparing demo rollup
-cargo build
 # we still use `cargo run`, to not deal with `target` folder location
 cargo run >demo_rollup_log.log 2>&1 &
 
