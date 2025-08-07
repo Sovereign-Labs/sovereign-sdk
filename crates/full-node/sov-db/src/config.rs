@@ -97,6 +97,9 @@ impl RollupDbConfig {
             self.user_commit_concurrency
                 .expect("`user_commit_concurrency` must be set"),
         );
+        if cfg!(debug_assertions) {
+            opts.preallocate_ht(false);
+        }
         opts.hashtable_buckets(
             self.user_hashtable_buckets
                 .expect("`user_hashtable_buckets` must be set"),
