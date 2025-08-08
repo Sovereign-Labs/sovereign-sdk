@@ -190,9 +190,12 @@ where
                     // records that we wrote key K at time T, so delete key K at time T-1. Recursively, this will ensure
                     // that no keys are pruned that are still live, and all old keys are pruned as soon as possible.
                     let mut key = key.into_versioned_key();
-                    let previous_version = key.1.saturating_sub(1);
+                    let Some(previous_version) = key.1.checked_sub(1) else {
+                        continue;
+                    };
                     let prev_written_version =
                         user.get_version_for_key(&key.0, previous_version)?;
+
                     keys_inspected += 1;
                     if let Some(previous_version) = prev_written_version {
                         key.1 = previous_version;
@@ -217,7 +220,9 @@ where
                     keys_inspected += 1;
                     // Prune the historical state table.
                     let mut key = key.into_versioned_key();
-                    let previous_version = key.1.saturating_sub(1);
+                    let Some(previous_version) = key.1.checked_sub(1) else {
+                        continue;
+                    };
                     let prev_written_version =
                         kernel.get_version_for_key(&key.0, previous_version)?;
                     keys_inspected += 1;
