@@ -318,6 +318,18 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let mut db = RocksDbBackend::new(dir.path()).await.unwrap();
 
+        // Allocate batch once.
+        let mut txs = vec![];
+        let mut tx_hashes = vec![];
+        for i in 0..10 {
+            let tx = FullyBakedTx {
+                data: vec![i as u8; 200],
+            };
+            let tx_hash = HexString([i as u8; 32]);
+            txs.push(tx);
+            tx_hashes.push(tx_hash);
+        }
+
         // Trigger `iters` batches of 10 txs. Ensure that performance stays reasonable
         for batch in 0u64..iters {
             db.begin_rollup_block(
@@ -329,18 +341,10 @@ mod tests {
             .await
             .unwrap();
 
-            let mut txs = vec![];
-            let mut tx_hashes = vec![];
-            for i in 0..10 {
-                let tx = FullyBakedTx {
-                    data: vec![i as u8; 200],
-                };
-                let tx_hash = HexString([i as u8; 32]);
-                db.add_tx(SequenceNumber::from(batch), i, tx.clone(), tx_hash)
+            for (i, (tx, tx_hash)) in txs.iter().zip(tx_hashes.iter()).enumerate() {
+                db.add_tx(SequenceNumber::from(batch), i as u64, tx.clone(), *tx_hash)
                     .await
                     .unwrap();
-                txs.push(tx);
-                tx_hashes.push(tx_hash);
             }
             let batch_to_store = BatchToStore {
                 sequence_number: SequenceNumber::from(batch),
