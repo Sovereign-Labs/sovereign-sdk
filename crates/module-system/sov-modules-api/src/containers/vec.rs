@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use sov_state::codec::BorshCodec;
 use sov_state::namespaces::{Accessory, CompileTimeNamespace, Kernel, User};
-use sov_state::{EncodeLike, Prefix, StateCodec, StateItemCodec};
+use sov_state::{EncodeLike, Prefix, StateCodec, StateItemCodec, StateItemDecoder};
 use thiserror::Error;
 use unwrap_infallible::UnwrapInfallible;
 
@@ -320,6 +320,25 @@ where
     }
 }
 
+impl< V, Codec> NamespacedStateVec<Accessory, V, Codec>
+where
+    Codec: StateCodec,
+    Codec::ValueCodec: StateItemCodec<V> + StateItemCodec<u64>,
+    Codec::KeyCodec: StateItemCodec<u64>,
+{
+    /// Pushes a value to the end of the vector without requiring read access to the length.
+    pub fn push_accessory<Vq, W>(&mut self, value: &Vq, state: &mut W) -> Result<(), <W as StateWriter<Accessory>>::Error> 
+    where W: StateWriter<Accessory>, Vq: ?Sized, Codec::ValueCodec: EncodeLike<Vq, V>{
+        let len_key = self.len_value.slot_key();
+        let index = if let Some(len_bytes)= state.get_value(Accessory::NAMESPACE, &len_key) {
+          self.len_value.codec().value_codec().decode_unwrap(len_bytes.value())
+        } else {
+            0
+        };
+        self.len_value.set(&index.saturating_add(1), state)?;
+        self.elems.set(&index, value, state)
+    }
+}
 /// An [`Iterator`] over a state vector.
 ///
 /// See [`NamespacedStateVec::iter`] for more details.
