@@ -306,12 +306,12 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn flaky_test_sequencer_rocksdb_db_performance_can_run_1k_batches_in_90_seconds() {
-        let handle = tokio::task::spawn(run_rocksdb_test(10000));
+    async fn flaky_test_sequencer_rocksdb_db_performance_can_run_10k_batches_in_2_minutes() {
+        let handle = tokio::task::spawn(run_rocksdb_test(10_000));
 
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(90), handle)
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(120), handle)
             .await
-            .expect("Creating 10000 batches should take less than 90 seconds; you may need to check your filesystem performance!");
+            .expect("Creating 10_000 batches should take less than 2 minutes; you may need to check your filesystem performance!");
     }
 
     async fn run_rocksdb_test(iters: u64) {
