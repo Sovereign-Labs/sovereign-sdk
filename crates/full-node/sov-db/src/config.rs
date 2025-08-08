@@ -57,7 +57,7 @@ impl RollupDbConfig {
             path,
             user_commit_concurrency: Some(4),
             user_hashtable_buckets: Some(if cfg!(debug_assertions) {
-                2_500
+                2_500 // 9.77MB
             } else {
                 15_000_000
             }),
@@ -94,8 +94,10 @@ impl RollupDbConfig {
                 .expect("`kernel_commit_concurrency` concurrency must be set"),
         );
         if cfg!(debug_assertions) {
+            // 9.77MB
             opts.hashtable_buckets(2_500);
         } else {
+            // 1000MB
             opts.hashtable_buckets(self.kernel_hashtable_buckets.unwrap_or(256_000));
         }
         if let Some(preallocate_ht) = self.kernel_preallocate_ht {
