@@ -169,7 +169,8 @@ where
         let first_unprocessed_height_at_startup = sync_state
             .synced_da_height
             .load(std::sync::atomic::Ordering::Acquire)
-            + 1;
+            .checked_add(1)
+            .expect("The impossible happened  first_unprocessed_height_at_startup overflowed");
 
         debug!(
             %runner_config.genesis_height,
