@@ -22,3 +22,6 @@ revm = { workspace = true, features = [
 reth-primitives = { workspace = true, features = ["secp256k1"] }
 reth-rpc-types = { workspace = true }
 secp256k1 = { workspace = true }
+sha2 = { workspace = true }
+rand_chacha = { workspace = true }
+arbitrary = { workspace = true }

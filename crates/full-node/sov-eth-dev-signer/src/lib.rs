@@ -3,12 +3,16 @@
 
 use std::collections::HashMap;
 
+use arbitrary::Arbitrary;
 use reth_primitives::{
-    sign_message, Transaction, TransactionSigned, TxEip1559, TxEip2930, TxEip4844, TxLegacy,
+    sign_message, Bytes, Transaction, TransactionSigned, TxEip1559, TxEip2930, TxEip4844, TxKind, TxLegacy, U256
 };
-use reth_rpc_types::TypedTransactionRequest;
+use reth_rpc_types::{transaction::EIP1559TransactionRequest, AccessList, TypedTransactionRequest};
 use revm::primitives::{Address, B256};
-use secp256k1::{PublicKey, SecretKey};
+use secp256k1::{rand::{RngCore, SeedableRng}, PublicKey};
+pub use secp256k1::{SecretKey};
+use sha2::Digest;
+
 
 /// Ethereum transaction signer.
 #[derive(Clone)]
@@ -74,6 +78,127 @@ impl DevSigner {
     /// List of signers.
     pub fn signers(&self) -> Vec<Address> {
         self.signers.keys().copied().collect()
+    }
+
+
+}
+
+/// Transfer generator.
+pub struct TransferGenerator {
+    key: SecretKey,
+    randomness: Vec<u8>,
+    remaining_randomness: usize,
+    target_buffer_size: usize,
+    salt: u128,
+}
+
+
+/// Get a Vec of `num` bytes, seeded by `num` and  a salt value
+pub fn get_random_bytes(num: usize, salt: u128) -> Vec<u8> {
+    let mut output = vec![0; num];
+    randomize_buffer(&mut output, salt);
+    output
+}
+
+/// Randomize the given buffer. The rng is seeded from the buffer's length and the salt
+pub fn randomize_buffer(buffer: &mut [u8], salt: u128) {
+    // First, use the hash of a sha256 string to get a high quality rng. (Seeding yourself is hard because you need a high hamming weight!)
+    let input = format!("{}|{}", buffer.len(), salt);
+    let salt_hashed = sha2::Sha256::digest(input);
+    let mut rng = rand_chacha::ChaChaRng::from_seed(salt_hashed.into());
+    rng.fill_bytes(buffer);
+}
+
+/// Setup generation with the given params
+pub fn setup_harness(rng_salt: u128, key: SecretKey) -> TransferGenerator {
+    let random_bytes: Vec<u8> = get_random_bytes(100_000, rng_salt);
+    let u = &mut arbitrary::Unstructured::new(&random_bytes[..]);
+    let remaining_randomness = u.len();
+    TransferGenerator {
+        randomness: random_bytes,
+        remaining_randomness,
+        key,
+        target_buffer_size: 100_000,
+        salt: rng_salt,
+    }
+}
+
+impl TransferGenerator {
+    /// Set up a new transfer generator
+    pub fn new(key: SecretKey, salt: u128) -> Self {
+        setup_harness(salt, key)
+    }
+
+
+    /// Generate a transfer transaction.
+    pub fn generate(
+        &mut self,
+        nonce: u64,
+    ) -> TransactionSigned {
+        for _ in 0..20 {
+            if self.has_enough_randomness() {
+                let u =
+                    &mut arbitrary::Unstructured::new(&self.randomness[self.randomness_offset()..]);
+
+                if let Ok(output) = self.generate_min_transfer(nonce, u) {
+                    self.remaining_randomness = u.len();
+                    return output;
+                } else {
+                    self.target_buffer_size *= 2;
+                }
+            }
+            self.re_randomize();
+        }
+        unreachable!("Could not get enough randomness to generate a transaction");
+    }
+
+    fn re_randomize(&mut self) {
+        if self.randomness.len() < self.target_buffer_size {
+            self.randomness = vec![0; self.target_buffer_size];
+        }
+        randomize_buffer(&mut self.randomness[..], self.salt);
+        self.remaining_randomness = self.randomness.len();
+        self.salt += 1;
+    }
+
+    fn randomness_offset(&self) -> usize {
+        self.randomness.len() - self.remaining_randomness
+    }
+
+    fn has_enough_randomness(&self) -> bool {
+        self.remaining_randomness > std::cmp::min(1000, self.target_buffer_size / 10)
+    }
+
+    /// Generate a transfer transaction.
+    fn generate_min_transfer(&self, nonce: u64, u: &mut arbitrary::Unstructured<'_>) -> Result<TransactionSigned, arbitrary::Error> {
+
+        let to: [u8;20] = Arbitrary::arbitrary(u)?;
+        let value = 1;
+        let request = TypedTransactionRequest::EIP1559(EIP1559TransactionRequest {
+            chain_id: 4321,
+            nonce,
+            value: U256::from_limbs([value, 0, 0, 0]),
+            input: Bytes::new(),
+            max_priority_fee_per_gas: U256::ZERO,
+            max_fee_per_gas: U256::from_limbs([1000, 0, 0, 0]),
+            gas_limit: U256::from_limbs([u64::MAX, 0, 0, 0]),
+            kind: TxKind::Call(Address::from_slice(&to)),
+            access_list: AccessList::default(),
+        });
+
+        let transaction =
+            to_primitive_transaction(request).expect("Invalid transaction request");
+        let tx_signature_hash = transaction.signature_hash();
+        let signer = self.key;
+
+        let signature = sign_message(B256::from_slice(signer.as_ref()), tx_signature_hash)
+            .expect("Could not sign");
+
+        Ok(TransactionSigned::from_transaction_and_signature(
+            transaction,
+            signature,
+        ))
+
     }
 }
 
