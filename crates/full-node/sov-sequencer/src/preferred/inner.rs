@@ -10,7 +10,7 @@ use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::{
-    DaSyncState, FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, StateUpdateInfo,
+    FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, StateUpdateInfo,
     VersionReader, VisibleSlotNumber,
 };
 use sov_state::{NativeStorage, Storage};
@@ -701,7 +701,6 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     SequencerConditions {
         resp: oneshot::Sender<PreferredSeqOperation<S, Rt>>,
         info: StateUpdateInfo<S::Storage>,
-        da_sync_state: Arc<DaSyncState>,
         next_sequence_number_according_to_node: u64,
         reason: &'static str,
     },
@@ -752,7 +751,6 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     },
     WaitNodeResync {
         info: StateUpdateInfo<S::Storage>,
-        da_sync_state: Arc<DaSyncState>,
         reason: &'static str,
     },
     #[cfg(feature = "test-utils")]
@@ -908,7 +906,6 @@ where
     pub(crate) async fn sequencer_conditions_msg(
         &self,
         info: &StateUpdateInfo<S::Storage>,
-        da_sync_state: Arc<DaSyncState>,
         next_sequence_number_according_to_node: u64,
         reason: &'static str,
     ) -> PreferredSeqOperation<S, Rt> {
@@ -916,7 +913,6 @@ where
         self.send(Message::SequencerConditions {
             resp,
             info: info.clone(),
-            da_sync_state,
             next_sequence_number_according_to_node,
             reason,
         })
@@ -1039,15 +1035,9 @@ where
     pub(crate) async fn wait_for_node_resync_msg(
         &self,
         info: StateUpdateInfo<S::Storage>,
-        da_sync_state: Arc<DaSyncState>,
         reason: &'static str,
     ) {
-        self.send(Message::WaitNodeResync {
-            info,
-            da_sync_state,
-            reason,
-        })
-        .await;
+        self.send(Message::WaitNodeResync { info, reason }).await;
     }
 
     /// Closes the current batch
@@ -1145,14 +1135,12 @@ where
                     Message::SequencerConditions {
                         resp,
                         info,
-                        da_sync_state,
                         next_sequence_number_according_to_node,
                         reason,
                     } => {
                         let ret = self
                             .process_sequencer_conditions(
                                 &info,
-                                da_sync_state,
                                 next_sequence_number_according_to_node,
                                 reason,
                             )
@@ -1241,13 +1229,8 @@ where
                     } => {
                         self.process_do_new_tx(tx_hash, baked_tx, reason).await;
                     }
-                    Message::WaitNodeResync {
-                        info,
-                        da_sync_state,
-                        reason,
-                    } => {
-                        self.process_wait_for_node_resync(info, da_sync_state, reason)
-                            .await;
+                    Message::WaitNodeResync { info, reason } => {
+                        self.process_wait_for_node_resync(info, reason).await;
                     }
                     #[cfg(feature = "test-utils")]
                     Message::ForceCloseCurrentBatch { reason: _reason } => {
@@ -1324,10 +1307,11 @@ where
     async fn process_sequencer_conditions(
         &mut self,
         info: &StateUpdateInfo<S::Storage>,
-        da_sync_state: Arc<DaSyncState>,
         next_sequence_number_according_to_node: u64,
         reason: &'static str,
     ) -> PreferredSeqOperation<S, Rt> {
+        let sync_status = &info.sync_status;
+
         debug!(?info, "Processing state update info from update_state");
         let mut inner = self.get_inner_with_timing(reason).await;
         let next_sequence_number = inner.sequence_number_of_next_blob;
@@ -1353,7 +1337,7 @@ where
             t.submit(fetch_batches_to_replay_metrics);
         });
 
-        let distance = da_sync_state.status().distance();
+        let distance = sync_status.distance();
 
         let condition_nodes_sequence_number_is_fresher =
             next_sequence_number_according_to_node > next_sequence_number;
@@ -1389,16 +1373,16 @@ where
             (true, _, false, false) => {
                 warn!("The node has a higher sequence number than the sequencer, but we're very close to the chain tip, i.e. we don't expect to be simply syncing. This could mean there is another preferred sequencer running (which is not supported and will likely lead to issues), or you very recently restarted the node and there's still some in-flight blobs. Resyncing to the chain tip.");
                 inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
-                    target_da_height: da_sync_state.target_da_height.load(Ordering::Relaxed),
-                    synced_da_height: da_sync_state.synced_da_height.load(Ordering::Relaxed),
+                    target_da_height: sync_status.target_da_height(),
+                    synced_da_height: sync_status.synced_da_height(),
                 });
                 PreferredSeqOperation::WaitForNodeResyncToTip
             }
             (_, _, true, _) => {
                 warn!(?distance, "The sequencer must pause because the node has lagged behind the DA blockchain. This might lead to a brief downtime for users.");
                 inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
-                    target_da_height: da_sync_state.target_da_height.load(Ordering::Relaxed),
-                    synced_da_height: da_sync_state.synced_da_height.load(Ordering::Relaxed),
+                    target_da_height: sync_status.target_da_height(),
+                    synced_da_height: sync_status.synced_da_height(),
                 });
                 PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack
             }
@@ -1706,14 +1690,13 @@ where
     async fn process_wait_for_node_resync(
         &mut self,
         info: StateUpdateInfo<S::Storage>,
-        da_sync_state: Arc<DaSyncState>,
         reason: &'static str,
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
         let mut rt = Rt::default();
         inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
-            target_da_height: da_sync_state.target_da_height.load(Ordering::Relaxed),
-            synced_da_height: da_sync_state.synced_da_height.load(Ordering::Relaxed),
+            target_da_height: info.sync_status.target_da_height(),
+            synced_da_height: info.sync_status.synced_da_height(),
         });
 
         let node_sequence_number = get_next_sequence_number_according_to_node(&info, &mut rt);

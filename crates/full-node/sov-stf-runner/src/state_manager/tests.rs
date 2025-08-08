@@ -1024,10 +1024,6 @@ where
     let genesis_header = MockBlockHeader::from_height(0);
     let (stf_state, ledger_state) = storage_manager.create_state_after(&genesis_header)?;
     let ledger_db = LedgerDb::with_reader(ledger_state)?;
-    let update_info = query_state_update_info(&ledger_db, stf_state).await?;
-
-    // Update channel, receiver does not need to be alive
-    let (state_update_sender, _state_update_recv) = watch::channel(update_info);
 
     let (sync_status_sender, _rec) = tokio::sync::watch::channel(SyncStatus::START);
 
@@ -1036,6 +1032,10 @@ where
         target_da_height: AtomicU64::new(u64::MAX),
         sync_status_sender,
     });
+
+    let update_info = query_state_update_info(&ledger_db, stf_state, sync_state.as_ref()).await?;
+    // Update channel, receiver does not need to be alive
+    let (state_update_sender, _state_update_recv) = watch::channel(update_info);
 
     let mut state_manager = StateManager::new(
         storage_manager,

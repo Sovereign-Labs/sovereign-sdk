@@ -138,7 +138,8 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             vec![]
         };
 
-        let state_update_info = query_state_update_info(&ledger_db, stf_state).await?;
+        let state_update_info =
+            query_state_update_info(&ledger_db, stf_state, da_sync_state.as_ref()).await?;
 
         let (state_update_sender, state_update_receiver) = watch::channel(state_update_info);
         let (shutdown_sender, mut shutdown_receiver) = watch::channel(());

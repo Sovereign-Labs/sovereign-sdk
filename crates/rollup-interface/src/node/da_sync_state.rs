@@ -33,6 +33,26 @@ pub enum SyncStatus {
 }
 
 impl SyncStatus {
+    /// The current height through which we've synced
+    pub fn synced_da_height(&self) -> u64 {
+        match self {
+            SyncStatus::Syncing {
+                synced_da_height, ..
+            }
+            | SyncStatus::Synced { synced_da_height } => *synced_da_height,
+        }
+    }
+
+    /// The height to which we're syncing.
+    pub fn target_da_height(&self) -> u64 {
+        match self {
+            SyncStatus::Synced { synced_da_height } => *synced_da_height,
+            SyncStatus::Syncing {
+                target_da_height, ..
+            } => *target_da_height,
+        }
+    }
+
     /// Where a node starts syncing from.
     pub const START: Self = SyncStatus::Syncing {
         synced_da_height: 0,

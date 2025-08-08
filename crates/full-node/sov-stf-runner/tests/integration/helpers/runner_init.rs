@@ -18,7 +18,7 @@ use sov_mock_da::{
 use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
 use sov_modules_api::{
-    FullyBakedTx, ProofSender, StateTransitionFunction, StateUpdateInfo, SyncStatus,
+    DaSyncState, FullyBakedTx, ProofSender, StateTransitionFunction, StateUpdateInfo, SyncStatus,
 };
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
@@ -30,6 +30,7 @@ use sov_rollup_interface::zk::Zkvm;
 use sov_sequencer::standard::StdSequencerConfig;
 use sov_sequencer::{react_to_state_updates, SequencerConfig, SequencerKindConfig};
 use sov_state::{DefaultStorageSpec, NativeStorage, ProverStorage};
+use sov_stf_runner::make_da_sync_state;
 use sov_stf_runner::processes::{
     start_zk_workflow_in_background, ParallelProverService, RollupProverConfigDiscriminants,
 };
@@ -151,12 +152,13 @@ impl ProofSender for MockProofSender {
 // Returns genesis state root, prev state root for given init variant and initial value for state update info.
 pub async fn bootstrap_state_update_info(
     storage_manager: &mut StorageManager,
+    da_sync_state: &DaSyncState,
 ) -> anyhow::Result<StateUpdateInfo<ProverStorage<S>>> {
     let genesis_block_header = MockBlockHeader::from_height(0);
     let (stf_storage, ledger_state) = storage_manager.create_state_after(&genesis_block_header)?;
     let ledger_db = LedgerDb::with_reader(ledger_state)?;
 
-    query_state_update_info(&ledger_db, stf_storage).await
+    query_state_update_info(&ledger_db, stf_storage, da_sync_state).await
 }
 
 pub async fn initialize_runner(
@@ -172,15 +174,31 @@ pub async fn initialize_runner(
     let verifier = MockDaVerifier::default();
 
     let rollup_config = rollup_config(&da_service, path, aggregated_proof_block_jump);
+
     let mut storage_manager: StorageManager = NativeStorageManager::new(path).unwrap();
 
+    let finalized_header = da_service.get_last_finalized_block_header().await.unwrap();
+    let (_, ledger_state) = storage_manager
+        .create_state_after(&finalized_header)
+        .unwrap();
+    let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
+    let (sync_sender, _sync_status_receiver) = watch::channel(SyncStatus::START);
+
+    let da_sync_state = make_da_sync_state(
+        &rollup_config.runner,
+        None,
+        &ledger_db,
+        da_service.as_ref(),
+        sync_sender,
+    )
+    .await
+    .unwrap();
     let (state_update_sender, state_update_recv) = watch::channel(
-        bootstrap_state_update_info(&mut storage_manager)
+        bootstrap_state_update_info(&mut storage_manager, da_sync_state.as_ref())
             .await
             .unwrap(),
     );
 
-    let (sync_sender, _sync_status_receiver) = watch::channel(SyncStatus::START);
     let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
     shutdown_receiver.mark_unchanged();
 
@@ -188,12 +206,6 @@ pub async fn initialize_runner(
         .initialize(&stf, &mut storage_manager)
         .await
         .unwrap();
-
-    let finalized_header = da_service.get_last_finalized_block_header().await.unwrap();
-    let (_, ledger_state) = storage_manager
-        .create_state_after(&finalized_header)
-        .unwrap();
-    let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
 
     let mut tasks = JoinSet::new();
 
@@ -227,12 +239,12 @@ pub async fn initialize_runner(
         storage_manager,
         state_update_sender,
         prev_state_root,
-        sync_sender,
         Box::new(InfiniteHeight),
         shutdown_receiver.clone(),
         rollup_config.monitoring.clone(),
         None,
         None,
+        da_sync_state,
     )
     .await
     .unwrap();

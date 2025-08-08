@@ -164,4 +164,6 @@ pub struct StateUpdateInfo<StfState> {
     pub slot_number: SlotNumber,
     /// The latest slot number that was finalized.
     pub latest_finalized_slot_number: SlotNumber,
+    ///  The node's sync status at the time this `StateUpdateInfo` was created.
+    pub sync_status: crate::node::SyncStatus,
 }

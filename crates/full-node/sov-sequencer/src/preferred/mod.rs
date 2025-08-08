@@ -52,7 +52,6 @@ use sov_modules_api::{
 use sov_rest_utils::errors::{database_error_500, sequencer_overloaded_503};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::DaSyncState;
 use sov_rollup_interface::TxHash;
 use state_root_compute::StateRootBackgroundTaskState;
 use tokio::sync::mpsc::{self};
@@ -94,7 +93,6 @@ where
     tx_status_manager: TxStatusManager<S::Da>,
     blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
     api_state: ApiState<S>,
-    da_sync_state: Arc<DaSyncState>,
     _runtime: PhantomData<(Rt, Da)>,
     config: SequencerConfig<S::Address, PreferredSequencerConfig>,
 
@@ -125,7 +123,6 @@ where
     pub async fn create(
         da: Da,
         state_update_receiver: StateUpdateReceiver<S::Storage>,
-        da_sync_state: Arc<DaSyncState>,
         storage_path: &Path,
         config: &SequencerConfig<S::Address, PreferredSequencerConfig>,
         ledger_db: LedgerDb,
@@ -285,7 +282,6 @@ where
             tx_status_manager: tx_status_manager.clone(),
             transaction_cache: cached_txs,
             blobs_sender_channel,
-            da_sync_state,
             api_state,
             _runtime: PhantomData,
             config: config.clone(),
@@ -379,14 +375,20 @@ where
             // 1. Dump our catchup batches once every DA block to fast-forward the
             //    visible_slot_number
             for i in 1..=max_batches_to_send {
-                let start_height = self.da_sync_state.target_da_height.load(Ordering::Relaxed);
+                let start_height = info.sync_status.target_da_height();
                 loop {
-                    let new_height = self.da_sync_state.target_da_height.load(Ordering::Relaxed);
+                    let new_height = info.sync_status.target_da_height();
                     if new_height > start_height {
                         break;
                     } else {
                         tokio::time::sleep(Duration::from_millis(100)).await;
                     }
+                    info = poll_state_update::<S>(
+                        state_update_receiver,
+                        shutdown_receiver,
+                        "update_state_task",
+                    )
+                    .await?;
                 }
                 if i % 10 == 0 {
                     tracing::info!(number = %i, min = %min_batches_to_send, max = %max_batches_to_send, "Sending catchup batch");
@@ -473,10 +475,10 @@ where
         let mut info = current_info;
 
         loop {
-            let is_synced = self.da_sync_state.status().distance() <= distance_to_tip;
+            let is_synced = info.sync_status.distance() <= distance_to_tip;
 
             self.synchronized_state_updator
-                .wait_for_node_resync_msg(info, self.da_sync_state.clone(), "wait_for_node_resync")
+                .wait_for_node_resync_msg(info, "wait_for_node_resync")
                 .await;
 
             // Exit after processing if we're synced
@@ -642,7 +644,6 @@ where
         .synchronized_state_updator
         .sequencer_conditions_msg(
             &info,
-            seq.da_sync_state.clone(),
             next_sequence_number_according_to_node,
             "update_state::fetch_initial_batches_to_replay",
         )

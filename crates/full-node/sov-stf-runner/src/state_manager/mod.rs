@@ -449,7 +449,9 @@ where
         ledger_state: DeltaReader,
     ) -> anyhow::Result<()> {
         self.ledger_db.replace_reader(ledger_state);
-        let state_update_info = query_state_update_info(&self.ledger_db, stf_state).await?;
+        let state_update_info =
+            query_state_update_info(&self.ledger_db, stf_state, self.da_sync_state.as_ref())
+                .await?;
 
         // `send_replace` is superior to `send` for our use case. It never fails
         // because it doesn't need to notify all receivers, unlike `send`, which
