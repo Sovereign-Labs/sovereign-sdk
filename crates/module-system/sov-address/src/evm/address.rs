@@ -3,12 +3,9 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::macros::UniversalWallet;
-#[cfg(feature = "evm")]
-use sov_modules_api::HexHash;
 use sov_rollup_interface::common::HexString;
 use sov_rollup_interface::crypto::CredentialId;
 use sov_rollup_interface::BasicAddress;
-use sov_modules_api::hyperlane::{HyperlaneAddress};
 
 use crate::evm::public_key::EthereumPublicKey;
 use crate::{MultiAddress, Not28Bytes};
@@ -131,31 +128,6 @@ impl schemars::JsonSchema for EthereumAddress {
             "description": "20 bytes in hexadecimal format, with `0x` prefix.",
         }))
         .unwrap()
-    }
-}
-
-
-impl HyperlaneAddress for EthereumAddress {
-    fn to_sender(&self) -> HexHash {
-        const START_INDEX: usize = 32 - 20; // EthereumAddress is 20 bytes
-                                            // Pad the address with leading zeros to 32 bytes. This is the hyperlane convention
-        let mut bytes = [0u8; 32];
-        bytes[START_INDEX..].copy_from_slice(self.as_ref());
-        bytes.into()
-    }
-
-    fn from_sender(recipient: HexHash) -> anyhow::Result<Self> {
-        const START_INDEX: usize = 32 - 20;
-        // Check that the address is padded with leading zeros to match the hyperlane convention.
-        let (padding, address) = recipient.0.split_at(START_INDEX);
-
-        // Ensure padding is all zeros:
-        anyhow::ensure!(
-            padding.iter().all(|&byte| byte == 0),
-            "Invalid address - not enough leading zeros"
-        );
-
-        Self::try_from(address)
     }
 }
 
