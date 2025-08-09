@@ -320,18 +320,29 @@ where
     }
 }
 
-impl< V, Codec> NamespacedStateVec<Accessory, V, Codec>
+impl<V, Codec> NamespacedStateVec<Accessory, V, Codec>
 where
     Codec: StateCodec,
     Codec::ValueCodec: StateItemCodec<V> + StateItemCodec<u64>,
     Codec::KeyCodec: StateItemCodec<u64>,
 {
     /// Pushes a value to the end of the vector without requiring read access to the length.
-    pub fn push_accessory<Vq, W>(&mut self, value: &Vq, state: &mut W) -> Result<(), <W as StateWriter<Accessory>>::Error> 
-    where W: StateWriter<Accessory>, Vq: ?Sized, Codec::ValueCodec: EncodeLike<Vq, V>{
+    pub fn push_accessory<Vq, W>(
+        &mut self,
+        value: &Vq,
+        state: &mut W,
+    ) -> Result<(), <W as StateWriter<Accessory>>::Error>
+    where
+        W: StateWriter<Accessory>,
+        Vq: ?Sized,
+        Codec::ValueCodec: EncodeLike<Vq, V>,
+    {
         let len_key = self.len_value.slot_key();
-        let index = if let Some(len_bytes)= state.get_value(Accessory::NAMESPACE, &len_key) {
-          self.len_value.codec().value_codec().decode_unwrap(len_bytes.value())
+        let index = if let Some(len_bytes) = state.get_value(Accessory::NAMESPACE, &len_key) {
+            self.len_value
+                .codec()
+                .value_codec()
+                .decode_unwrap(len_bytes.value())
         } else {
             0
         };
