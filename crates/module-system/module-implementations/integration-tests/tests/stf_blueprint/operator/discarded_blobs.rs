@@ -42,6 +42,6 @@ fn invalid_blobs_are_discarded() {
     let (result, _) = runner.execute::<RelevantBlobs<MockBlob>>(blobs);
 
     // Check that the blob was discarded
-    assert_eq!(result.discarded_blobs[0], HexString(mock_blob_hash.0));
+    assert_eq!(result.discarded_blobs[0].hash, HexString(mock_blob_hash.0));
     assert!(result.batch_receipts.is_empty());
 }

@@ -2,7 +2,7 @@ use crate::{
     as_u32_or_panic, InjectedControlFlow, IterableBatchWithId, KernelStateAccessor, SelectedBlob,
     Spec,
 };
-use sov_rollup_interface::common::{HexHash, SlotNumber};
+use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec, RelevantBlobIters};
 use sov_rollup_interface::stf::DiscardedBlob;
 
