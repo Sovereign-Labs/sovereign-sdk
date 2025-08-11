@@ -38,7 +38,7 @@ use preferred_blob_sender::PreferredBlobSender;
 use replica_sync_task::spawn_replica_sync_task;
 use serde_with::serde_as;
 use side_effects::SideEffectsTask;
-use sov_blob_sender::{new_blob_id, BlobExecutionStatus, BlobSender};
+use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::capabilities::{BlobSelector, RollupHeight, TransactionAuthenticator};
@@ -64,13 +64,12 @@ use transaction_subscriptions::TransactionCache;
 use crate::common::{
     error_not_fully_synced, generic_accept_tx_error, loop_send_tx_notifications, poll_state_update,
     AcceptedTx, Sequencer, SequencerEventStream, StateUpdateError, StateUpdateNotification,
-    TxStatusBlobSenderHooks, WithCachedTxHashes,
+    WithCachedTxHashes,
 };
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerFetchBatchesToReplayMetrics};
 use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
 use crate::preferred::db::DbEvent;
 use crate::preferred::executor_events::ExecutorEventsSender;
-use crate::preferred::preferred_blob_sender::create_blobs_to_send;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::rest_api::ApiAcceptedTx;
 use crate::{
@@ -171,6 +170,7 @@ where
             } else {
                 Box::new(RocksDbBackend::new(storage_path).await?)
             };
+
         let (db, latest_db_event_id, next_sequence_number, db_cache) =
             PreferredSequencerDb::<S, Rt>::new(
                 db_backend,
@@ -181,35 +181,22 @@ where
 
         let mut handles = vec![];
 
-        let completed_blobs = db_cache.all_completed_blobs();
-
         let blob_sender = {
-            let blobs_to_send = if config.sequencer_kind_config.is_replica {
-                Vec::new()
-            } else {
-                // It's possible that sov-blob-sender's DB might miss some blob data at
-                // node startup due to:
-                //  1. Disk failure (the sequencer can use Postgres so it's durable).
-                //  2. DB corruption.
-                //  3. Node crash at an inconvenient time.
-                // Let's restore all missing blob data to make sure they land on the DA.
-                create_blobs_to_send(completed_blobs)?
-            };
-
-            let (inner_blob_sender, blob_sender_handle) = BlobSender::new(
+            let (blob_sender, blob_sender_handle) = PreferredBlobSender::new(
                 da,
                 ledger_db.clone(),
+                &db_cache,
                 storage_path,
-                TxStatusBlobSenderHooks::new(tx_status_manager.clone()),
+                tx_status_manager.clone(),
                 shutdown_sender.clone(),
                 Duration::from_secs(config.blob_processing_timeout_secs),
-                Some(blobs_sender_channel.clone()),
-                blobs_to_send,
+                blobs_sender_channel.clone(),
+                config.sequencer_kind_config.is_replica,
             )
             .await?;
 
             handles.push(blob_sender_handle);
-            PreferredBlobSender::new(inner_blob_sender, config.sequencer_kind_config.is_replica)
+            blob_sender
         };
 
         let (state_root_compute_handle, state_root_compute_task) =

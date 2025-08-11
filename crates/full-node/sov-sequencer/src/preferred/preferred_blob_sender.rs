@@ -1,13 +1,23 @@
-use std::sync::{atomic::AtomicUsize, Arc};
+use std::{
+    path::Path,
+    sync::{atomic::AtomicUsize, Arc},
+};
 
+use sov_blob_sender::BlobExecutionStatus;
 use sov_blob_sender::{BlobInternalId, BlobSender, BlobToSend};
 use sov_blob_storage::{PreferredBatchData, PreferredProofData};
 use sov_db::ledger_db::LedgerDb;
 use sov_rollup_interface::node::da::DaService;
+use tokio::sync::broadcast;
+use tokio::sync::watch;
+use tokio::task::JoinHandle;
+use tokio::time::Duration;
 use tracing::debug;
 
 use super::db::{PreferredSequencerReadBatch, PreferredSequencerReadBlob};
-use crate::common::TxStatusBlobSenderHooks;
+use crate::{
+    common::TxStatusBlobSenderHooks, preferred::db::PreferredSequencerCache, TxStatusManager,
+};
 
 /// Wrapper around [`BlobSender`] with preferred blob -specific logic.
 pub struct PreferredBlobSender<Da: DaService> {
@@ -16,11 +26,42 @@ pub struct PreferredBlobSender<Da: DaService> {
 }
 
 impl<Da: DaService> PreferredBlobSender<Da> {
-    pub(crate) fn new(
-        inner: BlobSender<Da, TxStatusBlobSenderHooks<Da::Spec>, LedgerDb>,
+    pub(crate) async fn new(
+        da: Da,
+        ledger_db: LedgerDb,
+        db_cache: &PreferredSequencerCache,
+        storage_path: &Path,
+        tx_status_manager: TxStatusManager<Da::Spec>,
+        shutdown_sender: watch::Sender<()>,
+        blob_processing_timeout: Duration,
+        blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
         is_replica: bool,
-    ) -> Self {
-        Self { inner, is_replica }
+    ) -> anyhow::Result<(Self, JoinHandle<()>)> {
+        let blobs_to_send = if is_replica {
+            Vec::new()
+        } else {
+            // It's possible that sov-blob-sender's DB might miss some blob data at
+            // node startup due to:
+            //  1. Disk failure (the sequencer can use Postgres so it's durable).
+            //  2. DB corruption.
+            //  3. Node crash at an inconvenient time.
+            // Let's restore all missing blob data to make sure they land on the DA.
+            create_blobs_to_send(db_cache.all_completed_blobs())?
+        };
+
+        let (inner, blob_sender_handle) = BlobSender::new(
+            da,
+            ledger_db,
+            storage_path,
+            TxStatusBlobSenderHooks::new(tx_status_manager),
+            shutdown_sender,
+            blob_processing_timeout,
+            Some(blobs_sender_channel),
+            blobs_to_send,
+        )
+        .await?;
+
+        Ok((Self { inner, is_replica }, blob_sender_handle))
     }
 
     pub(crate) async fn publish_proof(
