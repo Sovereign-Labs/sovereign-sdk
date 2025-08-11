@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{atomic::AtomicUsize, Arc};
 
 use sov_blob_sender::{BlobInternalId, BlobSender, BlobToSend};
 use sov_blob_storage::{PreferredBatchData, PreferredProofData};
@@ -10,10 +10,9 @@ use super::db::{PreferredSequencerReadBatch, PreferredSequencerReadBlob};
 use crate::common::TxStatusBlobSenderHooks;
 
 /// Wrapper around [`BlobSender`] with preferred blob -specific logic.
-#[derive(derive_more::Deref, derive_more::From)]
+#[derive(derive_more::From)]
 pub struct PreferredBlobSender<Da: DaService> {
     inner: BlobSender<Da, TxStatusBlobSenderHooks<Da::Spec>, LedgerDb>,
-    #[deref(ignore)]
     is_replica: bool,
 }
 
@@ -71,6 +70,14 @@ impl<Da: DaService> PreferredBlobSender<Da> {
             }
         }
         Ok(())
+    }
+
+    pub(crate) fn nb_of_in_flight_blobs(&self) -> Arc<AtomicUsize> {
+        self.inner.nb_of_in_flight_blobs_handle()
+    }
+
+    pub(crate) fn hooks(&self) -> &TxStatusBlobSenderHooks<Da::Spec> {
+        self.inner.hooks()
     }
 }
 

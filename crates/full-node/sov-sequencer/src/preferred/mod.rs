@@ -230,7 +230,7 @@ where
 
         let (executor_events_sender, executor_events_receiver) =
             ExecutorEventsSender::new(shutdown_sender.clone(), db_cache);
-        let in_flight_blobs = blob_sender.nb_of_in_flight_blobs_handle();
+        let in_flight_blobs = blob_sender.nb_of_in_flight_blobs();
 
         // Here we need to mutliply by 1000 to convert from millis to micros.
         let batch_execution_time_limit_micros = config
