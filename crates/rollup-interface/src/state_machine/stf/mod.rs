@@ -11,6 +11,9 @@ mod proof_sender;
 mod transaction;
 mod verifier;
 
+use borsh::BorshDeserialize;
+use borsh::BorshSerialize;
+
 use std::fmt::{Debug, Display};
 
 pub use events::*;
@@ -162,7 +165,7 @@ type ProofReceipts<Address, Da, StateRoot, StorageProof> =
     Vec<ProofReceipt<Address, Da, StateRoot, StorageProof>>;
 
 /// The reason that a blob was discarded
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize)]
 pub enum BlobDiscardReason {
     /// The sequencer sent a blob with an old sequencer number that we've already processed.
     SequenceNumberTooLow,
@@ -182,7 +185,7 @@ pub enum BlobDiscardReason {
 }
 
 /// TODO
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct DiscardedBlob {
     /// TODO
     pub hash: HexHash,

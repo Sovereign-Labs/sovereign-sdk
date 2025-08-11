@@ -341,7 +341,7 @@ impl LedgerDb {
         blob: StoredDiscardedBlob,
         schema_batch: &mut SchemaBatch,
     ) -> anyhow::Result<()> {
-        schema_batch.put::<DiscardedBlobByHash>(&blob.hash, &blob)
+        schema_batch.put::<DiscardedBlobByHash>(&blob.discarded_blob.hash.0, &blob)
     }
 
     fn put_transaction(
@@ -419,10 +419,10 @@ impl LedgerDb {
             current_item_numbers.batch_number += 1;
         }
 
-        for dicarded_blob in data_to_commit.discarded_blobs.into_iter() {
+        for discarded_blob in data_to_commit.discarded_blobs.into_iter() {
             self.put_discarded_blob(
                 StoredDiscardedBlob {
-                    hash: dicarded_blob.hash.0,
+                    discarded_blob,
                     slot_number,
                 },
                 &mut schema_batch,
