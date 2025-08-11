@@ -89,7 +89,7 @@ pub struct StoredStfInfo {
 /// The on-disk format for a discarded blob.
 #[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct StoredDiscardedBlob {
-    /// The blob hash.
+    /// The discarded blob data.
     pub discarded_blob: DiscardedBlob,
     /// This blobs's parent slot number.
     pub slot_number: SlotNumber,

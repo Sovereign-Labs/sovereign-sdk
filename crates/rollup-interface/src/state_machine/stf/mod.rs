@@ -184,12 +184,12 @@ pub enum BlobDiscardReason {
     EmergencyRegistrationTooLarge,
 }
 
-/// TODO
+/// The discarded blob.
 #[derive(Debug, Clone, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct DiscardedBlob {
-    /// TODO
+    /// The blob's hash
     pub hash: HexHash,
-    /// TODO
+    /// Discard reason
     pub reason: BlobDiscardReason,
 }
 
