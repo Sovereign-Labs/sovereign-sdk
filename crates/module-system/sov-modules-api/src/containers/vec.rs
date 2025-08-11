@@ -176,7 +176,7 @@ where
         let len = self.len(state)?;
 
         self.elems_mut().set(&len, value, state)?;
-        self.set_len(len + 1, state)?;
+        self.set_len(len.checked_add(1).expect("Overflowed u64 while pushing to a state vec. This should be impossible in the lifetime of the universe."), state)?;
 
         Ok(())
     }
@@ -219,7 +219,8 @@ where
             };
 
             for i in index..new_len {
-                let next_elem = self.elems().remove(&(i + 1), state)?;
+                let next_idx = i.checked_add(1).expect("Overflowed u64 while removing from a state vec. This should be impossible in the lifetime of the universe.");
+                let next_elem = self.elems().remove(&next_idx, state)?;
                 if let Some(next_elem) = next_elem {
                     self.elems_mut().set(&i, &next_elem, state)?;
                 }
@@ -346,7 +347,7 @@ where
         } else {
             0
         };
-        self.len_value.set(&index.saturating_add(1), state)?;
+        self.len_value.set(&index.checked_add(1).expect("Overflowed u64 while pushing to a state vec. This should be impossible in the lifetime of the universe."), state)?;
         self.elems.set(&index, value, state)
     }
 }
