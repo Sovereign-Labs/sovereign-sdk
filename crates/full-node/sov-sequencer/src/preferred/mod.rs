@@ -181,23 +181,22 @@ where
 
         let mut handles = vec![];
 
-        let blob_sender = {
-            let (blob_sender, blob_sender_handle) = PreferredBlobSender::new(
-                da,
-                ledger_db.clone(),
-                &db_cache,
-                storage_path,
-                tx_status_manager.clone(),
-                shutdown_sender.clone(),
-                Duration::from_secs(config.blob_processing_timeout_secs),
-                blobs_sender_channel.clone(),
-                config.sequencer_kind_config.is_replica,
-            )
-            .await?;
+        let (blob_sender, blob_sender_handle) = PreferredBlobSender::new(
+            da,
+            ledger_db.clone(),
+            db_cache.all_completed_blobs().clone(),
+            storage_path.into(),
+            tx_status_manager.clone(),
+            shutdown_sender.clone(),
+            Duration::from_secs(config.blob_processing_timeout_secs),
+            blobs_sender_channel.clone(),
+            config.sequencer_kind_config.is_replica,
+        )
+        .await?;
 
+        if let Some(blob_sender_handle) = blob_sender_handle {
             handles.push(blob_sender_handle);
-            blob_sender
-        };
+        }
 
         let (state_root_compute_handle, state_root_compute_task) =
             StateRootBackgroundTaskState::create(
