@@ -26,12 +26,15 @@ macro_rules! inner_impl_charge_gas_state_infallible_reader {
         type Error = Infallible;
 
         fn get(&mut self, key: &SlotKey) -> Result<Option<SlotValue>, Infallible> {
-            let val = get_inner(
+            use crate::state::accessors::StateMetricsProvider;
+            let (val, size_metric, read_metric) = get_inner(
                 self,
                 <$namespace as sov_state::CompileTimeNamespace>::NAMESPACE,
                 key,
             )
             .expect("We should never fail to charge gas for infallible accessor. This is a bug!");
+            self.metrics().push(size_metric);
+            self.metrics().push(read_metric);
 
             Ok(val)
         }
@@ -175,10 +178,15 @@ impl<S: Spec, I: StateProvider<S>> AccessoryStateReader for WorkingSet<S, I> {}
 impl<S: Spec> StateReader<Accessory> for AccessoryStateCheckpoint<'_, S> {
     type Error = Infallible;
     fn get(&mut self, key: &SlotKey) -> Result<Option<SlotValue>, Self::Error> {
-        Ok(self.checkpoint.delta.get(
+        use sov_metrics::StateAccessMetric;
+        let mut metric = StateAccessMetric::new("get_accessory", key.size());
+        let res = Ok(self.checkpoint.delta.get(
             <Accessory as sov_state::CompileTimeNamespace>::NAMESPACE,
             key,
-        ))
+            &mut metric,
+        ));
+        self.checkpoint.metrics.push(metric);
+        res
     }
 
     /// Get a decoded value from the storage.

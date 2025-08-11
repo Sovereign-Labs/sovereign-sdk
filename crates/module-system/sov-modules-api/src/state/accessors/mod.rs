@@ -3,6 +3,7 @@
 use std::marker::PhantomData;
 
 use internals::RevertableWriter;
+use sov_metrics::StateMetrics;
 use sov_state::Namespace;
 
 mod access_controls;
@@ -45,13 +46,24 @@ use super::{StateReaderAndWriter, VersionReader};
 use crate::Spec;
 
 pub(super) mod seal {
+    use sov_metrics::StateAccessMetric;
     use sov_state::{Namespace, SlotKey, SlotValue};
 
     /// A helper trait allowing a type to access any namespace by their *runtime* enum variant.
     pub trait UniversalStateAccessor {
-        fn get_size(&mut self, namespace: Namespace, key: &SlotKey) -> Option<u32>;
+        fn get_size(
+            &mut self,
+            namespace: Namespace,
+            key: &SlotKey,
+            metric: &mut StateAccessMetric,
+        ) -> Option<u32>;
 
-        fn get_value(&mut self, namespace: Namespace, key: &SlotKey) -> Option<SlotValue>;
+        fn get_value(
+            &mut self,
+            namespace: Namespace,
+            key: &SlotKey,
+            metric: &mut StateAccessMetric,
+        ) -> Option<SlotValue>;
 
         fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue);
 
@@ -72,6 +84,7 @@ pub trait StateProvider<S: Spec>:
     + StateReaderAndWriter<sov_state::Kernel>
     + VersionReader
     + PerBlockCache
+    + StateMetricsProvider
 {
     /// Transforms this [`StateProvider`] into a [`TxScratchpad`].
     fn to_tx_scratchpad(self) -> TxScratchpad<S, Self>;
@@ -83,5 +96,17 @@ impl<S: Spec> StateProvider<S> for StateCheckpoint<S> {
             inner: RevertableWriter::new(self),
             phantom: PhantomData,
         }
+    }
+}
+
+/// A trait for types that provide state metrics.
+pub trait StateMetricsProvider {
+    /// Returns a mutable reference to the state metrics.
+    fn metrics(&mut self) -> &mut StateMetrics;
+}
+
+impl<S: Spec> StateMetricsProvider for StateCheckpoint<S> {
+    fn metrics(&mut self) -> &mut StateMetrics {
+        &mut self.metrics
     }
 }

@@ -1,3 +1,4 @@
+use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::{EventContainer, SlotKey, SlotValue, TypeErasedEvent};
 
@@ -5,6 +6,7 @@ use super::checkpoints::StateCheckpoint;
 use super::temp_cache::{BorshSerializedSize, CacheLookup, TempCache};
 use super::UniversalStateAccessor;
 use crate::capabilities::RollupHeight;
+use crate::state::accessors::StateMetricsProvider;
 use crate::state::traits::PerBlockCache;
 use crate::{GasMeter, Genesis, PrivilegedKernelAccessor, Spec, VersionReader};
 
@@ -52,12 +54,22 @@ impl<S: Spec> VersionReader for GenesisStateAccessor<'_, S> {
 }
 
 impl<S: Spec> UniversalStateAccessor for GenesisStateAccessor<'_, S> {
-    fn get_size(&mut self, namespace: sov_state::Namespace, key: &SlotKey) -> Option<u32> {
-        self.checkpoint.get_size(namespace, key)
+    fn get_size(
+        &mut self,
+        namespace: sov_state::Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<u32> {
+        self.checkpoint.get_size(namespace, key, metric)
     }
 
-    fn get_value(&mut self, namespace: sov_state::Namespace, key: &SlotKey) -> Option<SlotValue> {
-        self.checkpoint.get_value(namespace, key)
+    fn get_value(
+        &mut self,
+        namespace: sov_state::Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
+        self.checkpoint.get_value(namespace, key, metric)
     }
 
     fn set_value(&mut self, namespace: sov_state::Namespace, key: &SlotKey, value: SlotValue) {
@@ -71,6 +83,12 @@ impl<S: Spec> UniversalStateAccessor for GenesisStateAccessor<'_, S> {
 
 impl<S: Spec> GasMeter for GenesisStateAccessor<'_, S> {
     type Spec = S;
+}
+
+impl<S: Spec> StateMetricsProvider for GenesisStateAccessor<'_, S> {
+    fn metrics(&mut self) -> &mut StateMetrics {
+        self.checkpoint.metrics()
+    }
 }
 
 impl<S: Spec> GenesisStateAccessor<'_, S> {

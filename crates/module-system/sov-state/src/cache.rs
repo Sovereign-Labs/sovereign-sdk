@@ -206,6 +206,8 @@ mod internal {
 }
 
 use internal::CacheLog;
+#[cfg(feature = "native")]
+use sov_metrics::StateAccessMetric;
 
 /// Caches reads and writes for a (key, value) pair. On the first read the value is fetched
 /// from an external source represented by the `ValueReader` trait. On following reads,
@@ -291,6 +293,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         storage: &S,
         witness: &S::Witness,
         version: Option<sov_rollup_interface::common::SlotNumber>,
+        metric: &mut StateAccessMetric,
     ) -> anyhow::Result<Option<u32>> {
         match self.cache.get(key) {
             Some(Access::Read { original }) => Ok(original.as_ref().map(|node| node.leaf.size)),
@@ -298,6 +301,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             None => {
                 let maybe_leaf = storage.get_leaf_historical::<N>(key, version, witness)?;
                 let size = maybe_leaf.as_ref().map(|leaf| leaf.leaf.size);
+                metric.storage_read_size = size;
                 self.add_read(key.clone(), maybe_leaf);
                 Ok(size)
             }
@@ -310,6 +314,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         key: &SlotKey,
         storage: &S,
         witness: &S::Witness,
+        metric: &mut StateAccessMetric,
     ) -> Option<u32> {
         match self.cache.get(key) {
             Some(Access::Read { original }) => original.as_ref().map(|node| node.leaf.size),
@@ -317,6 +322,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             None => {
                 let maybe_leaf = storage.get_leaf::<N>(key, witness);
                 let size = maybe_leaf.as_ref().map(|leaf| leaf.leaf.size);
+                metric.storage_read_size = size;
                 self.add_read(key.clone(), maybe_leaf);
                 size
             }
@@ -329,6 +335,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         key: &SlotKey,
         storage: &S,
         witness: &S::Witness,
+        metric: &mut StateAccessMetric,
     ) -> Option<SlotValue> {
         self.get_or_fetch_with_fn(
             key,
@@ -336,6 +343,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             witness,
             |key, witness, _args| Ok::<_, Infallible>(storage.get::<N>(key, witness)),
             (),
+            metric,
         )
         .expect("Unwrapping an infallible type cannot fail")
     }
@@ -347,6 +355,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         witness: &S::Witness,
         fetch_fn: F,
         args: Args,
+        metric: &mut StateAccessMetric,
     ) -> Result<Option<SlotValue>, E>
     where
         F: Fn(&SlotKey, &S::Witness, Args) -> Result<Option<SlotValue>, E>,
@@ -363,7 +372,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                             .unwrap_or_else(|| {
                                 panic!("Invalid read for {key:?}, provided witness is invalid")
                             });
-
+                        metric.storage_read_size = Some(slot_value.size());
                         let node_leaf = NodeLeaf::make_leaf::<S::Hasher>(&slot_value);
                         assert_eq!(node.leaf, node_leaf);
 
@@ -400,6 +409,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         storage: &S,
         witness: &S::Witness,
         version: Option<sov_rollup_interface::common::SlotNumber>,
+        metric: &mut StateAccessMetric,
     ) -> anyhow::Result<Option<SlotValue>> {
         self.get_or_fetch_with_fn(
             key,
@@ -409,6 +419,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                 storage.get_historical::<N>(key, version, witness)
             },
             version,
+            metric,
         )
     }
 

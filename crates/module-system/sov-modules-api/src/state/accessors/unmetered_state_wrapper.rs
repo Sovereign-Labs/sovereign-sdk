@@ -1,11 +1,11 @@
 use std::convert::Infallible;
 
+use super::UniversalStateAccessor;
+use crate::{state::accessors::StateMetricsProvider, StateReader, StateWriter};
+use sov_metrics::StateAccessMetric;
 use sov_state::{
     CompileTimeNamespace, SlotKey, SlotValue, StateCodec, StateItemCodec, StateItemDecoder,
 };
-
-use super::UniversalStateAccessor;
-use crate::{StateReader, StateWriter};
 
 /// A wrapper around an accessor that does not charge gas for state accesses.
 /// This is used in the testing framework to wrap the [`crate::WorkingSet`] and avoid charging gas in the `post_dispatch_hook` checks for tests.
@@ -15,12 +15,22 @@ pub struct UnmeteredStateWrapper<'a, T> {
 }
 
 impl<T: UniversalStateAccessor> UniversalStateAccessor for UnmeteredStateWrapper<'_, T> {
-    fn get_size(&mut self, namespace: sov_state::Namespace, key: &SlotKey) -> Option<u32> {
-        self.inner.get_size(namespace, key)
+    fn get_size(
+        &mut self,
+        namespace: sov_state::Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<u32> {
+        self.inner.get_size(namespace, key, metric)
     }
 
-    fn get_value(&mut self, namespace: sov_state::Namespace, key: &SlotKey) -> Option<SlotValue> {
-        self.inner.get_value(namespace, key)
+    fn get_value(
+        &mut self,
+        namespace: sov_state::Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
+        self.inner.get_value(namespace, key, metric)
     }
 
     fn set_value(&mut self, namespace: sov_state::Namespace, key: &SlotKey, value: SlotValue) {
@@ -46,12 +56,15 @@ impl<Inner> UnmeteredStateWrapper<'_, Inner> {
 
 impl<Inner, N: CompileTimeNamespace> StateReader<N> for UnmeteredStateWrapper<'_, Inner>
 where
-    Inner: StateReader<N>,
+    Inner: StateReader<N> + StateMetricsProvider,
 {
     type Error = Infallible;
 
     fn get(&mut self, key: &SlotKey) -> Result<Option<SlotValue>, Self::Error> {
-        Ok(self.inner.get_value(N::NAMESPACE, key))
+        let mut metric = StateAccessMetric::new("get_unmereted", key.size());
+        let result = self.inner.get_value(N::NAMESPACE, key, &mut metric);
+        self.inner.metrics().push(metric);
+        Ok(result)
     }
 
     fn get_decoded<V, Codec>(

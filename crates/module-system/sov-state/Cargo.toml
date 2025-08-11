@@ -53,7 +53,7 @@ default = []
 native = [
     "sov-db",
     "sov-rollup-interface/native",
-    "sov-metrics?/native",
+    "sov-metrics/native",
     "sov-modules-macros?/native",
     "dep:nomt",
     "dep:tracing",
