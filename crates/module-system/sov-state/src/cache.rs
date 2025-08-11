@@ -9,6 +9,7 @@ use crate::storage::{SlotKey, SlotValue, Storage};
 #[cfg(feature = "native")]
 use crate::NativeStorage;
 use crate::{NodeLeaf, NodeLeafAndMaybeValue, ReadType};
+use sov_metrics::StateAccessMetric;
 
 /// An enum that represents the temperature of a value in the storage.
 /// Used in cached-structs to determine whether this is the first read of a value or not.
@@ -206,8 +207,6 @@ mod internal {
 }
 
 use internal::CacheLog;
-#[cfg(feature = "native")]
-use sov_metrics::StateAccessMetric;
 
 /// Caches reads and writes for a (key, value) pair. On the first read the value is fetched
 /// from an external source represented by the `ValueReader` trait. On following reads,

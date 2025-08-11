@@ -14,9 +14,8 @@ pub use config::{MonitoringConfig, TelegrafSocketConfig};
 #[cfg(feature = "gas-constant-estimation")]
 pub use gas_constant_estimation::{GasConstantTracker, GAS_CONSTANTS};
 pub use tracker::{
-    init_metrics_tracker, timestamp, AuthAndProcessMetrics, AuthAndProcessTimings, BatchMetrics,
-    BatchOutcome, HttpMetrics, RunnerMetrics, RunnerProcessStfChangesMetrics,
-    SlotProcessingMetrics, StateAccessMetric, StateMetrics, TransactionEffect,
+    init_metrics_tracker, timestamp, BatchMetrics, BatchOutcome, HttpMetrics, RunnerMetrics,
+    RunnerProcessStfChangesMetrics, SlotProcessingMetrics, TransactionEffect,
     TransactionProcessingMetrics, UserSpaceSlotProcessingMetrics, ZkCircuit, ZkProvingTime,
     ZkVmExecutionChunk,
 };

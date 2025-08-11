@@ -4,15 +4,18 @@
 /// Contains utilities to track zkVM cycles.
 pub mod cycle_utils;
 
+mod influx_db_nonnative;
 #[cfg(feature = "native")]
 mod influxdb;
+pub use influx_db_nonnative::{
+    AuthAndProcessMetrics, AuthAndProcessTimings, StateAccessMetric, StateMetrics,
+};
 
 #[cfg(feature = "native")]
 pub use influxdb::{
-    init_metrics_tracker, safe_telegraf_string, timestamp, track_metrics, AuthAndProcessMetrics,
-    AuthAndProcessTimings, BatchMetrics, BatchOutcome, HttpMetrics, Metric, MetricsTracker,
-    MonitoringConfig, RunnerMetrics, RunnerProcessStfChangesMetrics, SlotProcessingMetrics,
-    StateAccessMetric, StateMetrics, TelegrafSocketConfig, TransactionEffect,
+    init_metrics_tracker, safe_telegraf_string, timestamp, track_metrics, BatchMetrics,
+    BatchOutcome, HttpMetrics, Metric, MetricsTracker, MonitoringConfig, RunnerMetrics,
+    RunnerProcessStfChangesMetrics, SlotProcessingMetrics, TelegrafSocketConfig, TransactionEffect,
     TransactionProcessingMetrics, UserSpaceSlotProcessingMetrics, ZkCircuit, ZkProvingTime,
     ZkVmExecutionChunk,
 };
@@ -81,6 +84,11 @@ impl MaybeTimer {
         };
         *self = MaybeTimer::Completed(start.elapsed());
     }
+
+    /// Ends the timer if the `native` feature is enabled. Otherwise, does nothing.
+    /// Panics if the metric is not in progress.
+    #[cfg(not(feature = "native"))]
+    pub fn end(&mut self) {}
 
     /// Returns the elapsed time since the timer if the `native` feature is enabled. Otherwise does nothing.
     #[cfg(feature = "native")]
