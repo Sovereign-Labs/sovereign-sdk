@@ -209,7 +209,7 @@ where
             .await?;
 
             handles.push(blob_sender_handle);
-            PreferredBlobSender::from((inner_blob_sender, config.sequencer_kind_config.is_replica))
+            PreferredBlobSender::new(inner_blob_sender, config.sequencer_kind_config.is_replica)
         };
 
         let (state_root_compute_handle, state_root_compute_task) =

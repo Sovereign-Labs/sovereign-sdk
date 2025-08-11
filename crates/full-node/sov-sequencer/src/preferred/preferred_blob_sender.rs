@@ -10,14 +10,20 @@ use super::db::{PreferredSequencerReadBatch, PreferredSequencerReadBlob};
 use crate::common::TxStatusBlobSenderHooks;
 
 /// Wrapper around [`BlobSender`] with preferred blob -specific logic.
-#[derive(derive_more::From)]
 pub struct PreferredBlobSender<Da: DaService> {
     inner: BlobSender<Da, TxStatusBlobSenderHooks<Da::Spec>, LedgerDb>,
     is_replica: bool,
 }
 
 impl<Da: DaService> PreferredBlobSender<Da> {
-    pub async fn publish_proof(
+    pub(crate) fn new(
+        inner: BlobSender<Da, TxStatusBlobSenderHooks<Da::Spec>, LedgerDb>,
+        is_replica: bool,
+    ) -> Self {
+        Self { inner, is_replica }
+    }
+
+    pub(crate) async fn publish_proof(
         &mut self,
         proof_data: Arc<[u8]>,
         sequence_number: u64,
@@ -35,7 +41,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         Ok(())
     }
 
-    pub async fn publish_batch(
+    pub(crate) async fn publish_batch(
         &mut self,
         batch: PreferredSequencerReadBatch,
     ) -> anyhow::Result<()> {
