@@ -438,10 +438,10 @@ impl LedgerDb {
             current_item_numbers.batch_number += 1;
         }
 
-        for discarded_blob_hash in data_to_commit.discarded_blobs.into_iter() {
+        for discarded_blob in data_to_commit.discarded_blobs.into_iter() {
             self.put_discarded_blob(
                 StoredDiscardedBlob {
-                    hash: discarded_blob_hash.0,
+                    discarded_blob,
                     slot_number,
                 },
                 &mut schema_batch,
