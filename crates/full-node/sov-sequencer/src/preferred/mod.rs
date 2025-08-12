@@ -27,10 +27,7 @@ use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
 use db::postgres::PostgresBackend;
 use db::rocksdb::RocksDbBackend;
-use db::{
-    PreferredSequencerDb, PreferredSequencerDbBackend, PreferredSequencerReadBatch,
-    PreferredSequencerReadBlob,
-};
+use db::{PreferredSequencerDb, PreferredSequencerReadBatch, PreferredSequencerReadBlob};
 pub use full_node_configs::sequencer::{PreferredSequencerConfig, RecoveryStrategy};
 use futures::Stream;
 use inner::*;
@@ -162,22 +159,15 @@ where
         let (blobs_sender_channel, _) =
             broadcast::channel(config.sequencer_kind_config.events_channel_size);
 
-        let db_backend: Box<dyn PreferredSequencerDbBackend> =
-            if let Some(postgres_connection_string) =
-                &config.sequencer_kind_config.postgres_connection_string
-            {
-                Box::new(PostgresBackend::connect(postgres_connection_string).await?)
-            } else {
-                Box::new(RocksDbBackend::new(storage_path).await?)
-            };
+        let mut db = PreferredSequencerDb::new(
+            shutdown_sender.clone(),
+            config.sequencer_kind_config.is_replica,
+            storage_path,
+            &config.sequencer_kind_config.postgres_connection_string,
+        )
+        .await?;
 
-        let (db, latest_db_event_id, next_sequence_number, db_cache) =
-            PreferredSequencerDb::<S, Rt>::new(
-                db_backend,
-                shutdown_sender.clone(),
-                config.sequencer_kind_config.is_replica,
-            )
-            .await?;
+        let (latest_db_event_id, next_sequence_number, db_cache) = db.initial_data().await?;
 
         let mut handles = vec![];
 

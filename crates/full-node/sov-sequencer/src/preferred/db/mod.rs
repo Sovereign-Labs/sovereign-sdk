@@ -11,12 +11,8 @@
 
 pub mod postgres;
 pub mod rocksdb;
-
-use std::collections::VecDeque;
-use std::marker::PhantomData;
-use std::num::NonZero;
-use std::sync::Arc;
-
+use crate::preferred::PostgresBackend;
+use crate::preferred::RocksDbBackend;
 use axum::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_blob_sender::{new_blob_id, BlobInternalId};
@@ -26,6 +22,10 @@ use sov_modules_api::{
     FullyBakedTx, KernelStateAccessor, Runtime, Spec, StateCheckpoint, StateUpdateInfo, TxHash,
     VisibleSlotNumber,
 };
+use std::collections::VecDeque;
+use std::num::NonZero;
+use std::path::Path;
+use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
 
 use crate::common::WithCachedTxHashes;
@@ -374,69 +374,93 @@ impl From<BatchToStore> for StoredBlob {
     }
 }
 
-pub struct PreferredSequencerDb<S, Rt>
-where
-    S: Spec,
-    Rt: Runtime<S>,
-{
-    backend: Box<dyn PreferredSequencerDbBackend>,
-    phantom: PhantomData<S>,
-    is_replica: bool,
+pub struct PreferredSequencerDb {
+    backend: Option<Box<dyn PreferredSequencerDbBackend>>,
     shutdown_sender: watch::Sender<()>,
-    phantom_runtime: PhantomData<Rt>,
 }
 
-impl<S, Rt> PreferredSequencerDb<S, Rt>
-where
-    S: Spec,
-    Rt: Runtime<S>,
-{
-    /// Returns the constructed PreferredSequencerDb, and the latest EventID observed during
-    /// construction, for backends that allow atomic initialization (i.e. postgres).
-    pub async fn new(
-        backend: Box<dyn PreferredSequencerDbBackend>,
+impl PreferredSequencerDb {
+    pub(crate) async fn new(
         shutdown_sender: watch::Sender<()>,
         is_replica: bool,
-    ) -> anyhow::Result<(Self, Option<u64>, SequenceNumber, PreferredSequencerCache)> {
-        let DbSnapshotData {
-            completed_blobs,
-            in_progress_batch,
-            latest_event_id,
-        } = backend.current_data().await?;
-        let completed_blobs = VecDeque::from(completed_blobs);
+        storage_path: &Path,
+        postgres_connection_string: &Option<String>,
+    ) -> anyhow::Result<Self> {
+        if is_replica {
+            return Ok(Self {
+                backend: None,
+                shutdown_sender: shutdown_sender.clone(),
+            });
+        }
 
-        let sequence_number_of_next_blob = match (completed_blobs.back(), &in_progress_batch) {
-            (Some(blob), None) => blob.sequence_number() + 1,
-            (None, Some(batch)) => batch.sequence_number + 1,
-            (Some(blob), Some(batch)) => {
-                std::cmp::max(blob.sequence_number(), batch.sequence_number) + 1
+        let backend: Option<Box<dyn PreferredSequencerDbBackend>> = {
+            if let Some(postgres_connection_string) = &postgres_connection_string {
+                Some(Box::new(
+                    PostgresBackend::connect(postgres_connection_string).await?,
+                ))
+            } else {
+                Some(Box::new(RocksDbBackend::new(storage_path).await?))
             }
-            (None, None) => 0,
         };
 
-        Ok((
-            Self {
-                backend,
-                phantom: PhantomData,
-                is_replica,
-                shutdown_sender: shutdown_sender.clone(),
-                phantom_runtime: PhantomData,
-            },
-            latest_event_id,
-            sequence_number_of_next_blob,
-            PreferredSequencerCache::new(completed_blobs, in_progress_batch, shutdown_sender),
-        ))
+        Ok(Self {
+            backend,
+            shutdown_sender: shutdown_sender.clone(),
+        })
+    }
+
+    pub(crate) async fn initial_data(
+        &mut self,
+    ) -> anyhow::Result<(Option<u64>, SequenceNumber, PreferredSequencerCache)> {
+        if let Some(backend) = &mut self.backend {
+            let DbSnapshotData {
+                completed_blobs,
+                in_progress_batch,
+                latest_event_id,
+            } = backend.current_data().await?;
+
+            let completed_blobs = VecDeque::from(completed_blobs);
+
+            let sequence_number_of_next_blob = match (completed_blobs.back(), &in_progress_batch) {
+                (Some(blob), None) => blob.sequence_number() + 1,
+                (None, Some(batch)) => batch.sequence_number + 1,
+                (Some(blob), Some(batch)) => {
+                    std::cmp::max(blob.sequence_number(), batch.sequence_number) + 1
+                }
+                (None, None) => 0,
+            };
+
+            Ok((
+                latest_event_id,
+                sequence_number_of_next_blob,
+                PreferredSequencerCache::new(
+                    completed_blobs,
+                    in_progress_batch,
+                    self.shutdown_sender.clone(),
+                ),
+            ))
+        } else {
+            Ok((
+                None,
+                0, // TODO this will be revisited when we enable the replica sync task.
+                PreferredSequencerCache::new(
+                    VecDeque::default(),
+                    Option::None,
+                    self.shutdown_sender.clone(),
+                ),
+            ))
+        }
     }
 
     #[tracing::instrument(skip_all, level = "info")]
-    pub async fn bulk_insert_txs(
+    pub(crate) async fn bulk_insert_txs(
         &mut self,
         txs: Vec<(FullyBakedTx, TxHash)>,
         sequence_number: SequenceNumber,
         tx_idx_within_batch: u64,
     ) -> anyhow::Result<()> {
-        if !self.is_replica {
-            self.backend
+        if let Some(backend) = &mut self.backend {
+            backend
                 .batch_add_txs(sequence_number, tx_idx_within_batch, &txs)
                 .await?;
         }
@@ -445,30 +469,30 @@ where
     }
 
     #[tracing::instrument(skip_all, level = "info")]
-    pub async fn start_batch(
+    pub(crate) async fn start_batch(
         &mut self,
         visible_slot_number_after_increase: VisibleSlotNumber,
         visible_slots_to_advance: NonZero<u8>,
         sequence_number: SequenceNumber,
         blob_id: BlobInternalId,
     ) -> anyhow::Result<SequenceNumber> {
-        if !self.is_replica {
-            self.debug_assert_in_progress_batch_is_none(
+        if let Some(backend) = &mut self.backend {
+            Self::debug_assert_in_progress_batch_is_none(
                 "Cached in-progress batch state (None) didn't match backend db state",
+                backend,
+                &self.shutdown_sender,
             )
             .await;
-        }
 
-        tracing::debug!(
-            sequence_number,
-            blob_id,
-            %visible_slot_number_after_increase,
-            visible_slots_to_advance,
-            "Storing new rollup block"
-        );
+            tracing::debug!(
+                sequence_number,
+                blob_id,
+                %visible_slot_number_after_increase,
+                visible_slots_to_advance,
+                "Storing new rollup block"
+            );
 
-        if !self.is_replica {
-            self.backend
+            backend
                 .begin_rollup_block(
                     sequence_number,
                     blob_id,
@@ -482,14 +506,14 @@ where
     }
 
     #[tracing::instrument(skip_all, level = "info")]
-    pub async fn insert_proof_blob(
+    pub(crate) async fn insert_proof_blob(
         &mut self,
         blob_id: BlobInternalId,
         data: Arc<[u8]>,
         sequence_number: SequenceNumber,
     ) -> anyhow::Result<SequenceNumber> {
-        if !self.is_replica {
-            self.backend
+        if let Some(backend) = &mut self.backend {
+            backend
                 .add_proof_blob(sequence_number, blob_id, data.clone())
                 .await?;
         }
@@ -498,11 +522,13 @@ where
     }
 
     #[tracing::instrument(skip_all, level = "info")]
-    pub async fn terminate_batch(&mut self, batch: BatchToStore) -> anyhow::Result<()> {
-        if !self.is_replica {
-            self.backend.end_rollup_block(batch).await?;
-            self.debug_assert_in_progress_batch_is_none(
+    pub(crate) async fn terminate_batch(&mut self, batch: BatchToStore) -> anyhow::Result<()> {
+        if let Some(backend) = &mut self.backend {
+            backend.end_rollup_block(batch).await?;
+            Self::debug_assert_in_progress_batch_is_none(
                 "Backend didn't remove in-progress batch from database when ending rollup block",
+                backend,
+                &self.shutdown_sender,
             )
             .await;
         }
@@ -511,23 +537,27 @@ where
     }
 
     #[tracing::instrument(skip_all, level = "info")]
-    pub(super) async fn prune(
+    pub(super) async fn prune_db(
         &mut self,
         prune_up_to_including: SequenceNumber,
     ) -> anyhow::Result<()> {
-        if !self.is_replica {
-            self.backend.prune(prune_up_to_including).await?;
+        if let Some(backend) = &mut self.backend {
+            backend.prune(prune_up_to_including).await?;
         }
         Ok(())
     }
 
-    async fn debug_assert_in_progress_batch_is_none(&self, msg: &str) {
+    async fn debug_assert_in_progress_batch_is_none(
+        msg: &str,
+        backend: &mut Box<dyn PreferredSequencerDbBackend>,
+        shutdown_sender: &watch::Sender<()>,
+    ) {
         if cfg!(debug_assertions) {
-            match self.backend.read_in_progress_batch().await {
+            match backend.read_in_progress_batch().await {
                 Ok(None) => {}
                 other => {
                     tracing::error!("{msg}: {other:?}");
-                    exit_rollup(&self.shutdown_sender).await;
+                    exit_rollup(shutdown_sender).await;
                 }
             }
         }
