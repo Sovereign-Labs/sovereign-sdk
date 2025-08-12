@@ -382,7 +382,7 @@ async fn test_check_no_reorgs() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_check_no_reorgs_longer() -> anyhow::Result<()> {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("debug,sov_metrics=error,sov_sequencer::preferred=trace,integration=warn,jmt=info,hyper=info,request=info,tower=info,sqlx=warn,h2=info");
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("debug,sov_metrics=error,sov_sequencer::preferred=trace,sov_db=trace,sov_rollup_apis=trace,integration=warn,jmt=info,hyper=info,request=info,tower=info,sqlx=warn,h2=info");
     tokio::time::timeout(
         TEST_TIMEOUT,
         test_stream_of_transactions(StreamOfTransactionsArgs {

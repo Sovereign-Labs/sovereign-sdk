@@ -259,25 +259,28 @@ impl LedgerDb {
         }
     }
 
-    /// Initialize a new [`LedgerDb`] that shares the LedgerNotificationService
+    /// Initialize a new [`LedgerDb`] that shares the [`LedgerNotificationService`]
     /// of the provided ledger_db. It uses the other [`LedgerDb`]s inner reader
-    /// as the starting point.
+    /// as **the starting point**.
     ///
     /// This is used to create a [`LedgerDb`] used for serving API requests
     /// and publishing notifications produced by the "core" ledger instance.
     ///
-    /// In order to provide strong consistency across the REST API
+    /// To provide strong consistency across the REST API,
     /// we need to delay updating the inner reader of such ledger dbs until
     /// the full execution has completed (including the seqeuncer).
     ///
     /// This solves an issue where `/ledger/slots/finalized` would return a slot_number
     /// then that slot number was used to query module state:
-    /// `/modules/mymodule/state/a?slot_number=slot_number` but would return a invalid
-    /// slot number error because state updates haddn't progogated to module related
+    /// `/modules/mymodule/state/a?slot_number=slot_number` but would return an invalid
+    /// slot number error because state updates hadn't propagated to module-related
     /// state accessors.
+    ///
+    /// Important note: Produced instance of the [`LedgerDb`] will have a new independent `RwLock`,
+    /// so a call to `other.replace_reader()` won't propagate data to the newly created instance.
+    /// It is by design.
     pub fn with_shared_notifications(other: &LedgerDb) -> Self {
         Self {
-            // db: other.db.clone(),
             db: Arc::new(RwLock::new(other.clone_reader())),
             notification_service: other.notification_service.clone(),
         }
