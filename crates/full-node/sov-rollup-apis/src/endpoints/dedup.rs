@@ -8,13 +8,13 @@ use serde::Serialize;
 use sov_modules_api::prelude::anyhow;
 use sov_modules_api::rest::ApiState;
 use sov_modules_api::{metered_credential, ApiStateAccessor, CryptoSpec, Spec};
-use sov_rest_utils::{errors, preconfigured_router_layers};
+use sov_rest_utils::{errors, preconfigured_router_layers, Query};
 use sov_uniqueness::Uniqueness;
 
 /// Trait for the `/rollup/addresses/{address}/dedup` endpoint.
 ///
 /// Rollup developers should implement this to provide dedup functionality to external services
-/// such as web3 sdks in a generic way.
+/// such as web3 SDK's in a generic way.
 pub trait DeDupEndpoint<S: Spec>: Clone + Send + Sync + 'static {
     /// The response data returned by the `dedup` API endpoint.
     type Response: Serialize;
@@ -63,26 +63,78 @@ pub trait DeDupEndpoint<S: Spec>: Clone + Send + Sync + 'static {
 /// Provides the `/rollup/addresses/{address}/dedup` endpoint utilising the sovereign provided
 /// `uniqueness` module.
 #[derive(Clone)]
-pub struct NonceDeDupEndpoint<S: Spec> {
+pub struct SovereignDeDupEndpoint<S: Spec> {
     state: ApiState<S>,
 }
 
-impl<S: Spec> NonceDeDupEndpoint<S> {
-    /// Creates a new `NonceDeDupEndpoint` instance.
+impl<S: Spec> SovereignDeDupEndpoint<S> {
+    /// Creates a new [`SovereignDeDupEndpoint`] instance.
     pub fn new(state: ApiState<S>) -> Self {
         Self { state }
     }
 }
 
-/// The response of the nonce module implementation.
+/// The response of the Dedup implementation for both nonce and generation number
 #[derive(serde::Serialize, Clone)]
-pub struct NonceResponse {
-    /// The current nonce associated with the requested address.
-    pub nonce: u64,
+pub struct DedupResponse {
+    /// The next nonce associated with the requested address.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nonce: Option<u64>,
+    /// The next generation number associated with the requested address
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generation: Option<u64>,
 }
 
-impl<S: Spec> DeDupEndpoint<S> for NonceDeDupEndpoint<S> {
-    type Response = NonceResponse;
+/// Query parameters for the dedup endpoint.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct DedupQuery {
+    /// Select which kind of uniqueness to return.
+    /// If omitted, returns Nonce
+    /// Example: `?select=nonce` or `?select=generation`
+    pub select: Option<SelectField>,
+}
+
+/// Specifies which uniqueness field to return in the dedup response.
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SelectField {
+    /// Return the next nonce for the address.
+    Nonce,
+    /// Return the next generation number for the address.
+    Generation,
+}
+
+impl<S: Spec> SovereignDeDupEndpoint<S> {
+    fn handler_with_query(
+        address: String,
+        mut state: ApiStateAccessor<S>,
+        query: DedupQuery,
+    ) -> Result<DedupResponse, anyhow::Error> {
+        let pub_key = <S::CryptoSpec as CryptoSpec>::PublicKey::from_str(&address)?;
+        let credential_id = metered_credential(&pub_key, &mut state)?;
+        let uniqueness = Uniqueness::<S>::default();
+
+        match query.select {
+            Some(SelectField::Generation) => {
+                let generation = uniqueness.next_generation(&credential_id, &mut state)?;
+                Ok(DedupResponse {
+                    nonce: None,
+                    generation: Some(generation),
+                })
+            }
+            Some(SelectField::Nonce) | None => {
+                let nonce = uniqueness.next_nonce(&credential_id, &mut state)?;
+                Ok(DedupResponse {
+                    nonce: Some(nonce),
+                    generation: None,
+                })
+            }
+        }
+    }
+}
+
+impl<S: Spec> DeDupEndpoint<S> for SovereignDeDupEndpoint<S> {
+    type Response = DedupResponse;
 
     type Error = anyhow::Error;
 
@@ -93,10 +145,33 @@ impl<S: Spec> DeDupEndpoint<S> for NonceDeDupEndpoint<S> {
         let pub_key = <S::CryptoSpec as CryptoSpec>::PublicKey::from_str(&address)?;
         let credential_id = metered_credential(&pub_key, &mut state)?;
         let nonce = Uniqueness::<S>::default().next_nonce(&credential_id, &mut state)?;
-        Ok(NonceResponse { nonce })
+        Ok(DedupResponse {
+            nonce: Some(nonce),
+            generation: None,
+        })
     }
 
     fn state(&self) -> ApiStateAccessor<S> {
         self.state.default_api_state_accessor()
+    }
+
+    fn axum_router(&self) -> Router<()> {
+        preconfigured_router_layers(
+            Router::new()
+                .route(
+                    "/rollup/addresses/:address/dedup",
+                    get(
+                        |Path(address): Path<String>,
+                         State(state): State<Self>,
+                         Query(query): Query<DedupQuery>| async move {
+                            match Self::handler_with_query(address, state.state(), query) {
+                                Ok(data) => axum::Json(data).into_response(),
+                                Err(err) => errors::bad_request_400("Failed to dedup address", err),
+                            }
+                        },
+                    ),
+                )
+                .with_state(self.clone()),
+        )
     }
 }
