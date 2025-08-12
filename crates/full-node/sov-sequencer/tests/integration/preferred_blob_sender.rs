@@ -97,7 +97,7 @@ async fn test_discard_oversized_blobs() {
 
     tokio::time::timeout(tokio::time::Duration::from_secs(15), async {
         while let Some(blob_status) = sub.next().await {
-            if let Some(BlobSelectorStatus::Discarded) =
+            if let Some(BlobSelectorStatus::Discarded(_)) =
                 blob_status.as_ref().unwrap().blob_selector_status
             {
                 break;
