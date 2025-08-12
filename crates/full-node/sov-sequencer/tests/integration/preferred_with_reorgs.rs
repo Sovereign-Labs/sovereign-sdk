@@ -6,9 +6,7 @@ use std::sync::Arc;
 use futures::{Stream, StreamExt, TryStreamExt};
 use sov_api_spec::types::{Slot, TxStatus};
 use sov_blob_storage::config_deferred_slots_count;
-use sov_mock_da::{
-    BlockProducingConfig, MockDaConfig, RandomizationBehaviour, RandomizationConfig,
-};
+use sov_mock_da::{BlockProducingConfig, RandomizationBehaviour, RandomizationConfig};
 use sov_modules_api::prelude::arbitrary::Unstructured;
 use sov_modules_api::{Runtime, Spec};
 use sov_paymaster::{
