@@ -123,6 +123,10 @@ impl LedgerNotificationService {
         triggered_at_slot: SlotNumber,
         slot_number: SlotNumber,
     ) {
+        tracing::trace!(
+            %triggered_at_slot,
+            finalize_slot = %slot_number,
+            "Registering processed slot notification");
         self.slot_notifications
             .lock()
             .expect("Slot notification lock is poisoned")
@@ -135,14 +139,18 @@ impl LedgerNotificationService {
     pub(crate) fn register_finalized_slot_notification(
         &self,
         triggered_at_slot: SlotNumber,
-        slot_num: SlotNumber,
+        slot_number: SlotNumber,
     ) {
+        tracing::trace!(
+            %triggered_at_slot,
+            finalize_slot = %slot_number,
+            "Registering finalized slot notification");
         self.finalized_slot_notifications
             .lock()
             .expect("Finalized slot notification lock is poisoned")
             .push(Notification {
                 triggered_at_slot,
-                notification: slot_num,
+                notification: slot_number,
             });
     }
 
@@ -151,6 +159,9 @@ impl LedgerNotificationService {
         triggered_at_slot: SlotNumber,
         aggregated_proof: AggregatedProofResponse,
     ) {
+        tracing::trace!(
+            %triggered_at_slot,
+            "Registering aggregated proof notification");
         self.proof_notifications
             .lock()
             .expect("Aggregated proof notification lock is poisoned")
@@ -465,7 +476,7 @@ impl LedgerDb {
             .send_notifications_for_slot(slot_num);
     }
 
-    /// Materializes latest finalized slot and registers notification.
+    /// Materializes the latest finalized slot and registers notification.
     pub fn materialize_latest_finalize_slot(
         &self,
         current_slot_num: SlotNumber,

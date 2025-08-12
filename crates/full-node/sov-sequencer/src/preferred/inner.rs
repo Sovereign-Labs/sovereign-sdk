@@ -677,6 +677,7 @@ where
         self.api_ledger_db
             .replace_reader(info.ledger_reader.clone());
         tracing::trace!(
+            time = ?start.elapsed(),
             slot_number = %info.slot_number,
             latest_finalized_slot_number = %info.latest_finalized_slot_number,
             "LedgerDb reader is replaced, sending notifications for the slot");

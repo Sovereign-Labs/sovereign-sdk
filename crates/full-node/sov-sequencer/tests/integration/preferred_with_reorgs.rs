@@ -397,6 +397,40 @@ async fn test_check_no_reorgs_longer() -> anyhow::Result<()> {
     .await?
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_check_no_reorgs_longer_faster_finality() -> anyhow::Result<()> {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("debug,sov_metrics=error,sov_sequencer::preferred=trace,sov_db=trace,sov_rollup_apis=trace,integration=warn,jmt=info,hyper=info,request=info,tower=info,sqlx=warn,h2=info");
+    tokio::time::timeout(
+        TEST_TIMEOUT,
+        test_stream_of_transactions(StreamOfTransactionsArgs {
+            block_time_ms: 500,
+            finalization_blocks: 3,
+            da_slots: 60,
+            txs_per_da_slot: 10,
+            additional_users: 20,
+            randomization_config: None,
+        }),
+    )
+    .await?
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_check_no_reorgs_longer_instant_finality() -> anyhow::Result<()> {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("debug,sov_metrics=error,sov_sequencer::preferred=trace,sov_db=trace,sov_rollup_apis=trace,integration=warn,jmt=info,hyper=info,request=info,tower=info,sqlx=warn,h2=info");
+    tokio::time::timeout(
+        TEST_TIMEOUT,
+        test_stream_of_transactions(StreamOfTransactionsArgs {
+            block_time_ms: 500,
+            finalization_blocks: 0,
+            da_slots: 60,
+            txs_per_da_slot: 10,
+            additional_users: 20,
+            randomization_config: None,
+        }),
+    )
+        .await?
+}
+
 struct StreamOfTransactionsArgs {
     /// StorableMockDa is started in PeriodicBatchProduction mode, so this
     /// parameter defines block time.
