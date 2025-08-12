@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use sov_state::codec::BorshCodec;
 use sov_state::namespaces::{Accessory, CompileTimeNamespace, Kernel, User};
-use sov_state::{EncodeLike, Prefix, StateCodec, StateItemCodec};
+use sov_state::{EncodeLike, Prefix, StateCodec, StateItemCodec, StateItemDecoder};
 use thiserror::Error;
 use unwrap_infallible::UnwrapInfallible;
 
@@ -176,7 +176,7 @@ where
         let len = self.len(state)?;
 
         self.elems_mut().set(&len, value, state)?;
-        self.set_len(len + 1, state)?;
+        self.set_len(len.checked_add(1).expect("Overflowed u64 while pushing to a state vec. This should be impossible in the lifetime of the universe."), state)?;
 
         Ok(())
     }
@@ -219,7 +219,8 @@ where
             };
 
             for i in index..new_len {
-                let next_elem = self.elems().remove(&(i + 1), state)?;
+                let next_idx = i.checked_add(1).expect("Overflowed u64 while removing from a state vec. This should be impossible in the lifetime of the universe.");
+                let next_elem = self.elems().remove(&next_idx, state)?;
                 if let Some(next_elem) = next_elem {
                     self.elems_mut().set(&i, &next_elem, state)?;
                 }
@@ -320,6 +321,36 @@ where
     }
 }
 
+impl<V, Codec> NamespacedStateVec<Accessory, V, Codec>
+where
+    Codec: StateCodec,
+    Codec::ValueCodec: StateItemCodec<V> + StateItemCodec<u64>,
+    Codec::KeyCodec: StateItemCodec<u64>,
+{
+    /// Pushes a value to the end of the vector without requiring read access to the length.
+    pub fn push_accessory<Vq, W>(
+        &mut self,
+        value: &Vq,
+        state: &mut W,
+    ) -> Result<(), <W as StateWriter<Accessory>>::Error>
+    where
+        W: StateWriter<Accessory>,
+        Vq: ?Sized,
+        Codec::ValueCodec: EncodeLike<Vq, V>,
+    {
+        let len_key = self.len_value.slot_key();
+        let index = if let Some(len_bytes) = state.get_value(Accessory::NAMESPACE, &len_key) {
+            self.len_value
+                .codec()
+                .value_codec()
+                .decode_unwrap(len_bytes.value())
+        } else {
+            0
+        };
+        self.len_value.set(&index.checked_add(1).expect("Overflowed u64 while pushing to a state vec. This should be impossible in the lifetime of the universe."), state)?;
+        self.elems.set(&index, value, state)
+    }
+}
 /// An [`Iterator`] over a state vector.
 ///
 /// See [`NamespacedStateVec::iter`] for more details.

@@ -18,6 +18,7 @@ use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::storage::NativeStorage;
 use sov_state::{ArrayWitness, ProverStorage, Storage, StorageRoot};
+use sov_stf_runner::make_da_sync_state;
 use sov_stf_runner::StateTransitionRunner;
 use sov_test_utils::storage::SimpleStorageManager;
 use tempfile::TempDir;
@@ -120,14 +121,30 @@ async fn test_runner_with_background_da_service(
     let mut storage_manager: crate::helpers::runner_init::StorageManager =
         NativeStorageManager::new(tempdir.path())?;
 
-    let (state_update_sender, _state_update_recv) =
-        watch::channel(bootstrap_state_update_info(&mut storage_manager).await?);
+    let block = da_service.get_block_at(0).await?;
+    let genesis_header = block.header().clone();
+    let (_, ledger_state) = storage_manager.create_state_after(&genesis_header).unwrap();
+
     let (sync_sender, mut sync_status_receiver) = watch::channel(SyncStatus::START);
+    let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
+    let da_sync_state = make_da_sync_state(
+        &rollup_config.runner,
+        None,
+        &ledger_db,
+        da_service.as_ref(),
+        sync_sender,
+    )
+    .await
+    .unwrap();
+
+    let (state_update_sender, _state_update_recv) = watch::channel(
+        bootstrap_state_update_info(&mut storage_manager, da_sync_state.as_ref()).await?,
+    );
+
     sync_status_receiver.mark_unchanged();
 
     let genesis_params = vec![1, 2, 3, 4, 5];
-    let block = da_service.get_block_at(0).await?;
-    let genesis_header = block.header().clone();
+
     let init_variant: MockInitVariant = InitVariant::Genesis {
         block,
         genesis_params,
@@ -135,8 +152,6 @@ async fn test_runner_with_background_da_service(
     let (prev_state_root, _genesis_state_root) =
         init_variant.initialize(&stf, &mut storage_manager).await?;
 
-    let (_, ledger_state) = storage_manager.create_state_after(&genesis_header).unwrap();
-    let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
     let mut runner: HashStfRunner<StorableMockDaService> = StateTransitionRunner::new(
         rollup_config.runner.clone(),
         None,
@@ -146,12 +161,12 @@ async fn test_runner_with_background_da_service(
         storage_manager,
         state_update_sender,
         prev_state_root,
-        sync_sender,
         Box::new(InfiniteHeight),
         shutdown_receiver.clone(),
         rollup_config.monitoring.clone(),
         None,
         None,
+        da_sync_state,
     )
     .await?;
 

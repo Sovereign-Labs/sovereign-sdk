@@ -65,7 +65,6 @@ where
 
         // Publish the batch.
         self.blob_sender
-            .hooks()
             .add_txs(batch.blob_id, batch.tx_hashes.clone())
             .await;
         self.blob_sender.publish_batch(batch).await?;
@@ -83,7 +82,9 @@ where
                 RecoveryStrategy::TryToSave => {
                     // Flush our batches to try to save them if we can
                     warn!(num_batches_to_replay = batches_to_flush.len(), "TryToSave recovery strategy has been configured. The currently pending soft confirmations will be flushed to the node. This may save some of the transactions, but if any are no longer valid, the sequencer will be penalised.");
-                    self.blob_sender.publish_blobs(batches_to_flush).await?;
+                    self.blob_sender
+                        .publish_blobs_for_recovery(batches_to_flush)
+                        .await?;
                 }
                 RecoveryStrategy::None => {
                     // Shut down

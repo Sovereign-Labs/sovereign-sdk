@@ -8,12 +8,13 @@ use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{
     as_u32_or_panic, Amount, BatchWithId, BlobData, BlobDataWithId, BlobReaderTrait, DaSpec,
-    FullyBakedTx, Gas, GasArray, GasSpec, HexHash, HexString, InjectedControlFlow,
-    IterableBatchWithId, KernelStateAccessor, ModuleInfo, PrivilegedKernelAccessor, SelectedBlob,
-    Spec,
+    FullyBakedTx, Gas, GasArray, GasSpec, HexString, InjectedControlFlow, IterableBatchWithId,
+    KernelStateAccessor, ModuleInfo, PrivilegedKernelAccessor, SelectedBlob, Spec,
 };
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::RelevantBlobIters;
+use sov_rollup_interface::stf::BlobDiscardReason;
+use sov_rollup_interface::stf::DiscardedBlob;
 use sov_sequencer_registry::AllowedSequencerError;
 use tracing::{debug, info, trace, warn};
 
@@ -26,26 +27,6 @@ use crate::{
 /// A loose upper bound on the size of an emergency registration blob, in bytes. Blobs larger than this are statically known to be invalid
 /// so we don't bother trying to deserialize them.
 const MAX_EMERGENCY_REGISTRATION_BLOB_SIZE: usize = 1000;
-
-/// The reason that a blob was discarded
-#[derive(Debug)]
-pub(crate) enum BlobDiscardReason {
-    /// The sequencer sent a blob with an old sequencer number that we've already processed.
-    SequenceNumberTooLow,
-    /// Sender doesn't have enough staked sequencer funds
-    SenderInsufficientStake,
-    /// The max amount of unregistered blobs allowed to be processed per slot
-    MaxAllowedUnregisteredBlobs,
-    /// The blob is too large to be processed with the remaining capacity to accept blobs this slot
-    OutOfCapacity,
-    /// The blob has insufficient reserved gas to cover the pre-execution checks. This happens when the gas price more
-    /// than doubles while a blob is in storage.
-    InsufficientReservedGas,
-    /// The blob was not serialized correctly
-    InvalidSerialization,
-    /// The blob is too large to be processed to be a valid emergency registration.
-    EmergencyRegistrationTooLarge,
-}
 
 #[derive(Debug)]
 enum SequencerStatus<S: Spec> {
@@ -98,7 +79,7 @@ impl<S: Spec> BlobStorage<S> {
     fn select_blobs_as_based_sequencer_inner(
         &mut self,
         current_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
-        discarded_blobs: &mut Vec<HexHash>,
+        discarded_blobs: &mut Vec<DiscardedBlob>,
         state: &mut KernelStateAccessor<'_, S>,
     ) -> BlobSelectorOutput<ValidatedBlob<S, BatchWithId<S>>> {
         tracing::trace!("On based sequencer path");
@@ -124,7 +105,7 @@ impl<S: Spec> BlobStorage<S> {
     fn select_blobs_da_ordering(
         &mut self,
         current_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
-        discarded_blobs: &mut Vec<HexHash>,
+        discarded_blobs: &mut Vec<DiscardedBlob>,
         account_for_deferral: bool,
         visible_height_increase: u64,
         state: &mut KernelStateAccessor<'_, S>,
@@ -155,7 +136,7 @@ impl<S: Spec> BlobStorage<S> {
         &mut self,
         blob_iter: impl Iterator<Item = BlobOrigin<'a, <S::Da as DaSpec>::BlobTransaction>>,
         blobs_with_total_size_limit: &mut BlobsAccumulatorWithSizeLimit<S>,
-        discarded_blobs: &mut Vec<HexHash>,
+        discarded_blobs: &mut Vec<DiscardedBlob>,
         account_for_deferral: bool,
         visible_height_increase: u64,
         state: &mut KernelStateAccessor<'_, S>,
@@ -173,7 +154,7 @@ impl<S: Spec> BlobStorage<S> {
                     discarded_blobs,
                     &blob.sender(),
                     blob.hash().into(),
-                    &BlobDiscardReason::OutOfCapacity,
+                    BlobDiscardReason::OutOfCapacity,
                 );
                 continue;
             }
@@ -192,7 +173,7 @@ impl<S: Spec> BlobStorage<S> {
                             discarded_blobs,
                             &blob.sender(),
                             blob.hash().into(),
-                            &BlobDiscardReason::SenderInsufficientStake,
+                            BlobDiscardReason::SenderInsufficientStake,
                         );
                         continue;
                     };
@@ -203,7 +184,7 @@ impl<S: Spec> BlobStorage<S> {
                             discarded_blobs,
                             &sender,
                             id,
-                            &BlobDiscardReason::OutOfCapacity,
+                            BlobDiscardReason::OutOfCapacity,
                         );
                     }
                 }
@@ -225,7 +206,7 @@ impl<S: Spec> BlobStorage<S> {
                                     discarded_blobs,
                                     &blob.sender(),
                                     blob.hash().into(),
-                                    &BlobDiscardReason::SenderInsufficientStake,
+                                    BlobDiscardReason::SenderInsufficientStake,
                                 );
                                 continue;
                             };
@@ -240,7 +221,7 @@ impl<S: Spec> BlobStorage<S> {
                                     discarded_blobs,
                                     &sender,
                                     id,
-                                    &BlobDiscardReason::OutOfCapacity,
+                                    BlobDiscardReason::OutOfCapacity,
                                 );
                             }
                         }
@@ -251,7 +232,7 @@ impl<S: Spec> BlobStorage<S> {
                                     discarded_blobs,
                                     &blob.sender(),
                                     blob.hash().into(),
-                                    &BlobDiscardReason::EmergencyRegistrationTooLarge,
+                                    BlobDiscardReason::EmergencyRegistrationTooLarge,
                                 );
                                 continue;
                             }
@@ -273,7 +254,7 @@ impl<S: Spec> BlobStorage<S> {
                                         discarded_blobs,
                                         &sender,
                                         id,
-                                        &BlobDiscardReason::OutOfCapacity,
+                                        BlobDiscardReason::OutOfCapacity,
                                     );
                                 }
                                 continue;
@@ -283,7 +264,7 @@ impl<S: Spec> BlobStorage<S> {
                                 discarded_blobs,
                                 &blob.sender(),
                                 blob.hash().into(),
-                                &BlobDiscardReason::InvalidSerialization,
+                                BlobDiscardReason::InvalidSerialization,
                             );
                         }
                         ValidateBlobOutcome::Discard(reason) => {
@@ -291,7 +272,7 @@ impl<S: Spec> BlobStorage<S> {
                                 discarded_blobs,
                                 &blob.sender(),
                                 blob.hash().into(),
-                                &reason,
+                                reason,
                             );
                         }
                     }
@@ -323,10 +304,10 @@ impl<S: Spec> BlobStorage<S> {
     }
 
     fn discard(
-        discarded_blobs: &mut Vec<HexHash>,
+        discarded_blobs: &mut Vec<DiscardedBlob>,
         sender: &<S::Da as DaSpec>::Address,
         raw_blob_hash: [u8; 32],
-        reason: &BlobDiscardReason,
+        reason: BlobDiscardReason,
     ) {
         let blob_hash = HexString(raw_blob_hash);
         info!(
@@ -336,7 +317,10 @@ impl<S: Spec> BlobStorage<S> {
             "Discarding blob"
         );
 
-        discarded_blobs.push(blob_hash);
+        discarded_blobs.push(DiscardedBlob {
+            hash: blob_hash,
+            reason,
+        });
     }
 
     /// Select blobs when transitioning from a preferred sequencer back to normal operation.
@@ -346,7 +330,7 @@ impl<S: Spec> BlobStorage<S> {
     fn select_blobs_in_recovery_mode(
         &mut self,
         current_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
-        discarded_blobs: &mut Vec<HexHash>,
+        discarded_blobs: &mut Vec<DiscardedBlob>,
         state: &mut KernelStateAccessor<'_, S>,
     ) -> BlobSelectorOutput<ValidatedBlob<S, BatchWithId<S>>> {
         tracing::trace!("On recovery mode path");
@@ -389,7 +373,7 @@ impl<S: Spec> BlobStorage<S> {
                         discarded_blobs,
                         &sender,
                         id,
-                        &BlobDiscardReason::OutOfCapacity,
+                        BlobDiscardReason::OutOfCapacity,
                     );
                 }
             }
@@ -450,7 +434,7 @@ impl<S: Spec> BlobStorage<S> {
     fn select_blobs_for_preferred_sequencer<'k, CF: InjectedControlFlow<S> + Clone>(
         &mut self,
         current_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
-        discarded_blobs: &mut Vec<HexHash>,
+        discarded_blobs: &mut Vec<DiscardedBlob>,
         state: &mut KernelStateAccessor<'k, S>,
         preferred_sender: &<S::Da as DaSpec>::Address,
         preferred_sequencer: S::Address,
@@ -627,7 +611,7 @@ impl<S: Spec> BlobStorage<S> {
     fn pick_preferred_blobs_to_process(
         &mut self,
         well_formed_preferred_blobs: Vec<PreferredBlobDataWithId>,
-        discarded_blobs: &mut Vec<HexHash>,
+        discarded_blobs: &mut Vec<DiscardedBlob>,
         sequence_tracker: &mut SequencerNumberTracker,
         preferred_sender: &<S::Da as DaSpec>::Address,
         state: &mut KernelStateAccessor<'_, S>,
@@ -671,7 +655,7 @@ impl<S: Spec> BlobStorage<S> {
     fn find_next_run_of_blobs<'a>(
         &self,
         mut well_formed_preferred_blobs: Vec<PreferredBlobDataWithId>,
-        discarded_blobs: &mut Vec<HexHash>,
+        discarded_blobs: &mut Vec<DiscardedBlob>,
         sequence_tracker: &SequencerNumberTracker,
         preferred_sender: &'a <S::Da as DaSpec>::Address,
     ) -> (
@@ -694,7 +678,7 @@ impl<S: Spec> BlobStorage<S> {
                     discarded_blobs,
                     preferred_sender,
                     blob.id,
-                    &BlobDiscardReason::SequenceNumberTooLow,
+                    BlobDiscardReason::SequenceNumberTooLow,
                 );
                 false
             }
@@ -744,7 +728,7 @@ impl<S: Spec> BlobStorage<S> {
         slots_needed_from_storage: u64,
         gas_price_for_new_block: &<S::Gas as Gas>::Price,
         blobs_with_total_size_limit: &mut BlobsAccumulatorWithSizeLimit<S>,
-        discarded_blobs: &mut Vec<HexHash>,
+        discarded_blobs: &mut Vec<DiscardedBlob>,
         state: &mut KernelStateAccessor<'_, S>,
     ) {
         for slot in 1..=slots_needed_from_storage {
@@ -764,7 +748,7 @@ impl<S: Spec> BlobStorage<S> {
                                 discarded_blobs,
                                 &batch.sender,
                                 batch.blob.id(),
-                                &BlobDiscardReason::InsufficientReservedGas,
+                                BlobDiscardReason::InsufficientReservedGas,
                             );
                             // If we can't retrieve enough funds from escrow, we drop the blob and move on to the next one.
                             continue;
@@ -781,7 +765,7 @@ impl<S: Spec> BlobStorage<S> {
                         discarded_blobs,
                         &sender,
                         id,
-                        &BlobDiscardReason::OutOfCapacity,
+                        BlobDiscardReason::OutOfCapacity,
                     );
                 }
             }
@@ -826,7 +810,7 @@ impl<S: Spec> BlobStorage<S> {
         &mut self,
         selected_preferred_blobs: Vec<PreferredBlobDataWithId>,
         blobs_to_select: &mut BlobsAccumulatorWithSizeLimit<S>,
-        discarded_blobs: &mut Vec<HexHash>,
+        discarded_blobs: &mut Vec<DiscardedBlob>,
         preferred_sender: &<S::Da as DaSpec>::Address,
         preferred_sequencer: &S::Address,
 
@@ -863,7 +847,7 @@ impl<S: Spec> BlobStorage<S> {
                     discarded_blobs,
                     preferred_sender,
                     blob_id,
-                    &BlobDiscardReason::SenderInsufficientStake,
+                    BlobDiscardReason::SenderInsufficientStake,
                 );
 
                 continue;
@@ -875,7 +859,7 @@ impl<S: Spec> BlobStorage<S> {
                     discarded_blobs,
                     &sender,
                     id,
-                    &BlobDiscardReason::OutOfCapacity,
+                    BlobDiscardReason::OutOfCapacity,
                 );
                 tracing::error!(blob_id = hex::encode(blob_id), "Preferred blob size limit exceeded. Dropping preferred blob. Some soft confirmations may be invalidated");
             }
@@ -1099,7 +1083,7 @@ impl<S: Spec> BlobStorage<S> {
         cf: CF,
     ) -> anyhow::Result<(
         BlobSelectorOutput<SelectedBlob<S, IterableBatchWithId<S, CF>>>,
-        Vec<HexHash>,
+        Vec<DiscardedBlob>,
     )> {
         let mut discarded_blobs = Vec::default();
 
@@ -1187,7 +1171,7 @@ impl<S: Spec> BlobStorage<S> {
         cf: CF,
     ) -> (
         BlobSelectorOutput<SelectedBlob<S, IterableBatchWithId<S, CF>>>,
-        Vec<HexHash>,
+        Vec<DiscardedBlob>,
     ) {
         let mut discarded_blobs = Vec::default();
         let output =
@@ -1231,7 +1215,7 @@ impl<S: Spec> BlobStorage<S> {
                         discarded_blobs,
                         &sender,
                         id,
-                        &BlobDiscardReason::OutOfCapacity,
+                        BlobDiscardReason::OutOfCapacity,
                     );
                 }
             }

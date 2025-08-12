@@ -1,7 +1,5 @@
 //! The basic kernel provides censorship resistance by processing all blobs immediately in the order they appear on DA
 
-use std::convert::Infallible;
-
 use sov_blob_storage::BlobStorage;
 use sov_chain_state::ChainState;
 use sov_modules_api::capabilities::{BlobSelectorOutput, BlockGasInfo, RollupHeight};
@@ -10,12 +8,14 @@ use sov_modules_api::runtime::capabilities::{BlobSelector, Kernel as KernelTrait
 #[cfg(feature = "native")]
 use sov_modules_api::AccessoryStateReaderAndWriter;
 use sov_modules_api::{
-    BootstrapWorkingSet, DaSpec, Gas, HexHash, InjectedControlFlow, IterableBatchWithId,
+    BootstrapWorkingSet, DaSpec, Gas, InjectedControlFlow, IterableBatchWithId,
     KernelStateAccessor, SelectedBlob, Spec, StateReader, VersionReader, VisibleSlotNumber,
 };
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::RelevantBlobIters;
+use sov_rollup_interface::stf::DiscardedBlob;
 use sov_state::{Kernel, Storage, User};
+use std::convert::Infallible;
 
 /// A kernel supporting based sequencing with soft confirmations
 pub struct SoftConfirmationsKernel<'a, S: Spec> {
@@ -61,7 +61,7 @@ impl<S: Spec> BlobSelector for SoftConfirmationsKernel<'_, S> {
         cf: CF,
     ) -> anyhow::Result<(
         BlobSelectorOutput<SelectedBlob<S, IterableBatchWithId<S, CF>>>,
-        Vec<HexHash>,
+        Vec<DiscardedBlob>,
     )> {
         self.blob_storage
             .get_blobs_for_this_slot(current_blobs, state, cf)

@@ -9,6 +9,7 @@ use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
 use sov_db::schema::{DeltaReader, SchemaBatch};
 use sov_metrics::{MonitoringConfig, RunnerMetrics};
+
 use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
@@ -151,12 +152,12 @@ where
         storage_manager: Sm,
         state_update_channel: watch::Sender<StateUpdateInfo<Sm::StfState>>,
         prev_state_root: Stf::StateRoot,
-        sync_status_sender: watch::Sender<SyncStatus>,
         state_height_tracker: Box<dyn ProvableHeightTracker>,
         shutdown_receiver: watch::Receiver<()>,
         monitoring_config: MonitoringConfig,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
+        sync_state: Arc<DaSyncState>,
     ) -> anyhow::Result<Self> {
         error_if_tokio_runtime_is_not_multi_threaded()?;
 
@@ -165,15 +166,13 @@ where
         let listen_address_http =
             SocketAddr::new(axum_config.bind_host.parse()?, axum_config.bind_port);
 
-        let next_item_numbers = ledger_db.get_next_items_numbers()?;
-        let last_slot_processed_before_shutdown = next_item_numbers.slot_number.saturating_sub(1);
+        let first_unprocessed_height_at_startup = sync_state
+            .synced_da_height
+            .load(std::sync::atomic::Ordering::Acquire)
+            .checked_add(1)
+            .expect("The impossible happened  first_unprocessed_height_at_startup overflowed");
 
-        let da_height_processed =
-            runner_config.genesis_height + last_slot_processed_before_shutdown.get();
-
-        let first_unprocessed_height_at_startup = da_height_processed + 1;
         debug!(
-            %last_slot_processed_before_shutdown,
             %runner_config.genesis_height,
             %first_unprocessed_height_at_startup,
             proof_manager_config = ?pm_config,
@@ -191,16 +190,6 @@ where
         } else {
             (None, None)
         };
-
-        let target_da_height = Self::get_target_block(&da_service, &stop_at_rollup_height)
-            .await?
-            .height();
-
-        let sync_state = Arc::new(DaSyncState {
-            synced_da_height: da_height_processed.into(),
-            target_da_height: AtomicU64::new(target_da_height),
-            sync_status_sender,
-        });
 
         let da_polling_interval = Duration::from_millis(runner_config.da_polling_interval_ms);
 
@@ -250,18 +239,6 @@ where
             stop_at_rollup_height,
             save_tx_bodies: runner_config.save_tx_bodies,
         })
-    }
-
-    async fn get_target_block(
-        da_service: &Da,
-        stop_at_rollup_height: &Option<RollupHeight>,
-    ) -> anyhow::Result<<Da::Spec as DaSpec>::BlockHeader> {
-        // If we've entered the upgrade procedure, the rollup processes only finalized blocks.
-        if stop_at_rollup_height.is_some() {
-            da_service.get_last_finalized_block_header().await
-        } else {
-            da_service.get_head_block_header().await
-        }
     }
 
     /// Subscribes to this runner's [`StateUpdateInfo`] channel, if enabled.
@@ -321,7 +298,7 @@ where
 
             loop {
                 match future_or_shutdown(
-                    Self::get_target_block(&da_service, &stop_at_rollup_height),
+                    get_target_block(da_service.as_ref(), &stop_at_rollup_height),
                     &shutdown_receiver,
                 )
                 .await
@@ -734,6 +711,7 @@ where
 pub async fn query_state_update_info<S>(
     ledger_db: &LedgerDb,
     storage: S,
+    da_sync_state: &DaSyncState,
 ) -> anyhow::Result<StateUpdateInfo<S>> {
     let slot_number = ledger_db.get_head_slot_number().await?;
     let next_event_number = ledger_db
@@ -754,6 +732,7 @@ pub async fn query_state_update_info<S>(
         next_tx_number,
         slot_number,
         latest_finalized_slot_number,
+        sync_status: da_sync_state.status(),
     })
 }
 
@@ -764,4 +743,44 @@ fn error_if_tokio_runtime_is_not_multi_threaded() -> anyhow::Result<()> {
             RuntimeFlavor::CurrentThread => Err(anyhow::anyhow!("A multi-threaded Tokio runtime is required to run the rollup node. Check your Tokio configuration. If you're testing node functionality, make sure your test uses `#[tokio::test(flavor = \"multi_thread\")]` or an equivalent configuration. Aborting.")),
             _ => Ok(())
         }
+}
+
+/// Creats a new `DaSyncState`
+pub async fn make_da_sync_state<Da: DaService<Error = anyhow::Error>>(
+    runner_config: &RunnerConfig,
+    stop_at_rollup_height: Option<RollupHeight>,
+    ledger_db: &LedgerDb,
+    da_service: &Da,
+    sync_status_sender: watch::Sender<SyncStatus>,
+) -> anyhow::Result<Arc<DaSyncState>> {
+    let next_item_numbers = ledger_db.get_next_items_numbers()?;
+    let last_slot_processed_before_shutdown = next_item_numbers.slot_number.saturating_sub(1);
+
+    debug!(%last_slot_processed_before_shutdown);
+    let da_height_processed =
+        runner_config.genesis_height + last_slot_processed_before_shutdown.get();
+
+    let target_da_height = get_target_block(da_service, &stop_at_rollup_height)
+        .await?
+        .height();
+
+    let sync_state = Arc::new(DaSyncState {
+        synced_da_height: da_height_processed.into(),
+        target_da_height: AtomicU64::new(target_da_height),
+        sync_status_sender,
+    });
+
+    Ok(sync_state)
+}
+
+async fn get_target_block<Da: DaService<Error = anyhow::Error>>(
+    da_service: &Da,
+    stop_at_rollup_height: &Option<RollupHeight>,
+) -> anyhow::Result<<Da::Spec as DaSpec>::BlockHeader> {
+    // If we've entered the upgrade procedure, the rollup processes only finalized blocks.
+    if stop_at_rollup_height.is_some() {
+        da_service.get_last_finalized_block_header().await
+    } else {
+        da_service.get_head_block_header().await
+    }
 }

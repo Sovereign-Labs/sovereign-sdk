@@ -2,12 +2,6 @@
 
 mod mempool;
 
-use std::boxed::Box;
-use std::marker::PhantomData;
-use std::num::NonZero;
-use std::path::Path;
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use axum::http::StatusCode;
 pub use full_node_configs::sequencer::StdSequencerConfig;
@@ -22,6 +16,12 @@ use sov_modules_stf_blueprint::{process_tx_and_reward_prover, ApplyTxResult, Pre
 use sov_rest_utils::json_obj;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::DaSyncState;
+use std::boxed::Box;
+use std::marker::PhantomData;
+use std::num::NonZero;
+use std::path::Path;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::{watch, Mutex};
 use tokio::task::JoinHandle;
@@ -126,6 +126,8 @@ where
             StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel());
 
         let da_address = da.get_signer().await;
+
+        let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
         let (blob_sender, blob_sender_handle) = BlobSender::new(
             da,
             ledger_db.clone(),
@@ -135,6 +137,7 @@ where
             Duration::from_secs(config.blob_processing_timeout_secs),
             None,
             Default::default(),
+            nb_of_concurrent_blob_submissions,
         )
         .await?;
 

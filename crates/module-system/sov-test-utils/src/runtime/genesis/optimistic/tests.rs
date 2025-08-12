@@ -172,7 +172,7 @@ fn create_test_rt_genesis_config<S: Spec>(
             initial_provers: vec![(prover_placeholder.address(), prover_placeholder.balance())],
         },
         bank: BankConfig {
-            gas_token_config: sov_bank::GasTokenConfig {
+            gas_token_config: Some(sov_bank::GasTokenConfig {
                 token_name: token_name.clone(),
                 token_decimals: None,
                 supply_cap: None,
@@ -186,7 +186,7 @@ fn create_test_rt_genesis_config<S: Spec>(
                     additional_accounts_vec
                 },
                 admins: vec![admin.clone()],
-            },
+            }),
             tokens: vec![],
         },
 
@@ -264,6 +264,8 @@ fn test_define_token() {
         genesis_config
             .bank
             .gas_token_config
+            .as_ref()
+            .unwrap()
             .address_and_balances
             .contains(&(*address, TEST_DEFAULT_USER_BALANCE))
     }));
@@ -280,6 +282,8 @@ fn test_define_token() {
         genesis_config
             .bank
             .gas_token_config
+            .as_ref()
+            .unwrap()
             .address_and_balances
             .contains(&(*address, TEST_DEFAULT_USER_BALANCE))
     }));

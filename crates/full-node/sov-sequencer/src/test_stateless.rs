@@ -1,10 +1,6 @@
 #![allow(dead_code)]
 
 //! Sequencer without any validation or state.
-use std::marker::PhantomData;
-use std::path::Path;
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use sov_blob_sender::{new_blob_id, BlobSender};
 use sov_db::ledger_db::LedgerDb;
@@ -16,6 +12,10 @@ use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::DaSyncState;
 use sov_rollup_interface::{StateUpdateInfo, TxHash};
+use std::marker::PhantomData;
+use std::path::Path;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
 use tokio::sync::{watch, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
@@ -73,6 +73,7 @@ where
         let (state_sender, _rec) = watch::channel(StateCheckpoint::new(storage, &runtime.kernel()));
         let tx_status_manager = TxStatusManager::default();
 
+        let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
         let seq = Arc::new(Self {
             inner: inner.into(),
             blob_sender: Arc::new(Mutex::new(
@@ -85,6 +86,7 @@ where
                     Duration::from_secs(config.blob_processing_timeout_secs),
                     None,
                     Default::default(),
+                    nb_of_concurrent_blob_submissions,
                 )
                 .await?
                 .0,

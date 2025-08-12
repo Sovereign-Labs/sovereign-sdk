@@ -38,7 +38,7 @@ pub async fn materialize_simple_ledger_db_data(
     let tx_receipts = vec![TransactionReceipt {
         tx_hash: TxHash::new([1; 32]),
         body_to_save: Some(b"tx-body".to_vec()),
-        events: events(),
+        events: events(0),
         receipt: TxEffect::Successful(0),
     }];
 
@@ -62,14 +62,14 @@ pub async fn materialize_simple_ledger_db_data(
     Ok(ledger_data)
 }
 
-fn events() -> Vec<StoredEvent> {
+fn events(number: u64) -> Vec<StoredEvent> {
     let holder = TokenHolder::Module(ModuleId::from([0; 32]));
     let token_id =
         TokenId::from_str("token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6")
             .unwrap();
 
     let event_value1 = TestEvent::Bank(sov_bank::event::Event::TokenCreated {
-        token_name: "token".to_string(),
+        token_name: format!("token{number}"),
         coins: Coins {
             amount: Amount::ZERO,
             token_id,
@@ -86,12 +86,12 @@ fn events() -> Vec<StoredEvent> {
 
     vec![
         StoredEvent::new(
-            "foo".as_bytes(),
+            format!("foo{number}").as_bytes(),
             &borsh::to_vec(&event_value1).unwrap(),
             [0; 32],
         ),
         StoredEvent::new(
-            "bar".as_bytes(),
+            format!("bar{number}").as_bytes(),
             &borsh::to_vec(&event_value2).unwrap(),
             [0; 32],
         ),
@@ -99,88 +99,147 @@ fn events() -> Vec<StoredEvent> {
 }
 
 /// Materialize some complex data for the [`LedgerDb`]. Returns a [`SchemaBatch`] containing the description of the data to be stored.
-pub fn materialize_complex_ledger_db_data(ledger_db: &LedgerDb) -> anyhow::Result<SchemaBatch> {
-    let mut slots: Vec<SlotCommit<MockBlock, u32, TestTxReceiptContents>> = vec![SlotCommit::new(
-        MockBlock {
-            header: MockBlockHeader {
-                prev_hash: MockHash(sha2::Sha256::digest(b"prev_header").into()),
-                hash: MockHash(sha2::Sha256::digest(b"slot_data").into()),
-                height: 0,
-                time: Time::from_secs(100), // Use a non-zero time to test that the time is serialized correctly, but hard-code it to make sure the test is deterministic.
+pub fn materialize_and_commit_complex_ledger_db_data(
+    ledger_db: &LedgerDb,
+    storage_manager: &mut SimpleLedgerStorageManager,
+) -> anyhow::Result<()> {
+    let mut slots: Vec<SlotCommit<MockBlock, u32, TestTxReceiptContents>> = vec![
+        SlotCommit::new(
+            MockBlock {
+                header: MockBlockHeader {
+                    prev_hash: MockHash(sha2::Sha256::digest(b"prev_header_0").into()),
+                    hash: MockHash(sha2::Sha256::digest(b"slot_data_0").into()),
+                    height: 0,
+                    time: Time::from_secs(100),
+                },
+                batch_blobs: Default::default(),
+                proof_blobs: Default::default(),
             },
-            batch_blobs: Default::default(),
-            proof_blobs: Default::default(),
-        },
-        Vec::default(),
-    )];
+            Vec::default(),
+        ),
+        SlotCommit::new(
+            MockBlock {
+                header: MockBlockHeader {
+                    prev_hash: MockHash(sha2::Sha256::digest(b"prev_header_1").into()),
+                    hash: MockHash(sha2::Sha256::digest(b"slot_data_1").into()),
+                    height: 1,
+                    time: Time::from_secs(200),
+                },
+                batch_blobs: Default::default(),
+                proof_blobs: Default::default(),
+            },
+            Vec::default(),
+        ),
+    ];
 
-    let batches = vec![
+    // Create batches for slot 0
+    let slot0_batches = vec![
         BatchReceipt {
             ignored_tx_receipts: vec![],
-            batch_hash: sha2::Sha256::digest(b"batch_receipt").into(),
+            batch_hash: sha2::Sha256::digest(b"batch0").into(),
             tx_receipts: vec![
                 TransactionReceipt::<TestTxReceiptContents> {
-                    tx_hash: sha2::Sha256::digest(b"tx1").into(),
-                    body_to_save: Some(b"tx1 body".to_vec()),
-                    events: vec![],
+                    tx_hash: sha2::Sha256::digest(b"tx0").into(),
+                    body_to_save: Some(b"tx0 body".to_vec()),
+                    events: events(0),
                     receipt: TxEffect::Successful(0),
                 },
                 TransactionReceipt::<TestTxReceiptContents> {
-                    tx_hash: sha2::Sha256::digest(b"tx2").into(),
-                    body_to_save: Some(b"tx2 body".to_vec()),
-                    events: vec![
-                        StoredEvent::new(
-                            "event1_key".as_bytes(),
-                            "event1_value".as_bytes(),
-                            sha2::Sha256::digest(b"tx2").into(),
-                        ),
-                        StoredEvent::new(
-                            "event2_key".as_bytes(),
-                            "event2_value".as_bytes(),
-                            sha2::Sha256::digest(b"tx2").into(),
-                        ),
-                    ],
+                    tx_hash: sha2::Sha256::digest(b"tx1").into(),
+                    body_to_save: Some(b"tx1 body".to_vec()),
+                    events: events(1),
                     receipt: TxEffect::Successful(1),
                 },
             ],
             inner: 0,
         },
         BatchReceipt {
-            batch_hash: sha2::Sha256::digest(b"batch_receipt2").into(),
             ignored_tx_receipts: vec![],
-            tx_receipts: batch2_tx_receipts(),
+            batch_hash: sha2::Sha256::digest(b"batch1").into(),
+            tx_receipts: vec![
+                TransactionReceipt::<TestTxReceiptContents> {
+                    tx_hash: sha2::Sha256::digest(b"tx2").into(),
+                    body_to_save: Some(b"tx2 body".to_vec()),
+                    events: events(2),
+                    receipt: TxEffect::Successful(2),
+                },
+                TransactionReceipt::<TestTxReceiptContents> {
+                    tx_hash: sha2::Sha256::digest(b"tx3").into(),
+                    body_to_save: Some(b"tx3 body".to_vec()),
+                    events: events(3),
+                    receipt: TxEffect::Successful(3),
+                },
+            ],
             inner: 1,
         },
     ];
 
-    for batch in batches {
+    // Create batches for slot 1
+    let slot1_batches = vec![
+        BatchReceipt {
+            ignored_tx_receipts: vec![],
+            batch_hash: sha2::Sha256::digest(b"batch2").into(),
+            tx_receipts: vec![
+                TransactionReceipt::<TestTxReceiptContents> {
+                    tx_hash: sha2::Sha256::digest(b"tx4").into(),
+                    body_to_save: Some(b"tx4 body".to_vec()),
+                    events: events(4),
+                    receipt: TxEffect::Successful(4),
+                },
+                TransactionReceipt::<TestTxReceiptContents> {
+                    tx_hash: sha2::Sha256::digest(b"tx5").into(),
+                    body_to_save: Some(b"tx5 body".to_vec()),
+                    events: events(5),
+                    receipt: TxEffect::Successful(5),
+                },
+            ],
+            inner: 2,
+        },
+        BatchReceipt {
+            ignored_tx_receipts: vec![],
+            batch_hash: sha2::Sha256::digest(b"batch3").into(),
+            tx_receipts: batch3_tx_receipts(),
+            inner: 3,
+        },
+    ];
+
+    // Add batches to slots
+    for batch in slot0_batches {
         slots.get_mut(0).unwrap().add_batch(batch);
+    }
+    for batch in slot1_batches {
+        slots.get_mut(1).unwrap().add_batch(batch);
     }
 
     let mut ledger_data = SchemaBatch::new();
     for slot in slots {
         let state_root = format!("state-root-{}", slot.slot_data().header.height);
         ledger_data.merge(ledger_db.materialize_slot(slot, state_root.as_bytes())?);
+        ledger_db.send_notifications();
+        storage_manager.commit(ledger_data.clone());
     }
 
     let slot_num = ledger_db.get_next_items_numbers()?.slot_number;
 
+    let mut ledger_data = SchemaBatch::new();
     ledger_data.merge(ledger_db.materialize_aggregated_proof(
         slot_num,
         SerializedAggregatedProof {
             raw_aggregated_proof: b"aggregated-proof".to_vec(),
         },
     )?);
+    ledger_db.send_notifications();
+    storage_manager.commit(ledger_data.clone());
 
-    Ok(ledger_data)
+    Ok(())
 }
 
-fn batch2_tx_receipts() -> Vec<TransactionReceipt<TestTxReceiptContents>> {
+fn batch3_tx_receipts() -> Vec<TransactionReceipt<TestTxReceiptContents>> {
     (0..260u64)
         .map(|i| TransactionReceipt::<TestTxReceiptContents> {
-            tx_hash: ::sha2::Sha256::digest(i.to_string()).into(),
-            body_to_save: Some(b"tx body".to_vec()),
-            events: vec![],
+            tx_hash: ::sha2::Sha256::digest(format!("tx{}", 6 + i)).into(),
+            body_to_save: Some(format!("tx{} body", 6 + i).into_bytes()),
+            events: events(6 + i),
             receipt: TxEffect::Skipped(0),
         })
         .collect()
@@ -215,13 +274,17 @@ impl LedgerTestService {
         let reader = storage_manager.create_ledger_storage();
         let ledger_db = LedgerDb::with_reader(reader)?;
 
-        let ledger_data = match data {
-            LedgerTestServiceData::Simple => materialize_simple_ledger_db_data(&ledger_db).await?,
-            LedgerTestServiceData::Complex => materialize_complex_ledger_db_data(&ledger_db)?,
+        match data {
+            LedgerTestServiceData::Simple => {
+                let ledger_data = materialize_simple_ledger_db_data(&ledger_db).await?;
+                ledger_db.send_notifications();
+                storage_manager.commit(ledger_data);
+            }
+            LedgerTestServiceData::Complex => {
+                materialize_and_commit_complex_ledger_db_data(&ledger_db, &mut storage_manager)?;
+            }
         };
 
-        ledger_db.send_notifications();
-        storage_manager.commit(ledger_data);
         let (_, shutdown_receiver) = watch::channel(());
 
         let axum_handle = axum_server::Handle::new();
@@ -271,7 +334,7 @@ mod tests {
 
     #[test]
     fn events_deserialize_correctly() {
-        let events = events();
+        let events = events(0);
         for event in events {
             <crate::runtime::TestOptimisticRuntimeEvent<TestSpec > as borsh::BorshDeserialize>::deserialize(
                 &mut &event.value().inner()[..]).unwrap();

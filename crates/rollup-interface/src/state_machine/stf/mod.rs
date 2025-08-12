@@ -11,6 +11,9 @@ mod proof_sender;
 mod transaction;
 mod verifier;
 
+use borsh::BorshDeserialize;
+use borsh::BorshSerialize;
+
 use std::fmt::{Debug, Display};
 
 pub use events::*;
@@ -161,6 +164,35 @@ pub enum ProofOutcome<Address, Da: DaSpec, Root, StorageProof> {
 type ProofReceipts<Address, Da, StateRoot, StorageProof> =
     Vec<ProofReceipt<Address, Da, StateRoot, StorageProof>>;
 
+/// The reason that a blob was discarded
+#[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize)]
+pub enum BlobDiscardReason {
+    /// The sequencer sent a blob with an old sequencer number that we've already processed.
+    SequenceNumberTooLow,
+    /// Sender doesn't have enough staked sequencer funds
+    SenderInsufficientStake,
+    /// The max amount of unregistered blobs allowed to be processed per slot
+    MaxAllowedUnregisteredBlobs,
+    /// The blob is too large to be processed with the remaining capacity to accept blobs this slot
+    OutOfCapacity,
+    /// The blob has insufficient reserved gas to cover the pre-execution checks. This happens when the gas price more
+    /// than doubles while a blob is in storage.
+    InsufficientReservedGas,
+    /// The blob was not serialized correctly
+    InvalidSerialization,
+    /// The blob is too large to be processed to be a valid emergency registration.
+    EmergencyRegistrationTooLarge,
+}
+
+/// The discarded blob.
+#[derive(Debug, Clone, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
+pub struct DiscardedBlob {
+    /// The blob's hash
+    pub hash: HexHash,
+    /// Discard reason
+    pub reason: BlobDiscardReason,
+}
+
 /// The result of applying a slot to current state. We define a helpful alias [`ApplySlotOutput`]
 /// to make the type signature of [`StateTransitionFunction::apply_slot`] more readable. Unfortunately,
 /// since this type both depends on and appears in the defintion of the [`StateTransitionFunction`] trait,
@@ -175,7 +207,7 @@ pub struct ApplySlotOutputInner<Root, ChangeSet, BR, PR, Witness> {
     /// Receipt for each applied batch
     pub batch_receipts: Vec<BR>,
     /// Hash for each discarded blob.
-    pub discarded_blobs: Vec<HexHash>,
+    pub discarded_blobs: Vec<DiscardedBlob>,
     /// Witness after applying the whole block
     pub witness: Witness,
     /// The rollup height before applying the changes.

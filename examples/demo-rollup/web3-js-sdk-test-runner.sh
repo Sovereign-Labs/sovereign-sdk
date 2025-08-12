@@ -17,15 +17,51 @@
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# Preparing demo rollup
+# Building in foreground.
 cargo build
 # we still use `cargo run`, to not deal with `target` folder location
 cargo run >demo_rollup_log.log 2>&1 &
+CARGO_PID=$!
+
+# Check if the process started successfully
+sleep 2
+if ! kill -0 $CARGO_PID 2>/dev/null; then
+    echo "Error: cargo run process failed to start or exited immediately"
+    echo "=== Demo Rollup output ==="
+    cat demo_rollup_log.log
+    exit 1
+fi
+echo "Cargo process started successfully (PID: $CARGO_PID)"
+
+# Wait for HTTP server to start
+echo "Waiting for HTTP server to start..."
+iterations=60
+for i in $(seq 1 $iterations); do
+    if grep -q "Starting HTTP server" demo_rollup_log.log; then
+        echo "HTTP server started!"
+        break
+    fi
+    # Also check if process is still running
+    if ! kill -0 $CARGO_PID 2>/dev/null; then
+        echo "Error: cargo run process died unexpectedly"
+        echo "=== Demo Rollup output ==="
+        cat demo_rollup_log.log
+        exit 1
+    fi
+    echo "Waiting for HTTP server... ($i/$iterations)"
+    sleep 1
+    if [ $i -eq $iterations ]; then
+        echo "Timeout waiting for HTTP server to start"
+        echo "=== Demo Rollup output ==="
+        cat demo_rollup_log.log
+        exit 1
+    fi
+done
 
 echo "Waiting for slot number to be greater than 1..."
 iterations=100
 for i in $(seq 1 $iterations); do
-    response=$(curl -s -S http://localhost:12346/ledger/slots/latest 2>&1)
+    response=$(curl -s -S http://127.0.0.1:12346/ledger/slots/latest 2>&1)
     slot_number=$(echo "$response" | jq -r '.number')
     if [ ! -z "$slot_number" ] && [ "$slot_number" -gt 1 ]; then
         echo "Rollup is ready! Slot number: $slot_number"

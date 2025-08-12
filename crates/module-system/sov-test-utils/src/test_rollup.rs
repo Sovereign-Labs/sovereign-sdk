@@ -535,6 +535,7 @@ where
             next_tx_number: 0,
             slot_number: SlotNumber::ONE,
             latest_finalized_slot_number: SlotNumber::ONE,
+            sync_status: da_sync_state.status(),
         };
 
         let (sender, state_update_receiver) = watch::channel(state_update_info);

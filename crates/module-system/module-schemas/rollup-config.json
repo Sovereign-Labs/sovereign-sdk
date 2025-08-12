@@ -562,7 +562,7 @@
       ],
       "properties": {
         "kernel_commit_concurrency": {
-          "description": "Number of concurrent commit workers for kernel state. More details at [`Options::commit_concurrency`]",
+          "description": "Number of concurrent commit workers for the kernel state. More details at [`Options::commit_concurrency`]",
           "type": [
             "integer",
             "null"
@@ -597,6 +597,13 @@
           "format": "uint",
           "minimum": 0.0
         },
+        "kernel_preallocate_ht": {
+          "description": "Sets whether to preallocate the hashtable file for kernel db. More details at [`Options::preallocate_ht`]",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "path": {
           "description": "Path where all databases are stored",
           "type": "string"
@@ -611,7 +618,7 @@
           "minimum": 0.0
         },
         "pruner_versions_to_keep": {
-          "description": "This many versions will be available for historical querying.",
+          "description": "These many versions will be available for historical querying.",
           "type": [
             "integer",
             "null"
@@ -620,7 +627,7 @@
           "minimum": 0.0
         },
         "user_commit_concurrency": {
-          "description": "Number of concurrent commit workers for user state. More details at [`Options::commit_concurrency`]",
+          "description": "Number of concurrent commit workers for the user state. More details at [`Options::commit_concurrency`]",
           "type": [
             "integer",
             "null"
@@ -654,6 +661,13 @@
           ],
           "format": "uint",
           "minimum": 0.0
+        },
+        "user_preallocate_ht": {
+          "description": "Sets whether to preallocate the hashtable file for user db. More details at [`Options::preallocate_ht`]",
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       }
     },

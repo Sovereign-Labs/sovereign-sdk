@@ -7,7 +7,7 @@ use serde::Serialize;
 use sov_rollup_interface::common::{HexHash, SlotNumber};
 use sov_rollup_interface::node::da::SlotData;
 use sov_rollup_interface::node::ledger_api::AggregatedProofResponse;
-use sov_rollup_interface::stf::{BatchReceipt, StoredEvent, TxReceiptContents};
+use sov_rollup_interface::stf::{BatchReceipt, DiscardedBlob, StoredEvent, TxReceiptContents};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 
 use crate::schema::tables::{
@@ -49,7 +49,7 @@ pub struct ItemNumbers {
 pub struct SlotCommit<S: SlotData, B, T: TxReceiptContents> {
     slot_data: S,
     batch_receipts: Vec<BatchReceipt<B, T>>,
-    discarded_blobs: Vec<HexHash>,
+    discarded_blobs: Vec<DiscardedBlob>,
     num_txs: usize,
     num_events: usize,
 }
@@ -66,7 +66,7 @@ impl<S: SlotData, B, T: TxReceiptContents> SlotCommit<S, B, T> {
     }
 
     /// Create a new SlotCommit from the given slot data
-    pub fn new(slot_data: S, discarded_blobs: Vec<HexHash>) -> Self {
+    pub fn new(slot_data: S, discarded_blobs: Vec<DiscardedBlob>) -> Self {
         Self {
             slot_data,
             batch_receipts: vec![],
@@ -341,7 +341,7 @@ impl LedgerDb {
         blob: StoredDiscardedBlob,
         schema_batch: &mut SchemaBatch,
     ) -> anyhow::Result<()> {
-        schema_batch.put::<DiscardedBlobByHash>(&blob.hash, &blob)
+        schema_batch.put::<DiscardedBlobByHash>(&blob.discarded_blob.hash.0, &blob)
     }
 
     fn put_transaction(
@@ -419,10 +419,10 @@ impl LedgerDb {
             current_item_numbers.batch_number += 1;
         }
 
-        for dicarded_blob_hash in data_to_commit.discarded_blobs.into_iter() {
+        for discarded_blob in data_to_commit.discarded_blobs.into_iter() {
             self.put_discarded_blob(
                 StoredDiscardedBlob {
-                    hash: dicarded_blob_hash.0,
+                    discarded_blob,
                     slot_number,
                 },
                 &mut schema_batch,

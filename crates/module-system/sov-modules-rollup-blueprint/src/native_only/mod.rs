@@ -30,6 +30,7 @@ use sov_sequencer::standard::StdSequencer;
 use sov_sequencer::{ProofBlobSender, Sequencer, SequencerApis, SequencerKindConfig};
 use sov_state::storage::NativeStorage;
 use sov_state::Storage;
+use sov_stf_runner::make_da_sync_state;
 use sov_stf_runner::processes::{
     start_op_workflow_in_background, start_operator_workflow_in_background,
     start_zk_workflow_in_background, ProverService, RollupProverConfig,
@@ -234,7 +235,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     PreferredSequencer::<Self::Spec, Self::Runtime, Self::DaService>::create(
                         da_service.clone(),
                         state_update_receiver.clone(),
-                        da_sync_state,
                         &rollup_config.storage.path,
                         &rollup_config.sequencer.with_seq_config(seq_config.clone()),
                         ledger_db.clone(),
@@ -373,7 +373,21 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             }
         };
 
-        let state_update_info = query_state_update_info(&ledger_db, prover_storage.clone()).await?;
+        let (sync_status_sender, sync_status_receiver) =
+            tokio::sync::watch::channel(SyncStatus::START);
+
+        let da_sync_state = make_da_sync_state(
+            &rollup_config.runner,
+            stop_at_rollup_height,
+            &ledger_db,
+            da_service.as_ref(),
+            sync_status_sender,
+        )
+        .await?;
+
+        let state_update_info =
+            query_state_update_info(&ledger_db, prover_storage.clone(), da_sync_state.as_ref())
+                .await?;
 
         let mut rt = Self::Runtime::default();
         let checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel());
@@ -404,9 +418,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             MaximumProvableHeight::new(state_update_sender.subscribe(), Self::Runtime::default()),
         );
 
-        let (sync_status_sender, sync_status_receiver) =
-            tokio::sync::watch::channel(SyncStatus::START);
-
         let mut runner = StateTransitionRunner::new(
             rollup_config.runner.clone(),
             if prover_config.is_some() {
@@ -420,19 +431,19 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             storage_manager,
             state_update_sender,
             prev_state_root,
-            sync_status_sender,
             visible_state_height_tracker,
             main_shutdown_receiver.clone(),
             rollup_config.monitoring.clone(),
             start_at_rollup_height,
             stop_at_rollup_height,
+            da_sync_state.clone(),
         )
         .await?;
 
         let sequencer = self
             .create_sequencer(
                 state_update_receiver.clone(),
-                runner.da_sync_state(),
+                da_sync_state,
                 &rollup_config,
                 &ledger_db,
                 &api_ledger_db,

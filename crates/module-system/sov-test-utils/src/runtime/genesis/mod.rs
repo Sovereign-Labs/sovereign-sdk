@@ -109,7 +109,7 @@ impl<S: Spec> BasicGenesisConfig<S> {
         placeholder: TestUser<S>,
     ) -> BankConfig<S> {
         BankConfig {
-            gas_token_config: sov_bank::GasTokenConfig {
+            gas_token_config: Some(sov_bank::GasTokenConfig {
                 token_name: gas_token_name,
                 token_decimals: None,
                 supply_cap: None,
@@ -160,7 +160,7 @@ impl<S: Spec> BasicGenesisConfig<S> {
                     additional_accounts_vec
                 },
                 admins: vec![],
-            },
+            }),
             tokens: parse_token_configs(additional_accounts),
         }
     }

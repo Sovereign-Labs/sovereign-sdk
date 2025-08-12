@@ -37,6 +37,7 @@ pub use sov_paymaster::Paymaster;
 pub use sov_prover_incentives::{ProverIncentives, ProverIncentivesConfig};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::RelevantBlobs;
+use sov_rollup_interface::stf::DiscardedBlob;
 use sov_rollup_interface::stf::{ExecutionContext, StateTransitionFunction};
 pub use sov_sequencer_registry::{self, SequencerRegistry, SequencerRegistryConfig};
 use sov_state::{DefaultStorageSpec, Storage, StorageProof};
@@ -113,7 +114,7 @@ impl RelevantBlobInfo {
 /// Defines a slot receipt. A slot receipt is a list of [`BatchReceipt`]s and a block header.
 pub struct SlotReceipt<S: Spec> {
     #[allow(missing_docs)]
-    pub discarded_blobs: Vec<HexHash>,
+    pub discarded_blobs: Vec<DiscardedBlob>,
     #[allow(missing_docs)]
     pub batch_receipts: Vec<BatchReceipt<S>>,
     #[allow(missing_docs, clippy::type_complexity)]

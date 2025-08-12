@@ -824,20 +824,34 @@ struct Slot<B, TxReceipt: TxReceiptContents, E> {
     pub hash: HexHash,
     pub state_root: HexString,
     pub batch_range: Range<u64>,
-    pub batches: Vec<Batch<B, TxReceipt, E>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub batches: Option<Vec<Batch<B, TxReceipt, E>>>,
     pub finality_status: FinalityStatus,
     pub timestamp: Time,
 }
 
 impl<B, TxReceipt: TxReceiptContents, E> Slot<B, TxReceipt, E> {
     fn new(slot: SlotResponse<B, TxReceipt, RuntimeEventResponse<E>>) -> Self {
-        let mut batches = vec![];
-
-        for batch_response in slot.batches.unwrap_or_default().into_iter() {
-            if let ItemOrHash::Full(batch) = batch_response {
-                batches.push(Batch::new(batch, slot.number));
+        let batches = match slot.batches {
+            Some(batches) => {
+                let mut output = vec![];
+                let mut failed_conversion = false;
+                for (offset, batch) in batches.into_iter().enumerate() {
+                    if let ItemOrHash::Full(batch) = batch {
+                        output.push(Batch::new(batch, slot.batch_range.start + offset as u64));
+                    } else {
+                        failed_conversion = true;
+                        break;
+                    }
+                }
+                if failed_conversion {
+                    None
+                } else {
+                    Some(output)
+                }
             }
-        }
+            None => None,
+        };
 
         Self {
             number: slot.number,
@@ -862,20 +876,33 @@ struct Batch<B, TxReceipt: TxReceiptContents, E> {
     pub hash: HexHash,
     pub tx_range: Range<u64>,
     pub receipt: B,
-    pub txs: Vec<Transaction<TxReceipt, E>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub txs: Option<Vec<Transaction<TxReceipt, E>>>,
     pub slot_number: SlotNumber,
 }
 
 impl<B, TxReceipt: TxReceiptContents, E> Batch<B, TxReceipt, E> {
     fn new(batch: BatchResponse<B, TxReceipt, RuntimeEventResponse<E>>, number: u64) -> Self {
-        let mut txs = vec![];
-
-        for tx_response in batch.txs.unwrap_or_default().into_iter() {
-            if let ItemOrHash::Full(tx) = tx_response {
-                txs.push(Transaction::new(tx, number));
+        let txs = match batch.txs {
+            Some(txs) => {
+                let mut output = vec![];
+                let mut failed_conversion = false;
+                for (offset, tx) in txs.into_iter().enumerate() {
+                    if let ItemOrHash::Full(tx) = tx {
+                        output.push(Transaction::new(tx, batch.tx_range.start + offset as u64));
+                    } else {
+                        failed_conversion = true;
+                        break;
+                    }
+                }
+                if failed_conversion {
+                    None
+                } else {
+                    Some(output)
+                }
             }
-        }
-
+            None => None,
+        };
         Self {
             number,
             hash: HexHash::new(batch.hash),
@@ -901,7 +928,8 @@ struct Transaction<TxReceipt: TxReceiptContents, E> {
     #[serde_as(as = "serde_with::base64::Base64")]
     pub body: Vec<u8>,
     pub receipt: TxEffect<TxReceipt>,
-    pub events: Vec<RuntimeEventResponse<E>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub events: Option<Vec<RuntimeEventResponse<E>>>,
     pub batch_number: u64,
 }
 
@@ -913,7 +941,7 @@ impl<TxReceipt: TxReceiptContents, E> Transaction<TxReceipt, E> {
             event_range: tx.event_range,
             body: tx.body.unwrap_or_default(),
             receipt: tx.receipt.into(),
-            events: tx.events.unwrap_or_default(),
+            events: tx.events,
             batch_number: tx.batch_number,
         }
     }

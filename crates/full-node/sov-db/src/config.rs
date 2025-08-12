@@ -7,13 +7,16 @@ pub struct RollupDbConfig {
     /// Path where all databases are stored
     pub path: std::path::PathBuf,
     // User state configuration
-    /// Number of concurrent commit workers for user state.
+    /// Number of concurrent commit workers for the user state.
     /// More details at [`Options::commit_concurrency`]
     pub user_commit_concurrency: Option<usize>,
     /// Value is determined by the expected size of the state. Recommended to start with 15_000_000.
     /// Cannot be changed for the existing database.
     /// More details at [`Options::hashtable_buckets`]
     pub user_hashtable_buckets: Option<u32>,
+    /// Sets whether to preallocate the hashtable file for user db.
+    /// More details at [`Options::preallocate_ht`]
+    pub user_preallocate_ht: Option<bool>,
     /// Page cache size for user state.
     /// More details at [`Options::page_cache_size`]
     pub user_page_cache_size: Option<usize>,
@@ -22,12 +25,15 @@ pub struct RollupDbConfig {
     pub user_leaf_cache_size: Option<usize>,
 
     // Kernel state configuration
-    /// Number of concurrent commit workers for kernel state.
+    /// Number of concurrent commit workers for the kernel state.
     /// More details at [`Options::commit_concurrency`]
     pub kernel_commit_concurrency: Option<usize>,
     /// Cannot be changed for the existing database.
     /// More details at [`Options::hashtable_buckets`]
     pub kernel_hashtable_buckets: Option<u32>,
+    /// Sets whether to preallocate the hashtable file for kernel db.
+    /// More details at [`Options::preallocate_ht`]
+    pub kernel_preallocate_ht: Option<bool>,
     /// Page cache size for kernel state.
     /// More details at [`Options::page_cache_size`]
     pub kernel_page_cache_size: Option<usize>,
@@ -39,7 +45,7 @@ pub struct RollupDbConfig {
     /// Defines how often pruner is going to be started.
     /// Measure by DA blocks.
     pub pruner_block_interval: Option<u64>,
-    /// This many versions will be available for historical querying.
+    /// These many versions will be available for historical querying.
     pub pruner_versions_to_keep: Option<usize>,
 }
 
@@ -51,14 +57,24 @@ impl RollupDbConfig {
             path,
             user_commit_concurrency: Some(4),
             user_hashtable_buckets: Some(if cfg!(debug_assertions) {
-                100_000
+                2_500 // 9.77MB
             } else {
                 15_000_000
             }),
+            user_preallocate_ht: if cfg!(debug_assertions) {
+                Some(false)
+            } else {
+                None
+            },
             user_page_cache_size: None,
             user_leaf_cache_size: None,
             kernel_commit_concurrency: Some(2),
             kernel_hashtable_buckets: None,
+            kernel_preallocate_ht: if cfg!(debug_assertions) {
+                Some(false)
+            } else {
+                None
+            },
             kernel_page_cache_size: None,
             kernel_leaf_cache_size: None,
             pruner_block_interval: Some(100),
@@ -77,7 +93,17 @@ impl RollupDbConfig {
             self.kernel_commit_concurrency
                 .expect("`kernel_commit_concurrency` concurrency must be set"),
         );
-        opts.hashtable_buckets(self.kernel_hashtable_buckets.unwrap_or(256_000));
+        if cfg!(debug_assertions) {
+            // 9.77MB
+            opts.hashtable_buckets(2_500);
+        } else {
+            // 1000MB
+            opts.hashtable_buckets(self.kernel_hashtable_buckets.unwrap_or(256_000));
+        }
+        if let Some(preallocate_ht) = self.kernel_preallocate_ht {
+            opts.preallocate_ht(preallocate_ht);
+        }
+
         if let Some(page_cache_size) = self.kernel_page_cache_size {
             opts.page_cache_size(page_cache_size);
         }
@@ -85,6 +111,7 @@ impl RollupDbConfig {
             opts.leaf_cache_size(leaf_cache_size);
         }
         opts.path(self.path.join("kernel_nomt_db"));
+
         opts
     }
 
@@ -101,6 +128,9 @@ impl RollupDbConfig {
             self.user_hashtable_buckets
                 .expect("`user_hashtable_buckets` must be set"),
         );
+        if let Some(preallocate_ht) = self.kernel_preallocate_ht {
+            opts.preallocate_ht(preallocate_ht);
+        }
         if let Some(page_cache_size) = self.user_page_cache_size {
             opts.page_cache_size(page_cache_size);
         }

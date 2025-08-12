@@ -4,13 +4,13 @@ expression: "&slot"
 ---
 {
   "batch_range": {
-    "end": 2,
-    "start": 0
+    "end": 4,
+    "start": 2
   },
-  "finality_status": "finalized",
-  "hash": "0xd1231a38586e68d0405dc55ae6775e219f29fff1f7e0c6410d0ac069201e550b",
-  "number": 0,
-  "state_root": "0x73746174652d726f6f742d30",
-  "timestamp": 100000.0,
+  "finality_status": "pending",
+  "hash": "0xef6877158b6e72d971ccf69732380dc1831727a62b0dbba184d4780ca256aeaa",
+  "number": 1,
+  "state_root": "0x73746174652d726f6f742d31",
+  "timestamp": 200000.0,
   "type": "slot"
 }

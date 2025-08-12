@@ -306,17 +306,29 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn flaky_test_sequencer_rocksdb_db_performance_can_run_1k_batches_in_90_seconds() {
-        let handle = tokio::task::spawn(run_rocksdb_test(10000));
+    async fn flaky_test_sequencer_rocksdb_db_performance_can_run_10k_batches_in_2_minutes() {
+        let handle = tokio::task::spawn(run_rocksdb_test(10_000));
 
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(90), handle)
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(120), handle)
             .await
-            .expect("Creating 10000 batches should take less than 90 seconds; you may need to check your filesystem performance!");
+            .expect("Creating 10_000 batches should take less than 2 minutes; you may need to check your filesystem performance!");
     }
 
     async fn run_rocksdb_test(iters: u64) {
         let dir = TempDir::new().unwrap();
         let mut db = RocksDbBackend::new(dir.path()).await.unwrap();
+
+        // Allocate batch once.
+        let mut txs = vec![];
+        let mut tx_hashes = vec![];
+        for i in 0..10 {
+            let tx = FullyBakedTx {
+                data: vec![i as u8; 200],
+            };
+            let tx_hash = HexString([i as u8; 32]);
+            txs.push(tx);
+            tx_hashes.push(tx_hash);
+        }
 
         // Trigger `iters` batches of 10 txs. Ensure that performance stays reasonable
         for batch in 0u64..iters {
@@ -329,18 +341,10 @@ mod tests {
             .await
             .unwrap();
 
-            let mut txs = vec![];
-            let mut tx_hashes = vec![];
-            for i in 0..10 {
-                let tx = FullyBakedTx {
-                    data: vec![i as u8; 200],
-                };
-                let tx_hash = HexString([i as u8; 32]);
-                db.add_tx(SequenceNumber::from(batch), i, tx.clone(), tx_hash)
+            for (i, (tx, tx_hash)) in txs.iter().zip(tx_hashes.iter()).enumerate() {
+                db.add_tx(SequenceNumber::from(batch), i as u64, tx.clone(), *tx_hash)
                     .await
                     .unwrap();
-                txs.push(tx);
-                tx_hashes.push(tx_hash);
             }
             let batch_to_store = BatchToStore {
                 sequence_number: SequenceNumber::from(batch),

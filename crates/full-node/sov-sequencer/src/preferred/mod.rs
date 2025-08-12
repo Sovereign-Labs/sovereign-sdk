@@ -38,7 +38,7 @@ use preferred_blob_sender::PreferredBlobSender;
 use replica_sync_task::spawn_replica_sync_task;
 use serde_with::serde_as;
 use side_effects::SideEffectsTask;
-use sov_blob_sender::{new_blob_id, BlobExecutionStatus, BlobSender};
+use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::capabilities::{BlobSelector, RollupHeight, TransactionAuthenticator};
@@ -52,7 +52,6 @@ use sov_modules_api::{
 use sov_rest_utils::errors::{database_error_500, sequencer_overloaded_503};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::DaSyncState;
 use sov_rollup_interface::TxHash;
 use state_root_compute::StateRootBackgroundTaskState;
 use tokio::sync::mpsc::{self};
@@ -65,13 +64,12 @@ use transaction_subscriptions::TransactionCache;
 use crate::common::{
     error_not_fully_synced, generic_accept_tx_error, loop_send_tx_notifications, poll_state_update,
     AcceptedTx, Sequencer, SequencerEventStream, StateUpdateError, StateUpdateNotification,
-    TxStatusBlobSenderHooks, WithCachedTxHashes,
+    WithCachedTxHashes,
 };
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerFetchBatchesToReplayMetrics};
 use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
 use crate::preferred::db::DbEvent;
 use crate::preferred::executor_events::ExecutorEventsSender;
-use crate::preferred::preferred_blob_sender::create_blobs_to_send;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::rest_api::ApiAcceptedTx;
 use crate::{
@@ -94,7 +92,6 @@ where
     tx_status_manager: TxStatusManager<S::Da>,
     blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
     api_state: ApiState<S>,
-    da_sync_state: Arc<DaSyncState>,
     _runtime: PhantomData<(Rt, Da)>,
     config: SequencerConfig<S::Address, PreferredSequencerConfig>,
 
@@ -125,7 +122,6 @@ where
     pub async fn create(
         da: Da,
         state_update_receiver: StateUpdateReceiver<S::Storage>,
-        da_sync_state: Arc<DaSyncState>,
         storage_path: &Path,
         config: &SequencerConfig<S::Address, PreferredSequencerConfig>,
         ledger_db: LedgerDb,
@@ -174,6 +170,7 @@ where
             } else {
                 Box::new(RocksDbBackend::new(storage_path).await?)
             };
+
         let (db, latest_db_event_id, next_sequence_number, db_cache) =
             PreferredSequencerDb::<S, Rt>::new(
                 db_backend,
@@ -184,36 +181,22 @@ where
 
         let mut handles = vec![];
 
-        let completed_blobs = db_cache.all_completed_blobs();
+        let (blob_sender, blob_sender_handle) = PreferredBlobSender::new(
+            da,
+            ledger_db.clone(),
+            db_cache.all_completed_blobs().clone(),
+            storage_path.into(),
+            tx_status_manager.clone(),
+            shutdown_sender.clone(),
+            Duration::from_secs(config.blob_processing_timeout_secs),
+            blobs_sender_channel.clone(),
+            config.sequencer_kind_config.is_replica,
+        )
+        .await?;
 
-        let blob_sender = {
-            let blobs_to_send = if config.sequencer_kind_config.is_replica {
-                Vec::new()
-            } else {
-                // It's possible that sov-blob-sender's DB might miss some blob data at
-                // node startup due to:
-                //  1. Disk failure (the sequencer can use Postgres so it's durable).
-                //  2. DB corruption.
-                //  3. Node crash at an inconvenient time.
-                // Let's restore all missing blob data to make sure they land on the DA.
-                create_blobs_to_send(completed_blobs)?
-            };
-
-            let (inner_blob_sender, blob_sender_handle) = BlobSender::new(
-                da,
-                ledger_db.clone(),
-                storage_path,
-                TxStatusBlobSenderHooks::new(tx_status_manager.clone()),
-                shutdown_sender.clone(),
-                Duration::from_secs(config.blob_processing_timeout_secs),
-                Some(blobs_sender_channel.clone()),
-                blobs_to_send,
-            )
-            .await?;
-
+        if let Some(blob_sender_handle) = blob_sender_handle {
             handles.push(blob_sender_handle);
-            PreferredBlobSender::from((inner_blob_sender, config.sequencer_kind_config.is_replica))
-        };
+        }
 
         let (state_root_compute_handle, state_root_compute_task) =
             StateRootBackgroundTaskState::create(
@@ -233,7 +216,7 @@ where
 
         let (executor_events_sender, executor_events_receiver) =
             ExecutorEventsSender::new(shutdown_sender.clone(), db_cache);
-        let in_flight_blobs = blob_sender.nb_of_in_flight_blobs_handle();
+        let in_flight_blobs = blob_sender.nb_of_in_flight_blobs();
 
         // Here we need to mutliply by 1000 to convert from millis to micros.
         let batch_execution_time_limit_micros = config
@@ -285,7 +268,6 @@ where
             tx_status_manager: tx_status_manager.clone(),
             transaction_cache: cached_txs,
             blobs_sender_channel,
-            da_sync_state,
             api_state,
             _runtime: PhantomData,
             config: config.clone(),
@@ -379,14 +361,20 @@ where
             // 1. Dump our catchup batches once every DA block to fast-forward the
             //    visible_slot_number
             for i in 1..=max_batches_to_send {
-                let start_height = self.da_sync_state.target_da_height.load(Ordering::Relaxed);
+                let start_height = info.sync_status.target_da_height();
                 loop {
-                    let new_height = self.da_sync_state.target_da_height.load(Ordering::Relaxed);
+                    let new_height = info.sync_status.target_da_height();
                     if new_height > start_height {
                         break;
                     } else {
                         tokio::time::sleep(Duration::from_millis(100)).await;
                     }
+                    info = poll_state_update::<S>(
+                        state_update_receiver,
+                        shutdown_receiver,
+                        "update_state_task",
+                    )
+                    .await?;
                 }
                 if i % 10 == 0 {
                     tracing::info!(number = %i, min = %min_batches_to_send, max = %max_batches_to_send, "Sending catchup batch");
@@ -473,10 +461,10 @@ where
         let mut info = current_info;
 
         loop {
-            let is_synced = self.da_sync_state.status().distance() <= distance_to_tip;
+            let is_synced = info.sync_status.distance() <= distance_to_tip;
 
             self.synchronized_state_updator
-                .wait_for_node_resync_msg(info, self.da_sync_state.clone(), "wait_for_node_resync")
+                .wait_for_node_resync_msg(info, "wait_for_node_resync")
                 .await;
 
             // Exit after processing if we're synced
@@ -642,7 +630,6 @@ where
         .synchronized_state_updator
         .sequencer_conditions_msg(
             &info,
-            seq.da_sync_state.clone(),
             next_sequence_number_according_to_node,
             "update_state::fetch_initial_batches_to_replay",
         )

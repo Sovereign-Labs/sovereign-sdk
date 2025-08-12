@@ -14,6 +14,7 @@ use sov_modules_api::HexHash;
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_test_utils::logging::LogCollector;
+use std::sync::atomic::AtomicUsize;
 use tempfile::TempDir;
 use tokio::sync::{broadcast, watch, RwLock};
 use tokio::task::JoinHandle;
@@ -317,6 +318,7 @@ async fn create_blob_sender(
 
     let hooks = TestHooks {};
 
+    let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
     let (blob_sender, handle) = BlobSender::new_with_task_intervals(
         da,
         finalization_manager,
@@ -327,6 +329,7 @@ async fn create_blob_sender(
         blob_status_sender,
         Duration::from_millis(1000),
         Default::default(),
+        nb_of_concurrent_blob_submissions,
     )
     .await
     .unwrap();

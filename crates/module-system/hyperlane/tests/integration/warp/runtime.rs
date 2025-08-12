@@ -228,7 +228,8 @@ pub fn register_relayer_with_igp(
         assert: Box::new(|result, _| {
             assert!(
                 result.tx_receipt.is_successful(),
-                "IGP set relayer config was not done successfully"
+                "IGP set relayer config was not done successfully. {:?}",
+                result.tx_receipt
             );
         }),
     });

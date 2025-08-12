@@ -47,3 +47,4 @@ sov-test-utils = { workspace = true }
 sov-kernels = { workspace = true, features = ["native"] }
 sov-state = { workspace = true, features = ["native"] }
 
+

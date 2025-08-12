@@ -13,7 +13,6 @@ use sov_modules_api::prelude::*;
 use sov_modules_api::{Spec, SyncStatus};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
-
 type S = sov_test_utils::TestSpec;
 
 generate_optimistic_runtime!(TestRuntime <= );
@@ -64,6 +63,11 @@ impl TestData {
 
         let mut ledger = SimpleLedgerStorageManager::new_any_path();
 
+        let (sync_sender, sync_receiver) = watch::channel(SyncStatus::Syncing {
+            synced_da_height: 0,
+            target_da_height: 0,
+        });
+
         let state_update_info = StateUpdateInfo {
             storage,
             ledger_reader: ledger.create_ledger_storage(),
@@ -71,13 +75,12 @@ impl TestData {
             next_tx_number: 0,
             slot_number: SlotNumber::GENESIS,
             latest_finalized_slot_number: SlotNumber::GENESIS,
+            sync_status: SyncStatus::Synced {
+                synced_da_height: 22,
+            },
         };
 
         let (state_update_sender, state_update_receiver) = watch::channel(state_update_info);
-        let (sync_sender, sync_receiver) = watch::channel(SyncStatus::Syncing {
-            synced_da_height: 0,
-            target_da_height: 0,
-        });
 
         let axum_router: axum::Router<()> =
             RollupTxRouter::<Arc<DefaultRollupStateProvider<S, RT>>>::axum_router(
@@ -128,6 +131,9 @@ impl TestData {
             next_tx_number: 0,
             slot_number: SlotNumber::GENESIS,
             latest_finalized_slot_number: SlotNumber::GENESIS,
+            sync_status: SyncStatus::Synced {
+                synced_da_height: 99,
+            },
         };
         self.storage_sender.send_replace(state_update_info);
     }

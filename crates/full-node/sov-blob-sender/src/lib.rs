@@ -112,6 +112,7 @@ where
         blob_processing_timeout: Duration,
         blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
         completed_blobs_to_send: Vec<(BlobToSend, BlobInternalId)>,
+        nb_of_concurrent_blob_submissions: Arc<AtomicUsize>,
     ) -> anyhow::Result<(Self, JoinHandle<()>)> {
         Self::new_with_task_intervals(
             da,
@@ -123,6 +124,7 @@ where
             blob_sender_channel,
             LEDGER_POLL_INTERVAL,
             completed_blobs_to_send,
+            nb_of_concurrent_blob_submissions,
         )
         .await
     }
@@ -137,6 +139,7 @@ where
         blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
         ledger_pool_interval: Duration,
         completed_blobs_to_send: Vec<(BlobToSend, BlobInternalId)>,
+        nb_of_concurrent_blob_submissions: Arc<AtomicUsize>,
     ) -> anyhow::Result<(Self, JoinHandle<()>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
         let db = Arc::new(BlobSenderDb::new(storage_path).await?);
@@ -168,7 +171,7 @@ where
             shutdown_sender,
             da,
             finalization_manager,
-            nb_of_concurrent_blob_submissions: Arc::new(AtomicUsize::new(0)),
+            nb_of_concurrent_blob_submissions,
             blob_processing_timeout,
             blob_sender_channel,
             ledger_pool_interval,
