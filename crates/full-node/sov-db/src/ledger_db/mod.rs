@@ -143,7 +143,7 @@ impl LedgerNotificationService {
     ) {
         tracing::trace!(
             %triggered_at_slot,
-            finalize_slot = %slot_number,
+            finalized_slot = %slot_number,
             "Registering finalized slot notification");
         self.finalized_slot_notifications
             .lock()
@@ -279,11 +279,11 @@ impl LedgerDb {
     ///
     /// To provide strong consistency across the REST API,
     /// we need to delay updating the inner reader of such ledger dbs until
-    /// the full execution has completed (including the seqeuncer).
+    /// the full execution has completed (including the sequencer).
     ///
     /// This solves an issue where `/ledger/slots/finalized` would return a slot_number
     /// then that slot number was used to query module state:
-    /// `/modules/mymodule/state/a?slot_number=slot_number` but would return an invalid
+    /// `/modules/my-module/state/a?slot_number=slot_number` but would return an invalid
     /// slot number error because state updates hadn't propagated to module-related
     /// state accessors.
     ///
@@ -438,10 +438,10 @@ impl LedgerDb {
             current_item_numbers.batch_number += 1;
         }
 
-        for discarded_blob in data_to_commit.discarded_blobs.into_iter() {
+        for discarded_blob_hash in data_to_commit.discarded_blobs.into_iter() {
             self.put_discarded_blob(
                 StoredDiscardedBlob {
-                    discarded_blob,
+                    hash: discarded_blob_hash.0,
                     slot_number,
                 },
                 &mut schema_batch,
@@ -470,23 +470,24 @@ impl LedgerDb {
         self.notification_service.send_notifications();
     }
 
-    /// Send all notifications for slots <= `slot_num`.
-    pub fn send_notifications_for_slot(&self, slot_num: SlotNumber) {
+    /// Send all notifications for slots <= `slot_number`.
+    pub fn send_notifications_for_slot(&self, slot_number: SlotNumber) {
         self.notification_service
-            .send_notifications_for_slot(slot_num);
+            .send_notifications_for_slot(slot_number);
     }
 
     /// Materializes the latest finalized slot and registers notification.
     pub fn materialize_latest_finalize_slot(
         &self,
-        current_slot_num: SlotNumber,
-        slot_num: SlotNumber,
+        current_slot_number: SlotNumber,
+        finalized_slot_number: SlotNumber,
     ) -> anyhow::Result<SchemaBatch> {
         let mut schema_batch = SchemaBatch::new();
-        schema_batch.put::<FinalizedSlots>(&LatestFinalizedSlotSingleton, &slot_num)?;
+        schema_batch
+            .put::<FinalizedSlots>(&LatestFinalizedSlotSingleton, &finalized_slot_number)?;
         // Register notification for the slot number that was finalized. It will get *sent* after the slot is finished committing.
         self.notification_service
-            .register_finalized_slot_notification(current_slot_num, slot_num);
+            .register_finalized_slot_notification(current_slot_number, finalized_slot_number);
         Ok(schema_batch)
     }
 
@@ -516,7 +517,7 @@ impl LedgerDb {
     /// Materializes aggregated zk proof
     pub fn materialize_aggregated_proof(
         &self,
-        current_slot_num: SlotNumber,
+        current_slot_number: SlotNumber,
         agg_proof: SerializedAggregatedProof,
     ) -> anyhow::Result<SchemaBatch> {
         let mut schema_batch = SchemaBatch::new();
@@ -525,7 +526,7 @@ impl LedgerDb {
 
         self.notification_service
             .register_aggregated_proof_notification(
-                current_slot_num,
+                current_slot_number,
                 AggregatedProofResponse { proof: agg_proof },
             );
         Ok(schema_batch)
@@ -535,10 +536,10 @@ impl LedgerDb {
     pub fn materialize_stf_info(
         &self,
         stf_info: &StoredStfInfo,
-        slot_num: SlotNumber,
+        slot_number: SlotNumber,
     ) -> anyhow::Result<SchemaBatch> {
         let mut schema_batch = SchemaBatch::new();
-        schema_batch.put::<StfInfoByNumber>(&slot_num, stf_info)?;
+        schema_batch.put::<StfInfoByNumber>(&slot_number, stf_info)?;
         Ok(schema_batch)
     }
 
@@ -551,10 +552,10 @@ impl LedgerDb {
     /// Materializes the latest height of the written STF info.
     pub fn materialize_stf_info_write_slot_number(
         &self,
-        stf_write_slot_num: SlotNumber,
+        stf_write_slot_number: SlotNumber,
     ) -> anyhow::Result<SchemaBatch> {
         let mut schema_batch = SchemaBatch::new();
-        schema_batch.put::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID, &stf_write_slot_num)?;
+        schema_batch.put::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID, &stf_write_slot_number)?;
         Ok(schema_batch)
     }
 
@@ -595,9 +596,9 @@ impl LedgerDb {
     }
 
     /// Delete STF info for the given slot number.
-    pub fn delete_stf_info(&self, slot_num: SlotNumber) -> anyhow::Result<SchemaBatch> {
+    pub fn delete_stf_info(&self, slot_number: SlotNumber) -> anyhow::Result<SchemaBatch> {
         let mut schema_batch = SchemaBatch::new();
-        schema_batch.delete::<StfInfoByNumber>(&slot_num)?;
+        schema_batch.delete::<StfInfoByNumber>(&slot_number)?;
         Ok(schema_batch)
     }
 

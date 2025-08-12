@@ -775,14 +775,14 @@ where
                                         err.to_string()
                                     )),
                                 };
-                                tracing::trace!(
-                                    from = %old_last,
-                                    up_to_inc = %incoming_slot_num,
-                                    "Collected websocket notification about finalized slots"
-                                );
+                                tracing::trace!(%slot_number, "Preparing slot result for sending to websocket");
                                 slots.push(slot_result);
                             }
-
+                            tracing::trace!(
+                                from = %old_last,
+                                up_to_inc = %incoming_slot_num,
+                                "Collected websocket notification about finalized slots"
+                            );
                             // Returning `Some(...)` yields items to the *downstream*;
                             // returning `None` would end the stream.
                             Some(futures::stream::iter(slots))
