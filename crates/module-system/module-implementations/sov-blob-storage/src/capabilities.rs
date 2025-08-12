@@ -836,7 +836,10 @@ impl<S: Spec> BlobStorage<S> {
 
             if !blobs_to_select.can_accept_blob(SequencerType::Preferred, blob_with_id.blob_size())
             {
-                tracing::error!(blob_id = hex::encode(blob_id), "TODO");
+                tracing::error!(
+                    blob_id = hex::encode(blob_id),
+                    "The blob is discarded because it exceeds the size limit."
+                );
                 Self::discard(
                     discarded_blobs,
                     preferred_sender,
