@@ -250,11 +250,9 @@ async fn test_stream_of_transactions(
             ..Default::default()
         });
         config.rollup_prover_config = None;
-        config.automatic_batch_production = true;
+        config.max_concurrent_blobs = 128;
     })
     .set_da_config(|da_config| {
-        // We don't need to test restarts, so let's save disk accesses and file descriptors.
-        da_config.connection_string = MockDaConfig::sqlite_in_memory();
         da_config.sender_address = genesis_config
             .sequencer_registry
             .sequencer_config
