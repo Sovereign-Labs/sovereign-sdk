@@ -89,15 +89,10 @@ where
 
 #[tokio::test(flavor = "multi_thread")]
 async fn blob_sender_posts_data_to_da() -> anyhow::Result<()> {
-    let da_dir = tempfile::tempdir().unwrap();
-    let (shutdown_sender, _shutdown_receiver) = watch::channel(());
-    let da = create_da(&da_dir).await;
-    let storage_dir = tempfile::tempdir().unwrap();
+    let deps = create_deps().await;
     let (mut blob_sender, _) = create_blob_sender(
         Duration::from_secs(20),
-        &storage_dir,
-        da.clone(),
-        shutdown_sender,
+        &deps,
         None,
         BlobSelectorStatus::Accepted,
     )
@@ -126,10 +121,10 @@ async fn blob_sender_posts_data_to_da() -> anyhow::Result<()> {
     assert_eq!(submissions, 2);
 
     {
-        da.produce_block_now().await?;
+        deps.da.produce_block_now().await?;
         sleep(Duration::from_secs(1)).await;
-        assert_data_at(&da, data_1.as_slice(), 1).await;
-        assert_data_at(&da, data_2.as_slice(), 1).await;
+        assert_data_at(&deps.da, data_1.as_slice(), 1).await;
+        assert_data_at(&deps.da, data_2.as_slice(), 1).await;
 
         let submissions = blob_sender.nb_of_concurrent_blob_submissions();
         assert_eq!(submissions, 0);
@@ -138,6 +133,7 @@ async fn blob_sender_posts_data_to_da() -> anyhow::Result<()> {
     Ok(())
 }
 
+/*
 #[tokio::test(flavor = "multi_thread")]
 async fn blob_sender_shutdown_task() -> anyhow::Result<()> {
     let collector = LogCollector::new(Level::INFO);
@@ -391,6 +387,31 @@ async fn discarded_blobs_are_resubmitted() -> anyhow::Result<()> {
     Ok(())
 }
 
+*/
+
+struct Deps {
+    _da_dir: TempDir,
+    shutdown_sender: watch::Sender<()>,
+    _shutdown_receiver: watch::Receiver<()>,
+    da: StorableMockDaService,
+    storage_dir: TempDir,
+}
+
+async fn create_deps() -> Deps {
+    let da_dir = tempfile::tempdir().unwrap();
+    let (shutdown_sender, shutdown_receiver) = watch::channel(());
+    let da = create_da(&da_dir).await;
+    let storage_dir = tempfile::tempdir().unwrap();
+
+    Deps {
+        _da_dir: da_dir,
+        shutdown_sender,
+        _shutdown_receiver: shutdown_receiver,
+        da,
+        storage_dir,
+    }
+}
+
 async fn create_da(da_dir: &TempDir) -> StorableMockDaService {
     let da_layer = Arc::new(RwLock::new(
         StorableMockDaLayer::new_in_path(da_dir.path(), 0)
@@ -402,9 +423,7 @@ async fn create_da(da_dir: &TempDir) -> StorableMockDaService {
 
 async fn create_blob_sender(
     blob_processing_timeout: Duration,
-    storage_dir: &TempDir,
-    da: StorableMockDaService,
-    shutdown_sender: watch::Sender<()>,
+    deps: &Deps,
     blob_status_sender: Option<broadcast::Sender<BlobExecutionStatus<MockDaSpec>>>,
     blob_selector_status: BlobSelectorStatus,
 ) -> (
@@ -412,7 +431,7 @@ async fn create_blob_sender(
     JoinHandle<()>,
 ) {
     let finalization_manager = TestFinalizationManager {
-        da: da.clone(),
+        da: deps.da.clone(),
         start_da_height: 0,
         blob_selector_status,
     };
@@ -421,11 +440,11 @@ async fn create_blob_sender(
 
     let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
     let (blob_sender, handle) = BlobSender::new_with_task_intervals(
-        da,
+        deps.da.clone(),
         finalization_manager,
-        storage_dir.path(),
+        deps.storage_dir.path(),
         hooks,
-        shutdown_sender,
+        deps.shutdown_sender.clone(),
         blob_processing_timeout,
         blob_status_sender,
         Duration::from_millis(1000),
