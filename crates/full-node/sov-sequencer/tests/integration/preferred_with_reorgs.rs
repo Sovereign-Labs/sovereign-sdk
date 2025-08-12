@@ -415,6 +415,23 @@ async fn test_check_no_reorgs_longer_faster_finality() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_check_no_reorgs_longer_longer_finality() -> anyhow::Result<()> {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("debug,sov_metrics=error,sov_sequencer::preferred=trace,sov_db=trace,sov_rollup_apis=trace,integration=warn,jmt=info,hyper=info,request=info,tower=info,sqlx=warn,h2=info");
+    tokio::time::timeout(
+        TEST_TIMEOUT,
+        test_stream_of_transactions(StreamOfTransactionsArgs {
+            block_time_ms: 500,
+            finalization_blocks: 30,
+            da_slots: 60,
+            txs_per_da_slot: 10,
+            additional_users: 20,
+            randomization_config: None,
+        }),
+    )
+    .await?
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_check_no_reorgs_longer_instant_finality() -> anyhow::Result<()> {
     sov_test_utils::logging::initialize_or_change_logging_with_filter("debug,sov_metrics=error,sov_sequencer::preferred=trace,sov_db=trace,sov_rollup_apis=trace,integration=warn,jmt=info,hyper=info,request=info,tower=info,sqlx=warn,h2=info");
     tokio::time::timeout(
@@ -428,7 +445,7 @@ async fn test_check_no_reorgs_longer_instant_finality() -> anyhow::Result<()> {
             randomization_config: None,
         }),
     )
-        .await?
+    .await?
 }
 
 struct StreamOfTransactionsArgs {
