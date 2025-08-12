@@ -253,10 +253,10 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
 
 /// This test checks that process_stf_changes goes normally,
 /// even when the finalized block progressed above the passed block header.
-/// Important invariant, that ledger db receives "true" last finalized height,
-/// not height of the last **seen** finalized transition.
+/// Important invariant, ledger db receives the last **processed finalized rollup transition**
+/// and not **the last seen  finalized DA height**
 /// Basically this test covers the case of "syncing node",
-/// and it is an important invariant that LedgerDb gets true finalized height
+/// and it is an important invariant that LedgerDb gets finalized height that it has processed
 #[tokio::test(flavor = "multi_thread")]
 async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
@@ -303,8 +303,6 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
         da_service.send_transaction(&[10; 10]).await.await??;
     }
 
-    let last_finalized_height = da_service.get_last_finalized_block_header().await?.height();
-
     let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
         state_manager.get_state_root().to_owned(),
         prover_storage,
@@ -326,9 +324,10 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
         .await?;
     check_internal_consistency(&state_manager, finality as usize);
 
-    // Last finalized height written to LedgerDb as it passed.
+    // The last finalized height is not written to LedgerDb directly,
+    // only the last processed finalized height.
     assert_eq!(
-        last_finalized_height,
+        chain_length,
         state_manager
             .ledger_db
             .get_latest_finalized_slot_number()
