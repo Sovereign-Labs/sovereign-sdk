@@ -161,6 +161,7 @@ impl LedgerNotificationService {
     }
 
     pub(crate) fn send_notifications_for_slot(&self, slot: SlotNumber) {
+        tracing::trace!(slot_number = %slot, "Start sending notifications");
         {
             let mut slot_notifications = self
                 .slot_notifications
@@ -176,6 +177,7 @@ impl LedgerNotificationService {
                 }
             });
         }
+        tracing::trace!(slot_number = %slot, "Slot notifications are sent");
 
         {
             let mut finalized_slot_notifications = self
@@ -194,6 +196,7 @@ impl LedgerNotificationService {
                 }
             });
         }
+        tracing::trace!(slot_number = %slot, "Finalized slot notifications are sent");
 
         {
             let mut proof_notifications = self
@@ -212,6 +215,7 @@ impl LedgerNotificationService {
                 }
             });
         }
+        tracing::trace!(slot_number = %slot, "All notifications are sent");
     }
 
     pub(crate) fn send_notifications(&self) {
@@ -273,6 +277,7 @@ impl LedgerDb {
     /// state accessors.
     pub fn with_shared_notifications(other: &LedgerDb) -> Self {
         Self {
+            // db: other.db.clone(),
             db: Arc::new(RwLock::new(other.clone_reader())),
             notification_service: other.notification_service.clone(),
         }

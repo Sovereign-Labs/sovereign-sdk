@@ -676,6 +676,10 @@ where
             "Starting LedgerAPI storage update");
         self.api_ledger_db
             .replace_reader(info.ledger_reader.clone());
+        tracing::trace!(
+            slot_number = %info.slot_number,
+            latest_finalized_slot_number = %info.latest_finalized_slot_number,
+            "LedgerDb reader is replaced, sending notifications for the slot");
         self.api_ledger_db
             .send_notifications_for_slot(info.slot_number);
         tracing::trace!(
