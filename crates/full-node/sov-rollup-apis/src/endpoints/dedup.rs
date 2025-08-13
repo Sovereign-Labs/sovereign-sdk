@@ -62,6 +62,13 @@ pub trait DeDupEndpoint<S: Spec>: Clone + Send + Sync + 'static {
 
 /// Provides the `/rollup/addresses/{address}/dedup` endpoint using the sovereign provided
 /// `uniqueness` module.
+/// 
+/// This endpoint supports two independent uniqueness mechanisms:
+/// - **Nonces**: Sequential counters that must be used in order (0, 1, 2, ...). No skipping allowed.
+/// - **Generations**: Non-sequential identifiers that can skip values (0, 3, 7, ...).
+/// 
+/// Both mechanisms are tracked independently per account, allowing flexible transaction ordering
+/// strategies. You can mix nonce and generation-based transactions for the same account.
 #[derive(Clone)]
 pub struct SovereignDeDupEndpoint<S: Spec> {
     state: ApiState<S>,
@@ -74,13 +81,17 @@ impl<S: Spec> SovereignDeDupEndpoint<S> {
     }
 }
 
-/// The response of the Dedup implementation for both nonce and generation number
+/// The response of the Dedup implementation for both nonce and generation number.
+/// 
+/// Only one field will be populated based on the query parameter:
+/// - `nonce`: The next sequential nonce value (must be used in order)
+/// - `generation`: The next available generation number (can skip values)
 #[derive(serde::Serialize, Clone)]
 pub struct DedupResponse {
     /// The next nonce associated with the requested address.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nonce: Option<u64>,
-    /// The next generation number associated with the requested address
+    /// The next generation number associated with the requested address.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub generation: Option<u64>,
 }

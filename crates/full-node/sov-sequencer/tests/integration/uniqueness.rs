@@ -22,13 +22,12 @@ generate_operator_runtime_with_kernel!(kernel_type: SoftConfirmationsKernel<'a, 
 type RT = TestRuntime<TestSpec>;
 type TestBlueprint = RtAgnosticBlueprint<TestSpec, RT>;
 
-#[allow(clippy::too_many_arguments)]
 async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
     let reward_user = TestUser::<TestSpec>::generate(TEST_DEFAULT_USER_BALANCE);
 
     let genesis_config =
         HighLevelOperatorGenesisConfig::<TestSpec>::generate_with_additional_accounts(
-            2,
+            1,
             reward_user,
         );
 
@@ -73,13 +72,16 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
     )
 }
 
-/// Test demonstrating how nonce and generation can be used independently
+/// Test demonstrating how nonce and generation can be used independently.
 /// This test shows that:
 /// 1. Nonces and generations are tracked separately per account
-/// 2. You can skip values in generation, but not nonce
-/// 3. You cannot reuse a nonce or generation that was already consumed
+/// 2. Generations allow skipping values (e.g., 0 -> 3 -> 6)
+/// 3. Nonces must be sequential (0 -> 1 -> 2...), skipping is not allowed
+/// 4. You cannot reuse a nonce or generation that was already consumed
+/// 5. Both mechanisms can be used interchangeably for the same account
 #[tokio::test(flavor = "multi_thread")]
 async fn test_mixed_nonce_and_generation_transactions() {
+    // Keep it commented out in case of debug.
     // sov_test_utils::logging::initialize_or_change_logging_with_filter(
     //     "warn,sov_metrics=error,sov=debug,integration=debug",
     // );
@@ -135,36 +137,39 @@ async fn test_mixed_nonce_and_generation_transactions() {
         .await;
     assert!(
         result.is_err(),
-        "Nonce 2 should fail (skipping not is allowed)"
+        "Nonce 2 should fail (skipping is not allowed)"
     );
 
+    // Submit nonces 1, 2, 3, 4 in sequence (must be sequential)
     for nonce in 1..=4 {
         let result = client
             .send_tx_to_sequencer(&construct_tx(UniquenessData::Nonce(nonce)))
             .await;
         assert!(result.is_ok(), "Nonce {nonce} should succeed");
     }
-    // Last nonce is 4 at that point
+    // Last nonce used is 4, next expected nonce is 5
 
-    // 4. Submit tx with generation 3
+    // 4. Submit tx with generation 3 (skipping 1 and 2) -> should succeed
     let result = client
         .send_tx_to_sequencer(&construct_tx(UniquenessData::Generation(3)))
         .await;
     assert!(result.is_ok(), "Generation 3 should succeed");
-    // 4. Submit tx with generation 6
+    
+    // 5. Submit tx with generation 6 (skipping 4 and 5) -> should succeed
     let result = client
         .send_tx_to_sequencer(&construct_tx(UniquenessData::Generation(6)))
         .await;
     assert!(result.is_ok(), "Generation 6 should succeed");
 
-    // 5. is below the latest generation 6, but it is accepted because the latest nonce is 4
+    // 6. Submit tx with nonce 5 -> should succeed (continues from nonce 4, independent of generation)
     let result = client
         .send_tx_to_sequencer(&construct_tx(UniquenessData::Nonce(5)))
         .await;
     assert!(result.is_ok(), "Nonce 5 should succeed");
-    // 6. Submit tx with generation 6 again
+    
+    // 7. Submit tx with generation 6 again -> should fail (already used)
     let result = client
         .send_tx_to_sequencer(&construct_tx(UniquenessData::Generation(6)))
         .await;
-    assert!(result.is_err(), "Generation 6 should fail");
+    assert!(result.is_err(), "Generation 6 should fail (already used)");
 }
