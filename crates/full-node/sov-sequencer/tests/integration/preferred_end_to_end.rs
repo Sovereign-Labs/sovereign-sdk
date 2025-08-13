@@ -1825,7 +1825,10 @@ async fn seq_many_invalid_txs() {
         res.expect("Background sender task has panicked");
     }
 
-    let _ = test_rollup.shutdown().await.expect("Rollup shutdown properly");
+    let _ = test_rollup
+        .shutdown()
+        .await
+        .expect("Rollup shutdown properly");
 }
 
 /// Ensure that we use the correct visible slot number when replaying transactions after a call to `update_state` in the sequencer.
