@@ -86,7 +86,7 @@ impl<S: Spec> SovereignDeDupEndpoint<S> {
 /// Only one field will be populated based on the query parameter:
 /// - `nonce`: The next sequential nonce value (must be used in order)
 /// - `generation`: The next available generation number (can skip values)
-#[derive(serde::Serialize, Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct DedupResponse {
     /// The next nonce associated with the requested address.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -117,17 +117,19 @@ pub enum SelectField {
 
 impl<S: Spec> SovereignDeDupEndpoint<S> {
     fn handler_with_query(
-        address: String,
+        pub_key: String,
         mut state: ApiStateAccessor<S>,
         query: DedupQuery,
     ) -> Result<DedupResponse, anyhow::Error> {
-        let pub_key = <S::CryptoSpec as CryptoSpec>::PublicKey::from_str(&address)?;
+        let pub_key = <S::CryptoSpec as CryptoSpec>::PublicKey::from_str(&pub_key)?;
         let credential_id = metered_credential(&pub_key, &mut state)?;
+        tracing::trace!(%credential_id, "Going to provide dedup for");
         let uniqueness = Uniqueness::<S>::default();
 
         match query.select {
             Some(SelectField::Generation) => {
                 let generation = uniqueness.next_generation(&credential_id, &mut state)?;
+                tracing::trace!(%credential_id, %generation, "Providing generation for credential id");
                 Ok(DedupResponse {
                     nonce: None,
                     generation: Some(generation),
@@ -135,6 +137,7 @@ impl<S: Spec> SovereignDeDupEndpoint<S> {
             }
             Some(SelectField::Nonce) | None => {
                 let nonce = uniqueness.next_nonce(&credential_id, &mut state)?;
+                tracing::trace!(%credential_id, %nonce, "Providing nonce for credential id");
                 Ok(DedupResponse {
                     nonce: Some(nonce),
                     generation: None,

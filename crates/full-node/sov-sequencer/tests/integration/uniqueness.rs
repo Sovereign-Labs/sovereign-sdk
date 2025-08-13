@@ -1,5 +1,6 @@
 use crate::utils::{new_test_rollup, MAX_BATCH_EXECUTION_TIME_MILLIS};
 use futures::StreamExt;
+use sov_api_spec::types::AnyJsonValue;
 use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::capabilities::UniquenessData;
@@ -7,6 +8,7 @@ use sov_modules_api::prelude::*;
 use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
 use sov_modules_api::{Amount, EncodeCall, Runtime};
 use sov_modules_stf_blueprint::GenesisParams;
+use sov_rollup_interface::crypto::PrivateKey;
 use sov_test_utils::runtime::genesis::operator::HighLevelOperatorGenesisConfig;
 use sov_test_utils::runtime::Bank;
 use sov_test_utils::sov_bank::{config_gas_token_id, CallMessage as BankCallMessage, Coins};
@@ -94,6 +96,15 @@ async fn test_mixed_nonce_and_generation_transactions() {
         .unwrap();
 
     let client = test_rollup.client.client.clone();
+
+    // let addr1 = test_user.address();
+    let pub_key_hex = hex::encode(test_user.private_key.pub_key().bytes());
+    let response = client.address_dedup(&pub_key_hex).await.unwrap();
+    let AnyJsonValue::Object(inner) = response.into_inner() else {
+        panic!("Invalid response shape is returned from dedup endpoint");
+    };
+    let default_nonce = inner.get("nonce").and_then(|x| x.as_u64()).unwrap();
+    assert_eq!(0, default_nonce);
 
     let mut finalized_slots = client.subscribe_finalized_slots().await.unwrap();
     let _ = finalized_slots.next().await;
