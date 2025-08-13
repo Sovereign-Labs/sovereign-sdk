@@ -1723,10 +1723,7 @@ async fn flaky_seq_back_pressure() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn seq_many_invalid_txs() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter(
-        "warn,sov_metrics=error,sov=debug,integration=debug",
-    );
-    let txs = 100u64;
+    let txs = 1000u64;
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
@@ -1760,14 +1757,9 @@ async fn seq_many_invalid_txs() {
     let mut handles = Vec::with_capacity(txs as usize);
     for i in 0..txs {
         let client = client.clone();
-        let da_service = test_rollup.da_service.clone();
-
         // Generation is always below, so each tx is going to fail
         let tx = tx_set_value(&admin.private_key, 0, i);
         handles.push(tokio::spawn(async move {
-            let start_task = std::time::Instant::now();
-
-            // Use backon retry logic with exponential backoff
             let backoff = backon::ExponentialBuilder::default()
                 .with_factor(1.5)
                 .with_min_delay(Duration::from_millis(200))
@@ -1798,7 +1790,7 @@ async fn seq_many_invalid_txs() {
                             std::str::from_utf8(bytes.as_ref())
                                 .ok()
                                 .map(|s| {
-                                    // Try to parse status from response
+                                    // Try to parse status from the response
                                     s.contains("\"status\":5")
                                 })
                                 .unwrap_or(false)
@@ -1813,25 +1805,13 @@ async fn seq_many_invalid_txs() {
                     );
                 })
                 .await;
-
-            tracing::info!("Task {} i submit is done in {:?}", i, start_task.elapsed());
-            // Why each handle produces a block, when we produce 50 after the loop?
-            da_service.produce_block_now().await.unwrap();
-
-            // Panic on HTTP 200 success (as requested in TODO)
-            if let Ok(response) = &res {
-                panic!(
-                    "Task {i}: Transaction unexpectedly succeeded with HTTP 200. Response: {response:?}"
-                );
-            }
-
             assert!(res.is_err(), "Request has been accepted, when it shouldn't");
         }));
     }
 
     test_rollup
         .da_service
-        .produce_n_blocks_now(50)
+        .produce_n_blocks_now(txs as usize / 2)
         .await
         .unwrap();
 
