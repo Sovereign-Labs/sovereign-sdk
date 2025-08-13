@@ -1807,7 +1807,9 @@ async fn seq_many_invalid_txs() {
                 })
                 .await;
             // Producing block to add more work for the sequencer
-            da_service.produce_block_now().await.unwrap();
+            if i % 5 == 0 {
+                da_service.produce_block_now().await.unwrap();
+            }
             assert!(res.is_err(), "Request has been accepted, when it shouldn't");
         }));
     }
@@ -1822,6 +1824,8 @@ async fn seq_many_invalid_txs() {
     for res in results {
         res.expect("Background sender task has panicked");
     }
+
+    let _ = test_rollup.shutdown().await.expect("Rollup shutdown properly");
 }
 
 /// Ensure that we use the correct visible slot number when replaying transactions after a call to `update_state` in the sequencer.
