@@ -88,12 +88,14 @@ impl<S: Spec> Uniqueness<S> {
         credential_id: &CredentialId,
         state: &mut Reader,
     ) -> Result<u64, anyhow::Error> {
-        self.nonces.get(credential_id, state).map(|maybe_nonce| {
-            maybe_nonce
-                .unwrap_or_default()
-                .checked_add(1)
-                .ok_or(anyhow::anyhow!("Maximum nonce value reached"))
-        })?
+        self.nonces
+            .get(credential_id, state)
+            .map(|maybe_nonce| match maybe_nonce {
+                None => Ok(0),
+                Some(existing) => existing
+                    .checked_add(1)
+                    .ok_or(anyhow::anyhow!("Maximum nonce value reached")),
+            })?
     }
 }
 
