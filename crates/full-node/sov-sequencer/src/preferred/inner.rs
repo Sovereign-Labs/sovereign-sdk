@@ -601,6 +601,10 @@ where
         max_concurrent_blobs: usize,
         height_to_stop_at: Option<RollupHeight>,
     ) -> Result<(), SequencerNotReadyDetails> {
+        if self.is_replica() {
+            return Err(SequencerNotReadyDetails::ReplicaMode);
+        }
+
         // We cannot accept transactions until the latest finalized slot number
         // is AT LEAST 1. Meaning, as long as we're stuck at genesis, we can't
         // accept any transactions.

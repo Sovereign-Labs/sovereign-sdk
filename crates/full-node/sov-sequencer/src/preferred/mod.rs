@@ -32,7 +32,6 @@ pub use full_node_configs::sequencer::{PreferredSequencerConfig, RecoveryStrateg
 use futures::Stream;
 use inner::*;
 use preferred_blob_sender::PreferredBlobSender;
-use replica_sync_task::spawn_replica_sync_task;
 use serde_with::serde_as;
 use side_effects::SideEffectsTask;
 use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
@@ -167,7 +166,7 @@ where
         )
         .await?;
 
-        let (latest_db_event_id, next_sequence_number, db_cache) = db.initial_data().await?;
+        let (_latest_db_event_id, next_sequence_number, db_cache) = db.initial_data().await?;
 
         let mut handles = vec![];
 
@@ -273,10 +272,10 @@ where
         // state, then yield when it switches to processing postgres events live.
         // This is necessary to prevent conflicts with the update_state task.
         if config.sequencer_kind_config.is_replica {
-            handles.push(
-                spawn_replica_sync_task(seq.clone(), shutdown_receiver.clone(), latest_db_event_id)
-                    .await,
-            );
+            //handles.push(
+            //    spawn_replica_sync_task(seq.clone(), shutdown_receiver.clone(), latest_db_event_id)
+            //        .await,
+            //);
         }
         handles.push(tokio::spawn({
             update_state_task(
