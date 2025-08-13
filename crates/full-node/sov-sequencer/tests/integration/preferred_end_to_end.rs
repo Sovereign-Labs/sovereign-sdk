@@ -1757,6 +1757,7 @@ async fn seq_many_invalid_txs() {
     let mut handles = Vec::with_capacity(txs as usize);
     for i in 0..txs {
         let client = client.clone();
+        let da_service = test_rollup.da_service.clone();
         // Generation is always below, so each tx is going to fail
         let tx = tx_set_value(&admin.private_key, 0, i);
         handles.push(tokio::spawn(async move {
@@ -1805,6 +1806,8 @@ async fn seq_many_invalid_txs() {
                     );
                 })
                 .await;
+            // Producing block to add more work for the sequencer
+            da_service.produce_block_now().await.unwrap();
             assert!(res.is_err(), "Request has been accepted, when it shouldn't");
         }));
     }
