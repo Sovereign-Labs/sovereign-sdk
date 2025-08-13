@@ -81,27 +81,22 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
 /// 3. You cannot reuse a nonce or generation that was already consumed
 #[tokio::test(flavor = "multi_thread")]
 async fn test_mixed_nonce_and_generation_transactions() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter(
-        "warn,sov_metrics=error,sov=debug,integration=debug",
-    );
+    // sov_test_utils::logging::initialize_or_change_logging_with_filter(
+    //     "warn,sov_metrics=error,sov=debug,integration=debug",
+    // );
 
-    tracing::info!("STARTING ROLLUP");
     let (test_rollup, test_user) = create_test_rollup().await;
-    tracing::info!("ROLLUP STARTED");
     test_rollup
         .da_service
         .produce_n_blocks_now(3)
         .await
         .unwrap();
-    tracing::info!("PRODUCED SOME BLOCKS");
 
     let client = test_rollup.client.client.clone();
 
     let mut finalized_slots = client.subscribe_finalized_slots().await.unwrap();
-    let x = finalized_slots.next().await;
-    tracing::info!("X1: {:?}", x);
-    let x = finalized_slots.next().await;
-    tracing::info!("X2: {:?}", x);
+    let _ = finalized_slots.next().await;
+    let _ = finalized_slots.next().await;
 
     // Create a simple burn message for all transactions
     let msg = <RT as EncodeCall<Bank<TestSpec>>>::to_decodable(BankCallMessage::Burn {
@@ -123,123 +118,49 @@ async fn test_mixed_nonce_and_generation_transactions() {
     };
 
     // Test sequence:
-    // // 1. Submit tx with generation 1 -> should succeed
-    // let result = client
-    //     .send_tx_to_sequencer(&construct_tx(UniquenessData::Generation(0)))
-    //     .await;
-    // tracing::info!("Result 1: {:?}", result);
-    // assert!(result.is_ok(), "Generation 1 should succeed");
-    // let _ = sequencer.sequencer.produce_and_submit_batch().await;
+    // 1. Submit tx with generation 0 -> should succeed
+    let result = client
+        .send_tx_to_sequencer(&construct_tx(UniquenessData::Generation(0)))
+        .await;
+    assert!(result.is_ok(), "Generation 0 should succeed");
 
-    // 2. Submit tx with nonce 1 -> should succeed (independent counter)
+    // 2. Submit tx with nonce 0 -> should succeed (independent counter)
     let result = client
         .send_tx_to_sequencer(&construct_tx(UniquenessData::Nonce(0)))
         .await;
-    tracing::info!("Result 2: {:?}", result);
-    assert!(result.is_ok(), "Nonce 1 should succeed");
-    // let _ = sequencer.sequencer.produce_and_submit_batch().await;
+    assert!(result.is_ok(), "Nonce 0 should succeed");
 
-    // TESTING
+    // 3. Submit tx with nonce 2 -> should fail, skipping is not allowed for nonces
     let result = client
         .send_tx_to_sequencer(&construct_tx(UniquenessData::Nonce(2)))
         .await;
-    tracing::info!("RESULT NONCE 2: {:?}", result);
     assert!(
-        result.is_ok(),
-        "Nonce 2 should succeed (skipping is allowed)"
+        result.is_err(),
+        "Nonce 2 should fail (skipping not is allowed)"
     );
-    // let _ = sequencer.sequencer.produce_and_submit_batch().await;
 
+    for nonce in 1..=4 {
+        let result = client
+            .send_tx_to_sequencer(&construct_tx(UniquenessData::Nonce(nonce)))
+            .await;
+        assert!(result.is_ok(), "Nonce {nonce} should succeed");
+    }
+    // Last nonce is 4 at that point
+
+    // 4. Submit tx with generation 3
     let result = client
-        .send_tx_to_sequencer(&construct_tx(UniquenessData::Nonce(1)))
+        .send_tx_to_sequencer(&construct_tx(UniquenessData::Generation(3)))
         .await;
-    tracing::info!("RESULT NONCE 1: {:?}", result);
-    assert!(result.is_err(), "Nonce 1 should fail");
-    // let _ = sequencer.sequencer.produce_and_submit_batch().await;
+    assert!(result.is_ok(), "Generation 3 should succeed");
+    // 4. Submit tx with generation 6
+    let result = client
+        .send_tx_to_sequencer(&construct_tx(UniquenessData::Generation(6)))
+        .await;
+    assert!(result.is_ok(), "Generation 6 should succeed");
 
-    //  END OF TESTING
-
-    // // 3. Submit tx with generation 2 -> should succeed
-    // let result = client
-    //     .send_tx_to_sequencer(&construct_tx(UniquenessData::Generation(1)))
-    //     .await;
-    // tracing::info!("Result 3: {:?}", result);
-    // assert!(result.is_ok(), "Generation 2 should succeed");
-    // let _ = sequencer.sequencer.produce_and_submit_batch().await;
-
-    // // 4. Submit tx with generation 10 -> should succeed (can skip values)
-    // let result = client
-    //     .send_tx_to_sequencer(&construct_tx(UniquenessData::Generation(10)))
-    //     .await;
-    // tracing::info!("Result 4: {:?}", result);
-    // assert!(
-    //     result.is_ok(),
-    //     "Generation 10 should succeed (skipping is allowed)"
-    // );
-    // let _ = sequencer.sequencer.produce_and_submit_batch().await;
-    //
-    // // 5. Submit tx with nonce 9 -> should succeed (can skip values)
-    // let result = client
-    //     .send_tx_to_sequencer(&construct_tx(UniquenessData::Nonce(9)))
-    //     .await;
-    // assert!(
-    //     result.is_ok(),
-    //     "Nonce 9 should succeed (skipping is allowed)"
-    // );
-    // let _ = sequencer.sequencer.produce_and_submit_batch().await;
-    //
-    // // 6. Submit tx with nonce 15 -> should succeed
-    // let result = client
-    //     .send_tx_to_sequencer(&construct_tx(UniquenessData::Nonce(15)))
-    //     .await;
-    // assert!(result.is_ok(), "Nonce 15 should succeed");
-    // let _ = sequencer.sequencer.produce_and_submit_batch().await;
-    //
-    // // 7. Submit tx with generation 13 -> should succeed
-    // let result = client
-    //     .send_tx_to_sequencer(&construct_tx(UniquenessData::Generation(13)))
-    //     .await;
-    // assert!(result.is_ok(), "Generation 13 should succeed");
-    // let _ = sequencer.sequencer.produce_and_submit_batch().await;
-    //
-    // // 8. Submit tx with nonce 14 -> should fail (14 < 15, already used higher)
-    // tracing::info!("Submitting tx with nonce 14 (should fail)...");
-    // let result = client
-    //     .send_tx_to_sequencer(&construct_tx(UniquenessData::Nonce(14)))
-    //     .await;
-    // tracing::info!("RESULT: {:?}", result);
-    // assert!(
-    //     result.is_err(),
-    //     "Nonce 14 should fail - already used nonce 15"
-    // );
-    // let _ = sequencer.sequencer.produce_and_submit_batch().await;
-    //
-    // // 9. Submit tx with generation 12 -> should fail (12 < 13, already used higher)
-    // println!("Submitting tx with generation 12 (should fail)...");
-    // let result = client
-    //     .send_tx_to_sequencer(&construct_tx(UniquenessData::Generation(12)))
-    //     .await;
-    // assert!(
-    //     result.is_err(),
-    //     "Generation 12 should fail - already used generation 13"
-    // );
-    //
-    // // 10. Submit tx with generation 1 again -> should fail (already used)
-    // println!("Submitting tx with generation 1 again (should fail)...");
-    // let result = client
-    //     .send_tx_to_sequencer(&construct_tx(UniquenessData::Generation(1)))
-    //     .await;
-    // assert!(result.is_err(), "Generation 1 should fail - already used");
-    //
-    // // 11. Submit tx with nonce 1 again -> should fail (already used)
-    // println!("Submitting tx with nonce 1 again (should fail)...");
-    // let result = client
-    //     .send_tx_to_sequencer(&construct_tx(UniquenessData::Nonce(1)))
-    //     .await;
-    // assert!(result.is_err(), "Nonce 1 should fail - already used");
-    //
-    // // Produce a batch to ensure transactions are processed
-    // let _ = sequencer.sequencer.produce_and_submit_batch().await;
-
-    println!("Test completed successfully!");
+    // 5 is below the latest generation 6, but it is accepted because the latest nonce is 4
+    let result = client
+        .send_tx_to_sequencer(&construct_tx(UniquenessData::Nonce(5)))
+        .await;
+    assert!(result.is_ok(), "Nonce 5 should succeed");
 }
