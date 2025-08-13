@@ -99,7 +99,7 @@ async fn send_set_value_tx(
     generation: u64,
     value_to_set: u64,
 ) -> Result<ResponseValue<TxInfoWithConfirmation>, sov_api_spec::Error<api_types::ApiError>> {
-    let tx = tx_set_value(&priv_key, generation, value_to_set);
+    let tx = tx_set_value(priv_key, generation, value_to_set);
     client
         .accept_tx(&api_types::AcceptTxBody {
             body: BASE64_STANDARD.encode(&tx),

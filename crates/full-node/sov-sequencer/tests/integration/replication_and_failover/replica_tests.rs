@@ -26,7 +26,7 @@ async fn seq_with_replicas_basic_flow() {
         wait_for_height(node_client, &da_service, 10).await;
 
         send_set_value_tx(
-            &api_client,
+            api_client,
             &admin.private_key,
             next_generation,
             value_to_set,
@@ -36,7 +36,7 @@ async fn seq_with_replicas_basic_flow() {
 
         next_generation += 1;
 
-        let resp_value = query_value(&node_client).await;
+        let resp_value = query_value(node_client).await;
         assert_eq!(resp_value, value_to_set as u32);
     }
 
