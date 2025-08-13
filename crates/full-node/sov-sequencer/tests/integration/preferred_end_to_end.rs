@@ -1,6 +1,7 @@
 //! Integration tests for the preferred sequencer that use [`RollupBuilder`] and
 //! thus test sequencer + node interactions.
 
+use backon::Retryable;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -1725,7 +1726,6 @@ async fn seq_many_invalid_txs() {
     sov_test_utils::logging::initialize_or_change_logging_with_filter(
         "warn,sov_metrics=error,sov=debug,integration=debug",
     );
-    let start_test = std::time::Instant::now();
     let txs = 100u64;
     let (test_rollup, admin) = create_test_rollup(
         0,
@@ -1757,10 +1757,6 @@ async fn seq_many_invalid_txs() {
         .await
         .unwrap();
 
-    tracing::info!("Preparation is done: {:?}", start_test.elapsed());
-
-    let start_loop = std::time::Instant::now();
-
     let mut handles = Vec::with_capacity(txs as usize);
     for i in 0..txs {
         let client = client.clone();
@@ -1770,31 +1766,79 @@ async fn seq_many_invalid_txs() {
         let tx = tx_set_value(&admin.private_key, 0, i);
         handles.push(tokio::spawn(async move {
             let start_task = std::time::Instant::now();
-            // TODO: rewrite to use backon retry here, and retry only if communication error or HTTP 5XX happens.
-            // Panic if HTTP 200
-            let res = client.send_raw_tx_to_sequencer(&tx).await;
+
+            // Use backon retry logic with exponential backoff
+            let backoff = backon::ExponentialBuilder::default()
+                .with_factor(1.5)
+                .with_min_delay(Duration::from_millis(200))
+                .with_max_times(10)
+                .with_max_delay(Duration::from_secs(5));
+
+            let client_for_retry = client.clone();
+            let tx_for_retry = tx.clone();
+            let fut = move || {
+                let client = client_for_retry.clone();
+                let tx = tx_for_retry.clone();
+                async move { client.send_raw_tx_to_sequencer(&tx).await }
+            };
+
+            let res = fut
+                .retry(backoff)
+                .when(|err| {
+                    // Only retry on communication errors or HTTP 5XX
+                    match err {
+                        sov_api_spec::Error::CommunicationError(_) => true,
+                        sov_api_spec::Error::ErrorResponse(response_value) => {
+                            // Check if it's a 5XX error
+                            let status = response_value.status().as_u16();
+                            (500..600).contains(&status)
+                        }
+                        sov_api_spec::Error::InvalidResponsePayload(bytes, _) => {
+                            // Check if response contains 5XX status
+                            std::str::from_utf8(bytes.as_ref())
+                                .ok()
+                                .map(|s| {
+                                    // Try to parse status from response
+                                    s.contains("\"status\":5")
+                                })
+                                .unwrap_or(false)
+                        }
+                        _ => false,
+                    }
+                })
+                .notify(|err, dur| {
+                    tracing::warn!(
+                        "Task {} failed to submit transaction, retrying... Error: {:?}, Duration: {:?}",
+                        i, err, dur
+                    );
+                })
+                .await;
+
             tracing::info!("Task {} i submit is done in {:?}", i, start_task.elapsed());
-            // Why each handle produces block, when we produce 50 after the loop
+            // Why each handle produces a block, when we produce 50 after the loop?
             da_service.produce_block_now().await.unwrap();
-            tracing::info!("Task {} i fully completed in {:?}", i, start_task.elapsed());
-            res
+
+            // Panic on HTTP 200 success (as requested in TODO)
+            if let Ok(response) = &res {
+                panic!(
+                    "Task {i}: Transaction unexpectedly succeeded with HTTP 200. Response: {response:?}"
+                );
+            }
+
+            assert!(res.is_err(), "Request has been accepted, when it shouldn't");
         }));
     }
-    tracing::info!("LOOP IS COMPLETED IN {:?}", start_loop.elapsed());
 
-    let final_start = std::time::Instant::now();
     test_rollup
         .da_service
         .produce_n_blocks_now(50)
         .await
         .unwrap();
-    tracing::info!("Producing 50 blocks is done in {:?}", final_start.elapsed());
 
     let results = future::join_all(handles).await;
     for res in results {
-        assert!(res.unwrap().is_err());
+        res.expect("Background sender task has panicked");
     }
-    tracing::info!("JOINGING THREADS DONE IN {:?}", final_start.elapsed());
 }
 
 /// Ensure that we use the correct visible slot number when replaying transactions after a call to `update_state` in the sequencer.
