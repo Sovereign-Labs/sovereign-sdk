@@ -8,3 +8,4 @@ mod thin_sequencer;
 mod upgradability;
 pub mod utils;
 mod websockets;
+mod uniqueness;

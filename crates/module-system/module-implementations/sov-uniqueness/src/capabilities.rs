@@ -21,9 +21,11 @@ impl<S: Spec> Uniqueness<S> {
     ) -> anyhow::Result<()> {
         match transaction_uniqueness {
             UniquenessData::Nonce(nonce) => {
+                tracing::info!("CHECKING NONCE: {}", nonce);
                 self.check_nonce_uniqueness(credential_id, nonce, state)
             }
             UniquenessData::Generation(generation) => {
+                tracing::info!("CHECKING GENERATION: {}", generation);
                 self.check_generation_uniqueness(credential_id, generation, transaction_hash, state)
             }
         }

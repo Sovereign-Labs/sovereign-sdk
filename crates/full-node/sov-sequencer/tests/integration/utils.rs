@@ -64,13 +64,13 @@ pub async fn new_sequencer() -> TestSequencerSetup<RT> {
 
 pub fn build_tx<RT: Runtime<TestSpec>>(
     setup: &TestSequencerSetup<RT>,
-    nonce: u64,
+    generation: u64,
     call_message: &<RT as DispatchCall>::Decodable,
 ) -> RawTx {
     let tx = default_test_signed_transaction::<RT, TestSpec>(
         &setup.admin_private_key,
         call_message,
-        nonce,
+        generation,
         &RT::CHAIN_HASH,
     );
 
@@ -150,7 +150,7 @@ pub fn generate_paymaster_tx<RT: Runtime<TestSpec> + EncodeCall<Paymaster<TestSp
 
 pub fn valid_tx_bytes<RT: Runtime<TestSpec> + EncodeCall<ValueSetter<TestSpec>>>(
     setup: &TestSequencerSetup<RT>,
-    nonce: u64,
+    generation: u64,
     value_to_set: u32,
 ) -> RawTx {
     let msg = <RT as EncodeCall<ValueSetter<TestSpec>>>::to_decodable(
@@ -160,7 +160,7 @@ pub fn valid_tx_bytes<RT: Runtime<TestSpec> + EncodeCall<ValueSetter<TestSpec>>>
         },
     );
 
-    build_tx(setup, nonce, &msg)
+    build_tx(setup, generation, &msg)
 }
 
 #[derive(ModuleInfo, Clone)]
