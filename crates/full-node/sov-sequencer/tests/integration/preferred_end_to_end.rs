@@ -88,7 +88,7 @@ impl DaLayerWithSubscription {
             .da_service
             .block_producing(),
             BlockProducingConfig::Manual),
-            "Can't currently use DaLayerWithSubscription with a non-manual block producing config because notifications may be produced without our knowledge"
+                "Can't currently use DaLayerWithSubscription with a non-manual block producing config because notifications may be produced without our knowledge"
         );
         let da_layer = test_rollup.da_service.da_layer().clone();
         let state_update_subscription = test_rollup.subscribe_state_updates().await;
@@ -1722,6 +1722,11 @@ async fn flaky_seq_back_pressure() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn seq_many_invalid_txs() {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter(
+        "warn,sov_metrics=error,sov=debug,integration=debug",
+    );
+    let start_test = std::time::Instant::now();
+    let txs = 100u64;
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
@@ -1745,36 +1750,51 @@ async fn seq_many_invalid_txs() {
     }
 
     let client = test_rollup.api_client().clone();
-    let tx = tx_set_value(&admin.private_key, 100, 0);
+    let tx = tx_set_value(&admin.private_key, txs, 1_000_000);
 
     client
         .send_raw_tx_to_sequencer_with_retry(&tx)
         .await
         .unwrap();
 
-    let mut handles = Vec::default();
-    for i in 0..100 {
+    tracing::info!("Preparation is done: {:?}", start_test.elapsed());
+
+    let start_loop = std::time::Instant::now();
+
+    let mut handles = Vec::with_capacity(txs as usize);
+    for i in 0..txs {
         let client = client.clone();
         let da_service = test_rollup.da_service.clone();
 
+        // Generation is always below, so each tx is going to fail
         let tx = tx_set_value(&admin.private_key, 0, i);
         handles.push(tokio::spawn(async move {
-            let res = client.send_raw_tx_to_sequencer_with_retry(&tx).await;
+            let start_task = std::time::Instant::now();
+            // TODO: rewrite to use backon retry here, and retry only if communication error or HTTP 5XX happens.
+            // Panic if HTTP 200
+            let res = client.send_raw_tx_to_sequencer(&tx).await;
+            tracing::info!("Task {} i submit is done in {:?}", i, start_task.elapsed());
+            // Why each handle produces block, when we produce 50 after the loop
             da_service.produce_block_now().await.unwrap();
+            tracing::info!("Task {} i fully completed in {:?}", i, start_task.elapsed());
             res
         }));
     }
+    tracing::info!("LOOP IS COMPLETED IN {:?}", start_loop.elapsed());
 
+    let final_start = std::time::Instant::now();
     test_rollup
         .da_service
         .produce_n_blocks_now(50)
         .await
         .unwrap();
+    tracing::info!("Producing 50 blocks is done in {:?}", final_start.elapsed());
 
     let results = future::join_all(handles).await;
     for res in results {
         assert!(res.unwrap().is_err());
     }
+    tracing::info!("JOINGING THREADS DONE IN {:?}", final_start.elapsed());
 }
 
 /// Ensure that we use the correct visible slot number when replaying transactions after a call to `update_state` in the sequencer.
