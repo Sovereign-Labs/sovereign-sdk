@@ -33,13 +33,13 @@ pub trait DeDupEndpoint<S: Spec>: Clone + Send + Sync + 'static {
     /// Returns a configured axum router for the dedup endpoint.
     ///
     /// Calls the implemented [`DeDupEndpoint::handler`] and returns the result.
-    /// If [`DeDupEndpoint::handler`] returns a error then it will be included in the
+    /// If [`DeDupEndpoint::handler`] returns an error, then it will be included in the
     /// [`sov_rest_utils::ErrorObject`]s details field.
     ///
     /// # Warning
     ///
-    /// If you override this method you should ensure you provide the standard dedup path. If the
-    /// path is different then external tooling like web3 SDKs won't be able to consume the
+    /// If you override this method, you should ensure you provide the standard dedup path.
+    /// If the path is different, then external tooling like web3 SDKs won't be able to consume the
     /// functionality and will fail to work.
     fn axum_router(&self) -> Router<()> {
         preconfigured_router_layers(
@@ -60,7 +60,7 @@ pub trait DeDupEndpoint<S: Spec>: Clone + Send + Sync + 'static {
     }
 }
 
-/// Provides the `/rollup/addresses/{address}/dedup` endpoint utilising the sovereign provided
+/// Provides the `/rollup/addresses/{address}/dedup` endpoint using the sovereign provided
 /// `uniqueness` module.
 #[derive(Clone)]
 pub struct SovereignDeDupEndpoint<S: Spec> {
@@ -138,17 +138,8 @@ impl<S: Spec> DeDupEndpoint<S> for SovereignDeDupEndpoint<S> {
 
     type Error = anyhow::Error;
 
-    fn handler(
-        address: String,
-        mut state: ApiStateAccessor<S>,
-    ) -> Result<Self::Response, Self::Error> {
-        let pub_key = <S::CryptoSpec as CryptoSpec>::PublicKey::from_str(&address)?;
-        let credential_id = metered_credential(&pub_key, &mut state)?;
-        let nonce = Uniqueness::<S>::default().next_nonce(&credential_id, &mut state)?;
-        Ok(DedupResponse {
-            nonce: Some(nonce),
-            generation: None,
-        })
+    fn handler(address: String, state: ApiStateAccessor<S>) -> Result<Self::Response, Self::Error> {
+        Self::handler_with_query(address, state, Default::default())
     }
 
     fn state(&self) -> ApiStateAccessor<S> {

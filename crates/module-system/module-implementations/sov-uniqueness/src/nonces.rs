@@ -10,11 +10,6 @@ impl<S: Spec> Uniqueness<S> {
         state: &mut impl StateReader<User>,
     ) -> anyhow::Result<()> {
         let nonce = self.nonces.get(credential_id, state)?.unwrap_or_default();
-        tracing::trace!(
-            expected_nonce = nonce,
-            received_nonce = transaction_nonce,
-            "Checking nonce uniqueness"
-        );
 
         anyhow::ensure!(
             nonce == transaction_nonce,

@@ -90,7 +90,7 @@ impl<S: Spec> Uniqueness<S> {
     ) -> Result<u64, anyhow::Error> {
         self.nonces.get(credential_id, state).map(|maybe_nonce| {
             maybe_nonce
-                .unwrap()
+                .unwrap_or_default()
                 .checked_add(1)
                 .ok_or(anyhow::anyhow!("Maximum nonce value reached"))
         })?

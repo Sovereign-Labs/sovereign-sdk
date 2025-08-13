@@ -58,7 +58,6 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
             0,
             true,
             TEST_MAX_BATCH_SIZE,
-            // TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
             BlockProducingConfig::Manual,
             None,
             TEST_BLOB_PROCESSING_TIMEOUT,
@@ -77,7 +76,7 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
 /// Test demonstrating how nonce and generation can be used independently
 /// This test shows that:
 /// 1. Nonces and generations are tracked separately per account
-/// 2. You can skip values in both sequences
+/// 2. You can skip values in generation, but not nonce
 /// 3. You cannot reuse a nonce or generation that was already consumed
 #[tokio::test(flavor = "multi_thread")]
 async fn test_mixed_nonce_and_generation_transactions() {
@@ -158,9 +157,14 @@ async fn test_mixed_nonce_and_generation_transactions() {
         .await;
     assert!(result.is_ok(), "Generation 6 should succeed");
 
-    // 5 is below the latest generation 6, but it is accepted because the latest nonce is 4
+    // 5. is below the latest generation 6, but it is accepted because the latest nonce is 4
     let result = client
         .send_tx_to_sequencer(&construct_tx(UniquenessData::Nonce(5)))
         .await;
     assert!(result.is_ok(), "Nonce 5 should succeed");
+    // 6. Submit tx with generation 6 again
+    let result = client
+        .send_tx_to_sequencer(&construct_tx(UniquenessData::Generation(6)))
+        .await;
+    assert!(result.is_err(), "Generation 6 should fail");
 }

@@ -11852,7 +11852,6 @@ dependencies = [
  "sov-value-setter",
  "strum",
  "tempfile",
- "tracing",
 ]
 
 [[package]]
