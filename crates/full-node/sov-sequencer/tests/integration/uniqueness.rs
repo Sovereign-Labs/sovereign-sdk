@@ -154,7 +154,7 @@ async fn test_mixed_nonce_and_generation_transactions() {
         .send_tx_to_sequencer(&construct_tx(UniquenessData::Generation(3)))
         .await;
     assert!(result.is_ok(), "Generation 3 should succeed");
-    
+
     // 5. Submit tx with generation 6 (skipping 4 and 5) -> should succeed
     let result = client
         .send_tx_to_sequencer(&construct_tx(UniquenessData::Generation(6)))
@@ -166,7 +166,7 @@ async fn test_mixed_nonce_and_generation_transactions() {
         .send_tx_to_sequencer(&construct_tx(UniquenessData::Nonce(5)))
         .await;
     assert!(result.is_ok(), "Nonce 5 should succeed");
-    
+
     // 7. Submit tx with generation 6 again -> should fail (already used)
     let result = client
         .send_tx_to_sequencer(&construct_tx(UniquenessData::Generation(6)))
