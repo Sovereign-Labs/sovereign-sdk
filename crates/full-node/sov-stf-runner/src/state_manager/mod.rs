@@ -316,8 +316,7 @@ where
         // ----
 
         let processing_finalized_transitions_start = std::time::Instant::now();
-        let (last_finalized_header, finalized_transitions) =
-            self.process_finalized_state_transitions(da_service).await?;
+        let finalized_transitions = self.process_finalized_state_transitions(da_service).await?;
         let processing_finalized_transitions_time =
             processing_finalized_transitions_start.elapsed();
         tracing::trace!(
@@ -332,25 +331,29 @@ where
             .materialize_slot(slot_commit, new_state_root.as_ref())?;
         tracing::trace!("Initial Ledger ChangeSet is materialized");
 
-        // TODO: Review this, does not look nice.
-        let last_finalized_slot_number = SlotNumber::new_dangerous(
-            last_finalized_header
-                .height()
-                .saturating_sub(da_height_at_genesis),
-        );
-        tracing::trace!(
-            ?last_finalized_slot_number,
-            "Going to materialize last finalized slot number"
-        );
-        let last_finalized_slot_update = self
-            .ledger_db
-            .materialize_latest_finalize_slot(slot_number, last_finalized_slot_number)?;
+        if let Some(finalized_transition) = finalized_transitions.iter().last() {
+            let last_processed_finalized_header = &finalized_transition.block_header;
+            let last_finalized_slot_number = SlotNumber::new_dangerous(
+                last_processed_finalized_header
+                    .height()
+                    .saturating_sub(da_height_at_genesis),
+            );
+            tracing::trace!(
+                ?last_finalized_slot_number,
+                current_slot_number = ?slot_number,
+                "Going to materialize last finalized slot number"
+            );
+            let last_finalized_slot_update = self
+                .ledger_db
+                .materialize_latest_finalize_slot(slot_number, last_finalized_slot_number)?;
 
-        ledger_change_set.merge(last_finalized_slot_update);
-        tracing::trace!(
-            ?last_finalized_slot_number,
-            "Last finalized slot is materialized into LedgerDb ChangeSet"
-        );
+            ledger_change_set.merge(last_finalized_slot_update);
+            tracing::trace!(
+                ?last_finalized_slot_number,
+                current_slot_number = ?slot_number,
+                "Last finalized slot is materialized into LedgerDb ChangeSet"
+            );
+        }
 
         if let Some(stf_info_sender) = &self.stf_info_sender {
             tracing::trace!("Going to materialize StateTransitionInfo");
@@ -791,14 +794,10 @@ where
 
     /// Returns all [`StateTransitionInfo`] which are below finalized height
     /// and relevant LedgerDb changes.
-    /// Also returns the latest finalized block header, so caller shouldn't do another call.
     async fn process_finalized_state_transitions(
         &mut self,
         da_service: &Da,
-    ) -> anyhow::Result<(
-        <Da::Spec as DaSpec>::BlockHeader,
-        Vec<StateOnBlock<Da::Spec, StateRoot>>,
-    )> {
+    ) -> anyhow::Result<Vec<StateOnBlock<Da::Spec, StateRoot>>> {
         // DaService call # 1
         let mut da_service_calls = 1;
         let last_finalized_header = da_service.get_last_finalized_block_header().await?;
@@ -866,20 +865,20 @@ where
 
                 {
                     self.seen_on_height.get_mut(&height)
-                            .expect("Continuity broken, inconsistent internal state")
-                            .retain(|block_hash| {
-                                if new_survivors.contains(block_hash) {
-                                    true
-                                } else {
-                                    tracing::trace!(
+                        .expect("Continuity broken, inconsistent internal state")
+                        .retain(|block_hash| {
+                            if new_survivors.contains(block_hash) {
+                                true
+                            } else {
+                                tracing::trace!(
                                 %block_hash,
                                 ?new_survivors,
                                 "Removing block header from seen_on_height, because it does not originate from last seen finalized header"
                             );
-                                    self.state_on_block.remove(block_hash);
-                                    false
-                                }
-                            });
+                                self.state_on_block.remove(block_hash);
+                                false
+                            }
+                        });
                 }
 
                 survivors = new_survivors;
@@ -941,7 +940,7 @@ where
             ?da_service_calls,
             "Completed check for finalized transitions"
         );
-        Ok((last_finalized_header, finalized_transitions))
+        Ok(finalized_transitions)
     }
 
     // Returns updating time

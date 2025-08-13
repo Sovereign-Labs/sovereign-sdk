@@ -17,6 +17,7 @@ use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::node::da::{DaService, SubmitBlobReceipt};
 use sov_rollup_interface::node::ledger_api::{LedgerStateProvider, QueryMode};
 use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
+use sov_rollup_interface::stf::BlobDiscardReason;
 use tokio::sync::{broadcast, oneshot, watch, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::{interval, sleep};
@@ -55,15 +56,6 @@ pub trait BlobSenderHooks: Send + Sync + 'static {
 
     /// The blob was published and is now part of the DA's canonical chain.
     async fn on_published_blob(
-        &self,
-        _blob_id: BlobInternalId,
-        _blob_hash: [u8; 32],
-        _da_tx_id: <Self::Da as DaSpec>::TransactionId,
-    ) {
-    }
-
-    /// The blob was processed by the rollup node, but it may not be finalized yet.
-    async fn on_processed_blob(
         &self,
         _blob_id: BlobInternalId,
         _blob_hash: [u8; 32],
@@ -441,7 +433,10 @@ impl FinalizationManager for LedgerDb {
         {
             Some(batch) => (batch.slot_number, BlobSelectorStatus::Accepted),
             None => match self.get_discarded_blob_by_hash(blob_hash).await? {
-                Some(blob) => (blob.slot_number, BlobSelectorStatus::Discarded),
+                Some(blob) => (
+                    blob.slot_number,
+                    BlobSelectorStatus::Discarded(blob.discarded_blob.reason),
+                ),
                 None => return Ok(None),
             },
         };
@@ -690,14 +685,6 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                         return;
                     }
 
-                    self.hooks
-                        .on_processed_blob(
-                            blob_id,
-                            receipt.blob_hash.into(),
-                            receipt.da_transaction_id.clone(),
-                        )
-                        .await;
-
                     loop {
                         let finality_status = match self
                             .get_blob_finalized_or_discarded(
@@ -747,21 +734,41 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                     }
                 }
                 BlobSubmissionStatus::Finalized { receipt, .. } => {
-                    self.send_notification(blob_status.clone()).await;
-                    // Upon crashing, we'd rather call the hook twice rather than not
-                    // calling it at all. So, we call it *before* removing the blob from
-                    // the database.
-                    self.hooks
-                        .on_finalized_blob(
-                            blob_id,
-                            receipt.blob_hash.into(),
-                            &receipt.da_transaction_id,
-                        )
-                        .await;
+                    match blob_status.blob_selector_status {
+                        Some(BlobSelectorStatus::Accepted)
+                        | Some(BlobSelectorStatus::Discarded(
+                            BlobDiscardReason::SequenceNumberTooLow,
+                        )) => {
+                            self.send_notification(blob_status.clone()).await;
+                            // Upon crashing, we'd rather call the hook twice rather than not
+                            // calling it at all. So, we call it *before* removing the blob from
+                            // the database.
+                            self.hooks
+                                .on_finalized_blob(
+                                    blob_id,
+                                    receipt.blob_hash.into(),
+                                    &receipt.da_transaction_id,
+                                )
+                                .await;
 
-                    // We won't shut down the rollup in case of this error, but we will log the error.
-                    let _ = self.remove_blob_or_err(blob_id).await;
-                    break;
+                            // We won't shut down the rollup in case of this error, but we will log the error.
+                            let _ = self.remove_blob_or_err(blob_id).await;
+                            break;
+                        }
+                        // Resubmit if discarded for any reason except `SequenceNumberTooLow`
+                        Some(BlobSelectorStatus::Discarded(reason)) => {
+                            blob_status = BlobExecutionStatus {
+                                blob_submission_status: BlobSubmissionStatus::MustSubmit,
+                                blob_selector_status: None,
+                            };
+
+                            error!(?reason, "BlobSelector discarded the blob; resubmitting.");
+                            continue;
+                        }
+                        None => {
+                            unreachable!("The impossible happened: blob_selector_status is None.")
+                        }
+                    }
                 }
             }
         }
@@ -794,7 +801,7 @@ struct BlobSubmissionRequest<Da: DaSpec> {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum BlobSelectorStatus {
-    Discarded,
+    Discarded(BlobDiscardReason),
     Accepted,
 }
 

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::num::NonZero;
 use std::pin::Pin;
 use std::str::FromStr;

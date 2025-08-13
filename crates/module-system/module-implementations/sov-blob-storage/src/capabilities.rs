@@ -834,11 +834,26 @@ impl<S: Spec> BlobStorage<S> {
                 .get_sender_balance(preferred_sender, state)
                 .unwrap_or(Amount::ZERO);
 
+            if !blobs_to_select.can_accept_blob(SequencerType::Preferred, blob_with_id.blob_size())
+            {
+                tracing::error!(
+                    blob_id = hex::encode(blob_id),
+                    "The blob is discarded because it exceeds the size limit."
+                );
+                Self::discard(
+                    discarded_blobs,
+                    preferred_sender,
+                    blob_id,
+                    BlobDiscardReason::OutOfCapacity,
+                );
+
+                continue;
+            }
+
             let Some(validated_blob) = self.validate_preferred_blob(
                 blob_with_id,
                 preferred_sender.clone(),
                 available_balance,
-                blobs_to_select,
                 visible_height_increase,
                 state,
             ) else {

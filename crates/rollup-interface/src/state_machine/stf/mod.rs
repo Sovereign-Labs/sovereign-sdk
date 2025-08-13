@@ -165,7 +165,16 @@ type ProofReceipts<Address, Da, StateRoot, StorageProof> =
     Vec<ProofReceipt<Address, Da, StateRoot, StorageProof>>;
 
 /// The reason that a blob was discarded
-#[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    BorshDeserialize,
+    BorshSerialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum BlobDiscardReason {
     /// The sequencer sent a blob with an old sequencer number that we've already processed.
     SequenceNumberTooLow,

@@ -415,7 +415,7 @@ pub async fn loop_send_tx_notifications<S: Spec, Rt: RuntimeEventProcessor>(
                     }
                 }
             }
-            *latest_processed_slot_number.lock().await =info.slot_number;
+            *latest_processed_slot_number.lock().await = info.slot_number;
 
             Ok(())
         }

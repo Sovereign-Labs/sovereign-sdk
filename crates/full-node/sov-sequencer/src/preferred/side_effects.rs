@@ -25,7 +25,7 @@ where
 {
     pub checkpoint_sender: watch::Sender<StateCheckpoint<S>>,
     pub blob_sender: PreferredBlobSender<Da>,
-    pub db: PreferredSequencerDb<S, Rt>,
+    pub db: PreferredSequencerDb,
     pub executor_events_receiver: mpsc::Receiver<ExecutorEvent<S, Rt>>,
     pub shutdown_sender: watch::Sender<()>,
     pub transaction_cache: TxResultWriter<S, Rt>,
@@ -201,7 +201,7 @@ where
                 self.update_api_state(new_checkpoint);
             }
             ExecutorEvent::PruneDb(sequence_number) => {
-                self.db.prune(sequence_number).await?;
+                self.db.prune_db(sequence_number).await?;
             }
             ExecutorEvent::UpdateStateForRecovery(checkpoint) => {
                 self.update_api_state(checkpoint);

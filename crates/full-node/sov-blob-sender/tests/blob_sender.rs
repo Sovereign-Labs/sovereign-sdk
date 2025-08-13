@@ -13,6 +13,7 @@ use sov_modules_api::da::BlockHeaderTrait;
 use sov_modules_api::HexHash;
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::stf::BlobDiscardReason;
 use sov_test_utils::logging::LogCollector;
 use std::sync::atomic::AtomicUsize;
 use tempfile::TempDir;
@@ -34,6 +35,7 @@ impl BlobSenderHooks for TestHooks {
 struct TestFinalizationManager<Da: DaService> {
     da: Da,
     start_da_height: u64,
+    blob_selector_status: BlobSelectorStatus,
 }
 
 impl<Da: DaService> TestFinalizationManager<Da> {
@@ -81,22 +83,18 @@ where
             }
         };
 
-        Ok(finalized.map(|f| (f, BlobSelectorStatus::Accepted)))
+        Ok(finalized.map(|f| (f, self.blob_selector_status.clone())))
     }
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn blob_sender_posts_data_to_da() -> anyhow::Result<()> {
-    let da_dir = tempfile::tempdir().unwrap();
-    let (shutdown_sender, _shutdown_receiver) = watch::channel(());
-    let da = create_da(&da_dir).await;
-    let storage_dir = tempfile::tempdir().unwrap();
+    let deps = create_deps().await;
     let (mut blob_sender, _) = create_blob_sender(
         Duration::from_secs(20),
-        &storage_dir,
-        da.clone(),
-        shutdown_sender,
+        &deps,
         None,
+        BlobSelectorStatus::Accepted,
     )
     .await;
 
@@ -123,10 +121,10 @@ async fn blob_sender_posts_data_to_da() -> anyhow::Result<()> {
     assert_eq!(submissions, 2);
 
     {
-        da.produce_block_now().await?;
+        deps.da.produce_block_now().await?;
         sleep(Duration::from_secs(1)).await;
-        assert_data_at(&da, data_1.as_slice(), 1).await;
-        assert_data_at(&da, data_2.as_slice(), 1).await;
+        assert_data_at(&deps.da, data_1.as_slice(), 1).await;
+        assert_data_at(&deps.da, data_2.as_slice(), 1).await;
 
         let submissions = blob_sender.nb_of_concurrent_blob_submissions();
         assert_eq!(submissions, 0);
@@ -141,19 +139,14 @@ async fn blob_sender_shutdown_task() -> anyhow::Result<()> {
     let subscriber = registry().with(collector.clone());
     subscriber.init();
 
-    let da_dir = tempfile::tempdir().unwrap();
-    let (shutdown_sender, _shutdown_receiver) = watch::channel(());
-    let da = create_da(&da_dir).await;
-    let storage_dir = tempfile::tempdir().unwrap();
-
+    let deps = create_deps().await;
     let (status_sender, mut status_reciever) = broadcast::channel(100);
 
     let (mut blob_sender, handle) = create_blob_sender(
         Duration::from_secs(20),
-        &storage_dir,
-        da.clone(),
-        shutdown_sender.clone(),
+        &deps,
         Some(status_sender),
+        BlobSelectorStatus::Accepted,
     )
     .await;
 
@@ -168,7 +161,7 @@ async fn blob_sender_shutdown_task() -> anyhow::Result<()> {
 
     // Wait for the blob task to start.
     status_reciever.recv().await.unwrap();
-    shutdown_sender.send(()).unwrap();
+    deps.shutdown_sender.send(()).unwrap();
     handle.await.unwrap();
 
     let mut records = collector.records();
@@ -182,19 +175,15 @@ async fn blob_sender_shutdown_task() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn blob_sender_resubmits_blobs_in_progress_after_restart() -> anyhow::Result<()> {
-    let da_dir = tempfile::tempdir().unwrap();
-    let (shutdown_sender, _shutdown_receiver) = watch::channel(());
-    let da = create_da(&da_dir).await;
-    let storage_dir = tempfile::tempdir().unwrap();
+    let deps = create_deps().await;
 
     // Send blob to the DA and shutdown blob sender.
     {
         let (mut blob_sender, handle) = create_blob_sender(
             Duration::from_secs(20),
-            &storage_dir,
-            da.clone(),
-            shutdown_sender.clone(),
+            &deps,
             None,
+            BlobSelectorStatus::Accepted,
         )
         .await;
 
@@ -206,7 +195,7 @@ async fn blob_sender_resubmits_blobs_in_progress_after_restart() -> anyhow::Resu
                 .await?;
             data
         };
-        shutdown_sender.send(()).unwrap();
+        deps.shutdown_sender.send(()).unwrap();
         handle.await.unwrap();
     }
 
@@ -214,10 +203,9 @@ async fn blob_sender_resubmits_blobs_in_progress_after_restart() -> anyhow::Resu
     {
         let (mut blob_sender, _) = create_blob_sender(
             Duration::from_secs(20),
-            &storage_dir,
-            da.clone(),
-            shutdown_sender.clone(),
+            &deps,
             None,
+            BlobSelectorStatus::Accepted,
         )
         .await;
 
@@ -233,7 +221,7 @@ async fn blob_sender_resubmits_blobs_in_progress_after_restart() -> anyhow::Resu
         assert_eq!(submissions, 2);
 
         sleep(Duration::from_secs(1)).await;
-        da.produce_block_now().await?;
+        deps.da.produce_block_now().await?;
         // We have to wait a littele bit for the async task in blob sender.
         sleep(Duration::from_secs(1)).await;
 
@@ -250,17 +238,13 @@ async fn blob_sender_exit_if_blob_not_processed() -> anyhow::Result<()> {
     let subscriber = registry().with(collector.clone());
     subscriber.init();
 
-    let da_dir = tempfile::tempdir().unwrap();
-    let (shutdown_sender, _shutdown_receiver) = watch::channel(());
-    let da = create_da(&da_dir).await;
-    let storage_dir = tempfile::tempdir().unwrap();
+    let deps = create_deps().await;
 
     let (mut blob_sender, blob_sender_handle) = create_blob_sender(
         Duration::from_secs(1),
-        &storage_dir,
-        da.clone(),
-        shutdown_sender.clone(),
+        &deps,
         None,
+        BlobSelectorStatus::Accepted,
     )
     .await;
 
@@ -292,6 +276,111 @@ async fn blob_sender_exit_if_blob_not_processed() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn blobs_with_seq_nr_too_low_are_not_resubmitted() -> anyhow::Result<()> {
+    let deps = create_deps().await;
+    let (mut blob_sender, _) = create_blob_sender(
+        Duration::from_secs(20),
+        &deps,
+        None,
+        BlobSelectorStatus::Discarded(BlobDiscardReason::SequenceNumberTooLow),
+    )
+    .await;
+
+    let data_1 = {
+        let blob_id = 11u8;
+        let data = Arc::new([blob_id, 2, 3, 4, 5]);
+        blob_sender
+            .publish_batch_blob(data.clone(), blob_id as BlobInternalId)
+            .await?;
+        data
+    };
+
+    sleep(Duration::from_secs(1)).await;
+    let submissions = blob_sender.nb_of_concurrent_blob_submissions();
+    assert_eq!(submissions, 1);
+
+    {
+        deps.da.produce_block_now().await?;
+        sleep(Duration::from_secs(1)).await;
+        assert_data_at(&deps.da, data_1.as_slice(), 1).await;
+
+        let submissions = blob_sender.nb_of_concurrent_blob_submissions();
+        assert_eq!(submissions, 0);
+    }
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn discarded_blobs_are_resubmitted() -> anyhow::Result<()> {
+    let collector = LogCollector::new(Level::ERROR);
+    let subscriber = registry().with(collector.clone());
+    subscriber.init();
+
+    let deps = create_deps().await;
+    let (mut blob_sender, _) = create_blob_sender(
+        Duration::from_secs(20),
+        &deps,
+        None,
+        // If a blob is discarded for a reason other than BlobDiscardReason::SequenceNumberTooLow, it will be resubmitted.
+        BlobSelectorStatus::Discarded(BlobDiscardReason::SenderInsufficientStake),
+    )
+    .await;
+
+    let data_1 = {
+        let blob_id = 11u8;
+        let data = Arc::new([blob_id, 2, 3, 4, 5]);
+        blob_sender
+            .publish_batch_blob(data.clone(), blob_id as BlobInternalId)
+            .await?;
+        data
+    };
+
+    sleep(Duration::from_secs(1)).await;
+    let submissions = blob_sender.nb_of_concurrent_blob_submissions();
+    assert_eq!(submissions, 1);
+
+    {
+        deps.da.produce_block_now().await?;
+        sleep(Duration::from_secs(1)).await;
+        assert_data_at(&deps.da, data_1.as_slice(), 1).await;
+
+        let submissions = blob_sender.nb_of_concurrent_blob_submissions();
+        assert_eq!(submissions, 1);
+    }
+
+    let mut records = collector.records();
+    let (_, log) = records.pop().unwrap();
+
+    assert!(log.contains("BlobSelector discarded the blob; resubmitting."));
+
+    Ok(())
+}
+
+struct Deps {
+    _da_dir: TempDir,
+    shutdown_sender: watch::Sender<()>,
+    _shutdown_receiver: watch::Receiver<()>,
+    da: StorableMockDaService,
+    storage_dir: TempDir,
+}
+
+async fn create_deps() -> Deps {
+    let da_dir = tempfile::tempdir().unwrap();
+    let (shutdown_sender, shutdown_receiver) = watch::channel(());
+    let da = create_da(&da_dir).await;
+    let storage_dir = tempfile::tempdir().unwrap();
+
+    Deps {
+        _da_dir: da_dir,
+        shutdown_sender,
+        _shutdown_receiver: shutdown_receiver,
+        da,
+        storage_dir,
+    }
+}
+
 async fn create_da(da_dir: &TempDir) -> StorableMockDaService {
     let da_layer = Arc::new(RwLock::new(
         StorableMockDaLayer::new_in_path(da_dir.path(), 0)
@@ -303,28 +392,28 @@ async fn create_da(da_dir: &TempDir) -> StorableMockDaService {
 
 async fn create_blob_sender(
     blob_processing_timeout: Duration,
-    storage_dir: &TempDir,
-    da: StorableMockDaService,
-    shutdown_sender: watch::Sender<()>,
+    deps: &Deps,
     blob_status_sender: Option<broadcast::Sender<BlobExecutionStatus<MockDaSpec>>>,
+    blob_selector_status: BlobSelectorStatus,
 ) -> (
     BlobSender<StorableMockDaService, TestHooks, TestFinalizationManager<StorableMockDaService>>,
     JoinHandle<()>,
 ) {
     let finalization_manager = TestFinalizationManager {
-        da: da.clone(),
+        da: deps.da.clone(),
         start_da_height: 0,
+        blob_selector_status,
     };
 
     let hooks = TestHooks {};
 
     let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
     let (blob_sender, handle) = BlobSender::new_with_task_intervals(
-        da,
+        deps.da.clone(),
         finalization_manager,
-        storage_dir.path(),
+        deps.storage_dir.path(),
         hooks,
-        shutdown_sender,
+        deps.shutdown_sender.clone(),
         blob_processing_timeout,
         blob_status_sender,
         Duration::from_millis(1000),

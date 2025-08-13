@@ -260,8 +260,8 @@ async fn create_test_rollup(
 pub(crate) struct TestState {
     value_by_slot_number: HashMap<SlotNumber, u64>,
     _current_slot_number: SlotNumber,
-    next_generation: u64,
-    current_value: u64,
+    pub next_generation: u64,
+    pub current_value: u64,
 }
 
 impl Default for TestState {
