@@ -7,7 +7,7 @@ mod db;
 mod executor_events;
 mod inner;
 mod preferred_blob_sender;
-mod replica_sync_task;
+mod replica;
 mod side_effects;
 mod state_root_compute;
 mod transaction_subscriptions;

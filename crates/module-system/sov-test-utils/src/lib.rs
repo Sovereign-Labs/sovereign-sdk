@@ -40,6 +40,9 @@ pub use {
 
 mod evm;
 
+/// Utilities for working with PostgreSQL.
+pub mod postgres;
+
 mod rt_agnostic_blueprint;
 
 /// Utilities for recording logs.

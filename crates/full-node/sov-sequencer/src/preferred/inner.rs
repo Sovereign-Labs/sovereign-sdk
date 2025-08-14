@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::num::NonZero;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
@@ -968,13 +969,6 @@ where
         self.recv(recv).await
     }
 
-    pub(crate) async fn latest_slot_number_msg(&self, reason: &'static str) -> SlotNumber {
-        let (resp, recv) = oneshot::channel();
-        self.send(Message::LatestSlotNumber { resp, reason }).await;
-
-        self.recv(recv).await
-    }
-
     pub(crate) async fn final_catchup_msg(
         &self,
         info: StateUpdateInfo<S::Storage>,
@@ -1027,20 +1021,6 @@ where
             .await;
     }
 
-    pub(crate) async fn do_new_tx_msg(
-        &self,
-        tx_hash: TxHash,
-        baked_tx: FullyBakedTx,
-        reason: &'static str,
-    ) {
-        self.send(Message::DoNewTx {
-            tx_hash,
-            baked_tx,
-            reason,
-        })
-        .await;
-    }
-
     pub(crate) async fn wait_for_node_resync_msg(
         &self,
         info: StateUpdateInfo<S::Storage>,
@@ -1074,10 +1054,6 @@ where
             .await;
     }
 
-    pub(crate) async fn close_current_batch_msg(&self, reason: &'static str) {
-        self.send(Message::CloseCurrentBatch { reason }).await;
-    }
-
     async fn send(&self, message: Message<S, Rt>) {
         self.channel_size.fetch_add(1, Ordering::Relaxed);
         if self.message_sender.send(message).await.is_err() {
@@ -1094,6 +1070,31 @@ where
             exit_rollup(&self.shutdown_sender).await;
             unreachable!();
         }
+    }
+
+    pub(crate) async fn _close_current_batch_msg(&self, reason: &'static str) {
+        self.send(Message::CloseCurrentBatch { reason }).await;
+    }
+
+    pub(crate) async fn _do_new_tx_msg(
+        &self,
+        tx_hash: TxHash,
+        baked_tx: FullyBakedTx,
+        reason: &'static str,
+    ) {
+        self.send(Message::DoNewTx {
+            tx_hash,
+            baked_tx,
+            reason,
+        })
+        .await;
+    }
+
+    pub(crate) async fn _latest_slot_number_msg(&self, reason: &'static str) -> SlotNumber {
+        let (resp, recv) = oneshot::channel();
+        self.send(Message::LatestSlotNumber { resp, reason }).await;
+
+        self.recv(recv).await
     }
 }
 
