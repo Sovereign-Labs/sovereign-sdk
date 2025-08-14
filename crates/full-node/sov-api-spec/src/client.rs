@@ -213,9 +213,8 @@ impl Client {
     }
 
     pub async fn get_next_nonce(&self, credential_id: &CredentialId) -> anyhow::Result<u64> {
-        tracing::info!("CRED ID: {}", credential_id);
+        tracing::trace!(%credential_id, "Dedup is requested.");
         let param = types::Hash::from_str(&credential_id.to_string())?;
-        tracing::info!("PARAM: {:?}", param);
         let response = self.credential_id_dedup(&param).await?;
         let inner = match response.into_inner() {
             AnyJsonValue::Object(map) => map,

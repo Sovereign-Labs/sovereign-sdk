@@ -22,7 +22,7 @@ info:
 servers:
   - url: http://localhost:12346
     description: Localhost
-security: [ ]
+security: []
 paths:
   /ledger/slots/latest:
     get:
@@ -422,7 +422,7 @@ paths:
           required: true
           schema:
             $ref: "#/components/schemas/Hash"
-          description: The credential id to retrieve deduplication information about
+          description: The credential id to retrieve deduplication information about. Consult documentation on how to derive credential id from public key or address
       tags:
         - Rollup
       responses:
@@ -474,7 +474,7 @@ components:
       description: Pagination type (first, next, or last)
       schema:
         type: string
-        enum: [ first, next, last ]
+        enum: [first, next, last]
         default: first
     pageSize:
       name: page[size]
