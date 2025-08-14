@@ -110,12 +110,8 @@ impl TransferGenerator {
         setup_harness(salt, key)
     }
 
-
     /// Generate a transfer transaction.
-    pub fn generate(
-        &mut self,
-        nonce: u64,
-    ) -> TransactionSigned {
+    pub fn generate(&mut self, nonce: u64) -> TransactionSigned {
         for _ in 0..20 {
             if self.has_enough_randomness() {
                 let u =
@@ -151,9 +147,12 @@ impl TransferGenerator {
     }
 
     /// Generate a transfer transaction.
-    fn generate_min_transfer(&self, nonce: u64, u: &mut arbitrary::Unstructured<'_>) -> Result<TransactionSigned, arbitrary::Error> {
-
-        let to: [u8;20] = Arbitrary::arbitrary(u)?;
+    fn generate_min_transfer(
+        &self,
+        nonce: u64,
+        u: &mut arbitrary::Unstructured<'_>,
+    ) -> Result<TransactionSigned, arbitrary::Error> {
+        let to: [u8; 20] = Arbitrary::arbitrary(u)?;
         let value = 1;
         let request = TypedTransactionRequest::EIP1559(EIP1559TransactionRequest {
             chain_id: 4321,
@@ -167,8 +166,7 @@ impl TransferGenerator {
             access_list: AccessList::default(),
         });
 
-        let transaction =
-            to_primitive_transaction(request).expect("Invalid transaction request");
+        let transaction = to_primitive_transaction(request).expect("Invalid transaction request");
         let tx_signature_hash = transaction.signature_hash();
         let signer = self.key;
 
