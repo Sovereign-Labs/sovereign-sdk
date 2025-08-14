@@ -5,14 +5,14 @@ use std::collections::HashMap;
 
 use arbitrary::Arbitrary;
 use reth_primitives::{
-    sign_message, Bytes, Transaction, TransactionSigned, TxEip1559, TxEip2930, TxEip4844, TxKind, TxLegacy, U256
+    sign_message, Bytes, Transaction, TransactionSigned, TxEip1559, TxEip2930, TxEip4844, TxKind,
+    TxLegacy, U256,
 };
 use reth_rpc_types::{transaction::EIP1559TransactionRequest, AccessList, TypedTransactionRequest};
 use revm::primitives::{Address, B256};
-use secp256k1::{rand::{RngCore, SeedableRng}, PublicKey};
-pub use secp256k1::{SecretKey};
-use sha2::Digest;
-
+use secp256k1::PublicKey;
+pub use secp256k1::SecretKey;
+use sov_transaction_generator::rng_utils::{get_random_bytes, randomize_buffer};
 
 /// Ethereum transaction signer.
 #[derive(Clone)]
@@ -79,8 +79,6 @@ impl DevSigner {
     pub fn signers(&self) -> Vec<Address> {
         self.signers.keys().copied().collect()
     }
-
-
 }
 
 /// Transfer generator.
@@ -90,23 +88,6 @@ pub struct TransferGenerator {
     remaining_randomness: usize,
     target_buffer_size: usize,
     salt: u128,
-}
-
-
-/// Get a Vec of `num` bytes, seeded by `num` and  a salt value
-pub fn get_random_bytes(num: usize, salt: u128) -> Vec<u8> {
-    let mut output = vec![0; num];
-    randomize_buffer(&mut output, salt);
-    output
-}
-
-/// Randomize the given buffer. The rng is seeded from the buffer's length and the salt
-pub fn randomize_buffer(buffer: &mut [u8], salt: u128) {
-    // First, use the hash of a sha256 string to get a high quality rng. (Seeding yourself is hard because you need a high hamming weight!)
-    let input = format!("{}|{}", buffer.len(), salt);
-    let salt_hashed = sha2::Sha256::digest(input);
-    let mut rng = rand_chacha::ChaChaRng::from_seed(salt_hashed.into());
-    rng.fill_bytes(buffer);
 }
 
 /// Setup generation with the given params
@@ -198,7 +179,6 @@ impl TransferGenerator {
             transaction,
             signature,
         ))
-
     }
 }
 

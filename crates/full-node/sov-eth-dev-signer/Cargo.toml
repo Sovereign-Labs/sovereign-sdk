@@ -19,6 +19,7 @@ revm = { workspace = true, features = [
     "std",
     "secp256k1",
 ] }
+sov-transaction-generator = { workspace = true }
 reth-primitives = { workspace = true, features = ["secp256k1"] }
 reth-rpc-types = { workspace = true }
 secp256k1 = { workspace = true }
