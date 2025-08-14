@@ -25,7 +25,7 @@ where
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
     rpc.register_async_method("eth_accounts", |_parameters, ethereum, _| async move {
-        Ok::<_, ErrorObjectOwned>(ethereum.eth_signer.signers())
+        Ok::<_, ErrorObjectOwned>(ethereum.eth_signer.addresses())
     })?;
     rpc.register_async_method(
         "eth_sendTransaction",
@@ -41,7 +41,7 @@ where
                 .ok_or(to_jsonrpsee_error_object("No from address", ETH_RPC_ERROR))?;
 
             // return error if not in signers
-            if !ethereum.eth_signer.signers().contains(&from) {
+            if !ethereum.eth_signer.addresses().contains(&from) {
                 return Err(to_jsonrpsee_error_object(
                     "From address not in signers",
                     ETH_RPC_ERROR,
@@ -66,7 +66,7 @@ where
                 // sign transaction
                 let signed_tx = ethereum
                     .eth_signer
-                    .sign_transaction(transaction, from)
+                    .sign_transaction(transaction, &from)
                     .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
                 RlpEvmTransaction {

@@ -10,7 +10,7 @@ use reth_primitives::{Bytes, B256, U256};
 pub use reth_rpc_eth_types::GasPriceOracleConfig;
 use sov_address::{EthereumAddress, FromVmAddress};
 #[cfg(feature = "local")]
-pub use sov_eth_dev_signer::DevSigner;
+pub use sov_eth_dev_signer::Signers;
 pub use sov_evm::EthereumAuthenticator;
 use sov_evm::{convert_to_transaction_signed, Evm, RlpEvmTransaction};
 use sov_modules_api::capabilities::HasKernel;
@@ -25,7 +25,7 @@ const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
 pub struct EthRpcConfig {
     pub gas_price_oracle_config: GasPriceOracleConfig,
     #[cfg(feature = "local")]
-    pub eth_signer: DevSigner,
+    pub eth_signer: Signers,
 }
 
 pub fn get_ethereum_rpc<S, Seq>(eth_rpc_config: EthRpcConfig, sequencer: Arc<Seq>) -> RpcModule<()>
@@ -123,7 +123,7 @@ struct Ethereum<S: Spec, Seq: Sequencer<Spec = S>> {
     sequencer: Arc<Seq>,
     gas_price_oracle: GasPriceOracle<S>,
     #[cfg(feature = "local")]
-    eth_signer: DevSigner,
+    eth_signer: Signers,
 }
 
 impl<S, Seq> Ethereum<S, Seq>

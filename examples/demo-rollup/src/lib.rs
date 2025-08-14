@@ -33,8 +33,8 @@ pub const ROLLUP_BATCH_NAMESPACE: Namespace = Namespace::const_v0(ROLLUP_BATCH_N
 pub const ROLLUP_PROOF_NAMESPACE: Namespace = Namespace::const_v0(ROLLUP_PROOF_NAMESPACE_RAW);
 
 // TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/387
-fn eth_dev_signer() -> sov_ethereum::DevSigner {
-    sov_ethereum::DevSigner::new(vec![secp256k1::SecretKey::from_str(
+fn eth_dev_signer() -> sov_ethereum::Signers {
+    sov_ethereum::Signers::new(vec![secp256k1::SecretKey::from_str(
         "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
     )
     .unwrap()])
