@@ -1072,11 +1072,11 @@ where
         }
     }
 
-    pub(crate) async fn _close_current_batch_msg(&self, reason: &'static str) {
+    pub(crate) async fn close_current_batch_msg(&self, reason: &'static str) {
         self.send(Message::CloseCurrentBatch { reason }).await;
     }
 
-    pub(crate) async fn _do_new_tx_msg(
+    pub(crate) async fn do_new_tx_msg(
         &self,
         tx_hash: TxHash,
         baked_tx: FullyBakedTx,
@@ -1090,7 +1090,7 @@ where
         .await;
     }
 
-    pub(crate) async fn _latest_slot_number_msg(&self, reason: &'static str) -> SlotNumber {
+    pub(crate) async fn latest_slot_number_msg(&self, reason: &'static str) -> SlotNumber {
         let (resp, recv) = oneshot::channel();
         self.send(Message::LatestSlotNumber { resp, reason }).await;
 
