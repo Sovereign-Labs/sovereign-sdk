@@ -1,3 +1,6 @@
+# 2025-08-14
+- #1501 Adds support to the universal wallet's `json_to_borsh` for deserializing nested-stringified JSON objects. In particular, this allows map types with complex object keys to be serialized by json-stringifying the keys, and they will be deserialized correctly for the borsh conversion.
+
 # 2025-08-12
 - #1491 **BREAKING CHANGE** Dedup endpoint (`/rollup/addresses/{address}/dedup`) now actually returns nonce and not generation number. 
   It is possible to pass query parameter `?select=nonce` or `?select=generation` to explicitly request required uniqueness identifier.

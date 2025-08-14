@@ -808,7 +808,7 @@ pub struct VecOfWrapper {
     memo: Vec<SchemalessStringWrapper>,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, PartialOrd, Ord)]
 #[cfg_attr(test, derive(UniversalWallet, BorshSerialize, BorshDeserialize))]
 pub struct RegistrationLike {
     address: [u8; 32],
@@ -848,6 +848,66 @@ pub enum TestCallStructRec<T> {
 #[cfg_attr(test, derive(UniversalWallet, BorshSerialize))]
 pub struct ComplexRec<T> {
     unnested_enum: TestCallRec<T>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(test, derive(UniversalWallet, BorshSerialize))]
+pub struct ComplexMapKey {
+    object_map: HashMap<RegistrationLike, u8>,
+}
+
+impl Serialize for ComplexMapKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        #[derive(Serialize)]
+        struct Helper {
+            object_map: HashMap<String, u8>,
+        }
+
+        let mut stringified_map = HashMap::new();
+        for (k, v) in &self.object_map {
+            let key_json = serde_json::to_string(k).map_err(serde::ser::Error::custom)?;
+            stringified_map.insert(key_json, *v);
+        }
+
+        Helper {
+            object_map: stringified_map,
+        }
+        .serialize(serializer)
+    }
+}
+
+#[test]
+fn test_complex_map_key() {
+    let mut object_map: HashMap<RegistrationLike, u8> = HashMap::new();
+    object_map.insert(
+        RegistrationLike {
+            address: [23; 32],
+            some_bytes: vec![1, 2, 3, 4, 5],
+            extra_complexity: vec![AThirdComplexType {
+                address: [17; 32],
+                extra_bytes: vec![6, 7, 8, 9, 10],
+                role: Role::Attester,
+            }],
+        },
+        19,
+    );
+
+    let complex_map = ComplexMapKey { object_map };
+
+    encode_decode_tests!(ComplexMapKey, complex_map, "{ object_map: { { address: 0x1717171717171717171717171717171717171717171717171717171717171717, some_bytes: 0x0102030405, extra_complexity: [{ address: celestia1zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygsr0ealj, extra_bytes: [6, 7, 8, 9, 10], role: Attester }] }: 19 } }");
+
+    // let schema = Schema::of_single_type::<ComplexMapKey>().unwrap();
+    // let borsh_ser = borsh::to_vec(&complex_key).unwrap();
+    // let json = serde_json::to_string(&complex_key).unwrap();
+
+    // // The JSON should have the complex object as a stringified key
+    // assert!(json.contains(r#""address":[23,23,23"#));
+
+    // // Test that json_to_borsh can handle the nested JSON string
+    // assert_eq!(schema.json_to_borsh(0, &json).unwrap(), borsh_ser);
 }
 
 #[derive(Debug, PartialEq, Serialize, Eq, Clone)]
@@ -1137,7 +1197,7 @@ pub struct StructWithBase58 {
     role: Role,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, PartialOrd, Ord)]
 #[cfg_attr(test, derive(UniversalWallet, BorshSerialize, BorshDeserialize))]
 pub struct AThirdComplexType {
     #[cfg_attr(test, sov_wallet(display(bech32(prefix = "PREFIX_CELESTIA"))))]

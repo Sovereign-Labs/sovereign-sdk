@@ -226,12 +226,16 @@ impl<W: std::io::Write, L: LinkingScheme> TypeVisitor<L, ContainerSerdeMetadata>
         schema: &impl TypeResolver<LinkingScheme = L, Metadata = ContainerSerdeMetadata>,
         mut context: Context<L>,
     ) -> Self::ReturnType {
-        let mut json_fields = match context.value {
+        let mut value = context.value;
+        while let Value::String(s) = value {
+            value = serde_json::from_str(&s).map_err(|e| EncodeError::Json(e.to_string()))?;
+        }
+        let mut json_fields = match value {
             Value::Object(o) => o,
             _ => {
                 return Err(EncodeError::InvalidType {
                     schema_type: format!("{} struct", s.type_name),
-                    value: context.value.to_string(),
+                    value: value.to_string(),
                 })
             }
         };
