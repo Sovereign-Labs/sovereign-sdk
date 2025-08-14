@@ -1,8 +1,10 @@
+use crate::preferred::exit_rollup;
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::{PgListener, PgPoolOptions};
 use sqlx::PgPool;
 use std::str::FromStr;
+use tokio::sync::watch;
 use tracing::error;
 
 /// Event type enum for type-safe parsing
@@ -71,13 +73,25 @@ impl EventsNotificationPayload {
     }
 }
 
+#[derive(thiserror::Error, Debug)]
+pub(crate) enum EventReceiverError {
+    #[error("Error while listening for events: {0}")]
+    ListenerError(#[from] sqlx::Error),
+
+    #[error("Error while querying for events: {0}")]
+    ParsingError(#[from] anyhow::Error),
+}
+
 pub(crate) struct EventReceiver {
     listener: PgListener,
     query_pool: PgPool,
 }
 
 impl EventReceiver {
-    pub(crate) async fn new(connection_string: &str) -> anyhow::Result<Self> {
+    pub(crate) async fn new(
+        connection_string: &str,
+        shutdown_sender: &watch::Sender<()>,
+    ) -> anyhow::Result<Self> {
         // Create a separate persistent connection pool for querying transaction data
         let query_pool = match PgPoolOptions::default()
             .max_connections(5) // Small pool since we're just doing simple queries
@@ -87,8 +101,8 @@ impl EventReceiver {
             Ok(pool) => pool,
             Err(e) => {
                 error!("Failed to connect to PostgreSQL: {e:?}. Replica shutting down.");
-                //exit_rollup(&sequencer.shutdown_sender).await;
-                todo!("Error handling")
+                exit_rollup(shutdown_sender).await;
+                unreachable!("EventReceiver: impossible happened rollup didn't exit");
             }
         };
 
@@ -97,15 +111,15 @@ impl EventReceiver {
             Ok(listener) => listener,
             Err(e) => {
                 error!("Failed to create PostgreSQL listener: {e:?}. Replica shutting down.");
-                //exit_rollup(&sequencer.shutdown_sender).await;
-                todo!("Error handling")
+                exit_rollup(shutdown_sender).await;
+                unreachable!("EventReceiver: impossible happened rollup didn't exit");
             }
         };
 
         if let Err(e) = listener.listen("events_changes").await {
             error!("Failed to listen on events_changes channel: {e:?}. Replica shutting down.");
-            //exit_rollup(&sequencer.shutdown_sender).await;
-            todo!("Error handling")
+            exit_rollup(shutdown_sender).await;
+            unreachable!("EventReceiver: impossible happened rollup didn't exit");
         }
 
         Ok(Self {
@@ -114,15 +128,10 @@ impl EventReceiver {
         })
     }
 
-    pub(crate) async fn recv(
-        &mut self,
-    ) -> anyhow::Result<anyhow::Result<EventsNotificationPayload>> {
-        Ok(self.listener.recv().await.map(|notification| {
-            let payload = notification.payload();
-            let parsed_notification = EventsNotificationPayload::parse_csv(payload)
-                .map_err(|e| anyhow!("Failed to parse CSV notification payload: {e}"));
-
-            parsed_notification
-        })?)
+    pub(crate) async fn recv(&mut self) -> Result<EventsNotificationPayload, EventReceiverError> {
+        let notification = self.listener.recv().await?;
+        let payload = notification.payload();
+        let parsed_notification = EventsNotificationPayload::parse_csv(payload)?;
+        Ok(parsed_notification)
     }
 }
