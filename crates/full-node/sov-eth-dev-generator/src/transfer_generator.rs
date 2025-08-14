@@ -6,7 +6,7 @@ use revm::primitives::Address;
 pub use secp256k1::SecretKey;
 
 use crate::randomness::Randomness;
-use crate::signer::Signer;
+use sov_eth_dev_signer::Signer;
 
 /// Transfer generator.
 pub struct TransferGenerator {

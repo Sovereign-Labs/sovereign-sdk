@@ -99,7 +99,6 @@ arbitrary = [
 	"sov-state/arbitrary",
 	"sov-test-utils/arbitrary",
 	"sov-bank/arbitrary",
-	"sov-eth-dev-signer/arbitrary"
 ]
 native = [
 	"alloy-rpc-types",
@@ -119,5 +118,5 @@ native = [
 	"sov-state/native",
 	"sov-rollup-interface/native",
 	"sov-kernels/native",
-	"sov-bank/native"
+	"sov-bank/native",
 ]

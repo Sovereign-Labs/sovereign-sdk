@@ -48,7 +48,6 @@ arbitrary = [
 	"sov-address/arbitrary",
 	"sov-evm/arbitrary",
 	"sov-rollup-interface/arbitrary",
-	"sov-eth-dev-signer/arbitrary"
 ]
 native = [
 	"reth-primitives/std",
