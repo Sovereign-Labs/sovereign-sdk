@@ -1,6 +1,5 @@
 use crate::utils::{new_test_rollup, MAX_BATCH_EXECUTION_TIME_MILLIS};
 use futures::StreamExt;
-use sov_api_spec::types::AnyJsonValue;
 use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::capabilities::UniquenessData;
@@ -8,7 +7,7 @@ use sov_modules_api::prelude::*;
 use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
 use sov_modules_api::{Amount, EncodeCall, Runtime};
 use sov_modules_stf_blueprint::GenesisParams;
-use sov_rollup_interface::crypto::PrivateKey;
+use sov_rollup_interface::crypto::{PrivateKey, PublicKey};
 use sov_test_utils::runtime::genesis::operator::HighLevelOperatorGenesisConfig;
 use sov_test_utils::runtime::Bank;
 use sov_test_utils::sov_bank::{config_gas_token_id, CallMessage as BankCallMessage, Coins};
@@ -84,9 +83,9 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
 #[tokio::test(flavor = "multi_thread")]
 async fn test_mixed_nonce_and_generation_transactions() {
     // Keep it commented out in case of debug.
-    // sov_test_utils::logging::initialize_or_change_logging_with_filter(
-    //     "warn,sov_metrics=error,sov=debug,integration=debug",
-    // );
+    sov_test_utils::logging::initialize_or_change_logging_with_filter(
+        "warn,sov_metrics=error,sov=debug,integration=debug",
+    );
 
     let (test_rollup, test_user) = create_test_rollup().await;
     test_rollup
@@ -99,11 +98,9 @@ async fn test_mixed_nonce_and_generation_transactions() {
 
     // let addr1 = test_user.address();
     let pub_key_hex = hex::encode(test_user.private_key.pub_key().bytes());
-    let response = client.address_dedup(&pub_key_hex).await.unwrap();
-    let AnyJsonValue::Object(inner) = response.into_inner() else {
-        panic!("Invalid response shape is returned from dedup endpoint");
-    };
-    let default_nonce = inner.get("nonce").and_then(|x| x.as_u64()).unwrap();
+    tracing::info!("PUB KEY HEX: {}", pub_key_hex);
+    let credential_id = test_user.private_key.pub_key().credential_id();
+    let default_nonce = client.get_next_nonce(&credential_id).await.unwrap();
     assert_eq!(0, default_nonce);
 
     let mut finalized_slots = client.subscribe_finalized_slots().await.unwrap();
@@ -142,6 +139,9 @@ async fn test_mixed_nonce_and_generation_transactions() {
         .await;
     assert!(result.is_ok(), "Nonce 0 should succeed");
 
+    let next_available = client.get_next_nonce(&credential_id).await.unwrap();
+    assert_eq!(1, next_available);
+
     // 3. Submit tx with nonce 2 -> should fail, skipping is not allowed for nonces
     let result = client
         .send_tx_to_sequencer(&construct_tx(UniquenessData::Nonce(2)))
@@ -172,11 +172,17 @@ async fn test_mixed_nonce_and_generation_transactions() {
         .await;
     assert!(result.is_ok(), "Generation 6 should succeed");
 
+    let last_nonce = client.get_next_nonce(&credential_id).await.unwrap();
+    assert_eq!(5, last_nonce);
+
     // 6. Submit tx with nonce 5 -> should succeed (continues from nonce 4, independent of generation)
     let result = client
         .send_tx_to_sequencer(&construct_tx(UniquenessData::Nonce(5)))
         .await;
     assert!(result.is_ok(), "Nonce 5 should succeed");
+
+    let last_nonce = client.get_next_nonce(&credential_id).await.unwrap();
+    assert_eq!(6, last_nonce);
 
     // 7. Submit tx with generation 6 again -> should fail (already used)
     let result = client

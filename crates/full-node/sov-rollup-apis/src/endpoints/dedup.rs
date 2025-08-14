@@ -7,11 +7,12 @@ use axum::Router;
 use serde::Serialize;
 use sov_modules_api::prelude::anyhow;
 use sov_modules_api::rest::ApiState;
-use sov_modules_api::{metered_credential, ApiStateAccessor, CryptoSpec, Spec};
+use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_rest_utils::{errors, preconfigured_router_layers, Query};
+use sov_rollup_interface::crypto::CredentialId;
 use sov_uniqueness::Uniqueness;
 
-/// Trait for the `/rollup/addresses/{address}/dedup` endpoint.
+/// Trait for the `/rollup/addresses/{credential_id}/dedup` endpoint.
 ///
 /// Rollup developers should implement this to provide dedup functionality to external services
 /// such as web3 SDK's in a generic way.
@@ -25,7 +26,10 @@ pub trait DeDupEndpoint<S: Spec>: Clone + Send + Sync + 'static {
     type Error: std::fmt::Display;
 
     /// Handle the `dedup` request.
-    fn handler(address: String, state: ApiStateAccessor<S>) -> Result<Self::Response, Self::Error>;
+    fn handler(
+        credential_id: String,
+        state: ApiStateAccessor<S>,
+    ) -> Result<Self::Response, Self::Error>;
 
     /// Provides rollup state to the handler.
     fn state(&self) -> ApiStateAccessor<S>;
@@ -117,19 +121,18 @@ pub enum SelectField {
 
 impl<S: Spec> SovereignDeDupEndpoint<S> {
     fn handler_with_query(
-        pub_key: String,
+        credential_id: String,
         mut state: ApiStateAccessor<S>,
         query: DedupQuery,
     ) -> Result<DedupResponse, anyhow::Error> {
-        let pub_key = <S::CryptoSpec as CryptoSpec>::PublicKey::from_str(&pub_key)?;
-        let credential_id = metered_credential(&pub_key, &mut state)?;
-        tracing::trace!(%credential_id, "Going to provide dedup for");
+        let credential_id = CredentialId::from_str(&credential_id)?;
+        tracing::info!(%credential_id, "Going to provide dedup for");
         let uniqueness = Uniqueness::<S>::default();
 
         match query.select {
             Some(SelectField::Generation) => {
                 let generation = uniqueness.next_generation(&credential_id, &mut state)?;
-                tracing::trace!(%credential_id, %generation, "Providing generation for credential id");
+                tracing::info!(%credential_id, %generation, "Providing generation for credential id");
                 Ok(DedupResponse {
                     nonce: None,
                     generation: Some(generation),
@@ -137,7 +140,7 @@ impl<S: Spec> SovereignDeDupEndpoint<S> {
             }
             Some(SelectField::Nonce) | None => {
                 let nonce = uniqueness.next_nonce(&credential_id, &mut state)?;
-                tracing::trace!(%credential_id, %nonce, "Providing nonce for credential id");
+                tracing::info!(%credential_id, %nonce, "Providing nonce for credential id");
                 Ok(DedupResponse {
                     nonce: Some(nonce),
                     generation: None,
@@ -152,8 +155,11 @@ impl<S: Spec> DeDupEndpoint<S> for SovereignDeDupEndpoint<S> {
 
     type Error = anyhow::Error;
 
-    fn handler(address: String, state: ApiStateAccessor<S>) -> Result<Self::Response, Self::Error> {
-        Self::handler_with_query(address, state, Default::default())
+    fn handler(
+        credential_id: String,
+        state: ApiStateAccessor<S>,
+    ) -> Result<Self::Response, Self::Error> {
+        Self::handler_with_query(credential_id, state, Default::default())
     }
 
     fn state(&self) -> ApiStateAccessor<S> {
@@ -164,12 +170,12 @@ impl<S: Spec> DeDupEndpoint<S> for SovereignDeDupEndpoint<S> {
         preconfigured_router_layers(
             Router::new()
                 .route(
-                    "/rollup/addresses/:address/dedup",
+                    "/rollup/addresses/:credential_id/dedup",
                     get(
-                        |Path(address): Path<String>,
+                        |Path(credential_id): Path<String>,
                          State(state): State<Self>,
                          Query(query): Query<DedupQuery>| async move {
-                            match Self::handler_with_query(address, state.state(), query) {
+                            match Self::handler_with_query(credential_id, state.state(), query) {
                                 Ok(data) => axum::Json(data).into_response(),
                                 Err(err) => errors::bad_request_400("Failed to dedup address", err),
                             }

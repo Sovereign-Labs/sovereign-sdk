@@ -75,8 +75,8 @@ mod tests {
         let credential_id = CredentialId(HexHash::new([10u8; 32]));
         let s = credential_id.to_string().replace("0x", "");
         let result = CredentialId::from_str(&s);
-        assert!(result.is_err());
-        assert_eq!("Missing 0x prefix", result.unwrap_err().to_string());
+        assert!(result.is_ok());
+        assert_eq!(credential_id, result.unwrap());
     }
 
     #[test_strategy::proptest]

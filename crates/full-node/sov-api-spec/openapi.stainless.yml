@@ -93,7 +93,7 @@ resources:
           baseFeePerGas: BaseFeePerGas
       addresses:
         methods:
-          dedup: get /rollup/addresses/{address}/dedup
+          dedup: get /rollup/addresses/{credential_id}/dedup
       sync_status:
         methods:
           retrieve: get /rollup/sync-status
