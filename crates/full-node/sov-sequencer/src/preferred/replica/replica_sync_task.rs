@@ -1,13 +1,9 @@
-use crate::preferred::exit_rollup;
-use crate::preferred::replica::event_receiver::EventReceiverError;
-use crate::preferred::replica::event_receiver::{EventReceiver, EventsNotificationPayload};
+use crate::preferred::replica::event_receiver::DbData;
+use crate::preferred::replica::event_receiver::EventReceiver;
 use tokio::sync::watch;
-use tracing::error;
-
-const MAX_DB_ERRORS_ALLOWED: u32 = 10;
 
 pub(crate) trait ReplicaEventHandler {
-    async fn on_notification(&self, notification: EventsNotificationPayload);
+    async fn on_da_event(&self, batch: DbData);
 }
 
 pub(crate) struct ReplicaSyncTask<R: ReplicaEventHandler> {
@@ -18,12 +14,17 @@ pub(crate) struct ReplicaSyncTask<R: ReplicaEventHandler> {
 
 impl<R: ReplicaEventHandler> ReplicaSyncTask<R> {
     pub(crate) async fn new(
-        postgres_connection_string: &str,
+        postgres_connection_string: String,
         handler: R,
         shutdown_sender: watch::Sender<()>,
+        start_event_id: u64,
     ) -> anyhow::Result<Self> {
-        let event_receiver =
-            EventReceiver::new(postgres_connection_string, &shutdown_sender).await?;
+        let event_receiver = EventReceiver::new(
+            postgres_connection_string,
+            shutdown_sender.clone(),
+            start_event_id,
+        )
+        .await;
         Ok(Self {
             event_receiver,
             handler,
@@ -32,41 +33,16 @@ impl<R: ReplicaEventHandler> ReplicaSyncTask<R> {
     }
 
     pub(crate) async fn start(&mut self) {
+        self.event_receiver.spawn_db_data_fetcher().await;
         let shutdown_receiver = self.shutdown_sender.subscribe();
-        let mut nb_of_consecutive_db_errors = 0;
 
         loop {
-            tokio::select! {
-                notification_result = self.event_receiver.recv() => {
-                    match notification_result {
-                        Ok(notification) => {
-                            nb_of_consecutive_db_errors = 0;
-                            self.handler.on_notification(notification).await;
-                        }
+            if shutdown_receiver.has_changed().unwrap_or(true) {
+                break;
+            }
 
-                        Err(EventReceiverError::ParsingError(e)) => {
-                            // This should never happen, so we shut down the replica immediately
-                            error!("Failed to parse notification: {e:?}. Shutting down replica.");
-                            exit_rollup(&self.shutdown_sender).await;
-                        }
-                        Err(EventReceiverError::ListenerError(e)) => {
-                            error!("Failed to receive notifications from database: {e:?}. Shutting down replica.");
-
-                            if shutdown_receiver.has_changed().unwrap_or(true) {
-                                break;
-                            }
-
-                            // Since network errors can occur, we will retry receiving a few times before initiating replica shutdown.
-                            if nb_of_consecutive_db_errors >= MAX_DB_ERRORS_ALLOWED {
-                                error!("Failed to connect to the database after {nb_of_consecutive_db_errors} attempts. Shutting down replica.");
-                                exit_rollup(&self.shutdown_sender).await;
-                            }
-
-                            nb_of_consecutive_db_errors += 1;
-                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                        }
-                    }
-                }
+            if let Some(data) = self.event_receiver.recv().await {
+                self.handler.on_da_event(data).await;
             }
         }
     }
@@ -76,7 +52,11 @@ impl<R: ReplicaEventHandler> ReplicaSyncTask<R> {
 mod tests {
     use super::*;
     use crate::preferred::db::postgres::PostgresBackend;
+    use crate::preferred::db::BatchToStore;
     use crate::preferred::db::PreferredSequencerDbBackend;
+    use sov_modules_api::FullyBakedTx;
+    use sov_modules_api::TxHash;
+    use sov_modules_api::VisibleSlotNumber;
     use sov_test_utils::postgres::connection_string_from_postgres_container;
     use sov_test_utils::postgres::create_postgres_container;
     use std::num::NonZero;
@@ -84,19 +64,19 @@ mod tests {
 
     #[derive(Clone)]
     struct TestHandler {
-        send: mpsc::Sender<EventsNotificationPayload>,
+        send: mpsc::Sender<DbData>,
     }
 
     impl TestHandler {
-        pub fn new() -> (Self, mpsc::Receiver<EventsNotificationPayload>) {
+        pub fn new() -> (Self, mpsc::Receiver<DbData>) {
             let (send, recv) = mpsc::channel(1);
             (Self { send }, recv)
         }
     }
 
     impl ReplicaEventHandler for TestHandler {
-        async fn on_notification(&self, notification: EventsNotificationPayload) {
-            self.send.send(notification).await.unwrap();
+        async fn on_da_event(&self, data: DbData) {
+            self.send.send(data).await.unwrap();
         }
     }
 
@@ -113,15 +93,43 @@ mod tests {
 
         let (sync_task_ready_snd, mut sync_task_ready_rcv) = mpsc::channel(1);
 
+        let sequence_number = 10;
+        let blob_id = 99;
+        let visible_slot_number_after_increase = VisibleSlotNumber::new_dangerous(11);
+        let visible_slots_to_advance = NonZero::new(1).unwrap();
         // Insert `postgres_db_backend_begin_rollup_block` into the db.
         {
             let conn_str = postgres_connection_string.clone();
             tokio::spawn(async move {
                 let mut db = PostgresBackend::connect(&conn_str).await.unwrap();
                 sync_task_ready_rcv.recv().await.unwrap();
-                db.begin_rollup_block(99, 11, Default::default(), NonZero::new(1).unwrap())
-                    .await
-                    .unwrap();
+
+                db.begin_rollup_block(
+                    sequence_number,
+                    blob_id,
+                    visible_slot_number_after_increase,
+                    visible_slots_to_advance,
+                )
+                .await
+                .unwrap();
+
+                db.add_tx(
+                    sequence_number,
+                    0,
+                    FullyBakedTx::new(vec![1, 2, 3]),
+                    TxHash::new([11; 32]),
+                )
+                .await
+                .unwrap();
+
+                db.end_rollup_block(BatchToStore {
+                    blob_id,
+                    sequence_number,
+                    visible_slot_number_after_increase,
+                    visible_slots_to_advance,
+                })
+                .await
+                .unwrap();
             });
         }
 
@@ -134,7 +142,7 @@ mod tests {
             let test_handler = test_handler.clone();
             let shutdown_snd = shutdown_snd.clone();
             tokio::spawn(async move {
-                let mut sync_task = ReplicaSyncTask::new(&conn_str, test_handler, shutdown_snd)
+                let mut sync_task = ReplicaSyncTask::new(conn_str, test_handler, shutdown_snd, 0)
                     .await
                     .unwrap();
                 sync_task_ready_snd.send(()).await.unwrap();
@@ -142,8 +150,9 @@ mod tests {
             });
         }
 
-        let event = recv.recv().await.unwrap();
-        assert_eq!(event.sequence_number, 99);
+        let _event = recv.recv().await.unwrap();
+        let _event = recv.recv().await.unwrap();
+        let _event = recv.recv().await.unwrap();
 
         shutdown_snd.send(()).unwrap();
     }
