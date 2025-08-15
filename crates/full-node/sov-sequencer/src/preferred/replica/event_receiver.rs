@@ -205,8 +205,8 @@ impl EventReceiver {
         listener: &mut PgListener,
     ) -> Result<EventsNotificationPayload, EventReceiverError> {
         let mut last_notification = None;
-        // We are only interested in the last notification form the ebd because the backfill logic
-        // allows skipping some notifications.
+        // We only care about the latest notification from the DB,
+        // since the backfill logic allows us to skip earlier ones.
         while let Some(p) = listener.next_buffered() {
             last_notification = Some(p);
         }
@@ -256,6 +256,10 @@ impl EventReceiver {
             current_event_id, target_event_id
         );
 
+        // Currently, we fetch data in a loop. One possible (but not yet necessary) optimization would be to issue
+        // multiple parallel queries to the DB for different `event_id`` ranges.
+        // After analyzing real-world workloads, we can revisit this optimization. Implementing it would only affect
+        // the contents of this method and would not require significant refactoring.
         while current_event_id <= target_event_id {
             let page_end = std::cmp::min(current_event_id + PAGE_SIZE as u64, target_event_id);
 
