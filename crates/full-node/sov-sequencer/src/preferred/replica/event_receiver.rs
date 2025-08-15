@@ -85,9 +85,9 @@ impl EventsNotificationPayload {
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum EventReceiverError {
     #[error("Error while querying for  db data: {0}")]
-    ListenerError(#[from] sqlx::Error),
+    DbError(#[from] sqlx::Error),
 
-    #[error("Error while paring the db notification: {0}")]
+    #[error("Error while parsing the db notification: {0}")]
     ParsingError(#[from] anyhow::Error),
 }
 
@@ -173,7 +173,7 @@ impl EventReceiver {
                             exit_rollup(&shutdown_sender).await;
                         }
 
-                        EventReceiverError::ListenerError(e) => {
+                        EventReceiverError::DbError(e) => {
                             error!("Failed to receive notifications from database: {e:?}. Shutting down replica.");
 
                             if shutdown_receiver.has_changed().unwrap_or(true) {
