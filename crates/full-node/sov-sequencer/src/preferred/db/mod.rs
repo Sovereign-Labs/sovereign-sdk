@@ -101,7 +101,7 @@ pub trait PreferredSequencerDbBackend: Send + Sync + 'static {
 pub struct DbSnapshotData {
     pub completed_blobs: Vec<PreferredSequencerReadBlob>,
     pub in_progress_batch: Option<InProgressBatch>,
-    pub latest_event_id: Option<u64>,
+    //pub latest_event_id: Option<u64>,
 }
 
 /// See [`PreferredSequencerReadBlob::Batch`].
@@ -411,12 +411,12 @@ impl PreferredSequencerDb {
 
     pub(crate) async fn initial_data(
         &mut self,
-    ) -> anyhow::Result<(Option<u64>, SequenceNumber, PreferredSequencerCache)> {
+    ) -> anyhow::Result<(SequenceNumber, PreferredSequencerCache)> {
         if let Some(backend) = &mut self.backend {
             let DbSnapshotData {
                 completed_blobs,
                 in_progress_batch,
-                latest_event_id,
+                //latest_event_id,
             } = backend.current_data().await?;
 
             let completed_blobs = VecDeque::from(completed_blobs);
@@ -431,7 +431,7 @@ impl PreferredSequencerDb {
             };
 
             Ok((
-                latest_event_id,
+                //latest_event_id,
                 sequence_number_of_next_blob,
                 PreferredSequencerCache::new(
                     completed_blobs,
@@ -441,7 +441,6 @@ impl PreferredSequencerDb {
             ))
         } else {
             Ok((
-                None,
                 0, // TODO this will be revisited when we enable the replica sync task.
                 PreferredSequencerCache::new(
                     VecDeque::default(),

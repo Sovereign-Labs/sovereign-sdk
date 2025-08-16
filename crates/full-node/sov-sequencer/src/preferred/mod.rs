@@ -166,7 +166,7 @@ where
         )
         .await?;
 
-        let (_latest_db_event_id, next_sequence_number, db_cache) = db.initial_data().await?;
+        let (next_sequence_number, db_cache) = db.initial_data().await?;
 
         let mut handles = vec![];
 

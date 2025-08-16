@@ -96,22 +96,16 @@ pub(crate) struct EventReceiver {
     db_data_sender: tokio::sync::mpsc::Sender<DbData>,
     db_data_receiver: tokio::sync::mpsc::Receiver<DbData>,
     shutdown_sender: watch::Sender<()>,
-    start_event_id: u64,
 }
 
 impl EventReceiver {
-    pub(crate) async fn new(
-        connection_string: String,
-        shutdown_sender: watch::Sender<()>,
-        start_event_id: u64,
-    ) -> Self {
+    pub(crate) async fn new(connection_string: String, shutdown_sender: watch::Sender<()>) -> Self {
         let (db_data_sender, db_data_receiver) = tokio::sync::mpsc::channel(PAGE_SIZE as usize);
         Self {
             connection_string,
             db_data_sender,
             db_data_receiver,
             shutdown_sender,
-            start_event_id,
         }
     }
 
@@ -125,6 +119,15 @@ impl EventReceiver {
             Ok(pool) => pool,
             Err(e) => {
                 error!("Failed to connect to PostgreSQL: {e:?}. Replica shutting down.");
+                exit_rollup(&self.shutdown_sender).await;
+                unreachable!("EventReceiver: impossible happened rollup didn't exit");
+            }
+        };
+
+        let mut start_event_id = match latest_event_id(&query_pool).await {
+            Ok(latest_event_id) => latest_event_id,
+            Err(e) => {
+                error!("Failed to get latest event id: {e:?}. Replica shutting down.");
                 exit_rollup(&self.shutdown_sender).await;
                 unreachable!("EventReceiver: impossible happened rollup didn't exit");
             }
@@ -151,14 +154,14 @@ impl EventReceiver {
         let shutdown_receiver = self.shutdown_sender.subscribe();
 
         let mut db_data_sender = self.db_data_sender.clone();
-        let start_event_id = self.start_event_id;
+
         tokio::spawn(async move {
             loop {
                 if shutdown_receiver.has_changed().unwrap_or(true) {
                     break;
                 }
 
-                if let Err(e) = Self::fetch_data(
+                match Self::fetch_data(
                     start_event_id,
                     &query_pool,
                     &mut listener,
@@ -166,32 +169,40 @@ impl EventReceiver {
                 )
                 .await
                 {
-                    match e {
-                        EventReceiverError::ParsingError(e) => {
-                            // This should never happen, so we shut down the replica immediately
-                            error!("Failed to parse notification: {e:?}. Shutting down replica.");
-                            exit_rollup(&shutdown_sender).await;
-                        }
-
-                        EventReceiverError::DbError(e) => {
-                            error!("Failed to receive notifications from database: {e:?}. Shutting down replica.");
-
-                            if shutdown_receiver.has_changed().unwrap_or(true) {
-                                break;
-                            }
-
-                            // Since network errors can occur, we will retry receiving a few times before initiating replica shutdown.
-                            if nb_of_consecutive_db_errors >= MAX_DB_ERRORS_ALLOWED {
-                                error!("Failed to connect to the database after {nb_of_consecutive_db_errors} attempts. Shutting down replica.");
+                    Ok(n) => {
+                        start_event_id = Some(n + 1);
+                    }
+                    Err(e) => {
+                        match e {
+                            EventReceiverError::ParsingError(e) => {
+                                // This should never happen, so we shut down the replica immediately
+                                error!(
+                                    "Failed to parse notification: {e:?}. Shutting down replica."
+                                );
                                 exit_rollup(&shutdown_sender).await;
                             }
 
-                            nb_of_consecutive_db_errors += 1;
-                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                            continue;
+                            EventReceiverError::DbError(e) => {
+                                error!("Failed to receive notifications from database: {e:?}. Shutting down replica.");
+
+                                if shutdown_receiver.has_changed().unwrap_or(true) {
+                                    break;
+                                }
+
+                                // Since network errors can occur, we will retry receiving a few times before initiating replica shutdown.
+                                if nb_of_consecutive_db_errors >= MAX_DB_ERRORS_ALLOWED {
+                                    error!("Failed to connect to the database after {nb_of_consecutive_db_errors} attempts. Shutting down replica.");
+                                    exit_rollup(&shutdown_sender).await;
+                                }
+
+                                nb_of_consecutive_db_errors += 1;
+                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                                continue;
+                            }
                         }
                     }
                 }
+
                 nb_of_consecutive_db_errors = 0;
             }
         });
@@ -205,6 +216,7 @@ impl EventReceiver {
         listener: &mut PgListener,
     ) -> Result<EventsNotificationPayload, EventReceiverError> {
         let mut last_notification = None;
+
         // We only care about the latest notification from the DB,
         // since the backfill logic allows us to skip earlier ones.
         while let Some(p) = listener.next_buffered() {
@@ -222,11 +234,11 @@ impl EventReceiver {
     }
 
     async fn fetch_data(
-        start_event_id: u64,
+        start_event_id: Option<u64>,
         query_pool: &PgPool,
         listener: &mut PgListener,
         db_data_sender: &mut tokio::sync::mpsc::Sender<DbData>,
-    ) -> Result<(), EventReceiverError> {
+    ) -> Result<u64, EventReceiverError> {
         let notification = Self::recv_notifications(listener).await?;
 
         Self::backfill_to_event_id(
@@ -237,15 +249,17 @@ impl EventReceiver {
         )
         .await?;
 
-        Ok(())
+        Ok(notification.event_id)
     }
 
     async fn backfill_to_event_id(
         query_pool: &PgPool,
-        mut current_event_id: u64,
+        current_event_id: Option<u64>,
         target_event_id: u64,
         db_data_sender: &mut tokio::sync::mpsc::Sender<DbData>,
     ) -> Result<(), EventReceiverError> {
+        let mut current_event_id = current_event_id.unwrap_or(0);
+
         // If we're already caught up, nothing to do
         if current_event_id > target_event_id {
             return Ok(());
@@ -349,4 +363,13 @@ fn parse_serialized_batch(data: Vec<u8>, sequence_number: u64) -> anyhow::Result
             sequence_number
         )),
     }
+}
+
+async fn latest_event_id(query_pool: &PgPool) -> Result<Option<u64>, sqlx::Error> {
+    Ok(
+        sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(event_id) FROM events")
+            .fetch_one(&*query_pool)
+            .await?
+            .map(|id| id as u64),
+    )
 }

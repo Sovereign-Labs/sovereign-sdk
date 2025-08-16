@@ -1,50 +1,51 @@
 use crate::preferred::replica::event_receiver::DbData;
 use crate::preferred::replica::event_receiver::EventReceiver;
+use async_trait::async_trait;
 use tokio::sync::watch;
 
-pub(crate) trait ReplicaEventHandler {
+#[async_trait]
+pub(crate) trait ReplicaEventHandler: Send + Sync + 'static {
     async fn on_da_event(&self, batch: DbData);
 }
 
-pub(crate) struct ReplicaSyncTask<R: ReplicaEventHandler> {
-    event_receiver: EventReceiver,
-    handler: R,
+pub(crate) struct ReplicaSyncTask {
     shutdown_sender: watch::Sender<()>,
+    postgres_connection_string: String,
 }
 
-impl<R: ReplicaEventHandler> ReplicaSyncTask<R> {
+impl ReplicaSyncTask {
     pub(crate) async fn new(
         postgres_connection_string: String,
-        handler: R,
+
         shutdown_sender: watch::Sender<()>,
-        start_event_id: u64,
     ) -> anyhow::Result<Self> {
-        let event_receiver = EventReceiver::new(
-            postgres_connection_string,
-            shutdown_sender.clone(),
-            start_event_id,
-        )
-        .await;
         Ok(Self {
-            event_receiver,
-            handler,
+            postgres_connection_string,
             shutdown_sender,
         })
     }
 
-    pub(crate) async fn start(&mut self) {
-        self.event_receiver.spawn_db_data_fetcher().await;
+    pub(crate) async fn start<R: ReplicaEventHandler>(&mut self, handler: R) {
+        let mut event_receiver = EventReceiver::new(
+            self.postgres_connection_string.clone(),
+            self.shutdown_sender.clone(),
+        )
+        .await;
+
+        event_receiver.spawn_db_data_fetcher().await;
         let shutdown_receiver = self.shutdown_sender.subscribe();
 
-        loop {
-            if shutdown_receiver.has_changed().unwrap_or(true) {
-                break;
-            }
+        tokio::spawn(async move {
+            loop {
+                if shutdown_receiver.has_changed().unwrap_or(true) {
+                    break;
+                }
 
-            if let Some(data) = self.event_receiver.recv().await {
-                self.handler.on_da_event(data).await;
+                if let Some(data) = event_receiver.recv().await {
+                    handler.on_da_event(data).await;
+                }
             }
-        }
+        });
     }
 }
 
@@ -74,6 +75,7 @@ mod tests {
         }
     }
 
+    #[async_trait]
     impl ReplicaEventHandler for TestHandler {
         async fn on_da_event(&self, data: DbData) {
             self.send.send(data).await.unwrap();
@@ -91,17 +93,20 @@ mod tests {
             .await
             .unwrap();
 
+        let mut db = PostgresBackend::connect(&postgres_connection_string)
+            .await
+            .unwrap();
+
         let (sync_task_ready_snd, mut sync_task_ready_rcv) = mpsc::channel(1);
 
         let sequence_number = 10;
         let blob_id = 99;
         let visible_slot_number_after_increase = VisibleSlotNumber::new_dangerous(11);
         let visible_slots_to_advance = NonZero::new(1).unwrap();
+
         // Insert `postgres_db_backend_begin_rollup_block` into the db.
         {
-            let conn_str = postgres_connection_string.clone();
             tokio::spawn(async move {
-                let mut db = PostgresBackend::connect(&conn_str).await.unwrap();
                 sync_task_ready_rcv.recv().await.unwrap();
 
                 db.begin_rollup_block(
@@ -142,11 +147,10 @@ mod tests {
             let test_handler = test_handler.clone();
             let shutdown_snd = shutdown_snd.clone();
             tokio::spawn(async move {
-                let mut sync_task = ReplicaSyncTask::new(conn_str, test_handler, shutdown_snd, 0)
-                    .await
-                    .unwrap();
+                let mut sync_task = ReplicaSyncTask::new(conn_str, shutdown_snd).await.unwrap();
+
+                sync_task.start(test_handler).await;
                 sync_task_ready_snd.send(()).await.unwrap();
-                sync_task.start().await;
             });
         }
 

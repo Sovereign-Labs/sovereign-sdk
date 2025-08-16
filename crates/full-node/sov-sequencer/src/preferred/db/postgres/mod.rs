@@ -173,12 +173,6 @@ impl PostgresBackend {
     async fn current_data_transaction(&self) -> anyhow::Result<DbSnapshotData> {
         let mut tx = self.pool.begin().await?;
 
-        let latest_event_id: Option<u64> =
-            sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(event_id) FROM events")
-                .fetch_one(&mut *tx)
-                .await?
-                .map(|id| id as u64);
-
         let completed_blobs_metadata: Vec<(i64, Vec<u8>)> =
             sqlx::query_as::<Postgres, _>(
                 "SELECT sequence_number, data FROM events WHERE event_type = 'batch_end' ORDER BY sequence_number",
@@ -206,7 +200,7 @@ impl PostgresBackend {
         Ok(DbSnapshotData {
             completed_blobs,
             in_progress_batch,
-            latest_event_id,
+            //latest_event_id,
         })
     }
 }
