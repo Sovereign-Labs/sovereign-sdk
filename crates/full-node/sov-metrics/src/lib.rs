@@ -52,32 +52,41 @@ pub enum MaybeTimer {
     None,
 }
 
+#[cfg(not(feature = "native"))]
 impl MaybeTimer {
     /// Starts a timer if the `native` feature is enabled. Otherwise, does nothing.
-    #[cfg(feature = "native")]
-    pub fn start(&mut self) {
-        *self = MaybeTimer::InProgress(std::time::Instant::now());
-    }
-
-    /// Starts a timer if the `native` feature is enabled. Otherwise, does nothing.
-    #[cfg(not(feature = "native"))]
     pub fn start(&mut self) {}
 
     /// Starts a timer if the `native` feature is enabled. Otherwise, does nothing.
-    #[cfg(feature = "native")]
-    pub fn started() -> Self {
-        MaybeTimer::InProgress(std::time::Instant::now())
-    }
-
-    /// Starts a timer if the `native` feature is enabled. Otherwise, does nothing.
-    #[cfg(not(feature = "native"))]
     pub fn started() -> Self {
         MaybeTimer::None
     }
 
     /// Ends the timer if the `native` feature is enabled. Otherwise, does nothing.
     /// Panics if the metric is not in progress.
-    #[cfg(feature = "native")]
+    pub fn end(&mut self) {}
+
+    /// Ends the timer if the `native` feature is enabled. Otherwise, does nothing.
+    /// Panics if the metric is not in progress.
+    pub fn elapsed(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(0)
+    }
+}
+
+#[cfg(feature = "native")]
+impl MaybeTimer {
+    /// Starts a timer if the `native` feature is enabled. Otherwise, does nothing.
+    pub fn start(&mut self) {
+        *self = MaybeTimer::InProgress(std::time::Instant::now());
+    }
+
+    /// Starts a timer if the `native` feature is enabled. Otherwise, does nothing.
+    pub fn started() -> Self {
+        MaybeTimer::InProgress(std::time::Instant::now())
+    }
+
+    /// Ends the timer if the `native` feature is enabled. Otherwise, does nothing.
+    /// Panics if the metric is not in progress.
     pub fn end(&mut self) {
         let MaybeTimer::InProgress(start) = self else {
             panic!("Cannot end a metric that is not in progress");
@@ -85,25 +94,12 @@ impl MaybeTimer {
         *self = MaybeTimer::Completed(start.elapsed());
     }
 
-    /// Ends the timer if the `native` feature is enabled. Otherwise, does nothing.
-    /// Panics if the metric is not in progress.
-    #[cfg(not(feature = "native"))]
-    pub fn end(&mut self) {}
-
     /// Returns the elapsed time since the timer if the `native` feature is enabled. Otherwise does nothing.
-    #[cfg(feature = "native")]
     pub fn elapsed(&self) -> std::time::Duration {
         match self {
             MaybeTimer::InProgress(start) => start.elapsed(),
             MaybeTimer::Completed(duration) => *duration,
             MaybeTimer::None => std::time::Duration::from_secs(0),
         }
-    }
-
-    /// Ends the timer if the `native` feature is enabled. Otherwise, does nothing.
-    /// Panics if the metric is not in progress.
-    #[cfg(not(feature = "native"))]
-    pub fn elapsed(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(0)
     }
 }

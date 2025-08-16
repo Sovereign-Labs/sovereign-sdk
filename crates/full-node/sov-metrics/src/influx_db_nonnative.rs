@@ -106,10 +106,6 @@ impl StateMetrics {
     }
 }
 
-// fn serialize_state_access_metric(buffer: &mut Vec<u8>, metric: &StateAccessMetric, prefix: &str) -> std::io::Result<()> {
-//     write!(buffer, "{}_op={},{}_key_size={},{}_storage_read_size={},{}_duration_us={}", prefix, metric.op, prefix, metric.key_size, prefix, metric.storage_read_size.unwrap_or(0), prefix, metric.duration.elapsed().as_micros())
-// }
-
 /// Metrics for `auth_and_process_tx`, and the tx hash
 #[derive(Debug)]
 pub struct AuthAndProcessMetrics {
@@ -132,7 +128,6 @@ impl Metric for AuthAndProcessMetrics {
         "sov_rollup_auth_and_process_metrics"
     }
 
-    // TODO: Finish serializing all the metrics
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         use std::io::Write;
         write!(buffer, "{}, tx_hash={},total_time_us={},auth_time_us={},resolve_context_time_us={},check_uniqueness_time_us={},mark_tx_attempted_time_us={},attempt_tx_time_us={},reserve_gas_time_us={},refund_remaining_gas_time_us={},reward_prover_time_us={}", self.measurement_name(), self.tx_hash, self.timings.auth.elapsed().as_micros(), self.timings.total_timer.elapsed().as_micros(), self.timings.resolve_context_timer.elapsed().as_micros(), self.timings.check_uniqueness_timer.elapsed().as_micros(), self.timings.mark_tx_attempted_timer.elapsed().as_micros(), self.timings.attempt_tx_timer.elapsed().as_micros(), self.timings.reserve_gas_timer.elapsed().as_micros(), self.timings.refund_remaining_gas_timer.elapsed().as_micros(), self.timings.reward_prover_timer.elapsed().as_micros())?;
