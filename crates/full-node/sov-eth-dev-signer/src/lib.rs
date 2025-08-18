@@ -122,7 +122,6 @@ fn to_primitive_transaction(tx_request: TypedTransactionRequest) -> Option<Trans
             gas_limit: tx.gas_limit.to(),
             max_fee_per_gas: tx.max_fee_per_gas.to(),
             max_priority_fee_per_gas: tx.max_priority_fee_per_gas.to(),
-            placeholder: None,
             to: tx.to,
             value: tx.value,
             access_list: tx.access_list,

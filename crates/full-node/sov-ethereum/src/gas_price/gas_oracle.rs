@@ -92,7 +92,7 @@ where
             let (parent_hash, block_values) = self
                 .get_block_values(current_hash, SAMPLE_NUMBER as usize, state)
                 .await?
-                .ok_or(EthApiError::UnknownBlockNumber)?;
+                .ok_or(EthApiError::UnknownBlockOrTxIndex)?;
 
             if block_values.is_empty() {
                 results.push(U256::from(last_price.price));
