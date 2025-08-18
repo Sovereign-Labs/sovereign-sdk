@@ -269,16 +269,19 @@ ethers-contract = { version = "=2.0.14", default-features = false }
 ethers-providers = { version = "=2.0.14", default-features = false }
 ethers-signers = { version = "=2.0.14", default-features = false }
 ethers-middleware = { version = "=2.0.14", default-features = false }
-# 603e39ab74509e0863fc023461a4c760fb2126d1, 1.0.5
-alloy-primitives = { version = "=0.7.7", default-features = false }
-alloy-sol-types = { version = "=0.7.7", default-features = false }
-alloy-eips = { version = "=0.2.1", default-features = false }
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "603e39ab74509e0863fc023461a4c760fb2126d1", default-features = false }
-reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", rev = "603e39ab74509e0863fc023461a4c760fb2126d1", default-features = false }
-reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "603e39ab74509e0863fc023461a4c760fb2126d1", default-features = false }
-alloy-rpc-types = { version = "0.2", default-features = false }
-revm = { version = "13.0.0", features = ["serde"], default-features = false }
-revm-inspectors = { version = "0.5", default-features = false }
+# c228fe15808c3acbf18dc3af1a03ef5cbdcda07a, 1.0.6
+alloy-primitives = { version = "=0.8.0", default-features = false }
+alloy-sol-types = { version = "=0.8.0", default-features = false }
+alloy-eips = { version = "=0.3", default-features = false }
+alloy-rpc-types = { version = "=0.3.0", features = [
+    "eth",
+], default-features = false }
+alloy-rpc-types-trace = { version = "=0.3.0" }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "c228fe15808c3acbf18dc3af1a03ef5cbdcda07a", default-features = false }
+reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", rev = "c228fe15808c3acbf18dc3af1a03ef5cbdcda07a", default-features = false }
+reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "c228fe15808c3acbf18dc3af1a03ef5cbdcda07a", default-features = false }
+revm = { version = "=14.0.0", features = ["serde"], default-features = false }
+revm-inspectors = { version = "=0.6", default-features = false }
 secp256k1 = { version = "=0.29.0", default-features = false, features = [
     "global-context",
     "recovery",
