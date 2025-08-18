@@ -38,8 +38,8 @@ jsonrpsee = { workspace = true, features = [
 schemars = { workspace = true }
 tracing = { workspace = true }
 
-alloy-sol-types = { version = "0.7.7", default-features = false }
-alloy-eips = { version = "0.2", default-features = false }
+alloy-sol-types = { workspace = true, default-features = false }
+alloy-eips = { workspace = true, default-features = false }
 # `rlp` feature implicitly enabled via `reth-` crates, but this allows us to explicitly access Error type from there
 alloy-primitives = { workspace = true, default-features = false, features = [
 	"rlp",
