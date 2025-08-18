@@ -15,24 +15,11 @@ workspace = true
 
 [dependencies]
 sov-eth-dev-signer = { workspace = true }
-revm = { workspace = true, features = ["std", "secp256k1"] }
-sov-transaction-generator = { workspace = true, optional = true }
-reth-primitives = { workspace = true, features = ["secp256k1"] }
-reth-rpc-types = { workspace = true }
+revm = { workspace = true, features = ["std", "secp256k1", "arbitrary"] }
+sov-transaction-generator = { workspace = true }
+reth-primitives = { workspace = true, features = ["secp256k1", "arbitrary"] }
+reth-rpc-types = { workspace = true, features = ["arbitrary"] }
 secp256k1 = { workspace = true }
-sha2 = { workspace = true, optional = true }
-rand_chacha = { workspace = true, optional = true }
-arbitrary = { workspace = true, optional = true }
-
-
-[features]
-default = []
-arbitrary = [
-    "dep:sov-transaction-generator",
-    "dep:sha2",
-    "dep:rand_chacha",
-    "dep:arbitrary",
-    "reth-primitives/arbitrary",
-    "reth-rpc-types/arbitrary",
-    "revm/arbitrary",
-]
+sha2 = { workspace = true }
+rand_chacha = { workspace = true }
+arbitrary = { workspace = true }
