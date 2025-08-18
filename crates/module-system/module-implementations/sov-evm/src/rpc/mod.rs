@@ -147,12 +147,10 @@ where
         let block = reth_rpc_types::Block {
             header,
             transactions,
-            uncles: Default::default(),
-            size: Default::default(),
-            withdrawals: Default::default(),
+            ..Default::default()
         };
 
-        Ok(Some(block.into()))
+        Ok(Some(block))
     }
 
     /// Handler for: `eth_getBalance`
