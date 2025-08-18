@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use reth_primitives::B256;
 use reth_rpc_eth_types::EthResult;
-use reth_rpc_types::{Block};
+use reth_rpc_types::Block;
 use schnellru::{ByLength, LruMap};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::ApiStateAccessor;
