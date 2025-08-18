@@ -56,7 +56,7 @@ sov-test-utils = { workspace = true, features = ["arbitrary"] }
 
 futures = { workspace = true }
 borsh = { workspace = true }
-progenitor-client = { version = "0.8" }
+progenitor-client = { version = "0.11" }
 serde = { workspace = true }
 
 [lints]

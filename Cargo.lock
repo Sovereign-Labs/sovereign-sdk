@@ -1547,9 +1547,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
-version = "1.7.2"
+version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "428d9aa8fbc0670b7b8d6030a7fadd0f86151cae55e4dbbece15f3780a3dfaf3"
+checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 dependencies = [
  "serde",
 ]
@@ -2645,7 +2645,7 @@ dependencies = [
  "futures",
  "prettyplease",
  "progenitor",
- "progenitor-client",
+ "progenitor-client 0.11.0",
  "regress 0.4.1",
  "reqwest 0.12.9",
  "serde",
@@ -7328,7 +7328,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "293df5b79211fbf0c1ebad6513ba451d267e9c15f5f19ee5d3da775e2dd27331"
 dependencies = [
- "progenitor-client",
+ "progenitor-client 0.8.0",
  "progenitor-impl",
  "progenitor-macro",
 ]
@@ -7338,6 +7338,21 @@ name = "progenitor-client"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4a5db54eac3cae7007a0785854bc3e89fd418cca7dfc2207b99b43979154c1b"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "percent-encoding",
+ "reqwest 0.12.9",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+]
+
+[[package]]
+name = "progenitor-client"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3832a961a5f1b0b5a5ccda5fbf67cae2ba708f6add667401007764ba504ffebf"
 dependencies = [
  "bytes",
  "futures-core",
@@ -11802,7 +11817,7 @@ dependencies = [
  "futures",
  "hex",
  "indexmap 2.5.0",
- "progenitor-client",
+ "progenitor-client 0.11.0",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "schemars",
