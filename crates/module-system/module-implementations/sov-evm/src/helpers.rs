@@ -97,7 +97,7 @@ pub(crate) fn from_primitive_with_hash(primitive_header: reth_primitives::Sealed
     } = header;
 
     Header {
-        hash: Some(hash),
+        hash,
         parent_hash,
         uncles_hash: ommers_hash,
         miner: beneficiary,
@@ -105,7 +105,7 @@ pub(crate) fn from_primitive_with_hash(primitive_header: reth_primitives::Sealed
         transactions_root,
         receipts_root,
         withdrawals_root,
-        number: Some(number),
+        number,
         gas_used: gas_used as u128,
         gas_limit: gas_limit as u128,
         extra_data,
@@ -229,8 +229,6 @@ pub fn from_recovered_with_block_context(
         // EIP-4844 fields
         max_fee_per_blob_gas: Default::default(),
         blob_versioned_hashes: Default::default(),
-        // Other fields
-        other: Default::default(),
         // EIP-7702: TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1132
         authorization_list: None,
     }

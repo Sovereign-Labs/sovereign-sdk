@@ -73,7 +73,7 @@ where
         block_hash: B256,
         details: Option<bool>,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<reth_rpc_types::RichBlock>> {
+    ) -> RpcResult<Option<reth_rpc_types::Block>> {
         debug!(
             ?block_hash,
             "EVM module JSON-RPC request to `eth_getBlockByHash`"
@@ -100,7 +100,7 @@ where
         block_number: Option<String>,
         details: Option<bool>,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<reth_rpc_types::RichBlock>> {
+    ) -> RpcResult<Option<reth_rpc_types::Block>> {
         debug!(
             block_number,
             "EVM module JSON-RPC request to `eth_getBlockByNumber`"
@@ -150,7 +150,6 @@ where
             uncles: Default::default(),
             size: Default::default(),
             withdrawals: Default::default(),
-            other: Default::default(),
         };
 
         Ok(Some(block.into()))

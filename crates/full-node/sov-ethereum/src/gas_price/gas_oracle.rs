@@ -68,7 +68,7 @@ where
         let mut last_price = self.last_price.lock().await;
 
         // if we have stored a last price, then we check whether or not it was for the same head
-        if last_price.block_hash == header.hash.unwrap() {
+        if last_price.block_hash == header.hash {
             return Ok(last_price.price);
         }
 
@@ -77,15 +77,13 @@ where
         //
         // we only return more than check_block blocks' worth of prices if one or more return empty
         // transactions
-        let mut current_hash = header.hash.unwrap();
+        let mut current_hash = header.hash;
         let mut results = Vec::new();
         let mut populated_blocks = 0;
 
-        let header_number = header.number.unwrap();
-
         // we only check a maximum of 2 * max_block_history, or the number of blocks in the chain
-        let max_blocks = if self.oracle_config.max_block_history * 2 > header_number {
-            header_number
+        let max_blocks = if self.oracle_config.max_block_history * 2 > header.number {
+            header.number
         } else {
             self.oracle_config.max_block_history * 2
         };
@@ -128,7 +126,7 @@ where
         }
 
         *last_price = GasPriceOracleResult {
-            block_hash: header.hash.unwrap(),
+            block_hash: header.hash,
             price,
         };
 
