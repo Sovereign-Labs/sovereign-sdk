@@ -179,7 +179,7 @@ nomt-core = { git = "https://github.com/thrumdev/nomt.git", rev = "ff4491440d401
 nomt = { git = "https://github.com/thrumdev/nomt.git", rev = "ff4491440d401f32e18fe91041c4344b2bacb068", default-features = false, features = ["borsh", "serde"] }
 
 anyhow = { version = "1.0.95" }
-async-trait = "0.1.81"
+async-trait = "0.1.89"
 arrayvec = { version = "0.7.6", features = ["serde", "borsh"] }
 console-subscriber = "0.4"
 
