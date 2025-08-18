@@ -1,14 +1,14 @@
 use std::str::FromStr;
 
 use alloy_primitives::TxKind;
+use alloy_rpc_types::request::TransactionInput;
+use alloy_rpc_types::TransactionRequest;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
 use ethers_core::types::{Bytes, Eip1559TransactionRequest};
 use ethers_core::utils::rlp::Rlp;
 use ethers_signers::{LocalWallet, Signer};
 use reth_primitives::revm_primitives::{BlockEnv, TransactTo, TxEnv};
 use reth_primitives::{Address, TransactionSignedEcRecovered, U256};
-use reth_rpc_types::request::TransactionInput;
-use reth_rpc_types::TransactionRequest;
 use sov_modules_api::macros::config_value;
 
 use crate::evm::primitive_types::TransactionSignedAndRecovered;

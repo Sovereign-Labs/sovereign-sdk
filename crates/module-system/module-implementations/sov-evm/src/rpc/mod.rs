@@ -1,6 +1,10 @@
 use std::convert::Infallible;
 
-use alloy_primitives::TxKind;
+use alloy_primitives::{Bytes, TxKind};
+use alloy_rpc_types::{
+    state::StateOverride, Block, BlockOverrides, BlockTransactions, FeeHistory, Log,
+    ReceiptEnvelope, ReceiptWithBloom, Transaction, TransactionReceipt, TransactionRequest,
+};
 use error::ensure_success;
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
@@ -10,7 +14,6 @@ use reth_primitives::revm_primitives::{
 };
 use reth_primitives::{TransactionSignedEcRecovered, U64};
 use reth_rpc_eth_types::{EthApiError, RevertError, RpcInvalidTransactionError};
-use reth_rpc_types::{ReceiptEnvelope, ReceiptWithBloom};
 use revm::Database;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
@@ -73,7 +76,7 @@ where
         block_hash: B256,
         details: Option<bool>,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<reth_rpc_types::Block>> {
+    ) -> RpcResult<Option<Block>> {
         debug!(
             ?block_hash,
             "EVM module JSON-RPC request to `eth_getBlockByHash`"
@@ -100,7 +103,7 @@ where
         block_number: Option<String>,
         details: Option<bool>,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<reth_rpc_types::Block>> {
+    ) -> RpcResult<Option<Block>> {
         debug!(
             block_number,
             "EVM module JSON-RPC request to `eth_getBlockByNumber`"
@@ -123,7 +126,7 @@ where
 
         // Build rpc transactions response
         let transactions = match details {
-            Some(true) => reth_rpc_types::BlockTransactions::Full(
+            Some(true) => BlockTransactions::Full(
                 transactions_with_ids
                     .map(|(id, tx)| {
                         from_recovered_with_block_context(
@@ -136,7 +139,7 @@ where
                     })
                     .collect::<Vec<_>>(),
             ),
-            _ => reth_rpc_types::BlockTransactions::Hashes({
+            _ => BlockTransactions::Hashes({
                 transactions_with_ids
                     .map(|(_, tx)| tx.signed_transaction.hash)
                     .collect::<Vec<_>>()
@@ -144,7 +147,7 @@ where
         };
 
         // Build rpc block response
-        let block = reth_rpc_types::Block {
+        let block = Block {
             header,
             transactions,
             ..Default::default()
@@ -233,7 +236,7 @@ where
         address: Address,
         _block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<reth_primitives::Bytes> {
+    ) -> RpcResult<Bytes> {
         debug!("EVM module JSON-RPC request to `eth_getCode`");
 
         // TODO: Implement block_number once we have archival state #951
@@ -256,10 +259,10 @@ where
     /// Handler for: `eth_feeHistory`
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "eth_feeHistory")]
-    pub fn fee_history(&self) -> RpcResult<reth_rpc_types::FeeHistory> {
+    pub fn fee_history(&self) -> RpcResult<FeeHistory> {
         debug!("EVM module JSON-RPC request to `eth_feeHistory`");
 
-        Ok(reth_rpc_types::FeeHistory {
+        Ok(FeeHistory {
             base_fee_per_gas: Default::default(),
             gas_used_ratio: Default::default(),
             oldest_block: Default::default(),
@@ -276,7 +279,7 @@ where
         &self,
         hash: B256,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<reth_rpc_types::Transaction>> {
+    ) -> RpcResult<Option<Transaction>> {
         let tx_number = self
             .transaction_hashes
             .get(&hash, state)
@@ -325,7 +328,7 @@ where
         &self,
         hash: B256,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<reth_rpc_types::TransactionReceipt>> {
+    ) -> RpcResult<Option<TransactionReceipt>> {
         debug!(
             %hash,
             "EVM module JSON-RPC request to `eth_getTransactionReceipt`"
@@ -366,12 +369,12 @@ where
     #[rpc_method(name = "eth_call")]
     pub fn get_call(
         &self,
-        request: reth_rpc_types::TransactionRequest,
+        request: TransactionRequest,
         block_number: Option<String>,
-        _state_overrides: Option<reth_rpc_types::state::StateOverride>,
-        _block_overrides: Option<Box<reth_rpc_types::BlockOverrides>>,
+        _state_overrides: Option<StateOverride>,
+        _block_overrides: Option<Box<BlockOverrides>>,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<reth_primitives::Bytes> {
+    ) -> RpcResult<Bytes> {
         debug!("EVM module JSON-RPC request to `eth_call`");
 
         let block_env = match block_number {
@@ -416,7 +419,7 @@ where
     #[rpc_method(name = "eth_estimateGas")]
     pub fn eth_estimate_gas(
         &self,
-        request: reth_rpc_types::TransactionRequest,
+        request: TransactionRequest,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
@@ -700,7 +703,7 @@ pub(crate) fn build_rpc_receipt(
     tx: TransactionSignedAndRecovered,
     tx_number: u64,
     receipt: Receipt,
-) -> reth_rpc_types::TransactionReceipt {
+) -> TransactionReceipt {
     let transaction: TransactionSignedEcRecovered = tx.into();
     let from = transaction.signer();
 
@@ -709,12 +712,12 @@ pub(crate) fn build_rpc_receipt(
     let transaction_hash = Some(transaction.hash);
     let transaction_index = tx_number - block.transactions.start;
 
-    let logs: Vec<reth_rpc_types::Log> = receipt
+    let logs: Vec<Log> = receipt
         .receipt
         .logs
         .iter()
         .enumerate()
-        .map(|(tx_log_idx, log)| reth_rpc_types::Log {
+        .map(|(tx_log_idx, log)| Log {
             inner: log.clone(),
             block_hash,
             block_number,
@@ -728,7 +731,7 @@ pub(crate) fn build_rpc_receipt(
 
     let logs_bloom = receipt.receipt.bloom_slow();
 
-    let rpc_receipt = reth_rpc_types::Receipt {
+    let rpc_receipt = alloy_rpc_types::Receipt {
         status: receipt.receipt.success.into(),
         cumulative_gas_used: receipt.receipt.cumulative_gas_used as u128,
         logs,
@@ -739,7 +742,7 @@ pub(crate) fn build_rpc_receipt(
         TxKind::Call(addr) => (None, Some(Address(*addr))),
     };
 
-    reth_rpc_types::TransactionReceipt {
+    TransactionReceipt {
         inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom::new(rpc_receipt, logs_bloom)),
         transaction_hash: transaction.hash,
         transaction_index: Some(transaction_index),

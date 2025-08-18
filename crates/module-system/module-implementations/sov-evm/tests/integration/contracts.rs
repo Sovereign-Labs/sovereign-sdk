@@ -1,6 +1,6 @@
+use alloy_rpc_types::transaction::EIP1559TransactionRequest;
+use alloy_rpc_types::TypedTransactionRequest;
 use reth_primitives::{TxKind, U256};
-use reth_rpc_types::transaction::EIP1559TransactionRequest;
-use reth_rpc_types::TypedTransactionRequest;
 use revm::primitives::{BlockEnv, CfgEnv, CfgEnvWithHandlerCfg, ExecutionResult};
 use sov_evm::{convert_to_transaction_signed, executor, EthereumAuthenticator, Evm, SpecId};
 use sov_modules_api::macros::config_value;

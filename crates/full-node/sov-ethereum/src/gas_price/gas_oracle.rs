@@ -3,11 +3,11 @@
 
 // Adopted from: https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc/src/eth/gas_oracle.rs
 
-use reth_primitives::{B256, U256};
+use alloy_primitives::{B256, U256};
+use alloy_rpc_types::BlockTransactions;
 use reth_rpc_eth_types::{
     EthApiError, EthResult, GasPriceOracleConfig, GasPriceOracleResult, RpcInvalidTransactionError,
 };
-use reth_rpc_types::BlockTransactions;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_evm::Evm;
 use sov_modules_api::ApiStateAccessor;
@@ -199,7 +199,7 @@ where
 
 // Adopted from: https://github.com/paradigmxyz/reth/blob/main/crates/primitives/src/transaction/mod.rs#L297
 fn effective_gas_tip(
-    transaction: &reth_rpc_types::Transaction,
+    transaction: &alloy_rpc_types::Transaction,
     base_fee: Option<u128>,
 ) -> Option<u128> {
     let priority_fee_or_price = match transaction.transaction_type {

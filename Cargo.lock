@@ -10828,6 +10828,7 @@ dependencies = [
 name = "sov-eth-dev-signer"
 version = "0.3.0"
 dependencies = [
+ "alloy-rpc-types",
  "reth-primitives",
  "reth-rpc-types",
  "revm",
@@ -10839,6 +10840,8 @@ dependencies = [
 name = "sov-ethereum"
 version = "0.3.0"
 dependencies = [
+ "alloy-primitives",
+ "alloy-rpc-types",
  "anyhow",
  "borsh",
  "ethereum-types",
@@ -10901,7 +10904,6 @@ dependencies = [
  "rand 0.8.5",
  "reth-primitives",
  "reth-rpc-eth-types",
- "reth-rpc-types",
  "revm",
  "revm-inspectors",
  "schemars",

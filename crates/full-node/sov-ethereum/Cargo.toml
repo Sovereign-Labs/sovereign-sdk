@@ -28,6 +28,8 @@ sov-eth-dev-signer = { workspace = true }
 borsh = { workspace = true }
 serde = { workspace = true }
 
+alloy-primitives = { workspace = true }
+alloy-rpc-types = { workspace = true }
 reth-primitives = { workspace = true }
 reth-rpc-types = { workspace = true }
 reth-rpc-eth-types = { workspace = true }

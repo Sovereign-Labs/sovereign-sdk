@@ -1,13 +1,13 @@
 use alloy_eips::eip2930::AccessList;
 use alloy_primitives::{TxKind as PrimitiveTransactionKind, TxKind};
 use alloy_rpc_types::AccessListItem;
+use alloy_rpc_types::{Header, Parity, Signature, TransactionRequest};
 use reth_primitives::revm_primitives::{BlockEnv, TxEnv, B256, U256};
 use reth_primitives::{
     BlockNumber, Transaction as PrimitiveTransaction, TransactionSignedEcRecovered, TxType,
 };
 use reth_rpc_eth_types::revm_utils::CallFees;
 use reth_rpc_eth_types::{EthResult, RpcInvalidTransactionError};
-use reth_rpc_types::{Header, Parity, Signature, TransactionRequest};
 
 // https://github.com/paradigmxyz/reth/blob/d8677b4146f77c7c82d659c59b79b38caca78778/crates/rpc/rpc/src/eth/revm_utils.rs#L201
 // it is `pub(crate)` only for tests

@@ -1,6 +1,6 @@
+use alloy_primitives::{TxKind, U256};
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
-use reth_primitives::{TxKind, U256};
 use reth_rpc_eth_types::EthApiError;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_evm::{eth_api_into_rpc_error, EthereumAuthenticator, Evm, RlpEvmTransaction};
@@ -93,7 +93,7 @@ where
 }
 
 fn to_typed_transaction_request<S: sov_modules_api::Spec>(
-    transaction_request: reth_rpc_types::TransactionRequest,
+    transaction_request: alloy_rpc_types::TransactionRequest,
     evm: &Evm<S>,
     state: &mut ApiStateAccessor<S>,
 ) -> Result<reth_rpc_types::TypedTransactionRequest, ErrorObjectOwned>
@@ -113,7 +113,7 @@ where
     }
 
     let estimated_gas = evm.eth_estimate_gas(
-        reth_rpc_types::TransactionRequest {
+        alloy_rpc_types::TransactionRequest {
             from: transaction_request.from,
             to: transaction_request.to,
             gas: transaction_request.gas,
@@ -136,7 +136,7 @@ where
 
     let gas_limit = estimated_gas.to::<U256>();
 
-    let reth_rpc_types::TransactionRequest {
+    let alloy_rpc_types::TransactionRequest {
         to,
         gas_price,
         max_fee_per_gas,

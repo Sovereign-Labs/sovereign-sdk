@@ -1,6 +1,6 @@
+use alloy_rpc_types::transaction::EIP1559TransactionRequest;
+use alloy_rpc_types::TypedTransactionRequest;
 use reth_primitives::{TxKind, U256};
-use reth_rpc_types::transaction::EIP1559TransactionRequest;
-use reth_rpc_types::TypedTransactionRequest;
 use sov_evm::{EthereumAuthenticator, Evm};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;

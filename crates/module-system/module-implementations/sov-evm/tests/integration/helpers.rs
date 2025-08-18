@@ -1,5 +1,5 @@
+use alloy_rpc_types::TypedTransactionRequest;
 use reth_primitives::{Address, TransactionSigned, U256};
-use reth_rpc_types::TypedTransactionRequest;
 use secp256k1::rand::SeedableRng as _;
 use secp256k1::{PublicKey, SecretKey};
 use sov_eth_dev_signer::DevSigner;
