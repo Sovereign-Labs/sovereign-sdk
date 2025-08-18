@@ -1605,7 +1605,7 @@ checksum = "4acbb09d9ee8e23699b9634375c72795d095bf268439da88562cf9b501f181fa"
 dependencies = [
  "camino",
  "cargo-platform",
- "semver 1.0.23",
+ "semver 1.0.26",
  "serde",
  "serde_json",
 ]
@@ -1618,7 +1618,7 @@ checksum = "2d886547e41f740c616ae73108f6eb70afe6d940c7bc697cb30f13daec073037"
 dependencies = [
  "camino",
  "cargo-platform",
- "semver 1.0.23",
+ "semver 1.0.26",
  "serde",
  "serde_json",
  "thiserror 1.0.64",
@@ -1632,7 +1632,7 @@ checksum = "dd5eb614ed4c27c5d706420e4320fbe3216ab31fa1c33cd8246ac36dae4479ba"
 dependencies = [
  "camino",
  "cargo-platform",
- "semver 1.0.23",
+ "semver 1.0.26",
  "serde",
  "serde_json",
  "thiserror 2.0.11",
@@ -8901,7 +8901,7 @@ dependencies = [
  "postcard",
  "risc0-zkp",
  "risc0-zkvm-platform",
- "semver 1.0.23",
+ "semver 1.0.26",
  "serde",
  "tracing",
 ]
@@ -8923,7 +8923,7 @@ dependencies = [
  "risc0-zkp",
  "risc0-zkvm-platform",
  "rzup",
- "semver 1.0.23",
+ "semver 1.0.26",
  "serde",
  "serde_json",
  "stability",
@@ -9190,7 +9190,7 @@ dependencies = [
  "rrs-lib",
  "rustc-demangle",
  "rzup",
- "semver 1.0.23",
+ "semver 1.0.26",
  "serde",
  "sha2 0.10.8",
  "stability",
@@ -9424,7 +9424,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfa0f585226d2e68097d4f95d113b15b83a82e819ab25717ec0590d9584ef366"
 dependencies = [
- "semver 1.0.23",
+ "semver 1.0.26",
 ]
 
 [[package]]
@@ -9587,7 +9587,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "400558bf12d4292a7804093b60a437ba8b0219ea7d53716b2c010a0d31e5f4a8"
 dependencies = [
- "semver 1.0.23",
+ "semver 1.0.26",
  "serde",
  "strum",
  "tempfile",
@@ -9887,9 +9887,9 @@ dependencies = [
 
 [[package]]
 name = "semver"
-version = "1.0.23"
+version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61697e0a1c7e512e84a621326239844a24d8207b4669b41bc18b32ea5cbf988b"
+checksum = "56e6fa9c48d24d85fb3de5ad847117517440f6beceb7798af16b4a87d616b8d0"
 dependencies = [
  "serde",
 ]
@@ -10621,7 +10621,7 @@ dependencies = [
  "futures",
  "hex",
  "reqwest 0.12.9",
- "semver 1.0.23",
+ "semver 1.0.26",
  "serde",
  "serde_json",
  "sov-address",
@@ -13836,7 +13836,7 @@ dependencies = [
  "quote",
  "regress 0.10.1",
  "schemars",
- "semver 1.0.23",
+ "semver 1.0.26",
  "serde",
  "serde_json",
  "syn 2.0.98",
@@ -13853,7 +13853,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "schemars",
- "semver 1.0.23",
+ "semver 1.0.26",
  "serde",
  "serde_json",
  "serde_tokenstream",
