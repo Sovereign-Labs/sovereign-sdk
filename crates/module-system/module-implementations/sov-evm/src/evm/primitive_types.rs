@@ -1,7 +1,8 @@
 use std::ops::Range;
 
+use alloy_primitives::{Sealable, Sealed};
 use reth_primitives::revm_primitives::{Address, EVMError};
-use reth_primitives::{Header, SealedHeader, TransactionSigned, TransactionSignedEcRecovered};
+use reth_primitives::{Header, TransactionSigned, TransactionSignedEcRecovered};
 use sov_modules_api::macros::UniversalWallet;
 
 /// RLP encoded evm transaction.
@@ -60,7 +61,7 @@ impl Block {
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SealedBlock {
     /// Block header.
-    pub(crate) header: SealedHeader,
+    pub(crate) header: Sealed<Header>,
 
     /// Transactions in this block.
     pub(crate) transactions: Range<u64>,
@@ -68,7 +69,7 @@ pub struct SealedBlock {
 
 impl SealedBlock {
     /// Returns the block header.
-    pub fn header(&self) -> &SealedHeader {
+    pub fn header(&self) -> &Sealed<Header> {
         &self.header
     }
 

@@ -1,11 +1,10 @@
 use alloy_eips::eip2930::AccessList;
+use alloy_primitives::{Address, BlockNumber, Sealed};
 use alloy_primitives::{TxKind as PrimitiveTransactionKind, TxKind};
 use alloy_rpc_types::AccessListItem;
 use alloy_rpc_types::{Header, Parity, Signature, TransactionRequest};
 use reth_primitives::revm_primitives::{BlockEnv, TxEnv, B256, U256};
-use reth_primitives::{
-    BlockNumber, Transaction as PrimitiveTransaction, TransactionSignedEcRecovered, TxType,
-};
+use reth_primitives::{Transaction as PrimitiveTransaction, TransactionSignedEcRecovered, TxType};
 use reth_rpc_eth_types::revm_utils::CallFees;
 use reth_rpc_eth_types::{EthResult, RpcInvalidTransactionError};
 
@@ -70,7 +69,9 @@ pub(crate) fn prepare_call_env(
     Ok(env)
 }
 
-pub(crate) fn from_primitive_with_hash(primitive_header: reth_primitives::SealedHeader) -> Header {
+pub(crate) fn from_primitive_with_hash(
+    primitive_header: Sealed<reth_primitives::Header>,
+) -> Header {
     let (header, hash) = primitive_header.split();
     let reth_primitives::Header {
         parent_hash,
@@ -106,17 +107,17 @@ pub(crate) fn from_primitive_with_hash(primitive_header: reth_primitives::Sealed
         receipts_root,
         withdrawals_root,
         number,
-        gas_used: gas_used as u128,
-        gas_limit: gas_limit as u128,
+        gas_used,
+        gas_limit,
         extra_data,
         logs_bloom,
         timestamp,
         difficulty,
         mix_hash: Some(mix_hash),
-        nonce: Some(nonce.to_be_bytes().into()),
-        base_fee_per_gas: base_fee_per_gas.map(u128::from),
-        blob_gas_used: blob_gas_used.map(u128::from),
-        excess_blob_gas: excess_blob_gas.map(u128::from),
+        nonce: Some(nonce),
+        base_fee_per_gas,
+        blob_gas_used,
+        excess_blob_gas,
         parent_beacon_block_root,
         total_difficulty: None,
         requests_root,
@@ -140,7 +141,7 @@ pub fn from_recovered_with_block_context(
 
     let to = match signed_tx.kind() {
         PrimitiveTransactionKind::Create => None,
-        PrimitiveTransactionKind::Call(to) => Some(reth_primitives::Address(*to)),
+        PrimitiveTransactionKind::Call(to) => Some(Address(*to)),
     };
 
     let (gas_price, max_fee_per_gas) = match signed_tx.tx_type() {
@@ -216,7 +217,7 @@ pub fn from_recovered_with_block_context(
         max_fee_per_gas,
         max_priority_fee_per_gas: signed_tx.max_priority_fee_per_gas(),
         signature: Some(signature),
-        gas: u128::from(signed_tx.gas_limit()),
+        gas: signed_tx.gas_limit(),
         input: signed_tx.input().clone(),
         chain_id,
         access_list: access_list.map(AccessList::from),

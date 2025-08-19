@@ -1,5 +1,7 @@
 use std::marker::PhantomData;
 
+use alloy_eips::eip2718::Decodable2718;
+use alloy_primitives::Address;
 use borsh::{BorshDeserialize, BorshSerialize};
 use reth_primitives::TransactionSigned;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -29,7 +31,7 @@ use crate::{call, CallMessage, RlpEvmTransaction};
 fn recover_evm_signer(
     tx: &TransactionSigned,
     tx_hash: TxHash,
-) -> Result<reth_primitives::Address, AuthenticationError> {
+) -> Result<Address, AuthenticationError> {
     tx.recover_signer().ok_or(AuthenticationError::FatalError(
         FatalError::SigVerificationFailed(format!("Invalid ethereum signature: tx hash {tx_hash}")),
         tx_hash,
@@ -48,7 +50,7 @@ fn create_evm_tx_details<S: Spec>() -> TxDetails<S> {
 
 /// Extracts EVM authorization data from a verified transaction.
 fn extract_evm_authorization_data<S: Spec>(
-    signer: reth_primitives::Address,
+    signer: Address,
     tx_hash: TxHash,
     nonce: u64,
 ) -> AuthorizationData<S>
@@ -112,7 +114,7 @@ pub fn decode_evm_tx(raw_tx: &[u8]) -> Result<(RlpEvmTransaction, TransactionSig
         ));
     }
 
-    let tx = TransactionSigned::decode_enveloped(&mut &tx_data.rlp[..])
+    let tx = TransactionSigned::decode_2718(&mut &tx_data.rlp[..])
         .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
     Ok((tx_data, tx))

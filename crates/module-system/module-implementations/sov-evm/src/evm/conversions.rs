@@ -1,7 +1,7 @@
-use alloy_primitives::private::alloy_rlp::Error as RlpError;
-use alloy_primitives::TxKind;
+use alloy_eips::eip2718::{Decodable2718, Eip2718Error};
+use alloy_primitives::{Bytes, TxKind};
 use reth_primitives::revm_primitives::{Address, BlockEnv, TxEnv, U256};
-use reth_primitives::{Bytes as RethBytes, TransactionSigned, TransactionSignedEcRecovered};
+use reth_primitives::{TransactionSigned, TransactionSignedEcRecovered};
 use thiserror::Error;
 
 use super::primitive_types::SealedBlock;
@@ -58,7 +58,7 @@ pub enum RlpConversionError {
     EmptyRawTx,
     /// Deserialization has failed.
     #[error("Deserialization failed")]
-    DeserializationFailed(#[from] RlpError),
+    DeserializationFailed(#[from] Eip2718Error),
     /// Invalid signature during EC recovery
     #[error("Invalid signature")]
     InvalidSignature,
@@ -68,13 +68,13 @@ pub enum RlpConversionError {
 pub fn convert_to_transaction_signed(
     data: RlpEvmTransaction,
 ) -> Result<TransactionSigned, RlpConversionError> {
-    let data = RethBytes::from(data.rlp);
+    let data = Bytes::from(data.rlp);
     // We can skip that, it is done inside `decode_enveloped` method
     if data.is_empty() {
         return Err(RlpConversionError::EmptyRawTx);
     }
 
-    let tx = TransactionSigned::decode_enveloped(&mut data.as_ref())?;
+    let tx = TransactionSigned::decode_2718(&mut data.as_ref())?;
     Ok(tx)
 }
 

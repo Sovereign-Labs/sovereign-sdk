@@ -1,5 +1,6 @@
 //! Place where [`RlpConversionError`] is converted to [`EthApiError`]
 
+use alloy_primitives::Bytes;
 use reth_primitives::revm_primitives::ExecutionResult;
 use reth_rpc_eth_types::{EthApiError, EthResult, RevertError, RpcInvalidTransactionError};
 
@@ -19,7 +20,7 @@ impl From<RlpConversionError> for EthApiError {
 
 /// Converts the evm [ExecutionResult] into a result
 /// where [`Result::Ok`] variant is the output bytes if it if [`ExecutionResult::Success`].
-pub(crate) fn ensure_success(result: ExecutionResult) -> EthResult<reth_primitives::Bytes> {
+pub(crate) fn ensure_success(result: ExecutionResult) -> EthResult<Bytes> {
     match result {
         ExecutionResult::Success { output, .. } => Ok(output.into_data()),
         ExecutionResult::Revert { output, .. } => {

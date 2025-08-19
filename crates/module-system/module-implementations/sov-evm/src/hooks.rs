@@ -1,5 +1,6 @@
+use alloy_primitives::B64;
+use alloy_primitives::{Bloom, Bytes};
 use reth_primitives::revm_primitives::{B256, U256};
-use reth_primitives::{Bloom, Bytes};
 use sov_modules_api::prelude::UnwrapInfallible;
 #[cfg(feature = "native")]
 use sov_modules_api::{AccessoryStateReaderAndWriter, FinalizeHook};
@@ -111,7 +112,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
             .collect();
 
         let header = reth_primitives::Header {
-            parent_hash: parent_block.header.hash(),
+            parent_hash: parent_block.header.seal(),
             timestamp: block_env.timestamp.to(),
             number: block_env.number.to(),
             ommers_hash: reth_primitives::constants::EMPTY_OMMER_ROOT_HASH,
@@ -130,7 +131,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
             gas_limit: block_env.gas_limit.to(),
             gas_used,
             mix_hash: block_env.prevrandao.map_or(B256::ZERO, B256::from),
-            nonce: 0,
+            nonce: B64::ZERO,
             base_fee_per_gas: parent_block.header.next_block_base_fee(cfg.base_fee_params),
             extra_data: Bytes::default(),
             // EIP-4844 related fields
@@ -224,7 +225,7 @@ impl<S: Spec> FinalizeHook for Evm<S> {
         self.blocks.push(&sealed_block, state).unwrap_infallible();
         self.block_hashes
             .set(
-                &sealed_block.header.hash(),
+                &sealed_block.header.seal(),
                 &sealed_block.header.number,
                 state,
             )

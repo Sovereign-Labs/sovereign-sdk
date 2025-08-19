@@ -26,14 +26,15 @@ mod event;
 #[cfg(feature = "native")]
 mod helpers;
 
+use alloy_primitives::U256;
+use alloy_primitives::{Address, Bytes, B256};
 pub use authenticate::{
     authenticate, decode_evm_tx, Eip712Authenticator, EthereumAuthenticator, EvmAuthenticator,
     EvmAuthenticatorInput,
 };
+use reth_primitives::revm_primitives::BlockEnv;
 pub use reth_primitives::revm_primitives::SpecId;
-use reth_primitives::revm_primitives::{Address, BlockEnv, B256};
 pub use reth_primitives::TransactionSigned;
-use reth_primitives::U256;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::prelude::UnwrapInfallible as _;
 use sov_modules_api::{
@@ -47,7 +48,8 @@ use sov_state::{EncodeLike, User};
 
 use crate::event::Event;
 use crate::evm::db::EvmDb;
-use crate::evm::primitive_types::{Block, Receipt, SealedBlock, TransactionSignedAndRecovered};
+use crate::evm::primitive_types::SealedBlock;
+use crate::evm::primitive_types::{Block, Receipt, TransactionSignedAndRecovered};
 
 // Gas per transaction not creating a contract.
 #[cfg(feature = "native")]
@@ -109,7 +111,7 @@ pub struct Evm<S: Spec> {
 
     /// Mapping from code hash to code. Used for lazy-loading code into a contract account.
     #[state]
-    pub(crate) code: StateMap<B256, reth_primitives::Bytes, BcsCodec>,
+    pub(crate) code: StateMap<B256, Bytes, BcsCodec>,
 
     /// Chain configuration. This field is set in genesis.
     #[state]

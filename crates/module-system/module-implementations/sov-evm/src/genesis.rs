@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
+use alloy_primitives::{Bloom, Bytes, B64};
 use anyhow::Result;
 use reth_primitives::constants::{EMPTY_RECEIPTS, EMPTY_ROOT_HASH, EMPTY_TRANSACTIONS};
 use reth_primitives::revm_primitives::{AccountInfo, Address, SpecId, B256, U256};
-use reth_primitives::{Bloom, Bytes, EMPTY_OMMER_ROOT_HASH, KECCAK_EMPTY};
+use reth_primitives::{EMPTY_OMMER_ROOT_HASH, KECCAK_EMPTY};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_bank::config_gas_token_id;
 use sov_modules_api::macros::config_value;
@@ -178,7 +179,7 @@ where
             gas_used: 0,
             timestamp: config.genesis_timestamp,
             mix_hash: B256::default(),
-            nonce: 0,
+            nonce: B64::ZERO,
             base_fee_per_gas: Some(config.starting_base_fee),
             extra_data: Bytes::default(),
             // EIP-4844 related fields

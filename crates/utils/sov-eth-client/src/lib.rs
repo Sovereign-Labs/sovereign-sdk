@@ -1,5 +1,6 @@
 #![allow(missing_docs)]
 
+use alloy_primitives::Bytes;
 use ethereum_types::H160;
 use ethers_core::abi::Address;
 use ethers_core::k256::ecdsa::SigningKey;
@@ -12,7 +13,6 @@ use futures::StreamExt;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
-use reth_primitives::Bytes;
 use sov_cli::NodeClient;
 use sov_modules_api::{Runtime, Spec};
 use sov_test_utils::{SimpleStorageContract, TEST_DEFAULT_MAX_FEE};

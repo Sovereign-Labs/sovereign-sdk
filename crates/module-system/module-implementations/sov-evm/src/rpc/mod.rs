@@ -1,5 +1,6 @@
 use std::convert::Infallible;
 
+use alloy_primitives::U64;
 use alloy_primitives::{Bytes, TxKind};
 use alloy_rpc_types::{
     state::StateOverride, Block, BlockOverrides, BlockTransactions, FeeHistory, Log,
@@ -12,7 +13,7 @@ use reth_primitives::revm_primitives::{
     Address, AnalysisKind, BlockEnv, CfgEnv, CfgEnvWithHandlerCfg, EVMError, ExecutionResult,
     HaltReason, InvalidHeader, InvalidTransaction, TransactTo, TxEnv, B256, KECCAK_EMPTY, U256,
 };
-use reth_primitives::{TransactionSignedEcRecovered, U64};
+use reth_primitives::TransactionSignedEcRecovered;
 use reth_rpc_eth_types::{EthApiError, RevertError, RpcInvalidTransactionError};
 use revm::Database;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -131,7 +132,7 @@ where
                     .map(|(id, tx)| {
                         from_recovered_with_block_context(
                             tx.clone().into(),
-                            block.header.hash(),
+                            block.header.seal(),
                             block.header.number,
                             block.header.base_fee_per_gas,
                             U256::from(id - block.transactions.start),
@@ -306,7 +307,7 @@ where
 
             from_recovered_with_block_context(
                 tx.into(),
-                block.header.hash(),
+                block.header.seal(),
                 block.header.number,
                 block.header.base_fee_per_gas,
                 U256::from(tx_number.unwrap() - block.transactions.start),
@@ -707,7 +708,7 @@ pub(crate) fn build_rpc_receipt(
     let transaction: TransactionSignedEcRecovered = tx.into();
     let from = transaction.signer();
 
-    let block_hash = Some(block.header.hash());
+    let block_hash = Some(block.header.seal());
     let block_number = Some(block.header.number);
     let transaction_hash = Some(transaction.hash);
     let transaction_index = tx_number - block.transactions.start;
