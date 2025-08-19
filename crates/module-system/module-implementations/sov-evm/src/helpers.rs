@@ -2,7 +2,7 @@ use alloy_eips::eip2930::AccessList;
 use alloy_primitives::{Address, BlockNumber, Sealed};
 use alloy_primitives::{TxKind as PrimitiveTransactionKind, TxKind};
 use alloy_rpc_types::AccessListItem;
-use alloy_rpc_types::{Header, Parity, Signature, TransactionRequest};
+use alloy_rpc_types::{Header, TransactionRequest};
 use reth_primitives::revm_primitives::{BlockEnv, TxEnv, B256, U256};
 use reth_primitives::{Transaction as PrimitiveTransaction, TransactionSignedEcRecovered, TxType};
 use reth_rpc_eth_types::revm_utils::CallFees;
@@ -201,12 +201,6 @@ pub fn from_recovered_with_block_context(
         }
     };
 
-    let signature = from_primitive_signature(
-        *signed_tx.signature(),
-        signed_tx.tx_type(),
-        signed_tx.chain_id(),
-    );
-
     alloy_rpc_types::Transaction {
         hash: signed_tx.hash(),
         nonce: signed_tx.nonce(),
@@ -216,7 +210,7 @@ pub fn from_recovered_with_block_context(
         gas_price,
         max_fee_per_gas,
         max_priority_fee_per_gas: signed_tx.max_priority_fee_per_gas(),
-        signature: Some(signature),
+        signature: Some(signed_tx.signature().clone().into()),
         gas: signed_tx.gas_limit(),
         input: signed_tx.input().clone(),
         chain_id,
@@ -232,26 +226,5 @@ pub fn from_recovered_with_block_context(
         blob_versioned_hashes: Default::default(),
         // EIP-7702: TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1132
         authorization_list: None,
-    }
-}
-
-pub(crate) fn from_primitive_signature(
-    signature: reth_primitives::Signature,
-    tx_type: TxType,
-    chain_id: Option<u64>,
-) -> Signature {
-    match tx_type {
-        TxType::Legacy => Signature {
-            r: signature.r,
-            s: signature.s,
-            v: U256::from(signature.legacy_parity(chain_id).to_u64()),
-            y_parity: None,
-        },
-        _ => Signature {
-            r: signature.r,
-            s: signature.s,
-            v: U256::from(signature.odd_y_parity as u8),
-            y_parity: Some(Parity(signature.odd_y_parity)),
-        },
     }
 }

@@ -10697,6 +10697,7 @@ name = "sov-ethereum"
 version = "0.3.0"
 dependencies = [
  "alloy-consensus",
+ "alloy-eips",
  "alloy-primitives",
  "alloy-rpc-types",
  "anyhow",

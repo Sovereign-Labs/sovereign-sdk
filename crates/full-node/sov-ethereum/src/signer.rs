@@ -1,4 +1,5 @@
 use alloy_consensus::{TxEip1559, TxEip2930, TxLegacy, TypedTransaction};
+use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::TxKind;
 use alloy_rpc_types::TransactionRequest;
 use jsonrpsee::types::ErrorObjectOwned;
@@ -71,7 +72,7 @@ where
                     .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
                 RlpEvmTransaction {
-                    rlp: signed_tx.envelope_encoded().to_vec(),
+                    rlp: signed_tx.encoded_2718(),
                 }
             };
             let (tx_hash, raw_message) = ethereum
@@ -113,7 +114,7 @@ where
         state,
     )?;
 
-    let gas_limit = estimated_gas.to::<u128>();
+    let gas_limit = estimated_gas.to::<u64>();
 
     let transaction = build_tx(transaction_request, chain_id, gas_limit)?;
 
@@ -123,7 +124,7 @@ where
 fn build_tx(
     transaction_request: TransactionRequest,
     chain_id: u64,
-    gas_limit: u128,
+    gas_limit: u64,
 ) -> Result<TypedTransaction, ErrorObjectOwned> {
     let TransactionRequest {
         to,

@@ -200,28 +200,29 @@ where
 // Adopted from: https://github.com/paradigmxyz/reth/blob/main/crates/primitives/src/transaction/mod.rs#L297
 fn effective_gas_tip(
     transaction: &alloy_rpc_types::Transaction,
-    base_fee: Option<u128>,
-) -> Option<u128> {
+    base_fee: Option<u64>,
+) -> Option<u64> {
     let priority_fee_or_price = match transaction.transaction_type {
         Some(EIP_1559_TX_TYPE) => transaction.max_priority_fee_per_gas?,
         _ => transaction.gas_price?,
     };
 
-    if let Some(base_fee) = base_fee {
+    let gas_tip = if let Some(base_fee) = base_fee {
         let max_fee_per_gas = match transaction.transaction_type {
             Some(EIP_1559_TX_TYPE) => transaction.max_fee_per_gas?,
             _ => transaction.gas_price?,
         };
 
-        if max_fee_per_gas < base_fee {
+        if max_fee_per_gas < base_fee as u128 {
             None
         } else {
-            let effective_max_fee = max_fee_per_gas - base_fee;
+            let effective_max_fee = max_fee_per_gas - base_fee as u128;
             Some(std::cmp::min(effective_max_fee, priority_fee_or_price))
         }
     } else {
         Some(priority_fee_or_price)
-    }
+    };
+    gas_tip.map(|g| u64::try_from(g).unwrap())
 }
 
 #[cfg(test)]
