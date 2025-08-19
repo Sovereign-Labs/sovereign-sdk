@@ -269,7 +269,7 @@ ethers-contract = { version = "=2.0.14", default-features = false }
 ethers-providers = { version = "=2.0.14", default-features = false }
 ethers-signers = { version = "=2.0.14", default-features = false }
 ethers-middleware = { version = "=2.0.14", default-features = false }
-# d97449dae495a2243000078fa30b3b164ef5891b, 1.1.3
+# 15fac0873e91ea29ab2e605bfba17bedcd7a6084, 1.1.4
 alloy-chains = { version = "=0.1.32", default-features = false }
 alloy-primitives = { version = "=0.8.14", default-features = false }
 alloy-sol-types = { version = "=0.8.14", default-features = false }
@@ -279,10 +279,10 @@ alloy-rpc-types = { version = "=0.7.3", features = [
     "eth",
 ], default-features = false }
 alloy-rpc-types-trace = { version = "=0.7.3" }
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "d97449dae495a2243000078fa30b3b164ef5891b", default-features = false }
-reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", rev = "d97449dae495a2243000078fa30b3b164ef5891b", default-features = false }
-reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "d97449dae495a2243000078fa30b3b164ef5891b", default-features = false }
-reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "d97449dae495a2243000078fa30b3b164ef5891b", default-features = false }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "15fac0873e91ea29ab2e605bfba17bedcd7a6084", default-features = false }
+reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", rev = "15fac0873e91ea29ab2e605bfba17bedcd7a6084", default-features = false }
+reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "15fac0873e91ea29ab2e605bfba17bedcd7a6084", default-features = false }
+reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "15fac0873e91ea29ab2e605bfba17bedcd7a6084", default-features = false }
 revm = { version = "=18.0.0", features = ["serde"], default-features = false }
 revm-inspectors = { version = "=0.12.0", default-features = false }
 secp256k1 = { version = "=0.29.0", default-features = false, features = [
