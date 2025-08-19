@@ -736,7 +736,7 @@ pub(crate) fn build_rpc_receipt(
 
     let rpc_receipt = alloy_rpc_types::Receipt {
         status: receipt.receipt.success.into(),
-        cumulative_gas_used: receipt.receipt.cumulative_gas_used as u128,
+        cumulative_gas_used: receipt.receipt.cumulative_gas_used,
         logs,
     };
 
@@ -751,7 +751,7 @@ pub(crate) fn build_rpc_receipt(
         transaction_index: Some(transaction_index),
         block_hash,
         block_number,
-        gas_used: receipt.gas_used as u128,
+        gas_used: receipt.gas_used,
         effective_gas_price: transaction.effective_gas_price(block.header.base_fee_per_gas),
         blob_gas_used: None,
         blob_gas_price: None,

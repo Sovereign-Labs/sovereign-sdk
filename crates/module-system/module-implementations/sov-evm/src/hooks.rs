@@ -146,7 +146,6 @@ impl<S: Spec> BlockHooks for Evm<S> {
             parent_beacon_block_root: None,
             // EIP-7685: TODO: Sovereign does not yet support it: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1131
             requests_hash: None,
-            target_blobs_per_block: None,
         };
 
         let block = Block {

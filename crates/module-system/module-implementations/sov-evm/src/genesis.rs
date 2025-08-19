@@ -193,7 +193,6 @@ where
             parent_beacon_block_root: None,
             // If Prague is activated at genesis we set requests root to an empty trie root.
             requests_hash: Some(EMPTY_ROOT_HASH),
-            target_blobs_per_block: None,
         };
 
         let block = Block {

@@ -87,7 +87,7 @@ pub fn from_recovered_with_block_context(
     let transaction_index = Some(tx_index.to::<u64>());
 
     let signer = tx.signer();
-    let signed_tx = tx.into_signed();
+    let signed_tx = tx.into_tx();
 
     let effective_gas_price = signed_tx.effective_gas_price(base_fee);
     let hash = signed_tx.hash();

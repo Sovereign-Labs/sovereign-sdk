@@ -138,9 +138,6 @@ pub struct Receipt {
 
 impl From<TransactionSignedAndRecovered> for TransactionSignedEcRecovered {
     fn from(value: TransactionSignedAndRecovered) -> Self {
-        TransactionSignedEcRecovered::from_signed_transaction(
-            value.signed_transaction,
-            value.signer,
-        )
+        TransactionSignedEcRecovered::new_unchecked(value.signed_transaction, value.signer)
     }
 }
