@@ -28,6 +28,7 @@ thiserror = { workspace = true }
 bytes = { workspace = true }
 derive_more = { workspace = true }
 serde = { workspace = true }
+serde_with = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = [
@@ -108,6 +109,8 @@ native = [
 	"dep:rand",
 	"revm-inspectors",
 	"alloy-primitives/std",
+	"alloy-consensus/serde",
+	"alloy-consensus/serde-bincode-compat",
 	"reth-primitives/std",
 	"dep:reth-rpc-eth-types",
 	# Optional for speed up in native mode

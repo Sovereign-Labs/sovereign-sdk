@@ -270,6 +270,7 @@ ethers-providers = { version = "=2.0.14", default-features = false }
 ethers-signers = { version = "=2.0.14", default-features = false }
 ethers-middleware = { version = "=2.0.14", default-features = false }
 # 15fac0873e91ea29ab2e605bfba17bedcd7a6084, 1.1.4
+alloy-serde = { version = "=1.0.24" }
 alloy-chains = { version = "=0.1.32", default-features = false }
 alloy-primitives = { version = "=0.8.14", default-features = false }
 alloy-sol-types = { version = "=0.8.14", default-features = false }
