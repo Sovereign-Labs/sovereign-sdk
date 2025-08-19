@@ -144,7 +144,7 @@ where
             ),
             _ => BlockTransactions::Hashes({
                 transactions_with_ids
-                    .map(|(_, tx)| tx.signed_transaction.hash)
+                    .map(|(_, tx)| tx.signed_transaction.hash())
                     .collect::<Vec<_>>()
             }),
         };
@@ -305,7 +305,7 @@ where
                 .unwrap_infallible()
                 .unwrap_or_else(|| panic!("Block with number {} for known transaction {} must be set",
                                           tx.block_number,
-                                          tx.signed_transaction.hash));
+                                          tx.signed_transaction.hash()));
 
             from_recovered_with_block_context(
                 tx.into(),
@@ -712,7 +712,7 @@ pub(crate) fn build_rpc_receipt(
 
     let block_hash = Some(block.header.seal());
     let block_number = Some(block.header.number);
-    let transaction_hash = Some(transaction.hash);
+    let transaction_hash = Some(transaction.hash());
     let transaction_index = tx_number - block.transactions.start;
 
     let logs: Vec<Log> = receipt
@@ -747,7 +747,7 @@ pub(crate) fn build_rpc_receipt(
 
     TransactionReceipt {
         inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom::new(rpc_receipt, logs_bloom)),
-        transaction_hash: transaction.hash,
+        transaction_hash: transaction.hash(),
         transaction_index: Some(transaction_index),
         block_hash,
         block_number,

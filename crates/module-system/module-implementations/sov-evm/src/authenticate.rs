@@ -5,6 +5,7 @@ use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::Address;
 use borsh::{BorshDeserialize, BorshSerialize};
 use reth_primitives::TransactionSigned;
+use reth_primitives_traits::transaction::signed::SignedTransaction;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::capabilities::{
     self, fatal_deserialization_error, AuthenticationOutput, AuthorizationData,

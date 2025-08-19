@@ -1,5 +1,6 @@
 use alloy_consensus::constants::KECCAK_EMPTY;
-use alloy_consensus::EMPTY_OMMER_ROOT_HASH;
+use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root};
+use alloy_consensus::{TxReceipt, EMPTY_OMMER_ROOT_HASH};
 use alloy_primitives::B64;
 use alloy_primitives::{Bloom, Bytes};
 use alloy_primitives::{B256, U256};
@@ -103,15 +104,18 @@ impl<S: Spec> BlockHooks for Evm<S> {
             .last()
             .map_or(0u64, |tx| tx.receipt.receipt.cumulative_gas_used);
 
-        let transactions: Vec<&reth_primitives::TransactionSigned> = pending_transactions
+        let transactions: Vec<reth_primitives::TransactionSigned> = pending_transactions
             .iter()
-            .map(|tx| &tx.transaction.signed_transaction)
+            .map(|tx| tx.transaction.signed_transaction.clone())
             .collect();
 
-        let receipts: Vec<reth_primitives::ReceiptWithBloom> = pending_transactions
-            .iter()
-            .map(|tx| tx.receipt.receipt.clone().with_bloom())
-            .collect();
+        let receipts: Vec<reth_primitives::ReceiptWithBloom<reth_primitives::Receipt>> =
+            pending_transactions
+                .iter()
+                .map(|tx| tx.receipt.receipt.clone().with_bloom())
+                .collect();
+        let receipts_root = calculate_receipt_root(receipts.as_slice());
+        let transactions_root = calculate_transaction_root(transactions.as_slice());
 
         let header = alloy_consensus::Header {
             parent_hash: parent_block.header.seal(),
@@ -121,14 +125,12 @@ impl<S: Spec> BlockHooks for Evm<S> {
             beneficiary: parent_block.header.beneficiary,
             // This will be set in finalize_hook or in the next begin_rollup_block_hook
             state_root: KECCAK_EMPTY,
-            transactions_root: reth_primitives::proofs::calculate_transaction_root(
-                transactions.as_slice(),
-            ),
-            receipts_root: reth_primitives::proofs::calculate_receipt_root(receipts.as_slice()),
+            transactions_root,
+            receipts_root,
             withdrawals_root: None,
             logs_bloom: receipts
                 .iter()
-                .fold(Bloom::ZERO, |bloom, r| bloom | r.bloom),
+                .fold(Bloom::ZERO, |bloom, r| bloom | r.bloom()),
             difficulty: U256::ZERO,
             gas_limit: block_env.gas_limit.to(),
             gas_used,
@@ -144,6 +146,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
             parent_beacon_block_root: None,
             // EIP-7685: TODO: Sovereign does not yet support it: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1131
             requests_hash: None,
+            target_blobs_per_block: None,
         };
 
         let block = Block {
@@ -176,7 +179,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
                 self.transaction_hashes
                     .set(
-                        &transaction.signed_transaction.hash,
+                        &transaction.signed_transaction.hash(),
                         &tx_index,
                         &mut accessory_state,
                     )

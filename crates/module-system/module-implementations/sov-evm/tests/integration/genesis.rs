@@ -120,6 +120,7 @@ fn test_genesis_block() {
             excess_blob_gas: None,
             parent_beacon_block_root: None,
             requests_hash: Some(EMPTY_ROOT_HASH),
+            target_blobs_per_block: None,
         };
 
         assert_eq!(actual_block.header().inner(), &expected_header);

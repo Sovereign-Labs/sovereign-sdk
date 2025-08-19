@@ -90,22 +90,17 @@ pub fn from_recovered_with_block_context(
     let signed_tx = tx.into_signed();
 
     let effective_gas_price = signed_tx.effective_gas_price(base_fee);
+    let hash = signed_tx.hash();
     let tx = match signed_tx.transaction {
-        PrimitiveTransaction::Legacy(tx) => TxEnvelope::Legacy(Signed::new_unchecked(
-            tx,
-            signed_tx.signature,
-            signed_tx.hash,
-        )),
-        PrimitiveTransaction::Eip2930(tx) => TxEnvelope::Eip2930(Signed::new_unchecked(
-            tx,
-            signed_tx.signature,
-            signed_tx.hash,
-        )),
-        PrimitiveTransaction::Eip1559(tx) => TxEnvelope::Eip1559(Signed::new_unchecked(
-            tx,
-            signed_tx.signature,
-            signed_tx.hash,
-        )),
+        PrimitiveTransaction::Legacy(tx) => {
+            TxEnvelope::Legacy(Signed::new_unchecked(tx, signed_tx.signature, hash))
+        }
+        PrimitiveTransaction::Eip2930(tx) => {
+            TxEnvelope::Eip2930(Signed::new_unchecked(tx, signed_tx.signature, hash))
+        }
+        PrimitiveTransaction::Eip1559(tx) => {
+            TxEnvelope::Eip1559(Signed::new_unchecked(tx, signed_tx.signature, hash))
+        }
         PrimitiveTransaction::Eip4844(_) => {
             panic!("EIP-4844 transactions are not supported by the rollup");
         }

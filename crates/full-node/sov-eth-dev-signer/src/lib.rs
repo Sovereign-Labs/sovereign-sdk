@@ -63,10 +63,7 @@ impl DevSigner {
         let signature = sign_message(B256::from_slice(signer.as_ref()), tx_signature_hash)
             .map_err(|_| SignError::CouldNotSign)?;
 
-        Ok(TransactionSigned::from_transaction_and_signature(
-            transaction,
-            signature,
-        ))
+        Ok(TransactionSigned::new_unhashed(transaction, signature))
     }
 
     /// List of signers.
