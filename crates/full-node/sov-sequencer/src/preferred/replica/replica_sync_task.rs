@@ -82,6 +82,50 @@ mod tests {
         }
     }
 
+    fn create_test_data(test_case: Vec<usize>) -> Vec<DbData> {
+        let mut data = Vec::new();
+
+        for (seq_nr, nb_of_txs) in test_case.into_iter().enumerate() {
+            let stored_batch = BatchToStore {
+                sequence_number: (seq_nr as u64),
+                blob_id: (seq_nr + 99) as u128,
+                visible_slot_number_after_increase: VisibleSlotNumber::new_dangerous(1),
+                visible_slots_to_advance: NonZero::new(1).unwrap(),
+            };
+
+            data.push(DbData::BatchStart(stored_batch.clone()));
+
+            for i in 0..nb_of_txs {
+                data.push(DbData::Transaction(FullyBakedTx {
+                    data: vec![i as u8],
+                }));
+            }
+
+            data.push(DbData::BatchEnd(stored_batch));
+        }
+
+        data
+    }
+
+    async fn execute(mut db: PostgresBackend, data: Vec<DbData>) {
+        for db_data in data {
+            match db_data {
+                DbData::BatchStart(stored_batch) => {
+                    db.begin_rollup_block(stored_batch).await.unwrap();
+                }
+                DbData::Transaction(tx) => {
+                    db.add_tx(1, 0, tx, TxHash::new([1; 32])).await.unwrap();
+                }
+                DbData::BatchEnd(stored_batch) => {
+                    db.end_rollup_block(stored_batch).await.unwrap();
+                }
+                DbData::NewProof => {
+                    unimplemented!()
+                }
+            }
+        }
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn test_notifications() {
         let dir = tempfile::tempdir().unwrap();
@@ -93,54 +137,22 @@ mod tests {
             .await
             .unwrap();
 
-        let mut db = PostgresBackend::connect(&postgres_connection_string)
+        let db = PostgresBackend::connect(&postgres_connection_string)
             .await
             .unwrap();
 
         let (sync_task_ready_snd, mut sync_task_ready_rcv) = mpsc::channel(1);
 
-        let sequence_number = 10;
-        let blob_id = 99;
-        let visible_slot_number_after_increase = VisibleSlotNumber::new_dangerous(11);
-        let visible_slots_to_advance = NonZero::new(1).unwrap();
-
-        // Insert `postgres_db_backend_begin_rollup_block` into the db.
+        let test_data = create_test_data(vec![1, 0, 1000, 2]);
         {
+            let test_data = test_data.clone();
             tokio::spawn(async move {
                 sync_task_ready_rcv.recv().await.unwrap();
-
-                db.begin_rollup_block(
-                    sequence_number,
-                    blob_id,
-                    visible_slot_number_after_increase,
-                    visible_slots_to_advance,
-                )
-                .await
-                .unwrap();
-
-                db.add_tx(
-                    sequence_number,
-                    0,
-                    FullyBakedTx::new(vec![1, 2, 3]),
-                    TxHash::new([11; 32]),
-                )
-                .await
-                .unwrap();
-
-                db.end_rollup_block(BatchToStore {
-                    blob_id,
-                    sequence_number,
-                    visible_slot_number_after_increase,
-                    visible_slots_to_advance,
-                })
-                .await
-                .unwrap();
+                execute(db, test_data).await;
             });
         }
 
-        // Check if replica sync task received the notification.
         let (shutdown_snd, _shutdown_rcv) = watch::channel(());
-
         let (test_handler, mut recv) = TestHandler::new();
         {
             let conn_str = postgres_connection_string.clone();
@@ -148,15 +160,16 @@ mod tests {
             let shutdown_snd = shutdown_snd.clone();
             tokio::spawn(async move {
                 let mut sync_task = ReplicaSyncTask::new(conn_str, shutdown_snd).await.unwrap();
-
                 sync_task.start(test_handler).await;
                 sync_task_ready_snd.send(()).await.unwrap();
             });
         }
 
-        let _event = recv.recv().await.unwrap();
-        let _event = recv.recv().await.unwrap();
-        let _event = recv.recv().await.unwrap();
+        // Check if replica sync task received the notification.
+        for data in test_data {
+            let recv_data = recv.recv().await.unwrap();
+            assert_eq!(recv_data, data);
+        }
 
         shutdown_snd.send(()).unwrap();
     }

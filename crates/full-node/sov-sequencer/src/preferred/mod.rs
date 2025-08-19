@@ -158,7 +158,7 @@ where
         let (blobs_sender_channel, _) =
             broadcast::channel(config.sequencer_kind_config.events_channel_size);
 
-        let mut db = PreferredSequencerDb::new(
+        let db = PreferredSequencerDb::new(
             shutdown_sender.clone(),
             config.sequencer_kind_config.is_replica,
             storage_path,

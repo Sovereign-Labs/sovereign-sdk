@@ -1,4 +1,4 @@
-use crate::preferred::db::StoredBlob;
+use crate::preferred::db::{BatchToStore, StoredBlob};
 use crate::preferred::exit_rollup;
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -169,11 +169,12 @@ impl EventReceiver {
                 )
                 .await
                 {
-                    Ok(n) => {
-                        start_event_id = Some(n + 1);
+                    Ok(next_event_id) => {
+                        nb_of_consecutive_db_errors = 0;
+                        start_event_id = Some(next_event_id + 1);
                     }
-                    Err(e) => {
-                        match e {
+                    Err(err) => {
+                        match err {
                             EventReceiverError::ParsingError(e) => {
                                 // This should never happen, so we shut down the replica immediately
                                 error!(
@@ -202,8 +203,6 @@ impl EventReceiver {
                         }
                     }
                 }
-
-                nb_of_consecutive_db_errors = 0;
             }
         });
     }
@@ -258,7 +257,7 @@ impl EventReceiver {
         target_event_id: u64,
         db_data_sender: &mut tokio::sync::mpsc::Sender<DbData>,
     ) -> Result<(), EventReceiverError> {
-        let mut current_event_id = current_event_id.unwrap_or(0);
+        let mut current_event_id = current_event_id.unwrap_or(1);
 
         // If we're already caught up, nothing to do
         if current_event_id > target_event_id {
@@ -299,21 +298,26 @@ impl EventReceiver {
                 let sequence_number = row.get::<i64, _>("sequence_number") as u64;
 
                 match event_type {
+                    EventType::BatchStart => {
+                        let batch_data: Vec<u8> = row.get("data");
+                        let batch_to_store = parse_serialized_batch(batch_data, sequence_number)?;
+
+                        let _ = db_data_sender
+                            .send(DbData::BatchStart(batch_to_store))
+                            .await;
+                    }
                     EventType::Transaction => {
                         let tx_data: Vec<u8> = row.get("data");
 
                         let baked_tx = FullyBakedTx::new(tx_data);
                         let _ = db_data_sender.send(DbData::Transaction(baked_tx)).await;
                     }
-                    EventType::BatchStart => {
-                        let batch_data: Vec<u8> = row.get("data");
-                        let batch_metadata = parse_serialized_batch(batch_data, sequence_number)?;
-                        let _ = db_data_sender
-                            .send(DbData::BatchStart(batch_metadata))
-                            .await;
-                    }
+
                     EventType::BatchEnd => {
-                        let _ = db_data_sender.send(DbData::BatchEnd).await;
+                        let batch_data: Vec<u8> = row.get("data");
+                        let batch_to_store = parse_serialized_batch(batch_data, sequence_number)?;
+
+                        let _ = db_data_sender.send(DbData::BatchEnd(batch_to_store)).await;
                     }
                     EventType::NewProof => {
                         let _ = db_data_sender.send(DbData::NewProof).await;
@@ -328,35 +332,27 @@ impl EventReceiver {
     }
 }
 
-/// Structure representing batch metadata stored by the master sequencer
-#[derive(Debug)]
-pub(crate) struct BatchMetadata {
-    pub(crate) visible_slot_number_after_increase: VisibleSlotNumber,
-    pub(crate) visible_slots_to_advance: NonZero<u8>,
-}
-
-use sov_modules_api::VisibleSlotNumber;
-use std::num::NonZero;
-
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum DbData {
-    BatchStart(BatchMetadata),
+    BatchStart(BatchToStore),
     Transaction(FullyBakedTx),
-    BatchEnd,
+    BatchEnd(BatchToStore),
     NewProof,
 }
 
-fn parse_serialized_batch(data: Vec<u8>, sequence_number: u64) -> anyhow::Result<BatchMetadata> {
+fn parse_serialized_batch(data: Vec<u8>, sequence_number: u64) -> anyhow::Result<BatchToStore> {
     let stored_blob: StoredBlob = borsh::from_slice(&data)?;
 
     match stored_blob {
         StoredBlob::Batch {
             visible_slot_number_after_increase,
             visible_slots_to_advance,
-            ..
-        } => Ok(BatchMetadata {
+            blob_id,
+        } => Ok(BatchToStore {
             visible_slot_number_after_increase,
             visible_slots_to_advance,
+            blob_id,
+            sequence_number,
         }),
         StoredBlob::Proof { .. } => Err(anyhow::anyhow!(
             "Expected batch blob but found proof blob for sequence_number {}",
@@ -368,7 +364,7 @@ fn parse_serialized_batch(data: Vec<u8>, sequence_number: u64) -> anyhow::Result
 async fn latest_event_id(query_pool: &PgPool) -> Result<Option<u64>, sqlx::Error> {
     Ok(
         sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(event_id) FROM events")
-            .fetch_one(&*query_pool)
+            .fetch_one(query_pool)
             .await?
             .map(|id| id as u64),
     )
