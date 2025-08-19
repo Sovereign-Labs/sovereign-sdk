@@ -10828,9 +10828,9 @@ dependencies = [
 name = "sov-eth-dev-signer"
 version = "0.3.0"
 dependencies = [
+ "alloy-consensus",
  "alloy-rpc-types",
  "reth-primitives",
- "reth-rpc-types",
  "revm",
  "secp256k1",
  "thiserror 1.0.64",
@@ -10840,6 +10840,7 @@ dependencies = [
 name = "sov-ethereum"
 version = "0.3.0"
 dependencies = [
+ "alloy-consensus",
  "alloy-primitives",
  "alloy-rpc-types",
  "anyhow",
@@ -10855,7 +10856,6 @@ dependencies = [
  "proptest",
  "reth-primitives",
  "reth-rpc-eth-types",
- "reth-rpc-types",
  "schnellru",
  "serde",
  "sov-accounts",
@@ -11861,7 +11861,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "reth-primitives",
- "reth-rpc-types",
  "schemars",
  "secp256k1",
  "serde",

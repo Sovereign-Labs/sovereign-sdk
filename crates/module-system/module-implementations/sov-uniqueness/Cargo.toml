@@ -33,7 +33,6 @@ sov-address = { workspace = true, features = ["evm"] }
 sov-rollup-interface = { workspace = true }
 sov-kernels = { workspace = true }
 secp256k1 = { workspace = true, features = ["rand-std"] }
-reth-rpc-types = { workspace = true, default-features = false }
 sov-eth-dev-signer = { workspace = true }
 
 [features]
@@ -44,14 +43,12 @@ arbitrary = [
 	"sov-state/arbitrary",
 	"sov-test-utils/arbitrary",
 	"reth-primitives/arbitrary",
-	"reth-rpc-types/arbitrary",
 	"sov-address/arbitrary",
 	"sov-evm/arbitrary",
 	"sov-rollup-interface/arbitrary"
 ]
 native = [
 	"reth-primitives/std",
-	"reth-rpc-types/default",
 	"sov-modules-api/native",
 	"sov-uniqueness/native",
 	"sov-state/native",

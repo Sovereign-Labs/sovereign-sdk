@@ -191,10 +191,10 @@ pub fn from_recovered_with_block_context(
                 })
                 .collect(),
         ),
-        PrimitiveTransaction::Eip4844(_tx) => {
+        PrimitiveTransaction::Eip4844(_) => {
             panic!("EIP-4844 transactions are not supported by the rollup");
         }
-        PrimitiveTransaction::Eip7702(_tx) => {
+        PrimitiveTransaction::Eip7702(_) => {
             // TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1132
             panic!("EIP-7702 transactions are not yet supported by the rollup")
         }

@@ -273,12 +273,12 @@ ethers-middleware = { version = "=2.0.14", default-features = false }
 alloy-primitives = { version = "=0.8.2", default-features = false }
 alloy-sol-types = { version = "=0.8.2", default-features = false }
 alloy-eips = { version = "=0.3", default-features = false }
+alloy-consensus = { version = "=0.3.6", default-features = false }
 alloy-rpc-types = { version = "=0.3.6", features = [
     "eth",
 ], default-features = false }
 alloy-rpc-types-trace = { version = "=0.3.6" }
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "75b7172cf77eb4fd65fe1a6924f75066fb09fcd1", default-features = false }
-reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", rev = "75b7172cf77eb4fd65fe1a6924f75066fb09fcd1", default-features = false }
 reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "75b7172cf77eb4fd65fe1a6924f75066fb09fcd1", default-features = false }
 revm = { version = "=14.0.1", features = ["serde"], default-features = false }
 revm-inspectors = { version = "=0.7", default-features = false }
