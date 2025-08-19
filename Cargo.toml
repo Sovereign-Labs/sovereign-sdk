@@ -269,17 +269,17 @@ ethers-contract = { version = "=2.0.14", default-features = false }
 ethers-providers = { version = "=2.0.14", default-features = false }
 ethers-signers = { version = "=2.0.14", default-features = false }
 ethers-middleware = { version = "=2.0.14", default-features = false }
-# d72e438c06e040e213b5decf5f29543c86cbad0f, 1.0.8
-alloy-primitives = { version = "=0.8.5", default-features = false }
-alloy-sol-types = { version = "=0.8.5", default-features = false }
+# 1ba631ba9581973e7c6cadeea92cfe1802aceb4a, 1.1.0
+alloy-primitives = { version = "=0.8.7", default-features = false }
+alloy-sol-types = { version = "=0.8.7", default-features = false }
 alloy-eips = { version = "=0.4.2", default-features = false }
 alloy-consensus = { version = "=0.4.2", default-features = false }
 alloy-rpc-types = { version = "=0.4.2", features = [
     "eth",
 ], default-features = false }
 alloy-rpc-types-trace = { version = "=0.4.2" }
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "d72e438c06e040e213b5decf5f29543c86cbad0f", default-features = false }
-reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "d72e438c06e040e213b5decf5f29543c86cbad0f", default-features = false }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "1ba631ba9581973e7c6cadeea92cfe1802aceb4a", default-features = false }
+reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "1ba631ba9581973e7c6cadeea92cfe1802aceb4a", default-features = false }
 revm = { version = "=14.0.3", features = ["serde"], default-features = false }
 revm-inspectors = { version = "=0.8.1", default-features = false }
 secp256k1 = { version = "=0.29.0", default-features = false, features = [
