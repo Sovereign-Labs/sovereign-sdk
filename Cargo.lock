@@ -11701,6 +11701,7 @@ dependencies = [
  "schemars",
  "serde",
  "sov-address",
+ "sov-metrics",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
