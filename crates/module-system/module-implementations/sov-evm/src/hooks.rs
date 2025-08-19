@@ -1,3 +1,5 @@
+use alloy_consensus::constants::KECCAK_EMPTY;
+use alloy_consensus::EMPTY_OMMER_ROOT_HASH;
 use alloy_primitives::B64;
 use alloy_primitives::{Bloom, Bytes};
 use reth_primitives::revm_primitives::{B256, U256};
@@ -115,10 +117,10 @@ impl<S: Spec> BlockHooks for Evm<S> {
             parent_hash: parent_block.header.seal(),
             timestamp: block_env.timestamp.to(),
             number: block_env.number.to(),
-            ommers_hash: reth_primitives::constants::EMPTY_OMMER_ROOT_HASH,
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: parent_block.header.beneficiary,
             // This will be set in finalize_hook or in the next begin_rollup_block_hook
-            state_root: reth_primitives::constants::KECCAK_EMPTY,
+            state_root: KECCAK_EMPTY,
             transactions_root: reth_primitives::proofs::calculate_transaction_root(
                 transactions.as_slice(),
             ),
@@ -141,7 +143,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
             // unrelated for rollups
             parent_beacon_block_root: None,
             // EIP-7685: TODO: Sovereign does not yet support it: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1131
-            requests_root: None,
+            requests_hash: None,
         };
 
         let block = Block {

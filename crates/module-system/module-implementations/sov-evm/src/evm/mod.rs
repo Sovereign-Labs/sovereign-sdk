@@ -2,9 +2,8 @@
 // similar as possible to upstream than clean it up.
 #![allow(clippy::match_same_arms)]
 
-use alloy_eips::eip1559::BaseFeeParams;
+use alloy_eips::eip1559::{BaseFeeParams, ETHEREUM_BLOCK_GAS_LIMIT};
 use alloy_primitives::Address;
-use reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT;
 use reth_primitives::revm_primitives::{AccountInfo, SpecId};
 use serde::{Deserialize, Serialize};
 use sov_address::{EthereumAddress, FromVmAddress};

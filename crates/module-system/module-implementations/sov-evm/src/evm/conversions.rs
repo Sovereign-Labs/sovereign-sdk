@@ -1,3 +1,4 @@
+use alloy_consensus::Transaction;
 use alloy_eips::eip2718::{Decodable2718, Eip2718Error};
 use alloy_primitives::{Bytes, TxKind};
 use reth_primitives::revm_primitives::{Address, BlockEnv, TxEnv, U256};

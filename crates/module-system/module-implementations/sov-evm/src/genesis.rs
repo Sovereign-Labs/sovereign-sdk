@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
+use alloy_consensus::constants::{EMPTY_RECEIPTS, EMPTY_TRANSACTIONS, KECCAK_EMPTY};
+use alloy_consensus::{EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
+use alloy_eips::eip1559::{ETHEREUM_BLOCK_GAS_LIMIT, MIN_PROTOCOL_BASE_FEE};
+use alloy_eips::merge::SLOT_DURATION;
 use alloy_primitives::{Bloom, Bytes, B64};
 use anyhow::Result;
-use reth_primitives::constants::{EMPTY_RECEIPTS, EMPTY_ROOT_HASH, EMPTY_TRANSACTIONS};
 use reth_primitives::revm_primitives::{AccountInfo, Address, SpecId, B256, U256};
-use reth_primitives::{EMPTY_OMMER_ROOT_HASH, KECCAK_EMPTY};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_bank::config_gas_token_id;
 use sov_modules_api::macros::config_value;
@@ -75,9 +77,9 @@ impl Default for EvmConfig {
             limit_contract_code_size: None,
             spec: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
             coinbase: Address::ZERO,
-            starting_base_fee: reth_primitives::constants::MIN_PROTOCOL_BASE_FEE,
-            block_gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
-            block_timestamp_delta: reth_primitives::constants::SLOT_DURATION.as_secs(),
+            starting_base_fee: MIN_PROTOCOL_BASE_FEE,
+            block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
+            block_timestamp_delta: SLOT_DURATION.as_secs(),
             genesis_timestamp: 0,
             base_fee_params: alloy_eips::eip1559::BaseFeeParams::ethereum(),
         }
@@ -189,7 +191,7 @@ where
             // unrelated for rollups
             parent_beacon_block_root: None,
             // If Prague is activated at genesis we set requests root to an empty trie root.
-            requests_root: Some(EMPTY_ROOT_HASH),
+            requests_hash: Some(EMPTY_ROOT_HASH),
         };
 
         let block = Block {

@@ -269,19 +269,19 @@ ethers-contract = { version = "=2.0.14", default-features = false }
 ethers-providers = { version = "=2.0.14", default-features = false }
 ethers-signers = { version = "=2.0.14", default-features = false }
 ethers-middleware = { version = "=2.0.14", default-features = false }
-# 1ba631ba9581973e7c6cadeea92cfe1802aceb4a, 1.1.0
-alloy-primitives = { version = "=0.8.7", default-features = false }
-alloy-sol-types = { version = "=0.8.7", default-features = false }
-alloy-eips = { version = "=0.4.2", default-features = false }
-alloy-consensus = { version = "=0.4.2", default-features = false }
-alloy-rpc-types = { version = "=0.4.2", features = [
+# 15c230bac20e2b1b3532c8b0d470e815fbc0cc22, 1.1.1
+alloy-primitives = { version = "=0.8.9", default-features = false }
+alloy-sol-types = { version = "=0.8.9", default-features = false }
+alloy-eips = { version = "=0.5.4", default-features = false }
+alloy-consensus = { version = "=0.5.4", default-features = false }
+alloy-rpc-types = { version = "=0.5.4", features = [
     "eth",
 ], default-features = false }
-alloy-rpc-types-trace = { version = "=0.4.2" }
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "1ba631ba9581973e7c6cadeea92cfe1802aceb4a", default-features = false }
-reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "1ba631ba9581973e7c6cadeea92cfe1802aceb4a", default-features = false }
-revm = { version = "=14.0.3", features = ["serde"], default-features = false }
-revm-inspectors = { version = "=0.8.1", default-features = false }
+alloy-rpc-types-trace = { version = "=0.5.4" }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "15c230bac20e2b1b3532c8b0d470e815fbc0cc22", default-features = false }
+reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "15c230bac20e2b1b3532c8b0d470e815fbc0cc22", default-features = false }
+revm = { version = "=17.0.0", features = ["serde"], default-features = false }
+revm-inspectors = { version = "=0.10.0", default-features = false }
 secp256k1 = { version = "=0.29.0", default-features = false, features = [
     "global-context",
     "recovery",

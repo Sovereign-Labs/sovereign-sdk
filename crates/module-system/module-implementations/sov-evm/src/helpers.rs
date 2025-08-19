@@ -1,3 +1,4 @@
+use alloy_consensus::transaction::Transaction;
 use alloy_eips::eip2930::AccessList;
 use alloy_primitives::{Address, BlockNumber, Sealed};
 use alloy_primitives::{TxKind as PrimitiveTransactionKind, TxKind};
@@ -89,7 +90,7 @@ pub(crate) fn from_primitive_with_hash(
         mix_hash,
         nonce,
         base_fee_per_gas,
-        requests_root,
+        requests_hash,
         extra_data,
         withdrawals_root,
         blob_gas_used,
@@ -120,7 +121,7 @@ pub(crate) fn from_primitive_with_hash(
         excess_blob_gas,
         parent_beacon_block_root,
         total_difficulty: None,
-        requests_root,
+        requests_hash,
     }
 }
 
@@ -152,7 +153,7 @@ pub fn from_recovered_with_block_context(
             let gas_price = base_fee
                 .and_then(|base_fee| {
                     signed_tx
-                        .effective_tip_per_gas(Some(base_fee))
+                        .effective_tip_per_gas(base_fee)
                         .map(|tip| tip + base_fee as u128)
                 })
                 .unwrap_or_else(|| signed_tx.max_fee_per_gas());

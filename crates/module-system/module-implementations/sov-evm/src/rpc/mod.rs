@@ -1,5 +1,6 @@
 use std::convert::Infallible;
 
+use alloy_consensus::Transaction as TransactionTrait;
 use alloy_primitives::U64;
 use alloy_primitives::{Bytes, TxKind};
 use alloy_rpc_types::{
@@ -756,8 +757,6 @@ pub(crate) fn build_rpc_receipt(
         from,
         to,
         contract_address,
-        // TODO pre-byzantium receipts have a post-transaction state root
-        state_root: None,
         authorization_list: transaction.authorization_list().map(|l| l.to_vec()),
     }
 }
