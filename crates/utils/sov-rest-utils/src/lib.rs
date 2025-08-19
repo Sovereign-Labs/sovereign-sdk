@@ -230,7 +230,7 @@ pub async fn serve_generic_ws_subscription<S, M>(
             _ = shutdown_receiver.changed() => break,
         }
     }
-
+    tracing::trace!("Closing websocket subscription");
     socket.close().await.ok();
 }
 

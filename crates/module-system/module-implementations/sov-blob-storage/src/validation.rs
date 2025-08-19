@@ -7,8 +7,7 @@ use sov_modules_api::{
     GasSpec, KernelStateAccessor, ModuleInfo, PrivilegedKernelAccessor, Spec,
 };
 
-use crate::max_size_checker::BlobsAccumulatorWithSizeLimit;
-use crate::{BlobStorage, Escrow, SequencerType, ValidatedBlob};
+use crate::{BlobStorage, Escrow, ValidatedBlob};
 
 const CONSERVATIVE_KEY_SIZE: u32 = 256;
 
@@ -114,13 +113,9 @@ impl<S: Spec> BlobStorage<S> {
         blob: BlobDataWithId<S, BatchWithId<S>>,
         sender: <<S as Spec>::Da as DaSpec>::Address,
         available_balance: Amount,
-        selected_blobs: &BlobsAccumulatorWithSizeLimit<S>,
         visible_height_increase: u64,
         state: &mut KernelStateAccessor<'_, S>,
     ) -> Option<ValidatedBlob<S, BatchWithId<S>>> {
-        if !selected_blobs.can_accept_blob(SequencerType::Preferred, blob.blob_size()) {
-            return None;
-        }
         let best_gas_price_estimate = self.get_new_gas_price(visible_height_increase, state);
 
         let gas_needed_for_pre_exec_checks = <S as GasSpec>::max_tx_check_costs();

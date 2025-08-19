@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::utils::get_height;
 use futures::StreamExt;
 use sov_api_spec::{types, ResponseValue};
 use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
@@ -330,20 +331,6 @@ async fn send_tx(
             panic!("Unexpected error: {err:?}")
         }
     }
-}
-
-use serde::Deserialize;
-
-#[derive(Deserialize, Debug)]
-struct Data {
-    value: (u64, u64),
-}
-
-async fn get_height(client: &NodeClient) -> anyhow::Result<RollupHeight> {
-    let url = "/modules/chain-state/state/current-heights";
-    let response = client.http_get(url).await?;
-    let heights: Data = serde_json::from_str(&response)?;
-    Ok(RollupHeight::new(heights.value.0))
 }
 
 async fn get_last_finalized_block_height(client: &NodeClient) -> u64 {

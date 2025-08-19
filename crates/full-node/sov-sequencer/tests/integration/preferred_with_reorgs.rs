@@ -6,9 +6,7 @@ use std::sync::Arc;
 use futures::{Stream, StreamExt, TryStreamExt};
 use sov_api_spec::types::{Slot, TxStatus};
 use sov_blob_storage::config_deferred_slots_count;
-use sov_mock_da::{
-    BlockProducingConfig, MockDaConfig, RandomizationBehaviour, RandomizationConfig,
-};
+use sov_mock_da::{BlockProducingConfig, RandomizationBehaviour, RandomizationConfig};
 use sov_modules_api::prelude::arbitrary::Unstructured;
 use sov_modules_api::{Runtime, Spec};
 use sov_paymaster::{
@@ -55,6 +53,7 @@ type TestRollupBuilder = RollupBuilder<RollupBlueprint>;
 
 const TEST_RANDOMIZATION_SEED: HexHash = HexHash::new([10; 32]);
 const TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+const RUNNER_LOG_DEBUG: &str = "debug,sov_metrics=error,sov_sequencer::preferred=trace,sov_db=trace,sov_ledger_apis=trace,integration=warn,jmt=info,hyper=info,request=info,tower=info,sqlx=warn,h2=info";
 
 fn setup_genesis(additional_accounts: usize) -> (HighLevelZkGenesisConfig<S>, GenesisConfig<S>) {
     let high_level_genesis_config = HighLevelZkGenesisConfig::generate()
@@ -249,11 +248,9 @@ async fn test_stream_of_transactions(
             ..Default::default()
         });
         config.rollup_prover_config = None;
-        config.automatic_batch_production = true;
+        config.max_concurrent_blobs = 128;
     })
     .set_da_config(|da_config| {
-        // We don't need to test restarts, so let's save disk accesses and file descriptors.
-        da_config.connection_string = MockDaConfig::sqlite_in_memory();
         da_config.sender_address = genesis_config
             .sequencer_registry
             .sequencer_config
@@ -382,12 +379,63 @@ async fn test_check_no_reorgs() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_check_no_reorgs_longer() -> anyhow::Result<()> {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("debug,sov_metrics=error,sov_sequencer::preferred=trace,integration=warn,jmt=info,hyper=info,request=info,tower=info,sqlx=warn,h2=info");
+    sov_test_utils::logging::initialize_or_change_logging_with_filter(RUNNER_LOG_DEBUG);
     tokio::time::timeout(
         TEST_TIMEOUT,
         test_stream_of_transactions(StreamOfTransactionsArgs {
             block_time_ms: 500,
             finalization_blocks: 10,
+            da_slots: 50,
+            txs_per_da_slot: 10,
+            additional_users: 20,
+            randomization_config: None,
+        }),
+    )
+    .await?
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_check_no_reorgs_longer_faster_finality() -> anyhow::Result<()> {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter(RUNNER_LOG_DEBUG);
+    tokio::time::timeout(
+        TEST_TIMEOUT,
+        test_stream_of_transactions(StreamOfTransactionsArgs {
+            block_time_ms: 500,
+            finalization_blocks: 3,
+            da_slots: 50,
+            txs_per_da_slot: 10,
+            additional_users: 20,
+            randomization_config: None,
+        }),
+    )
+    .await?
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_check_no_reorgs_longer_longer_finality() -> anyhow::Result<()> {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter(RUNNER_LOG_DEBUG);
+    tokio::time::timeout(
+        TEST_TIMEOUT,
+        test_stream_of_transactions(StreamOfTransactionsArgs {
+            block_time_ms: 500,
+            finalization_blocks: 30,
+            da_slots: 50,
+            txs_per_da_slot: 10,
+            additional_users: 20,
+            randomization_config: None,
+        }),
+    )
+    .await?
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_check_no_reorgs_longer_instant_finality() -> anyhow::Result<()> {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter(RUNNER_LOG_DEBUG);
+    tokio::time::timeout(
+        TEST_TIMEOUT,
+        test_stream_of_transactions(StreamOfTransactionsArgs {
+            block_time_ms: 500,
+            finalization_blocks: 0,
             da_slots: 50,
             txs_per_da_slot: 10,
             additional_users: 20,

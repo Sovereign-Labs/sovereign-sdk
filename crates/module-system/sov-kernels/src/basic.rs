@@ -10,11 +10,12 @@ use sov_modules_api::runtime::capabilities::{BlobSelector, Kernel as KernelTrait
 #[cfg(feature = "native")]
 use sov_modules_api::AccessoryStateReaderAndWriter;
 use sov_modules_api::{
-    BootstrapWorkingSet, DaSpec, Gas, HexHash, InjectedControlFlow, IterableBatchWithId,
+    BootstrapWorkingSet, DaSpec, Gas, InjectedControlFlow, IterableBatchWithId,
     KernelStateAccessor, SelectedBlob, Spec, StateReader, VersionReader, VisibleSlotNumber,
 };
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::RelevantBlobIters;
+use sov_rollup_interface::stf::DiscardedBlob;
 use sov_state::{Kernel, Storage, User};
 
 /// The simplest imaginable kernel. It does not do any batching or reordering of blobs.
@@ -74,7 +75,7 @@ impl<S: Spec> BlobSelector for BasicKernel<'_, S> {
         cf: CF,
     ) -> anyhow::Result<(
         BlobSelectorOutput<SelectedBlob<S, IterableBatchWithId<S, CF>>>,
-        Vec<HexHash>,
+        Vec<DiscardedBlob>,
     )> {
         Ok(self
             .blob_storage

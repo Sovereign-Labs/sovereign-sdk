@@ -737,6 +737,11 @@ where
                 .scan(
                     initial_slot,
                     move |last_notified_slot, incoming_slot_num| {
+                        tracing::trace!(
+                            %last_notified_slot,
+                            %incoming_slot_num,
+                            "Incoming finalized slot number in WebSocket handler"
+                        );
                         let old_last = *last_notified_slot;
                         // Not ideal, since slot results with an error won't get re-notified.
                         // An incoming slot is going to be included in the notification.
@@ -747,6 +752,11 @@ where
                             let capacity =
                                 incoming_slot_num.saturating_sub(old_last.get()).get() as usize;
                             let mut slots = Vec::with_capacity(capacity);
+                            tracing::trace!(
+                                from = %old_last,
+                                up_to_inc = %incoming_slot_num,
+                                "Going to notify about finalized slots"
+                            );
                             for slot_number in old_last.range_inclusive(incoming_slot_num) {
                                 let slot_result = match ledger
                                     .get_slot_by_number::<B, TxReceipt, RuntimeEventResponse<E>>(
@@ -765,10 +775,14 @@ where
                                         err.to_string()
                                     )),
                                 };
-
+                                tracing::trace!(%slot_number, "Preparing slot result for sending to websocket");
                                 slots.push(slot_result);
                             }
-
+                            tracing::trace!(
+                                from = %old_last,
+                                up_to_inc = %incoming_slot_num,
+                                "Collected websocket notification about finalized slots"
+                            );
                             // Returning `Some(...)` yields items to the *downstream*;
                             // returning `None` would end the stream.
                             Some(futures::stream::iter(slots))

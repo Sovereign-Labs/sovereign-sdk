@@ -1,3 +1,8 @@
+# 2025-08-12
+- #1491 **BREAKING CHANGE** Dedup endpoint (`/rollup/addresses/{address}/dedup`) now actually returns nonce and not generation number. 
+  It is possible to pass query parameter `?select=nonce` or `?select=generation` to explicitly request required uniqueness identifier.
+  **Important note** Nonce and Generation numbers are independent uniqueness identifiers even for the same account and can be used in mix.
+
 # 2025-08-04
 - #1477 **BREAKING CHANGE**: Replaces `generation: u64` with `uniqueness: sov_modules_api::capabilities::UniquenessData` enum for `Version0` transaction. 
   Replaces `generation: u64` attribute of `UnsignedTransaction` with `uniqueness: UniquenessData`

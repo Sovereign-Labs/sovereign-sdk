@@ -13,9 +13,11 @@ pub fn test_supply_cap_too_small() {
     genesis
         .bank
         .gas_token_config
+        .as_mut()
+        .unwrap()
         .address_and_balances
         .push((<S as Spec>::Address::new([11; 28]), Amount::new(1000)));
-    genesis.bank.gas_token_config.supply_cap = Some(Amount::new(10));
+    genesis.bank.gas_token_config.as_mut().unwrap().supply_cap = Some(Amount::new(10));
 
     let runtime = RT::default();
     TestRunner::<RT, S>::new_with_genesis(genesis.into_genesis_params(), runtime);

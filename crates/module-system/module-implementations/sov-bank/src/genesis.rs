@@ -14,7 +14,8 @@ use crate::{config_gas_token_id, Amount, Bank, TokenId};
 #[schemars(bound = "S: Spec", rename = "BankConfig")]
 pub struct BankConfig<S: Spec> {
     /// Configuration for the gas token
-    pub gas_token_config: GasTokenConfig<S>,
+    #[serde(default)]
+    pub gas_token_config: Option<GasTokenConfig<S>>,
     /// A list of configurations for any other tokens to create at genesis
     pub tokens: Vec<TokenConfig<S>>,
 }
@@ -98,9 +99,10 @@ impl<S: Spec> Bank<S> {
         config: &<Self as Module>::Config,
         state: &mut impl GenesisState<S>,
     ) -> Result<()> {
-        let gas_token_config: TokenConfig<S> = config.gas_token_config.clone().into();
-        tracing::debug!(token_id = %config_gas_token_id(), token_name = %gas_token_config.token_name, "Gas token");
-        for token_config in std::iter::once(&gas_token_config).chain(config.tokens.iter()) {
+        let gas_token_config: Option<TokenConfig<S>> =
+            config.gas_token_config.as_ref().map(|c| c.clone().into());
+        tracing::debug!(token_id = %config_gas_token_id(), token_name = ?gas_token_config.as_ref().map(|c| &c.token_name), "Gas token");
+        for token_config in gas_token_config.iter().chain(config.tokens.iter()) {
             let token_id = &token_config.token_id;
             tracing::debug!(
                 %token_config,
@@ -175,13 +177,13 @@ mod tests {
                 .unwrap();
 
         let config = BankConfig::<TestSpec> {
-            gas_token_config: GasTokenConfig {
+            gas_token_config: Some(GasTokenConfig {
                 token_name: "sov-gas-token".to_owned(),
                 token_decimals: None,
                 address_and_balances: vec![(sender_address, Amount::new(100_000_000))],
                 admins: vec![sender_address],
                 supply_cap: None,
-            },
+            }),
             tokens: vec![TokenConfig {
                 token_name: "sov-demo-token".to_owned(),
                 token_decimals: Some(6),

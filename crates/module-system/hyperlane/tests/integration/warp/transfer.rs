@@ -17,7 +17,7 @@ use sov_test_utils::{AsUser, TestUser, TransactionTestCase};
 use super::runtime::*;
 
 #[allow(clippy::too_many_arguments)]
-fn do_inbound_transfer_success(
+pub(crate) fn do_inbound_transfer_success(
     runner: &mut TestRunner<RT, S>,
     admin: &TestUser<S>,
     from_domain: u32,
@@ -144,7 +144,7 @@ fn do_inbound_transfer_failure(
     });
 }
 
-fn inbound_message(
+pub(crate) fn inbound_message(
     from_domain: u32,
     from_router_address: HexHash,
     warp_route_id: HexHash,
@@ -422,7 +422,7 @@ fn test_transfer_remote_fails_if_route_does_not_exist() {
     });
 }
 
-fn encode_amount(amount: Amount) -> HexHash {
+pub(crate) fn encode_amount(amount: Amount) -> HexHash {
     let mut encoded = [0u8; 32];
     encoded[16..].copy_from_slice(&amount.0.to_be_bytes());
     HexString(encoded)

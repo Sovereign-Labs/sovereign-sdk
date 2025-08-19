@@ -7,7 +7,7 @@ mod db;
 mod executor_events;
 mod inner;
 mod preferred_blob_sender;
-mod replica_sync_task;
+mod replica;
 mod side_effects;
 mod state_root_compute;
 mod transaction_subscriptions;
@@ -27,18 +27,14 @@ use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
 use db::postgres::PostgresBackend;
 use db::rocksdb::RocksDbBackend;
-use db::{
-    PreferredSequencerDb, PreferredSequencerDbBackend, PreferredSequencerReadBatch,
-    PreferredSequencerReadBlob,
-};
+use db::{PreferredSequencerDb, PreferredSequencerReadBatch, PreferredSequencerReadBlob};
 pub use full_node_configs::sequencer::{PreferredSequencerConfig, RecoveryStrategy};
 use futures::Stream;
 use inner::*;
 use preferred_blob_sender::PreferredBlobSender;
-use replica_sync_task::spawn_replica_sync_task;
 use serde_with::serde_as;
 use side_effects::SideEffectsTask;
-use sov_blob_sender::{new_blob_id, BlobExecutionStatus, BlobSender};
+use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::capabilities::{BlobSelector, RollupHeight, TransactionAuthenticator};
@@ -64,13 +60,12 @@ use transaction_subscriptions::TransactionCache;
 use crate::common::{
     error_not_fully_synced, generic_accept_tx_error, loop_send_tx_notifications, poll_state_update,
     AcceptedTx, Sequencer, SequencerEventStream, StateUpdateError, StateUpdateNotification,
-    TxStatusBlobSenderHooks, WithCachedTxHashes,
+    WithCachedTxHashes,
 };
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerFetchBatchesToReplayMetrics};
 use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
 use crate::preferred::db::DbEvent;
 use crate::preferred::executor_events::ExecutorEventsSender;
-use crate::preferred::preferred_blob_sender::create_blobs_to_send;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::rest_api::ApiAcceptedTx;
 use crate::{
@@ -163,54 +158,34 @@ where
         let (blobs_sender_channel, _) =
             broadcast::channel(config.sequencer_kind_config.events_channel_size);
 
-        let db_backend: Box<dyn PreferredSequencerDbBackend> =
-            if let Some(postgres_connection_string) =
-                &config.sequencer_kind_config.postgres_connection_string
-            {
-                Box::new(PostgresBackend::connect(postgres_connection_string).await?)
-            } else {
-                Box::new(RocksDbBackend::new(storage_path).await?)
-            };
-        let (db, latest_db_event_id, next_sequence_number, db_cache) =
-            PreferredSequencerDb::<S, Rt>::new(
-                db_backend,
-                shutdown_sender.clone(),
-                config.sequencer_kind_config.is_replica,
-            )
-            .await?;
+        let mut db = PreferredSequencerDb::new(
+            shutdown_sender.clone(),
+            config.sequencer_kind_config.is_replica,
+            storage_path,
+            &config.sequencer_kind_config.postgres_connection_string,
+        )
+        .await?;
+
+        let (_latest_db_event_id, next_sequence_number, db_cache) = db.initial_data().await?;
 
         let mut handles = vec![];
 
-        let completed_blobs = db_cache.all_completed_blobs();
+        let (blob_sender, blob_sender_handle) = PreferredBlobSender::new(
+            da,
+            ledger_db.clone(),
+            db_cache.all_completed_blobs().clone(),
+            storage_path.into(),
+            tx_status_manager.clone(),
+            shutdown_sender.clone(),
+            Duration::from_secs(config.blob_processing_timeout_secs),
+            blobs_sender_channel.clone(),
+            config.sequencer_kind_config.is_replica,
+        )
+        .await?;
 
-        let blob_sender = {
-            let blobs_to_send = if config.sequencer_kind_config.is_replica {
-                Vec::new()
-            } else {
-                // It's possible that sov-blob-sender's DB might miss some blob data at
-                // node startup due to:
-                //  1. Disk failure (the sequencer can use Postgres so it's durable).
-                //  2. DB corruption.
-                //  3. Node crash at an inconvenient time.
-                // Let's restore all missing blob data to make sure they land on the DA.
-                create_blobs_to_send(completed_blobs)?
-            };
-
-            let (inner_blob_sender, blob_sender_handle) = BlobSender::new(
-                da,
-                ledger_db.clone(),
-                storage_path,
-                TxStatusBlobSenderHooks::new(tx_status_manager.clone()),
-                shutdown_sender.clone(),
-                Duration::from_secs(config.blob_processing_timeout_secs),
-                Some(blobs_sender_channel.clone()),
-                blobs_to_send,
-            )
-            .await?;
-
+        if let Some(blob_sender_handle) = blob_sender_handle {
             handles.push(blob_sender_handle);
-            PreferredBlobSender::from((inner_blob_sender, config.sequencer_kind_config.is_replica))
-        };
+        }
 
         let (state_root_compute_handle, state_root_compute_task) =
             StateRootBackgroundTaskState::create(
@@ -230,7 +205,7 @@ where
 
         let (executor_events_sender, executor_events_receiver) =
             ExecutorEventsSender::new(shutdown_sender.clone(), db_cache);
-        let in_flight_blobs = blob_sender.nb_of_in_flight_blobs_handle();
+        let in_flight_blobs = blob_sender.nb_of_in_flight_blobs();
 
         // Here we need to mutliply by 1000 to convert from millis to micros.
         let batch_execution_time_limit_micros = config
@@ -297,10 +272,10 @@ where
         // state, then yield when it switches to processing postgres events live.
         // This is necessary to prevent conflicts with the update_state task.
         if config.sequencer_kind_config.is_replica {
-            handles.push(
-                spawn_replica_sync_task(seq.clone(), shutdown_receiver.clone(), latest_db_event_id)
-                    .await,
-            );
+            //handles.push(
+            //    spawn_replica_sync_task(seq.clone(), shutdown_receiver.clone(), latest_db_event_id)
+            //        .await,
+            //);
         }
         handles.push(tokio::spawn({
             update_state_task(

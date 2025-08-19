@@ -64,13 +64,13 @@ pub async fn new_sequencer() -> TestSequencerSetup<RT> {
 
 pub fn build_tx<RT: Runtime<TestSpec>>(
     setup: &TestSequencerSetup<RT>,
-    nonce: u64,
+    generation: u64,
     call_message: &<RT as DispatchCall>::Decodable,
 ) -> RawTx {
     let tx = default_test_signed_transaction::<RT, TestSpec>(
         &setup.admin_private_key,
         call_message,
-        nonce,
+        generation,
         &RT::CHAIN_HASH,
     );
 
@@ -150,7 +150,7 @@ pub fn generate_paymaster_tx<RT: Runtime<TestSpec> + EncodeCall<Paymaster<TestSp
 
 pub fn valid_tx_bytes<RT: Runtime<TestSpec> + EncodeCall<ValueSetter<TestSpec>>>(
     setup: &TestSequencerSetup<RT>,
-    nonce: u64,
+    generation: u64,
     value_to_set: u32,
 ) -> RawTx {
     let msg = <RT as EncodeCall<ValueSetter<TestSpec>>>::to_decodable(
@@ -160,7 +160,7 @@ pub fn valid_tx_bytes<RT: Runtime<TestSpec> + EncodeCall<ValueSetter<TestSpec>>>
         },
     );
 
-    build_tx(setup, nonce, &msg)
+    build_tx(setup, generation, &msg)
 }
 
 #[derive(ModuleInfo, Clone)]
@@ -334,4 +334,19 @@ pub fn tx_set_value_with_gas<RT: Runtime<TestSpec> + EncodeCall<ValueSetter<Test
 // This allows for easily setting file sharing when using Docker Desktop.
 pub fn tempdir_inside_codebase_dir() -> Arc<tempfile::TempDir> {
     Arc::new(tempfile::tempdir_in(std::env!("CARGO_TARGET_TMPDIR")).unwrap())
+}
+
+use serde::Deserialize;
+use sov_node_client::NodeClient;
+
+pub async fn get_height(client: &NodeClient) -> anyhow::Result<RollupHeight> {
+    #[derive(Deserialize, Debug)]
+    struct Data {
+        value: (u64, u64),
+    }
+
+    let url = "/modules/chain-state/state/current-heights";
+    let response = client.http_get(url).await?;
+    let heights: Data = serde_json::from_str(&response)?;
+    Ok(RollupHeight::new(heights.value.0))
 }

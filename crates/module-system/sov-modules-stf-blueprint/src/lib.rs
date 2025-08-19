@@ -9,14 +9,14 @@ use sov_modules_api::track_gas_constants_usage;
 #[cfg(feature = "native")]
 use sov_modules_api::{capabilities::RollupHeight, AccessoryDelta};
 use sov_modules_api::{
-    BatchSequencerReceipt, GasArray, GasSpec, HexHash, IncrementalBatch, InjectedControlFlow,
+    BatchSequencerReceipt, GasArray, GasSpec, IncrementalBatch, InjectedControlFlow,
     KernelStateAccessor, NoOpControlFlow, SelectedBlob, TransactionReceipt, VersionReader,
 };
 #[cfg(feature = "native")]
 use sov_state::{SlotValue, StateAccesses};
 mod proof_processing;
 use sov_modules_api::{PrivilegedKernelAccessor, SlotGasMeter};
-use sov_rollup_interface::stf::ProofReceipt;
+use sov_rollup_interface::stf::{DiscardedBlob, ProofReceipt};
 mod sequencer_mode;
 use sov_modules_api::{IterableBatchWithId, TxReceiptContents};
 #[cfg(feature = "test-utils")]
@@ -394,7 +394,7 @@ where
         cf: CF,
     ) -> (
         BlobSelectorOutput<SelectedBlob<S, IterableBatchWithId<S, CF>>>,
-        Vec<HexHash>,
+        Vec<DiscardedBlob>,
     ) {
         runtime
             .blob_selector()

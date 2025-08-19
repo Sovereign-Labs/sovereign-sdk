@@ -4,15 +4,18 @@
   "description": "Initial configuration for sov-bank module.",
   "type": "object",
   "required": [
-    "gas_token_config",
     "tokens"
   ],
   "properties": {
     "gas_token_config": {
       "description": "Configuration for the gas token",
-      "allOf": [
+      "default": null,
+      "anyOf": [
         {
           "$ref": "#/definitions/GasTokenConfig"
+        },
+        {
+          "type": "null"
         }
       ]
     },

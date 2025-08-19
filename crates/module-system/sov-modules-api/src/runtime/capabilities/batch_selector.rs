@@ -1,10 +1,10 @@
-use sov_rollup_interface::common::{HexHash, SlotNumber};
-use sov_rollup_interface::da::{BlobReaderTrait, DaSpec, RelevantBlobIters};
-
 use crate::{
     as_u32_or_panic, InjectedControlFlow, IterableBatchWithId, KernelStateAccessor, SelectedBlob,
     Spec,
 };
+use sov_rollup_interface::common::SlotNumber;
+use sov_rollup_interface::da::{BlobReaderTrait, DaSpec, RelevantBlobIters};
+use sov_rollup_interface::stf::DiscardedBlob;
 
 /// The namespace in which a blob appeared.
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -87,7 +87,7 @@ pub trait BlobSelector {
         cf: CF,
     ) -> anyhow::Result<(
         BlobSelectorOutput<SelectedBlob<Self::Spec, IterableBatchWithId<Self::Spec, CF>>>,
-        Vec<HexHash>,
+        Vec<DiscardedBlob>,
     )>;
 
     /// Extracts all delayed non-preferred blobs that belong to the given slots.

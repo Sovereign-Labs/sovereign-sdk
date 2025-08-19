@@ -407,22 +407,22 @@ paths:
           $ref: "#/components/responses/Constants"
         "400":
           $ref: "#/components/responses/ApiErrorResponse"
-  /rollup/addresses/{address}/dedup:
+  /rollup/addresses/{credential_id}/dedup:
     get:
-      summary: Deduplicate an address
+      summary: Deduplicate a credential id
       description: >
-        This endpoint retireves deduplication information needed for building transactions.
+        This endpoint retrieves deduplication information needed for building transactions.
 
         The exact shape of the data in the response depends on the implementation of the rollup.
 
-      operationId: address_dedup
+      operationId: credential_id_dedup
       parameters:
         - in: path
-          name: address
+          name: credential_id
           required: true
           schema:
-            type: string
-          description: The address to retrieve deduplication information about
+            $ref: "#/components/schemas/Hash"
+          description: The credential id to retrieve deduplication information about. Consult documentation on how to derive credential id from public key or address
       tags:
         - Rollup
       responses:

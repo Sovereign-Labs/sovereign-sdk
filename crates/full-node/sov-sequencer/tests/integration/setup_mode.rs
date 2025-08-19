@@ -129,12 +129,11 @@ where
         );
 
     rt_genesis_config.chain_state.admin = Some(admin.address());
-    rt_genesis_config
-        .bank
-        .gas_token_config
-        .address_and_balances
-        .clear();
-    rt_genesis_config.bank.gas_token_config.admins = vec![admin.address()];
+    if let Some(conf) = &mut rt_genesis_config.bank.gas_token_config {
+        conf.address_and_balances.clear();
+        conf.admins = vec![admin.address()];
+    }
+
     rt_genesis_config
         .sequencer_registry
         .sequencer_config

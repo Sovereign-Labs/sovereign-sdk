@@ -9,6 +9,7 @@ use sov_modules_api::prelude::*;
 use sov_modules_api::{DispatchCall, RawTx, Runtime};
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_paymaster::PaymasterConfig;
+use sov_rollup_interface::stf::BlobDiscardReason;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::{
@@ -97,7 +98,7 @@ async fn test_discard_oversized_blobs() {
 
     tokio::time::timeout(tokio::time::Duration::from_secs(15), async {
         while let Some(blob_status) = sub.next().await {
-            if let Some(BlobSelectorStatus::Discarded) =
+            if let Some(BlobSelectorStatus::Discarded(BlobDiscardReason::OutOfCapacity)) =
                 blob_status.as_ref().unwrap().blob_selector_status
             {
                 break;

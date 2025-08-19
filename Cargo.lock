@@ -11431,6 +11431,7 @@ dependencies = [
  "sov-uniqueness",
  "strum",
  "tempfile",
+ "tracing",
  "utoipa-swagger-ui",
 ]
 

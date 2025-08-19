@@ -5,7 +5,9 @@ use serde::de::DeserializeOwned;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::Time;
 use sov_rollup_interface::node::ledger_api::{BatchResponse, TxResponse};
-use sov_rollup_interface::stf::{StoredEvent, TransactionReceipt, TxReceiptContents};
+use sov_rollup_interface::stf::{
+    DiscardedBlob, StoredEvent, TransactionReceipt, TxReceiptContents,
+};
 
 /// A cheaply cloneable bytes abstraction for use within the trust boundary of the node
 /// (i.e. when interfacing with the database). Serializes and deserializes more efficiently,
@@ -87,8 +89,8 @@ pub struct StoredStfInfo {
 /// The on-disk format for a discarded blob.
 #[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct StoredDiscardedBlob {
-    /// The blob hash.
-    pub hash: DbHash,
+    /// The discarded blob data.
+    pub discarded_blob: DiscardedBlob,
     /// This blobs's parent slot number.
     pub slot_number: SlotNumber,
 }
