@@ -3,11 +3,11 @@
 
 // Adopted from: https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc/src/eth/gas_oracle.rs
 
+use alloy_consensus::BlockHeader;
 use alloy_primitives::{B256, U256};
 use alloy_rpc_types::BlockTransactions;
-use reth_rpc_eth_types::{
-    EthApiError, EthResult, GasPriceOracleConfig, GasPriceOracleResult, RpcInvalidTransactionError,
-};
+use alloy_rpc_types::TransactionTrait;
+use reth_rpc_eth_types::{EthApiError, EthResult, GasPriceOracleConfig, GasPriceOracleResult};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_evm::Evm;
 use sov_modules_api::ApiStateAccessor;
@@ -18,8 +18,6 @@ use super::cache::BlockCache;
 
 /// The number of transactions sampled in a block
 pub const SAMPLE_NUMBER: u32 = 3;
-
-const EIP_1559_TX_TYPE: u8 = 2;
 
 /// Calculates a gas price depending on recent blocks.
 /// TODO: replace with [`reth_rpc_eth_types::GasPriceOracle`].
@@ -161,68 +159,28 @@ where
             _ => return Ok(None),
         };
 
-        let mut txs = txs
+        let mut effective_gas_prices = txs
             .iter()
             .filter(|tx| {
                 if let Some(ignore_under) = self.oracle_config.ignore_price {
-                    let effective_gas_tip =
-                        effective_gas_tip(tx, block.header.base_fee_per_gas).map(U256::from);
-                    if effective_gas_tip < Some(ignore_under) {
+                    let effective_gas_tip = tx.effective_gas_price(block.header.base_fee_per_gas);
+                    if U256::from(effective_gas_tip) < ignore_under {
                         return false;
                     }
                 }
-
                 // check if coinbase
                 let sender = tx.from;
-                sender != block.header.miner
+                sender != block.header.beneficiary()
             })
-            // map all values to effective_gas_tip because we will be returning those values
-            // anyways
-            .map(|tx| effective_gas_tip(tx, block.header.base_fee_per_gas))
-            .collect::<Vec<_>>();
+            .map(|tx| U256::from(tx.effective_gas_price(block.header.base_fee_per_gas)))
+            .collect::<Vec<U256>>();
 
-        // now do the sort
-        txs.sort_unstable();
+        effective_gas_prices.sort_unstable();
 
-        // fill result with the top `limit` transactions
-        let mut final_result = Vec::with_capacity(limit);
-        for tx in txs.iter().take(limit) {
-            // a `None` effective_gas_tip represents a transaction where the max_fee_per_gas is
-            // less than the base fee
-            let effective_tip = tx.ok_or(RpcInvalidTransactionError::FeeCapTooLow)?;
-            final_result.push(U256::from(effective_tip));
-        }
+        effective_gas_prices.truncate(limit);
 
-        Ok(Some((block.header.parent_hash, final_result)))
+        Ok(Some((block.header.parent_hash, effective_gas_prices)))
     }
-}
-
-// Adopted from: https://github.com/paradigmxyz/reth/blob/main/crates/primitives/src/transaction/mod.rs#L297
-fn effective_gas_tip(
-    transaction: &alloy_rpc_types::Transaction,
-    base_fee: Option<u64>,
-) -> Option<u64> {
-    let priority_fee_or_price = match transaction.transaction_type {
-        Some(EIP_1559_TX_TYPE) => transaction.max_priority_fee_per_gas?,
-        _ => transaction.gas_price?,
-    };
-
-    let gas_tip = if let Some(base_fee) = base_fee {
-        let max_fee_per_gas = match transaction.transaction_type {
-            Some(EIP_1559_TX_TYPE) => transaction.max_fee_per_gas?,
-            _ => transaction.gas_price?,
-        };
-
-        if max_fee_per_gas < base_fee as u128 {
-            None
-        } else {
-            let effective_max_fee = max_fee_per_gas - base_fee as u128;
-            Some(std::cmp::min(effective_max_fee, priority_fee_or_price))
-        }
-    } else {
-        Some(priority_fee_or_price)
-    };
-    gas_tip.map(|g| u64::try_from(g).unwrap())
 }
 
 #[cfg(test)]

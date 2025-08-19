@@ -1,5 +1,5 @@
-use alloy_primitives::Bytes;
-use reth_primitives::revm_primitives::{AccountInfo, Address, B256};
+use alloy_primitives::{Address, Bytes, B256};
+use revm::primitives::AccountInfo;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{InfallibleStateAccessor, Spec};
 
@@ -35,9 +35,8 @@ impl InitEvmDb for revm::db::CacheDB<revm::db::EmptyDB> {
     }
 
     fn insert_code(&mut self, code_hash: B256, code: Bytes) {
-        self.contracts.insert(
-            code_hash,
-            reth_primitives::revm_primitives::Bytecode::new_raw(code),
-        );
+        use revm::primitives::Bytecode;
+
+        self.contracts.insert(code_hash, Bytecode::new_raw(code));
     }
 }

@@ -55,6 +55,7 @@ revm = { workspace = true, features = [
 	"optional_no_base_fee",
 	"std",
 ] }
+reth-revm = { workspace = true }
 reth-primitives = { workspace = true }
 revm-inspectors = { workspace = true, default-features = false, optional = true }
 reth-rpc-eth-types = { workspace = true, optional = true }
@@ -97,7 +98,8 @@ arbitrary = [
 	"sov-rollup-interface/arbitrary",
 	"sov-state/arbitrary",
 	"sov-test-utils/arbitrary",
-	"sov-bank/arbitrary"
+	"sov-bank/arbitrary",
+	"alloy-consensus/arbitrary"
 ]
 native = [
 	"alloy-rpc-types",

@@ -20,6 +20,9 @@ sov-modules-api = { workspace = true }
 sov-state = { workspace = true }
 
 [dev-dependencies]
+alloy-consensus = { workspace = true }
+alloy-primitives = { workspace = true }
+alloy-eips = { workspace = true }
 sov-modules-stf-blueprint = { workspace = true }
 sov-uniqueness = { path = ".", features = ["native"] }
 tempfile = { workspace = true }
@@ -45,7 +48,10 @@ arbitrary = [
 	"reth-primitives/arbitrary",
 	"sov-address/arbitrary",
 	"sov-evm/arbitrary",
-	"sov-rollup-interface/arbitrary"
+	"sov-rollup-interface/arbitrary",
+	"alloy-consensus/arbitrary",
+	"alloy-eips/arbitrary",
+	"alloy-primitives/arbitrary"
 ]
 native = [
 	"reth-primitives/std",

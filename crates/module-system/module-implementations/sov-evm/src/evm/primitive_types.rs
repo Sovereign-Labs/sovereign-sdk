@@ -1,8 +1,9 @@
 use std::ops::Range;
 
-use alloy_primitives::{Sealable, Sealed};
-use reth_primitives::revm_primitives::{Address, EVMError};
-use reth_primitives::{Header, TransactionSigned, TransactionSignedEcRecovered};
+use alloy_consensus::Header;
+use alloy_primitives::{Address, Sealable, Sealed};
+use reth_primitives::{TransactionSigned, TransactionSignedEcRecovered};
+use revm::primitives::EVMError;
 use sov_modules_api::macros::UniversalWallet;
 
 /// RLP encoded evm transaction.

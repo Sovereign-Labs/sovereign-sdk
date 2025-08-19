@@ -1,8 +1,9 @@
 use std::convert::Infallible;
 
+use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::Transaction as TransactionTrait;
-use alloy_primitives::U64;
-use alloy_primitives::{Bytes, TxKind};
+use alloy_primitives::{Address, U64};
+use alloy_primitives::{Bytes, TxKind, B256, U256};
 use alloy_rpc_types::{
     state::StateOverride, Block, BlockOverrides, BlockTransactions, FeeHistory, Log,
     ReceiptEnvelope, ReceiptWithBloom, Transaction, TransactionReceipt, TransactionRequest,
@@ -10,12 +11,12 @@ use alloy_rpc_types::{
 use error::ensure_success;
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
-use reth_primitives::revm_primitives::{
-    Address, AnalysisKind, BlockEnv, CfgEnv, CfgEnvWithHandlerCfg, EVMError, ExecutionResult,
-    HaltReason, InvalidHeader, InvalidTransaction, TransactTo, TxEnv, B256, KECCAK_EMPTY, U256,
-};
 use reth_primitives::TransactionSignedEcRecovered;
 use reth_rpc_eth_types::{EthApiError, RevertError, RpcInvalidTransactionError};
+use revm::primitives::{
+    AnalysisKind, BlockEnv, CfgEnv, CfgEnvWithHandlerCfg, EVMError, ExecutionResult, HaltReason,
+    InvalidHeader, InvalidTransaction, TransactTo, TxEnv,
+};
 use revm::Database;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};

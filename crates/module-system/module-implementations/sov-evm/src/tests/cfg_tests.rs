@@ -1,4 +1,5 @@
-use reth_primitives::revm_primitives::{BlockEnv, CfgEnv, HandlerCfg, SpecId, U256};
+use alloy_primitives::U256;
+use revm::primitives::{BlockEnv, CfgEnv, HandlerCfg, SpecId};
 use sov_modules_api::macros::config_value;
 
 use crate::call::get_cfg_env_with_handler;

@@ -1,5 +1,5 @@
-use alloy_primitives::U256;
-use reth_primitives::revm_primitives::{Account, Address, HashMap};
+use alloy_primitives::{Address, U256};
+use revm::primitives::{Account, HashMap};
 use revm::DatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::prelude::UnwrapInfallible;

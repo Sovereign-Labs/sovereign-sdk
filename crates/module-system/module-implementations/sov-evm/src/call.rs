@@ -1,7 +1,6 @@
-use reth_primitives::revm_primitives::{
-    Address, BlockEnv, CfgEnv, CfgEnvWithHandlerCfg, EVMError, HandlerCfg,
-};
+use alloy_primitives::Address;
 use reth_primitives::TransactionSigned;
+use revm::primitives::{BlockEnv, CfgEnv, CfgEnvWithHandlerCfg, EVMError, HandlerCfg};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{Context, Spec, TxState};

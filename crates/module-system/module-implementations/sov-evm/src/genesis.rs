@@ -4,9 +4,10 @@ use alloy_consensus::constants::{EMPTY_RECEIPTS, EMPTY_TRANSACTIONS, KECCAK_EMPT
 use alloy_consensus::{EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
 use alloy_eips::eip1559::{ETHEREUM_BLOCK_GAS_LIMIT, MIN_PROTOCOL_BASE_FEE};
 use alloy_eips::merge::SLOT_DURATION;
+use alloy_primitives::{Address, B256, U256};
 use alloy_primitives::{Bloom, Bytes, B64};
 use anyhow::Result;
-use reth_primitives::revm_primitives::{AccountInfo, Address, SpecId, B256, U256};
+use revm::primitives::{AccountInfo, SpecId};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_bank::config_gas_token_id;
 use sov_modules_api::macros::config_value;
@@ -165,7 +166,7 @@ where
 
         self.cfg.set(&chain_cfg, state)?;
 
-        let header = reth_primitives::Header {
+        let header = alloy_consensus::Header {
             parent_hash: B256::default(),
             ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: config.coinbase,
@@ -213,8 +214,8 @@ where
 mod tests {
     use std::str::FromStr;
 
-    use reth_primitives::revm_primitives::{Address, SpecId};
-    use reth_primitives::Bytes;
+    use alloy_primitives::{Address, Bytes};
+    use revm::primitives::SpecId;
     use sov_modules_api::prelude::serde_json;
 
     use crate::{AccountData, EvmConfig};

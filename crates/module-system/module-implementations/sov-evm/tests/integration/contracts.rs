@@ -1,7 +1,7 @@
-use alloy_rpc_types::transaction::EIP1559TransactionRequest;
-use alloy_rpc_types::TypedTransactionRequest;
-use reth_primitives::{TxKind, U256};
-use revm::primitives::{BlockEnv, CfgEnv, CfgEnvWithHandlerCfg, ExecutionResult};
+use alloy_consensus::{TxEip1559, TypedTransaction};
+use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
+use alloy_primitives::{Bytes, TxKind};
+use revm::primitives::{BlockEnv, CfgEnv, CfgEnvWithHandlerCfg, ExecutionResult, HandlerCfg};
 use sov_evm::{convert_to_transaction_signed, executor, EthereumAuthenticator, Evm, SpecId};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
@@ -15,15 +15,15 @@ fn test_invalid_contract_execution() {
     let (mut runner, _, account, _) = setup();
     let contract = SimpleStorageContract::default();
     let contract_addr = account.address().create(0);
-    let tx_request = TypedTransactionRequest::EIP1559(EIP1559TransactionRequest {
+    let tx_request = TypedTransaction::Eip1559(TxEip1559 {
         chain_id: config_value!("CHAIN_ID"),
         nonce: 0,
         max_priority_fee_per_gas: Default::default(),
-        max_fee_per_gas: U256::from(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE * 2),
-        gas_limit: U256::from(1_000_000u64),
-        kind: TxKind::Create,
+        max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
+        gas_limit: 1_000_000,
+        to: TxKind::Create,
         value: Default::default(),
-        input: reth_primitives::Bytes::from(contract.byte_code().to_vec()),
+        input: Bytes::from(contract.byte_code().to_vec()),
         access_list: Default::default(),
     });
     let (signed_eth_tx, _) = account.sign(tx_request);
@@ -38,15 +38,15 @@ fn test_invalid_contract_execution() {
     runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
         let mut evm_db = evm.get_db(state);
-        let tx_request = TypedTransactionRequest::EIP1559(EIP1559TransactionRequest {
+        let tx_request = TypedTransaction::Eip1559(TxEip1559 {
             chain_id: config_value!("CHAIN_ID"),
             nonce: 1,
             max_priority_fee_per_gas: Default::default(),
-            max_fee_per_gas: U256::from(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE * 2),
-            gas_limit: U256::from(1_000_000u64),
-            kind: TxKind::Call(contract_addr),
+            max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
+            gas_limit: 1_000_000,
+            to: TxKind::Call(contract_addr),
             value: Default::default(),
-            input: reth_primitives::Bytes::from(
+            input: Bytes::from(
                 hex::decode(hex::encode(contract.failing_function_call_data())).unwrap(),
             ),
             access_list: Default::default(),
@@ -54,7 +54,7 @@ fn test_invalid_contract_execution() {
         let (signed_eth_tx, _) = account.sign(tx_request);
         let mut cfg_env_with_handler = CfgEnvWithHandlerCfg::new(
             CfgEnv::default(),
-            reth_primitives::revm_primitives::HandlerCfg {
+            HandlerCfg {
                 spec_id: SpecId::SHANGHAI,
             },
         );

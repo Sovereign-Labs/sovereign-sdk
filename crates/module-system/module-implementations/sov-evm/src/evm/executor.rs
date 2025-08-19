@@ -1,10 +1,15 @@
 use std::convert::Infallible;
 
-use reth_primitives::revm_primitives::{
-    Address, BlockEnv, CfgEnvWithHandlerCfg, EVMError, Env, EnvWithHandlerCfg, ExecutionResult,
-};
+use alloy_primitives::Address;
 use reth_primitives::TransactionSigned;
-use revm::{Database, DatabaseCommit, EvmBuilder};
+#[cfg(feature = "native")]
+use revm::primitives::{ResultAndState, TxEnv};
+use revm::{
+    primitives::{
+        BlockEnv, CfgEnvWithHandlerCfg, EVMError, Env, EnvWithHandlerCfg, ExecutionResult,
+    },
+    Database, DatabaseCommit, EvmBuilder,
+};
 
 use crate::evm::conversions::create_tx_env;
 
@@ -42,9 +47,9 @@ pub fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
 pub(crate) fn inspect<DB: Database<Error = Infallible> + DatabaseCommit>(
     db: DB,
     block_env: &BlockEnv,
-    tx: reth_primitives::revm_primitives::TxEnv,
+    tx: TxEnv,
     config_env: CfgEnvWithHandlerCfg,
-) -> Result<reth_primitives::revm_primitives::ResultAndState, EVMError<Infallible>> {
+) -> Result<ResultAndState, EVMError<Infallible>> {
     let CfgEnvWithHandlerCfg {
         cfg_env,
         handler_cfg,

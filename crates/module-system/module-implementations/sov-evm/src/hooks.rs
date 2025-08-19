@@ -2,7 +2,7 @@ use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::EMPTY_OMMER_ROOT_HASH;
 use alloy_primitives::B64;
 use alloy_primitives::{Bloom, Bytes};
-use reth_primitives::revm_primitives::{B256, U256};
+use alloy_primitives::{B256, U256};
 use sov_modules_api::prelude::UnwrapInfallible;
 #[cfg(feature = "native")]
 use sov_modules_api::{AccessoryStateReaderAndWriter, FinalizeHook};
@@ -113,7 +113,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
             .map(|tx| tx.receipt.receipt.clone().with_bloom())
             .collect();
 
-        let header = reth_primitives::Header {
+        let header = alloy_consensus::Header {
             parent_hash: parent_block.header.seal(),
             timestamp: block_env.timestamp.to(),
             number: block_env.number.to(),

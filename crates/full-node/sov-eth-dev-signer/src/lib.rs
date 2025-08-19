@@ -78,15 +78,13 @@ impl DevSigner {
 /// Converts a typed transaction request into a primitive transaction.
 fn to_primitive_transaction(tx_request: TypedTransaction) -> Option<Transaction> {
     Some(match tx_request {
-        TypedTransaction::Legacy(tx) => Transaction::Legacy(tx.into()),
-        TypedTransaction::Eip2930(tx) => Transaction::Eip2930(tx.into()),
-        TypedTransaction::Eip1559(tx) => Transaction::Eip1559(tx.into()),
-        TypedTransaction::Eip4844(TxEip4844Variant::TxEip4844(tx)) => {
-            Transaction::Eip4844(tx.into())
-        }
+        TypedTransaction::Legacy(tx) => Transaction::Legacy(tx),
+        TypedTransaction::Eip2930(tx) => Transaction::Eip2930(tx),
+        TypedTransaction::Eip1559(tx) => Transaction::Eip1559(tx),
+        TypedTransaction::Eip4844(TxEip4844Variant::TxEip4844(tx)) => Transaction::Eip4844(tx),
         TypedTransaction::Eip4844(TxEip4844Variant::TxEip4844WithSidecar(tx)) => {
             Transaction::Eip4844(tx.into())
         }
-        TypedTransaction::Eip7702(tx) => Transaction::Eip7702(tx.into()),
+        TypedTransaction::Eip7702(tx) => Transaction::Eip7702(tx),
     })
 }
