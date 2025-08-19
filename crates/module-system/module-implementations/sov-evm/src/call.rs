@@ -58,7 +58,7 @@ where
         let previous_transaction = self.pending_transactions.last(state)?;
         let previous_transaction_cumulative_gas_used = previous_transaction
             .as_ref()
-            .map_or(0u64, |tx| tx.receipt.receipt.cumulative_gas_used as u64);
+            .map_or(0u64, |tx| tx.receipt.receipt.cumulative_gas_used);
         let log_index_start = previous_transaction.as_ref().map_or(0u64, |tx| {
             tx.receipt
                 .log_index_start
