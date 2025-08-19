@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use sov_rollup_interface::common::HexHash;
 
 use crate::MaybeTimer;
@@ -27,32 +29,27 @@ impl StateAccessMetric {
             duration: MaybeTimer::started(),
         }
     }
-}
 
-#[cfg(feature = "native")]
-fn summarize(
-    metrics: &[StateAccessMetric],
-    prefix: &str,
-    target: &mut Vec<u8>,
-) -> std::io::Result<()> {
-    use std::io::Write;
-    let total_reads = metrics.len();
-    let mut cache_misses = 0;
-    let mut cache_miss_bytes = 0;
-    let mut slowest_read = std::time::Duration::from_millis(0);
-    let mut slowest_read_name = "none";
-    let mut slowest_read_key_size = 0;
-    let mut slowest_read_storage_read_size = 0;
-    for metric in metrics {
-        cache_misses += metric.storage_read_size.is_some() as usize;
-        cache_miss_bytes += metric.storage_read_size.unwrap_or(0);
-        if metric.duration.elapsed() > slowest_read {
-            slowest_read = metric.duration.elapsed();
-            slowest_read_name = metric.op;
-            slowest_read_key_size = metric.key_size;
-            slowest_read_storage_read_size = metric.storage_read_size.unwrap_or(0);
+    /// Returns a serializable placeholder metric.
+    pub fn placeholder() -> Self {
+        Self {
+            op: "placeholder",
+            key_size: 0,
+            storage_read_size: None,
+            duration: MaybeTimer::Completed(Duration::from_secs(0)),
         }
     }
+}
+#[cfg(feature = "native")]
+fn summarize(metrics: &StateMetrics, prefix: &str, target: &mut Vec<u8>) -> std::io::Result<()> {
+    use std::io::Write;
+    let total_reads = metrics.total_reads;
+    let cache_misses = metrics.total_read_misses;
+    let cache_miss_bytes = metrics.total_read_bytes;
+    let slowest_read = metrics.slowest_access.duration.elapsed();
+    let slowest_read_name = metrics.slowest_access.op;
+    let slowest_read_key_size = metrics.slowest_access.key_size;
+    let slowest_read_storage_read_size = metrics.slowest_access.storage_read_size.unwrap_or(0);
     write!(
         target,
         "{prefix}_total_reads={total_reads},{prefix}_cache_misses={cache_misses},{prefix}_cache_miss_bytes={cache_miss_bytes}",
@@ -65,44 +62,56 @@ fn summarize(
 #[derive(Debug)]
 pub struct StateMetrics {
     #[allow(missing_docs)]
-    accesses: Vec<StateAccessMetric>,
+    slowest_access: StateAccessMetric,
+    /// The number of reads that were dropped because the metric was full.
+    pub total_reads: u64,
+    /// The number of reads that did not hit the cache.
+    pub total_read_misses: u64,
+    /// The total time spent reading from the state.
+    pub total_read_timing: Duration,
+    /// The total number of bytes read from the state.
+    pub total_read_bytes: u64,
 }
 
 impl Default for StateMetrics {
     fn default() -> Self {
         Self {
-            accesses: Vec::with_capacity(Self::MAX_CAPACITY),
+            slowest_access: StateAccessMetric::placeholder(),
+            total_reads: 0,
+            total_read_misses: 0,
+            total_read_timing: Duration::from_secs(0),
+            total_read_bytes: 0,
         }
     }
 }
 
 impl StateMetrics {
-    #[cfg(feature = "native")]
-    const MAX_CAPACITY: usize = 100;
-
-    #[cfg(not(feature = "native"))]
-    const MAX_CAPACITY: usize = 0;
-
     /// Pushes a new state access metric.
     pub fn push(&mut self, metric: StateAccessMetric) {
-        if self.accesses.len() < Self::MAX_CAPACITY {
-            self.accesses.push(metric);
+        self.total_reads = self.total_reads.saturating_add(1);
+        if let Some(size) = metric.storage_read_size {
+            self.total_read_bytes = self.total_read_bytes.saturating_add(size as u64);
+            self.total_read_misses = self.total_read_misses.saturating_add(1);
+        }
+        self.total_read_timing += metric.duration.elapsed();
+        if metric.duration.elapsed() > self.slowest_access.duration.elapsed() {
+            self.slowest_access = metric;
         }
     }
 
     /// Takes the state access metrics.
-    pub fn take(&mut self) -> Vec<StateAccessMetric> {
-        std::mem::take(&mut self.accesses)
+    pub fn take(&mut self) -> StateMetrics {
+        std::mem::take(self)
     }
 
     /// Returns the number of accesses. in the current state metrics.
     pub fn len(&self) -> usize {
-        self.accesses.len()
+        self.total_reads.try_into().expect("Performed more than 4 billion state accesses in a single block on a 32-bit system. This is impossible!")
     }
 
     /// Returns true if there are no state accesses since the last flush
     pub fn is_empty(&self) -> bool {
-        self.accesses.is_empty()
+        self.total_reads == 0
     }
 }
 
@@ -180,29 +189,29 @@ pub struct AuthAndProcessTimings {
     /// Timer for resolving the context.
     pub resolve_context_timer: MaybeTimer,
     /// State Accesses performed while resolving the context.
-    pub resolve_context_access_metrics: Vec<StateAccessMetric>,
+    pub resolve_context_access_metrics: StateMetrics,
     /// Timer for checking uniqueness.
     pub check_uniqueness_timer: MaybeTimer,
     /// State Accesses performed while checking uniqueness.
-    pub check_uniqueness_access_metrics: Vec<StateAccessMetric>,
+    pub check_uniqueness_access_metrics: StateMetrics,
     /// Timer for marking the tx as attempted.
     pub mark_tx_attempted_timer: MaybeTimer,
     /// State Accesses performed while marking the tx as attempted.
-    pub mark_tx_attempted_access_metrics: Vec<StateAccessMetric>,
+    pub mark_tx_attempted_access_metrics: StateMetrics,
     /// Timer for executing the tx.
     pub attempt_tx_timer: MaybeTimer,
     /// State Accesses performed while executing the tx.
-    pub attempt_tx_access_metrics: Vec<StateAccessMetric>,
+    pub attempt_tx_access_metrics: StateMetrics,
     /// Timer for reserving gas.
     pub reserve_gas_timer: MaybeTimer,
     /// State Accesses performed while reserving gas.
-    pub reserve_gas_access_metrics: Vec<StateAccessMetric>,
+    pub reserve_gas_access_metrics: StateMetrics,
     /// Timer for refunding remaining gas.
     pub refund_remaining_gas_timer: MaybeTimer,
     /// State Accesses performed while refunding remaining gas.
-    pub refund_remaining_gas_access_metrics: Vec<StateAccessMetric>,
+    pub refund_remaining_gas_access_metrics: StateMetrics,
     /// Timer for rewarding the prover.
     pub reward_prover_timer: MaybeTimer,
     /// State Accesses performed while rewarding the prover.
-    pub reward_prover_access_metrics: Vec<StateAccessMetric>,
+    pub reward_prover_access_metrics: StateMetrics,
 }

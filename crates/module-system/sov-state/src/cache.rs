@@ -300,7 +300,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             None => {
                 let maybe_leaf = storage.get_leaf_historical::<N>(key, version, witness)?;
                 let size = maybe_leaf.as_ref().map(|leaf| leaf.leaf.size);
-                metric.storage_read_size = size;
+                metric.storage_read_size = Some(size.unwrap_or(0));
                 self.add_read(key.clone(), maybe_leaf);
                 Ok(size)
             }
@@ -321,7 +321,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             None => {
                 let maybe_leaf = storage.get_leaf::<N>(key, witness);
                 let size = maybe_leaf.as_ref().map(|leaf| leaf.leaf.size);
-                metric.storage_read_size = size;
+                metric.storage_read_size = Some(size.unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
                 self.add_read(key.clone(), maybe_leaf);
                 size
             }
@@ -391,6 +391,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             }
         } else {
             let storage_value = fetch_fn(key, witness, args)?;
+            metric.storage_read_size = Some(storage_value.as_ref().map(|v| v.size()).unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
             let read = storage_value.clone().map(|v| NodeLeafAndMaybeValue {
                 leaf: NodeLeaf::make_leaf::<S::Hasher>(&v),
                 value: ReadType::Read(v),

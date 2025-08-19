@@ -148,7 +148,7 @@ impl<S: Storage> Delta<S> {
                 None => {
                     let val = self.inner.get_accessory(key);
                     let size = val.map(|v| v.size());
-                    metric.storage_read_size = size;
+                    metric.storage_read_size = Some(size.unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
                     size
                 }
             },
@@ -176,7 +176,7 @@ impl<S: Storage> Delta<S> {
                 None => {
                     let val = self.inner.get_accessory(key);
                     let size = val.as_ref().map(|v| v.size());
-                    metric.storage_read_size = size;
+                    metric.storage_read_size = Some(size.unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
                     val
                 }
             },
@@ -242,7 +242,7 @@ impl<S: Storage> UniversalStateAccessor for AccessoryDelta<S> {
         }
 
         let val = self.storage.get_accessory(key);
-        metric.storage_read_size = val.as_ref().map(|v| v.size());
+        metric.storage_read_size = Some(val.as_ref().map(|v| v.size()).unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
         val.map(|v| v.size())
     }
 
@@ -257,7 +257,7 @@ impl<S: Storage> UniversalStateAccessor for AccessoryDelta<S> {
         }
 
         let val = self.storage.get_accessory(key);
-        metric.storage_read_size = val.as_ref().map(|v| v.size());
+        metric.storage_read_size = Some(val.as_ref().map(|v| v.size()).unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
         val
     }
 
