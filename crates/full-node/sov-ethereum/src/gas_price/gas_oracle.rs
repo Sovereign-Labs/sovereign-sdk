@@ -154,13 +154,13 @@ where
         // but first filter those that should be ignored
 
         // get the transactions (block.transactions is a enum but we only care about the 2nd arm)
-        let txs = match &block.transactions {
+        let txs = match block.transactions {
             BlockTransactions::Full(txs) => txs,
             _ => return Ok(None),
         };
 
         let mut effective_gas_prices = txs
-            .iter()
+            .into_iter()
             .filter(|tx| {
                 if let Some(ignore_under) = self.oracle_config.ignore_price {
                     let effective_gas_tip = tx.effective_gas_price(block.header.base_fee_per_gas);
@@ -169,7 +169,7 @@ where
                     }
                 }
                 // check if coinbase
-                let sender = tx.from;
+                let sender = tx.inner.signer();
                 sender != block.header.beneficiary()
             })
             .map(|tx| U256::from(tx.effective_gas_price(block.header.base_fee_per_gas)))

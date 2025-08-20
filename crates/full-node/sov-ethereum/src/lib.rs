@@ -145,7 +145,7 @@ where
         let tx_hash = signed_transaction.hash();
         let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
 
-        Ok((tx_hash, message))
+        Ok((*tx_hash, message))
     }
 }
 

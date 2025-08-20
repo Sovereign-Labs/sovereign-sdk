@@ -565,7 +565,7 @@ where
         } else {
             MIN_TRANSACTION_GAS
         };
-        let mut highest_gas_limit: u64 = highest_gas_limit.try_into().unwrap_or(u64::MAX);
+        let mut highest_gas_limit: u64 = highest_gas_limit;
         // pick a point that's close to the estimated gas
         let mut mid_gas_limit = std::cmp::min(
             gas_used * 3,

@@ -46,7 +46,7 @@ pub(crate) fn prepare_call_env(
     )
     .map_err(Into::<EthTxEnvError>::into)?;
 
-    let gas_limit = gas.unwrap_or_else(|| block_env.gas_limit.min(u64::MAX));
+    let gas_limit = gas.unwrap_or(block_env.gas_limit);
 
     let env = TxEnv {
         tx_type: TransactionType::Eip1559.into(),
@@ -59,7 +59,7 @@ pub(crate) fn prepare_call_env(
         value: value.unwrap_or_default(),
         data: input.try_into_unique_input()?.unwrap_or_default(),
         chain_id,
-        access_list: access_list.unwrap_or_default().into(),
+        access_list: access_list.unwrap_or_default(),
         // EIP-4844 related fields:
         blob_hashes: Default::default(),
         max_fee_per_blob_gas: 0,
