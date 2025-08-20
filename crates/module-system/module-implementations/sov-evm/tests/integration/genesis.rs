@@ -1,6 +1,6 @@
 use alloy_consensus::constants::{EMPTY_RECEIPTS, EMPTY_TRANSACTIONS, KECCAK_EMPTY};
 use alloy_consensus::{BlockHeader, Header, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
-use alloy_eips::eip1559::{BaseFeeParams, ETHEREUM_BLOCK_GAS_LIMIT};
+use alloy_eips::eip1559::{BaseFeeParams, ETHEREUM_BLOCK_GAS_LIMIT_30M};
 use alloy_primitives::{Address, Bloom, Bytes, B256, B64, U256};
 use revm::primitives::AccountInfo;
 use revm::Database;
@@ -46,7 +46,7 @@ fn test_genesis_cfg() {
             EvmChainConfig {
                 spec: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)],
                 chain_id: 1000,
-                block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
+                block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
                 block_timestamp_delta: 2,
                 coinbase: Address::from([3u8; 20]),
                 limit_contract_code_size: Some(5000),
@@ -106,7 +106,7 @@ fn test_genesis_block() {
             logs_bloom: Bloom::default(),
             difficulty: U256::ZERO,
             number: 0,
-            gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
+            gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
             gas_used: 0,
             timestamp: 0,
             extra_data: Bytes::default(),
@@ -143,7 +143,7 @@ fn default_config() -> EvmConfig {
             .into_iter()
             .collect(),
         chain_id: 1000,
-        block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
+        block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
         block_timestamp_delta: 2,
         genesis_timestamp: 50,
         coinbase: Address::from([3u8; 20]),

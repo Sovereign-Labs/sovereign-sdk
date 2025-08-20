@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 
+use alloy_consensus::SignableTransaction;
 use alloy_consensus::{TxEip4844Variant, TypedTransaction};
 use reth_primitives::{sign_message, Transaction, TransactionSigned};
 use revm::primitives::{Address, B256};

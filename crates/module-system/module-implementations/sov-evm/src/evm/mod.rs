@@ -2,7 +2,7 @@
 // similar as possible to upstream than clean it up.
 #![allow(clippy::match_same_arms)]
 
-use alloy_eips::eip1559::{BaseFeeParams, ETHEREUM_BLOCK_GAS_LIMIT};
+use alloy_eips::eip1559::{BaseFeeParams, ETHEREUM_BLOCK_GAS_LIMIT_30M};
 use alloy_primitives::Address;
 use revm::primitives::{AccountInfo, SpecId};
 use serde::{Deserialize, Serialize};
@@ -73,7 +73,7 @@ impl Default for EvmChainConfig {
             limit_contract_code_size: None,
             spec: vec![(0, SpecId::SHANGHAI)],
             coinbase: Address::ZERO,
-            block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
+            block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
             block_timestamp_delta: 1,
             base_fee_params: BaseFeeParams::ethereum(),
         }

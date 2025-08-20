@@ -1,7 +1,9 @@
 use alloy_consensus::Transaction;
 use alloy_eips::eip2718::{Decodable2718, Eip2718Error};
 use alloy_primitives::{Address, Bytes, TxKind, U256};
-use reth_primitives::{TransactionSigned, TransactionSignedEcRecovered};
+use reth_primitives::{
+    transaction::SignedTransactionIntoRecoveredExt, Recovered, TransactionSigned,
+};
 use revm::primitives::{BlockEnv, TxEnv};
 use thiserror::Error;
 
@@ -79,14 +81,14 @@ pub fn convert_to_transaction_signed(
     Ok(tx)
 }
 
-impl TryFrom<RlpEvmTransaction> for TransactionSignedEcRecovered {
+impl TryFrom<RlpEvmTransaction> for Recovered<TransactionSigned> {
     type Error = RlpConversionError;
 
     fn try_from(evm_tx: RlpEvmTransaction) -> Result<Self, Self::Error> {
-        let tx = convert_to_transaction_signed(evm_tx)?;
+        let tx: TransactionSigned = convert_to_transaction_signed(evm_tx)?;
         let tx = tx
-            .into_ecrecovered()
-            .ok_or(RlpConversionError::InvalidSignature)?;
+            .try_into_recovered()
+            .map_err(|_| RlpConversionError::InvalidSignature)?;
 
         Ok(tx)
     }

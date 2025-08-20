@@ -1,7 +1,7 @@
 use std::convert::Infallible;
 
 use alloy_consensus::constants::KECCAK_EMPTY;
-use alloy_consensus::Transaction as TransactionTrait;
+use alloy_consensus::{Transaction as TransactionTrait, TxReceipt};
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
 use alloy_rpc_types::{
@@ -11,7 +11,7 @@ use alloy_rpc_types::{
 use error::ensure_success;
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
-use reth_primitives::TransactionSignedEcRecovered;
+use reth_primitives::{Recovered, TransactionSigned};
 use reth_rpc_eth_types::{EthApiError, RevertError, RpcInvalidTransactionError};
 use revm::primitives::{
     AnalysisKind, BlockEnv, CfgEnv, CfgEnvWithHandlerCfg, EVMError, ExecutionResult, HaltReason,
@@ -144,7 +144,7 @@ where
             ),
             _ => BlockTransactions::Hashes({
                 transactions_with_ids
-                    .map(|(_, tx)| tx.signed_transaction.hash())
+                    .map(|(_, tx)| *tx.signed_transaction.hash())
                     .collect::<Vec<_>>()
             }),
         };
@@ -707,12 +707,12 @@ pub(crate) fn build_rpc_receipt(
     tx_number: u64,
     receipt: Receipt,
 ) -> TransactionReceipt {
-    let transaction: TransactionSignedEcRecovered = tx.into();
+    let transaction: Recovered<TransactionSigned> = tx.into();
     let from = transaction.signer();
 
     let block_hash = Some(block.header.seal());
     let block_number = Some(block.header.number);
-    let transaction_hash = Some(transaction.hash());
+    let transaction_hash = Some(*transaction.hash());
     let transaction_index = tx_number - block.transactions.start;
 
     let logs: Vec<Log> = receipt
@@ -732,7 +732,7 @@ pub(crate) fn build_rpc_receipt(
         })
         .collect();
 
-    let logs_bloom = receipt.receipt.bloom_slow();
+    let logs_bloom = receipt.receipt.bloom();
 
     let rpc_receipt = alloy_rpc_types::Receipt {
         status: receipt.receipt.success.into(),
@@ -740,14 +740,14 @@ pub(crate) fn build_rpc_receipt(
         logs,
     };
 
-    let (contract_address, to) = match transaction.transaction.kind() {
-        TxKind::Create => (Some(from.create(transaction.transaction.nonce())), None),
+    let (contract_address, to) = match transaction.kind() {
+        TxKind::Create => (Some(from.create(transaction.nonce())), None),
         TxKind::Call(addr) => (None, Some(Address(*addr))),
     };
 
     TransactionReceipt {
         inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom::new(rpc_receipt, logs_bloom)),
-        transaction_hash: transaction.hash(),
+        transaction_hash: *transaction.hash(),
         transaction_index: Some(transaction_index),
         block_hash,
         block_number,
@@ -758,7 +758,6 @@ pub(crate) fn build_rpc_receipt(
         from,
         to,
         contract_address,
-        authorization_list: transaction.authorization_list().map(|l| l.to_vec()),
     }
 }
 

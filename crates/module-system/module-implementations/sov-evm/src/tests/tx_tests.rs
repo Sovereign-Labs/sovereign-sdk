@@ -7,7 +7,7 @@ use ethers_core::types::transaction::eip2718::TypedTransaction;
 use ethers_core::types::{Bytes, Eip1559TransactionRequest};
 use ethers_core::utils::rlp::Rlp;
 use ethers_signers::{LocalWallet, Signer};
-use reth_primitives::TransactionSignedEcRecovered;
+use reth_primitives::{Recovered, TransactionSigned};
 use revm::primitives::{BlockEnv, TransactTo, TxEnv};
 use sov_modules_api::macros::config_value;
 
@@ -61,7 +61,7 @@ fn tx_conversion() {
         block_number: 5u64,
     };
 
-    let reth_tx: TransactionSignedEcRecovered = tx.into();
+    let reth_tx: Recovered<TransactionSigned> = tx.into();
 
     assert_eq!(signer, reth_tx.signer());
 }

@@ -4,7 +4,7 @@ use alloy_primitives::TxKind;
 use alloy_primitives::{BlockNumber, Sealed};
 use alloy_primitives::{B256, U256};
 use alloy_rpc_types::{Header, TransactionRequest};
-use reth_primitives::{Transaction as PrimitiveTransaction, TransactionSignedEcRecovered};
+use reth_primitives::{Recovered, Transaction as PrimitiveTransaction, TransactionSigned};
 use reth_rpc_eth_types::revm_utils::CallFees;
 use reth_rpc_eth_types::EthResult;
 use revm::primitives::{BlockEnv, TxEnv};
@@ -76,7 +76,7 @@ pub(crate) fn from_primitive_with_hash(
 
 /// copy from [`reth_rpc_types_compat::transaction::from_recovered_with_block_context`]
 pub fn from_recovered_with_block_context(
-    tx: TransactionSignedEcRecovered,
+    tx: Recovered<TransactionSigned>,
     block_hash: B256,
     block_number: BlockNumber,
     base_fee: Option<u64>,
@@ -90,16 +90,16 @@ pub fn from_recovered_with_block_context(
     let signed_tx = tx.into_tx();
 
     let effective_gas_price = signed_tx.effective_gas_price(base_fee);
-    let hash = signed_tx.hash();
-    let tx = match signed_tx.transaction {
+    let (tx, sig, hash) = signed_tx.into_parts();
+    let tx = match tx {
         PrimitiveTransaction::Legacy(tx) => {
-            TxEnvelope::Legacy(Signed::new_unchecked(tx, signed_tx.signature, hash))
+            TxEnvelope::Legacy(Signed::new_unchecked(tx, sig, hash))
         }
         PrimitiveTransaction::Eip2930(tx) => {
-            TxEnvelope::Eip2930(Signed::new_unchecked(tx, signed_tx.signature, hash))
+            TxEnvelope::Eip2930(Signed::new_unchecked(tx, sig, hash))
         }
         PrimitiveTransaction::Eip1559(tx) => {
-            TxEnvelope::Eip1559(Signed::new_unchecked(tx, signed_tx.signature, hash))
+            TxEnvelope::Eip1559(Signed::new_unchecked(tx, sig, hash))
         }
         PrimitiveTransaction::Eip4844(_) => {
             panic!("EIP-4844 transactions are not supported by the rollup");

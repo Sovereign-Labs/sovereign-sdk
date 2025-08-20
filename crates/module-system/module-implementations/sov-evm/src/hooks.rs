@@ -109,10 +109,10 @@ impl<S: Spec> BlockHooks for Evm<S> {
             .map(|tx| tx.transaction.signed_transaction.clone())
             .collect();
 
-        let receipts: Vec<reth_primitives::ReceiptWithBloom<reth_primitives::Receipt>> =
+        let receipts: Vec<reth_primitives::ReceiptWithBloom<&reth_primitives::Receipt>> =
             pending_transactions
                 .iter()
-                .map(|tx| tx.receipt.receipt.clone().with_bloom())
+                .map(|tx| tx.receipt.receipt.with_bloom_ref())
                 .collect();
         let receipts_root = calculate_receipt_root(receipts.as_slice());
         let transactions_root = calculate_transaction_root(transactions.as_slice());
@@ -178,7 +178,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
                 self.transaction_hashes
                     .set(
-                        &transaction.signed_transaction.hash(),
+                        transaction.signed_transaction.hash(),
                         &tx_index,
                         &mut accessory_state,
                     )

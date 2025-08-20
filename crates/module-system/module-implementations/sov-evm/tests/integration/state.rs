@@ -107,8 +107,8 @@ fn test_transactions_receipts() {
             assert_eq!(signed_txns, vec![signed_tx1.clone(), signed_tx2.clone()]);
             assert_eq!(evm.pending_transactions(state).len(), 0);
 
-            assert_eq!(evm.get_tx_index_by_hash(&signed_tx1.hash(), state), Some(0));
-            assert_eq!(evm.get_tx_index_by_hash(&signed_tx2.hash(), state), Some(1));
+            assert_eq!(evm.get_tx_index_by_hash(signed_tx1.hash(), state), Some(0));
+            assert_eq!(evm.get_tx_index_by_hash(signed_tx2.hash(), state), Some(1));
         }),
     });
 }

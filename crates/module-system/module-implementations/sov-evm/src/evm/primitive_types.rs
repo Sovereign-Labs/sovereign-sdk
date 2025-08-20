@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use alloy_consensus::{serde_bincode_compat, Header};
 use alloy_primitives::{Address, Sealable, Sealed, B256};
-use reth_primitives::{TransactionSigned, TransactionSignedEcRecovered};
+use reth_primitives::{Recovered, TransactionSigned};
 use revm::primitives::EVMError;
 use serde_with::serde_as;
 use sov_modules_api::macros::UniversalWallet;
@@ -136,8 +136,8 @@ pub struct Receipt {
     pub error: Option<EVMError<u8>>,
 }
 
-impl From<TransactionSignedAndRecovered> for TransactionSignedEcRecovered {
+impl From<TransactionSignedAndRecovered> for Recovered<TransactionSigned> {
     fn from(value: TransactionSignedAndRecovered) -> Self {
-        TransactionSignedEcRecovered::new_unchecked(value.signed_transaction, value.signer)
+        Recovered::new_unchecked(value.signed_transaction, value.signer)
     }
 }

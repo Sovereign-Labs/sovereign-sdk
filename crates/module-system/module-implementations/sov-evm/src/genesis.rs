@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use alloy_consensus::constants::{EMPTY_RECEIPTS, EMPTY_TRANSACTIONS, KECCAK_EMPTY};
 use alloy_consensus::{EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
-use alloy_eips::eip1559::{ETHEREUM_BLOCK_GAS_LIMIT, MIN_PROTOCOL_BASE_FEE};
+use alloy_eips::eip1559::{ETHEREUM_BLOCK_GAS_LIMIT_30M, MIN_PROTOCOL_BASE_FEE};
 use alloy_eips::merge::SLOT_DURATION;
 use alloy_primitives::{Address, B256, U256};
 use alloy_primitives::{Bloom, Bytes, B64};
@@ -79,7 +79,7 @@ impl Default for EvmConfig {
             spec: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
             coinbase: Address::ZERO,
             starting_base_fee: MIN_PROTOCOL_BASE_FEE,
-            block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
+            block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
             block_timestamp_delta: SLOT_DURATION.as_secs(),
             genesis_timestamp: 0,
             base_fee_params: alloy_eips::eip1559::BaseFeeParams::ethereum(),

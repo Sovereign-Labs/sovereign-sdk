@@ -34,10 +34,14 @@ fn recover_evm_signer(
     tx: &TransactionSigned,
     tx_hash: TxHash,
 ) -> Result<Address, AuthenticationError> {
-    tx.recover_signer().ok_or(AuthenticationError::FatalError(
-        FatalError::SigVerificationFailed(format!("Invalid ethereum signature: tx hash {tx_hash}")),
-        tx_hash,
-    ))
+    tx.recover_signer().map_err(|_| {
+        AuthenticationError::FatalError(
+            FatalError::SigVerificationFailed(format!(
+                "Invalid ethereum signature: tx hash {tx_hash}"
+            )),
+            tx_hash,
+        )
+    })
 }
 
 /// Creates the transaction details for an EVM transaction.
@@ -88,7 +92,7 @@ where
 
     let (rlp, tx) = decode_evm_tx(raw_tx)
         .map_err(|e| fatal_deserialization_error::<Accessor, S, _>(raw_tx, e, state))?;
-    let hash = TxHash::new(tx.hash().into());
+    let hash = TxHash::new(**tx.hash());
 
     let signer = recover_evm_signer(&tx, hash)?;
 
@@ -229,7 +233,7 @@ where
         match input {
             EvmAuthenticatorInput::Evm(tx) => {
                 let (_rlp, tx) = decode_evm_tx(&tx.data)?;
-                Ok(TxHash::new(tx.hash().into()))
+                Ok(TxHash::new(**tx.hash()))
             }
             EvmAuthenticatorInput::Standard(tx) => Ok(capabilities::calculate_hash::<S>(&tx.data)),
         }
