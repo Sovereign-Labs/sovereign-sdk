@@ -269,7 +269,7 @@ ethers-contract = { version = "=2.0.14", default-features = false }
 ethers-providers = { version = "=2.0.14", default-features = false }
 ethers-signers = { version = "=2.0.14", default-features = false }
 ethers-middleware = { version = "=2.0.14", default-features = false }
-# 1e965caf5fa176f244a31c0d2662ba1b590938db, 1.2.0
+# 2f4c509b3d01960f96abf2f9314b7d63db36977b, 1.2.2
 alloy-serde = { version = "1.0.24" }
 alloy-chains = { version = "=0.1.32", default-features = false }
 alloy-primitives = { version = "=0.8.20", default-features = false }
@@ -280,10 +280,10 @@ alloy-rpc-types = { version = "=0.11.1", features = [
     "eth",
 ], default-features = false }
 alloy-rpc-types-trace = { version = "=0.11.1" }
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "1e965caf5fa176f244a31c0d2662ba1b590938db", default-features = false }
-reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", rev = "1e965caf5fa176f244a31c0d2662ba1b590938db", default-features = false }
-reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "1e965caf5fa176f244a31c0d2662ba1b590938db", default-features = false }
-reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "1e965caf5fa176f244a31c0d2662ba1b590938db", default-features = false }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "2f4c509b3d01960f96abf2f9314b7d63db36977b", default-features = false }
+reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", rev = "2f4c509b3d01960f96abf2f9314b7d63db36977b", default-features = false }
+reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "2f4c509b3d01960f96abf2f9314b7d63db36977b", default-features = false }
+reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "2f4c509b3d01960f96abf2f9314b7d63db36977b", default-features = false }
 revm = { version = "=19.5.0", features = ["serde"], default-features = false }
 revm-inspectors = { version = "=0.15.0", default-features = false }
 secp256k1 = { version = "=0.29.0", default-features = false, features = [
