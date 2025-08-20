@@ -3,12 +3,13 @@ use std::convert::Infallible;
 use alloy_primitives::Address;
 use reth_primitives::TransactionSigned;
 #[cfg(feature = "native")]
-use revm::primitives::{ResultAndState, TxEnv};
+use revm::context::{result::ResultAndState, TxEnv};
 use revm::{
-    primitives::{
-        BlockEnv, CfgEnvWithHandlerCfg, EVMError, Env, EnvWithHandlerCfg, ExecutionResult,
+    context::{
+        result::{EVMError, ExecutionResult},
+        BlockEnv,
     },
-    Database, DatabaseCommit, EvmBuilder,
+    Database, DatabaseCommit,
 };
 
 use crate::evm::conversions::create_tx_env;

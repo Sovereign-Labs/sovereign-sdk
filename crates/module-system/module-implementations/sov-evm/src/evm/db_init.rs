@@ -1,5 +1,5 @@
 use alloy_primitives::{Address, Bytes, B256};
-use revm::primitives::AccountInfo;
+use revm::state::AccountInfo;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{InfallibleStateAccessor, Spec};
 

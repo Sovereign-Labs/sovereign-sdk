@@ -2,7 +2,7 @@ use std::convert::Infallible;
 
 use alloy_primitives::Bytes;
 use alloy_primitives::{Address, B256, U256};
-use revm::primitives::{AccountInfo, Bytecode};
+use revm::state::{AccountInfo, Bytecode};
 use revm::Database;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::prelude::UnwrapInfallible;

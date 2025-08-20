@@ -15,7 +15,7 @@ pub use genesis::*;
 #[cfg(feature = "native")]
 mod rpc;
 
-use revm::primitives::BlockEnv;
+use revm::context::BlockEnv;
 #[cfg(feature = "native")]
 pub use rpc::*;
 
@@ -34,7 +34,7 @@ pub use authenticate::{
     EvmAuthenticatorInput,
 };
 pub use reth_primitives::TransactionSigned;
-pub use revm::primitives::SpecId;
+pub use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::prelude::UnwrapInfallible as _;
 use sov_modules_api::{

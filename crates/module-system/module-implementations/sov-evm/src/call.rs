@@ -1,6 +1,7 @@
 use alloy_primitives::Address;
 use reth_primitives::TransactionSigned;
-use revm::primitives::{BlockEnv, CfgEnv, CfgEnvWithHandlerCfg, EVMError, HandlerCfg};
+use revm::context::result::EVMError;
+use revm::context::{BlockEnv, CfgEnv};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{Context, Spec, TxState};
@@ -112,7 +113,7 @@ where
             transaction: TransactionSignedAndRecovered {
                 signer,
                 signed_transaction: evm_tx,
-                block_number: block_env.number.to(),
+                block_number: block_env.number,
             },
             receipt,
         };
@@ -135,7 +136,7 @@ pub(crate) fn get_cfg_env_with_handler(
     let mut cfg_env = template_cfg.unwrap_or_default();
     cfg_env.chain_id = cfg.chain_id;
     cfg_env.limit_contract_code_size = cfg.limit_contract_code_size;
-    let spec_id = get_spec_id(cfg.spec, block_env.number.to());
+    let spec_id = get_spec_id(cfg.spec, block_env.number);
     CfgEnvWithHandlerCfg::new(cfg_env, HandlerCfg { spec_id })
 }
 

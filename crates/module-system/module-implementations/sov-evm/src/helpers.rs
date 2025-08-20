@@ -7,7 +7,7 @@ use alloy_rpc_types::{Header, TransactionRequest};
 use reth_primitives::{Recovered, Transaction as PrimitiveTransaction, TransactionSigned};
 use reth_rpc_eth_types::revm_utils::CallFees;
 use reth_rpc_eth_types::EthResult;
-use revm::primitives::{BlockEnv, TxEnv};
+use revm::context::{BlockEnv, TransactionType, TxEnv};
 
 // https://github.com/paradigmxyz/reth/blob/d8677b4146f77c7c82d659c59b79b38caca78778/crates/rpc/rpc/src/eth/revm_utils.rs#L201
 // it is `pub(crate)` only for tests
@@ -38,31 +38,32 @@ pub(crate) fn prepare_call_env(
         gas_price.map(U256::from),
         max_fee_per_gas.map(U256::from),
         max_priority_fee_per_gas.map(U256::from),
-        block_env.basefee,
+        U256::from(block_env.basefee),
         // EIP-4844 related params
         None,
         None,
         None,
     )?;
 
-    let gas_limit = gas.unwrap_or_else(|| block_env.gas_limit.min(U256::from(u64::MAX)).to());
+    let gas_limit = gas.unwrap_or_else(|| block_env.gas_limit.min(u64::MAX));
 
     let env = TxEnv {
+        tx_type: TransactionType::Eip1559.into(),
         gas_limit,
-        nonce,
+        nonce: nonce.unwrap_or_default(),
         caller: from.unwrap_or_default(),
-        gas_price,
-        gas_priority_fee: max_priority_fee_per_gas,
-        transact_to: to.unwrap_or(TxKind::Create),
+        gas_price: gas_price.to::<u128>(),
+        gas_priority_fee: max_priority_fee_per_gas.map(|g| g.to::<u128>()),
+        kind: to.unwrap_or(TxKind::Create),
         value: value.unwrap_or_default(),
         data: input.try_into_unique_input()?.unwrap_or_default(),
         chain_id,
         access_list: access_list.unwrap_or_default().into(),
         // EIP-4844 related fields:
         blob_hashes: Default::default(),
-        max_fee_per_blob_gas: None,
+        max_fee_per_blob_gas: 0,
         // EIP-7702: TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1132
-        authorization_list: None,
+        authorization_list: vec![],
     };
 
     Ok(env)
@@ -87,7 +88,7 @@ pub fn from_recovered_with_block_context(
     let transaction_index = Some(tx_index.to::<u64>());
 
     let signer = tx.signer();
-    let signed_tx = tx.into_tx();
+    let signed_tx = tx.into_inner();
 
     let effective_gas_price = signed_tx.effective_gas_price(base_fee);
     let (tx, sig, hash) = signed_tx.into_parts();
@@ -111,11 +112,10 @@ pub fn from_recovered_with_block_context(
     };
 
     alloy_rpc_types::Transaction {
-        inner: tx,
-        from: signer,
-        effective_gas_price: Some(effective_gas_price),
+        inner: Recovered::new_unchecked(tx, signer),
         block_hash,
         block_number,
         transaction_index,
+        effective_gas_price: Some(effective_gas_price),
     }
 }

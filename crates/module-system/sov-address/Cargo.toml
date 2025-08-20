@@ -41,7 +41,7 @@ k256 = { workspace = true, features = ["serde", "ecdsa", "ecdsa-core"], optional
 
 [dev-dependencies]
 sov-address = { path = ".", features = ["native"] }
-secp256k1 = { workspace = true, features = ["serde", "rand-std"] }
+secp256k1 = { workspace = true, features = ["serde", "rand"] }
 sov-test-utils = { workspace = true }
 
 bincode = { workspace = true }

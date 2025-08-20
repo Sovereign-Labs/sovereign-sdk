@@ -39,25 +39,21 @@ impl<S: Spec> BlockHooks for Evm<S> {
         let cfg = self.cfg.get(state).unwrap_infallible().unwrap_or_default();
 
         let new_pending_env = BlockEnv {
-            number: U256::from(parent_block.header.number.wrapping_add(1)),
-            coinbase: cfg.coinbase,
-            timestamp: U256::from(
-                parent_block
-                    .header
-                    .timestamp
-                    .saturating_add(cfg.block_timestamp_delta),
-            ),
+            number: parent_block.header.number.wrapping_add(1),
+            beneficiary: cfg.coinbase,
+            timestamp: parent_block
+                .header
+                .timestamp
+                .saturating_add(cfg.block_timestamp_delta),
             // WARNING: `prevrandao`` value is predictable up to [`DEFERRED_SLOTS_COUNT`] in advance,
             // Users should follow the same best practice that they would on Ethereum and use future randomness.
             // See: https://eips.ethereum.org/EIPS/eip-4399#tips-for-application-developers
             prevrandao: Some(B256::from(pre_state_user_root)),
-            basefee: U256::from(
-                parent_block
-                    .header
-                    .next_block_base_fee(cfg.base_fee_params)
-                    .unwrap(),
-            ),
-            gas_limit: U256::from(cfg.block_gas_limit),
+            basefee: parent_block
+                .header
+                .next_block_base_fee(cfg.base_fee_params)
+                .unwrap(),
+            gas_limit: cfg.block_gas_limit,
             difficulty: Default::default(),
             blob_excess_gas_and_price: None,
         };
@@ -86,11 +82,9 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
         let expected_block_number = parent_block.header.number.wrapping_add(1);
         assert_eq!(
-            block_env.number.to::<u64>(),
-            expected_block_number,
+            block_env.number, expected_block_number,
             "Pending head must be set to block {}, but found block {}",
-            expected_block_number,
-            block_env.number
+            expected_block_number, block_env.number
         );
 
         let pending_transactions: Vec<PendingTransaction> =
@@ -119,8 +113,8 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
         let header = alloy_consensus::Header {
             parent_hash: parent_block.header.seal(),
-            timestamp: block_env.timestamp.to(),
-            number: block_env.number.to(),
+            timestamp: block_env.timestamp,
+            number: block_env.number,
             ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: parent_block.header.beneficiary,
             // This will be set in finalize_hook or in the next begin_rollup_block_hook
@@ -132,7 +126,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
                 .iter()
                 .fold(Bloom::ZERO, |bloom, r| bloom | r.bloom()),
             difficulty: U256::ZERO,
-            gas_limit: block_env.gas_limit.to(),
+            gas_limit: block_env.gas_limit,
             gas_used,
             mix_hash: block_env.prevrandao.map_or(B256::ZERO, B256::from),
             nonce: B64::ZERO,

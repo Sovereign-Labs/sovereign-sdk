@@ -35,7 +35,7 @@ reth-primitives = { workspace = true }
 sov-address = { workspace = true, features = ["evm"] }
 sov-rollup-interface = { workspace = true }
 sov-kernels = { workspace = true }
-secp256k1 = { workspace = true, features = ["rand-std"] }
+secp256k1 = { workspace = true, features = ["rand"] }
 sov-eth-dev-signer = { workspace = true }
 
 [features]

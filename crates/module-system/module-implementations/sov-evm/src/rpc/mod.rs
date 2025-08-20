@@ -13,10 +13,10 @@ use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
 use reth_primitives::{Recovered, TransactionSigned};
 use reth_rpc_eth_types::{EthApiError, RevertError, RpcInvalidTransactionError};
-use revm::primitives::{
-    AnalysisKind, BlockEnv, CfgEnv, CfgEnvWithHandlerCfg, EVMError, ExecutionResult, HaltReason,
-    InvalidHeader, InvalidTransaction, TransactTo, TxEnv,
+use revm::context::result::{
+    EVMError, ExecutionResult, HaltReason, InvalidHeader, InvalidTransaction,
 };
+use revm::context::{BlockEnv, CfgEnv, TransactTo, TxEnv};
 use revm::Database;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
@@ -453,7 +453,7 @@ where
 
         // get the highest possible gas limit, either the request's set value or the currently
         // configured gas limit
-        let mut highest_gas_limit = request.gas.map(U256::from).unwrap_or(env_gas_limit);
+        let mut highest_gas_limit = request.gas.unwrap_or(env_gas_limit);
         trace!(
             ?request_gas,
             ?request_gas_price,
@@ -470,7 +470,7 @@ where
 
         // if the request is a simple transfer, can we optimize?
         if tx_env.data.is_empty() {
-            if let TransactTo::Call(to) = tx_env.transact_to {
+            if let TransactTo::Call(to) = tx_env.kind {
                 let to_account = self
                     .accounts
                     .get(&to, state)
@@ -492,9 +492,10 @@ where
         }
 
         // check funds of the sender
-        if tx_env.gas_price > U256::ZERO {
+        if tx_env.gas_price > 0 {
             // allowance is (balance - tx.value) / tx.gas_price
-            let allowance = (account.balance - tx_env.value) / tx_env.gas_price;
+            let allowance =
+                ((account.balance - tx_env.value).to::<u128>() / tx_env.gas_price) as u64;
 
             if highest_gas_limit > allowance {
                 // cap the highest gas limit by max gas caller can afford with a given gas price
@@ -503,7 +504,7 @@ where
         }
 
         // if the provided gas limit is less than the computed cap, use that
-        block_env.gas_limit = std::cmp::min(U256::from(tx_env.gas_limit), highest_gas_limit);
+        block_env.gas_limit = std::cmp::min(tx_env.gas_limit, highest_gas_limit);
         trace!(?block_env, "Block env is configured");
 
         let evm_db = self.get_db(state);
@@ -571,7 +572,7 @@ where
         // transaction requires succeeding
         let gas_used = result.gas_used();
         // the lowest value is capped by the gas it takes for a transfer
-        let mut lowest_gas_limit = if tx_env.transact_to.is_create() {
+        let mut lowest_gas_limit = if tx_env.kind.is_create() {
             MIN_CREATE_GAS
         } else {
             MIN_TRANSACTION_GAS
@@ -695,7 +696,6 @@ fn get_cfg_env_template() -> CfgEnv {
     cfg_env.disable_eip3607 = true;
     cfg_env.disable_base_fee = true;
     cfg_env.chain_id = config_value!("CHAIN_ID");
-    cfg_env.perf_analyse_created_bytecodes = AnalysisKind::Analyse;
     cfg_env.limit_contract_code_size = None;
     cfg_env
 }
@@ -771,7 +771,7 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
 {
     let req_gas_limit = tx_env.gas_limit;
-    tx_env.gas_limit = block_env.gas_limit.to();
+    tx_env.gas_limit = block_env.gas_limit;
     let res = executor::inspect(db, &block_env, tx_env, cfg_env_with_handler).unwrap();
     match res.result {
         ExecutionResult::Success { .. } => {
@@ -796,7 +796,6 @@ fn eth_from_infallible(err: EVMError<Infallible>) -> EthApiError {
             panic!("Infallible error triggered")
         }
         EVMError::Custom(data) => EthApiError::EvmCustom(data),
-        EVMError::Precompile(data) => EthApiError::EvmPrecompile(data),
     }
 }
 

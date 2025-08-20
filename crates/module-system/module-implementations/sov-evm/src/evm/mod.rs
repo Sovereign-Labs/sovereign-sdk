@@ -4,7 +4,8 @@
 
 use alloy_eips::eip1559::{BaseFeeParams, ETHEREUM_BLOCK_GAS_LIMIT_30M};
 use alloy_primitives::Address;
-use revm::primitives::{AccountInfo, SpecId};
+use revm::primitives::hardfork::SpecId;
+use revm::state::AccountInfo;
 use serde::{Deserialize, Serialize};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::config_value;

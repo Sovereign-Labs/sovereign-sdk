@@ -3,7 +3,7 @@ use std::ops::Range;
 use alloy_consensus::{serde_bincode_compat, Header};
 use alloy_primitives::{Address, Sealable, Sealed, B256};
 use reth_primitives::{Recovered, TransactionSigned};
-use revm::primitives::EVMError;
+use revm::context::result::EVMError;
 use serde_with::serde_as;
 use sov_modules_api::macros::UniversalWallet;
 
