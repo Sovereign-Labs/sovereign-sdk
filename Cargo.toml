@@ -225,7 +225,7 @@ serde = { version = "1.0.208", default-features = false, features = [
 serde_arrays = "0.1"
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 serde_yaml = { version = "0.9", default-features = false }
-serde_with = { version = "3.9", features = ["schemars_0_8"] }
+serde_with = { version = "3.12", features = ["schemars_0_8"] }
 sha2 = { version = "0.10.8", default-features = false }
 sha3 = { version = "0.10.8", default-features = false }
 strum = { version = "0.26.3", features = ["derive"] }
@@ -281,6 +281,7 @@ alloy-rpc-types = { version = "=0.14.0", features = [
 ], default-features = false }
 alloy-rpc-types-trace = { version = "=0.14.0" }
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "b36fc954d26258ac727b5cc13b771524411e1001", default-features = false }
+reth-ethereum-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "b36fc954d26258ac727b5cc13b771524411e1001", default-features = false }
 reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", rev = "b36fc954d26258ac727b5cc13b771524411e1001", default-features = false }
 reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "b36fc954d26258ac727b5cc13b771524411e1001", default-features = false }
 reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "b36fc954d26258ac727b5cc13b771524411e1001", default-features = false }

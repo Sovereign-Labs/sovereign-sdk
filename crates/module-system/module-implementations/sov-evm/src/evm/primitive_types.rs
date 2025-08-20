@@ -1,7 +1,10 @@
 use std::ops::Range;
 
-use alloy_consensus::{serde_bincode_compat, Header};
+use alloy_consensus::{serde_bincode_compat::Header as HeaderBincodeCompat, Header};
 use alloy_primitives::{Address, Sealable, Sealed, B256};
+use reth_ethereum_primitives::serde_bincode_compat::{
+    Receipt as ReceiptBincodeCompat, TransactionSigned as TransactionSignedBincodeCompat,
+};
 use reth_primitives::{Recovered, TransactionSigned};
 use revm::context::result::EVMError;
 use serde_with::serde_as;
@@ -25,11 +28,13 @@ pub struct RlpEvmTransaction {
     pub rlp: Vec<u8>,
 }
 
+#[serde_as]
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TransactionSignedAndRecovered {
     /// Signer of the transaction
     pub(crate) signer: Address,
     /// Signed transaction
+    #[serde_as(as = "TransactionSignedBincodeCompat")]
     pub(crate) signed_transaction: TransactionSigned,
     /// Block the transaction was added to
     pub(crate) block_number: u64,
@@ -46,7 +51,7 @@ impl TransactionSignedAndRecovered {
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Block {
     /// Block header.
-    #[serde_as(as = "serde_bincode_compat::Header")]
+    #[serde_as(as = "HeaderBincodeCompat")]
     pub(crate) header: Header,
 
     /// Transactions in this block.
@@ -92,10 +97,7 @@ impl serde::Serialize for SealedBlock {
 
         let mut s = serializer.serialize_struct("SealedBlock", 3)?;
         // serialize inner Header using bincode-compat wrapper
-        s.serialize_field(
-            "header",
-            &serde_bincode_compat::Header::from(self.header.inner()),
-        )?;
+        s.serialize_field("header", &HeaderBincodeCompat::from(self.header.inner()))?;
         s.serialize_field("seal", &self.header.seal())?;
         s.serialize_field("transactions", &self.transactions)?;
         s.end()
@@ -110,7 +112,7 @@ impl<'de> serde::Deserialize<'de> for SealedBlock {
         #[serde_as]
         #[derive(serde::Deserialize)]
         struct Raw {
-            #[serde_as(as = "serde_bincode_compat::Header")]
+            #[serde_as(as = "HeaderBincodeCompat")]
             header: Header,
             seal: B256,
             transactions: Range<u64>,
@@ -128,8 +130,10 @@ impl<'de> serde::Deserialize<'de> for SealedBlock {
     }
 }
 
+#[serde_as]
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Receipt {
+    #[serde_as(as = "ReceiptBincodeCompat")]
     pub receipt: reth_primitives::Receipt,
     pub gas_used: u64,
     pub log_index_start: u64,

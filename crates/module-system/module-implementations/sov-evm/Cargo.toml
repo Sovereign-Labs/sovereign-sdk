@@ -57,6 +57,7 @@ revm = { workspace = true, features = [
 	"std",
 ] }
 reth-revm = { workspace = true }
+reth-ethereum-primitives = { workspace = true }
 reth-primitives = { workspace = true }
 reth-primitives-traits = { workspace = true }
 revm-inspector = { workspace = true, default-features = false, optional = true }
@@ -115,6 +116,9 @@ native = [
 	"alloy-consensus/serde",
 	"alloy-consensus/serde-bincode-compat",
 	"reth-primitives/std",
+	"reth-ethereum-primitives/std",
+	"reth-ethereum-primitives/serde",
+	"reth-ethereum-primitives/serde-bincode-compat",
 	"dep:reth-rpc-eth-types",
 	# Optional for speed up in native mode
 	# "revm/asm-keccak"
