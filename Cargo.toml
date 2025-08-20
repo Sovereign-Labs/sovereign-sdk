@@ -269,7 +269,7 @@ ethers-contract = { version = "=2.0.14", default-features = false }
 ethers-providers = { version = "=2.0.14", default-features = false }
 ethers-signers = { version = "=2.0.14", default-features = false }
 ethers-middleware = { version = "=2.0.14", default-features = false }
-# e0e85aa10b98fa92d32c3e820c7ed2cee0b02931, 1.3.11
+# 6f8e7258f4733279080e4bd8345ce50538a40d6e, 1.3.12
 alloy-serde = { version = "1.0.24" }
 alloy-chains = { version = "=0.2.0", default-features = false }
 alloy-primitives = { version = "=1.0.0", default-features = false }
@@ -280,16 +280,16 @@ alloy-rpc-types = { version = "=0.14.0", features = [
     "eth",
 ], default-features = false }
 alloy-rpc-types-trace = { version = "=0.14.0" }
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "e0e85aa10b98fa92d32c3e820c7ed2cee0b02931", default-features = false }
-reth-ethereum-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "e0e85aa10b98fa92d32c3e820c7ed2cee0b02931", default-features = false }
-reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", rev = "e0e85aa10b98fa92d32c3e820c7ed2cee0b02931", default-features = false }
-reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "e0e85aa10b98fa92d32c3e820c7ed2cee0b02931", default-features = false }
-reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "e0e85aa10b98fa92d32c3e820c7ed2cee0b02931", default-features = false }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "6f8e7258f4733279080e4bd8345ce50538a40d6e", default-features = false }
+reth-ethereum-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "6f8e7258f4733279080e4bd8345ce50538a40d6e", default-features = false }
+reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", rev = "6f8e7258f4733279080e4bd8345ce50538a40d6e", default-features = false }
+reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "6f8e7258f4733279080e4bd8345ce50538a40d6e", default-features = false }
+reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "6f8e7258f4733279080e4bd8345ce50538a40d6e", default-features = false }
 revm = { version = "=22.0.1", features = ["serde"], default-features = false }
 revm-context = { version = "=3.0.1", default-features = false }
 revm-context-interface = { version = "=3.0.1", default-features = false }
 revm-inspector = { version = "=3.0.1", default-features = false }
-revm-inspectors = { version = "=0.19.0", default-features = false }
+revm-inspectors = { version = "=0.19.1", default-features = false }
 secp256k1 = { version = "=0.30.0", default-features = false, features = [
     "global-context",
     "recovery",
