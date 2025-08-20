@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
-use alloy_primitives::{Address, TxKind, U256};
+use alloy_consensus::{EthereumTxEnvelope, Signed, TxEip1559};
+use alloy_primitives::{Address, Signature, TxKind, U256};
 use alloy_rpc_types::request::TransactionInput;
 use alloy_rpc_types::TransactionRequest;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
@@ -57,7 +58,11 @@ fn tx_conversion() {
     let signer = Address::random();
     let tx = TransactionSignedAndRecovered {
         signer,
-        signed_transaction: reth_primitives::TransactionSigned::default(),
+        signed_transaction: EthereumTxEnvelope::Eip1559(Signed::new_unchecked(
+            TxEip1559::default(),
+            Signature::test_signature(),
+            Default::default(),
+        )),
         block_number: 5u64,
     };
 

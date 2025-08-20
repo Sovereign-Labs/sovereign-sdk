@@ -91,7 +91,7 @@ pub fn from_recovered_with_block_context(
     let signed_tx = tx.into_inner();
 
     let effective_gas_price = signed_tx.effective_gas_price(base_fee);
-    let (tx, sig, hash) = signed_tx.into_parts();
+    let (tx, sig, hash) = signed_tx.into_signed().into_parts();
     let tx = match tx {
         PrimitiveTransaction::Legacy(tx) => {
             TxEnvelope::Legacy(Signed::new_unchecked(tx, sig, hash))

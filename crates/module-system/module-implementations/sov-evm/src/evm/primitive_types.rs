@@ -1,10 +1,12 @@
 use std::ops::Range;
 
-use alloy_consensus::{serde_bincode_compat::Header as HeaderBincodeCompat, Header};
-use alloy_primitives::{Address, Sealable, Sealed, B256};
-use reth_ethereum_primitives::serde_bincode_compat::{
-    Receipt as ReceiptBincodeCompat, TransactionSigned as TransactionSignedBincodeCompat,
+use alloy_consensus::{
+    serde_bincode_compat::Header as HeaderBincodeCompat,
+    transaction::serde_bincode_compat::EthereumTxEnvelope as EthereumTxEnvelopeBincodeCompat,
+    Header,
 };
+use alloy_primitives::{Address, Sealable, Sealed, B256};
+use reth_ethereum_primitives::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
 use reth_primitives::{Recovered, TransactionSigned};
 use revm::context::result::EVMError;
 use serde_with::serde_as;
@@ -34,7 +36,7 @@ pub struct TransactionSignedAndRecovered {
     /// Signer of the transaction
     pub(crate) signer: Address,
     /// Signed transaction
-    #[serde_as(as = "TransactionSignedBincodeCompat")]
+    #[serde_as(as = "EthereumTxEnvelopeBincodeCompat")]
     pub(crate) signed_transaction: TransactionSigned,
     /// Block the transaction was added to
     pub(crate) block_number: u64,
