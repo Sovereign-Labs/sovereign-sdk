@@ -113,7 +113,7 @@ where
             transaction: TransactionSignedAndRecovered {
                 signer,
                 signed_transaction: evm_tx,
-                block_number: block_env.number,
+                block_number: block_env.number.to::<u64>(),
             },
             receipt,
         };

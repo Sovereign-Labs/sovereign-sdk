@@ -39,12 +39,14 @@ impl<S: Spec> BlockHooks for Evm<S> {
         let cfg = self.cfg.get(state).unwrap_infallible().unwrap_or_default();
 
         let new_pending_env = BlockEnv {
-            number: parent_block.header.number.wrapping_add(1),
+            number: U256::from(parent_block.header.number.wrapping_add(1)),
             beneficiary: cfg.coinbase,
-            timestamp: parent_block
-                .header
-                .timestamp
-                .saturating_add(cfg.block_timestamp_delta),
+            timestamp: U256::from(
+                parent_block
+                    .header
+                    .timestamp
+                    .saturating_add(cfg.block_timestamp_delta),
+            ),
             // WARNING: `prevrandao`` value is predictable up to [`DEFERRED_SLOTS_COUNT`] in advance,
             // Users should follow the same best practice that they would on Ethereum and use future randomness.
             // See: https://eips.ethereum.org/EIPS/eip-4399#tips-for-application-developers
@@ -113,8 +115,8 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
         let header = alloy_consensus::Header {
             parent_hash: parent_block.header.seal(),
-            timestamp: block_env.timestamp,
-            number: block_env.number,
+            timestamp: block_env.timestamp.to::<u64>(),
+            number: block_env.number.to::<u64>(),
             ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: parent_block.header.beneficiary,
             // This will be set in finalize_hook or in the next begin_rollup_block_hook

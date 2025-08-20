@@ -1,6 +1,6 @@
 use alloy_consensus::Transaction;
 use alloy_eips::eip2718::{Decodable2718, Eip2718Error};
-use alloy_primitives::{Address, Bytes, TxKind};
+use alloy_primitives::{Address, Bytes, TxKind, U256};
 use reth_primitives::{Recovered, TransactionSigned};
 use reth_primitives_traits::SignedTransaction;
 use revm::context::{BlockEnv, TransactionType, TxEnv};
@@ -13,9 +13,9 @@ use crate::RlpEvmTransaction;
 impl From<SealedBlock> for BlockEnv {
     fn from(block: SealedBlock) -> Self {
         Self {
-            number: block.header.number,
+            number: U256::from(block.header.number),
             beneficiary: block.header.beneficiary,
-            timestamp: block.header.timestamp,
+            timestamp: U256::from(block.header.timestamp),
             prevrandao: Some(block.header.mix_hash),
             basefee: block.header.base_fee_per_gas.unwrap_or_default(),
             gas_limit: block.header.gas_limit,

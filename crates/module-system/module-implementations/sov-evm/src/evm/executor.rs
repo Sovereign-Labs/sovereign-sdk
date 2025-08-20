@@ -25,7 +25,7 @@ pub(crate) fn get_cfg_env(
     let mut cfg_env = template_cfg.unwrap_or_default();
     cfg_env.chain_id = cfg.chain_id;
     cfg_env.limit_contract_code_size = cfg.limit_contract_code_size;
-    let spec = get_spec_id(cfg.spec, block_env.number);
+    let spec = get_spec_id(cfg.spec, block_env.number.to::<u64>());
     cfg_env.with_spec(spec)
 }
 
@@ -65,5 +65,5 @@ pub(crate) fn inspect<DB: Database<Error = Infallible> + DatabaseCommit>(
         .with_cfg(cfg);
     let mut evm = context.build_mainnet().with_inspector(inspector);
 
-    evm.inspect_with_tx(tx)
+    evm.inspect_tx(tx)
 }

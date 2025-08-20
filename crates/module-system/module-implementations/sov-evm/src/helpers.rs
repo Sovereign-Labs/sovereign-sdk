@@ -5,7 +5,7 @@ use alloy_primitives::{BlockNumber, Sealed};
 use alloy_primitives::{B256, U256};
 use alloy_rpc_types::{Header, TransactionRequest};
 use reth_primitives::{Recovered, Transaction as PrimitiveTransaction, TransactionSigned};
-use reth_rpc_eth_types::revm_utils::CallFees;
+use reth_rpc_convert::{CallFees, EthTxEnvError};
 use reth_rpc_eth_types::EthResult;
 use revm::context::{BlockEnv, TransactionType, TxEnv};
 
@@ -43,7 +43,8 @@ pub(crate) fn prepare_call_env(
         None,
         None,
         None,
-    )?;
+    )
+    .map_err(Into::<EthTxEnvError>::into)?;
 
     let gas_limit = gas.unwrap_or_else(|| block_env.gas_limit.min(u64::MAX));
 

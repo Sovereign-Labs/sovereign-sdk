@@ -1,3 +1,4 @@
+use alloy_primitives::U256;
 use revm::context::{BlockEnv, CfgEnv};
 use revm::primitives::hardfork::SpecId;
 use sov_modules_api::macros::config_value;
@@ -9,7 +10,7 @@ use crate::get_spec_id;
 #[test]
 fn cfg_test() {
     let block_env = BlockEnv {
-        number: 10,
+        number: U256::from(10),
         ..Default::default()
     };
 
