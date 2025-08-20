@@ -13,11 +13,8 @@ use sov_modules_api::transaction::{
 };
 use sov_modules_api::{
     charge_gas_to_deserialize_json, CryptoSpec, DispatchCall, GasMeter, MeteredSignature,
-    ProvableStateReader, Spec, TxHash,
+    ProvableStateReader, SafeString, Spec, TxHash,
 };
-
-/// The application domain for Solana offchain messages (placeholder for now)
-pub const APPLICATION_DOMAIN: [u8; 32] = [0u8; 32];
 
 /// The payload for a solana offchain message.
 /// Essentially a wrapper around `sov_modules_api::transaction::UnsignedTransaction` that also
@@ -34,10 +31,10 @@ pub struct SolanaOffchainUnsignedTransaction<R: TransactionCallable, S: Spec> {
     pub uniqueness: UniquenessData,
     /// Data related to fees and gas handling.
     pub details: TxDetails<S>,
-    /// The chain hash the transaction data was signed with. Because we're not actually using the
-    /// schema to display the transaction, we have to include and validate the hash explicitly.
-    #[serde_as(as = "serde_with::hex::Hex")]
-    pub chain_hash: [u8; 32],
+    /// The chain name, so that users can verify the destination chain and avoid replay attacks
+    /// from malicious chains (if the chain name matches some other chain the use but didn't expect
+    /// to be signing for right now).
+    pub chain_name: SafeString,
 }
 
 impl<R, S> SolanaOffchainUnsignedTransaction<R, S>
@@ -76,6 +73,7 @@ pub struct SolanaOffchainSpecCompliantMessage<S: Spec> {
 pub struct SolanaOffchainSimpleMessage<S: Spec> {
     /// The message is a JSON-serialized SolanaOffchainUnsignedTransaction, unaltered.
     pub signed_message: Vec<u8>,
+    pub chain_hash: [u8; 32],
     pub pubkey: <S::CryptoSpec as CryptoSpec>::PublicKey,
     pub signature: <S::CryptoSpec as CryptoSpec>::Signature,
 }
@@ -101,19 +99,14 @@ impl RawSolanaOffchainMessagePreamble {
     /// Validates a Solana offchain message preamble
     fn validate(&self, actual_message_length: usize) -> Result<(), FatalError> {
         if self.signing_domain != *b"\xffsolana offchain" {
-            return Err(FatalError::DeserializationFailed(format!(
-                "Invalid Solana signing domain in preamble"
-            )));
+            return Err(FatalError::DeserializationFailed(
+                "Invalid Solana signing domain in preamble".to_string(),
+            ));
         }
         // 0 is the only supported header version
         if self.header_version != 0 {
             return Err(FatalError::DeserializationFailed(format!(
                     "Invalid header version in preamble: only version 0 is supported, but version {} was provided", self.header_version
-        )));
-        }
-        if self.application_domain != APPLICATION_DOMAIN {
-            return Err(FatalError::DeserializationFailed(format!(
-                    "Invalid application domain in preamble: supported domain is {}, provided domain was {}", hex::encode(APPLICATION_DOMAIN), hex::encode(self.application_domain)
         )));
         }
         // Format 0 is the ASCII, hw-wallet compatible format
@@ -141,6 +134,7 @@ impl RawSolanaOffchainMessagePreamble {
 struct UnpackedSolanaMessage<S: Spec> {
     pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
     signature: <S::CryptoSpec as CryptoSpec>::Signature,
+    chain_hash: [u8; 32],
     signed_bytes: Vec<u8>,
     json_start: usize,
 }
@@ -213,6 +207,7 @@ fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage
         Ok(UnpackedSolanaMessage {
             pub_key: signer,
             signature: envelope.signature,
+            chain_hash: preamble.application_domain,
             signed_bytes: envelope.signed_message_with_preamble,
             json_start: PREAMBLE_LEN,
         })
@@ -224,6 +219,7 @@ fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage
         Ok(UnpackedSolanaMessage {
             pub_key: raw_message.pubkey,
             signature: raw_message.signature,
+            chain_hash: raw_message.chain_hash,
             signed_bytes: raw_message.signed_message,
             json_start: 0,
         })
@@ -247,6 +243,7 @@ where
 pub fn authenticate<Accessor, S, D>(
     raw_tx: &[u8],
     runtime_chain_hash: &[u8; 32],
+    runtime_chain_name: &'static str,
     state: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError>
 where
@@ -261,14 +258,14 @@ where
     let unpacked_message = unpack_solana_message::<S>(raw_tx)
         .map_err(|e| AuthenticationError::FatalError(e, raw_tx_hash))?;
 
-    let mut json_slice = unpacked_message.json_bytes();
+    let json_slice = unpacked_message.json_bytes();
     charge_gas_to_deserialize_json(json_slice, state).map_err(|e| {
         AuthenticationError::OutOfGas(format!(
             "Transaction deserialization run out of gas: {e}, tx hash {raw_tx_hash}"
         ))
     })?;
     let solana_unsigned_tx = SolanaOffchainUnsignedTransaction::<D, S>::unmetered_deserialize(
-        &mut json_slice,
+        json_slice,
     )
     .map_err(|e| {
         AuthenticationError::FatalError(
@@ -277,9 +274,10 @@ where
         )
     })?;
 
-    let provided_chain_hash = solana_unsigned_tx.chain_hash;
-    let unsigned_tx = solana_unsigned_tx.into_unsigned_tx();
+    let provided_chain_name = solana_unsigned_tx.chain_name.to_string();
+
     // This is useful to be able to reuse some of the standard authenticator's logic
+    let unsigned_tx = solana_unsigned_tx.into_unsigned_tx();
     let reconstructed_tx_v0 = transaction::Version0 {
         runtime_call: unsigned_tx.runtime_call,
         uniqueness: unsigned_tx.uniqueness,
@@ -288,11 +286,21 @@ where
         pub_key: unpacked_message.pub_key,
     };
 
-    if provided_chain_hash != *runtime_chain_hash {
+    if unpacked_message.chain_hash != *runtime_chain_hash {
         return Err(AuthenticationError::FatalError(
             FatalError::InvalidChainHash {
                 expected: hex::encode(runtime_chain_hash),
-                got: hex::encode(provided_chain_hash),
+                got: hex::encode(unpacked_message.chain_hash),
+            },
+            raw_tx_hash,
+        ));
+    }
+
+    if provided_chain_name != runtime_chain_name {
+        return Err(AuthenticationError::FatalError(
+            FatalError::InvalidChainName {
+                expected: runtime_chain_name.to_string(),
+                got: provided_chain_name,
             },
             raw_tx_hash,
         ));
@@ -333,6 +341,8 @@ pub mod test {
     use super::*;
     use crate::utils::make_preamble_for_message;
 
+    const TEST_CHAIN_HASH: [u8; 32] = [0u8; 32];
+
     #[test]
     fn test_unpack_with_preamble() {
         let message = b"{\"test\":\"abcd\"}";
@@ -342,7 +352,7 @@ pub mod test {
         let pubkey = Ed25519PrivateKey::generate().pub_key();
         let signature: Ed25519Signature = [4u8; 64].as_slice().try_into().unwrap();
 
-        let preamble = make_preamble_for_message(pubkey.bytes(), message_len);
+        let preamble = make_preamble_for_message(pubkey.bytes(), &TEST_CHAIN_HASH, message_len);
 
         let mut signed_message = Vec::new();
         signed_message.extend_from_slice(&preamble);
@@ -361,6 +371,7 @@ pub mod test {
         let unpacked = result.unwrap();
         assert_eq!(unpacked.pub_key, pubkey);
         assert_eq!(unpacked.signature, signature);
+        assert_eq!(unpacked.chain_hash, TEST_CHAIN_HASH);
         assert_eq!(unpacked.json_bytes(), message);
         assert_eq!(unpacked.signed_bytes, signed_message);
     }
@@ -375,6 +386,7 @@ pub mod test {
 
         let raw_message = SolanaOffchainSimpleMessage::<TestSpec> {
             signed_message: message.to_vec(),
+            chain_hash: TEST_CHAIN_HASH,
             pubkey: pubkey.clone(),
             signature: signature.clone(),
         };
@@ -387,6 +399,7 @@ pub mod test {
         let unpacked = result.unwrap();
         assert_eq!(unpacked.pub_key, pubkey);
         assert_eq!(unpacked.signature, signature);
+        assert_eq!(unpacked.chain_hash, TEST_CHAIN_HASH);
         assert_eq!(unpacked.json_bytes(), message);
         assert_eq!(unpacked.signed_bytes, message);
     }
@@ -402,7 +415,7 @@ pub mod test {
         let mut header = Vec::<u8>::new();
         header.extend(b"\xffsolanaXoffchain"); // Wrong domain
         header.push(0);
-        header.extend(APPLICATION_DOMAIN);
+        header.extend(TEST_CHAIN_HASH);
         header.push(0);
         header.push(1);
         header.extend(pubkey.bytes());

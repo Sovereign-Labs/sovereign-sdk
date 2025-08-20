@@ -198,6 +198,15 @@ pub enum FatalError {
         /// The actual chain id
         got: String,
     },
+    /// The chain name was invalid. Not every type of transaction will be able to throw this (some
+    /// will just implicitly fail signature checks).
+    #[error("Invalid chain name: expected {expected}, got {got}")]
+    InvalidChainName {
+        /// The expected chain id
+        expected: String,
+        /// The actual chain id
+        got: String,
+    },
     /// Transaction decoding failed.
     #[error("Transaction decoding error: {0}")]
     MessageDecodingFailed(String),

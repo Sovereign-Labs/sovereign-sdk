@@ -159,8 +159,6 @@ pub mod third_test_module {
     pub trait ModuleThreeStorable:
         borsh::BorshSerialize
         + borsh::BorshDeserialize
-        + serde::Serialize
-        + for<'a> serde::Deserialize<'a>
         + UniversalWallet
         + schemars::JsonSchema
         + core::fmt::Debug

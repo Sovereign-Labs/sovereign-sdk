@@ -237,6 +237,54 @@ pub(crate) fn get_generics_type_param(
     Ok(generic_param.clone())
 }
 
+/// Builds a string that adds a `Spec` bound to the first generic, and
+/// `serde::Serialize + serde::Deserialize` bounds to every other.
+/// This is useful because the Spec trait includes a built-in bound on Deserialize, which causes
+/// issues when serde auto-generates `S: Deserialize` bounds by default. So we have to override
+/// this for S only, while ensuring we keep the normal Serialize + Deserialize bounds on every
+/// other generic.
+pub(crate) fn get_serde_bounds_str(
+    generics: &syn::Generics,
+    unique_lifetime_name: &str,
+) -> syn::Result<String> {
+    let mut params = generics.params.iter();
+
+    // First parameter is assumed to be the Spec
+    let spec_ident = match params.next() {
+        Some(syn::GenericParam::Type(type_param)) => type_param.ident.clone(),
+        Some(syn::GenericParam::Lifetime(lf)) => {
+            return Err(syn::Error::new_spanned(
+                lf,
+                "Expected type parameter, found lifetime parameter",
+            ));
+        }
+        Some(syn::GenericParam::Const(cnst)) => {
+            return Err(syn::Error::new_spanned(
+                cnst,
+                "Expected type parameter, found const parameter",
+            ));
+        }
+        None => {
+            return Err(syn::Error::new_spanned(
+                generics,
+                "No generic parameters found",
+            ));
+        }
+    };
+    let mut all_bounds = vec![format!("{}: sov_modules_api::module::Spec", spec_ident)];
+
+    // Collect other type parameters that need serde bounds
+    let other_bounds: Vec<String> = params.filter_map(|generic| match generic {
+        syn::GenericParam::Type(type_param) => {
+            Some(format!("{}: serde::Serialize + for<'{unique_lifetime_name}> serde::Deserialize<'{unique_lifetime_name}>", type_param.ident))
+        },
+        syn::GenericParam::Lifetime(_) | syn::GenericParam::Const(_) => None,
+    }).collect();
+
+    all_bounds.extend(other_bounds);
+    Ok(all_bounds.join(", "))
+}
+
 pub(crate) fn get_derived_enum_attrs(
     ident: &str,
     input: &syn::DeriveInput,

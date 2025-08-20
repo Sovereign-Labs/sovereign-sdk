@@ -7,6 +7,7 @@ use sov_modules_api::capabilities::{
     AuthenticationError, BatchFromUnregisteredSequencer, FatalError, TransactionAuthenticator,
     UnregisteredAuthenticationError,
 };
+use sov_modules_api::macros::config_value;
 use sov_modules_api::{DispatchCall, FullyBakedTx, ProvableStateReader, RawTx, Runtime, Spec};
 
 /// Indicates that a runtime supports the `SolanaOffchain` transaction authenticator
@@ -90,6 +91,7 @@ where
                     crate::authentication::authenticate::<Accessor, S, Rt>(
                         &tx.data,
                         &Rt::CHAIN_HASH,
+                        config_value!("CHAIN_NAME"),
                         state,
                     )?;
 

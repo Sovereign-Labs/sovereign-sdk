@@ -2,8 +2,8 @@ use proc_macro2::Span;
 use syn::DeriveInput;
 
 use crate::common::{
-    get_derived_enum_attrs, get_generics_type_param, pascal_case_ident, StructDef,
-    StructFieldExtractor, CALL,
+    get_derived_enum_attrs, get_generics_type_param, get_serde_bounds_str, pascal_case_ident,
+    StructDef, StructFieldExtractor, CALL,
 };
 
 impl StructDef<'_> {
@@ -127,6 +127,7 @@ impl DispatchCallMacro {
         &self,
         input: DeriveInput,
     ) -> syn::Result<proc_macro::TokenStream> {
+        let serde_bounds_str = get_serde_bounds_str(&input.generics, "_dispatch_call_de")?;
         let default_attrs = vec![
             quote::quote! {
                 #[
@@ -153,7 +154,7 @@ impl DispatchCallMacro {
                 #[sov_wallet(template_inherit)]
             },
             quote::quote! {
-                #[serde(bound = "", rename_all = "snake_case")]
+                #[serde(bound = #serde_bounds_str, rename_all = "snake_case")]
             },
             quote::quote! {
                 #[strum_discriminants(derive(
@@ -167,6 +168,7 @@ impl DispatchCallMacro {
         ];
 
         let enum_attributes = get_derived_enum_attrs("dispatch_call", &input, default_attrs)?;
+
         let DeriveInput {
             data,
             ident,

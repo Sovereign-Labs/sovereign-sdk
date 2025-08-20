@@ -1,13 +1,17 @@
-use crate::authentication::APPLICATION_DOMAIN;
-
-pub fn make_preamble_for_message(pubkey: &[u8; 32], message_length: u16) -> [u8; 85] {
+/// Generate the header that needs to be pre-pended to the message when serializing according to
+/// the Ledger-compatible spec.
+pub fn make_preamble_for_message(
+    pubkey: &[u8; 32],
+    chain_hash: &[u8; 32],
+    message_length: u16,
+) -> [u8; 85] {
     let mut header = Vec::<u8>::new();
     // Signing domain (pre-defined constant)
     header.extend(b"\xffsolana offchain");
     // Header version (only 0 is valid)
     header.push(0);
     // Application domain
-    header.extend(APPLICATION_DOMAIN);
+    header.extend(chain_hash);
     // Message format - 0 is for ASCII, hardware wallet compatible
     header.push(0);
     // Signer count

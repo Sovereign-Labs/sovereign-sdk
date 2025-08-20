@@ -192,7 +192,7 @@ fn create_transfer_tx_json(amount: Amount, recipient: &str) -> String {
         runtime_call: unsigned_tx.runtime_call,
         uniqueness: unsigned_tx.uniqueness,
         details: unsigned_tx.details,
-        chain_hash: RT::CHAIN_HASH,
+        chain_name: config_value!("CHAIN_NAME").to_string().try_into().unwrap(),
     };
 
     serde_json::to_string(&solana_unsigned_tx).unwrap()
@@ -262,6 +262,7 @@ async fn test_submit_ledger_signed_transaction() {
 
         let message = SolanaOffchainSimpleMessage::<S> {
             signed_message: encoded_tx,
+            chain_hash: RT::CHAIN_HASH,
             pubkey,
             signature,
         };
@@ -281,7 +282,7 @@ async fn test_submit_ledger_signed_transaction() {
     // updated.)
     assert_eq!(
         transfer_json_tx,
-        r#"{"runtime_call":{"bank":{"transfer":{"to":"4zdwHNaEa5npHtRtaZ3RL1m6rptuQZ6RBLHG6cAyVHjL","coins":{"amount":"5000","token_id":"token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"}}}},"uniqueness":{"generation":0},"details":{"max_priority_fee_bips":0,"max_fee":"100000000000","gas_limit":[1000000000,1000000000],"chain_id":4321},"chain_hash":"0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"}"#
+        r#"{"runtime_call":{"bank":{"transfer":{"to":"4zdwHNaEa5npHtRtaZ3RL1m6rptuQZ6RBLHG6cAyVHjL","coins":{"amount":"5000","token_id":"token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"}}}},"uniqueness":{"generation":0},"details":{"max_priority_fee_bips":0,"max_fee":"100000000000","gas_limit":[1000000000,1000000000],"chain_id":4321},"chain_name":"TestChain"}"#
     );
     let encoded_tx = transfer_json_tx.as_bytes().to_vec();
     let pubkey: [u8; 32] = bs58::decode(LEDGER_ADDRESS)
@@ -290,7 +291,7 @@ async fn test_submit_ledger_signed_transaction() {
         .try_into()
         .unwrap();
     let signature: Ed25519Signature = bs58::decode(
-        "5K7i3PTJM1DDACVEuke2jXrkSutGEKb5ByyiNwBXQXiERZi8hFxnFARdnH21qr4yGgdmZygY9SyJQc6SPbJbZCrX",
+        "3GBYQrmcKtUiXAQLz2bUR55Kh7YfgUy2g199ePXYSUHbRHLAsdjcTctSrt98oiA79nZVQU79AbBpiKU23Z2UTstQ",
     )
     .into_vec()
     .unwrap()
@@ -299,7 +300,7 @@ async fn test_submit_ledger_signed_transaction() {
     .unwrap();
 
     let mut signed_message_with_preamble =
-        make_preamble_for_message(&pubkey, encoded_tx.len() as u16).to_vec();
+        make_preamble_for_message(&pubkey, &RT::CHAIN_HASH, encoded_tx.len() as u16).to_vec();
     signed_message_with_preamble.extend_from_slice(&encoded_tx);
 
     let message = SolanaOffchainSpecCompliantMessage::<S> {
@@ -348,6 +349,7 @@ async fn test_submit_raw_signed_message_transaction() {
 
     let message = SolanaOffchainSimpleMessage::<S> {
         signed_message: encoded_tx,
+        chain_hash: RT::CHAIN_HASH,
         pubkey,
         signature,
     };
@@ -383,6 +385,7 @@ async fn test_submit_invalid_raw_signed_message_transaction() {
 
     let message = SolanaOffchainSimpleMessage::<S> {
         signed_message: encoded_tx,
+        chain_hash: RT::CHAIN_HASH,
         pubkey,
         signature,
     };

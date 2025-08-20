@@ -2,7 +2,8 @@ use proc_macro2::Span;
 use syn::{DeriveInput, ImplGenerics, TypeGenerics, WhereClause};
 
 use crate::common::{
-    get_derived_enum_attrs, get_generics_type_param, StructFieldExtractor, StructNamedField,
+    get_derived_enum_attrs, get_generics_type_param, get_serde_bounds_str, StructFieldExtractor,
+    StructNamedField,
 };
 
 pub(crate) struct GenesisMacro {
@@ -20,12 +21,13 @@ impl GenesisMacro {
         &self,
         input: DeriveInput,
     ) -> syn::Result<proc_macro::TokenStream> {
+        let serde_bounds_str = get_serde_bounds_str(&input.generics, "_genesis_de")?;
         let default_attrs = vec![
             quote::quote! {
                 #[derive(Clone, ::serde::Deserialize, ::serde::Serialize)]
             },
             quote::quote! {
-                #[serde(bound = "")]
+                #[serde(bound = #serde_bounds_str)]
             },
         ];
         let config_attributes = get_derived_enum_attrs("genesis", &input, default_attrs)?;
