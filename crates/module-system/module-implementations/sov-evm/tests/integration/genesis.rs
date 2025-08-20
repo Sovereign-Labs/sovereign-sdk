@@ -2,7 +2,7 @@ use alloy_consensus::constants::{EMPTY_RECEIPTS, EMPTY_TRANSACTIONS, KECCAK_EMPT
 use alloy_consensus::{BlockHeader, Header, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
 use alloy_eips::eip1559::{BaseFeeParams, ETHEREUM_BLOCK_GAS_LIMIT_30M};
 use alloy_primitives::{Address, Bloom, Bytes, B256, B64, U256};
-use revm::primitives::AccountInfo;
+use revm::state::AccountInfo;
 use revm::Database;
 use sov_evm::{AccountData, Evm, EvmChainConfig, EvmConfig, SpecId};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;

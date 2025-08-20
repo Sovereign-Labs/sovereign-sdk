@@ -29,14 +29,16 @@ impl<Ws: InfallibleStateAccessor, S: Spec> InitEvmDb for EvmDb<Ws, S> {
 }
 
 #[cfg(test)]
-impl InitEvmDb for revm::db::CacheDB<revm::db::EmptyDB> {
+impl InitEvmDb for revm::database::CacheDB<revm::database::EmptyDB> {
     fn insert_account_info(&mut self, sender: Address, acc: AccountInfo) {
         self.insert_account_info(sender, acc);
     }
 
     fn insert_code(&mut self, code_hash: B256, code: Bytes) {
-        use revm::primitives::Bytecode;
+        use revm::state::Bytecode;
 
-        self.contracts.insert(code_hash, Bytecode::new_raw(code));
+        self.cache
+            .contracts
+            .insert(code_hash, Bytecode::new_raw(code));
     }
 }

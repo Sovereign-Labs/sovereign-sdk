@@ -1,7 +1,8 @@
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_primitives::{Bytes, TxKind};
-use revm::primitives::{BlockEnv, CfgEnv, CfgEnvWithHandlerCfg, ExecutionResult, HandlerCfg};
+use revm::context::result::ExecutionResult;
+use revm::context::{BlockEnv, CfgEnv};
 use sov_evm::{convert_to_transaction_signed, executor, EthereumAuthenticator, Evm, SpecId};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
@@ -52,19 +53,14 @@ fn test_invalid_contract_execution() {
             access_list: Default::default(),
         });
         let (signed_eth_tx, _) = account.sign(tx_request);
-        let mut cfg_env_with_handler = CfgEnvWithHandlerCfg::new(
-            CfgEnv::default(),
-            HandlerCfg {
-                spec_id: SpecId::SHANGHAI,
-            },
-        );
-        cfg_env_with_handler.chain_id = config_value!("CHAIN_ID");
+        let cfg_env =
+            CfgEnv::new_with_spec(SpecId::SHANGHAI).with_chain_id(config_value!("CHAIN_ID"));
         let result = executor::execute_tx(
             &mut evm_db,
             &BlockEnv::default(),
             &convert_to_transaction_signed(signed_eth_tx).unwrap(),
             account.address(),
-            cfg_env_with_handler,
+            cfg_env,
         )
         .unwrap();
         assert!(matches!(result, ExecutionResult::Revert { .. }));

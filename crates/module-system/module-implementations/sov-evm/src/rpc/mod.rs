@@ -24,10 +24,10 @@ use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{ApiStateAccessor, InfallibleStateAccessor, Spec};
 use tracing::{debug, trace};
 
-use crate::call::get_cfg_env_with_handler;
 use crate::evm::db::EvmDb;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, SealedBlock, TransactionSignedAndRecovered};
+use crate::executor::get_cfg_env;
 use crate::helpers::{
     from_primitive_with_hash, from_recovered_with_block_context, prepare_call_env,
 };
@@ -396,7 +396,7 @@ where
         let tx_env = prepare_call_env(&block_env, request.clone()).unwrap();
 
         let cfg = self.cfg.get(state).unwrap_infallible().unwrap_or_default();
-        let cfg_env = get_cfg_env_with_handler(&block_env, cfg, Some(get_cfg_env_template()));
+        let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
 
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
@@ -444,8 +444,7 @@ where
         trace!(?tx_env, "TxEnv is prepared");
 
         let cfg = self.cfg.get(state).unwrap_infallible().unwrap_or_default();
-        let cfg_env_with_handler =
-            get_cfg_env_with_handler(&block_env, cfg, Some(get_cfg_env_template()));
+        let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
 
         let request_gas = request.gas;
         let request_gas_price = request.gas_price;
@@ -510,12 +509,7 @@ where
         let evm_db = self.get_db(state);
 
         // execute the call without writing to db
-        let result = executor::inspect(
-            evm_db,
-            &block_env,
-            tx_env.clone(),
-            cfg_env_with_handler.clone(),
-        );
+        let result = executor::inspect(evm_db, &block_env, tx_env.clone(), cfg_env.clone());
 
         // Exceptional case: init used too much gas, we need to increase the gas limit and try
         // again
@@ -526,10 +520,7 @@ where
             if request_gas.is_some() || request_gas_price.is_some() {
                 let evm_db = self.get_db(state);
                 return Err(eth_api_into_rpc_error(map_out_of_gas_err(
-                    block_env,
-                    tx_env,
-                    cfg_env_with_handler,
-                    evm_db,
+                    block_env, tx_env, cfg_env, evm_db,
                 )));
             }
         }
@@ -549,10 +540,7 @@ where
                     return if request_gas.is_some() || request_gas_price.is_some() {
                         let evm_db = self.get_db(state);
                         Err(eth_api_into_rpc_error(map_out_of_gas_err(
-                            block_env,
-                            tx_env,
-                            cfg_env_with_handler,
-                            evm_db,
+                            block_env, tx_env, cfg_env, evm_db,
                         )))
                     } else {
                         // the transaction did revert
@@ -589,12 +577,7 @@ where
             tx_env.gas_limit = mid_gas_limit;
 
             let evm_db = self.get_db(state);
-            let result = executor::inspect(
-                evm_db,
-                &block_env,
-                tx_env.clone(),
-                cfg_env_with_handler.clone(),
-            );
+            let result = executor::inspect(evm_db, &block_env, tx_env.clone(), cfg_env.clone());
 
             // Exceptional case: init used too much gas, we need to increase the gas limit and try
             // again
@@ -764,7 +747,7 @@ pub(crate) fn build_rpc_receipt(
 fn map_out_of_gas_err<Ws: InfallibleStateAccessor, S: Spec>(
     block_env: BlockEnv,
     mut tx_env: TxEnv,
-    cfg_env_with_handler: CfgEnvWithHandlerCfg,
+    cfg_env: CfgEnv,
     db: EvmDb<Ws, S>,
 ) -> EthApiError
 where
@@ -772,7 +755,7 @@ where
 {
     let req_gas_limit = tx_env.gas_limit;
     tx_env.gas_limit = block_env.gas_limit;
-    let res = executor::inspect(db, &block_env, tx_env, cfg_env_with_handler).unwrap();
+    let res = executor::inspect(db, &block_env, tx_env, cfg_env).unwrap();
     match res.result {
         ExecutionResult::Success { .. } => {
             // a transaction succeeded by manually increasing the gas limit to

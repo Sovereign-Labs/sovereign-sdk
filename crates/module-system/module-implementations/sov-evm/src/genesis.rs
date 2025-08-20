@@ -216,7 +216,7 @@ mod tests {
     use std::str::FromStr;
 
     use alloy_primitives::{Address, Bytes};
-    use revm::primitives::SpecId;
+    use revm::primitives::hardfork::SpecId;
     use sov_modules_api::prelude::serde_json;
 
     use crate::{AccountData, EvmConfig};

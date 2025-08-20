@@ -1,15 +1,15 @@
-use alloy_primitives::U256;
-use revm::primitives::{BlockEnv, CfgEnv, HandlerCfg, SpecId};
+use revm::context::{BlockEnv, CfgEnv};
+use revm::primitives::hardfork::SpecId;
 use sov_modules_api::macros::config_value;
 
-use crate::call::get_cfg_env_with_handler;
 use crate::evm::EvmChainConfig;
+use crate::executor::get_cfg_env;
 use crate::get_spec_id;
 
 #[test]
 fn cfg_test() {
     let block_env = BlockEnv {
-        number: U256::from(10),
+        number: 10,
         ..Default::default()
     };
 
@@ -23,20 +23,15 @@ fn cfg_test() {
     template_cfg_env.chain_id = 2;
     template_cfg_env.disable_base_fee = true;
 
-    let cfg_env_with_hanlder = get_cfg_env_with_handler(&block_env, cfg, Some(template_cfg_env));
+    let cfg_env = get_cfg_env(&block_env, cfg, Some(template_cfg_env));
 
     let mut expected_cfg_env = CfgEnv::default();
     expected_cfg_env.chain_id = config_value!("CHAIN_ID");
     expected_cfg_env.disable_base_fee = true;
     expected_cfg_env.limit_contract_code_size = Some(100);
+    expected_cfg_env.spec = SpecId::SHANGHAI;
 
-    assert_eq!(expected_cfg_env, cfg_env_with_hanlder.cfg_env);
-
-    let expected_handler_cfg = HandlerCfg {
-        spec_id: SpecId::SHANGHAI,
-    };
-
-    assert_eq!(expected_handler_cfg, cfg_env_with_hanlder.handler_cfg);
+    assert_eq!(expected_cfg_env, cfg_env);
 }
 
 #[test]
