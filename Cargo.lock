@@ -15181,6 +15181,7 @@ dependencies = [
 name = "workspace-hack"
 version = "0.3.0"
 dependencies = [
+ "ethereum-types",
  "sov-accounts",
  "sov-evm",
  "sov-mock-da",

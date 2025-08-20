@@ -17,6 +17,7 @@ sov-sequencer-registry = { workspace = true, features = [
 	"arbitrary",
 	"native",
 ] }
+ethereum-types = { workspace = true, features = ["arbitrary"] }
 
 [lints]
 workspace = true
