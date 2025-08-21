@@ -260,7 +260,7 @@ impl PreValidationOutput {
 /// 1. Checks that blobs quantity matches inclusion proofs quantity.
 /// 2. Checks that row roots are non-empty for non-empty blobs slice.
 /// 3. Handles the case of an empty blobs slice and verifies absence proof.
-///    In this case returns `Ok(None)` and the caller can exit early.
+///    In this case returns `PreValidationOutput::EarlyReturn` and the caller can exit early.
 fn prevalidate_blobs(
     namespace_row_roots: &[&NamespacedHash],
     blobs: &[BlobWithSender],
