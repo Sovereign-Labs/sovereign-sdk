@@ -105,12 +105,16 @@ impl TestClient {
         contract_address: H160,
         set_arg: u32,
     ) -> PendingTransaction<'_, Http> {
+        // TODO: Re-evaluate if it's still needed after we migrate from ethers
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+        tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
+
         // Tx without gas_limit should estimate and include it in send_transaction endpoint
-        // Tx without nonce should fetch and include it in send_transaction endpoint
         let req = Eip1559TransactionRequest::new()
             .from(self.from_addr)
             .to(contract_address)
             .chain_id(self.chain_id)
+            .nonce(nonce)
             .data(self.contract.set_call_data(set_arg))
             .max_priority_fee_per_gas(10u64)
             .max_fee_per_gas(TEST_DEFAULT_MAX_FEE.0);
