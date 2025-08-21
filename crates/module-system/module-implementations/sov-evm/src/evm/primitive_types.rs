@@ -36,6 +36,7 @@ pub struct TransactionSignedAndRecovered {
     /// Signer of the transaction
     pub(crate) signer: Address,
     /// Signed transaction
+    /// https://reth.rs/docs/reth_primitives/serde_bincode_compat/index.html
     #[serde_as(as = "EthereumTxEnvelopeBincodeCompat")]
     pub(crate) signed_transaction: TransactionSigned,
     /// Block the transaction was added to
@@ -53,6 +54,7 @@ impl TransactionSignedAndRecovered {
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Block {
     /// Block header.
+    /// https://reth.rs/docs/reth_primitives/serde_bincode_compat/index.html
     #[serde_as(as = "HeaderBincodeCompat")]
     pub(crate) header: Header,
 
@@ -114,6 +116,7 @@ impl<'de> serde::Deserialize<'de> for SealedBlock {
         #[serde_as]
         #[derive(serde::Deserialize)]
         struct Raw {
+            /// https://reth.rs/docs/reth_primitives/serde_bincode_compat/index.html
             #[serde_as(as = "HeaderBincodeCompat")]
             header: Header,
             seal: B256,
@@ -135,6 +138,7 @@ impl<'de> serde::Deserialize<'de> for SealedBlock {
 #[serde_as]
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Receipt {
+    /// https://reth.rs/docs/reth_primitives/serde_bincode_compat/index.html
     #[serde_as(as = "ReceiptBincodeCompat")]
     pub receipt: reth_primitives::Receipt,
     pub gas_used: u64,
