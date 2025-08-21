@@ -103,10 +103,11 @@ impl RawSolanaOffchainMessagePreamble {
                 "Invalid Solana signing domain in preamble".to_string(),
             ));
         }
-        // 0 is the only supported header version
-        if self.header_version != 0 {
+        // 0 and 1 are the supported header versions
+        // Version 1 added newline support to ASCII messages, and is otherwise identical
+        if self.header_version != 0 && self.header_version != 1 {
             return Err(FatalError::DeserializationFailed(format!(
-                    "Invalid header version in preamble: only version 0 is supported, but version {} was provided", self.header_version
+                    "Invalid header version in preamble: only versions 0 and 1 are supported, but version {} was provided", self.header_version
         )));
         }
         // Format 0 is the ASCII, hw-wallet compatible format
