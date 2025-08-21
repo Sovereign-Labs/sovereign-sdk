@@ -1,6 +1,8 @@
 use core::fmt;
 use std::collections::HashMap;
 
+use crate::state::accessors::StateMetricsProvider;
+use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_state::{
     namespaces, AccessSize, IsValueCached, Namespace, ProvableStorageCache, SlotKey, SlotValue,
     StateAccesses, Storage,
@@ -70,6 +72,7 @@ impl<S: Storage> Delta<S> {
             AccessoryDelta {
                 writes: accessory_writes,
                 storage: inner.clone(),
+                metrics: StateMetrics::default(),
             },
             witness,
             inner,
@@ -124,38 +127,58 @@ impl<S: Storage> Delta<S> {
         }
     }
 
-    pub fn get_size(&mut self, namespace: Namespace, key: &SlotKey) -> Option<u32> {
+    pub fn get_size(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<u32> {
         match namespace {
-            Namespace::User => self
-                .user_cache
-                .get_size_or_fetch(key, &self.inner, &self.witness),
+            Namespace::User => {
+                self.user_cache
+                    .get_size_or_fetch(key, &self.inner, &self.witness, metric)
+            }
             Namespace::Kernel => {
                 self.kernel_cache
-                    .get_size_or_fetch(key, &self.inner, &self.witness)
+                    .get_size_or_fetch(key, &self.inner, &self.witness, metric)
             }
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
                 Some(Some(value)) => Some(value.size()),
                 Some(None) => None,
                 None => {
                     let val = self.inner.get_accessory(key);
-                    val.map(|v| v.size())
+                    let size = val.map(|v| v.size());
+                    metric.storage_read_size = Some(size.unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
+                    size
                 }
             },
         }
     }
 
-    pub fn get(&mut self, namespace: Namespace, key: &SlotKey) -> Option<SlotValue> {
+    pub fn get(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
         match namespace {
-            Namespace::User => self
-                .user_cache
-                .get_or_fetch(key, &self.inner, &self.witness),
-            Namespace::Kernel => self
-                .kernel_cache
-                .get_or_fetch(key, &self.inner, &self.witness),
+            Namespace::User => {
+                self.user_cache
+                    .get_or_fetch(key, &self.inner, &self.witness, metric)
+            }
+            Namespace::Kernel => {
+                self.kernel_cache
+                    .get_or_fetch(key, &self.inner, &self.witness, metric)
+            }
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
                 Some(Some(value)) => Some(value),
                 Some(None) => None,
-                None => self.inner.get_accessory(key),
+                None => {
+                    let val = self.inner.get_accessory(key);
+                    let size = val.as_ref().map(|v| v.size());
+                    metric.storage_read_size = Some(size.unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
+                    val
+                }
             },
         }
     }
@@ -191,6 +214,13 @@ impl<S: Storage> fmt::Debug for Delta<S> {
 pub struct AccessoryDelta<S: Storage> {
     writes: HashMap<SlotKey, Option<SlotValue>>,
     storage: S,
+    metrics: StateMetrics,
+}
+
+impl<S: Storage> StateMetricsProvider for AccessoryDelta<S> {
+    fn metrics(&mut self) -> &mut StateMetrics {
+        &mut self.metrics
+    }
 }
 
 impl<S: Storage> AccessoryDelta<S> {
@@ -201,21 +231,34 @@ impl<S: Storage> AccessoryDelta<S> {
 }
 
 impl<S: Storage> UniversalStateAccessor for AccessoryDelta<S> {
-    fn get_size(&mut self, _namespace: Namespace, key: &SlotKey) -> Option<u32> {
+    fn get_size(
+        &mut self,
+        _namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<u32> {
         if let Some(value) = self.writes.get(key) {
             return value.clone().map(|v| v.size());
         }
 
         let val = self.storage.get_accessory(key);
+        metric.storage_read_size = Some(val.as_ref().map(|v| v.size()).unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
         val.map(|v| v.size())
     }
 
-    fn get_value(&mut self, _namespace: Namespace, key: &SlotKey) -> Option<SlotValue> {
+    fn get_value(
+        &mut self,
+        _namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
         if let Some(value) = self.writes.get(key) {
             return value.clone();
         }
 
-        self.storage.get_accessory(key)
+        let val = self.storage.get_accessory(key);
+        metric.storage_read_size = Some(val.as_ref().map(|v| v.size()).unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
+        val
     }
 
     fn set_value(&mut self, _namespace: Namespace, key: &SlotKey, value: SlotValue) {
@@ -293,19 +336,29 @@ impl<T> UniversalStateAccessor for RevertableWriter<T>
 where
     T: UniversalStateAccessor,
 {
-    fn get_size(&mut self, namespace: Namespace, key: &SlotKey) -> Option<u32> {
+    fn get_size(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<u32> {
         if let Some(value) = self.writes.get(&(key.clone(), namespace)) {
             value.as_ref().map(|v| v.size())
         } else {
-            <T as UniversalStateAccessor>::get_size(&mut self.inner, namespace, key)
+            <T as UniversalStateAccessor>::get_size(&mut self.inner, namespace, key, metric)
         }
     }
 
-    fn get_value(&mut self, namespace: Namespace, key: &SlotKey) -> Option<SlotValue> {
+    fn get_value(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
         if let Some(value) = self.writes.get(&(key.clone(), namespace)) {
             value.clone()
         } else {
-            <T as UniversalStateAccessor>::get_value(&mut self.inner, namespace, key)
+            <T as UniversalStateAccessor>::get_value(&mut self.inner, namespace, key, metric)
         }
     }
 
@@ -328,5 +381,10 @@ where
         } else {
             self.inner.get_cached::<T>()
         }
+    }
+}
+impl<C: StateMetricsProvider> StateMetricsProvider for RevertableWriter<C> {
+    fn metrics(&mut self) -> &mut StateMetrics {
+        self.inner.metrics()
     }
 }

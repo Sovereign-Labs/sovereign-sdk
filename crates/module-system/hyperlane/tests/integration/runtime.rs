@@ -181,7 +181,7 @@ pub fn sign(digest: [u8; 32], sk: &SecretKey) -> ValidatorSignature {
 
     let mut bytes = [0u8; 65];
     bytes[..64].copy_from_slice(&sig_bytes);
-    bytes[64] = recovery_id.to_i32() as u8;
+    bytes[64] = recovery_id as u8;
     HexString(bytes)
 }
 

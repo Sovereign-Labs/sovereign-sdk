@@ -158,7 +158,7 @@ where
         let (blobs_sender_channel, _) =
             broadcast::channel(config.sequencer_kind_config.events_channel_size);
 
-        let mut db = PreferredSequencerDb::new(
+        let db = PreferredSequencerDb::new(
             shutdown_sender.clone(),
             config.sequencer_kind_config.is_replica,
             storage_path,
@@ -166,7 +166,7 @@ where
         )
         .await?;
 
-        let (_latest_db_event_id, next_sequence_number, db_cache) = db.initial_data().await?;
+        let (next_sequence_number, db_cache) = db.initial_data().await?;
 
         let mut handles = vec![];
 

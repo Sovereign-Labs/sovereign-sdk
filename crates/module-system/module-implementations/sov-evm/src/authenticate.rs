@@ -1,7 +1,11 @@
 use std::marker::PhantomData;
 
+use alloy_consensus::Transaction;
+use alloy_eips::eip2718::Decodable2718;
+use alloy_primitives::Address;
 use borsh::{BorshDeserialize, BorshSerialize};
 use reth_primitives::TransactionSigned;
+use reth_primitives_traits::SignerRecoverable;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::capabilities::{
     self, fatal_deserialization_error, AuthenticationOutput, AuthorizationData,
@@ -29,11 +33,15 @@ use crate::{call, CallMessage, RlpEvmTransaction};
 fn recover_evm_signer(
     tx: &TransactionSigned,
     tx_hash: TxHash,
-) -> Result<reth_primitives::Address, AuthenticationError> {
-    tx.recover_signer().ok_or(AuthenticationError::FatalError(
-        FatalError::SigVerificationFailed(format!("Invalid ethereum signature: tx hash {tx_hash}")),
-        tx_hash,
-    ))
+) -> Result<Address, AuthenticationError> {
+    tx.recover_signer().map_err(|_| {
+        AuthenticationError::FatalError(
+            FatalError::SigVerificationFailed(format!(
+                "Invalid ethereum signature: tx hash {tx_hash}"
+            )),
+            tx_hash,
+        )
+    })
 }
 
 /// Creates the transaction details for an EVM transaction.
@@ -48,7 +56,7 @@ fn create_evm_tx_details<S: Spec>() -> TxDetails<S> {
 
 /// Extracts EVM authorization data from a verified transaction.
 fn extract_evm_authorization_data<S: Spec>(
-    signer: reth_primitives::Address,
+    signer: Address,
     tx_hash: TxHash,
     nonce: u64,
 ) -> AuthorizationData<S>
@@ -84,7 +92,7 @@ where
 
     let (rlp, tx) = decode_evm_tx(raw_tx)
         .map_err(|e| fatal_deserialization_error::<Accessor, S, _>(raw_tx, e, state))?;
-    let hash = TxHash::new(tx.hash().into());
+    let hash = TxHash::new(**tx.hash());
 
     let signer = recover_evm_signer(&tx, hash)?;
 
@@ -112,7 +120,7 @@ pub fn decode_evm_tx(raw_tx: &[u8]) -> Result<(RlpEvmTransaction, TransactionSig
         ));
     }
 
-    let tx = TransactionSigned::decode_enveloped(&mut &tx_data.rlp[..])
+    let tx = TransactionSigned::decode_2718(&mut &tx_data.rlp[..])
         .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
     Ok((tx_data, tx))
@@ -225,7 +233,7 @@ where
         match input {
             EvmAuthenticatorInput::Evm(tx) => {
                 let (_rlp, tx) = decode_evm_tx(&tx.data)?;
-                Ok(TxHash::new(tx.hash().into()))
+                Ok(TxHash::new(**tx.hash()))
             }
             EvmAuthenticatorInput::Standard(tx) => Ok(capabilities::calculate_hash::<S>(&tx.data)),
         }

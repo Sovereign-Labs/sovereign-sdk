@@ -1,14 +1,15 @@
 use std::str::FromStr;
 
-use alloy_primitives::TxKind;
+use alloy_consensus::{EthereumTxEnvelope, Signed, TxEip1559};
+use alloy_primitives::{Address, Signature, TxKind, U256};
+use alloy_rpc_types::request::TransactionInput;
+use alloy_rpc_types::TransactionRequest;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
 use ethers_core::types::{Bytes, Eip1559TransactionRequest};
 use ethers_core::utils::rlp::Rlp;
 use ethers_signers::{LocalWallet, Signer};
-use reth_primitives::revm_primitives::{BlockEnv, TransactTo, TxEnv};
-use reth_primitives::{Address, TransactionSignedEcRecovered, U256};
-use reth_rpc_types::request::TransactionInput;
-use reth_rpc_types::TransactionRequest;
+use reth_primitives::{Recovered, TransactionSigned};
+use revm::context::{BlockEnv, TransactTo, TransactionType, TxEnv};
 use sov_modules_api::macros::config_value;
 
 use crate::evm::primitive_types::TransactionSignedAndRecovered;
@@ -57,11 +58,15 @@ fn tx_conversion() {
     let signer = Address::random();
     let tx = TransactionSignedAndRecovered {
         signer,
-        signed_transaction: reth_primitives::TransactionSigned::default(),
+        signed_transaction: EthereumTxEnvelope::Eip1559(Signed::new_unchecked(
+            TxEip1559::default(),
+            Signature::test_signature(),
+            Default::default(),
+        )),
         block_number: 5u64,
     };
 
-    let reth_tx: TransactionSignedEcRecovered = tx.into();
+    let reth_tx: Recovered<TransactionSigned> = tx.into();
 
     assert_eq!(signer, reth_tx.signer());
 }
@@ -93,29 +98,27 @@ fn prepare_call_env_conversion() {
 
     let tx_env = prepare_call_env(&block_env, request).unwrap();
     let expected = TxEnv {
+        tx_type: TransactionType::Eip1559.into(),
         caller: from,
-        gas_price: U256::from(100u64),
-        gas_limit: 200u64,
+        gas_price: 100,
+        gas_limit: 200,
         gas_priority_fee: None,
-        transact_to: TransactTo::Call(to),
+        kind: TransactTo::Call(to),
         value: U256::from(300u64),
         data: Default::default(),
-        chain_id: Some(1u64),
-        nonce: Some(1u64),
-        access_list: vec![],
+        chain_id: Some(1),
+        nonce: 1,
+        access_list: Default::default(),
         blob_hashes: vec![],
-        max_fee_per_blob_gas: None,
-        authorization_list: None,
+        max_fee_per_blob_gas: 0,
+        authorization_list: vec![],
     };
 
     assert_eq!(tx_env.caller, expected.caller);
     assert_eq!(tx_env.gas_limit, expected.gas_limit);
     assert_eq!(tx_env.gas_price, expected.gas_price);
     assert_eq!(tx_env.gas_priority_fee, expected.gas_priority_fee);
-    assert_eq!(
-        tx_env.transact_to.is_create(),
-        expected.transact_to.is_create()
-    );
+    assert_eq!(tx_env.kind.is_create(), expected.kind.is_create());
     assert_eq!(tx_env.value, expected.value);
     assert_eq!(tx_env.data, expected.data);
     assert_eq!(tx_env.chain_id, expected.chain_id);
@@ -134,13 +137,13 @@ fn prepare_call_block_env() {
 
     let block_env = BlockEnv::from(sealed_block);
 
-    assert_eq!(block_env.number.to::<u64>(), block.header.number);
-    assert_eq!(block_env.coinbase, block.header.beneficiary);
-    assert_eq!(block_env.timestamp.to::<u64>(), block.header.timestamp);
+    assert_eq!(block_env.number, block.header.number);
+    assert_eq!(block_env.beneficiary, block.header.beneficiary);
+    assert_eq!(block_env.timestamp, block.header.timestamp);
     assert_eq!(
-        block_env.basefee.to::<u64>(),
+        block_env.basefee,
         block.header.base_fee_per_gas.unwrap_or_default()
     );
-    assert_eq!(block_env.gas_limit.to::<u64>(), block.header.gas_limit);
+    assert_eq!(block_env.gas_limit, block.header.gas_limit);
     assert_eq!(block_env.prevrandao, Some(block.header.mix_hash));
 }

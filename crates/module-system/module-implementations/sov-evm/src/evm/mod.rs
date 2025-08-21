@@ -2,8 +2,10 @@
 // similar as possible to upstream than clean it up.
 #![allow(clippy::match_same_arms)]
 
-use alloy_eips::eip1559::BaseFeeParams;
-use reth_primitives::revm_primitives::{AccountInfo, Address, SpecId};
+use alloy_eips::eip1559::{BaseFeeParams, ETHEREUM_BLOCK_GAS_LIMIT_30M};
+use alloy_primitives::Address;
+use revm::primitives::hardfork::SpecId;
+use revm::state::AccountInfo;
 use serde::{Deserialize, Serialize};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::config_value;
@@ -72,14 +74,14 @@ impl Default for EvmChainConfig {
             limit_contract_code_size: None,
             spec: vec![(0, SpecId::SHANGHAI)],
             coinbase: Address::ZERO,
-            block_gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
+            block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
             block_timestamp_delta: 1,
             base_fee_params: BaseFeeParams::ethereum(),
         }
     }
 }
 
-pub(crate) fn to_rollup_address<S: Spec>(address: reth_primitives::Address) -> S::Address
+pub(crate) fn to_rollup_address<S: Spec>(address: Address) -> S::Address
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {

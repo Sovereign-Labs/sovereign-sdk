@@ -28,6 +28,7 @@ thiserror = { workspace = true }
 bytes = { workspace = true }
 derive_more = { workspace = true }
 serde = { workspace = true }
+serde_with = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = [
@@ -38,12 +39,13 @@ jsonrpsee = { workspace = true, features = [
 schemars = { workspace = true }
 tracing = { workspace = true }
 
-alloy-sol-types = { version = "0.7.7", default-features = false }
-alloy-eips = { version = "0.2", default-features = false }
+alloy-sol-types = { workspace = true, default-features = false }
+alloy-eips = { workspace = true, features = ["std"] }
 # `rlp` feature implicitly enabled via `reth-` crates, but this allows us to explicitly access Error type from there
 alloy-primitives = { workspace = true, default-features = false, features = [
 	"rlp",
 ] }
+alloy-consensus = { workspace = true, features = ["serde", "serde-bincode-compat"] }
 
 alloy-rpc-types = { workspace = true, optional = true }
 digest = { workspace = true }
@@ -54,9 +56,13 @@ revm = { workspace = true, features = [
 	"optional_no_base_fee",
 	"std",
 ] }
+reth-revm = { workspace = true }
+reth-ethereum-primitives = { workspace = true, features = ["serde", "serde-bincode-compat"] }
 reth-primitives = { workspace = true }
-reth-rpc-types = { workspace = true }
+reth-primitives-traits = { workspace = true }
+revm-inspector = { workspace = true, default-features = false, optional = true }
 revm-inspectors = { workspace = true, default-features = false, optional = true }
+reth-rpc-convert = { workspace = true }
 reth-rpc-eth-types = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 proptest = { workspace = true, optional = true }
@@ -69,7 +75,7 @@ tempfile = { workspace = true }
 bytes = { workspace = true }
 ethers-signers = { workspace = true }
 ethers-core = { workspace = true }
-secp256k1 = { workspace = true, features = ["rand-std"] }
+secp256k1 = { workspace = true, features = ["rand"] }
 lazy_static = "1.5.0"
 jsonschema = { workspace = true }
 bincode = { workspace = true }
@@ -89,7 +95,6 @@ arbitrary = [
 	"alloy-rpc-types?/arbitrary",
 	"alloy-sol-types/arbitrary",
 	"reth-primitives/arbitrary",
-	"reth-rpc-types/arbitrary",
 	"revm/arbitrary",
 	"sov-address/arbitrary",
 	"sov-evm/arbitrary",
@@ -98,16 +103,20 @@ arbitrary = [
 	"sov-rollup-interface/arbitrary",
 	"sov-state/arbitrary",
 	"sov-test-utils/arbitrary",
-	"sov-bank/arbitrary"
+	"sov-bank/arbitrary",
+	"alloy-consensus/arbitrary",
+	"reth-primitives-traits/arbitrary",
+	"reth-ethereum-primitives/arbitrary"
 ]
 native = [
 	"alloy-rpc-types",
 	"jsonrpsee",
 	"dep:rand",
+	"revm-inspector",
 	"revm-inspectors",
 	"alloy-primitives/std",
 	"reth-primitives/std",
-	"reth-rpc-types/default",
+	"reth-ethereum-primitives/std",
 	"dep:reth-rpc-eth-types",
 	# Optional for speed up in native mode
 	# "revm/asm-keccak"

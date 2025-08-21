@@ -1,5 +1,6 @@
 #![allow(missing_docs)]
 
+use alloy_primitives::Bytes;
 use ethereum_types::H160;
 use ethers_core::abi::Address;
 use ethers_core::k256::ecdsa::SigningKey;
@@ -12,7 +13,6 @@ use futures::StreamExt;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
-use reth_primitives::Bytes;
 use sov_cli::NodeClient;
 use sov_modules_api::{Runtime, Spec};
 use sov_test_utils::{SimpleStorageContract, TEST_DEFAULT_MAX_FEE};
@@ -105,12 +105,16 @@ impl TestClient {
         contract_address: H160,
         set_arg: u32,
     ) -> PendingTransaction<'_, Http> {
+        // TODO: Re-evaluate if it's still needed after we migrate from ethers
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+        tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
+
         // Tx without gas_limit should estimate and include it in send_transaction endpoint
-        // Tx without nonce should fetch and include it in send_transaction endpoint
         let req = Eip1559TransactionRequest::new()
             .from(self.from_addr)
             .to(contract_address)
             .chain_id(self.chain_id)
+            .nonce(nonce)
             .data(self.contract.set_call_data(set_arg))
             .max_priority_fee_per_gas(10u64)
             .max_fee_per_gas(TEST_DEFAULT_MAX_FEE.0);

@@ -1,4 +1,5 @@
 use internals::Delta;
+use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 /// Provides specialized working set wrappers for dealing with protected state.
 use sov_state::{SlotKey, SlotValue};
@@ -6,6 +7,7 @@ use sov_state::{SlotKey, SlotValue};
 use self::checkpoints::StateCheckpoint;
 use super::{checkpoints, internals, Namespace, UniversalStateAccessor};
 use crate::capabilities::{Kernel, RollupHeight};
+use crate::state::accessors::StateMetricsProvider;
 use crate::state::traits::{PrivilegedKernelAccessor, VersionReader};
 use crate::{AccessoryStateWriter, GasMeter, Spec};
 
@@ -13,15 +15,26 @@ use crate::{AccessoryStateWriter, GasMeter, Spec};
 pub struct BootstrapWorkingSet<'a, S: Spec> {
     /// The inner working set
     pub(super) inner: &'a mut Delta<S::Storage>,
+    pub(crate) metrics: &'a mut StateMetrics,
 }
 
 impl<S: Spec> UniversalStateAccessor for BootstrapWorkingSet<'_, S> {
-    fn get_size(&mut self, namespace: Namespace, key: &SlotKey) -> Option<u32> {
-        self.inner.get_size(namespace, key)
+    fn get_size(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<u32> {
+        self.inner.get_size(namespace, key, metric)
     }
 
-    fn get_value(&mut self, namespace: Namespace, key: &SlotKey) -> Option<SlotValue> {
-        self.inner.get(namespace, key)
+    fn get_value(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
+        self.inner.get(namespace, key, metric)
     }
 
     fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
@@ -30,6 +43,12 @@ impl<S: Spec> UniversalStateAccessor for BootstrapWorkingSet<'_, S> {
 
     fn delete_value(&mut self, namespace: Namespace, key: &SlotKey) {
         self.inner.delete(namespace, key);
+    }
+}
+
+impl<S: Spec> StateMetricsProvider for BootstrapWorkingSet<'_, S> {
+    fn metrics(&mut self) -> &mut StateMetrics {
+        self.metrics
     }
 }
 
@@ -75,6 +94,12 @@ impl<S: Spec> PrivilegedKernelAccessor for KernelStateAccessor<'_, S> {
 
 impl<S: Spec> AccessoryStateWriter for KernelStateAccessor<'_, S> {}
 
+impl<S: Spec> StateMetricsProvider for KernelStateAccessor<'_, S> {
+    fn metrics(&mut self) -> &mut StateMetrics {
+        self.checkpoint.metrics()
+    }
+}
+
 impl<'a, S: Spec> KernelStateAccessor<'a, S> {
     /// Instantiates a new [`KernelStateAccessor`].
     pub fn from_checkpoint<K: Kernel<S> + ?Sized>(
@@ -83,6 +108,7 @@ impl<'a, S: Spec> KernelStateAccessor<'a, S> {
     ) -> Self {
         let mut bootstrap = BootstrapWorkingSet {
             inner: &mut checkpoint.delta,
+            metrics: &mut checkpoint.metrics,
         };
 
         let true_slot_num = kernel.true_slot_number(&mut bootstrap);
@@ -117,12 +143,22 @@ impl<S: Spec> KernelStateAccessor<'_, S> {
 }
 
 impl<S: Spec> UniversalStateAccessor for KernelStateAccessor<'_, S> {
-    fn get_size(&mut self, namespace: Namespace, key: &SlotKey) -> Option<u32> {
-        self.checkpoint.get_size(namespace, key)
+    fn get_size(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<u32> {
+        self.checkpoint.get_size(namespace, key, metric)
     }
 
-    fn get_value(&mut self, namespace: Namespace, key: &SlotKey) -> Option<SlotValue> {
-        self.checkpoint.get_value(namespace, key)
+    fn get_value(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
+        self.checkpoint.get_value(namespace, key, metric)
     }
 
     fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {

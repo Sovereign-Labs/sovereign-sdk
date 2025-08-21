@@ -1,12 +1,33 @@
 use std::convert::Infallible;
 
-use reth_primitives::revm_primitives::{
-    Address, BlockEnv, CfgEnvWithHandlerCfg, EVMError, Env, EnvWithHandlerCfg, ExecutionResult,
-};
+use alloy_primitives::Address;
 use reth_primitives::TransactionSigned;
-use revm::{Database, DatabaseCommit, EvmBuilder};
+#[cfg(feature = "native")]
+use revm::context::{result::ResultAndState, TxEnv};
+use revm::{
+    context::{
+        result::{EVMError, ExecutionResult},
+        BlockEnv, CfgEnv, Context,
+    },
+    Database, DatabaseCommit, ExecuteCommitEvm, MainBuilder, MainContext,
+};
 
-use crate::evm::conversions::create_tx_env;
+use crate::{evm::conversions::create_tx_env, get_spec_id, EvmChainConfig};
+
+/// builds CfgEnv
+/// Returns correct config depending on spec for given block number
+// Copies context-dependent values from template_cfg or default if not provided
+pub(crate) fn get_cfg_env(
+    block_env: &BlockEnv,
+    cfg: EvmChainConfig,
+    template_cfg: Option<CfgEnv>,
+) -> CfgEnv {
+    let mut cfg_env = template_cfg.unwrap_or_default();
+    cfg_env.chain_id = cfg.chain_id;
+    cfg_env.limit_contract_code_size = cfg.limit_contract_code_size;
+    let spec = get_spec_id(cfg.spec, block_env.number.to::<u64>());
+    cfg_env.with_spec(spec)
+}
 
 /// Execute an Ethereum transaction and commit it to the database.
 pub fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
@@ -14,59 +35,35 @@ pub fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
     block_env: &BlockEnv,
     tx: &TransactionSigned,
     signer: Address,
-    config_env: CfgEnvWithHandlerCfg,
+    cfg: CfgEnv,
 ) -> Result<ExecutionResult, EVMError<Infallible>> {
-    let CfgEnvWithHandlerCfg {
-        cfg_env,
-        handler_cfg,
-    } = config_env;
-
-    let env_with_handler_cfg = EnvWithHandlerCfg {
-        env: Box::new(Env {
-            cfg: cfg_env,
-            block: block_env.clone(),
-            tx: create_tx_env(tx, signer),
-        }),
-        handler_cfg,
-    };
-
-    let mut evm = EvmBuilder::default()
+    let tx_env = create_tx_env(tx, signer);
+    let context = Context::mainnet()
         .with_db(db)
-        .with_env_with_handler_cfg(env_with_handler_cfg)
-        .build();
+        .with_block(block_env)
+        .with_cfg(cfg);
+    let mut evm = context.build_mainnet();
 
-    evm.transact_commit()
+    evm.transact_commit(tx_env)
 }
 
 #[cfg(feature = "native")]
 pub(crate) fn inspect<DB: Database<Error = Infallible> + DatabaseCommit>(
     db: DB,
     block_env: &BlockEnv,
-    tx: reth_primitives::revm_primitives::TxEnv,
-    config_env: CfgEnvWithHandlerCfg,
-) -> Result<reth_primitives::revm_primitives::ResultAndState, EVMError<Infallible>> {
-    let CfgEnvWithHandlerCfg {
-        cfg_env,
-        handler_cfg,
-    } = config_env;
-
-    let env_with_handler_cfg = EnvWithHandlerCfg {
-        env: Box::new(Env {
-            cfg: cfg_env,
-            block: block_env.clone(),
-            tx,
-        }),
-        handler_cfg,
-    };
+    tx: TxEnv,
+    cfg: CfgEnv,
+) -> Result<ResultAndState, EVMError<Infallible>> {
+    use revm::InspectEvm;
 
     let config = revm_inspectors::tracing::TracingInspectorConfig::all();
-    let mut inspector = revm_inspectors::tracing::TracingInspector::new(config);
+    let inspector = revm_inspectors::tracing::TracingInspector::new(config);
 
-    let mut evm = EvmBuilder::default()
-        .with_external_context(&mut inspector)
+    let context = Context::mainnet()
         .with_db(db)
-        .with_env_with_handler_cfg(env_with_handler_cfg)
-        .build();
+        .with_block(block_env)
+        .with_cfg(cfg);
+    let mut evm = context.build_mainnet().with_inspector(inspector);
 
-    evm.transact()
+    evm.inspect_tx(tx)
 }

@@ -1,7 +1,6 @@
-use reth_primitives::revm_primitives::{
-    Address, BlockEnv, CfgEnv, CfgEnvWithHandlerCfg, EVMError, HandlerCfg,
-};
+use alloy_primitives::Address;
 use reth_primitives::TransactionSigned;
+use revm::context::result::EVMError;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{Context, Spec, TxState};
@@ -10,7 +9,8 @@ use crate::conversions::convert_to_transaction_signed;
 use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};
 use crate::evm::primitive_types::{Receipt, TransactionSignedAndRecovered};
-use crate::evm::{EvmChainConfig, RlpEvmTransaction};
+use crate::evm::RlpEvmTransaction;
+use crate::executor::get_cfg_env;
 use crate::{Evm, PendingTransaction, SpecId};
 
 /// EVM call message.
@@ -51,7 +51,7 @@ where
             .expect("Pending block must be set");
 
         let cfg = self.cfg.get(state)?.expect("Evm config must be set");
-        let cfg_env = get_cfg_env_with_handler(&block_env, cfg, None);
+        let cfg_env = get_cfg_env(&block_env, cfg, None);
 
         let evm_db: EvmDb<_, S> = self.get_db(state);
         let result = executor::execute_tx(evm_db, &block_env, &evm_tx, signer, cfg_env);
@@ -113,7 +113,7 @@ where
             transaction: TransactionSignedAndRecovered {
                 signer,
                 signed_transaction: evm_tx,
-                block_number: block_env.number.to(),
+                block_number: block_env.number.to::<u64>(),
             },
             receipt,
         };
@@ -123,21 +123,6 @@ where
 
         Ok(())
     }
-}
-
-/// builds CfgEnvWithHandlerCfg
-/// Returns correct config depending on spec for given block number
-// Copies context-dependent values from template_cfg or default if not provided
-pub(crate) fn get_cfg_env_with_handler(
-    block_env: &BlockEnv,
-    cfg: EvmChainConfig,
-    template_cfg: Option<CfgEnv>,
-) -> CfgEnvWithHandlerCfg {
-    let mut cfg_env = template_cfg.unwrap_or_default();
-    cfg_env.chain_id = cfg.chain_id;
-    cfg_env.limit_contract_code_size = cfg.limit_contract_code_size;
-    let spec_id = get_spec_id(cfg.spec, block_env.number.to());
-    CfgEnvWithHandlerCfg::new(cfg_env, HandlerCfg { spec_id })
 }
 
 /// Get spec id for a given block number

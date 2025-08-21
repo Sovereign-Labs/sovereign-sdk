@@ -1,4 +1,3 @@
-use std::num::NonZero;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -173,12 +172,6 @@ impl PostgresBackend {
     async fn current_data_transaction(&self) -> anyhow::Result<DbSnapshotData> {
         let mut tx = self.pool.begin().await?;
 
-        let latest_event_id: Option<u64> =
-            sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(event_id) FROM events")
-                .fetch_one(&mut *tx)
-                .await?
-                .map(|id| id as u64);
-
         let completed_blobs_metadata: Vec<(i64, Vec<u8>)> =
             sqlx::query_as::<Postgres, _>(
                 "SELECT sequence_number, data FROM events WHERE event_type = 'batch_end' ORDER BY sequence_number",
@@ -206,24 +199,17 @@ impl PostgresBackend {
         Ok(DbSnapshotData {
             completed_blobs,
             in_progress_batch,
-            latest_event_id,
         })
     }
 }
 
 #[async_trait]
 impl PreferredSequencerDbBackend for PostgresBackend {
-    async fn begin_rollup_block(
-        &mut self,
-        sequence_number: SequenceNumber,
-        blob_id: BlobInternalId,
-        visible_slot_number_after_increase: sov_modules_api::VisibleSlotNumber,
-        visible_slots_to_advance: NonZero<u8>,
-    ) -> anyhow::Result<()> {
+    async fn begin_rollup_block(&mut self, batch_to_store: BatchToStore) -> anyhow::Result<()> {
         let blob_data = borsh::to_vec(&StoredBlob::Batch {
-            blob_id,
-            visible_slot_number_after_increase,
-            visible_slots_to_advance,
+            blob_id: batch_to_store.blob_id,
+            visible_slot_number_after_increase: batch_to_store.visible_slot_number_after_increase,
+            visible_slots_to_advance: batch_to_store.visible_slots_to_advance,
         })?;
 
         // Compound CTE statement to avoid multiple roundtrips
@@ -236,7 +222,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
              INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data) 
              SELECT $1, 'batch_start', NULL, NULL, $2",
             )
-            .bind(i64::try_from(sequence_number)?)
+            .bind(i64::try_from(batch_to_store.sequence_number)?)
             .bind::<&[u8]>(blob_data.as_ref())
             .execute(&self.pool),
             "postgres_db_backend_begin_rollup_block"

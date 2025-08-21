@@ -38,7 +38,7 @@ sov-rollup-interface = { workspace = true }
 sov-modules-macros = { workspace = true }
 sov-universal-wallet = { workspace = true, features = ["serde"] }
 sov-db = { workspace = true, optional = true }
-sov-metrics = { workspace = true, optional = true }
+sov-metrics = { workspace = true }
 serde = { workspace = true }
 borsh = { workspace = true }
 digest = { workspace = true }
@@ -101,7 +101,6 @@ arbitrary = [
 	"alloy-sol-types/arbitrary"
 ]
 bench = [
-    "sov-metrics",
     "sov-modules-api/bench",
     "sov-state/bench",
     "sov-modules-macros/bench",
@@ -126,7 +125,7 @@ native = [
     "utoipa",
     "utoipa-swagger-ui",
     "sov-sequencer-registry/native",
-    "sov-metrics?/native",
+    "sov-metrics/native",
 ]
 test-utils = ["dep:tracing-test", "sov-state/test-utils"]
 evm = []

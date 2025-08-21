@@ -1,5 +1,8 @@
-use reth_primitives::{Address, TransactionSigned, U256};
-use reth_rpc_types::TypedTransactionRequest;
+use alloy_consensus::constants::KECCAK_EMPTY;
+use alloy_consensus::TypedTransaction;
+use alloy_eips::eip2718::Encodable2718;
+use alloy_primitives::{Address, U256};
+use reth_primitives::TransactionSigned;
 use secp256k1::rand::SeedableRng as _;
 use secp256k1::{PublicKey, SecretKey};
 use sov_eth_dev_signer::DevSigner;
@@ -28,10 +31,10 @@ impl EvmAccount {
         reth_primitives::public_key_to_address(self.public_key())
     }
 
-    pub fn sign(&self, tx: TypedTransactionRequest) -> (RlpEvmTransaction, TransactionSigned) {
+    pub fn sign(&self, tx: TypedTransaction) -> (RlpEvmTransaction, TransactionSigned) {
         let signer = DevSigner::new(vec![self.0]);
         let signed_tx = signer.sign_transaction(tx, self.address()).unwrap();
-        let rlp = signed_tx.envelope_encoded().to_vec();
+        let rlp = signed_tx.encoded_2718();
         (RlpEvmTransaction { rlp }, signed_tx)
     }
 }
@@ -49,14 +52,14 @@ pub(crate) fn setup() -> (TestRunner<RT, S>, TestUser<S>, EvmAccount, EvmAccount
             AccountData {
                 address: evm_account.address(),
                 balance: U256::from(1000000000),
-                code_hash: reth_primitives::KECCAK_EMPTY,
+                code_hash: KECCAK_EMPTY,
                 code: Default::default(),
                 nonce: 0,
             },
             AccountData {
                 address: no_balance_account.address(),
                 balance: U256::from(0),
-                code_hash: reth_primitives::KECCAK_EMPTY,
+                code_hash: KECCAK_EMPTY,
                 code: Default::default(),
                 nonce: 0,
             },

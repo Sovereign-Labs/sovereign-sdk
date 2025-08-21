@@ -298,6 +298,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: taiki-e/install-action@cargo-deny
+        with:
+          tool: cargo-deny@0.18.4
       - run: make cargo-deny-check-licenses
 
   # Temporarily disabled until AWS credentials can be re-issued

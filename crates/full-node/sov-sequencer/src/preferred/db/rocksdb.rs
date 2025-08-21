@@ -1,4 +1,3 @@
-use std::num::NonZero;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -6,7 +5,7 @@ use axum::async_trait;
 use rockbound::{gen_rocksdb_options, SchemaBatch};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
-use sov_modules_api::{FullyBakedTx, TxHash, VisibleSlotNumber};
+use sov_modules_api::{FullyBakedTx, TxHash};
 
 use super::{DbSnapshotData, PreferredSequencerDbBackend, PreferredSequencerReadBlob, StoredBlob};
 use crate::preferred::db::{BatchToStore, InProgressBatch};
@@ -40,22 +39,17 @@ impl PreferredSequencerDbBackend for RocksDbBackend {
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
-    async fn begin_rollup_block(
-        &mut self,
-        sequence_number: SequenceNumber,
-        blob_id: BlobInternalId,
-        visible_slot_number_after_increase: VisibleSlotNumber,
-        visible_slots_to_advance: NonZero<u8>,
-    ) -> anyhow::Result<()> {
+    async fn begin_rollup_block(&mut self, batch_to_store: BatchToStore) -> anyhow::Result<()> {
         self.db
             .put_async::<tables::InProgressBatch>(
                 &(),
                 &(
-                    sequence_number,
+                    batch_to_store.sequence_number,
                     StoredBlob::Batch {
-                        visible_slot_number_after_increase,
-                        visible_slots_to_advance,
-                        blob_id,
+                        visible_slot_number_after_increase: batch_to_store
+                            .visible_slot_number_after_increase,
+                        visible_slots_to_advance: batch_to_store.visible_slots_to_advance,
+                        blob_id: batch_to_store.blob_id,
                     },
                 ),
             )
@@ -154,7 +148,6 @@ impl PreferredSequencerDbBackend for RocksDbBackend {
         Ok(DbSnapshotData {
             completed_blobs,
             in_progress_batch,
-            latest_event_id: None,
         })
     }
 }
@@ -295,10 +288,11 @@ mod tables {
 
 #[cfg(test)]
 mod tests {
-    use sov_modules_api::HexString;
-    use tempfile::TempDir;
-
     use super::*;
+    use sov_modules_api::HexString;
+    use sov_modules_api::VisibleSlotNumber;
+    use std::num::NonZero;
+    use tempfile::TempDir;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_overlapping_range_deletion_pathology() {
@@ -332,26 +326,21 @@ mod tests {
 
         // Trigger `iters` batches of 10 txs. Ensure that performance stays reasonable
         for batch in 0u64..iters {
-            db.begin_rollup_block(
-                SequenceNumber::from(batch),
-                BlobInternalId::from(batch),
-                VisibleSlotNumber::new_dangerous(batch),
-                NonZero::new(1).unwrap(),
-            )
-            .await
-            .unwrap();
-
-            for (i, (tx, tx_hash)) in txs.iter().zip(tx_hashes.iter()).enumerate() {
-                db.add_tx(SequenceNumber::from(batch), i as u64, tx.clone(), *tx_hash)
-                    .await
-                    .unwrap();
-            }
             let batch_to_store = BatchToStore {
                 sequence_number: SequenceNumber::from(batch),
                 visible_slot_number_after_increase: VisibleSlotNumber::new_dangerous(batch),
                 visible_slots_to_advance: NonZero::new(1).unwrap(),
                 blob_id: BlobInternalId::from(batch),
             };
+
+            db.begin_rollup_block(batch_to_store.clone()).await.unwrap();
+
+            for (i, (tx, tx_hash)) in txs.iter().zip(tx_hashes.iter()).enumerate() {
+                db.add_tx(SequenceNumber::from(batch), i as u64, tx.clone(), *tx_hash)
+                    .await
+                    .unwrap();
+            }
+
             db.end_rollup_block(batch_to_store).await.unwrap();
 
             if batch > 1 {

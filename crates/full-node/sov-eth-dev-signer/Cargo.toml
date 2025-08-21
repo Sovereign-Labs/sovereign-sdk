@@ -20,5 +20,6 @@ revm = { workspace = true, features = [
     "secp256k1",
 ] }
 reth-primitives = { workspace = true, features = ["secp256k1"] }
-reth-rpc-types = { workspace = true }
+alloy-consensus = { workspace = true }
+alloy-rpc-types = { workspace = true }
 secp256k1 = { workspace = true }

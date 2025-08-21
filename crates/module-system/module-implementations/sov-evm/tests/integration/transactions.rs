@@ -1,6 +1,6 @@
-use reth_primitives::{TxKind, U256};
-use reth_rpc_types::transaction::EIP1559TransactionRequest;
-use reth_rpc_types::TypedTransactionRequest;
+use alloy_consensus::{TxEip1559, TypedTransaction};
+use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
+use alloy_primitives::{Bytes, TxKind, U256};
 use sov_evm::{EthereumAuthenticator, Evm};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
@@ -14,15 +14,15 @@ fn test_executing_eth_transaction() {
     let (mut runner, _, account, _) = setup();
     let contract = SimpleStorageContract::default();
     let contract_addr = account.address().create(0);
-    let create_contract_tx_request = TypedTransactionRequest::EIP1559(EIP1559TransactionRequest {
+    let create_contract_tx_request = TypedTransaction::Eip1559(TxEip1559 {
         chain_id: config_value!("CHAIN_ID"),
         nonce: 0,
         max_priority_fee_per_gas: Default::default(),
-        max_fee_per_gas: U256::from(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE * 2),
-        gas_limit: U256::from(1_000_000u64),
-        kind: TxKind::Create,
+        max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
+        gas_limit: 1_000_000,
+        to: TxKind::Create,
         value: Default::default(),
-        input: reth_primitives::Bytes::from(contract.byte_code().to_vec()),
+        input: Bytes::from(contract.byte_code().to_vec()),
         access_list: Default::default(),
     });
     let (signed_eth_tx, _) = account.sign(create_contract_tx_request);
@@ -30,17 +30,15 @@ fn test_executing_eth_transaction() {
         data: borsh::to_vec(&signed_eth_tx).unwrap(),
     };
 
-    let set_arg_eth_tx = TypedTransactionRequest::EIP1559(EIP1559TransactionRequest {
+    let set_arg_eth_tx = TypedTransaction::Eip1559(TxEip1559 {
         chain_id: config_value!("CHAIN_ID"),
         nonce: 1,
         max_priority_fee_per_gas: Default::default(),
-        max_fee_per_gas: U256::from(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE * 2),
-        gas_limit: U256::from(1_000_000u64),
-        kind: TxKind::Call(contract_addr),
+        max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
+        gas_limit: 1_000_000,
+        to: TxKind::Call(contract_addr),
         value: Default::default(),
-        input: reth_primitives::Bytes::from(
-            hex::decode(hex::encode(contract.set_call_data(5))).unwrap(),
-        ),
+        input: Bytes::from(hex::decode(hex::encode(contract.set_call_data(5))).unwrap()),
         access_list: Default::default(),
     });
     let (signed_eth_tx, _) = account.sign(set_arg_eth_tx);
@@ -74,17 +72,15 @@ fn test_executing_eth_transaction() {
         }),
     });
 
-    let set_arg_eth_tx = TypedTransactionRequest::EIP1559(EIP1559TransactionRequest {
+    let set_arg_eth_tx = TypedTransaction::Eip1559(TxEip1559 {
         chain_id: config_value!("CHAIN_ID"),
         nonce: 2,
         max_priority_fee_per_gas: Default::default(),
-        max_fee_per_gas: U256::from(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE * 2),
-        gas_limit: U256::from(1_000_000u64),
-        kind: TxKind::Call(contract_addr),
+        max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
+        gas_limit: 1_000_000,
+        to: TxKind::Call(contract_addr),
         value: Default::default(),
-        input: reth_primitives::Bytes::from(
-            hex::decode(hex::encode(contract.set_call_data(92))).unwrap(),
-        ),
+        input: Bytes::from(hex::decode(hex::encode(contract.set_call_data(92))).unwrap()),
         access_list: Default::default(),
     });
     let (signed_eth_tx, _) = account.sign(set_arg_eth_tx);
@@ -112,15 +108,15 @@ fn test_executing_eth_transaction() {
 fn test_failed_tx_doesnt_update_evm_module_state() {
     let (mut runner, _, _, no_balance_account) = setup();
     let contract = SimpleStorageContract::default();
-    let create_contract_tx_request = TypedTransactionRequest::EIP1559(EIP1559TransactionRequest {
+    let create_contract_tx_request = TypedTransaction::Eip1559(TxEip1559 {
         chain_id: config_value!("CHAIN_ID"),
         nonce: 0,
         max_priority_fee_per_gas: Default::default(),
-        max_fee_per_gas: U256::from(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE * 2),
-        gas_limit: U256::from(1_000_000u64),
-        kind: TxKind::Create,
+        max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
+        gas_limit: 1_000_000,
+        to: TxKind::Create,
         value: Default::default(),
-        input: reth_primitives::Bytes::from(contract.byte_code().to_vec()),
+        input: Bytes::from(contract.byte_code().to_vec()),
         access_list: Default::default(),
     });
     let (signed_eth_tx, _) = no_balance_account.sign(create_contract_tx_request);
