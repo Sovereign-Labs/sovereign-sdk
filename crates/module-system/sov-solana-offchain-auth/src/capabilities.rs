@@ -42,7 +42,6 @@ pub struct SolanaOffchainAuthenticator<S, Rt>(PhantomData<(S, Rt)>);
 impl<S, Rt> TransactionAuthenticator<S> for SolanaOffchainAuthenticator<S, Rt>
 where
     S: Spec,
-    // S::Address: FromVmAddress<Base58Address>,
     Rt: Runtime<S> + DispatchCall<Spec = S>,
     <Rt as DispatchCall>::Decodable: Serialize + DeserializeOwned,
 {
