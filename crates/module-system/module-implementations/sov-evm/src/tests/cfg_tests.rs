@@ -3,7 +3,7 @@ use revm::context::{BlockEnv, CfgEnv};
 use revm::primitives::hardfork::SpecId;
 use sov_modules_api::macros::config_value;
 
-use crate::evm::EvmChainConfig;
+use crate::evm::EvmRuntimeConfig;
 use crate::executor::get_cfg_env;
 use crate::get_spec_id;
 
@@ -14,10 +14,12 @@ fn cfg_test() {
         ..Default::default()
     };
 
-    let cfg = EvmChainConfig {
-        limit_contract_code_size: Some(100),
-        spec: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
-        ..Default::default()
+    let cfg = EvmRuntimeConfig {
+        chain_spec: crate::EvmChainSpec {
+            limit_contract_code_size: Some(100),
+            ..Default::default()
+        },
+        hardforks: vec![(0, SpecId::SHANGHAI)],
     };
 
     let mut template_cfg_env = CfgEnv::default();

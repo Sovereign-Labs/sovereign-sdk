@@ -10,8 +10,8 @@ use sov_modules_api::{Amount, GenesisState, Module, Spec};
 
 use crate::evm::db_init::InitEvmDb;
 use crate::evm::primitive_types::Block;
-use crate::evm::EvmChainConfig;
-use crate::{to_rollup_address, Evm, EvmConfig};
+use crate::evm::EvmRuntimeConfig;
+use crate::{to_rollup_address, Evm, EvmGenesisConfig};
 
 /// Evm account.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
@@ -49,7 +49,7 @@ where
         config: &<Self as Module>::Config,
         state: &mut impl GenesisState<S>,
     ) -> Result<()> {
-        for acc in config.data.clone() {
+        for acc in config.accounts.clone() {
             self.init_account(acc, state)?;
         }
 
@@ -109,14 +109,14 @@ where
     }
 }
 
-fn init_block(config: &EvmConfig) -> Block {
+fn init_block(config: &EvmGenesisConfig) -> Block {
     let header = alloy_consensus::Header {
-        beneficiary: config.coinbase,
+        beneficiary: config.chain_spec.coinbase,
         // This will be set in finalize_hook or in the next begin_rollup_block_hook
         state_root: KECCAK_EMPTY,
-        gas_limit: config.block_gas_limit,
+        gas_limit: config.chain_spec.block_gas_limit,
         timestamp: config.genesis_timestamp,
-        base_fee_per_gas: Some(config.starting_base_fee),
+        base_fee_per_gas: Some(config.initial_base_fee),
         ..Default::default()
     };
 
@@ -126,9 +126,9 @@ fn init_block(config: &EvmConfig) -> Block {
     }
 }
 
-fn init_spec(config: &EvmConfig) -> Result<Vec<(BlockNumber, SpecId)>> {
+fn init_spec(config: &EvmGenesisConfig) -> Result<Vec<(BlockNumber, SpecId)>> {
     let mut spec = config
-        .spec
+        .hardforks
         .iter()
         .map(|(k, v)| {
             // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
@@ -151,14 +151,9 @@ fn init_spec(config: &EvmConfig) -> Result<Vec<(BlockNumber, SpecId)>> {
     Ok(spec)
 }
 
-fn evm_chain_config(cfg: &EvmConfig, spec: Vec<(BlockNumber, SpecId)>) -> EvmChainConfig {
-    EvmChainConfig {
-        spec,
-        chain_id: cfg.chain_id,
-        limit_contract_code_size: cfg.limit_contract_code_size,
-        coinbase: cfg.coinbase,
-        block_gas_limit: cfg.block_gas_limit,
-        block_timestamp_delta: cfg.block_timestamp_delta,
-        base_fee_params: cfg.base_fee_params,
+fn evm_chain_config(cfg: &EvmGenesisConfig, spec: Vec<(BlockNumber, SpecId)>) -> EvmRuntimeConfig {
+    EvmRuntimeConfig {
+        hardforks: spec,
+        chain_spec: cfg.chain_spec.clone(),
     }
 }

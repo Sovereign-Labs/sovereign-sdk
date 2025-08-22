@@ -11,7 +11,7 @@ use sov_address::{EthereumAddress, FromVmAddress};
 use sov_attester_incentives::AttesterIncentivesConfig;
 pub use sov_bank::{BankConfig, Coins, TokenConfig};
 pub use sov_chain_state::ChainStateConfig;
-pub use sov_evm::EvmConfig;
+pub use sov_evm::EvmGenesisConfig;
 use sov_modules_api::prelude::*;
 use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_operator_incentives::OperatorIncentivesConfig;
@@ -98,7 +98,7 @@ where
 
     let nonces_config = ();
 
-    let evm_config: EvmConfig = read_genesis_json(&genesis_paths.evm_genesis_path)?;
+    let evm_config: EvmGenesisConfig = read_genesis_json(&genesis_paths.evm_genesis_path)?;
 
     let chain_state_config: ChainStateConfig<S> =
         read_genesis_json(&genesis_paths.chain_state_genesis_path)?;

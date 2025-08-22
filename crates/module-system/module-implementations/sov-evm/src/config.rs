@@ -8,44 +8,59 @@ use sov_modules_api::macros::config_value;
 
 use crate::AccountData;
 
-/// Genesis configuration.
+/// Core EVM chain parameters shared between genesis and runtime
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
-pub struct EvmConfig {
-    /// Genesis accounts.
-    pub data: Vec<AccountData>,
-    /// Chain id.
+pub struct EvmChainSpec {
+    /// Unique chain identifier
     pub chain_id: u64,
-    /// Limits size of contract code size.
+    /// Maximum contract code size (None = unlimited)
     pub limit_contract_code_size: Option<usize>,
-    /// List of EVM hard forks by block number
-    pub spec: HashMap<u64, SpecId>,
-    /// Coinbase where all the fees go
+    /// Address where transaction fees are collected
     pub coinbase: Address,
-    /// Starting base fee.
-    pub starting_base_fee: u64,
-    /// Gas limit for single block
+    /// Maximum gas allowed per block
     pub block_gas_limit: u64,
-    /// Genesis timestamp.
-    pub genesis_timestamp: u64,
-    /// Delta to add to parent block timestamp,
+    /// Seconds to add to parent block timestamp
     pub block_timestamp_delta: u64,
-    /// Base fee params.
+    /// EIP-1559 base fee calculation parameters
     pub base_fee_params: alloy_eips::eip1559::BaseFeeParams,
 }
 
-impl Default for EvmConfig {
+/// Genesis configuration for EVM module initialization
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
+pub struct EvmGenesisConfig {
+    /// Initial account states
+    pub accounts: Vec<AccountData>,
+    /// Hard fork activation schedule (block number -> fork ID)
+    pub hardforks: HashMap<u64, SpecId>,
+    /// Initial base fee for first block
+    pub initial_base_fee: u64,
+    /// Timestamp of genesis block
+    pub genesis_timestamp: u64,
+    /// Core chain parameters
+    pub chain_spec: EvmChainSpec,
+}
+
+impl Default for EvmChainSpec {
     fn default() -> Self {
         Self {
-            data: vec![],
             chain_id: config_value!("CHAIN_ID"),
             limit_contract_code_size: None,
-            spec: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
             coinbase: Address::ZERO,
-            starting_base_fee: MIN_PROTOCOL_BASE_FEE,
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
             block_timestamp_delta: SLOT_DURATION.as_secs(),
-            genesis_timestamp: 0,
             base_fee_params: alloy_eips::eip1559::BaseFeeParams::ethereum(),
+        }
+    }
+}
+
+impl Default for EvmGenesisConfig {
+    fn default() -> Self {
+        Self {
+            accounts: vec![],
+            hardforks: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
+            initial_base_fee: MIN_PROTOCOL_BASE_FEE,
+            genesis_timestamp: 0,
+            chain_spec: EvmChainSpec::default(),
         }
     }
 }
@@ -58,29 +73,32 @@ mod tests {
     use revm::primitives::hardfork::SpecId;
     use sov_modules_api::prelude::serde_json;
 
-    use crate::{AccountData, EvmConfig};
+    use crate::{AccountData, EvmGenesisConfig};
 
     #[test]
     fn test_config_serialization() {
         let address = Address::from_str("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266").unwrap();
-        let config = EvmConfig {
-            data: vec![AccountData {
+        let config = EvmGenesisConfig {
+            accounts: vec![AccountData {
                 address,
                 balance: AccountData::balance(u64::MAX),
                 code_hash: AccountData::empty_code(),
                 code: Bytes::default(),
                 nonce: 0,
             }],
-            chain_id: 4321, // Use a hard-coded value instead of config_value!("CHAIN_ID") since the string below is hard-coded
-            limit_contract_code_size: None,
-            spec: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
-            block_timestamp_delta: 1u64,
+            hardforks: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
+            chain_spec: crate::EvmChainSpec {
+                chain_id: 4321, // Use a hard-coded value instead of config_value!("CHAIN_ID") since the string below is hard-coded
+                limit_contract_code_size: None,
+                block_timestamp_delta: 1u64,
+                ..Default::default()
+            },
             ..Default::default()
         };
 
         let data = r#"
         {
-            "data":[
+            "accounts":[
                 {
                     "address":"0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
                     "balance":"0xffffffffffffffff",
@@ -88,23 +106,25 @@ mod tests {
                     "code":"0x",
                     "nonce":0
                 }],
-                "chain_id":4321,
-                "limit_contract_code_size":null,
-                "spec":{
+                "hardforks":{
                     "0":"SHANGHAI"
                 },
-                "coinbase":"0x0000000000000000000000000000000000000000",
-                "starting_base_fee":7,
-                "block_gas_limit":30000000,
+                "initial_base_fee":7,
                 "genesis_timestamp":0,
-                "block_timestamp_delta":1,
-                "base_fee_params":{
-                    "max_change_denominator":8,
-                    "elasticity_multiplier":2
+                "chain_spec":{
+                    "chain_id":4321,
+                    "limit_contract_code_size":null,
+                    "coinbase":"0x0000000000000000000000000000000000000000",
+                    "block_gas_limit":30000000,
+                    "block_timestamp_delta":1,
+                    "base_fee_params":{
+                        "max_change_denominator":8,
+                        "elasticity_multiplier":2
+                    }
                 }
         }"#;
 
-        let parsed_config: EvmConfig = serde_json::from_str(data).unwrap();
+        let parsed_config: EvmGenesisConfig = serde_json::from_str(data).unwrap();
         assert_eq!(config, parsed_config);
     }
 }

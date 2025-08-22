@@ -6,7 +6,7 @@ use reth_primitives::TransactionSigned;
 use secp256k1::rand::SeedableRng as _;
 use secp256k1::{PublicKey, SecretKey};
 use sov_eth_dev_signer::Signer;
-use sov_evm::{AccountData, EvmConfig, RlpEvmTransaction, SpecId};
+use sov_evm::{AccountData, EvmGenesisConfig, RlpEvmTransaction, SpecId};
 use sov_modules_api::{CredentialId, HexHash};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
@@ -47,8 +47,8 @@ pub(crate) fn setup() -> (TestRunner<RT, S>, TestUser<S>, EvmAccount, EvmAccount
     ));
     let genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![rollup_account.clone()]);
-    let evm_config = EvmConfig {
-        data: vec![
+    let evm_config = EvmGenesisConfig {
+        accounts: vec![
             AccountData {
                 address: evm_account.address(),
                 balance: U256::from(1000000000),
@@ -66,7 +66,7 @@ pub(crate) fn setup() -> (TestRunner<RT, S>, TestUser<S>, EvmAccount, EvmAccount
         ],
         // SHANGHAI instead of LATEST
         // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
-        spec: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
+        hardforks: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
         ..Default::default()
     };
     let genesis = GenesisConfig::from_minimal_config(genesis_config.into(), evm_config);

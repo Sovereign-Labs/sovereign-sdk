@@ -39,12 +39,12 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
         let new_pending_env = BlockEnv {
             number: U256::from(parent_block.header.number.wrapping_add(1)),
-            beneficiary: cfg.coinbase,
+            beneficiary: cfg.chain_spec.coinbase,
             timestamp: U256::from(
                 parent_block
                     .header
                     .timestamp
-                    .saturating_add(cfg.block_timestamp_delta),
+                    .saturating_add(cfg.chain_spec.block_timestamp_delta),
             ),
             // WARNING: `prevrandao`` value is predictable up to [`DEFERRED_SLOTS_COUNT`] in advance,
             // Users should follow the same best practice that they would on Ethereum and use future randomness.
@@ -52,9 +52,9 @@ impl<S: Spec> BlockHooks for Evm<S> {
             prevrandao: Some(B256::from(pre_state_user_root)),
             basefee: parent_block
                 .header
-                .next_block_base_fee(cfg.base_fee_params)
+                .next_block_base_fee(cfg.chain_spec.base_fee_params)
                 .unwrap(),
-            gas_limit: cfg.block_gas_limit,
+            gas_limit: cfg.chain_spec.block_gas_limit,
             difficulty: Default::default(),
             blob_excess_gas_and_price: None,
         };
@@ -127,7 +127,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
             gas_limit: block_env.gas_limit,
             gas_used,
             mix_hash: block_env.prevrandao.map_or(B256::ZERO, B256::from),
-            base_fee_per_gas: parent_block.header.next_block_base_fee(cfg.base_fee_params),
+            base_fee_per_gas: parent_block.header.next_block_base_fee(cfg.chain_spec.base_fee_params),
             ..Default::default()
         };
 

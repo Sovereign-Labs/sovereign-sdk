@@ -46,14 +46,14 @@ where
         debug!("EVM module JSON-RPC request to `net_version`");
 
         // Network ID is the same as chain ID for most networks
-        let chain_id = self.cfg_infallible(state).chain_id;
+        let chain_id = self.cfg_infallible(state).chain_spec.chain_id;
         Ok(chain_id.to_string())
     }
 
     /// Handler for: `eth_chainId`
     #[rpc_method(name = "eth_chainId")]
     pub fn chain_id(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<Option<U64>> {
-        let chain_id = self.cfg_infallible(state).chain_id;
+        let chain_id = self.cfg_infallible(state).chain_spec.chain_id;
         debug!(
             chain_id = chain_id,
             "EVM module JSON-RPC request to `eth_chainId`"

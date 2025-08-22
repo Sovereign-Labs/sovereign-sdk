@@ -1,5 +1,5 @@
 {
-  "data": [
+  "accounts": [
     {
       "address": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
       "balance": "0xffffffffffffffff",
@@ -29,18 +29,20 @@
       "nonce": 0
     }
   ],
-  "chain_id": 4321,
-  "limit_contract_code_size": null,
-  "spec": {
+  "hardforks": {
     "0": "SHANGHAI"
   },
-  "coinbase": "0x0000000000000000000000000000000000000000",
-  "starting_base_fee": 7,
-  "block_gas_limit": 30000000,
+  "initial_base_fee": 7,
   "genesis_timestamp": 0,
-  "block_timestamp_delta": 1,
-  "base_fee_params": {
-    "max_change_denominator": 8,
-    "elasticity_multiplier": 2
+  "chain_spec": {
+    "chain_id": 4321,
+    "limit_contract_code_size": null,
+    "coinbase": "0x0000000000000000000000000000000000000000",
+    "block_gas_limit": 30000000,
+    "block_timestamp_delta": 1,
+    "base_fee_params": {
+      "max_change_denominator": 8,
+      "elasticity_multiplier": 2
+    }
   }
 }

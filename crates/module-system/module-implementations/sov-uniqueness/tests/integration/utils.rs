@@ -6,7 +6,7 @@ use reth_primitives::TransactionSigned;
 use secp256k1::rand::SeedableRng as _;
 use secp256k1::{PublicKey, SecretKey};
 use sov_eth_dev_signer::Signer;
-use sov_evm::{AccountData, EthereumAuthenticator, EvmConfig, RlpEvmTransaction, SpecId};
+use sov_evm::{AccountData, EthereumAuthenticator, EvmGenesisConfig, RlpEvmTransaction, SpecId};
 use sov_modules_api::capabilities::{config_chain_id, TransactionAuthenticator, UniquenessData};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
@@ -120,8 +120,8 @@ pub(crate) fn setup() -> (TestUser<S>, TestRunner<TestNonceRuntime<S>, S>, EvmAc
 
     let evm_account = EvmAccount::generate();
 
-    let evm_config = EvmConfig {
-        data: vec![AccountData {
+    let evm_config = EvmGenesisConfig {
+        accounts: vec![AccountData {
             address: evm_account.address(),
             balance: U256::from(1000000000),
             code_hash: KECCAK_EMPTY,
@@ -130,7 +130,7 @@ pub(crate) fn setup() -> (TestUser<S>, TestRunner<TestNonceRuntime<S>, S>, EvmAc
         }],
         // SHANGHAI instead of LATEST
         // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
-        spec: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
+        hardforks: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
         ..Default::default()
     };
 

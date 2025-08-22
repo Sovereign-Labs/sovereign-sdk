@@ -2,13 +2,11 @@
 // similar as possible to upstream than clean it up.
 #![allow(clippy::match_same_arms)]
 
-use alloy_eips::eip1559::{BaseFeeParams, ETHEREUM_BLOCK_GAS_LIMIT_30M};
 use alloy_primitives::Address;
 use revm::primitives::hardfork::SpecId;
 use revm::state::AccountInfo;
 use serde::{Deserialize, Serialize};
 use sov_address::{EthereumAddress, FromVmAddress};
-use sov_modules_api::macros::config_value;
 use sov_modules_api::Spec;
 
 pub(crate) mod conversions;
@@ -40,43 +38,22 @@ impl DbAccount {
     }
 }
 
-/// EVM Chain configuration
+/// Runtime configuration for EVM execution
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct EvmChainConfig {
-    /// Unique chain id
-    /// Chains can be registered at <https://github.com/ethereum-lists/chains>.
-    pub chain_id: u64,
+pub struct EvmRuntimeConfig {
+    /// Core chain parameters
+    pub chain_spec: crate::EvmChainSpec,
 
-    /// Limits size of contract code size
-    /// By default it is 0x6000 (~25kb).
-    pub limit_contract_code_size: Option<usize>,
-
-    /// List of EVM hard forks by block number
-    pub spec: Vec<(u64, SpecId)>,
-
-    /// Coinbase where all the fees go
-    pub coinbase: Address,
-
-    /// Gas limit for single block
-    pub block_gas_limit: u64,
-
-    /// Delta to add to parent block timestamp
-    pub block_timestamp_delta: u64,
-
-    /// Base fee params.
-    pub base_fee_params: BaseFeeParams,
+    /// Sorted hard fork schedule for efficient lookup
+    /// (block number, fork ID) ordered by block number
+    pub hardforks: Vec<(u64, SpecId)>,
 }
 
-impl Default for EvmChainConfig {
-    fn default() -> EvmChainConfig {
-        EvmChainConfig {
-            chain_id: config_value!("CHAIN_ID"),
-            limit_contract_code_size: None,
-            spec: vec![(0, SpecId::SHANGHAI)],
-            coinbase: Address::ZERO,
-            block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
-            block_timestamp_delta: 1,
-            base_fee_params: BaseFeeParams::ethereum(),
+impl Default for EvmRuntimeConfig {
+    fn default() -> EvmRuntimeConfig {
+        EvmRuntimeConfig {
+            chain_spec: crate::EvmChainSpec::default(),
+            hardforks: vec![(0, SpecId::SHANGHAI)],
         }
     }
 }

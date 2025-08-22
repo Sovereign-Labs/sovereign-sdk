@@ -1,5 +1,37 @@
 # 2025-08-22
 - #1553 Enables ignored EVM tests. This is NOT a breaking change.
+- **BREAKING CHANGE** Refactors EVM configuration types to reduce duplication and improve clarity:
+  - `EvmConfig` has been renamed to `EvmGenesisConfig` and restructured
+  - `EvmChainConfig` has been renamed to `EvmRuntimeConfig` and restructured
+  - Common chain parameters extracted into new `EvmChainSpec` struct
+  - Field renames: `data` → `accounts`, `spec` → `hardforks`, `starting_base_fee` → `initial_base_fee`
+  - Genesis JSON structure changed: chain parameters are now nested under `chain_spec` field
+  
+  Migration guide:
+  - Update imports: `EvmConfig` → `EvmGenesisConfig`, `EvmChainConfig` → `EvmRuntimeConfig`
+  - Update genesis JSON files to nest chain parameters under `chain_spec`
+  - Update field names in code and configuration
+  - Example JSON structure change:
+    ```json
+    // Before:
+    {
+      "data": [...],
+      "spec": {"0": "SHANGHAI"},
+      "starting_base_fee": 7,
+      "chain_id": 4321,
+      ...
+    }
+    // After:
+    {
+      "accounts": [...],
+      "hardforks": {"0": "SHANGHAI"},
+      "initial_base_fee": 7,
+      "chain_spec": {
+        "chain_id": 4321,
+        ...
+      }
+    }
+    ```
 
 # 2025-08-12
 - #1522 **BREAKING CHANGE**: Adds the `solana-offchain-auth` authenticator which supports transactions signed using Solana wallets using the "offchain message" functionality. Compatible with Ledger.

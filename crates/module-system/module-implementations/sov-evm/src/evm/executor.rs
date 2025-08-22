@@ -12,20 +12,20 @@ use revm::{
     Database, DatabaseCommit, ExecuteCommitEvm, MainBuilder, MainContext,
 };
 
-use crate::{evm::conversions::create_tx_env, get_spec_id, EvmChainConfig};
+use crate::{evm::conversions::create_tx_env, get_spec_id, EvmRuntimeConfig};
 
 /// builds CfgEnv
 /// Returns correct config depending on spec for given block number
 // Copies context-dependent values from template_cfg or default if not provided
 pub(crate) fn get_cfg_env(
     block_env: &BlockEnv,
-    cfg: EvmChainConfig,
+    cfg: EvmRuntimeConfig,
     template_cfg: Option<CfgEnv>,
 ) -> CfgEnv {
     let mut cfg_env = template_cfg.unwrap_or_default();
-    cfg_env.chain_id = cfg.chain_id;
-    cfg_env.limit_contract_code_size = cfg.limit_contract_code_size;
-    let spec = get_spec_id(cfg.spec, block_env.number.to::<u64>());
+    cfg_env.chain_id = cfg.chain_spec.chain_id;
+    cfg_env.limit_contract_code_size = cfg.chain_spec.limit_contract_code_size;
+    let spec = get_spec_id(cfg.hardforks, block_env.number.to::<u64>());
     cfg_env.with_spec(spec)
 }
 

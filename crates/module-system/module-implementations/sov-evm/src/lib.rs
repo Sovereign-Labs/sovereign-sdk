@@ -82,7 +82,7 @@ pub struct Evm<S: Spec> {
 
     /// Chain configuration. This field is set in genesis.
     #[state]
-    pub(crate) cfg: StateValue<EvmChainConfig, BcsCodec>,
+    pub(crate) cfg: StateValue<EvmRuntimeConfig, BcsCodec>,
 
     /// Block environment used by the evm. This field is set in `begin_rollup_block_hook`.
     #[state]
@@ -141,7 +141,7 @@ where
 {
     type Spec = S;
 
-    type Config = EvmConfig;
+    type Config = EvmGenesisConfig;
 
     type CallMessage = CallMessage;
 
@@ -289,7 +289,7 @@ impl<S: Spec> Evm<S> {
     pub fn cfg<Accessor: StateReader<User>>(
         &self,
         state: &mut Accessor,
-    ) -> Result<Option<EvmChainConfig>, Accessor::Error> {
+    ) -> Result<Option<EvmRuntimeConfig>, Accessor::Error> {
         self.cfg.get(state)
     }
 
@@ -297,7 +297,7 @@ impl<S: Spec> Evm<S> {
     pub fn cfg_infallible<Accessor: InfallibleStateAccessor>(
         &self,
         state: &mut Accessor,
-    ) -> EvmChainConfig {
+    ) -> EvmRuntimeConfig {
         self.cfg
             .get(state)
             .unwrap_infallible()
