@@ -53,9 +53,9 @@ where
             self.init_account(acc, state)?;
         }
 
-        let spec = init_spec(&config)?;
-        let chain_cfg = evm_chain_config(&config, spec);
-        let block = init_block(&config);
+        let spec = init_spec(config)?;
+        let chain_cfg = evm_chain_config(config, spec);
+        let block = init_block(config);
 
         self.cfg.set(&chain_cfg, state)?;
         self.head.set(&block, state)?;

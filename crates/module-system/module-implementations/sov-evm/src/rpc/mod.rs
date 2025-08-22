@@ -588,7 +588,7 @@ where
             tx_env.gas_limit = mid_gas_limit;
 
             let evm_db = self.get_db(state);
-            let result = executor::inspect(evm_db, &block_env, tx_env.clone(), cfg_env.clone());
+            let result = executor::inspect(evm_db, block_env, tx_env.clone(), cfg_env.clone());
 
             // Exceptional case: init used too much gas, we need to increase the gas limit and try
             // again
