@@ -1,6 +1,6 @@
 # 2025-08-22
 - #1553 Enables ignored EVM tests. This is NOT a breaking change.
-- **BREAKING CHANGE** Refactors EVM configuration types to reduce duplication and improve clarity:
+- #1555 **BREAKING CHANGE** Refactors EVM configuration types to reduce duplication and improve clarity:
   - `EvmConfig` has been renamed to `EvmGenesisConfig` and restructured
   - `EvmChainConfig` has been renamed to `EvmRuntimeConfig` and restructured
   - Common chain parameters extracted into new `EvmChainSpec` struct
