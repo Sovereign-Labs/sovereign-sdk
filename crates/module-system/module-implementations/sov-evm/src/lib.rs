@@ -3,11 +3,13 @@
 
 mod account_storage_key;
 mod call;
+mod config;
 mod evm;
 mod genesis;
 mod hooks;
 
 pub use call::*;
+pub use config::*;
 pub use evm::*;
 pub use genesis::*;
 
