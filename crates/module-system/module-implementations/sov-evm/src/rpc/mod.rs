@@ -395,7 +395,7 @@ where
 
         let tx_env = prepare_call_env(&block_env, request.clone()).unwrap();
 
-        let cfg = self.cfg.get(state).unwrap_infallible().unwrap_or_default();
+        let cfg = self.cfg(state).unwrap_infallible().unwrap_or_default();
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
 
         let evm_db: EvmDb<_, S> = self.get_db(state);
@@ -443,7 +443,7 @@ where
         let tx_env = prepare_call_env(&block_env, request.clone()).unwrap();
         trace!(?tx_env, "TxEnv is prepared");
 
-        let cfg = self.cfg.get(state).unwrap_infallible().unwrap_or_default();
+        let cfg = self.cfg(state).unwrap_infallible().unwrap_or_default();
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
 
         let request_gas = request.gas;

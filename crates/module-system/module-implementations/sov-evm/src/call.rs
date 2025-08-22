@@ -50,7 +50,7 @@ where
             .get(state)?
             .expect("Pending block must be set");
 
-        let cfg = self.cfg.get(state)?.expect("Evm config must be set");
+        let cfg = self.cfg(state)?.expect("Evm config must be set");
         let cfg_env = get_cfg_env(&block_env, cfg, None);
 
         let evm_db: EvmDb<_, S> = self.get_db(state);
