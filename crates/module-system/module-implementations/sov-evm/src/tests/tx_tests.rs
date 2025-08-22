@@ -2,7 +2,6 @@ use std::str::FromStr;
 
 use alloy_consensus::{EthereumTxEnvelope, Signed, TxEip1559};
 use alloy_primitives::{Address, Signature, TxKind, U256};
-use alloy_rpc_types::request::TransactionInput;
 use alloy_rpc_types::TransactionRequest;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
 use ethers_core::types::{Bytes, Eip1559TransactionRequest};
@@ -80,17 +79,11 @@ fn prepare_call_env_conversion() {
         from: Some(from),
         to: Some(TxKind::Call(to)),
         gas_price: Some(100),
-        max_fee_per_gas: None,
-        max_priority_fee_per_gas: None,
         gas: Some(200),
         value: Some(U256::from(300u64)),
-        input: TransactionInput::default(),
         nonce: Some(1),
         chain_id: Some(1),
-        access_list: None,
         transaction_type: Some(2),
-        blob_versioned_hashes: Default::default(),
-        max_fee_per_blob_gas: None,
         ..Default::default()
     };
 
@@ -102,16 +95,11 @@ fn prepare_call_env_conversion() {
         caller: from,
         gas_price: 100,
         gas_limit: 200,
-        gas_priority_fee: None,
         kind: TransactTo::Call(to),
         value: U256::from(300u64),
-        data: Default::default(),
         chain_id: Some(1),
         nonce: 1,
-        access_list: Default::default(),
-        blob_hashes: vec![],
-        max_fee_per_blob_gas: 0,
-        authorization_list: vec![],
+        ..Default::default()
     };
 
     assert_eq!(tx_env.caller, expected.caller);
@@ -128,11 +116,7 @@ fn prepare_call_env_conversion() {
 
 #[test]
 fn prepare_call_block_env() {
-    let block = Block {
-        header: Default::default(),
-        transactions: Default::default(),
-    };
-
+    let block = Block::default();
     let sealed_block = block.clone().seal();
 
     let block_env = BlockEnv::from(sealed_block);

@@ -58,7 +58,7 @@ pub struct PendingTransaction {
 }
 
 #[serde_as]
-#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, PartialEq, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Block {
     /// Block header.
     /// https://reth.rs/docs/reth_primitives/serde_bincode_compat/index.html
