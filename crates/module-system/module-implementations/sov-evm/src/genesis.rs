@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 
-use alloy_consensus::constants::{EMPTY_RECEIPTS, EMPTY_TRANSACTIONS, KECCAK_EMPTY};
-use alloy_consensus::{EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
+use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_eips::eip1559::{ETHEREUM_BLOCK_GAS_LIMIT_30M, MIN_PROTOCOL_BASE_FEE};
 use alloy_eips::merge::SLOT_DURATION;
+use alloy_primitives::Bytes;
 use alloy_primitives::{Address, B256, U256};
-use alloy_primitives::{Bloom, Bytes, B64};
 use anyhow::Result;
 use revm::primitives::hardfork::SpecId;
 use revm::state::AccountInfo;

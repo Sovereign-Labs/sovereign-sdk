@@ -1,5 +1,5 @@
 use alloy_consensus::constants::KECCAK_EMPTY;
-use alloy_consensus::{BlockHeader, Header, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
+use alloy_consensus::{BlockHeader, Header};
 use alloy_eips::eip1559::{BaseFeeParams, ETHEREUM_BLOCK_GAS_LIMIT_30M};
 use alloy_primitives::{Address, Bytes, U256};
 use revm::state::AccountInfo;
