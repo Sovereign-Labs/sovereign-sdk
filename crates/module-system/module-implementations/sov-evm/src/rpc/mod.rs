@@ -485,6 +485,85 @@ where
             Err(err) => return Err(eth_api_into_rpc_error(eth_from_infallible(err))),
         };
 
+        let gas_limit = self.bin_search_gas_limit(
+            &cfg_env,
+            &block_env,
+            &tx_env,
+            result,
+            highest_gas_limit,
+            state,
+        )?;
+
+        debug!(
+            %gas_limit,
+            "EVM module JSON-RPC response from `eth_estimateGas`"
+        );
+        Ok(U64::from(gas_limit))
+    }
+}
+
+impl<S: Spec> Evm<S>
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    fn get_sealed_block_by_number(
+        &self,
+        block_number: Option<String>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> SealedBlock {
+        // safe, finalized, and pending are not supported
+        match block_number {
+            Some(ref block_number) if block_number == "earliest" => self
+                .blocks
+                .get(0, state)
+                .unwrap_infallible()
+                .expect("Genesis block must be set"),
+            Some(ref block_number) if block_number == "latest" => self
+                .blocks
+                .last(state)
+                .unwrap_infallible()
+                .expect("Head block must be set"),
+            Some(ref block_number) => {
+                // hex representation may have 0x prefix
+                let block_number = u64::from_str_radix(block_number.trim_start_matches("0x"), 16)
+                    .expect("Block number must be a valid hex number, with or without 0x prefix");
+                self.blocks
+                    .get(block_number, state)
+                    .unwrap_infallible()
+                    .expect("Block must be set")
+            }
+            None => self.get_sealed_block_by_number(Some("latest".into()), state),
+        }
+    }
+
+    fn resolve_block_env(
+        &self,
+        block_number: Option<String>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> BlockEnv {
+        match block_number {
+            Some(ref block_number) if block_number == "pending" => self
+                .block_env
+                .get(state)
+                .unwrap_infallible()
+                .unwrap_or_default()
+                .clone(),
+            _ => {
+                let block = self.get_sealed_block_by_number(block_number, state);
+                BlockEnv::from(block)
+            }
+        }
+    }
+
+    fn bin_search_gas_limit(
+        &self,
+        cfg_env: &CfgEnv,
+        block_env: &BlockEnv,
+        tx_env: &TxEnv,
+        result: ExecutionResult,
+        highest_gas_limit: u64,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<u64, ErrorObjectOwned> {
         // at this point, we know the call succeeded but want to find the _best_ (lowest) gas the
         // transaction succeeds with.
         // we find this by doing a binary search over the
@@ -558,67 +637,7 @@ where
             // new midpoint
             mid_gas_limit = ((highest_gas_limit as u128 + lowest_gas_limit as u128) / 2) as u64;
         }
-
-        debug!(
-            %highest_gas_limit,
-            "EVM module JSON-RPC response from `eth_estimateGas`"
-        );
-        Ok(U64::from(highest_gas_limit))
-    }
-}
-
-impl<S: Spec> Evm<S> {
-    fn get_sealed_block_by_number(
-        &self,
-        block_number: Option<String>,
-        state: &mut ApiStateAccessor<S>,
-    ) -> SealedBlock {
-        // safe, finalized, and pending are not supported
-        match block_number {
-            Some(ref block_number) if block_number == "earliest" => self
-                .blocks
-                .get(0, state)
-                .unwrap_infallible()
-                .expect("Genesis block must be set"),
-            Some(ref block_number) if block_number == "latest" => self
-                .blocks
-                .last(state)
-                .unwrap_infallible()
-                .expect("Head block must be set"),
-            Some(ref block_number) => {
-                // hex representation may have 0x prefix
-                let block_number = u64::from_str_radix(block_number.trim_start_matches("0x"), 16)
-                    .expect("Block number must be a valid hex number, with or without 0x prefix");
-                self.blocks
-                    .get(block_number, state)
-                    .unwrap_infallible()
-                    .expect("Block must be set")
-            }
-            None => self
-                .blocks
-                .last(state)
-                .unwrap_infallible()
-                .expect("Head block must be set"),
-        }
-    }
-
-    fn resolve_block_env(
-        &self,
-        block_number: Option<String>,
-        state: &mut ApiStateAccessor<S>,
-    ) -> BlockEnv {
-        match block_number {
-            Some(ref block_number) if block_number == "pending" => self
-                .block_env
-                .get(state)
-                .unwrap_infallible()
-                .unwrap_or_default()
-                .clone(),
-            _ => {
-                let block = self.get_sealed_block_by_number(block_number, state);
-                BlockEnv::from(block)
-            }
-        }
+        Ok(highest_gas_limit)
     }
 }
 
