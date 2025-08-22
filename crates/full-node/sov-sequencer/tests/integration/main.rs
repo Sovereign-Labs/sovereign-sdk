@@ -5,6 +5,7 @@ mod replication_and_failover;
 mod setup_mode;
 mod standard_sequencer;
 mod thin_sequencer;
+mod uniqueness;
 mod upgradability;
 pub mod utils;
 mod websockets;

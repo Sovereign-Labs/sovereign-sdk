@@ -1,3 +1,4 @@
+use sov_metrics::{AuthAndProcessMetrics, AuthAndProcessTimings};
 use sov_modules_api::capabilities::{
     AuthenticationError, ChainState, GasEnforcer, SequencerAuthorization, TransactionAuthenticator,
     TransactionAuthorizer,
@@ -39,6 +40,7 @@ pub fn process_tx_and_reward_prover<S, R, I, C>(
     #[allow(unused_variables)] execution_context: ExecutionContext,
     injected_control_flow: &C,
     operating_mode: OperatingMode,
+    mut metrics: AuthAndProcessMetrics,
 ) -> (
     Result<ApplyTxResult<S>, TxAndError>,
     TxScratchpad<S, I>,
@@ -72,6 +74,7 @@ where
         sequencer_rollup_address,
         injected_control_flow,
         operating_mode,
+        &mut metrics,
     );
 
     #[cfg(feature = "native")]
@@ -83,6 +86,7 @@ where
         sequencer_da_address,
         discriminant,
         &result.2,
+        metrics,
     );
 
     result
@@ -97,6 +101,7 @@ fn track_transaction_metrics<S: Spec>(
     sequencer_address: &<S::Da as DaSpec>::Address,
     message_discriminant: String,
     basic_gas_meter: &BasicGasMeter<S>,
+    processing_metrics: AuthAndProcessMetrics,
 ) {
     sov_metrics::track_metrics(|metrics_tracker| {
         let tx_effect = match result {
@@ -117,6 +122,7 @@ fn track_transaction_metrics<S: Spec>(
         };
 
         metrics_tracker.submit(transaction_metrics);
+        metrics_tracker.submit(processing_metrics);
     });
 }
 
@@ -135,6 +141,7 @@ fn process_tx_and_reward_prover_inner<S, R, I, C>(
     sequencer_rollup_address: S::Address,
     injected_control_flow: &C,
     operating_mode: OperatingMode,
+    metrics: &mut AuthAndProcessMetrics,
 ) -> (
     Result<ApplyTxResult<S>, TxAndError>,
     TxScratchpad<S, I>,
@@ -150,13 +157,18 @@ where
 
     let raw_tx_hash = auth_tx.raw_tx_hash;
     let tx = &auth_tx.authenticated_tx;
+    // Clear any leftover state access metrics from the pre-exec working set
+    let _ = pre_exec_working_set.metrics().take();
 
+    metrics.timings.resolve_context_timer.start();
     let maybe_ctx = runtime.transaction_authorizer().resolve_context(
         &auth_data,
         sequencer_da_address,
         sequencer_rollup_address,
         &mut pre_exec_working_set,
     );
+    metrics.timings.resolve_context_timer.end();
+    metrics.timings.resolve_context_access_metrics = pre_exec_working_set.metrics().take();
 
     let mut ctx = match maybe_ctx {
         Ok(ctx) => ctx,
@@ -186,6 +198,7 @@ where
     }
 
     // Check that the transaction isn't a duplicate
+    metrics.timings.check_uniqueness_timer.start();
     if let Err(err) = runtime.transaction_authorizer().check_uniqueness(
         &auth_data,
         &ctx,
@@ -201,7 +214,10 @@ where
             pre_exec_gas_meter,
         );
     }
+    metrics.timings.check_uniqueness_timer.end();
+    metrics.timings.check_uniqueness_access_metrics = pre_exec_working_set.metrics().take();
 
+    metrics.timings.mark_tx_attempted_timer.start();
     if let Err(err) = runtime.transaction_authorizer().mark_tx_attempted(
         &auth_data,
         sequencer_da_address,
@@ -217,7 +233,10 @@ where
             pre_exec_gas_meter,
         );
     }
+    metrics.timings.mark_tx_attempted_timer.end();
+    metrics.timings.mark_tx_attempted_access_metrics = pre_exec_working_set.metrics().take();
 
+    metrics.timings.reserve_gas_timer.start();
     let gas_price = pre_exec_working_set.gas_price().clone();
     if let Err(err) =
         runtime
@@ -231,6 +250,8 @@ where
             pre_exec_gas_meter,
         );
     }
+    metrics.timings.reserve_gas_timer.end();
+    metrics.timings.reserve_gas_access_metrics = pre_exec_working_set.metrics().take();
 
     let (scratchpad, pre_exec_gas_meter) = pre_exec_working_set.to_scratchpad_and_gas_meter();
 
@@ -257,24 +278,37 @@ where
             pre_exec_gas_meter,
         );
     }
-
+    assert_eq!(
+        working_set.metrics().len(),
+        0,
+        "State access metrics should be empty since we just took them"
+    );
+    metrics.timings.attempt_tx_timer.start();
     // If the transaction is valid, execute it and apply the changes to the state.
     let (apply_tx, mut scratchpad) =
         apply_tx(runtime, &ctx, tx, raw_tx_hash, raw_tx, message, working_set);
+    metrics.timings.attempt_tx_timer.end();
+    metrics.timings.attempt_tx_access_metrics = scratchpad.metrics().take();
 
     let transaction_consumption = &apply_tx.transaction_consumption;
 
+    metrics.timings.refund_remaining_gas_timer.start();
     runtime.gas_enforcer().refund_remaining_gas(
         ctx.gas_refund_recipient(),
         &transaction_consumption.remaining_funds(),
         &mut scratchpad,
     );
+    metrics.timings.refund_remaining_gas_timer.end();
+    metrics.timings.refund_remaining_gas_access_metrics = scratchpad.metrics().take();
 
+    metrics.timings.reward_prover_timer.start();
     runtime.gas_enforcer().reward_prover(
         &transaction_consumption.base_fee_value(),
         operating_mode,
         &mut scratchpad,
     );
+    metrics.timings.reward_prover_timer.end();
+    metrics.timings.reward_prover_access_metrics = scratchpad.metrics().take();
 
     (Ok(apply_tx), scratchpad, pre_exec_gas_meter)
 }
@@ -625,6 +659,8 @@ where
     I: StateProvider<S>,
     C: InjectedControlFlow<S>,
 {
+    let mut timings = AuthAndProcessTimings::default();
+    timings.total_timer.start();
     // CHECKS:
     // 1. `max_tx_check_costs` will not cause an overflow when converted to a token value.
     let max_tx_check_costs = <S as GasSpec>::max_tx_check_costs();
@@ -681,8 +717,10 @@ where
         .charge_gas(&<S as GasSpec>::process_tx_pre_exec_checks_gas())
         .expect("The gas meter should be able to charge the pre-execution checks");
 
+    timings.auth.start();
     let authentication_result =
         deserialize_and_authenticate::<S, RT, I>(&raw_tx, &mut pre_exec_working_set);
+    timings.auth.end();
 
     let validated_output = match authentication_result {
         Ok(auth_output) => auth_output,
@@ -744,6 +782,7 @@ where
         Some(raw_tx_hash),
         "Sanity check failed. The transaction hash computed by the authenticator does not match the hash computed by the dedicated tx hash calculation utility method. This is a bug, please report it."
     );
+    let metrics = AuthAndProcessMetrics::new(raw_tx_hash, timings);
 
     // Process the transaction and reward the sequencer if everything went well. Responsibility for
     // penalizing the sequencer if the transaction cannot be executed due to sequencer error is with the caller.
@@ -758,6 +797,7 @@ where
         execution_context,
         injected_control_flow,
         operating_mode,
+        metrics,
     );
 
     span.exit();

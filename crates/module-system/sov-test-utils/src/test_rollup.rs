@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use crate::postgres::connection_string_from_postgres_container;
 use std::net::SocketAddr;
 use std::num::NonZero;
 use std::path::{Path, PathBuf};
@@ -6,6 +6,8 @@ use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
+use crate::postgres::create_postgres_container;
+use crate::postgres::PostgresImage;
 use anyhow::Context;
 use derivative::Derivative;
 use sov_api_spec::WsSubscription;
@@ -38,13 +40,10 @@ pub use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{
     HttpServerConfig, MonitoringConfig, ProofManagerConfig, RollupConfig, RunnerConfig,
 };
-use testcontainers::core::{Mount, WaitFor};
-use testcontainers::runners::AsyncRunner;
-use testcontainers::{ContainerAsync, Image, ImageExt};
+use testcontainers::ContainerAsync;
 use tokio::sync::{watch, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
-use tracing::debug;
 
 use crate::{
     TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
@@ -134,26 +133,16 @@ impl<R: FullNodeBlueprint<Native>> RollupBuilder<R> {
 
     /// Uses the preferred sequencer with Postgres as a database.
     pub async fn with_postgres_sequencer(mut self) -> anyhow::Result<Self> {
-        let postgres_data_dir = self.config.storage.as_path().join("postgres_data");
-        debug!(?postgres_data_dir, "Using Postgres data directory");
-        std::fs::create_dir_all(&postgres_data_dir)?;
-
-        let postgres = PostgresImage
-            .with_mount(Mount::bind_mount(
-                postgres_data_dir.to_string_lossy(),
-                "/var/lib/postgresql/data",
-            ))
-            .start()
-            .await
+        let postgres =
+            create_postgres_container(&self.config.storage.as_path().join("postgres_data")).await
             .with_context(|| "Failed to start Postgres container. This is most likely because (1) the Docker daemon is not running or (2) Docker Desktop doesn't have file sharing permissions to the repository directory")?;
+
+        let postgres_connection_string =
+            connection_string_from_postgres_container(&postgres).await?;
 
         match &mut self.config.sequencer_config {
             SequencerKindConfig::Preferred(ref mut config) => {
-                config.postgres_connection_string = Some(format!(
-                    "postgres://postgres:postgres@{}:{}",
-                    postgres.get_host().await?,
-                    postgres.get_host_port_ipv4(5432).await?
-                ));
+                config.postgres_connection_string = Some(postgres_connection_string);
                 self.postgres_container_opt = Some(Arc::new(postgres));
             }
             _ => panic!("Can't use Postgres with a non-preferred sequencer"),
@@ -856,36 +845,5 @@ pub fn get_appropriate_rollup_prover_config<S: Spec>(
         RollupProverConfig::Skip
     } else {
         RollupProverConfig::Execute(host_args)
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-struct PostgresImage;
-
-impl Image for PostgresImage {
-    fn name(&self) -> &str {
-        "postgres"
-    }
-
-    fn tag(&self) -> &str {
-        "17-alpine"
-    }
-
-    fn ready_conditions(&self) -> Vec<WaitFor> {
-        // See <https://github.com/testcontainers/testcontainers-rs-modules-community/issues/158>.
-        vec![
-            WaitFor::message_on_stderr("database system is ready to accept connections"),
-            WaitFor::message_on_stdout("database system is ready to accept connections"),
-        ]
-    }
-
-    fn env_vars(
-        &self,
-    ) -> impl IntoIterator<Item = (impl Into<Cow<'_, str>>, impl Into<Cow<'_, str>>)> {
-        [
-            ("POSTGRES_DB", "postgres"),
-            ("POSTGRES_USER", "postgres"),
-            ("POSTGRES_PASSWORD", "postgres"),
-        ]
     }
 }

@@ -3,17 +3,13 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
-use sov_state::{
-    EventContainer, Kernel as KernelType, Namespace, SlotKey, SlotValue, TypeErasedEvent, User,
-};
-
 use super::checkpoints::StateCheckpoint;
 use super::internals::RevertableWriter;
 use super::temp_cache::{CacheLookup, TempCache};
 use super::{BorshSerializedSize, ChangeSet, StateProvider, UniversalStateAccessor};
 use crate::capabilities::RollupHeight;
 use crate::module::Spec;
+use crate::state::accessors::StateMetricsProvider;
 use crate::state::traits::PerBlockCache;
 use crate::transaction::{
     transaction_consumption_helper, AuthenticatedTransactionData, PriorityFeeBips,
@@ -24,6 +20,11 @@ use crate::{AccessoryStateReader, GasArray};
 use crate::{
     AccessoryStateWriter, Amount, BasicGasMeter, Gas, GasInfo, GasMeter, GasMeteringError,
     GetGasPrice, ProvableStateReader, ProvableStateWriter, TxState, VersionReader,
+};
+use sov_metrics::{StateAccessMetric, StateMetrics};
+use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
+use sov_state::{
+    EventContainer, Kernel as KernelType, Namespace, SlotKey, SlotValue, TypeErasedEvent, User,
 };
 
 /// A state diff over the storage that contains all the changes related to transaction execution.
@@ -41,6 +42,12 @@ pub struct RevertableTxState<'a, S: Spec, State> {
     pub(super) temp_cache: TempCache,
     pub(super) writes: HashMap<(Namespace, SlotKey), Option<SlotValue>>,
     pub(super) phantom: PhantomData<S>,
+}
+
+impl<S: Spec, I: StateMetricsProvider> StateMetricsProvider for RevertableTxState<'_, S, I> {
+    fn metrics(&mut self) -> &mut StateMetrics {
+        self.inner.metrics()
+    }
 }
 
 impl<'a, S: Spec, I: TxState<S>> RevertableTxState<'a, S, I> {
@@ -116,18 +123,28 @@ impl<S: Spec, I: TxState<S>> VersionReader for RevertableTxState<'_, S, I> {
 }
 
 impl<S: Spec, I: TxState<S>> UniversalStateAccessor for RevertableTxState<'_, S, I> {
-    fn get_size(&mut self, namespace: Namespace, key: &SlotKey) -> Option<u32> {
+    fn get_size(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metrics: &mut StateAccessMetric,
+    ) -> Option<u32> {
         if let Some(value) = self.writes.get(&(namespace, key.clone())) {
             return value.as_ref().map(|v| v.size());
         }
-        self.inner.get_size(namespace, key)
+        self.inner.get_size(namespace, key, metrics)
     }
 
-    fn get_value(&mut self, namespace: Namespace, key: &SlotKey) -> Option<SlotValue> {
+    fn get_value(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metrics: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
         if let Some(value) = self.writes.get(&(namespace, key.clone())) {
             return value.clone();
         }
-        self.inner.get_value(namespace, key)
+        self.inner.get_value(namespace, key, metrics)
     }
 
     fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
@@ -192,12 +209,32 @@ pub struct TxScratchpad<S: Spec, I: StateProvider<S>> {
 }
 
 impl<S: Spec, I: StateProvider<S>> UniversalStateAccessor for TxScratchpad<S, I> {
-    fn get_size(&mut self, namespace: Namespace, key: &SlotKey) -> Option<u32> {
-        <RevertableWriter<I> as UniversalStateAccessor>::get_size(&mut self.inner, namespace, key)
+    fn get_size(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metrics: &mut StateAccessMetric,
+    ) -> Option<u32> {
+        <RevertableWriter<I> as UniversalStateAccessor>::get_size(
+            &mut self.inner,
+            namespace,
+            key,
+            metrics,
+        )
     }
 
-    fn get_value(&mut self, namespace: Namespace, key: &SlotKey) -> Option<SlotValue> {
-        <RevertableWriter<I> as UniversalStateAccessor>::get_value(&mut self.inner, namespace, key)
+    fn get_value(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metrics: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
+        <RevertableWriter<I> as UniversalStateAccessor>::get_value(
+            &mut self.inner,
+            namespace,
+            key,
+            metrics,
+        )
     }
 
     fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
@@ -252,6 +289,14 @@ impl<S: Spec, I: StateProvider<S>> TxScratchpad<S, I> {
     }
 }
 
+impl<S: Spec, I: StateProvider<S> + StateMetricsProvider> StateMetricsProvider
+    for TxScratchpad<S, I>
+{
+    fn metrics(&mut self) -> &mut StateMetrics {
+        self.inner.metrics()
+    }
+}
+
 impl<S: Spec, I: StateProvider<S>> VersionReader for TxScratchpad<S, I> {
     fn rollup_height_to_access(&self) -> RollupHeight {
         self.inner.inner.rollup_height_to_access()
@@ -288,6 +333,12 @@ impl<S: Spec, I: StateProvider<S>> PerBlockCache for TxScratchpad<S, I> {
 pub struct PreExecWorkingSet<S: Spec, I: StateProvider<S>> {
     inner: TxScratchpad<S, I>,
     gas_meter: BasicGasMeter<S>,
+}
+
+impl<S: Spec, I: StateProvider<S>> StateMetricsProvider for PreExecWorkingSet<S, I> {
+    fn metrics(&mut self) -> &mut StateMetrics {
+        self.inner.metrics()
+    }
 }
 
 impl<S: Spec, I: StateProvider<S>> PreExecWorkingSet<S, I> {
@@ -342,12 +393,32 @@ impl<S: Spec, I: StateProvider<S>> GetGasPrice for PreExecWorkingSet<S, I> {
 }
 
 impl<S: Spec, I: StateProvider<S>> UniversalStateAccessor for PreExecWorkingSet<S, I> {
-    fn get_size(&mut self, namespace: Namespace, key: &SlotKey) -> Option<u32> {
-        <TxScratchpad<S, I> as UniversalStateAccessor>::get_size(&mut self.inner, namespace, key)
+    fn get_size(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metrics: &mut StateAccessMetric,
+    ) -> Option<u32> {
+        <TxScratchpad<S, I> as UniversalStateAccessor>::get_size(
+            &mut self.inner,
+            namespace,
+            key,
+            metrics,
+        )
     }
 
-    fn get_value(&mut self, namespace: Namespace, key: &SlotKey) -> Option<SlotValue> {
-        <TxScratchpad<S, I> as UniversalStateAccessor>::get_value(&mut self.inner, namespace, key)
+    fn get_value(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metrics: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
+        <TxScratchpad<S, I> as UniversalStateAccessor>::get_value(
+            &mut self.inner,
+            namespace,
+            key,
+            metrics,
+        )
     }
 
     fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
@@ -501,6 +572,14 @@ impl<S: Spec, I: StateProvider<S>> WorkingSet<S, I> {
     }
 }
 
+impl<S: Spec, I: StateProvider<S> + StateMetricsProvider> StateMetricsProvider
+    for WorkingSet<S, I>
+{
+    fn metrics(&mut self) -> &mut StateMetrics {
+        self.delta.metrics()
+    }
+}
+
 #[cfg(test)]
 use crate::capabilities::Kernel;
 
@@ -585,12 +664,22 @@ impl<S: Spec, I: StateProvider<S>> GetGasPrice for WorkingSet<S, I> {
 }
 
 impl<S: Spec, I: StateProvider<S>> UniversalStateAccessor for WorkingSet<S, I> {
-    fn get_size(&mut self, namespace: Namespace, key: &SlotKey) -> Option<u32> {
-        self.delta.get_size(namespace, key)
+    fn get_size(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metrics: &mut StateAccessMetric,
+    ) -> Option<u32> {
+        self.delta.get_size(namespace, key, metrics)
     }
 
-    fn get_value(&mut self, namespace: Namespace, key: &SlotKey) -> Option<SlotValue> {
-        self.delta.get_value(namespace, key)
+    fn get_value(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metrics: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
+        self.delta.get_value(namespace, key, metrics)
     }
     fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
         self.delta.set_value(namespace, key, value);

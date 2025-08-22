@@ -1,3 +1,4 @@
+use sov_metrics::StateAccessMetric;
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::execution_mode;
 use sov_state::{
@@ -91,13 +92,14 @@ fn test_witness_generation() {
 
 fn test_values<S: Spec>(state: &mut StateCheckpoint<S>) {
     // Test overriding empty value.
+    let mut metric = StateAccessMetric::new("get_size", 8);
     {
         let mut state_value =
             StateValue::<u64>::with_codec(Prefix::new(vec![VAL_ID_1]), BorshCodec);
         let is_cached = state.is_value_cached(NAMESPACE, &state_value.slot_key());
         assert_eq!(is_cached, IsValueCached::No);
 
-        let maybe_size = state.get_size(NAMESPACE, &state_value.slot_key());
+        let maybe_size = state.get_size(NAMESPACE, &state_value.slot_key(), &mut metric);
         assert!(maybe_size.is_none());
 
         let maybe_get = state_value.get(state).unwrap();
@@ -107,7 +109,7 @@ fn test_values<S: Spec>(state: &mut StateCheckpoint<S>) {
         let is_cached = state.is_value_cached(NAMESPACE, &state_value.slot_key());
         assert_eq!(is_cached, IsValueCached::Yes(AccessSize::Write(8)));
 
-        let maybe_size = state.get_size(NAMESPACE, &state_value.slot_key());
+        let maybe_size = state.get_size(NAMESPACE, &state_value.slot_key(), &mut metric);
         assert_eq!(maybe_size, Some(8));
 
         let maybe_get = state_value.get(state).unwrap();
@@ -122,7 +124,7 @@ fn test_values<S: Spec>(state: &mut StateCheckpoint<S>) {
         let is_cached = state.is_value_cached(NAMESPACE, &state_value.slot_key());
         assert_eq!(is_cached, IsValueCached::No);
 
-        let maybe_size = state.get_size(NAMESPACE, &state_value.slot_key());
+        let maybe_size = state.get_size(NAMESPACE, &state_value.slot_key(), &mut metric);
         assert_eq!(maybe_size, Some(8));
 
         let is_cached = state.is_value_cached(NAMESPACE, &state_value.slot_key());
@@ -151,7 +153,7 @@ fn test_values<S: Spec>(state: &mut StateCheckpoint<S>) {
         let is_cached = state.is_value_cached(NAMESPACE, &state_value.slot_key());
         assert_eq!(is_cached, IsValueCached::Yes(AccessSize::Read(8)));
 
-        let maybe_size = state.get_size(NAMESPACE, &state_value.slot_key());
+        let maybe_size = state.get_size(NAMESPACE, &state_value.slot_key(), &mut metric);
         assert_eq!(maybe_size, Some(8));
     }
 }

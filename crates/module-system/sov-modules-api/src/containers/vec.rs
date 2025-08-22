@@ -1,6 +1,7 @@
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
 
+use sov_metrics::StateAccessMetric;
 use sov_state::codec::BorshCodec;
 use sov_state::namespaces::{Accessory, CompileTimeNamespace, Kernel, User};
 use sov_state::{EncodeLike, Prefix, StateCodec, StateItemCodec, StateItemDecoder};
@@ -9,7 +10,10 @@ use unwrap_infallible::UnwrapInfallible;
 
 use super::map::NamespacedStateMap;
 use super::value::NamespacedStateValue;
-use crate::{InfallibleStateReaderAndWriter, StateReader, StateReaderAndWriter, StateWriter};
+use crate::{
+    InfallibleStateReaderAndWriter, StateMetricsProvider, StateReader, StateReaderAndWriter,
+    StateWriter,
+};
 
 /// A growable array of values stored as JMT-backed state.
 #[derive(
@@ -334,19 +338,22 @@ where
         state: &mut W,
     ) -> Result<(), <W as StateWriter<Accessory>>::Error>
     where
-        W: StateWriter<Accessory>,
+        W: StateWriter<Accessory> + StateMetricsProvider,
         Vq: ?Sized,
         Codec::ValueCodec: EncodeLike<Vq, V>,
     {
         let len_key = self.len_value.slot_key();
-        let index = if let Some(len_bytes) = state.get_value(Accessory::NAMESPACE, &len_key) {
-            self.len_value
-                .codec()
-                .value_codec()
-                .decode_unwrap(len_bytes.value())
-        } else {
-            0
-        };
+        let mut metric = StateAccessMetric::new("push_accessory", len_key.size());
+        let index =
+            if let Some(len_bytes) = state.get_value(Accessory::NAMESPACE, &len_key, &mut metric) {
+                self.len_value
+                    .codec()
+                    .value_codec()
+                    .decode_unwrap(len_bytes.value())
+            } else {
+                0
+            };
+        state.metrics().push(metric);
         self.len_value.set(&index.checked_add(1).expect("Overflowed u64 while pushing to a state vec. This should be impossible in the lifetime of the universe."), state)?;
         self.elems.set(&index, value, state)
     }

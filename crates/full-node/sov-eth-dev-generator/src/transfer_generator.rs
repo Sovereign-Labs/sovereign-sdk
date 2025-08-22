@@ -1,9 +1,11 @@
 //! Ethereum transfer generator.
+use alloy_consensus::TxEip1559;
+use alloy_consensus::TypedTransaction;
+use alloy_primitives::{Address, Bytes, TxKind, U256};
 use arbitrary::Arbitrary;
-use reth_primitives::{Bytes, TransactionSigned, TxKind, U256};
-use reth_rpc_types::{transaction::EIP1559TransactionRequest, AccessList, TypedTransactionRequest};
-use revm::primitives::Address;
-pub use secp256k1::SecretKey;
+use reth_primitives::TransactionSigned;
+use revm::context::transaction::AccessList;
+use secp256k1::SecretKey;
 
 use crate::randomness::Randomness;
 use sov_eth_dev_signer::Signer;
@@ -51,15 +53,15 @@ impl TransferGenerator {
 
     /// Creates the signed transfer tx
     fn signed_tx(&self, to: Address, nonce: u64) -> TransactionSigned {
-        let request = TypedTransactionRequest::EIP1559(EIP1559TransactionRequest {
+        let request = TypedTransaction::Eip1559(TxEip1559 {
             chain_id: 4321,
             nonce,
             value: U256::from(1),
             input: Bytes::new(),
-            max_priority_fee_per_gas: U256::ZERO,
-            max_fee_per_gas: U256::from(1000),
-            gas_limit: U256::from(u64::MAX),
-            kind: TxKind::Call(to),
+            max_priority_fee_per_gas: 0,
+            max_fee_per_gas: 0,
+            gas_limit: 0,
+            to: TxKind::Call(to),
             access_list: AccessList::default(),
         });
 

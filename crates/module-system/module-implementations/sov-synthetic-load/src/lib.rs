@@ -3,6 +3,9 @@
 mod call;
 mod genesis;
 
+#[cfg(feature = "native")]
+mod metrics;
+
 mod event;
 pub use call::*;
 pub use event::Event;

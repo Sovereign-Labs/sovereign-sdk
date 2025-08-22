@@ -4,6 +4,7 @@
 use std::str::FromStr;
 use std::time::Duration;
 
+use crate::types::AnyJsonValue;
 use anyhow::Context;
 use backon::{ExponentialBuilder, Retryable};
 use base64::prelude::*;
@@ -11,6 +12,7 @@ use borsh::BorshSerialize;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use sov_modules_api::RawTx;
+use sov_rollup_interface::crypto::CredentialId;
 use sov_rollup_interface::node::ledger_api::{FinalityStatus, IncludeChildren};
 use sov_rollup_interface::zk::aggregated_proof;
 use sov_rollup_interface::TxHash;
@@ -208,6 +210,24 @@ impl Client {
                 }
             })
             .boxed())
+    }
+
+    pub async fn get_next_nonce(&self, credential_id: &CredentialId) -> anyhow::Result<u64> {
+        tracing::trace!(%credential_id, "Dedup is requested.");
+        let param = types::Hash::from_str(&credential_id.to_string())?;
+        let response = self.credential_id_dedup(&param).await?;
+        let inner = match response.into_inner() {
+            AnyJsonValue::Object(map) => map,
+            other => {
+                anyhow::bail!(
+                    "Unexpected response shape is returned from dedup endpoint: {other:?}"
+                )
+            }
+        };
+        inner
+            .get("nonce")
+            .and_then(|nonce| nonce.as_u64())
+            .ok_or(anyhow::anyhow!("Failed to get nonce from {inner:?}"))
     }
 }
 

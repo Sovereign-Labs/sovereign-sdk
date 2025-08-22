@@ -391,10 +391,10 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.exceptions]]
-allow = ["LGPL-3.0"]
+allow = ["LGPL-3.0-or-later"]
 # Used by `risc0-circuit-recursion` in its build script: <https://github.com/risc0/risc0/blob/3177cdedda8fad56d7acd71fe2439e8dd0d93413/risc0/circuit/recursion/build.rs>.
 name = "downloader"
-version = "0.2"
+version = "0.2.8"
 
 [[licenses.exceptions]]
 # Halo 2 is now MIT licensed, but the update hasn't been published on crates.io
@@ -407,31 +407,31 @@ version = "0.1.0-beta.2"
 # Unfortunately, this new one is actually statically linked into our prover,
 # which is one of the things that LGPL specifically singles out as making your project a “derivative work”
 # But, as long as we distribute our source such that users can recompile with a different version of the LGPL software we’re compliant
-allow = ["LGPL-3.0"]
+allow = ["LGPL-3.0-only"]
 name = "malachite-nz"
 version = "0.4.22"
 
 [[licenses.exceptions]]
 # Same as above
-allow = ["LGPL-3.0"]
+allow = ["LGPL-3.0-only"]
 name = "malachite"
 version = "0.4.22"
 
 [[licenses.exceptions]]
 # Same as above
-allow = ["LGPL-3.0"]
+allow = ["LGPL-3.0-only"]
 name = "malachite-base"
 version = "0.4.22"
 
 [[licenses.exceptions]]
 # Same as above
-allow = ["LGPL-3.0"]
+allow = ["LGPL-3.0-only"]
 name = "malachite-float"
 version = "0.4.22"
 
 [[licenses.exceptions]]
 # Same as above
-allow = ["LGPL-3.0"]
+allow = ["LGPL-3.0-only"]
 name = "malachite-q"
 version = "0.4.22"
 

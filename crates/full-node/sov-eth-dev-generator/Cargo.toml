@@ -17,8 +17,9 @@ workspace = true
 sov-eth-dev-signer = { workspace = true }
 revm = { workspace = true, features = ["std", "secp256k1", "arbitrary"] }
 sov-transaction-generator = { workspace = true }
+alloy-primitives = { workspace = true }
+alloy-consensus = { workspace = true }
 reth-primitives = { workspace = true, features = ["secp256k1", "arbitrary"] }
-reth-rpc-types = { workspace = true, features = ["arbitrary"] }
 secp256k1 = { workspace = true }
 sha2 = { workspace = true }
 rand_chacha = { workspace = true }

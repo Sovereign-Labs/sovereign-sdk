@@ -31,6 +31,7 @@ borsh = { workspace = true, features = ["rc"] }
 sov-state = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+sov-metrics = { workspace = true }
 
 [features]
 default = []
@@ -38,5 +39,6 @@ native = [
     "sov-modules-api/native",
     "sov-rollup-interface/native",
     "sov-state/native",
-    "sov-address/native"
+    "sov-address/native",
+    "sov-metrics/native"
 ]

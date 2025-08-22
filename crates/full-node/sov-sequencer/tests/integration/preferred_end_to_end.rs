@@ -1,6 +1,7 @@
 //! Integration tests for the preferred sequencer that use [`RollupBuilder`] and
 //! thus test sequencer + node interactions.
 
+use backon::Retryable;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -88,7 +89,7 @@ impl DaLayerWithSubscription {
             .da_service
             .block_producing(),
             BlockProducingConfig::Manual),
-            "Can't currently use DaLayerWithSubscription with a non-manual block producing config because notifications may be produced without our knowledge"
+                "Can't currently use DaLayerWithSubscription with a non-manual block producing config because notifications may be produced without our knowledge"
         );
         let da_layer = test_rollup.da_service.da_layer().clone();
         let state_update_subscription = test_rollup.subscribe_state_updates().await;
@@ -1722,6 +1723,7 @@ async fn flaky_seq_back_pressure() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn seq_many_invalid_txs() {
+    let txs = 1000u64;
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
@@ -1745,36 +1747,88 @@ async fn seq_many_invalid_txs() {
     }
 
     let client = test_rollup.api_client().clone();
-    let tx = tx_set_value(&admin.private_key, 100, 0);
+    let tx = tx_set_value(&admin.private_key, txs, 1_000_000);
 
     client
         .send_raw_tx_to_sequencer_with_retry(&tx)
         .await
         .unwrap();
 
-    let mut handles = Vec::default();
-    for i in 0..100 {
+    let mut handles = Vec::with_capacity(txs as usize);
+    for i in 0..txs {
         let client = client.clone();
         let da_service = test_rollup.da_service.clone();
-
+        // Generation is always below, so each tx is going to fail
         let tx = tx_set_value(&admin.private_key, 0, i);
         handles.push(tokio::spawn(async move {
-            let res = client.send_raw_tx_to_sequencer_with_retry(&tx).await;
-            da_service.produce_block_now().await.unwrap();
-            res
+            let backoff = backon::ExponentialBuilder::default()
+                .with_factor(1.5)
+                .with_min_delay(Duration::from_millis(200))
+                .with_max_times(10)
+                .with_max_delay(Duration::from_secs(5));
+
+            let client_for_retry = client.clone();
+            let tx_for_retry = tx.clone();
+            let fut = move || {
+                let client = client_for_retry.clone();
+                let tx = tx_for_retry.clone();
+                async move { client.send_raw_tx_to_sequencer(&tx).await }
+            };
+
+            let res = fut
+                .retry(backoff)
+                .when(|err| {
+                    // Only retry on communication errors or HTTP 5XX
+                    match err {
+                        sov_api_spec::Error::CommunicationError(_) => true,
+                        sov_api_spec::Error::ErrorResponse(response_value) => {
+                            // Check if it's a 5XX error
+                            let status = response_value.status().as_u16();
+                            (500..600).contains(&status)
+                        }
+                        sov_api_spec::Error::InvalidResponsePayload(bytes, _) => {
+                            // Check if response contains 5XX status
+                            std::str::from_utf8(bytes.as_ref())
+                                .ok()
+                                .map(|s| {
+                                    // Try to parse status from the response
+                                    s.contains("\"status\":5")
+                                })
+                                .unwrap_or(false)
+                        }
+                        _ => false,
+                    }
+                })
+                .notify(|err, dur| {
+                    tracing::warn!(
+                        "Task {} failed to submit transaction, retrying... Error: {:?}, Duration: {:?}",
+                        i, err, dur
+                    );
+                })
+                .await;
+            // Producing block to add more work for the sequencer
+            if i % 5 == 0 {
+                da_service.produce_block_now().await.unwrap();
+            }
+            assert!(res.is_err(), "Request has been accepted, when it shouldn't");
         }));
     }
 
     test_rollup
         .da_service
-        .produce_n_blocks_now(50)
+        .produce_n_blocks_now(txs as usize / 2)
         .await
         .unwrap();
 
     let results = future::join_all(handles).await;
     for res in results {
-        assert!(res.unwrap().is_err());
+        res.expect("Background sender task has panicked");
     }
+
+    let _ = test_rollup
+        .shutdown()
+        .await
+        .expect("Rollup shutdown properly");
 }
 
 /// Ensure that we use the correct visible slot number when replaying transactions after a call to `update_state` in the sequencer.

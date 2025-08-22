@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::{
     namespaces, CompileTimeNamespace, EventContainer, Namespace, NativeStorage,
@@ -33,19 +34,26 @@ fn get_slot_number(visible_slot_number: Option<VisibleSlotNumber>) -> Option<Slo
 }
 
 impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
-    fn get_size(&mut self, namespace: sov_state::Namespace, key: &SlotKey) -> Option<u32> {
+    fn get_size(
+        &mut self,
+        namespace: sov_state::Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<u32> {
         let result = match namespace {
             Namespace::User => self.user_cache.get_size_or_fetch_historical(
                 key,
                 &self.storage,
                 &self.witness,
                 self.safe_true_slot_number_to_use,
+                metric,
             ),
             Namespace::Kernel => self.kernel_cache.get_size_or_fetch_historical(
                 key,
                 &self.storage,
                 &self.witness,
                 get_slot_number(self.visible_slot_number),
+                metric,
             ),
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
                 Some(Some(value)) => Ok(Some(value.size())),
@@ -68,19 +76,26 @@ impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
         }
     }
 
-    fn get_value(&mut self, namespace: sov_state::Namespace, key: &SlotKey) -> Option<SlotValue> {
+    fn get_value(
+        &mut self,
+        namespace: sov_state::Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
         let result = match namespace {
             Namespace::User => self.user_cache.get_or_fetch_historical(
                 key,
                 &self.storage,
                 &self.witness,
                 self.safe_true_slot_number_to_use,
+                metric,
             ),
             Namespace::Kernel => self.kernel_cache.get_or_fetch_historical(
                 key,
                 &self.storage,
                 &self.witness,
                 get_slot_number(self.visible_slot_number),
+                metric,
             ),
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
                 Some(Some(value)) => Ok(Some(value)),
@@ -166,6 +181,7 @@ pub struct ApiStateAccessor<S: Spec> {
     // will cause any state *before* 4 to be visible. (Assume that the state checkpoint the accessor is based on contains all the state *of* 4 in memory)
     safe_true_slot_number_to_use: Option<SlotNumber>,
     encountered_pruning_error: Option<anyhow::Error>,
+    pub(crate) metrics: StateMetrics,
 }
 
 impl<S: Spec> PerBlockCache for ApiStateAccessor<S> {
@@ -385,6 +401,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
             visible_slot_number: None,
             safe_true_slot_number_to_use: None,
             encountered_pruning_error: None,
+            metrics: StateMetrics::default(),
         };
 
         (out.safe_true_slot_number_to_use) = match state_to_access {
@@ -435,6 +452,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
             // permissions vs state confusion in our current design of VersionReader - see the comment inline in get_cached for more details.
             visible_slot_number: Some(VisibleSlotNumber::MAX),
             encountered_pruning_error: None,
+            metrics: StateMetrics::default(),
         }
     }
 
@@ -529,6 +547,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         let _test_query_result = state.get_value(
             namespaces::User::NAMESPACE,
             &SlotKey::from_slice(b"test-key"),
+            &mut StateAccessMetric::new("test-query", 8), // We throw away the metric from this test query because it should almost always be cached and wasn't requested by the user
         );
         if state.encountered_pruning_error.is_some() {
             return Err(ApiStateAccessorError::HeightNotAccessible);
@@ -557,6 +576,12 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
     #[cfg(feature = "test-utils")]
     pub fn true_slot_number_to_use(&self) -> SlotNumber {
         self.safe_true_slot_number_to_use.unwrap()
+    }
+}
+
+impl<S: Spec> crate::state::accessors::StateMetricsProvider for ApiStateAccessor<S> {
+    fn metrics(&mut self) -> &mut StateMetrics {
+        &mut self.metrics
     }
 }
 

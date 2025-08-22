@@ -2,6 +2,7 @@ use std::convert::Infallible;
 use std::fmt::Debug;
 use std::num::TryFromIntError;
 
+use sov_metrics::StateAccessMetric;
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 #[cfg(feature = "native")]
 use sov_state::StorageProof;
@@ -16,6 +17,7 @@ use tracing::{enabled, instrument, Level, Span};
 use super::accessors::seal::UniversalStateAccessor;
 use super::accessors::{BorshSerializedSize, TempCache};
 use crate::capabilities::RollupHeight;
+use crate::state::accessors::StateMetricsProvider;
 #[cfg(any(feature = "test-utils", feature = "evm"))]
 use crate::UnmeteredStateWrapper;
 use crate::{Gas, GasMeter, GasMeteringError, GasSpec, RevertableTxState, Spec};
@@ -96,6 +98,7 @@ pub trait TxState<S: Spec>:
     + PerBlockCache
     + GasMeter<Spec = S>
     + Sized
+    + StateMetricsProvider
 {
     /// Converts this state accessor into a [`RevertableTxState`].
     ///
@@ -116,6 +119,7 @@ impl<S: Spec, T> TxState<S> for T where
         + PerBlockCache
         + GasMeter<Spec = S>
         + Sized
+        + StateMetricsProvider
 {
 }
 
@@ -288,7 +292,7 @@ pub trait StateReader<N: CompileTimeNamespace>: UniversalStateAccessor {
 
 /// A storage reader which can access the accessory state.
 /// Does not charge gas for read operations.
-pub trait AccessoryStateReader: UniversalStateAccessor {}
+pub trait AccessoryStateReader: UniversalStateAccessor + StateMetricsProvider {}
 
 /// A trait wrapper that replicates the functionality of [`StateReader`] but with a gas metering interface.
 /// This allows a storage reader to charge gas for read operations.
@@ -302,7 +306,7 @@ macro_rules! blanket_impl_metered_state_reader {
         type Error = StateAccessorError<<T::Spec as GasSpec>::Gas>;
 
         fn get(&mut self, key: &SlotKey) -> Result<Option<SlotValue>, Self::Error> {
-            let val = get_inner(
+            let (val, size_metric, read_metric) = get_inner(
                 self,
                 <$namespace as sov_state::CompileTimeNamespace>::NAMESPACE,
                 key,
@@ -312,6 +316,8 @@ macro_rules! blanket_impl_metered_state_reader {
                 inner: e,
                 namespace: <$namespace as sov_state::CompileTimeNamespace>::NAMESPACE,
             })?;
+            self.metrics().push(size_metric);
+            self.metrics().push(read_metric);
 
             Ok(val)
         }
@@ -351,20 +357,24 @@ macro_rules! blanket_impl_metered_state_reader {
     };
 }
 
-impl<T: ProvableStateReader<Kernel>> StateReader<Kernel> for T {
+impl<T: ProvableStateReader<Kernel> + StateMetricsProvider> StateReader<Kernel> for T {
     blanket_impl_metered_state_reader!(Kernel);
 }
 
-impl<T: ProvableStateReader<User>> StateReader<User> for T {
+impl<T: ProvableStateReader<User> + StateMetricsProvider> StateReader<User> for T {
     blanket_impl_metered_state_reader!(User);
 }
 
-impl<T: AccessoryStateReader> StateReader<Accessory> for T {
+impl<T: AccessoryStateReader + StateMetricsProvider> StateReader<Accessory> for T {
     type Error = Infallible;
 
     /// Get a value from the storage.
     fn get(&mut self, key: &SlotKey) -> Result<Option<SlotValue>, Self::Error> {
-        Ok(self.get_value(Accessory::NAMESPACE, key))
+        use sov_metrics::StateAccessMetric;
+        let mut metric = StateAccessMetric::new("accessory::get", key.size());
+        let val = self.get_value(Accessory::NAMESPACE, key, &mut metric);
+        self.metrics().push(metric);
+        Ok(val)
     }
 
     /// Get a decoded value from the storage.
@@ -542,14 +552,15 @@ fn charge_read<Accessor: UniversalStateAccessor + GasMeter>(
     accessor: &mut Accessor,
     namespace: Namespace,
     key: &SlotKey,
-) -> Result<(), GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
+) -> Result<StateAccessMetric, GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
     charge_storage_access(accessor, key)?;
 
     tracing::trace_span!("access::charge_bias_for_read",).in_scope(|| {
         accessor.charge_gas(&<Accessor::Spec as GasSpec>::bias_to_charge_for_read())
     })?;
 
-    let value_size = accessor.get_size(namespace, key);
+    let mut metric = StateAccessMetric::new("charge_read::get_size", key.size());
+    let value_size = accessor.get_size(namespace, key, &mut metric);
 
     match value_size {
         Some(0) | None => {}
@@ -578,7 +589,7 @@ fn charge_read<Accessor: UniversalStateAccessor + GasMeter>(
         }
     }
 
-    Ok(())
+    Ok(metric)
 }
 
 fn charge_write<Accessor: UniversalStateAccessor + GasMeter>(
@@ -605,22 +616,28 @@ fn charge_write<Accessor: UniversalStateAccessor + GasMeter>(
     Ok(())
 }
 
+type ValueWithMetrics = (Option<SlotValue>, StateAccessMetric, StateAccessMetric);
+
+/// Returns metrics for the get_size and get_value operations, in that order.
 #[instrument(name = "state::get", skip_all, level = Level::TRACE, fields(key = %key, value_size_bytes))]
 pub(crate) fn get_inner<Accessor: UniversalStateAccessor + GasMeter>(
     accessor: &mut Accessor,
     namespace: Namespace,
     key: &SlotKey,
-) -> Result<Option<SlotValue>, GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
+) -> Result<ValueWithMetrics, GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
     charge_read(accessor, namespace, key)?;
 
-    let value = accessor.get_value(namespace, key);
+    let size_metric = charge_read(accessor, namespace, key)?;
+    let mut read_metric = StateAccessMetric::new("get_value::get_inner", key.size());
+
+    let value = accessor.get_value(namespace, key, &mut read_metric);
 
     if enabled!(Level::TRACE) {
         let size = value.as_ref().map(SlotValue::size).unwrap_or(0);
         Span::current().record("value_size_bytes", size);
     }
 
-    Ok(value)
+    Ok((value, size_metric, read_metric))
 }
 
 #[instrument(name = "state::set", skip_all, level = Level::TRACE, fields(key = %key, value_size_bytes = value.size()))]
@@ -637,22 +654,28 @@ pub(crate) fn set_inner<Accessor: UniversalStateAccessor + GasMeter>(
     Ok(())
 }
 
+/// Returns a metric for the read done if `trace` level tracking is enabled. Otherwise, no state read is performed
+/// so no metric is returned.
 #[instrument(name = "state::delete", skip_all, level = Level::TRACE, fields(key = %key, value_size_bytes))]
 pub(crate) fn delete_inner<Accessor: UniversalStateAccessor + GasMeter>(
     accessor: &mut Accessor,
     namespace: Namespace,
     key: &SlotKey,
-) -> Result<(), GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
+) -> Result<Option<StateAccessMetric>, GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
     // Doing a delete is the same as doing a write with a size of 0
     charge_write(accessor, namespace, key, 0)?;
 
     // avoid an extra size calculation
-    if enabled!(Level::TRACE) {
-        let size = accessor.get_size(namespace, key).unwrap_or(0);
+    let metric = if enabled!(Level::TRACE) {
+        let mut metric = StateAccessMetric::new("trace_delete::get_size", key.size());
+        let size = accessor.get_size(namespace, key, &mut metric).unwrap_or(0);
         Span::current().record("value_size_bytes", size);
-    }
+        Some(metric)
+    } else {
+        None
+    };
 
     accessor.delete_value(namespace, key);
 
-    Ok(())
+    Ok(metric)
 }

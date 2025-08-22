@@ -1,3 +1,4 @@
+use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::{IsValueCached, Namespace, SlotKey, SlotValue, StateAccesses, Storage};
 use tracing::trace;
@@ -8,6 +9,7 @@ use super::{BootstrapWorkingSet, BorshSerializedSize, UniversalStateAccessor};
 use crate::capabilities::{Kernel, RollupHeight};
 use crate::state::traits::PerBlockCache;
 use crate::{GasMeter, Spec, VersionReader};
+
 /// This structure is responsible for storing the `read-write` set.
 ///
 /// A [`StateCheckpoint`] can be obtained from a [`crate::WorkingSet`] in two ways:
@@ -21,6 +23,7 @@ pub struct StateCheckpoint<S: Spec> {
     pub(super) visible_slot_num: VisibleSlotNumber,
     pub(super) rollup_height: RollupHeight,
     pub(super) cache: TempCache,
+    pub(super) metrics: StateMetrics,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +72,7 @@ impl<S: Spec> StateCheckpoint<S> {
             visible_slot_num: self.visible_slot_num,
             rollup_height: self.rollup_height,
             cache: TempCache::new(),
+            metrics: StateMetrics::default(),
         }
     }
 
@@ -92,7 +96,11 @@ impl<S: Spec> StateCheckpoint<S> {
         kernel: &K,
     ) -> Self {
         let mut delta = Delta::with_witness(inner, witness);
-        let mut bootstrap_state = BootstrapWorkingSet { inner: &mut delta };
+        let mut metrics = StateMetrics::default();
+        let mut bootstrap_state = BootstrapWorkingSet {
+            inner: &mut delta,
+            metrics: &mut metrics,
+        };
 
         let visible_slot_num = kernel.next_visible_slot_number(&mut bootstrap_state);
         trace!(%visible_slot_num, "Initializing a `StateCheckpoint`");
@@ -102,6 +110,7 @@ impl<S: Spec> StateCheckpoint<S> {
             visible_slot_num,
             rollup_height,
             cache: TempCache::new(),
+            metrics: StateMetrics::default(),
         }
     }
 
@@ -195,12 +204,22 @@ impl<S: Spec> VersionReader for StateCheckpoint<S> {
 }
 
 impl<S: Spec> UniversalStateAccessor for StateCheckpoint<S> {
-    fn get_size(&mut self, namespace: Namespace, key: &SlotKey) -> Option<u32> {
-        self.delta.get_size(namespace, key)
+    fn get_size(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<u32> {
+        self.delta.get_size(namespace, key, metric)
     }
 
-    fn get_value(&mut self, namespace: Namespace, key: &SlotKey) -> Option<SlotValue> {
-        self.delta.get(namespace, key)
+    fn get_value(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
+        self.delta.get(namespace, key, metric)
     }
 
     fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
@@ -214,6 +233,7 @@ impl<S: Spec> UniversalStateAccessor for StateCheckpoint<S> {
 
 #[cfg(feature = "native")]
 pub mod native {
+    use sov_metrics::StateAccessMetric;
     use sov_state::{SlotKey, SlotValue};
 
     use crate::state::accessors::UniversalStateAccessor;
@@ -236,16 +256,22 @@ pub mod native {
     }
 
     impl<S: Spec> UniversalStateAccessor for AccessoryStateCheckpoint<'_, S> {
-        fn get_size(&mut self, namespace: sov_state::Namespace, key: &SlotKey) -> Option<u32> {
-            self.checkpoint.get_size(namespace, key)
+        fn get_size(
+            &mut self,
+            namespace: sov_state::Namespace,
+            key: &SlotKey,
+            metric: &mut StateAccessMetric,
+        ) -> Option<u32> {
+            self.checkpoint.get_size(namespace, key, metric)
         }
 
         fn get_value(
             &mut self,
             namespace: sov_state::Namespace,
             key: &SlotKey,
+            metric: &mut StateAccessMetric,
         ) -> Option<SlotValue> {
-            self.checkpoint.get_value(namespace, key)
+            self.checkpoint.get_value(namespace, key, metric)
         }
 
         fn set_value(&mut self, namespace: sov_state::Namespace, key: &SlotKey, value: SlotValue) {

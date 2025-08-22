@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::num::NonZero;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
@@ -968,13 +969,6 @@ where
         self.recv(recv).await
     }
 
-    pub(crate) async fn latest_slot_number_msg(&self, reason: &'static str) -> SlotNumber {
-        let (resp, recv) = oneshot::channel();
-        self.send(Message::LatestSlotNumber { resp, reason }).await;
-
-        self.recv(recv).await
-    }
-
     pub(crate) async fn final_catchup_msg(
         &self,
         info: StateUpdateInfo<S::Storage>,
@@ -1027,20 +1021,6 @@ where
             .await;
     }
 
-    pub(crate) async fn do_new_tx_msg(
-        &self,
-        tx_hash: TxHash,
-        baked_tx: FullyBakedTx,
-        reason: &'static str,
-    ) {
-        self.send(Message::DoNewTx {
-            tx_hash,
-            baked_tx,
-            reason,
-        })
-        .await;
-    }
-
     pub(crate) async fn wait_for_node_resync_msg(
         &self,
         info: StateUpdateInfo<S::Storage>,
@@ -1074,10 +1054,6 @@ where
             .await;
     }
 
-    pub(crate) async fn close_current_batch_msg(&self, reason: &'static str) {
-        self.send(Message::CloseCurrentBatch { reason }).await;
-    }
-
     async fn send(&self, message: Message<S, Rt>) {
         self.channel_size.fetch_add(1, Ordering::Relaxed);
         if self.message_sender.send(message).await.is_err() {
@@ -1094,6 +1070,31 @@ where
             exit_rollup(&self.shutdown_sender).await;
             unreachable!();
         }
+    }
+
+    pub(crate) async fn close_current_batch_msg(&self, reason: &'static str) {
+        self.send(Message::CloseCurrentBatch { reason }).await;
+    }
+
+    pub(crate) async fn do_new_tx_msg(
+        &self,
+        tx_hash: TxHash,
+        baked_tx: FullyBakedTx,
+        reason: &'static str,
+    ) {
+        self.send(Message::DoNewTx {
+            tx_hash,
+            baked_tx,
+            reason,
+        })
+        .await;
+    }
+
+    pub(crate) async fn latest_slot_number_msg(&self, reason: &'static str) -> SlotNumber {
+        let (resp, recv) = oneshot::channel();
+        self.send(Message::LatestSlotNumber { resp, reason }).await;
+
+        self.recv(recv).await
     }
 }
 
@@ -1112,10 +1113,9 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    async fn send_response<T>(&mut self, resp: oneshot::Sender<T>, v: T) {
+    async fn send_response<T>(&mut self, resp: oneshot::Sender<T>, v: T, name: &'static str) {
         if resp.send(v).is_err() {
-            tracing::error!("SynchronizedSequencerState: Response channel closed. Shutting down.");
-            exit_rollup(&self.inner.shutdown_sender).await;
+            tracing::debug!("SynchronizedSequencerState: Response channel closed - unable to send response to {}", name);
         }
     }
 
@@ -1127,7 +1127,7 @@ where
                 match msg {
                     Message::NextSequenceNumber { resp, reason } => {
                         let ret = self.process_next_sequence_number(reason).await;
-                        self.send_response(resp, ret).await;
+                        self.send_response(resp, ret, "next_sequence_number").await;
                     }
 
                     Message::FetchCompletedBatches {
@@ -1139,7 +1139,8 @@ where
                             .process_fetch_completed_batches(next_sequence_number, reason)
                             .await;
 
-                        self.send_response(resp, ret).await;
+                        self.send_response(resp, ret, "fetch_completed_batches")
+                            .await;
                     }
                     Message::SequencerConditions {
                         resp,
@@ -1155,7 +1156,7 @@ where
                             )
                             .await;
 
-                        self.send_response(resp, ret).await;
+                        self.send_response(resp, ret, "sequencer_conditions").await;
                     }
                     Message::CheckReadiness {
                         resp,
@@ -1171,7 +1172,7 @@ where
                             )
                             .await;
 
-                        self.send_response(resp, ret).await;
+                        self.send_response(resp, ret, "check_readiness").await;
                     }
                     Message::AcceptTx {
                         resp,
@@ -1184,11 +1185,11 @@ where
                             .process_accept_tx(&baked_tx, tx_hash, original_tx_queue_id, reason)
                             .await;
 
-                        self.send_response(resp, ret).await;
+                        self.send_response(resp, ret, "accept_tx").await;
                     }
                     Message::LatestSlotNumber { resp, reason } => {
                         let ret = self.process_latest_slot_number(reason).await;
-                        self.send_response(resp, ret).await;
+                        self.send_response(resp, ret, "latest_slot_number").await;
                     }
                     Message::FinalCatchup {
                         resp,
@@ -1210,7 +1211,7 @@ where
                             )
                             .await;
 
-                        self.send_response(resp, ret).await;
+                        self.send_response(resp, ret, "final_catchup").await;
                     }
                     Message::DoBatchStartMsg {
                         visible_slot_number_after_increase,

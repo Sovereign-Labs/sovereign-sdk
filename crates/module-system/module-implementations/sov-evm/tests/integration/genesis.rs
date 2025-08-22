@@ -1,10 +1,8 @@
-use alloy_eips::eip1559::BaseFeeParams;
-use reth_primitives::constants::{
-    EMPTY_RECEIPTS, EMPTY_ROOT_HASH, EMPTY_TRANSACTIONS, ETHEREUM_BLOCK_GAS_LIMIT,
-};
-use reth_primitives::{
-    Address, Bloom, Bytes, Header, B256, EMPTY_OMMER_ROOT_HASH, KECCAK_EMPTY, U256,
-};
+use alloy_consensus::constants::{EMPTY_RECEIPTS, EMPTY_TRANSACTIONS, KECCAK_EMPTY};
+use alloy_consensus::{BlockHeader, Header, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
+use alloy_eips::eip1559::{BaseFeeParams, ETHEREUM_BLOCK_GAS_LIMIT_30M};
+use alloy_primitives::{Address, Bloom, Bytes, B256, B64, U256};
+use revm::state::AccountInfo;
 use revm::Database;
 use sov_evm::{AccountData, Evm, EvmChainConfig, EvmConfig, SpecId};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
@@ -25,7 +23,7 @@ fn test_genesis_data() {
 
         assert_eq!(
             &account_info,
-            &reth_primitives::revm_primitives::AccountInfo {
+            &AccountInfo {
                 balance: account.balance,
                 code_hash: account.code_hash,
                 nonce: account.nonce,
@@ -48,7 +46,7 @@ fn test_genesis_cfg() {
             EvmChainConfig {
                 spec: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)],
                 chain_id: 1000,
-                block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
+                block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
                 block_timestamp_delta: 2,
                 coinbase: Address::from([3u8; 20]),
                 limit_contract_code_size: Some(5000),
@@ -102,18 +100,18 @@ fn test_genesis_block() {
         let actual_block = &evm.blocks(state)[0_usize];
         let expected_header = Header {
             parent_hash: B256::default(),
-            state_root: actual_block.header().header().state_root,
+            state_root: actual_block.header().state_root(),
             transactions_root: EMPTY_TRANSACTIONS,
             receipts_root: EMPTY_RECEIPTS,
             logs_bloom: Bloom::default(),
             difficulty: U256::ZERO,
             number: 0,
-            gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
+            gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
             gas_used: 0,
             timestamp: 0,
             extra_data: Bytes::default(),
             mix_hash: B256::default(),
-            nonce: 0,
+            nonce: B64::ZERO,
             base_fee_per_gas: Some(7),
             ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary,
@@ -121,10 +119,10 @@ fn test_genesis_block() {
             blob_gas_used: None,
             excess_blob_gas: None,
             parent_beacon_block_root: None,
-            requests_root: Some(EMPTY_ROOT_HASH),
+            requests_hash: Some(EMPTY_ROOT_HASH),
         };
 
-        assert_eq!(actual_block.header().header(), &expected_header);
+        assert_eq!(actual_block.header().inner(), &expected_header);
 
         let txns = actual_block.transactions();
         assert_eq!(txns.start, 0);
@@ -145,7 +143,7 @@ fn default_config() -> EvmConfig {
             .into_iter()
             .collect(),
         chain_id: 1000,
-        block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
+        block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
         block_timestamp_delta: 2,
         genesis_timestamp: 50,
         coinbase: Address::from([3u8; 20]),

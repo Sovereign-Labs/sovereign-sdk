@@ -78,6 +78,21 @@ impl<S: Spec> Uniqueness<S> {
                     .unwrap_or_default())
             })?
     }
+
+    /// Retrieves the latest known nonce + 1 for a given credential id.
+    ///
+    /// # Errors
+    /// May return an error if the next nonce overflows or if state access fails.
+    pub fn next_nonce<Reader: StateReader<User>>(
+        &self,
+        credential_id: &CredentialId,
+        state: &mut Reader,
+    ) -> Result<u64, anyhow::Error> {
+        Ok(self
+            .nonces
+            .get(credential_id, state)
+            .map(|maybe_nonce| maybe_nonce.unwrap_or_default())?)
+    }
 }
 
 impl<S: Spec> Module for Uniqueness<S> {

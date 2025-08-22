@@ -223,11 +223,9 @@ pub mod hex_string_serde {
 }
 
 fn parse_vec_u8(s: &str) -> anyhow::Result<Vec<u8>> {
-    let s = s
-        .strip_prefix("0x")
-        .ok_or_else(|| anyhow::anyhow!("Missing 0x prefix"))?;
+    let s = s.strip_prefix("0x").unwrap_or(s);
 
-    hex::decode(s).map_err(|e| anyhow::anyhow!(e))
+    hex::decode(s).map_err(|e| anyhow::anyhow!("Failed to decode hex string {}, error: {}", s, e))
 }
 
 #[cfg(test)]
