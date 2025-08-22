@@ -272,10 +272,7 @@ where
         hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Transaction>> {
-        let tx_number = self
-            .transaction_hashes
-            .get(&hash, state)
-            .unwrap_infallible();
+        let tx_number = self.get_tx_index_by_hash(&hash, state);
 
         let transaction = tx_number.map(|number| {
             let tx = self.transaction(number, state);
@@ -311,10 +308,7 @@ where
             "EVM module JSON-RPC request to `eth_getTransactionReceipt`"
         );
 
-        let tx_number = self
-            .transaction_hashes
-            .get(&hash, state)
-            .unwrap_infallible();
+        let tx_number = self.get_tx_index_by_hash(&hash, state);
 
         let receipt = tx_number.map(|number| {
             let tx = self.transaction(number, state);
