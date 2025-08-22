@@ -278,23 +278,8 @@ where
             .unwrap_infallible();
 
         let transaction = tx_number.map(|number| {
-            let tx = self
-                .transactions
-                .get(number, state)
-                .unwrap_infallible()
-                .unwrap_or_else(|| panic!("Transaction with known hash {} and number {} must be set in all {} transaction",
-                                          hash,
-                                          number,
-                                          self.transactions.len(state).unwrap_infallible()
-                ));
-
-            let block = self
-                .blocks
-                .get(tx.block_number, state)
-                .unwrap_infallible()
-                .unwrap_or_else(|| panic!("Block with number {} for known transaction {} must be set",
-                                          tx.block_number,
-                                          tx.signed_transaction.hash()));
+            let tx = self.transaction(number, state);
+            let block = self.block(tx.block_number, state);
 
             from_recovered_with_block_context(
                 tx.into(),
@@ -332,16 +317,8 @@ where
             .unwrap_infallible();
 
         let receipt = tx_number.map(|number| {
-            let tx = self
-                .transactions
-                .get(number, state)
-                .unwrap_infallible()
-                .expect("Transaction with known hash must be set");
-            let block = self
-                .blocks
-                .get(tx.block_number, state)
-                .unwrap_infallible()
-                .expect("Block number for known transaction must be set");
+            let tx = self.transaction(number, state);
+            let block = self.block(tx.block_number, state);
 
             let receipt = self
                 .receipts

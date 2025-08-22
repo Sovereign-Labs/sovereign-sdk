@@ -198,12 +198,36 @@ impl<S: Spec> Evm<S> {
         self.transactions.collect_infallible(state)
     }
 
+    /// Access the Ethereum transaction by number.
+    pub fn transaction<Accessor: AccessoryStateReader>(
+        &self,
+        number: u64,
+        state: &mut Accessor,
+    ) -> TransactionSignedAndRecovered {
+        self.transactions
+            .get(number, state)
+            .unwrap_infallible()
+            .expect("Transaction with known hash must be set")
+    }
+
     /// Access the Ethereum blocks.
     pub fn blocks<Accessor: AccessoryStateReaderAndWriter>(
         &self,
         state: &mut Accessor,
     ) -> Vec<SealedBlock> {
         self.blocks.collect_infallible(state)
+    }
+
+    /// Access Ethereum block by number.
+    pub fn block<Accessor: AccessoryStateReaderAndWriter>(
+        &self,
+        number: u64,
+        state: &mut Accessor,
+    ) -> SealedBlock {
+        self.blocks
+            .get(number, state)
+            .unwrap_infallible()
+            .expect("Block number for known transaction must be set")
     }
 
     /// Lookup an Ethereum account by address.
