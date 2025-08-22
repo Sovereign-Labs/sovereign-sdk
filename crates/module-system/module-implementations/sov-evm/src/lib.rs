@@ -23,7 +23,6 @@ pub use rpc::*;
 mod tests;
 
 mod authenticate;
-mod event;
 #[cfg(feature = "native")]
 mod helpers;
 
@@ -46,7 +45,6 @@ use sov_modules_api::{
 use sov_state::codec::BcsCodec;
 use sov_state::{EncodeLike, User};
 
-use crate::event::Event;
 use crate::evm::db::EvmDb;
 use crate::evm::primitive_types::SealedBlock;
 use crate::evm::primitive_types::{Block, Receipt, TransactionSignedAndRecovered};
@@ -178,7 +176,7 @@ where
 
     type CallMessage = CallMessage;
 
-    type Event = Event;
+    type Event = ();
 
     fn genesis(
         &mut self,
