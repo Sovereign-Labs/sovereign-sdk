@@ -2,8 +2,6 @@ use crate::evm::evm_test_helper::{self};
 use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
 use demo_stf::runtime::{Runtime, RuntimeCall};
 use ethers_core::abi::Address;
-use full_node_configs::sequencer::default_ideal_lag_behind_finalized_slot;
-use futures::StreamExt;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockRollupSpec};
 use sov_eth_client::TestClient;
 use sov_modules_api::capabilities::UniquenessData;
@@ -12,7 +10,6 @@ use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
 use sov_modules_macros::config_value;
 use sov_test_utils::test_rollup::{get_appropriate_rollup_prover_config, read_private_key};
 use sov_test_utils::{TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE};
-use std::time::Duration;
 
 type TestSpec = DemoRollupSpec;
 
