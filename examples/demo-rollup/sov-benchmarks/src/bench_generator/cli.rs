@@ -1,7 +1,7 @@
 //! CLI utilities for benchmark generation.
 
 use clap::{Args, Parser, Subcommand};
-use demo_stf::genesis_config::EvmConfig;
+use demo_stf::genesis_config::EvmGenesisConfig;
 use demo_stf::runtime::{GenesisConfig, Runtime};
 use sov_modules_api::{Amount, CryptoSpec, Spec};
 use sov_risc0_adapter::host::Risc0Host;
@@ -222,7 +222,7 @@ impl BenchCLICustomArgs {
 
         let genesis_config = GenesisConfig::from_minimal_config(
             genesis_config.into(),
-            EvmConfig::default(),
+            EvmGenesisConfig::default(),
             PaymasterConfig {
                 payers: [PayerGenesisConfig {
                     payer_address: payer.address(),

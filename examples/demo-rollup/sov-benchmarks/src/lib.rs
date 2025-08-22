@@ -3,7 +3,7 @@
 use core::time::Duration;
 use std::sync::Arc;
 
-use demo_stf::genesis_config::EvmConfig;
+use demo_stf::genesis_config::EvmGenesisConfig;
 use demo_stf::runtime::{GenesisConfig, Runtime};
 use sov_address::MultiAddressEvm;
 use sov_mock_da::BlockProducingConfig;
@@ -104,7 +104,7 @@ where
 
     let genesis = GenesisConfig::from_minimal_config(
         genesis_config.clone().into(),
-        EvmConfig::default(),
+        EvmGenesisConfig::default(),
         PaymasterConfig {
             payers: [PayerGenesisConfig {
                 payer_address: payer.address(),

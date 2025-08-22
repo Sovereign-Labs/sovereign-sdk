@@ -215,7 +215,7 @@ mod tests {
     use std::io::{BufReader, Seek};
     use std::sync::Arc;
 
-    use demo_stf::genesis_config::EvmConfig;
+    use demo_stf::genesis_config::EvmGenesisConfig;
     use sov_address::MultiAddress;
     use sov_modules_api::Address;
     use sov_test_modules::access_pattern::AccessPatternGenesisConfig;
@@ -263,7 +263,7 @@ mod tests {
             initial_randomization_buffer_size: DEFAULT_RANDOMIZATION_BUFFER_SIZE,
             genesis_config: GenesisConfig::from_minimal_config(
                 MinimalZkGenesisConfig::from(HighLevelZkGenesisConfig::generate_with_additional_accounts_and_code_commitments(0, Default::default(), Default::default())),
-                EvmConfig::default(),
+                EvmGenesisConfig::default(),
                 Default::default(),
                 AccessPatternGenesisConfig {
                     admin: MultiAddress::Standard(Address::from_const_slice([0; 28])),
