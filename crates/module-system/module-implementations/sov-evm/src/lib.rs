@@ -39,9 +39,9 @@ use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::prelude::UnwrapInfallible as _;
 use sov_modules_api::{
     AccessoryStateMap, AccessoryStateReader, AccessoryStateReaderAndWriter, AccessoryStateValue,
-    AccessoryStateVec, Context, DaSpec, GenesisState, InfallibleStateReaderAndWriter, Module,
-    ModuleId, ModuleInfo, Spec, StateAccessor, StateMap, StateReader, StateValue, StateVec,
-    TxState, UnmeteredStateWrapper,
+    AccessoryStateVec, Context, DaSpec, GenesisState, InfallibleStateAccessor,
+    InfallibleStateReaderAndWriter, Module, ModuleId, ModuleInfo, Spec, StateAccessor, StateMap,
+    StateReader, StateValue, StateVec, TxState, UnmeteredStateWrapper,
 };
 use sov_state::codec::BcsCodec;
 use sov_state::User;
@@ -255,6 +255,17 @@ impl<S: Spec> Evm<S> {
         state: &mut Accessor,
     ) -> Result<Option<EvmChainConfig>, Accessor::Error> {
         self.cfg.get(state)
+    }
+
+    /// Get the Evm chain config.
+    pub fn cfg_infallible<Accessor: InfallibleStateAccessor>(
+        &self,
+        state: &mut Accessor,
+    ) -> EvmChainConfig {
+        self.cfg
+            .get(state)
+            .unwrap_infallible()
+            .expect("EVM config must be set at genesis")
     }
 
     /// Access the pending Ethereum transactions.

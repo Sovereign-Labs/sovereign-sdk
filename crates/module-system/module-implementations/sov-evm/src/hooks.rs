@@ -35,7 +35,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
             B256::from_slice(&pre_state_user_root);
         self.head.set(&parent_block, state).unwrap_infallible();
 
-        let cfg = self.cfg(state).unwrap_infallible().unwrap_or_default();
+        let cfg = self.cfg_infallible(state);
 
         let new_pending_env = BlockEnv {
             number: U256::from(parent_block.header.number.wrapping_add(1)),
@@ -66,7 +66,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
     /// Logic executed at the end of the slot. Here, we generate an authenticated block and set it as the new head of the chain.
     /// It's important to note that the state root hash is not known at this moment, so we postpone setting this field until the begin_rollup_block_hook of the next slot.
     fn end_rollup_block_hook(&mut self, state: &mut StateCheckpoint<S>) {
-        let cfg = self.cfg(state).unwrap_infallible().unwrap_or_default();
+        let cfg = self.cfg_infallible(state);
 
         let block_env = self
             .block_env

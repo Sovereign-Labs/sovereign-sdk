@@ -42,7 +42,7 @@ fn test_genesis_cfg() {
         let evm = Evm::<S>::default();
 
         assert_eq!(
-            evm.cfg(state).unwrap().unwrap(),
+            evm.cfg_infallible(state),
             EvmChainConfig {
                 spec: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)],
                 chain_id: 1000,
@@ -64,7 +64,7 @@ fn test_empty_spec_defaults_to_shanghai() {
 
     runner.query_visible_state(move |state| {
         let evm = Evm::<S>::default();
-        let evm_cfg = evm.cfg(state).unwrap().unwrap();
+        let evm_cfg = evm.cfg_infallible(state);
         assert_eq!(evm_cfg.spec, vec![(0, SpecId::SHANGHAI)]);
     });
 }
