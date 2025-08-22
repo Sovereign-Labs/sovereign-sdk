@@ -2,14 +2,12 @@ mod replica_tests;
 
 use crate::preferred_end_to_end::tx_set_value;
 use crate::preferred_end_to_end::{TestBlueprint, TestRuntime};
-use crate::utils::get_height;
 use crate::utils::{new_test_rollup, tempdir_inside_codebase_dir, MAX_BATCH_EXECUTION_TIME_MILLIS};
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use sov_api_spec::types as api_types;
 use sov_api_spec::types::TxInfoWithConfirmation;
 use sov_api_spec::ResponseValue;
-use sov_mock_da::storable::service::StorableMockDaService;
 use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::Runtime;
@@ -23,7 +21,6 @@ use sov_test_utils::{
 };
 use sov_value_setter::ValueSetterConfig;
 use std::sync::Arc;
-use tokio::time::Duration;
 
 async fn create_test_rollups(
     num_replicas: u64,
@@ -105,13 +102,4 @@ async fn send_set_value_tx(
             body: BASE64_STANDARD.encode(&tx),
         })
         .await
-}
-
-async fn wait_for_height(client: &NodeClient, da_service: &StorableMockDaService, height: u64) {
-    let mut current_height = get_height(client).await.unwrap();
-    while current_height.get() < height {
-        da_service.produce_block_now().await.unwrap();
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        current_height = get_height(client).await.unwrap();
-    }
 }

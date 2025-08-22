@@ -1,3 +1,6 @@
+# 2025-08-22
+- #1553 Enables ignored EVM tests. This is NOT a breaking change.
+
 # 2025-08-12
 - #1522 **BREAKING CHANGE**: Adds the `solana-offchain-auth` authenticator which supports transactions signed using Solana wallets using the "offchain message" functionality. Compatible with Ledger.
   * The transactions need to be wrapped in the new types defined in the authenticator; support for this in the web3 SDK will come soon, while custom clients should serialize the transaction as a `SolanaOffchainUnsignedTransaction` and, after signing, wrap it into either `SolanaOffchainSpecCompliantMessage` (for Ledger compatiblity) or `SolanaOffchainSimpleMessage` (when signed with a wallet that signs messages as-is, without appending a preamble).

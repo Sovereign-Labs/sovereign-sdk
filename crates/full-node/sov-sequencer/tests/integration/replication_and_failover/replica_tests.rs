@@ -1,7 +1,6 @@
 use crate::replication_and_failover::create_test_rollups;
 use crate::replication_and_failover::query_value;
 use crate::replication_and_failover::send_set_value_tx;
-use crate::replication_and_failover::wait_for_height;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn seq_with_replicas_basic_flow() {
@@ -16,14 +15,13 @@ async fn seq_with_replicas_basic_flow() {
 
     let mut next_generation = 0;
     let value_to_set = 99;
-    let da_service = master.da_service.clone();
 
     // User sends a tx to the master sequencer.
     {
         let api_client = master.api_client();
         let node_client = &master.client;
 
-        wait_for_height(node_client, &da_service, 10).await;
+        master.wait_for_height(10).await;
 
         send_set_value_tx(
             api_client,
@@ -43,9 +41,7 @@ async fn seq_with_replicas_basic_flow() {
     // Replicas flow.
     {
         let api_client = replica_1.api_client();
-        let node_client = &replica_1.client;
-
-        wait_for_height(node_client, &da_service, 20).await;
+        replica_1.wait_for_height(20).await;
 
         // Replicas cannot accept txs.
         let res = send_set_value_tx(

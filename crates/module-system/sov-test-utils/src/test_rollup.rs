@@ -10,6 +10,7 @@ use crate::postgres::create_postgres_container;
 use crate::postgres::PostgresImage;
 use anyhow::Context;
 use derivative::Derivative;
+use serde::Deserialize;
 use sov_api_spec::WsSubscription;
 use sov_blob_sender::BlobExecutionStatus;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
@@ -44,6 +45,7 @@ use testcontainers::ContainerAsync;
 use tokio::sync::{watch, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
+use tokio::time::Duration;
 
 use crate::{
     TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
@@ -812,6 +814,16 @@ where
         });
         builder.start().await
     }
+
+    /// Wait until rollup reaches a specific height.
+    pub async fn wait_for_height(&self, height: u64) {
+        let mut current_height = get_height(&self.client).await.unwrap();
+        while current_height.get() < height {
+            self.da_service.produce_block_now().await.unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            current_height = get_height(&self.client).await.unwrap();
+        }
+    }
 }
 
 /// Reads and parses a private key from the test data directory.
@@ -846,4 +858,17 @@ pub fn get_appropriate_rollup_prover_config<S: Spec>(
     } else {
         RollupProverConfig::Execute(host_args)
     }
+}
+
+/// Get rollup height
+pub async fn get_height(client: &NodeClient) -> anyhow::Result<RollupHeight> {
+    #[derive(Deserialize, Debug)]
+    struct Data {
+        value: (u64, u64),
+    }
+
+    let url = "/modules/chain-state/state/current-heights";
+    let response = client.http_get(url).await?;
+    let heights: Data = serde_json::from_str(&response)?;
+    Ok(RollupHeight::new(heights.value.0))
 }

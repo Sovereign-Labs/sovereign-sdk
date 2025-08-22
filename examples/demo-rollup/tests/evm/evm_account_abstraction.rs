@@ -3,6 +3,7 @@ use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
 use demo_stf::runtime::{Runtime, RuntimeCall};
 use ethers_core::abi::Address;
 use full_node_configs::sequencer::default_ideal_lag_behind_finalized_slot;
+use futures::StreamExt;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockRollupSpec};
 use sov_eth_client::TestClient;
 use sov_modules_api::capabilities::UniquenessData;
@@ -32,12 +33,7 @@ async fn test_evm_account_abstraction() {
     )
     .await;
 
-    for _ in
-        0..(default_ideal_lag_behind_finalized_slot10 + default_ideal_lag_behind_finalized_slot)
-    {
-        test_rollup.da_service.produce_block_now().await.unwrap();
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    test_rollup.wait_for_height(20).await;
 
     // Before executing the evm checks we need to insert the credentials in the `Accounts`.
     send_insert_credentials(&test_client, from_addr, chain_id).await;
