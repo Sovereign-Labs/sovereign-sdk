@@ -4,7 +4,7 @@ use alloy_eips::eip1559::{BaseFeeParams, ETHEREUM_BLOCK_GAS_LIMIT_30M};
 use alloy_primitives::{Address, Bytes, U256};
 use revm::state::AccountInfo;
 use revm::Database;
-use sov_evm::{AccountData, Evm, EvmRuntimeConfig, EvmGenesisConfig, SpecId};
+use sov_evm::{AccountData, Evm, EvmGenesisConfig, EvmRuntimeConfig, SpecId};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
 

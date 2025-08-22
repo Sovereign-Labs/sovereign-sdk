@@ -127,7 +127,9 @@ impl<S: Spec> BlockHooks for Evm<S> {
             gas_limit: block_env.gas_limit,
             gas_used,
             mix_hash: block_env.prevrandao.map_or(B256::ZERO, B256::from),
-            base_fee_per_gas: parent_block.header.next_block_base_fee(cfg.chain_spec.base_fee_params),
+            base_fee_per_gas: parent_block
+                .header
+                .next_block_base_fee(cfg.chain_spec.base_fee_params),
             ..Default::default()
         };
 
