@@ -190,6 +190,18 @@ impl<S: Spec> Evm<S> {
         self.receipts.collect_infallible(state)
     }
 
+    /// Access the Ethereum transaction receipt by number.
+    pub fn receipt<Accessor: AccessoryStateReader>(
+        &self,
+        number: u64,
+        state: &mut Accessor,
+    ) -> Receipt {
+        self.receipts
+            .get(number, state)
+            .unwrap_infallible()
+            .expect("Receipt for known transaction must be set")
+    }
+
     /// Access the Ethereum transactions.
     pub fn transactions<Accessor: AccessoryStateReaderAndWriter>(
         &self,

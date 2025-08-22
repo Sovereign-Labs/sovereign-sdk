@@ -319,12 +319,7 @@ where
         let receipt = tx_number.map(|number| {
             let tx = self.transaction(number, state);
             let block = self.block(tx.block_number, state);
-
-            let receipt = self
-                .receipts
-                .get(tx_number.unwrap(), state)
-                .unwrap_infallible()
-                .expect("Receipt for known transaction must be set");
+            let receipt = self.receipt(tx_number.unwrap(), state);
 
             build_rpc_receipt(block, tx, tx_number.unwrap(), receipt)
         });
