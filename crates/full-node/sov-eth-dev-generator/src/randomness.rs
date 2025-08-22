@@ -1,6 +1,6 @@
 use sov_transaction_generator::rng_utils::{get_random_bytes, randomize_buffer};
 
-/// Manages randomness buffer for
+/// Manages randomness buffer for Arbitrary implementations
 pub struct Randomness {
     pub randomness: Vec<u8>,
     pub remaining: usize,
