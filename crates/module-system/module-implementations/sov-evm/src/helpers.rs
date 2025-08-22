@@ -60,11 +60,7 @@ pub(crate) fn prepare_call_env(
         data: input.try_into_unique_input()?.unwrap_or_default(),
         chain_id,
         access_list: access_list.unwrap_or_default(),
-        // EIP-4844 related fields:
-        blob_hashes: Default::default(),
-        max_fee_per_blob_gas: 0,
-        // EIP-7702: TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1132
-        authorization_list: vec![],
+        ..Default::default()
     };
 
     Ok(env)
