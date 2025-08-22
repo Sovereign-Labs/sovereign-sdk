@@ -346,19 +346,7 @@ where
     ) -> RpcResult<Bytes> {
         debug!("EVM module JSON-RPC request to `eth_call`");
 
-        let block_env = match block_number {
-            Some(ref block_number) if block_number == "pending" => self
-                .block_env
-                .get(state)
-                .unwrap_infallible()
-                .unwrap_or_default()
-                .clone(),
-            _ => {
-                let block = self.get_sealed_block_by_number(block_number, state);
-                BlockEnv::from(block)
-            }
-        };
-
+        let block_env = self.resolve_block_env(block_number, state);
         let tx_env = prepare_call_env(&block_env, request.clone()).unwrap();
 
         let cfg = self.cfg_infallible(state);
@@ -393,18 +381,7 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
         debug!("EVM module JSON-RPC request to `eth_estimateGas`");
-        let mut block_env = match block_number {
-            Some(ref block_number) if block_number == "pending" => self
-                .block_env
-                .get(state)
-                .unwrap_infallible()
-                .unwrap_or_default()
-                .clone(),
-            _ => {
-                let block = self.get_sealed_block_by_number(block_number, state);
-                BlockEnv::from(block)
-            }
-        };
+        let mut block_env = self.resolve_block_env(block_number, state);
 
         let tx_env = prepare_call_env(&block_env, request.clone()).unwrap();
         trace!(?tx_env, "TxEnv is prepared");
@@ -633,6 +610,25 @@ impl<S: Spec> Evm<S> {
                 .last(state)
                 .unwrap_infallible()
                 .expect("Head block must be set"),
+        }
+    }
+
+    fn resolve_block_env(
+        &self,
+        block_number: Option<String>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> BlockEnv {
+        match block_number {
+            Some(ref block_number) if block_number == "pending" => self
+                .block_env
+                .get(state)
+                .unwrap_infallible()
+                .unwrap_or_default()
+                .clone(),
+            _ => {
+                let block = self.get_sealed_block_by_number(block_number, state);
+                BlockEnv::from(block)
+            }
         }
     }
 }
