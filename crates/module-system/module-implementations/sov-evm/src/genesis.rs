@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_eips::eip1559::{ETHEREUM_BLOCK_GAS_LIMIT_30M, MIN_PROTOCOL_BASE_FEE};
 use alloy_eips::merge::SLOT_DURATION;
-use alloy_primitives::Bytes;
 use alloy_primitives::{Address, B256, U256};
+use alloy_primitives::{BlockNumber, Bytes};
 use anyhow::Result;
 use revm::primitives::hardfork::SpecId;
 use revm::state::AccountInfo;
@@ -96,98 +96,117 @@ where
         config: &<Self as Module>::Config,
         state: &mut impl GenesisState<S>,
     ) -> Result<()> {
-        for mut acc in config.data.clone() {
-            let rollup_address: <S as Spec>::Address = to_rollup_address::<S>(acc.address);
-            let bank_balance =
-                self.bank_module
-                    .get_balance_of(&rollup_address, config_gas_token_id(), state)?;
-
-            assert!(
-                !(acc.balance != U256::ZERO && bank_balance.is_some()),
-                "EVM account balance can only be set from one genesis config to avoid conflicts. 
-                Choose either the Bank or the EVM module genesis config."
-            );
-
-            if acc.balance != U256::ZERO {
-                self.bank_module.override_gas_balance(
-                    Amount::new(acc.balance.try_into().unwrap()),
-                    &rollup_address,
-                    state,
-                )?;
-                acc.balance = U256::ZERO;
-            }
-
-            let mut evm_db = self.get_db(state);
-            evm_db.insert_account_info(
-                acc.address,
-                AccountInfo {
-                    balance: acc.balance,
-                    code_hash: acc.code_hash,
-                    nonce: acc.nonce,
-                    code: None,
-                },
-            );
-
-            if !acc.code.is_empty() {
-                evm_db.insert_code(acc.code_hash, acc.code.clone());
-            }
+        for acc in config.data.clone() {
+            self.init_account(acc, state)?;
         }
 
-        let mut spec = config
-            .spec
-            .iter()
-            .map(|(k, v)| {
-                // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
-                if *v == SpecId::CANCUN {
-                    panic!("Cancun is not supported");
-                }
-
-                (*k, *v)
-            })
-            .collect::<Vec<_>>();
-
-        spec.sort_by(|a, b| a.0.cmp(&b.0));
-
-        if spec.is_empty() {
-            spec.push((0, SpecId::SHANGHAI));
-        } else if spec[0].0 != 0u64 {
-            panic!("EVM spec must start from block 0");
-        }
-
-        let chain_cfg = EvmChainConfig {
-            chain_id: config.chain_id,
-            limit_contract_code_size: config.limit_contract_code_size,
-            spec,
-            coinbase: config.coinbase,
-            block_gas_limit: config.block_gas_limit,
-            block_timestamp_delta: config.block_timestamp_delta,
-            base_fee_params: config.base_fee_params,
-        };
+        let spec = init_spec(&config)?;
+        let chain_cfg = evm_chain_config(&config, spec);
+        let block = init_block(&config);
 
         self.cfg.set(&chain_cfg, state)?;
-
-        let header = alloy_consensus::Header {
-            beneficiary: config.coinbase,
-            // This will be set in finalize_hook or in the next begin_rollup_block_hook
-            state_root: KECCAK_EMPTY,
-            gas_limit: config.block_gas_limit,
-            timestamp: config.genesis_timestamp,
-            base_fee_per_gas: Some(config.starting_base_fee),
-            ..Default::default()
-        };
-
-        let block = Block {
-            header,
-            transactions: 0u64..0u64,
-        };
-
         self.head.set(&block, state)?;
         #[cfg(feature = "native")]
-        {
-            self.pending_head.set(&block, state)?;
-        }
+        self.pending_head.set(&block, state)?;
 
         Ok(())
+    }
+
+    fn init_account(
+        &mut self,
+        mut acc: AccountData,
+        state: &mut impl GenesisState<S>,
+    ) -> Result<()> {
+        let rollup_address: <S as Spec>::Address = to_rollup_address::<S>(acc.address);
+        let bank_balance =
+            self.bank_module
+                .get_balance_of(&rollup_address, config_gas_token_id(), state)?;
+
+        assert!(
+            !(acc.balance != U256::ZERO && bank_balance.is_some()),
+            "EVM account balance can only be set from one genesis config to avoid conflicts. 
+                Choose either the Bank or the EVM module genesis config."
+        );
+
+        if acc.balance != U256::ZERO {
+            self.bank_module.override_gas_balance(
+                Amount::new(acc.balance.try_into().unwrap()),
+                &rollup_address,
+                state,
+            )?;
+            acc.balance = U256::ZERO;
+        }
+
+        let mut evm_db = self.get_db(state);
+        evm_db.insert_account_info(
+            acc.address,
+            AccountInfo {
+                balance: acc.balance,
+                code_hash: acc.code_hash,
+                nonce: acc.nonce,
+                code: None,
+            },
+        );
+
+        if !acc.code.is_empty() {
+            evm_db.insert_code(acc.code_hash, acc.code.clone());
+        };
+
+        Ok(())
+    }
+}
+
+fn init_block(config: &EvmConfig) -> Block {
+    let header = alloy_consensus::Header {
+        beneficiary: config.coinbase,
+        // This will be set in finalize_hook or in the next begin_rollup_block_hook
+        state_root: KECCAK_EMPTY,
+        gas_limit: config.block_gas_limit,
+        timestamp: config.genesis_timestamp,
+        base_fee_per_gas: Some(config.starting_base_fee),
+        ..Default::default()
+    };
+
+    Block {
+        header,
+        transactions: 0u64..0u64,
+    }
+}
+
+fn init_spec(config: &EvmConfig) -> Result<Vec<(BlockNumber, SpecId)>> {
+    let mut spec = config
+        .spec
+        .iter()
+        .map(|(k, v)| {
+            // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
+            if *v == SpecId::CANCUN {
+                panic!("Cancun is not supported");
+            }
+
+            (*k, *v)
+        })
+        .collect::<Vec<_>>();
+
+    spec.sort_by(|a, b| a.0.cmp(&b.0));
+
+    if spec.is_empty() {
+        spec.push((0, SpecId::SHANGHAI));
+    } else if spec[0].0 != 0u64 {
+        panic!("EVM spec must start from block 0");
+    };
+
+    Ok(spec)
+}
+
+fn evm_chain_config(cfg: &EvmConfig, spec: Vec<(BlockNumber, SpecId)>) -> EvmChainConfig {
+    EvmChainConfig {
+        spec,
+        chain_id: cfg.chain_id,
+        limit_contract_code_size: cfg.limit_contract_code_size,
+        coinbase: cfg.coinbase,
+        block_gas_limit: cfg.block_gas_limit,
+        block_timestamp_delta: cfg.block_timestamp_delta,
+        base_fee_params: cfg.base_fee_params,
     }
 }
 

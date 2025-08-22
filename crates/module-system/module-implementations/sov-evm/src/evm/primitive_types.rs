@@ -50,6 +50,13 @@ impl TransactionSignedAndRecovered {
     }
 }
 
+/// A pending Ethereum transaction.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct PendingTransaction {
+    pub(crate) transaction: TransactionSignedAndRecovered,
+    pub(crate) receipt: Receipt,
+}
+
 #[serde_as]
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Block {
