@@ -27,29 +27,18 @@ impl From<SealedBlock> for BlockEnv {
 }
 
 pub(crate) fn create_tx_env(tx: &TransactionSigned, signer: Address) -> TxEnv {
-    let to = match tx.to() {
-        Some(addr) => TxKind::Call(addr),
-        None => TxKind::Create,
-    };
-
     TxEnv {
         tx_type: TransactionType::Eip1559.into(),
         caller: signer,
         gas_limit: tx.gas_limit(),
         gas_price: tx.effective_gas_price(None),
         gas_priority_fee: tx.max_priority_fee_per_gas(),
-        kind: to,
+        kind: tx.to().into(),
         value: tx.value(),
         data: tx.input().clone(),
         chain_id: tx.chain_id(),
         nonce: tx.nonce(),
-        // TODO handle access list
-        access_list: Default::default(),
-        // EIP-4844 related fields
-        blob_hashes: Default::default(),
-        max_fee_per_blob_gas: 0,
-        // EIP-7702: TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1132
-        authorization_list: vec![],
+        ..Default::default()
     }
 }
 

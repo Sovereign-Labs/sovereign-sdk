@@ -1,7 +1,7 @@
-use alloy_consensus::constants::{EMPTY_RECEIPTS, EMPTY_TRANSACTIONS, KECCAK_EMPTY};
+use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{BlockHeader, Header, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
 use alloy_eips::eip1559::{BaseFeeParams, ETHEREUM_BLOCK_GAS_LIMIT_30M};
-use alloy_primitives::{Address, Bloom, Bytes, B256, B64, U256};
+use alloy_primitives::{Address, Bytes, U256};
 use revm::state::AccountInfo;
 use revm::Database;
 use sov_evm::{AccountData, Evm, EvmChainConfig, EvmConfig, SpecId};
@@ -99,27 +99,11 @@ fn test_genesis_block() {
 
         let actual_block = &evm.blocks(state)[0_usize];
         let expected_header = Header {
-            parent_hash: B256::default(),
             state_root: actual_block.header().state_root(),
-            transactions_root: EMPTY_TRANSACTIONS,
-            receipts_root: EMPTY_RECEIPTS,
-            logs_bloom: Bloom::default(),
-            difficulty: U256::ZERO,
-            number: 0,
             gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
-            gas_used: 0,
-            timestamp: 0,
-            extra_data: Bytes::default(),
-            mix_hash: B256::default(),
-            nonce: B64::ZERO,
             base_fee_per_gas: Some(7),
-            ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary,
-            withdrawals_root: None,
-            blob_gas_used: None,
-            excess_blob_gas: None,
-            parent_beacon_block_root: None,
-            requests_hash: Some(EMPTY_ROOT_HASH),
+            ..Default::default()
         };
 
         assert_eq!(actual_block.header().inner(), &expected_header);

@@ -168,32 +168,13 @@ where
         self.cfg.set(&chain_cfg, state)?;
 
         let header = alloy_consensus::Header {
-            parent_hash: B256::default(),
-            ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: config.coinbase,
             // This will be set in finalize_hook or in the next begin_rollup_block_hook
             state_root: KECCAK_EMPTY,
-            transactions_root: EMPTY_TRANSACTIONS,
-            receipts_root: EMPTY_RECEIPTS,
-            withdrawals_root: None,
-            logs_bloom: Bloom::default(),
-            difficulty: U256::ZERO,
-            number: 0,
             gas_limit: config.block_gas_limit,
-            gas_used: 0,
             timestamp: config.genesis_timestamp,
-            mix_hash: B256::default(),
-            nonce: B64::ZERO,
             base_fee_per_gas: Some(config.starting_base_fee),
-            extra_data: Bytes::default(),
-            // EIP-4844 related fields
-            blob_gas_used: None,
-            excess_blob_gas: None,
-            // EIP-4788 related field
-            // unrelated for rollups
-            parent_beacon_block_root: None,
-            // If Prague is activated at genesis we set requests root to an empty trie root.
-            requests_hash: Some(EMPTY_ROOT_HASH),
+            ..Default::default()
         };
 
         let block = Block {
