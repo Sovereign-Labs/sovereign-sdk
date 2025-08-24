@@ -123,13 +123,17 @@ pub struct Evm<S: Spec> {
     #[state]
     pub(crate) transaction_hashes: AccessoryStateMap<B256, u64, BcsCodec>,
 
+    /// Used only by the RPC: Receipts.
+    #[state]
+    pub(crate) receipts: AccessoryStateVec<Receipt, BcsCodec>,
+
     /// A reference to the Bank module.
     #[module]
     pub(crate) bank_module: sov_bank::Bank<S>,
 
-    /// Used only by the RPC: Receipts.
-    #[state]
-    pub(crate) receipts: AccessoryStateVec<Receipt, BcsCodec>,
+    /// A reference to the Uniqueness module.
+    #[module]
+    pub(crate) uniqueness_module: sov_uniqueness::Uniqueness<S>,
 
     #[phantom]
     phantom: core::marker::PhantomData<S>,

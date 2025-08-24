@@ -26,7 +26,7 @@ impl From<SealedBlock> for BlockEnv {
     }
 }
 
-pub(crate) fn create_tx_env(tx: &TransactionSigned, signer: Address) -> TxEnv {
+pub(crate) fn create_tx_env(nonce_to_use: u64, tx: &TransactionSigned, signer: Address) -> TxEnv {
     TxEnv {
         tx_type: TransactionType::Eip1559.into(),
         caller: signer,
@@ -37,7 +37,7 @@ pub(crate) fn create_tx_env(tx: &TransactionSigned, signer: Address) -> TxEnv {
         value: tx.value(),
         data: tx.input().clone(),
         chain_id: tx.chain_id(),
-        nonce: tx.nonce(),
+        nonce: nonce_to_use,
         ..Default::default()
     }
 }

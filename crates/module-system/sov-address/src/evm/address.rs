@@ -33,6 +33,12 @@ use crate::{MultiAddress, Not28Bytes};
 /// A standard 20-byte Ethereum address with checksum.
 pub struct EthereumAddress(#[sov_wallet(as_ty = "[u8;20]", display = "hex")] pub Address);
 
+impl EthereumAddress {
+    pub fn as_credential_id(&self) -> CredentialId {
+        CredentialId::from_bytes(self.0.into_word().into())
+    }
+}
+
 impl From<CredentialId> for EthereumAddress {
     fn from(credential_id: CredentialId) -> Self {
         credential_id.0.into()

@@ -1,6 +1,5 @@
-use alloy_primitives::keccak256;
+use crate::EthereumAddress;
 use borsh::{BorshDeserialize, BorshSerialize};
-use k256::elliptic_curve::sec1::ToEncodedPoint;
 use k256::EncodedPoint;
 use schemars::JsonSchema;
 use sov_modules_api::macros::UniversalWallet;
@@ -98,12 +97,8 @@ impl std::hash::Hash for EthereumPublicKey {
 
 impl sov_rollup_interface::crypto::PublicKey for EthereumPublicKey {
     fn credential_id(&self) -> sov_rollup_interface::crypto::CredentialId {
-        // Use the same method as EthereumAddress::from(&EthereumPublicKey)
-        // Get the uncompressed public key bytes (without the prefix byte)
-        let uncompressed = self.pub_key.to_encoded_point(false);
-        let hash: [u8; 32] = keccak256(&uncompressed.as_bytes()[1..]).into();
-
-        sov_rollup_interface::crypto::CredentialId(hash.into())
+        let eth_address = EthereumAddress::from(self);
+        eth_address.as_credential_id()
     }
 }
 
@@ -332,7 +327,7 @@ mod tests {
         // Get the ethereum address from the public key turned into credential id turned into address
         let credential_id = public_key.credential_id();
         assert_eq!(
-            "0x4efbae02ded675eac115583671334bf1710d12c9f689cc819476fa589f08c64c",
+            "0x00000000000000000000000071334bf1710d12c9f689cc819476fa589f08c64c",
             credential_id.to_string()
         );
         let address_from_credential_id: EthereumAddress = credential_id.into();

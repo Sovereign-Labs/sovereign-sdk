@@ -63,9 +63,9 @@ fn extract_evm_authorization_data<S: Spec>(
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
-    let credentials = Credentials::new(signer);
-    let credential_id = signer.into_word().0.into();
     let ethereum_address: EthereumAddress = signer.into();
+    let credentials = Credentials::new(signer);
+    let credential_id = ethereum_address.as_credential_id();
 
     AuthorizationData {
         uniqueness: UniquenessData::Nonce(nonce),

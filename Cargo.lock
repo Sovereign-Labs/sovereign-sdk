@@ -11336,6 +11336,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "sov-test-utils",
+ "sov-uniqueness",
  "strum 0.26.3",
  "tempfile",
  "thiserror 1.0.64",

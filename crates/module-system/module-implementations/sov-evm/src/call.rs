@@ -53,8 +53,12 @@ where
         let cfg = self.cfg(state)?.expect("Evm config must be set");
         let cfg_env = get_cfg_env(&block_env, cfg, None);
 
+        let nonce_to_use = self.get_nonce_to_use(signer, state)?;
+
         let evm_db: EvmDb<_, S> = self.get_db(state);
-        let result = executor::execute_tx(evm_db, &block_env, &evm_tx, signer, cfg_env);
+
+        let result =
+            executor::execute_tx(nonce_to_use, evm_db, &block_env, &evm_tx, signer, cfg_env);
 
         let previous_transaction = self.pending_transactions.last(state)?;
         let previous_transaction_cumulative_gas_used = previous_transaction
@@ -122,6 +126,26 @@ where
             .push(&pending_transaction, state)?;
 
         Ok(())
+    }
+
+    // The nonce check is already performed by the stf-blueprint during transaction preprocessing,
+    // so the EVM does not need to perform any additional nonce validation.
+    //
+    // However, the account nonce is still used by the EVM in the `CREATE` opcode when generating
+    // a contract address: `new_address = keccak256(sender, nonce)`.
+    // This means we must ensure a unique value is provided to satisfy the opcode.
+    // Here, we use the nonce tracked by the EVM, but keep in mind that `eth_getTransactionCount`
+    // will return the nonce tracked by the sov-uniqueness module.
+    fn get_nonce_to_use(
+        &self,
+        address: Address,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<u64> {
+        Ok(self
+            .accounts
+            .get(&address, state)?
+            .map(|acc| acc.info.nonce)
+            .unwrap_or_default())
     }
 }
 
