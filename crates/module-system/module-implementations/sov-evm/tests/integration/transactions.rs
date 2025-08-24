@@ -46,6 +46,7 @@ fn test_executing_eth_transaction() {
     });
 
     for n in 2..10 {
+        let address = account.address();
         let set_value_tx =
             create_set_arg_tx((n + 90) as u32, n, &contract, contract_addr, &account);
 
@@ -56,6 +57,12 @@ fn test_executing_eth_transaction() {
             .into(),
             assert: Box::new(move |_result, state| {
                 let evm = Evm::<S>::default();
+                let nonce_from_module = evm
+                    .get_transaction_count(address, None, state)
+                    .unwrap()
+                    .to::<u64>();
+                assert_eq!(n + 1, nonce_from_module);
+
                 let storage_value = evm
                     .get_storage(&contract_addr, &U256::ZERO, state)
                     .unwrap()
