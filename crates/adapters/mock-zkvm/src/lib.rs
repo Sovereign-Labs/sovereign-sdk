@@ -81,8 +81,8 @@ impl sov_rollup_interface::zk::CodeCommitment for MockCodeCommitment {
 /// An error that can occur when converting a byte vector to a `MockCodeCommitment`.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum MockCodeCommitmentError {
-    /// The input was not 32 bytes long.
-    #[error("MockCodeCommitment must be 32 bytes long, but the input was {found} bytes long")]
+    /// The input was not 8 bytes long.
+    #[error("MockCodeCommitment must be 8 bytes long, but the input was {found} bytes long")]
     InvalidLength {
         /// The size of the input.
         found: usize,
