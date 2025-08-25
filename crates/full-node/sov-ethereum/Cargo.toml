@@ -36,7 +36,7 @@ reth-primitives = { workspace = true }
 reth-rpc-eth-types = { workspace = true }
 
 tokio = { workspace = true, features = ["sync"] }
-schnellru = "0.2.3"
+schnellru = "0.2.4"
 
 [dev-dependencies]
 anyhow = { workspace = true }
