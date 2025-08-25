@@ -1,3 +1,5 @@
+# 2025-08-25
+- #1558 Enables querying the `DerivedHolder/Module` balance. Previously, the balance route only worked for user addresses at `/tokens/{}/balances/{}`. This has been updated: the endpoint now attempts to convert the provided string into a `TokenHolder::User/Module/Bank` before processing.
 # 2025-08-22
 - #1553 Enables ignored EVM tests. This is NOT a breaking change.
 

@@ -105,11 +105,11 @@ impl<S: Spec> HasCustomRestApi for Bank<S> {
         axum::Router::new()
             .route("/tokens/gas_token", get(Self::route_gas_token))
             .route(
-                "/tokens/gas_token/balances/:address",
+                "/tokens/gas_token/balances/:holderStr",
                 get(Self::route_gas_token_balance),
             )
             .route(
-                "/tokens/:tokenId/balances/:address",
+                "/tokens/:tokenId/balances/:holderStr",
                 get(Self::route_balance),
             )
             .route(
