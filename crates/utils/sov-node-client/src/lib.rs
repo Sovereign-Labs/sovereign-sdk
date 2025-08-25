@@ -202,7 +202,7 @@ impl NodeClient {
         Ok(amount)
     }
 
-    /// Get balance of the hoder.
+    /// Get balance of the holder.
     pub async fn get_balance_for_holder<S: sov_modules_api::Spec>(
         &self,
         holder: &str,
