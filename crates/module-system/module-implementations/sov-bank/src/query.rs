@@ -1,15 +1,15 @@
 //! Defines REST queries exposed by the bank module, along with the relevant types.
 
+use crate::TokenHolder;
+use crate::{config_gas_token_id, get_token_id, Amount, Bank, Coins, TokenId};
 use axum::routing::get;
 use axum::Json;
-use sov_modules_api::capabilities::RollupHeight;
+use derive_more::FromStr;
 use sov_modules_api::prelude::utoipa::openapi::OpenApi;
 use sov_modules_api::prelude::{axum, serde_yaml, UnwrapInfallible};
 use sov_modules_api::rest::utils::{errors, ApiResult, Path, Query};
 use sov_modules_api::rest::{ApiState, HasCustomRestApi};
 use sov_modules_api::{ApiStateAccessor, Spec};
-
-use crate::{config_gas_token_id, get_token_id, Amount, Bank, Coins, TokenId};
 
 /// Structure returned by the `balance_of` method.
 #[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]
@@ -36,7 +36,7 @@ impl<S: Spec> Bank<S> {
     async fn route_gas_token_balance(
         state: ApiState<S, Self>,
         accessor: ApiStateAccessor<S>,
-        Path(user_address): Path<S::Address>,
+        Path(user_address): Path<String>,
     ) -> ApiResult<Coins> {
         Self::route_balance(state, accessor, Path((config_gas_token_id(), user_address))).await
     }
@@ -44,14 +44,19 @@ impl<S: Spec> Bank<S> {
     async fn route_balance(
         state: ApiState<S, Self>,
         mut accessor: ApiStateAccessor<S>,
-        Path((token_id, user_address)): Path<(TokenId, S::Address)>,
+        Path((token_id, holder_str)): Path<(TokenId, String)>,
     ) -> ApiResult<Coins> {
-        let amount = state
-            .get_balance_of(&user_address, token_id, &mut accessor)
-            .unwrap_infallible()
-            .ok_or_else(|| errors::not_found_404("Balance", user_address))?;
+        if let Ok(holder) = TokenHolder::from_str(&holder_str) {
+            let amount = state
+                .balances
+                .get(&(holder.clone(), &token_id), &mut accessor)
+                .unwrap_infallible()
+                .ok_or_else(|| errors::not_found_404("Balance", holder))?;
 
-        Ok(Coins { amount, token_id }.into())
+            return Ok(Coins { amount, token_id }.into());
+        }
+
+        todo!()
     }
 
     async fn route_total_supply(
