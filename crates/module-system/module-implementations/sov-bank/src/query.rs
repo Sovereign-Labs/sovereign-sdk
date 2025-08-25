@@ -57,7 +57,7 @@ impl<S: Spec> Bank<S> {
                 Ok(Coins { amount, token_id }.into())
             }
             Err(err) => Err(errors::bad_request_400(
-                &format!("The given holder {holder_str} is not convertible to a TokenHolder"),
+                &format!("The given parameter {holder_str} is not a valid address or token holder"),
                 err.to_string(),
             )),
         }
