@@ -128,15 +128,16 @@ fn init_block(config: &EvmGenesisConfig) -> Block {
 
 fn init_spec(config: &EvmGenesisConfig) -> Result<Vec<(BlockNumber, SpecId)>> {
     let mut spec = config
+        .chain_spec
         .hardforks
         .iter()
-        .map(|(k, v)| {
+        .map(|&(k, v)| {
             // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
-            if *v == SpecId::CANCUN {
+            if v == SpecId::CANCUN {
                 panic!("Cancun is not supported");
             }
 
-            (*k, *v)
+            (k, v)
         })
         .collect::<Vec<_>>();
 
@@ -153,7 +154,7 @@ fn init_spec(config: &EvmGenesisConfig) -> Result<Vec<(BlockNumber, SpecId)>> {
 
 fn evm_chain_config(cfg: &EvmGenesisConfig, spec: Vec<(BlockNumber, SpecId)>) -> EvmRuntimeConfig {
     EvmRuntimeConfig {
-        hardforks: spec,
         chain_spec: cfg.chain_spec.clone(),
+        hardforks: spec,
     }
 }

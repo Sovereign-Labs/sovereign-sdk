@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use alloy_eips::eip1559::{ETHEREUM_BLOCK_GAS_LIMIT_30M, MIN_PROTOCOL_BASE_FEE};
 use alloy_eips::merge::SLOT_DURATION;
 use alloy_primitives::Address;
@@ -23,6 +21,8 @@ pub struct EvmChainSpec {
     pub block_timestamp_delta: u64,
     /// EIP-1559 base fee calculation parameters
     pub base_fee_params: alloy_eips::eip1559::BaseFeeParams,
+    /// Hard fork activation schedule (block number -> fork ID)
+    pub hardforks: Vec<(u64, SpecId)>,
 }
 
 /// Genesis configuration for EVM module initialization
@@ -30,8 +30,6 @@ pub struct EvmChainSpec {
 pub struct EvmGenesisConfig {
     /// Initial account states
     pub accounts: Vec<AccountData>,
-    /// Hard fork activation schedule (block number -> fork ID)
-    pub hardforks: HashMap<u64, SpecId>,
     /// Initial base fee for first block
     pub initial_base_fee: u64,
     /// Timestamp of genesis block
@@ -49,6 +47,7 @@ impl Default for EvmChainSpec {
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
             block_timestamp_delta: SLOT_DURATION.as_secs(),
             base_fee_params: alloy_eips::eip1559::BaseFeeParams::ethereum(),
+            hardforks: vec![(0, SpecId::SHANGHAI)],
         }
     }
 }
@@ -57,7 +56,6 @@ impl Default for EvmGenesisConfig {
     fn default() -> Self {
         Self {
             accounts: vec![],
-            hardforks: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
             initial_base_fee: MIN_PROTOCOL_BASE_FEE,
             genesis_timestamp: 0,
             chain_spec: EvmChainSpec::default(),
@@ -86,11 +84,11 @@ mod tests {
                 code: Bytes::default(),
                 nonce: 0,
             }],
-            hardforks: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
             chain_spec: crate::EvmChainSpec {
                 chain_id: 4321, // Use a hard-coded value instead of config_value!("CHAIN_ID") since the string below is hard-coded
                 limit_contract_code_size: None,
                 block_timestamp_delta: 1u64,
+                hardforks: vec![(0, SpecId::SHANGHAI)],
                 ..Default::default()
             },
             ..Default::default()
@@ -106,9 +104,6 @@ mod tests {
                     "code":"0x",
                     "nonce":0
                 }],
-                "hardforks":{
-                    "0":"SHANGHAI"
-                },
                 "initial_base_fee":7,
                 "genesis_timestamp":0,
                 "chain_spec":{
@@ -120,7 +115,8 @@ mod tests {
                     "base_fee_params":{
                         "max_change_denominator":8,
                         "elasticity_multiplier":2
-                    }
+                    },
+                    "hardforks":[[0,"SHANGHAI"]]
                 }
         }"#;
 

@@ -44,7 +44,6 @@ fn test_genesis_cfg() {
         assert_eq!(
             evm.cfg_infallible(state),
             EvmRuntimeConfig {
-                hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)],
                 chain_spec: sov_evm::EvmChainSpec {
                     chain_id: 1000,
                     block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
@@ -52,7 +51,9 @@ fn test_genesis_cfg() {
                     coinbase: Address::from([3u8; 20]),
                     limit_contract_code_size: Some(5000),
                     base_fee_params: BaseFeeParams::ethereum(),
+                    hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)],
                 },
+                hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)],
             }
         );
     });
@@ -61,7 +62,7 @@ fn test_genesis_cfg() {
 #[test]
 fn test_empty_spec_defaults_to_shanghai() {
     let mut cfg = default_config();
-    cfg.hardforks.clear();
+    cfg.chain_spec.hardforks.clear();
     let runner = basic_setup(cfg);
 
     runner.query_visible_state(move |state| {
@@ -74,20 +75,16 @@ fn test_empty_spec_defaults_to_shanghai() {
 #[test]
 #[should_panic(expected = "EVM spec must start from block 0")]
 fn test_cfg_missing_specs() {
-    let cfg = EvmGenesisConfig {
-        hardforks: vec![(5, SpecId::BERLIN)].into_iter().collect(),
-        ..Default::default()
-    };
+    let mut cfg = EvmGenesisConfig::default();
+    cfg.chain_spec.hardforks = vec![(5, SpecId::BERLIN)];
     let _ = basic_setup(cfg);
 }
 
 #[test]
 #[should_panic(expected = "Cancun is not supported")]
 fn test_cancun_is_unsupported() {
-    let cfg = EvmGenesisConfig {
-        hardforks: vec![(0, SpecId::CANCUN)].into_iter().collect(),
-        ..Default::default()
-    };
+    let mut cfg = EvmGenesisConfig::default();
+    cfg.chain_spec.hardforks = vec![(0, SpecId::CANCUN)];
     let _ = basic_setup(cfg);
 }
 
@@ -125,9 +122,6 @@ fn default_config() -> EvmGenesisConfig {
             code: Bytes::default(),
             nonce: 0,
         }],
-        hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)]
-            .into_iter()
-            .collect(),
         initial_base_fee: 70,
         genesis_timestamp: 50,
         chain_spec: sov_evm::EvmChainSpec {
@@ -137,6 +131,7 @@ fn default_config() -> EvmGenesisConfig {
             coinbase: Address::from([3u8; 20]),
             limit_contract_code_size: Some(5000),
             base_fee_params: BaseFeeParams::ethereum(),
+            hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)],
         },
     }
 }

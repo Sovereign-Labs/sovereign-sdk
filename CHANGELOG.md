@@ -6,6 +6,7 @@
   - Common chain parameters extracted into new `EvmChainSpec` struct
   - Field renames: `data` → `accounts`, `spec` → `hardforks`, `starting_base_fee` → `initial_base_fee`
   - Genesis JSON structure changed: chain parameters are now nested under `chain_spec` field
+  - **Hardforks moved to `EvmChainSpec`**: The `hardforks` field has been moved from `EvmGenesisConfig` to `EvmChainSpec` and changed from a HashMap to a Vec of tuples for consistent ordering
   
   Migration guide:
   - Update imports: `EvmConfig` → `EvmGenesisConfig`, `EvmChainConfig` → `EvmRuntimeConfig`
@@ -24,10 +25,10 @@
     // After:
     {
       "accounts": [...],
-      "hardforks": {"0": "SHANGHAI"},
       "initial_base_fee": 7,
       "chain_spec": {
         "chain_id": 4321,
+        "hardforks": [[0, "SHANGHAI"]],
         ...
       }
     }

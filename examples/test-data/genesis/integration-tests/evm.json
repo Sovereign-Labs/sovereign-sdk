@@ -29,9 +29,6 @@
       "nonce": 0
     }
   ],
-  "hardforks": {
-    "0": "SHANGHAI"
-  },
   "initial_base_fee": 7,
   "genesis_timestamp": 0,
   "chain_spec": {
@@ -43,6 +40,7 @@
     "base_fee_params": {
       "max_change_denominator": 8,
       "elasticity_multiplier": 2
-    }
+    },
+    "hardforks": [[0, "SHANGHAI"]]
   }
 }

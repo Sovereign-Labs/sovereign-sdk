@@ -43,17 +43,20 @@ impl DbAccount {
 pub struct EvmRuntimeConfig {
     /// Core chain parameters
     pub chain_spec: crate::EvmChainSpec,
-
-    /// Sorted hard fork schedule for efficient lookup
+    /// Sorted hard fork schedule for efficient runtime lookup
     /// (block number, fork ID) ordered by block number
     pub hardforks: Vec<(u64, SpecId)>,
 }
 
 impl Default for EvmRuntimeConfig {
     fn default() -> EvmRuntimeConfig {
+        let chain_spec = crate::EvmChainSpec::default();
+        // Clone hardforks from chain_spec for runtime use
+        let hardforks = chain_spec.hardforks.clone();
+
         EvmRuntimeConfig {
-            chain_spec: crate::EvmChainSpec::default(),
-            hardforks: vec![(0, SpecId::SHANGHAI)],
+            chain_spec,
+            hardforks,
         }
     }
 }
