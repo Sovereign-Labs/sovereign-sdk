@@ -210,7 +210,7 @@ futures = { version = "0.3", default-features = false }
 hex = { version = "0.4.3" }
 insta = { version = "1.39", features = ["json"] }
 jsonschema = "0.26.1"
-openapiv3 = "2.0.0"
+openapiv3 = "2.2.0"
 prometheus = { version = "0.13.4", default-features = false }
 proc-macro2 = { version = "1.0" }
 proptest = { version = "1.5", default-features = false, features = ["std", "alloc"] }
