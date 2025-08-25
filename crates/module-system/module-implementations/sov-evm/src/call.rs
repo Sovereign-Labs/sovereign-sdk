@@ -53,12 +53,11 @@ where
         let cfg = self.cfg(state)?.expect("Evm config must be set");
         let cfg_env = get_cfg_env(&block_env, cfg, None);
 
-        let nonce_to_use = self.get_nonce_to_use(signer, state)?;
+        let sov_nonce = self.get_sov_nonce(signer, state)?;
 
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
-        let result =
-            executor::execute_tx(nonce_to_use, evm_db, &block_env, &evm_tx, signer, cfg_env);
+        let result = executor::execute_tx(sov_nonce, evm_db, &block_env, &evm_tx, signer, cfg_env);
 
         let previous_transaction = self.pending_transactions.last(state)?;
         let previous_transaction_cumulative_gas_used = previous_transaction
@@ -136,11 +135,7 @@ where
     // This means we must ensure a unique value is provided to satisfy the opcode.
     // Here, we use the nonce tracked by the EVM, but keep in mind that `eth_getTransactionCount`
     // will return the nonce tracked by the sov-uniqueness module.
-    fn get_nonce_to_use(
-        &self,
-        address: Address,
-        state: &mut impl TxState<S>,
-    ) -> anyhow::Result<u64> {
+    fn get_sov_nonce(&self, address: Address, state: &mut impl TxState<S>) -> anyhow::Result<u64> {
         Ok(self
             .accounts
             .get(&address, state)?
