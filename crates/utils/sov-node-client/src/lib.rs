@@ -207,14 +207,10 @@ impl NodeClient {
         &self,
         holder: &str,
         token_id: &TokenId,
-        rollup_height: Option<u64>,
     ) -> anyhow::Result<Amount> {
-        let height_param: String = rollup_height
-            .map(|h| format!("?rollup_height={h}"))
-            .unwrap_or_default();
         let balance_url = format!(
-            "{}/modules/bank/tokens/{}/balances/{}{}",
-            self.base_url, token_id, holder, height_param
+            "{}/modules/bank/tokens/{}/balances/{}",
+            self.base_url, token_id, holder
         );
         let amount = self.query_amount(&balance_url).await?;
 

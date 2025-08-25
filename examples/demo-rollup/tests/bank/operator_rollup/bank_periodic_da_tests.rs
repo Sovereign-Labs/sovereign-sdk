@@ -120,7 +120,7 @@ async fn send_test_bank_txs(
     // Check the derive holder api
     let derived_holder_str = DerivedHolder::from([22; 32]).to_string();
     let derived_holder_balance_err = client
-        .get_balance_for_holder::<TestSpec>(&derived_holder_str, &token_id, None)
+        .get_balance_for_holder::<TestSpec>(&derived_holder_str, &token_id)
         .await
         .unwrap_err()
         .to_string();
