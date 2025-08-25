@@ -46,17 +46,21 @@ impl<S: Spec> Bank<S> {
         mut accessor: ApiStateAccessor<S>,
         Path((token_id, holder_str)): Path<(TokenId, String)>,
     ) -> ApiResult<Coins> {
-        if let Ok(holder) = TokenHolder::from_str(&holder_str) {
-            let amount = state
-                .balances
-                .get(&(holder.clone(), &token_id), &mut accessor)
-                .unwrap_infallible()
-                .ok_or_else(|| errors::not_found_404("Balance", holder))?;
+        match TokenHolder::from_str(&holder_str) {
+            Ok(holder) => {
+                let amount = state
+                    .balances
+                    .get(&(holder.clone(), &token_id), &mut accessor)
+                    .unwrap_infallible()
+                    .ok_or_else(|| errors::not_found_404("Balance", holder))?;
 
-            return Ok(Coins { amount, token_id }.into());
+                Ok(Coins { amount, token_id }.into())
+            }
+            Err(err) => Err(errors::bad_request_400(
+                &format!("The given holder {holder_str} is not convertible to a TokenHolder"),
+                err.to_string(),
+            )),
         }
-
-        todo!()
     }
 
     async fn route_total_supply(

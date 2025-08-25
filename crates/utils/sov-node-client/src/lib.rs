@@ -202,6 +202,32 @@ impl NodeClient {
         Ok(amount)
     }
 
+    /// Get balance of the user.
+    pub async fn get_balance_for_holder<S: sov_modules_api::Spec>(
+        &self,
+        holder: &str,
+        token_id: &TokenId,
+        rollup_height: Option<u64>,
+    ) -> anyhow::Result<Amount> {
+        let height_param: String = rollup_height
+            .map(|h| format!("?rollup_height={h}"))
+            .unwrap_or_default();
+        let balance_url = format!(
+            "{}/modules/bank/tokens/{}/balances/{}{}",
+            self.base_url, token_id, holder, height_param
+        );
+        let amount = self.query_amount(&balance_url).await?;
+
+        tracing::debug!(
+            holder = %holder,
+            url = balance_url,
+            %amount,
+            "Queried balance",
+        );
+
+        Ok(amount)
+    }
+
     /// Send transactions to the sequencer.
     /// Accepts vector of borsh serialized [`sov_modules_api::transaction::Transaction`].
     /// Returns batch submission receipt and hashes of transactions provided to this method.
