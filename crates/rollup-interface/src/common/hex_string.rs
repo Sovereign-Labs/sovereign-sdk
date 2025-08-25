@@ -44,7 +44,7 @@ impl schemars::JsonSchema for HexString {
 // Useful for representing Ethereum addresses
 impl<const N: usize> schemars::JsonSchema for HexString<[u8; N]> {
     fn schema_name() -> String {
-        "HexHash".to_string()
+        format!("HexStringBytes{}", N)
     }
 
     fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
@@ -59,7 +59,7 @@ impl<const N: usize> schemars::JsonSchema for HexString<[u8; N]> {
 
 impl<const N: usize> schemars::JsonSchema for HexString<SafeVec<u8, N>> {
     fn schema_name() -> String {
-        "HexHash".to_string()
+        format!("HexStringMax{}", N)
     }
 
     fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
