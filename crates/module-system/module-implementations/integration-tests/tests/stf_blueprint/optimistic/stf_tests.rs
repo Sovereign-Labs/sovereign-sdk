@@ -59,13 +59,8 @@ fn test_demo_values_in_db() -> Result<(), Infallible> {
         let runtime = IntegTestRuntime::<TestSpec>::default();
         let resp = runtime
             .bank
-            .supply_of(None, get_default_token_id::<S>(&admin_address), state);
-        assert_eq!(
-            resp.unwrap(),
-            sov_bank::TotalSupplyResponse {
-                amount: Some(Amount::new(1000))
-            }
-        );
+            .get_total_supply_of(&get_default_token_id::<S>(&admin_address), state);
+        assert_eq!(resp.unwrap(), Some(Amount::new(1000)));
 
         assert_eq!(
             runtime.value_setter.value.get(state).unwrap_infallible(),
@@ -113,13 +108,8 @@ fn test_demo_values_in_cache() -> Result<(), Infallible> {
 
         let resp = runtime
             .bank
-            .supply_of(None, get_default_token_id::<S>(&admin_address), state);
-        assert_eq!(
-            resp.unwrap(),
-            sov_bank::TotalSupplyResponse {
-                amount: Some(Amount::new(1000))
-            }
-        );
+            .get_total_supply_of(&get_default_token_id::<S>(&admin_address), state);
+        assert_eq!(resp.unwrap(), Some(Amount::new(1000)));
 
         assert_eq!(
             runtime.value_setter.value.get(state).unwrap_infallible(),

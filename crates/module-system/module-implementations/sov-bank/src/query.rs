@@ -25,44 +25,6 @@ pub struct TotalSupplyResponse {
     pub amount: Option<Amount>,
 }
 
-impl<S: Spec> Bank<S> {
-    /// Method that returns the balance of the user at the address `user_address` for the token
-    /// stored at the address `token_id`.
-    pub fn balance_of(
-        &self,
-        version: Option<RollupHeight>,
-        user_address: S::Address,
-        token_id: TokenId,
-        state: &mut ApiStateAccessor<S>,
-    ) -> Result<BalanceResponse, anyhow::Error> {
-        let amount = if let Some(v) = version {
-            let state = &mut state.get_archival_state(v).map_err(|e| anyhow::anyhow!("Impossible to retrieve the state at the provided height. Please ensure you're querying a valid state. Error: {e}"))?;
-            self.get_balance_of(&user_address, token_id, state)
-        } else {
-            self.get_balance_of(&user_address, token_id, state)
-        }
-        .unwrap_infallible();
-        Ok(BalanceResponse { amount })
-    }
-
-    /// Method that returns the supply of a token stored at the address `token_id`.
-    pub fn supply_of(
-        &self,
-        version: Option<RollupHeight>,
-        token_id: TokenId,
-        state: &mut ApiStateAccessor<S>,
-    ) -> Result<TotalSupplyResponse, anyhow::Error> {
-        let amount = if let Some(v) = version {
-            let mut state = state.get_archival_state(v).map_err(|e| anyhow::anyhow!("Impossible to retrieve the state at the provided height. Please ensure you're querying a valid state. Error: {e}"))?;
-            self.get_total_supply_of(&token_id, &mut state)
-        } else {
-            self.get_total_supply_of(&token_id, state)
-        }
-        .unwrap_infallible();
-        Ok(TotalSupplyResponse { amount })
-    }
-}
-
 /// Axum routes.
 impl<S: Spec> Bank<S> {
     async fn route_gas_token() -> axum::Json<types::TokenIdResponse> {
