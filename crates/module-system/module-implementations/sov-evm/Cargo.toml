@@ -31,6 +31,7 @@ derive_more = { workspace = true }
 serde = { workspace = true }
 serde_with = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
+delegate = { workspace = true }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = [
 	"macros",

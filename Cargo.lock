@@ -2773,6 +2773,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "092966b41edc516079bdf31ec78a2e0588d1d0c08f78b91d8307215928642b2b"
 
 [[package]]
+name = "delegate"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6178a82cf56c836a3ba61a7935cdb1c49bfaa6fa4327cd5bf554a503087de26b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.98",
+]
+
+[[package]]
 name = "demo-simple-stf"
 version = "0.3.0"
 dependencies = [
@@ -11302,6 +11313,7 @@ dependencies = [
  "bincode",
  "borsh",
  "bytes",
+ "delegate",
  "derive_more 1.0.0",
  "digest 0.10.7",
  "ethers-core",
