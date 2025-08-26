@@ -13,7 +13,7 @@ use revm::{
 };
 
 use crate::{
-    evm::{conversions::create_tx_env, evm::SovEvm},
+    evm::{conversions::create_tx_env, sov_evm::SovEvm},
     get_spec_id, EvmRuntimeConfig,
 };
 
