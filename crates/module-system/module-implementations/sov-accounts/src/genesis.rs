@@ -24,7 +24,12 @@ pub struct AccountConfig<S: Spec> {
     /// Accounts to initialize the rollup.
     pub accounts: Vec<AccountData<S::Address>>,
     /// Enable custom `CredentailId` => `Account` mapping.
+    #[serde(default = "default_true")]
     pub enable_custom_account_mappings: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl<S: Spec> Accounts<S> {
