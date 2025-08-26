@@ -69,7 +69,9 @@ pub(crate) fn setup() -> (TestRunner<RT, S>, TestUser<S>, EvmAccount, EvmAccount
     // SHANGHAI instead of LATEST
     // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
     evm_config.chain_spec.hardforks = vec![(0, SpecId::SHANGHAI)];
+
     let genesis = GenesisConfig::from_minimal_config(genesis_config.into(), evm_config);
+
     let runner =
         TestRunner::new_with_genesis(genesis.into_genesis_params(), TestRuntime::default());
 

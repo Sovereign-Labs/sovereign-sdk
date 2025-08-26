@@ -14,6 +14,7 @@ use sov_test_utils::{TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE};
 type TestSpec = DemoRollupSpec;
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "Account abstraction for the EVM is disabled"]
 async fn test_evm_account_abstraction() {
     let chain_id = config_value!("CHAIN_ID");
     let finalization_blocks = 0;

@@ -4,7 +4,8 @@
   "description": "Initial configuration for sov-accounts module.",
   "type": "object",
   "required": [
-    "accounts"
+    "accounts",
+    "enable_custom_account_mappings"
   ],
   "properties": {
     "accounts": {
@@ -13,6 +14,10 @@
       "items": {
         "$ref": "#/definitions/AccountData_for_Address"
       }
+    },
+    "enable_custom_account_mappings": {
+      "description": "TODO",
+      "type": "boolean"
     }
   },
   "definitions": {

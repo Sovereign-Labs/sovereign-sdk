@@ -1,3 +1,5 @@
+# 2025-08-26
+- #1562 **BREAKING CHANGE** The `account.json` genesis files now include a new field: `enable_custom_account_mappings`. If this field is set to false, the custom `CredentialId` => `Account` mapping is disabled. It should remain disabled for EVM rollups.
 # 2025-08-22
 - #1553 Enables ignored EVM tests. This is NOT a breaking change.
 - #1555 **BREAKING CHANGE** Refactors EVM configuration types to reduce duplication and improve clarity:
