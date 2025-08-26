@@ -43,7 +43,7 @@ reltester = { workspace = true }
 serde_json = { workspace = true, features = ["alloc"] }
 sov-sp1-adapter = { path = ".", features = ["arbitrary", "native"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
-sp1-build = { version = "5.0.8" }
+sp1-build = { version = "5.2.1" }
 
 [build-dependencies]
 anyhow = { workspace = true }
