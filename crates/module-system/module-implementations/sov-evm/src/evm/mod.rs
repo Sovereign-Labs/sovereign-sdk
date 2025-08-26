@@ -3,7 +3,6 @@
 #![allow(clippy::match_same_arms)]
 
 use alloy_primitives::Address;
-use revm::primitives::hardfork::SpecId;
 use revm::state::AccountInfo;
 use serde::{Deserialize, Serialize};
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -35,29 +34,6 @@ impl DbAccount {
     /// The account info associated with this db account.
     pub fn account_info(&self) -> &AccountInfo {
         &self.info
-    }
-}
-
-/// Runtime configuration for EVM execution
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct EvmRuntimeConfig {
-    /// Core chain parameters
-    pub chain_spec: crate::EvmChainSpec,
-    /// Sorted hard fork schedule for efficient runtime lookup
-    /// (block number, fork ID) ordered by block number
-    pub hardforks: Vec<(u64, SpecId)>,
-}
-
-impl Default for EvmRuntimeConfig {
-    fn default() -> EvmRuntimeConfig {
-        let chain_spec = crate::EvmChainSpec::default();
-        // Clone hardforks from chain_spec for runtime use
-        let hardforks = chain_spec.hardforks.clone();
-
-        EvmRuntimeConfig {
-            chain_spec,
-            hardforks,
-        }
     }
 }
 
