@@ -10132,9 +10132,9 @@ dependencies = [
 
 [[package]]
 name = "sea-orm"
-version = "1.1.6"
+version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13fba7b2c749b2d0a00303d5cb13e6761e39a4172554bdf930852cac4e7aeabd"
+checksum = "cbebb18c5bbcfe2f99f32e40caaa80ddb188cc1d69503cee01fa94f12e021aec"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -10148,18 +10148,18 @@ dependencies = [
  "serde",
  "sqlx",
  "strum 0.26.3",
- "thiserror 1.0.64",
+ "thiserror 2.0.11",
  "tracing",
  "url",
 ]
 
 [[package]]
 name = "sea-orm-macros"
-version = "1.1.6"
+version = "1.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2568cff8d35d5150b4276cc0dd766192a587f64b6ece60ae3706e0872c4eb209"
+checksum = "a489127c872766445b4e28f846825f89a076ac3af2591d1365503a68f93e974c"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
  "sea-bae",
