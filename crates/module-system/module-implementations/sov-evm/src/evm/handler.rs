@@ -35,6 +35,29 @@ where
     type Evm = EVM;
     type Error = EVMError<<<EVM::Context as ContextTr>::Db as Database>::Error, InvalidTransaction>;
     type HaltReason = HaltReason;
+
+    fn validate_against_state_and_deduct_caller(
+        &self,
+        _evm: &mut Self::Evm,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn reward_beneficiary(
+        &self,
+        _evm: &mut Self::Evm,
+        _exec_result: &mut <<Self::Evm as EvmTr>::Frame as FrameTr>::FrameResult,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn reimburse_caller(
+        &self,
+        _evm: &mut Self::Evm,
+        _exec_result: &mut <<Self::Evm as EvmTr>::Frame as FrameTr>::FrameResult,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
 }
 
 impl<EVM> InspectorHandler for SovHandler<EVM>
