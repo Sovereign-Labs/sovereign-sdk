@@ -1,15 +1,15 @@
 //! Defines REST queries exposed by the bank module, along with the relevant types.
 
+use crate::TokenHolder;
+use crate::{config_gas_token_id, get_token_id, Amount, Bank, Coins, TokenId};
 use axum::routing::get;
 use axum::Json;
-use sov_modules_api::capabilities::RollupHeight;
+use derive_more::FromStr;
 use sov_modules_api::prelude::utoipa::openapi::OpenApi;
 use sov_modules_api::prelude::{axum, serde_yaml, UnwrapInfallible};
 use sov_modules_api::rest::utils::{errors, ApiResult, Path, Query};
 use sov_modules_api::rest::{ApiState, HasCustomRestApi};
 use sov_modules_api::{ApiStateAccessor, Spec};
-
-use crate::{config_gas_token_id, get_token_id, Amount, Bank, Coins, TokenId};
 
 /// Structure returned by the `balance_of` method.
 #[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]
@@ -25,44 +25,6 @@ pub struct TotalSupplyResponse {
     pub amount: Option<Amount>,
 }
 
-impl<S: Spec> Bank<S> {
-    /// Method that returns the balance of the user at the address `user_address` for the token
-    /// stored at the address `token_id`.
-    pub fn balance_of(
-        &self,
-        version: Option<RollupHeight>,
-        user_address: S::Address,
-        token_id: TokenId,
-        state: &mut ApiStateAccessor<S>,
-    ) -> Result<BalanceResponse, anyhow::Error> {
-        let amount = if let Some(v) = version {
-            let state = &mut state.get_archival_state(v).map_err(|e| anyhow::anyhow!("Impossible to retrieve the state at the provided height. Please ensure you're querying a valid state. Error: {e}"))?;
-            self.get_balance_of(&user_address, token_id, state)
-        } else {
-            self.get_balance_of(&user_address, token_id, state)
-        }
-        .unwrap_infallible();
-        Ok(BalanceResponse { amount })
-    }
-
-    /// Method that returns the supply of a token stored at the address `token_id`.
-    pub fn supply_of(
-        &self,
-        version: Option<RollupHeight>,
-        token_id: TokenId,
-        state: &mut ApiStateAccessor<S>,
-    ) -> Result<TotalSupplyResponse, anyhow::Error> {
-        let amount = if let Some(v) = version {
-            let mut state = state.get_archival_state(v).map_err(|e| anyhow::anyhow!("Impossible to retrieve the state at the provided height. Please ensure you're querying a valid state. Error: {e}"))?;
-            self.get_total_supply_of(&token_id, &mut state)
-        } else {
-            self.get_total_supply_of(&token_id, state)
-        }
-        .unwrap_infallible();
-        Ok(TotalSupplyResponse { amount })
-    }
-}
-
 /// Axum routes.
 impl<S: Spec> Bank<S> {
     async fn route_gas_token() -> axum::Json<types::TokenIdResponse> {
@@ -74,7 +36,7 @@ impl<S: Spec> Bank<S> {
     async fn route_gas_token_balance(
         state: ApiState<S, Self>,
         accessor: ApiStateAccessor<S>,
-        Path(user_address): Path<S::Address>,
+        Path(user_address): Path<String>,
     ) -> ApiResult<Coins> {
         Self::route_balance(state, accessor, Path((config_gas_token_id(), user_address))).await
     }
@@ -82,14 +44,23 @@ impl<S: Spec> Bank<S> {
     async fn route_balance(
         state: ApiState<S, Self>,
         mut accessor: ApiStateAccessor<S>,
-        Path((token_id, user_address)): Path<(TokenId, S::Address)>,
+        Path((token_id, holder_str)): Path<(TokenId, String)>,
     ) -> ApiResult<Coins> {
-        let amount = state
-            .get_balance_of(&user_address, token_id, &mut accessor)
-            .unwrap_infallible()
-            .ok_or_else(|| errors::not_found_404("Balance", user_address))?;
+        match TokenHolder::from_str(&holder_str) {
+            Ok(holder) => {
+                let amount = state
+                    .balances
+                    .get(&(holder.clone(), &token_id), &mut accessor)
+                    .unwrap_infallible()
+                    .ok_or_else(|| errors::not_found_404("Balance", holder))?;
 
-        Ok(Coins { amount, token_id }.into())
+                Ok(Coins { amount, token_id }.into())
+            }
+            Err(err) => Err(errors::bad_request_400(
+                &format!("The given parameter {holder_str} is not a valid address or token holder"),
+                err.to_string(),
+            )),
+        }
     }
 
     async fn route_total_supply(
@@ -134,11 +105,11 @@ impl<S: Spec> HasCustomRestApi for Bank<S> {
         axum::Router::new()
             .route("/tokens/gas_token", get(Self::route_gas_token))
             .route(
-                "/tokens/gas_token/balances/:address",
+                "/tokens/gas_token/balances/:holderStr",
                 get(Self::route_gas_token_balance),
             )
             .route(
-                "/tokens/:tokenId/balances/:address",
+                "/tokens/:tokenId/balances/:holderStr",
                 get(Self::route_balance),
             )
             .route(
