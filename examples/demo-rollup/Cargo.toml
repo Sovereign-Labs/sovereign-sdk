@@ -113,7 +113,7 @@ tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = "0.3.18"
 rand = "0.8"
 
-ethereum-types = "0.14.1"
+ethereum-types = "0.15.1"
 ethers-core = { version = "=2.0.14", default-features = false }
 ethers-contract = { version = "=2.0.14", default-features = false }
 ethers-providers = { version = "=2.0.14", default-features = false }
