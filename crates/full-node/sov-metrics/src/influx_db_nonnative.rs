@@ -24,9 +24,12 @@ pub struct StateAccessMetric {
     pub access_type: StateAccessType,
 }
 
+/// The type of state access.
 #[derive(Debug)]
-enum StateAccessType {
+pub enum StateAccessType {
+    /// Fetch the size of the value
     GetSize,
+    /// Fetch the value itself
     GetValue,
 }
 
