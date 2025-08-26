@@ -296,7 +296,7 @@ revm-handler = { version = "=8.0.3", default-features = false }
 revm-context-interface = { version = "=8.0.3", default-features = false }
 revm-inspector = { version = "=8.0.3", default-features = false }
 revm-inspectors = { version = "=0.27.1", default-features = false }
-secp256k1 = { version = "=0.30.0", default-features = false, features = [
+secp256k1 = { version = "=0.31.1", default-features = false, features = [
     "global-context",
     "recovery",
 ] }
