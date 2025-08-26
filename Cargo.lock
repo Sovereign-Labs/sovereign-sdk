@@ -2813,7 +2813,7 @@ dependencies = [
  "sov-test-modules",
  "sov-test-utils",
  "sov-uniqueness",
- "strum 0.26.3",
+ "strum 0.27.2",
 ]
 
 [[package]]
@@ -5092,7 +5092,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
  "tracing",
 ]
@@ -6119,7 +6119,7 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
 ]
 
@@ -7761,7 +7761,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c1318b19085f08681016926435853bbf7858f9c082d0999b80550ff5d9abe15"
 dependencies = [
  "bytes",
- "heck 0.5.0",
+ "heck 0.4.1",
  "itertools 0.13.0",
  "log",
  "multimap",
@@ -10735,7 +10735,7 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
 ]
 
@@ -10808,7 +10808,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.27.2",
  "thiserror 1.0.64",
  "tokio",
  "tracing",
@@ -10831,7 +10831,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
  "thiserror 1.0.64",
  "tracing",
@@ -10869,7 +10869,7 @@ dependencies = [
  "sov-test-modules",
  "sov-test-utils",
  "sov-transaction-generator",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
  "tokio",
  "tracing",
@@ -10923,7 +10923,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
  "tracing",
 ]
@@ -11018,7 +11018,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
  "thiserror 1.0.64",
  "tracing",
@@ -11282,7 +11282,7 @@ dependencies = [
  "sov-state",
  "sov-stf-runner",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.27.2",
  "test-strategy",
  "tokio",
  "tracing",
@@ -11337,7 +11337,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-uniqueness",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
  "thiserror 1.0.64",
  "tokio",
@@ -11377,7 +11377,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
  "testcontainers",
  "tokio",
@@ -11450,7 +11450,7 @@ dependencies = [
  "sov-metrics",
  "sov-rollup-interface",
  "sp1-lib",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tokio",
  "toml",
  "tracing",
@@ -11576,7 +11576,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-universal-wallet",
- "strum 0.26.3",
+ "strum 0.27.2",
  "thiserror 1.0.64",
  "tokio",
  "toml",
@@ -11615,7 +11615,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-universal-wallet-macro-helpers",
- "strum 0.26.3",
+ "strum 0.27.2",
  "syn 2.0.98",
  "tokio",
  "toml",
@@ -11709,7 +11709,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.27.2",
  "thiserror 1.0.64",
  "tracing",
 ]
@@ -11735,7 +11735,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-universal-wallet",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
  "tracing",
 ]
@@ -11761,7 +11761,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
  "thiserror 1.0.64",
  "tracing",
@@ -11810,7 +11810,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.27.2",
  "thiserror 1.0.64",
 ]
 
@@ -11871,7 +11871,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-uniqueness",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
  "tracing",
  "utoipa-swagger-ui",
@@ -11961,7 +11961,7 @@ dependencies = [
  "sov-transaction-generator",
  "sov-value-setter",
  "sqlx",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
  "test-strategy",
  "thiserror 1.0.64",
@@ -11992,7 +11992,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.27.2",
  "thiserror 1.0.64",
  "tracing",
 ]
@@ -12029,7 +12029,7 @@ dependencies = [
  "sov-test-utils",
  "sov-transaction-generator",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tokio",
 ]
 
@@ -12069,7 +12069,7 @@ dependencies = [
  "sov-stf-runner",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
  "tokio",
  "tokio-stream",
@@ -12164,7 +12164,7 @@ dependencies = [
  "sov-sequencer",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
  "thiserror 1.0.64",
  "tokio",
@@ -12190,7 +12190,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
- "strum 0.26.3",
+ "strum 0.27.2",
 ]
 
 [[package]]
@@ -12211,7 +12211,7 @@ dependencies = [
  "sov-test-modules",
  "sov-test-utils",
  "sov-universal-wallet",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
  "thiserror 1.0.64",
  "tracing",
@@ -12268,7 +12268,7 @@ dependencies = [
  "sov-uniqueness",
  "sov-universal-wallet",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
  "testcontainers",
  "tokio",
@@ -12310,7 +12310,7 @@ dependencies = [
  "sov-test-modules",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.27.2",
  "thiserror 1.0.64",
  "tracing",
 ]
@@ -12339,7 +12339,7 @@ dependencies = [
  "sov-test-utils",
  "sov-uniqueness",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
 ]
 
@@ -12404,7 +12404,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.27.2",
  "tempfile",
  "thiserror 1.0.64",
 ]
