@@ -107,7 +107,7 @@ tracing-panic = { version = "0.1.2" }
 base64 = { workspace = true }
 hex = { workspace = true }
 sha2 = { workspace = true }
-tempfile = "3.12"
+tempfile = "3.21"
 proptest = { version = "1.5", features = ["alloc"] }
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = "0.3.18"
