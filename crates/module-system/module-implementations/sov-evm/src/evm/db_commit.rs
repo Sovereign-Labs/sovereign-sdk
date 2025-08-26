@@ -7,7 +7,6 @@ use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{Amount, InfallibleStateAccessor, Spec};
 
 use super::db::EvmDb;
-use super::DbAccount;
 use crate::to_rollup_address;
 
 impl<Ws: InfallibleStateAccessor, S: Spec> DatabaseCommit for EvmDb<Ws, S>
@@ -34,7 +33,7 @@ where
                 .accounts
                 .get(&address, &mut self.state)
                 .unwrap_infallible()
-                .unwrap_or_else(DbAccount::new);
+                .unwrap_or_default();
 
             let mut account_info = account.info;
             let rollup_address: <S as Spec>::Address = to_rollup_address::<S>(address);
@@ -60,7 +59,7 @@ where
                 }
             }
 
-            db_account.info = account_info;
+            db_account.0 = account_info;
 
             // Sort keys explicitly to avoid non-determinism.
             let mut account_storage_keys: Vec<_> = account.storage.keys().collect();

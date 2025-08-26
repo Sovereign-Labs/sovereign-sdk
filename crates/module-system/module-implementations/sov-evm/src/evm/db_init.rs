@@ -14,7 +14,7 @@ pub(crate) trait InitEvmDb {
 
 impl<Ws: InfallibleStateAccessor, S: Spec> InitEvmDb for EvmDb<Ws, S> {
     fn insert_account_info(&mut self, sender: Address, info: AccountInfo) {
-        let db_account = DbAccount { info };
+        let db_account = DbAccount(info);
 
         self.accounts
             .set(&sender, &db_account, &mut self.state)

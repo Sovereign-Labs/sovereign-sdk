@@ -239,11 +239,7 @@ where
             .accounts
             .get(&address, state)
             .unwrap_infallible()
-            .and_then(|account| {
-                self.code
-                    .get(&account.info.code_hash, state)
-                    .unwrap_infallible()
-            })
+            .and_then(|account| self.code.get(&account.code_hash, state).unwrap_infallible())
             .unwrap_or_default();
 
         Ok(code)
@@ -407,7 +403,7 @@ where
                     .accounts
                     .get(&to, state)
                     .unwrap_infallible()
-                    .map(|account| account.info)
+                    .map(|account| account.0)
                     .unwrap_or_default();
                 if KECCAK_EMPTY == to_account.code_hash {
                     // simple transfer, check if the caller has sufficient funds

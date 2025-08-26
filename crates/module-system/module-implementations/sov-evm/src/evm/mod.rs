@@ -3,6 +3,7 @@
 #![allow(clippy::match_same_arms)]
 
 use alloy_primitives::Address;
+use derive_more::derive::{Deref, Into};
 use revm::state::AccountInfo;
 use serde::{Deserialize, Serialize};
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -19,23 +20,8 @@ pub(crate) mod primitive_types;
 pub use primitive_types::RlpEvmTransaction;
 
 /// Stores information about an EVM account and a corresponding account state.
-#[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
-pub struct DbAccount {
-    pub(crate) info: AccountInfo,
-}
-
-impl DbAccount {
-    fn new() -> Self {
-        Self {
-            info: Default::default(),
-        }
-    }
-
-    /// The account info associated with this db account.
-    pub fn account_info(&self) -> &AccountInfo {
-        &self.info
-    }
-}
+#[derive(Deserialize, Serialize, Debug, PartialEq, Clone, Default, Deref, Into)]
+pub struct DbAccount(pub(crate) AccountInfo);
 
 pub(crate) fn to_rollup_address<S: Spec>(address: Address) -> S::Address
 where

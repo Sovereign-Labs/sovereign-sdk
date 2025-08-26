@@ -50,7 +50,7 @@ where
             .accounts
             .get(&address, &mut self.state)
             .unwrap_infallible()
-            .map(|acc| acc.info);
+            .map(|acc| acc.0);
 
         let rollup_address: <S as Spec>::Address = to_rollup_address::<S>(address);
 
