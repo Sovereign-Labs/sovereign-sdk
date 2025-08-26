@@ -8,6 +8,10 @@ use sov_modules_api::macros::UniversalWallet;
 use sov_rollup_interface::common::HexString;
 use sov_rollup_interface::crypto::CredentialId;
 use sov_rollup_interface::BasicAddress;
+<<<<<<< HEAD
+=======
+use std::str::FromStr;
+>>>>>>> 850a8a752 (Add balance tests)
 
 #[derive(
     Debug,
@@ -33,8 +37,8 @@ use sov_rollup_interface::BasicAddress;
 pub struct EthereumAddress(#[sov_wallet(as_ty = "[u8;20]", display = "hex")] pub Address);
 
 impl EthereumAddress {
-    pub fn new(bytes: [u8; 20]) -> Self {
-        Self(Address(alloy_primitives::FixedBytes(bytes)))
+    pub fn new(hex_str: &str) -> Self {
+        Self(Address::from_str(hex_str).unwrap())
     }
 
     pub fn as_credential_id(&self) -> CredentialId {
