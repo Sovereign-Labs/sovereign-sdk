@@ -20,11 +20,11 @@ sov-celestia-adapter = { workspace = true, features = ["native"] }
 sov-mock-da = { workspace = true, features = ["native"] }
 sov-rollup-interface = { workspace = true, features = ["native"] }
 sov-stf-runner = { workspace = true }
+sov-metrics = { workspace = true, features = ["native"] }
 
 # Sovereign crates
 sov-bank = { workspace = true, features = ["native"] }
 sov-cli = { workspace = true }
-sov-metrics = { workspace = true, optional = true }
 sov-db = { workspace = true }
 sov-ethereum = { workspace = true, features = ["local"] }
 sov-kernels = { workspace = true, features = ["native"] }

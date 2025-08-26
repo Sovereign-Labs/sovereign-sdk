@@ -544,10 +544,11 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         state.safe_true_slot_number_to_use = Some(true_slot_number);
         state.set_gas_price(base_fee_per_gas);
         // Run a test query at the requested height to ensure that the state is accessible.
+        let test_key = SlotKey::from_slice(b"test-key");
         let _test_query_result = state.get_value(
             namespaces::User::NAMESPACE,
-            &SlotKey::from_slice(b"test-key"),
-            &mut StateAccessMetric::new("test-query", 8), // We throw away the metric from this test query because it should almost always be cached and wasn't requested by the user
+            &test_key,
+            &mut StateAccessMetric::new_read(test_key.key(), None), // We throw away the metric from this test query because it should almost always be cached and wasn't requested by the user
         );
         if state.encountered_pruning_error.is_some() {
             return Err(ApiStateAccessorError::HeightNotAccessible);

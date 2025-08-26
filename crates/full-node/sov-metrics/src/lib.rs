@@ -102,4 +102,17 @@ impl MaybeTimer {
             MaybeTimer::None => std::time::Duration::from_secs(0),
         }
     }
+
+    /// Returns the elapsed time since the timer if the `native` feature is enabled. Otherwise does nothing.
+    pub fn stop_and_get_elapsed(&mut self) -> std::time::Duration {
+        match self {
+            MaybeTimer::InProgress(start) => {
+                let duration = start.elapsed();
+                *self = MaybeTimer::Completed(duration);
+                duration
+            }
+            MaybeTimer::Completed(duration) => *duration,
+            MaybeTimer::None => std::time::Duration::from_secs(0),
+        }
+    }
 }
