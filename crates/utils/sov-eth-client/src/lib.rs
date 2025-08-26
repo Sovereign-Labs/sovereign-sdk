@@ -380,7 +380,7 @@ impl TestClient {
         Ok(())
     }
 
-    pub async fn send_eth(&self, reciever: H160, eth_value: u64) -> PendingTransaction<'_, Http> {
+    pub async fn send_eth(&self, reciever: H160, eth_value: u128) -> PendingTransaction<'_, Http> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
         tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
 

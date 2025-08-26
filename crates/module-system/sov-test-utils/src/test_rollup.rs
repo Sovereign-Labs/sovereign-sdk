@@ -815,7 +815,7 @@ where
         builder.start().await
     }
 
-    /// Wait until rollup reaches a specific height.
+    /// Wait until sequencer reaches a specific height.
     pub async fn wait_for_height(&self, height: u64) {
         let mut current_height = get_height(&self.client).await.unwrap();
         while current_height.get() < height {
@@ -823,6 +823,13 @@ where
             tokio::time::sleep(Duration::from_millis(100)).await;
             current_height = get_height(&self.client).await.unwrap();
         }
+    }
+
+    /// Waits until the sequencer advances by the given number of blocks.
+    pub async fn wait_for_next_blocks(&self, delta: u64) {
+        let current_height = get_height(&self.client).await.unwrap();
+        let end_height = current_height.get() + delta;
+        self.wait_for_height(end_height).await;
     }
 }
 
