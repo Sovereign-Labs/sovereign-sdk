@@ -235,7 +235,7 @@ async fn test_multisig_ism() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore(reason = "Ignore hyperlane tests")]
+#[ignore("Ignore hyperlane tests")]
 async fn test_process_message_from_evm_counterparty() {
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
@@ -321,7 +321,7 @@ async fn test_process_message_from_evm_counterparty() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore(reason = "Ignore hyperlane tests")]
+#[ignore("Ignore hyperlane tests")]
 async fn test_dispatch_message_to_evm_counterparty() {
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
@@ -611,7 +611,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore(reason = "Ignore hyperlane tests")]
+#[ignore("Ignore hyperlane tests")]
 async fn test_warp_transfer_back_and_forth_with_evm_without_scaling() {
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         18,
@@ -624,7 +624,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_without_scaling() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore(reason = "Ignore hyperlane tests")]
+#[ignore("Ignore hyperlane tests")]
 async fn test_warp_transfer_back_and_forth_with_evm_scaled_down() {
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         16,
@@ -637,7 +637,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_scaled_down() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore(reason = "Ignore hyperlane tests")]
+#[ignore("Ignore hyperlane tests")]
 async fn test_warp_transfer_back_and_forth_with_evm_scaled_up() {
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         20,
