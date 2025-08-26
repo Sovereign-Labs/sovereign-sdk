@@ -46,7 +46,7 @@ pub struct Accounts<S: Spec> {
     #[state]
     pub(crate) accounts: StateMap<CredentialId, Account<S>>,
 
-    /// If this field is false, `CallMessage::InsertCredentialId`` messages will be rejected.
+    /// If this field is false, `CallMessage::InsertCredentialId` messages will be rejected.
     #[state]
     enable_custom_account_mappings: StateValue<bool>,
 }
