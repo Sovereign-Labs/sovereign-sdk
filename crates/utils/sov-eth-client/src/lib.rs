@@ -185,7 +185,7 @@ impl TestClient {
             .unwrap()
     }
 
-    pub async fn set_value_call(
+    pub async fn set_value_call_and_estimate_gas(
         &self,
         contract_address: H160,
         set_arg: u32,
@@ -378,5 +378,27 @@ impl TestClient {
         let _ = slot_subscription.next().await;
 
         Ok(())
+    }
+
+    pub async fn send_eth(&self, reciever: H160, eth_value: u64) -> PendingTransaction<'_, Http> {
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+        tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
+
+        let req = Eip1559TransactionRequest::new()
+            .from(self.from_addr)
+            .to(reciever)
+            .chain_id(self.chain_id)
+            .nonce(nonce)
+            .value(eth_value)
+            .gas(GAS)
+            .max_priority_fee_per_gas(10u64)
+            .max_fee_per_gas(TEST_DEFAULT_MAX_FEE.0);
+
+        let typed_transaction = TypedTransaction::Eip1559(req);
+
+        self.client
+            .send_transaction(typed_transaction, None)
+            .await
+            .unwrap()
     }
 }
