@@ -2,14 +2,11 @@
 // similar as possible to upstream than clean it up.
 #![allow(clippy::match_same_arms)]
 
-pub(crate) mod api;
 pub(crate) mod conversions;
 pub(crate) mod db;
 mod db_commit;
 pub(crate) mod db_init;
 /// EVM execution utilities
 pub mod executor;
-pub(crate) mod handler;
 pub(crate) mod primitive_types;
-pub(crate) mod sov_evm;
 pub use primitive_types::RlpEvmTransaction;

@@ -12,10 +12,7 @@ use revm::{
     Database, DatabaseCommit, ExecuteCommitEvm, MainContext,
 };
 
-use crate::{
-    evm::{conversions::create_tx_env, sov_evm::SovEvm},
-    get_spec_id, EvmRuntimeConfig,
-};
+use crate::{evm::conversions::create_tx_env, get_spec_id, sov_evm::SovEvm, EvmRuntimeConfig};
 
 /// builds CfgEnv
 /// Returns correct config depending on spec for given block number

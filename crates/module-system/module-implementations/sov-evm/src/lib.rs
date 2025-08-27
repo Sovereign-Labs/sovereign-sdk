@@ -7,6 +7,7 @@ mod config;
 mod evm;
 mod genesis;
 mod hooks;
+mod sov_evm;
 
 pub use call::*;
 pub use config::*;

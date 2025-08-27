@@ -1,4 +1,4 @@
-use super::{handler::SovHandler, sov_evm::SovEvm};
+use super::{evm::SovEvm, handler::SovHandler};
 use revm::{
     context::{
         result::{ExecResultAndState, HaltReason, InvalidTransaction},
