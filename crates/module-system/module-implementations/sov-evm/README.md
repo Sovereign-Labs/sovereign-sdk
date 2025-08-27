@@ -18,10 +18,8 @@ For example, parts of `evm.json`:
   "data": [
     {
       "address": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
-      "balance": "0xffffffffffffffff",
       "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
       "code": "0x",
-      "nonce": 0
     }
   ]
 }

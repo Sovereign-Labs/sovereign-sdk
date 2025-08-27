@@ -3,26 +3,22 @@
     {
       "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
       "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
-      "code": "0x",
-      "nonce": 0
+      "code": "0x"
     },
     {
       "address": "0x3FE0233e6cf3c9753fcB7449987EC49C88aDDE71",
       "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
-      "code": "0x",
-      "nonce": 0
+      "code": "0x"
     },
     {
       "address": "0x4Fa6c577eE74B4F3C5309Af1b6313dd6D525e694",
       "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
-      "code": "0x",
-      "nonce": 0
+      "code": "0x"
     },
     {
       "address": "0xa80749aD39A047603cbc5D0f46a03A1c6B2Db6c9",
       "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
-      "code": "0x",
-      "nonce": 0
+      "code": "0x"
     }
   ],
   "initial_base_fee": 7,
