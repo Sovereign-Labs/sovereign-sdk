@@ -46,7 +46,7 @@ impl Default for EvmChainSpec {
             coinbase: Address::ZERO,
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
             block_timestamp_delta: SLOT_DURATION.as_secs(),
-            base_fee_params: alloy_eips::eip1559::BaseFeeParams::new(1, 1),
+            base_fee_params: alloy_eips::eip1559::BaseFeeParams::new(0, 1),
             hardforks: vec![(0, SpecId::SHANGHAI)],
         }
     }
