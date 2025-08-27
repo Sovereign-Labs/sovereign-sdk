@@ -1,3 +1,6 @@
+# 2025-08-27
+- #1572 Adds custom EVM handler (`SovHandler`) and EVM implementation (`SovEvm`) to disable gas charging for EVM transactions. This allows EVM transactions to execute without gas fees.
+
 # 2025-08-26
 - #1562 **BREAKING CHANGE** The `account.json` genesis files now include a new field: `enable_custom_account_mappings`. If this field is set to false, the custom `CredentialId` => `Account` mapping is disabled. It should remain disabled for EVM rollups.
 
