@@ -397,7 +397,8 @@ impl Hyperlane {
     /// and tries to extract the Mailbox Process event from it.
     pub async fn latest_message_on_counterparty(&self) -> EvmProcessWithId {
         // fetch logs in latest block
-        let logs: Vec<_> = anvil_rpc(&self.container, "eth_getLogs", json!([{}])).await;
+        let logs: Vec<_> =
+            anvil_rpc(self.anvil.as_ref().unwrap(), "eth_getLogs", json!([{}])).await;
         EvmProcessWithId::new(logs)
     }
 
@@ -409,7 +410,7 @@ impl Hyperlane {
             panic!("Called mine next block on counterparty before its setup");
         }
 
-        anvil_rpc::<Value>(&self.container, "anvil_mine", json!([1])).await;
+        anvil_rpc::<Value>(self.anvil.as_ref().unwrap(), "anvil_mine", json!([1])).await;
     }
 
     /// Create warp route for nativeETH on counterparty, enroll remote router to rollup,
@@ -508,7 +509,7 @@ impl Hyperlane {
     pub async fn counterparty_balance_of(&self, address: HexHash) -> Amount {
         let addr = HexString(&address.0[12..]);
         let mut balance: String = anvil_rpc(
-            &self.container,
+            self.anvil.as_ref().unwrap(),
             "eth_getBalance",
             json!([addr.to_string(), "latest"]),
         )
@@ -537,7 +538,8 @@ impl Hyperlane {
         let token_eth_addr = HexString(&token_addr.0[12..]);
 
         // fetch logs in latest block
-        let logs: Vec<EvmLog> = anvil_rpc(&self.container, "eth_getLogs", json!([{}])).await;
+        let logs: Vec<EvmLog> =
+            anvil_rpc(self.anvil.as_ref().unwrap(), "eth_getLogs", json!([{}])).await;
         let log = logs
             .into_iter()
             .find(|log| log.address.0 == token_eth_addr.0)
@@ -886,14 +888,14 @@ pub fn parse_eth_addr(addr: &str) -> HexHash {
 }
 
 pub async fn anvil_rpc<T: DeserializeOwned>(
-    container: &Container,
+    container: &ContainerAsync<AnvilNode>,
     method: &str,
     params: Value,
 ) -> T {
     static ID: AtomicUsize = AtomicUsize::new(0);
     let port = container.get_host_port_ipv4(ANVIL_PORT).await.unwrap();
     let resp = reqwest::Client::new()
-        .post(format!("http://localhost:{port}"))
+        .post(format!("http://127.0.0.1:{port}"))
         .json(&json!({
             "id": ID.fetch_add(1, Ordering::Relaxed),
             "jsonrpc": "2.0",
@@ -908,7 +910,7 @@ pub async fn anvil_rpc<T: DeserializeOwned>(
         .unwrap();
 
     if let Some(error) = resp.get("error") {
-        panic!("Errors calling anvil jrpc: {error:?}");
+        panic!("Errors calling anvil json-rpc: {error:?}");
     }
 
     serde_json::from_value(resp["result"].clone()).unwrap()
@@ -936,13 +938,27 @@ async fn cast_call(
     ]
     .concat();
 
-    let output = container
+    let mut result = container
         .exec(ExecCommand::new(command.clone()))
         .await
-        .unwrap()
-        .stdout_to_vec()
-        .await
         .unwrap();
+
+    let mut exit_code = result.exit_code().await.expect("Failed to get exit code");
+    for _ in 0..30 {
+        exit_code = result.exit_code().await.expect("Failed to get exit code");
+        if exit_code.is_some() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    }
+
+    let output = result.stdout_to_vec().await.unwrap();
+    if exit_code != Some(0) {
+        let std_err = result.stderr_to_vec().await.unwrap();
+        println!("STDOUT:\n {}", String::from_utf8_lossy(&output));
+        println!("STDERR:\n {}", String::from_utf8_lossy(&std_err));
+        panic!("Failed to cast call");
+    }
 
     // print the output to help debugging, it anyway only shows if test fails
     println!("executing {command:?}");
@@ -1045,14 +1061,17 @@ async fn run_hyperlane_cli(rollup_port: u16, anvil_host: &str, anvil_port: u16) 
     let container = hyperlane_cli_image.start().await.unwrap();
 
     // Give container time to run
-    tokio::time::sleep(std::time::Duration::from_secs(300)).await;
-    let mut is_running = container.is_running().await.expect("failed to get running status");
-    for _ in 0..10 {
+    // tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    let mut is_running = container
+        .is_running()
+        .await
+        .expect("failed to get running status");
+    for _ in 0..30 {
         is_running = container.is_running().await.unwrap();
         if !is_running {
             break;
         }
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
     assert!(!is_running, "container is running for too long");
     let container_exit_code = container
