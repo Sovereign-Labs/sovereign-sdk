@@ -1,4 +1,5 @@
 use std::env;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -18,8 +19,9 @@ use sov_sequencer::SequencerKindConfig;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, TestUser};
+use tempfile::TempDir;
 use testcontainers::core::client::docker_client_instance;
-use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult, Host, IntoContainerPort};
+use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult, Host, IntoContainerPort, Mount};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 use testcontainers_modules::anvil::AnvilNode;
@@ -857,7 +859,7 @@ pub async fn get_docker_gateway_ip() -> String {
     let bridge_info = docker_client_instance()
         .await
         .unwrap()
-        .inspect_network::<String>("bridge", None)
+        .inspect_network("bridge", None::<testcontainers::bollard::query_parameters::InspectNetworkOptions>)
         .await
         .unwrap();
     bridge_info
@@ -980,77 +982,82 @@ async fn start_evm_counterparty_2(rollup_port: u16) -> (ContainerAsync<AnvilNode
 }
 
 async fn run_hyperlane_cli(rollup_port: u16, anvil_host: &str) -> HexHash {
-    // Configure the image with tail -f /dev/null to keep container running
+    // Step 1: Prepare all config files locally in a tempdir
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let temp_path = temp_dir.path();
+
+    // Create directory structure
+    let hyperlane_dir = temp_path.join(".hyperlane");
+    let chains_dir = hyperlane_dir.join("chains");
+    let sovtest_dir = chains_dir.join("sovtest");
+    let ethtest_dir = chains_dir.join("ethtest");
+    let configs_dir = temp_path.join("configs");
+
+    fs::create_dir_all(&sovtest_dir).expect("Failed to create sovtest directory");
+    fs::create_dir_all(&ethtest_dir).expect("Failed to create ethtest directory");
+    fs::create_dir_all(&configs_dir).expect("Failed to create configs directory");
+
+    // Write chain metadata files
+    let sovtest_config = sovtest_metadata(rollup_port);
+    fs::write(sovtest_dir.join("metadata.yaml"), sovtest_config)
+        .expect("Failed to write sovtest metadata");
+
+    let ethtest_config = ethtest_metadata(anvil_host);
+    fs::write(ethtest_dir.join("metadata.yaml"), ethtest_config)
+        .expect("Failed to write ethtest metadata");
+
+    // Write core config
+    let core_config = core_config(ANVIL_ACCOUNTS[0].0.parse().unwrap());
+    fs::write(configs_dir.join("core-config.yaml"), core_config)
+        .expect("Failed to write core config");
+
+    let sov_addresses = sovtest_addresses();
+    fs::write(sovtest_dir.join("addresses.yaml"), sov_addresses)
+        .expect("Failed to write sovtest addresses");
+
+    // Step 2: Configure the container with mounted volume
     let hyperlane_cli_image = GenericImage::new("ghcr.io/citizen-stig/hyperlane-cli", "17.0.0")
         .with_env_var("HYP_KEY", ANVIL_ACCOUNTS[0].1)
-        .with_cmd(["tail", "-f", "/dev/null"]); // This keeps the container running, while other commands are executed there.
+        .with_mount(Mount::bind_mount(
+            chains_dir.to_string_lossy().to_string(),
+            "/root/.hyperlane/chains",
+        ))
+        .with_mount(Mount::bind_mount(
+            configs_dir.to_string_lossy().to_string(),
+            "/root/configs",
+        ))
+        .with_cmd(["core", "deploy", "--chain", "ethtest", "--yes"]);
 
     let container = hyperlane_cli_image.start().await.unwrap();
 
-    // Step 1: Create chains configuration files for hyperlane-cli
-    let chains_dir = "/root/.hyperlane/chains";
-    let sovtest_config = sovtest_metadata(rollup_port);
-    let ethtest_config = ethtest_metadata(anvil_host);
-    for (chain, config) in [("sovtest", sovtest_config), ("ethtest", ethtest_config)] {
-        exec_in_bash(
-            &container,
-            format!("mkdir -p {chains_dir}/{chain}; echo '{config}' > {chains_dir}/{chain}/metadata.yaml")
-        )
-            .await;
-    }
+    // Give container time to run
+    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
-    // Step 2: Create core config for hyperlane deployment
-    let core_config = core_config(ANVIL_ACCOUNTS[0].0.parse().unwrap());
-    exec_in_bash(
-        &container,
-        format!("mkdir -p configs && echo '{core_config}' > configs/core-config.yaml"),
-    )
-    .await;
-
-    // Step 3: Deploy smart contracts on ethtest chain using exec
-    let mut res = container
-        .exec(ExecCommand::new([
-            "hyperlane",
-            "core",
-            "deploy",
-            "--chain",
-            "ethtest",
-            "--yes",
-        ]))
-        .await
-        .unwrap();
-
-    let stderr = res.stderr_to_vec().await.unwrap();
-    let stdout = res.stdout_to_vec().await.unwrap();
-    if res.exit_code().await.unwrap().unwrap() != 0 {
-        println!("STDERR:\n{}", String::from_utf8_lossy(&stderr));
-        println!("STDOUT:\n{}", String::from_utf8_lossy(&stdout));
-        panic!("hyperlane deployment on evm chain failed");
-    }
-
-    // Step 4: Create sovtest addresses configuration
-    let sov_addresses = sovtest_addresses();
-    exec_in_bash(
-        &container,
-        format!("echo '{sov_addresses}' > {chains_dir}/sovtest/addresses.yaml"),
-    )
-    .await;
-
-    // Step 5: Extract the ethereum test recipient address
-    let output = container
+    let mut addresses_result = container
         .exec(ExecCommand::new([
             "awk",
             "-F",
             "\"",
             "/testRecipient/ { print $2 }",
-            &format!("{chains_dir}/ethtest/addresses.yaml"),
+            &format!("/root/.hyperlane/chains/ethtest/addresses.yaml"),
         ]))
         .await
-        .unwrap()
-        .stdout_to_vec()
-        .await
         .unwrap();
-    let output = String::from_utf8_lossy(&output);
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+    let logs = addresses_result.stdout_to_vec().await.unwrap();
+    let stderr_logs = container.stderr_to_vec().await.unwrap();
+
+    println!("CMD STDOUT:\n{}", String::from_utf8_lossy(&logs));
+    println!("CMD STDERR:\n{}", String::from_utf8_lossy(&stderr_logs));
+
+    let exit_code = addresses_result
+        .exit_code()
+        .await
+        .expect("Failed to read addresses");
+    println!("ADDRESSES EXIT CODE: {:?}", exit_code);
+
+    let output = String::from_utf8_lossy(&logs);
 
     parse_eth_addr(&output)
 }

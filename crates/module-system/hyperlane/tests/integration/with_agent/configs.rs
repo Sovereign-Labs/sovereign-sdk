@@ -133,7 +133,7 @@ pub fn sovtest_metadata(rollup_port: u16) -> String {
     "}
 }
 
-/// Configuration of sovtest smart contract addressess in hyperlane
+/// Configuration of sovtest smart contract addresses in hyperlane
 ///
 /// Sov implementation uses modules thus we use only dummy addresses here.
 pub fn sovtest_addresses() -> &'static str {
