@@ -26,7 +26,7 @@ fn test_genesis_data() {
             &AccountInfo {
                 balance: U256::ZERO,
                 code_hash: account.code_hash,
-                nonce: account.nonce,
+                nonce: 0,
                 code: None,
             }
         );
@@ -119,7 +119,6 @@ fn default_config() -> EvmGenesisConfig {
             address: Address::from([1u8; 20]),
             code_hash: KECCAK_EMPTY,
             code: Bytes::default(),
-            nonce: 0,
         }],
         initial_base_fee: 70,
         genesis_timestamp: 50,

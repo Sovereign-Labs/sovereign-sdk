@@ -51,13 +51,11 @@ pub(crate) fn setup() -> (TestRunner<RT, S>, EvmAccount, EvmAccount) {
                 address: evm_account.address(),
                 code_hash: KECCAK_EMPTY,
                 code: Default::default(),
-                nonce: 0,
             },
             AccountData {
                 address: no_balance_account.address(),
                 code_hash: KECCAK_EMPTY,
                 code: Default::default(),
-                nonce: 0,
             },
         ],
         ..Default::default()

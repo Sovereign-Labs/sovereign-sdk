@@ -104,7 +104,6 @@ mod tests {
                 address,
                 code_hash: AccountData::empty_code(),
                 code: Bytes::default(),
-                nonce: 0,
             }],
             chain_spec: crate::EvmChainSpec {
                 chain_id: 4321, // Use a hard-coded value instead of config_value!("CHAIN_ID") since the string below is hard-coded

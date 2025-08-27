@@ -21,8 +21,6 @@ pub struct AccountData {
     pub code_hash: B256,
     /// Smart contract code.
     pub code: Bytes,
-    /// Account nonce.
-    pub nonce: u64,
 }
 
 impl AccountData {
@@ -69,7 +67,7 @@ where
             AccountInfo {
                 balance: U256::ZERO,
                 code_hash: acc.code_hash,
-                nonce: acc.nonce,
+                nonce: 0,
                 code: None,
             },
         );
