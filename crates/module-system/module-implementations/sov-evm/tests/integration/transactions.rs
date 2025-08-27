@@ -15,18 +15,12 @@ fn test_executing_eth_transaction() {
     let (mut runner, _, account, _) = setup();
     let contract = SimpleStorageContract::default();
     let contract_addr = account.address().create(0);
-    let create_contract_tx = create_contract_tx(0, &contract, &account);
 
+    let create_contract_tx = create_deploy_tx(0, &contract, &account);
     let set_value_tx = create_set_arg_tx(5, 1, &contract, contract_addr, &account);
 
     runner.execute_batch(BatchTestCase {
-        input: vec![
-            TransactionType::<RT, S>::PreAuthenticated(RT::encode_with_ethereum_auth(
-                create_contract_tx,
-            )),
-            TransactionType::<RT, S>::PreAuthenticated(RT::encode_with_ethereum_auth(set_value_tx)),
-        ]
-        .into(),
+        input: vec![create_contract_tx, set_value_tx].into(),
         assert: Box::new(move |_result, state| {
             let evm = Evm::<S>::default();
             let receipts = evm.receipts(state);
@@ -51,10 +45,7 @@ fn test_executing_eth_transaction() {
             create_set_arg_tx((n + 90) as u32, n, &contract, contract_addr, &account);
 
         runner.execute_batch(BatchTestCase {
-            input: vec![TransactionType::<RT, S>::PreAuthenticated(
-                RT::encode_with_ethereum_auth(set_value_tx),
-            )]
-            .into(),
+            input: vec![set_value_tx].into(),
             assert: Box::new(move |_result, state| {
                 let evm = Evm::<S>::default();
                 let nonce_from_module = evm
@@ -77,13 +68,10 @@ fn test_executing_eth_transaction() {
 fn test_failed_tx_doesnt_update_evm_module_state() {
     let (mut runner, _, _, no_balance_account) = setup();
     let contract = SimpleStorageContract::default();
-    let create_contract_tx = create_contract_tx(0, &contract, &no_balance_account);
+    let create_contract_tx = create_deploy_tx(0, &contract, &no_balance_account);
 
     runner.execute_batch(BatchTestCase {
-        input: vec![TransactionType::<RT, S>::PreAuthenticated(
-            RT::encode_with_ethereum_auth(create_contract_tx),
-        )]
-        .into(),
+        input: vec![create_contract_tx].into(),
         assert: Box::new(move |_result, state| {
             let evm = Evm::<S>::default();
             // no pending block added if eth tx execution fails.
@@ -93,22 +81,17 @@ fn test_failed_tx_doesnt_update_evm_module_state() {
     });
 }
 
-fn create_contract_tx(nonce: u64, contract: &SimpleStorageContract, account: &EvmAccount) -> RawTx {
-    let create_contract_tx_request = TypedTransaction::Eip1559(TxEip1559 {
-        chain_id: config_value!("CHAIN_ID"),
-        nonce,
-        max_priority_fee_per_gas: Default::default(),
-        max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
-        gas_limit: 1_000_000,
-        to: TxKind::Create,
-        value: Default::default(),
+fn create_deploy_tx(
+    nonce: u64,
+    contract: &SimpleStorageContract,
+    account: &EvmAccount,
+) -> TransactionType<RT, S> {
+    let tx = TxEip1559 {
         input: Bytes::from(contract.byte_code().to_vec()),
-        access_list: Default::default(),
-    });
-    let (signed_eth_tx, _) = account.sign(create_contract_tx_request);
-    RawTx {
-        data: borsh::to_vec(&signed_eth_tx).unwrap(),
-    }
+        nonce,
+        ..Default::default()
+    };
+    create_tx(account, tx)
 }
 
 fn create_set_arg_tx(
@@ -117,21 +100,25 @@ fn create_set_arg_tx(
     contract: &SimpleStorageContract,
     contract_addr: Address,
     account: &EvmAccount,
-) -> RawTx {
-    let set_arg_eth_tx = TypedTransaction::Eip1559(TxEip1559 {
-        chain_id: config_value!("CHAIN_ID"),
-        nonce,
-        max_priority_fee_per_gas: Default::default(),
-        max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
-        gas_limit: 1_000_000,
+) -> TransactionType<RT, S> {
+    let tx = TxEip1559 {
         to: TxKind::Call(contract_addr),
-        value: Default::default(),
         input: Bytes::from(hex::decode(hex::encode(contract.set_call_data(set_arg))).unwrap()),
-        access_list: Default::default(),
-    });
+        nonce,
+        ..Default::default()
+    };
+    create_tx(account, tx)
+}
 
-    let (signed_eth_tx, _) = account.sign(set_arg_eth_tx);
-    RawTx {
-        data: borsh::to_vec(&signed_eth_tx).unwrap(),
-    }
+fn create_tx(account: &EvmAccount, tx: TxEip1559) -> TransactionType<RT, S> {
+    let tx_with_defaults = TxEip1559 {
+        gas_limit: 1_000_000,
+        max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
+        chain_id: config_value!("CHAIN_ID"),
+        ..tx
+    };
+    let (signed_eth_tx, _) = account.sign(TypedTransaction::Eip1559(tx_with_defaults));
+    let data = borsh::to_vec(&signed_eth_tx).unwrap();
+    let raw_tx = RawTx { data };
+    TransactionType::PreAuthenticated(RT::encode_with_ethereum_auth(raw_tx))
 }
