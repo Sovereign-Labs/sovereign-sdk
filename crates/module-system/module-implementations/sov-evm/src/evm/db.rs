@@ -11,7 +11,7 @@ use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{InfallibleStateAccessor, Spec, StateMap};
 use sov_state::codec::BcsCodec;
 
-use crate::{helpers::to_rollup_address, AccountStorageKey};
+use crate::{to_rollup_address, AccountStorageKey};
 
 /// Stores information about an EVM account and a corresponding account state.
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone, Default, Deref, Into)]

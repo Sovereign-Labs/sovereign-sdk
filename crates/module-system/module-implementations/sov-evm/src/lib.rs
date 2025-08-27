@@ -336,3 +336,10 @@ impl<S: Spec> Evm<S> {
             .unwrap_infallible()
     }
 }
+
+pub(crate) fn to_rollup_address<S: Spec>(address: Address) -> S::Address
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    S::Address::from_vm_address(EthereumAddress::from(address))
+}

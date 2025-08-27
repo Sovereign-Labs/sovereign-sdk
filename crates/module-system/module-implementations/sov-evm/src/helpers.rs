@@ -1,6 +1,5 @@
 use alloy_consensus::transaction::Transaction;
 use alloy_consensus::{Signed, TxEnvelope};
-use alloy_primitives::Address;
 use alloy_primitives::TxKind;
 use alloy_primitives::{BlockNumber, Sealed};
 use alloy_primitives::{B256, U256};
@@ -9,8 +8,6 @@ use reth_primitives::{Recovered, Transaction as PrimitiveTransaction, Transactio
 use reth_rpc_convert::{CallFees, EthTxEnvError};
 use reth_rpc_eth_types::EthResult;
 use revm::context::{BlockEnv, TransactionType, TxEnv};
-use sov_address::{EthereumAddress, FromVmAddress};
-use sov_modules_api::Spec;
 
 // https://github.com/paradigmxyz/reth/blob/d8677b4146f77c7c82d659c59b79b38caca78778/crates/rpc/rpc/src/eth/revm_utils.rs#L201
 // it is `pub(crate)` only for tests
@@ -118,11 +115,4 @@ pub fn from_recovered_with_block_context(
         transaction_index,
         effective_gas_price: Some(effective_gas_price),
     }
-}
-
-pub(crate) fn to_rollup_address<S: Spec>(address: Address) -> S::Address
-where
-    S::Address: FromVmAddress<EthereumAddress>,
-{
-    S::Address::from_vm_address(EthereumAddress::from(address))
 }
