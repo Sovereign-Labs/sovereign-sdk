@@ -1,3 +1,6 @@
+# 2025-08-27
+- #1580 **BREAKING CHANGE** `EVM` account balances are now initialized in the `Bank` genesis rather than the EVM genesis. Any `EVM` rollup must update both `evm.json` and `bank.json` accordingly.
+
 # 2025-08-26
 - #1562 **BREAKING CHANGE** The `account.json` genesis files now include a new field: `enable_custom_account_mappings`. If this field is set to false, the custom `CredentialId` => `Account` mapping is disabled. It should remain disabled for EVM rollups.
 

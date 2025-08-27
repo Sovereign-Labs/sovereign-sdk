@@ -24,7 +24,7 @@ fn test_genesis_data() {
         assert_eq!(
             &account_info,
             &AccountInfo {
-                balance: account.balance,
+                balance: U256::ZERO,
                 code_hash: account.code_hash,
                 nonce: account.nonce,
                 code: None,
@@ -90,7 +90,7 @@ fn test_cancun_is_unsupported() {
 
 #[test]
 fn test_genesis_block() {
-    let (runner, _, _, _) = setup();
+    let (runner, _, _) = setup();
     let beneficiary = Address::new([0u8; 20]);
 
     runner.query_visible_state(move |state| {
@@ -117,7 +117,6 @@ fn default_config() -> EvmGenesisConfig {
     EvmGenesisConfig {
         accounts: vec![AccountData {
             address: Address::from([1u8; 20]),
-            balance: U256::from(1000000000),
             code_hash: KECCAK_EMPTY,
             code: Bytes::default(),
             nonce: 0,

@@ -12,7 +12,7 @@ use sov_test_utils::{BatchTestCase, SimpleStorageContract, TransactionType};
 
 #[test]
 fn test_executing_eth_transaction() {
-    let (mut runner, _, account, _) = setup();
+    let (mut runner, account, _) = setup();
     let contract = SimpleStorageContract::default();
     let contract_addr = account.address().create(0);
     let create_contract_tx = create_contract_tx(0, &contract, &account);
@@ -75,7 +75,7 @@ fn test_executing_eth_transaction() {
 
 #[test]
 fn test_failed_tx_doesnt_update_evm_module_state() {
-    let (mut runner, _, _, no_balance_account) = setup();
+    let (mut runner, _, no_balance_account) = setup();
     let contract = SimpleStorageContract::default();
     let create_contract_tx = create_contract_tx(0, &contract, &no_balance_account);
 

@@ -4,8 +4,7 @@
   "description": "Initial configuration for sov-accounts module.",
   "type": "object",
   "required": [
-    "accounts",
-    "enable_custom_account_mappings"
+    "accounts"
   ],
   "properties": {
     "accounts": {
@@ -16,7 +15,8 @@
       }
     },
     "enable_custom_account_mappings": {
-      "description": "TODO",
+      "description": "Enable custom `CredentailId` => `Account` mapping.",
+      "default": true,
       "type": "boolean"
     }
   },

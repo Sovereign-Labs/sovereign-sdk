@@ -31,8 +31,6 @@ where
         context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
-        println!("EVM call received");
-
         // Check if the tx went through the EVM authenticator.
         // TODO: This may no longer be needed.
         //
@@ -96,6 +94,7 @@ where
             }
             // Adopted from https://github.com/paradigmxyz/reth/blob/main/crates/payload/basic/src/lib.rs#L884
             Err(err) => {
+                println!("Errr {err}");
                 tracing::debug!(
                     tx_hash = hex::encode(evm_tx.hash()),
                     error = ?err,
