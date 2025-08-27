@@ -1,4 +1,3 @@
-use delegate::delegate;
 use revm::{
     context::{ContextError, ContextSetters, ContextTr, Evm, FrameStack},
     handler::{
@@ -44,34 +43,53 @@ where
     type Precompiles = EthPrecompiles;
     type Frame = EthFrame<EthInterpreter>;
 
-    delegate! {
-        to self.0 {
-            fn ctx(&mut self) -> &mut Self::Context;
-            fn ctx_ref(&self) -> &Self::Context;
-            fn ctx_instructions(&mut self) -> (&mut Self::Context, &mut Self::Instructions);
-            fn ctx_precompiles(&mut self) -> (&mut Self::Context, &mut Self::Precompiles);
-            fn frame_stack(&mut self) -> &mut FrameStack<Self::Frame>;
-            fn frame_init(
-                &mut self,
-                frame_input: <Self::Frame as FrameTr>::FrameInit,
-            ) -> Result<
-                ItemOrResult<&mut Self::Frame, <Self::Frame as FrameTr>::FrameResult>,
-                ContextError<<<Self::Context as ContextTr>::Db as Database>::Error>,
-            >;
-            fn frame_run(
-                &mut self,
-            ) -> Result<
-                FrameInitOrResult<Self::Frame>,
-                ContextError<<<Self::Context as ContextTr>::Db as Database>::Error>,
-            >;
-            fn frame_return_result(
-                &mut self,
-                frame_result: <Self::Frame as FrameTr>::FrameResult,
-            ) -> Result<
-                Option<<Self::Frame as FrameTr>::FrameResult>,
-                ContextError<<<Self::Context as ContextTr>::Db as Database>::Error>,
-            >;
-        }
+    fn ctx(&mut self) -> &mut Self::Context {
+        self.0.ctx()
+    }
+
+    fn ctx_ref(&self) -> &Self::Context {
+        self.0.ctx_ref()
+    }
+
+    fn ctx_instructions(&mut self) -> (&mut Self::Context, &mut Self::Instructions) {
+        self.0.ctx_instructions()
+    }
+
+    fn ctx_precompiles(&mut self) -> (&mut Self::Context, &mut Self::Precompiles) {
+        self.0.ctx_precompiles()
+    }
+
+    fn frame_stack(&mut self) -> &mut FrameStack<Self::Frame> {
+        self.0.frame_stack()
+    }
+
+    fn frame_init(
+        &mut self,
+        frame_input: <Self::Frame as FrameTr>::FrameInit,
+    ) -> Result<
+        ItemOrResult<&mut Self::Frame, <Self::Frame as FrameTr>::FrameResult>,
+        ContextError<<<Self::Context as ContextTr>::Db as Database>::Error>,
+    > {
+        self.0.frame_init(frame_input)
+    }
+
+    fn frame_run(
+        &mut self,
+    ) -> Result<
+        FrameInitOrResult<Self::Frame>,
+        ContextError<<<Self::Context as ContextTr>::Db as Database>::Error>,
+    > {
+        self.0.frame_run()
+    }
+
+    fn frame_return_result(
+        &mut self,
+        frame_result: <Self::Frame as FrameTr>::FrameResult,
+    ) -> Result<
+        Option<<Self::Frame as FrameTr>::FrameResult>,
+        ContextError<<<Self::Context as ContextTr>::Db as Database>::Error>,
+    > {
+        self.0.frame_return_result(frame_result)
     }
 }
 
@@ -82,21 +100,28 @@ where
 {
     type Inspector = INSP;
 
-    delegate! {
-        to self.0 {
-            fn inspector(&mut self) -> &mut Self::Inspector;
-            fn ctx_inspector(&mut self) -> (&mut Self::Context, &mut Self::Inspector);
-            fn ctx_inspector_frame(
-                &mut self,
-            ) -> (&mut Self::Context, &mut Self::Inspector, &mut Self::Frame);
-            fn ctx_inspector_frame_instructions(
-                &mut self,
-            ) -> (
-                &mut Self::Context,
-                &mut Self::Inspector,
-                &mut Self::Frame,
-                &mut Self::Instructions,
-            );
-        }
+    fn inspector(&mut self) -> &mut Self::Inspector {
+        self.0.inspector()
+    }
+
+    fn ctx_inspector(&mut self) -> (&mut Self::Context, &mut Self::Inspector) {
+        self.0.ctx_inspector()
+    }
+
+    fn ctx_inspector_frame(
+        &mut self,
+    ) -> (&mut Self::Context, &mut Self::Inspector, &mut Self::Frame) {
+        self.0.ctx_inspector_frame()
+    }
+
+    fn ctx_inspector_frame_instructions(
+        &mut self,
+    ) -> (
+        &mut Self::Context,
+        &mut Self::Inspector,
+        &mut Self::Frame,
+        &mut Self::Instructions,
+    ) {
+        self.0.ctx_inspector_frame_instructions()
     }
 }
