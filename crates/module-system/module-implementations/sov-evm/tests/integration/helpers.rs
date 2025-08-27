@@ -1,3 +1,4 @@
+use crate::runtime::{GenesisConfig, TestRuntime, RT, S};
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
@@ -6,15 +7,14 @@ use alloy_primitives::{Address, Bytes, TxKind, U256};
 use reth_primitives::TransactionSigned;
 use secp256k1::rand::SeedableRng as _;
 use secp256k1::{PublicKey, SecretKey};
+use sov_address::EthereumAddress;
+use sov_address::MultiAddress;
 use sov_eth_dev_signer::Signer;
 use sov_evm::{AccountData, EthereumAuthenticator, EvmGenesisConfig, RlpEvmTransaction, SpecId};
 use sov_modules_api::macros::config_value;
-use sov_modules_api::{CredentialId, HexHash, RawTx};
-use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
-use sov_test_utils::runtime::TestRunner;
-use sov_test_utils::{SimpleStorageContract, TestUser, TransactionType};
-
-use crate::runtime::{GenesisConfig, TestRuntime, RT, S};
+use sov_modules_api::RawTx;
+use sov_test_utils::runtime::{genesis::optimistic::HighLevelOptimisticGenesisConfig, TestRunner};
+use sov_test_utils::{SimpleStorageContract, TransactionType, TEST_DEFAULT_USER_BALANCE};
 
 pub(crate) struct EvmAccount(SecretKey);
 
@@ -41,28 +41,22 @@ impl EvmAccount {
     }
 }
 
-pub(crate) const INITIAL_BALANCE: u128 = 1000000000;
-
-pub(crate) fn setup() -> (TestRunner<RT, S>, TestUser<S>, EvmAccount, EvmAccount) {
+pub(crate) fn setup() -> (TestRunner<RT, S>, EvmAccount, EvmAccount) {
     let evm_account = EvmAccount::generate();
     let no_balance_account = EvmAccount::generate();
-    let rollup_account = TestUser::generate_with_default_balance().add_credential_id(CredentialId(
-        HexHash::new(evm_account.address().into_word().into()),
-    ));
-    let genesis_config =
-        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![rollup_account.clone()]);
+
+    let genesis_config = HighLevelOptimisticGenesisConfig::generate();
+
     let mut evm_config = EvmGenesisConfig {
         accounts: vec![
             AccountData {
                 address: evm_account.address(),
-                balance: U256::from(INITIAL_BALANCE),
                 code_hash: KECCAK_EMPTY,
                 code: Default::default(),
                 nonce: 0,
             },
             AccountData {
                 address: no_balance_account.address(),
-                balance: U256::from(0),
                 code_hash: KECCAK_EMPTY,
                 code: Default::default(),
                 nonce: 0,
@@ -74,12 +68,19 @@ pub(crate) fn setup() -> (TestRunner<RT, S>, TestUser<S>, EvmAccount, EvmAccount
     // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
     evm_config.chain_spec.hardforks = vec![(0, SpecId::SHANGHAI)];
 
-    let genesis = GenesisConfig::from_minimal_config(genesis_config.into(), evm_config);
+    let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into(), evm_config);
+
+    if let Some(c) = genesis.bank.gas_token_config.as_mut() {
+        c.address_and_balances.push((
+            MultiAddress::Vm(EthereumAddress::from(evm_account.address())),
+            TEST_DEFAULT_USER_BALANCE,
+        ));
+    }
 
     let runner =
         TestRunner::new_with_genesis(genesis.into_genesis_params(), TestRuntime::default());
 
-    (runner, rollup_account, evm_account, no_balance_account)
+    (runner, evm_account, no_balance_account)
 }
 
 pub(crate) fn create_transfer_tx(

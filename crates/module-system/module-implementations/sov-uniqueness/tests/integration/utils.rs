@@ -1,10 +1,12 @@
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::{eip1559::MIN_PROTOCOL_BASE_FEE, eip2718::Encodable2718};
-use alloy_primitives::{Address, Bytes, TxKind, U256};
+use alloy_primitives::{Address, Bytes, TxKind};
 use reth_primitives::TransactionSigned;
 use secp256k1::rand::SeedableRng as _;
 use secp256k1::{PublicKey, SecretKey};
+use sov_address::EthereumAddress;
+use sov_address::MultiAddress;
 use sov_eth_dev_signer::Signer;
 use sov_evm::{
     AccountData, EthereumAuthenticator, EvmChainSpec, EvmGenesisConfig, RlpEvmTransaction, SpecId,
@@ -17,7 +19,7 @@ use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConf
 use sov_test_utils::runtime::{Runtime, TestRunner, ValueSetter, ValueSetterConfig};
 use sov_test_utils::{
     SimpleStorageContract, TestUser, TransactionType, TEST_DEFAULT_MAX_FEE,
-    TEST_DEFAULT_MAX_PRIORITY_FEE,
+    TEST_DEFAULT_MAX_PRIORITY_FEE, TEST_DEFAULT_USER_BALANCE,
 };
 
 use crate::runtime::{GenesisConfig, TestNonceRuntime, RT, S};
@@ -125,7 +127,6 @@ pub(crate) fn setup() -> (TestUser<S>, TestRunner<TestNonceRuntime<S>, S>, EvmAc
     let evm_config = EvmGenesisConfig {
         accounts: vec![AccountData {
             address: evm_account.address(),
-            balance: U256::from(1000000000),
             code_hash: KECCAK_EMPTY,
             code: Default::default(),
             nonce: 0,
@@ -140,13 +141,20 @@ pub(crate) fn setup() -> (TestUser<S>, TestRunner<TestNonceRuntime<S>, S>, EvmAc
     };
 
     // Run genesis registering the attester and sequencer we've generated.
-    let genesis = GenesisConfig::from_minimal_config(
+    let mut genesis = GenesisConfig::from_minimal_config(
         genesis_config.into(),
         ValueSetterConfig {
             admin: admin.address(),
         },
         evm_config,
     );
+
+    if let Some(c) = genesis.bank.gas_token_config.as_mut() {
+        c.address_and_balances.push((
+            MultiAddress::Vm(EthereumAddress::from(evm_account.address())),
+            TEST_DEFAULT_USER_BALANCE,
+        ));
+    }
 
     let runner =
         TestRunner::new_with_genesis(genesis.into_genesis_params(), TestNonceRuntime::default());

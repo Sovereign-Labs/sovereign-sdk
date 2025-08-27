@@ -92,9 +92,7 @@ pub(crate) async fn set_value_check(
     set_arg: u32,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _tx_hash = {
-        let set_value_req = client
-            .set_value(contract_address, set_arg, None, None)
-            .await;
+        let set_value_req = client.set_value(contract_address, set_arg).await;
         set_value_req.await.unwrap().unwrap().transaction_hash
     };
 
@@ -132,9 +130,7 @@ pub(crate) async fn set_multiple_values_check(
     contract_address: Address,
     values: Vec<u32>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let requests = client
-        .set_values(contract_address, values, None, None)
-        .await;
+    let requests = client.set_values(contract_address, values).await;
 
     let receipts: Vec<Result<Option<_>, ProviderError>> = join_all(requests).await;
     assert!(receipts

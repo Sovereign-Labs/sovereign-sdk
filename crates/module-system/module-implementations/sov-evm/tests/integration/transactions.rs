@@ -3,12 +3,12 @@ use crate::runtime::S;
 use alloy_primitives::U256;
 use revm::Database;
 use sov_evm::Evm;
-use sov_test_utils::TransactionTestCase;
 use sov_test_utils::{BatchTestCase, SimpleStorageContract};
+use sov_test_utils::{TransactionTestCase, TEST_DEFAULT_USER_BALANCE};
 
 #[test]
 fn simple_transfer() {
-    let (mut runner, _, from, to) = setup();
+    let (mut runner, from, to) = setup();
 
     let value = 1;
     let create_contract_tx = create_transfer_tx(0, &from, &to, value);
@@ -21,7 +21,7 @@ fn simple_transfer() {
             let from_acc = db.basic(from.address()).unwrap().unwrap();
             let to_acc = db.basic(to.address()).unwrap().unwrap();
             // The only balance changes should be from the trasfer itself and not from gas as it's disabled in SovEvm
-            assert_eq!(from_acc.balance, INITIAL_BALANCE - value);
+            assert_eq!(from_acc.balance, TEST_DEFAULT_USER_BALANCE.0 - value);
             assert_eq!(to_acc.balance, value);
         }),
     });
@@ -29,7 +29,7 @@ fn simple_transfer() {
 
 #[test]
 fn test_executing_eth_transactions() {
-    let (mut runner, _, account, _) = setup();
+    let (mut runner, account, _) = setup();
     let contract = SimpleStorageContract::default();
     let contract_addr = account.address().create(0);
 
@@ -83,7 +83,7 @@ fn test_executing_eth_transactions() {
 
 #[test]
 fn test_failed_tx_doesnt_update_evm_module_state() {
-    let (mut runner, _, _, no_balance_account) = setup();
+    let (mut runner, _, no_balance_account) = setup();
     let contract = SimpleStorageContract::default();
     let create_contract_tx = create_deploy_tx(0, &contract, &no_balance_account);
 

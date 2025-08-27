@@ -13,7 +13,7 @@ use crate::runtime::{RT, S};
 
 #[test]
 fn test_invalid_contract_execution() {
-    let (mut runner, _, account, _) = setup();
+    let (mut runner, account, _) = setup();
     let contract = SimpleStorageContract::default();
     let contract_addr = account.address().create(0);
     let tx_request = TypedTransaction::Eip1559(TxEip1559 {

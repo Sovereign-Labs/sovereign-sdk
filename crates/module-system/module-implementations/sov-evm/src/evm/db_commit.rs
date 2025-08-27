@@ -38,13 +38,14 @@ where
             let mut account_info = account.info;
             let rollup_address: <S as Spec>::Address = to_rollup_address::<S>(address);
 
+            // Overflow is not possible here. The gas token’s supply_cap is bounded by u128::MAX,
+            // which means no account can ever hold a balance greater than u128::MAX.
+            let bank_amount = account_info.balance.try_into().unwrap_or_else(|_| {
+                panic!("The impossible happened: Balance overflowed for address: {address}")
+            });
+
             self.bank_module
-                .override_gas_balance(
-                    // U256 can overflow u128
-                    Amount::new(account_info.balance.try_into().unwrap()),
-                    &rollup_address,
-                    &mut self.state,
-                )
+                .override_gas_balance(Amount::new(bank_amount), &rollup_address, &mut self.state)
                 .unwrap_infallible();
 
             // Set the EVM account balance to 0 - as balances are stored in the bank module.

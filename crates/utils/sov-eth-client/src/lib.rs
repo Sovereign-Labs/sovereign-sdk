@@ -15,9 +15,11 @@ use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
 use sov_cli::NodeClient;
 use sov_modules_api::{Runtime, Spec};
-use sov_test_utils::{SimpleStorageContract, TEST_DEFAULT_MAX_FEE};
+use sov_test_utils::SimpleStorageContract;
 
 const GAS: u64 = 900000u64;
+const MAX_FEE_PER_GAS: u64 = 100;
+const MAX_PRIORITY_FEE_PER_GAS: u64 = 1;
 
 pub struct TestClient {
     pub chain_id: u64,
@@ -68,8 +70,8 @@ impl TestClient {
             .from(self.from_addr)
             .chain_id(self.chain_id)
             .nonce(0u64)
-            .max_priority_fee_per_gas(10u64)
-            .max_fee_per_gas(TEST_DEFAULT_MAX_FEE.0)
+            .max_priority_fee_per_gas(MAX_PRIORITY_FEE_PER_GAS)
+            .max_fee_per_gas(MAX_FEE_PER_GAS)
             .gas(GAS)
             .data(self.contract.byte_code());
 
@@ -88,8 +90,8 @@ impl TestClient {
             .from(self.from_addr)
             .chain_id(self.chain_id)
             .nonce(0u64)
-            .max_priority_fee_per_gas(10u64)
-            .max_fee_per_gas(TEST_DEFAULT_MAX_FEE.0)
+            .max_priority_fee_per_gas(MAX_PRIORITY_FEE_PER_GAS)
+            .max_fee_per_gas(MAX_FEE_PER_GAS)
             .gas(GAS)
             .data(self.contract.byte_code());
 
@@ -116,8 +118,8 @@ impl TestClient {
             .chain_id(self.chain_id)
             .nonce(nonce)
             .data(self.contract.set_call_data(set_arg))
-            .max_priority_fee_per_gas(10u64)
-            .max_fee_per_gas(TEST_DEFAULT_MAX_FEE.0);
+            .max_priority_fee_per_gas(MAX_PRIORITY_FEE_PER_GAS)
+            .max_fee_per_gas(MAX_FEE_PER_GAS);
 
         let typed_transaction = TypedTransaction::Eip1559(req);
 
@@ -128,8 +130,6 @@ impl TestClient {
         &self,
         contract_address: H160,
         set_args: Vec<u32>,
-        max_priority_fee_per_gas: Option<u64>,
-        max_fee_per_gas: Option<u128>,
     ) -> Vec<PendingTransaction<'_, Http>> {
         let mut requests: Vec<_> = Vec::with_capacity(set_args.len());
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
@@ -141,8 +141,8 @@ impl TestClient {
                 .chain_id(self.chain_id)
                 .nonce(nonce + (i as u64))
                 .data(self.contract.set_call_data(set_arg))
-                .max_priority_fee_per_gas(max_priority_fee_per_gas.unwrap_or(10u64))
-                .max_fee_per_gas(max_fee_per_gas.unwrap_or(TEST_DEFAULT_MAX_FEE.0))
+                .max_priority_fee_per_gas(MAX_PRIORITY_FEE_PER_GAS)
+                .max_fee_per_gas(MAX_FEE_PER_GAS)
                 .gas(GAS);
 
             let typed_transaction = TypedTransaction::Eip1559(req);
@@ -161,8 +161,6 @@ impl TestClient {
         &self,
         contract_address: H160,
         set_arg: u32,
-        max_priority_fee_per_gas: Option<u64>,
-        max_fee_per_gas: Option<u128>,
     ) -> PendingTransaction<'_, Http> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
         tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
@@ -173,8 +171,8 @@ impl TestClient {
             .chain_id(self.chain_id)
             .nonce(nonce)
             .data(self.contract.set_call_data(set_arg))
-            .max_priority_fee_per_gas(max_priority_fee_per_gas.unwrap_or(10u64))
-            .max_fee_per_gas(max_fee_per_gas.unwrap_or(TEST_DEFAULT_MAX_FEE.0))
+            .max_priority_fee_per_gas(MAX_PRIORITY_FEE_PER_GAS)
+            .max_fee_per_gas(MAX_FEE_PER_GAS)
             .gas(GAS);
 
         let typed_transaction = TypedTransaction::Eip1559(req);
@@ -232,8 +230,8 @@ impl TestClient {
             .chain_id(self.chain_id)
             .nonce(nonce)
             .data(self.contract.failing_function_call_data())
-            .max_priority_fee_per_gas(10u64)
-            .max_fee_per_gas(TEST_DEFAULT_MAX_FEE.0)
+            .max_priority_fee_per_gas(MAX_PRIORITY_FEE_PER_GAS)
+            .max_fee_per_gas(MAX_FEE_PER_GAS)
             .gas(GAS);
 
         let typed_transaction = TypedTransaction::Eip1559(req);
@@ -391,8 +389,8 @@ impl TestClient {
             .nonce(nonce)
             .value(eth_value)
             .gas(GAS)
-            .max_priority_fee_per_gas(10u64)
-            .max_fee_per_gas(TEST_DEFAULT_MAX_FEE.0);
+            .max_priority_fee_per_gas(MAX_PRIORITY_FEE_PER_GAS)
+            .max_fee_per_gas(MAX_FEE_PER_GAS);
 
         let typed_transaction = TypedTransaction::Eip1559(req);
 

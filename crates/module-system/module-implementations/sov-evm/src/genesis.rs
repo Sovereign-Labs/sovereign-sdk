@@ -5,20 +5,18 @@ use anyhow::Result;
 use revm::primitives::hardfork::SpecId;
 use revm::state::AccountInfo;
 use sov_address::{EthereumAddress, FromVmAddress};
-use sov_bank::config_gas_token_id;
-use sov_modules_api::{Amount, GenesisState, Module, Spec};
+use sov_modules_api::{GenesisState, Module, Spec};
 
 use crate::evm::db_init::InitEvmDb;
 use crate::evm::primitive_types::Block;
-use crate::{to_rollup_address, Evm, EvmGenesisConfig, EvmRuntimeConfig};
+
+use crate::{Evm, EvmGenesisConfig, EvmRuntimeConfig};
 
 /// Evm account.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
 pub struct AccountData {
     /// Account address.
     pub address: Address,
-    /// Account balance.
-    pub balance: U256,
     /// Code hash.
     pub code_hash: B256,
     /// Smart contract code.
@@ -64,36 +62,12 @@ where
         Ok(())
     }
 
-    fn init_account(
-        &mut self,
-        mut acc: AccountData,
-        state: &mut impl GenesisState<S>,
-    ) -> Result<()> {
-        let rollup_address: <S as Spec>::Address = to_rollup_address::<S>(acc.address);
-        let bank_balance =
-            self.bank_module
-                .get_balance_of(&rollup_address, config_gas_token_id(), state)?;
-
-        assert!(
-            !(acc.balance != U256::ZERO && bank_balance.is_some()),
-            "EVM account balance can only be set from one genesis config to avoid conflicts. 
-                Choose either the Bank or the EVM module genesis config."
-        );
-
-        if acc.balance != U256::ZERO {
-            self.bank_module.override_gas_balance(
-                Amount::new(acc.balance.try_into().unwrap()),
-                &rollup_address,
-                state,
-            )?;
-            acc.balance = U256::ZERO;
-        }
-
+    fn init_account(&mut self, acc: AccountData, state: &mut impl GenesisState<S>) -> Result<()> {
         let mut evm_db = self.get_db(state);
         evm_db.insert_account_info(
             acc.address,
             AccountInfo {
-                balance: acc.balance,
+                balance: U256::ZERO,
                 code_hash: acc.code_hash,
                 nonce: acc.nonce,
                 code: None,

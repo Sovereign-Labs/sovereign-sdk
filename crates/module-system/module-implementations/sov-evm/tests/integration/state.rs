@@ -11,7 +11,7 @@ use crate::runtime::{RT, S};
 
 #[test]
 fn test_block_updates() {
-    let (mut runner, _, account, _) = setup();
+    let (mut runner, account, _) = setup();
     let contract = SimpleStorageContract::default();
     let create_contract_tx_request = TypedTransaction::Eip1559(TxEip1559 {
         chain_id: config_value!("CHAIN_ID"),
@@ -57,7 +57,7 @@ fn test_block_updates() {
 
 #[test]
 fn test_transactions_receipts() {
-    let (mut runner, _, account, _) = setup();
+    let (mut runner, account, _) = setup();
     let contract = SimpleStorageContract::default();
     let tx_1_request = TypedTransaction::Eip1559(TxEip1559 {
         chain_id: config_value!("CHAIN_ID"),

@@ -1,4 +1,5 @@
 # 2025-08-27
+- #1580 **BREAKING CHANGE** `EVM` account balances are now initialized in the `Bank` genesis rather than the EVM genesis. Any `EVM` rollup must update both `evm.json` and `bank.json` accordingly.
 - #1572 Adds custom EVM handler (`SovHandler`) and EVM implementation (`SovEvm`) to disable gas charging for EVM transactions. This allows EVM transactions to execute without gas fees.
 
 # 2025-08-26
