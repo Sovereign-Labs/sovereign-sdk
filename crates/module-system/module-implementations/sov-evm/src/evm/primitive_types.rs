@@ -158,3 +158,29 @@ impl From<TransactionSignedAndRecovered> for Recovered<TransactionSigned> {
         Recovered::new_unchecked(value.signed_transaction, value.signer)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use alloy_consensus::{EthereumTxEnvelope, Signed, TxEip1559};
+    use alloy_primitives::Signature;
+
+    use super::*;
+
+    #[test]
+    fn tx_conversion() {
+        let signer = Address::random();
+        let tx = TransactionSignedAndRecovered {
+            signer,
+            signed_transaction: EthereumTxEnvelope::Eip1559(Signed::new_unchecked(
+                TxEip1559::default(),
+                Signature::test_signature(),
+                Default::default(),
+            )),
+            block_number: 5u64,
+        };
+
+        let reth_tx: Recovered<TransactionSigned> = tx.into();
+
+        assert_eq!(signer, reth_tx.signer());
+    }
+}

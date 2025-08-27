@@ -159,3 +159,28 @@ pub(crate) fn get_spec_id(spec: Vec<(u64, SpecId)>, block_number: u64) -> SpecId
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn spec_id_lookup() {
+        let spec = vec![
+            (0, SpecId::CONSTANTINOPLE),
+            (10, SpecId::BERLIN),
+            (20, SpecId::LONDON),
+            (30, SpecId::CANCUN),
+        ];
+
+        assert_eq!(get_spec_id(spec.clone(), 0), SpecId::CONSTANTINOPLE);
+        assert_eq!(get_spec_id(spec.clone(), 5), SpecId::CONSTANTINOPLE);
+        assert_eq!(get_spec_id(spec.clone(), 10), SpecId::BERLIN);
+        assert_eq!(get_spec_id(spec.clone(), 15), SpecId::BERLIN);
+        assert_eq!(get_spec_id(spec.clone(), 20), SpecId::LONDON);
+        assert_eq!(get_spec_id(spec.clone(), 25), SpecId::LONDON);
+        assert_eq!(get_spec_id(spec.clone(), 29), SpecId::LONDON);
+        assert_eq!(get_spec_id(spec.clone(), 30), SpecId::CANCUN);
+        assert_eq!(get_spec_id(spec.clone(), 35), SpecId::CANCUN);
+    }
+}

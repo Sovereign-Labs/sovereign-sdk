@@ -82,3 +82,28 @@ impl TryFrom<RlpEvmTransaction> for Recovered<TransactionSigned> {
         Ok(tx)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::primitive_types::Block;
+
+    use super::*;
+
+    #[test]
+    fn prepare_call_block_env() {
+        let block = Block::default();
+        let sealed_block = block.clone().seal();
+
+        let block_env = BlockEnv::from(sealed_block);
+
+        assert_eq!(block_env.number, block.header.number);
+        assert_eq!(block_env.beneficiary, block.header.beneficiary);
+        assert_eq!(block_env.timestamp, block.header.timestamp);
+        assert_eq!(
+            block_env.basefee,
+            block.header.base_fee_per_gas.unwrap_or_default()
+        );
+        assert_eq!(block_env.gas_limit, block.header.gas_limit);
+        assert_eq!(block_env.prevrandao, Some(block.header.mix_hash));
+    }
+}

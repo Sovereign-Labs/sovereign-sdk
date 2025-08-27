@@ -116,3 +116,55 @@ pub fn from_recovered_with_block_context(
         effective_gas_price: Some(effective_gas_price),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use alloy_primitives::Address;
+    use revm::context::TransactTo;
+
+    use super::*;
+
+    // TODO: Needs more complex tests later
+    #[test]
+    fn prepare_call_env_conversion() {
+        let from = Address::random();
+        let to = Address::random();
+        let request = TransactionRequest {
+            from: Some(from),
+            to: Some(TxKind::Call(to)),
+            gas_price: Some(100),
+            gas: Some(200),
+            value: Some(U256::from(300u64)),
+            nonce: Some(1),
+            chain_id: Some(1),
+            transaction_type: Some(2),
+            ..Default::default()
+        };
+
+        let block_env = BlockEnv::default();
+
+        let tx_env = prepare_call_env(&block_env, request).unwrap();
+        let expected = TxEnv {
+            tx_type: TransactionType::Eip1559.into(),
+            caller: from,
+            gas_price: 100,
+            gas_limit: 200,
+            kind: TransactTo::Call(to),
+            value: U256::from(300u64),
+            chain_id: Some(1),
+            nonce: 1,
+            ..Default::default()
+        };
+
+        assert_eq!(tx_env.caller, expected.caller);
+        assert_eq!(tx_env.gas_limit, expected.gas_limit);
+        assert_eq!(tx_env.gas_price, expected.gas_price);
+        assert_eq!(tx_env.gas_priority_fee, expected.gas_priority_fee);
+        assert_eq!(tx_env.kind.is_create(), expected.kind.is_create());
+        assert_eq!(tx_env.value, expected.value);
+        assert_eq!(tx_env.data, expected.data);
+        assert_eq!(tx_env.chain_id, expected.chain_id);
+        assert_eq!(tx_env.nonce, expected.nonce);
+        assert_eq!(tx_env.access_list, expected.access_list);
+    }
+}
