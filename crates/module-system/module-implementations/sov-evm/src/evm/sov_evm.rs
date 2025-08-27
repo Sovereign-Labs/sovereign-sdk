@@ -9,7 +9,7 @@ use revm::{
     Database, Inspector,
 };
 
-/// TODO
+/// Customized EVM implementation that uses SovHandler to override gas charging behavior
 #[derive(Debug)]
 pub struct SovEvm<CTX, INSP>(
     pub  Evm<
@@ -22,7 +22,7 @@ pub struct SovEvm<CTX, INSP>(
 );
 
 impl<CTX: ContextTr, INSP> SovEvm<CTX, INSP> {
-    /// TODO
+    /// Creates new SovEvm instance from context and inspector
     pub fn new(ctx: CTX, inspector: INSP) -> Self {
         Self(Evm {
             ctx,
