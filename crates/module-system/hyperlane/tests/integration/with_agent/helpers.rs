@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-
 use super::configs::{
     agent_config, core_config, ethtest_metadata, sovtest_addresses, sovtest_metadata,
 };
@@ -374,7 +373,9 @@ impl Hyperlane {
 
         // https://github.com/hyperlane-xyz/hyperlane-monorepo/blob/main/solidity/contracts/Mailbox.sol#L110
         let logs = cast_call(
-            &self.container,
+            self.anvil
+                .as_ref()
+                .expect("Cannot cast call without anvil running"),
             EVM_MAILBOX,
             "dispatch(uint32,bytes32,bytes)",
             [
@@ -482,7 +483,9 @@ impl Hyperlane {
 
         // https://github.com/hyperlane-xyz/hyperlane-monorepo/tree/c177c4733de52f8a2477ad74b46b3f1eebb5740b/solidity/contracts/token/libs/TokenRouter.sol#L54
         let logs = cast_call(
-            &self.container,
+            self.anvil
+                .as_ref()
+                .expect("Cannot cast call without anvil running"),
             route_addr,
             "transferRemote(uint32,bytes32,uint256)",
             [
@@ -682,9 +685,7 @@ async fn start_relayer(
     };
 
     let cmd = ExecCommand::new([
-        // relayer command
-        "relayer",
-        // database locations
+        "/app/relayer",
         "--db",
         "/relayer-db",
         // signer for the rollup
@@ -731,7 +732,7 @@ async fn start_validator(
 
     let cmd = ExecCommand::new([
         // validator command
-        "validator",
+        "/app/validator",
         // save signatures on local fs
         "--checkpointSyncer.type",
         "localStorage",
@@ -914,7 +915,7 @@ pub async fn anvil_rpc<T: DeserializeOwned>(
 }
 
 async fn cast_call(
-    container: &Container,
+    container: &ContainerAsync<AnvilNode>,
     contract: EthAddress,
     abi: &str,
     args: impl AsRef<[&str]>,
@@ -977,12 +978,9 @@ async fn start_evm_counterparty_2(rollup_port: u16) -> (ContainerAsync<AnvilNode
         .await
         .expect("failed to start anvil");
 
-    let anvil_host = anvil.get_host().await.unwrap();
+    // let anvil_host = anvil.get_host().await.unwrap();
     let anvil_port = anvil.get_host_port_ipv4(ANVIL_PORT).await.unwrap();
-    let anvil_url = format!("host.docker.internal:{}", anvil_port);
 
-    println!("ANVIL HOST: {:?}", anvil_host);
-    println!("ANVIL URL: {}", anvil_url);
     let addr = run_hyperlane_cli(rollup_port, "host.docker.internal", anvil_port).await;
 
     (anvil, addr)
@@ -1034,12 +1032,29 @@ async fn run_hyperlane_cli(rollup_port: u16, anvil_host: &str, anvil_port: u16) 
             configs_dir.to_string_lossy().to_string(),
             "/root/configs",
         ))
-        .with_cmd(["core", "deploy", "--config", "/root/configs/core-config.yaml", "--chain", "ethtest", "--yes"]);
+        .with_cmd([
+            "core",
+            "deploy",
+            "--config",
+            "/root/configs/core-config.yaml",
+            "--chain",
+            "ethtest",
+            "--yes",
+        ]);
 
     let container = hyperlane_cli_image.start().await.unwrap();
 
     // Give container time to run
-    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+    let mut is_running = container.is_running().await.expect("failed to get running status");
+    for _ in 0..10 {
+        is_running = container.is_running().await.unwrap();
+        if !is_running {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert!(!is_running, "container is running for too long");
     let container_exit_code = container
         .exit_code()
         .await
@@ -1063,31 +1078,17 @@ async fn run_hyperlane_cli(rollup_port: u16, anvil_host: &str, anvil_port: u16) 
         String::from_utf8_lossy(&container_stderr)
     );
 
-    let mut addresses_result = container
-        .exec(ExecCommand::new([
-            "awk",
-            "-F",
-            "\"",
-            "/testRecipient/ { print $2 }",
-            &format!("/root/.hyperlane/chains/ethtest/addresses.yaml"),
-        ]))
-        .await
-        .unwrap();
-    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    // Read the addresses.yaml file that was created by the container
+    let addresses_file = ethtest_dir.join("addresses.yaml");
+    let addresses_content =
+        fs::read_to_string(&addresses_file).expect("Failed to read addresses.yaml from host");
 
-    let logs = addresses_result.stdout_to_vec().await.unwrap();
-    let stderr_logs = container.stderr_to_vec().await.unwrap();
+    // Parse testRecipient address from the yaml file
+    let test_recipient = addresses_content
+        .lines()
+        .find(|line| line.contains("testRecipient"))
+        .and_then(|line| line.split('"').nth(1))
+        .expect("Failed to find testRecipient in addresses.yaml");
 
-    println!("CMD STDOUT:\n{}", String::from_utf8_lossy(&logs));
-    println!("CMD STDERR:\n{}", String::from_utf8_lossy(&stderr_logs));
-
-    let exit_code = addresses_result
-        .exit_code()
-        .await
-        .expect("Failed to read addresses");
-    println!("ADDRESSES EXIT CODE: {:?}", exit_code);
-
-    let output = String::from_utf8_lossy(&logs);
-
-    parse_eth_addr(&output)
+    parse_eth_addr(test_recipient)
 }
