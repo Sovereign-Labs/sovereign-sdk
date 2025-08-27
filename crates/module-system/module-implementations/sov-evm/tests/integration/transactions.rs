@@ -1,17 +1,34 @@
-use crate::helpers::setup;
-use crate::helpers::EvmAccount;
-use crate::runtime::{RT, S};
-use alloy_consensus::{TxEip1559, TypedTransaction};
-use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
-use alloy_primitives::Address;
-use alloy_primitives::{Bytes, TxKind, U256};
-use sov_evm::{EthereumAuthenticator, Evm};
-use sov_modules_api::macros::config_value;
-use sov_modules_api::RawTx;
-use sov_test_utils::{BatchTestCase, SimpleStorageContract, TransactionType};
+use crate::helpers::*;
+use crate::runtime::S;
+use alloy_primitives::U256;
+use revm::Database;
+use sov_evm::Evm;
+use sov_test_utils::TransactionTestCase;
+use sov_test_utils::{BatchTestCase, SimpleStorageContract};
 
 #[test]
-fn test_executing_eth_transaction() {
+fn simple_transfer() {
+    let (mut runner, _, from, to) = setup();
+
+    let value = 1;
+    let create_contract_tx = create_transfer_tx(0, &from, &to, value);
+
+    let evm = Evm::<S>::default();
+    runner.execute_transaction(TransactionTestCase {
+        input: create_contract_tx,
+        assert: Box::new(move |_result, state| {
+            let mut db = evm.get_db(state);
+            let from_acc = db.basic(from.address()).unwrap().unwrap();
+            let to_acc = db.basic(to.address()).unwrap().unwrap();
+            // The only balance changes should be from the trasfer itself and not from gas as it's disabled in SovEvm
+            assert_eq!(from_acc.balance, INITIAL_BALANCE - value);
+            assert_eq!(to_acc.balance, value);
+        }),
+    });
+}
+
+#[test]
+fn test_executing_eth_transactions() {
     let (mut runner, _, account, _) = setup();
     let contract = SimpleStorageContract::default();
     let contract_addr = account.address().create(0);
@@ -79,46 +96,4 @@ fn test_failed_tx_doesnt_update_evm_module_state() {
             assert!(evm.pending_transactions(state).is_empty());
         }),
     });
-}
-
-fn create_deploy_tx(
-    nonce: u64,
-    contract: &SimpleStorageContract,
-    account: &EvmAccount,
-) -> TransactionType<RT, S> {
-    let tx = TxEip1559 {
-        input: Bytes::from(contract.byte_code().to_vec()),
-        nonce,
-        ..Default::default()
-    };
-    create_tx(account, tx)
-}
-
-fn create_set_arg_tx(
-    set_arg: u32,
-    nonce: u64,
-    contract: &SimpleStorageContract,
-    contract_addr: Address,
-    account: &EvmAccount,
-) -> TransactionType<RT, S> {
-    let tx = TxEip1559 {
-        to: TxKind::Call(contract_addr),
-        input: Bytes::from(hex::decode(hex::encode(contract.set_call_data(set_arg))).unwrap()),
-        nonce,
-        ..Default::default()
-    };
-    create_tx(account, tx)
-}
-
-fn create_tx(account: &EvmAccount, tx: TxEip1559) -> TransactionType<RT, S> {
-    let tx_with_defaults = TxEip1559 {
-        gas_limit: 1_000_000,
-        max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
-        chain_id: config_value!("CHAIN_ID"),
-        ..tx
-    };
-    let (signed_eth_tx, _) = account.sign(TypedTransaction::Eip1559(tx_with_defaults));
-    let data = borsh::to_vec(&signed_eth_tx).unwrap();
-    let raw_tx = RawTx { data };
-    TransactionType::PreAuthenticated(RT::encode_with_ethereum_auth(raw_tx))
 }
