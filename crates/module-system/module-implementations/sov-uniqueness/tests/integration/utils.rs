@@ -19,7 +19,7 @@ use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConf
 use sov_test_utils::runtime::{Runtime, TestRunner, ValueSetter, ValueSetterConfig};
 use sov_test_utils::{
     SimpleStorageContract, TestUser, TransactionType, TEST_DEFAULT_MAX_FEE,
-    TEST_DEFAULT_MAX_PRIORITY_FEE,
+    TEST_DEFAULT_MAX_PRIORITY_FEE, TEST_DEFAULT_USER_BALANCE,
 };
 
 use crate::runtime::{GenesisConfig, TestNonceRuntime, RT, S};
@@ -152,7 +152,7 @@ pub(crate) fn setup() -> (TestUser<S>, TestRunner<TestNonceRuntime<S>, S>, EvmAc
     if let Some(c) = genesis.bank.gas_token_config.as_mut() {
         c.address_and_balances.push((
             MultiAddress::Vm(EthereumAddress::from(evm_account.address())),
-            sov_modules_api::Amount(1000000000),
+            TEST_DEFAULT_USER_BALANCE,
         ));
     }
 

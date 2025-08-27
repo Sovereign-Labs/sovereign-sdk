@@ -71,7 +71,7 @@ pub(crate) fn setup() -> (TestRunner<RT, S>, EvmAccount, EvmAccount) {
     if let Some(c) = genesis.bank.gas_token_config.as_mut() {
         c.address_and_balances.push((
             MultiAddress::Vm(EthereumAddress::from(evm_account.address())),
-            sov_modules_api::Amount(TEST_DEFAULT_USER_BALANCE),
+            TEST_DEFAULT_USER_BALANCE,
         ));
     }
 
