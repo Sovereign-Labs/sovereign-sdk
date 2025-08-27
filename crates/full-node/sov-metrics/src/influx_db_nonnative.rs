@@ -15,6 +15,7 @@ type ArcFormatFn =
 #[derive(Debug)]
 pub struct StateAccessMetric {
     /// The key being accessed
+    #[cfg_attr(not(feature = "native"), allow(dead_code))]
     key: MetricSlotKey,
     #[allow(missing_docs)]
     pub storage_read_size: Option<u32>,
@@ -133,8 +134,10 @@ fn summarize(metrics: &StateMetrics, prefix: &str, target: &mut Vec<u8>) -> std:
 
 #[derive(Debug)]
 pub struct SlowDeserialization {
+    #[cfg_attr(not(feature = "native"), allow(dead_code))]
     key: MetricSlotKey,
     duration: Duration,
+    #[cfg_attr(not(feature = "native"), allow(dead_code))]
     deserialized_bytes: u32,
 }
 
