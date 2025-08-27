@@ -129,7 +129,6 @@ pub(crate) fn setup() -> (TestUser<S>, TestRunner<TestNonceRuntime<S>, S>, EvmAc
             address: evm_account.address(),
             code_hash: KECCAK_EMPTY,
             code: Default::default(),
-            nonce: 0,
         }],
         chain_spec: EvmChainSpec {
             // SHANGHAI instead of LATEST
