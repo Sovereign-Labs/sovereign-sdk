@@ -94,7 +94,6 @@ where
             }
             // Adopted from https://github.com/paradigmxyz/reth/blob/main/crates/payload/basic/src/lib.rs#L884
             Err(err) => {
-                println!("Errr {err}");
                 tracing::debug!(
                     tx_hash = hex::encode(evm_tx.hash()),
                     error = ?err,
