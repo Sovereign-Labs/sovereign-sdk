@@ -2,15 +2,20 @@ use std::convert::Infallible;
 
 use alloy_primitives::Bytes;
 use alloy_primitives::{Address, B256, U256};
+use derive_more::{Deref, Into};
 use revm::state::{AccountInfo, Bytecode};
 use revm::Database;
+use serde::{Deserialize, Serialize};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{InfallibleStateAccessor, Spec, StateMap};
 use sov_state::codec::BcsCodec;
 
-use super::DbAccount;
 use crate::{to_rollup_address, AccountStorageKey};
+
+/// Stores information about an EVM account and a corresponding account state.
+#[derive(Deserialize, Serialize, Debug, PartialEq, Clone, Default, Deref, Into)]
+pub struct DbAccount(pub(crate) AccountInfo);
 
 /// A queryable EVM database.
 pub struct EvmDb<Ws, S: Spec> {
@@ -50,7 +55,7 @@ where
             .accounts
             .get(&address, &mut self.state)
             .unwrap_infallible()
-            .map(|acc| acc.info);
+            .map(|acc| acc.0);
 
         let rollup_address: <S as Spec>::Address = to_rollup_address::<S>(address);
 

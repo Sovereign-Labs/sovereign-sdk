@@ -4361,6 +4361,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
+ "sov-uniqueness",
  "thiserror 1.0.65",
  "tracing",
 ]

@@ -139,7 +139,7 @@ where
         Ok(self
             .accounts
             .get(&address, state)?
-            .map(|acc| acc.info.nonce)
+            .map(|acc| acc.nonce)
             .unwrap_or_default())
     }
 }

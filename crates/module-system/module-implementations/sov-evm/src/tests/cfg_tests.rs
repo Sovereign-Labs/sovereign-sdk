@@ -3,9 +3,9 @@ use revm::context::{BlockEnv, CfgEnv};
 use revm::primitives::hardfork::SpecId;
 use sov_modules_api::macros::config_value;
 
-use crate::evm::EvmRuntimeConfig;
 use crate::executor::get_cfg_env;
 use crate::get_spec_id;
+use crate::EvmRuntimeConfig;
 
 #[test]
 fn cfg_test() {

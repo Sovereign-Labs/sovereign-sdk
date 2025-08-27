@@ -9,8 +9,8 @@ use sov_modules_api::{GenesisState, Module, Spec};
 
 use crate::evm::db_init::InitEvmDb;
 use crate::evm::primitive_types::Block;
-use crate::evm::EvmRuntimeConfig;
-use crate::{Evm, EvmGenesisConfig};
+
+use crate::{Evm, EvmGenesisConfig, EvmRuntimeConfig};
 
 /// Evm account.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]

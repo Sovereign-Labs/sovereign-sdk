@@ -9,10 +9,10 @@ use revm::{
         result::{EVMError, ExecutionResult},
         BlockEnv, CfgEnv, Context,
     },
-    Database, DatabaseCommit, ExecuteCommitEvm, MainBuilder, MainContext,
+    Database, DatabaseCommit, ExecuteCommitEvm, MainContext,
 };
 
-use crate::{evm::conversions::create_tx_env, get_spec_id, EvmRuntimeConfig};
+use crate::{evm::conversions::create_tx_env, get_spec_id, sov_evm::SovEvm, EvmRuntimeConfig};
 
 /// builds CfgEnv
 /// Returns correct config depending on spec for given block number
@@ -43,7 +43,7 @@ pub fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
         .with_db(db)
         .with_block(block_env)
         .with_cfg(cfg);
-    let mut evm = context.build_mainnet();
+    let mut evm = SovEvm::new(context, ());
 
     evm.transact_commit(tx_env)
 }
@@ -64,7 +64,7 @@ pub(crate) fn inspect<DB: Database<Error = Infallible> + DatabaseCommit>(
         .with_db(db)
         .with_block(block_env)
         .with_cfg(cfg);
-    let mut evm = context.build_mainnet().with_inspector(inspector);
+    let mut evm = SovEvm::new(context, inspector);
 
     evm.inspect_tx(tx)
 }

@@ -7,6 +7,7 @@ mod config;
 mod evm;
 mod genesis;
 mod hooks;
+mod sov_evm;
 
 pub use call::*;
 pub use config::*;
@@ -47,7 +48,7 @@ use sov_state::codec::BcsCodec;
 use sov_state::User;
 
 use crate::account_storage_key::AccountStorageKey;
-use crate::evm::db::EvmDb;
+use crate::evm::db::{DbAccount, EvmDb};
 use crate::evm::primitive_types::{
     Block, PendingTransaction, Receipt, SealedBlock, TransactionSignedAndRecovered,
 };
@@ -335,4 +336,11 @@ impl<S: Spec> Evm<S> {
             .get(tx_hash, state)
             .unwrap_infallible()
     }
+}
+
+pub(crate) fn to_rollup_address<S: Spec>(address: Address) -> S::Address
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    S::Address::from_vm_address(EthereumAddress::from(address))
 }
