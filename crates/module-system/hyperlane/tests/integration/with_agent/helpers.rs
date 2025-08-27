@@ -22,6 +22,7 @@ use testcontainers::core::client::docker_client_instance;
 use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult, Host, IntoContainerPort};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
+use testcontainers_modules::anvil::AnvilNode;
 use tokio::io::AsyncBufReadExt;
 use tokio::time::timeout;
 
@@ -100,6 +101,9 @@ pub const ANVIL_ACCOUNTS: &[(&str, &str)] = &[
     ),
 ];
 
+// const DEFAULT_HYPERLANE_AGENT_IMAGE: &str = "ghcr.io/citizen-stig/hyperlane-agent:integration-2";
+// const DEFAULT_HYPERLANE_CLI_IMAGE: &str = "ghcr.io/citizen-stig/hyperlane-cli:17.0.0";
+
 pub struct Setup {
     pub sequencer: TestSequencer<TestSpec>,
     pub relayer: TestUser<TestSpec>,
@@ -152,7 +156,6 @@ pub async fn setup_rollup(
         true,
     )
     .set_config(|config| {
-        config.automatic_batch_production = true;
         config.rollup_prover_config = None;
         config.sequencer_config = SequencerKindConfig::Preferred(PreferredSequencerConfig {
             minimum_profit_per_tx: 0,
@@ -191,6 +194,9 @@ pub async fn setup_rollup(
 /// Helper for handling the dockerized hyperlane setup.
 pub struct HyperlaneBuilder {
     image: GenericImage,
+    // TODO:
+    // anvil_image: Option<GenericImage>,
+    // hyperlane_cli_image: GenericImage,
     rollup_port: Option<u16>,
     with_evm: bool,
     relayer: Option<PrivateKey>,
@@ -205,8 +211,8 @@ impl HyperlaneBuilder {
 
         // Current image is based on https://github.com/citizen-stig/hyperlane-monorepo/tree/nikolai/for-test
         // TODO: Migrate it to https://github.com/Sovereign-Labs/hyperlane-monorepo/ and later to upstream.
-        let docker_image =
-            docker_image.unwrap_or_else(|_| "ghcr.io/citizen-stig/hyperlane:uniqueness".into());
+        let docker_image = docker_image
+            .unwrap_or_else(|_| "ghcr.io/citizen-stig/hyperlane-agent:integration-2".into());
         let (name, tag) = docker_image
             .split_once(':')
             .unwrap_or((&docker_image, "latest"));
@@ -304,7 +310,7 @@ impl HyperlaneBuilder {
         // because they will try to reach out to it immediately.
         // same goes for rollup, but we assume its runnig knowing its port.
         let (anvil, evm_recipient) = if self.with_evm {
-            let (anvil, evm_recipient) = start_evm_counterparty(&container, rollup_port).await;
+            let (anvil, evm_recipient) = start_evm_counterparty_2(rollup_port).await;
             (Some(anvil), Some(evm_recipient))
         } else {
             (None, None)
@@ -349,7 +355,8 @@ impl HyperlaneBuilder {
 
 pub struct Hyperlane {
     pub container: Container,
-    pub anvil: Option<ExecResult>,
+    // Why this is option and not bool?
+    pub anvil: Option<ContainerAsync<AnvilNode>>,
     pub evm_recipient: Option<HexHash>,
     pub relayer: Option<ExecResult>,
     pub validators: Vec<ExecResult>,
@@ -757,6 +764,7 @@ async fn start_validator(
 /// Run Evm counterparty chain in docker.
 ///
 /// Returns an address of evm test recipient, to which we can dispatch test messages.
+#[allow(dead_code)]
 async fn start_evm_counterparty(container: &Container, rollup_port: u16) -> (ExecResult, HexHash) {
     let anvil = container
         .exec(ExecCommand::new([
@@ -772,7 +780,7 @@ async fn start_evm_counterparty(container: &Container, rollup_port: u16) -> (Exe
     // Create chains configuration files for `hyperlane-cli`
     let chains_dir = "/root/.hyperlane/chains";
     let sovtest_config = sovtest_metadata(rollup_port);
-    let ethtest_config = ethtest_metadata();
+    let ethtest_config = ethtest_metadata("127.0.0.1");
     for (chain, config) in [("sovtest", sovtest_config), ("ethtest", ethtest_config)] {
         exec_in_bash(
             container,
@@ -947,4 +955,102 @@ async fn cast_call(
 fn domain_from_hexhash(hash: HexHash) -> u32 {
     assert!(hash.0[0..28].iter().all(|&b| b == 0));
     u32::from_be_bytes(hash.0[28..].try_into().unwrap())
+}
+
+async fn start_evm_counterparty_2(rollup_port: u16) -> (ContainerAsync<AnvilNode>, HexHash) {
+    // Hard code tag, so we don't accidental breakages
+    let anvil = AnvilNode::default()
+        .with_tag("v1.1.0")
+        .with_cmd([
+            // TODO: Do we really need that? It looks like AnvilNode handles that.
+            "--host",
+            "0.0.0.0",
+            "--port",
+            &ANVIL_PORT.to_string(),
+        ])
+        .start()
+        .await
+        .expect("failed to start anvil");
+
+    let anvil_host = anvil.get_host().await.unwrap();
+
+    let addr = run_hyperlane_cli(rollup_port, &anvil_host.to_string()).await;
+
+    (anvil, addr)
+}
+
+async fn run_hyperlane_cli(rollup_port: u16, anvil_host: &str) -> HexHash {
+    // Configure the image with tail -f /dev/null to keep container running
+    let hyperlane_cli_image = GenericImage::new("ghcr.io/citizen-stig/hyperlane-cli", "17.0.0")
+        .with_env_var("HYP_KEY", ANVIL_ACCOUNTS[0].1)
+        .with_cmd(["tail", "-f", "/dev/null"]); // This keeps the container running, while other commands are executed there.
+
+    let container = hyperlane_cli_image.start().await.unwrap();
+
+    // Step 1: Create chains configuration files for hyperlane-cli
+    let chains_dir = "/root/.hyperlane/chains";
+    let sovtest_config = sovtest_metadata(rollup_port);
+    let ethtest_config = ethtest_metadata(anvil_host);
+    for (chain, config) in [("sovtest", sovtest_config), ("ethtest", ethtest_config)] {
+        exec_in_bash(
+            &container,
+            format!("mkdir -p {chains_dir}/{chain}; echo '{config}' > {chains_dir}/{chain}/metadata.yaml")
+        )
+            .await;
+    }
+
+    // Step 2: Create core config for hyperlane deployment
+    let core_config = core_config(ANVIL_ACCOUNTS[0].0.parse().unwrap());
+    exec_in_bash(
+        &container,
+        format!("mkdir -p configs && echo '{core_config}' > configs/core-config.yaml"),
+    )
+    .await;
+
+    // Step 3: Deploy smart contracts on ethtest chain using exec
+    let mut res = container
+        .exec(ExecCommand::new([
+            "hyperlane",
+            "core",
+            "deploy",
+            "--chain",
+            "ethtest",
+            "--yes",
+        ]))
+        .await
+        .unwrap();
+
+    let stderr = res.stderr_to_vec().await.unwrap();
+    let stdout = res.stdout_to_vec().await.unwrap();
+    if res.exit_code().await.unwrap().unwrap() != 0 {
+        println!("STDERR:\n{}", String::from_utf8_lossy(&stderr));
+        println!("STDOUT:\n{}", String::from_utf8_lossy(&stdout));
+        panic!("hyperlane deployment on evm chain failed");
+    }
+
+    // Step 4: Create sovtest addresses configuration
+    let sov_addresses = sovtest_addresses();
+    exec_in_bash(
+        &container,
+        format!("echo '{sov_addresses}' > {chains_dir}/sovtest/addresses.yaml"),
+    )
+    .await;
+
+    // Step 5: Extract the ethereum test recipient address
+    let output = container
+        .exec(ExecCommand::new([
+            "awk",
+            "-F",
+            "\"",
+            "/testRecipient/ { print $2 }",
+            &format!("{chains_dir}/ethtest/addresses.yaml"),
+        ]))
+        .await
+        .unwrap()
+        .stdout_to_vec()
+        .await
+        .unwrap();
+    let output = String::from_utf8_lossy(&output);
+
+    parse_eth_addr(&output)
 }

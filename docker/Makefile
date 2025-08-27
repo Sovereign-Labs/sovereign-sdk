@@ -51,3 +51,9 @@ restart-toxiproxy:
 	docker compose restart toxiproxy
 	sleep 5
 	TOXIPROXY_HOST="localhost" ./toxiproxy/configure.sh
+
+
+build-hyperlane-cli:
+	docker build -f hyperlane/hyperlane-cli.Dockerfile --build-arg CLI_VERSION=17.0.0 -t ghcr.io/citizen-stig/hyperlane-cli:17.0.0 .
+	docker push ghcr.io/citizen-stig/hyperlane-cli:17.0.0
+	docker run ghcr.io/citizen-stig/hyperlane-cli:17.0.0 --version

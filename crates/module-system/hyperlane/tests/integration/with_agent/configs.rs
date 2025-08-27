@@ -157,7 +157,7 @@ pub fn sovtest_addresses() -> &'static str {
 }
 
 /// Configuration of ethtest chain in hyperlane
-pub fn ethtest_metadata() -> String {
+pub fn ethtest_metadata(anvil_host: &str) -> String {
     formatdoc! {"
         chainId: {EVM_DOMAIN}
         displayName: EthTest
@@ -170,7 +170,7 @@ pub fn ethtest_metadata() -> String {
           symbol: ETH
         protocol: ethereum
         rpcUrls:
-          - http: HTTP://127.0.0.1:{ANVIL_PORT}
+          - http: HTTP://{anvil_host}:{ANVIL_PORT}
     "}
 }
 

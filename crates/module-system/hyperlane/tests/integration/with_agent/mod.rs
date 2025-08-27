@@ -235,7 +235,6 @@ async fn test_multisig_ism() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Ignore hyperlane tests"]
 async fn test_process_message_from_evm_counterparty() {
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
