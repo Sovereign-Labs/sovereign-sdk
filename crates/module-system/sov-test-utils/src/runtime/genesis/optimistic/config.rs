@@ -276,6 +276,7 @@ impl<S: Spec> MinimalOptimisticGenesisConfig<S> {
                             })
                             .collect()
                     },
+                    enable_custom_account_mappings: true,
                 },
                 uniqueness: (),
                 blob_storage: (),

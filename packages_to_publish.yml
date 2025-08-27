@@ -30,6 +30,7 @@
 - sov-prover-incentives
 - sov-chain-state
 - sov-blob-storage
+- sov-solana-offchain-auth
 - sov-uniqueness
 
 # Adapters

@@ -36,6 +36,7 @@ pub enum ProofType {
     feature = "native",
     derive(borsh::BorshSerialize, serde::Serialize, serde::Deserialize,)
 )]
+#[cfg_attr(feature = "native", serde(bound = "S: Spec"))]
 pub struct SerializeProofWithDetails<S: Spec> {
     /// The serialized aggregated proof.
     pub proof: ProofType,

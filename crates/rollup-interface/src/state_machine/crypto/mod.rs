@@ -34,6 +34,13 @@ use crate::common::HexHash;
 )]
 pub struct CredentialId(pub HexHash);
 
+impl CredentialId {
+    /// Make new `CredentialId`
+    pub fn from_bytes(value: [u8; 32]) -> Self {
+        Self(HexHash::new(value))
+    }
+}
+
 impl schemars::JsonSchema for CredentialId {
     fn schema_name() -> String {
         "CredentialId".to_string()

@@ -201,7 +201,10 @@ fn create_test_rt_genesis_config<S: Spec>(
             admin: None,
         },
 
-        accounts: AccountConfig { accounts: vec![] },
+        accounts: AccountConfig {
+            accounts: vec![],
+            enable_custom_account_mappings: true,
+        },
 
         uniqueness: (),
     }

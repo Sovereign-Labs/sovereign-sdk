@@ -1,14 +1,14 @@
 use std::sync::Mutex;
 
-use reth_primitives::B256;
+use alloy_primitives::B256;
+use alloy_rpc_types::Block;
 use reth_rpc_eth_types::EthResult;
-use reth_rpc_types::{Block, Rich};
 use schnellru::{ByLength, LruMap};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::ApiStateAccessor;
 /// Block cache for gas oracle
 pub struct BlockCache<S: sov_modules_api::Spec> {
-    cache: Mutex<LruMap<B256, Rich<Block>, ByLength>>,
+    cache: Mutex<LruMap<B256, Block, ByLength>>,
     provider: sov_evm::Evm<S>,
 }
 
@@ -28,7 +28,7 @@ where
         &self,
         block_hash: B256,
         state: &mut ApiStateAccessor<S>,
-    ) -> EthResult<Option<Rich<Block>>> {
+    ) -> EthResult<Option<Block>> {
         // Check if block is in cache
         let mut cache = self.cache.lock().unwrap();
         if let Some(block) = cache.get(&block_hash) {

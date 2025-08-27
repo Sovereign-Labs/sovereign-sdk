@@ -99,7 +99,7 @@ sov-test-utils = { workspace = true }
 sov-chain-state = { workspace = true }
 sov-blob-storage = { workspace = true }
 sov-synthetic-load = { workspace = true, features = ["native"] }
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "ea25df7ed3b02c951c1d6ed49cee1ba40728f3f9", default-features = false }
+reth-primitives = { workspace = true, default-features = false }
 futures = "0.3"
 demo-stf-json-client = { path = "./stf/demo-stf-json-client", default-features = false }
 tracing-panic = { version = "0.1.2" }

@@ -1,10 +1,14 @@
-use reth_primitives::{Address, TransactionSigned, TxKind, U256};
-use reth_rpc_types::transaction::EIP1559TransactionRequest;
-use reth_rpc_types::TypedTransactionRequest;
+use alloy_consensus::constants::KECCAK_EMPTY;
+use alloy_consensus::{TxEip1559, TypedTransaction};
+use alloy_eips::{eip1559::MIN_PROTOCOL_BASE_FEE, eip2718::Encodable2718};
+use alloy_primitives::{Address, Bytes, TxKind, U256};
+use reth_primitives::TransactionSigned;
 use secp256k1::rand::SeedableRng as _;
 use secp256k1::{PublicKey, SecretKey};
-use sov_eth_dev_signer::DevSigner;
-use sov_evm::{AccountData, EthereumAuthenticator, EvmConfig, RlpEvmTransaction, SpecId};
+use sov_eth_dev_signer::Signer;
+use sov_evm::{
+    AccountData, EthereumAuthenticator, EvmChainSpec, EvmGenesisConfig, RlpEvmTransaction, SpecId,
+};
 use sov_modules_api::capabilities::{config_chain_id, TransactionAuthenticator, UniquenessData};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
@@ -35,10 +39,10 @@ impl EvmAccount {
         reth_primitives::public_key_to_address(self.public_key())
     }
 
-    pub fn sign(&self, tx: TypedTransactionRequest) -> (RlpEvmTransaction, TransactionSigned) {
-        let signer = DevSigner::new(vec![self.0]);
-        let signed_tx = signer.sign_transaction(tx, self.address()).unwrap();
-        let rlp = signed_tx.envelope_encoded().to_vec();
+    pub fn sign(&self, tx: TypedTransaction) -> (RlpEvmTransaction, TransactionSigned) {
+        let signer = Signer::new(self.0);
+        let signed_tx = signer.sign_transaction(tx).unwrap();
+        let rlp = signed_tx.encoded_2718();
         (RlpEvmTransaction { rlp }, signed_tx)
     }
 }
@@ -51,20 +55,17 @@ pub(crate) fn generate_default_tx(
     match uniqueness {
         UniquenessData::Nonce(nonce) => {
             let contract = SimpleStorageContract::default();
-            let create_contract_tx_request =
-                TypedTransactionRequest::EIP1559(EIP1559TransactionRequest {
-                    chain_id: config_value!("CHAIN_ID"),
-                    nonce,
-                    max_priority_fee_per_gas: Default::default(),
-                    max_fee_per_gas: U256::from(
-                        reth_primitives::constants::MIN_PROTOCOL_BASE_FEE * 2,
-                    ),
-                    gas_limit: U256::from(1_000_000u64),
-                    kind: TxKind::Create,
-                    value: Default::default(),
-                    input: reth_primitives::Bytes::from(contract.byte_code().to_vec()),
-                    access_list: Default::default(),
-                });
+            let create_contract_tx_request = TypedTransaction::Eip1559(TxEip1559 {
+                chain_id: config_value!("CHAIN_ID"),
+                nonce,
+                max_priority_fee_per_gas: Default::default(),
+                max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
+                gas_limit: 1_000_000,
+                to: TxKind::Create,
+                value: Default::default(),
+                input: Bytes::from(contract.byte_code().to_vec()),
+                access_list: Default::default(),
+            });
             let (signed_eth_tx, _) = evm_account.sign(create_contract_tx_request);
             let create_contract_tx = RawTx {
                 data: borsh::to_vec(&signed_eth_tx).unwrap(),
@@ -121,17 +122,20 @@ pub(crate) fn setup() -> (TestUser<S>, TestRunner<TestNonceRuntime<S>, S>, EvmAc
 
     let evm_account = EvmAccount::generate();
 
-    let evm_config = EvmConfig {
-        data: vec![AccountData {
+    let evm_config = EvmGenesisConfig {
+        accounts: vec![AccountData {
             address: evm_account.address(),
             balance: U256::from(1000000000),
-            code_hash: reth_primitives::KECCAK_EMPTY,
+            code_hash: KECCAK_EMPTY,
             code: Default::default(),
             nonce: 0,
         }],
-        // SHANGHAI instead of LATEST
-        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
-        spec: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
+        chain_spec: EvmChainSpec {
+            // SHANGHAI instead of LATEST
+            // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
+            hardforks: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
+            ..Default::default()
+        },
         ..Default::default()
     };
 

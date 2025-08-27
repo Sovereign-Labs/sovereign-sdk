@@ -1,0 +1,73 @@
+[package]
+name = "sov-solana-offchain-auth"
+description = "A Sovereign SDK module for authenticating transactions signed as Solana offchain messages"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+borsh = { workspace = true }
+derive_more = { workspace = true }
+tracing = { workspace = true }
+hex = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_with = { workspace = true, features = ["hex"] }
+
+sov-modules-api = { workspace = true }
+sov-state = { workspace = true }
+
+[dev-dependencies]
+axum = { workspace = true }
+base64 = { workspace = true }
+tokio-stream = { workspace = true }
+sov-solana-offchain-auth = { path = ".", features = ["native"] }
+tempfile = { workspace = true }
+strum = { workspace = true }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-test-utils = { workspace = true }
+sov-kernels = { workspace = true, features = ["native", "test-utils"] }
+sov-value-setter = { workspace = true }
+sov-bank = { workspace = true }
+bs58 = { workspace = true }
+sov-paymaster = { workspace = true }
+sov-rollup-interface = { workspace = true }
+sov-modules-stf-blueprint = { workspace = true }
+sov-db = { workspace = true }
+sov-stf-runner = { workspace = true }
+sov-modules-rollup-blueprint = { workspace = true }
+sov-sequencer = { workspace = true }
+sov-rest-utils = { workspace = true }
+sov-node-client = { workspace = true }
+sov-api-spec = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+jsonrpsee = { workspace = true }
+reqwest = { workspace = true }
+
+[features]
+default = []
+native = [
+	"sov-modules-api/native",
+	"sov-solana-offchain-auth/native",
+	"sov-bank/native",
+	"sov-kernels/native",
+	"sov-mock-da/native",
+	"sov-mock-zkvm/native",
+	"sov-modules-rollup-blueprint/native",
+	"sov-modules-stf-blueprint/native",
+	"sov-paymaster/native",
+	"sov-rollup-interface/native",
+	"sov-state/native",
+	"sov-value-setter/native"
+]

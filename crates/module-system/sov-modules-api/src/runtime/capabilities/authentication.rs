@@ -189,6 +189,24 @@ pub enum FatalError {
         /// The actual chain id
         got: u64,
     },
+    /// The chain hash was invalid. Not every type of transaction will be able to throw this (some
+    /// will just implicitly fail signature checks).
+    #[error("Invalid chain hash: expected {expected}, got {got}")]
+    InvalidChainHash {
+        /// The expected chain id
+        expected: String,
+        /// The actual chain id
+        got: String,
+    },
+    /// The chain name was invalid. Not every type of transaction will be able to throw this (some
+    /// will just implicitly fail signature checks).
+    #[error("Invalid chain name: expected {expected}, got {got}")]
+    InvalidChainName {
+        /// The expected chain id
+        expected: String,
+        /// The actual chain id
+        got: String,
+    },
     /// Transaction decoding failed.
     #[error("Transaction decoding error: {0}")]
     MessageDecodingFailed(String),
@@ -293,7 +311,12 @@ pub fn extract_authorization_data<S: Spec, D: DispatchCall<Spec = S>>(
     })
 }
 
-fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
+/// Authenticate and verify deserialized sov-tx. See `authenticate`.
+///
+/// # Errors
+/// Returns an error if gas runs out at any point, if deserialization or hashing fails, or if the
+/// signature cannot be verified.
+pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx_hash: TxHash,
     tx: Transaction<D, S>,
     chain_hash: &[u8; 32],

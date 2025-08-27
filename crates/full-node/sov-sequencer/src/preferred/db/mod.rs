@@ -33,13 +33,7 @@ use crate::preferred::{exit_rollup, track_in_progress_batch_size};
 
 #[async_trait]
 pub trait PreferredSequencerDbBackend: Send + Sync + 'static {
-    async fn begin_rollup_block(
-        &mut self,
-        sequence_number: SequenceNumber,
-        blob_id: BlobInternalId,
-        visible_slot_number_after_increase: VisibleSlotNumber,
-        visibile_slots_to_advance: NonZero<u8>,
-    ) -> anyhow::Result<()>;
+    async fn begin_rollup_block(&mut self, stored_batch: BatchToStore) -> anyhow::Result<()>;
 
     /// Calls to this method MUST be "sandwiched" between
     /// [`PreferredSequencerDbBackend::begin_rollup_block`] and
@@ -101,7 +95,6 @@ pub trait PreferredSequencerDbBackend: Send + Sync + 'static {
 pub struct DbSnapshotData {
     pub completed_blobs: Vec<PreferredSequencerReadBlob>,
     pub in_progress_batch: Option<InProgressBatch>,
-    pub latest_event_id: Option<u64>,
 }
 
 /// See [`PreferredSequencerReadBlob::Batch`].
@@ -410,13 +403,12 @@ impl PreferredSequencerDb {
     }
 
     pub(crate) async fn initial_data(
-        &mut self,
-    ) -> anyhow::Result<(Option<u64>, SequenceNumber, PreferredSequencerCache)> {
-        if let Some(backend) = &mut self.backend {
+        &self,
+    ) -> anyhow::Result<(SequenceNumber, PreferredSequencerCache)> {
+        if let Some(backend) = &self.backend {
             let DbSnapshotData {
                 completed_blobs,
                 in_progress_batch,
-                latest_event_id,
             } = backend.current_data().await?;
 
             let completed_blobs = VecDeque::from(completed_blobs);
@@ -431,7 +423,6 @@ impl PreferredSequencerDb {
             };
 
             Ok((
-                latest_event_id,
                 sequence_number_of_next_blob,
                 PreferredSequencerCache::new(
                     completed_blobs,
@@ -441,7 +432,6 @@ impl PreferredSequencerDb {
             ))
         } else {
             Ok((
-                None,
                 0, // TODO this will be revisited when we enable the replica sync task.
                 PreferredSequencerCache::new(
                     VecDeque::default(),
@@ -492,14 +482,13 @@ impl PreferredSequencerDb {
                 "Storing new rollup block"
             );
 
-            backend
-                .begin_rollup_block(
-                    sequence_number,
-                    blob_id,
-                    visible_slot_number_after_increase,
-                    visible_slots_to_advance,
-                )
-                .await?;
+            let batch_to_store = BatchToStore {
+                sequence_number,
+                blob_id,
+                visible_slot_number_after_increase,
+                visible_slots_to_advance,
+            };
+            backend.begin_rollup_block(batch_to_store).await?;
         }
 
         Ok(sequence_number)

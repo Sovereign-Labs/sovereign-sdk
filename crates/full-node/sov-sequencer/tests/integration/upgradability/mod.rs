@@ -1,7 +1,3 @@
-use std::sync::Arc;
-use std::time::Duration;
-
-use crate::utils::get_height;
 use futures::StreamExt;
 use sov_api_spec::{types, ResponseValue};
 use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
@@ -13,6 +9,7 @@ use sov_node_client::NodeClient;
 use sov_test_utils::logging::LogCollector;
 use sov_test_utils::runtime::genesis::operator::HighLevelOperatorGenesisConfig;
 use sov_test_utils::runtime::GenesisParams;
+use sov_test_utils::test_rollup::get_height;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::{
     generate_operator_runtime_with_kernel, RtAgnosticBlueprint, TestSpec, TestUser,
@@ -20,6 +17,8 @@ use sov_test_utils::{
     TEST_MAX_BATCH_SIZE,
 };
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
+use std::sync::Arc;
+use std::time::Duration;
 use tracing::Level;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::registry;

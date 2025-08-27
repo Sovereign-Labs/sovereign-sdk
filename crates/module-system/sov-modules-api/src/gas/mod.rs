@@ -7,8 +7,8 @@ mod tests;
 use std::marker::PhantomData;
 
 pub use metered_utils::{
-    metered_credential, MeteredBorshDeserialize, MeteredBorshDeserializeError, MeteredHasher,
-    MeteredSigVerificationError, MeteredSignature,
+    charge_gas_to_deserialize_json, metered_credential, MeteredBorshDeserialize,
+    MeteredBorshDeserializeError, MeteredHasher, MeteredSigVerificationError, MeteredSignature,
 };
 pub use traits::*;
 

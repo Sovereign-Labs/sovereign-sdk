@@ -1,3 +1,4 @@
+use anyhow::bail;
 use anyhow::{anyhow, Result};
 use schemars::JsonSchema;
 use sov_modules_api::macros::{serialize, UniversalWallet};
@@ -25,6 +26,12 @@ impl<S: Spec> Accounts<S> {
         context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> Result<()> {
+        if !self.enable_custom_account_mappings.get(state)?.expect(
+            "`enable_custom_account_mappings` should not be None; it must be set at genesis.",
+        ) {
+            bail!("Custom account mappings are disabled");
+        }
+
         self.exit_if_credential_exists(&new_credential_id, state)?;
 
         // Insert the new credential id -> account mapping

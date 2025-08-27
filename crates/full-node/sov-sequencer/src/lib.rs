@@ -4,7 +4,7 @@
 pub(crate) mod common;
 mod config;
 pub(crate) mod metrics;
-mod rest_api;
+pub mod rest_api;
 mod tx_status;
 
 pub mod preferred;

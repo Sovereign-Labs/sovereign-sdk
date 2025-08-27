@@ -15,7 +15,7 @@ mod tests;
 pub use call::CallMessage;
 use sov_modules_api::{
     Context, CredentialId, DaSpec, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec,
-    StateMap, TxState,
+    StateMap, StateValue, TxState,
 };
 
 /// An account on the rollup.
@@ -45,6 +45,10 @@ pub struct Accounts<S: Spec> {
     /// Mapping from a credential to its corresponding account.
     #[state]
     pub(crate) accounts: StateMap<CredentialId, Account<S>>,
+
+    /// If this field is false, `CallMessage::InsertCredentialId` messages will be rejected.
+    #[state]
+    enable_custom_account_mappings: StateValue<bool>,
 }
 
 impl<S: Spec> Module for Accounts<S> {

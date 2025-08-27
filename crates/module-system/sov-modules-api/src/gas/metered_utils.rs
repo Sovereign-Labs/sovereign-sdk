@@ -247,6 +247,32 @@ pub trait MeteredBorshDeserialize<S: Spec>: Sized {
     ) -> Result<Self, MeteredBorshDeserializeError<<S as GasSpec>::Gas>>;
 }
 
+/// Computes the cost to deserialize the given JSON buffer, in `Gas`, and charges it to the provided
+/// `GasMeter`.
+///
+/// # Errors
+/// Returns an error if charging the gas for the deserialization operation fails.
+pub fn charge_gas_to_deserialize_json<S: Spec>(
+    buf: &[u8],
+    meter: &mut impl GasMeter<Spec = S>,
+) -> Result<(), GasMeteringError<<S as GasSpec>::Gas>> {
+    // This is safe to cast here. We won't have data bigger thane 4GB.
+    let buf_len: u32 = as_u32_or_panic(buf.len());
+
+    // Custom gas costs to deserialize this data structure.
+    meter.charge_gas(&S::tx_bias_json_deserialization())?;
+
+    meter.charge_linear_gas(
+        &S::tx_gas_to_charge_per_byte_json_deserialization(),
+        buf_len,
+    )?;
+
+    // Since JSON is not used often, no common cost to JSON deserialization is defined to
+    // simplify the set of constants.
+
+    Ok(())
+}
+
 /// Calculates `CredentialId`
 pub fn metered_credential<S: Spec>(
     pub_key: &<S::CryptoSpec as CryptoSpec>::PublicKey,

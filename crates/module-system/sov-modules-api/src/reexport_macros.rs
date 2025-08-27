@@ -69,7 +69,7 @@ pub use sov_modules_macros::track_gas_constants_usage;
 ///    sov_modules_api::prelude::schemars::JsonSchema,
 ///    sov_modules_api::macros::UniversalWallet,
 /// ))]
-/// #[serde(rename_all = "snake_case")]
+/// #[serde(bound = "S: Spec", rename_all = "snake_case")]
 /// pub enum RuntimeCall<S: Spec> {
 ///   bank(<Bank::<S> as Module>::CallMessage),
 ///   sequencer_registry(<SequencerRegistry::<S> as Module>::CallMessage),

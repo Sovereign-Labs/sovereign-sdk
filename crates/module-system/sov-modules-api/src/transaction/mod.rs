@@ -310,6 +310,7 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
 #[derive(
     derive_more::Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, UniversalWallet,
 )]
+#[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
 pub struct UnsignedTransaction<R: TransactionCallable, S: Spec> {
     /// The runtime call
     pub runtime_call: R::Call,
@@ -378,6 +379,11 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
             self.uniqueness,
             self.details,
         )
+    }
+
+    /// Returns a copy of the RuntimeCall from this unsigned transaction.
+    pub fn call(&self) -> R::Call {
+        self.runtime_call.clone()
     }
 }
 

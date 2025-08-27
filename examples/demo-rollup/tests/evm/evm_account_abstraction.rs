@@ -1,3 +1,5 @@
+use crate::evm::evm_test_helper::{self};
+use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
 use demo_stf::runtime::{Runtime, RuntimeCall};
 use ethers_core::abi::Address;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockRollupSpec};
@@ -9,13 +11,10 @@ use sov_modules_macros::config_value;
 use sov_test_utils::test_rollup::{get_appropriate_rollup_prover_config, read_private_key};
 use sov_test_utils::{TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE};
 
-use crate::evm::evm_test_helper::{self};
-use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
-
 type TestSpec = DemoRollupSpec;
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "This test is currently broken. We need to integrate the EVM module with the soft-confirmation kernel to make it work again. Relevant issue: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1904"]
+#[ignore = "Account abstraction for the EVM is disabled"]
 async fn test_evm_account_abstraction() {
     let chain_id = config_value!("CHAIN_ID");
     let finalization_blocks = 0;
@@ -31,6 +30,8 @@ async fn test_evm_account_abstraction() {
         "0x90cb5be9e2c125d84af44f19a4e6e36af359bd47b41577aedbe8aa24313bbd40",
     )
     .await;
+
+    test_rollup.wait_for_height(20).await;
 
     // Before executing the evm checks we need to insert the credentials in the `Accounts`.
     send_insert_credentials(&test_client, from_addr, chain_id).await;

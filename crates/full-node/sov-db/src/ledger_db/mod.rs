@@ -312,6 +312,7 @@ impl LedgerDb {
     }
 
     /// Clones the underlying `DeltaReader` used by this `LedgerDb`.
+    /// Blocking if called in async context
     pub fn clone_reader(&self) -> DeltaReader {
         self.db.read().expect(DB_LOCK_POISONED).clone()
     }
@@ -386,6 +387,7 @@ impl LedgerDb {
 
     /// Materializes [`SlotCommit`] into [`SchemaBatch`] by inserting its events,
     /// transactions, and batches before inserting the slot metadata.
+    /// Blocking if called in async context
     pub fn materialize_slot<S: SlotData, B: Serialize, T: TxReceiptContents>(
         &self,
         data_to_commit: SlotCommit<S, B, T>,

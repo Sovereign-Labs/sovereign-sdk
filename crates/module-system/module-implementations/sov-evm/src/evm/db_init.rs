@@ -1,10 +1,9 @@
-use reth_primitives::revm_primitives::{AccountInfo, Address, B256};
-use reth_primitives::Bytes;
+use alloy_primitives::{Address, Bytes, B256};
+use revm::state::AccountInfo;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{InfallibleStateAccessor, Spec};
 
-use super::db::EvmDb;
-use super::DbAccount;
+use super::db::{DbAccount, EvmDb};
 
 /// Initializes database with a predefined account.
 pub(crate) trait InitEvmDb {
@@ -14,7 +13,7 @@ pub(crate) trait InitEvmDb {
 
 impl<Ws: InfallibleStateAccessor, S: Spec> InitEvmDb for EvmDb<Ws, S> {
     fn insert_account_info(&mut self, sender: Address, info: AccountInfo) {
-        let db_account = DbAccount { info };
+        let db_account = DbAccount(info);
 
         self.accounts
             .set(&sender, &db_account, &mut self.state)
@@ -29,15 +28,16 @@ impl<Ws: InfallibleStateAccessor, S: Spec> InitEvmDb for EvmDb<Ws, S> {
 }
 
 #[cfg(test)]
-impl InitEvmDb for revm::db::CacheDB<revm::db::EmptyDB> {
+impl InitEvmDb for revm::database::CacheDB<revm::database::EmptyDB> {
     fn insert_account_info(&mut self, sender: Address, acc: AccountInfo) {
         self.insert_account_info(sender, acc);
     }
 
     fn insert_code(&mut self, code_hash: B256, code: Bytes) {
-        self.contracts.insert(
-            code_hash,
-            reth_primitives::revm_primitives::Bytecode::new_raw(code),
-        );
+        use revm::state::Bytecode;
+
+        self.cache
+            .contracts
+            .insert(code_hash, Bytecode::new_raw(code));
     }
 }

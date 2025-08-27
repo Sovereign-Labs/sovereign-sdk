@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 use sov_address::MultiAddress;
-use sov_bank::config_gas_token_id;
+use sov_bank::derived_holder::DerivedHolder;
+use sov_bank::{config_gas_token_id, Amount};
 use sov_cli::NodeClient;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_mock_da::storable::service::StorableMockDaService;
@@ -115,6 +116,16 @@ async fn send_test_bank_txs(
             .unwrap();
         assert!(reward_amount > 0);
     }
+
+    // Check the derive holder api
+    let derived_holder_str = DerivedHolder::from([22; 32]).to_string();
+    let derived_holder_balance_err = client
+        .get_balance_for_holder::<TestSpec>(&derived_holder_str, &token_id)
+        .await
+        .unwrap_err()
+        .to_string();
+
+    assert!(derived_holder_balance_err.contains("404 Not Found"));
 
     Ok(())
 }

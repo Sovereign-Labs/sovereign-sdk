@@ -1,4 +1,53 @@
+# 2025-08-27
+- #1572 Adds custom EVM handler (`SovHandler`) and EVM implementation (`SovEvm`) to disable gas charging for EVM transactions. This allows EVM transactions to execute without gas fees.
+
+# 2025-08-26
+- #1562 **BREAKING CHANGE** The `account.json` genesis files now include a new field: `enable_custom_account_mappings`. If this field is set to false, the custom `CredentialId` => `Account` mapping is disabled. It should remain disabled for EVM rollups.
+
+# 2025-08-25
+- #1558 Enables querying the `DerivedHolder/Module` balance. Previously, the balance route only worked for user addresses at `/tokens/{}/balances/{}`. This has been updated: the endpoint now attempts to convert the provided string into a `TokenHolder::User/Module/Bank` before processing.
+
+# 2025-08-22
+- #1553 Enables ignored EVM tests. This is NOT a breaking change.
+- #1555 **BREAKING CHANGE** Refactors EVM configuration types to reduce duplication and improve clarity:
+  - `EvmConfig` has been renamed to `EvmGenesisConfig` and restructured
+  - `EvmChainConfig` has been renamed to `EvmRuntimeConfig` and restructured
+  - Common chain parameters extracted into new `EvmChainSpec` struct
+  - Field renames: `data` → `accounts`, `spec` → `hardforks`, `starting_base_fee` → `initial_base_fee`
+  - Genesis JSON structure changed: chain parameters are now nested under `chain_spec` field
+  - **Hardforks moved to `EvmChainSpec`**: The `hardforks` field has been moved from `EvmGenesisConfig` to `EvmChainSpec` and changed from a HashMap to a Vec of tuples for consistent ordering
+  
+  Migration guide:
+  - Update imports: `EvmConfig` → `EvmGenesisConfig`, `EvmChainConfig` → `EvmRuntimeConfig`
+  - Update genesis JSON files to nest chain parameters under `chain_spec`
+  - Update field names in code and configuration
+  - Example JSON structure change:
+    ```json
+    // Before:
+    {
+      "data": [...],
+      "spec": {"0": "SHANGHAI"},
+      "starting_base_fee": 7,
+      "chain_id": 4321,
+      ...
+    }
+    // After:
+    {
+      "accounts": [...],
+      "initial_base_fee": 7,
+      "chain_spec": {
+        "chain_id": 4321,
+        "hardforks": [[0, "SHANGHAI"]],
+        ...
+      }
+    }
+    ```
+
 # 2025-08-12
+- #1522 **BREAKING CHANGE**: Adds the `solana-offchain-auth` authenticator which supports transactions signed using Solana wallets using the "offchain message" functionality. Compatible with Ledger.
+  * The transactions need to be wrapped in the new types defined in the authenticator; support for this in the web3 SDK will come soon, while custom clients should serialize the transaction as a `SolanaOffchainUnsignedTransaction` and, after signing, wrap it into either `SolanaOffchainSpecCompliantMessage` (for Ledger compatiblity) or `SolanaOffchainSimpleMessage` (when signed with a wallet that signs messages as-is, without appending a preamble).
+  * Breaking: adds `TX_GAS_TO_CHARGE_PER_BYTE_JSON_DESERIALIZATION` and `TX_BIAS_JSON_DESERIALIZATION` constants to `constants.toml`, as the transaction is JSON-serialized for human-readable display in the Solana wallet. Initially, they can be set to the same value as the equivalent `BORSH` constants.
+  * Breaking: the `Spec` trait has had `serde::Serialize` and `serde::Deserialize` bounds added. Due to a subtlety of how the rustc compiler handles trait bounds with lifetimes (affecting the `Deserialize<'a>` trait), some types generic on the Spec may cause errors if `Deserialize` is derived for them due to the derive generating a duplicate Deserialize bound. The fix is to specify `#[serde(bound = "S: Spec")]` for the type (with any extra bounds as necessary if there are additional generics).
 - #1491 **BREAKING CHANGE** Dedup endpoint (`/rollup/addresses/{address}/dedup`) now actually returns nonce and not generation number. 
   It is possible to pass query parameter `?select=nonce` or `?select=generation` to explicitly request required uniqueness identifier.
   **Important note** Nonce and Generation numbers are independent uniqueness identifiers even for the same account and can be used in mix.

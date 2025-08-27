@@ -60,7 +60,10 @@ fuzz_target!(
             })
             .collect();
 
-        let config = AccountConfig { accounts };
+        let config = AccountConfig {
+            accounts,
+            enable_custom_account_mappings: true,
+        };
 
         let mut accounts: Accounts<S> = Accounts::default();
         let mut genesis_state = state.to_genesis_state_accessor::<Accounts<S>>(&config);

@@ -158,7 +158,7 @@ where
         let (blobs_sender_channel, _) =
             broadcast::channel(config.sequencer_kind_config.events_channel_size);
 
-        let mut db = PreferredSequencerDb::new(
+        let db = PreferredSequencerDb::new(
             shutdown_sender.clone(),
             config.sequencer_kind_config.is_replica,
             storage_path,
@@ -166,7 +166,7 @@ where
         )
         .await?;
 
-        let (_latest_db_event_id, next_sequence_number, db_cache) = db.initial_data().await?;
+        let (next_sequence_number, db_cache) = db.initial_data().await?;
 
         let mut handles = vec![];
 
@@ -1090,7 +1090,7 @@ pub enum BatchCreationError {
     NoFinalizedSlotAvailable,
     /// The prefered sequencer has reached the stop height and is no longer creating new batches.
     #[error(
-        "The sequencer is halted for a chain upgrade. Please wait for the upgrade to complete. height_to_stop_at: {height_to_stop_at}, current_height: {current_height}" 
+        "The sequencer is halted for a chain upgrade. Please wait for the upgrade to complete. height_to_stop_at: {height_to_stop_at}, current_height: {current_height}"
     )]
     PreferredSequencerAtStopHeight {
         /// The current rollup height of the preferred sequencer.

@@ -1,5 +1,8 @@
-use reth_primitives::revm_primitives::{B256, U256};
-use reth_primitives::{Bloom, Bytes};
+use alloy_consensus::constants::KECCAK_EMPTY;
+use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root};
+use alloy_consensus::TxReceipt;
+use alloy_primitives::Bloom;
+use alloy_primitives::{B256, U256};
 use sov_modules_api::prelude::UnwrapInfallible;
 #[cfg(feature = "native")]
 use sov_modules_api::{AccessoryStateReaderAndWriter, FinalizeHook};
@@ -32,28 +35,26 @@ impl<S: Spec> BlockHooks for Evm<S> {
             B256::from_slice(&pre_state_user_root);
         self.head.set(&parent_block, state).unwrap_infallible();
 
-        let cfg = self.cfg.get(state).unwrap_infallible().unwrap_or_default();
+        let cfg = self.cfg_infallible(state);
 
         let new_pending_env = BlockEnv {
             number: U256::from(parent_block.header.number.wrapping_add(1)),
-            coinbase: cfg.coinbase,
+            beneficiary: cfg.chain_spec.coinbase,
             timestamp: U256::from(
                 parent_block
                     .header
                     .timestamp
-                    .saturating_add(cfg.block_timestamp_delta),
+                    .saturating_add(cfg.chain_spec.block_timestamp_delta),
             ),
             // WARNING: `prevrandao`` value is predictable up to [`DEFERRED_SLOTS_COUNT`] in advance,
             // Users should follow the same best practice that they would on Ethereum and use future randomness.
             // See: https://eips.ethereum.org/EIPS/eip-4399#tips-for-application-developers
             prevrandao: Some(B256::from(pre_state_user_root)),
-            basefee: U256::from(
-                parent_block
-                    .header
-                    .next_block_base_fee(cfg.base_fee_params)
-                    .unwrap(),
-            ),
-            gas_limit: U256::from(cfg.block_gas_limit),
+            basefee: parent_block
+                .header
+                .next_block_base_fee(cfg.chain_spec.base_fee_params)
+                .unwrap(),
+            gas_limit: cfg.chain_spec.block_gas_limit,
             difficulty: Default::default(),
             blob_excess_gas_and_price: None,
         };
@@ -65,7 +66,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
     /// Logic executed at the end of the slot. Here, we generate an authenticated block and set it as the new head of the chain.
     /// It's important to note that the state root hash is not known at this moment, so we postpone setting this field until the begin_rollup_block_hook of the next slot.
     fn end_rollup_block_hook(&mut self, state: &mut StateCheckpoint<S>) {
-        let cfg = self.cfg.get(state).unwrap_infallible().unwrap_or_default();
+        let cfg = self.cfg_infallible(state);
 
         let block_env = self
             .block_env
@@ -82,11 +83,9 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
         let expected_block_number = parent_block.header.number.wrapping_add(1);
         assert_eq!(
-            block_env.number.to::<u64>(),
-            expected_block_number,
+            block_env.number, expected_block_number,
             "Pending head must be set to block {}, but found block {}",
-            expected_block_number,
-            block_env.number
+            expected_block_number, block_env.number
         );
 
         let pending_transactions: Vec<PendingTransaction> =
@@ -100,47 +99,38 @@ impl<S: Spec> BlockHooks for Evm<S> {
             .last()
             .map_or(0u64, |tx| tx.receipt.receipt.cumulative_gas_used);
 
-        let transactions: Vec<&reth_primitives::TransactionSigned> = pending_transactions
+        let transactions: Vec<reth_primitives::TransactionSigned> = pending_transactions
             .iter()
-            .map(|tx| &tx.transaction.signed_transaction)
+            .map(|tx| tx.transaction.signed_transaction.clone())
             .collect();
 
-        let receipts: Vec<reth_primitives::ReceiptWithBloom> = pending_transactions
-            .iter()
-            .map(|tx| tx.receipt.receipt.clone().with_bloom())
-            .collect();
+        let receipts: Vec<reth_primitives::ReceiptWithBloom<&reth_primitives::Receipt>> =
+            pending_transactions
+                .iter()
+                .map(|tx| tx.receipt.receipt.with_bloom_ref())
+                .collect();
+        let receipts_root = calculate_receipt_root(receipts.as_slice());
+        let transactions_root = calculate_transaction_root(transactions.as_slice());
 
-        let header = reth_primitives::Header {
-            parent_hash: parent_block.header.hash(),
-            timestamp: block_env.timestamp.to(),
-            number: block_env.number.to(),
-            ommers_hash: reth_primitives::constants::EMPTY_OMMER_ROOT_HASH,
+        let header = alloy_consensus::Header {
+            parent_hash: parent_block.header.seal(),
+            timestamp: block_env.timestamp.to::<u64>(),
+            number: block_env.number.to::<u64>(),
             beneficiary: parent_block.header.beneficiary,
             // This will be set in finalize_hook or in the next begin_rollup_block_hook
-            state_root: reth_primitives::constants::KECCAK_EMPTY,
-            transactions_root: reth_primitives::proofs::calculate_transaction_root(
-                transactions.as_slice(),
-            ),
-            receipts_root: reth_primitives::proofs::calculate_receipt_root(receipts.as_slice()),
-            withdrawals_root: None,
+            state_root: KECCAK_EMPTY,
+            transactions_root,
+            receipts_root,
             logs_bloom: receipts
                 .iter()
-                .fold(Bloom::ZERO, |bloom, r| bloom | r.bloom),
-            difficulty: U256::ZERO,
-            gas_limit: block_env.gas_limit.to(),
+                .fold(Bloom::ZERO, |bloom, r| bloom | r.bloom()),
+            gas_limit: block_env.gas_limit,
             gas_used,
             mix_hash: block_env.prevrandao.map_or(B256::ZERO, B256::from),
-            nonce: 0,
-            base_fee_per_gas: parent_block.header.next_block_base_fee(cfg.base_fee_params),
-            extra_data: Bytes::default(),
-            // EIP-4844 related fields
-            blob_gas_used: None,
-            excess_blob_gas: None,
-            // EIP-4788 related field
-            // unrelated for rollups
-            parent_beacon_block_root: None,
-            // EIP-7685: TODO: Sovereign does not yet support it: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1131
-            requests_root: None,
+            base_fee_per_gas: parent_block
+                .header
+                .next_block_base_fee(cfg.chain_spec.base_fee_params),
+            ..Default::default()
         };
 
         let block = Block {
@@ -173,7 +163,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
                 self.transaction_hashes
                     .set(
-                        &transaction.signed_transaction.hash,
+                        transaction.signed_transaction.hash(),
                         &tx_index,
                         &mut accessory_state,
                     )
@@ -224,7 +214,7 @@ impl<S: Spec> FinalizeHook for Evm<S> {
         self.blocks.push(&sealed_block, state).unwrap_infallible();
         self.block_hashes
             .set(
-                &sealed_block.header.hash(),
+                &sealed_block.header.seal(),
                 &sealed_block.header.number,
                 state,
             )

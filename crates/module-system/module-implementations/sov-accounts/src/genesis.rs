@@ -23,6 +23,13 @@ pub struct AccountData<Address> {
 pub struct AccountConfig<S: Spec> {
     /// Accounts to initialize the rollup.
     pub accounts: Vec<AccountData<S::Address>>,
+    /// Enable custom `CredentailId` => `Account` mapping.
+    #[serde(default = "default_true")]
+    pub enable_custom_account_mappings: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl<S: Spec> Accounts<S> {
@@ -31,6 +38,16 @@ impl<S: Spec> Accounts<S> {
         config: &<Self as sov_modules_api::Module>::Config,
         state: &mut impl GenesisState<S>,
     ) -> Result<()> {
+        self.enable_custom_account_mappings
+            .set(&config.enable_custom_account_mappings, state)?;
+
+        if !config.enable_custom_account_mappings {
+            if !config.accounts.is_empty() {
+                bail!("Custom account mapping is disabled, but accounts are provided")
+            }
+            return Ok(());
+        }
+
         for acc in &config.accounts {
             if self.accounts.get(&acc.credential_id, state)?.is_some() {
                 bail!("Account already exists")
@@ -70,11 +87,13 @@ mod tests {
                 credential_id,
                 address: credential_id.into(),
             }],
+            enable_custom_account_mappings: false,
         };
 
         let data = r#"
         {
-            "accounts":[{"credential_id":"0x1cd4e2d9d5943e6f3d12589d31feee6bb6c11e7b8cd996a393623e207da72cbf","address":"sov1rn2w9kw4jslx70gjtzwnrlhwdwmvz8nm3nvedgunvglzqp593hk"}]
+            "accounts":[{"credential_id":"0x1cd4e2d9d5943e6f3d12589d31feee6bb6c11e7b8cd996a393623e207da72cbf","address":"sov1rn2w9kw4jslx70gjtzwnrlhwdwmvz8nm3nvedgunvglzqp593hk"}],
+            "enable_custom_account_mappings":false
         }"#;
 
         let parsed_config: AccountConfig<TestSpec> = serde_json::from_str(data).unwrap();

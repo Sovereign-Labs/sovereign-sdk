@@ -1,3 +1,5 @@
+//! Utilities and definitions for the sequencer's REST APIs.
+
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -414,19 +416,17 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
 #[serde_as]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
+#[allow(missing_docs)]
 pub struct Base64Blob {
     #[serde_as(as = "Base64")]
-    blob: Vec<u8>,
+    pub blob: Vec<u8>,
 }
 
+/// The input of the axum accept_tx endpoint.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct AcceptTx {
+    #[allow(missing_docs)]
     pub body: Base64Blob,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct SubmitBatch {
-    pub transactions: Vec<Base64Blob>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -436,13 +436,15 @@ struct TxInfo<DaTransactionId> {
     status: TxStatus<DaTransactionId>,
 }
 
+/// The output of the axum accept_tx endpoint.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
-struct TxInfoWithConfirmation<DaTransactionId, Confirmation> {
-    id: TxHash,
+#[allow(missing_docs)]
+pub struct TxInfoWithConfirmation<DaTransactionId, Confirmation> {
+    pub id: TxHash,
     #[serde(flatten)]
-    confirmation: Confirmation,
+    pub confirmation: Confirmation,
     #[serde(flatten)]
-    status: TxStatus<DaTransactionId>,
+    pub status: TxStatus<DaTransactionId>,
 }
 
 /// An accepted transaction, with the transaction body and confirmation data.

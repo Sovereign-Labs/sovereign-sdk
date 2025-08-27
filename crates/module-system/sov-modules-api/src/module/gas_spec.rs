@@ -65,6 +65,11 @@ pub trait GasSpec:
     /// The bias to charge for deserializing a tx using Borsh
     fn tx_bias_borsh_deserialization() -> Self::Gas;
 
+    /// The cost of deserializing a transaction using JSON
+    fn tx_gas_to_charge_per_byte_json_deserialization() -> Self::Gas;
+    /// The bias to charge for deserializing a tx using JSON
+    fn tx_bias_json_deserialization() -> Self::Gas;
+
     /// The cost of deserializing a proof using Borsh
     fn proof_gas_to_charge_per_byte_borsh_deserialization() -> Self::Gas;
     /// The bias to charge for deserializing a proof using Borsh
@@ -170,6 +175,14 @@ impl<S: Spec> GasSpec for S {
 
     fn tx_bias_borsh_deserialization() -> Self::Gas {
         new_constant!("TX_BIAS_BORSH_DESERIALIZATION", Self::Gas)
+    }
+
+    fn tx_gas_to_charge_per_byte_json_deserialization() -> Self::Gas {
+        new_constant!("TX_GAS_TO_CHARGE_PER_BYTE_JSON_DESERIALIZATION", Self::Gas)
+    }
+
+    fn tx_bias_json_deserialization() -> Self::Gas {
+        new_constant!("TX_BIAS_JSON_DESERIALIZATION", Self::Gas)
     }
 
     fn proof_gas_to_charge_per_byte_borsh_deserialization() -> Self::Gas {

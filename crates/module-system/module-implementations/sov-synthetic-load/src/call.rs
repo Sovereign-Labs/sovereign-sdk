@@ -49,6 +49,8 @@ impl<S: Spec> SyntheticLoad<S> {
         _context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
+        #[cfg(feature = "native")]
+        let start = std::time::Instant::now();
         // Use a ChaCha8-based PRNG seeded with the supplied salt.
         let mut rng = ChaCha8Rng::seed_from_u64(salt);
 
@@ -71,6 +73,9 @@ impl<S: Spec> SyntheticLoad<S> {
             state,
             Event::ReadAndSetManyIndividualValues(number_of_operations),
         );
+
+        #[cfg(feature = "native")]
+        crate::metrics::submit_many_values_metric(start);
         Ok(())
     }
 
@@ -82,6 +87,8 @@ impl<S: Spec> SyntheticLoad<S> {
         _context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
+        #[cfg(feature = "native")]
+        let start = std::time::Instant::now();
         // Read the entire huge vector from the state.
         let mut old_vec: Vec<u64> = self.heavy_state.get(state)?.unwrap_or_default();
 
@@ -104,6 +111,9 @@ impl<S: Spec> SyntheticLoad<S> {
             Event::ReadAndSetHeavyState(number_of_new_values, salt),
         );
 
+        #[cfg(feature = "native")]
+        crate::metrics::submit_state_heavy_metric(start);
+
         Ok(())
     }
 
@@ -113,18 +123,27 @@ impl<S: Spec> SyntheticLoad<S> {
         context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
+        #[cfg(feature = "native")]
+        let start = std::time::Instant::now();
+
         if iterations == u64::MAX {
             anyhow::bail!("u64 is too many operations, even for heavy load");
         }
         let mut current_hash =
             <S::CryptoSpec as CryptoSpec>::Hasher::digest(context.sender().as_ref());
+
         for _ in 0..iterations {
             current_hash = <S::CryptoSpec as CryptoSpec>::Hasher::digest(&current_hash[..]);
         }
+
         self.emit_event(
             state,
             Event::RanCPUHeavyOperation(iterations, current_hash.to_vec()),
         );
+
+        #[cfg(feature = "native")]
+        crate::metrics::submit_cpu_heavy_metric(start);
+
         Ok(())
     }
 }

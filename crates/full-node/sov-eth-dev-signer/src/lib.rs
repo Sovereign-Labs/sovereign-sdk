@@ -3,132 +3,101 @@
 
 use std::collections::HashMap;
 
-use reth_primitives::{
-    sign_message, Transaction, TransactionSigned, TxEip1559, TxEip2930, TxEip4844, TxLegacy,
-};
-use reth_rpc_types::TypedTransactionRequest;
+use alloy_consensus::SignableTransaction;
+use alloy_consensus::{TxEip4844Variant, TypedTransaction};
+use reth_primitives::{sign_message, Transaction, TransactionSigned};
 use revm::primitives::{Address, B256};
 use secp256k1::{PublicKey, SecretKey};
 
 /// Ethereum transaction signer.
 #[derive(Clone)]
-pub struct DevSigner {
-    signers: HashMap<Address, SecretKey>,
-}
+pub struct Signer(SecretKey);
 
 /// Signature error.
 #[derive(Debug, thiserror::Error)]
-pub enum SignError {
+pub enum Error {
     /// Error occurred while trying to sign data.
     #[error("Could not sign")]
     CouldNotSign,
     /// Signer for a requested account is not found.
     #[error("Unknown account")]
     NoAccount,
-    /// TypedData has an invalid format.
-    #[error("Given typed data is not valid")]
-    TypedData,
     /// Invalid transaction request in `sign_transaction`.
     #[error("invalid transaction request")]
     InvalidTransactionRequest,
-    /// No chain id
-    #[error("No chain id")]
-    NoChainId,
 }
 
-impl DevSigner {
-    /// Creates a new DevSigner.
-    pub fn new(secret_keys: Vec<SecretKey>) -> Self {
-        let mut signers = HashMap::with_capacity(secret_keys.len());
+impl Signer {
+    /// Creates a new Signer.
+    pub fn new(key: SecretKey) -> Self {
+        Self(key)
+    }
 
-        for sk in secret_keys {
-            let public_key = PublicKey::from_secret_key(secp256k1::SECP256K1, &sk);
-            let address = reth_primitives::public_key_to_address(public_key);
+    /// Public key
+    pub fn public_key(&self) -> PublicKey {
+        PublicKey::from_secret_key(secp256k1::SECP256K1, &self.0)
+    }
 
-            signers.insert(address, sk);
-        }
-
-        Self { signers }
+    /// Address
+    pub fn address(&self) -> Address {
+        reth_primitives::public_key_to_address(self.public_key())
     }
 
     /// Signs an ethereum transaction.
+    pub fn sign_transaction(&self, request: TypedTransaction) -> Result<TransactionSigned, Error> {
+        let transaction =
+            to_primitive_transaction(request).ok_or(Error::InvalidTransactionRequest)?;
+        let tx_signature_hash = transaction.signature_hash();
+        let sk = B256::from_slice(self.0.as_ref());
+        let signature = sign_message(sk, tx_signature_hash).map_err(|_| Error::CouldNotSign)?;
+
+        Ok(TransactionSigned::new_unhashed(transaction, signature))
+    }
+}
+
+/// Ethereum transaction signer supporting multiple accounts.
+#[derive(Clone)]
+pub struct Signers(HashMap<Address, Signer>);
+
+impl Signers {
+    /// Creates a new Signer.
+    pub fn new(keys: impl IntoIterator<Item = SecretKey>) -> Self {
+        let signers = keys
+            .into_iter()
+            .map(|sk| {
+                let signer = Signer::new(sk);
+                (signer.address(), signer)
+            })
+            .collect();
+        Self(signers)
+    }
+
+    /// Signs an ethereum transaction with a provided account.
     pub fn sign_transaction(
         &self,
-        request: TypedTransactionRequest,
-        address: Address,
-    ) -> Result<TransactionSigned, SignError> {
-        let transaction =
-            to_primitive_transaction(request).ok_or(SignError::InvalidTransactionRequest)?;
-        let tx_signature_hash = transaction.signature_hash();
-        let signer = self.signers.get(&address).ok_or(SignError::NoAccount)?;
-
-        let signature = sign_message(B256::from_slice(signer.as_ref()), tx_signature_hash)
-            .map_err(|_| SignError::CouldNotSign)?;
-
-        Ok(TransactionSigned::from_transaction_and_signature(
-            transaction,
-            signature,
-        ))
+        request: TypedTransaction,
+        address: &Address,
+    ) -> Result<TransactionSigned, Error> {
+        let signer = self.0.get(address).ok_or(Error::NoAccount)?;
+        signer.sign_transaction(request)
     }
 
     /// List of signers.
-    pub fn signers(&self) -> Vec<Address> {
-        self.signers.keys().copied().collect()
+    pub fn addresses(&self) -> Vec<Address> {
+        self.0.keys().cloned().collect()
     }
 }
 
 /// Converts a typed transaction request into a primitive transaction.
-///
-/// Returns `None` if any of the following are true:
-/// - `nonce` is greater than [`u64::MAX`]
-/// - `gas_limit` is greater than [`u64::MAX`]
-/// - `value` is greater than [`u128::MAX`]
-///   Copy from [`reth_rpc_types_compat::transaction::to_primitive_transaction`]
-fn to_primitive_transaction(tx_request: TypedTransactionRequest) -> Option<Transaction> {
+fn to_primitive_transaction(tx_request: TypedTransaction) -> Option<Transaction> {
     Some(match tx_request {
-        TypedTransactionRequest::Legacy(tx) => Transaction::Legacy(TxLegacy {
-            chain_id: tx.chain_id,
-            nonce: tx.nonce,
-            gas_price: tx.gas_price.to(),
-            gas_limit: tx.gas_limit.try_into().ok()?,
-            to: tx.kind,
-            value: tx.value,
-            input: tx.input,
-        }),
-        TypedTransactionRequest::EIP2930(tx) => Transaction::Eip2930(TxEip2930 {
-            chain_id: tx.chain_id,
-            nonce: tx.nonce,
-            gas_price: tx.gas_price.to(),
-            gas_limit: tx.gas_limit.try_into().ok()?,
-            to: tx.kind,
-            value: tx.value,
-            input: tx.input,
-            access_list: tx.access_list,
-        }),
-        TypedTransactionRequest::EIP1559(tx) => Transaction::Eip1559(TxEip1559 {
-            chain_id: tx.chain_id,
-            nonce: tx.nonce,
-            max_fee_per_gas: tx.max_fee_per_gas.to(),
-            gas_limit: tx.gas_limit.try_into().ok()?,
-            to: tx.kind,
-            value: tx.value,
-            input: tx.input,
-            access_list: tx.access_list,
-            max_priority_fee_per_gas: tx.max_priority_fee_per_gas.to(),
-        }),
-        TypedTransactionRequest::EIP4844(tx) => Transaction::Eip4844(TxEip4844 {
-            chain_id: tx.chain_id,
-            nonce: tx.nonce,
-            gas_limit: tx.gas_limit.to(),
-            max_fee_per_gas: tx.max_fee_per_gas.to(),
-            max_priority_fee_per_gas: tx.max_priority_fee_per_gas.to(),
-            placeholder: None,
-            to: tx.to,
-            value: tx.value,
-            access_list: tx.access_list,
-            blob_versioned_hashes: tx.blob_versioned_hashes,
-            max_fee_per_blob_gas: tx.max_fee_per_blob_gas.to(),
-            input: tx.input,
-        }),
+        TypedTransaction::Legacy(tx) => Transaction::Legacy(tx),
+        TypedTransaction::Eip2930(tx) => Transaction::Eip2930(tx),
+        TypedTransaction::Eip1559(tx) => Transaction::Eip1559(tx),
+        TypedTransaction::Eip4844(TxEip4844Variant::TxEip4844(tx)) => Transaction::Eip4844(tx),
+        TypedTransaction::Eip4844(TxEip4844Variant::TxEip4844WithSidecar(tx)) => {
+            Transaction::Eip4844(tx.into())
+        }
+        TypedTransaction::Eip7702(tx) => Transaction::Eip7702(tx),
     })
 }

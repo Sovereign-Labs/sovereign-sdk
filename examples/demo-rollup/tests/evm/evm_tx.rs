@@ -126,7 +126,9 @@ async fn execute_evm_tests(
     evm_test_helper::set_value_check(client, contract_address, set_arg).await?;
 
     // This should just pass without an error
-    client.set_value_call(contract_address, set_arg).await?;
+    client
+        .set_value_call_and_estimate_gas(contract_address, set_arg)
+        .await?;
 
     // This call should fail because function does not exist
     let failing_call = client.failing_call(contract_address).await;

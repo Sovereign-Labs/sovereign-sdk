@@ -189,7 +189,10 @@ impl<S: Spec> MinimalZkGenesisConfig<S> {
                     gas_token_name,
                     placeholder,
                 ),
-                accounts: AccountConfig { accounts: vec![] },
+                accounts: AccountConfig {
+                    accounts: vec![],
+                    enable_custom_account_mappings: true,
+                },
                 uniqueness: (),
                 blob_storage: (),
                 chain_state: BasicGenesisConfig::chain_state(

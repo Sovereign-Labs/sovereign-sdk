@@ -39,6 +39,7 @@ where
     fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
         Ok(Self {
             accounts: u.arbitrary_iter()?.collect::<Result<_, _>>()?,
+            enable_custom_account_mappings: u.arbitrary()?,
         })
     }
 }

@@ -206,6 +206,11 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
+name = "sov-eth-dev-generator"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
 name = "sov-modules-api"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
@@ -382,6 +387,11 @@ license-files = []
 
 [[licenses.clarify]]
 name = "full-node-configs"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-solana-offchain-auth"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 

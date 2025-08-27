@@ -258,6 +258,7 @@ pub struct ProvisionalSequencerOutcome<S: Spec> {
 
 /// The reason a transaction was rejected by the sequencer due to insufficient funds.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
+#[serde(bound = "S: Spec")]
 pub enum OutOfFundsReason<S: Spec> {
     /// The gas calculation overflowed.
     #[error("Overflow: Unable to calculate gas value for max_tx_check_costs")]

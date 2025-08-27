@@ -173,6 +173,7 @@ impl<S: Spec> MinimalOperatorGenesisConfig<S> {
                             })
                             .collect()
                     },
+                    enable_custom_account_mappings: true,
                 },
                 uniqueness: (),
                 blob_storage: (),

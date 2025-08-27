@@ -24,7 +24,7 @@ sov-sequencer = { workspace = true }
 sov-state = { workspace = true, features = ["native"] }
 sov-test-utils = { workspace = true }
 sov-value-setter = { workspace = true, features = ["native"] }
-secp256k1 = { workspace = true }
+secp256k1 = { workspace = true, features = ["rand"] }
 
 base64 = { workspace = true }
 futures = { workspace = true }
@@ -58,6 +58,7 @@ sha3 = { workspace = true }
 ruint = { workspace = true }
 strum = { workspace = true }
 tracing = { workspace = true, optional = true }
+workspace-hack = { workspace = true }
 
 [features]
 default = []

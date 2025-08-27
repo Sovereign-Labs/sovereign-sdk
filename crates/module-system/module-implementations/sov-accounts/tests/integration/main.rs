@@ -44,6 +44,19 @@ fn setup() -> (TestData<S>, TestRunner<RT, S>) {
     )
 }
 
+fn setup_with_disable_custom_account_mappings() -> (TestUser<S>, TestRunner<RT, S>) {
+    let mut genesis_config = HighLevelOptimisticGenesisConfig::generate();
+    let user = TestUser::generate_with_default_balance();
+    genesis_config = genesis_config.add_accounts(vec![user.clone()]);
+
+    let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    genesis.accounts.enable_custom_account_mappings = false;
+    (
+        user,
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default()),
+    )
+}
+
 #[test]
 fn test_config_account() {
     let (
@@ -298,5 +311,25 @@ fn test_resolve_with_different_default_address() {
                 .unwrap(),
             account_1.address()
         );
+    });
+}
+
+#[test]
+fn test_disable_custom_account_mappings() {
+    let (user, mut runner) = setup_with_disable_custom_account_mappings();
+
+    let new_credential = TestPrivateKey::generate().pub_key().credential_id();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: user.create_plain_message::<RT, Accounts<S>>(CallMessage::InsertCredentialId(
+            new_credential,
+        )),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Reverted(contents) => {
+                let Error::ModuleError(err) = contents.reason;
+                assert_eq!(err.to_string(), "Custom account mappings are disabled");
+            }
+            _ => panic!("Expected reverted transaction"),
+        }),
     });
 }

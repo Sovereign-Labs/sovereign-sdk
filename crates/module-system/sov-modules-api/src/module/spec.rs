@@ -3,6 +3,7 @@
 use core::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
 use sov_rollup_interface::crypto::{CredentialId, Signature};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::optimistic::Attestation;
@@ -27,6 +28,8 @@ use crate::{PublicKeyExt, SignatureExt};
 pub trait Spec:
     BorshDeserialize
     + BorshSerialize
+    + Serialize
+    + for<'a> Deserialize<'a>
     + Default
     + Debug
     + Clone

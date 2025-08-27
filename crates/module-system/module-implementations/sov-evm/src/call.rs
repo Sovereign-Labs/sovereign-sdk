@@ -1,7 +1,6 @@
-use reth_primitives::revm_primitives::{
-    Address, BlockEnv, CfgEnv, CfgEnvWithHandlerCfg, EVMError, HandlerCfg,
-};
+use alloy_primitives::Address;
 use reth_primitives::TransactionSigned;
+use revm::context::result::EVMError;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{Context, Spec, TxState};
@@ -10,7 +9,8 @@ use crate::conversions::convert_to_transaction_signed;
 use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};
 use crate::evm::primitive_types::{Receipt, TransactionSignedAndRecovered};
-use crate::evm::{EvmChainConfig, RlpEvmTransaction};
+use crate::evm::RlpEvmTransaction;
+use crate::executor::get_cfg_env;
 use crate::{Evm, PendingTransaction, SpecId};
 
 /// EVM call message.
@@ -50,11 +50,14 @@ where
             .get(state)?
             .expect("Pending block must be set");
 
-        let cfg = self.cfg.get(state)?.expect("Evm config must be set");
-        let cfg_env = get_cfg_env_with_handler(&block_env, cfg, None);
+        let cfg = self.cfg(state)?.expect("Evm config must be set");
+        let cfg_env = get_cfg_env(&block_env, cfg, None);
+
+        let sov_nonce = self.get_sov_nonce(signer, state)?;
 
         let evm_db: EvmDb<_, S> = self.get_db(state);
-        let result = executor::execute_tx(evm_db, &block_env, &evm_tx, signer, cfg_env);
+
+        let result = executor::execute_tx(sov_nonce, evm_db, &block_env, &evm_tx, signer, cfg_env);
 
         let previous_transaction = self.pending_transactions.last(state)?;
         let previous_transaction_cumulative_gas_used = previous_transaction
@@ -113,7 +116,7 @@ where
             transaction: TransactionSignedAndRecovered {
                 signer,
                 signed_transaction: evm_tx,
-                block_number: block_env.number.to(),
+                block_number: block_env.number.to::<u64>(),
             },
             receipt,
         };
@@ -123,21 +126,22 @@ where
 
         Ok(())
     }
-}
 
-/// builds CfgEnvWithHandlerCfg
-/// Returns correct config depending on spec for given block number
-// Copies context-dependent values from template_cfg or default if not provided
-pub(crate) fn get_cfg_env_with_handler(
-    block_env: &BlockEnv,
-    cfg: EvmChainConfig,
-    template_cfg: Option<CfgEnv>,
-) -> CfgEnvWithHandlerCfg {
-    let mut cfg_env = template_cfg.unwrap_or_default();
-    cfg_env.chain_id = cfg.chain_id;
-    cfg_env.limit_contract_code_size = cfg.limit_contract_code_size;
-    let spec_id = get_spec_id(cfg.spec, block_env.number.to());
-    CfgEnvWithHandlerCfg::new(cfg_env, HandlerCfg { spec_id })
+    // The nonce check is already performed by the stf-blueprint during transaction preprocessing,
+    // so the EVM does not need to perform any additional nonce validation.
+    //
+    // However, the account nonce is still used by the EVM in the `CREATE` opcode when generating
+    // a contract address: `new_address = keccak256(sender, nonce)`.
+    // This means we must ensure a unique value is provided to satisfy the opcode.
+    // Here, we use the nonce tracked by the EVM, but keep in mind that `eth_getTransactionCount`
+    // will return the nonce tracked by the sov-uniqueness module.
+    fn get_sov_nonce(&self, address: Address, state: &mut impl TxState<S>) -> anyhow::Result<u64> {
+        Ok(self
+            .accounts
+            .get(&address, state)?
+            .map(|acc| acc.nonce)
+            .unwrap_or_default())
+    }
 }
 
 /// Get spec id for a given block number
