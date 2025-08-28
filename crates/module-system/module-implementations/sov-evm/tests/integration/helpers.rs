@@ -93,7 +93,7 @@ pub(crate) fn create_transfer_tx(
         nonce,
         ..Default::default()
     };
-    create_evm_tx(from, tx)
+    create_tx(from, tx)
 }
 
 pub(crate) fn create_deploy_tx(
@@ -106,7 +106,7 @@ pub(crate) fn create_deploy_tx(
         nonce,
         ..Default::default()
     };
-    create_evm_tx(account, tx)
+    create_tx(account, tx)
 }
 
 pub(crate) fn create_set_arg_tx(
@@ -122,10 +122,10 @@ pub(crate) fn create_set_arg_tx(
         nonce,
         ..Default::default()
     };
-    create_evm_tx(account, tx)
+    create_tx(account, tx)
 }
 
-fn create_evm_tx(account: &EvmAccount, tx: TxEip1559) -> TransactionType<RT, S> {
+fn create_tx(account: &EvmAccount, tx: TxEip1559) -> TransactionType<RT, S> {
     let tx_with_defaults = TxEip1559 {
         gas_limit: 1_000_000,
         max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,

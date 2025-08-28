@@ -109,10 +109,10 @@ fn test_account_nonce() {
     let value = 1;
     let transfer_tx = create_transfer_tx(0, &from, &to, value);
 
+    let evm = Evm::<S>::default();
     runner.execute_transaction(TransactionTestCase {
         input: transfer_tx,
         assert: Box::new(move |_ctx, state| {
-            let evm = Evm::<S>::default();
             let mut db = evm.get_db(state);
             let from_acc = db.basic(from_addr).unwrap().unwrap();
             assert_eq!(from_acc.nonce, 1);
@@ -120,10 +120,11 @@ fn test_account_nonce() {
     });
 
     let transfer_tx = create_transfer_tx(1, &from, &to, value);
+
+    let evm = Evm::<S>::default();
     runner.execute_transaction(TransactionTestCase {
         input: transfer_tx,
         assert: Box::new(move |_ctx, state| {
-            let evm = Evm::<S>::default();
             let mut db = evm.get_db(state);
             let from_acc = db.basic(from_addr).unwrap().unwrap();
             assert_eq!(from_acc.nonce, 2);
