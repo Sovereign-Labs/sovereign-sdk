@@ -19,7 +19,6 @@ fn test_simple_transfer() {
         assert: Box::new(move |ctx, state| {
             let mut db = evm.get_db(state);
             let from_acc = db.basic(from.address()).unwrap().unwrap();
-
             let to_acc = db.basic(to.address()).unwrap().unwrap();
             // The only balance changes should be from the trasfer itself and not from gas as it's disabled in SovEvm
             assert_eq!(
