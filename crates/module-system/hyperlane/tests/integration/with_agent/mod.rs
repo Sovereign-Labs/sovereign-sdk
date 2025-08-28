@@ -251,13 +251,15 @@ async fn test_process_message_from_evm_counterparty() {
         .with_evm_counterparty()
         .start()
         .await;
-    println!("STARTED");
+    tracing::info!("Hyperlane stack has started");
 
     // wait for first finalized block
+    // TODO: Should we subscribe to finalized slots then?
     let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS {
         slot_subscription.next().await.unwrap().unwrap();
     }
+    tracing::info!("Finalization slots have been reached");
 
     // register prover as a recipient
     let register_call = TestRuntimeCall::TestRecipient(test_recipient::CallMessage::Register {
@@ -266,7 +268,6 @@ async fn test_process_message_from_evm_counterparty() {
     });
     let register_tx = encode_call(prover.user_info.private_key(), &register_call);
     submit_tx(rollup.api_client(), register_tx).await;
-    println!("REGISTERED");
 
     // dispatch test message to prover from evm
     let evm_dispatch = hyperlane
@@ -275,7 +276,6 @@ async fn test_process_message_from_evm_counterparty() {
     println!("DISPATCHED: {:?}", evm_dispatch);
 
     let sender_addr = parse_eth_addr(ANVIL_ACCOUNTS[0].0);
-    println!("SENDER: {}", sender_addr);
 
     assert_eq!(evm_dispatch.message.origin_domain, EVM_DOMAIN);
     assert_eq!(
@@ -287,7 +287,6 @@ async fn test_process_message_from_evm_counterparty() {
 
     // finalize the block with dispatched message
     hyperlane.mine_next_block_on_counterparty().await;
-    println!("HERE");
 
     // look for `process` event
     for i in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
@@ -318,8 +317,6 @@ async fn test_process_message_from_evm_counterparty() {
             );
 
             rollup.shutdown().await.unwrap();
-            hyperlane.print_stdout().await;
-            println!("SUCCESSS!");
             return;
         }
     }

@@ -763,10 +763,10 @@ async fn start_relayer(
         "--log.format",
         "pretty",
     ])
-        // Options:
-        // 1. INFO "Agent relayer starting up" - before settings, so any error in settings is going to be missed
-        // 2. INFO "Creating db" - settings have been parsed, but won't catch failure of db or sysargs
-        // 3. DEBUG "Relayer startup duration measurement" - "fully initialized": printed after initialization is completed, but require debug.
+    // Options:
+    // 1. INFO "Agent relayer starting up" - before settings, so any error in settings is going to be missed
+    // 2. INFO "Creating db" - settings have been parsed, but won't catch failure of db or sysargs
+    // 3. DEBUG "Relayer startup duration measurement" - "fully initialized": printed after initialization is completed, but require debug.
     .with_cmd_ready_condition(CmdWaitFor::message_on_stdout("fully initialized"));
 
     container.exec(cmd).await.expect("starting relayer failed")
@@ -1117,54 +1117,81 @@ async fn deploy_hyperlane(rollup_port: u16, anvil_port: u16) -> HexHash {
         .await
         .expect("Failed to start hyperlane-cli");
 
-    // Give container time to run
-    // tokio::time::sleep(std::time::Duration::from_secs(3)).await;
     let mut is_running = container
         .is_running()
         .await
         .expect("failed to get running status");
-    for _ in 0..30 {
+    for _ in 0..300 {
         is_running = container.is_running().await.unwrap();
         if !is_running {
             break;
         }
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-    assert!(!is_running, "container is running for too long");
+    assert!(!is_running, "hyperlane deploy hasn't completed on time");
     let container_exit_code = container
         .exit_code()
         .await
-        .expect("Failed to execute deploy");
-    println!("CONTAINER EXIT CODE: {:?}", container_exit_code);
+        .expect("Failed to get hyperlane deploy exit code");
 
     let container_stdout = container
         .stdout_to_vec()
         .await
         .expect("FAILED TO GET STDOUT");
-    let container_stderr = container
-        .stderr_to_vec()
-        .await
-        .expect("FAILED TO GET STDERR");
-    println!(
-        "CONTAINER STDOUT:\n{}",
-        String::from_utf8_lossy(&container_stdout)
-    );
-    println!(
-        "CONTAINER STDERR:\n{}",
-        String::from_utf8_lossy(&container_stderr)
-    );
 
-    // Read the addresses.yaml file that was created by the container
-    let addresses_file = ethtest_dir.join("addresses.yaml");
-    let addresses_content =
-        fs::read_to_string(&addresses_file).expect("Failed to read addresses.yaml from host");
+    if container_exit_code != Some(0) {
+        let container_stderr = container
+            .stderr_to_vec()
+            .await
+            .expect("FAILED TO GET STDERR");
+        tracing::error!("Failed to deploy hyperlane");
+        println!(
+            "CONTAINER STDERR:\n{}",
+            String::from_utf8_lossy(&container_stderr)
+        );
+        println!(
+            "CONTAINER STDOUT:\n{}",
+            String::from_utf8_lossy(&container_stdout)
+        );
+        panic!("Failed to deploy hyperlane");
+    }
 
-    // Parse testRecipient address from the yaml file
-    let test_recipient = addresses_content
+    let pretty_stdout = String::from_utf8_lossy(&container_stdout);
+    println!("CONTAINER STDOUT:\n{}", pretty_stdout);
+
+    // Parse testRecipient from the output, which should be something like that:
+    // ✅ Core contract deployments complete:
+    //
+    //     staticMerkleRootMultisigIsmFactory: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+    //     staticMessageIdMultisigIsmFactory: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+    //     staticAggregationIsmFactory: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
+    //     staticAggregationHookFactory: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
+    //     domainRoutingIsmFactory: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
+    //     staticMerkleRootWeightedMultisigIsmFactory: "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707"
+    //     staticMessageIdWeightedMultisigIsmFactory: "0x0165878A594ca255338adfa4d48449f69242Eb8F"
+    //     proxyAdmin: "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853"
+    //     mailbox: "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318"
+    //     interchainAccountRouter: "0x9A676e781A523b5d0C0e43731313A708CB607508"
+    //     validatorAnnounce: "0x0B306BF915C4d645ff596e518fAf3F9669b97016"
+    //     testRecipient: "0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1"
+    //     merkleTreeHook: "0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e"
+    let test_recipient = pretty_stdout
         .lines()
+        .skip_while(|line | !line.contains("Core contract deployments complete:"))
         .find(|line| line.contains("testRecipient"))
-        .and_then(|line| line.split('"').nth(1))
-        .expect("Failed to find testRecipient in addresses.yaml");
+        .and_then(|line| {
+            println!("LINE FOUND, PARSING: {}", line);
+            // Format is: testRecipient: "0x..."
+            // Split by quotes and take the content between them
+            // let parts: Vec<&str> = line.split('"').collect();
+            // if parts.len() >= 2 {
+            //     Some(parts[1])
+            // } else {
+            //     None
+            // }
+            line.split('"').nth(1)
+        })
+        .expect("Failed to find 'testRecipient' in stdout");
 
     parse_eth_addr(test_recipient)
 }
