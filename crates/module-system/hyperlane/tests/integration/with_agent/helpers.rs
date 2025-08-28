@@ -758,9 +758,16 @@ async fn start_relayer(
         // port for metrics
         "--metrics-port",
         RELAYER_METRICS_PORT.to_string().as_str(),
+        "--log.level",
+        "debug",
+        "--log.format",
+        "pretty",
     ])
-    // TODO: Use better message, when it actually started.
-    .with_cmd_ready_condition(CmdWaitFor::message_on_stdout("Agent relayer starting up"));
+        // Options:
+        // 1. INFO "Agent relayer starting up" - before settings, so any error in settings is going to be missed
+        // 2. INFO "Creating db" - settings have been parsed, but won't catch failure of db or sysargs
+        // 3. DEBUG "Relayer startup duration measurement" - "fully initialized": printed after initialization is completed, but require debug.
+    .with_cmd_ready_condition(CmdWaitFor::message_on_stdout("fully initialized"));
 
     container.exec(cmd).await.expect("starting relayer failed")
 }
