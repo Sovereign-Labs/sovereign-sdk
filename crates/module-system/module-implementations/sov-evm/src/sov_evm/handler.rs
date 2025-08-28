@@ -52,6 +52,8 @@ where
 
         // Touch account so we know it is changed.
         caller_account.mark_touch();
+
+        // Bump the nonce for calls. Nonce for CREATE will be bumped in `handle_create`.
         if tx.kind().is_call() {
             // Nonce is already checked
             caller_account.info.nonce = caller_account.info.nonce.saturating_add(1);
