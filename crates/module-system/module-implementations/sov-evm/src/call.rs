@@ -98,9 +98,8 @@ where
                     error = ?err,
                     "EVM transaction has been reverted"
                 );
-
                 return match err {
-                    EVMError::Transaction(_e) => {
+                    EVMError::Transaction(_) => {
                         // This is a transactional error, so we can skip it without doing anything.
                         Ok(())
                     }

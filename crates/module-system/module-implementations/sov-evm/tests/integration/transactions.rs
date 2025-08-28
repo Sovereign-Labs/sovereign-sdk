@@ -143,11 +143,11 @@ fn test_deploy_many_contracts() {
     {
         let create_contract_tx_1 = create_deploy_tx(0, &contract, &account);
         let set_value_tx_1 = create_set_arg_tx(5, 1, &contract, contract_addr_1, &account);
-        let set_value_tx_11 = create_set_arg_tx(7, 2, &contract, contract_addr_1, &account);
+        let set_value_tx_12 = create_set_arg_tx(7, 2, &contract, contract_addr_1, &account);
 
         let evm = Evm::<S>::default();
         runner.execute_batch(BatchTestCase {
-            input: vec![create_contract_tx_1, set_value_tx_1, set_value_tx_11].into(),
+            input: vec![create_contract_tx_1, set_value_tx_1, set_value_tx_12].into(),
             assert: Box::new(move |_ctx, state| {
                 let storage_value_1 = evm
                     .get_storage(&contract_addr_1, &U256::ZERO, state)
@@ -169,14 +169,14 @@ fn test_deploy_many_contracts() {
         runner.execute_batch(BatchTestCase {
             input: vec![create_contract_tx_2, set_value_tx_2].into(),
             assert: Box::new(move |_ctx, state| {
-                // Contract have different addresses.
+                // The two contracts have different addresses.
                 assert_ne!(contract_addr_1, contract_addr_2);
 
                 let mut db = evm.get_db(state);
                 let contract_1_account = db.basic(contract_addr_1).unwrap().unwrap();
                 let contract_2_account = db.basic(contract_addr_2).unwrap().unwrap();
 
-                // The contracts have the same code.
+                // The two contracts have the same code.
                 assert_eq!(contract_1_account.code_hash, contract_2_account.code_hash);
 
                 let storage_value_1 = evm
