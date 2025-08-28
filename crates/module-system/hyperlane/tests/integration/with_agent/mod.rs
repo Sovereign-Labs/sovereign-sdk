@@ -236,7 +236,7 @@ async fn test_multisig_ism() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_process_message_from_evm_counterparty() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
+    // sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();

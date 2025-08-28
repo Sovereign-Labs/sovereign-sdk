@@ -575,7 +575,6 @@ impl Hyperlane {
         // on `ExecResult`s, so this would hang infinitly waiting
         // for `exec`s to exit. Instead we give them at most 1s of
         // printing time each.
-        println!("-----");
         println!("VALIDATORS: {}", self.validators.len());
         let has_relayer = self.relayer.is_some();
         for (n, val) in self
@@ -586,18 +585,11 @@ impl Hyperlane {
         {
             if n == 0 && has_relayer {
                 println!("RELAYER\n");
-                let exit_code = val.exit_code().await.unwrap();
-                println!("EXIT CODE: {:?}", exit_code);
-                // if exit_code != Some(0) {
-                //     let stdout = val.stdout_to_vec().await.unwrap();
-                //     let stderr = val.stderr_to_vec().await.unwrap();
-                //     println!("STDOUT:\n {}", String::from_utf8_lossy(&stdout));
-                //     println!("STDERR:\n {}", String::from_utf8_lossy(&stderr));
-                //     println!("-=-=-=-=-=-=-");
-                // }
             } else {
                 println!("\n\nVALIDATOR {n}\n");
             }
+            let exit_code = val.exit_code().await.unwrap();
+            println!("EXIT CODE: {exit_code:?}");
             let _ = timeout(Duration::from_secs(3), async {
                 println!("PRINTING STDOUT:");
                 let mut stdout = val.stdout().lines();
@@ -606,7 +598,6 @@ impl Hyperlane {
                 }
             })
             .await;
-            println!("~~~~~~~~~~~~~");
             let _ = timeout(Duration::from_secs(3), async {
                 println!("PRINTING STDERR:");
                 let mut stderr = val.stderr().lines();
@@ -616,7 +607,6 @@ impl Hyperlane {
             })
             .await;
         }
-        println!("=====");
     }
 }
 
@@ -996,31 +986,31 @@ async fn cast_call(
     ]
     .concat();
 
+    tracing::info!(?command, "executing cast call");
     let mut result = container
         .exec(ExecCommand::new(command.clone()))
         .await
         .unwrap();
 
     let mut exit_code = result.exit_code().await.expect("Failed to get exit code");
-    for _ in 0..30 {
+    for _ in 0..300 {
         exit_code = result.exit_code().await.expect("Failed to get exit code");
         if exit_code.is_some() {
             break;
         }
-        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
+    tracing::info!(?command, ?exit_code, "executed cast call");
     let output = result.stdout_to_vec().await.unwrap();
     if exit_code != Some(0) {
         let std_err = result.stderr_to_vec().await.unwrap();
-        println!("STDOUT:\n {}", String::from_utf8_lossy(&output));
-        println!("STDERR:\n {}", String::from_utf8_lossy(&std_err));
-        panic!("Failed to cast call");
+        panic!(
+            "Failed to cast call.\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output),
+            String::from_utf8_lossy(&std_err),
+        );
     }
-
-    // print the output to help debugging, it anyway only shows if test fails
-    println!("executing {command:?}");
-    println!("{}", String::from_utf8_lossy(&output));
 
     #[derive(Debug, Deserialize)]
     struct CallOutput {
