@@ -282,12 +282,16 @@ impl HyperlaneBuilder {
         // because they will try to reach out to it immediately.
         // same goes for rollup, but we assume its runnig knowing its port.
         let (anvil, anvil_port, evm_recipient) = if self.with_evm {
-            let anvil = start_evm().await;
+            let start_anvil_time = std::time::Instant::now();
+            let anvil = start_anvil().await;
             let anvil_port = anvil
                 .get_host_port_ipv4(ANVIL_PORT)
                 .await
                 .expect("Failed to get anvil port");
+            tracing::info!(port = anvil_port, time = ?start_anvil_time.elapsed(), "Anvil has been started");
+            let hyperlane_deploy_start = std::time::Instant::now();
             let evm_recipient = deploy_hyperlane(rollup_port, anvil_port).await;
+            tracing::info!(time = ?hyperlane_deploy_start.elapsed(), "Hyperlane deployed");
             (Some(anvil), anvil_port, Some(evm_recipient))
         } else {
             // Does not matter, default port going to do
@@ -941,6 +945,7 @@ pub async fn get_docker_gateway_ip() -> String {
 
 // parses eth addr 0x(40 chars hex) into HexHash
 pub fn parse_eth_addr(addr: &str) -> HexHash {
+    // TODO: use sov-address with proper feature?
     let address: EthAddress = addr.trim().parse().unwrap();
     let mut res = [0; 32];
     res[12..].copy_from_slice(&address.0);
@@ -1040,7 +1045,7 @@ fn domain_from_hexhash(hash: HexHash) -> u32 {
     u32::from_be_bytes(hash.0[28..].try_into().unwrap())
 }
 
-async fn start_evm() -> ContainerAsync<AnvilNode> {
+async fn start_anvil() -> ContainerAsync<AnvilNode> {
     // Hard code tag, so we don't accidental breakages
     AnvilNode::default()
         .with_tag("v1.1.0")
@@ -1138,26 +1143,19 @@ async fn deploy_hyperlane(rollup_port: u16, anvil_port: u16) -> HexHash {
         .stdout_to_vec()
         .await
         .expect("FAILED TO GET STDOUT");
+    let pretty_stdout = String::from_utf8_lossy(&container_stdout);
 
     if container_exit_code != Some(0) {
         let container_stderr = container
             .stderr_to_vec()
             .await
             .expect("FAILED TO GET STDERR");
-        tracing::error!("Failed to deploy hyperlane");
-        println!(
-            "CONTAINER STDERR:\n{}",
+        panic!(
+            "Failed to deploy hyperlane: \nstdout:\n {} \nstderr: {}",
+            pretty_stdout,
             String::from_utf8_lossy(&container_stderr)
         );
-        println!(
-            "CONTAINER STDOUT:\n{}",
-            String::from_utf8_lossy(&container_stdout)
-        );
-        panic!("Failed to deploy hyperlane");
     }
-
-    let pretty_stdout = String::from_utf8_lossy(&container_stdout);
-    println!("CONTAINER STDOUT:\n{}", pretty_stdout);
 
     // Parse testRecipient from the output, which should be something like that:
     // ✅ Core contract deployments complete:
@@ -1177,20 +1175,9 @@ async fn deploy_hyperlane(rollup_port: u16, anvil_port: u16) -> HexHash {
     //     merkleTreeHook: "0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e"
     let test_recipient = pretty_stdout
         .lines()
-        .skip_while(|line | !line.contains("Core contract deployments complete:"))
+        .skip_while(|line| !line.contains("Core contract deployments complete:"))
         .find(|line| line.contains("testRecipient"))
-        .and_then(|line| {
-            println!("LINE FOUND, PARSING: {}", line);
-            // Format is: testRecipient: "0x..."
-            // Split by quotes and take the content between them
-            // let parts: Vec<&str> = line.split('"').collect();
-            // if parts.len() >= 2 {
-            //     Some(parts[1])
-            // } else {
-            //     None
-            // }
-            line.split('"').nth(1)
-        })
+        .and_then(|line| line.split('"').nth(1))
         .expect("Failed to find 'testRecipient' in stdout");
 
     parse_eth_addr(test_recipient)
