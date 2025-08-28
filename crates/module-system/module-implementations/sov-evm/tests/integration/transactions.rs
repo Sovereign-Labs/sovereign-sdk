@@ -101,3 +101,33 @@ fn test_failed_tx_doesnt_update_evm_module_state() {
         }),
     });
 }
+
+#[test]
+fn test_account_nonce() {
+    let (mut runner, from, to) = setup();
+
+    let from_addr = from.address();
+    let value = 1;
+    let transfer_tx = create_transfer_tx(0, &from, &to, value);
+
+    runner.execute_transaction(TransactionTestCase {
+        input: transfer_tx,
+        assert: Box::new(move |_ctx, state| {
+            let evm = Evm::<S>::default();
+            let mut db = evm.get_db(state);
+            let from_acc = db.basic(from_addr).unwrap().unwrap();
+            assert_eq!(from_acc.nonce, 1);
+        }),
+    });
+
+    let transfer_tx = create_transfer_tx(1, &from, &to, value);
+    runner.execute_transaction(TransactionTestCase {
+        input: transfer_tx,
+        assert: Box::new(move |_ctx, state| {
+            let evm = Evm::<S>::default();
+            let mut db = evm.get_db(state);
+            let from_acc = db.basic(from_addr).unwrap().unwrap();
+            assert_eq!(from_acc.nonce, 2);
+        }),
+    });
+}
