@@ -1,5 +1,9 @@
 use revm::{
-    context::result::{EVMError, HaltReason, InvalidTransaction},
+    context::{
+        self,
+        result::{EVMError, HaltReason, InvalidTransaction},
+        Transaction,
+    },
     context_interface::{ContextTr, JournalTr},
     handler::{
         evm::FrameTr, instructions::InstructionProvider, EvmTr, FrameResult, Handler,
@@ -38,8 +42,19 @@ where
 
     fn validate_against_state_and_deduct_caller(
         &self,
-        _evm: &mut Self::Evm,
+        evm: &mut Self::Evm,
     ) -> Result<(), Self::Error> {
+        let context = evm.ctx();
+        let (tx, journal) = context.tx_journal_mut();
+
+        // Load caller's account.
+        let caller_account = journal.load_account_code(tx.caller())?.data;
+        // Bump the nonce for calls. Nonce for CREATE will be bumped in `make_create_frame`.
+        if tx.kind().is_call() {
+            // Nonce is already checked
+            caller_account.info.nonce = caller_account.info.nonce.saturating_add(1);
+        }
+
         Ok(())
     }
 
