@@ -31,14 +31,17 @@ where
         context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
-        // Check if the tx went through the EVM authenticator.
+        // The signature was checked before the call was dispatched,
+        // and the signer was recovered during the authentication process.
         let signer = *context
             .get_sender_credential::<Address>()
             .ok_or(anyhow::anyhow!(
                 "EVM transaction must be authenticated by the EVM authenticator"
             ))?;
 
-        let sov_nonce = self.get_sov_nonce(signer, state)?;
+        // Inside the EVM, we use nonces only for the CREATE operation.
+        // The uniqueness check was performed before the call was dispatched.
+        let account_nonce = self.get_account_nonce(signer, state)?;
 
         let evm_tx: TransactionSigned = convert_to_transaction_signed(message.rlp)?;
 
@@ -52,7 +55,8 @@ where
 
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
-        let result = executor::execute_tx(sov_nonce, evm_db, &block_env, &evm_tx, signer, cfg_env);
+        let result =
+            executor::execute_tx(account_nonce, evm_db, &block_env, &evm_tx, signer, cfg_env);
 
         let previous_transaction = self.pending_transactions.last(state)?;
         let previous_transaction_cumulative_gas_used = previous_transaction
@@ -130,7 +134,11 @@ where
     // This means we must ensure a unique value is provided to satisfy the opcode.
     // Here, we use the nonce tracked by the EVM, but keep in mind that `eth_getTransactionCount`
     // will return the nonce tracked by the sov-uniqueness module.
-    fn get_sov_nonce(&self, address: Address, state: &mut impl TxState<S>) -> anyhow::Result<u64> {
+    fn get_account_nonce(
+        &self,
+        address: Address,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<u64> {
         Ok(self
             .accounts
             .get(&address, state)?

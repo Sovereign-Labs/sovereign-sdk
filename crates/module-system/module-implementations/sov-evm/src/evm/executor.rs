@@ -31,14 +31,14 @@ pub(crate) fn get_cfg_env(
 
 /// Execute an Ethereum transaction and commit it to the database.
 pub fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
-    sov_nonce: u64,
+    account_nonce: u64,
     db: DB,
     block_env: &BlockEnv,
     tx: &TransactionSigned,
     signer: Address,
     cfg: CfgEnv,
 ) -> Result<ExecutionResult, EVMError<Infallible>> {
-    let tx_env = create_tx_env(sov_nonce, tx, signer);
+    let tx_env = create_tx_env(account_nonce, tx, signer);
     let context = Context::mainnet()
         .with_db(db)
         .with_block(block_env)

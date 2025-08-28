@@ -11,11 +11,11 @@ fn simple_transfer() {
     let (mut runner, from, to) = setup();
 
     let value = 1;
-    let create_contract_tx = create_transfer_tx(0, &from, &to, value);
+    let transfer_tx = create_transfer_tx(0, &from, &to, value);
 
     let evm = Evm::<S>::default();
     runner.execute_transaction(TransactionTestCase {
-        input: create_contract_tx,
+        input: transfer_tx,
         assert: Box::new(move |ctx, state| {
             let mut db = evm.get_db(state);
             let from_acc = db.basic(from.address()).unwrap().unwrap();
