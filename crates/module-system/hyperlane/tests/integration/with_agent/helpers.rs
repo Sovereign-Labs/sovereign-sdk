@@ -197,9 +197,6 @@ pub async fn setup_rollup(
 /// Helper for handling the dockerized hyperlane setup.
 pub struct HyperlaneBuilder {
     image: GenericImage,
-    // TODO:
-    // anvil_image: Option<GenericImage>,
-    // hyperlane_cli_image: GenericImage,
     rollup_port: Option<u16>,
     with_evm: bool,
     relayer: Option<PrivateKey>,
@@ -318,7 +315,6 @@ impl HyperlaneBuilder {
             )
             .with_env_var("CONFIG_FILES", "/sov-agent-config.json")
             // a dummy command because we will populate services by execs appropriately
-            // todo: should start validator before?
             .with_cmd(["tail", "-f", "/dev/null"]);
 
         // The hyperlane CLI accesses GitHub APIs quite heavily for its GitHub hosted
@@ -738,7 +734,6 @@ async fn start_relayer(
         // allow using validator signatures from local fs
         "--allowLocalCheckpointSyncers",
         "true",
-        // port for metrics
         "--metrics-port",
         RELAYER_METRICS_PORT.to_string().as_str(),
         "--log.level",
@@ -768,16 +763,17 @@ async fn start_validator(
         0
     };
 
-    let val_db_path = format!("/validator{val_id}/db");
-    let val_sigs_path = format!("/validator{val_id}/signatures");
+    let val_db_path = format!("/app/validator-{val_id}-db");
+    let val_sigs_path = format!("/app/validator-{val_id}/signatures");
     let val_eth_key = ANVIL_ACCOUNTS[val_id + 1].1;
 
     // make directories for db and signatures
     let mkdir_cmd = ExecCommand::new(["mkdir", "-p", val_db_path.as_str(), val_sigs_path.as_str()]);
-    container.exec(mkdir_cmd).await.unwrap();
+    // TODO: check status!
+    let _mkdir_result = container.exec(mkdir_cmd).await.unwrap();
 
+    let sov_key = HexHash::new(private_key.as_bytes());
     let cmd = ExecCommand::new([
-        // validator command
         "/app/validator",
         // save signatures on local fs
         "--checkpointSyncer.type",
@@ -795,104 +791,28 @@ async fn start_validator(
         "--validator.key",
         val_eth_key,
         // signer for the rollup
+        "--chains.sovtest.signer.type",
+        "sovereignKey",
         "--chains.sovtest.signer.key",
-        format!("0x{}", private_key.as_hex()).as_str(),
-        // port for metrics
+        &sov_key.to_string(),
+        "--chains.sovtest.signer.accountType",
+        "sovereign",
+        "--chains.sovtest.signer.hrp",
+        "sov",
         "--metrics-port",
         metrics_port.to_string().as_str(),
+        "--log.level",
+        "debug",
+        "--log.format",
+        "pretty",
     ])
-    .with_cmd_ready_condition(CmdWaitFor::message_on_stdout("Agent validator starting up"));
+    .with_cmd_ready_condition(CmdWaitFor::message_on_stdout("starting server on"));
 
     // run validator
     container
         .exec(cmd)
         .await
         .expect("starting validator failed")
-}
-
-/// Run Evm counterparty chain in docker.
-///
-/// Returns an address of evm test recipient, to which we can dispatch test messages.
-#[allow(dead_code)]
-async fn start_evm_counterparty(container: &Container, rollup_port: u16) -> (ExecResult, HexHash) {
-    let anvil = container
-        .exec(ExecCommand::new([
-            "anvil",
-            "--host",
-            "0.0.0.0",
-            "--port",
-            &ANVIL_PORT.to_string(),
-        ]))
-        .await
-        .unwrap();
-
-    // Create chains configuration files for `hyperlane-cli`
-    let chains_dir = "/root/.hyperlane/chains";
-    let sovtest_config = sovtest_metadata(rollup_port);
-    let ethtest_config = ethtest_metadata("127.0.0.1", ANVIL_PORT);
-    for (chain, config) in [("sovtest", sovtest_config), ("ethtest", ethtest_config)] {
-        exec_in_bash(
-            container,
-            format!("mkdir -p {chains_dir}/{chain}; echo '{config}' > {chains_dir}/{chain}/metadata.yaml")
-        )
-        .await;
-    }
-
-    // core config of hyperlane-cli, see `core_config`
-    let core_config = core_config(ANVIL_ACCOUNTS[0].0.parse().unwrap());
-    exec_in_bash(
-        container,
-        format!("mkdir configs && echo '{core_config}' > configs/core-config.yaml"),
-    )
-    .await;
-
-    // Deploy smart contracts on ethereum and create
-    // `~/.hyperlane/chains/ethtest/addresses.yaml
-    let mut res = container
-        .exec(ExecCommand::new([
-            "hyperlane",
-            "core",
-            "deploy",
-            "--chain",
-            "ethtest",
-            "--yes",
-        ]))
-        .await
-        .unwrap();
-
-    let stderr = res.stderr_to_vec().await.unwrap();
-    let stdout = res.stdout_to_vec().await.unwrap();
-    if res.exit_code().await.unwrap().unwrap() != 0 {
-        println!("STDERR:\n{}", String::from_utf8_lossy(&stderr));
-        println!("STDOUT:\n{}", String::from_utf8_lossy(&stdout));
-        panic!("hyperlane deployment on evm chain failed");
-    }
-
-    // create `~/.hyperlane/chains/sovtest/addresses.yaml
-    let sov_addresses = sovtest_addresses();
-    exec_in_bash(
-        container,
-        format!("echo '{sov_addresses}' > {chains_dir}/sovtest/addresses.yaml"),
-    )
-    .await;
-
-    // get ethereum test recipient
-    let output = container
-        .exec(ExecCommand::new([
-            "awk",
-            "-F",
-            "\"",
-            "/testRecipient/ { print $2 }",
-            &format!("{chains_dir}/ethtest/addresses.yaml"),
-        ]))
-        .await
-        .unwrap()
-        .stdout_to_vec()
-        .await
-        .unwrap();
-    let output = String::from_utf8_lossy(&output);
-
-    (anvil, parse_eth_addr(&output))
 }
 
 /// runs docker exec <container> bash -c "cmd"
@@ -1043,6 +963,7 @@ async fn start_anvil() -> ContainerAsync<AnvilNode> {
         .expect("failed to start anvil")
 }
 
+/// Returns an address of evm test recipient, to which we can dispatch test messages.
 async fn deploy_hyperlane(rollup_port: u16, anvil_port: u16) -> HexHash {
     // Step 1: Prepare all config files locally in a tempdir
     let temp_dir = TempDir::new().expect("Failed to create temp directory");

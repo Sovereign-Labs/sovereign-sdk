@@ -55,7 +55,6 @@ mod preferred_sequencer_runtime;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_validator_announces_itself() {
-    sov_test_utils::initialize_logging();
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
@@ -71,7 +70,7 @@ async fn test_validator_announces_itself() {
         .await;
 
     // wait for the first finalized block
-    for i in 0..DEFAULT_FINALIZATION_BLOCKS * 30 {
+    for i in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
         let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
         println!("ROUND {i}, events: {events:?}");
         if let Some(process_event) = find_event(&events, "Mailbox/ValidatorAnnouncement") {
@@ -79,10 +78,14 @@ async fn test_validator_announces_itself() {
                 process_event["validator_announcement"]["address"],
                 ANVIL_ACCOUNTS[1].0.to_string(),
             );
-            assert!(process_event["validator_announcement"]["storage_location"]
-                .as_str()
-                .unwrap()
-                .starts_with("file:///validator0/signatures"));
+            let pattern = "file:///app/validator-0/signatures";
+            assert!(
+                process_event["validator_announcement"]["storage_location"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with(pattern),
+                "Found event does not contain pattern {pattern}. Event: {process_event:?}"
+            );
 
             rollup.shutdown().await.unwrap();
             return;
@@ -325,7 +328,6 @@ async fn test_process_message_from_evm_counterparty() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Ignore hyperlane tests"]
 async fn test_dispatch_message_to_evm_counterparty() {
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
@@ -343,8 +345,7 @@ async fn test_dispatch_message_to_evm_counterparty() {
     // wait for first finalized block
     let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS {
-        let slot = slot_subscription.next().await.unwrap().unwrap();
-        println!("SLOT DURING PRE {}", slot.number);
+        let _slot = slot_subscription.next().await.unwrap().unwrap();
     }
 
     // set relayer igp config
@@ -616,7 +617,6 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Ignore hyperlane tests"]
 async fn test_warp_transfer_back_and_forth_with_evm_without_scaling() {
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         18,
@@ -629,7 +629,6 @@ async fn test_warp_transfer_back_and_forth_with_evm_without_scaling() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Ignore hyperlane tests"]
 async fn test_warp_transfer_back_and_forth_with_evm_scaled_down() {
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         16,
@@ -642,7 +641,6 @@ async fn test_warp_transfer_back_and_forth_with_evm_scaled_down() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Ignore hyperlane tests"]
 async fn test_warp_transfer_back_and_forth_with_evm_scaled_up() {
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         20,
