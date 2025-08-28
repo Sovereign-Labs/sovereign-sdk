@@ -335,11 +335,6 @@ impl HyperlaneBuilder {
             .await
             .expect("Failed starting hyperlane image");
 
-        println!(
-            "STARTED AGENT CONTAINER: {}",
-            container.is_running().await.unwrap()
-        );
-
         // start all the hyperlane agents concurrently
         let has_relayer = self.relayer.is_some();
         let maybe_relayer_fut = if has_relayer {
@@ -362,10 +357,7 @@ impl HyperlaneBuilder {
         .await;
 
         let relayer = if has_relayer {
-            let r = agents.remove(0);
-            let e = r.exit_code().await.unwrap();
-            println!("RELAYER STATUS: {:?}", e);
-            Some(r)
+            Some(agents.remove(0))
         } else {
             None
         };
@@ -435,8 +427,7 @@ impl Hyperlane {
             panic!("Called mine next block on counterparty before its setup");
         }
 
-        let res = anvil_rpc::<Value>(self.anvil.as_ref().unwrap(), "anvil_mine", json!([1])).await;
-        println!("BLOCK MINED {:?}", res)
+        anvil_rpc::<Value>(self.anvil.as_ref().unwrap(), "anvil_mine", json!([1])).await;
     }
 
     /// Create warp route for nativeETH on counterparty, enroll remote router to rollup,
@@ -735,8 +726,6 @@ async fn start_relayer(
     };
 
     let sov_key = HexHash::new(private_key.as_bytes());
-    println!("RELAYER SOV KEY: {}", sov_key);
-    println!("ANVIL KEY (second arg): {:?}", ANVIL_ACCOUNTS[0]);
     let cmd = ExecCommand::new([
         "/app/relayer",
         "--db",
@@ -958,9 +947,11 @@ pub async fn anvil_rpc<T: DeserializeOwned>(
     method: &str,
     params: Value,
 ) -> T {
+    let start = std::time::Instant::now();
     static ID: AtomicUsize = AtomicUsize::new(0);
     let port = container.get_host_port_ipv4(ANVIL_PORT).await.unwrap();
     let resp = reqwest::Client::new()
+        // Here we call on localhost, because anvil exposes port to the host machine.
         .post(format!("http://127.0.0.1:{port}"))
         .json(&json!({
             "id": ID.fetch_add(1, Ordering::Relaxed),
@@ -979,6 +970,7 @@ pub async fn anvil_rpc<T: DeserializeOwned>(
         panic!("Errors calling anvil json-rpc: {error:?}");
     }
 
+    tracing::info!(%method, response = ?resp, time = ?start.elapsed(), "Anvil call response");
     serde_json::from_value(resp["result"].clone()).unwrap()
 }
 
@@ -1096,7 +1088,7 @@ async fn deploy_hyperlane(rollup_port: u16, anvil_port: u16) -> HexHash {
         .expect("Failed to write sovtest addresses");
 
     // Step 2: Configure the container with mounted volume and network
-    let hyperlane_cli_image = GenericImage::new("ghcr.io/citizen-stig/hyperlane-cli", "17.0.0")
+    let mut hyperlane_cli_image = GenericImage::new("ghcr.io/citizen-stig/hyperlane-cli", "17.0.0")
         .with_env_var("HYP_KEY", ANVIL_ACCOUNTS[0].1)
         .with_network("hyperlane-test")
         .with_mount(Mount::bind_mount(
@@ -1116,6 +1108,15 @@ async fn deploy_hyperlane(rollup_port: u16, anvil_port: u16) -> HexHash {
             "ethtest",
             "--yes",
         ]);
+
+    // The hyperlane CLI accesses GitHub APIs quite heavily for its GitHub hosted
+    // registry, this can cause rate limiting in CI jobs. Include the github token
+    // so we use authenticated requests to try to avoid this
+    if let Ok(token) = std::env::var("GITHUB_TOKEN") {
+        // `hyperlane` cli tool will use this env var by default as an auth token
+        // if it is set.
+        hyperlane_cli_image = hyperlane_cli_image.with_env_var("GH_AUTH_TOKEN", token);
+    }
 
     let container = hyperlane_cli_image
         .start()

@@ -81,10 +81,8 @@ pub fn agent_config(rollup_port: u16, anvil_port: u16) -> Vec<u8> {
         "defaultRpcConsensusType": "fallback"
     });
 
-    let v = serde_json::to_vec(&config).unwrap();
-
-    println!("AGENT CONFIG:\n {}", String::from_utf8_lossy(&v));
-    v
+    tracing::info!(?config, "Agent config");
+    serde_json::to_vec(&config).unwrap()
 }
 
 /// Core config used by hyperlane-cli

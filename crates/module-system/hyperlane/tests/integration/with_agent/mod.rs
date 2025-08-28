@@ -273,7 +273,6 @@ async fn test_process_message_from_evm_counterparty() {
     let evm_dispatch = hyperlane
         .dispatch_msg_from_counterparty(prover_addr.to_sender())
         .await;
-    println!("DISPATCHED: {:?}", evm_dispatch);
 
     let sender_addr = parse_eth_addr(ANVIL_ACCOUNTS[0].0);
 
@@ -289,10 +288,9 @@ async fn test_process_message_from_evm_counterparty() {
     hyperlane.mine_next_block_on_counterparty().await;
 
     // look for `process` event
-    for i in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
+    for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
         let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
 
-        println!("EVENTS AT {}: {:?}", i, events);
         if let Some(process_event) = find_event(&events, "Mailbox/Process") {
             assert_eq!(
                 process_event["process"]["recipient_address"],
@@ -323,7 +321,7 @@ async fn test_process_message_from_evm_counterparty() {
 
     rollup.shutdown().await.unwrap();
     hyperlane.print_stdout().await;
-    panic!("Mailbox/Process event not found");
+    panic!("Mailbox/Process event not found in the stream of events");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -689,13 +687,13 @@ fn encode_call(
 }
 
 async fn submit_tx(client: &Client, tx_body: RawTx) {
-    let x = client
+    let response = client
         .accept_tx(&api_types::AcceptTxBody {
             body: BASE64_STANDARD.encode(&tx_body),
         })
         .await
         .unwrap();
-    println!("TX SUBMITTED: {:?}", x);
+    tracing::info!(?response, "Transaction submitted");
 }
 
 async fn next_slot_events<S>(client: &Client, subscription: &mut S) -> Vec<LedgerEvent>
@@ -703,7 +701,6 @@ where
     S: Stream<Item = Result<Slot>> + Unpin,
 {
     let slot = subscription.next().await.unwrap().unwrap();
-    // println!("SLOT: {}, HASH={:?} STATE_ROOT={:?} BATCHES={}", slot.number, slot.hash, slot.state_root, slot.batches.len());
     client
         .get_slot_filtered_events(&IntOrHash::Integer(slot.number), None)
         .await
