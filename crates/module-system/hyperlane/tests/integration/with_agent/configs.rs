@@ -4,10 +4,10 @@ use sov_hyperlane_integration::EthAddress;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::HexHash;
 
-use super::helpers::{ANVIL_ACCOUNTS, ANVIL_PORT, EVM_DOMAIN, EVM_MAILBOX};
+use super::helpers::{ANVIL_ACCOUNTS, EVM_CHAIN_ID, EVM_DOMAIN, EVM_MAILBOX};
 
 /// Generates a configuration file for the agents with the given rollup port
-pub fn agent_config(rollup_port: u16) -> Vec<u8> {
+pub fn agent_config(rollup_port: u16, anvil_port: u16) -> Vec<u8> {
     let config = json!({
         "chains": {
             "sovtest": {
@@ -44,7 +44,7 @@ pub fn agent_config(rollup_port: u16) -> Vec<u8> {
                 "interchainGasPaymaster": "0x0000000000000000000000000000000000000000"
             },
             "ethtest": {
-                "chainId": EVM_DOMAIN,
+                "chainId": EVM_CHAIN_ID,
                 "displayName": "EthTest",
                 "domainId": EVM_DOMAIN,
                 "isTestnet": true,
@@ -56,7 +56,7 @@ pub fn agent_config(rollup_port: u16) -> Vec<u8> {
                 },
                 "protocol": "ethereum",
                 "rpcUrls": [{
-                    "http": format!("HTTP://127.0.0.1:{ANVIL_PORT}")
+                    "http": format!("HTTP://host.docker.internal:{anvil_port}")
                 }],
                 "domainRoutingIsmFactory": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
                 "interchainAccountIsm": "0x9A676e781A523b5d0C0e43731313A708CB607508",
@@ -81,7 +81,10 @@ pub fn agent_config(rollup_port: u16) -> Vec<u8> {
         "defaultRpcConsensusType": "fallback"
     });
 
-    serde_json::to_vec(&config).unwrap()
+    let v = serde_json::to_vec(&config).unwrap();
+
+    println!("AGENT CONFIG:\n {}", String::from_utf8_lossy(&v));
+    v
 }
 
 /// Core config used by hyperlane-cli
@@ -159,7 +162,7 @@ pub fn sovtest_addresses() -> &'static str {
 /// Configuration of ethtest chain in hyperlane
 pub fn ethtest_metadata(anvil_host: &str, anvil_port: u16) -> String {
     formatdoc! {"
-        chainId: {EVM_DOMAIN}
+        chainId: {EVM_CHAIN_ID}
         displayName: EthTest
         domainId: {EVM_DOMAIN}
         isTestnet: true

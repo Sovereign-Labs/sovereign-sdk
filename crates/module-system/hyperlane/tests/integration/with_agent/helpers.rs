@@ -50,7 +50,9 @@ pub const ANVIL_PORT: u16 = 8545;
 pub const RELAYER_METRICS_PORT: u16 = 9091;
 pub const VALIDATOR_METRICS_PORT: u16 = 9097;
 /// Domain id of the evm counterparty chain
-pub const EVM_DOMAIN: u32 = 31337;
+/// Should match K
+pub const EVM_DOMAIN: u32 = 31337_90210;
+pub const EVM_CHAIN_ID: u32 = 31337;
 /// Address of the mailbox on evm counterparty chain
 /// 0x8A791620dd6260079BF849Dc5567aDC3F2FdC318
 pub const EVM_MAILBOX: EthAddress = HexString([
@@ -272,7 +274,25 @@ impl HyperlaneBuilder {
 
     /// Start the configured hyperlane network setup.
     pub async fn start(self) -> Hyperlane {
-        let rollup_port = self.rollup_port.expect("Rollup port must be set");
+        let rollup_port = self
+            .rollup_port
+            .expect("Rollup port must be set before starting hyperlane");
+
+        // evm counterparty must be started before agents
+        // because they will try to reach out to it immediately.
+        // same goes for rollup, but we assume its runnig knowing its port.
+        let (anvil, anvil_port, evm_recipient) = if self.with_evm {
+            let anvil = start_evm().await;
+            let anvil_port = anvil
+                .get_host_port_ipv4(ANVIL_PORT)
+                .await
+                .expect("Failed to get anvil port");
+            let evm_recipient = deploy_hyperlane(rollup_port, anvil_port).await;
+            (Some(anvil), anvil_port, Some(evm_recipient))
+        } else {
+            // Does not matter, default port going to do
+            (None, ANVIL_PORT, None)
+        };
 
         // Start container with just basic env and no processes
         let mut builder = self
@@ -287,10 +307,11 @@ impl HyperlaneBuilder {
             .with_env_var("SOV_TEST_UTILS_FIXED_CHAIN_HASH", "true")
             // default signing key for hyperlane cli and relayer in evm
             .with_env_var("HYP_KEY", ANVIL_ACCOUNTS[0].1)
-            // setup agent config
-            .with_copy_to("/agent-config.json", agent_config(rollup_port))
-            .with_env_var("CONFIG_FILES", "/agent-config.json")
+            // setup agent config. NOTE: maybe use this in hyperlane-cli
+            .with_copy_to("/sov-agent-config.json", agent_config(rollup_port, anvil_port))
+            .with_env_var("CONFIG_FILES", "/sov-agent-config.json")
             // a dummy command because we will populate services by execs appropriately
+            // todo: should start validator before?
             .with_cmd(["tail", "-f", "/dev/null"]);
 
         // The hyperlane CLI accesses GitHub APIs quite heavily for its GitHub hosted
@@ -307,15 +328,10 @@ impl HyperlaneBuilder {
             .await
             .expect("Failed starting hyperlane image");
 
-        // evm counterparty must be started before agents
-        // because they will try to reach out to it immediately.
-        // same goes for rollup, but we assume its runnig knowing its port.
-        let (anvil, evm_recipient) = if self.with_evm {
-            let (anvil, evm_recipient) = start_evm_counterparty_2(rollup_port).await;
-            (Some(anvil), Some(evm_recipient))
-        } else {
-            (None, None)
-        };
+        println!(
+            "STARTED AGENT CONTAINER: {}",
+            container.is_running().await.unwrap()
+        );
 
         // start all the hyperlane agents concurrently
         let has_relayer = self.relayer.is_some();
@@ -339,7 +355,10 @@ impl HyperlaneBuilder {
         .await;
 
         let relayer = if has_relayer {
-            Some(agents.remove(0))
+            let r = agents.remove(0);
+            let e = r.exit_code().await.unwrap();
+            println!("RELAYER STATUS: {:?}", e);
+            Some(r)
         } else {
             None
         };
@@ -356,7 +375,6 @@ impl HyperlaneBuilder {
 
 pub struct Hyperlane {
     pub container: Container,
-    // Why this is option and not bool?
     pub anvil: Option<ContainerAsync<AnvilNode>>,
     pub evm_recipient: Option<HexHash>,
     pub relayer: Option<ExecResult>,
@@ -410,7 +428,8 @@ impl Hyperlane {
             panic!("Called mine next block on counterparty before its setup");
         }
 
-        anvil_rpc::<Value>(self.anvil.as_ref().unwrap(), "anvil_mine", json!([1])).await;
+        let res = anvil_rpc::<Value>(self.anvil.as_ref().unwrap(), "anvil_mine", json!([1])).await;
+        println!("BLOCK MINED {:?}", res)
     }
 
     /// Create warp route for nativeETH on counterparty, enroll remote router to rollup,
@@ -558,6 +577,8 @@ impl Hyperlane {
         // on `ExecResult`s, so this would hang infinitly waiting
         // for `exec`s to exit. Instead we give them at most 1s of
         // printing time each.
+        println!("-----");
+        println!("VALIDATORS: {}", self.validators.len());
         let has_relayer = self.relayer.is_some();
         for (n, val) in self
             .relayer
@@ -567,11 +588,15 @@ impl Hyperlane {
         {
             if n == 0 && has_relayer {
                 println!("RELAYER\n");
+                let stdout = val.stdout_to_vec().await.unwrap();
+                let stderr = val.stderr_to_vec().await.unwrap();
+                println!("STDOUT:\n {}", String::from_utf8_lossy(&stdout));
+                println!("STDERR:\n {}", String::from_utf8_lossy(&stderr));
+                println!("-=-=-=-=-=-=-");
             } else {
                 println!("\n\nVALIDATOR {n}\n");
             }
-
-            let _ = timeout(Duration::from_secs(1), async {
+            let _ = timeout(Duration::from_secs(3), async {
                 let mut stdout = val.stdout().lines();
                 while let Some(line) = stdout.next_line().await.unwrap() {
                     println!("{line}");
@@ -579,6 +604,8 @@ impl Hyperlane {
             })
             .await;
         }
+        println!("=====");
+
     }
 }
 
@@ -627,6 +654,7 @@ impl EvmProcessWithId {
     }
 }
 
+#[derive(Debug)]
 pub struct EvmDispatchWithId {
     /// The sender address of the message.
     pub sender_address: HexHash,
@@ -706,6 +734,7 @@ async fn start_relayer(
         "--metrics-port",
         RELAYER_METRICS_PORT.to_string().as_str(),
     ])
+        // TODO: Use better message, when it actually started.
     .with_cmd_ready_condition(CmdWaitFor::message_on_stdout("Agent relayer starting up"));
 
     container.exec(cmd).await.expect("starting relayer failed")
@@ -979,12 +1008,12 @@ fn domain_from_hexhash(hash: HexHash) -> u32 {
     u32::from_be_bytes(hash.0[28..].try_into().unwrap())
 }
 
-async fn start_evm_counterparty_2(rollup_port: u16) -> (ContainerAsync<AnvilNode>, HexHash) {
+async fn start_evm() -> ContainerAsync<AnvilNode> {
     // Hard code tag, so we don't accidental breakages
-    let anvil = AnvilNode::default()
+    AnvilNode::default()
         .with_tag("v1.1.0")
         .with_cmd([
-            // TODO: Do we really need that? It looks like AnvilNode handles that.
+            // TODO: Do we really need that? It looks like AnvilNode handles that by default.
             "--host",
             "0.0.0.0",
             "--port",
@@ -992,17 +1021,10 @@ async fn start_evm_counterparty_2(rollup_port: u16) -> (ContainerAsync<AnvilNode
         ])
         .start()
         .await
-        .expect("failed to start anvil");
-
-    // let anvil_host = anvil.get_host().await.unwrap();
-    let anvil_port = anvil.get_host_port_ipv4(ANVIL_PORT).await.unwrap();
-
-    let addr = run_hyperlane_cli(rollup_port, "host.docker.internal", anvil_port).await;
-
-    (anvil, addr)
+        .expect("failed to start anvil")
 }
 
-async fn run_hyperlane_cli(rollup_port: u16, anvil_host: &str, anvil_port: u16) -> HexHash {
+async fn deploy_hyperlane(rollup_port: u16, anvil_port: u16) -> HexHash {
     // Step 1: Prepare all config files locally in a tempdir
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let temp_path = temp_dir.path();
@@ -1023,7 +1045,7 @@ async fn run_hyperlane_cli(rollup_port: u16, anvil_host: &str, anvil_port: u16) 
     fs::write(sovtest_dir.join("metadata.yaml"), sovtest_config)
         .expect("Failed to write sovtest metadata");
 
-    let ethtest_config = ethtest_metadata(anvil_host, anvil_port);
+    let ethtest_config = ethtest_metadata("host.docker.internal", anvil_port);
     fs::write(ethtest_dir.join("metadata.yaml"), ethtest_config)
         .expect("Failed to write ethtest metadata");
 
@@ -1058,7 +1080,10 @@ async fn run_hyperlane_cli(rollup_port: u16, anvil_host: &str, anvil_port: u16) 
             "--yes",
         ]);
 
-    let container = hyperlane_cli_image.start().await.unwrap();
+    let container = hyperlane_cli_image
+        .start()
+        .await
+        .expect("Failed to start hyperlane-cli");
 
     // Give container time to run
     // tokio::time::sleep(std::time::Duration::from_secs(3)).await;

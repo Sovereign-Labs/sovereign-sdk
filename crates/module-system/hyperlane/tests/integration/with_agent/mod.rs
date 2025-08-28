@@ -236,7 +236,7 @@ async fn test_multisig_ism() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_process_message_from_evm_counterparty() {
-    // sov_test_utils::logging::initialize_or_change_logging_with_filter("debug,sov=warn,jmt=warn");
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
@@ -251,6 +251,7 @@ async fn test_process_message_from_evm_counterparty() {
         .with_evm_counterparty()
         .start()
         .await;
+    println!("STARTED");
 
     // wait for first finalized block
     let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
@@ -265,12 +266,16 @@ async fn test_process_message_from_evm_counterparty() {
     });
     let register_tx = encode_call(prover.user_info.private_key(), &register_call);
     submit_tx(rollup.api_client(), register_tx).await;
+    println!("REGISTERED");
 
     // dispatch test message to prover from evm
     let evm_dispatch = hyperlane
         .dispatch_msg_from_counterparty(prover_addr.to_sender())
         .await;
+    println!("DISPATCHED: {:?}", evm_dispatch);
+
     let sender_addr = parse_eth_addr(ANVIL_ACCOUNTS[0].0);
+    println!("SENDER: {}", sender_addr);
 
     assert_eq!(evm_dispatch.message.origin_domain, EVM_DOMAIN);
     assert_eq!(
@@ -282,11 +287,13 @@ async fn test_process_message_from_evm_counterparty() {
 
     // finalize the block with dispatched message
     hyperlane.mine_next_block_on_counterparty().await;
+    println!("HERE");
 
     // look for `process` event
-    for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
+    for i in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
         let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
 
+        println!("EVENTS AT {}: {:?}", i, events);
         if let Some(process_event) = find_event(&events, "Mailbox/Process") {
             assert_eq!(
                 process_event["process"]["recipient_address"],
@@ -339,7 +346,8 @@ async fn test_dispatch_message_to_evm_counterparty() {
     // wait for first finalized block
     let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS {
-        slot_subscription.next().await.unwrap().unwrap();
+        let slot = slot_subscription.next().await.unwrap().unwrap();
+        println!("SLOT DURING PRE {}", slot.number);
     }
 
     // set relayer igp config
@@ -682,12 +690,13 @@ fn encode_call(
 }
 
 async fn submit_tx(client: &Client, tx_body: RawTx) {
-    client
+    let x = client
         .accept_tx(&api_types::AcceptTxBody {
             body: BASE64_STANDARD.encode(&tx_body),
         })
         .await
         .unwrap();
+    println!("TX SUBMITTED: {:?}", x);
 }
 
 async fn next_slot_events<S>(client: &Client, subscription: &mut S) -> Vec<LedgerEvent>
@@ -695,6 +704,7 @@ where
     S: Stream<Item = Result<Slot>> + Unpin,
 {
     let slot = subscription.next().await.unwrap().unwrap();
+    // println!("SLOT: {}, HASH={:?} STATE_ROOT={:?} BATCHES={}", slot.number, slot.hash, slot.state_root, slot.batches.len());
     client
         .get_slot_filtered_events(&IntOrHash::Integer(slot.number), None)
         .await
