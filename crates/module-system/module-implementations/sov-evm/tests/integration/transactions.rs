@@ -16,12 +16,15 @@ fn simple_transfer() {
     let evm = Evm::<S>::default();
     runner.execute_transaction(TransactionTestCase {
         input: create_contract_tx,
-        assert: Box::new(move |_result, state| {
+        assert: Box::new(move |ctx, state| {
             let mut db = evm.get_db(state);
             let from_acc = db.basic(from.address()).unwrap().unwrap();
             let to_acc = db.basic(to.address()).unwrap().unwrap();
             // The only balance changes should be from the trasfer itself and not from gas as it's disabled in SovEvm
-            assert_eq!(from_acc.balance, TEST_DEFAULT_USER_BALANCE.0 - value);
+            assert_eq!(
+                from_acc.balance,
+                TEST_DEFAULT_USER_BALANCE.0 - value - ctx.gas_value_used.0
+            );
             assert_eq!(to_acc.balance, value);
         }),
     });
