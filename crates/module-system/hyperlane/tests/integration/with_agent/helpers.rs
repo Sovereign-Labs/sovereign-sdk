@@ -308,7 +308,10 @@ impl HyperlaneBuilder {
             // default signing key for hyperlane cli and relayer in evm
             .with_env_var("HYP_KEY", ANVIL_ACCOUNTS[0].1)
             // setup agent config. NOTE: maybe use this in hyperlane-cli
-            .with_copy_to("/sov-agent-config.json", agent_config(rollup_port, anvil_port))
+            .with_copy_to(
+                "/sov-agent-config.json",
+                agent_config(rollup_port, anvil_port),
+            )
             .with_env_var("CONFIG_FILES", "/sov-agent-config.json")
             // a dummy command because we will populate services by execs appropriately
             // todo: should start validator before?
@@ -588,24 +591,37 @@ impl Hyperlane {
         {
             if n == 0 && has_relayer {
                 println!("RELAYER\n");
-                let stdout = val.stdout_to_vec().await.unwrap();
-                let stderr = val.stderr_to_vec().await.unwrap();
-                println!("STDOUT:\n {}", String::from_utf8_lossy(&stdout));
-                println!("STDERR:\n {}", String::from_utf8_lossy(&stderr));
-                println!("-=-=-=-=-=-=-");
+                let exit_code = val.exit_code().await.unwrap();
+                println!("EXIT CODE: {:?}", exit_code);
+                // if exit_code != Some(0) {
+                //     let stdout = val.stdout_to_vec().await.unwrap();
+                //     let stderr = val.stderr_to_vec().await.unwrap();
+                //     println!("STDOUT:\n {}", String::from_utf8_lossy(&stdout));
+                //     println!("STDERR:\n {}", String::from_utf8_lossy(&stderr));
+                //     println!("-=-=-=-=-=-=-");
+                // }
             } else {
                 println!("\n\nVALIDATOR {n}\n");
             }
             let _ = timeout(Duration::from_secs(3), async {
+                println!("PRINTING STDOUT:");
                 let mut stdout = val.stdout().lines();
                 while let Some(line) = stdout.next_line().await.unwrap() {
-                    println!("{line}");
+                    println!("STDOUT: {line}");
+                }
+            })
+            .await;
+            println!("~~~~~~~~~~~~~");
+            let _ = timeout(Duration::from_secs(3), async {
+                println!("PRINTING STDERR:");
+                let mut stderr = val.stderr().lines();
+                while let Some(line) = stderr.next_line().await.unwrap() {
+                    println!("STDERR {line}");
                 }
             })
             .await;
         }
         println!("=====");
-
     }
 }
 
@@ -714,13 +730,22 @@ async fn start_relayer(
         "sovtest"
     };
 
+    let sov_key = HexHash::new(private_key.as_bytes());
+    println!("RELAYER SOV KEY: {}", sov_key);
+    println!("ANVIL KEY (second arg): {:?}", ANVIL_ACCOUNTS[0]);
     let cmd = ExecCommand::new([
         "/app/relayer",
         "--db",
-        "/relayer-db",
+        "/app/relayer-db",
         // signer for the rollup
+        "--chains.sovtest.signer.type",
+        "sovereignKey",
         "--chains.sovtest.signer.key",
-        format!("0x{}", private_key.as_hex()).as_str(),
+        &sov_key.to_string(),
+        "--chains.sovtest.signer.accountType",
+        "sovereign",
+        "--chains.sovtest.signer.hrp",
+        "sov",
         // signer for the counterparty
         "--chains.ethtest.signer.key",
         ANVIL_ACCOUNTS[0].1,
@@ -734,7 +759,7 @@ async fn start_relayer(
         "--metrics-port",
         RELAYER_METRICS_PORT.to_string().as_str(),
     ])
-        // TODO: Use better message, when it actually started.
+    // TODO: Use better message, when it actually started.
     .with_cmd_ready_condition(CmdWaitFor::message_on_stdout("Agent relayer starting up"));
 
     container.exec(cmd).await.expect("starting relayer failed")

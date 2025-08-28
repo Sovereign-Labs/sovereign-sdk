@@ -318,6 +318,8 @@ async fn test_process_message_from_evm_counterparty() {
             );
 
             rollup.shutdown().await.unwrap();
+            hyperlane.print_stdout().await;
+            println!("SUCCESSS!");
             return;
         }
     }
