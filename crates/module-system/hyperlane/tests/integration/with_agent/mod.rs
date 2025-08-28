@@ -1,6 +1,6 @@
-//! End to end tests for hyperlane implementation that utilize real relayer, validators and evm devnet.
+//! End-to-end tests for hyperlane implementation that utilize real relayer, validators and evm devnet.
 //!
-//! The docker setup uses a single container which provides all the needed tools.
+//! The docker setup uses a single container which provides all the necessary tools.
 //! It comes from <https://github.com/eigerco/hyperlane-monorepo/blob/main/hyperlane.Dockerfile>.
 //!
 //! To build it:
@@ -10,7 +10,7 @@
 //! ./build.sh
 //! ```
 //!
-//! Tests will always fetch the latest shipped image. To run tests with locally built image:
+//! Tests will always fetch the latest shipped image. To run tests with a locally built image:
 //! ```bash
 //! export CUSTOM_HLP_DOCKER_IMAGE=hyperlane
 //! ```
@@ -48,6 +48,7 @@ use tokio::time::sleep;
 use tokio_stream::StreamExt;
 
 use crate::igp::{default_gas_hashmap_to_safe_vec, oracle_data_hashmap_to_safe_vec};
+use crate::with_agent::helpers::ANVIL_PORT;
 
 mod configs;
 mod helpers;
@@ -113,7 +114,7 @@ async fn test_relayer_basic_dispatch_process() {
         .start()
         .await;
 
-    // wait for first finalized block
+    // wait for the first finalized block
     let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS {
         slot_subscription.next().await.unwrap().unwrap();
@@ -184,7 +185,7 @@ async fn test_multisig_ism() {
         .start()
         .await;
 
-    // wait for first finalized block
+    // wait for the first finalized block
     let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS {
         slot_subscription.next().await.unwrap().unwrap();
@@ -194,7 +195,7 @@ async fn test_multisig_ism() {
     let relayer_config_tx = tx_set_relayer_config(&relayer);
     submit_tx(rollup.api_client(), relayer_config_tx).await;
 
-    // register prover as a recipient with first 3 validators addresses for multisig
+    // register prover as a recipient with the first 3 validators addresses for multisig
     let val_addresses: Vec<_> = ANVIL_ACCOUNTS[1..4]
         .iter()
         .map(|(addr, _)| addr.parse().unwrap())
@@ -287,7 +288,7 @@ async fn test_process_message_from_evm_counterparty() {
     assert_eq!(evm_dispatch.sender_address, sender_addr);
     assert_eq!(evm_dispatch.recipient_address, prover_addr.to_sender());
 
-    // finalize the block with dispatched message
+    // finalize the block with a dispatched message
     hyperlane.mine_next_block_on_counterparty().await;
 
     // look for `process` event
@@ -410,12 +411,21 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
     let prover = setup.prover.clone();
     let rollup = setup_rollup(dir.path().to_path_buf(), setup, true).await;
 
+    let rollup_port = rollup.http_addr.port();
     let mut hyperlane = builder
-        .with_rollup_port(rollup.http_addr.port())
+        .with_rollup_port(rollup_port)
         .with_relayer(&relayer)
         .with_evm_counterparty()
         .start()
         .await;
+
+    let anvil_port = hyperlane
+        .anvil
+        .as_ref()
+        .unwrap()
+        .get_host_port_ipv4(ANVIL_PORT)
+        .await
+        .expect("Failed to get anvil port");
 
     // wait for first finalized block
     let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
@@ -477,7 +487,12 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
 
             // deploy warp route on counterparty
             remote_route_id = hyperlane
-                .deploy_warp_route_on_counterparty(local_route_id, local_decimals)
+                .deploy_warp_route_on_counterparty(
+                    local_route_id,
+                    local_decimals,
+                    rollup_port,
+                    anvil_port,
+                )
                 .await;
 
             // enroll remote router on rollup

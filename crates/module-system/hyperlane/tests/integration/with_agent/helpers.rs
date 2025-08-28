@@ -26,7 +26,7 @@ use sov_test_utils::{RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, T
 use testcontainers::core::client::docker_client_instance;
 use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult, Host, IntoContainerPort};
 use testcontainers::runners::AsyncRunner;
-use testcontainers::{ContainerAsync, GenericImage, ImageExt};
+use testcontainers::{ContainerAsync, ContainerRequest, GenericImage, ImageExt};
 use testcontainers_modules::anvil::AnvilNode;
 use tokio::io::AsyncBufReadExt;
 use tokio::time::timeout;
@@ -367,6 +367,8 @@ impl HyperlaneBuilder {
 }
 
 pub struct Hyperlane {
+    // Keep ownership of the container, so it does not stopped before neeeded.
+    #[allow(dead_code)]
     pub container: Container,
     pub anvil: Option<ContainerAsync<AnvilNode>>,
     pub evm_recipient: Option<HexHash>,
@@ -431,38 +433,47 @@ impl Hyperlane {
         &self,
         sovtest_route: HexHash,
         sovtest_decimals: u8,
+        rollup_port: u16,
+        anvil_port: u16,
     ) -> HexHash {
         if self.anvil.is_none() {
             panic!("Called warp init on counterparty before its setup");
         }
 
-        // TODO: Fix this
-        // deploy warp route on evm counterparty
-        let config_path = "./configs/warp-route-deployment.yaml";
         let warp_config = warp_route_config(sovtest_route, sovtest_decimals);
-        exec_in_bash(
-            &self.container,
-            format!("echo '{warp_config}' > {config_path}"),
-        )
-        .await;
-        let mut res = self
-            .container
-            .exec(ExecCommand::new([
-                "hyperlane",
+        let warp_config_path = "/root/configs/warp-route-deployment.yaml";
+        let hyperlane_cli_image = prepare_hyperlane_cli(rollup_port, anvil_port)
+            .with_copy_to(warp_config_path, warp_config.into_bytes())
+            .with_cmd([
                 "warp",
                 "deploy",
                 "--config",
-                config_path,
+                &warp_config_path,
                 "--yes",
-            ]))
+            ]);
+
+        let container = hyperlane_cli_image
+            .start()
             .await
-            .unwrap();
+            .expect("Failed to start hyperlane-cli");
 
-        let stdout = res.stdout_to_vec().await.unwrap();
+        let mut is_running = container
+            .is_running()
+            .await
+            .expect("failed to get running status");
+        for _ in 0..300 {
+            is_running = container.is_running().await.unwrap();
+            if !is_running {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert!(!is_running, "hyperlane deploy hasn't completed on time");
+
+        let stdout = container.stdout_to_vec().await.unwrap();
         let stdout = String::from_utf8_lossy(&stdout);
-        if res.exit_code().await.unwrap().unwrap() != 0 {
-            let stderr = res.stderr_to_vec().await.unwrap();
-
+        if container.exit_code().await.unwrap() != Some(0) {
+            let stderr = container.stderr_to_vec().await.unwrap();
             println!("hyperlane warp deploy stdout: {stdout}");
             println!(
                 "hyperlane warp deploy stderr: {}",
@@ -815,12 +826,6 @@ async fn start_validator(
         .expect("starting validator failed")
 }
 
-/// runs docker exec <container> bash -c "cmd"
-async fn exec_in_bash(container: &Container, cmd: impl AsRef<str>) -> ExecResult {
-    let bash_c = ExecCommand::new(["bash", "-c", cmd.as_ref()]);
-    container.exec(bash_c).await.unwrap()
-}
-
 #[cfg_attr(target_os = "macos", allow(dead_code))]
 pub async fn get_docker_gateway_ip() -> String {
     let bridge_info = docker_client_instance()
@@ -964,8 +969,7 @@ async fn start_anvil() -> ContainerAsync<AnvilNode> {
 }
 
 
-/// Returns an address of evm test recipient, to which we can dispatch test messages.
-async fn deploy_hyperlane(rollup_port: u16, anvil_port: u16) -> HexHash {
+fn prepare_hyperlane_cli(rollup_port: u16, anvil_port: u16) -> ContainerRequest<GenericImage> {
     // Prepare config content
     let sovtest_config = sovtest_metadata(rollup_port);
     let ethtest_config = ethtest_metadata("host.docker.internal", anvil_port);
@@ -978,16 +982,8 @@ async fn deploy_hyperlane(rollup_port: u16, anvil_port: u16) -> HexHash {
         .with_copy_to("/root/.hyperlane/chains/sovtest/metadata.yaml", sovtest_config.into_bytes())
         .with_copy_to("/root/.hyperlane/chains/ethtest/metadata.yaml", ethtest_config.into_bytes())
         .with_copy_to("/root/.hyperlane/chains/sovtest/addresses.yaml", sov_addresses.as_bytes().to_vec())
-        .with_copy_to("/root/configs/core-config.yaml", core_config.into_bytes())
-        .with_cmd([
-            "core",
-            "deploy",
-            "--config",
-            "/root/configs/core-config.yaml",
-            "--chain",
-            "ethtest",
-            "--yes",
-        ]);
+        .with_copy_to("/root/configs/core-config.yaml", core_config.into_bytes());
+
 
     // The hyperlane CLI accesses GitHub APIs quite heavily for its GitHub hosted
     // registry, this can cause rate limiting in CI jobs. Include the github token
@@ -997,6 +993,22 @@ async fn deploy_hyperlane(rollup_port: u16, anvil_port: u16) -> HexHash {
         // if it is set.
         hyperlane_cli_image = hyperlane_cli_image.with_env_var("GH_AUTH_TOKEN", token);
     }
+
+    hyperlane_cli_image
+}
+
+/// Returns an address of evm test recipient, to which we can dispatch test messages.
+async fn deploy_hyperlane(rollup_port: u16, anvil_port: u16) -> HexHash {
+    let hyperlane_cli_image = prepare_hyperlane_cli(rollup_port, anvil_port)
+        .with_cmd([
+            "core",
+            "deploy",
+            "--config",
+            "/root/configs/core-config.yaml",
+            "--chain",
+            "ethtest",
+            "--yes",
+        ]);
 
     let container = hyperlane_cli_image
         .start()
@@ -1025,7 +1037,6 @@ async fn deploy_hyperlane(rollup_port: u16, anvil_port: u16) -> HexHash {
         .await
         .expect("FAILED TO GET STDOUT");
     let pretty_stdout = String::from_utf8_lossy(&container_stdout);
-    println!("PRETTY STDOUT: {}", pretty_stdout);
 
     if container_exit_code != Some(0) {
         let container_stderr = container
