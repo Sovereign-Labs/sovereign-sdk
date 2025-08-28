@@ -1,5 +1,4 @@
 use std::env;
-use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -24,9 +23,8 @@ use sov_sequencer::SequencerKindConfig;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, TestUser};
-use tempfile::TempDir;
 use testcontainers::core::client::docker_client_instance;
-use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult, Host, IntoContainerPort, Mount};
+use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult, Host, IntoContainerPort};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 use testcontainers_modules::anvil::AnvilNode;
@@ -412,6 +410,7 @@ impl Hyperlane {
         // fetch logs in latest block
         let logs: Vec<_> =
             anvil_rpc(self.anvil.as_ref().unwrap(), "eth_getLogs", json!([{}])).await;
+        println!("LOGS: {:?}", logs);
         EvmProcessWithId::new(logs)
     }
 
@@ -437,6 +436,7 @@ impl Hyperlane {
             panic!("Called warp init on counterparty before its setup");
         }
 
+        // TODO: Fix this
         // deploy warp route on evm counterparty
         let config_path = "./configs/warp-route-deployment.yaml";
         let warp_config = warp_route_config(sovtest_route, sovtest_decimals);
@@ -963,53 +963,22 @@ async fn start_anvil() -> ContainerAsync<AnvilNode> {
         .expect("failed to start anvil")
 }
 
+
 /// Returns an address of evm test recipient, to which we can dispatch test messages.
 async fn deploy_hyperlane(rollup_port: u16, anvil_port: u16) -> HexHash {
-    // Step 1: Prepare all config files locally in a tempdir
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let temp_path = temp_dir.path();
-
-    // Create directory structure
-    let hyperlane_dir = temp_path.join(".hyperlane");
-    let chains_dir = hyperlane_dir.join("chains");
-    let sovtest_dir = chains_dir.join("sovtest");
-    let ethtest_dir = chains_dir.join("ethtest");
-    let configs_dir = temp_path.join("configs");
-
-    fs::create_dir_all(&sovtest_dir).expect("Failed to create sovtest directory");
-    fs::create_dir_all(&ethtest_dir).expect("Failed to create ethtest directory");
-    fs::create_dir_all(&configs_dir).expect("Failed to create configs directory");
-
-    // Write chain metadata files
+    // Prepare config content
     let sovtest_config = sovtest_metadata(rollup_port);
-    fs::write(sovtest_dir.join("metadata.yaml"), sovtest_config)
-        .expect("Failed to write sovtest metadata");
-
     let ethtest_config = ethtest_metadata("host.docker.internal", anvil_port);
-    fs::write(ethtest_dir.join("metadata.yaml"), ethtest_config)
-        .expect("Failed to write ethtest metadata");
-
-    // Write core config
     let core_config = core_config(ANVIL_ACCOUNTS[0].0.parse().unwrap());
-    fs::write(configs_dir.join("core-config.yaml"), core_config)
-        .expect("Failed to write core config");
-
     let sov_addresses = sovtest_addresses();
-    fs::write(sovtest_dir.join("addresses.yaml"), sov_addresses)
-        .expect("Failed to write sovtest addresses");
 
-    // Step 2: Configure the container with mounted volume and network
+    // Step 2: Configure the container with copy_to for configs and network
     let mut hyperlane_cli_image = GenericImage::new("ghcr.io/citizen-stig/hyperlane-cli", "17.0.0")
         .with_env_var("HYP_KEY", ANVIL_ACCOUNTS[0].1)
-        .with_network("hyperlane-test")
-        .with_mount(Mount::bind_mount(
-            chains_dir.to_string_lossy().to_string(),
-            "/root/.hyperlane/chains",
-        ))
-        .with_mount(Mount::bind_mount(
-            configs_dir.to_string_lossy().to_string(),
-            "/root/configs",
-        ))
+        .with_copy_to("/root/.hyperlane/chains/sovtest/metadata.yaml", sovtest_config.into_bytes())
+        .with_copy_to("/root/.hyperlane/chains/ethtest/metadata.yaml", ethtest_config.into_bytes())
+        .with_copy_to("/root/.hyperlane/chains/sovtest/addresses.yaml", sov_addresses.as_bytes().to_vec())
+        .with_copy_to("/root/configs/core-config.yaml", core_config.into_bytes())
         .with_cmd([
             "core",
             "deploy",
@@ -1056,6 +1025,7 @@ async fn deploy_hyperlane(rollup_port: u16, anvil_port: u16) -> HexHash {
         .await
         .expect("FAILED TO GET STDOUT");
     let pretty_stdout = String::from_utf8_lossy(&container_stdout);
+    println!("PRETTY STDOUT: {}", pretty_stdout);
 
     if container_exit_code != Some(0) {
         let container_stderr = container
