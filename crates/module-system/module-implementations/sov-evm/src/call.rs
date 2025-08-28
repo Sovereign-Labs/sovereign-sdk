@@ -32,16 +32,13 @@ where
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
         // Check if the tx went through the EVM authenticator.
-        // TODO: This may no longer be needed.
-        //
-        // If a sov-modules address is registered as a credential id,
-        // then it should be able to send EVM transactions - in that scenario, to give EVM an address, we could
-        // use the address of the EVM address that the sov-modules address is registered as a credential to.
         let signer = *context
             .get_sender_credential::<Address>()
             .ok_or(anyhow::anyhow!(
                 "EVM transaction must be authenticated by the EVM authenticator"
             ))?;
+
+        let sov_nonce = self.get_sov_nonce(signer, state)?;
 
         let evm_tx: TransactionSigned = convert_to_transaction_signed(message.rlp)?;
 
@@ -52,8 +49,6 @@ where
 
         let cfg = self.cfg(state)?.expect("Evm config must be set");
         let cfg_env = get_cfg_env(&block_env, cfg, None);
-
-        let sov_nonce = self.get_sov_nonce(signer, state)?;
 
         let evm_db: EvmDb<_, S> = self.get_db(state);
 

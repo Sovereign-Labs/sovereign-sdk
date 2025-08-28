@@ -44,7 +44,6 @@ pub fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
         .with_block(block_env)
         .with_cfg(cfg);
     let mut evm = SovEvm::new(context, ());
-
     evm.transact_commit(tx_env)
 }
 

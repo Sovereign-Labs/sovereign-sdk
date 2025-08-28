@@ -218,7 +218,6 @@ where
             .unwrap_or_default();
 
         debug!(%address, nonce, "EVM module JSON-RPC request to `eth_getTransactionCount`");
-
         Ok(U64::from(nonce))
     }
 
