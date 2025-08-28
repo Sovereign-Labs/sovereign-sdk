@@ -49,6 +49,9 @@ where
 
         // Load caller's account.
         let caller_account = journal.load_account_code(tx.caller())?.data;
+
+        // Touch account so we know it is changed.
+        caller_account.mark_touch();
         // Bump the nonce for calls. Nonce for CREATE will be bumped in `make_create_frame`.
         if tx.kind().is_call() {
             // Nonce is already checked
