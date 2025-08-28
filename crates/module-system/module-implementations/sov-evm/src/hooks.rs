@@ -222,3 +222,37 @@ impl<S: Spec> FinalizeHook for Evm<S> {
         self.pending_head.delete(state).unwrap_infallible();
     }
 }
+
+#[cfg(feature = "native")]
+impl<S: Spec> Evm<S> {
+    fn _prune(&mut self, state: &mut impl AccessoryStateReaderAndWriter) {
+        /*let (x, y) = self
+                    .pruning_distance
+                    .get(state)
+                    //.unwrap_infallible()
+                    .unwrap()
+                    .unwrap();
+        */
+
+        {
+            let _ = self.blocks.len(state);
+            let block = self.blocks.remove(0, state).unwrap_infallible().unwrap();
+            let block_hash = block.header.hash();
+            let _ = self.block_hashes.remove(&block_hash, state);
+        }
+
+        {
+            let _ = self.receipts.len(state);
+            let receipt = self.receipts.remove(0, state).unwrap_infallible().unwrap();
+
+            let transaction = self
+                .transactions
+                .remove(0, state)
+                .unwrap_infallible()
+                .unwrap();
+
+            let tx_hash = transaction.signed_transaction.hash();
+            let _ = self.transaction_hashes.remove(&tx_hash, state);
+        }
+    }
+}
