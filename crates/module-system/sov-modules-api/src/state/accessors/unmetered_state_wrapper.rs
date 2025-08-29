@@ -79,15 +79,19 @@ where
         let storage_value = <Self as StateReader<N>>::get(self, storage_key)?;
 
         Ok(storage_value.map(|storage_value| {
+            #[cfg(feature = "native")]
             let deserialization_start = std::time::Instant::now();
             let value = codec.value_codec().decode_unwrap(storage_value.value());
-            let deserialization_duration = deserialization_start.elapsed();
-            self.inner.metrics().add_deserialize_metric(
-                storage_key.key(),
-                storage_key.display_fn(),
-                storage_value.size(),
-                deserialization_duration,
-            );
+            #[cfg(feature = "native")]
+            {
+                let deserialization_duration = deserialization_start.elapsed();
+                self.inner.metrics().add_deserialize_metric(
+                    storage_key.key(),
+                    storage_key.display_fn(),
+                    storage_value.size(),
+                    deserialization_duration,
+                );
+            }
             value
         }))
     }

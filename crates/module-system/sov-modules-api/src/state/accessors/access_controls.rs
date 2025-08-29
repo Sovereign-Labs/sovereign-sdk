@@ -51,15 +51,19 @@ macro_rules! inner_impl_charge_gas_state_infallible_reader {
             use crate::state::accessors::StateMetricsProvider;
             let storage_value = <Self as StateReader<$namespace>>::get(self, storage_key)?;
             Ok(storage_value.map(|storage_value| {
+                #[cfg(feature = "native")]
                 let deserialization_start = std::time::Instant::now();
                 let value = codec.value_codec().decode_unwrap(storage_value.value());
-                let deserialization_duration = deserialization_start.elapsed();
-                self.metrics().add_deserialize_metric(
-                    storage_key.key(),
-                    storage_key.display_fn(),
-                    storage_value.size(),
-                    deserialization_duration,
-                );
+                #[cfg(feature = "native")]
+                {
+                    let deserialization_duration = deserialization_start.elapsed();
+                    self.metrics().add_deserialize_metric(
+                        storage_key.key(),
+                        storage_key.display_fn(),
+                        storage_value.size(),
+                        deserialization_duration,
+                    );
+                }
                 value
             }))
         }
@@ -213,15 +217,19 @@ impl<S: Spec> StateReader<Accessory> for AccessoryStateCheckpoint<'_, S> {
         let storage_value = <Self as StateReader<Accessory>>::get(self, storage_key)?;
 
         Ok(storage_value.map(|storage_value| {
+            #[cfg(feature = "native")]
             let deserialization_start = std::time::Instant::now();
             let value = codec.value_codec().decode_unwrap(storage_value.value());
-            let deserialization_duration = deserialization_start.elapsed();
-            self.checkpoint.metrics.add_deserialize_metric(
-                storage_key.key(),
-                storage_key.display_fn(),
-                storage_value.size(),
-                deserialization_duration,
-            );
+            #[cfg(feature = "native")]
+            {
+                let deserialization_duration = deserialization_start.elapsed();
+                self.checkpoint.metrics.add_deserialize_metric(
+                    storage_key.key(),
+                    storage_key.display_fn(),
+                    storage_value.size(),
+                    deserialization_duration,
+                );
+            }
             value
         }))
     }

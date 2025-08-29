@@ -350,15 +350,20 @@ macro_rules! blanket_impl_metered_state_reader {
                             namespace: <$namespace as sov_state::CompileTimeNamespace>::NAMESPACE,
                         })?;
 
+                    #[cfg(feature = "native")]
                     let deserialization_start = std::time::Instant::now();
                     let value = codec.value_codec().decode_unwrap(storage_value.value());
-                    let deserialization_duration = deserialization_start.elapsed();
-                    self.metrics().add_deserialize_metric(
-                        storage_key.key(),
-                        storage_key.display_fn(),
-                        storage_value.size(),
-                        deserialization_duration,
-                    );
+                    #[cfg(feature = "native")]
+                    {
+                        let deserialization_duration = deserialization_start.elapsed();
+                        self.metrics().add_deserialize_metric(
+                            storage_key.key(),
+                            storage_key.display_fn(),
+                            storage_value.size(),
+                            deserialization_duration,
+                        );
+                    }
+
                     Ok(value)
                 })
                 .transpose()
@@ -398,15 +403,19 @@ impl<T: AccessoryStateReader + StateMetricsProvider> StateReader<Accessory> for 
     {
         let storage_value = <Self as StateReader<Accessory>>::get(self, storage_key)?;
         let value = storage_value.map(|storage_value| {
+            #[cfg(feature = "native")]
             let deserialization_start = std::time::Instant::now();
             let value = codec.value_codec().decode_unwrap(storage_value.value());
-            let deserialization_duration = deserialization_start.elapsed();
-            self.metrics().add_deserialize_metric(
-                storage_key.key(),
-                storage_key.display_fn(),
-                storage_value.size(),
-                deserialization_duration,
-            );
+            #[cfg(feature = "native")]
+            {
+                let deserialization_duration = deserialization_start.elapsed();
+                self.metrics().add_deserialize_metric(
+                    storage_key.key(),
+                    storage_key.display_fn(),
+                    storage_value.size(),
+                    deserialization_duration,
+                );
+            }
             value
         });
 
