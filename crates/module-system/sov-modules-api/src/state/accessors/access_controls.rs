@@ -48,6 +48,7 @@ macro_rules! inner_impl_charge_gas_state_infallible_reader {
             Codec: StateCodec,
             Codec::ValueCodec: StateItemCodec<V>,
         {
+            #[cfg(feature = "native")]
             use crate::state::accessors::StateMetricsProvider;
             let storage_value = <Self as StateReader<$namespace>>::get(self, storage_key)?;
             Ok(storage_value.map(|storage_value| {
