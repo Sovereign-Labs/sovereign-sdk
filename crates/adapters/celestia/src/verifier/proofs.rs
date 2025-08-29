@@ -81,17 +81,17 @@ impl BlobProof {
         let first_sub_proof = self.get_first_sub_proof().map_err(InvalidRowProof)?;
         let blob_proof_range_start = first_sub_proof.start_share_idx;
 
-        // 1. It should point to the first row.
-        // The start range is row adjusted, but namespace relative. So it should be always row zero,
-        // Even if first row that contains this namespace is not the first row in the block.
+        // 1. It should point to the first row of this namespace.
+        // The start index is row-aligned (not a flat namespace index), so the row number must be 0
+        // (the first row containing this namespace), even if that row is not the first row in the block.
         let row_number = block_header.calculate_row_number_for_share(blob_proof_range_start);
         if row_number != 0 {
             return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
         }
 
         // 2. Check consistency between `start_share_idx` and `proof.start_idx()`
-        // Because it is a first row, total start_share_idx, which is index in the namespace.
-        // Should match proof start_idx, which is the index inside the row.
+        // Because this is the first row for the namespace, the row-aligned `start_share_idx`
+        // must match `proof.start_idx()`, which is the index inside that row.
         // Note: converting both to u64 for correct validation and making this variable trusted.
         if first_sub_proof.start_share_idx as u64 != first_sub_proof.proof.start_idx() as u64 {
             return Err(InvalidRowProof(RowProofError::WrongStartShareIndex {
@@ -147,8 +147,8 @@ impl BlobProof {
 pub struct RangeProof {
     pub(crate) shares: Vec<celestia_types::Share>,
     pub(crate) proof: celestia_types::nmt::NamespaceProof,
-    // Index in the namespace, aligned for data row, not for namespace
-    // Index is relative to the first row which contains the given namespace.
+    // Row-aligned index: absolute position in the EDS rows (width = row_length),
+    // where row 0 is the first row containing this namespace.
     pub(crate) start_share_idx: usize,
 }
 
@@ -297,7 +297,7 @@ fn sub_namespace_inclusion_proofs(
 ) -> Vec<BlobProof> {
     #[cfg(debug_assertions)]
     {
-        // using regular asser, as whole block is wrapped in debug_assertions
+        // using regular assert, as the whole block is wrapped in debug_assertions
         assert!(
             check_ranges_sorted(blob_ranges_to_prove),
             "Ranges non-sorted or overlapping"
@@ -306,12 +306,12 @@ fn sub_namespace_inclusion_proofs(
     // Should be sorted and non-overlapping
     let mut output = Vec::with_capacity(blob_ranges_to_prove.len());
 
-    // Shares in the first row are aligned right
+    // Shares in the first row are right-aligned within the row
     let first_row_offset = if !namespace_data.rows.is_empty() {
         let first_row = &namespace_data.rows[0];
         row_length
             .checked_sub(first_row.shares.len())
-            .expect("Row cannot be larger that square size")
+            .expect("Row cannot be larger than square size")
     } else {
         0
     };
@@ -403,7 +403,8 @@ fn check_ranges_sorted(ranges: &[std::ops::Range<usize>]) -> bool {
     true
 }
 
-/// Converts namespace relative range into the set of per-row ranges with absolute coordinates inside data square
+/// Converts a flat namespace-relative range into the set of per-row ranges with row-aligned absolute coordinates
+/// (row 0 is the first row containing this namespace) inside the data square
 /// Blob range is a "flat" range over the whole namespace.
 /// It can span across several rows.
 /// Returns sub-ranges adjusted to the offset.
