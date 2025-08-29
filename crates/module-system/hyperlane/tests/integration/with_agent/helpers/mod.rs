@@ -211,10 +211,11 @@ impl HyperlaneBuilder {
         // Current image is based on https://github.com/citizen-stig/hyperlane-monorepo/tree/nikolai/for-test
         // TODO: Migrate it to https://github.com/Sovereign-Labs/hyperlane-monorepo/ and later to upstream.
         let docker_image = docker_image
-            .unwrap_or_else(|_| "ghcr.io/citizen-stig/hyperlane-agent:integration-2".into());
+            .unwrap_or_else(|_| "ghcr.io/sovereign-labs/hyperlane-agent:integration-2".into());
         let (name, tag) = docker_image
             .split_once(':')
             .unwrap_or((&docker_image, "latest"));
+        tracing::info!(%name, %tag, "Using hyperlane agent docker image");
 
         let image = GenericImage::new(name, tag);
 
@@ -453,9 +454,8 @@ impl Hyperlane {
     /// Searches the latest block on evm counterparty (where there's block per tx)
     /// and tries to extract the Mailbox Process event from it.
     pub async fn latest_message_on_counterparty(&mut self) -> EvmProcessWithId {
-        let anvil = self.get_anvil_mut();
         // fetch logs in the latest block
-        let logs: Vec<_> = anvil.rpc("eth_getLogs", json!([{}])).await;
+        let logs: Vec<_> = self.get_anvil_mut().rpc("eth_getLogs", json!([{}])).await;
         println!("LOGS: {logs:?}");
         EvmProcessWithId::new(logs)
     }
@@ -467,16 +467,12 @@ impl Hyperlane {
         if self.evm_counter_party.is_none() {
             panic!("Called mine next block on counterparty before its setup");
         }
-        let anvil = &mut self
-            .evm_counter_party
-            .as_mut()
-            .expect("Cannot use without evm")
-            .anvil;
-
-        anvil.rpc::<Value>("anvil_mine", json!([1])).await;
+        self.get_anvil_mut()
+            .rpc::<Value>("anvil_mine", json!([1]))
+            .await;
     }
 
-    /// Create warp route for nativeETH on counterparty, enroll remote router to rollup,
+    /// Create a warp route for nativeETH on counterparty, enroll remote router to rollup,
     /// and return route address on counterparty.
     pub async fn deploy_warp_route_on_counterparty(&mut self, sovtest_route: HexHash) -> HexHash {
         if self.evm_counter_party.is_none() {
@@ -605,7 +601,6 @@ impl Hyperlane {
             };
             print_logs_from_exec_result(&name, val, std::time::Duration::from_secs(1)).await;
         }
-
     }
 }
 
