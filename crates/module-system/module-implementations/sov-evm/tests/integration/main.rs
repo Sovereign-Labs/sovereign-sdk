@@ -1,6 +1,7 @@
 mod contracts;
 mod genesis;
 mod helpers;
+mod pruning;
 mod runtime;
 mod state;
 mod transactions;

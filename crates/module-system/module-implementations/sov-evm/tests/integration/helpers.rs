@@ -132,7 +132,9 @@ fn create_tx(account: &EvmAccount, tx: TxEip1559) -> TransactionType<RT, S> {
         chain_id: config_value!("CHAIN_ID"),
         ..tx
     };
+
     let (signed_eth_tx, _) = account.sign(TypedTransaction::Eip1559(tx_with_defaults));
+
     let data = borsh::to_vec(&signed_eth_tx).unwrap();
     let raw_tx = RawTx { data };
     TransactionType::PreAuthenticated(RT::encode_with_ethereum_auth(raw_tx))

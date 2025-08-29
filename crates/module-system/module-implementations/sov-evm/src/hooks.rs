@@ -1,16 +1,17 @@
+use crate::evm::primitive_types::Block;
+use crate::{BlockEnv, Evm, PendingTransaction};
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root};
 use alloy_consensus::TxReceipt;
 use alloy_primitives::Bloom;
 use alloy_primitives::{B256, U256};
+use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 #[cfg(feature = "native")]
 use sov_modules_api::{AccessoryStateReaderAndWriter, FinalizeHook};
 use sov_modules_api::{BlockHooks, Spec, StateCheckpoint};
 use sov_state::{ProvableNamespace, StateRoot, Storage};
-
-use crate::evm::primitive_types::Block;
-use crate::{BlockEnv, Evm, PendingTransaction};
+use std::convert::Infallible;
 
 impl<S: Spec> BlockHooks for Evm<S> {
     type Spec = S;
@@ -191,21 +192,21 @@ impl<S: Spec> FinalizeHook for Evm<S> {
         root_hash: &<S::Storage as Storage>::Root,
         state: &mut impl AccessoryStateReaderAndWriter,
     ) {
-        let expected_block_number = self.blocks.len(state).unwrap_infallible();
+        // let expected_block_number = self.blocks.len(state).unwrap_infallible();
 
         let mut block = self
             .pending_head
             .get(state)
             .unwrap_infallible()
-            .unwrap_or_else(|| {
-                panic!("Pending head must be set to block {expected_block_number}, but was empty")
-            });
+            .unwrap_or_else(|| panic!("TODO"));
 
+        /*
         assert_eq!(
             block.header.number, expected_block_number,
             "Pending head must be set to block {}, but found block {}",
             expected_block_number, block.header.number
-        );
+        );*/
+
         let user_space_root_hash: [u8; 32] = root_hash.namespace_root(ProvableNamespace::User);
         block.header.state_root = user_space_root_hash.into();
 
@@ -220,39 +221,55 @@ impl<S: Spec> FinalizeHook for Evm<S> {
             )
             .unwrap_infallible();
         self.pending_head.delete(state).unwrap_infallible();
+
+        self.prune(state).unwrap_infallible();
     }
 }
 
 #[cfg(feature = "native")]
 impl<S: Spec> Evm<S> {
-    fn _prune(&mut self, state: &mut impl AccessoryStateReaderAndWriter) {
-        /*let (x, y) = self
-                    .pruning_distance
-                    .get(state)
-                    //.unwrap_infallible()
-                    .unwrap()
-                    .unwrap();
-        */
+    fn prune(&mut self, state: &mut impl AccessoryStateReaderAndWriter) -> Result<(), Infallible> {
+        let block_pruning_threshold = config_value!("EVM_BLOCK_PRUNING_THRESHOLD");
+        let transaction_pruning_threshold = config_value!("EVM_TRANSACTION_PRUNING_THRESHOLD");
 
-        {
-            let _ = self.blocks.len(state);
-            let block = self.blocks.remove(0, state).unwrap_infallible().unwrap();
+        // Prune blocks
+        while self.blocks.len(state)? > block_pruning_threshold {
+            let block = self
+                .blocks
+                .remove(0, state)?
+                // Safe because we already checked blocks.len()
+                .expect("Impossible happened: no block available to prune");
+
             let block_hash = block.header.hash();
-            let _ = self.block_hashes.remove(&block_hash, state);
+            self.block_hashes
+                .remove(&block_hash, state)
+                // Safe, since we keep one block_hash per block.
+                .expect("Impossible happened: no block_hasha vailable to prune");
         }
 
-        {
-            let _ = self.receipts.len(state);
-            let receipt = self.receipts.remove(0, state).unwrap_infallible().unwrap();
-
+        // Prune transactions
+        while self.transactions.len(state)? > transaction_pruning_threshold {
             let transaction = self
                 .transactions
-                .remove(0, state)
-                .unwrap_infallible()
-                .unwrap();
+                .remove(0, state)?
+                // Safe because we already checked transactions.len()
+                .expect("Impossible happened: no transaction available to prune");
 
             let tx_hash = transaction.signed_transaction.hash();
-            let _ = self.transaction_hashes.remove(&tx_hash, state);
+            self.transaction_hashes
+                .remove(tx_hash, state)
+                // Safe, since we keep one tx_hash per tx.
+                .expect("Impossible happened: no transaction_hashes available to prune");
         }
+
+        // Prune receipts
+        while self.receipts.len(state)? > transaction_pruning_threshold {
+            self.receipts
+                .remove(0, state)?
+                // Safe because we already checked receipts.len()
+                .expect("Impossible happened: no receipts available to prune");
+        }
+
+        Ok(())
     }
 }

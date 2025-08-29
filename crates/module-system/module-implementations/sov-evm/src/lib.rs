@@ -99,10 +99,6 @@ pub struct Evm<S: Spec> {
     #[state]
     pub(crate) head: StateValue<Block, BcsCodec>,
 
-    ///
-    #[state]
-    pub(crate) pruning_distance: StateValue<(u64, u64), BcsCodec>,
-
     /// Used only by the RPC. This represents the head of the chain and is set in two distinct stages:
     ///  1. `end_rollup_block_hook`: the pending head is populated with data from pending_transactions.
     ///  2. `finalize_hook` the `root_hash` is populated.
@@ -114,23 +110,23 @@ pub struct Evm<S: Spec> {
 
     /// Used only by the RPC: The vec is extended with `pending_head` in `finalize_hook`.
     #[state]
-    pub(crate) blocks: AccessoryStateVec<SealedBlock, BcsCodec>,
+    pub blocks: AccessoryStateVec<SealedBlock, BcsCodec>,
 
     /// Used only by the RPC: List of processed transactions.
     #[state]
-    pub(crate) transactions: AccessoryStateVec<TransactionSignedAndRecovered, BcsCodec>,
+    pub transactions: AccessoryStateVec<TransactionSignedAndRecovered, BcsCodec>,
 
     /// Used only by the RPC: Receipts.
     #[state]
-    pub(crate) receipts: AccessoryStateVec<Receipt, BcsCodec>,
+    pub receipts: AccessoryStateVec<Receipt, BcsCodec>,
 
     /// Used only by the RPC: block_hash => block_number mapping.
     #[state]
-    pub(crate) block_hashes: AccessoryStateMap<B256, u64, BcsCodec>,
+    pub block_hashes: AccessoryStateMap<B256, u64, BcsCodec>,
 
     /// Used only by the RPC: transaction_hash => transaction_index mapping.
     #[state]
-    pub(crate) transaction_hashes: AccessoryStateMap<B256, u64, BcsCodec>,
+    pub transaction_hashes: AccessoryStateMap<B256, u64, BcsCodec>,
 
     /// A reference to the Bank module.
     #[module]

@@ -55,8 +55,6 @@ where
         self.cfg.set(&chain_cfg, state)?;
         self.head.set(&block, state)?;
 
-        self.pruning_distance.set(&(1000, 10), state)?;
-
         #[cfg(feature = "native")]
         self.pending_head.set(&block, state)?;
 

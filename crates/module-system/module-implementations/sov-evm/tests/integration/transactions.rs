@@ -110,6 +110,7 @@ fn test_account_nonce() {
     let transfer_tx = create_transfer_tx(0, &from, &to, value);
 
     let evm = Evm::<S>::default();
+
     runner.execute_transaction(TransactionTestCase {
         input: transfer_tx,
         assert: Box::new(move |_ctx, state| {
