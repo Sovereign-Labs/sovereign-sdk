@@ -54,6 +54,6 @@ restart-toxiproxy:
 
 
 build-hyperlane-cli:
-	docker build -f hyperlane/hyperlane-cli.Dockerfile --build-arg CLI_VERSION=sov-integration -t ghcr.io/citizen-stig/hyperlane-cli:sov-integration .
-	docker push ghcr.io/citizen-stig/hyperlane-cli:sov-integration
-	docker run ghcr.io/citizen-stig/hyperlane-cli:sov-integration --version
+	docker build -f hyperlane/hyperlane-cli.Dockerfile --build-arg CLI_VERSION=sov-integration-2 -t ghcr.io/citizen-stig/hyperlane-cli:sov-integration-2 .
+	docker push ghcr.io/citizen-stig/hyperlane-cli:sov-integration-2
+	docker run ghcr.io/citizen-stig/hyperlane-cli:sov-integration-2 --version
