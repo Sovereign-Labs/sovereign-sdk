@@ -115,7 +115,7 @@ pub fn core_config(owner: EthAddress) -> String {
 /// hyperlane-cli doesn't yet have support for 'sovereign' protocol,
 /// but since we are using it only to interact with ethereum deployment
 /// we only care to have there anything but 'ethereum'
-pub fn sovtest_metadata(rollup_port: u16, ) -> String {
+pub fn sovtest_metadata(rollup_port: u16) -> String {
     let chain = config_value!("CHAIN_ID");
     let domain = config_value!("HYPERLANE_BRIDGE_DOMAIN");
     formatdoc! {"

@@ -362,7 +362,7 @@ async fn test_dispatch_message_to_evm_counterparty() {
     let relayer_config_tx = tx_set_relayer_config(&relayer);
     submit_tx(rollup.api_client(), relayer_config_tx).await;
 
-    let evm_recipient = hyperlane.evm_recipient.unwrap();
+    let evm_recipient = hyperlane.evm_counter_party.as_ref().unwrap().evm_recipient;
     // dispatch message to evm test recipient
     let dispatch_tx = tx_send_message(&relayer, evm_recipient, Some(EVM_DOMAIN), b"Hello there");
     submit_tx(rollup.api_client(), dispatch_tx).await;
@@ -631,7 +631,8 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
 #[tokio::test(flavor = "multi_thread")]
 async fn test_warp_transfer_back_and_forth_with_evm_without_scaling() {
     sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
-    let _span = tracing::info_span!("test_warp_transfer_back_and_forth_with_evm_without_scaling").entered();
+    let _span =
+        tracing::info_span!("test_warp_transfer_back_and_forth_with_evm_without_scaling").entered();
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         18,
         Amount(1234),
@@ -645,7 +646,8 @@ async fn test_warp_transfer_back_and_forth_with_evm_without_scaling() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_warp_transfer_back_and_forth_with_evm_scaled_down() {
     sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
-    let _span = tracing::info_span!("test_warp_transfer_back_and_forth_with_evm_scaled_down").entered();
+    let _span =
+        tracing::info_span!("test_warp_transfer_back_and_forth_with_evm_scaled_down").entered();
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         16,
         Amount(1234),
@@ -659,7 +661,8 @@ async fn test_warp_transfer_back_and_forth_with_evm_scaled_down() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_warp_transfer_back_and_forth_with_evm_scaled_up() {
     sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
-    let _span = tracing::info_span!("test_warp_transfer_back_and_forth_with_evm_scaled_up").entered();
+    let _span =
+        tracing::info_span!("test_warp_transfer_back_and_forth_with_evm_scaled_up").entered();
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         20,
         Amount(1234),

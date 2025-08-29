@@ -1,16 +1,16 @@
+mod evm;
 mod hyperlane_cli;
 
 use std::env;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use super::configs::agent_config;
 use super::preferred_sequencer_runtime::{GenesisConfig, TestRuntime};
+use crate::with_agent::helpers::evm::AnvilRunner;
 use crate::with_agent::helpers::hyperlane_cli::HyperlaneCliRunner;
 use futures::future::join_all;
 use futures::{FutureExt, StreamExt};
-use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sov_bank::Amount;
@@ -24,10 +24,9 @@ use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, TestUser};
 use testcontainers::core::client::docker_client_instance;
-use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult, Host, IntoContainerPort, Mount};
+use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult, Host, IntoContainerPort};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
-use testcontainers_modules::anvil::AnvilNode;
 use tokio::io::AsyncBufReadExt;
 use tokio::time::timeout;
 
@@ -42,9 +41,9 @@ pub const FINALIZED_BLOCKS_AT_START: usize = 3;
 pub const DEFAULT_BLOCK_PRODUCING_CONFIG: BlockProducingConfig = BlockProducingConfig::Periodic {
     block_time_ms: DEFAULT_BLOCK_TIME_MS,
 };
+pub const ANVIL_PORT: u16 = 8545;
 pub const DEFAULT_FINALIZATION_BLOCKS: u32 = 10;
 /// Use `container.get_host_port_ipv4(RELAYER_METRICS_PORT)` to get metrics
-pub const ANVIL_PORT: u16 = 8545;
 pub const RELAYER_METRICS_PORT: u16 = 9091;
 pub const VALIDATOR_METRICS_PORT: u16 = 9097;
 /// Domain id of the evm counterparty chain
@@ -276,32 +275,13 @@ impl HyperlaneBuilder {
         // evm counterparty must be started before agents
         // because they will try to reach out to it immediately.
         // the same goes for rollup, but we assume it's running knowing its port.
-        let (anvil, anvil_port, evm_recipient, hyperlane_cli) = if self.with_evm {
-            let start_anvil_time = std::time::Instant::now();
-            let anvil = start_anvil().await;
-            let anvil_port = anvil
-                .get_host_port_ipv4(ANVIL_PORT)
-                .await
-                .expect("Failed to get anvil port");
-            tracing::info!(
-                port = anvil_port,
-                container_id = ?anvil.id(),
-                time = ?start_anvil_time.elapsed(),
-                "Anvil container started"
-            );
-            let hyperlane_cli = HyperlaneCliRunner::new(rollup_port, anvil_port);
-            let hyperlane_deploy_start = std::time::Instant::now();
-            let evm_recipient = hyperlane_cli.deploy_core().await;
-            tracing::info!(time = ?hyperlane_deploy_start.elapsed(), "Hyperlane deployed");
-            (
-                Some(anvil),
-                anvil_port,
-                Some(evm_recipient),
-                Some(hyperlane_cli),
-            )
+        let (evm_counter_party, anvil_port) = if self.with_evm {
+            let evm_counter_party = EvmCounterParty::new(rollup_port).await;
+            let anvil_port = evm_counter_party.anvil.port();
+            (Some(evm_counter_party), anvil_port)
         } else {
             // Does not matter, default port going to do
-            (None, ANVIL_PORT, None, None)
+            (None, ANVIL_PORT)
         };
 
         // Start container with just basic env and no processes
@@ -343,7 +323,11 @@ impl HyperlaneBuilder {
         // start all the hyperlane agents concurrently
         let has_relayer = self.relayer.is_some();
         let maybe_relayer_fut = if has_relayer {
-            let fut = start_relayer(&container, self.relayer.unwrap(), anvil.is_some());
+            let fut = start_relayer(
+                &container,
+                self.relayer.unwrap(),
+                evm_counter_party.is_some(),
+            );
             Some(fut.boxed_local())
         } else {
             None
@@ -369,11 +353,31 @@ impl HyperlaneBuilder {
 
         Hyperlane {
             container,
-            anvil,
-            evm_recipient,
+            evm_counter_party,
             relayer,
             validators: agents,
+        }
+    }
+}
+
+pub(crate) struct EvmCounterParty {
+    anvil: AnvilRunner,
+    hyperlane_cli: HyperlaneCliRunner,
+    pub evm_recipient: HexHash,
+}
+
+impl EvmCounterParty {
+    async fn new(rollup_port: u16) -> Self {
+        let anvil = AnvilRunner::new().await;
+        let anvil_port = anvil.port();
+        let hyperlane_cli = HyperlaneCliRunner::new(rollup_port, anvil_port);
+        let hyperlane_deploy_start = std::time::Instant::now();
+        let evm_recipient = hyperlane_cli.deploy_core().await;
+        tracing::info!(time = ?hyperlane_deploy_start.elapsed(), "Hyperlane deployed");
+        Self {
+            anvil,
             hyperlane_cli,
+            evm_recipient,
         }
     }
 }
@@ -382,49 +386,70 @@ pub struct Hyperlane {
     // Keep ownership of the container, so it does not stopped before neeeded.
     #[allow(dead_code)]
     pub container: Container,
-    pub anvil: Option<ContainerAsync<AnvilNode>>,
-    pub evm_recipient: Option<HexHash>,
+    pub evm_counter_party: Option<EvmCounterParty>,
     pub relayer: Option<ExecResult>,
     pub validators: Vec<ExecResult>,
-    pub hyperlane_cli: Option<HyperlaneCliRunner>,
 }
 
 impl Hyperlane {
+    fn get_anvil(&self) -> &AnvilRunner {
+        &self
+            .evm_counter_party
+            .as_ref()
+            .expect("Cannot use without evm")
+            .anvil
+    }
+
+    fn get_anvil_mut(&mut self) -> &mut AnvilRunner {
+        &mut self
+            .evm_counter_party
+            .as_mut()
+            .expect("Cannot use without evm")
+            .anvil
+    }
+
+    fn get_hyperlane_cli(&self) -> &HyperlaneCliRunner {
+        &self
+            .evm_counter_party
+            .as_ref()
+            .expect("Cannot use without evm")
+            .hyperlane_cli
+    }
+
     /// Send test message from evm counterparty to sov test recipient
     pub async fn dispatch_msg_from_counterparty(&self, recipient: HexHash) -> EvmDispatchWithId {
-        if self.anvil.is_none() {
+        if self.evm_counter_party.is_none() {
             panic!("called dispatch_msg_from_counterparty without set up counterparty");
         }
         let dest_domain = config_value!("HYPERLANE_BRIDGE_DOMAIN");
 
-        // https://github.com/hyperlane-xyz/hyperlane-monorepo/blob/main/solidity/contracts/Mailbox.sol#L110
-        let logs = cast_call(
-            self.anvil
-                .as_ref()
-                .expect("Cannot cast call without anvil running"),
-            EVM_MAILBOX,
-            "dispatch(uint32,bytes32,bytes)",
-            [
-                // destination domain
-                dest_domain.to_string().as_str(),
-                // recipient
-                recipient.to_string().as_str(),
-                // message
-                HexString(b"hello world".to_vec()).to_string().as_str(),
-            ],
-            Amount(0),
-        )
-        .await;
+        let anvil = self.get_anvil();
 
+        // https://github.com/hyperlane-xyz/hyperlane-monorepo/blob/main/solidity/contracts/Mailbox.sol#L110
+        let logs = anvil
+            .cast_call(
+                EVM_MAILBOX,
+                "dispatch(uint32,bytes32,bytes)",
+                [
+                    // destination domain
+                    dest_domain.to_string().as_str(),
+                    // recipient
+                    recipient.to_string().as_str(),
+                    // message
+                    HexString(b"hello world".to_vec()).to_string().as_str(),
+                ],
+                Amount(0),
+            )
+            .await;
         EvmDispatchWithId::new(logs)
     }
 
     /// Searches the latest block on evm counterparty (where there's block per tx)
     /// and tries to extract the Mailbox Process event from it.
-    pub async fn latest_message_on_counterparty(&self) -> EvmProcessWithId {
-        // fetch logs in latest block
-        let logs: Vec<_> =
-            anvil_rpc(self.anvil.as_ref().unwrap(), "eth_getLogs", json!([{}])).await;
+    pub async fn latest_message_on_counterparty(&mut self) -> EvmProcessWithId {
+        let anvil = self.get_anvil_mut();
+        // fetch logs in the latest block
+        let logs: Vec<_> = anvil.rpc("eth_getLogs", json!([{}])).await;
         println!("LOGS: {logs:?}");
         EvmProcessWithId::new(logs)
     }
@@ -432,12 +457,17 @@ impl Hyperlane {
     /// Mines next block on the counterparty evm chain.
     ///
     /// Needed to finalize previous blocks for relayer to pick up txs.
-    pub async fn mine_next_block_on_counterparty(&self) {
-        if self.anvil.is_none() {
+    pub async fn mine_next_block_on_counterparty(&mut self) {
+        if self.evm_counter_party.is_none() {
             panic!("Called mine next block on counterparty before its setup");
         }
+        let anvil = &mut self
+            .evm_counter_party
+            .as_mut()
+            .expect("Cannot use without evm")
+            .anvil;
 
-        anvil_rpc::<Value>(self.anvil.as_ref().unwrap(), "anvil_mine", json!([1])).await;
+        anvil.rpc::<Value>("anvil_mine", json!([1])).await;
     }
 
     /// Create warp route for nativeETH on counterparty, enroll remote router to rollup,
@@ -447,63 +477,56 @@ impl Hyperlane {
         sovtest_route: HexHash,
         sovtest_decimals: u8,
     ) -> HexHash {
-        if self.anvil.is_none() {
+        if self.evm_counter_party.is_none() {
             panic!("Called warp init on counterparty before its setup");
         }
 
-        let hyperlane_cli = self
-            .hyperlane_cli
-            .as_ref()
-            .expect("Called warp init on counterparty before its setup");
-        hyperlane_cli
+        self.get_hyperlane_cli()
             .deploy_warp_route_on_counterparty(sovtest_route, sovtest_decimals)
             .await
     }
 
     pub async fn send_warp_token_transfer_from_counterparty(
-        &self,
+        &mut self,
         counterparty_route_id: HexHash,
         recipient: HexHash,
         amount: Amount,
     ) -> EvmDispatchWithId {
-        if self.anvil.is_none() {
+        if self.evm_counter_party.is_none() {
             panic!("called dispatch_msg_from_counterparty without set up counterparty");
         }
         let route_addr = HexString::new(counterparty_route_id.0[12..].try_into().unwrap());
         let destination = config_value!("HYPERLANE_BRIDGE_DOMAIN").to_string();
 
+        let anvil = self.get_anvil();
         // https://github.com/hyperlane-xyz/hyperlane-monorepo/tree/c177c4733de52f8a2477ad74b46b3f1eebb5740b/solidity/contracts/token/libs/TokenRouter.sol#L54
-        let logs = cast_call(
-            self.anvil
-                .as_ref()
-                .expect("Cannot cast call without anvil running"),
-            route_addr,
-            "transferRemote(uint32,bytes32,uint256)",
-            [
-                // destination domain
-                destination.as_str(),
-                // recipient
-                recipient.to_string().as_str(),
-                // amount
-                amount.to_string().as_str(),
-            ],
-            // we don't need to pay fees on counterparty
-            // so we only need to give contract what we want to send
-            amount,
-        )
-        .await;
+        let logs = anvil
+            .cast_call(
+                route_addr,
+                "transferRemote(uint32,bytes32,uint256)",
+                [
+                    // destination domain
+                    destination.as_str(),
+                    // recipient
+                    recipient.to_string().as_str(),
+                    // amount
+                    amount.to_string().as_str(),
+                ],
+                // we don't need to pay fees on counterparty
+                // so we only need to give contract what we want to send
+                amount,
+            )
+            .await;
 
         EvmDispatchWithId::new(logs)
     }
 
-    pub async fn counterparty_balance_of(&self, address: HexHash) -> Amount {
+    pub async fn counterparty_balance_of(&mut self, address: HexHash) -> Amount {
         let addr = HexString(&address.0[12..]);
-        let mut balance: String = anvil_rpc(
-            self.anvil.as_ref().unwrap(),
-            "eth_getBalance",
-            json!([addr.to_string(), "latest"]),
-        )
-        .await;
+        let anvil = self.get_anvil_mut();
+        let mut balance: String = anvil
+            .rpc("eth_getBalance", json!([addr.to_string(), "latest"]))
+            .await;
 
         // evm can encode first byte in a single hex character if it fits
         // but `hex::decode` expects each byte to be encoded in two characters
@@ -522,14 +545,14 @@ impl Hyperlane {
     /// Searches latest block on evm counterparty (where there's block per tx)
     /// and tries to extract the event of native token received: (origin_domain, recipient)
     pub async fn latest_warp_transfer_on_counterparty(
-        &self,
+        &mut self,
         token_addr: HexHash,
     ) -> (u32, HexHash) {
         let token_eth_addr = HexString(&token_addr.0[12..]);
+        let anvil = self.get_anvil_mut();
 
         // fetch logs in latest block
-        let logs: Vec<EvmLog> =
-            anvil_rpc(self.anvil.as_ref().unwrap(), "eth_getLogs", json!([{}])).await;
+        let logs: Vec<EvmLog> = anvil.rpc("eth_getLogs", json!([{}])).await;
         let log = logs
             .into_iter()
             .find(|log| log.address.0 == token_eth_addr.0)
@@ -584,7 +607,7 @@ impl Hyperlane {
 }
 
 #[derive(Debug, Deserialize)]
-struct EvmLog {
+pub struct EvmLog {
     address: EthAddress,
     /// First topic is keccak hash of event's signature
     /// followed by indexed event's fields in order they are defined.
@@ -823,143 +846,7 @@ pub fn parse_eth_addr(addr: &str) -> HexHash {
     res.into()
 }
 
-pub async fn anvil_rpc<T: DeserializeOwned>(
-    container: &ContainerAsync<AnvilNode>,
-    method: &str,
-    params: Value,
-) -> T {
-    let start = std::time::Instant::now();
-    static ID: AtomicUsize = AtomicUsize::new(0);
-    let port = container.get_host_port_ipv4(ANVIL_PORT).await.unwrap();
-    let resp = reqwest::Client::new()
-        // Here we call on localhost, because anvil exposes port to the host machine.
-        .post(format!("http://127.0.0.1:{port}"))
-        .json(&json!({
-            "id": ID.fetch_add(1, Ordering::Relaxed),
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-        }))
-        .send()
-        .await
-        .unwrap()
-        .json::<Value>()
-        .await
-        .unwrap();
-
-    if let Some(error) = resp.get("error") {
-        panic!("Errors calling anvil json-rpc: {error:?}");
-    }
-
-    tracing::info!(%method, response = ?resp, time = ?start.elapsed(), "Anvil call response");
-    serde_json::from_value(resp["result"].clone()).unwrap()
-}
-
-async fn cast_call(
-    container: &ContainerAsync<AnvilNode>,
-    contract: EthAddress,
-    abi: &str,
-    args: impl AsRef<[&str]>,
-    value: Amount,
-) -> Vec<EvmLog> {
-    // Use a different account than the relayer to avoid nonce conflicts
-    // Relayer uses ANVIL_ACCOUNTS[0], so we use the last account for test transactions
-    const TEST_ACCOUNT_INDEX: usize = 9;
-
-    // Get current nonce before sending transaction
-    let nonce: String = anvil_rpc(
-        container,
-        "eth_getTransactionCount",
-        json!([ANVIL_ACCOUNTS[TEST_ACCOUNT_INDEX].0, "latest"]),
-    )
-    .await;
-
-    tracing::info!(
-        from = ANVIL_ACCOUNTS[TEST_ACCOUNT_INDEX].0,
-        nonce = nonce,
-        container_id = ?container.id(),
-        "Current nonce before cast call (using test account to avoid conflicts with relayer)"
-    );
-
-    let contract = contract.to_string();
-    let value = value.to_string();
-    let command = [
-        &["cast", "send", contract.as_str(), abi][..],
-        args.as_ref(),
-        &[
-            "--value",
-            value.as_str(),
-            "--private-key",
-            ANVIL_ACCOUNTS[TEST_ACCOUNT_INDEX].1,
-            "--json",
-        ][..],
-    ]
-    .concat();
-
-    tracing::info!(
-        ?command,
-        container_id = ?container.id(),
-        "executing cast call"
-    );
-    let mut result = container
-        .exec(ExecCommand::new(command.clone()))
-        .await
-        .unwrap();
-
-    let mut exit_code = result.exit_code().await.expect("Failed to get exit code");
-    for _ in 0..300 {
-        exit_code = result.exit_code().await.expect("Failed to get exit code");
-        if exit_code.is_some() {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
-
-    tracing::info!(?command, ?exit_code, "executed cast call");
-    let output = result.stdout_to_vec().await.unwrap();
-    if exit_code != Some(0) {
-        let std_err = result.stderr_to_vec().await.unwrap();
-        panic!(
-            "Failed to cast call.\nstdout:\n{}\nstderr:\n{}",
-            String::from_utf8_lossy(&output),
-            String::from_utf8_lossy(&std_err),
-        );
-    }
-
-    #[derive(Debug, Deserialize)]
-    struct CallOutput {
-        logs: Vec<EvmLog>,
-    }
-
-    let output: CallOutput = serde_json::from_slice(&output).unwrap();
-
-    output.logs
-}
-
 fn domain_from_hexhash(hash: HexHash) -> u32 {
     assert!(hash.0[0..28].iter().all(|&b| b == 0));
     u32::from_be_bytes(hash.0[28..].try_into().unwrap())
-}
-
-async fn start_anvil() -> ContainerAsync<AnvilNode> {
-    tracing::info!("Starting anvil container...");
-    // Hard code tag, so we don't accidental breakages
-    let container = AnvilNode::default()
-        .with_tag("v1.1.0")
-        .with_cmd([
-            // TODO: Do we really need that? It looks like AnvilNode handles that by default.
-            "--host",
-            "0.0.0.0",
-            "--port",
-            &ANVIL_PORT.to_string(),
-        ])
-        .start()
-        .await
-        .expect("failed to start anvil");
-
-    tracing::info!(
-        container_id = ?container.id(),
-        "Anvil container started successfully"
-    );
-    container
 }
