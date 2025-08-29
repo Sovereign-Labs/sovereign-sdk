@@ -139,61 +139,51 @@ fn test_deploy_many_contracts() {
     let contract = SimpleStorageContract::default();
     let contract_addr_1 = account.address().create(0);
 
-    // Deploy a contract and execute two transactions that update its storage.
-    {
-        let create_contract_tx_1 = create_deploy_tx(0, &contract, &account);
-        let set_value_tx_1 = create_set_arg_tx(5, 1, &contract, contract_addr_1, &account);
-        let set_value_tx_12 = create_set_arg_tx(7, 2, &contract, contract_addr_1, &account);
+    let create_contract_tx_1 = create_deploy_tx(0, &contract, &account);
+    let set_value_tx_1 = create_set_arg_tx(1, 1, &contract, contract_addr_1, &account);
+    let set_value_tx_12 = create_set_arg_tx(2, 2, &contract, contract_addr_1, &account);
 
-        let evm = Evm::<S>::default();
-        runner.execute_batch(BatchTestCase {
-            input: vec![create_contract_tx_1, set_value_tx_1, set_value_tx_12].into(),
-            assert: Box::new(move |_ctx, state| {
-                let storage_value_1 = evm
-                    .get_storage(&contract_addr_1, &U256::ZERO, state)
-                    .unwrap()
-                    .unwrap();
+    let contract_addr_2 = account.address().create(3);
+    let create_contract_tx_2 = create_deploy_tx(3, &contract, &account);
+    let set_value_tx_2 = create_set_arg_tx(3, 4, &contract, contract_addr_2, &account);
 
-                assert_eq!(U256::from(7), storage_value_1);
-            }),
-        });
-    }
+    let evm = Evm::<S>::default();
+    runner.execute_batch(BatchTestCase {
+        input: vec![
+            // Deploy a contract and execute two transactions that update its storage.
+            create_contract_tx_1,
+            set_value_tx_1,
+            set_value_tx_12,
+            // Deploy another contract and execut single transaction that updates its storage.
+            create_contract_tx_2,
+            set_value_tx_2,
+        ]
+        .into(),
+        assert: Box::new(move |_ctx, state| {
+            // The two contracts have different addresses.
+            assert_ne!(contract_addr_1, contract_addr_2);
 
-    // Deploy another contract and execut single transaction that updates its storage.
-    {
-        let contract_addr_2 = account.address().create(3);
-        let create_contract_tx_2 = create_deploy_tx(3, &contract, &account);
-        let set_value_tx_2 = create_set_arg_tx(99, 4, &contract, contract_addr_2, &account);
+            let mut db = evm.get_db(state);
+            let contract_1_account = db.basic(contract_addr_1).unwrap().unwrap();
+            let contract_2_account = db.basic(contract_addr_2).unwrap().unwrap();
 
-        let evm = Evm::<S>::default();
-        runner.execute_batch(BatchTestCase {
-            input: vec![create_contract_tx_2, set_value_tx_2].into(),
-            assert: Box::new(move |_ctx, state| {
-                // The two contracts have different addresses.
-                assert_ne!(contract_addr_1, contract_addr_2);
+            // The two contracts have the same code.
+            assert_eq!(contract_1_account.code_hash, contract_2_account.code_hash);
 
-                let mut db = evm.get_db(state);
-                let contract_1_account = db.basic(contract_addr_1).unwrap().unwrap();
-                let contract_2_account = db.basic(contract_addr_2).unwrap().unwrap();
+            let storage_value_2 = evm
+                .get_storage(&contract_addr_2, &U256::ZERO, state)
+                .unwrap()
+                .unwrap();
 
-                // The two contracts have the same code.
-                assert_eq!(contract_1_account.code_hash, contract_2_account.code_hash);
+            assert_eq!(U256::from(3), storage_value_2);
 
-                let storage_value_1 = evm
-                    .get_storage(&contract_addr_2, &U256::ZERO, state)
-                    .unwrap()
-                    .unwrap();
+            // The storage of the first contract didn't change.
+            let storage_value_1 = evm
+                .get_storage(&contract_addr_1, &U256::ZERO, state)
+                .unwrap()
+                .unwrap();
 
-                assert_eq!(U256::from(99), storage_value_1);
-
-                // The storage of the first contract didn't change.
-                let storage_value_1 = evm
-                    .get_storage(&contract_addr_1, &U256::ZERO, state)
-                    .unwrap()
-                    .unwrap();
-
-                assert_eq!(U256::from(7), storage_value_1);
-            }),
-        });
-    }
+            assert_eq!(U256::from(2), storage_value_1);
+        }),
+    });
 }
