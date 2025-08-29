@@ -338,7 +338,7 @@ async fn test_process_message_from_evm_counterparty() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_dispatch_message_to_evm_counterparty() {
     sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
-    let _span = tracing::info_span!("test_dispatch_message_to_evm_counterparty").entered();
+    let _span = tracing::info_span!("dispatch_message_to_evm").entered();
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
@@ -378,6 +378,8 @@ async fn test_dispatch_message_to_evm_counterparty() {
                 evm_recipient.to_string(),
             );
 
+            tracing::info!(event = ?process_event, "Found Mailbox/Dispatch call");
+
             let message_id_event = find_event(&events, "Mailbox/DispatchId").unwrap();
             let message_id = message_id_event["dispatch_id"]["id"]
                 .as_str()
@@ -387,7 +389,18 @@ async fn test_dispatch_message_to_evm_counterparty() {
 
             // Find the dispatched message on counterparty
             // TODO: How to do it more reliably?
-            sleep(Duration::from_secs(30)).await; // give relayer extra time to relay
+            tracing::info!("Waiting for relayer to submit transaction to EVM...");
+            sleep(Duration::from_secs(10)).await; // give relayer extra time to relay
+
+            hyperlane.print_stdout().await;
+            hyperlane
+                .evm_counter_party
+                .as_ref()
+                .unwrap()
+                .print_logs()
+                .await;
+            // Check if relayer is healthy before checking for events
+            tracing::info!("Checking for events on EVM counterparty...");
             let evm_event = hyperlane.latest_message_on_counterparty().await;
             assert_eq!(
                 evm_event.origin_domain,

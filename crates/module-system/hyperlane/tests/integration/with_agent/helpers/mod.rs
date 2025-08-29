@@ -1,13 +1,13 @@
+mod docker;
 mod evm;
 mod hyperlane_cli;
-mod docker;
 
 use std::env;
 use std::path::PathBuf;
-use std::time::Duration;
 
 use super::configs::agent_config;
 use super::preferred_sequencer_runtime::{GenesisConfig, TestRuntime};
+use crate::with_agent::helpers::docker::print_logs_from_exec_result;
 use crate::with_agent::helpers::evm::AnvilRunner;
 use crate::with_agent::helpers::hyperlane_cli::HyperlaneCliRunner;
 use futures::future::join_all;
@@ -28,8 +28,6 @@ use testcontainers::core::client::docker_client_instance;
 use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult, Host, IntoContainerPort};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
-use tokio::io::AsyncBufReadExt;
-use tokio::time::timeout;
 
 pub type RollupBlueprint = RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>>;
 pub type TestRollupBuilder = RollupBuilder<RollupBlueprint, PathBuf>;
@@ -42,6 +40,7 @@ pub const FINALIZED_BLOCKS_AT_START: usize = 3;
 pub const DEFAULT_BLOCK_PRODUCING_CONFIG: BlockProducingConfig = BlockProducingConfig::Periodic {
     block_time_ms: DEFAULT_BLOCK_TIME_MS,
 };
+// TODO: Use on from evm module
 pub const ANVIL_PORT: u16 = 8545;
 pub const DEFAULT_FINALIZATION_BLOCKS: u32 = 10;
 /// Use `container.get_host_port_ipv4(RELAYER_METRICS_PORT)` to get metrics
@@ -103,6 +102,8 @@ pub const ANVIL_ACCOUNTS: &[(&str, &str)] = &[
 ];
 
 pub const RELAYER_ACCOUNT: (&str, &str) = ANVIL_ACCOUNTS[0];
+// Use a separate account for hyperlane CLI deployments to avoid nonce conflicts with relayer
+pub const DEPLOYER_ACCOUNT: (&str, &str) = ANVIL_ACCOUNTS[9];
 
 pub struct Setup {
     pub sequencer: TestSequencer<TestSpec>,
@@ -380,6 +381,10 @@ impl EvmCounterParty {
             evm_recipient,
         }
     }
+
+    pub async fn print_logs(&self) {
+        self.anvil.print_logs().await;
+    }
 }
 
 pub struct Hyperlane {
@@ -582,7 +587,6 @@ impl Hyperlane {
         // on `ExecResult`s, so this would hang infinitly waiting
         // for `exec`s to exit. Instead we give them at most 1s of
         // printing time each.
-        println!("VALIDATORS: {}", self.validators.len());
         let has_relayer = self.relayer.is_some();
         for (n, val) in self
             .relayer
@@ -590,29 +594,12 @@ impl Hyperlane {
             .chain(self.validators.iter_mut())
             .enumerate()
         {
-            if n == 0 && has_relayer {
-                println!("RELAYER\n");
+            let name = if n == 0 && has_relayer {
+                "relayer".to_string()
             } else {
-                println!("\n\nVALIDATOR {n}\n");
-            }
-            let exit_code = val.exit_code().await.unwrap();
-            println!("EXIT CODE: {exit_code:?}");
-            let _ = timeout(Duration::from_secs(3), async {
-                println!("PRINTING STDOUT:");
-                let mut stdout = val.stdout().lines();
-                while let Some(line) = stdout.next_line().await.unwrap() {
-                    println!("STDOUT: {line}");
-                }
-            })
-            .await;
-            let _ = timeout(Duration::from_secs(3), async {
-                println!("PRINTING STDERR:");
-                let mut stderr = val.stderr().lines();
-                while let Some(line) = stderr.next_line().await.unwrap() {
-                    println!("STDERR {line}");
-                }
-            })
-            .await;
+                format!("validator-{n}")
+            };
+            print_logs_from_exec_result(&name, val, std::time::Duration::from_secs(1)).await;
         }
     }
 }

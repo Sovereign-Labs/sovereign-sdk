@@ -1,7 +1,7 @@
 use crate::with_agent::configs::{
     core_config, ethtest_metadata, sovtest_addresses, sovtest_metadata, warp_route_config,
 };
-use crate::with_agent::helpers::{parse_eth_addr, RELAYER_ACCOUNT};
+use crate::with_agent::helpers::{parse_eth_addr, DEPLOYER_ACCOUNT, RELAYER_ACCOUNT};
 use sov_modules_api::HexHash;
 use testcontainers::core::Mount;
 use testcontainers::runners::AsyncRunner;
@@ -33,7 +33,8 @@ impl HyperlaneCliRunner {
         let configs_dir = data_path.join("configs");
 
         let mut hyperlane_cli_image = GenericImage::new(IMAGE, TAG)
-            .with_env_var("HYP_KEY", RELAYER_ACCOUNT.1)
+            // TODO: Move this to optional parameter
+            .with_env_var("HYP_KEY", DEPLOYER_ACCOUNT.1)
             .with_mount(Mount::bind_mount(
                 chains_dir.to_string_lossy().to_string(),
                 "/root/.hyperlane/chains",
@@ -118,7 +119,9 @@ impl HyperlaneCliRunner {
             .nth(1)
             .unwrap();
 
-        parse_eth_addr(ethtest_route)
+        let ethtest_route = parse_eth_addr(ethtest_route);
+        tracing::info!(%ethtest_route, "deployed core");
+        ethtest_route
     }
 }
 

@@ -1,3 +1,4 @@
+use crate::with_agent::helpers::docker::print_logs_from_container;
 use crate::with_agent::helpers::{EvmLog, ANVIL_ACCOUNTS};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -40,6 +41,8 @@ impl AnvilRunner {
             .await
             .expect("Failed to get anvil port");
         tracing::info!(container_id = ?container.id(), %host_port, "Anvil container started successfully");
+
+        // TODO: Assert all anvil accounts have funds
 
         Self {
             container,
@@ -134,6 +137,10 @@ impl AnvilRunner {
 
         tracing::info!(%method, response = ?resp, time = ?start.elapsed(), "Anvil call response");
         serde_json::from_value(resp["result"].clone()).unwrap()
+    }
+
+    pub async fn print_logs(&self) {
+        print_logs_from_container("anvil", &self.container).await;
     }
 }
 
