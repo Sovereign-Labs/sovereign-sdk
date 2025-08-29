@@ -54,7 +54,6 @@ where
 
         self.cfg.set(&chain_cfg, state)?;
         self.head.set(&block, state)?;
-
         #[cfg(feature = "native")]
         self.pending_head.set(&block, state)?;
 

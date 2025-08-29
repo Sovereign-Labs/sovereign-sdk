@@ -5,12 +5,14 @@ use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root
 use alloy_consensus::TxReceipt;
 use alloy_primitives::Bloom;
 use alloy_primitives::{B256, U256};
+#[cfg(feature = "native")]
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 #[cfg(feature = "native")]
 use sov_modules_api::{AccessoryStateReaderAndWriter, FinalizeHook};
 use sov_modules_api::{BlockHooks, Spec, StateCheckpoint};
 use sov_state::{ProvableNamespace, StateRoot, Storage};
+#[cfg(feature = "native")]
 use std::convert::Infallible;
 
 impl<S: Spec> BlockHooks for Evm<S> {
