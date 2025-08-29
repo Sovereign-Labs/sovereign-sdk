@@ -1,13 +1,13 @@
+mod hyperlane_cli;
+
 use std::env;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use super::configs::{
-    agent_config, core_config, ethtest_metadata, sovtest_addresses, sovtest_metadata,
-};
+use super::configs::agent_config;
 use super::preferred_sequencer_runtime::{GenesisConfig, TestRuntime};
-use crate::with_agent::configs::warp_route_config;
+use crate::with_agent::helpers::hyperlane_cli::HyperlaneCliRunner;
 use futures::future::join_all;
 use futures::{FutureExt, StreamExt};
 use serde::de::DeserializeOwned;
@@ -26,7 +26,7 @@ use sov_test_utils::{RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, T
 use testcontainers::core::client::docker_client_instance;
 use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult, Host, IntoContainerPort, Mount};
 use testcontainers::runners::AsyncRunner;
-use testcontainers::{ContainerAsync, ContainerRequest, GenericImage, ImageExt};
+use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 use testcontainers_modules::anvil::AnvilNode;
 use tokio::io::AsyncBufReadExt;
 use tokio::time::timeout;
@@ -269,7 +269,6 @@ impl HyperlaneBuilder {
 
     /// Start the configured hyperlane network setup.
     pub async fn start(self) -> Hyperlane {
-        let hyperlane_cli_data = tempfile::tempdir().expect("failed to create tempdir");
         let rollup_port = self
             .rollup_port
             .expect("Rollup port must be set before starting hyperlane");
@@ -277,22 +276,32 @@ impl HyperlaneBuilder {
         // evm counterparty must be started before agents
         // because they will try to reach out to it immediately.
         // the same goes for rollup, but we assume it's running knowing its port.
-        let (anvil, anvil_port, evm_recipient) = if self.with_evm {
+        let (anvil, anvil_port, evm_recipient, hyperlane_cli) = if self.with_evm {
             let start_anvil_time = std::time::Instant::now();
             let anvil = start_anvil().await;
             let anvil_port = anvil
                 .get_host_port_ipv4(ANVIL_PORT)
                 .await
                 .expect("Failed to get anvil port");
-            prepare_cli_data(hyperlane_cli_data.path(), rollup_port, anvil_port);
-            tracing::info!(port = anvil_port, time = ?start_anvil_time.elapsed(), "Anvil has been started");
+            tracing::info!(
+                port = anvil_port,
+                container_id = ?anvil.id(),
+                time = ?start_anvil_time.elapsed(),
+                "Anvil container started"
+            );
+            let hyperlane_cli = HyperlaneCliRunner::new(rollup_port, anvil_port);
             let hyperlane_deploy_start = std::time::Instant::now();
-            let evm_recipient = deploy_hyperlane(hyperlane_cli_data.path()).await;
+            let evm_recipient = hyperlane_cli.deploy_core().await;
             tracing::info!(time = ?hyperlane_deploy_start.elapsed(), "Hyperlane deployed");
-            (Some(anvil), anvil_port, Some(evm_recipient))
+            (
+                Some(anvil),
+                anvil_port,
+                Some(evm_recipient),
+                Some(hyperlane_cli),
+            )
         } else {
             // Does not matter, default port going to do
-            (None, ANVIL_PORT, None)
+            (None, ANVIL_PORT, None, None)
         };
 
         // Start container with just basic env and no processes
@@ -364,7 +373,7 @@ impl HyperlaneBuilder {
             evm_recipient,
             relayer,
             validators: agents,
-            hyperlane_cli_data,
+            hyperlane_cli,
         }
     }
 }
@@ -377,7 +386,7 @@ pub struct Hyperlane {
     pub evm_recipient: Option<HexHash>,
     pub relayer: Option<ExecResult>,
     pub validators: Vec<ExecResult>,
-    pub hyperlane_cli_data: tempfile::TempDir,
+    pub hyperlane_cli: Option<HyperlaneCliRunner>,
 }
 
 impl Hyperlane {
@@ -410,7 +419,7 @@ impl Hyperlane {
         EvmDispatchWithId::new(logs)
     }
 
-    /// Searches latest block on evm counterparty (where there's block per tx)
+    /// Searches the latest block on evm counterparty (where there's block per tx)
     /// and tries to extract the Mailbox Process event from it.
     pub async fn latest_message_on_counterparty(&self) -> EvmProcessWithId {
         // fetch logs in latest block
@@ -442,63 +451,13 @@ impl Hyperlane {
             panic!("Called warp init on counterparty before its setup");
         }
 
-        let warp_config = warp_route_config(sovtest_route, sovtest_decimals);
-        tracing::info!(warp_config, "warp route config");
-        let configs_dir = self.hyperlane_cli_data.path().join("configs");
-        std::fs::write(configs_dir.join("warp-route-deployment.yaml"), warp_config)
-            .expect("Failed to write core-config");
-
-        // Use existing volumes if available, otherwise create new ones
-        let hyperlane_cli_image = prepare_hyperlane_cli(self.hyperlane_cli_data.path()).with_cmd([
-            "warp",
-            "deploy",
-            "--config",
-            "/root/configs/warp-route-deployment.yaml",
-            "--yes",
-        ]);
-
-        let container = hyperlane_cli_image
-            .start()
+        let hyperlane_cli = self
+            .hyperlane_cli
+            .as_ref()
+            .expect("Called warp init on counterparty before its setup");
+        hyperlane_cli
+            .deploy_warp_route_on_counterparty(sovtest_route, sovtest_decimals)
             .await
-            .expect("Failed to start hyperlane-cli");
-
-        let mut is_running = container
-            .is_running()
-            .await
-            .expect("failed to get running status");
-        for _ in 0..300 {
-            is_running = container.is_running().await.unwrap();
-            if !is_running {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
-        assert!(!is_running, "hyperlane deploy hasn't completed on time");
-
-        let stdout = container.stdout_to_vec().await.unwrap();
-        let stdout = String::from_utf8_lossy(&stdout);
-        let exit_code = container.exit_code().await.unwrap();
-        if exit_code != Some(0) {
-            println!("exit code: {exit_code:?}");
-            let stderr = container.stderr_to_vec().await.unwrap();
-            println!("hyperlane warp deploy stdout:\n {stdout}");
-            println!(
-                "hyperlane warp deploy stderr:\n {}",
-                String::from_utf8_lossy(&stderr)
-            );
-            panic!("hyperlane deployment on evm chain failed");
-        }
-
-        // parse ethtest route address from logs
-        let ethtest_route = stdout
-            .lines()
-            .find(|line| line.contains("addressOrDenom"))
-            .unwrap()
-            .split("\"")
-            .nth(1)
-            .unwrap();
-
-        parse_eth_addr(ethtest_route)
     }
 
     pub async fn send_warp_token_transfer_from_counterparty(
@@ -903,6 +862,25 @@ async fn cast_call(
     args: impl AsRef<[&str]>,
     value: Amount,
 ) -> Vec<EvmLog> {
+    // Use a different account than the relayer to avoid nonce conflicts
+    // Relayer uses ANVIL_ACCOUNTS[0], so we use the last account for test transactions
+    const TEST_ACCOUNT_INDEX: usize = 9;
+
+    // Get current nonce before sending transaction
+    let nonce: String = anvil_rpc(
+        container,
+        "eth_getTransactionCount",
+        json!([ANVIL_ACCOUNTS[TEST_ACCOUNT_INDEX].0, "latest"]),
+    )
+    .await;
+
+    tracing::info!(
+        from = ANVIL_ACCOUNTS[TEST_ACCOUNT_INDEX].0,
+        nonce = nonce,
+        container_id = ?container.id(),
+        "Current nonce before cast call (using test account to avoid conflicts with relayer)"
+    );
+
     let contract = contract.to_string();
     let value = value.to_string();
     let command = [
@@ -912,13 +890,17 @@ async fn cast_call(
             "--value",
             value.as_str(),
             "--private-key",
-            ANVIL_ACCOUNTS[0].1,
+            ANVIL_ACCOUNTS[TEST_ACCOUNT_INDEX].1,
             "--json",
         ][..],
     ]
     .concat();
 
-    tracing::info!(?command, "executing cast call");
+    tracing::info!(
+        ?command,
+        container_id = ?container.id(),
+        "executing cast call"
+    );
     let mut result = container
         .exec(ExecCommand::new(command.clone()))
         .await
@@ -960,8 +942,9 @@ fn domain_from_hexhash(hash: HexHash) -> u32 {
 }
 
 async fn start_anvil() -> ContainerAsync<AnvilNode> {
+    tracing::info!("Starting anvil container...");
     // Hard code tag, so we don't accidental breakages
-    AnvilNode::default()
+    let container = AnvilNode::default()
         .with_tag("v1.1.0")
         .with_cmd([
             // TODO: Do we really need that? It looks like AnvilNode handles that by default.
@@ -972,141 +955,11 @@ async fn start_anvil() -> ContainerAsync<AnvilNode> {
         ])
         .start()
         .await
-        .expect("failed to start anvil")
-}
+        .expect("failed to start anvil");
 
-fn prepare_cli_data(data_path: &std::path::Path, rollup_port: u16, anvil_port: u16) {
-    // Create directory structure
-    let hyperlane_dir = data_path.join(".hyperlane");
-    let chains_dir = hyperlane_dir.join("chains");
-    let sovtest_dir = chains_dir.join("sovtest");
-    let ethtest_dir = chains_dir.join("ethtest");
-    let configs_dir = data_path.join("configs");
-
-    std::fs::create_dir_all(&sovtest_dir).expect("Failed to create 'sovtest' directory");
-    std::fs::create_dir_all(&ethtest_dir).expect("Failed to create 'ethtest' directory");
-    std::fs::create_dir_all(&configs_dir).expect("Failed to create 'configs' directory");
-
-    // Write chain metadata files
-    let sovtest_config = sovtest_metadata(rollup_port);
-    let ethtest_config = ethtest_metadata("host.docker.internal", anvil_port);
-    let core_config = core_config(ANVIL_ACCOUNTS[0].0.parse().unwrap());
-    let sov_addresses = sovtest_addresses();
-
-    std::fs::write(sovtest_dir.join("metadata.yaml"), sovtest_config)
-        .expect("Failed to write 'sovtest' metadata");
-    std::fs::write(ethtest_dir.join("metadata.yaml"), ethtest_config)
-        .expect("Failed to write 'ethtest' metadata");
-    std::fs::write(configs_dir.join("core-config.yaml"), core_config)
-        .expect("Failed to write core-config");
-    std::fs::write(sovtest_dir.join("addresses.yaml"), sov_addresses)
-        .expect("Failed to write 'sovtest' addresses");
-}
-
-fn prepare_hyperlane_cli(data_path: &std::path::Path) -> ContainerRequest<GenericImage> {
-    let chains_dir = data_path.join(".hyperlane").join("chains");
-    let configs_dir = data_path.join("configs");
-
-    // Configure the container with volumes
-    let mut hyperlane_cli_image = GenericImage::new("ghcr.io/citizen-stig/hyperlane-cli", "17.0.0")
-        .with_env_var("HYP_KEY", ANVIL_ACCOUNTS[0].1)
-        .with_mount(Mount::bind_mount(
-            chains_dir.to_string_lossy().to_string(),
-            "/root/.hyperlane/chains",
-        ))
-        .with_mount(Mount::bind_mount(
-            configs_dir.to_string_lossy().to_string(),
-            "/root/configs",
-        ));
-
-    // The hyperlane CLI accesses GitHub APIs quite heavily for its GitHub hosted
-    // registry, this can cause rate limiting in CI jobs. Include the github token
-    // so we use authenticated requests to try to avoid this
-    if let Ok(token) = std::env::var("GITHUB_TOKEN") {
-        // `hyperlane` cli tool will use this env var by default as an auth token
-        // if it is set.
-        hyperlane_cli_image = hyperlane_cli_image.with_env_var("GH_AUTH_TOKEN", token);
-    }
-
-    hyperlane_cli_image
-}
-
-/// Returns an address of evm test recipient, to which we can dispatch test messages.
-async fn deploy_hyperlane(data_path: &std::path::Path) -> HexHash {
-    let hyperlane_cli_image = prepare_hyperlane_cli(data_path).with_cmd([
-        "core",
-        "deploy",
-        "--config",
-        "/root/configs/core-config.yaml",
-        "--chain",
-        "ethtest",
-        "--yes",
-    ]);
-
-    let container = hyperlane_cli_image
-        .start()
-        .await
-        .expect("Failed to start hyperlane-cli");
-
-    let mut is_running = container
-        .is_running()
-        .await
-        .expect("failed to get running status");
-    for _ in 0..300 {
-        is_running = container.is_running().await.unwrap();
-        if !is_running {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
-    assert!(!is_running, "hyperlane deploy hasn't completed on time");
-    let container_exit_code = container
-        .exit_code()
-        .await
-        .expect("Failed to get hyperlane deploy exit code");
-
-    let container_stdout = container
-        .stdout_to_vec()
-        .await
-        .expect("FAILED TO GET STDOUT");
-    let pretty_stdout = String::from_utf8_lossy(&container_stdout);
-
-    if container_exit_code != Some(0) {
-        let container_stderr = container
-            .stderr_to_vec()
-            .await
-            .expect("FAILED TO GET STDERR");
-        panic!(
-            "Failed to deploy hyperlane: \nstdout:\n {} \nstderr: {}",
-            pretty_stdout,
-            String::from_utf8_lossy(&container_stderr)
-        );
-    }
-
-    // COPY ethtest/addresses.yaml, or whole
-
-    // Parse testRecipient from the output, which should be something like that:
-    // ✅ Core contract deployments complete:
-    //
-    //     staticMerkleRootMultisigIsmFactory: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
-    //     staticMessageIdMultisigIsmFactory: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
-    //     staticAggregationIsmFactory: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
-    //     staticAggregationHookFactory: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
-    //     domainRoutingIsmFactory: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
-    //     staticMerkleRootWeightedMultisigIsmFactory: "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707"
-    //     staticMessageIdWeightedMultisigIsmFactory: "0x0165878A594ca255338adfa4d48449f69242Eb8F"
-    //     proxyAdmin: "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853"
-    //     mailbox: "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318"
-    //     interchainAccountRouter: "0x9A676e781A523b5d0C0e43731313A708CB607508"
-    //     validatorAnnounce: "0x0B306BF915C4d645ff596e518fAf3F9669b97016"
-    //     testRecipient: "0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1"
-    //     merkleTreeHook: "0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e"
-    let test_recipient = pretty_stdout
-        .lines()
-        .skip_while(|line| !line.contains("Core contract deployments complete:"))
-        .find(|line| line.contains("testRecipient"))
-        .and_then(|line| line.split('"').nth(1))
-        .expect("Failed to find 'testRecipient' in stdout");
-
-    parse_eth_addr(test_recipient)
+    tracing::info!(
+        container_id = ?container.id(),
+        "Anvil container started successfully"
+    );
+    container
 }
