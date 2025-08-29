@@ -101,8 +101,7 @@ pub const ANVIL_ACCOUNTS: &[(&str, &str)] = &[
     ),
 ];
 
-// const DEFAULT_HYPERLANE_AGENT_IMAGE: &str = "ghcr.io/citizen-stig/hyperlane-agent:integration-2";
-// const DEFAULT_HYPERLANE_CLI_IMAGE: &str = "ghcr.io/citizen-stig/hyperlane-cli:17.0.0";
+pub const RELAYER_ACCOUNT: (&str, &str) = ANVIL_ACCOUNTS[0];
 
 pub struct Setup {
     pub sequencer: TestSequencer<TestSpec>,
@@ -472,18 +471,29 @@ impl Hyperlane {
 
     /// Create warp route for nativeETH on counterparty, enroll remote router to rollup,
     /// and return route address on counterparty.
-    pub async fn deploy_warp_route_on_counterparty(
-        &self,
-        sovtest_route: HexHash,
-        sovtest_decimals: u8,
-    ) -> HexHash {
+    pub async fn deploy_warp_route_on_counterparty(&mut self, sovtest_route: HexHash) -> HexHash {
         if self.evm_counter_party.is_none() {
             panic!("Called warp init on counterparty before its setup");
         }
 
-        self.get_hyperlane_cli()
-            .deploy_warp_route_on_counterparty(sovtest_route, sovtest_decimals)
-            .await
+        let remote_router_id = self.get_hyperlane_cli().deploy_warp().await;
+
+        let anvil = self.get_anvil_mut();
+
+        let domain = config_value!("HYPERLANE_BRIDGE_DOMAIN");
+        anvil
+            .cast_call(
+                hex_hash_into_eth_addr(&remote_router_id),
+                "enrollRemoteRouter(uint32,bytes32)",
+                [
+                    domain.to_string().as_str(),
+                    sovtest_route.to_string().as_str(),
+                ],
+                Amount(0),
+            )
+            .await;
+
+        remote_router_id
     }
 
     pub async fn send_warp_token_transfer_from_counterparty(
@@ -842,7 +852,12 @@ pub fn parse_eth_addr(addr: &str) -> HexHash {
     let address: EthAddress = addr.trim().parse().unwrap();
     let mut res = [0; 32];
     res[12..].copy_from_slice(&address.0);
+    res.into()
+}
 
+pub fn hex_hash_into_eth_addr(hex_hash: &HexHash) -> EthAddress {
+    let mut res = [0; 20];
+    res[..].copy_from_slice(&hex_hash.0[12..]);
     res.into()
 }
 

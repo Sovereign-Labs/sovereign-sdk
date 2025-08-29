@@ -1,7 +1,7 @@
 use crate::with_agent::configs::{
     core_config, ethtest_metadata, sovtest_addresses, sovtest_metadata, warp_route_config,
 };
-use crate::with_agent::helpers::{parse_eth_addr, ANVIL_ACCOUNTS};
+use crate::with_agent::helpers::{parse_eth_addr, RELAYER_ACCOUNT};
 use sov_modules_api::HexHash;
 use testcontainers::core::Mount;
 use testcontainers::runners::AsyncRunner;
@@ -33,7 +33,7 @@ impl HyperlaneCliRunner {
         let configs_dir = data_path.join("configs");
 
         let mut hyperlane_cli_image = GenericImage::new(IMAGE, TAG)
-            .with_env_var("HYP_KEY", ANVIL_ACCOUNTS[0].1)
+            .with_env_var("HYP_KEY", RELAYER_ACCOUNT.1)
             .with_mount(Mount::bind_mount(
                 chains_dir.to_string_lossy().to_string(),
                 "/root/.hyperlane/chains",
@@ -92,32 +92,20 @@ impl HyperlaneCliRunner {
         parse_eth_addr(test_recipient)
     }
 
-    pub async fn deploy_warp_route_on_counterparty(
-        &self,
-        sovtest_route: HexHash,
-        sovtest_decimals: u8,
-    ) -> HexHash {
-        let warp_config = warp_route_config(sovtest_route, sovtest_decimals);
+    pub async fn deploy_warp(&self) -> HexHash {
+        let warp_config = warp_route_config();
         tracing::info!(warp_config, "warp route config");
         let configs_dir = self.data.path().join("configs");
         std::fs::write(configs_dir.join("warp-route-deployment.yaml"), warp_config)
             .expect("Failed to write warp-route-deployment config");
 
-        let hyperlane_cli_image = self
-            .prepare_container()
-            .with_env_var(
-                "HYP_KEY_COSMOSNATIVE",
-                "0x0000000000000000000000000000000000000000000000000000000000000001",
-            )
-            .with_cmd([
-                "warp",
-                "deploy",
-                "--config",
-                "/root/configs/warp-route-deployment.yaml",
-                "--key",
-                "0x0000000000000000000000000000000000000000000000000000000000000001",
-                "--yes",
-            ]);
+        let hyperlane_cli_image = self.prepare_container().with_cmd([
+            "warp",
+            "deploy",
+            "--config",
+            "/root/configs/warp-route-deployment.yaml",
+            "--yes",
+        ]);
 
         let stdout = wait_till_container_exit(hyperlane_cli_image).await;
 
@@ -149,7 +137,7 @@ fn prepare_cli_data(data_path: &std::path::Path, rollup_port: u16, anvil_port: u
     // Write chain metadata files
     let sovtest_config = sovtest_metadata(rollup_port);
     let ethtest_config = ethtest_metadata("host.docker.internal", anvil_port);
-    let core_config = core_config(ANVIL_ACCOUNTS[0].0.parse().unwrap());
+    let core_config = core_config(RELAYER_ACCOUNT.0.parse().unwrap());
     let sov_addresses = sovtest_addresses();
 
     std::fs::write(sovtest_dir.join("metadata.yaml"), sovtest_config)

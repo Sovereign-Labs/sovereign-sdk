@@ -69,7 +69,7 @@ impl AnvilRunner {
                 "--value",
                 value.as_str(),
                 "--private-key",
-                ANVIL_ACCOUNTS[9].1,
+                ANVIL_ACCOUNTS[0].1,
                 "--json",
             ][..],
         ]

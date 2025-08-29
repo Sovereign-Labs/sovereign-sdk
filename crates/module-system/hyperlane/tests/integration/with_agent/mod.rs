@@ -415,6 +415,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
     outbound_sent_amount: Amount,
     outbound_received_amount: Amount,
 ) {
+    // TODO: This can be removed and rollup will hold
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
@@ -489,8 +490,9 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
 
             // deploy warp route on counterparty
             remote_route_id = hyperlane
-                .deploy_warp_route_on_counterparty(local_route_id, local_decimals)
+                .deploy_warp_route_on_counterparty(local_route_id)
                 .await;
+            // enroll local router on sovereign as workaround of `protocol not supported`:
 
             // enroll remote router on rollup
             let enroll_router_call = TestRuntimeCall::Warp(warp::CallMessage::EnrollRemoteRouter {
@@ -511,6 +513,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
         hyperlane.print_stdout().await;
         panic!("Warp/RouteRegistered event not found");
     }
+    tracing::info!(%local_route_id, %remote_route_id, "routes deployed");
 
     // transfer native eth from evm counterparty to prover
     let prover_addr = prover.user_info.address().to_sender();

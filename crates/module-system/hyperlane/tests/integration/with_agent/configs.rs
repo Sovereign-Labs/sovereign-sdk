@@ -2,9 +2,8 @@ use indoc::{formatdoc, indoc};
 use serde_json::json;
 use sov_hyperlane_integration::EthAddress;
 use sov_modules_api::macros::config_value;
-use sov_modules_api::HexHash;
 
-use super::helpers::{ANVIL_ACCOUNTS, EVM_CHAIN_ID, EVM_DOMAIN, EVM_MAILBOX};
+use super::helpers::{EVM_CHAIN_ID, EVM_DOMAIN, EVM_MAILBOX, RELAYER_ACCOUNT};
 
 /// Generates a configuration file for the agents with the given rollup port
 pub fn agent_config(rollup_port: u16, anvil_port: u16) -> Vec<u8> {
@@ -111,10 +110,6 @@ pub fn core_config(owner: EthAddress) -> String {
 }
 
 /// Configuration of sovtest chain in hyperlane
-///
-/// hyperlane-cli doesn't yet have support for 'sovereign' protocol,
-/// but since we are using it only to interact with ethereum deployment
-/// we only care to have there anything but 'ethereum'
 pub fn sovtest_metadata(rollup_port: u16) -> String {
     let chain = config_value!("CHAIN_ID");
     let domain = config_value!("HYPERLANE_BRIDGE_DOMAIN");
@@ -128,16 +123,9 @@ pub fn sovtest_metadata(rollup_port: u16) -> String {
           decimals: 8
           name: SovToken
           symbol: sov
-          denom: usov
-        protocol: cosmosnative
-        bech32Prefix: sov
-        slip44: 118
+        protocol: sovereign
         rpcUrls:
           - http: http://host.docker.internal:{rollup_port}
-        restUrls:
-          - http: http://host.docker.internal:{rollup_port}
-        grpcUrls:
-          - http: http://host.docker.internal:9090
     "}
 }
 
@@ -182,14 +170,12 @@ pub fn ethtest_metadata(anvil_host: &str, anvil_port: u16) -> String {
     "}
 }
 
-/// Configuration for deploying warp route on evm counterparty
-///
-/// Optionally accepts a route id on sovtest chain, to enroll
-/// a router on ethtest.
+/// Configuration for deploying the warp route on evm counterparty.
+/// sovtest chain is updated in a separate call.
 ///
 /// Examples of warp route configs can be found here: <https://docs.hyperlane.xyz/docs/guides/extending-warp-route>
-pub fn warp_route_config(sov_route_id: HexHash, sovtest_decimals: u8) -> String {
-    let owner = ANVIL_ACCOUNTS[0].0;
+pub fn warp_route_config() -> String {
+    let owner = RELAYER_ACCOUNT.0;
     formatdoc! {"
         ethtest:
           type: native
@@ -197,12 +183,6 @@ pub fn warp_route_config(sov_route_id: HexHash, sovtest_decimals: u8) -> String 
           symbol: \"nativeETH\"
           decimals: 18
           owner: \"{owner}\"
-          interchainSecurityModule: \"0x0000000000000000000000000000000000000000\"
-        sovtest:
-          type: synthetic
-          name: \"EthNativeToken\"
-          symbol: \"nativeETH\"
-          decimals: {sovtest_decimals}
-          foreignDeployment: \"{sov_route_id}\"
+          interchainSecurityModule: \"0x0000000000000000000000000000000000000000\"\
     "}
 }
