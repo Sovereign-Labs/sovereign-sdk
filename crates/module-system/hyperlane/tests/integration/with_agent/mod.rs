@@ -55,6 +55,8 @@ mod preferred_sequencer_runtime;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_validator_announces_itself() {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
+    let _span = tracing::info_span!("test_validator_announces_itself").entered();
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
@@ -99,6 +101,8 @@ async fn test_validator_announces_itself() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_relayer_basic_dispatch_process() {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
+    let _span = tracing::info_span!("test_relayer_basic_dispatch_process").entered();
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
@@ -168,6 +172,8 @@ async fn test_relayer_basic_dispatch_process() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_multisig_ism() {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
+    let _span = tracing::info_span!("test_multisig_ism").entered();
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
@@ -239,7 +245,8 @@ async fn test_multisig_ism() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_process_message_from_evm_counterparty() {
-    // sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
+    let _span = tracing::info_span!("test_process_message_from_evm_counterparty").entered();
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
@@ -277,7 +284,8 @@ async fn test_process_message_from_evm_counterparty() {
         .dispatch_msg_from_counterparty(prover_addr.to_sender())
         .await;
 
-    let sender_addr = parse_eth_addr(ANVIL_ACCOUNTS[0].0);
+    // We now use account index 9 for test transactions to avoid conflicts with relayer (index 0)
+    let sender_addr = parse_eth_addr(ANVIL_ACCOUNTS[9].0);
 
     assert_eq!(evm_dispatch.message.origin_domain, EVM_DOMAIN);
     assert_eq!(
@@ -329,6 +337,8 @@ async fn test_process_message_from_evm_counterparty() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_dispatch_message_to_evm_counterparty() {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
+    let _span = tracing::info_span!("test_dispatch_message_to_evm_counterparty").entered();
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
@@ -376,7 +386,9 @@ async fn test_dispatch_message_to_evm_counterparty() {
                 .unwrap();
 
             // Find the dispatched message on counterparty
-            sleep(Duration::from_secs(10)).await; // give relayer extra time to relay
+            // TODO: How to do it more reliablY?
+            sleep(Duration::from_secs(30)).await; // give relayer extra time to relay
+            hyperlane.print_stdout().await;
             let evm_event = hyperlane.latest_message_on_counterparty().await;
             assert_eq!(
                 evm_event.origin_domain,
@@ -619,6 +631,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
 #[tokio::test(flavor = "multi_thread")]
 async fn test_warp_transfer_back_and_forth_with_evm_without_scaling() {
     sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
+    let _span = tracing::info_span!("test_warp_transfer_back_and_forth_with_evm_without_scaling").entered();
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         18,
         Amount(1234),
@@ -631,6 +644,8 @@ async fn test_warp_transfer_back_and_forth_with_evm_without_scaling() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_warp_transfer_back_and_forth_with_evm_scaled_down() {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
+    let _span = tracing::info_span!("test_warp_transfer_back_and_forth_with_evm_scaled_down").entered();
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         16,
         Amount(1234),
@@ -643,6 +658,8 @@ async fn test_warp_transfer_back_and_forth_with_evm_scaled_down() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_warp_transfer_back_and_forth_with_evm_scaled_up() {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
+    let _span = tracing::info_span!("test_warp_transfer_back_and_forth_with_evm_scaled_up").entered();
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         20,
         Amount(1234),

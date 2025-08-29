@@ -115,11 +115,11 @@ pub fn core_config(owner: EthAddress) -> String {
 /// hyperlane-cli doesn't yet have support for 'sovereign' protocol,
 /// but since we are using it only to interact with ethereum deployment
 /// we only care to have there anything but 'ethereum'
-pub fn sovtest_metadata(rollup_port: u16) -> String {
+pub fn sovtest_metadata(rollup_port: u16, ) -> String {
     let chain = config_value!("CHAIN_ID");
     let domain = config_value!("HYPERLANE_BRIDGE_DOMAIN");
     formatdoc! {"
-        chainId: {chain}
+        chainId: sovtest-{chain}
         displayName: SovTest
         domainId: {domain}
         isTestnet: true
@@ -128,9 +128,16 @@ pub fn sovtest_metadata(rollup_port: u16) -> String {
           decimals: 8
           name: SovToken
           symbol: sov
-        protocol: sealevel
+          denom: usov
+        protocol: cosmosnative
+        bech32Prefix: sov
+        slip44: 118
         rpcUrls:
           - http: http://host.docker.internal:{rollup_port}
+        restUrls:
+          - http: http://host.docker.internal:{rollup_port}
+        grpcUrls:
+          - http: http://host.docker.internal:9090
     "}
 }
 
