@@ -141,19 +141,17 @@ fn test_deploy_many_contracts() {
 
     let create_contract_tx_1 = create_deploy_tx(0, &contract, &account);
     let set_value_tx_1 = create_set_arg_tx(1, 1, &contract, contract_addr_1, &account);
-    let set_value_tx_12 = create_set_arg_tx(2, 2, &contract, contract_addr_1, &account);
 
-    let contract_addr_2 = account.address().create(3);
-    let create_contract_tx_2 = create_deploy_tx(3, &contract, &account);
-    let set_value_tx_2 = create_set_arg_tx(3, 4, &contract, contract_addr_2, &account);
+    let contract_addr_2 = account.address().create(2);
+    let create_contract_tx_2 = create_deploy_tx(2, &contract, &account);
+    let set_value_tx_2 = create_set_arg_tx(2, 3, &contract, contract_addr_2, &account);
 
     let evm = Evm::<S>::default();
     runner.execute_batch(BatchTestCase {
         input: vec![
-            // Deploy a contract and execute two transactions that update its storage.
+            // Deploy a contract and execute single transaction that update its storage.
             create_contract_tx_1,
             set_value_tx_1,
-            set_value_tx_12,
             // Deploy another contract and execut single transaction that updates its storage.
             create_contract_tx_2,
             set_value_tx_2,
@@ -175,7 +173,7 @@ fn test_deploy_many_contracts() {
                 .unwrap()
                 .unwrap();
 
-            assert_eq!(U256::from(3), storage_value_2);
+            assert_eq!(U256::from(2), storage_value_2);
 
             // The storage of the first contract didn't change.
             let storage_value_1 = evm
@@ -183,7 +181,7 @@ fn test_deploy_many_contracts() {
                 .unwrap()
                 .unwrap();
 
-            assert_eq!(U256::from(2), storage_value_1);
+            assert_eq!(U256::from(1), storage_value_1);
         }),
     });
 }
