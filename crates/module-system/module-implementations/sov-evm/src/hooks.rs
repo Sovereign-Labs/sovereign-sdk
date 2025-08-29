@@ -192,20 +192,13 @@ impl<S: Spec> FinalizeHook for Evm<S> {
         root_hash: &<S::Storage as Storage>::Root,
         state: &mut impl AccessoryStateReaderAndWriter,
     ) {
-        // let expected_block_number = self.blocks.len(state).unwrap_infallible();
-
         let mut block = self
             .pending_head
             .get(state)
             .unwrap_infallible()
-            .unwrap_or_else(|| panic!("TODO"));
-
-        /*
-        assert_eq!(
-            block.header.number, expected_block_number,
-            "Pending head must be set to block {}, but found block {}",
-            expected_block_number, block.header.number
-        );*/
+            .unwrap_or_else(|| {
+                panic!("The impossible happened: the pending block should always be set.")
+            });
 
         let user_space_root_hash: [u8; 32] = root_hash.namespace_root(ProvableNamespace::User);
         block.header.state_root = user_space_root_hash.into();
