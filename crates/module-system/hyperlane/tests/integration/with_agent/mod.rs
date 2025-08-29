@@ -48,6 +48,7 @@ use tokio::time::sleep;
 use tokio_stream::StreamExt;
 
 use crate::igp::{default_gas_hashmap_to_safe_vec, oracle_data_hashmap_to_safe_vec};
+use crate::with_agent::helpers::RELAYER_ACCOUNT;
 
 mod configs;
 mod helpers;
@@ -284,8 +285,7 @@ async fn test_process_message_from_evm_counterparty() {
         .dispatch_msg_from_counterparty(prover_addr.to_sender())
         .await;
 
-    // We now use account index 9 for test transactions to avoid conflicts with relayer (index 0)
-    let sender_addr = parse_eth_addr(ANVIL_ACCOUNTS[9].0);
+    let sender_addr = parse_eth_addr(RELAYER_ACCOUNT.0);
 
     assert_eq!(evm_dispatch.message.origin_domain, EVM_DOMAIN);
     assert_eq!(
@@ -386,9 +386,8 @@ async fn test_dispatch_message_to_evm_counterparty() {
                 .unwrap();
 
             // Find the dispatched message on counterparty
-            // TODO: How to do it more reliablY?
+            // TODO: How to do it more reliably?
             sleep(Duration::from_secs(30)).await; // give relayer extra time to relay
-            hyperlane.print_stdout().await;
             let evm_event = hyperlane.latest_message_on_counterparty().await;
             assert_eq!(
                 evm_event.origin_domain,

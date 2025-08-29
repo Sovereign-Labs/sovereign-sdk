@@ -122,6 +122,8 @@ impl HyperlaneCliRunner {
     }
 }
 
+/// Renders configs with proper endpoints.
+/// Each chain has an endpoint on host.docker.internal and passed port.
 fn prepare_cli_data(data_path: &std::path::Path, rollup_port: u16, anvil_port: u16) {
     // Create directory structure
     let hyperlane_dir = data_path.join(".hyperlane");
@@ -134,7 +136,6 @@ fn prepare_cli_data(data_path: &std::path::Path, rollup_port: u16, anvil_port: u
     std::fs::create_dir_all(&ethtest_dir).expect("Failed to create 'ethtest' directory");
     std::fs::create_dir_all(&configs_dir).expect("Failed to create 'configs' directory");
 
-    // Write chain metadata files
     let sovtest_config = sovtest_metadata(rollup_port);
     let ethtest_config = ethtest_metadata("host.docker.internal", anvil_port);
     let core_config = core_config(RELAYER_ACCOUNT.0.parse().unwrap());
@@ -151,6 +152,7 @@ fn prepare_cli_data(data_path: &std::path::Path, rollup_port: u16, anvil_port: u
 }
 
 // Waits for some time while hyperlane-cli exit with status code 0
+// TODO: Move this to docker utils?
 async fn wait_till_container_exit(hyperlane_cli_image: ContainerRequest<GenericImage>) -> String {
     let container = hyperlane_cli_image
         .start()

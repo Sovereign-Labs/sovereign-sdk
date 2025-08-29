@@ -1,5 +1,6 @@
 mod evm;
 mod hyperlane_cli;
+mod docker;
 
 use std::env;
 use std::path::PathBuf;
