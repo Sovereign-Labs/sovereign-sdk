@@ -31,17 +31,17 @@ where
         context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
-        // Check if the tx went through the EVM authenticator.
-        // TODO: This may no longer be needed.
-        //
-        // If a sov-modules address is registered as a credential id,
-        // then it should be able to send EVM transactions - in that scenario, to give EVM an address, we could
-        // use the address of the EVM address that the sov-modules address is registered as a credential to.
+        // The signature was checked before the call was dispatched,
+        // and the signer was recovered during the authentication process.
         let signer = *context
             .get_sender_credential::<Address>()
             .ok_or(anyhow::anyhow!(
                 "EVM transaction must be authenticated by the EVM authenticator"
             ))?;
+
+        // Inside the EVM, we use nonces only for the CREATE operation.
+        // The uniqueness check was performed before the call was dispatched.
+        let account_nonce = self.get_account_nonce(signer, state)?;
 
         let evm_tx: TransactionSigned = convert_to_transaction_signed(message.rlp)?;
 
@@ -53,11 +53,10 @@ where
         let cfg = self.cfg(state)?.expect("Evm config must be set");
         let cfg_env = get_cfg_env(&block_env, cfg, None);
 
-        let sov_nonce = self.get_sov_nonce(signer, state)?;
-
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
-        let result = executor::execute_tx(sov_nonce, evm_db, &block_env, &evm_tx, signer, cfg_env);
+        let result =
+            executor::execute_tx(account_nonce, evm_db, &block_env, &evm_tx, signer, cfg_env);
 
         let previous_transaction = self.pending_transactions.last(state)?;
         let previous_transaction_cumulative_gas_used = previous_transaction
@@ -135,7 +134,11 @@ where
     // This means we must ensure a unique value is provided to satisfy the opcode.
     // Here, we use the nonce tracked by the EVM, but keep in mind that `eth_getTransactionCount`
     // will return the nonce tracked by the sov-uniqueness module.
-    fn get_sov_nonce(&self, address: Address, state: &mut impl TxState<S>) -> anyhow::Result<u64> {
+    fn get_account_nonce(
+        &self,
+        address: Address,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<u64> {
         Ok(self
             .accounts
             .get(&address, state)?
@@ -157,5 +160,30 @@ pub(crate) fn get_spec_id(spec: Vec<(u64, SpecId)>, block_number: u64) -> SpecId
                 panic!("EVM spec must start from block 0")
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn spec_id_lookup() {
+        let spec = vec![
+            (0, SpecId::CONSTANTINOPLE),
+            (10, SpecId::BERLIN),
+            (20, SpecId::LONDON),
+            (30, SpecId::CANCUN),
+        ];
+
+        assert_eq!(get_spec_id(spec.clone(), 0), SpecId::CONSTANTINOPLE);
+        assert_eq!(get_spec_id(spec.clone(), 5), SpecId::CONSTANTINOPLE);
+        assert_eq!(get_spec_id(spec.clone(), 10), SpecId::BERLIN);
+        assert_eq!(get_spec_id(spec.clone(), 15), SpecId::BERLIN);
+        assert_eq!(get_spec_id(spec.clone(), 20), SpecId::LONDON);
+        assert_eq!(get_spec_id(spec.clone(), 25), SpecId::LONDON);
+        assert_eq!(get_spec_id(spec.clone(), 29), SpecId::LONDON);
+        assert_eq!(get_spec_id(spec.clone(), 30), SpecId::CANCUN);
+        assert_eq!(get_spec_id(spec.clone(), 35), SpecId::CANCUN);
     }
 }

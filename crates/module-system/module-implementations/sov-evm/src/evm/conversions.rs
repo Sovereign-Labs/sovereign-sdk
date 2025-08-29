@@ -26,7 +26,7 @@ impl From<SealedBlock> for BlockEnv {
     }
 }
 
-pub(crate) fn create_tx_env(sov_nonce: u64, tx: &TransactionSigned, signer: Address) -> TxEnv {
+pub(crate) fn create_tx_env(account_nonce: u64, tx: &TransactionSigned, signer: Address) -> TxEnv {
     TxEnv {
         tx_type: TransactionType::Eip1559.into(),
         caller: signer,
@@ -37,7 +37,7 @@ pub(crate) fn create_tx_env(sov_nonce: u64, tx: &TransactionSigned, signer: Addr
         value: tx.value(),
         data: tx.input().clone(),
         chain_id: tx.chain_id(),
-        nonce: sov_nonce,
+        nonce: account_nonce,
         ..Default::default()
     }
 }
@@ -80,5 +80,30 @@ impl TryFrom<RlpEvmTransaction> for Recovered<TransactionSigned> {
             .map_err(|_| RlpConversionError::InvalidSignature)?;
 
         Ok(tx)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::primitive_types::Block;
+
+    use super::*;
+
+    #[test]
+    fn prepare_call_block_env() {
+        let block = Block::default();
+        let sealed_block = block.clone().seal();
+
+        let block_env = BlockEnv::from(sealed_block);
+
+        assert_eq!(block_env.number, block.header.number);
+        assert_eq!(block_env.beneficiary, block.header.beneficiary);
+        assert_eq!(block_env.timestamp, block.header.timestamp);
+        assert_eq!(
+            block_env.basefee,
+            block.header.base_fee_per_gas.unwrap_or_default()
+        );
+        assert_eq!(block_env.gas_limit, block.header.gas_limit);
+        assert_eq!(block_env.prevrandao, Some(block.header.mix_hash));
     }
 }

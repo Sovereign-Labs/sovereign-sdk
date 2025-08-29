@@ -46,7 +46,7 @@ impl Default for EvmChainSpec {
             coinbase: Address::ZERO,
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
             block_timestamp_delta: SLOT_DURATION.as_secs(),
-            base_fee_params: alloy_eips::eip1559::BaseFeeParams::ethereum(),
+            base_fee_params: alloy_eips::eip1559::BaseFeeParams::new(1, 1),
             hardforks: vec![(0, SpecId::SHANGHAI)],
         }
     }
@@ -102,10 +102,8 @@ mod tests {
         let config = EvmGenesisConfig {
             accounts: vec![AccountData {
                 address,
-                balance: AccountData::balance(u64::MAX),
                 code_hash: AccountData::empty_code(),
                 code: Bytes::default(),
-                nonce: 0,
             }],
             chain_spec: crate::EvmChainSpec {
                 chain_id: 4321, // Use a hard-coded value instead of config_value!("CHAIN_ID") since the string below is hard-coded
@@ -122,7 +120,6 @@ mod tests {
             "accounts":[
                 {
                     "address":"0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
-                    "balance":"0xffffffffffffffff",
                     "code_hash":"0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
                     "code":"0x",
                     "nonce":0
@@ -136,8 +133,8 @@ mod tests {
                     "block_gas_limit":30000000,
                     "block_timestamp_delta":1,
                     "base_fee_params":{
-                        "max_change_denominator":8,
-                        "elasticity_multiplier":2
+                        "max_change_denominator":1,
+                        "elasticity_multiplier":1
                     },
                     "hardforks":[[0,"SHANGHAI"]]
                 }

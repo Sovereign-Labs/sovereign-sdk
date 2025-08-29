@@ -37,7 +37,7 @@ pub struct TokenConfig<S: Spec> {
     pub address_and_balances: Vec<(S::Address, Amount)>,
     /// The addresses that are authorized to mint the token.
     pub admins: Vec<S::Address>,
-    /// The supply cap of the token, if any.
+    /// Supply cap of the token. If None, the value falls back to Amount::MAX.
     pub supply_cap: Option<Amount>,
 }
 
@@ -54,7 +54,7 @@ pub struct GasTokenConfig<S: Spec> {
     pub address_and_balances: Vec<(S::Address, Amount)>,
     /// The addresses that are authorized to mint the token.
     pub admins: Vec<S::Address>,
-    /// The supply cap of the token, if any.
+    /// Supply cap of the token. If None, the value falls back to Amount::MAX.
     pub supply_cap: Option<Amount>,
 }
 

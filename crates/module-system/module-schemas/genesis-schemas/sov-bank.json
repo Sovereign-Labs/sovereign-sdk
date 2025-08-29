@@ -73,7 +73,7 @@
           }
         },
         "supply_cap": {
-          "description": "The supply cap of the token, if any.",
+          "description": "Supply cap of the token. If None, the value falls back to Amount::MAX.",
           "anyOf": [
             {
               "$ref": "#/definitions/Amount"
@@ -133,7 +133,7 @@
           }
         },
         "supply_cap": {
-          "description": "The supply cap of the token, if any.",
+          "description": "Supply cap of the token. If None, the value falls back to Amount::MAX.",
           "anyOf": [
             {
               "$ref": "#/definitions/Amount"
