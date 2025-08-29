@@ -12,10 +12,12 @@ RUN git clone --depth 1 --branch ${GITHUB_REF} https://github.com/Sovereign-Labs
     && yarn workspace @hyperlane-xyz/cli bundle \
     && npm install -g ./typescript/cli \
     && rm -rf /tmp/hyperlane/node_modules \
+    && rm -rf /tmp/hyperlane/solidity \
+    && rm -rf /tmp/hyperlane/starknet \
+    && rm -rf /tmp/hyperlane/rust \
     && yarn cache clean \
     && npm cache clean --force \
-    && apk del git jq curl bash
-#    && rm -rf /tmp/hyperlane
+    && apk del git bash curl jq
 
 LABEL hyperlane.cli.ref="Sovereign-Labs/hyperlane-monorepo:${GITHUB_REF}"
 
