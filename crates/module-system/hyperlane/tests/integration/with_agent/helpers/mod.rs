@@ -50,10 +50,11 @@ pub const VALIDATOR_METRICS_PORT: u16 = 9097;
 /// Should match K
 pub const EVM_DOMAIN: u32 = 31337_90210;
 pub const EVM_CHAIN_ID: u32 = 31337;
-/// Address of the mailbox on evm counterparty chain
-/// 0x8A791620dd6260079BF849Dc5567aDC3F2FdC318
+/// Address of the mailbox on evm counterparty chain.
+/// Derived from the deployer in hyperlane-cli
+/// 0x8a791620dd6260079bf849dc5567adc3f2fdc318
 pub const EVM_MAILBOX: EthAddress = HexString([
-    138, 121, 22, 32, 221, 98, 96, 7, 155, 248, 73, 220, 85, 103, 173, 195, 242, 253, 195, 24,
+    18, 151, 81, 115, 184, 127, 117, 149, 238, 69, 223, 251, 42, 184, 18, 236, 229, 150, 191, 132,
 ]);
 /// Fixed Eth keys created by anvil. They don't change. Each address is funded 1000ETH
 // run `docker run --rm ghcr.io/eigerco/hyperlane anvil` to see all keys
@@ -583,9 +584,12 @@ impl Hyperlane {
 
     /// Prints container's stdout
     pub async fn print_stdout(&mut self) {
+        if let Some(evm_counter_party) = self.evm_counter_party.as_ref() {
+            evm_counter_party.print_logs().await;
+        }
         // we don't have an option for no-follow stdout access
-        // on `ExecResult`s, so this would hang infinitly waiting
-        // for `exec`s to exit. Instead we give them at most 1s of
+        // on `ExecResult`s, so this would hang infinitely waiting
+        // for `exec`s to exit. Instead, we give them at most 1s of
         // printing time each.
         let has_relayer = self.relayer.is_some();
         for (n, val) in self
@@ -601,6 +605,7 @@ impl Hyperlane {
             };
             print_logs_from_exec_result(&name, val, std::time::Duration::from_secs(1)).await;
         }
+
     }
 }
 
@@ -630,8 +635,10 @@ impl EvmProcessWithId {
     /// https://github.com/hyperlane-xyz/hyperlane-monorepo/blob/7656fe1c3865f817d68971ed3c8b939376065283/solidity/contracts/interfaces/IMailbox.sol#L29-L45
     fn new(logs: impl IntoIterator<Item = EvmLog>) -> Self {
         let mut logs = logs.into_iter().filter(|log| log.address == EVM_MAILBOX);
-        let process = logs.next().unwrap();
-        let process_id = logs.next().unwrap();
+        let process = logs.next().expect("Didn't find first event: Process");
+        let process_id = logs
+            .next()
+            .expect("Didn't find the second event: ProcessId");
 
         // we should only have 2 logs from the mailbox
         assert!(logs.next().is_none());

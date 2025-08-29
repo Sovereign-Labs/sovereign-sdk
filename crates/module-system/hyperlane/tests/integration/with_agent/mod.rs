@@ -392,13 +392,6 @@ async fn test_dispatch_message_to_evm_counterparty() {
             tracing::info!("Waiting for relayer to submit transaction to EVM...");
             sleep(Duration::from_secs(10)).await; // give relayer extra time to relay
 
-            hyperlane.print_stdout().await;
-            hyperlane
-                .evm_counter_party
-                .as_ref()
-                .unwrap()
-                .print_logs()
-                .await;
             // Check if relayer is healthy before checking for events
             tracing::info!("Checking for events on EVM counterparty...");
             let evm_event = hyperlane.latest_message_on_counterparty().await;
