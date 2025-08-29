@@ -96,7 +96,6 @@ impl StateAccessMetric {
     }
 }
 #[cfg(feature = "native")]
-#[allow(dead_code)]
 fn summarize(metrics: &StateMetrics, prefix: &str, target: &mut Vec<u8>) -> std::io::Result<()> {
     use std::io::Write;
     let total_reads = metrics.total_reads;
