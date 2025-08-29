@@ -416,7 +416,7 @@ impl Hyperlane {
         // fetch logs in latest block
         let logs: Vec<_> =
             anvil_rpc(self.anvil.as_ref().unwrap(), "eth_getLogs", json!([{}])).await;
-        println!("LOGS: {:?}", logs);
+        println!("LOGS: {logs:?}");
         EvmProcessWithId::new(logs)
     }
 
@@ -443,6 +443,7 @@ impl Hyperlane {
         }
 
         let warp_config = warp_route_config(sovtest_route, sovtest_decimals);
+        tracing::info!(warp_config, "warp route config");
         let configs_dir = self.hyperlane_cli_data.path().join("configs");
         std::fs::write(configs_dir.join("warp-route-deployment.yaml"), warp_config)
             .expect("Failed to write core-config");
@@ -478,7 +479,7 @@ impl Hyperlane {
         let stdout = String::from_utf8_lossy(&stdout);
         let exit_code = container.exit_code().await.unwrap();
         if exit_code != Some(0) {
-            println!("exit code: {:?}", exit_code);
+            println!("exit code: {exit_code:?}");
             let stderr = container.stderr_to_vec().await.unwrap();
             println!("hyperlane warp deploy stdout:\n {stdout}");
             println!(

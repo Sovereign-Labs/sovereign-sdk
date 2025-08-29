@@ -618,6 +618,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_warp_transfer_back_and_forth_with_evm_without_scaling() {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         18,
         Amount(1234),

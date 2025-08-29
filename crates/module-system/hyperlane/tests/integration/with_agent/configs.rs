@@ -130,7 +130,7 @@ pub fn sovtest_metadata(rollup_port: u16) -> String {
           symbol: sov
         protocol: sealevel
         rpcUrls:
-          - http: HTTP://host.docker.internal:{rollup_port}
+          - http: http://host.docker.internal:{rollup_port}
     "}
 }
 
