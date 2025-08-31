@@ -158,7 +158,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
             } in &pending_transactions
             {
                 self.transactions
-                    .push(transaction, &mut accessory_state)
+                    .set(&tx_index, transaction, &mut accessory_state)
                     .unwrap_infallible();
                 self.receipts
                     .push(receipt, &mut accessory_state)
@@ -235,6 +235,8 @@ impl<S: Spec> Evm<S> {
                 // Safe because we already checked blocks.len()
                 .expect("Impossible happened: no block available to prune");
 
+            block.header.seal();
+
             let block_hash = block.header.hash();
             self.block_hashes
                 .remove(&block_hash, state)
@@ -242,6 +244,7 @@ impl<S: Spec> Evm<S> {
                 .expect("Impossible happened: no block_hasha vailable to prune");
         }
 
+        /*
         // Prune transactions
         while self.transactions.len(state)? > transaction_pruning_threshold {
             let transaction = self
@@ -263,7 +266,7 @@ impl<S: Spec> Evm<S> {
                 .remove(0, state)?
                 // Safe because we already checked receipts.len()
                 .expect("Impossible happened: no receipts available to prune");
-        }
+        }*/
 
         Ok(())
     }

@@ -107,32 +107,32 @@ where
         let header = from_primitive_with_hash(block.header.clone());
 
         // Collect transactions with ids from db
-        let transactions_with_ids = block.transactions.clone().map(|id| {
+        let transactions_with_index = block.transactions.clone().map(|index| {
             let tx = self
                 .transactions
-                .get(id, state)
+                .get(&index, state)
                 .unwrap_infallible()
                 .expect("Transaction must be set");
-            (id, tx)
+            (index, tx)
         });
 
         // Build rpc transactions response
         let transactions = match details {
             Some(true) => BlockTransactions::Full(
-                transactions_with_ids
-                    .map(|(id, tx)| {
+                transactions_with_index
+                    .map(|(index, tx)| {
                         from_recovered_with_block_context(
                             tx.clone().into(),
                             block.header.seal(),
                             block.header.number,
                             block.header.base_fee_per_gas,
-                            U256::from(id - block.transactions.start),
+                            U256::from(index - block.transactions.start),
                         )
                     })
                     .collect::<Vec<_>>(),
             ),
             _ => BlockTransactions::Hashes({
-                transactions_with_ids
+                transactions_with_index
                     .map(|(_, tx)| *tx.signed_transaction.hash())
                     .collect::<Vec<_>>()
             }),

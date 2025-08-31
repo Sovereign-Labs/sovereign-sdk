@@ -114,7 +114,7 @@ pub struct Evm<S: Spec> {
 
     /// Used only by the RPC: List of processed transactions.
     #[state]
-    pub transactions: AccessoryStateVec<TransactionSignedAndRecovered, BcsCodec>,
+    pub transactions: AccessoryStateMap<u64, TransactionSignedAndRecovered, BcsCodec>,
 
     /// Used only by the RPC: Receipts.
     #[state]
@@ -218,11 +218,11 @@ impl<S: Spec> Evm<S> {
     /// Access the Ethereum transaction by number.
     pub fn transaction<Accessor: AccessoryStateReader>(
         &self,
-        number: u64,
+        index: u64,
         state: &mut Accessor,
     ) -> TransactionSignedAndRecovered {
         self.transactions
-            .get(number, state)
+            .get(&index, state)
             .unwrap_infallible()
             .expect("Transaction with known hash must be set")
     }
