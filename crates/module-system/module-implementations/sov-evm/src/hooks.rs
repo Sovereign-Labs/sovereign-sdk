@@ -291,7 +291,7 @@ impl<S: Spec> Evm<S> {
 }
 
 #[cfg(feature = "native")]
-pub(crate) fn crate_range_from(
+fn crate_range_from(
     mut range: RangeInclusive<u64>,
     new_start: Option<u64>,
     new_end: Option<u64>,
