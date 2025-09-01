@@ -337,8 +337,8 @@ where
 
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
-        let result = match executor::inspect(evm_db, &block_env, tx_env, cfg_env) {
-            Ok(result) => result.result,
+        let result = match executor::call(evm_db, &block_env, tx_env, cfg_env) {
+            Ok(result) => result,
             Err(err) => return Err(eth_api_into_rpc_error(eth_from_evm_error(err))),
         };
 
@@ -435,7 +435,7 @@ where
         let evm_db = self.get_db(state);
 
         // execute the call without writing to db
-        let result = executor::inspect(evm_db, &block_env, tx_env.clone(), cfg_env.clone());
+        let result = executor::call(evm_db, &block_env, tx_env.clone(), cfg_env.clone());
 
         // Exceptional case: init used too much gas, we need to increase the gas limit and try
         // again
@@ -452,8 +452,8 @@ where
         }
 
         let result = match result {
-            Ok(result) => match result.result {
-                ExecutionResult::Success { .. } => result.result,
+            Ok(result) => match result {
+                ExecutionResult::Success { .. } => result,
                 ExecutionResult::Halt { reason, gas_used } => {
                     return Err(invalid_tx_into_rpc_error(RpcInvalidTransactionError::halt(
                         reason, gas_used,
@@ -582,7 +582,7 @@ where
             tx_env.gas_limit = mid_gas_limit;
 
             let evm_db = self.get_db(state);
-            let result = executor::inspect(evm_db, block_env, tx_env.clone(), cfg_env.clone());
+            let result = executor::call(evm_db, block_env, tx_env.clone(), cfg_env.clone());
 
             // Exceptional case: init used too much gas, we need to increase the gas limit and try
             // again
@@ -598,7 +598,7 @@ where
             }
 
             match result {
-                Ok(result) => match result.result {
+                Ok(result) => match result {
                     ExecutionResult::Success { .. } => {
                         // cap the highest gas limit with succeeding gas limit
                         highest_gas_limit = mid_gas_limit;
@@ -719,8 +719,8 @@ where
 {
     let req_gas_limit = tx_env.gas_limit;
     tx_env.gas_limit = block_env.gas_limit;
-    let res = executor::inspect(db, &block_env, tx_env, cfg_env).unwrap();
-    match res.result {
+    let res = executor::call(db, &block_env, tx_env, cfg_env).unwrap();
+    match res {
         ExecutionResult::Success { .. } => {
             // a transaction succeeded by manually increasing the gas limit to
             // highest, which means the caller lacks funds to pay for the tx

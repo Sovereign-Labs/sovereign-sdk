@@ -1,14 +1,12 @@
 use alloy_primitives::Address;
 use reth_primitives::TransactionSigned;
 use reth_revm::db::DBErrorMarker;
-#[cfg(feature = "native")]
-use revm::context::{result::ResultAndState, TxEnv};
+use revm::context::TxEnv;
 use revm::{
     context::{
-        result::{EVMError, ExecutionResult},
-        BlockEnv, CfgEnv, Context, ContextTr,
+        result::{EVMError, ExecResultAndState, ExecutionResult},
+        BlockEnv, CfgEnv, Context,
     },
-    handler::EvmTr,
     Database, ExecuteEvm, MainContext,
 };
 
@@ -33,46 +31,48 @@ pub(crate) fn get_cfg_env(
 }
 
 /// Execute an Ethereum transaction and commit it to the database.
-pub fn execute_tx<DB: Database<Error = E> + FallibleDatabaseCommit<Error = E>, E: DBErrorMarker>(
+pub fn transact_commit<
+    DB: Database<Error = E> + FallibleDatabaseCommit<Error = E>,
+    E: DBErrorMarker,
+>(
     account_nonce: u64,
-    db: DB,
+    mut db: DB,
     block_env: &BlockEnv,
     tx: &TransactionSigned,
     signer: Address,
     cfg: CfgEnv,
 ) -> Result<ExecutionResult, EVMError<E>> {
     let tx_env = create_tx_env(account_nonce, tx, signer);
+    let ExecResultAndState { result, state } = transact(&mut db, block_env, tx_env, cfg)?;
+    db.commit(state)?;
+    Ok(result)
+}
+
+#[cfg(feature = "native")]
+pub(crate) fn call<DB: Database<Error = E>, E: DBErrorMarker>(
+    mut db: DB,
+    block_env: &BlockEnv,
+    tx: TxEnv,
+    cfg: CfgEnv,
+) -> Result<ExecutionResult, EVMError<E>> {
+    Ok(transact(&mut db, block_env, tx, cfg)?.result)
+}
+
+fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
+    db: &mut DB,
+    block_env: &BlockEnv,
+    tx: TxEnv,
+    cfg: CfgEnv,
+) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>> {
     let context = Context::mainnet()
         .with_db(db)
         .with_block(block_env)
         .with_cfg(cfg);
     let mut evm = SovEvm::new(context, ());
     // We don't use transact_commit as it does not support returning an error
-    let result = evm.transact_one(tx_env)?;
-    let changes = evm.finalize();
-    evm.ctx().db_mut().commit(changes)?;
-    Ok(result)
-}
-
-#[cfg(feature = "native")]
-pub(crate) fn inspect<DB: Database<Error = E>, E>(
-    db: DB,
-    block_env: &BlockEnv,
-    tx: TxEnv,
-    cfg: CfgEnv,
-) -> Result<ResultAndState, EVMError<E>> {
-    use revm::InspectEvm;
-
-    let config = revm_inspectors::tracing::TracingInspectorConfig::all();
-    let inspector = revm_inspectors::tracing::TracingInspector::new(config);
-
-    let context = Context::mainnet()
-        .with_db(db)
-        .with_block(block_env)
-        .with_cfg(cfg);
-    let mut evm = SovEvm::new(context, inspector);
-
-    evm.inspect_tx(tx)
+    let result = evm.transact_one(tx)?;
+    let state = evm.finalize();
+    Ok(ExecResultAndState::new(result, state))
 }
 
 #[cfg(test)]

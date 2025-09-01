@@ -55,7 +55,7 @@ fn test_invalid_contract_execution() {
         let (signed_eth_tx, _) = account.sign(tx_request);
         let cfg_env =
             CfgEnv::new_with_spec(SpecId::SHANGHAI).with_chain_id(config_value!("CHAIN_ID"));
-        let result = executor::execute_tx(
+        let result = executor::transact_commit(
             1,
             evm_db,
             &BlockEnv::default(),

@@ -56,7 +56,7 @@ where
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
         let result =
-            executor::execute_tx(account_nonce, evm_db, &block_env, &evm_tx, signer, cfg_env);
+            executor::transact_commit(account_nonce, evm_db, &block_env, &evm_tx, signer, cfg_env);
 
         let previous_transaction = self.pending_transactions.last(state)?;
         let previous_transaction_cumulative_gas_used = previous_transaction
