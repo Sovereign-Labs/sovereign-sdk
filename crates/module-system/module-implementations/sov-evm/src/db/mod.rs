@@ -48,7 +48,7 @@ where
 {
     type Error = Error<Ws>;
 
-    fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Error<Ws>> {
+    fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
         let maybe_account_info = self
             .accounts
             .get(&address, self.state)

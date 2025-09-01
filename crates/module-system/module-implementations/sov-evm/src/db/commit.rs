@@ -24,7 +24,7 @@ where
 {
     type Error = Error<Ws>;
 
-    fn commit(&mut self, changes: HashMap<Address, Account>) -> Result<(), Error<Ws>> {
+    fn commit(&mut self, changes: HashMap<Address, Account>) -> Result<(), Self::Error> {
         changes
             .into_iter()
             .sorted_by_key(|(address, _)| *address) // Sort addresses to avoid non-determinism in ZK
@@ -39,7 +39,11 @@ impl<'a, Ws: StateAccessor, S: Spec> EvmDb<'a, Ws, S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
-    fn commit_account(&mut self, address: Address, account: Account) -> Result<(), Error<Ws>> {
+    fn commit_account(
+        &mut self,
+        address: Address,
+        account: Account,
+    ) -> Result<(), <Self as FallibleDatabaseCommit>::Error> {
         // TODO figure out what to do when account is destroyed.
         // https://github.com/Sovereign-Labs/sovereign-sdk/issues/425
         if account.is_selfdestructed() {
@@ -80,7 +84,7 @@ where
         &mut self,
         address: Address,
         storage: HashMap<U256, EvmStorageSlot>,
-    ) -> Result<(), Error<Ws>> {
+    ) -> Result<(), <Self as FallibleDatabaseCommit>::Error> {
         storage
             .into_iter()
             .sorted_by_key(|(key, _)| *key) // Sort keys explicitly to avoid non-determinism.
