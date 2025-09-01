@@ -1,18 +1,21 @@
-use std::convert::Infallible;
-
 use alloy_primitives::Address;
 use reth_primitives::TransactionSigned;
+use reth_revm::db::DBErrorMarker;
 #[cfg(feature = "native")]
 use revm::context::{result::ResultAndState, TxEnv};
 use revm::{
     context::{
         result::{EVMError, ExecutionResult},
-        BlockEnv, CfgEnv, Context,
+        BlockEnv, CfgEnv, Context, ContextTr,
     },
-    Database, DatabaseCommit, ExecuteCommitEvm, MainContext,
+    handler::EvmTr,
+    Database, ExecuteEvm, MainContext,
 };
 
-use crate::{evm::conversions::create_tx_env, get_spec_id, sov_evm::SovEvm, EvmRuntimeConfig};
+use crate::{
+    db::commit::FallibleDatabaseCommit, evm::conversions::create_tx_env, get_spec_id,
+    sov_evm::SovEvm, EvmRuntimeConfig,
+};
 
 /// builds CfgEnv
 /// Returns correct config depending on spec for given block number
@@ -25,35 +28,39 @@ pub(crate) fn get_cfg_env(
     let mut cfg_env = template_cfg.unwrap_or_default();
     cfg_env.chain_id = cfg.chain_spec.chain_id;
     cfg_env.limit_contract_code_size = cfg.chain_spec.limit_contract_code_size;
-    let spec = get_spec_id(cfg.hardforks, block_env.number.to::<u64>());
+    let spec = get_spec_id(&cfg.hardforks, block_env.number.to::<u64>());
     cfg_env.with_spec(spec)
 }
 
 /// Execute an Ethereum transaction and commit it to the database.
-pub fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
+pub fn execute_tx<DB: Database<Error = E> + FallibleDatabaseCommit<Error = E>, E: DBErrorMarker>(
     account_nonce: u64,
     db: DB,
     block_env: &BlockEnv,
     tx: &TransactionSigned,
     signer: Address,
     cfg: CfgEnv,
-) -> Result<ExecutionResult, EVMError<Infallible>> {
+) -> Result<ExecutionResult, EVMError<E>> {
     let tx_env = create_tx_env(account_nonce, tx, signer);
     let context = Context::mainnet()
         .with_db(db)
         .with_block(block_env)
         .with_cfg(cfg);
     let mut evm = SovEvm::new(context, ());
-    evm.transact_commit(tx_env)
+    // We don't use transact_commit as it does not support returning an error
+    let result = evm.transact_one(tx_env)?;
+    let changes = evm.finalize();
+    evm.ctx().db_mut().commit(changes)?;
+    Ok(result)
 }
 
 #[cfg(feature = "native")]
-pub(crate) fn inspect<DB: Database<Error = Infallible> + DatabaseCommit>(
+pub(crate) fn inspect<DB: Database<Error = E>, E>(
     db: DB,
     block_env: &BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
-) -> Result<ResultAndState, EVMError<Infallible>> {
+) -> Result<ResultAndState, EVMError<E>> {
     use revm::InspectEvm;
 
     let config = revm_inspectors::tracing::TracingInspectorConfig::all();

@@ -1,9 +1,8 @@
 use alloy_primitives::{Address, Bytes, B256};
 use revm::state::AccountInfo;
-use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{InfallibleStateAccessor, Spec};
+use sov_modules_api::{Spec, StateAccessor};
 
-use super::db::{DbAccount, EvmDb};
+use super::{DbAccount, EvmDb};
 
 /// Initializes database with a predefined account.
 pub(crate) trait InitEvmDb {
@@ -11,19 +10,19 @@ pub(crate) trait InitEvmDb {
     fn insert_code(&mut self, code_hash: B256, code: Bytes);
 }
 
-impl<Ws: InfallibleStateAccessor, S: Spec> InitEvmDb for EvmDb<Ws, S> {
+impl<'a, Ws: StateAccessor, S: Spec> InitEvmDb for EvmDb<'a, Ws, S> {
     fn insert_account_info(&mut self, sender: Address, info: AccountInfo) {
         let db_account = DbAccount(info);
 
         self.accounts
-            .set(&sender, &db_account, &mut self.state)
-            .unwrap_infallible();
+            .set(&sender, &db_account, self.state)
+            .expect("Failed to set account info");
     }
 
     fn insert_code(&mut self, code_hash: B256, code: Bytes) {
         self.code
-            .set(&code_hash, &code, &mut self.state)
-            .unwrap_infallible();
+            .set(&code_hash, &code, self.state)
+            .expect("Failed to set account info");
     }
 }
 

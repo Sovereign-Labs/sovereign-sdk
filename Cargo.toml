@@ -204,6 +204,7 @@ convert_case = { version = "0.6", default-features = false }
 chrono = { version = "0.4", default-features = false, features = ["now"] }
 darling = "0.20"
 delegate = "0.13.4"
+derive-new = "0.7.0"
 derivative = { version = "2.2", features = ["use_core"] }
 digest = { version = "0.10.7", default-features = false, features = ["alloc"] }
 derive-getters = { version = "0.5.0" }
@@ -235,6 +236,7 @@ sha2 = { version = "0.10.8", default-features = false }
 sha3 = { version = "0.10.8", default-features = false }
 strum = { version = "0.26.3", features = ["derive"] }
 syn = { version = "2.0" }
+itertools = { version = "0.14.0" }
 thiserror = "1.0.64"
 tower = { version = "0.5", default-features = false }
 tower-http = "0.5"

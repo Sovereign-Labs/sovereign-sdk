@@ -38,7 +38,7 @@ fn test_invalid_contract_execution() {
 
     runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
-        let mut evm_db = evm.get_db(state);
+        let evm_db = evm.get_db(state);
         let tx_request = TypedTransaction::Eip1559(TxEip1559 {
             chain_id: config_value!("CHAIN_ID"),
             nonce: 1,
@@ -57,7 +57,7 @@ fn test_invalid_contract_execution() {
             CfgEnv::new_with_spec(SpecId::SHANGHAI).with_chain_id(config_value!("CHAIN_ID"));
         let result = executor::execute_tx(
             1,
-            &mut evm_db,
+            evm_db,
             &BlockEnv::default(),
             &convert_to_transaction_signed(signed_eth_tx).unwrap(),
             account.address(),

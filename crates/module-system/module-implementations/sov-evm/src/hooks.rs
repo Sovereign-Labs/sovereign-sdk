@@ -1,5 +1,3 @@
-#[cfg(feature = "native")]
-use crate::crate_range_from;
 use crate::evm::primitive_types::Block;
 use crate::{BlockEnv, Evm, PendingTransaction};
 use alloy_consensus::constants::KECCAK_EMPTY;
@@ -16,6 +14,8 @@ use sov_modules_api::{BlockHooks, Spec, StateCheckpoint};
 use sov_state::{ProvableNamespace, StateRoot, Storage};
 #[cfg(feature = "native")]
 use std::convert::Infallible;
+#[cfg(feature = "native")]
+use std::ops::RangeInclusive;
 
 impl<S: Spec> BlockHooks for Evm<S> {
     type Spec = S;
@@ -288,4 +288,19 @@ impl<S: Spec> Evm<S> {
 
         Ok(())
     }
+}
+
+#[cfg(feature = "native")]
+pub(crate) fn crate_range_from(
+    mut range: RangeInclusive<u64>,
+    new_start: Option<u64>,
+    new_end: Option<u64>,
+) -> RangeInclusive<u64> {
+    if let Some(new_start) = new_start {
+        range = RangeInclusive::new(new_start, *range.end());
+    }
+    if let Some(new_end) = new_end {
+        range = RangeInclusive::new(*range.start(), new_end);
+    }
+    range
 }

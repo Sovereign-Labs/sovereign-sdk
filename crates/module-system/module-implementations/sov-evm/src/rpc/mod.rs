@@ -1,5 +1,3 @@
-use std::convert::Infallible;
-
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{Transaction as TransactionTrait, TxReceipt};
 use alloy_primitives::{Address, U64};
@@ -21,10 +19,10 @@ use revm::Database;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{ApiStateAccessor, InfallibleStateAccessor, Spec};
+use sov_modules_api::{ApiStateAccessor, InfallibleStateAccessor, Spec, StateAccessor};
 use tracing::{debug, trace};
 
-use crate::evm::db::EvmDb;
+use crate::db::EvmDb;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, SealedBlock, TransactionSignedAndRecovered};
 use crate::executor::get_cfg_env;
@@ -162,7 +160,7 @@ where
         let balance = self
             .get_db(state)
             .basic(address)
-            .unwrap_infallible()
+            .map_err(EthApiError::from)?
             .map(|account| account.balance)
             .unwrap_or_default();
 
@@ -341,7 +339,7 @@ where
 
         let result = match executor::inspect(evm_db, &block_env, tx_env, cfg_env) {
             Ok(result) => result.result,
-            Err(err) => return Err(eth_api_into_rpc_error(eth_from_infallible(err))),
+            Err(err) => return Err(eth_api_into_rpc_error(eth_from_evm_error(err))),
         };
 
         ensure_success(result).map_err(eth_api_into_rpc_error)
@@ -394,7 +392,7 @@ where
         let account = self
             .get_db(state)
             .basic(tx_env.caller)
-            .unwrap_infallible()
+            .map_err(EthApiError::from)?
             .unwrap_or_default();
 
         // if the request is a simple transfer, can we optimize?
@@ -480,7 +478,7 @@ where
                     };
                 }
             },
-            Err(err) => return Err(eth_api_into_rpc_error(eth_from_infallible(err))),
+            Err(err) => return Err(eth_api_into_rpc_error(eth_from_evm_error(err))),
         };
 
         let gas_limit = self.bin_search_gas_limit(
@@ -637,7 +635,7 @@ where
                     }
                 },
                 Err(err) => {
-                    return Err(eth_api_into_rpc_error(eth_from_infallible(err)));
+                    return Err(eth_api_into_rpc_error(eth_from_evm_error(err)));
                 }
             };
 
@@ -747,15 +745,24 @@ where
     }
 }
 
-fn eth_from_infallible(err: EVMError<Infallible>) -> EthApiError {
+fn eth_from_evm_error<Ws: StateAccessor>(err: EVMError<crate::db::Error<Ws>>) -> EthApiError {
     match err {
         EVMError::Transaction(err) => RpcInvalidTransactionError::from(err).into(),
         EVMError::Header(InvalidHeader::PrevrandaoNotSet) => EthApiError::PrevrandaoNotSet,
         EVMError::Header(InvalidHeader::ExcessBlobGasNotSet) => EthApiError::ExcessBlobGasNotSet,
-        EVMError::Database(_) => {
-            panic!("Infallible error triggered")
-        }
+        EVMError::Database(db_err) => db_err.into(),
         EVMError::Custom(data) => EthApiError::EvmCustom(data),
+    }
+}
+
+impl<Ws: StateAccessor> From<crate::db::Error<Ws>> for EthApiError {
+    fn from(err: crate::db::Error<Ws>) -> Self {
+        RpcInvalidTransactionError::other(ErrorObject::owned(
+            -32603,
+            format!("Database error: {err}"),
+            None::<()>,
+        ))
+        .into()
     }
 }
 

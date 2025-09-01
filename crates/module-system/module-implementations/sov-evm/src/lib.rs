@@ -4,6 +4,7 @@
 mod account_storage_key;
 mod call;
 mod config;
+mod db;
 mod evm;
 mod genesis;
 mod hooks;
@@ -38,18 +39,19 @@ pub use authenticate::{
 pub use reth_primitives::TransactionSigned;
 pub use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_bank::Amount;
 use sov_modules_api::prelude::UnwrapInfallible as _;
 use sov_modules_api::{
     AccessoryStateMap, AccessoryStateReader, AccessoryStateReaderAndWriter, AccessoryStateValue,
     Context, DaSpec, GenesisState, InfallibleStateAccessor, InfallibleStateReaderAndWriter, Module,
     ModuleId, ModuleInfo, Spec, StateAccessor, StateMap, StateReader, StateValue, StateVec,
-    TxState, UnmeteredStateWrapper,
+    TxState,
 };
 use sov_state::codec::BcsCodec;
 use sov_state::User;
 
 use crate::account_storage_key::AccountStorageKey;
-use crate::evm::db::{DbAccount, EvmDb};
+use crate::db::{DbAccount, EvmDb};
 use crate::evm::primitive_types::{
     Block, PendingTransaction, Receipt, SealedBlock, TransactionSignedAndRecovered,
 };
@@ -178,16 +180,12 @@ where
 
 impl<S: Spec> Evm<S> {
     /// Get a EvmDb instance for the supplied state.
-    pub fn get_db<'a, Ws: StateAccessor>(
-        &self,
-        state: &'a mut Ws,
-    ) -> EvmDb<UnmeteredStateWrapper<'a, Ws>, S> {
-        let infallible_state_accessor = state.to_unmetered();
+    pub fn get_db<'a, Ws: StateAccessor>(&self, state: &'a mut Ws) -> EvmDb<'a, Ws, S> {
         EvmDb::new(
             self.accounts.clone(),
             self.account_storage.clone(),
             self.code.clone(),
-            infallible_state_accessor,
+            state,
             self.bank_module.clone(),
         )
     }
@@ -331,16 +329,11 @@ where
     S::Address::from_vm_address(EthereumAddress::from(address))
 }
 
-pub(crate) fn crate_range_from(
-    mut range: RangeInclusive<u64>,
-    new_start: Option<u64>,
-    new_end: Option<u64>,
-) -> RangeInclusive<u64> {
-    if let Some(new_start) = new_start {
-        range = RangeInclusive::new(new_start, *range.end());
-    }
-    if let Some(new_end) = new_end {
-        range = RangeInclusive::new(*range.start(), new_end);
-    }
-    range
+pub(crate) fn to_rollup_balance(balance: U256) -> Amount {
+    // Overflow is not possible here. The gas token’s supply_cap is bounded by u128::MAX,
+    // which means no account can ever hold a balance greater than u128::MAX.
+    let bank_amount = balance
+        .try_into()
+        .unwrap_or_else(|_| panic!("The impossible happened: Balance overflowed"));
+    Amount::new(bank_amount)
 }

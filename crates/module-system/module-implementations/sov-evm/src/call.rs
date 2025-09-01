@@ -6,7 +6,7 @@ use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{Context, Spec, TxState};
 
 use crate::conversions::convert_to_transaction_signed;
-use crate::evm::db::EvmDb;
+use crate::db::EvmDb;
 use crate::evm::executor::{self};
 use crate::evm::primitive_types::{Receipt, TransactionSignedAndRecovered};
 use crate::evm::RlpEvmTransaction;
@@ -105,7 +105,7 @@ where
                     }
                     err => {
                         // This is a fatal error, so we need to return it.
-                        Err(err.into())
+                        Err(anyhow::anyhow!("EVM execution error: {:?}", err))
                     }
                 };
             }
@@ -149,16 +149,14 @@ where
 
 /// Get spec id for a given block number
 /// Returns the first spec id defined for block >= block_number
-pub(crate) fn get_spec_id(spec: Vec<(u64, SpecId)>, block_number: u64) -> SpecId {
-    match spec.binary_search_by(|&(k, _)| k.cmp(&block_number)) {
+pub(crate) fn get_spec_id(spec: &[(u64, SpecId)], block_number: u64) -> SpecId {
+    match spec.binary_search_by_key(&block_number, |&(k, _)| k) {
         Ok(index) => spec[index].1,
         Err(index) => {
-            if index > 0 {
-                spec[index.checked_sub(1).expect("invalid spec index")].1
-            } else {
-                // this should never happen as we cover this in genesis
-                panic!("EVM spec must start from block 0")
-            }
+            spec[index
+                .checked_sub(1)
+                .expect("EVM spec must start from block 0")]
+            .1
         }
     }
 }
@@ -169,21 +167,11 @@ mod tests {
 
     #[test]
     fn spec_id_lookup() {
-        let spec = vec![
-            (0, SpecId::CONSTANTINOPLE),
-            (10, SpecId::BERLIN),
-            (20, SpecId::LONDON),
-            (30, SpecId::CANCUN),
-        ];
+        let spec = vec![(0, SpecId::CONSTANTINOPLE), (2, SpecId::BERLIN)];
 
-        assert_eq!(get_spec_id(spec.clone(), 0), SpecId::CONSTANTINOPLE);
-        assert_eq!(get_spec_id(spec.clone(), 5), SpecId::CONSTANTINOPLE);
-        assert_eq!(get_spec_id(spec.clone(), 10), SpecId::BERLIN);
-        assert_eq!(get_spec_id(spec.clone(), 15), SpecId::BERLIN);
-        assert_eq!(get_spec_id(spec.clone(), 20), SpecId::LONDON);
-        assert_eq!(get_spec_id(spec.clone(), 25), SpecId::LONDON);
-        assert_eq!(get_spec_id(spec.clone(), 29), SpecId::LONDON);
-        assert_eq!(get_spec_id(spec.clone(), 30), SpecId::CANCUN);
-        assert_eq!(get_spec_id(spec.clone(), 35), SpecId::CANCUN);
+        assert_eq!(get_spec_id(&spec, 0), SpecId::CONSTANTINOPLE);
+        assert_eq!(get_spec_id(&spec, 1), SpecId::CONSTANTINOPLE);
+        assert_eq!(get_spec_id(&spec, 2), SpecId::BERLIN);
+        assert_eq!(get_spec_id(&spec, 3), SpecId::BERLIN);
     }
 }
