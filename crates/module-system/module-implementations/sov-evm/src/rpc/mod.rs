@@ -523,7 +523,7 @@ where
                 let last_block_number = block_numbers.end();
 
                 self.blocks
-                    .get(&last_block_number, state)
+                    .get(last_block_number, state)
                     .unwrap_infallible()
                     .expect("Block must be set")
             }
