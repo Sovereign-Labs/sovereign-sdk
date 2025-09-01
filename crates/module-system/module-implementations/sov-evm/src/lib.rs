@@ -8,6 +8,7 @@ mod evm;
 mod genesis;
 mod hooks;
 mod sov_evm;
+use std::ops::RangeInclusive;
 
 pub use call::*;
 pub use config::*;
@@ -40,9 +41,9 @@ use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::prelude::UnwrapInfallible as _;
 use sov_modules_api::{
     AccessoryStateMap, AccessoryStateReader, AccessoryStateReaderAndWriter, AccessoryStateValue,
-    AccessoryStateVec, Context, DaSpec, GenesisState, InfallibleStateAccessor,
-    InfallibleStateReaderAndWriter, Module, ModuleId, ModuleInfo, Spec, StateAccessor, StateMap,
-    StateReader, StateValue, StateVec, TxState, UnmeteredStateWrapper,
+    Context, DaSpec, GenesisState, InfallibleStateAccessor, InfallibleStateReaderAndWriter, Module,
+    ModuleId, ModuleInfo, Spec, StateAccessor, StateMap, StateReader, StateValue, StateVec,
+    TxState, UnmeteredStateWrapper,
 };
 use sov_state::codec::BcsCodec;
 use sov_state::User;
@@ -108,9 +109,13 @@ pub struct Evm<S: Spec> {
     #[state]
     pub(crate) pending_head: AccessoryStateValue<Block, BcsCodec>,
 
+    /// Tracks the blocks stored in the accessory state.
+    #[state]
+    pub block_numbers: AccessoryStateValue<RangeInclusive<u64>, BcsCodec>,
+
     /// Used only by the RPC: The vec is extended with `pending_head` in `finalize_hook`.
     #[state]
-    pub blocks: AccessoryStateVec<SealedBlock, BcsCodec>,
+    pub blocks: AccessoryStateMap<u64, SealedBlock, BcsCodec>,
 
     /// Used only by the RPC: List of processed transactions.
     #[state]
@@ -118,7 +123,7 @@ pub struct Evm<S: Spec> {
 
     /// Used only by the RPC: Receipts.
     #[state]
-    pub receipts: AccessoryStateVec<Receipt, BcsCodec>,
+    pub receipts: AccessoryStateMap<u64, Receipt, BcsCodec>,
 
     /// Used only by the RPC: block_hash => block_number mapping.
     #[state]
@@ -187,32 +192,13 @@ impl<S: Spec> Evm<S> {
         )
     }
 
-    /// Access the Ethereum transaction receipts.
-    pub fn receipts<Accessor: AccessoryStateReaderAndWriter>(
-        &self,
-        state: &mut Accessor,
-    ) -> Vec<Receipt> {
-        self.receipts.collect_infallible(state)
-    }
-
     /// Access the Ethereum transaction receipt by number.
     pub fn receipt<Accessor: AccessoryStateReader>(
         &self,
-        number: u64,
+        index: u64,
         state: &mut Accessor,
-    ) -> Receipt {
-        self.receipts
-            .get(number, state)
-            .unwrap_infallible()
-            .expect("Receipt for known transaction must be set")
-    }
-
-    /// Access the Ethereum transactions.
-    pub fn transactions<Accessor: AccessoryStateReaderAndWriter>(
-        &self,
-        state: &mut Accessor,
-    ) -> Vec<TransactionSignedAndRecovered> {
-        self.transactions.collect_infallible(state)
+    ) -> Option<Receipt> {
+        self.receipts.get(&index, state).unwrap_infallible()
     }
 
     /// Access the Ethereum transaction by number.
@@ -220,19 +206,19 @@ impl<S: Spec> Evm<S> {
         &self,
         index: u64,
         state: &mut Accessor,
-    ) -> TransactionSignedAndRecovered {
-        self.transactions
-            .get(&index, state)
-            .unwrap_infallible()
-            .expect("Transaction with known hash must be set")
+    ) -> Option<TransactionSignedAndRecovered> {
+        self.transactions.get(&index, state).unwrap_infallible()
     }
 
     /// Access the Ethereum blocks.
-    pub fn blocks<Accessor: AccessoryStateReaderAndWriter>(
+    pub fn block_numbers<Accessor: AccessoryStateReaderAndWriter>(
         &self,
         state: &mut Accessor,
-    ) -> Vec<SealedBlock> {
-        self.blocks.collect_infallible(state)
+    ) -> RangeInclusive<u64> {
+        self.block_numbers
+            .get(state)
+            .unwrap_infallible()
+            .expect("Block numbers must be set")
     }
 
     /// Access Ethereum block by number.
@@ -242,7 +228,7 @@ impl<S: Spec> Evm<S> {
         state: &mut Accessor,
     ) -> SealedBlock {
         self.blocks
-            .get(number, state)
+            .get(&number, state)
             .unwrap_infallible()
             .expect("Block number for known transaction must be set")
     }
@@ -343,4 +329,18 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
 {
     S::Address::from_vm_address(EthereumAddress::from(address))
+}
+
+pub(crate) fn crate_range_from(
+    mut range: RangeInclusive<u64>,
+    new_start: Option<u64>,
+    new_end: Option<u64>,
+) -> RangeInclusive<u64> {
+    if let Some(new_start) = new_start {
+        range = RangeInclusive::new(new_start, *range.end());
+    }
+    if let Some(new_end) = new_end {
+        range = RangeInclusive::new(*range.start(), new_end);
+    }
+    range
 }

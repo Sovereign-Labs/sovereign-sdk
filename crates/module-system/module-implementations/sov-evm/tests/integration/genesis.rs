@@ -5,6 +5,7 @@ use alloy_primitives::{Address, Bytes, U256};
 use revm::state::AccountInfo;
 use revm::Database;
 use sov_evm::{AccountData, Evm, EvmGenesisConfig, EvmRuntimeConfig, SpecId};
+use sov_modules_api::prelude::UnwrapInfallible;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
 
@@ -96,7 +97,7 @@ fn test_genesis_block() {
     runner.query_visible_state(move |state| {
         let evm = Evm::<S>::default();
 
-        let actual_block = &evm.blocks(state)[0_usize];
+        let actual_block = &evm.blocks.get(&0, state).unwrap_infallible().unwrap();
         let expected_header = Header {
             state_root: actual_block.header().state_root(),
             gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,

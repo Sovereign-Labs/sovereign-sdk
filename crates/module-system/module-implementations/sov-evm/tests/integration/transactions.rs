@@ -11,7 +11,7 @@ fn test_simple_transfer() {
     let (mut runner, from, to) = setup();
 
     let value = 1;
-    let transfer_tx = create_transfer_tx(0, &from, &to, value);
+    let transfer_tx = create_transfer_tx(0, &from, &to, value).tx;
 
     let evm = Evm::<S>::default();
     runner.execute_transaction(TransactionTestCase {
@@ -36,49 +36,56 @@ fn test_executing_eth_transactions() {
     let contract = SimpleStorageContract::default();
     let contract_addr = account.address().create(0);
 
-    let create_contract_tx = create_deploy_tx(0, &contract, &account);
-    let set_value_tx = create_set_arg_tx(5, 1, &contract, contract_addr, &account);
+    let address = account.address();
+    let mut txs = vec![create_deploy_tx(0, &contract, &account)];
 
-    runner.execute_batch(BatchTestCase {
-        input: vec![create_contract_tx, set_value_tx].into(),
-        assert: Box::new(move |_result, state| {
-            let evm = Evm::<S>::default();
-            let receipts = evm.receipts(state);
-            assert_eq!(receipts.len(), 2);
-            for receipt in receipts {
-                assert!(
-                    receipt.receipt.success,
-                    "Eth tx didn't execute successfully, receipt: {receipt:?}"
-                );
-            }
-            let storage_value = evm
-                .get_storage(&contract_addr, &U256::ZERO, state)
-                .unwrap()
-                .unwrap();
-            assert_eq!(U256::from(5), storage_value);
-        }),
-    });
+    for nonce in 1..10 {
+        txs.push(create_set_arg_tx(
+            (nonce + 100) as u32, // Add 100 so that the value set in the smart contract differs from the nonce.
+            nonce,
+            &contract,
+            contract_addr,
+            &account,
+        ));
+    }
 
-    for n in 2..10 {
-        let address = account.address();
-        let set_value_tx =
-            create_set_arg_tx((n + 90) as u32, n, &contract, contract_addr, &account);
-
-        runner.execute_batch(BatchTestCase {
-            input: vec![set_value_tx].into(),
+    for tx in txs {
+        let evm = Evm::<S>::default();
+        runner.execute_transaction(TransactionTestCase {
+            input: tx.tx,
             assert: Box::new(move |_result, state| {
-                let evm = Evm::<S>::default();
+                let nonce = tx.nonce;
+                let tx_hash = tx.hash;
+
+                assert_eq!(evm.pending_transactions(state).len(), 0);
+
+                assert_eq!(
+                    evm.transaction(nonce, state)
+                        .unwrap()
+                        .signed_transaction()
+                        .hash(),
+                    &tx_hash
+                );
+
+                assert_eq!(evm.get_tx_index_by_hash(&tx_hash, state), Some(nonce));
+
+                assert!(evm.receipt(nonce, state).unwrap().receipt.success);
+
                 let nonce_from_module = evm
                     .get_transaction_count(address, None, state)
                     .unwrap()
                     .to::<u64>();
-                assert_eq!(n + 1, nonce_from_module);
 
-                let storage_value = evm
-                    .get_storage(&contract_addr, &U256::ZERO, state)
-                    .unwrap()
-                    .unwrap();
-                assert_eq!(U256::from(n + 90), storage_value);
+                assert_eq!(nonce + 1, nonce_from_module);
+
+                let storage_value = evm.get_storage(&contract_addr, &U256::ZERO, state).unwrap();
+
+                if nonce == 0 {
+                    // On contract creation the value is absent.
+                    assert!(storage_value.is_none())
+                } else {
+                    assert_eq!(U256::from(nonce + 100), storage_value.unwrap());
+                }
             }),
         });
     }
@@ -88,7 +95,7 @@ fn test_executing_eth_transactions() {
 fn test_failed_tx_doesnt_update_evm_module_state() {
     let (mut runner, _, no_balance_account) = setup();
     let contract = SimpleStorageContract::default();
-    let create_contract_tx = create_deploy_tx(0, &contract, &no_balance_account);
+    let create_contract_tx = create_deploy_tx(0, &contract, &no_balance_account).tx;
 
     runner.execute_batch(BatchTestCase {
         input: vec![create_contract_tx].into(),
@@ -107,7 +114,7 @@ fn test_account_nonce() {
 
     let from_addr = from.address();
     let value = 1;
-    let transfer_tx = create_transfer_tx(0, &from, &to, value);
+    let transfer_tx = create_transfer_tx(0, &from, &to, value).tx;
 
     let evm = Evm::<S>::default();
     runner.execute_transaction(TransactionTestCase {
@@ -119,7 +126,7 @@ fn test_account_nonce() {
         }),
     });
 
-    let transfer_tx = create_transfer_tx(1, &from, &to, value);
+    let transfer_tx = create_transfer_tx(1, &from, &to, value).tx;
 
     let evm = Evm::<S>::default();
     runner.execute_transaction(TransactionTestCase {
@@ -139,12 +146,12 @@ fn test_deploy_many_contracts() {
     let contract = SimpleStorageContract::default();
     let contract_addr_1 = account.address().create(0);
 
-    let create_contract_tx_1 = create_deploy_tx(0, &contract, &account);
-    let set_value_tx_1 = create_set_arg_tx(1, 1, &contract, contract_addr_1, &account);
+    let create_contract_tx_1 = create_deploy_tx(0, &contract, &account).tx;
+    let set_value_tx_1 = create_set_arg_tx(1, 1, &contract, contract_addr_1, &account).tx;
 
     let contract_addr_2 = account.address().create(2);
-    let create_contract_tx_2 = create_deploy_tx(2, &contract, &account);
-    let set_value_tx_2 = create_set_arg_tx(2, 3, &contract, contract_addr_2, &account);
+    let create_contract_tx_2 = create_deploy_tx(2, &contract, &account).tx;
+    let set_value_tx_2 = create_set_arg_tx(2, 3, &contract, contract_addr_2, &account).tx;
 
     let evm = Evm::<S>::default();
     runner.execute_batch(BatchTestCase {
