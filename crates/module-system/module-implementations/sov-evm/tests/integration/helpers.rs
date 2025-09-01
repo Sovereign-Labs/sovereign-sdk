@@ -144,7 +144,7 @@ fn create_tx(account: &EvmAccount, tx: TxEip1559) -> TxWithNonceAndHash {
 
     TxWithNonceAndHash {
         nonce: tx.nonce,
-        hash: tx_env.hash().clone(),
+        hash: *tx_env.hash(),
         tx: TransactionType::PreAuthenticated(RT::encode_with_ethereum_auth(raw_tx)),
     }
 }

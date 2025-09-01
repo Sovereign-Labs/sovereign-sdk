@@ -82,7 +82,7 @@ fn test_executing_eth_transactions() {
 
                 if nonce == 0 {
                     // On contract creation the value is absent.
-                    assert!(storage_value.is_none())
+                    assert!(storage_value.is_none());
                 } else {
                     assert_eq!(U256::from(nonce + 100), storage_value.unwrap());
                 }
