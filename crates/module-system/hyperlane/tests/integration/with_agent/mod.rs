@@ -73,7 +73,7 @@ async fn test_validator_announces_itself() {
         .await;
 
     // wait for the first finalized block
-    for i in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
+    for i in 0..DEFAULT_FINALIZATION_BLOCKS * 30 {
         let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
         println!("ROUND {i}, events: {events:?}");
         if let Some(process_event) = find_event(&events, "Mailbox/ValidatorAnnouncement") {
@@ -102,8 +102,6 @@ async fn test_validator_announces_itself() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_relayer_basic_dispatch_process() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
-    let _span = tracing::info_span!("test_relayer_basic_dispatch_process").entered();
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
@@ -173,8 +171,6 @@ async fn test_relayer_basic_dispatch_process() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_multisig_ism() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
-    let _span = tracing::info_span!("test_multisig_ism").entered();
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
@@ -246,8 +242,8 @@ async fn test_multisig_ism() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_process_message_from_evm_counterparty() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
-    let _span = tracing::info_span!("test_process_message_from_evm_counterparty").entered();
+    // sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
+    // let _span = tracing::info_span!("test_process_message_from_evm_counterparty").entered();
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
@@ -337,8 +333,6 @@ async fn test_process_message_from_evm_counterparty() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_dispatch_message_to_evm_counterparty() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
-    let _span = tracing::info_span!("dispatch_message_to_evm").entered();
     let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
@@ -638,9 +632,6 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_warp_transfer_back_and_forth_with_evm_without_scaling() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
-    let _span =
-        tracing::info_span!("test_warp_transfer_back_and_forth_with_evm_without_scaling").entered();
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         18,
         Amount(1234),
@@ -653,9 +644,6 @@ async fn test_warp_transfer_back_and_forth_with_evm_without_scaling() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_warp_transfer_back_and_forth_with_evm_scaled_down() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
-    let _span =
-        tracing::info_span!("test_warp_transfer_back_and_forth_with_evm_scaled_down").entered();
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         16,
         Amount(1234),
@@ -668,9 +656,6 @@ async fn test_warp_transfer_back_and_forth_with_evm_scaled_down() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_warp_transfer_back_and_forth_with_evm_scaled_up() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
-    let _span =
-        tracing::info_span!("test_warp_transfer_back_and_forth_with_evm_scaled_up").entered();
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         20,
         Amount(1234),

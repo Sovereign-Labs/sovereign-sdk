@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use super::configs::agent_config;
 use super::preferred_sequencer_runtime::{GenesisConfig, TestRuntime};
 use crate::with_agent::helpers::docker::print_logs_from_exec_result;
-use crate::with_agent::helpers::evm::AnvilRunner;
+use crate::with_agent::helpers::evm::{AnvilRunner, ANVIL_PORT};
 use crate::with_agent::helpers::hyperlane_cli::HyperlaneCliRunner;
 use futures::future::join_all;
 use futures::{FutureExt, StreamExt};
@@ -35,13 +35,7 @@ pub type PrivateKey = <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey
 
 type Container = ContainerAsync<GenericImage>;
 
-pub const DEFAULT_BLOCK_TIME_MS: u64 = 400;
 pub const FINALIZED_BLOCKS_AT_START: usize = 3;
-pub const DEFAULT_BLOCK_PRODUCING_CONFIG: BlockProducingConfig = BlockProducingConfig::Periodic {
-    block_time_ms: DEFAULT_BLOCK_TIME_MS,
-};
-// TODO: Use on from evm module
-pub const ANVIL_PORT: u16 = 8545;
 pub const DEFAULT_FINALIZATION_BLOCKS: u32 = 10;
 /// Use `container.get_host_port_ipv4(RELAYER_METRICS_PORT)` to get metrics
 pub const RELAYER_METRICS_PORT: u16 = 9091;
@@ -102,6 +96,7 @@ pub const ANVIL_ACCOUNTS: &[(&str, &str)] = &[
     ),
 ];
 
+// Explicitly specify relayer account for readability
 pub const RELAYER_ACCOUNT: (&str, &str) = ANVIL_ACCOUNTS[0];
 // Use a separate account for hyperlane CLI deployments to avoid nonce conflicts with relayer
 pub const DEPLOYER_ACCOUNT: (&str, &str) = ANVIL_ACCOUNTS[9];
@@ -152,7 +147,7 @@ pub async fn setup_rollup(
     };
     let rollup_builder = TestRollupBuilder::new_with_storage_path(
         GenesisSource::CustomParams(setup.genesis_config.clone().into_genesis_params()),
-        DEFAULT_BLOCK_PRODUCING_CONFIG,
+        sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
         DEFAULT_FINALIZATION_BLOCKS,
         storage_path,
         true,
@@ -299,7 +294,7 @@ impl HyperlaneBuilder {
             // test runtime uses fixed value for chain hash, this lets relayer know
             .with_env_var("SOV_TEST_UTILS_FIXED_CHAIN_HASH", "true")
             // default signing key for hyperlane cli and relayer in evm
-            .with_env_var("HYP_KEY", ANVIL_ACCOUNTS[0].1)
+            .with_env_var("HYP_KEY", RELAYER_ACCOUNT.1)
             // setup agent config. NOTE: maybe use this in hyperlane-cli
             .with_copy_to(
                 "/sov-agent-config.json",
@@ -727,7 +722,7 @@ async fn start_relayer(
         "sov",
         // signer for the counterparty
         "--chains.ethtest.signer.key",
-        ANVIL_ACCOUNTS[0].1,
+       RELAYER_ACCOUNT.1,
         // chains to relay
         "--relayChains",
         relay_chains,

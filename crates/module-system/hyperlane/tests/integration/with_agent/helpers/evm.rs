@@ -1,5 +1,5 @@
 use crate::with_agent::helpers::docker::print_logs_from_container;
-use crate::with_agent::helpers::{EvmLog, ANVIL_ACCOUNTS};
+use crate::with_agent::helpers::{EvmLog, ANVIL_ACCOUNTS, RELAYER_ACCOUNT};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -10,7 +10,7 @@ use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, ImageExt};
 use testcontainers_modules::anvil::AnvilNode;
 
-const ANVIL_PORT: u16 = 8545;
+pub const ANVIL_PORT: u16 = 8545;
 const TAG: &str = "v1.1.0";
 
 pub struct AnvilRunner {
@@ -72,7 +72,7 @@ impl AnvilRunner {
                 "--value",
                 value.as_str(),
                 "--private-key",
-                ANVIL_ACCOUNTS[0].1,
+                RELAYER_ACCOUNT.1,
                 "--json",
             ][..],
         ]
