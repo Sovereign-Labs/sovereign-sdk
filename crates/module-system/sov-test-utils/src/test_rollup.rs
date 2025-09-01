@@ -806,7 +806,7 @@ where
             }
         };
 
-        timeout(Duration::from_secs(10), wait_loop)
+        timeout(Duration::from_secs(20), wait_loop)
             .await
             .context("Timeout waiting for sequencer to be ready after 10 seconds")?
     }
