@@ -6,9 +6,6 @@ pub use visitors::json_to_borsh;
 pub mod schema;
 pub mod ty;
 
-#[cfg(test)]
-mod tests;
-
 pub extern crate bech32;
 
 #[cfg(feature = "macros")]
