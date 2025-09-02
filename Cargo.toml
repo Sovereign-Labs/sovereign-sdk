@@ -241,7 +241,7 @@ thiserror = "1.0.64"
 tower = { version = "0.5", default-features = false }
 tower-http = "0.5"
 tower-request-id = "0.3"
-tracing = { version = "0.1.40", default-features = false }
+tracing = { version = "0.1.41", default-features = false }
 tracing-subscriber = { version = "0.3.18" } # There's hardly any reason to disable its default features.
 tracing-test = { version = "0.2.5", features = [
     "no-env-filter",
