@@ -116,9 +116,10 @@ impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
     }
 
     fn set_value(&mut self, namespace: sov_state::Namespace, key: &SlotKey, value: SlotValue) {
+        // The rollup height is only used for pruning the sequencer state checkpoint - which is irrelelvant for the API. So we use a dummy value.
         match namespace {
-            Namespace::User => self.user_cache.set(key, value),
-            Namespace::Kernel => self.kernel_cache.set(key, value),
+            Namespace::User => self.user_cache.set(key, value, 0),
+            Namespace::Kernel => self.kernel_cache.set(key, value, 0),
             Namespace::Accessory => {
                 self.accessory_writes.insert(key.clone(), Some(value));
             }
@@ -126,9 +127,10 @@ impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
     }
 
     fn delete_value(&mut self, namespace: sov_state::Namespace, key: &SlotKey) {
+        // The rollup height is only used for pruning the sequencer state checkpoint - which is irrelelvant for the API. So we use a dummy value.
         match namespace {
-            Namespace::User => self.user_cache.delete(key),
-            Namespace::Kernel => self.kernel_cache.delete(key),
+            Namespace::User => self.user_cache.delete(key, 0),
+            Namespace::Kernel => self.kernel_cache.delete(key, 0),
             Namespace::Accessory => {
                 self.accessory_writes.remove(key);
             }

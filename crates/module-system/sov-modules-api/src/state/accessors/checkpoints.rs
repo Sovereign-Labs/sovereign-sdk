@@ -223,11 +223,12 @@ impl<S: Spec> UniversalStateAccessor for StateCheckpoint<S> {
     }
 
     fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
-        self.delta.set(namespace, key, value);
+        self.delta
+            .set(namespace, key, value, self.rollup_height.get());
     }
 
     fn delete_value(&mut self, namespace: Namespace, key: &SlotKey) {
-        self.delta.delete(namespace, key);
+        self.delta.delete(namespace, key, self.rollup_height.get());
     }
 }
 

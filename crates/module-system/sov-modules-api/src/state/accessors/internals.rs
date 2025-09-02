@@ -183,20 +183,26 @@ impl<S: Storage> Delta<S> {
         }
     }
 
-    pub fn set(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
+    pub fn set(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        value: SlotValue,
+        rollup_height: u64,
+    ) {
         match namespace {
-            Namespace::User => self.user_cache.set(key, value),
-            Namespace::Kernel => self.kernel_cache.set(key, value),
+            Namespace::User => self.user_cache.set(key, value, rollup_height),
+            Namespace::Kernel => self.kernel_cache.set(key, value, rollup_height),
             Namespace::Accessory => {
                 self.accessory_writes.insert(key.clone(), Some(value));
             }
         }
     }
 
-    pub fn delete(&mut self, namespace: Namespace, key: &SlotKey) {
+    pub fn delete(&mut self, namespace: Namespace, key: &SlotKey, rollup_height: u64) {
         match namespace {
-            Namespace::User => self.user_cache.delete(key),
-            Namespace::Kernel => self.kernel_cache.delete(key),
+            Namespace::User => self.user_cache.delete(key, rollup_height),
+            Namespace::Kernel => self.kernel_cache.delete(key, rollup_height),
             Namespace::Accessory => {
                 self.accessory_writes.remove(key);
             }

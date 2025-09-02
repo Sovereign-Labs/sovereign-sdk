@@ -37,12 +37,12 @@ impl<S: Spec> UniversalStateAccessor for BootstrapWorkingSet<'_, S> {
         self.inner.get(namespace, key, metric)
     }
 
-    fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
-        self.inner.set(namespace, key, value);
+    fn set_value(&mut self, _namespace: Namespace, _key: &SlotKey, _value: SlotValue) {
+        unimplemented!("The bootstrap working set should only be used for reading state to bootstrap the block processing logic");
     }
 
-    fn delete_value(&mut self, namespace: Namespace, key: &SlotKey) {
-        self.inner.delete(namespace, key);
+    fn delete_value(&mut self, _namespace: Namespace, _key: &SlotKey) {
+        unimplemented!("The bootstrap working set should only be used for reading state to bootstrap the block processing logic");
     }
 }
 
