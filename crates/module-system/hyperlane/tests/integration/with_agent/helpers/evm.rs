@@ -1,5 +1,5 @@
 use crate::with_agent::helpers::docker::print_logs_from_container;
-use crate::with_agent::helpers::{EvmLog, ANVIL_ACCOUNTS, RELAYER_ACCOUNT};
+use crate::with_agent::helpers::{EvmLog, RELAYER_ACCOUNT};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};

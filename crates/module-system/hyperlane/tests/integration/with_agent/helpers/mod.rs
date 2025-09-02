@@ -16,7 +16,6 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use sov_bank::Amount;
 use sov_hyperlane_integration::{EthAddress, Message};
-use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{CryptoSpec, HexHash, HexString, Spec};
 use sov_sequencer::preferred::PreferredSequencerConfig;
@@ -722,7 +721,7 @@ async fn start_relayer(
         "sov",
         // signer for the counterparty
         "--chains.ethtest.signer.key",
-       RELAYER_ACCOUNT.1,
+        RELAYER_ACCOUNT.1,
         // chains to relay
         "--relayChains",
         relay_chains,
