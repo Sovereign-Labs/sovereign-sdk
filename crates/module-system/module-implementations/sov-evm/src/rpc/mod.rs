@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{Transaction as TransactionTrait, TxReceipt};
 use alloy_primitives::{Address, U64};
@@ -302,17 +303,28 @@ where
             "EVM module JSON-RPC request to `eth_getTransactionReceipt`"
         );
 
-        let tx_number = self.get_tx_index_by_hash(&hash, state);
+        //let tx_number = self.get_tx_index_by_hash(&hash, state);
 
+        /*
         let receipt = tx_number.map(|number| {
             let tx = self.transaction(number, state).unwrap();
             let block = self.block(tx.block_number, state);
             let receipt = self.receipt(tx_number.unwrap(), state).unwrap();
 
             build_rpc_receipt(block, tx, tx_number.unwrap(), receipt)
-        });
+        });*/
 
-        Ok(receipt)
+        let Some(number) = self.get_tx_index_by_hash(&hash, state) else {
+            return Ok(None);
+        };
+
+        let tx = self.transaction(number, state).unwrap();
+        // The block may be `None` for a few seconds after the tx is processed
+        let block = self.get_maybe_sealed_block(&tx, state);
+        let receipt = self.receipt(number, state).unwrap();
+        let receipt = build_rpc_receipt2(block, tx, number, receipt);
+
+        Ok(Some(receipt))
     }
 
     /// Handler for: `eth_call`
@@ -498,10 +510,42 @@ where
     }
 }
 
+use crate::primitive_types::MaybeSealedBlock;
+
 impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    fn get_maybe_sealed_block(
+        &self,
+        tx: &TransactionSignedAndRecovered,
+        state: &mut ApiStateAccessor<S>,
+    ) -> MaybeSealedBlock {
+        let block = self.blocks.get(&tx.block_number, state).unwrap_infallible();
+        if let Some(block) = block {
+            return MaybeSealedBlock::Sealed(block.into());
+        }
+        let current_block_env = self
+            .block_env
+            .get(state)
+            .unwrap_infallible()
+            .unwrap_or_default();
+        let block_num: u64 = current_block_env
+            .number
+            .try_into()
+            .expect("Block number is too large to fit in a u64. It's over!");
+        assert_eq!(block_num, tx.block_number, "Transaction is in a block that is not yet sealed, but that block is not yet pending! This is impossible!");
+
+        let head = self.head.get(state).unwrap_infallible().unwrap();
+        let first_tx_index = head.transactions.end;
+
+        MaybeSealedBlock::Pending {
+            block_number: tx.block_number,
+            first_tx_number: first_tx_index,
+            base_fee_per_gas: current_block_env.basefee,
+        }
+    }
+
     fn get_sealed_block_by_number(
         &self,
         block_number: Option<String>,
@@ -711,6 +755,69 @@ pub(crate) fn build_rpc_receipt(
         block_number,
         gas_used: receipt.gas_used,
         effective_gas_price: transaction.effective_gas_price(block.header.base_fee_per_gas),
+        blob_gas_used: None,
+        blob_gas_price: None,
+        from,
+        to,
+        contract_address,
+    }
+}
+
+pub(crate) fn build_rpc_receipt2(
+    block: MaybeSealedBlock,
+    tx: TransactionSignedAndRecovered,
+    tx_number: u64,
+    receipt: Receipt,
+) -> TransactionReceipt {
+    let transaction: Recovered<TransactionSigned> = tx.into();
+    let from = transaction.signer();
+
+    let block_hash = block.hash();
+    let block_number = Some(block.number());
+    let transaction_hash = Some(*transaction.hash());
+    // Safety: The transaction cannot have a lower number than the block start
+    let transaction_index = tx_number
+        .checked_sub(block.transactions_start())
+        .expect("Overflow while subtracting block start from tx number. This is a bug!");
+
+    let logs: Vec<Log> = receipt
+        .receipt
+        .logs
+        .iter()
+        .enumerate()
+        .map(|(tx_log_idx, log)| Log {
+            inner: log.clone(),
+            block_hash,
+            block_number,
+            block_timestamp: block.timestamp(),
+            transaction_hash,
+            transaction_index: Some(transaction_index),
+            log_index: Some(receipt.log_index_start + tx_log_idx as u64),
+            removed: false,
+        })
+        .collect();
+
+    let logs_bloom = receipt.receipt.bloom();
+
+    let rpc_receipt = alloy_rpc_types::Receipt {
+        status: receipt.receipt.success.into(),
+        cumulative_gas_used: receipt.receipt.cumulative_gas_used,
+        logs,
+    };
+
+    let (contract_address, to) = match transaction.kind() {
+        TxKind::Create => (Some(from.create(transaction.nonce())), None),
+        TxKind::Call(addr) => (None, Some(Address(*addr))),
+    };
+
+    TransactionReceipt {
+        inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom::new(rpc_receipt, logs_bloom)),
+        transaction_hash: *transaction.hash(),
+        transaction_index: Some(transaction_index),
+        block_hash,
+        block_number,
+        gas_used: receipt.gas_used,
+        effective_gas_price: transaction.effective_gas_price(Some(block.base_fee_per_gas())),
         blob_gas_used: None,
         blob_gas_price: None,
         from,
