@@ -304,6 +304,12 @@ fn validate_validator_announcement<S: Spec>(
     let signature = decode_signature(&signature.0)?;
     let pub_key = ec_recover(digest.0, &signature, gas_meter)?;
     let eth_address = eth_address_from_public_key(pub_key, gas_meter)?;
+    tracing::debug!(
+        %domain,
+        recovered_address = %eth_address,
+        provided_address = %validator_address,
+        "validating validator announcement"
+    );
 
     ensure!(
         validator_address == &eth_address,
