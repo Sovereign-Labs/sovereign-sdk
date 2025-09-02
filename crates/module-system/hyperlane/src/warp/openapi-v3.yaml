@@ -121,7 +121,7 @@ components:
                 $ref: '#/components/schemas/Meta'
               data:
                 $ref: '#/components/schemas/RemoteRouter'
-    RouteLimitsRensponse:
+    RouteLimitsResponse:
       description: OK
       content:
         application/json:
