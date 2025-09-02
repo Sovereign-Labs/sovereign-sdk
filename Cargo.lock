@@ -2248,15 +2248,6 @@ checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 
 [[package]]
 name = "convert_case"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec182b0ca2f35d8fc196cf3404988fd8b8c739a4d270ff118a398feb0cbec1ca"
-dependencies = [
- "unicode-segmentation",
-]
-
-[[package]]
-name = "convert_case"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb402b8d4c85569410425650ce3eddc7d698ed96d39a73f941b08fb63082f1e7"
@@ -2980,7 +2971,7 @@ version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bda628edc44c4bb645fbe0f758797143e4e07926f7ebf4e9bdfbd3d2ce621df3"
 dependencies = [
- "convert_case 0.7.1",
+ "convert_case",
  "proc-macro2",
  "quote",
  "syn 2.0.98",
@@ -8399,7 +8390,7 @@ name = "reth-codecs-derive"
 version = "1.6.0"
 source = "git+https://github.com/paradigmxyz/reth?rev=d8451e54e7267f9f1634118d6d279b2216f7e2bb#d8451e54e7267f9f1634118d6d279b2216f7e2bb"
 dependencies = [
- "convert_case 0.7.1",
+ "convert_case",
  "proc-macro2",
  "quote",
  "syn 2.0.98",
@@ -11609,7 +11600,7 @@ dependencies = [
  "bech32 0.11.0",
  "blake2",
  "borsh",
- "convert_case 0.6.0",
+ "convert_case",
  "darling",
  "derive_more 1.0.0",
  "hex",
@@ -12385,7 +12376,7 @@ dependencies = [
  "bech32 0.11.0",
  "borsh",
  "bs58",
- "convert_case 0.6.0",
+ "convert_case",
  "darling",
  "hex",
  "proc-macro2",
@@ -12427,7 +12418,7 @@ name = "sov-zkvm-utils"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "convert_case 0.6.0",
+ "convert_case",
 ]
 
 [[package]]

@@ -25,7 +25,7 @@ path = "tests/integration/main.rs"
 anyhow = { workspace = true }
 bech32 = { workspace = true }
 blake2 = "0.10"
-convert_case = "0.6.0"
+convert_case = "0.7.1"
 darling = { workspace = true }
 derive_more = { workspace = true, features = ["deref"] }
 hex = { workspace = true }
