@@ -2,17 +2,21 @@ use alloy_primitives::Address;
 use reth_primitives::TransactionSigned;
 use reth_revm::db::DBErrorMarker;
 use revm::context::TxEnv;
+use revm::InspectEvm;
 use revm::{
     context::{
         result::{EVMError, ExecResultAndState, ExecutionResult},
         BlockEnv, CfgEnv, Context,
     },
-    Database, ExecuteEvm, MainContext,
+    Database, MainContext,
 };
 
 use crate::{
-    db::commit::FallibleDatabaseCommit, evm::conversions::create_tx_env, get_spec_id,
-    sov_evm::SovEvm, EvmRuntimeConfig,
+    db::commit::FallibleDatabaseCommit,
+    evm::conversions::create_tx_env,
+    get_spec_id,
+    sov_evm::{SovEvm, UnmeteredStorageAccessInspector},
+    EvmRuntimeConfig,
 };
 
 /// builds CfgEnv
@@ -44,6 +48,7 @@ pub fn transact_commit<
 ) -> Result<ExecutionResult, EVMError<E>> {
     let tx_env = create_tx_env(account_nonce, tx, signer);
     let ExecResultAndState { result, state } = transact(&mut db, block_env, tx_env, cfg)?;
+    // We don't use transact_commit as it does not support returning an error
     db.commit(state)?;
     Ok(result)
 }
@@ -68,11 +73,9 @@ fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
         .with_db(db)
         .with_block(block_env)
         .with_cfg(cfg);
-    let mut evm = SovEvm::new(context, ());
-    // We don't use transact_commit as it does not support returning an error
-    let result = evm.transact_one(tx)?;
-    let state = evm.finalize();
-    Ok(ExecResultAndState::new(result, state))
+    let inspector = UnmeteredStorageAccessInspector::new();
+    let mut evm = SovEvm::new(context, inspector);
+    evm.inspect_tx(tx)
 }
 
 #[cfg(test)]
