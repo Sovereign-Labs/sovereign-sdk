@@ -7,7 +7,6 @@ use crate::evm::executor::{self};
 use crate::evm::primitive_types::{Receipt, TransactionSignedAndRecovered};
 use crate::evm::RlpEvmTransaction;
 use crate::executor::get_cfg_env;
-use crate::Block;
 use crate::{Evm, PendingTransaction, SpecId};
 use alloy_primitives::Address;
 use reth_primitives::TransactionSigned;
@@ -169,7 +168,7 @@ where
     #[cfg(feature = "native")]
     fn set_sccessory_state(
         &mut self,
-        head: Block,
+        head: crate::Block,
         pending_transaction: &PendingTransaction,
         pending_tx_len: u64,
         state: &mut impl TxState<S>,
