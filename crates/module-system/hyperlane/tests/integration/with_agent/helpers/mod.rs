@@ -3,7 +3,6 @@ mod evm;
 mod hyperlane_cli;
 
 use std::env;
-use std::path::PathBuf;
 
 use super::configs::agent_config;
 use super::preferred_sequencer_runtime::{GenesisConfig, TestRuntime};
@@ -29,7 +28,7 @@ use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 
 pub type RollupBlueprint = RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>>;
-pub type TestRollupBuilder = RollupBuilder<RollupBlueprint, PathBuf>;
+pub type TestRollupBuilder = RollupBuilder<RollupBlueprint>;
 pub type PrivateKey = <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey;
 
 type Container = ContainerAsync<GenericImage>;
@@ -132,10 +131,9 @@ pub fn generate_setup() -> Setup {
 }
 
 pub async fn setup_rollup(
-    storage_path: PathBuf,
     setup: Setup,
     wait_for_finalized_slot: bool,
-) -> TestRollup<RollupBlueprint, PathBuf> {
+) -> TestRollup<RollupBlueprint> {
     let axum_bind_ip = if cfg!(target_os = "macos") {
         // MacOS runs docker inside the VM, so returned gateway IP does not match any address on the host.
         // Test containers already expose all the ports to `0.0.0.0` so this does not increase security risk significantly.
@@ -144,12 +142,10 @@ pub async fn setup_rollup(
     } else {
         get_docker_gateway_ip().await
     };
-    let rollup_builder = TestRollupBuilder::new_with_storage_path(
+    let rollup_builder = TestRollupBuilder::new(
         GenesisSource::CustomParams(setup.genesis_config.clone().into_genesis_params()),
         sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
         DEFAULT_FINALIZATION_BLOCKS,
-        storage_path,
-        true,
     )
     .set_config(|config| {
         config.rollup_prover_config = None;

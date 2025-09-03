@@ -52,11 +52,10 @@ mod preferred_sequencer_runtime;
 async fn test_validator_announces_itself() {
     sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
     let _span = tracing::info_span!("test_validator_announces_itself").entered();
-    let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
     let validator = setup.validators[0].clone();
-    let rollup = setup_rollup(dir.path().to_path_buf(), setup, false).await;
+    let rollup = setup_rollup(setup, false).await;
 
     let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
 
@@ -96,13 +95,12 @@ async fn test_validator_announces_itself() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_relayer_basic_dispatch_process() {
-    let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
     let relayer = setup.relayer.clone();
     let prover = setup.prover.clone();
     let prover_addr = prover.user_info.address();
-    let rollup = setup_rollup(dir.path().to_path_buf(), setup, true).await;
+    let rollup = setup_rollup(setup, true).await;
 
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
@@ -165,14 +163,13 @@ async fn test_relayer_basic_dispatch_process() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_multisig_ism() {
-    let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
     let relayer = setup.relayer.clone();
     let prover = setup.prover.clone();
     let prover_addr = prover.user_info.address();
     let validators = setup.validators.clone();
-    let rollup = setup_rollup(dir.path().to_path_buf(), setup, true).await;
+    let rollup = setup_rollup(setup, true).await;
 
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
@@ -238,13 +235,12 @@ async fn test_multisig_ism() {
 async fn test_process_message_from_evm_counterparty() {
     // sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
     // let _span = tracing::info_span!("test_process_message_from_evm_counterparty").entered();
-    let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
     let relayer = setup.relayer.clone();
     let prover = setup.prover.clone();
     let prover_addr = prover.user_info.address();
-    let rollup = setup_rollup(dir.path().to_path_buf(), setup, true).await;
+    let rollup = setup_rollup(setup, true).await;
 
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
@@ -327,11 +323,10 @@ async fn test_process_message_from_evm_counterparty() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_dispatch_message_to_evm_counterparty() {
-    let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
     let relayer = setup.relayer.clone();
-    let rollup = setup_rollup(dir.path().to_path_buf(), setup, true).await;
+    let rollup = setup_rollup(setup, true).await;
 
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
@@ -408,13 +403,11 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
     outbound_sent_amount: Amount,
     outbound_received_amount: Amount,
 ) {
-    // TODO: This can be removed and rollup will hold
-    let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
     let relayer = setup.relayer.clone();
     let prover = setup.prover.clone();
-    let rollup = setup_rollup(dir.path().to_path_buf(), setup, true).await;
+    let rollup = setup_rollup(setup, true).await;
 
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
