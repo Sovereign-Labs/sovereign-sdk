@@ -22,7 +22,6 @@ use sov_sequencer::SequencerKindConfig;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, TestUser};
-use testcontainers::core::client::docker_client_instance;
 use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult, IntoContainerPort};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
@@ -39,7 +38,7 @@ pub const DEFAULT_FINALIZATION_BLOCKS: u32 = 10;
 pub const RELAYER_METRICS_PORT: u16 = 9091;
 pub const VALIDATOR_METRICS_PORT: u16 = 9097;
 /// Domain id of the evm counterparty chain
-/// Should match K
+/// Shouldn't match any known hyperlane network, otherwise it fails.
 pub const EVM_DOMAIN: u32 = 31337_90210;
 pub const EVM_CHAIN_ID: u32 = 31337;
 /// Address of the mailbox on evm counterparty chain.
@@ -49,7 +48,7 @@ pub const EVM_MAILBOX: EthAddress = HexString([
     18, 151, 81, 115, 184, 127, 117, 149, 238, 69, 223, 251, 42, 184, 18, 236, 229, 150, 191, 132,
 ]);
 /// Fixed Eth keys created by anvil. They don't change. Each address is funded 1000ETH
-// run `docker run --rm ghcr.io/eigerco/hyperlane anvil` to see all keys
+// run `docker run --rm ghcr.io/foundry-rs/foundry:v1.1.0 anvil` to see all keys
 pub const ANVIL_ACCOUNTS: &[(&str, &str)] = &[
     (
         // First account is used by relayer, the rest belongs to validators
@@ -140,7 +139,7 @@ pub async fn setup_rollup(
         // If better solution exists, happy to apply it
         "0.0.0.0".to_string()
     } else {
-        get_docker_gateway_ip().await
+        docker::get_docker_gateway_ip().await
     };
     let rollup_builder = TestRollupBuilder::new(
         GenesisSource::CustomParams(setup.genesis_config.clone().into_genesis_params()),
@@ -198,8 +197,7 @@ impl HyperlaneBuilder {
         let docker_image = env::var("CUSTOM_HLP_DOCKER_IMAGE");
         let has_custom_image = !matches!(docker_image, Err(env::VarError::NotPresent));
 
-        // Current image is based on https://github.com/citizen-stig/hyperlane-monorepo/tree/nikolai/for-test
-        // TODO: Migrate it to https://github.com/Sovereign-Labs/hyperlane-monorepo/ and later to upstream.
+        // Current image is based on https://github.com/Sovereign-Labs/hyperlane-monorepo/tree/integration-2025-08-27-rebase branch
         let docker_image = docker_image
             .unwrap_or_else(|_| "ghcr.io/sovereign-labs/hyperlane-agent:integration-2".into());
         let (name, tag) = docker_image
@@ -234,7 +232,7 @@ impl HyperlaneBuilder {
         self
     }
 
-    /// Run relayer with specified key.
+    /// Run relayer with a specified key.
     pub fn with_relayer(mut self, relayer: &TestUser<TestSpec>) -> Self {
         self.relayer = Some(relayer.private_key.clone());
         self
@@ -269,7 +267,7 @@ impl HyperlaneBuilder {
             "host.docker.internal".to_string()
         } else {
             // On Linux, get the Docker bridge network gateway IP
-            get_docker_gateway_ip().await
+            docker::get_docker_gateway_ip().await
         };
 
         // evm counterparty must be started before agents
@@ -751,7 +749,7 @@ async fn start_validator(
     val_id: usize,
     private_key: PrivateKey,
 ) -> ExecResult {
-    // set the known port only for first validator, and let os choose random one for rest
+    // set the known port only for the first validator, and let os choose random one for rest
     let metrics_port = if val_id == 0 {
         VALIDATOR_METRICS_PORT
     } else {
@@ -808,27 +806,6 @@ async fn start_validator(
         .exec(cmd)
         .await
         .expect("starting validator failed")
-}
-
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-pub async fn get_docker_gateway_ip() -> String {
-    let bridge_info = docker_client_instance()
-        .await
-        .unwrap()
-        .inspect_network(
-            "bridge",
-            None::<testcontainers::bollard::query_parameters::InspectNetworkOptions>,
-        )
-        .await
-        .unwrap();
-    bridge_info
-        .ipam
-        .expect("no IPAM driver found")
-        .config
-        .expect("IPAM has no configuration")
-        .into_iter()
-        .find_map(|conf| conf.gateway)
-        .expect("No gateway config in IPAM")
 }
 
 // parses eth addr 0x(40 chars hex) into HexHash
