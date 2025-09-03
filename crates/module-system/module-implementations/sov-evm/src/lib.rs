@@ -63,6 +63,7 @@ pub(crate) const MIN_TRANSACTION_GAS: u64 = 21_000u64;
 pub(crate) const MIN_CREATE_GAS: u64 = 53_000u64;
 
 pub use conversions::convert_to_transaction_signed;
+pub use conversions::create_tx_env;
 
 /// The sov-evm module provides compatibility with the EVM.
 #[allow(dead_code)]

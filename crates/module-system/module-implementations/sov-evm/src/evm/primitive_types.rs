@@ -57,6 +57,15 @@ pub struct PendingTransaction {
     pub(crate) receipt: Receipt,
 }
 
+impl PendingTransaction {
+    pub(crate) fn new(transaction: TransactionSignedAndRecovered, receipt: Receipt) -> Self {
+        Self {
+            transaction,
+            receipt,
+        }
+    }
+}
+
 #[serde_as]
 #[derive(Debug, PartialEq, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Block {

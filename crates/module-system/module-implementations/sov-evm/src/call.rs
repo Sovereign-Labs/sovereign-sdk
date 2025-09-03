@@ -79,27 +79,12 @@ where
         self.pending_transactions
             .push(&PendingTransaction::new(transaction, receipt), state)?;
 
-        // Fetch `head` and `pending_len` before the `native` code block.
-        // This ensures consistent gas charges between native and non-native execution.
-        #[allow(unused_variables)]
-        let head = self
-            .head
-            .get(state)?
-            .expect("Impossible happened: Head must be set.");
-
-        #[allow(unused_variables)]
-        let pending_len = self.pending_transactions.len(state)?;
-
-        #[cfg(feature = "native")]
-        self.set_sccessory_state(head, &pending_transaction, pending_len, state)
-            .unwrap_infallible();
-
         Ok(())
     }
 
     fn get_receipt(
         &self,
-        tx: &TransactionSigned,
+        tx: &TransactionSignedAndRecovered,
         result: ExecutionResult,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<Receipt> {
@@ -116,12 +101,12 @@ where
         let gas_used = result.gas_used();
         let logs = result.into_logs();
         tracing::debug!(
-            hash = hex::encode(tx.hash()),
+            hash = hex::encode(tx.signed_transaction.hash()),
             gas_used,
             "EVM transaction has been executed"
         );
         let receipt = reth_primitives::Receipt {
-            tx_type: tx.tx_type(),
+            tx_type: tx.signed_transaction.tx_type(),
             success: is_success,
             cumulative_gas_used: previous_transaction_cumulative_gas_used.saturating_add(gas_used),
             logs,

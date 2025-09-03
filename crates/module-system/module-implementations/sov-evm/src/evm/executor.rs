@@ -1,5 +1,3 @@
-use alloy_primitives::Address;
-use reth_primitives::TransactionSigned;
 use reth_revm::db::DBErrorMarker;
 use revm::context::TxEnv;
 use revm::InspectEvm;
@@ -13,7 +11,6 @@ use revm::{
 
 use crate::{
     db::commit::FallibleDatabaseCommit,
-    evm::conversions::create_tx_env,
     get_spec_id,
     sov_evm::{SovEvm, UnmeteredStorageAccessInspector},
     EvmRuntimeConfig,
@@ -30,6 +27,8 @@ pub(crate) fn get_cfg_env(
     let mut cfg_env = template_cfg.unwrap_or_default();
     cfg_env.chain_id = cfg.chain_spec.chain_id;
     cfg_env.limit_contract_code_size = cfg.chain_spec.limit_contract_code_size;
+    cfg_env.disable_block_gas_limit = true;
+    cfg_env.disable_balance_check = true;
     let spec = get_spec_id(&cfg.hardforks, block_env.number.to::<u64>());
     cfg_env.with_spec(spec)
 }
@@ -39,15 +38,12 @@ pub fn transact_commit<
     DB: Database<Error = E> + FallibleDatabaseCommit<Error = E>,
     E: DBErrorMarker,
 >(
-    account_nonce: u64,
     mut db: DB,
     block_env: &BlockEnv,
-    tx: &TransactionSigned,
-    signer: Address,
+    tx: TxEnv,
     cfg: CfgEnv,
 ) -> Result<ExecutionResult, EVMError<E>> {
-    let tx_env = create_tx_env(account_nonce, tx, signer);
-    let ExecResultAndState { result, state } = transact(&mut db, block_env, tx_env, cfg)?;
+    let ExecResultAndState { result, state } = transact(&mut db, block_env, tx, cfg)?;
     // We don't use transact_commit as it does not support returning an error
     db.commit(state)?;
     Ok(result)
@@ -110,6 +106,8 @@ mod tests {
         let mut expected_cfg_env = CfgEnv::default();
         expected_cfg_env.chain_id = config_value!("CHAIN_ID");
         expected_cfg_env.disable_base_fee = true;
+        expected_cfg_env.disable_balance_check = true;
+        expected_cfg_env.disable_block_gas_limit = true;
         expected_cfg_env.limit_contract_code_size = Some(100);
         expected_cfg_env.spec = SpecId::SHANGHAI;
 
