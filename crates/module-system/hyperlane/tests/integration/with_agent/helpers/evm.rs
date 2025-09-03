@@ -25,13 +25,7 @@ impl AnvilRunner {
         // Hard code tag, so we don't accidental breakages
         let container = AnvilNode::default()
             .with_tag(TAG)
-            .with_cmd([
-                // TODO: Do we really need that? It looks like AnvilNode handles that by default.
-                "--host",
-                "0.0.0.0",
-                "--port",
-                &ANVIL_PORT.to_string(),
-            ])
+            .with_cmd(["--port", &ANVIL_PORT.to_string()])
             .start()
             .await
             .expect("failed to start anvil");
@@ -41,8 +35,6 @@ impl AnvilRunner {
             .await
             .expect("Failed to get anvil port");
         tracing::info!(container_id = ?container.id(), %host_port, "Anvil container started successfully");
-
-        // TODO: Assert all anvil accounts have funds
 
         Self {
             container,
@@ -55,7 +47,7 @@ impl AnvilRunner {
         self.host_port
     }
 
-    // TODO: why something goes via cast send and other via RPC
+    // Cast call is used to modify state
     pub async fn cast_call(
         &self,
         contract: EthAddress,
@@ -111,6 +103,7 @@ impl AnvilRunner {
         output.logs
     }
 
+    // RPC is used to query data.
     pub async fn rpc<T: DeserializeOwned>(&mut self, method: &str, params: Value) -> T {
         let start = std::time::Instant::now();
         let port = self.host_port;

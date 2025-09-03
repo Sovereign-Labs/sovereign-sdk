@@ -185,7 +185,6 @@ fn test_invalid_signature() {
             val_addr,
             location.clone(),
             sig,
-            // Empirically resolved from the actual output
             format!("doesn't match announced address {val_addr}"),
         );
     }

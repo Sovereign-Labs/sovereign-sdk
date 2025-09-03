@@ -297,10 +297,10 @@ impl HyperlaneBuilder {
             .with_env_var("HYP_KEY", RELAYER_ACCOUNT.1)
             // setup agent config. NOTE: maybe use this in hyperlane-cli
             .with_copy_to(
-                "/sov-agent-config.json",
+                "/agent-config.json",
                 agent_config(rollup_port, anvil_port, &host_address),
             )
-            .with_env_var("CONFIG_FILES", "/sov-agent-config.json")
+            .with_env_var("CONFIG_FILES", "/agent-config.json")
             // a dummy command because we will populate services by execs appropriately
             .with_cmd(["tail", "-f", "/dev/null"]);
 
