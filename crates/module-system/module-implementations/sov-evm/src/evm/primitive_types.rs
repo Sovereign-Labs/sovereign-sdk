@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::ops::Range;
 
 use alloy_consensus::{

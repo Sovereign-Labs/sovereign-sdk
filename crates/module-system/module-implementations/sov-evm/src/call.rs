@@ -140,16 +140,6 @@ where
 
             let hash = pending_transaction.transaction.signed_transaction.hash();
             self.transaction_hashes.set(hash, &tx_index, state)?;
-
-            /*
-            self.receipts
-                .push_accessory(&pending_transaction.receipt, state)?;
-            self.transactions
-                .push_accessory(&pending_transaction.transaction, state)?;
-            let hash = pending_transaction.transaction.signed_transaction.hash();
-            self.transaction_hashes
-                .set(hash, &current_tx_number, state)?;
-            */
         }
 
         Ok(())

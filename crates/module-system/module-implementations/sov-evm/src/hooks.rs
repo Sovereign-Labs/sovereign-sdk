@@ -152,32 +152,6 @@ impl<S: Spec> BlockHooks for Evm<S> {
             self.pending_head
                 .set(&block, &mut accessory_state)
                 .unwrap_infallible();
-
-            /*
-            let mut tx_index = start_tx_index;
-            for PendingTransaction {
-                transaction,
-                receipt,
-            } in &pending_transactions
-            {
-                self.transactions
-                    .set(&tx_index, transaction, &mut accessory_state)
-                    .unwrap_infallible();
-                self.receipts
-                    .set(&tx_index, receipt, &mut accessory_state)
-                    .unwrap_infallible();
-
-                self.transaction_hashes
-                    .set(
-                        transaction.signed_transaction.hash(),
-                        &tx_index,
-                        &mut accessory_state,
-                    )
-                    .unwrap_infallible();
-
-                tx_index += 1;
-            }
-            */
         }
 
         self.pending_transactions.clear(state).unwrap_infallible();
