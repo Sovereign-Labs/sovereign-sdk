@@ -5,6 +5,7 @@ use ethereum_types::H160;
 use ethers_core::abi::Address;
 use ethers_core::k256::ecdsa::SigningKey;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
+use ethers_core::types::TransactionReceipt;
 use ethers_core::types::{Block, Eip1559TransactionRequest, TransactionRequest, TxHash};
 use ethers_middleware::SignerMiddleware;
 use ethers_providers::{Http, Middleware, PendingTransaction, Provider};
@@ -398,5 +399,9 @@ impl TestClient {
             .send_transaction(typed_transaction, None)
             .await
             .unwrap()
+    }
+
+    pub async fn receipt(&self, hash: TxHash) -> Option<TransactionReceipt> {
+        self.client.get_transaction_receipt(hash).await.unwrap()
     }
 }

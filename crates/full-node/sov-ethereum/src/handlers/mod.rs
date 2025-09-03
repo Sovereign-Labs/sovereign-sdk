@@ -12,6 +12,8 @@ use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::{RawTx, Spec};
 use sov_sequencer::Sequencer;
 
+use alloy_rpc_types::TransactionReceipt;
+
 use crate::to_jsonrpsee_error_object;
 use crate::Ethereum;
 
@@ -189,4 +191,22 @@ where
     })?;
 
     Ok(tx_hash)
+}
+
+pub async fn get_transaction_receipt_foo<S, Seq>(
+    parameters: Params<'static>,
+    ethereum: Arc<Ethereum<S, Seq>>,
+    _: Extensions,
+) -> Result<Option<TransactionReceipt>, ErrorObjectOwned>
+where
+    S: Spec,
+    Seq: Sequencer<Spec = S>,
+    S::Address: FromVmAddress<EthereumAddress>,
+    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
+{
+    let data: B256 = parameters.one().unwrap();
+
+    let mut state = ethereum.api_state_accessor();
+    let evm = Evm::<S>::default();
+    evm.get_transaction_receipt(data, &mut state)
 }
