@@ -1,21 +1,21 @@
+use alloy_primitives::{Address, B256};
+use anyhow::Context as _;
+use revm::context::result::{EVMError, ExecutionResult};
+use sov_address::{EthereumAddress, FromVmAddress};
+use sov_modules_api::macros::{serialize, UniversalWallet};
+use sov_modules_api::{Context, GasSpec, Spec, TxState};
 #[cfg(feature = "native")]
 use std::convert::Infallible;
+#[cfg(feature = "native")]
+use sov_modules_api::prelude::UnwrapInfallible;
 
-use crate::conversions::convert_to_transaction_signed;
+use crate::conversions::{convert_to_transaction_signed, create_tx_env};
 use crate::db::EvmDb;
 use crate::evm::executor::{self};
 use crate::evm::primitive_types::{Receipt, TransactionSignedAndRecovered};
 use crate::evm::RlpEvmTransaction;
 use crate::executor::get_cfg_env;
-use crate::{Evm, PendingTransaction, SpecId};
-use alloy_primitives::Address;
-use reth_primitives::TransactionSigned;
-use revm::context::result::EVMError;
-use sov_address::{EthereumAddress, FromVmAddress};
-use sov_modules_api::macros::{serialize, UniversalWallet};
-#[cfg(feature = "native")]
-use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{Context, Spec, TxState};
+use crate::{Evm, PendingTransaction};
 
 /// EVM call message.
 #[derive(Debug, PartialEq, Eq, Clone, schemars::JsonSchema, UniversalWallet)]
@@ -56,45 +56,13 @@ where
 
         let cfg = self.cfg(state)?.expect("Evm config must be set");
         let cfg_env = get_cfg_env(&block_env, cfg, None);
-
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
         let result =
             executor::transact_commit(account_nonce, evm_db, &block_env, &evm_tx, signer, cfg_env);
 
-        let previous_transaction = self.pending_transactions.last(state)?;
-        let previous_transaction_cumulative_gas_used = previous_transaction
-            .as_ref()
-            .map_or(0u64, |tx| tx.receipt.receipt.cumulative_gas_used);
-        let log_index_start = previous_transaction.as_ref().map_or(0u64, |tx| {
-            tx.receipt
-                .log_index_start
-                .saturating_add(tx.receipt.receipt.logs.len() as u64)
-        });
-
         let receipt = match result {
-            Ok(result) => {
-                let is_success = result.is_success();
-                let gas_used = result.gas_used();
-                let logs = result.into_logs();
-                tracing::debug!(
-                    hash = hex::encode(evm_tx.hash()),
-                    gas_used,
-                    "EVM transaction has been executed"
-                );
-                Receipt {
-                    receipt: reth_primitives::Receipt {
-                        tx_type: evm_tx.tx_type(),
-                        success: is_success,
-                        cumulative_gas_used: previous_transaction_cumulative_gas_used
-                            .saturating_add(gas_used),
-                        logs,
-                    },
-                    gas_used,
-                    log_index_start,
-                    error: None,
-                }
-            }
+            Ok(result) => self.get_receipt(&evm_tx, result, state)?,
             // Adopted from https://github.com/paradigmxyz/reth/blob/main/crates/payload/basic/src/lib.rs#L884
             Err(err) => {
                 tracing::debug!(
@@ -143,6 +111,43 @@ where
             .unwrap_infallible();
 
         Ok(())
+    }
+
+    fn get_receipt(
+        &self,
+        tx: &TransactionSigned,
+        result: ExecutionResult,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<Receipt> {
+        let previous_transaction = self.pending_transactions.last(state)?;
+        let previous_transaction_cumulative_gas_used = previous_transaction
+            .as_ref()
+            .map_or(0u64, |tx| tx.receipt.receipt.cumulative_gas_used);
+        let log_index_start = previous_transaction.as_ref().map_or(0u64, |tx| {
+            tx.receipt
+                .log_index_start
+                .saturating_add(tx.receipt.receipt.logs.len() as u64)
+        });
+        let is_success = result.is_success();
+        let gas_used = result.gas_used();
+        let logs = result.into_logs();
+        tracing::debug!(
+            hash = hex::encode(tx.hash()),
+            gas_used,
+            "EVM transaction has been executed"
+        );
+        let receipt = reth_primitives::Receipt {
+            tx_type: tx.tx_type(),
+            success: is_success,
+            cumulative_gas_used: previous_transaction_cumulative_gas_used.saturating_add(gas_used),
+            logs,
+        };
+        Ok(Receipt {
+            receipt,
+            gas_used,
+            log_index_start,
+            error: None,
+        })
     }
 
     // The nonce check is already performed by the stf-blueprint during transaction preprocessing,
