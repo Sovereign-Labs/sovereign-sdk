@@ -169,7 +169,7 @@ where
     }
 
     /// Processes an incoming message.
-    // Compare with https://github.com/eigerco/hyperlane-monorepo/blob/b68fe264b3585ecd9d95a5ec2ec2d7defbe907d2/solidity/contracts/Mailbox.sol#L202
+    // Compare with https://github.com/Sovereign-Labs/hyperlane-monorepo/blob/b68fe264b3585ecd9d95a5ec2ec2d7defbe907d2/solidity/contracts/Mailbox.sol#L202
     pub(crate) fn process(
         &mut self,
         metadata: HexString,
@@ -304,7 +304,7 @@ fn validate_validator_announcement<S: Spec>(
     let signature = decode_signature(&signature.0)?;
     let pub_key = ec_recover(digest.0, &signature, gas_meter)?;
     let eth_address = eth_address_from_public_key(pub_key, gas_meter)?;
-    tracing::debug!(
+    tracing::trace!(
         %domain,
         recovered_address = %eth_address,
         provided_address = %validator_address,

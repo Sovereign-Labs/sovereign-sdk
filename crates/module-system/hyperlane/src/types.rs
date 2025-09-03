@@ -9,7 +9,7 @@ pub type Domain = u32;
 
 /// These are returned from `hook_type` to indicate to the caller (usually a relayer) what type of metadata
 /// to pass into `post_dispatch/quote_dispatch`. These are defined by the hyperlane protocol here:
-/// <https://github.com/eigerco/hyperlane-monorepo/blob/b68fe264b3585ecd9d95a5ec2ec2d7defbe907d2/solidity/contracts/interfaces/hooks/IPostDispatchHook.sol#L18>
+/// <https://github.com/Sovereign-Labs/hyperlane-monorepo/blob/b68fe264b3585ecd9d95a5ec2ec2d7defbe907d2/solidity/contracts/interfaces/hooks/IPostDispatchHook.sol#L18>
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub enum HookType {
     Unused = 0,

@@ -1,19 +1,13 @@
 //! End-to-end tests for hyperlane implementation that utilize real relayer, validators and evm devnet.
 //!
-//! The docker setup uses a single container which provides all the necessary tools.
-//! It comes from <https://github.com/eigerco/hyperlane-monorepo/blob/main/hyperlane.Dockerfile>.
+//! The docker setup uses several containers:
+//! 1. Hyperlane agents are built from official [Dockerfile](https://github.com/Sovereign-Labs/hyperlane-monorepo/blob/integration-2025-08-27-rebase/rust/Dockerfile)
+//! 2. Hyperlane CLI is built from [docker/hyperlane/hyperlane-cli.Dockerfile](https://github.com/Sovereign-Labs/sovereign-sdk/blob/39e6ee0e94b7a8a5d1e23c346efdab856814c62a/docker/hyperlane/hyperlane-cli.Dockerfile)j
+//! 3. EVM uses official anvil image: `ghcr.io/foundry-rs/foundry`
 //!
-//! To build it:
-//! ```bash
-//! git clone https://github.com/eigerco/hyperlane-monorepo
-//! cd hyperlane-monorepo
-//! ./build.sh
-//! ```
+//! Rollup is running on host machine and accesses via host docker network.
 //!
-//! Tests will always fetch the latest shipped image. To run tests with a locally built image:
-//! ```bash
-//! export CUSTOM_HLP_DOCKER_IMAGE=hyperlane
-//! ```
+//! For tests reliability all images use hard coded tags.
 //!
 //! For more information about the setup, check the [`HyperlaneBuilder`].
 
