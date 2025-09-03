@@ -1,10 +1,3 @@
-use alloy_primitives::Address;
-use reth_primitives::TransactionSigned;
-use revm::context::result::EVMError;
-use sov_address::{EthereumAddress, FromVmAddress};
-use sov_modules_api::macros::{serialize, UniversalWallet};
-use sov_modules_api::{Context, Spec, TxState};
-
 use crate::conversions::convert_to_transaction_signed;
 use crate::db::EvmDb;
 use crate::evm::executor::{self};
@@ -12,6 +5,14 @@ use crate::evm::primitive_types::{Receipt, TransactionSignedAndRecovered};
 use crate::evm::RlpEvmTransaction;
 use crate::executor::get_cfg_env;
 use crate::{Evm, PendingTransaction, SpecId};
+use alloy_primitives::Address;
+use reth_primitives::TransactionSigned;
+use revm::context::result::EVMError;
+use sov_address::{EthereumAddress, FromVmAddress};
+use sov_modules_api::macros::{serialize, UniversalWallet};
+#[cfg(feature = "native")]
+use sov_modules_api::prelude::UnwrapInfallible;
+use sov_modules_api::{Context, Spec, TxState};
 
 /// EVM call message.
 #[derive(Debug, PartialEq, Eq, Clone, schemars::JsonSchema, UniversalWallet)]
@@ -123,23 +124,34 @@ where
         self.pending_transactions
             .push(&pending_transaction, state)?;
 
+        // Fetch `head` and `pending_len` before the `native` code block.
+        // This ensures consistent gas charges between native and non-native execution.
+        #[allow(unused_variables)]
+        let head = self
+            .head
+            .get(state)?
+            .expect("Impossible happened: Head must be set.");
+
+        #[allow(unused_variables)]
+        let pending_len = self.pending_transactions.len(state)?;
+
         #[cfg(feature = "native")]
         {
-            let head = self.head.get(state)?.unwrap();
             let first_tx_index = head.transactions.end;
-
-            let pending_len = self.pending_transactions.len(state)?;
-
             let tx_index = first_tx_index + pending_len - 1;
 
             self.transactions
-                .set(&tx_index, &pending_transaction.transaction, state)?;
+                .set(&tx_index, &pending_transaction.transaction, state)
+                .unwrap_infallible();
 
             self.receipts
-                .set(&tx_index, &pending_transaction.receipt, state)?;
+                .set(&tx_index, &pending_transaction.receipt, state)
+                .unwrap_infallible();
 
             let hash = pending_transaction.transaction.signed_transaction.hash();
-            self.transaction_hashes.set(hash, &tx_index, state)?;
+            self.transaction_hashes
+                .set(hash, &tx_index, state)
+                .unwrap_infallible();
         }
 
         Ok(())
