@@ -96,6 +96,7 @@ pub(crate) fn create_transfer_tx(
     create_tx(from, tx)
 }
 
+#[derive(Clone)]
 pub(crate) struct TxWithNonceAndHash {
     pub(crate) nonce: u64,
     pub(crate) hash: B256,

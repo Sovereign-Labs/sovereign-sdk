@@ -1,8 +1,12 @@
 use crate::helpers::*;
+use crate::runtime::RT;
 use crate::runtime::S;
+use alloy_primitives::FixedBytes;
 use alloy_primitives::U256;
+use alloy_rpc_types::BlockTransactions;
 use revm::Database;
 use sov_evm::Evm;
+use sov_test_utils::TransactionType;
 use sov_test_utils::{BatchTestCase, SimpleStorageContract};
 use sov_test_utils::{TransactionTestCase, TEST_DEFAULT_USER_BALANCE};
 
@@ -85,6 +89,58 @@ fn test_executing_eth_transactions() {
                     assert!(storage_value.is_none());
                 } else {
                     assert_eq!(U256::from(nonce + 100), storage_value.unwrap());
+                }
+            }),
+        });
+    }
+}
+
+#[test]
+fn test_executing_eth_transactions_several_blocks() {
+    let (mut runner, from, to) = setup();
+
+    let nb_of_transfers: u64 = 200;
+    let batch_size: usize = 10;
+
+    let blocks = Block::create_blocks(nb_of_transfers, batch_size, &from, &to);
+
+    // Execute all the batches
+    for block in blocks {
+        let evm = Evm::<S>::default();
+
+        runner.execute_batch(BatchTestCase {
+            input: block.batch_txs().into(),
+            assert: Box::new(move |_result, state| {
+                assert_eq!(block.nr, evm.block_number(state).unwrap().to::<u64>());
+                let block_from_evm = evm.get_block_by_number(None, None, state).unwrap().unwrap();
+
+                if let BlockTransactions::Hashes(hashes) = &block_from_evm.transactions {
+                    assert_eq!(hashes, &block.tx_hashes());
+                } else {
+                    panic!("The test expects BlockTransactions::Hashes");
+                }
+                assert_eq!(batch_size, block.transactions.len());
+
+                for (tx_index, tx) in block.transactions.iter().enumerate() {
+                    let tx_index = tx_index as u64;
+
+                    let tx_from_evm = evm
+                        .get_transaction_by_hash(tx.hash, state)
+                        .unwrap()
+                        .unwrap();
+
+                    assert_eq!(&tx.hash, tx_from_evm.inner.hash());
+                    assert_eq!(tx_index, tx_from_evm.transaction_index.unwrap());
+                    assert_eq!(block.nr, tx_from_evm.block_number.unwrap());
+
+                    let receipt_from_evem = evm
+                        .get_transaction_receipt(tx.hash, state)
+                        .unwrap()
+                        .unwrap();
+
+                    assert_eq!(block.nr, receipt_from_evem.block_number.unwrap());
+                    assert_eq!(tx_index, receipt_from_evem.transaction_index.unwrap());
+                    assert_eq!(tx.hash, receipt_from_evem.transaction_hash);
                 }
             }),
         });
@@ -191,4 +247,46 @@ fn test_deploy_many_contracts() {
             assert_eq!(U256::from(1), storage_value_1);
         }),
     });
+}
+
+struct Block {
+    nr: u64,
+    transactions: Vec<TxWithNonceAndHash>,
+}
+
+impl Block {
+    fn create_blocks(
+        nb_of_transfers: u64,
+        batch_size: usize,
+        from: &EvmAccount,
+        to: &EvmAccount,
+    ) -> Vec<Block> {
+        let value = 1;
+        // 1. Create `batch_size`` transfers
+        let transfers: Vec<TxWithNonceAndHash> = (0..nb_of_transfers)
+            .map(|nonce| create_transfer_tx(nonce, from, to, value))
+            .collect();
+
+        let mut blocks = vec![];
+
+        // We start from 1 becaue genesis is alredy in the state.
+        let mut nr = 1;
+        for txs in transfers.chunks(batch_size) {
+            blocks.push(Block {
+                nr,
+                transactions: txs.to_vec(),
+            });
+            nr += 1;
+        }
+
+        blocks
+    }
+
+    fn batch_txs(&self) -> Vec<TransactionType<RT, S>> {
+        self.transactions.iter().cloned().map(|tx| tx.tx).collect()
+    }
+
+    fn tx_hashes(&self) -> Vec<FixedBytes<32>> {
+        self.transactions.iter().map(|tx| tx.hash).collect()
+    }
 }
