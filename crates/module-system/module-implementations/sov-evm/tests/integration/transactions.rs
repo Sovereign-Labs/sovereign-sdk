@@ -133,14 +133,14 @@ fn test_executing_eth_transactions_several_blocks() {
                     assert_eq!(tx_index, tx_from_evm.transaction_index.unwrap());
                     assert_eq!(block.nr, tx_from_evm.block_number.unwrap());
 
-                    let receipt_from_evem = evm
+                    let receipt_from_evm = evm
                         .get_transaction_receipt(tx.hash, state)
                         .unwrap()
                         .unwrap();
 
-                    assert_eq!(block.nr, receipt_from_evem.block_number.unwrap());
-                    assert_eq!(tx_index, receipt_from_evem.transaction_index.unwrap());
-                    assert_eq!(tx.hash, receipt_from_evem.transaction_hash);
+                    assert_eq!(tx.hash, receipt_from_evm.transaction_hash);
+                    assert_eq!(block.nr, receipt_from_evm.block_number.unwrap());
+                    assert_eq!(tx_index, receipt_from_evm.transaction_index.unwrap());
                 }
             }),
         });

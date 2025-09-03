@@ -1,9 +1,13 @@
+#[cfg(feature = "native")]
+use std::convert::Infallible;
+
 use crate::conversions::convert_to_transaction_signed;
 use crate::db::EvmDb;
 use crate::evm::executor::{self};
 use crate::evm::primitive_types::{Receipt, TransactionSignedAndRecovered};
 use crate::evm::RlpEvmTransaction;
 use crate::executor::get_cfg_env;
+use crate::Block;
 use crate::{Evm, PendingTransaction, SpecId};
 use alloy_primitives::Address;
 use reth_primitives::TransactionSigned;
@@ -136,23 +140,8 @@ where
         let pending_len = self.pending_transactions.len(state)?;
 
         #[cfg(feature = "native")]
-        {
-            let first_tx_index = head.transactions.end;
-            let tx_index = first_tx_index + pending_len - 1;
-
-            self.transactions
-                .set(&tx_index, &pending_transaction.transaction, state)
-                .unwrap_infallible();
-
-            self.receipts
-                .set(&tx_index, &pending_transaction.receipt, state)
-                .unwrap_infallible();
-
-            let hash = pending_transaction.transaction.signed_transaction.hash();
-            self.transaction_hashes
-                .set(hash, &tx_index, state)
-                .unwrap_infallible();
-        }
+        self.set_sccessory_state(head, &pending_transaction, pending_len, state)
+            .unwrap_infallible();
 
         Ok(())
     }
@@ -175,6 +164,36 @@ where
             .get(&address, state)?
             .map(|acc| acc.nonce)
             .unwrap_or_default())
+    }
+
+    #[cfg(feature = "native")]
+    fn set_sccessory_state(
+        &mut self,
+        head: Block,
+        pending_transaction: &PendingTransaction,
+        pending_tx_len: u64,
+        state: &mut impl TxState<S>,
+    ) -> Result<(), Infallible> {
+        assert!(pending_tx_len > 0);
+        let first_tx_index = head.transactions.end;
+
+        let tx_index = first_tx_index
+            .checked_add(pending_tx_len)
+            .expect("The impossible happened: Tx index overflow.")
+            .checked_sub(1)
+            //Can't underflow because `pending_tx_len` is greater than 0.
+            .expect("The impossible happened: Tx index underflow.");
+
+        self.transactions
+            .set(&tx_index, &pending_transaction.transaction, state)?;
+
+        self.receipts
+            .set(&tx_index, &pending_transaction.receipt, state)?;
+
+        let hash = pending_transaction.transaction.signed_transaction.hash();
+        self.transaction_hashes.set(hash, &tx_index, state)?;
+
+        Ok(())
     }
 }
 
