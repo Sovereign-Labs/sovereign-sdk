@@ -24,7 +24,7 @@ use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, TestUser};
 use testcontainers::core::client::docker_client_instance;
-use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult, Host, IntoContainerPort};
+use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult, IntoContainerPort};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 
@@ -269,11 +269,18 @@ impl HyperlaneBuilder {
             .rollup_port
             .expect("Rollup port must be set before starting hyperlane");
 
+        let host_address = if cfg!(target_os = "macos") || cfg!(target_os = "windows") {
+            "host.docker.internal".to_string()
+        } else {
+            // On Linux, get the Docker bridge network gateway IP
+            get_docker_gateway_ip().await
+        };
+
         // evm counterparty must be started before agents
         // because they will try to reach out to it immediately.
         // the same goes for rollup, but we assume it's running knowing its port.
         let (evm_counter_party, anvil_port) = if self.with_evm {
-            let evm_counter_party = EvmCounterParty::new(rollup_port).await;
+            let evm_counter_party = EvmCounterParty::new(rollup_port, &host_address).await;
             let anvil_port = evm_counter_party.anvil.port();
             (Some(evm_counter_party), anvil_port)
         } else {
@@ -288,8 +295,6 @@ impl HyperlaneBuilder {
             .with_exposed_port(ANVIL_PORT.tcp())
             .with_exposed_port(RELAYER_METRICS_PORT.tcp())
             .with_exposed_port(VALIDATOR_METRICS_PORT.tcp())
-            // a bridge to the host system, to reach rollup from within container
-            .with_host("host.docker.internal", Host::HostGateway)
             // test runtime uses fixed value for chain hash, this lets relayer know
             .with_env_var("SOV_TEST_UTILS_FIXED_CHAIN_HASH", "true")
             // default signing key for hyperlane cli and relayer in evm
@@ -297,7 +302,7 @@ impl HyperlaneBuilder {
             // setup agent config. NOTE: maybe use this in hyperlane-cli
             .with_copy_to(
                 "/sov-agent-config.json",
-                agent_config(rollup_port, anvil_port),
+                agent_config(rollup_port, anvil_port, &host_address),
             )
             .with_env_var("CONFIG_FILES", "/sov-agent-config.json")
             // a dummy command because we will populate services by execs appropriately
@@ -364,10 +369,10 @@ pub(crate) struct EvmCounterParty {
 }
 
 impl EvmCounterParty {
-    async fn new(rollup_port: u16) -> Self {
+    async fn new(rollup_port: u16, host_address: &str) -> Self {
         let anvil = AnvilRunner::new().await;
         let anvil_port = anvil.port();
-        let hyperlane_cli = HyperlaneCliRunner::new(rollup_port, anvil_port);
+        let hyperlane_cli = HyperlaneCliRunner::new(rollup_port, anvil_port, host_address);
         let hyperlane_deploy_start = std::time::Instant::now();
         let evm_recipient = hyperlane_cli.deploy_core().await;
         tracing::info!(time = ?hyperlane_deploy_start.elapsed(), "Hyperlane deployed");

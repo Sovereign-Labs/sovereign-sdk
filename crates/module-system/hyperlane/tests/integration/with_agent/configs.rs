@@ -6,7 +6,7 @@ use sov_modules_api::macros::config_value;
 use super::helpers::{EVM_CHAIN_ID, EVM_DOMAIN, EVM_MAILBOX, RELAYER_ACCOUNT};
 
 /// Generates a configuration file for the agents with the given rollup port
-pub fn agent_config(rollup_port: u16, anvil_port: u16) -> Vec<u8> {
+pub fn agent_config(rollup_port: u16, anvil_port: u16, host_address: &str) -> Vec<u8> {
     let config = json!({
         "chains": {
             "sovtest": {
@@ -22,7 +22,7 @@ pub fn agent_config(rollup_port: u16, anvil_port: u16) -> Vec<u8> {
                 },
                 "protocol": "sovereign",
                 "rpcUrls": [{
-                    "http": format!("http://host.docker.internal:{rollup_port}")
+                    "http": format!("http://{}:{}", host_address, rollup_port)
                 }],
                 // note: here we don't do much based on contract addresses, but some of those may
                 // be needed to set to real addresses in a future
@@ -55,7 +55,7 @@ pub fn agent_config(rollup_port: u16, anvil_port: u16) -> Vec<u8> {
                 },
                 "protocol": "ethereum",
                 "rpcUrls": [{
-                    "http": format!("http://host.docker.internal:{anvil_port}")
+                    "http": format!("http://{}:{}", host_address, anvil_port)
                 }],
                 "domainRoutingIsmFactory": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
                 "interchainAccountIsm": "0x9A676e781A523b5d0C0e43731313A708CB607508",
@@ -110,7 +110,7 @@ pub fn core_config(owner: EthAddress) -> String {
 }
 
 /// Configuration of sovtest chain in hyperlane
-pub fn sovtest_metadata(rollup_port: u16) -> String {
+pub fn sovtest_metadata(rollup_port: u16, host_address: &str) -> String {
     let chain = config_value!("CHAIN_ID");
     let domain = config_value!("HYPERLANE_BRIDGE_DOMAIN");
     formatdoc! {"
@@ -125,7 +125,7 @@ pub fn sovtest_metadata(rollup_port: u16) -> String {
           symbol: sov
         protocol: sovereign
         rpcUrls:
-          - http: http://host.docker.internal:{rollup_port}
+          - http: http://{host_address}:{rollup_port}
     "}
 }
 

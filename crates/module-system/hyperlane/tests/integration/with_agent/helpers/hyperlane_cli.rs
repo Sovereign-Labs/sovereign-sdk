@@ -17,14 +17,15 @@ pub struct HyperlaneCliRunner {
 }
 
 impl HyperlaneCliRunner {
-    pub fn new(rollup_port: u16, anvil_port: u16) -> Self {
+    pub fn new(rollup_port: u16, anvil_port: u16, host_address: &str) -> Self {
         tracing::debug!(
             rollup_port,
             anvil_port,
+            host_address,
             "Initializing runner for hyperlane-cli"
         );
         let data = tempfile::tempdir().expect("failed to create tempdir for hyperlane-cli data");
-        prepare_cli_data(data.path(), rollup_port, anvil_port);
+        prepare_cli_data(data.path(), rollup_port, anvil_port, host_address);
 
         Self { data }
     }
@@ -125,8 +126,13 @@ impl HyperlaneCliRunner {
 }
 
 /// Renders configs with proper endpoints.
-/// Each chain has an endpoint on host.docker.internal and passed port.
-fn prepare_cli_data(data_path: &std::path::Path, rollup_port: u16, anvil_port: u16) {
+/// Each chain has an endpoint on the provided host address and passed port.
+fn prepare_cli_data(
+    data_path: &std::path::Path,
+    rollup_port: u16,
+    anvil_port: u16,
+    host_address: &str,
+) {
     // Create directory structure
     let hyperlane_dir = data_path.join(".hyperlane");
     let chains_dir = hyperlane_dir.join("chains");
@@ -138,8 +144,8 @@ fn prepare_cli_data(data_path: &std::path::Path, rollup_port: u16, anvil_port: u
     std::fs::create_dir_all(&ethtest_dir).expect("Failed to create 'ethtest' directory");
     std::fs::create_dir_all(&configs_dir).expect("Failed to create 'configs' directory");
 
-    let sovtest_config = sovtest_metadata(rollup_port);
-    let ethtest_config = ethtest_metadata("host.docker.internal", anvil_port);
+    let sovtest_config = sovtest_metadata(rollup_port, host_address);
+    let ethtest_config = ethtest_metadata(host_address, anvil_port);
     let core_config = core_config(RELAYER_ACCOUNT.0.parse().unwrap());
     let sov_addresses = sovtest_addresses();
 
