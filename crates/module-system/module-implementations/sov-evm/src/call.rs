@@ -35,6 +35,7 @@ where
         context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
+        let tx = convert_to_transaction_signed(message.rlp)?;
         // The signature was checked before the call was dispatched,
         // and the signer was recovered during the authentication process.
         let signer = *context
@@ -46,54 +47,37 @@ where
         // Inside the EVM, we use nonces only for the CREATE operation.
         // The uniqueness check was performed before the call was dispatched.
         let account_nonce = self.get_account_nonce(signer, state)?;
-
-        let evm_tx: TransactionSigned = convert_to_transaction_signed(message.rlp)?;
-
+        let gas_limit = state.gas_limit()?;
+        let tx_env = create_tx_env(&tx, signer, account_nonce, gas_limit.as_ref()[0]);
         let block_env = self
             .block_env
             .get(state)?
-            .expect("Pending block must be set");
+            .context("Pending block must be set")?;
+        let transaction = TransactionSignedAndRecovered {
+            signer,
+            signed_transaction: tx,
+            block_number: block_env.number.to::<u64>(),
+        };
 
-        let cfg = self.cfg(state)?.expect("Evm config must be set");
+        let cfg = self.cfg(state)?.context("Evm config must be set")?;
         let cfg_env = get_cfg_env(&block_env, cfg, None);
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
-        let result =
-            executor::transact_commit(account_nonce, evm_db, &block_env, &evm_tx, signer, cfg_env);
+        let result = executor::transact_commit(evm_db, &block_env, tx_env, cfg_env);
 
         let receipt = match result {
-            Ok(result) => self.get_receipt(&evm_tx, result, state)?,
-            // Adopted from https://github.com/paradigmxyz/reth/blob/main/crates/payload/basic/src/lib.rs#L884
+            Ok(result) => self.get_receipt(&transaction, result, state)?,
             Err(err) => {
-                tracing::debug!(
-                    tx_hash = hex::encode(evm_tx.hash()),
-                    error = ?err,
-                    "EVM transaction has been reverted"
-                );
-                return match err {
-                    EVMError::Transaction(_) => {
-                        // This is a transactional error, so we can skip it without doing anything.
-                        Ok(())
-                    }
-                    err => {
-                        // This is a fatal error, so we need to return it.
-                        Err(anyhow::anyhow!("EVM execution error: {:?}", err))
-                    }
-                };
+                return self.handle_execution_error(transaction.signed_transaction.hash(), err)
             }
         };
-
-        let pending_transaction = PendingTransaction {
-            transaction: TransactionSignedAndRecovered {
-                signer,
-                signed_transaction: evm_tx,
-                block_number: block_env.number.to::<u64>(),
-            },
-            receipt,
-        };
+        state.charge_linear_gas(
+            &<S as GasSpec>::gas_to_charge_per_evm_gas(),
+            receipt.gas_used as u32,
+        )?;
 
         self.pending_transactions
-            .push(&pending_transaction, state)?;
+            .push(&PendingTransaction::new(transaction, receipt), state)?;
 
         // Fetch `head` and `pending_len` before the `native` code block.
         // This ensures consistent gas charges between native and non-native execution.
@@ -148,6 +132,23 @@ where
             log_index_start,
             error: None,
         })
+    }
+
+    fn handle_execution_error<E: std::fmt::Debug>(
+        &self,
+        hash: &B256,
+        err: EVMError<E>,
+    ) -> anyhow::Result<()> {
+        // Adopted from https://github.com/paradigmxyz/reth/blob/main/crates/payload/basic/src/lib.rs#L884
+        tracing::debug!(
+            tx_hash = hex::encode(hash),
+            error = ?err,
+            "EVM transaction has been reverted"
+        );
+        return match err {
+            EVMError::Transaction(_) => Ok(()), // This is a transactional error, so we can skip it without doing anything.
+            err => Err(anyhow::anyhow!("EVM execution error: {:?}", err)), // This is a fatal error, so we need to return it.
+        };
     }
 
     // The nonce check is already performed by the stf-blueprint during transaction preprocessing,
