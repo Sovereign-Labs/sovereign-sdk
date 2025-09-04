@@ -1,13 +1,14 @@
 use alloy_primitives::{Address, B256};
 use anyhow::Context as _;
 use revm::context::result::{EVMError, ExecutionResult};
+use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{serialize, UniversalWallet};
+#[cfg(feature = "native")]
+use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{Context, GasSpec, Spec, TxState};
 #[cfg(feature = "native")]
 use std::convert::Infallible;
-#[cfg(feature = "native")]
-use sov_modules_api::prelude::UnwrapInfallible;
 
 use crate::conversions::{convert_to_transaction_signed, create_tx_env};
 use crate::db::EvmDb;
@@ -76,8 +77,24 @@ where
             receipt.gas_used as u32,
         )?;
 
+        let pending_transaction = PendingTransaction::new(transaction, receipt);
         self.pending_transactions
-            .push(&PendingTransaction::new(transaction, receipt), state)?;
+            .push(&pending_transaction, state)?;
+
+        // Fetch `head` and `pending_len` before the `native` code block.
+        // This ensures consistent gas charges between native and non-native execution.
+        #[allow(unused_variables)]
+        let head = self
+            .head
+            .get(state)?
+            .expect("Impossible happened: Head must be set.");
+
+        #[allow(unused_variables)]
+        let pending_len = self.pending_transactions.len(state)?;
+
+        #[cfg(feature = "native")]
+        self.set_accessory_state(head, &pending_transaction, pending_len, state)
+            .unwrap_infallible();
 
         Ok(())
     }
@@ -130,10 +147,10 @@ where
             error = ?err,
             "EVM transaction has been reverted"
         );
-        return match err {
+        match err {
             EVMError::Transaction(_) => Ok(()), // This is a transactional error, so we can skip it without doing anything.
             err => Err(anyhow::anyhow!("EVM execution error: {:?}", err)), // This is a fatal error, so we need to return it.
-        };
+        }
     }
 
     // The nonce check is already performed by the stf-blueprint during transaction preprocessing,
@@ -157,7 +174,7 @@ where
     }
 
     #[cfg(feature = "native")]
-    fn set_sccessory_state(
+    fn set_accessory_state(
         &mut self,
         head: crate::Block,
         pending_transaction: &PendingTransaction,
