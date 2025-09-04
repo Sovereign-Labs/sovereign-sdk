@@ -1,5 +1,4 @@
 use alloy_primitives::{Address, B256};
-use anyhow::Context as _;
 use revm::context::result::{EVMError, ExecutionResult};
 use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
