@@ -1,4 +1,3 @@
-use alloy_consensus::Transaction;
 use alloy_primitives::{Address, B256};
 use revm::context::result::{EVMError, ExecutionResult};
 use revm::primitives::hardfork::SpecId;
@@ -7,7 +6,6 @@ use sov_modules_api::macros::{serialize, UniversalWallet};
 #[cfg(feature = "native")]
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{Context, GasSpec, Spec, TxState};
-use std::cmp::min;
 #[cfg(feature = "native")]
 use std::convert::Infallible;
 
@@ -53,12 +51,7 @@ where
         // Inside the EVM, we use nonces only for the CREATE operation.
         // The uniqueness check was performed before the call was dispatched.
         let account_nonce = self.get_account_nonce(signer, state)?;
-        let remaining_funds = state.remaining_funds()?;
-        let remaining_gas = state.remaining_gas()?.as_ref()[0];
-        let gas_limit = min(
-            remaining_gas,
-            (remaining_funds.0 / tx.effective_gas_price(Some(block_env.basefee))) as u64,
-        );
+        let gas_limit = state.remaining_gas()?.as_ref()[0];
         let tx_env = create_tx_env(&tx, signer, account_nonce, gas_limit);
 
         let transaction = TransactionSignedAndRecovered {

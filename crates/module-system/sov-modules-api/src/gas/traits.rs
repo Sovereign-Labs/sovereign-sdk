@@ -570,13 +570,6 @@ pub trait GasMeter {
         Ok(())
     }
 
-    /// Returns the amount of funds remaining. Used to set the EVM gas limit
-    fn remaining_funds(&mut self) -> Result<Amount, GasMeteringError<<Self::Spec as Spec>::Gas>> {
-        unreachable!(
-            "Default implementation should not be called. Override in the respective gas meter"
-        )
-    }
-
     /// Returns the amount of gas remaining. Used to set the EVM gas limit
     fn remaining_gas(
         &mut self,
@@ -910,12 +903,6 @@ impl<S: Spec> GasMeter for BasicGasMeter<S> {
         }
 
         Ok(())
-    }
-
-    fn remaining_funds(&mut self) -> Result<Amount, GasMeteringError<<Self::Spec as Spec>::Gas>> {
-        Ok(self
-            .remaining_funds
-            .expect("Funds should be set during a transaction"))
     }
 
     fn remaining_gas(
