@@ -56,8 +56,8 @@ impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
                 metric,
             ),
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
-                Some(Some(value)) => Ok(Some(value.size())),
-                Some(None) => Ok(None),
+                Some((_, Some(value))) => Ok(Some(value.size())),
+                Some((_, None)) => Ok(None),
                 None => {
                     let val = self
                         .storage
@@ -98,8 +98,8 @@ impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
                 metric,
             ),
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
-                Some(Some(value)) => Ok(Some(value)),
-                Some(None) => Ok(None),
+                Some((_, Some(value))) => Ok(Some(value)),
+                Some((_, None)) => Ok(None),
                 None => self
                     .storage
                     .get_accessory_historical(key, self.safe_true_slot_number_to_use),
@@ -121,7 +121,7 @@ impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
             Namespace::User => self.user_cache.set(key, value, 0),
             Namespace::Kernel => self.kernel_cache.set(key, value, 0),
             Namespace::Accessory => {
-                self.accessory_writes.insert(key.clone(), Some(value));
+                self.accessory_writes.insert(key.clone(), (0, Some(value)));
             }
         }
     }
@@ -162,7 +162,7 @@ pub struct ApiStateAccessor<S: Spec> {
     gas_price: <S::Gas as Gas>::Price,
     kernel_cache: ProvableStorageCache<namespaces::Kernel>,
     user_cache: ProvableStorageCache<namespaces::User>,
-    accessory_writes: HashMap<SlotKey, Option<SlotValue>>,
+    accessory_writes: HashMap<SlotKey, (u64, Option<SlotValue>)>,
     temp_cache: TempCache,
     #[debug(skip)]
     kernel: Arc<dyn KernelWithSlotMapping<S>>,

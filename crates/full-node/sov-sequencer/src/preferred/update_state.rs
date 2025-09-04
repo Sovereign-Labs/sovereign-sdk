@@ -200,6 +200,17 @@ where
 
         Ok(())
     }
+
+    pub(super) async fn do_simple_state_update(&self, info: StateUpdateInfo<S::Storage>) {
+        self.synchronized_state_updator
+            .send_simple_state_update_msg(info)
+            .await;
+        if !self.shutdown_receiver.has_changed().unwrap_or(true) {
+            self.synchronized_state_updator
+                .prune_sequencer_db_msg("update_state::prune_sequencer_db")
+                .await;
+        }
+    }
 }
 
 /// Replay an event on the executor.

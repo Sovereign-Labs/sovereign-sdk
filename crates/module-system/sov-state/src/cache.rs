@@ -125,6 +125,33 @@ mod internal {
             self.log.iter()
         }
 
+        #[cfg(feature = "native")]
+        pub(crate) fn prune_up_to(&mut self, rollup_height: u64) {
+            // We skip the expensive `retain` operation if the log is empty.
+            // According to its docs, `retain` runs in O(capacity) time rather than O(len); If the map is already empty from `.clear()`, that could be expensive!
+            if !self.revertable_log.is_empty() {
+                self.revertable_log.retain(|_, access| {
+                    if let Access::Write { at_version, .. } = access {
+                        *at_version >= rollup_height
+                    } else {
+                        false
+                    }
+                });
+            }
+
+            // NOTE: If we ever add back separate metering for hot vs cold reads, this will break since it clears out *all* reads, not just the ones before the given
+            // height. This was already broken, so we don't bother to fix it yet.
+            if !self.log.is_empty() {
+                self.log.retain(|_, access| {
+                    if let Access::Write { at_version, .. } = access {
+                        *at_version >= rollup_height
+                    } else {
+                        false
+                    }
+                });
+            }
+        }
+
         // This method is used to take all the changeset from the cache. The `revertable_log`
         // shoule be either merged or discarded before calling this method.
         pub(crate) fn take_writes(self) -> Vec<(SlotKey, Option<SlotValue>)> {
@@ -275,6 +302,16 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     pub fn discard_revertable_storage_cache(&mut self) {
         self.revertable_ordered_reads.clear();
         self.cache.discard_revertable_log();
+    }
+
+    /// Prunes all the entries in the cache that occurred before the given rollup height. Clears all read-only entries regardless of their rollup height.
+    /// We prune all reads because it's simpler to implement and we know that this method is only used in the sequencer, where we don't care about read tracking.
+    /// Pruning them aggressively allows us to save memory.
+    #[cfg(feature = "native")]
+    pub fn prune_writes_up_to_and_all_reads(&mut self, rollup_height: u64) {
+        self.ordered_db_reads.clear();
+        self.revertable_ordered_reads.clear();
+        self.cache.prune_up_to(rollup_height);
     }
 
     /// Returns an iterator over the writes
