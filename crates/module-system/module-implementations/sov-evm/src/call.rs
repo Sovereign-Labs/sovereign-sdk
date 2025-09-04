@@ -53,14 +53,14 @@ where
         let block_env = self
             .block_env
             .get(state)?
-            .context("Pending block must be set")?;
+            .expect("Pending block must be set");
         let transaction = TransactionSignedAndRecovered {
             signer,
             signed_transaction: tx,
             block_number: block_env.number.to::<u64>(),
         };
 
-        let cfg = self.cfg(state)?.context("Evm config must be set")?;
+        let cfg = self.cfg(state)?.expect("Evm config must be set");
         let cfg_env = get_cfg_env(&block_env, cfg, None);
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
