@@ -84,7 +84,7 @@ pub(crate) async fn deploy_contract_check(
     // Assert contract deployed correctly
     let code = client.eth_get_code(contract_address).await;
     // code has natural following 0x00 bytes, so we need to trim it
-    assert_eq!(code.to_vec()[..runtime_code.len()], runtime_code.to_vec());
+    assert_eq!(code[..runtime_code.len()], runtime_code.to_vec());
 
     Ok(contract_address)
 }
