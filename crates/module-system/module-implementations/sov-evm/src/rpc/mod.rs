@@ -292,14 +292,12 @@ where
     }
 
     /// Handler for: `eth_getTransactionReceipt`
-    #[rpc_method(name = "eth_getTransactionReceipt_xxx")]
+    #[rpc_method(name = "eth_getTransactionReceipt")]
     pub fn get_transaction_receipt(
         &self,
         hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<TransactionReceipt>> {
-        println!("Got tx hash: {:?}", hash);
-
         debug!(
             %hash,
             "EVM module JSON-RPC request to `eth_getTransactionReceipt`"

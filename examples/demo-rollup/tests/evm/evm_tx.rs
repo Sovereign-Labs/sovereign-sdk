@@ -1,61 +1,24 @@
 use std::time::Duration;
 
-use full_node_configs::sequencer::default_ideal_lag_behind_finalized_slot;
-use sov_demo_rollup::{mock_da_risc0_host_args, MockRollupSpec};
+use crate::evm::evm_test_helper::setup;
 use sov_eth_client::TestClient;
 use sov_mock_da::storable::service::StorableMockDaService;
-use sov_modules_api::execution_mode::Native;
-use sov_modules_api::Spec;
-use sov_modules_macros::config_value;
-use sov_stf_runner::processes::RollupProverConfig;
-use sov_test_utils::initialize_logging;
-use sov_test_utils::test_rollup::get_appropriate_rollup_prover_config;
 use tokio::time::sleep;
 
 use super::evm_test_helper;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_tx_tests_instant_finality() -> anyhow::Result<()> {
-    let rollup_prover_config =
-        get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(mock_da_risc0_host_args());
-    tokio::time::timeout(
-        std::time::Duration::from_secs(300),
-        evm_tx_test(0, rollup_prover_config),
-    )
-    .await?
+    tokio::time::timeout(std::time::Duration::from_secs(300), evm_tx_test(0)).await?
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_tx_tests_non_instant_finality() -> anyhow::Result<()> {
-    initialize_logging();
-    tokio::time::timeout(
-        std::time::Duration::from_secs(300),
-        evm_tx_test(3, RollupProverConfig::Skip),
-    )
-    .await?
+    tokio::time::timeout(std::time::Duration::from_secs(300), evm_tx_test(3)).await?
 }
 
-async fn evm_tx_test(
-    finalization_blocks: u32,
-    rollup_prover_config: RollupProverConfig<<MockRollupSpec<Native> as Spec>::InnerZkvm>,
-) -> anyhow::Result<()> {
-    let chain_id = config_value!("CHAIN_ID");
-    // temp_dir is hold here os it is not removed during test run
-    let test_rollup = evm_test_helper::start_node(rollup_prover_config, finalization_blocks).await;
-
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(10 + default_ideal_lag_behind_finalized_slot() as usize)
-        .await?;
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    let (test_client, _) = evm_test_helper::create_test_client(
-        test_rollup.http_addr,
-        chain_id,
-        // This will produce an evm key exist in rollup accounts-genesis.
-        "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-    )
-    .await;
+async fn evm_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
+    let (test_rollup, test_client, _, _) = setup(finalization_blocks).await;
 
     sanity_checks(&test_client).await;
     execute_evm_tests(&test_client, &test_rollup.da_service)

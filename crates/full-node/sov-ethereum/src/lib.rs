@@ -62,10 +62,6 @@ where
 {
     rpc.register_async_method("eth_gasPrice", handlers::eth_gas_price)?;
     rpc.register_async_method("eth_sendRawTransaction", handlers::eth_send_raw_transaction)?;
-    rpc.register_async_method(
-        "eth_getTransactionReceipt",
-        handlers::get_transaction_receipt_foo,
-    )?;
 
     #[cfg(feature = "local")]
     {

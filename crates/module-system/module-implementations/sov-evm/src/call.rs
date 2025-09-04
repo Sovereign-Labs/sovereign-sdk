@@ -10,7 +10,6 @@ use crate::executor::get_cfg_env;
 use crate::{Evm, PendingTransaction, SpecId};
 use alloy_primitives::Address;
 use reth_primitives::TransactionSigned;
-use revm::context::result::EVMError;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{serialize, UniversalWallet};
 #[cfg(feature = "native")]
@@ -76,12 +75,25 @@ where
             Ok(result) => {
                 let is_success = result.is_success();
                 let gas_used = result.gas_used();
-                let logs = result.into_logs();
+
+                if !is_success {
+                    tracing::debug!(
+                        hash = hex::encode(evm_tx.hash()),
+                        gas_used,
+                        ?result,
+                        "EVM execution error"
+                    );
+                    anyhow::bail!("EVM execution error: {:?}", &result);
+                }
+
                 tracing::debug!(
                     hash = hex::encode(evm_tx.hash()),
                     gas_used,
                     "EVM transaction has been executed"
                 );
+
+                let logs = result.into_logs();
+
                 Receipt {
                     receipt: reth_primitives::Receipt {
                         tx_type: evm_tx.tx_type(),
@@ -100,18 +112,10 @@ where
                 tracing::debug!(
                     tx_hash = hex::encode(evm_tx.hash()),
                     error = ?err,
-                    "EVM transaction has been reverted"
+                    "EVM transaction error"
                 );
-                return match err {
-                    EVMError::Transaction(_) => {
-                        // This is a transactional error, so we can skip it without doing anything.
-                        Ok(())
-                    }
-                    err => {
-                        // This is a fatal error, so we need to return it.
-                        Err(anyhow::anyhow!("EVM execution error: {:?}", err))
-                    }
-                };
+
+                anyhow::bail!("EVM transaction error: {:?}", err);
             }
         };
 

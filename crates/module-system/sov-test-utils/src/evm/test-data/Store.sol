@@ -12,4 +12,8 @@ contract SimpleStorage {
     function get() public view returns (uint) {
         return num;
     }
+
+    function alwaysRevert() external pure {
+        revert("This function always reverts!");
+    }
 }
