@@ -1,3 +1,6 @@
+# 2025-09-04
+- #1621 Introduces rollup gas metering for EVM execution. EVM transactions now use available rollup gas as their gas limit and charge rollup gas proportionally to EVM gas consumed.
+
 # 2025-08-29
 - #1570 adds additional metrics on tx processing and state accesses. 
 

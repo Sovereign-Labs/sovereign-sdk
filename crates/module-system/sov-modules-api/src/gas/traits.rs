@@ -574,7 +574,9 @@ pub trait GasMeter {
     fn gas_limit(
         &mut self,
     ) -> Result<<Self::Spec as Spec>::Gas, GasMeteringError<<Self::Spec as Spec>::Gas>> {
-        unreachable!("Should not be called")
+        unreachable!(
+            "Default implementation should not be called. Override in the respective gas meter"
+        )
     }
 
     /// Tracks the removal of gas consumption pattern.
