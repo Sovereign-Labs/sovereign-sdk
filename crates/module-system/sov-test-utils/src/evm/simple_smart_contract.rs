@@ -72,7 +72,7 @@ impl SimpleStorageContract {
         Bytes::from(data)
     }
 
-    /// Revert
+    /// Revert transaction.
     pub fn always_revert(&self) -> Bytes {
         self.base_contract.encode("alwaysRevert", ()).unwrap()
     }
