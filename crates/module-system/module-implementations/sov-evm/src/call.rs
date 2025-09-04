@@ -1,3 +1,4 @@
+use alloy_consensus::Transaction;
 use alloy_primitives::{Address, B256};
 use revm::context::result::{EVMError, ExecutionResult};
 use revm::primitives::hardfork::SpecId;
@@ -36,6 +37,10 @@ where
         context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
+        let block_env = self
+            .block_env
+            .get(state)?
+            .expect("Pending block must be set");
         let tx = convert_to_transaction_signed(message.rlp)?;
         // The signature was checked before the call was dispatched,
         // and the signer was recovered during the authentication process.
@@ -50,12 +55,12 @@ where
         let account_nonce = self.get_account_nonce(signer, state)?;
         let remaining_funds = state.remaining_funds()?;
         let remaining_gas = state.remaining_gas()?.as_ref()[0];
-        let gas_limit = min(remaining_gas, remaining_funds.0 as u64);
+        let gas_limit = min(
+            remaining_gas,
+            (remaining_funds.0 / tx.effective_gas_price(Some(block_env.basefee))) as u64,
+        );
         let tx_env = create_tx_env(&tx, signer, account_nonce, gas_limit);
-        let block_env = self
-            .block_env
-            .get(state)?
-            .expect("Pending block must be set");
+
         let transaction = TransactionSignedAndRecovered {
             signer,
             signed_transaction: tx,
