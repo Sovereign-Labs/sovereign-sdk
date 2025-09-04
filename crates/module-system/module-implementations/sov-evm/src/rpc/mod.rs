@@ -353,6 +353,7 @@ where
             .get(state)
             .unwrap_infallible()
             .expect("Block number must be set");
+
         Ok(U256::from(*block_number_range.end()))
     }
 

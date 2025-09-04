@@ -429,4 +429,8 @@ impl TestClient {
     pub async fn receipt(&self, hash: TxHash) -> Option<TransactionReceipt> {
         self.client.get_transaction_receipt(hash).await.unwrap()
     }
+
+    pub async fn block_number(&self) -> u64 {
+        self.client.get_block_number().await.unwrap().as_u64()
+    }
 }
