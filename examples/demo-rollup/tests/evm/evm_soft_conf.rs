@@ -35,7 +35,9 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
     // Check that invalid trsnacations are rejected.
     {
         let req = evm_client.always_reverts(contract_address).await;
-        assert!(req.is_err());
+
+        let err_str = req.unwrap_err().to_string();
+        assert!(err_str.contains("EVM execution error: Revert"));
     }
 
     Ok(())
