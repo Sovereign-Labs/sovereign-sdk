@@ -570,13 +570,9 @@ pub trait GasMeter {
         Ok(())
     }
 
-    /// Returns the amount of gas remaining. Used to set the EVM gas limit
-    fn remaining_gas(
-        &mut self,
-    ) -> Result<<Self::Spec as Spec>::Gas, GasMeteringError<<Self::Spec as Spec>::Gas>> {
-        unreachable!(
-            "Default implementation should not be called. Override in the respective gas meter"
-        )
+    /// Returns the basic gas state if it's a BasicGasMeter or contains a BasicGasMeter. Used to set the EVM gas limit
+    fn try_as_basic_gas_state(&mut self) -> Option<BasicGasState<Self::Spec>> {
+        None
     }
 
     /// Tracks the removal of gas consumption pattern.
@@ -905,10 +901,15 @@ impl<S: Spec> GasMeter for BasicGasMeter<S> {
         Ok(())
     }
 
-    fn remaining_gas(
-        &mut self,
-    ) -> Result<<Self::Spec as Spec>::Gas, GasMeteringError<<Self::Spec as Spec>::Gas>> {
-        Ok(self.remaining_gas.clone())
+    fn try_as_basic_gas_state(&mut self) -> Option<BasicGasState<Self::Spec>> {
+        Some(BasicGasState {
+            gas: self.remaining_gas.clone(),
+            funds: self
+                .remaining_funds
+                .clone()
+                .expect("This method is used in TX context where amount is set"),
+            price: self.gas_price.clone(),
+        })
     }
 
     #[cfg(all(feature = "gas-constant-estimation", feature = "native"))]
@@ -941,6 +942,23 @@ impl<S: Spec> GetGasPrice for BasicGasMeter<S> {
     type Spec = S;
     fn gas_price(&self) -> &<<Self::Spec as Spec>::Gas as Gas>::Price {
         &self.gas_price
+    }
+}
+
+/// A subset of BasicGasMeter used to compute EVM gas limit
+pub struct BasicGasState<S: Spec> {
+    gas: S::Gas,
+    funds: Amount,
+    price: <<S as Spec>::Gas as Gas>::Price,
+}
+
+impl<S: Spec> BasicGasState<S> {
+    /// Computes gas limit as a min from gas and funds divided by gas price
+    pub fn gas_limit(&self) -> u64 {
+        min(
+            self.gas.as_ref()[0],
+            (self.funds.0 / self.price.as_ref()[0].0) as u64,
+        )
     }
 }
 

@@ -51,7 +51,10 @@ where
         // Inside the EVM, we use nonces only for the CREATE operation.
         // The uniqueness check was performed before the call was dispatched.
         let account_nonce = self.get_account_nonce(signer, state)?;
-        let gas_limit = state.remaining_gas()?.as_ref()[0];
+        let gas_limit = state
+            .try_as_basic_gas_state()
+            .expect("We should have a BasicGasMeter or it's derivative in tx context")
+            .gas_limit();
         let tx_env = create_tx_env(&tx, signer, account_nonce, gas_limit);
 
         let transaction = TransactionSignedAndRecovered {
