@@ -20,14 +20,10 @@ fn test_invalid_contract_execution() {
     let contract_addr = account.address().create(0);
     let tx_request = TypedTransaction::Eip1559(TxEip1559 {
         chain_id: config_value!("CHAIN_ID"),
-        nonce: 0,
-        max_priority_fee_per_gas: Default::default(),
         max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
         gas_limit: 1_000_000,
-        to: TxKind::Create,
-        value: Default::default(),
         input: Bytes::from(contract.byte_code().to_vec()),
-        access_list: Default::default(),
+        ..Default::default()
     });
     let (signed_eth_tx, _) = account.sign(tx_request);
     let raw_tx = RawTx {
@@ -44,21 +40,19 @@ fn test_invalid_contract_execution() {
         let tx_request = TypedTransaction::Eip1559(TxEip1559 {
             chain_id: config_value!("CHAIN_ID"),
             nonce: 1,
-            max_priority_fee_per_gas: Default::default(),
             max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
             gas_limit: 1_000_000,
             to: TxKind::Call(contract_addr),
-            value: Default::default(),
             input: Bytes::from(
                 hex::decode(hex::encode(contract.failing_function_call_data())).unwrap(),
             ),
-            access_list: Default::default(),
+            ..Default::default()
         });
         let (signed_eth_tx, _) = account.sign(tx_request);
         let cfg_env =
             CfgEnv::new_with_spec(SpecId::SHANGHAI).with_chain_id(config_value!("CHAIN_ID"));
         let tx = convert_to_transaction_signed(signed_eth_tx).unwrap();
-        let tx_env = create_tx_env(&tx, account.address(), 1);
+        let tx_env = create_tx_env(&tx, account.address(), 1, 1_000_000);
         let result =
             executor::transact_commit(evm_db, &BlockEnv::default(), tx_env, cfg_env).unwrap();
         assert!(matches!(result, ExecutionResult::Revert { .. }));
