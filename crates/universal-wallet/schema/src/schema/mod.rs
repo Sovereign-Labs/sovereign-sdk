@@ -284,6 +284,16 @@ impl Schema {
         Ok(output)
     }
 
+    #[cfg(feature = "eip712")]
+    pub fn eip712_json(&self, type_index: usize, input: &[u8]) -> Result<String, SchemaError> {
+        todo!();
+    }
+
+    #[cfg(feature = "eip712")]
+    pub fn eip712_signing_hash(&self, type_index: usize, input: &[u8]) -> Result<[u8; 32], SchemaError> {
+        todo!();
+    }
+
     /// Use the schema to convert a serde-compatible JSON string of the given type into its borsh
     /// encoding
     #[cfg(feature = "serde")]
