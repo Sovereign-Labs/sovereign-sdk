@@ -570,6 +570,13 @@ pub trait GasMeter {
         Ok(())
     }
 
+    /// Returns the amount of gas available. Used to set the EVM gas limit
+    fn gas_limit(
+        &mut self,
+    ) -> Result<<Self::Spec as Spec>::Gas, GasMeteringError<<Self::Spec as Spec>::Gas>> {
+        unreachable!("Should not be called")
+    }
+
     /// Tracks the removal of gas consumption pattern.
     /// This is for use only in benchmarks.
     #[cfg(all(feature = "gas-constant-estimation", feature = "native"))]
@@ -894,6 +901,12 @@ impl<S: Spec> GasMeter for BasicGasMeter<S> {
         }
 
         Ok(())
+    }
+
+    fn gas_limit(
+        &mut self,
+    ) -> Result<<Self::Spec as Spec>::Gas, GasMeteringError<<Self::Spec as Spec>::Gas>> {
+        Ok(self.remaining_gas.clone())
     }
 
     #[cfg(all(feature = "gas-constant-estimation", feature = "native"))]

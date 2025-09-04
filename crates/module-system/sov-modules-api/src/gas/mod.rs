@@ -20,4 +20,10 @@ pub struct UnlimitedGasMeter<S>(PhantomData<S>);
 
 impl<S: Spec> GasMeter for UnlimitedGasMeter<S> {
     type Spec = S;
+
+    fn gas_limit(
+        &mut self,
+    ) -> Result<<Self::Spec as Spec>::Gas, GasMeteringError<<Self::Spec as Spec>::Gas>> {
+        Ok(<Self::Spec as Spec>::Gas::max())
+    }
 }
