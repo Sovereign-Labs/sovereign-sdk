@@ -161,9 +161,7 @@ impl<S: Spec, I: TxState<S>> GasMeter for RevertableTxState<'_, S, I> {
     fn charge_gas(&mut self, amount: &S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
         self.inner.charge_gas(amount)
     }
-    fn gas_limit(
-        &mut self,
-    ) -> Result<<Self::Spec as Spec>::Gas, GasMeteringError<<Self::Spec as Spec>::Gas>> {
+    fn gas_limit(&mut self) -> Result<Amount, GasMeteringError<<Self::Spec as Spec>::Gas>> {
         self.inner.gas_limit()
     }
 
@@ -375,9 +373,7 @@ impl<S: Spec, I: StateProvider<S>> GasMeter for PreExecWorkingSet<S, I> {
     fn charge_gas(&mut self, amount: &S::Gas) -> anyhow::Result<(), GasMeteringError<S::Gas>> {
         self.gas_meter.charge_gas(amount)
     }
-    fn gas_limit(
-        &mut self,
-    ) -> Result<<Self::Spec as Spec>::Gas, GasMeteringError<<Self::Spec as Spec>::Gas>> {
+    fn gas_limit(&mut self) -> Result<Amount, GasMeteringError<<Self::Spec as Spec>::Gas>> {
         self.gas_meter.gas_limit()
     }
 
@@ -652,9 +648,7 @@ impl<S: Spec, I: StateProvider<S>> GasMeter for WorkingSet<S, I> {
         self.gas_meter.charge_gas(gas)
     }
 
-    fn gas_limit(
-        &mut self,
-    ) -> Result<<Self::Spec as Spec>::Gas, GasMeteringError<<Self::Spec as Spec>::Gas>> {
+    fn gas_limit(&mut self) -> Result<Amount, GasMeteringError<<Self::Spec as Spec>::Gas>> {
         self.gas_meter.gas_limit()
     }
 

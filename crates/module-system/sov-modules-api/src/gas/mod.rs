@@ -12,7 +12,7 @@ pub use metered_utils::{
 };
 pub use traits::*;
 
-use crate::Spec;
+use crate::{Amount, Spec};
 
 /// A [`GasMeter`] that doesn't charge any gas.
 #[derive(Clone, Default)]
@@ -21,9 +21,7 @@ pub struct UnlimitedGasMeter<S>(PhantomData<S>);
 impl<S: Spec> GasMeter for UnlimitedGasMeter<S> {
     type Spec = S;
 
-    fn gas_limit(
-        &mut self,
-    ) -> Result<<Self::Spec as Spec>::Gas, GasMeteringError<<Self::Spec as Spec>::Gas>> {
-        Ok(<Self::Spec as Spec>::Gas::max())
+    fn gas_limit(&mut self) -> Result<Amount, GasMeteringError<<Self::Spec as Spec>::Gas>> {
+        Ok(Amount::MAX)
     }
 }

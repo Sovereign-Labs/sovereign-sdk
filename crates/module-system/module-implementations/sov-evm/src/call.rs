@@ -48,7 +48,7 @@ where
         // The uniqueness check was performed before the call was dispatched.
         let account_nonce = self.get_account_nonce(signer, state)?;
         let gas_limit = state.gas_limit()?;
-        let tx_env = create_tx_env(&tx, signer, account_nonce, gas_limit.as_ref()[0]);
+        let tx_env = create_tx_env(&tx, signer, account_nonce, gas_limit.0 as u64);
         let block_env = self
             .block_env
             .get(state)?

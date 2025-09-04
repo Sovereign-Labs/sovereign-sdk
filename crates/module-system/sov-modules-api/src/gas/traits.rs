@@ -571,9 +571,7 @@ pub trait GasMeter {
     }
 
     /// Returns the amount of gas available. Used to set the EVM gas limit
-    fn gas_limit(
-        &mut self,
-    ) -> Result<<Self::Spec as Spec>::Gas, GasMeteringError<<Self::Spec as Spec>::Gas>> {
+    fn gas_limit(&mut self) -> Result<Amount, GasMeteringError<<Self::Spec as Spec>::Gas>> {
         unreachable!(
             "Default implementation should not be called. Override in the respective gas meter"
         )
@@ -905,10 +903,10 @@ impl<S: Spec> GasMeter for BasicGasMeter<S> {
         Ok(())
     }
 
-    fn gas_limit(
-        &mut self,
-    ) -> Result<<Self::Spec as Spec>::Gas, GasMeteringError<<Self::Spec as Spec>::Gas>> {
-        Ok(self.remaining_gas.clone())
+    fn gas_limit(&mut self) -> Result<Amount, GasMeteringError<<Self::Spec as Spec>::Gas>> {
+        Ok(self
+            .remaining_funds
+            .expect("Funds should be set during a transaction"))
     }
 
     #[cfg(all(feature = "gas-constant-estimation", feature = "native"))]
