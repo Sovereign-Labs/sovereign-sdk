@@ -1,0 +1,52 @@
+[package]
+name = "sov-encryption"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+default = ["aes-encryption"]
+
+# Core encryption without external key fetching
+aes-encryption = ["aes-gcm", "rand"]
+
+# Key client implementations
+unix-client = ["tokio/net"]
+
+[dependencies]
+# Core encryption (optional, enabled by default)
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc", "getrandom"], optional = true }
+rand = { workspace = true, optional = true }
+
+# Async runtime (always needed for async trait)
+tokio = { workspace = true, features = ["time"] }
+async-trait = { workspace = true }
+
+
+# Serialization and utilities
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+bytes = { workspace = true }
+hex = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# JSON Schema for configuration
+schemars = { workspace = true, features = ["derive"] }
+
+# Logging
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio-test = "0.4"
+tokio = { workspace = true, features = ["test-util", "macros"] }
+
+[lints]
+workspace = true
