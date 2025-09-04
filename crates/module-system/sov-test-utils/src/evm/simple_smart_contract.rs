@@ -71,4 +71,9 @@ impl SimpleStorageContract {
         let data = hex::decode("a5643bf2").unwrap();
         Bytes::from(data)
     }
+
+    /// Revert transaction.
+    pub fn always_revert(&self) -> Bytes {
+        self.base_contract.encode("alwaysRevert", ()).unwrap()
+    }
 }

@@ -1,19 +1,23 @@
 use std::net::SocketAddr;
 
+use crate::test_helpers::test_genesis_source;
 use ethers_core::abi::Address;
 use ethers_providers::ProviderError;
 use ethers_signers::{LocalWallet, Signer};
 use futures::future::join_all;
+use sov_demo_rollup::MockRollupSpec;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_eth_client::TestClient;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
+use sov_modules_api::macros::config_value;
 use sov_risc0_adapter::Risc0;
 use sov_stf_runner::processes::RollupProverConfig;
+use sov_test_utils::test_rollup::get_appropriate_rollup_prover_config;
 use sov_test_utils::test_rollup::{RollupBuilder, TestRollup};
 use sov_test_utils::SimpleStorageContract;
 
-use crate::test_helpers::test_genesis_source;
+const SENDER_PRIV_KEY: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
 /// Starts test rollup node.  
 pub(crate) async fn start_node(
@@ -144,6 +148,24 @@ pub(crate) async fn set_multiple_values_check(
     }
 
     Ok(())
+}
+
+pub async fn setup(
+    finalization_blocks: u32,
+) -> (TestRollup<MockDemoRollup<Native>>, TestClient, Address, u64) {
+    let rollup_prover_config =
+        get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(mock_da_risc0_host_args());
+
+    let chain_id = config_value!("CHAIN_ID");
+    let test_rollup: TestRollup<MockDemoRollup<Native>> =
+        start_node(rollup_prover_config, finalization_blocks).await;
+
+    let (evm_client, addr) =
+        create_test_client(test_rollup.http_addr, chain_id, SENDER_PRIV_KEY).await;
+
+    test_rollup.wait_for_next_blocks(10).await;
+
+    (test_rollup, evm_client, addr, chain_id)
 }
 
 // TODO: reenable this check by figuring out a way to get finer grained control over preferred batch production.

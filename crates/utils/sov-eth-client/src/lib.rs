@@ -5,7 +5,9 @@ use ethereum_types::H160;
 use ethers_core::abi::Address;
 use ethers_core::k256::ecdsa::SigningKey;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
+use ethers_core::types::TransactionReceipt;
 use ethers_core::types::{Block, Eip1559TransactionRequest, TransactionRequest, TxHash};
+use ethers_middleware::signer::SignerMiddlewareError;
 use ethers_middleware::SignerMiddleware;
 use ethers_providers::{Http, Middleware, PendingTransaction, Provider};
 use ethers_signers::Wallet;
@@ -25,7 +27,7 @@ pub struct TestClient {
     pub chain_id: u64,
     pub from_addr: Address,
     contract: SimpleStorageContract,
-    client: SignerMiddleware<Provider<Http>, Wallet<SigningKey>>,
+    pub client: SignerMiddleware<Provider<Http>, Wallet<SigningKey>>,
     node_client: NodeClient,
     rpc: WsClient,
 }
@@ -240,6 +242,30 @@ impl TestClient {
             .await
     }
 
+    pub async fn always_reverts(
+        &self,
+        contract_address: H160,
+    ) -> Result<
+        PendingTransaction<'_, Http>,
+        SignerMiddlewareError<Provider<Http>, Wallet<SigningKey>>,
+    > {
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+
+        let req = Eip1559TransactionRequest::new()
+            .from(self.from_addr)
+            .to(contract_address)
+            .chain_id(self.chain_id)
+            .nonce(nonce)
+            .data(self.contract.always_revert())
+            .max_priority_fee_per_gas(MAX_PRIORITY_FEE_PER_GAS)
+            .max_fee_per_gas(MAX_FEE_PER_GAS)
+            .gas(GAS);
+
+        let typed_transaction = TypedTransaction::Eip1559(req);
+
+        self.client.send_transaction(typed_transaction, None).await
+    }
+
     pub async fn query_contract(
         &self,
         contract_address: H160,
@@ -398,5 +424,13 @@ impl TestClient {
             .send_transaction(typed_transaction, None)
             .await
             .unwrap()
+    }
+
+    pub async fn receipt(&self, hash: TxHash) -> Option<TransactionReceipt> {
+        self.client.get_transaction_receipt(hash).await.unwrap()
+    }
+
+    pub async fn block_number(&self) -> u64 {
+        self.client.get_block_number().await.unwrap().as_u64()
     }
 }
