@@ -21,6 +21,9 @@ use tokio::time::Instant;
 use tracing::{debug, info, instrument, trace};
 
 pub use crate::config::CelestiaConfig;
+use crate::metrics::{
+    BlobSubmitMeasurement, GetBlockMeasurement, NamespaceDataMetrics, RollupNamespace,
+};
 use crate::types::{
     BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, NamespaceRelevantData, TmHash,
     APP_VERSION,
@@ -32,14 +35,12 @@ use crate::CelestiaHeader;
 
 type BoxError = anyhow::Error;
 
-type TimedHttpClient = HttpClient;
-
 #[derive(Debug, Clone)]
 pub struct CelestiaService {
     // Client is used for a submission request, where we want to have consistent ordering.
-    submit_client: Arc<Mutex<TimedHttpClient>>,
+    submit_client: Arc<Mutex<HttpClient>>,
     // Client used for queries, where it is not important to have ordering
-    read_client: Arc<TimedHttpClient>,
+    read_client: Arc<HttpClient>,
     rollup_batch_namespace: Namespace,
     rollup_proof_namespace: Namespace,
     signer_address: CelestiaAddress,
@@ -49,7 +50,7 @@ pub struct CelestiaService {
 
 impl CelestiaService {
     pub fn with_client(
-        client: TimedHttpClient,
+        client: HttpClient,
         rollup_batch_namespace: Namespace,
         rollup_proof_namespace: Namespace,
         signer_address: CelestiaAddress,
@@ -73,8 +74,16 @@ impl CelestiaService {
         blob: &[u8],
         namespace: Namespace,
     ) -> Result<SubmitBlobReceipt<TmHash>, jsonrpsee::core::client::Error> {
+        let start = std::time::Instant::now();
         let bytes = blob.len();
-        debug!(bytes, ?namespace, "Sending raw data to Celestia");
+        let ns = if namespace == self.rollup_batch_namespace {
+            RollupNamespace::Batch
+        } else if namespace == self.rollup_proof_namespace {
+            RollupNamespace::Proof
+        } else {
+            panic!("Attempt to submit to non batch/proof namespace: {namespace:?}")
+        };
+        debug!(bytes, namespace = ?ns, "Sending raw data to Celestia");
 
         let blob = JsonBlob::new_with_signer(
             namespace,
@@ -85,6 +94,7 @@ impl CelestiaService {
         .expect("Bug in CelestiaAdapter");
         let blob_hash = HexHash::new(*blob.commitment.hash());
         debug!(
+            namespace = ?ns,
             commitment = %blob_hash,
             bytes,
             data_bytes = blob.data.len(),
@@ -92,19 +102,34 @@ impl CelestiaService {
         );
 
         let tx_config = celestia_rpc::TxConfig::default();
-
-        let tx_response = self
-            .submit_client
-            .lock()
-            .await
+        let start_lock = std::time::Instant::now();
+        let submit_client = self.submit_client.lock().await;
+        let lock_acquisition = start_lock.elapsed();
+        let start_submit = std::time::Instant::now();
+        let tx_result = submit_client
             .state_submit_pay_for_blob(&[blob.into()], tx_config)
-            .await?;
+            .await;
+        drop(submit_client);
 
+        let submit_time = start_submit.elapsed();
+        let total_time = start.elapsed();
+        let measurement = BlobSubmitMeasurement::new(
+            ns,
+            &tx_result,
+            bytes,
+            lock_acquisition,
+            submit_time,
+            total_time,
+        );
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(measurement);
+        });
+
+        let tx_response = tx_result?;
         let tx_hash = TmHash(
             tendermint::Hash::from_str(&tx_response.txhash)
                 .expect("Failed to decode hash from `TxResponse`"),
         );
-
         info!(
             da_height = tx_response.height,
             tx_hash = %tx_hash,
@@ -112,6 +137,10 @@ impl CelestiaService {
             blob_hash = %blob_hash,
             gas_used = %tx_response.gas_used,
             bytes,
+            namespace = ?ns,
+            ?lock_acquisition,
+            ?submit_time,
+            ?total_time,
             "Blob has been submitted to Celestia"
         );
 
@@ -217,34 +246,53 @@ impl CelestiaService {
             .header_get_by_height(height)
             .await
             .map_err(into_transient_with_context)?;
-        trace!(%header, height, time_ms = start_get_block.elapsed().as_millis(), "Got the block header");
+        let fetch_header_time = start_get_block.elapsed();
+        let square_width = header.dah.square_width();
+        trace!(%header, height, time_ms = fetch_header_time.as_millis(), "Got the block header");
 
         let data_futures_all = Instant::now();
 
         let rollup_batch_rows_future =
             client.share_get_namespace_data(&header, self.rollup_batch_namespace);
-
         let rollup_proof_rows_future =
             client.share_get_namespace_data(&header, self.rollup_proof_namespace);
 
         let (batch_rows, proof_rows) =
             tokio::try_join!(rollup_batch_rows_future, rollup_proof_rows_future,)
                 .map_err(into_transient_with_context)?;
+        let fetch_rows_time = data_futures_all.elapsed();
         trace!(
             time_ms = data_futures_all.elapsed().as_millis(),
             "All data futures are resolved"
         );
 
+        let build_relevant_data_start = std::time::Instant::now();
+        let batch_ns_metrics = NamespaceDataMetrics::new(&batch_rows);
         let rollup_batch_shares =
             NamespaceRelevantData::new(self.rollup_batch_namespace, batch_rows);
 
+        let proof_ns_metrics = NamespaceDataMetrics::new(&proof_rows);
         let rollup_proof_shares =
             NamespaceRelevantData::new(self.rollup_proof_namespace, proof_rows);
+        let build_relevant_data = build_relevant_data_start.elapsed();
 
-        trace!(
-            time_ms = start_get_block.elapsed().as_millis(),
-            "Get block total"
-        );
+        let total_time = start_get_block.elapsed();
+        trace!(time_ms = total_time.as_millis(), "Get block total");
+
+        sov_metrics::track_metrics(|tracker| {
+            let get_block_measurement = GetBlockMeasurement {
+                height,
+                square_width,
+                fetch_header_time,
+                fetch_rows_time,
+                build_relevant_data,
+                batch_ns_metrics,
+                proof_ns_metrics,
+                total_time,
+            };
+            tracker.submit(get_block_measurement);
+        });
+
         FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header)
             .map_err(MaybeRetryable::Permanent)
     }
