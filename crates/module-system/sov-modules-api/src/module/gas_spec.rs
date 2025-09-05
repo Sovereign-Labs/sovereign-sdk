@@ -55,6 +55,9 @@ pub trait GasSpec:
     fn fixed_gas_to_charge_per_signature_verification() -> Self::Gas;
     // --- End Gas parameters to specify how to charge gas for signature verification ---
 
+    /// Gas to charge for EVM execution
+    fn gas_to_charge_per_evm_gas() -> Self::Gas;
+
     /// The cost of deserializing a message using Borsh
     fn gas_to_charge_per_byte_borsh_deserialization() -> Self::Gas;
     /// The bias to charge for deserializing a message using Borsh
@@ -220,6 +223,10 @@ impl<S: Spec> GasSpec for S {
             "DEFAULT_GAS_TO_CHARGE_PER_BYTE_SIGNATURE_VERIFICATION",
             Self::Gas
         )
+    }
+
+    fn gas_to_charge_per_evm_gas() -> Self::Gas {
+        new_constant!("DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS", Self::Gas)
     }
 
     fn initial_base_fee_per_gas() -> <Self::Gas as Gas>::Price {

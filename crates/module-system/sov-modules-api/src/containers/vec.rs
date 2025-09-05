@@ -343,7 +343,7 @@ where
         Codec::ValueCodec: EncodeLike<Vq, V>,
     {
         let len_key = self.len_value.slot_key();
-        let mut metric = StateAccessMetric::new("push_accessory", len_key.size());
+        let mut metric = StateAccessMetric::new_read(len_key.key(), len_key.display_fn());
         let index =
             if let Some(len_bytes) = state.get_value(Accessory::NAMESPACE, &len_key, &mut metric) {
                 self.len_value

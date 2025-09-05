@@ -4,10 +4,12 @@
 mod account_storage_key;
 mod call;
 mod config;
+mod db;
 mod evm;
 mod genesis;
 mod hooks;
 mod sov_evm;
+use std::ops::RangeInclusive;
 
 pub use call::*;
 pub use config::*;
@@ -37,29 +39,25 @@ pub use authenticate::{
 pub use reth_primitives::TransactionSigned;
 pub use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_bank::Amount;
 use sov_modules_api::prelude::UnwrapInfallible as _;
 use sov_modules_api::{
     AccessoryStateMap, AccessoryStateReader, AccessoryStateReaderAndWriter, AccessoryStateValue,
-    AccessoryStateVec, Context, DaSpec, GenesisState, InfallibleStateAccessor,
-    InfallibleStateReaderAndWriter, Module, ModuleId, ModuleInfo, Spec, StateAccessor, StateMap,
-    StateReader, StateValue, StateVec, TxState, UnmeteredStateWrapper,
+    Context, DaSpec, GenesisState, InfallibleStateAccessor, InfallibleStateReaderAndWriter, Module,
+    ModuleId, ModuleInfo, Spec, StateAccessor, StateMap, StateReader, StateValue, StateVec,
+    TxState,
 };
 use sov_state::codec::BcsCodec;
 use sov_state::User;
 
 use crate::account_storage_key::AccountStorageKey;
-use crate::evm::db::{DbAccount, EvmDb};
+use crate::db::{DbAccount, EvmDb};
 use crate::evm::primitive_types::{
     Block, PendingTransaction, Receipt, SealedBlock, TransactionSignedAndRecovered,
 };
 
-// Gas per transaction not creating a contract.
-#[cfg(feature = "native")]
-pub(crate) const MIN_TRANSACTION_GAS: u64 = 21_000u64;
-#[cfg(feature = "native")]
-pub(crate) const MIN_CREATE_GAS: u64 = 53_000u64;
-
 pub use conversions::convert_to_transaction_signed;
+pub use conversions::create_tx_env;
 
 /// The sov-evm module provides compatibility with the EVM.
 #[allow(dead_code)]
@@ -108,25 +106,29 @@ pub struct Evm<S: Spec> {
     #[state]
     pub(crate) pending_head: AccessoryStateValue<Block, BcsCodec>,
 
+    /// Tracks the blocks stored in the accessory state.
+    #[state]
+    pub block_numbers: AccessoryStateValue<RangeInclusive<u64>, BcsCodec>,
+
     /// Used only by the RPC: The vec is extended with `pending_head` in `finalize_hook`.
     #[state]
-    pub(crate) blocks: AccessoryStateVec<SealedBlock, BcsCodec>,
-
-    /// Used only by the RPC: block_hash => block_number mapping.
-    #[state]
-    pub(crate) block_hashes: AccessoryStateMap<B256, u64, BcsCodec>,
+    pub blocks: AccessoryStateMap<u64, SealedBlock, BcsCodec>,
 
     /// Used only by the RPC: List of processed transactions.
     #[state]
-    pub(crate) transactions: AccessoryStateVec<TransactionSignedAndRecovered, BcsCodec>,
-
-    /// Used only by the RPC: transaction_hash => transaction_index mapping.
-    #[state]
-    pub(crate) transaction_hashes: AccessoryStateMap<B256, u64, BcsCodec>,
+    pub transactions: AccessoryStateMap<u64, TransactionSignedAndRecovered, BcsCodec>,
 
     /// Used only by the RPC: Receipts.
     #[state]
-    pub(crate) receipts: AccessoryStateVec<Receipt, BcsCodec>,
+    pub receipts: AccessoryStateMap<u64, Receipt, BcsCodec>,
+
+    /// Used only by the RPC: block_hash => block_number mapping.
+    #[state]
+    pub block_hashes: AccessoryStateMap<B256, u64, BcsCodec>,
+
+    /// Used only by the RPC: transaction_hash => transaction_index mapping.
+    #[state]
+    pub transaction_hashes: AccessoryStateMap<B256, u64, BcsCodec>,
 
     /// A reference to the Bank module.
     #[module]
@@ -173,66 +175,43 @@ where
 
 impl<S: Spec> Evm<S> {
     /// Get a EvmDb instance for the supplied state.
-    pub fn get_db<'a, Ws: StateAccessor>(
-        &self,
-        state: &'a mut Ws,
-    ) -> EvmDb<UnmeteredStateWrapper<'a, Ws>, S> {
-        let infallible_state_accessor = state.to_unmetered();
+    pub fn get_db<'a, Ws: StateAccessor>(&self, state: &'a mut Ws) -> EvmDb<'a, Ws, S> {
         EvmDb::new(
             self.accounts.clone(),
             self.account_storage.clone(),
             self.code.clone(),
-            infallible_state_accessor,
+            state,
             self.bank_module.clone(),
         )
-    }
-
-    /// Access the Ethereum transaction receipts.
-    pub fn receipts<Accessor: AccessoryStateReaderAndWriter>(
-        &self,
-        state: &mut Accessor,
-    ) -> Vec<Receipt> {
-        self.receipts.collect_infallible(state)
     }
 
     /// Access the Ethereum transaction receipt by number.
     pub fn receipt<Accessor: AccessoryStateReader>(
         &self,
-        number: u64,
+        index: u64,
         state: &mut Accessor,
-    ) -> Receipt {
-        self.receipts
-            .get(number, state)
-            .unwrap_infallible()
-            .expect("Receipt for known transaction must be set")
-    }
-
-    /// Access the Ethereum transactions.
-    pub fn transactions<Accessor: AccessoryStateReaderAndWriter>(
-        &self,
-        state: &mut Accessor,
-    ) -> Vec<TransactionSignedAndRecovered> {
-        self.transactions.collect_infallible(state)
+    ) -> Option<Receipt> {
+        self.receipts.get(&index, state).unwrap_infallible()
     }
 
     /// Access the Ethereum transaction by number.
     pub fn transaction<Accessor: AccessoryStateReader>(
         &self,
-        number: u64,
+        index: u64,
         state: &mut Accessor,
-    ) -> TransactionSignedAndRecovered {
-        self.transactions
-            .get(number, state)
-            .unwrap_infallible()
-            .expect("Transaction with known hash must be set")
+    ) -> Option<TransactionSignedAndRecovered> {
+        self.transactions.get(&index, state).unwrap_infallible()
     }
 
     /// Access the Ethereum blocks.
-    pub fn blocks<Accessor: AccessoryStateReaderAndWriter>(
+    pub fn block_numbers<Accessor: AccessoryStateReaderAndWriter>(
         &self,
         state: &mut Accessor,
-    ) -> Vec<SealedBlock> {
-        self.blocks.collect_infallible(state)
+    ) -> RangeInclusive<u64> {
+        self.block_numbers
+            .get(state)
+            .unwrap_infallible()
+            .expect("Block numbers must be set")
     }
 
     /// Access Ethereum block by number.
@@ -240,11 +219,8 @@ impl<S: Spec> Evm<S> {
         &self,
         number: u64,
         state: &mut Accessor,
-    ) -> SealedBlock {
-        self.blocks
-            .get(number, state)
-            .unwrap_infallible()
-            .expect("Block number for known transaction must be set")
+    ) -> Option<SealedBlock> {
+        self.blocks.get(&number, state).unwrap_infallible()
     }
 
     /// Lookup an Ethereum account by address.
@@ -294,8 +270,12 @@ impl<S: Spec> Evm<S> {
     pub fn cfg<Accessor: StateReader<User>>(
         &self,
         state: &mut Accessor,
-    ) -> Result<Option<EvmRuntimeConfig>, Accessor::Error> {
-        self.cfg.get(state)
+    ) -> Result<EvmRuntimeConfig, Accessor::Error> {
+        let cfg = self
+            .cfg
+            .get(state)? // The config must be set at genesis.
+            .expect("The impossible happened: EVM config is not set");
+        Ok(cfg)
     }
 
     /// Get the Evm chain config.
@@ -306,7 +286,8 @@ impl<S: Spec> Evm<S> {
         self.cfg
             .get(state)
             .unwrap_infallible()
-            .expect("EVM config must be set at genesis")
+            // The config must be set at genesis.
+            .expect("The impossible happened: EVM config is not set")
     }
 
     /// Access the pending Ethereum transactions.
@@ -343,4 +324,13 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
 {
     S::Address::from_vm_address(EthereumAddress::from(address))
+}
+
+pub(crate) fn to_rollup_balance(balance: U256) -> Amount {
+    // Overflow is not possible here. The gas token’s supply_cap is bounded by u128::MAX,
+    // which means no account can ever hold a balance greater than u128::MAX.
+    let bank_amount = balance
+        .try_into()
+        .unwrap_or_else(|_| panic!("The impossible happened: Balance overflowed"));
+    Amount::new(bank_amount)
 }

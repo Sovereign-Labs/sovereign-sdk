@@ -659,8 +659,9 @@ async fn flaky_seq_behind_deferred_slots_count_simple_lagging() {
     tracing::info!("Producing DA blocks to let the sequencer resync.");
     for _ in 0..10 {
         let _ = da_layer.produce_block().await;
-        sleep(Duration::from_millis(100)).await; // Notifications don't work during recovery.
+        sleep(Duration::from_millis(50)).await; // Notifications don't work during recovery.
     }
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Submit the same transaction to the now-working sequencer
     // This transaction will be soft-confirmed. The assertion should pass at this stage.
@@ -807,6 +808,7 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
         test_rollup.da_service.produce_block_now().await.unwrap();
         sleep(Duration::from_millis(50)).await;
     }
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Submit the same transaction to the now-working sequencer
     client

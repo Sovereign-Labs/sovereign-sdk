@@ -570,6 +570,11 @@ pub trait GasMeter {
         Ok(())
     }
 
+    /// Returns the basic gas state if it's a BasicGasMeter or contains a BasicGasMeter. Used to set the EVM gas limit
+    fn try_as_basic_gas_state(&mut self) -> Option<BasicGasState<Self::Spec>> {
+        None
+    }
+
     /// Tracks the removal of gas consumption pattern.
     /// This is for use only in benchmarks.
     #[cfg(all(feature = "gas-constant-estimation", feature = "native"))]
@@ -896,6 +901,16 @@ impl<S: Spec> GasMeter for BasicGasMeter<S> {
         Ok(())
     }
 
+    fn try_as_basic_gas_state(&mut self) -> Option<BasicGasState<Self::Spec>> {
+        Some(BasicGasState {
+            gas: self.remaining_gas.clone(),
+            funds: self
+                .remaining_funds
+                .expect("This method is used in TX context where amount is set"),
+            price: self.gas_price.clone(),
+        })
+    }
+
     #[cfg(all(feature = "gas-constant-estimation", feature = "native"))]
     fn remove_gas_pattern(&mut self, amount: &<Self::Spec as Spec>::Gas, parameter: u32) {
         if let Some(name) = amount.name() {
@@ -927,6 +942,16 @@ impl<S: Spec> GetGasPrice for BasicGasMeter<S> {
     fn gas_price(&self) -> &<<Self::Spec as Spec>::Gas as Gas>::Price {
         &self.gas_price
     }
+}
+
+/// A subset of BasicGasMeter used to compute EVM gas limit
+pub struct BasicGasState<S: Spec> {
+    /// Amount of gas available
+    pub gas: S::Gas,
+    /// Amount of funds available
+    pub funds: Amount,
+    /// Gas price
+    pub price: <<S as Spec>::Gas as Gas>::Price,
 }
 
 #[cfg(test)]

@@ -1,18 +1,20 @@
-use std::convert::Infallible;
-
-use alloy_primitives::Address;
-use reth_primitives::TransactionSigned;
-#[cfg(feature = "native")]
-use revm::context::{result::ResultAndState, TxEnv};
+use reth_revm::db::DBErrorMarker;
+use revm::context::TxEnv;
+use revm::InspectEvm;
 use revm::{
     context::{
-        result::{EVMError, ExecutionResult},
+        result::{EVMError, ExecResultAndState, ExecutionResult},
         BlockEnv, CfgEnv, Context,
     },
-    Database, DatabaseCommit, ExecuteCommitEvm, MainContext,
+    Database, MainContext,
 };
 
-use crate::{evm::conversions::create_tx_env, get_spec_id, sov_evm::SovEvm, EvmRuntimeConfig};
+use crate::{
+    db::commit::FallibleDatabaseCommit,
+    get_spec_id,
+    sov_evm::{SovEvm, UnmeteredStorageAccessInspector},
+    EvmRuntimeConfig,
+};
 
 /// builds CfgEnv
 /// Returns correct config depending on spec for given block number
@@ -25,46 +27,50 @@ pub(crate) fn get_cfg_env(
     let mut cfg_env = template_cfg.unwrap_or_default();
     cfg_env.chain_id = cfg.chain_spec.chain_id;
     cfg_env.limit_contract_code_size = cfg.chain_spec.limit_contract_code_size;
-    let spec = get_spec_id(cfg.hardforks, block_env.number.to::<u64>());
+    cfg_env.disable_block_gas_limit = true;
+    cfg_env.disable_balance_check = true;
+    let spec = get_spec_id(&cfg.hardforks, block_env.number.to::<u64>());
     cfg_env.with_spec(spec)
 }
 
 /// Execute an Ethereum transaction and commit it to the database.
-pub fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
-    account_nonce: u64,
-    db: DB,
-    block_env: &BlockEnv,
-    tx: &TransactionSigned,
-    signer: Address,
-    cfg: CfgEnv,
-) -> Result<ExecutionResult, EVMError<Infallible>> {
-    let tx_env = create_tx_env(account_nonce, tx, signer);
-    let context = Context::mainnet()
-        .with_db(db)
-        .with_block(block_env)
-        .with_cfg(cfg);
-    let mut evm = SovEvm::new(context, ());
-    evm.transact_commit(tx_env)
-}
-
-#[cfg(feature = "native")]
-pub(crate) fn inspect<DB: Database<Error = Infallible> + DatabaseCommit>(
-    db: DB,
+pub fn transact_commit<
+    DB: Database<Error = E> + FallibleDatabaseCommit<Error = E>,
+    E: DBErrorMarker,
+>(
+    mut db: DB,
     block_env: &BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
-) -> Result<ResultAndState, EVMError<Infallible>> {
-    use revm::InspectEvm;
+) -> Result<ExecutionResult, EVMError<E>> {
+    let ExecResultAndState { result, state } = transact(&mut db, block_env, tx, cfg)?;
+    // We don't use transact_commit as it does not support returning an error
+    db.commit(state)?;
+    Ok(result)
+}
 
-    let config = revm_inspectors::tracing::TracingInspectorConfig::all();
-    let inspector = revm_inspectors::tracing::TracingInspector::new(config);
+#[cfg(feature = "native")]
+pub(crate) fn call<DB: Database<Error = E>, E: DBErrorMarker>(
+    mut db: DB,
+    block_env: &BlockEnv,
+    tx: TxEnv,
+    cfg: CfgEnv,
+) -> Result<ExecutionResult, EVMError<E>> {
+    Ok(transact(&mut db, block_env, tx, cfg)?.result)
+}
 
+fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
+    db: &mut DB,
+    block_env: &BlockEnv,
+    tx: TxEnv,
+    cfg: CfgEnv,
+) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>> {
     let context = Context::mainnet()
         .with_db(db)
         .with_block(block_env)
         .with_cfg(cfg);
+    let inspector = UnmeteredStorageAccessInspector::new();
     let mut evm = SovEvm::new(context, inspector);
-
     evm.inspect_tx(tx)
 }
 
@@ -100,6 +106,8 @@ mod tests {
         let mut expected_cfg_env = CfgEnv::default();
         expected_cfg_env.chain_id = config_value!("CHAIN_ID");
         expected_cfg_env.disable_base_fee = true;
+        expected_cfg_env.disable_balance_check = true;
+        expected_cfg_env.disable_block_gas_limit = true;
         expected_cfg_env.limit_contract_code_size = Some(100);
         expected_cfg_env.spec = SpecId::SHANGHAI;
 

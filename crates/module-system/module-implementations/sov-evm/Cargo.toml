@@ -31,6 +31,8 @@ derive_more = { workspace = true }
 serde = { workspace = true }
 serde_with = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
+derive-new = { workspace = true }
+itertools = { workspace = true }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = [
 	"macros",
@@ -46,7 +48,10 @@ alloy-eips = { workspace = true, features = ["std"] }
 alloy-primitives = { workspace = true, default-features = false, features = [
 	"rlp",
 ] }
-alloy-consensus = { workspace = true, features = ["serde", "serde-bincode-compat"] }
+alloy-consensus = { workspace = true, features = [
+	"serde",
+	"serde-bincode-compat",
+] }
 
 alloy-rpc-types = { workspace = true, optional = true }
 digest = { workspace = true }
@@ -55,10 +60,14 @@ revm = { workspace = true, features = [
 	"optional_block_gas_limit",
 	"optional_eip3607",
 	"optional_no_base_fee",
+	"optional_balance_check",
 	"std",
 ] }
 reth-revm = { workspace = true }
-reth-ethereum-primitives = { workspace = true, features = ["serde", "serde-bincode-compat"] }
+reth-ethereum-primitives = { workspace = true, features = [
+	"serde",
+	"serde-bincode-compat",
+] }
 reth-primitives = { workspace = true }
 reth-primitives-traits = { workspace = true }
 revm-inspector = { workspace = true, default-features = false, optional = true }
@@ -108,7 +117,7 @@ arbitrary = [
 	"sov-uniqueness/arbitrary",
 	"alloy-consensus/arbitrary",
 	"reth-primitives-traits/arbitrary",
-	"reth-ethereum-primitives/arbitrary"
+	"reth-ethereum-primitives/arbitrary",
 ]
 native = [
 	"alloy-rpc-types",
@@ -130,5 +139,5 @@ native = [
 	"sov-rollup-interface/native",
 	"sov-kernels/native",
 	"sov-bank/native",
-	"sov-uniqueness/native"
+	"sov-uniqueness/native",
 ]

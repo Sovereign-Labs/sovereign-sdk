@@ -1,16 +1,21 @@
+use crate::evm::primitive_types::Block;
+use crate::{BlockEnv, Evm, PendingTransaction};
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root};
 use alloy_consensus::TxReceipt;
 use alloy_primitives::Bloom;
 use alloy_primitives::{B256, U256};
+#[cfg(feature = "native")]
+use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 #[cfg(feature = "native")]
 use sov_modules_api::{AccessoryStateReaderAndWriter, FinalizeHook};
 use sov_modules_api::{BlockHooks, Spec, StateCheckpoint};
 use sov_state::{ProvableNamespace, StateRoot, Storage};
-
-use crate::evm::primitive_types::Block;
-use crate::{BlockEnv, Evm, PendingTransaction};
+#[cfg(feature = "native")]
+use std::convert::Infallible;
+#[cfg(feature = "native")]
+use std::ops::RangeInclusive;
 
 impl<S: Spec> BlockHooks for Evm<S> {
     type Spec = S;
@@ -24,7 +29,8 @@ impl<S: Spec> BlockHooks for Evm<S> {
             .head
             .get(state)
             .unwrap_infallible()
-            .expect("Head block should always be set");
+            // This is justified. We set the head at genesis and never remove it — only overwrite it.
+            .expect("The impossible happened: Head block is empty");
 
         let pre_state_user_root: [u8; 32] =
             pre_state_user_root.namespace_root(ProvableNamespace::User);
@@ -37,15 +43,24 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
         let cfg = self.cfg_infallible(state);
 
+        let new_block_number = parent_block
+            .header
+            .number
+            .checked_add(1)
+            // This is justified. We will never have so many blocks.
+            .expect("The impossible happened: Block number overflow");
+
+        // TODO EVM: #1510. This is wrong we should take the sov timestamp.
+        let new_timestamp = parent_block
+            .header
+            .timestamp
+            .checked_add(cfg.chain_spec.block_timestamp_delta)
+            .expect("The impossible happened: Timestamp overflow");
+
         let new_pending_env = BlockEnv {
-            number: U256::from(parent_block.header.number.wrapping_add(1)),
+            number: U256::from(new_block_number),
             beneficiary: cfg.chain_spec.coinbase,
-            timestamp: U256::from(
-                parent_block
-                    .header
-                    .timestamp
-                    .saturating_add(cfg.chain_spec.block_timestamp_delta),
-            ),
+            timestamp: U256::from(new_timestamp),
             // WARNING: `prevrandao`` value is predictable up to [`DEFERRED_SLOTS_COUNT`] in advance,
             // Users should follow the same best practice that they would on Ethereum and use future randomness.
             // See: https://eips.ethereum.org/EIPS/eip-4399#tips-for-application-developers
@@ -53,7 +68,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
             basefee: parent_block
                 .header
                 .next_block_base_fee(cfg.chain_spec.base_fee_params)
-                .unwrap(),
+                .expect("The impossible happened: TxEip4844 is not supported"),
             gas_limit: cfg.chain_spec.block_gas_limit,
             difficulty: Default::default(),
             blob_excess_gas_and_price: None,
@@ -72,13 +87,15 @@ impl<S: Spec> BlockHooks for Evm<S> {
             .block_env
             .get(state)
             .unwrap_infallible()
-            .expect("Pending block should always be set");
+            // This is justified. We set `pending_head` in `end_rollup_block_hook`.
+            .expect("The impossible happened: Pending block is empty");
 
         let parent_block = self
             .head
             .get(state)
             .unwrap_infallible()
-            .expect("Head block should always be set")
+            // This is justified. We set the head at genesis and never remove it — only overwrite it.
+            .expect("The impossible happened: Head block is empty")
             .seal();
 
         let expected_block_number = parent_block.header.number.wrapping_add(1);
@@ -133,10 +150,14 @@ impl<S: Spec> BlockHooks for Evm<S> {
             ..Default::default()
         };
 
+        let end_tx_index = start_tx_index
+            .checked_add(pending_transactions.len() as u64)
+            // This is justified. We will never have that many txs.
+            .expect("The impossible happened: Tx count overflow");
+
         let block = Block {
             header,
-            transactions: start_tx_index
-                ..start_tx_index.saturating_add(pending_transactions.len() as u64),
+            transactions: start_tx_index..end_tx_index,
         };
 
         self.head.set(&block, state).unwrap_infallible();
@@ -147,30 +168,6 @@ impl<S: Spec> BlockHooks for Evm<S> {
             self.pending_head
                 .set(&block, &mut accessory_state)
                 .unwrap_infallible();
-
-            let mut tx_index = start_tx_index;
-            for PendingTransaction {
-                transaction,
-                receipt,
-            } in &pending_transactions
-            {
-                self.transactions
-                    .push(transaction, &mut accessory_state)
-                    .unwrap_infallible();
-                self.receipts
-                    .push(receipt, &mut accessory_state)
-                    .unwrap_infallible();
-
-                self.transaction_hashes
-                    .set(
-                        transaction.signed_transaction.hash(),
-                        &tx_index,
-                        &mut accessory_state,
-                    )
-                    .unwrap_infallible();
-
-                tx_index += 1;
-            }
         }
 
         self.pending_transactions.clear(state).unwrap_infallible();
@@ -191,27 +188,32 @@ impl<S: Spec> FinalizeHook for Evm<S> {
         root_hash: &<S::Storage as Storage>::Root,
         state: &mut impl AccessoryStateReaderAndWriter,
     ) {
-        let expected_block_number = self.blocks.len(state).unwrap_infallible();
-
         let mut block = self
             .pending_head
             .get(state)
             .unwrap_infallible()
-            .unwrap_or_else(|| {
-                panic!("Pending head must be set to block {expected_block_number}, but was empty")
-            });
+            // This is justified because we set `pending_head` in `end_rollup_block_hook`.
+            .expect("The impossible happened: the pending block should always be set.");
 
-        assert_eq!(
-            block.header.number, expected_block_number,
-            "Pending head must be set to block {}, but found block {}",
-            expected_block_number, block.header.number
-        );
         let user_space_root_hash: [u8; 32] = root_hash.namespace_root(ProvableNamespace::User);
         block.header.state_root = user_space_root_hash.into();
 
+        let block_number = block.header.number;
         let sealed_block = block.seal();
 
-        self.blocks.push(&sealed_block, state).unwrap_infallible();
+        let block_numbers_range = self.block_numbers(state);
+
+        let new_block_numbers_range =
+            crate_range_from(block_numbers_range, None, Some(block_number));
+
+        self.block_numbers
+            .set(&new_block_numbers_range, state)
+            .unwrap_infallible();
+
+        self.blocks
+            .set(&sealed_block.header.number, &sealed_block, state)
+            .unwrap_infallible();
+
         self.block_hashes
             .set(
                 &sealed_block.header.seal(),
@@ -220,5 +222,76 @@ impl<S: Spec> FinalizeHook for Evm<S> {
             )
             .unwrap_infallible();
         self.pending_head.delete(state).unwrap_infallible();
+
+        self.prune(state).unwrap_infallible();
     }
+}
+
+#[cfg(feature = "native")]
+impl<S: Spec> Evm<S> {
+    fn prune(&mut self, state: &mut impl AccessoryStateReaderAndWriter) -> Result<(), Infallible> {
+        let block_pruning_threshold = config_value!("EVM_BLOCK_PRUNING_THRESHOLD");
+        let block_numbers = self.block_numbers(state);
+
+        if let Some(last_to_remove) = block_numbers.end().checked_sub(block_pruning_threshold) {
+            let block_numbers_to_remove =
+                crate_range_from(block_numbers.clone(), None, Some(last_to_remove));
+
+            for block_number in block_numbers_to_remove {
+                let block = self
+                    .blocks
+                    .remove(&block_number, state)?
+                    // Safe because we already checked block_numbers.len()
+                    .expect("Impossible happened: no block available to prune");
+
+                let block_hash = block.header.hash();
+                self.block_hashes
+                    .remove(&block_hash, state)?
+                    // Safe, since we keep one block_hash per block.
+                    .expect("Impossible happened: no block_hasha available to prune");
+
+                for tx_idx in block.transactions {
+                    let transaction = self
+                        .transactions
+                        .remove(&tx_idx, state)?
+                        // Safe because we already checked transactions.len()
+                        // Safe, since we keep one tx_hash per tx.
+                        .expect("Impossible happened: no transaction_hashes available to prune");
+
+                    let tx_hash = transaction.signed_transaction.hash();
+
+                    self.transaction_hashes
+                        .remove(tx_hash, state)?
+                        // Safe, since we keep one tx_hash per tx.
+                        .expect("Impossible happened: no transaction_hashes available to prune");
+
+                    self.receipts
+                        .remove(&tx_idx, state)?
+                        // Safe because we already checked receipts.len()
+                        .expect("Impossible happened: no receipts available to prune");
+                }
+            }
+
+            let new_block_numbers = crate_range_from(block_numbers, Some(last_to_remove + 1), None);
+            assert!(new_block_numbers.end() - new_block_numbers.start() < block_pruning_threshold);
+            self.block_numbers.set(&new_block_numbers, state)?;
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "native")]
+fn crate_range_from(
+    mut range: RangeInclusive<u64>,
+    new_start: Option<u64>,
+    new_end: Option<u64>,
+) -> RangeInclusive<u64> {
+    if let Some(new_start) = new_start {
+        range = RangeInclusive::new(new_start, *range.end());
+    }
+    if let Some(new_end) = new_end {
+        range = RangeInclusive::new(*range.start(), new_end);
+    }
+    range
 }

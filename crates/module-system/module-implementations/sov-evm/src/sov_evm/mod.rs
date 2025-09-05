@@ -3,5 +3,7 @@
 mod api;
 mod evm;
 mod handler;
+mod inspector;
 
 pub use evm::SovEvm;
+pub use inspector::UnmeteredStorageAccessInspector;

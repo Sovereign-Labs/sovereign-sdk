@@ -49,6 +49,8 @@ async fn bank_tx_periodic_da_tests() -> anyhow::Result<()> {
         .await
         .unwrap();
 
+    test_rollup.wait_for_sequencer_ready().await?;
+
     // If the rollup throws an error, return it and stop trying to send the transaction
     tokio::select! {
         err = test_rollup.rollup_task => err?,

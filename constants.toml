@@ -10,6 +10,8 @@ freeze = [1, 1]
 # We use the ID 4321 for demo purposes. Change this value before deploying!
 CHAIN_ID = 4321
 CHAIN_NAME = "TestChain"
+# We will keep only this many blocks in the EVM module.
+EVM_BLOCK_PRUNING_THRESHOLD = 1000
 # How many rollup blocks to wait before terminating setup mode. While setup mode is enabled,
 # the rollup does not charge gas. This is useful when initializing the rollup with a bridged gas token.
 SETUP_MODE_TERMINATION_HEIGHT = 0 # Disable setup mode entirely by default.
@@ -80,6 +82,9 @@ DEFAULT_GAS_TO_CHARGE_PER_BYTE_SIGNATURE_VERIFICATION = [1, 1]
 # The fixed cost of verifying a signature
 DEFAULT_FIXED_GAS_TO_CHARGE_PER_SIGNATURE_VERIFICATION = [100, 100]
 # --- End Gas parameters to specify how to charge gas for hashing ---
+
+# The cost of EVM execution
+DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS = [1, 0]
 
 # Maximum amount of gas the sequencer can pay for the tx execution ---
 MAX_SEQUENCER_EXEC_GAS_PER_TX = [1_000_000_000, 1_000_000_000]

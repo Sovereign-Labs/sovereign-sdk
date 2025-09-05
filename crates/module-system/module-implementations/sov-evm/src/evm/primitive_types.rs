@@ -57,6 +57,15 @@ pub struct PendingTransaction {
     pub(crate) receipt: Receipt,
 }
 
+impl PendingTransaction {
+    pub(crate) fn new(transaction: TransactionSignedAndRecovered, receipt: Receipt) -> Self {
+        Self {
+            transaction,
+            receipt,
+        }
+    }
+}
+
 #[serde_as]
 #[derive(Debug, PartialEq, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Block {
@@ -139,6 +148,61 @@ impl<'de> serde::Deserialize<'de> for SealedBlock {
             header: Sealed::new_unchecked(header, seal),
             transactions,
         })
+    }
+}
+
+#[cfg(feature = "native")]
+pub(crate) enum MaybeSealedBlock {
+    Sealed(Box<SealedBlock>),
+    Pending {
+        block_number: u64,
+        first_tx_number: u64,
+        base_fee_per_gas: u64,
+    },
+}
+
+#[cfg(feature = "native")]
+impl MaybeSealedBlock {
+    pub fn hash(&self) -> Option<B256> {
+        match self {
+            Self::Sealed(block) => Some(block.header.hash()),
+            Self::Pending { .. } => None,
+        }
+    }
+
+    pub fn number(&self) -> u64 {
+        match self {
+            Self::Sealed(block) => block.header.number,
+            Self::Pending { block_number, .. } => *block_number,
+        }
+    }
+
+    pub fn transactions_start(&self) -> u64 {
+        match self {
+            Self::Sealed(block) => block.transactions.start,
+            Self::Pending {
+                first_tx_number, ..
+            } => *first_tx_number,
+        }
+    }
+
+    pub fn timestamp(&self) -> Option<u64> {
+        match self {
+            Self::Sealed(block) => Some(block.header.timestamp),
+            Self::Pending { .. } => None,
+        }
+    }
+
+    pub fn base_fee_per_gas(&self) -> u64 {
+        match self {
+            Self::Sealed(block) => block
+                .header
+                .base_fee_per_gas
+                .expect("Legacy blocks with no base fee are unsupported"),
+            Self::Pending {
+                base_fee_per_gas, ..
+            } => *base_fee_per_gas,
+        }
     }
 }
 

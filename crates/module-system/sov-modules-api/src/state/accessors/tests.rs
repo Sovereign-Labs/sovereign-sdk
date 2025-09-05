@@ -92,7 +92,7 @@ fn test_witness_generation() {
 
 fn test_values<S: Spec>(state: &mut StateCheckpoint<S>) {
     // Test overriding empty value.
-    let mut metric = StateAccessMetric::new("get_size", 8);
+    let mut metric = StateAccessMetric::new_size(std::sync::Arc::new(vec![]), None);
     {
         let mut state_value =
             StateValue::<u64>::with_codec(Prefix::new(vec![VAL_ID_1]), BorshCodec);

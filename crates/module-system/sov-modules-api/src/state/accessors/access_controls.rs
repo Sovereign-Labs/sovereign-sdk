@@ -48,9 +48,25 @@ macro_rules! inner_impl_charge_gas_state_infallible_reader {
             Codec: StateCodec,
             Codec::ValueCodec: StateItemCodec<V>,
         {
+            #[cfg(feature = "native")]
+            use crate::state::accessors::StateMetricsProvider;
             let storage_value = <Self as StateReader<$namespace>>::get(self, storage_key)?;
-            Ok(storage_value
-                .map(|storage_value| codec.value_codec().decode_unwrap(storage_value.value())))
+            Ok(storage_value.map(|storage_value| {
+                #[cfg(feature = "native")]
+                let deserialization_start = std::time::Instant::now();
+                let value = codec.value_codec().decode_unwrap(storage_value.value());
+                #[cfg(feature = "native")]
+                {
+                    let deserialization_duration = deserialization_start.elapsed();
+                    self.metrics().add_deserialize_metric(
+                        storage_key.key(),
+                        storage_key.display_fn(),
+                        storage_value.size(),
+                        deserialization_duration,
+                    );
+                }
+                value
+            }))
         }
     };
 }
@@ -179,7 +195,7 @@ impl<S: Spec> StateReader<Accessory> for AccessoryStateCheckpoint<'_, S> {
     type Error = Infallible;
     fn get(&mut self, key: &SlotKey) -> Result<Option<SlotValue>, Self::Error> {
         use sov_metrics::StateAccessMetric;
-        let mut metric = StateAccessMetric::new("get_accessory", key.size());
+        let mut metric = StateAccessMetric::new_read(key.key(), key.display_fn());
         let res = Ok(self.checkpoint.delta.get(
             <Accessory as sov_state::CompileTimeNamespace>::NAMESPACE,
             key,
@@ -201,8 +217,22 @@ impl<S: Spec> StateReader<Accessory> for AccessoryStateCheckpoint<'_, S> {
     {
         let storage_value = <Self as StateReader<Accessory>>::get(self, storage_key)?;
 
-        Ok(storage_value
-            .map(|storage_value| codec.value_codec().decode_unwrap(storage_value.value())))
+        Ok(storage_value.map(|storage_value| {
+            #[cfg(feature = "native")]
+            let deserialization_start = std::time::Instant::now();
+            let value = codec.value_codec().decode_unwrap(storage_value.value());
+            #[cfg(feature = "native")]
+            {
+                let deserialization_duration = deserialization_start.elapsed();
+                self.checkpoint.metrics.add_deserialize_metric(
+                    storage_key.key(),
+                    storage_key.display_fn(),
+                    storage_value.size(),
+                    deserialization_duration,
+                );
+            }
+            value
+        }))
     }
 }
 

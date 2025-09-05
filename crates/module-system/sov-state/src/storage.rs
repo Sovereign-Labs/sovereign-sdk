@@ -95,6 +95,11 @@ impl SlotKey {
     pub fn size(&self) -> usize {
         self.key.len()
     }
+
+    /// Returns the display function for this key.
+    pub fn display_fn(&self) -> Option<ArcFormatFn> {
+        self.display_fn.clone()
+    }
 }
 
 impl AsRef<Vec<u8>> for SlotKey {

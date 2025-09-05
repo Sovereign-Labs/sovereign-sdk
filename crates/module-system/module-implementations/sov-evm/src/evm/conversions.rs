@@ -26,18 +26,20 @@ impl From<SealedBlock> for BlockEnv {
     }
 }
 
-pub(crate) fn create_tx_env(account_nonce: u64, tx: &TransactionSigned, signer: Address) -> TxEnv {
+/// Converts tx to TxEnv while overriding the signer and nonce
+pub fn create_tx_env(tx: &TransactionSigned, signer: Address, nonce: u64, gas_limit: u64) -> TxEnv {
     TxEnv {
-        tx_type: TransactionType::Eip1559.into(),
         caller: signer,
-        gas_limit: tx.gas_limit(),
+        gas_limit,
+        nonce,
+
+        tx_type: TransactionType::Eip1559.into(),
         gas_price: tx.effective_gas_price(None),
         gas_priority_fee: tx.max_priority_fee_per_gas(),
         kind: tx.to().into(),
         value: tx.value(),
         data: tx.input().clone(),
         chain_id: tx.chain_id(),
-        nonce: account_nonce,
         ..Default::default()
     }
 }

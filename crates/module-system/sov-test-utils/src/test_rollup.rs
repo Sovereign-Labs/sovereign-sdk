@@ -791,6 +791,26 @@ where
             .await
     }
 
+    /// Polls the sequencer until is_ready() returns Ok(()).
+    pub async fn wait_for_sequencer_ready(&self) -> anyhow::Result<()> {
+        let wait_loop = async {
+            loop {
+                match self.client.http_get("/sequencer/ready").await {
+                    Ok(_) => {
+                        return Ok(());
+                    }
+                    Err(_) => {
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+                }
+            }
+        };
+
+        timeout(Duration::from_secs(20), wait_loop)
+            .await
+            .context("Timeout waiting for sequencer to be ready after 10 seconds")?
+    }
+
     /// Restarts the rollup.
     pub async fn restart(self) -> anyhow::Result<Self> {
         self.restart_with_heights(None, None).await
@@ -812,7 +832,9 @@ where
             c.start_at_rollup_height = start_at_height;
             c.stop_at_rollup_height = stop_at_height;
         });
-        builder.start().await
+        let rollup = builder.start().await?;
+        rollup.wait_for_sequencer_ready().await?;
+        Ok(rollup)
     }
 
     /// Wait until sequencer reaches a specific height.

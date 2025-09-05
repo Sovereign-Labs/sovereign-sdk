@@ -1,6 +1,8 @@
-pub mod display;
+mod visitors;
+pub use visitors::display;
 #[cfg(feature = "serde")]
-pub mod json_to_borsh;
+pub use visitors::json_to_borsh;
+
 pub mod schema;
 pub mod ty;
 

@@ -3,6 +3,7 @@ use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_eips::eip2718::Encodable2718;
+use alloy_primitives::B256;
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use reth_primitives::TransactionSigned;
 use secp256k1::rand::SeedableRng as _;
@@ -15,7 +16,6 @@ use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
 use sov_test_utils::runtime::{genesis::optimistic::HighLevelOptimisticGenesisConfig, TestRunner};
 use sov_test_utils::{SimpleStorageContract, TransactionType, TEST_DEFAULT_USER_BALANCE};
-
 pub(crate) struct EvmAccount(SecretKey);
 
 impl EvmAccount {
@@ -86,7 +86,7 @@ pub(crate) fn create_transfer_tx(
     from: &EvmAccount,
     to: &EvmAccount,
     value: u128,
-) -> TransactionType<RT, S> {
+) -> TxWithNonceAndHash {
     let tx = TxEip1559 {
         to: TxKind::Call(to.address()),
         value: U256::from(value),
@@ -96,11 +96,18 @@ pub(crate) fn create_transfer_tx(
     create_tx(from, tx)
 }
 
+#[derive(Clone)]
+pub(crate) struct TxWithNonceAndHash {
+    pub(crate) nonce: u64,
+    pub(crate) hash: B256,
+    pub(crate) tx: TransactionType<RT, S>,
+}
+
 pub(crate) fn create_deploy_tx(
     nonce: u64,
     contract: &SimpleStorageContract,
     account: &EvmAccount,
-) -> TransactionType<RT, S> {
+) -> TxWithNonceAndHash {
     let tx = TxEip1559 {
         input: Bytes::from(contract.byte_code().to_vec()),
         nonce,
@@ -115,7 +122,7 @@ pub(crate) fn create_set_arg_tx(
     contract: &SimpleStorageContract,
     contract_addr: Address,
     account: &EvmAccount,
-) -> TransactionType<RT, S> {
+) -> TxWithNonceAndHash {
     let tx = TxEip1559 {
         to: TxKind::Call(contract_addr),
         input: Bytes::from(hex::decode(hex::encode(contract.set_call_data(set_arg))).unwrap()),
@@ -125,15 +132,20 @@ pub(crate) fn create_set_arg_tx(
     create_tx(account, tx)
 }
 
-fn create_tx(account: &EvmAccount, tx: TxEip1559) -> TransactionType<RT, S> {
+fn create_tx(account: &EvmAccount, tx: TxEip1559) -> TxWithNonceAndHash {
     let tx_with_defaults = TxEip1559 {
         gas_limit: 1_000_000,
         max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
         chain_id: config_value!("CHAIN_ID"),
         ..tx
     };
-    let (signed_eth_tx, _) = account.sign(TypedTransaction::Eip1559(tx_with_defaults));
+    let (signed_eth_tx, tx_env) = account.sign(TypedTransaction::Eip1559(tx_with_defaults));
     let data = borsh::to_vec(&signed_eth_tx).unwrap();
     let raw_tx = RawTx { data };
-    TransactionType::PreAuthenticated(RT::encode_with_ethereum_auth(raw_tx))
+
+    TxWithNonceAndHash {
+        nonce: tx.nonce,
+        hash: *tx_env.hash(),
+        tx: TransactionType::PreAuthenticated(RT::encode_with_ethereum_auth(raw_tx)),
+    }
 }

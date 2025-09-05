@@ -1,6 +1,3 @@
-use std::convert::Infallible;
-
-use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{Transaction as TransactionTrait, TxReceipt};
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
@@ -12,26 +9,25 @@ use error::ensure_success;
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
 use reth_primitives::{Recovered, TransactionSigned};
-use reth_rpc_eth_types::{EthApiError, RevertError, RpcInvalidTransactionError};
-use revm::context::result::{
-    EVMError, ExecutionResult, HaltReason, InvalidHeader, InvalidTransaction,
-};
-use revm::context::{BlockEnv, CfgEnv, TransactTo, TxEnv};
+use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
+use revm::context::result::{EVMError, InvalidHeader};
+use revm::context::{BlockEnv, CfgEnv};
 use revm::Database;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{ApiStateAccessor, InfallibleStateAccessor, Spec};
-use tracing::{debug, trace};
+use sov_modules_api::{ApiStateAccessor, Spec, StateAccessor};
+use tracing::debug;
 
-use crate::evm::db::EvmDb;
+use crate::db::EvmDb;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, SealedBlock, TransactionSignedAndRecovered};
 use crate::executor::get_cfg_env;
 use crate::helpers::{
     from_primitive_with_hash, from_recovered_with_block_context, prepare_call_env,
 };
-use crate::{Evm, MIN_CREATE_GAS, MIN_TRANSACTION_GAS};
+use crate::primitive_types::MaybeSealedBlock;
+use crate::Evm;
 
 pub(crate) mod error;
 
@@ -101,51 +97,48 @@ where
             "EVM module JSON-RPC request to `eth_getBlockByNumber`"
         );
 
-        let block = self.get_sealed_block_by_number(block_number, state);
+        let maybe_block = || -> Option<Block> {
+            let block = self.get_sealed_block_by_number(block_number, state)?;
+            let header = from_primitive_with_hash(block.header.clone());
 
-        // Build rpc header response
-        let header = from_primitive_with_hash(block.header.clone());
+            let transactions = if Some(true) == details {
+                BlockTransactions::Full(
+                    block
+                        .transactions
+                        .clone()
+                        .map(|index| {
+                            let tx = self.transactions.get(&index, state).unwrap_infallible()?;
+                            Some(from_recovered_with_block_context(
+                                tx.into(),
+                                block.header.seal(),
+                                block.header.number,
+                                block.header.base_fee_per_gas,
+                                U256::from(index - block.transactions.start),
+                            ))
+                        })
+                        .collect::<Option<Vec<_>>>()?,
+                )
+            } else {
+                BlockTransactions::Hashes(
+                    block
+                        .transactions
+                        .clone()
+                        .map(|index| {
+                            let tx = self.transactions.get(&index, state).unwrap_infallible()?;
+                            Some(*tx.signed_transaction.hash())
+                        })
+                        .collect::<Option<Vec<_>>>()?,
+                )
+            };
 
-        // Collect transactions with ids from db
-        let transactions_with_ids = block.transactions.clone().map(|id| {
-            let tx = self
-                .transactions
-                .get(id, state)
-                .unwrap_infallible()
-                .expect("Transaction must be set");
-            (id, tx)
-        });
-
-        // Build rpc transactions response
-        let transactions = match details {
-            Some(true) => BlockTransactions::Full(
-                transactions_with_ids
-                    .map(|(id, tx)| {
-                        from_recovered_with_block_context(
-                            tx.clone().into(),
-                            block.header.seal(),
-                            block.header.number,
-                            block.header.base_fee_per_gas,
-                            U256::from(id - block.transactions.start),
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-            ),
-            _ => BlockTransactions::Hashes({
-                transactions_with_ids
-                    .map(|(_, tx)| *tx.signed_transaction.hash())
-                    .collect::<Vec<_>>()
-            }),
+            Some(Block {
+                header,
+                transactions,
+                ..Default::default()
+            })
         };
 
-        // Build rpc block response
-        let block = Block {
-            header,
-            transactions,
-            ..Default::default()
-        };
-
-        Ok(Some(block))
+        Ok(maybe_block())
     }
 
     /// Handler for: `eth_getBalance`
@@ -162,7 +155,7 @@ where
         let balance = self
             .get_db(state)
             .basic(address)
-            .unwrap_infallible()
+            .map_err(EthApiError::from)?
             .map(|account| account.balance)
             .unwrap_or_default();
 
@@ -268,21 +261,21 @@ where
         hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Transaction>> {
-        let tx_number = self.get_tx_index_by_hash(&hash, state);
+        let mut maybe_tx = || -> Option<Transaction> {
+            let tx_number = self.get_tx_index_by_hash(&hash, state)?;
+            let tx = self.transaction(tx_number, state)?;
+            let block = self.block(tx.block_number, state)?;
 
-        let transaction = tx_number.map(|number| {
-            let tx = self.transaction(number, state);
-            let block = self.block(tx.block_number, state);
-
-            from_recovered_with_block_context(
+            Some(from_recovered_with_block_context(
                 tx.into(),
                 block.header.seal(),
                 block.header.number,
                 block.header.base_fee_per_gas,
-                U256::from(tx_number.unwrap() - block.transactions.start),
-            )
-        });
+                U256::from(tx_number - block.transactions.start),
+            ))
+        };
 
+        let transaction = maybe_tx();
         debug!(
             %hash,
             ?transaction,
@@ -304,17 +297,15 @@ where
             "EVM module JSON-RPC request to `eth_getTransactionReceipt`"
         );
 
-        let tx_number = self.get_tx_index_by_hash(&hash, state);
+        let mut maybe_receipt = || -> Option<TransactionReceipt> {
+            let number = self.get_tx_index_by_hash(&hash, state)?;
+            let tx = self.transaction(number, state)?;
+            let block = self.get_maybe_sealed_block(&tx, state);
+            let receipt = self.receipt(number, state)?;
+            Some(build_rpc_receipt(block, tx, number, receipt))
+        };
 
-        let receipt = tx_number.map(|number| {
-            let tx = self.transaction(number, state);
-            let block = self.block(tx.block_number, state);
-            let receipt = self.receipt(tx_number.unwrap(), state);
-
-            build_rpc_receipt(block, tx, tx_number.unwrap(), receipt)
-        });
-
-        Ok(receipt)
+        Ok(maybe_receipt())
     }
 
     /// Handler for: `eth_call`
@@ -331,7 +322,7 @@ where
     ) -> RpcResult<Bytes> {
         debug!("EVM module JSON-RPC request to `eth_call`");
 
-        let block_env = self.resolve_block_env(block_number, state);
+        let block_env = self.resolve_block_env(block_number, state).unwrap();
         let tx_env = prepare_call_env(&block_env, request.clone()).unwrap();
 
         let cfg = self.cfg_infallible(state);
@@ -339,9 +330,9 @@ where
 
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
-        let result = match executor::inspect(evm_db, &block_env, tx_env, cfg_env) {
-            Ok(result) => result.result,
-            Err(err) => return Err(eth_api_into_rpc_error(eth_from_infallible(err))),
+        let result = match executor::call(evm_db, &block_env, tx_env, cfg_env) {
+            Ok(result) => result,
+            Err(err) => return Err(eth_api_into_rpc_error(eth_from_evm_error(err))),
         };
 
         ensure_success(result).map_err(eth_api_into_rpc_error)
@@ -350,10 +341,12 @@ where
     /// Handler for: `eth_blockNumber`
     #[rpc_method(name = "eth_blockNumber")]
     pub fn block_number(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
-        let block_number = self.blocks.len(state).unwrap_infallible().saturating_sub(1);
-        debug!(%block_number, "EVM module JSON-RPC request to `eth_blockNumber`");
-
-        Ok(U256::from(block_number))
+        let block_number_range = self
+            .block_numbers
+            .get(state)
+            .unwrap_infallible()
+            .expect("Block number must be set");
+        Ok(U256::from(*block_number_range.end()))
     }
 
     /// Handler for: `eth_estimateGas`
@@ -361,140 +354,12 @@ where
     #[rpc_method(name = "eth_estimateGas")]
     pub fn eth_estimate_gas(
         &self,
-        request: TransactionRequest,
-        block_number: Option<String>,
-        state: &mut ApiStateAccessor<S>,
+        _request: TransactionRequest,
+        _block_number: Option<String>,
+        _state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
-        debug!("EVM module JSON-RPC request to `eth_estimateGas`");
-        let mut block_env = self.resolve_block_env(block_number, state);
-
-        let tx_env = prepare_call_env(&block_env, request.clone()).unwrap();
-        trace!(?tx_env, "TxEnv is prepared");
-
-        let cfg = self.cfg_infallible(state);
-        let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
-
-        let request_gas = request.gas;
-        let request_gas_price = request.gas_price;
-        let env_gas_limit = block_env.gas_limit;
-
-        // get the highest possible gas limit, either the request's set value or the currently
-        // configured gas limit
-        let mut highest_gas_limit = request.gas.unwrap_or(env_gas_limit);
-        trace!(
-            ?request_gas,
-            ?request_gas_price,
-            ?env_gas_limit,
-            ?highest_gas_limit,
-            "Gas limits"
-        );
-
-        let account = self
-            .get_db(state)
-            .basic(tx_env.caller)
-            .unwrap_infallible()
-            .unwrap_or_default();
-
-        // if the request is a simple transfer, can we optimize?
-        if tx_env.data.is_empty() {
-            if let TransactTo::Call(to) = tx_env.kind {
-                let to_account = self
-                    .accounts
-                    .get(&to, state)
-                    .unwrap_infallible()
-                    .map(|account| account.0)
-                    .unwrap_or_default();
-                if KECCAK_EMPTY == to_account.code_hash {
-                    // simple transfer, check if the caller has sufficient funds
-                    let available_funds = account.balance;
-
-                    if tx_env.value > available_funds {
-                        return Err(invalid_tx_into_rpc_error(
-                            RpcInvalidTransactionError::InsufficientFundsForTransfer,
-                        ));
-                    }
-                    return Ok(U64::from(MIN_TRANSACTION_GAS));
-                }
-            }
-        }
-
-        // check funds of the sender
-        if tx_env.gas_price > 0 {
-            // allowance is (balance - tx.value) / tx.gas_price
-            let allowance =
-                ((account.balance - tx_env.value).to::<u128>() / tx_env.gas_price) as u64;
-
-            if highest_gas_limit > allowance {
-                // cap the highest gas limit by max gas caller can afford with a given gas price
-                highest_gas_limit = allowance;
-            }
-        }
-
-        // if the provided gas limit is less than the computed cap, use that
-        block_env.gas_limit = std::cmp::min(tx_env.gas_limit, highest_gas_limit);
-        trace!(?block_env, "Block env is configured");
-
-        let evm_db = self.get_db(state);
-
-        // execute the call without writing to db
-        let result = executor::inspect(evm_db, &block_env, tx_env.clone(), cfg_env.clone());
-
-        // Exceptional case: init used too much gas, we need to increase the gas limit and try
-        // again
-        if let Err(EVMError::Transaction(InvalidTransaction::CallerGasLimitMoreThanBlock)) = result
-        {
-            // if price or limit was included in the request, then we can execute the request
-            // again with the block's gas limit to check if revert is gas related or not
-            if request_gas.is_some() || request_gas_price.is_some() {
-                let evm_db = self.get_db(state);
-                return Err(eth_api_into_rpc_error(map_out_of_gas_err(
-                    block_env, tx_env, cfg_env, evm_db,
-                )));
-            }
-        }
-
-        let result = match result {
-            Ok(result) => match result.result {
-                ExecutionResult::Success { .. } => result.result,
-                ExecutionResult::Halt { reason, gas_used } => {
-                    return Err(invalid_tx_into_rpc_error(RpcInvalidTransactionError::halt(
-                        reason, gas_used,
-                    )))
-                }
-                ExecutionResult::Revert { output, .. } => {
-                    // if price or limit was included in the request,
-                    // then we can execute the request
-                    // again with the block's gas limit to check if revert is gas related or not
-                    return if request_gas.is_some() || request_gas_price.is_some() {
-                        let evm_db = self.get_db(state);
-                        Err(eth_api_into_rpc_error(map_out_of_gas_err(
-                            block_env, tx_env, cfg_env, evm_db,
-                        )))
-                    } else {
-                        // the transaction did revert
-                        Err(invalid_tx_into_rpc_error(
-                            RpcInvalidTransactionError::Revert(RevertError::new(output)),
-                        ))
-                    };
-                }
-            },
-            Err(err) => return Err(eth_api_into_rpc_error(eth_from_infallible(err))),
-        };
-
-        let gas_limit = self.bin_search_gas_limit(
-            &cfg_env,
-            &block_env,
-            &tx_env,
-            result,
-            highest_gas_limit,
-            state,
-        )?;
-
-        debug!(
-            %gas_limit,
-            "EVM module JSON-RPC response from `eth_estimateGas`"
-        );
-        Ok(U64::from(gas_limit))
+        // TODO EVM: #1510
+        Ok(U64::from(100_000))
     }
 }
 
@@ -502,31 +367,65 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    fn get_maybe_sealed_block(
+        &self,
+        tx: &TransactionSignedAndRecovered,
+        state: &mut ApiStateAccessor<S>,
+    ) -> MaybeSealedBlock {
+        let block = self.blocks.get(&tx.block_number, state).unwrap_infallible();
+        if let Some(block) = block {
+            return MaybeSealedBlock::Sealed(block.into());
+        }
+        let current_block_env = self
+            .block_env
+            .get(state)
+            .unwrap_infallible()
+            .unwrap_or_default();
+        let block_num: u64 = current_block_env
+            .number
+            .try_into()
+            .expect("Block number is too large to fit in a u64. It's over!");
+        assert_eq!(block_num, tx.block_number, "Transaction is in a block that is not yet sealed, but that block is not yet pending! This is impossible!");
+
+        let head = self.head.get(state).unwrap_infallible().unwrap();
+        let first_tx_index = head.transactions.end;
+
+        MaybeSealedBlock::Pending {
+            block_number: tx.block_number,
+            first_tx_number: first_tx_index,
+            base_fee_per_gas: current_block_env.basefee,
+        }
+    }
+
     fn get_sealed_block_by_number(
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> SealedBlock {
+    ) -> Option<SealedBlock> {
         // safe, finalized, and pending are not supported
         match block_number {
-            Some(ref block_number) if block_number == "earliest" => self
-                .blocks
-                .get(0, state)
-                .unwrap_infallible()
-                .expect("Genesis block must be set"),
-            Some(ref block_number) if block_number == "latest" => self
-                .blocks
-                .last(state)
-                .unwrap_infallible()
-                .expect("Head block must be set"),
+            Some(ref block_number) if block_number == "earliest" => {
+                let block_numbers = self.block_numbers.get(state).unwrap_infallible().unwrap();
+                let first_block_number = block_numbers.start();
+
+                self.blocks
+                    .get(first_block_number, state)
+                    .unwrap_infallible()
+            }
+            Some(ref block_number) if block_number == "latest" => {
+                let block_numbers = self.block_numbers.get(state).unwrap_infallible().unwrap();
+                let last_block_number = block_numbers.end();
+
+                self.blocks
+                    .get(last_block_number, state)
+                    .unwrap_infallible()
+            }
             Some(ref block_number) => {
                 // hex representation may have 0x prefix
                 let block_number = u64::from_str_radix(block_number.trim_start_matches("0x"), 16)
                     .expect("Block number must be a valid hex number, with or without 0x prefix");
-                self.blocks
-                    .get(block_number, state)
-                    .unwrap_infallible()
-                    .expect("Block must be set")
+
+                self.blocks.get(&block_number, state).unwrap_infallible()
             }
             None => self.get_sealed_block_by_number(Some("latest".into()), state),
         }
@@ -536,104 +435,16 @@ where
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> BlockEnv {
+    ) -> Option<BlockEnv> {
         match block_number {
-            Some(ref block_number) if block_number == "pending" => self
-                .block_env
-                .get(state)
-                .unwrap_infallible()
-                .unwrap_or_default()
-                .clone(),
+            Some(ref block_number) if block_number == "pending" => {
+                self.block_env.get(state).unwrap_infallible()
+            }
             _ => {
-                let block = self.get_sealed_block_by_number(block_number, state);
-                BlockEnv::from(block)
+                let block = self.get_sealed_block_by_number(block_number, state)?;
+                Some(BlockEnv::from(block))
             }
         }
-    }
-
-    fn bin_search_gas_limit(
-        &self,
-        cfg_env: &CfgEnv,
-        block_env: &BlockEnv,
-        tx_env: &TxEnv,
-        result: ExecutionResult,
-        highest_gas_limit: u64,
-        state: &mut ApiStateAccessor<S>,
-    ) -> Result<u64, ErrorObjectOwned> {
-        // at this point, we know the call succeeded but want to find the _best_ (lowest) gas the
-        // transaction succeeds with.
-        // we find this by doing a binary search over the
-        // possible range NOTE: this is the gas the transaction used, which is less than the
-        // transaction requires succeeding
-        let gas_used = result.gas_used();
-        // the lowest value is capped by the gas it takes for a transfer
-        let mut lowest_gas_limit = if tx_env.kind.is_create() {
-            MIN_CREATE_GAS
-        } else {
-            MIN_TRANSACTION_GAS
-        };
-        let mut highest_gas_limit: u64 = highest_gas_limit;
-        // pick a point that's close to the estimated gas
-        let mut mid_gas_limit = std::cmp::min(
-            gas_used * 3,
-            ((highest_gas_limit as u128 + lowest_gas_limit as u128) / 2) as u64,
-        );
-        // binary search
-        while (highest_gas_limit - lowest_gas_limit) > 1 {
-            let mut tx_env = tx_env.clone();
-            tx_env.gas_limit = mid_gas_limit;
-
-            let evm_db = self.get_db(state);
-            let result = executor::inspect(evm_db, block_env, tx_env.clone(), cfg_env.clone());
-
-            // Exceptional case: init used too much gas, we need to increase the gas limit and try
-            // again
-            if let Err(EVMError::Transaction(InvalidTransaction::CallerGasLimitMoreThanBlock)) =
-                result
-            {
-                // increase the lowest gas limit
-                lowest_gas_limit = mid_gas_limit;
-
-                // new midpoint
-                mid_gas_limit = ((highest_gas_limit as u128 + lowest_gas_limit as u128) / 2) as u64;
-                continue;
-            }
-
-            match result {
-                Ok(result) => match result.result {
-                    ExecutionResult::Success { .. } => {
-                        // cap the highest gas limit with succeeding gas limit
-                        highest_gas_limit = mid_gas_limit;
-                    }
-                    ExecutionResult::Revert { .. } => {
-                        // increase the lowest gas limit
-                        lowest_gas_limit = mid_gas_limit;
-                    }
-                    ExecutionResult::Halt { reason, .. } => {
-                        match reason {
-                            HaltReason::OutOfGas(_) => {
-                                // increase the lowest gas limit
-                                lowest_gas_limit = mid_gas_limit;
-                            }
-                            err => {
-                                // these should be unreachable because we know the transaction succeeds,
-                                // but we consider these cases an error
-                                return Err(invalid_tx_into_rpc_error(
-                                    RpcInvalidTransactionError::EvmHalt(err),
-                                ));
-                            }
-                        }
-                    }
-                },
-                Err(err) => {
-                    return Err(eth_api_into_rpc_error(eth_from_infallible(err)));
-                }
-            };
-
-            // new midpoint
-            mid_gas_limit = ((highest_gas_limit as u128 + lowest_gas_limit as u128) / 2) as u64;
-        }
-        Ok(highest_gas_limit)
     }
 }
 
@@ -651,7 +462,7 @@ fn get_cfg_env_template() -> CfgEnv {
 
 // modified from: https://github.com/paradigmxyz/reth many times
 pub(crate) fn build_rpc_receipt(
-    block: SealedBlock,
+    block: MaybeSealedBlock,
     tx: TransactionSignedAndRecovered,
     tx_number: u64,
     receipt: Receipt,
@@ -659,10 +470,13 @@ pub(crate) fn build_rpc_receipt(
     let transaction: Recovered<TransactionSigned> = tx.into();
     let from = transaction.signer();
 
-    let block_hash = Some(block.header.seal());
-    let block_number = Some(block.header.number);
+    let block_hash = block.hash();
+    let block_number = Some(block.number());
     let transaction_hash = Some(*transaction.hash());
-    let transaction_index = tx_number - block.transactions.start;
+    // Safety: The transaction cannot have a lower number than the block start
+    let transaction_index = tx_number
+        .checked_sub(block.transactions_start())
+        .expect("Overflow while subtracting block start from tx number. This is a bug!");
 
     let logs: Vec<Log> = receipt
         .receipt
@@ -673,7 +487,7 @@ pub(crate) fn build_rpc_receipt(
             inner: log.clone(),
             block_hash,
             block_number,
-            block_timestamp: Some(block.header.timestamp),
+            block_timestamp: block.timestamp(),
             transaction_hash,
             transaction_index: Some(transaction_index),
             log_index: Some(receipt.log_index_start + tx_log_idx as u64),
@@ -701,7 +515,7 @@ pub(crate) fn build_rpc_receipt(
         block_hash,
         block_number,
         gas_used: receipt.gas_used,
-        effective_gas_price: transaction.effective_gas_price(block.header.base_fee_per_gas),
+        effective_gas_price: transaction.effective_gas_price(Some(block.base_fee_per_gas())),
         blob_gas_used: None,
         blob_gas_price: None,
         from,
@@ -710,41 +524,24 @@ pub(crate) fn build_rpc_receipt(
     }
 }
 
-fn map_out_of_gas_err<Ws: InfallibleStateAccessor, S: Spec>(
-    block_env: BlockEnv,
-    mut tx_env: TxEnv,
-    cfg_env: CfgEnv,
-    db: EvmDb<Ws, S>,
-) -> EthApiError
-where
-    S::Address: FromVmAddress<EthereumAddress>,
-{
-    let req_gas_limit = tx_env.gas_limit;
-    tx_env.gas_limit = block_env.gas_limit;
-    let res = executor::inspect(db, &block_env, tx_env, cfg_env).unwrap();
-    match res.result {
-        ExecutionResult::Success { .. } => {
-            // a transaction succeeded by manually increasing the gas limit to
-            // highest, which means the caller lacks funds to pay for the tx
-            RpcInvalidTransactionError::BasicOutOfGas(req_gas_limit).into()
-        }
-        ExecutionResult::Revert { output, .. } => {
-            // reverted again after bumping the limit
-            RpcInvalidTransactionError::Revert(RevertError::new(output)).into()
-        }
-        ExecutionResult::Halt { reason, .. } => RpcInvalidTransactionError::EvmHalt(reason).into(),
-    }
-}
-
-fn eth_from_infallible(err: EVMError<Infallible>) -> EthApiError {
+fn eth_from_evm_error<Ws: StateAccessor>(err: EVMError<crate::db::Error<Ws>>) -> EthApiError {
     match err {
         EVMError::Transaction(err) => RpcInvalidTransactionError::from(err).into(),
         EVMError::Header(InvalidHeader::PrevrandaoNotSet) => EthApiError::PrevrandaoNotSet,
         EVMError::Header(InvalidHeader::ExcessBlobGasNotSet) => EthApiError::ExcessBlobGasNotSet,
-        EVMError::Database(_) => {
-            panic!("Infallible error triggered")
-        }
+        EVMError::Database(db_err) => db_err.into(),
         EVMError::Custom(data) => EthApiError::EvmCustom(data),
+    }
+}
+
+impl<Ws: StateAccessor> From<crate::db::Error<Ws>> for EthApiError {
+    fn from(err: crate::db::Error<Ws>) -> Self {
+        RpcInvalidTransactionError::other(ErrorObject::owned(
+            -32603,
+            format!("Database error: {err}"),
+            None::<()>,
+        ))
+        .into()
     }
 }
 

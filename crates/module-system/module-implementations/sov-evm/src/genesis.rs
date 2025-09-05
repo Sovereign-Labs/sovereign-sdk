@@ -7,10 +7,11 @@ use revm::state::AccountInfo;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::{GenesisState, Module, Spec};
 
-use crate::evm::db_init::InitEvmDb;
+use crate::db::init::InitEvmDb;
 use crate::evm::primitive_types::Block;
-
 use crate::{Evm, EvmGenesisConfig, EvmRuntimeConfig};
+#[cfg(feature = "native")]
+use std::ops::RangeInclusive;
 
 /// Evm account.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
@@ -55,7 +56,10 @@ where
         self.cfg.set(&chain_cfg, state)?;
         self.head.set(&block, state)?;
         #[cfg(feature = "native")]
-        self.pending_head.set(&block, state)?;
+        {
+            self.block_numbers.set(&RangeInclusive::new(0, 0), state)?;
+            self.pending_head.set(&block, state)?;
+        }
 
         Ok(())
     }

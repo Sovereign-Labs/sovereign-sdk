@@ -350,7 +350,21 @@ macro_rules! blanket_impl_metered_state_reader {
                             namespace: <$namespace as sov_state::CompileTimeNamespace>::NAMESPACE,
                         })?;
 
-                    Ok(codec.value_codec().decode_unwrap(storage_value.value()))
+                    #[cfg(feature = "native")]
+                    let deserialization_start = std::time::Instant::now();
+                    let value = codec.value_codec().decode_unwrap(storage_value.value());
+                    #[cfg(feature = "native")]
+                    {
+                        let deserialization_duration = deserialization_start.elapsed();
+                        self.metrics().add_deserialize_metric(
+                            storage_key.key(),
+                            storage_key.display_fn(),
+                            storage_value.size(),
+                            deserialization_duration,
+                        );
+                    }
+
+                    Ok(value)
                 })
                 .transpose()
         }
@@ -371,7 +385,7 @@ impl<T: AccessoryStateReader + StateMetricsProvider> StateReader<Accessory> for 
     /// Get a value from the storage.
     fn get(&mut self, key: &SlotKey) -> Result<Option<SlotValue>, Self::Error> {
         use sov_metrics::StateAccessMetric;
-        let mut metric = StateAccessMetric::new("accessory::get", key.size());
+        let mut metric = StateAccessMetric::new_read(key.key(), key.display_fn());
         let val = self.get_value(Accessory::NAMESPACE, key, &mut metric);
         self.metrics().push(metric);
         Ok(val)
@@ -388,9 +402,24 @@ impl<T: AccessoryStateReader + StateMetricsProvider> StateReader<Accessory> for 
         Codec::ValueCodec: StateItemCodec<V>,
     {
         let storage_value = <Self as StateReader<Accessory>>::get(self, storage_key)?;
+        let value = storage_value.map(|storage_value| {
+            #[cfg(feature = "native")]
+            let deserialization_start = std::time::Instant::now();
+            let value = codec.value_codec().decode_unwrap(storage_value.value());
+            #[cfg(feature = "native")]
+            {
+                let deserialization_duration = deserialization_start.elapsed();
+                self.metrics().add_deserialize_metric(
+                    storage_key.key(),
+                    storage_key.display_fn(),
+                    storage_value.size(),
+                    deserialization_duration,
+                );
+            }
+            value
+        });
 
-        Ok(storage_value
-            .map(|storage_value| codec.value_codec().decode_unwrap(storage_value.value())))
+        Ok(value)
     }
 }
 
@@ -559,7 +588,7 @@ fn charge_read<Accessor: UniversalStateAccessor + GasMeter>(
         accessor.charge_gas(&<Accessor::Spec as GasSpec>::bias_to_charge_for_read())
     })?;
 
-    let mut metric = StateAccessMetric::new("charge_read::get_size", key.size());
+    let mut metric = StateAccessMetric::new_size(key.key(), key.display_fn());
     let value_size = accessor.get_size(namespace, key, &mut metric);
 
     match value_size {
@@ -625,10 +654,8 @@ pub(crate) fn get_inner<Accessor: UniversalStateAccessor + GasMeter>(
     namespace: Namespace,
     key: &SlotKey,
 ) -> Result<ValueWithMetrics, GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
-    charge_read(accessor, namespace, key)?;
-
     let size_metric = charge_read(accessor, namespace, key)?;
-    let mut read_metric = StateAccessMetric::new("get_value::get_inner", key.size());
+    let mut read_metric = StateAccessMetric::new_read(key.key(), key.display_fn());
 
     let value = accessor.get_value(namespace, key, &mut read_metric);
 
@@ -667,7 +694,7 @@ pub(crate) fn delete_inner<Accessor: UniversalStateAccessor + GasMeter>(
 
     // avoid an extra size calculation
     let metric = if enabled!(Level::TRACE) {
-        let mut metric = StateAccessMetric::new("trace_delete::get_size", key.size());
+        let mut metric = StateAccessMetric::new_size(key.key(), key.display_fn());
         let size = accessor.get_size(namespace, key, &mut metric).unwrap_or(0);
         Span::current().record("value_size_bytes", size);
         Some(metric)

@@ -101,8 +101,15 @@ fn track_transaction_metrics<S: Spec>(
     sequencer_address: &<S::Da as DaSpec>::Address,
     message_discriminant: String,
     basic_gas_meter: &BasicGasMeter<S>,
-    processing_metrics: AuthAndProcessMetrics,
+    mut processing_metrics: AuthAndProcessMetrics,
 ) {
+    let total_time = processing_metrics
+        .timings
+        .total_timer
+        .stop_and_get_elapsed();
+    if total_time > std::time::Duration::from_millis(25) {
+        tracing::debug!(processing_metrics = ?processing_metrics, %message_discriminant, "Slow transaction.");
+    }
     sov_metrics::track_metrics(|metrics_tracker| {
         let tx_effect = match result {
             Ok(tx_result) => sov_metrics::TransactionEffect::from(&tx_result.receipt.receipt),

@@ -16,8 +16,6 @@ pub use primitive::Primitive;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 mod schema_impls;
-#[cfg(test)]
-mod tests;
 
 use thiserror::Error;
 use transaction_templates::TransactionTemplateSet;

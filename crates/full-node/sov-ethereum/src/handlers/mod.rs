@@ -52,7 +52,7 @@ pub(crate) mod signer {
         S::Address: FromVmAddress<EthereumAddress>,
         Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
     {
-        let mut transaction_request: TransactionRequest = parameters.one().unwrap();
+        let mut transaction_request: TransactionRequest = parameters.one()?;
 
         let evm = Evm::<S>::default();
 
@@ -171,7 +171,7 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    let data: Bytes = parameters.one().unwrap();
+    let data: Bytes = parameters.one()?;
 
     let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
 

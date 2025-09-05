@@ -3,9 +3,6 @@
 #![allow(clippy::match_same_arms)]
 
 pub(crate) mod conversions;
-pub(crate) mod db;
-mod db_commit;
-pub(crate) mod db_init;
 /// EVM execution utilities
 pub mod executor;
 pub(crate) mod primitive_types;
