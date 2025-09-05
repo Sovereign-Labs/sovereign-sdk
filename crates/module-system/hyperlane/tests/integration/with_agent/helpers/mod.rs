@@ -12,7 +12,6 @@ use crate::with_agent::helpers::evm::{
 };
 use futures::future::join_all;
 use futures::{FutureExt, StreamExt};
-use sov_address::EthereumAddress;
 use sov_bank::Amount;
 use sov_hyperlane_integration::EthAddress;
 use sov_modules_api::{CryptoSpec, HexHash, HexString, Spec};
@@ -426,7 +425,7 @@ impl Hyperlane {
         }
     }
 
-    pub async fn counterparty_balance_of(&mut self, address: EthereumAddress) -> Amount {
+    pub async fn counterparty_balance_of(&mut self, address: HexHash) -> Amount {
         match self.evm_counter_party.as_mut() {
             None => {
                 panic!("called counterparty_balance_of before setting its setup");
@@ -607,9 +606,11 @@ async fn start_validator(
         .expect("starting validator failed")
 }
 
-/// Module expects 32 bytes, but ethereum address is only 20, pad it with zeros.
-pub fn pad_eth_address(addr: &EthereumAddress) -> HexHash {
+// parses eth addr 0x(40 chars hex) into HexHash
+pub fn parse_eth_addr(addr: &str) -> HexHash {
+    // TODO: use sov-address with proper feature?
+    let address: EthAddress = addr.trim().parse().unwrap();
     let mut res = [0; 32];
-    res[12..].copy_from_slice(addr.as_ref());
+    res[12..].copy_from_slice(&address.0);
     res.into()
 }

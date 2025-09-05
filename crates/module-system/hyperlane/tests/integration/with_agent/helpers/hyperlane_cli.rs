@@ -1,9 +1,9 @@
 use crate::with_agent::configs::{
     core_config, ethtest_metadata, sovtest_addresses, sovtest_metadata, warp_route_config,
 };
-use crate::with_agent::helpers::{DEPLOYER_ACCOUNT, EVM_MAILBOX, RELAYER_ACCOUNT};
-use sov_address::EthereumAddress;
+use crate::with_agent::helpers::{parse_eth_addr, DEPLOYER_ACCOUNT, EVM_MAILBOX, RELAYER_ACCOUNT};
 use sov_hyperlane_integration::EthAddress;
+use sov_modules_api::HexHash;
 use std::str::FromStr;
 use testcontainers::core::Mount;
 use testcontainers::runners::AsyncRunner;
@@ -58,7 +58,7 @@ impl HyperlaneCliRunner {
     }
 
     /// Returns an address of evm test recipient, to which we can dispatch test messages.
-    pub async fn deploy_core(&self) -> EthereumAddress {
+    pub async fn deploy_core(&self) -> HexHash {
         let hyperlane_cli_image = self.prepare_container().with_cmd([
             "core",
             "deploy",
@@ -90,10 +90,10 @@ impl HyperlaneCliRunner {
             full_output = ?deployment_output,
             "Deployed core");
 
-        EthereumAddress::from_str(test_recipient).expect("Failed to parse recipient")
+        parse_eth_addr(test_recipient)
     }
 
-    pub async fn deploy_warp(&self) -> EthereumAddress {
+    pub async fn deploy_warp(&self) -> HexHash {
         let warp_config = warp_route_config();
         tracing::info!(warp_config, "warp route config");
         let configs_dir = self.data.path().join("configs");
@@ -119,7 +119,7 @@ impl HyperlaneCliRunner {
             .nth(1)
             .unwrap();
 
-        let ethtest_route = EthereumAddress::from_str(ethtest_route).unwrap();
+        let ethtest_route = parse_eth_addr(ethtest_route);
         tracing::info!(%ethtest_route, evm_mailbox = %EVM_MAILBOX, "deployed warp");
         ethtest_route
     }
