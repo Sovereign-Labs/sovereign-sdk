@@ -265,7 +265,7 @@ where
     ) -> RpcResult<Option<Transaction>> {
         let mut maybe_tx = || -> Option<Transaction> {
             let tx_number = self.get_tx_index_by_hash(&hash, state)?;
-            let tx = self.transaction(tx_number, state).unwrap();
+            let tx = self.transaction(tx_number, state)?;
             let block = self.block(tx.block_number, state)?;
 
             Some(from_recovered_with_block_context(
