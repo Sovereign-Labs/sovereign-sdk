@@ -288,7 +288,6 @@ impl Metric for AuthAndProcessMetrics {
             .as_micros();
         let reward_prover_time_us = self.timings.reward_prover_timer.elapsed().as_micros();
 
-        tracing::info!("AuthAndProcessMetrics: total_time_us={}", total_time_us);
         write!(buffer, "{metric_name} total_time_us={total_time_us},auth_time_us={auth_time_us},resolve_context_time_us={resolve_context_time_us},check_uniqueness_time_us={check_uniqueness_time_us},mark_tx_attempted_time_us={mark_tx_attempted_time_us},attempt_tx_time_us={attempt_tx_time_us},reserve_gas_time_us={reserve_gas_time_us},refund_remaining_gas_time_us={refund_remaining_gas_time_us},reward_prover_time_us={reward_prover_time_us}")?;
         summarize(
             &self.timings.attempt_tx_access_metrics,
