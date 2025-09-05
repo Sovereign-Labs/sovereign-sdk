@@ -311,7 +311,7 @@ where
     /// Handler for: `eth_call`
     //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
     #[rpc_method(name = "eth_call")]
-    pub fn get_call(
+    pub fn eth_call(
         &self,
         request: TransactionRequest,
         block_number: Option<String>,
@@ -348,7 +348,9 @@ where
             .block_numbers
             .get(state)
             .unwrap_infallible()
-            .expect("Block number must be set");
+            // Justified, we set it at genesis and later only override it.
+            .expect("The impossible happened: block_numbers was not set.");
+
         Ok(U256::from(*block_number_range.end()))
     }
 
@@ -384,13 +386,17 @@ where
             .get(state)
             .unwrap_infallible()
             .unwrap_or_default();
-        let block_num: u64 = current_block_env
-            .number
-            .try_into()
-            .expect("Block number is too large to fit in a u64. It's over!");
+        let block_num: u64 = current_block_env.number.try_into().expect(
+            "The impossible happened: block number is too large to fit in a u64. It's over!",
+        );
         assert_eq!(block_num, tx.block_number, "Transaction is in a block that is not yet sealed, but that block is not yet pending! This is impossible!");
 
-        let head = self.head.get(state).unwrap_infallible().unwrap();
+        let head = self
+            .head
+            .get(state)
+            .unwrap_infallible()
+            // his is justified because the head is initialized at genesis and modified only later through overrides.
+            .expect("The impossible happened: head was not set.");
         let first_tx_index = head.transactions.end;
 
         MaybeSealedBlock::Pending {
@@ -408,7 +414,12 @@ where
         // safe, finalized, and pending are not supported
         match block_number {
             Some(ref block_number) if block_number == "earliest" => {
-                let block_numbers = self.block_numbers.get(state).unwrap_infallible().unwrap();
+                let block_numbers = self
+                    .block_numbers
+                    .get(state)
+                    .unwrap_infallible()
+                    // This is justified, as block numbers are set at genesis and only overridden later.
+                    .expect("The impossible happened: block_numbers was not set.");
                 let first_block_number = block_numbers.start();
 
                 self.blocks
@@ -416,7 +427,13 @@ where
                     .unwrap_infallible()
             }
             Some(ref block_number) if block_number == "latest" => {
-                let block_numbers = self.block_numbers.get(state).unwrap_infallible().unwrap();
+                let block_numbers = self
+                    .block_numbers
+                    .get(state)
+                    .unwrap_infallible()
+                    // This is justified, as block numbers are set at genesis and only overridden later.
+                    .expect("The impossible happened: block_numbers was not set.");
+
                 let last_block_number = block_numbers.end();
 
                 self.blocks
@@ -425,8 +442,16 @@ where
             }
             Some(ref block_number) => {
                 // hex representation may have 0x prefix
-                let block_number = u64::from_str_radix(block_number.trim_start_matches("0x"), 16)
-                    .expect("Block number must be a valid hex number, with or without 0x prefix");
+                let Ok(block_number) =
+                    u64::from_str_radix(block_number.trim_start_matches("0x"), 16)
+                else {
+                    tracing::error!(
+                        block_number,
+                        "get_sealed_block_by_number: Block number must be a valid hex number, with or without 0x prefix"
+                    );
+
+                    return None;
+                };
 
                 self.blocks.get(&block_number, state).unwrap_infallible()
             }
@@ -479,7 +504,7 @@ pub(crate) fn build_rpc_receipt(
     // Safety: The transaction cannot have a lower number than the block start
     let transaction_index = tx_number
         .checked_sub(block.transactions_start())
-        .expect("Overflow while subtracting block start from tx number. This is a bug!");
+        .expect("The impossible happened: overflow while subtracting block start from tx number.");
 
     let logs: Vec<Log> = receipt
         .receipt
