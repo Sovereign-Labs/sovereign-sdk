@@ -97,53 +97,52 @@ where
             "EVM module JSON-RPC request to `eth_getBlockByNumber`"
         );
 
-        let block = self
-            .get_sealed_block_by_number(block_number, state)
-            .unwrap();
+        let maybe_block = || -> Option<Block> {
+            let block = self.get_sealed_block_by_number(block_number, state)?;
+            // Build rpc header response
+            let header = from_primitive_with_hash(block.header.clone());
 
-        // Build rpc header response
-        let header = from_primitive_with_hash(block.header.clone());
+            let mut transactions_with_index = Vec::new();
+            for index in block.transactions.clone() {
+                let tx = self.transactions.get(&index, state).unwrap_infallible()?;
+                transactions_with_index.push((index, tx));
+            }
 
-        // Collect transactions with ids from db
-        let transactions_with_index = block.transactions.clone().map(|index| {
-            let tx = self
-                .transactions
-                .get(&index, state)
-                .unwrap_infallible()
-                .expect("Transaction must be set");
-            (index, tx)
-        });
+            // Build rpc transactions response
+            let transactions = match details {
+                Some(true) => BlockTransactions::Full(
+                    transactions_with_index
+                        .into_iter()
+                        .map(|(index, tx)| {
+                            from_recovered_with_block_context(
+                                tx.clone().into(),
+                                block.header.seal(),
+                                block.header.number,
+                                block.header.base_fee_per_gas,
+                                U256::from(index - block.transactions.start),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+                _ => BlockTransactions::Hashes({
+                    transactions_with_index
+                        .into_iter()
+                        .map(|(_, tx)| *tx.signed_transaction.hash())
+                        .collect::<Vec<_>>()
+                }),
+            };
 
-        // Build rpc transactions response
-        let transactions = match details {
-            Some(true) => BlockTransactions::Full(
-                transactions_with_index
-                    .map(|(index, tx)| {
-                        from_recovered_with_block_context(
-                            tx.clone().into(),
-                            block.header.seal(),
-                            block.header.number,
-                            block.header.base_fee_per_gas,
-                            U256::from(index - block.transactions.start),
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-            ),
-            _ => BlockTransactions::Hashes({
-                transactions_with_index
-                    .map(|(_, tx)| *tx.signed_transaction.hash())
-                    .collect::<Vec<_>>()
-            }),
+            // Build rpc block response
+            let block = Block {
+                header,
+                transactions,
+                ..Default::default()
+            };
+
+            Some(block)
         };
 
-        // Build rpc block response
-        let block = Block {
-            header,
-            transactions,
-            ..Default::default()
-        };
-
-        Ok(Some(block))
+        Ok(maybe_block())
     }
 
     /// Handler for: `eth_getBalance`
