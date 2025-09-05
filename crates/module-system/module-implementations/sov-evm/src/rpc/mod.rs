@@ -97,7 +97,9 @@ where
             "EVM module JSON-RPC request to `eth_getBlockByNumber`"
         );
 
-        let block = self.get_sealed_block_by_number(block_number, state);
+        let block = self
+            .get_sealed_block_by_number(block_number, state)
+            .unwrap();
 
         // Build rpc header response
         let header = from_primitive_with_hash(block.header.clone());
@@ -325,7 +327,7 @@ where
     ) -> RpcResult<Bytes> {
         debug!("EVM module JSON-RPC request to `eth_call`");
 
-        let block_env = self.resolve_block_env(block_number, state);
+        let block_env = self.resolve_block_env(block_number, state).unwrap();
         let tx_env = prepare_call_env(&block_env, request.clone()).unwrap();
 
         let cfg = self.cfg_infallible(state);
@@ -404,7 +406,7 @@ where
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> SealedBlock {
+    ) -> Option<SealedBlock> {
         // safe, finalized, and pending are not supported
         match block_number {
             Some(ref block_number) if block_number == "earliest" => {
@@ -414,7 +416,6 @@ where
                 self.blocks
                     .get(first_block_number, state)
                     .unwrap_infallible()
-                    .expect("Block must be set")
             }
             Some(ref block_number) if block_number == "latest" => {
                 let block_numbers = self.block_numbers.get(state).unwrap_infallible().unwrap();
@@ -423,17 +424,13 @@ where
                 self.blocks
                     .get(last_block_number, state)
                     .unwrap_infallible()
-                    .expect("Block must be set")
             }
             Some(ref block_number) => {
                 // hex representation may have 0x prefix
                 let block_number = u64::from_str_radix(block_number.trim_start_matches("0x"), 16)
                     .expect("Block number must be a valid hex number, with or without 0x prefix");
 
-                self.blocks
-                    .get(&block_number, state)
-                    .unwrap_infallible()
-                    .expect("Block must be set")
+                self.blocks.get(&block_number, state).unwrap_infallible()
             }
             None => self.get_sealed_block_by_number(Some("latest".into()), state),
         }
@@ -443,17 +440,14 @@ where
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> BlockEnv {
+    ) -> Option<BlockEnv> {
         match block_number {
-            Some(ref block_number) if block_number == "pending" => self
-                .block_env
-                .get(state)
-                .unwrap_infallible()
-                .unwrap_or_default()
-                .clone(),
+            Some(ref block_number) if block_number == "pending" => {
+                self.block_env.get(state).unwrap_infallible()
+            }
             _ => {
-                let block = self.get_sealed_block_by_number(block_number, state);
-                BlockEnv::from(block)
+                let block = self.get_sealed_block_by_number(block_number, state)?;
+                Some(BlockEnv::from(block))
             }
         }
     }
