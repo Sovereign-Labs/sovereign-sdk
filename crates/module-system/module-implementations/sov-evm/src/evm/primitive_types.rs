@@ -198,6 +198,7 @@ impl MaybeSealedBlock {
             Self::Sealed(block) => block
                 .header
                 .base_fee_per_gas
+                // Justified, the `base_fee_per_gas` must be alwasy set.
                 .expect("Legacy blocks with no base fee are unsupported"),
             Self::Pending {
                 base_fee_per_gas, ..
