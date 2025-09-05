@@ -2208,7 +2208,7 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
     // This is now needed to exhaust the sequencer's buffer and prevent flakiness allowing us to test the downtime.
     client
         .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx_set_value_and_sleep(&admin.private_key, 1, 0, 1200)),
+            body: BASE64_STANDARD.encode(tx_set_value_and_sleep(&admin.private_key, 1, 0, 1200)),
         })
         .await
         .unwrap();

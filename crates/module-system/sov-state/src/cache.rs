@@ -33,7 +33,7 @@ enum Access {
     /// Write access to a storage value.
     Write {
         modified: Option<SlotValue>,
-        at_version: u64,
+        at_rollup_height: u64,
     },
 }
 
@@ -87,12 +87,12 @@ impl Access {
             Access::Read { original: _ } => {
                 *self = Access::Write {
                     modified: write,
-                    at_version: rollup_height,
+                    at_rollup_height: rollup_height,
                 }
             }
             Access::Write {
                 modified,
-                at_version,
+                at_rollup_height: at_version,
             } => {
                 // Simply override the modified value with the new modified
                 // value.
@@ -131,7 +131,11 @@ mod internal {
             // According to its docs, `retain` runs in O(capacity) time rather than O(len); If the map is already empty from `.clear()`, that could be expensive!
             if !self.revertable_log.is_empty() {
                 self.revertable_log.retain(|_, access| {
-                    if let Access::Write { at_version, .. } = access {
+                    if let Access::Write {
+                        at_rollup_height: at_version,
+                        ..
+                    } = access
+                    {
                         *at_version >= rollup_height
                     } else {
                         false
@@ -143,7 +147,11 @@ mod internal {
             // height. This was already broken, so we don't bother to fix it yet.
             if !self.log.is_empty() {
                 self.log.retain(|_, access| {
-                    if let Access::Write { at_version, .. } = access {
+                    if let Access::Write {
+                        at_rollup_height: at_version,
+                        ..
+                    } = access
+                    {
                         *at_version >= rollup_height
                     } else {
                         false
@@ -215,7 +223,7 @@ mod internal {
                     // It will later be either committed or discarded.
                     vacancy.insert(Access::Write {
                         modified: value,
-                        at_version: rollup_height,
+                        at_rollup_height: rollup_height,
                     });
                     out
                 }
@@ -233,7 +241,7 @@ mod internal {
                     // 2. merge writes
                     Access::Write {
                         modified,
-                        at_version,
+                        at_rollup_height: at_version,
                     } => match self.log.entry(k) {
                         Entry::Occupied(mut existing) => {
                             existing.get_mut().add_write(modified, at_version);
@@ -241,7 +249,7 @@ mod internal {
                         Entry::Vacant(vacancy) => {
                             vacancy.insert(Access::Write {
                                 modified,
-                                at_version,
+                                at_rollup_height: at_version,
                             });
                         }
                     },
