@@ -12,19 +12,23 @@
 //! For more information about the setup, check the [`HyperlaneBuilder`].
 
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+use crate::igp::{default_gas_hashmap_to_safe_vec, oracle_data_hashmap_to_safe_vec};
+use crate::with_agent::helpers::{pad_eth_address, RELAYER_ACCOUNT};
 use anyhow::Result;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use futures::Stream;
 use helpers::{
-    generate_setup, parse_eth_addr, setup_rollup, HyperlaneBuilder, ANVIL_ACCOUNTS,
-    DEFAULT_FINALIZATION_BLOCKS, EVM_DOMAIN,
+    generate_setup, setup_rollup, HyperlaneBuilder, ANVIL_ACCOUNTS, DEFAULT_FINALIZATION_BLOCKS,
+    EVM_DOMAIN,
 };
 use preferred_sequencer_runtime::{TestRuntime, TestRuntimeCall};
 use serde_json::{Map, Value};
+use sov_address::EthereumAddress;
 use sov_api_spec::types::{self as api_types, IntOrHash, LedgerEvent, Slot};
 use sov_api_spec::Client;
 use sov_bank::Amount;
@@ -40,9 +44,6 @@ use sov_modules_api::{
 use sov_test_utils::{default_test_signed_transaction, TestSpec, TestUser};
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
-
-use crate::igp::{default_gas_hashmap_to_safe_vec, oracle_data_hashmap_to_safe_vec};
-use crate::with_agent::helpers::RELAYER_ACCOUNT;
 
 mod configs;
 mod helpers;
@@ -271,14 +272,14 @@ async fn test_process_message_from_evm_counterparty() {
         .dispatch_msg_from_counterparty(prover_addr.to_sender())
         .await;
 
-    let sender_addr = parse_eth_addr(RELAYER_ACCOUNT.0);
+    let sender_addr = EthereumAddress::from_str(RELAYER_ACCOUNT.0).unwrap();
 
     assert_eq!(evm_dispatch.message.origin_domain, EVM_DOMAIN);
     assert_eq!(
         evm_dispatch.destination_domain,
         config_value!("HYPERLANE_BRIDGE_DOMAIN")
     );
-    assert_eq!(evm_dispatch.sender_address, sender_addr);
+    assert_eq!(evm_dispatch.sender_address, pad_eth_address(&sender_addr));
     assert_eq!(evm_dispatch.recipient_address, prover_addr.to_sender());
 
     // finalize the block with a dispatched message
@@ -548,7 +549,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
     // Now transfer it back to the remote
     // choose some account which didn't have to pay for anything yet
     // to simplify balance asserts
-    let evm_recipient = parse_eth_addr(ANVIL_ACCOUNTS[8].0);
+    let evm_recipient = EthereumAddress::from_str(ANVIL_ACCOUNTS[8].0).unwrap();
     let recipient_balance_before_transfer = hyperlane.counterparty_balance_of(evm_recipient).await;
     assert_eq!(
         recipient_balance_before_transfer,
@@ -558,7 +559,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
     let transfer_call = TestRuntimeCall::Warp(warp::CallMessage::TransferRemote {
         warp_route: local_route_id,
         destination_domain: EVM_DOMAIN,
-        recipient: evm_recipient,
+        recipient: pad_eth_address(&evm_recipient),
         amount: outbound_sent_amount,
         relayer: Some(relayer.address()),
         gas_payment_limit: Amount::MAX,
@@ -596,7 +597,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
                 .latest_warp_transfer_on_counterparty(remote_route_id)
                 .await;
             assert_eq!(origin_domain, config_value!("HYPERLANE_BRIDGE_DOMAIN"));
-            assert_eq!(recipient, evm_recipient);
+            assert_eq!(recipient, pad_eth_address(&evm_recipient));
 
             let recipient_balance_after_transfer =
                 hyperlane.counterparty_balance_of(evm_recipient).await;

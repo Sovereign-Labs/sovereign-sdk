@@ -15,7 +15,8 @@ publish = false
 workspace = true
 
 [dev-dependencies]
-sov-address = { workspace = true }
+
+sov-address = { workspace = true, features = ["evm"] }
 sov-api-spec = { workspace = true }
 sov-hyperlane-integration = { path = ".", features = ["test-utils", "native"] }
 sov-mock-da = { workspace = true }

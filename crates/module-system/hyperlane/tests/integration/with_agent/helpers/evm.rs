@@ -1,9 +1,10 @@
 use crate::with_agent::helpers::docker::print_logs_from_container;
 use crate::with_agent::helpers::hyperlane_cli::HyperlaneCliRunner;
-use crate::with_agent::helpers::{EVM_MAILBOX, RELAYER_ACCOUNT};
+use crate::with_agent::helpers::{pad_eth_address, EVM_MAILBOX, RELAYER_ACCOUNT};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use sov_address::EthereumAddress;
 use sov_hyperlane_integration::{EthAddress, Message};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{Amount, HexHash, HexString};
@@ -52,7 +53,7 @@ impl AnvilRunner {
     // Cast call is used to modify state
     pub async fn cast_call(
         &self,
-        contract: EthAddress,
+        contract: EthereumAddress,
         abi: &str,
         args: impl AsRef<[&str]>,
         value: Amount,
@@ -156,7 +157,7 @@ impl EvmCounterParty {
         Self {
             anvil,
             hyperlane_cli,
-            evm_recipient,
+            evm_recipient: pad_eth_address(&evm_recipient),
         }
     }
 
@@ -175,7 +176,7 @@ impl EvmCounterParty {
         let logs = self
             .anvil
             .cast_call(
-                EVM_MAILBOX,
+                EthereumAddress::try_from(&EVM_MAILBOX.0[..]).unwrap(),
                 "dispatch(uint32,bytes32,bytes)",
                 [
                     // destination domain
@@ -198,7 +199,7 @@ impl EvmCounterParty {
         let domain = config_value!("HYPERLANE_BRIDGE_DOMAIN");
         self.anvil
             .cast_call(
-                hex_hash_into_eth_addr(&ethtest_route_id),
+                ethtest_route_id,
                 "enrollRemoteRouter(uint32,bytes32)",
                 [
                     domain.to_string().as_str(),
@@ -208,7 +209,7 @@ impl EvmCounterParty {
             )
             .await;
 
-        ethtest_route_id
+        pad_eth_address(&ethtest_route_id)
     }
 
     pub async fn send_warp_token_transfer(
@@ -217,7 +218,7 @@ impl EvmCounterParty {
         recipient: HexHash,
         amount: Amount,
     ) -> EvmDispatchWithId {
-        let route_addr = HexString::new(ethtest_route_id.0[12..].try_into().unwrap());
+        let route_addr = EthereumAddress::from(ethtest_route_id);
         let destination = config_value!("HYPERLANE_BRIDGE_DOMAIN").to_string();
 
         // https://github.com/hyperlane-xyz/hyperlane-monorepo/tree/c177c4733de52f8a2477ad74b46b3f1eebb5740b/solidity/contracts/token/libs/TokenRouter.sol#L54
@@ -234,7 +235,7 @@ impl EvmCounterParty {
                     // amount
                     amount.to_string().as_str(),
                 ],
-                // we don't need to pay fees on counterparty
+                // we don't need to pay fees on counterparty,
                 // so we only need to give contract what we want to send
                 amount,
             )
@@ -243,11 +244,10 @@ impl EvmCounterParty {
         EvmDispatchWithId::new(logs)
     }
 
-    pub async fn balance_of(&mut self, address: HexHash) -> Amount {
-        let addr = hex_hash_into_eth_addr(&address);
+    pub async fn balance_of(&mut self, address: EthereumAddress) -> Amount {
         let mut balance: String = self
             .anvil
-            .rpc("eth_getBalance", json!([addr.to_string(), "latest"]))
+            .rpc("eth_getBalance", json!([address.to_string(), "latest"]))
             .await;
 
         // evm can encode first byte in a single hex character if it fits
@@ -272,7 +272,7 @@ impl EvmCounterParty {
 
     /// Returns (origin_domain, recipient)
     pub async fn latest_warp_transfer(&mut self, token_addr: HexHash) -> (u32, HexHash) {
-        let token_eth_addr = hex_hash_into_eth_addr(&token_addr);
+        let token_eth_addr = EthereumAddress::from(token_addr);
         let logs: Vec<EvmLog> = self.anvil.rpc("eth_getLogs", json!([{}])).await;
         let log = logs
             .into_iter()
@@ -394,10 +394,4 @@ impl EvmDispatchWithId {
 fn domain_from_hexhash(hash: HexHash) -> u32 {
     assert!(hash.0[0..28].iter().all(|&b| b == 0));
     u32::from_be_bytes(hash.0[28..].try_into().unwrap())
-}
-
-fn hex_hash_into_eth_addr(hex_hash: &HexHash) -> EthAddress {
-    let mut res = [0; 20];
-    res[..].copy_from_slice(&hex_hash.0[12..]);
-    res.into()
 }
