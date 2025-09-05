@@ -99,47 +99,45 @@ where
 
         let maybe_block = || -> Option<Block> {
             let block = self.get_sealed_block_by_number(block_number, state)?;
-            // Build rpc header response
             let header = from_primitive_with_hash(block.header.clone());
 
-            let mut transactions_with_index = Vec::new();
-            for index in block.transactions.clone() {
-                let tx = self.transactions.get(&index, state).unwrap_infallible()?;
-                transactions_with_index.push((index, tx));
-            }
-
-            // Build rpc transactions response
-            let transactions = match details {
-                Some(true) => BlockTransactions::Full(
-                    transactions_with_index
+            let transactions = if Some(true) == details {
+                BlockTransactions::Full(
+                    block
+                        .transactions
+                        .clone()
                         .into_iter()
-                        .map(|(index, tx)| {
-                            from_recovered_with_block_context(
-                                tx.clone().into(),
+                        .map(|index| {
+                            let tx = self.transactions.get(&index, state).unwrap_infallible()?;
+                            Some(from_recovered_with_block_context(
+                                tx.into(),
                                 block.header.seal(),
                                 block.header.number,
                                 block.header.base_fee_per_gas,
                                 U256::from(index - block.transactions.start),
-                            )
+                            ))
                         })
-                        .collect::<Vec<_>>(),
-                ),
-                _ => BlockTransactions::Hashes({
-                    transactions_with_index
+                        .collect::<Option<Vec<_>>>()?,
+                )
+            } else {
+                BlockTransactions::Hashes(
+                    block
+                        .transactions
+                        .clone()
                         .into_iter()
-                        .map(|(_, tx)| *tx.signed_transaction.hash())
-                        .collect::<Vec<_>>()
-                }),
+                        .map(|index| {
+                            let tx = self.transactions.get(&index, state).unwrap_infallible()?;
+                            Some(*tx.signed_transaction.hash())
+                        })
+                        .collect::<Option<Vec<_>>>()?,
+                )
             };
 
-            // Build rpc block response
-            let block = Block {
+            Some(Block {
                 header,
                 transactions,
                 ..Default::default()
-            };
-
-            Some(block)
+            })
         };
 
         Ok(maybe_block())
