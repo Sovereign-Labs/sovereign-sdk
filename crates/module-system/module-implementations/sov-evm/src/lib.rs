@@ -218,11 +218,8 @@ impl<S: Spec> Evm<S> {
         &self,
         number: u64,
         state: &mut Accessor,
-    ) -> SealedBlock {
-        self.blocks
-            .get(&number, state)
-            .unwrap_infallible()
-            .expect("Block number for known transaction must be set")
+    ) -> Option<SealedBlock> {
+        self.blocks.get(&number, state).unwrap_infallible()
     }
 
     /// Lookup an Ethereum account by address.

@@ -264,21 +264,21 @@ where
         hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Transaction>> {
-        let tx_number = self.get_tx_index_by_hash(&hash, state);
+        let mut maybe_tx = || -> Option<Transaction> {
+            let tx_number = self.get_tx_index_by_hash(&hash, state)?;
+            let tx = self.transaction(tx_number, state).unwrap();
+            let block = self.block(tx.block_number, state)?;
 
-        let transaction = tx_number.map(|number| {
-            let tx = self.transaction(number, state).unwrap();
-            let block = self.block(tx.block_number, state);
-
-            from_recovered_with_block_context(
+            Some(from_recovered_with_block_context(
                 tx.into(),
                 block.header.seal(),
                 block.header.number,
                 block.header.base_fee_per_gas,
-                U256::from(tx_number.unwrap() - block.transactions.start),
-            )
-        });
+                U256::from(tx_number - block.transactions.start),
+            ))
+        };
 
+        let transaction = maybe_tx();
         debug!(
             %hash,
             ?transaction,
