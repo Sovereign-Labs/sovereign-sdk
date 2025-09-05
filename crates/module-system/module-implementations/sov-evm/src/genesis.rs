@@ -1,7 +1,6 @@
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_primitives::{Address, B256, U256};
 use alloy_primitives::{BlockNumber, Bytes};
-use anyhow::Result;
 use revm::primitives::hardfork::SpecId;
 use revm::state::AccountInfo;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -44,7 +43,7 @@ where
         &mut self,
         config: &<Self as Module>::Config,
         state: &mut impl GenesisState<S>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         for acc in config.accounts.clone() {
             self.init_account(acc, state)?;
         }
@@ -64,7 +63,11 @@ where
         Ok(())
     }
 
-    fn init_account(&mut self, acc: AccountData, state: &mut impl GenesisState<S>) -> Result<()> {
+    fn init_account(
+        &mut self,
+        acc: AccountData,
+        state: &mut impl GenesisState<S>,
+    ) -> anyhow::Result<()> {
         let mut evm_db = self.get_db(state);
         evm_db.insert_account_info(
             acc.address,
@@ -74,10 +77,10 @@ where
                 nonce: 0,
                 code: None,
             },
-        );
+        )?;
 
         if !acc.code.is_empty() {
-            evm_db.insert_code(acc.code_hash, acc.code.clone());
+            evm_db.insert_code(acc.code_hash, acc.code.clone())?;
         };
 
         Ok(())
@@ -101,7 +104,7 @@ fn init_block(config: &EvmGenesisConfig) -> Block {
     }
 }
 
-fn init_spec(config: &EvmGenesisConfig) -> Result<Vec<(BlockNumber, SpecId)>> {
+fn init_spec(config: &EvmGenesisConfig) -> anyhow::Result<Vec<(BlockNumber, SpecId)>> {
     let mut spec = config
         .chain_spec
         .hardforks
