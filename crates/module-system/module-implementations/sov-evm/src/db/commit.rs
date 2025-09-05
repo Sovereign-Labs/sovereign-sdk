@@ -25,12 +25,14 @@ where
     type Error = Error<Ws>;
 
     fn commit(&mut self, changes: HashMap<Address, Account>) -> Result<(), Self::Error> {
-        changes
+        for (address, account) in changes
             .into_iter()
-            .sorted_by_key(|(address, _)| *address) // Sort addresses to avoid non-determinism in ZK
-            .for_each(|(address, account)| {
-                self.commit_account(address, account).unwrap();
-            });
+            // Sort addresses to avoid non-determinism in ZK
+            .sorted_by_key(|(address, _)| *address)
+        {
+            self.commit_account(address, account)?;
+        }
+
         Ok(())
     }
 }
