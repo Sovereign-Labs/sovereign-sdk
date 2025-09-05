@@ -137,12 +137,20 @@ impl DaService for AvailDAService {
             blob.len()
         );
         let (tx, rx) = oneshot::channel();
-        let result = Self::submit_data(&self.client, &self.signer, self.batch_app_id, blob)
-            .await
-            .map(|tx_hash| SubmitBlobReceipt {
-                blob_hash: HexHash::from(blake2_256(blob)),
-                da_transaction_id: tx_hash,
-            });
+        let result = run_maybe_retryable_async_fn_with_retries(
+            &self.backoff_policy,
+            || async {
+                Self::submit_data(&self.client, &self.signer, self.batch_app_id, blob)
+                    .await
+                    .map(|tx_hash: H256| SubmitBlobReceipt {
+                        blob_hash: HexHash::from(blake2_256(blob)),
+                        da_transaction_id: tx_hash,
+                    })
+                    .map_err(MaybeRetryable::Transient)
+            },
+            "send_transaction",
+        )
+        .await;
         debug!("Transaction submission result: {:?}", result.is_ok());
         let _ = tx.send(result);
         rx
@@ -160,17 +168,25 @@ impl DaService for AvailDAService {
             aggregated_proof_data.len()
         );
         let (tx, rx) = oneshot::channel();
-        let result = Self::submit_data(
-            &self.client,
-            &self.signer,
-            self.proof_app_id,
-            aggregated_proof_data,
+        let result = run_maybe_retryable_async_fn_with_retries(
+            &self.backoff_policy,
+            || async {
+                Self::submit_data(
+                    &self.client,
+                    &self.signer,
+                    self.proof_app_id,
+                    aggregated_proof_data,
+                )
+                .await
+                .map(|tx_hash: H256| SubmitBlobReceipt {
+                    blob_hash: HexHash::from(blake2_256(aggregated_proof_data)),
+                    da_transaction_id: tx_hash,
+                })
+                .map_err(MaybeRetryable::Transient)
+            },
+            "send_proof",
         )
-        .await
-        .map(|tx_hash: H256| SubmitBlobReceipt {
-            blob_hash: HexHash::from(blake2_256(aggregated_proof_data)),
-            da_transaction_id: tx_hash,
-        });
+        .await;
         debug!("Proof submission result: {:?}", result.is_ok());
         let _ = tx.send(result);
         rx
