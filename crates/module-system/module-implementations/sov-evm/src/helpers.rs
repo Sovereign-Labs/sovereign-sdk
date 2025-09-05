@@ -1,13 +1,16 @@
 use alloy_consensus::transaction::Transaction;
-use alloy_consensus::{Signed, TxEnvelope};
+use alloy_consensus::{Signed, TxEip4844Variant, TxEnvelope};
 use alloy_primitives::TxKind;
 use alloy_primitives::{BlockNumber, Sealed};
 use alloy_primitives::{B256, U256};
 use alloy_rpc_types::{Header, TransactionRequest};
-use reth_primitives::{Recovered, Transaction as PrimitiveTransaction, TransactionSigned};
+use reth_primitives::{Recovered, TransactionSigned};
 use reth_rpc_convert::{CallFees, EthTxEnvError};
 use reth_rpc_eth_types::EthResult;
 use revm::context::{BlockEnv, TransactionType, TxEnv};
+
+use alloy_consensus::TxEip4844;
+pub type PrimitiveTransaction = alloy_consensus::EthereumTypedTransaction<TxEip4844>;
 
 // https://github.com/paradigmxyz/reth/blob/d8677b4146f77c7c82d659c59b79b38caca78778/crates/rpc/rpc/src/eth/revm_utils.rs#L201
 // it is `pub(crate)` only for tests
@@ -73,7 +76,7 @@ pub(crate) fn from_primitive_with_hash(
 }
 
 /// copy from [`reth_rpc_types_compat::transaction::from_recovered_with_block_context`]
-pub fn from_recovered_with_block_context(
+pub(crate) fn from_recovered_with_block_context(
     tx: Recovered<TransactionSigned>,
     block_hash: B256,
     block_number: BlockNumber,
@@ -99,12 +102,13 @@ pub fn from_recovered_with_block_context(
         PrimitiveTransaction::Eip1559(tx) => {
             TxEnvelope::Eip1559(Signed::new_unchecked(tx, sig, hash))
         }
-        PrimitiveTransaction::Eip4844(_) => {
-            panic!("EIP-4844 transactions are not supported by the rollup");
-        }
-        PrimitiveTransaction::Eip7702(_) => {
-            // TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1132
-            panic!("EIP-7702 transactions are not yet supported by the rollup")
+        PrimitiveTransaction::Eip4844(tx) => TxEnvelope::Eip4844(Signed::new_unchecked(
+            TxEip4844Variant::TxEip4844(tx),
+            sig,
+            hash,
+        )),
+        PrimitiveTransaction::Eip7702(tx) => {
+            TxEnvelope::Eip7702(Signed::new_unchecked(tx, sig, hash))
         }
     };
 
