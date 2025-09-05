@@ -906,7 +906,6 @@ impl<S: Spec> GasMeter for BasicGasMeter<S> {
             gas: self.remaining_gas.clone(),
             funds: self
                 .remaining_funds
-                .clone()
                 .expect("This method is used in TX context where amount is set"),
             price: self.gas_price.clone(),
         })
