@@ -163,13 +163,8 @@ impl<S: Spec> StateCheckpoint<S> {
         <S::Storage as Storage>::Witness,
         S::Storage,
     ) {
-        tracing::debug!("Kernel writes: for height: {}", self.rollup_height.get());
         let (cache_log, accessory_delta, witness, storage) =
             self.delta.freeze(self.rollup_height.get());
-        for (key, value) in cache_log.kernel.ordered_writes.iter() {
-            tracing::debug!(slot_key = %key, new_value = %SlotValue::debug_show(value.as_ref()));
-        }
-
         let _span = tracing::debug_span!("compute_state_root", scope = "node").entered();
         let (root, update) = storage
             .compute_state_update(cache_log, &witness, prev_state_root)
