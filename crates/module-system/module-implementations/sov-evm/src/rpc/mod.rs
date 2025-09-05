@@ -310,7 +310,6 @@ where
 
     /// Handler for: `eth_call`
     //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
-    //https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-types/src/eth/call.rs#L7
     #[rpc_method(name = "eth_call")]
     pub fn get_call(
         &self,
@@ -322,8 +321,12 @@ where
     ) -> RpcResult<Bytes> {
         debug!("EVM module JSON-RPC request to `eth_call`");
 
-        let block_env = self.resolve_block_env(block_number, state).unwrap();
-        let tx_env = prepare_call_env(&block_env, request.clone()).unwrap();
+        let Some(block_env) = self.resolve_block_env(block_number, state) else {
+            return Err(eth_api_into_rpc_error(EthApiError::UnknownBlockOrTxIndex));
+        };
+
+        let tx_env =
+            prepare_call_env(&block_env, request.clone()).map_err(eth_api_into_rpc_error)?;
 
         let cfg = self.cfg_infallible(state);
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
