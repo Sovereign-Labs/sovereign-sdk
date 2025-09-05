@@ -67,7 +67,21 @@ where
         let result = executor::transact_commit(evm_db, &block_env, tx_env, cfg_env);
 
         let receipt = match result {
-            Ok(result) => self.get_receipt(&transaction, result, state)?,
+            Ok(result) => {
+                let is_success = result.is_success();
+                let gas_used = result.gas_used();
+
+                if !is_success {
+                    tracing::debug!(
+                        hash = hex::encode(transaction.signed_transaction.hash()),
+                        gas_used,
+                        ?result,
+                        "EVM execution error"
+                    );
+                    anyhow::bail!("EVM execution error: {:?}", &result);
+                }
+                self.get_receipt(&transaction, result, state)?
+            }
             Err(err) => {
                 return self.handle_execution_error(transaction.signed_transaction.hash(), err)
             }
