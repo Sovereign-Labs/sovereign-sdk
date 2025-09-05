@@ -395,7 +395,7 @@ where
             .head
             .get(state)
             .unwrap_infallible()
-            // his is justified because the head is initialized at genesis and modified only later through overrides.
+            // Justified, the head is initialized at genesis and modified only later through overrides.
             .expect("The impossible happened: head was not set.");
         let first_tx_index = head.transactions.end;
 

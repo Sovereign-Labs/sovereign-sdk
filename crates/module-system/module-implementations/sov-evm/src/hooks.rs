@@ -192,7 +192,7 @@ impl<S: Spec> FinalizeHook for Evm<S> {
             .pending_head
             .get(state)
             .unwrap_infallible()
-            // This is justified because we set `pending_head` in `end_rollup_block_hook`.
+            // Justified, we set `pending_head` in `end_rollup_block_hook`.
             .expect("The impossible happened: the pending block should always be set.");
 
         let user_space_root_hash: [u8; 32] = root_hash.namespace_root(ProvableNamespace::User);

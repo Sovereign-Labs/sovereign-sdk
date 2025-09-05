@@ -45,10 +45,7 @@ where
         // The signature was checked before the call was dispatched,
         // and the signer was recovered during the authentication process.
         let signer = *context
-            .get_sender_credential::<Address>()
-            .ok_or(anyhow::anyhow!(
-                "The impossible happened: EVM transaction wasn't authenticated by the EVM authenticator"
-            ))?;
+            .get_sender_credential::<Address>().expect("The impossible happened: EVM transaction wasn't authenticated by the EVM authenticator");
 
         // Inside the EVM, we use nonces only for the CREATE operation.
         // The uniqueness check was performed before the call was dispatched.
