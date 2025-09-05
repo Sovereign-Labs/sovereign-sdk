@@ -946,19 +946,12 @@ impl<S: Spec> GetGasPrice for BasicGasMeter<S> {
 
 /// A subset of BasicGasMeter used to compute EVM gas limit
 pub struct BasicGasState<S: Spec> {
-    gas: S::Gas,
-    funds: Amount,
-    price: <<S as Spec>::Gas as Gas>::Price,
-}
-
-impl<S: Spec> BasicGasState<S> {
-    /// Computes gas limit as a min from gas and funds divided by gas price
-    pub fn gas_limit(&self) -> u64 {
-        min(
-            self.gas.as_ref()[0],
-            (self.funds.0 / self.price.as_ref()[0].0) as u64,
-        )
-    }
+    /// Amount of gas available
+    pub gas: S::Gas,
+    /// Amount of funds available
+    pub funds: Amount,
+    /// Gas price
+    pub price: <<S as Spec>::Gas as Gas>::Price,
 }
 
 #[cfg(test)]

@@ -5,7 +5,7 @@ use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{serialize, UniversalWallet};
 #[cfg(feature = "native")]
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{Context, GasSpec, Spec, TxState};
+use sov_modules_api::{BasicGasState, Context, GasSpec, Spec, TxState};
 #[cfg(feature = "native")]
 use std::convert::Infallible;
 
@@ -51,10 +51,7 @@ where
         // Inside the EVM, we use nonces only for the CREATE operation.
         // The uniqueness check was performed before the call was dispatched.
         let account_nonce = self.get_account_nonce(signer, state)?;
-        let gas_limit = state
-            .try_as_basic_gas_state()
-            .expect("We should have a BasicGasMeter or it's derivative in tx context")
-            .gas_limit();
+        let gas_limit = self.gas_limit(state);
         let tx_env = create_tx_env(&tx, signer, account_nonce, gas_limit);
 
         let transaction = TransactionSignedAndRecovered {
@@ -114,6 +111,23 @@ where
             .unwrap_infallible();
 
         Ok(())
+    }
+
+    fn gas_limit(&self, state: &mut impl TxState<S>) -> u64 {
+        let BasicGasState { gas, funds, price } = state
+            .try_as_basic_gas_state()
+            .expect("We should have a BasicGasMeter or it's derivative in tx context");
+        let funds = funds.0;
+        let gas = gas.as_ref()[0];
+        let price = price.as_ref()[0].0;
+        match (funds, gas) {
+            (0, 0) => 0,
+            (_, 0) => u64::MAX,
+            (funds, gas) => {
+                let gas_from_funds = (funds / price).min(u64::MAX as u128) as u64;
+                gas.min(gas_from_funds)
+            }
+        }
     }
 
     fn get_receipt(
