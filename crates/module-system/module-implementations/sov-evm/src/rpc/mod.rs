@@ -106,7 +106,6 @@ where
                     block
                         .transactions
                         .clone()
-                        .into_iter()
                         .map(|index| {
                             let tx = self.transactions.get(&index, state).unwrap_infallible()?;
                             Some(from_recovered_with_block_context(
@@ -124,7 +123,6 @@ where
                     block
                         .transactions
                         .clone()
-                        .into_iter()
                         .map(|index| {
                             let tx = self.transactions.get(&index, state).unwrap_infallible()?;
                             Some(*tx.signed_transaction.hash())
