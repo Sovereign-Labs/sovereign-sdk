@@ -6,6 +6,7 @@ use alloy_primitives::U256;
 use alloy_rpc_types::BlockTransactions;
 use revm::Database;
 use sov_evm::Evm;
+use sov_modules_api::GasArray;
 use sov_test_utils::TransactionType;
 use sov_test_utils::{BatchTestCase, SimpleStorageContract};
 use sov_test_utils::{TransactionTestCase, TEST_DEFAULT_USER_BALANCE};
@@ -32,6 +33,38 @@ fn test_simple_transfer() {
             assert_eq!(to_acc.balance, value);
         }),
     });
+}
+
+#[test]
+fn test_evm_gas_usage() {
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS",
+        "[1, 0]",
+    );
+    let gas_used_with_evm_metering = {
+        let (mut runner, from, to) = setup();
+        let transfer = create_transfer_tx(0, &from, &to, 0).tx;
+        let (receipt, _) = runner.execute(transfer);
+        receipt.last_batch_receipt().inner.gas_used.clone()
+    };
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS",
+        "[0, 0]",
+    );
+    let gas_used_without_evm_metering = {
+        let (mut runner, from, to) = setup();
+        let transfer = create_transfer_tx(0, &from, &to, 0).tx;
+        let (receipt, _) = runner.execute(transfer);
+        receipt.last_batch_receipt().inner.gas_used.clone()
+    };
+    const BASE_EVM_GAS: u64 = 21_000;
+    assert_eq!(
+        gas_used_with_evm_metering
+            .checked_sub(&gas_used_without_evm_metering)
+            .unwrap()
+            .as_ref(),
+        &[BASE_EVM_GAS, 0]
+    );
 }
 
 #[test]
