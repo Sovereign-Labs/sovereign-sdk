@@ -579,13 +579,13 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                     return;
                 }
             };
-            // Sanity check: the height we received should match the height we need.
+            // Sanity check: the height should not be bigger than the one we need - this would imply that we received a response before we sent it!
             if received_height > next_visible_rollup_height {
                 tracing::error!(
                     received_height = %received_height,
                     next_visible_root_height = %next_visible_rollup_height,
-                    "Received height did not equal expected height for assertion. This is a bug in the RollupBlockExecutor, please report it.");
-                panic!("Received height ({received_height}) did not equal expected height for assertion {next_visible_rollup_height}. This is a bug in the RollupBlockExecutor, please report it.");
+                    "Received height was greater than the expected height. This is a bug in the RollupBlockExecutor, please report it.");
+                panic!("Received height ({received_height}) was greater than the expected height ({next_visible_rollup_height}). This is a bug in the RollupBlockExecutor, please report it.");
             }
             tracing::trace!(
                 "Received state root for height {} : {}",
