@@ -257,7 +257,20 @@ impl AvailDAService {
 
         // NOTE: Current exponential backoff policy defaults:
         // jitter: false, factor: 2, min_delay: 1s, max_delay: 60s, max_times: 3,
-        let backoff_policy = ExponentialBuilder::default();
+        let mut builder = ExponentialBuilder::default();
+        if let Some(min) = config.backoff_min_delay_secs {
+            builder = builder.with_min_delay(std::time::Duration::from_secs(min));
+        }
+        if let Some(max) = config.backoff_max_delay_secs {
+            builder = builder.with_max_delay(std::time::Duration::from_secs(max));
+        }
+        if let Some(times) = config.backoff_max_times {
+            builder = builder.with_max_times(times);
+        }
+        if let Some(factor) = config.backoff_factor {
+            builder = builder.with_factor(factor);
+        }
+        let backoff_policy = builder;
         debug!("Backoff policy initialized");
 
         info!("AvailDAService created successfully");

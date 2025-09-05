@@ -3,12 +3,18 @@
 http_api_url = "https://turing-rpc.avail.so/rpc"
 ws_api_url = "wss://turing-rpc.avail.so/ws"
 
+# The app IDs to use when submitting proofs and batches
 proof_app_id = 
 batch_app_id = 
 
 # the signer's seed, to use to submit blob on Avail DA# App ids for batches and proofs submited by rollup, for more info https://docs.availproject.org/docs/build-with-avail/interact-with-avail-da/app-id# App ids for submitting batches and proofs over Avail DA
 signer_key = ""
 
+# backoff policy configurations
+backoff_min_delay_secs = 1 # Minimal time to wait before reattempting to request to avail rpc.
+backoff_max_delay_secs = 100 # Maximal time between reattempting to request to the avail rpc.
+backoff_max_times = 10 # Number of requests attempted on avail rpc before returning an error.
+backoff_factor = 2.0 # Exponential factor for reattempting failed requests
 
 [storage]
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
@@ -17,10 +23,10 @@ path = "demo_data"
 # We define the rollup's genesis to occur at block number `genesis_height`. The rollup will ignore
 # any blocks before this height, and any blobs at this height will not be processed
 [runner]
-genesis_height = 2115830
+genesis_height = 2267603
 
 # da.block_time is 20s, so status updater will try to poll it 20 times during it.
-da_polling_interval_ms = 1000
+da_polling_interval_ms = 1000000
 
 [runner.http_config]
 bind_host = "127.0.0.1"
