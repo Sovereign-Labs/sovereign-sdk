@@ -30,16 +30,23 @@ pub(super) struct Delta<S: Storage> {
 
 #[derive(Debug, Clone)]
 pub(crate) struct AccessoryWrite {
+    #[cfg(feature = "native")]
     pub at_rollup_height: u64,
     pub value: Option<SlotValue>,
 }
 
 impl AccessoryWrite {
+    #[cfg(feature = "native")]
     pub fn new(at_rollup_height: u64, value: Option<SlotValue>) -> Self {
         Self {
             at_rollup_height,
             value,
         }
+    }
+
+    #[cfg(not(feature = "native"))]
+    pub fn new(_at_rollup_height: u64, value: Option<SlotValue>) -> Self {
+        Self { value }
     }
 }
 
