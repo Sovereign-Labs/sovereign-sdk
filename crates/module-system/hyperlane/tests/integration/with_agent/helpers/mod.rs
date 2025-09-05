@@ -544,8 +544,25 @@ async fn start_validator(
 
     // make directories for db and signatures
     let mkdir_cmd = ExecCommand::new(["mkdir", "-p", val_db_path.as_str(), val_sigs_path.as_str()]);
-    // TODO: check status!
-    let _mkdir_result = container.exec(mkdir_cmd).await.unwrap();
+    let mkdir_result = container.exec(mkdir_cmd).await.unwrap();
+    let mut exit_code = mkdir_result
+        .exit_code()
+        .await
+        .expect("Failed to get exit code for validator directory creation");
+    for _ in 1..50 {
+        if exit_code.is_some() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        exit_code = mkdir_result
+            .exit_code()
+            .await
+            .expect("Failed to get exit code for validator directory creation");
+    }
+
+    if exit_code != Some(0) {
+        panic!("Failed to create directory for validator {val_id}, exit code: {exit_code:?}",);
+    }
 
     let sov_key = HexHash::new(private_key.as_bytes());
     let cmd = ExecCommand::new([
@@ -583,7 +600,6 @@ async fn start_validator(
     ])
     .with_cmd_ready_condition(CmdWaitFor::message_on_stdout("starting server on"));
 
-    // run validator
     container
         .exec(cmd)
         .await

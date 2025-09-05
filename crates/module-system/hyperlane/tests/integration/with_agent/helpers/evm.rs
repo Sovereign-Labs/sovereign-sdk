@@ -307,7 +307,6 @@ pub struct EvmLog {
 }
 
 pub struct EvmProcessWithId {
-    // TODO: Make unpublic again
     /// The origin domain of the message.
     pub origin_domain: u32,
     /// The sender address of the message.

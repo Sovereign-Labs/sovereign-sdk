@@ -160,7 +160,6 @@ fn prepare_cli_data(
 }
 
 // Waits for some time while hyperlane-cli exit with status code 0
-// TODO: Move this to docker utils?
 async fn wait_till_container_exit(hyperlane_cli_image: ContainerRequest<GenericImage>) -> String {
     let container = hyperlane_cli_image
         .start()
@@ -222,7 +221,6 @@ async fn wait_till_container_exit(hyperlane_cli_image: ContainerRequest<GenericI
 //     testRecipient: "0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1"
 //     merkleTreeHook: "0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e"
 pub fn parse_deployments_map(input: &str) -> std::collections::HashMap<String, String> {
-    // println!("OUTPUT: \n{}", input);
     input
         .lines()
         .skip_while(|l| !l.contains("Core contract deployments complete:"))
