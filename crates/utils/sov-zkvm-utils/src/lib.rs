@@ -46,7 +46,7 @@ pub fn does_rustc_match(zk_vm: &str) -> anyhow::Result<RustComparisonResult> {
         .map_err(|e| anyhow::anyhow!("{e:?}"))?;
     if !native_version_cmd.status.success() {
         anyhow::bail!(
-            "Failed to get native cargo version: {:?}",
+            "Failed to get native rustc version: {:?}",
             native_version_cmd
         );
     }
