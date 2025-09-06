@@ -16,38 +16,44 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
     {
         test_rollup.pause_preferred_batches().await;
 
+        // Verify the `pending_block and latest_block`` assertions before inserting the transaction.
         {
-            let latest_blokck = evm_client
+            let latest_block = evm_client
                 .eth_get_block_by_number(Some("latest".to_string()))
                 .await;
 
-            let pending_blokck = evm_client
+            let pending_block = evm_client
                 .eth_get_block_by_number(Some("pending".to_string()))
                 .await;
 
-            assert_eq!(pending_blokck.parent_hash, latest_blokck.hash.unwrap());
+            assert_eq!(pending_block.parent_hash, latest_block.hash.unwrap());
             assert_eq!(
-                pending_blokck.number.unwrap(),
-                latest_blokck.number.unwrap() + 1
+                pending_block.number.unwrap(),
+                latest_block.number.unwrap() + 1
             );
-            assert!(pending_blokck.transactions.is_empty());
-            assert!(latest_blokck.transactions.is_empty());
+            assert!(pending_block.transactions.is_empty());
+            assert!(latest_block.transactions.is_empty());
         }
 
         let set_arg = 1;
         let set_value_req = evm_client.set_value(contract_address, set_arg).await;
         let tx_hash = set_value_req.tx_hash();
 
-        let rec = evm_client.receipt(tx_hash).await.unwrap();
-        let tx = evm_client.transaction(tx_hash).await.unwrap();
-
-        assert!(rec.block_hash.is_none());
-        assert!(tx.block_hash.is_none());
-
         let expected_block_nr = evm_client.block_number().await + 1;
-        assert_eq!(rec.block_number.unwrap().as_u64(), expected_block_nr);
-        assert_eq!(tx.block_number.unwrap().as_u64(), expected_block_nr);
 
+        // Verify the `receipt & transaction` asserts.
+        {
+            let rec = evm_client.receipt(tx_hash).await.unwrap();
+            let tx = evm_client.transaction(tx_hash).await.unwrap();
+
+            assert!(rec.block_hash.is_none());
+            assert!(tx.block_hash.is_none());
+
+            assert_eq!(rec.block_number.unwrap().as_u64(), expected_block_nr);
+            assert_eq!(tx.block_number.unwrap().as_u64(), expected_block_nr);
+        }
+
+        // Verify the `pending_block` asserts after inserting the transaction.
         {
             let pending_blokck = evm_client
                 .eth_get_block_by_number(Some("pending".to_string()))
@@ -62,14 +68,20 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
 
         test_rollup.wait_for_next_blocks(1).await;
 
-        let rec = evm_client.receipt(tx_hash).await.unwrap();
-        let tx = evm_client.transaction(tx_hash).await.unwrap();
+        {
+            let latest_block = evm_client
+                .eth_get_block_by_number(Some("latest".to_string()))
+                .await;
 
-        assert!(rec.block_hash.is_some());
-        assert_eq!(rec.block_hash, tx.block_hash);
+            let rec = evm_client.receipt(tx_hash).await.unwrap();
+            let tx = evm_client.transaction(tx_hash).await.unwrap();
 
-        assert_eq!(rec.block_number.unwrap().as_u64(), expected_block_nr);
-        assert_eq!(tx.block_number.unwrap().as_u64(), expected_block_nr);
+            assert_eq!(rec.block_hash.unwrap(), latest_block.hash.unwrap());
+            assert_eq!(rec.block_hash, tx.block_hash);
+
+            assert_eq!(rec.block_number.unwrap().as_u64(), expected_block_nr);
+            assert_eq!(tx.block_number.unwrap().as_u64(), expected_block_nr);
+        }
     }
 
     // Check that invalid trsnacations are rejected.
