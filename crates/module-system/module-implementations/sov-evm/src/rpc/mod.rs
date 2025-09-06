@@ -110,7 +110,7 @@ where
                             let tx = self.transactions.get(&index, state).unwrap_infallible()?;
                             Some(from_recovered_with_block_context(
                                 tx.into(),
-                                block.header.seal(),
+                                Some(block.header.seal()),
                                 block.header.number,
                                 block.header.base_fee_per_gas,
                                 U256::from(index - block.transactions.start),
@@ -264,14 +264,14 @@ where
         let mut maybe_tx = || -> Option<Transaction> {
             let tx_number = self.get_tx_index_by_hash(&hash, state)?;
             let tx = self.transaction(tx_number, state)?;
-            let block = self.block(tx.block_number, state)?;
+            let block = self.get_maybe_sealed_block(&tx, state);
 
             Some(from_recovered_with_block_context(
                 tx.into(),
-                block.header.seal(),
-                block.header.number,
-                block.header.base_fee_per_gas,
-                U256::from(tx_number - block.transactions.start),
+                block.hash(),
+                block.number(),
+                Some(block.base_fee_per_gas()),
+                U256::from(tx_number - block.transactions_start()),
             ))
         };
 
@@ -419,6 +419,45 @@ where
                 self.blocks
                     .get(last_block_number, state)
                     .unwrap_infallible()
+            }
+            Some(ref block_number) if block_number == "pending" => {
+                let block_numbers = self.block_numbers.get(state).unwrap_infallible().unwrap();
+                let parent_block = self
+                    .blocks
+                    .get(block_numbers.end(), state)
+                    .unwrap_infallible()
+                    .unwrap();
+
+                assert_eq!(&parent_block.header.number, block_numbers.end());
+                let pending_block_number = block_numbers.end() + 1;
+
+                let header = alloy_consensus::Header {
+                    parent_hash: parent_block.header.seal(),
+                    number: pending_block_number,
+                    beneficiary: parent_block.header.beneficiary,
+                    // This will be set in finalize_hook or in the next begin_rollup_block_hook
+                    state_root: Default::default(),
+                    transactions_root: Default::default(),
+                    receipts_root: Default::default(),
+                    timestamp: Default::default(),
+                    gas_limit: Default::default(),
+                    gas_used: Default::default(),
+                    mix_hash: Default::default(),
+                    ..Default::default()
+                };
+
+                let pending_transactions_len =
+                    self.pending_transactions.len(state).unwrap_infallible();
+
+                let start = parent_block.transactions.end;
+                let end = start + pending_transactions_len;
+
+                let block = crate::Block {
+                    header,
+                    transactions: start..end,
+                };
+
+                Some(block.seal())
             }
             Some(ref block_number) => {
                 // hex representation may have 0x prefix
