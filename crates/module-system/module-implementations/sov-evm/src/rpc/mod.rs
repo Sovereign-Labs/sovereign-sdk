@@ -421,12 +421,19 @@ where
                     .unwrap_infallible()
             }
             Some(ref block_number) if block_number == "pending" => {
-                let block_numbers = self.block_numbers.get(state).unwrap_infallible().unwrap();
+                let block_numbers = self
+                    .block_numbers
+                    .get(state)
+                    .unwrap_infallible()
+                    // This is justified, as block numbers are set at genesis and only overridden later.
+                    .expect("The impossible happened: block_numbers was not set.");
+
                 let parent_block = self
                     .blocks
                     .get(block_numbers.end(), state)
                     .unwrap_infallible()
-                    .unwrap();
+                    // This is justified, as we just fetched `block_numbers`.
+                    .expect("The impossible happened: parent_block was not set.");
 
                 assert_eq!(&parent_block.header.number, block_numbers.end());
                 let pending_block_number = block_numbers.end() + 1;
@@ -434,15 +441,6 @@ where
                 let header = alloy_consensus::Header {
                     parent_hash: parent_block.header.seal(),
                     number: pending_block_number,
-                    beneficiary: parent_block.header.beneficiary,
-                    // This will be set in finalize_hook or in the next begin_rollup_block_hook
-                    state_root: Default::default(),
-                    transactions_root: Default::default(),
-                    receipts_root: Default::default(),
-                    timestamp: Default::default(),
-                    gas_limit: Default::default(),
-                    gas_used: Default::default(),
-                    mix_hash: Default::default(),
                     ..Default::default()
                 };
 

@@ -32,8 +32,6 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
             );
             assert!(pending_blokck.transactions.is_empty());
             assert!(latest_blokck.transactions.is_empty());
-
-            println!("pending_blokck: {:?}", pending_blokck.state_root);
         }
 
         let set_arg = 1;
@@ -47,7 +45,6 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
         assert!(tx.block_hash.is_none());
 
         let expected_block_nr = evm_client.block_number().await + 1;
-
         assert_eq!(rec.block_number.unwrap().as_u64(), expected_block_nr);
         assert_eq!(tx.block_number.unwrap().as_u64(), expected_block_nr);
 
