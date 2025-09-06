@@ -82,6 +82,27 @@ impl<S: Spec> StateCheckpoint<S> {
         self.delta.inner()
     }
 
+    /// Returns the rollup height of the latest data saved in the underlying storage.
+    #[cfg(feature = "native")]
+    pub fn get_rollup_height_of_underlying_storage<K: Kernel<S>>(
+        &self,
+        kernel: &K,
+    ) -> RollupHeight {
+        let new_checkpoint = Self::new(self.delta.inner().clone(), kernel);
+        new_checkpoint.rollup_height
+    }
+
+    /// Replaces the underlying storage and prunes...
+    /// - Any writes older than or equal to the new rollup height
+    /// - All reads
+    #[cfg(feature = "native")]
+    pub fn replace_storage_and_prune<K: Kernel<S>>(&mut self, storage: S::Storage, kernel: &K) {
+        let new_checkpoint = Self::new(storage.clone(), kernel);
+        let new_rollup_height = new_checkpoint.rollup_height;
+        self.delta
+            .replace_storage_and_prune(storage, new_rollup_height.get());
+    }
+
     /// Creates a new [`StateCheckpoint`] instance without any changes, backed
     /// by the given [`Storage`].
     pub fn new<K: Kernel<S>>(inner: S::Storage, kernel: &K) -> Self {
@@ -124,7 +145,8 @@ impl<S: Spec> StateCheckpoint<S> {
         AccessoryDelta<S::Storage>,
         <S::Storage as Storage>::Witness,
     ) {
-        let (state_accesses, accesory_delta, witness, _storage) = self.delta.freeze();
+        let (state_accesses, accesory_delta, witness, _storage) =
+            self.delta.freeze(self.rollup_height.get());
         (state_accesses, accesory_delta, witness)
     }
 
@@ -141,8 +163,8 @@ impl<S: Spec> StateCheckpoint<S> {
         <S::Storage as Storage>::Witness,
         S::Storage,
     ) {
-        let (cache_log, accessory_delta, witness, storage) = self.delta.freeze();
-
+        let (cache_log, accessory_delta, witness, storage) =
+            self.delta.freeze(self.rollup_height.get());
         let _span = tracing::debug_span!("compute_state_root", scope = "node").entered();
         let (root, update) = storage
             .compute_state_update(cache_log, &witness, prev_state_root)
@@ -223,11 +245,12 @@ impl<S: Spec> UniversalStateAccessor for StateCheckpoint<S> {
     }
 
     fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
-        self.delta.set(namespace, key, value);
+        self.delta
+            .set(namespace, key, value, self.rollup_height.get());
     }
 
     fn delete_value(&mut self, namespace: Namespace, key: &SlotKey) {
-        self.delta.delete(namespace, key);
+        self.delta.delete(namespace, key, self.rollup_height.get());
     }
 }
 

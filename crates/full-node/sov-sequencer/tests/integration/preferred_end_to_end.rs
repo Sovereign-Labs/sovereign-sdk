@@ -2197,6 +2197,24 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
         .await
         .unwrap();
 
+    // Produce a new block that includes this first tx.
+    test_rollup
+        .da_service
+        .produce_n_blocks_now(1)
+        .await
+        .unwrap();
+    // Wait until the new batch is almost processed
+    sleep(Duration::from_millis(1200)).await;
+
+    // Produce a second large delay tx and a second block since - for some reason - the sequencer seems to be holding one extra finalized slot in reserve.
+    // This is now needed to exhaust the sequencer's buffer and prevent flakiness allowing us to test the downtime.
+    client
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(tx_set_value_and_sleep(&admin.private_key, 1, 0, 1200)),
+        })
+        .await
+        .unwrap();
+
     // Produce a new block that includes this first tx. It will take 1200 ms to get processed, so start soon.
     test_rollup
         .da_service
@@ -2204,7 +2222,7 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
         .await
         .unwrap();
     // Wait until the new batch is almost processed
-    sleep(Duration::from_millis(1100)).await;
+    sleep(Duration::from_millis(1000)).await;
 
     // Send off the delayed tx. It should arrive at the seqeuncer immediately and begin sleeping.
     let delayed_tx_handle = tokio::spawn({

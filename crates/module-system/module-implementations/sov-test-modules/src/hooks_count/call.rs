@@ -67,7 +67,8 @@ impl<S: Spec> HooksCount<S> {
         let state_root = self.latest_state_root.get_or_err(state)??;
         anyhow::ensure!(
             expected_state_root == state_root.as_ref(),
-            "State root is not as expected. Expected {}, but got {}",
+            "State root is not as expected for height {}. Expected {}, but got {}",
+            state.rollup_height_to_access(),
             hex::encode(expected_state_root),
             state_root
         );

@@ -12,6 +12,7 @@ use super::temp_cache::{CacheLookup, TempCache};
 use super::{BorshSerializedSize, StateCheckpoint, UniversalStateAccessor};
 use crate::capabilities::{KernelWithSlotMapping, RollupHeight};
 use crate::gas::GasArray;
+use crate::state::accessors::internals::AccessoryWrite;
 use crate::state::traits::PerBlockCache;
 use crate::{Gas, GasMeter, GetGasPrice, Spec, VersionReader};
 
@@ -56,8 +57,7 @@ impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
                 metric,
             ),
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
-                Some(Some(value)) => Ok(Some(value.size())),
-                Some(None) => Ok(None),
+                Some(write) => Ok(write.value.as_ref().map(|v| v.size())),
                 None => {
                     let val = self
                         .storage
@@ -98,8 +98,7 @@ impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
                 metric,
             ),
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
-                Some(Some(value)) => Ok(Some(value)),
-                Some(None) => Ok(None),
+                Some(write) => Ok(write.value),
                 None => self
                     .storage
                     .get_accessory_historical(key, self.safe_true_slot_number_to_use),
@@ -116,19 +115,22 @@ impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
     }
 
     fn set_value(&mut self, namespace: sov_state::Namespace, key: &SlotKey, value: SlotValue) {
+        // The rollup height is only used for pruning the sequencer state checkpoint - which is irrelelvant for the API. So we use a dummy value.
         match namespace {
-            Namespace::User => self.user_cache.set(key, value),
-            Namespace::Kernel => self.kernel_cache.set(key, value),
+            Namespace::User => self.user_cache.set(key, value, 0),
+            Namespace::Kernel => self.kernel_cache.set(key, value, 0),
             Namespace::Accessory => {
-                self.accessory_writes.insert(key.clone(), Some(value));
+                self.accessory_writes
+                    .insert(key.clone(), AccessoryWrite::new(0, Some(value)));
             }
         }
     }
 
     fn delete_value(&mut self, namespace: sov_state::Namespace, key: &SlotKey) {
+        // The rollup height is only used for pruning the sequencer state checkpoint - which is irrelelvant for the API. So we use a dummy value.
         match namespace {
-            Namespace::User => self.user_cache.delete(key),
-            Namespace::Kernel => self.kernel_cache.delete(key),
+            Namespace::User => self.user_cache.delete(key, 0),
+            Namespace::Kernel => self.kernel_cache.delete(key, 0),
             Namespace::Accessory => {
                 self.accessory_writes.remove(key);
             }
@@ -160,7 +162,7 @@ pub struct ApiStateAccessor<S: Spec> {
     gas_price: <S::Gas as Gas>::Price,
     kernel_cache: ProvableStorageCache<namespaces::Kernel>,
     user_cache: ProvableStorageCache<namespaces::User>,
-    accessory_writes: HashMap<SlotKey, Option<SlotValue>>,
+    accessory_writes: HashMap<SlotKey, AccessoryWrite>,
     temp_cache: TempCache,
     #[debug(skip)]
     kernel: Arc<dyn KernelWithSlotMapping<S>>,
