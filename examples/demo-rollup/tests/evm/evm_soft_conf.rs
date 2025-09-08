@@ -69,10 +69,6 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
         test_rollup.wait_for_next_blocks(1).await;
 
         {
-            let latest_block = evm_client
-                .eth_get_block_by_number(Some("latest".to_string()))
-                .await;
-
             let rec = evm_client.receipt(tx_hash).await.unwrap();
             let tx = evm_client.transaction(tx_hash).await.unwrap();
 
