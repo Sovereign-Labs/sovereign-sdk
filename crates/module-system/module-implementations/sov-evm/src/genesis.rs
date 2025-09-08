@@ -94,7 +94,6 @@ fn init_block(config: &EvmGenesisConfig) -> Block {
         state_root: KECCAK_EMPTY,
         gas_limit: config.chain_spec.block_gas_limit,
         timestamp: config.genesis_timestamp,
-        base_fee_per_gas: Some(config.initial_base_fee),
         ..Default::default()
     };
 

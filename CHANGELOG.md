@@ -1,3 +1,6 @@
+# 2025-09-08
+- #1635 **BREAKING CHANGE** Removes ETH gas price mechanism from the EVM module. The gas oracle, gas price cache, and related configuration have been eliminated. This simplifies EVM transaction handling by removing Ethereum gas pricing in favor of rollup gas metering.
+
 # 2025-09-04
 - #1621 Introduces rollup gas metering for EVM execution. EVM transactions now use available rollup gas as their gas limit and charge rollup gas proportionally to EVM gas consumed.
 

@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
-use alloy_primitives::{Bytes, B256, U256};
+use alloy_primitives::{Bytes, B256};
 
 use jsonrpsee::types::{ErrorObjectOwned, Params};
 use jsonrpsee::Extensions;
 use sov_address::{EthereumAddress, FromVmAddress};
 
 pub use sov_evm::EthereumAuthenticator;
-use sov_evm::{Evm, RlpEvmTransaction};
+#[cfg(feature = "local")]
+use sov_evm::Evm;
+use sov_evm::RlpEvmTransaction;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::{RawTx, Spec};
 use sov_sequencer::Sequencer;
@@ -122,42 +124,6 @@ pub(crate) mod signer {
 
         Ok(tx_hash)
     }
-}
-
-pub async fn eth_gas_price<S, Seq>(
-    _: Params<'static>,
-    ethereum: Arc<Ethereum<S, Seq>>,
-    _: Extensions,
-) -> Result<U256, ErrorObjectOwned>
-where
-    S: Spec,
-    Seq: Sequencer<Spec = S>,
-    S::Address: FromVmAddress<EthereumAddress>,
-    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
-{
-    let price = {
-        let mut state = ethereum.api_state_accessor();
-
-        let suggested_tip = ethereum
-            .gas_price_oracle
-            .suggest_tip_cap(&mut state)
-            .await
-            .unwrap();
-
-        let evm = Evm::<S>::default();
-        let base_fee = U256::from(
-            evm.get_block_by_number(None, None, &mut state)
-                .unwrap()
-                .unwrap()
-                .header
-                .base_fee_per_gas
-                .unwrap_or_default(),
-        );
-
-        suggested_tip + base_fee
-    };
-
-    Ok(price)
 }
 
 pub async fn eth_send_raw_transaction<S, Seq>(

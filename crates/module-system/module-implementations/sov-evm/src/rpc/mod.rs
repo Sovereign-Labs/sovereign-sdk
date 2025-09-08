@@ -112,7 +112,6 @@ where
                                 tx.into(),
                                 block.header.seal(),
                                 block.header.number,
-                                block.header.base_fee_per_gas,
                                 U256::from(index - block.transactions.start),
                             ))
                         })
@@ -270,7 +269,6 @@ where
                 tx.into(),
                 block.header.seal(),
                 block.header.number,
-                block.header.base_fee_per_gas,
                 U256::from(tx_number - block.transactions.start),
             ))
         };
@@ -402,7 +400,6 @@ where
         MaybeSealedBlock::Pending {
             block_number: tx.block_number,
             first_tx_number: first_tx_index,
-            base_fee_per_gas: current_block_env.basefee,
         }
     }
 
@@ -543,7 +540,7 @@ pub(crate) fn build_rpc_receipt(
         block_hash,
         block_number,
         gas_used: receipt.gas_used,
-        effective_gas_price: transaction.effective_gas_price(Some(block.base_fee_per_gas())),
+        effective_gas_price: 0,
         blob_gas_used: None,
         blob_gas_price: None,
         from,
