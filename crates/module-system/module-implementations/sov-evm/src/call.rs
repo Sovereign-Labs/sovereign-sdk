@@ -16,6 +16,7 @@ use crate::evm::primitive_types::{Receipt, TransactionSignedAndRecovered};
 use crate::evm::RlpEvmTransaction;
 use crate::executor::get_cfg_env;
 use crate::{Evm, PendingTransaction};
+use anyhow::Context as _;
 
 /// EVM call message.
 #[derive(Debug, PartialEq, Eq, Clone, schemars::JsonSchema, UniversalWallet)]
@@ -38,7 +39,8 @@ where
         let block_env = self
             .block_env
             .get(state)?
-            .expect("Pending block must be set");
+            // Justified, we set it in `begin_rollup_block_hook`.
+            .expect("The impossible happened: block_env is not set.");
         let tx = convert_to_transaction_signed(message.rlp)?;
         // The signature was checked before the call was dispatched,
         // and the signer was recovered during the authentication process.
@@ -101,6 +103,7 @@ where
         let head = self
             .head
             .get(state)?
+            // Justified, we set it at `genesis` and leter only override it.
             .expect("Impossible happened: Head must be set.");
 
         #[allow(unused_variables)]
@@ -116,7 +119,8 @@ where
     fn gas_limit(&self, state: &mut impl TxState<S>) -> u64 {
         let BasicGasState { gas, funds, price } = state
             .try_as_basic_gas_state()
-            .expect("We should have a BasicGasMeter or it's derivative in tx context");
+            // Justified, `impl TxState` has access to `BasicGasState`.
+            .expect("The impossible happened: BasicGasState is absent.");
         let funds = funds.0;
         let gas = gas.as_ref()[0];
         let price = price.as_ref()[0].0;
@@ -140,10 +144,13 @@ where
         let previous_transaction_cumulative_gas_used = previous_transaction
             .as_ref()
             .map_or(0u64, |tx| tx.receipt.receipt.cumulative_gas_used);
+
         let log_index_start = previous_transaction.as_ref().map_or(0u64, |tx| {
             tx.receipt
                 .log_index_start
-                .saturating_add(tx.receipt.receipt.logs.len() as u64)
+                .checked_add(tx.receipt.receipt.logs.len() as u64)
+                // Justified, we will never have that many logs.
+                .expect("Impossible happened: Log index overflow.")
         });
         let is_success = result.is_success();
         let gas_used = result.gas_used();
@@ -153,12 +160,18 @@ where
             gas_used,
             "EVM transaction has been executed"
         );
+
         let receipt = reth_primitives::Receipt {
             tx_type: tx.signed_transaction.tx_type(),
             success: is_success,
-            cumulative_gas_used: previous_transaction_cumulative_gas_used.saturating_add(gas_used),
+
+            cumulative_gas_used: previous_transaction_cumulative_gas_used
+                .checked_add(gas_used)
+                .context("EVM: Cumulative gas used overflow")?,
+
             logs,
         };
+
         Ok(Receipt {
             receipt,
             gas_used,
@@ -219,7 +232,7 @@ where
             .checked_add(pending_tx_len)
             .expect("The impossible happened: Tx index overflow.")
             .checked_sub(1)
-            //Can't underflow because `pending_tx_len` is greater than 0.
+            // Justified, can't underflow because `pending_tx_len` is greater than 0.
             .expect("The impossible happened: Tx index underflow.");
 
         self.transactions

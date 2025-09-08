@@ -1,26 +1,23 @@
-mod gas_price;
 mod handlers;
 
+use std::convert::Infallible;
 use std::sync::Arc;
 
-use alloy_primitives::B256;
+use alloy_primitives::{B256, U256};
 use jsonrpsee::types::{ErrorCode, ErrorObjectOwned};
 use jsonrpsee::RpcModule;
-pub use reth_rpc_eth_types::GasPriceOracleConfig;
 use sov_address::{EthereumAddress, FromVmAddress};
 #[cfg(feature = "local")]
 pub use sov_eth_dev_signer::Signers;
 pub use sov_evm::EthereumAuthenticator;
-use sov_evm::{convert_to_transaction_signed, Evm, RlpEvmTransaction};
+use sov_evm::{convert_to_transaction_signed, RlpEvmTransaction};
 use sov_modules_api::capabilities::HasKernel;
-use sov_modules_api::{ApiStateAccessor, Spec};
+use sov_modules_api::Spec;
 use sov_sequencer::Sequencer;
-
-use crate::gas_price::gas_oracle::GasPriceOracle;
+use std::future::ready;
 
 #[derive(Clone)]
 pub struct EthRpcConfig {
-    pub gas_price_oracle_config: GasPriceOracleConfig,
     #[cfg(feature = "local")]
     pub eth_signer: Signers,
 }
@@ -36,12 +33,10 @@ where
     let EthRpcConfig {
         #[cfg(feature = "local")]
         eth_signer,
-        gas_price_oracle_config,
     } = eth_rpc_config;
 
     let mut rpc = RpcModule::new(Ethereum {
         sequencer,
-        gas_price_oracle: GasPriceOracle::new(Evm::<S>::default(), gas_price_oracle_config),
         #[cfg(feature = "local")]
         eth_signer,
     });
@@ -60,7 +55,12 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    rpc.register_async_method("eth_gasPrice", handlers::eth_gas_price)?;
+    rpc.register_async_method("eth_gasPrice", |_, _, _| {
+        // We don't use EVM gas price mechanism and rely on sov gas/gas price.
+        // Therefore - we can safely return zero here as it's used by wallets to set gas price when sending transactions.
+        // When we receive transactions - we override the gas price with 0 and disable charging the sender account for gas in handler.
+        ready(Ok::<_, Infallible>(U256::ZERO))
+    })?;
     rpc.register_async_method("eth_sendRawTransaction", handlers::eth_send_raw_transaction)?;
 
     #[cfg(feature = "local")]
@@ -77,7 +77,6 @@ where
 
 struct Ethereum<S: Spec, Seq: Sequencer<Spec = S>> {
     sequencer: Arc<Seq>,
-    gas_price_oracle: GasPriceOracle<S>,
     #[cfg(feature = "local")]
     eth_signer: Signers,
 }
@@ -89,10 +88,6 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    fn api_state_accessor(&self) -> ApiStateAccessor<S> {
-        self.sequencer.api_state().default_api_state_accessor()
-    }
-
     fn make_raw_tx(&self, raw_tx: RlpEvmTransaction) -> Result<(B256, Vec<u8>), ErrorObjectOwned> {
         let signed_transaction = convert_to_transaction_signed(raw_tx.clone())
             // TODO: Fix this later
