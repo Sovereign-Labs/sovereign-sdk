@@ -11,6 +11,7 @@ use testcontainers::{ContainerRequest, GenericImage, ImageExt};
 
 const IMAGE: &str = "ghcr.io/sovereign-labs/hyperlane-cli";
 const TAG: &str = "sov-integration-3";
+const REGISTRY_REPO: &str = "https://github.com/citizen-stig/hyperlane-registry";
 
 pub struct HyperlaneCliRunner {
     data: tempfile::TempDir,
@@ -62,6 +63,10 @@ impl HyperlaneCliRunner {
         let hyperlane_cli_image = self.prepare_container().with_cmd([
             "core",
             "deploy",
+            "--registry",
+            REGISTRY_REPO,
+            "--registry",
+            "/root/.hyperlane",
             "--config",
             "/root/configs/core-config.yaml",
             "--chain",
@@ -103,6 +108,10 @@ impl HyperlaneCliRunner {
         let hyperlane_cli_image = self.prepare_container().with_cmd([
             "warp",
             "deploy",
+            "--registry",
+            REGISTRY_REPO,
+            "--registry",
+            "/root/.hyperlane",
             "--config",
             "/root/configs/warp-route-deployment.yaml",
             "--yes",
