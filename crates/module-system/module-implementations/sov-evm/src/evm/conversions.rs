@@ -38,6 +38,8 @@ pub fn create_tx_env(tx: &TransactionSigned, signer: Address, nonce: u64, gas_li
         value: tx.value(),
         data: tx.input().clone(),
         chain_id: tx.chain_id(),
+        // We don't set gas_price nor the gas_priority_fee.
+        // We disable the EVM logic charging gas at the beginning of the TX and instead rely on sov gas metering
         ..Default::default()
     }
 }

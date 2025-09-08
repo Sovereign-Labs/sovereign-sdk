@@ -56,6 +56,9 @@ where
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
     rpc.register_async_method("eth_gasPrice", |_, _, _| {
+        // We don't use EVM gas price mechanism and rely on sov gas/gas price.
+        // Therefore - we can safely return zero here as it's used by wallets to set gas price when sending transactions.
+        // When we receive transactions - we override the gas price with 0 and disable charging the sender account for gas in handler.
         ready(Ok::<_, Infallible>(U256::ZERO))
     })?;
     rpc.register_async_method("eth_sendRawTransaction", handlers::eth_send_raw_transaction)?;
