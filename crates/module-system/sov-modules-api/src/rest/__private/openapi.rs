@@ -290,6 +290,18 @@ where
     }
 }
 
+impl<N, T, Codec> StateItemPaths for StateItemOpenApiSpecImpl<NamespacedStateValue<N, T, Codec>>
+where
+    N: CompileTimeNamespace,
+    T: Serialize + Send + Sync + 'static,
+    Codec: StateCodec,
+    Codec::ValueCodec: StateItemCodec<T>,
+{
+    fn state_item_paths(&self, module_name: &str, field_name: &str) -> Option<OpenApiPaths> {
+        Some(state_value_paths(module_name, field_name))
+    }
+}
+
 /// The OpenAPI paths specification for
 /// [`StateValue`](crate::containers::StateValue) with optional custom response type.
 pub fn state_value_paths_with_response(
