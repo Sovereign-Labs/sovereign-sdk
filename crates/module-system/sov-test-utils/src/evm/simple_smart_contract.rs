@@ -76,4 +76,14 @@ impl SimpleStorageContract {
     pub fn always_revert(&self) -> Bytes {
         self.base_contract.encode("alwaysRevert", ()).unwrap()
     }
+
+    /// Emit example log.
+    pub fn emit_one_log(&self) -> Bytes {
+        self.base_contract.encode("emitOneLog", ()).unwrap()
+    }
+
+    /// Emit example log.
+    pub fn emit_two_logs(&self) -> Bytes {
+        self.base_contract.encode("emitTwoLogs", ()).unwrap()
+    }
 }
