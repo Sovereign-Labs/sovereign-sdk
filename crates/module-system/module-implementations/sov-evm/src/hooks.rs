@@ -1,6 +1,5 @@
 use crate::evm::primitive_types::Block;
 use crate::{BlockEnv, Evm, PendingTransaction};
-use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root};
 use alloy_consensus::TxReceipt;
 use alloy_primitives::Bloom;
@@ -124,11 +123,10 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
         let header = alloy_consensus::Header {
             parent_hash: parent_block.header.seal(),
-            timestamp: block_env.timestamp.to::<u64>(),
             number: block_env.number.to::<u64>(),
             beneficiary: parent_block.header.beneficiary,
             // This will be set in finalize_hook or in the next begin_rollup_block_hook
-            state_root: KECCAK_EMPTY,
+            state_root: Default::default(),
             transactions_root,
             receipts_root,
             logs_bloom: receipts

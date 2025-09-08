@@ -57,11 +57,10 @@ pub(crate) fn from_primitive_with_hash(
 /// copy from [`reth_rpc_types_compat::transaction::from_recovered_with_block_context`]
 pub(crate) fn from_recovered_with_block_context(
     tx: Recovered<TransactionSigned>,
-    block_hash: B256,
+    block_hash: Option<B256>,
     block_number: BlockNumber,
     tx_index: U256,
 ) -> alloy_rpc_types::Transaction {
-    let block_hash = Some(block_hash);
     let block_number = Some(block_number);
     let transaction_index = Some(tx_index.to::<u64>());
 

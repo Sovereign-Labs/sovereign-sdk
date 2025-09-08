@@ -214,15 +214,6 @@ impl<S: Spec> Evm<S> {
             .expect("Block numbers must be set")
     }
 
-    /// Access Ethereum block by number.
-    pub fn block<Accessor: AccessoryStateReaderAndWriter>(
-        &self,
-        number: u64,
-        state: &mut Accessor,
-    ) -> Option<SealedBlock> {
-        self.blocks.get(&number, state).unwrap_infallible()
-    }
-
     /// Lookup an Ethereum account by address.
     pub fn get_account<Accessor: StateReader<User>>(
         &self,

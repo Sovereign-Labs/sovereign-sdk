@@ -16,7 +16,7 @@ fn check_blocks(block_start: u64, block_end: u64, evm: &Evm<S>, state: &mut ApiS
     assert_eq!(*blocks_range.end(), block_end);
 
     for block_number in block_start..=block_end {
-        let block = evm.block(block_number, state).unwrap();
+        let block = evm.blocks.get(&block_number, state).unwrap().unwrap();
         assert_eq!(block.header().number(), block_number);
     }
 }

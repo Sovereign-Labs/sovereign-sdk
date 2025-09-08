@@ -110,7 +110,7 @@ where
                             let tx = self.transactions.get(&index, state).unwrap_infallible()?;
                             Some(from_recovered_with_block_context(
                                 tx.into(),
-                                block.header.seal(),
+                                Some(block.header.seal()),
                                 block.header.number,
                                 U256::from(index - block.transactions.start),
                             ))
@@ -263,13 +263,13 @@ where
         let mut maybe_tx = || -> Option<Transaction> {
             let tx_number = self.get_tx_index_by_hash(&hash, state)?;
             let tx = self.transaction(tx_number, state)?;
-            let block = self.block(tx.block_number, state)?;
+            let block = self.get_maybe_sealed_block(&tx, state);
 
             Some(from_recovered_with_block_context(
                 tx.into(),
-                block.header.seal(),
-                block.header.number,
-                U256::from(tx_number - block.transactions.start),
+                block.hash(),
+                block.number(),
+                U256::from(tx_number - block.transactions_start()),
             ))
         };
 
@@ -437,6 +437,43 @@ where
                     .get(last_block_number, state)
                     .unwrap_infallible()
             }
+            Some(ref block_number) if block_number == "pending" => {
+                let block_numbers = self
+                    .block_numbers
+                    .get(state)
+                    .unwrap_infallible()
+                    // This is justified, as block numbers are set at genesis and only overridden later.
+                    .expect("The impossible happened: block_numbers was not set.");
+
+                let parent_block = self
+                    .blocks
+                    .get(block_numbers.end(), state)
+                    .unwrap_infallible()
+                    // This is justified, as we just fetched `block_numbers`.
+                    .expect("The impossible happened: parent_block was not set.");
+
+                assert_eq!(&parent_block.header.number, block_numbers.end());
+                let pending_block_number = block_numbers.end() + 1;
+
+                let header = alloy_consensus::Header {
+                    parent_hash: parent_block.header.seal(),
+                    number: pending_block_number,
+                    ..Default::default()
+                };
+
+                let pending_transactions_len =
+                    self.pending_transactions.len(state).unwrap_infallible();
+
+                let start = parent_block.transactions.end;
+                let end = start + pending_transactions_len;
+
+                let block = crate::Block {
+                    header,
+                    transactions: start..end,
+                };
+
+                Some(block.seal())
+            }
             Some(ref block_number) => {
                 // hex representation may have 0x prefix
                 let Ok(block_number) =
@@ -541,10 +578,12 @@ pub(crate) fn build_rpc_receipt(
         block_number,
         gas_used: receipt.gas_used,
         effective_gas_price: 0,
+
         blob_gas_used: None,
         blob_gas_price: None,
         from,
         to,
+
         contract_address,
     }
 }
