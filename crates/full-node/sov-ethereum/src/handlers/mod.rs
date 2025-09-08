@@ -7,7 +7,9 @@ use jsonrpsee::Extensions;
 use sov_address::{EthereumAddress, FromVmAddress};
 
 pub use sov_evm::EthereumAuthenticator;
-use sov_evm::{Evm, RlpEvmTransaction};
+#[cfg(feature = "local")]
+use sov_evm::Evm;
+use sov_evm::RlpEvmTransaction;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::{RawTx, Spec};
 use sov_sequencer::Sequencer;
