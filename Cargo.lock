@@ -12378,6 +12378,7 @@ name = "sov-universal-wallet"
 version = "0.1.0"
 dependencies = [
  "alloy-dyn-abi",
+ "alloy-primitives",
  "arrayvec",
  "bech32 0.11.0",
  "borsh",

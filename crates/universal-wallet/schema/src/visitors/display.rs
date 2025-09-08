@@ -6,7 +6,8 @@ use thiserror::Error;
 use crate::schema::Primitive;
 use crate::ty::visitor::{ResolutionError, TypeResolver, TypeVisitor};
 use crate::ty::{
-    byte_display, ByteDisplay, Enum, FixedPointDisplay, IntegerDisplay, IntegerType, LinkingScheme, Struct, Tuple
+    byte_display, ByteDisplay, Enum, FixedPointDisplay, IntegerDisplay, IntegerType, LinkingScheme,
+    Struct, Tuple,
 };
 
 type Delimiters = (&'static str, &'static str);

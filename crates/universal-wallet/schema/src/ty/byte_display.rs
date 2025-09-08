@@ -103,7 +103,11 @@ mod hrp_serde {
     }
 }
 impl ByteDisplay {
-    pub fn format(&self, input: &[u8], f: &mut impl core::fmt::Write) -> Result<(), ByteFormatError> {
+    pub fn format(
+        &self,
+        input: &[u8],
+        f: &mut impl core::fmt::Write,
+    ) -> Result<(), ByteFormatError> {
         match self {
             ByteDisplay::Hex => {
                 f.write_str("0x")?;

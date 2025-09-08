@@ -1,7 +1,4 @@
-#[allow(dead_code)]
-
 use std::collections::HashMap;
-use std::fmt::Write;
 
 use alloy_dyn_abi::{Eip712Types, PropertyDef};
 use serde_json::Map;
@@ -10,13 +7,13 @@ use thiserror::Error;
 use crate::schema::Primitive;
 use crate::ty::visitor::{ResolutionError, TypeResolver, TypeVisitor};
 use crate::ty::{
-    byte_display, ByteDisplay, Enum, IntegerDisplay, IntegerType, LinkingScheme, Struct, Tuple
+    byte_display, ByteDisplay, Enum, IntegerDisplay, IntegerType, LinkingScheme, Struct, Tuple,
 };
 
-pub type Result<T, E = FormatError> = core::result::Result<T, E>;
+pub type Result<T, E = Eip712Error> = core::result::Result<T, E>;
 
 #[derive(Debug, Error, Clone)]
-pub enum FormatError {
+pub enum Eip712Error {
     #[error("Core error: {0}")]
     Core(#[from] core::fmt::Error),
     #[error("EIP712 ABI error: {0}")]
@@ -80,18 +77,22 @@ impl<'t> Output<'t> {
             visited_types: Default::default(),
         }
     }
-    
+
     /// Get or create a unique type name for the given field definitions.
     /// If this exact field definition already exists for this base type, returns the existing name.
     /// Otherwise, creates a new unique name with appropriate suffix.
-    pub fn insert_types_and_get_or_create_name(&mut self, base_name: &str, fields: Vec<PropertyDef>) -> String {
+    pub fn insert_types_and_get_or_create_name(
+        &mut self,
+        base_name: &str,
+        fields: Vec<PropertyDef>,
+    ) -> String {
         let type_info = self.visited_types.entry(base_name.to_string()).or_default();
-        
+
         // Check if we've seen this exact field configuration for this base type before
         if let Some(existing_name) = type_info.variants.get(&fields) {
             return existing_name.clone();
         }
-        
+
         // Generate a unique name for this variant
         let unique_name = if type_info.next_suffix == 0 {
             base_name.to_string()
@@ -99,11 +100,13 @@ impl<'t> Output<'t> {
             format!("{}{}", base_name, type_info.next_suffix)
         };
         type_info.next_suffix += 1;
-        type_info.variants.insert(fields.clone(), unique_name.clone());
-        
+        type_info
+            .variants
+            .insert(fields.clone(), unique_name.clone());
+
         // Add to EIP712 types
         self.types.insert(unique_name.clone(), fields);
-        
+
         unique_name
     }
 }
@@ -114,9 +117,7 @@ pub struct Input<'a> {
 
 impl<'a> Input<'a> {
     pub fn new(buf: &'a mut &'a [u8]) -> Self {
-        Self {
-            buf,
-        }
+        Self { buf }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -127,9 +128,9 @@ impl<'a> Input<'a> {
         self.buf.len()
     }
 
-    pub(crate) fn check_remaining_bytes(&self, len: usize) -> Result<(), FormatError> {
+    pub(crate) fn check_remaining_bytes(&self, len: usize) -> Result<(), Eip712Error> {
         if self.buf.len() < len {
-            return Err(FormatError::MissingBytesInput {
+            return Err(Eip712Error::MissingBytesInput {
                 claimed_size: len,
                 bytes_available: self.buf.len(),
             });
@@ -139,7 +140,7 @@ impl<'a> Input<'a> {
 
     /// Splits the first `len` bytes from the input, returning them as a slice and updating the input buffer.
     /// Returns an error if there are not enough bytes remaining to fulfill the request.
-    pub fn advance(&mut self, len: usize) -> Result<&[u8], FormatError> {
+    pub fn advance(&mut self, len: usize) -> Result<&[u8], Eip712Error> {
         self.check_remaining_bytes(len)?;
         let (leading, rest) = self.buf.split_at(len);
         *self.buf = rest;
@@ -166,9 +167,9 @@ impl Eip712Visitor<'_, '_> {
         self.input.is_empty()
     }
 
-    pub fn read_usize_borsh(&mut self) -> Result<usize, FormatError> {
+    pub fn read_usize_borsh(&mut self) -> Result<usize, Eip712Error> {
         if self.input.len() < 4 {
-            return Err(FormatError::MissingIntegerInput {
+            return Err(Eip712Error::MissingIntegerInput {
                 claimed_size: 4,
                 bytes_available: self.input.len() as u8,
             });
@@ -182,18 +183,18 @@ impl Eip712Visitor<'_, '_> {
         Ok(len)
     }
 
-    pub fn display_byte_sequence(
+    fn display_byte_sequence(
         &mut self,
         len: usize,
         display: ByteDisplay,
         _context: Context,
-    ) -> Result<Option<InnerReturnType>, FormatError> {
+    ) -> Result<Option<InnerReturnType>, Eip712Error> {
         self.input.check_remaining_bytes(len)?;
         let mut str = String::new();
         display.format(self.input.advance(len)?, &mut str)?;
         Ok(Some(InnerReturnType {
             json_value: serde_json::Value::String(str),
-            unique_type_name: "string".to_string()
+            unique_type_name: "string".to_string(),
         }))
     }
 
@@ -205,25 +206,38 @@ impl Eip712Visitor<'_, '_> {
         value: &L::TypeLink,
         schema: &impl TypeResolver<LinkingScheme = L>,
         context: Context,
-    ) -> Result<Option<InnerReturnType>, FormatError> {
+    ) -> Result<Option<InnerReturnType>, Eip712Error> {
         let inner = schema.resolve_or_err(value)?;
         let base_name = &context.parent_name;
 
         let mut json_values = Map::new();
         let mut inner_types = Vec::new();
-        
+
         for i in 0..len {
-            let Some(eip712_value) = inner.visit(schema, self, Context { is_virtual: IsVirtual::No, parent_name: format!("{base_name}_{i}") })? else {
-                continue
+            let Some(eip712_value) = inner.visit(
+                schema,
+                self,
+                Context {
+                    is_virtual: IsVirtual::No,
+                    parent_name: format!("{base_name}_{i}"),
+                },
+            )?
+            else {
+                continue;
             };
             json_values.insert(i.to_string(), eip712_value.json_value);
             let property_def = PropertyDef::new(eip712_value.unique_type_name, i.to_string())?;
             inner_types.push(property_def);
         }
 
-        let eip712_name = self.output.insert_types_and_get_or_create_name(&base_name, inner_types);
+        let eip712_name = self
+            .output
+            .insert_types_and_get_or_create_name(&base_name, inner_types);
         let json_value = serde_json::Value::Object(json_values);
-        Ok(Some(InnerReturnType { json_value, unique_type_name: eip712_name }))
+        Ok(Some(InnerReturnType {
+            json_value,
+            unique_type_name: eip712_name,
+        }))
     }
 }
 
@@ -240,13 +254,6 @@ pub struct Context {
 pub enum IsVirtual {
     Yes,
     #[default]
-    No,
-}
-
-/// Tuple wrapping a single value
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IsTrivial {
-    Yes,
     No,
 }
 
@@ -273,7 +280,7 @@ macro_rules! display_int {
     ($t:ident, $input:expr, $disp:expr, $solint: expr) => {{
         let size = IntegerType::$t.size();
         if $input.len() < size {
-            return Err(FormatError::MissingIntegerInput {
+            return Err(Eip712Error::MissingIntegerInput {
                 claimed_size: size as u8,
                 bytes_available: $input.len() as u8,
             });
@@ -281,43 +288,35 @@ macro_rules! display_int {
         let buf = $input.advance(size)?;
         let value = <$t>::from_le_bytes(buf.try_into().unwrap()).to_string();
         match $disp {
-            IntegerDisplay::Hex => {
-                Ok(Some(
-                        InnerReturnType {
-                            json_value: serde_json::Value::String(hex::encode(value)),
-                            unique_type_name: "string".to_string()
-                        }
-                ))
-            }
+            IntegerDisplay::Hex => Ok(Some(InnerReturnType {
+                json_value: serde_json::Value::String(hex::encode(value)),
+                unique_type_name: "string".to_string(),
+            })),
             // EIP-712 doesn't have support for fixed point decimals.
-            IntegerDisplay::Decimal | IntegerDisplay::FixedPoint(_) => {
-                Ok(Some(
-                        InnerReturnType {
-                            json_value: serde_json::Value::String(value),
-                            unique_type_name: $solint.to_string()
-                        }
-                ))
-            }
+            IntegerDisplay::Decimal | IntegerDisplay::FixedPoint(_) => Ok(Some(InnerReturnType {
+                json_value: serde_json::Value::String(value),
+                unique_type_name: $solint.to_string(),
+            })),
         }
     }};
 }
 
-struct InnerReturnType {
-    json_value: serde_json::Value,
-    unique_type_name: String,
+pub struct InnerReturnType {
+    pub json_value: serde_json::Value,
+    pub unique_type_name: String,
 }
 
 impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
     type Arg = Context;
-    type ReturnType = Result<Option<InnerReturnType>, FormatError>;
+    type ReturnType = Result<Option<InnerReturnType>, Eip712Error>;
     fn visit_enum(
         &mut self,
         e: &Enum<L>,
         schema: &impl TypeResolver<LinkingScheme = L>,
-        mut context: Context,
+        context: Context,
     ) -> Self::ReturnType {
         if self.input.is_empty() && !e.variants.is_empty() {
-            return Err(FormatError::MissingDiscriminant {
+            return Err(Eip712Error::MissingDiscriminant {
                 type_name: e.type_name.clone(),
             });
         }
@@ -327,22 +326,57 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
             e.variants.iter().filter(|v| v.discriminant == discriminant);
         let variant = variants_by_discriminant
             .next()
-            .ok_or(FormatError::InvalidDiscriminant {
+            .ok_or(Eip712Error::InvalidDiscriminant {
                 type_name: e.type_name.clone(),
                 discriminant,
             })?;
         assert!(variants_by_discriminant.next().is_none(), "Found two enum variants with the same discriminant - the schema is malformed, cannot proceed!");
-        // TODO: start Value of a struct
-        if let Some(maybe_resolved) = &variant.value {
-            let inner = schema.resolve_or_err(maybe_resolved)?;
-            inner.visit(schema, self, context)?;
-            // TODO: populate from the inner fields
-            todo!();
+
+        // The enum type name comes from context (for nested) or from the enum itself
+        let enum_type_name = if context.is_virtual == IsVirtual::Yes {
+            &context.parent_name
         } else {
-            // TODO: insert single struct with type bool
-            todo!()
-        }
-        Ok(())
+            &e.type_name
+        };
+
+        // Create the single-field struct for the enum
+        let mut field_values = Map::new();
+        let mut field_types = Vec::new();
+
+        let (field_value, field_type_name) = if let Some(maybe_resolved) = &variant.value {
+            // Visit the variant's content with virtual context
+            let inner = schema.resolve_or_err(maybe_resolved)?;
+            let variant_context = Context {
+                is_virtual: IsVirtual::Yes,
+                parent_name: variant.name.clone(),
+            };
+
+            if let Some(result) = inner.visit(schema, self, variant_context)? {
+                (result.json_value, result.unique_type_name)
+            } else {
+                // Skip field if the inner type returns None
+                return Ok(None);
+            }
+        } else {
+            // Empty variant - use bool type with value true
+            (serde_json::Value::Bool(true), "bool".to_string())
+        };
+
+        // Add the variant as a field in the enum struct
+        field_values.insert(variant.name.clone(), field_value);
+        let property_def = PropertyDef::new(field_type_name, variant.name.clone())?;
+        field_types.push(property_def);
+
+        // Register this enum variant configuration and get its unique name
+        let eip712_name = self
+            .output
+            .insert_types_and_get_or_create_name(enum_type_name, field_types);
+        let json_value = serde_json::Value::Object(field_values);
+
+        Ok(Some(InnerReturnType {
+            json_value,
+            unique_type_name: eip712_name,
+        }))
     }
 
     fn visit_struct(
@@ -366,18 +400,32 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
 
         for field in &s.fields {
             let inner_ty = schema.resolve_or_err(&field.value)?;
-            let Some(eip712_field) = inner_ty.visit(schema, self, Context { is_virtual: IsVirtual::No, parent_name: field.display_name.clone() })? else {
+            let Some(eip712_field) = inner_ty.visit(
+                schema,
+                self,
+                Context {
+                    is_virtual: IsVirtual::No,
+                    parent_name: field.display_name.clone(),
+                },
+            )?
+            else {
                 continue;
             };
             if !field.silent && !inner_ty.is_skip() {
                 field_values.insert(field.display_name.clone(), eip712_field.json_value);
-                let property_def = PropertyDef::new(eip712_field.unique_type_name, field.display_name.clone())?;
+                let property_def =
+                    PropertyDef::new(eip712_field.unique_type_name, field.display_name.clone())?;
                 field_types.push(property_def);
             }
         }
-        let eip712_name = self.output.insert_types_and_get_or_create_name(&base_name, field_types);
+        let eip712_name = self
+            .output
+            .insert_types_and_get_or_create_name(&base_name, field_types);
         let json_value = serde_json::Value::Object(field_values);
-        Ok(Some(InnerReturnType { json_value, unique_type_name: eip712_name }))
+        Ok(Some(InnerReturnType {
+            json_value,
+            unique_type_name: eip712_name,
+        }))
     }
 
     fn visit_tuple(
@@ -386,11 +434,12 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
         schema: &impl TypeResolver<LinkingScheme = L>,
         context: Context,
     ) -> Self::ReturnType {
-        // Trivial tuple (single field) - make it transparent
+        // Trivial tuple (single field) - always transparent
+        // The magic happens in visit_enum when it sees a virtual context
         if t.fields.len() == 1 {
             let field = &t.fields[0];
             let inner_ty = schema.resolve_or_err(&field.value)?;
-            // Pass through the parent context since the tuple is transparent
+            // Pass through the context - if we're virtual, the inner enum will use parent_name as its type
             return inner_ty.visit(schema, self, context);
         }
 
@@ -398,7 +447,7 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
         let base_name = if context.is_virtual == IsVirtual::Yes {
             &context.parent_name
         } else {
-            &context.parent_name  // For tuples, parent_name is the field name
+            &context.parent_name // For tuples, parent_name is the field name
         };
 
         let mut field_values = Map::new();
@@ -407,13 +456,18 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
         for (i, field) in t.fields.iter().enumerate() {
             let inner_ty = schema.resolve_or_err(&field.value)?;
             let field_name = i.to_string();
-            let Some(eip712_field) = inner_ty.visit(schema, self, Context { 
-                is_virtual: IsVirtual::No, 
-                parent_name: format!("{base_name}_{field_name}")
-            })? else {
+            let Some(eip712_field) = inner_ty.visit(
+                schema,
+                self,
+                Context {
+                    is_virtual: IsVirtual::No,
+                    parent_name: format!("{base_name}_{field_name}"),
+                },
+            )?
+            else {
                 continue;
             };
-            
+
             if !field.silent && !inner_ty.is_skip() {
                 field_values.insert(field_name.clone(), eip712_field.json_value);
                 let property_def = PropertyDef::new(eip712_field.unique_type_name, field_name)?;
@@ -421,9 +475,14 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
             }
         }
 
-        let eip712_name = self.output.insert_types_and_get_or_create_name(&base_name, field_types);
+        let eip712_name = self
+            .output
+            .insert_types_and_get_or_create_name(&base_name, field_types);
         let json_value = serde_json::Value::Object(field_values);
-        Ok(Some(InnerReturnType { json_value, unique_type_name: eip712_name }))
+        Ok(Some(InnerReturnType {
+            json_value,
+            unique_type_name: eip712_name,
+        }))
     }
 
     fn visit_option(
@@ -436,13 +495,11 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
 
         match discriminant {
             0 => Ok(None),
-            1 => {
-                schema.resolve_or_err(value)?.visit(schema, self, context)
-            }
-            _ => Err(FormatError::InvalidDiscriminant {
+            1 => schema.resolve_or_err(value)?.visit(schema, self, context),
+            _ => Err(Eip712Error::InvalidDiscriminant {
                 type_name: "Option".to_string(),
                 discriminant,
-            })
+            }),
         }
     }
 
@@ -459,7 +516,7 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
                 let json_value = serde_json::Value::String(value);
                 Ok(Some(InnerReturnType {
                     json_value,
-                    unique_type_name: "string".to_string()
+                    unique_type_name: "string".to_string(),
                 }))
             }
             Primitive::Float64 => {
@@ -468,7 +525,7 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
                 let json_value = serde_json::Value::String(value);
                 Ok(Some(InnerReturnType {
                     json_value,
-                    unique_type_name: "string".to_string()
+                    unique_type_name: "string".to_string(),
                 }))
             }
             Primitive::Boolean => {
@@ -477,7 +534,7 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
                     0 => serde_json::Value::Bool(false),
                     1 => serde_json::Value::Bool(true),
                     _ => {
-                        return Err(FormatError::InvalidDiscriminant {
+                        return Err(Eip712Error::InvalidDiscriminant {
                             type_name: "bool".to_string(),
                             discriminant: value[0],
                         });
@@ -485,7 +542,7 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
                 };
                 Ok(Some(InnerReturnType {
                     json_value,
-                    unique_type_name: "bool".to_string()
+                    unique_type_name: "bool".to_string(),
                 }))
             }
             Primitive::Integer(int, display) => match int {
@@ -506,16 +563,19 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
             Primitive::ByteVec { display } => {
                 let len = self
                     .read_usize_borsh()
-                    .or(Err(FormatError::MissingVecLength))?;
+                    .or(Err(Eip712Error::MissingVecLength))?;
                 self.display_byte_sequence(len, display, context)
             }
             Primitive::String => {
                 let len = self
                     .read_usize_borsh()
-                    .or(Err(FormatError::MissingStringLength))?;
+                    .or(Err(Eip712Error::MissingStringLength))?;
                 let content = self.input.advance(len)?;
                 let content = std::str::from_utf8(content)?.to_string();
-                Ok(Some(InnerReturnType { json_value: serde_json::Value::String(content), unique_type_name: "string".to_string() }))
+                Ok(Some(InnerReturnType {
+                    json_value: serde_json::Value::String(content),
+                    unique_type_name: "string".to_string(),
+                }))
             }
             Primitive::Skip { len } => {
                 self.input.advance(len)?;
@@ -561,16 +621,24 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
         let mut inner_types = Vec::new();
 
         for i in 0..len {
-            let Some(eip712_key) = key.visit(schema, self, Context { is_virtual: IsVirtual::No, parent_name: format!("{base_name}_{i}") })? else {
-                return Err(FormatError::InvalidMapKey(base_name.clone()))
+            let Some(eip712_key) = key.visit(
+                schema,
+                self,
+                Context {
+                    is_virtual: IsVirtual::No,
+                    parent_name: format!("{base_name}_{i}"),
+                },
+            )?
+            else {
+                return Err(Eip712Error::InvalidMapKey(base_name.clone()));
             };
             let key_name = match eip712_key.json_value {
                 serde_json::Value::String(s) => s,
-                _ => return Err(FormatError::InvalidMapKey(base_name.clone()))
+                _ => return Err(Eip712Error::InvalidMapKey(base_name.clone())),
             };
 
             let Some(eip712_value) = value.visit(schema, self, context.clone())? else {
-                continue
+                continue;
             };
 
             json_values.insert(key_name.clone(), eip712_value.json_value);
@@ -578,8 +646,13 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
             inner_types.push(property_def);
         }
 
-        let eip712_name = self.output.insert_types_and_get_or_create_name(&base_name, inner_types);
+        let eip712_name = self
+            .output
+            .insert_types_and_get_or_create_name(&base_name, inner_types);
         let json_value = serde_json::Value::Object(json_values);
-        Ok(Some(InnerReturnType { json_value, unique_type_name: eip712_name }))
+        Ok(Some(InnerReturnType {
+            json_value,
+            unique_type_name: eip712_name,
+        }))
     }
 }
