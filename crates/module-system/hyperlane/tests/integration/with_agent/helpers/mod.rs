@@ -20,7 +20,7 @@ use sov_sequencer::SequencerKindConfig;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, TestUser};
-use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult, IntoContainerPort};
+use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 
@@ -281,7 +281,7 @@ impl HyperlaneBuilder {
         };
 
         // Start container with just basic env and no processes
-        let mut builder = self
+        let builder = self
             .image
             // test runtime uses fixed value for chain hash, this lets relayer know
             .with_env_var("SOV_TEST_UTILS_FIXED_CHAIN_HASH", "true")
