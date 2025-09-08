@@ -65,13 +65,8 @@ impl<S: Spec> BlockHooks for Evm<S> {
             // Users should follow the same best practice that they would on Ethereum and use future randomness.
             // See: https://eips.ethereum.org/EIPS/eip-4399#tips-for-application-developers
             prevrandao: Some(B256::from(pre_state_user_root)),
-            basefee: parent_block
-                .header
-                .next_block_base_fee(cfg.chain_spec.base_fee_params)
-                .expect("The impossible happened: TxEip4844 is not supported"),
             gas_limit: cfg.chain_spec.block_gas_limit,
-            difficulty: Default::default(),
-            blob_excess_gas_and_price: None,
+            ..Default::default()
         };
         self.block_env
             .set(&new_pending_env, state)
@@ -81,8 +76,6 @@ impl<S: Spec> BlockHooks for Evm<S> {
     /// Logic executed at the end of the slot. Here, we generate an authenticated block and set it as the new head of the chain.
     /// It's important to note that the state root hash is not known at this moment, so we postpone setting this field until the begin_rollup_block_hook of the next slot.
     fn end_rollup_block_hook(&mut self, state: &mut StateCheckpoint<S>) {
-        let cfg = self.cfg_infallible(state);
-
         let block_env = self
             .block_env
             .get(state)
@@ -144,9 +137,6 @@ impl<S: Spec> BlockHooks for Evm<S> {
             gas_limit: block_env.gas_limit,
             gas_used,
             mix_hash: block_env.prevrandao.map_or(B256::ZERO, B256::from),
-            base_fee_per_gas: parent_block
-                .header
-                .next_block_base_fee(cfg.chain_spec.base_fee_params),
             ..Default::default()
         };
 

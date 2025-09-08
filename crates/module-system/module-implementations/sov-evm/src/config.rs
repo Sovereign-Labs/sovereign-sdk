@@ -19,8 +19,6 @@ pub struct EvmChainSpec {
     pub block_gas_limit: u64,
     /// Seconds to add to parent block timestamp
     pub block_timestamp_delta: u64,
-    /// EIP-1559 base fee calculation parameters
-    pub base_fee_params: alloy_eips::eip1559::BaseFeeParams,
     /// Hard fork activation schedule (block number -> fork ID)
     pub hardforks: Vec<(u64, SpecId)>,
 }
@@ -46,7 +44,6 @@ impl Default for EvmChainSpec {
             coinbase: Address::ZERO,
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
             block_timestamp_delta: SLOT_DURATION.as_secs(),
-            base_fee_params: alloy_eips::eip1559::BaseFeeParams::new(1, 1),
             hardforks: vec![(0, SpecId::SHANGHAI)],
         }
     }
@@ -132,10 +129,6 @@ mod tests {
                     "coinbase":"0x0000000000000000000000000000000000000000",
                     "block_gas_limit":30000000,
                     "block_timestamp_delta":1,
-                    "base_fee_params":{
-                        "max_change_denominator":1,
-                        "elasticity_multiplier":1
-                    },
                     "hardforks":[[0,"SHANGHAI"]]
                 }
         }"#;
