@@ -41,13 +41,14 @@ serde = { workspace = true }
 test-vectors = []
 macros = ["sov-universal-wallet-macros"]
 serde = [
-  "dep:serde",
-  "schemars",
-  "serde_json",
-  "sov-universal-wallet/serde",
-  "nmt-rs/serde",
-  "arrayvec?/serde",
-  "hex/serde",
+	"dep:serde",
+	"schemars",
+	"serde_json",
+	"sov-universal-wallet/serde",
+	"nmt-rs/serde",
+	"arrayvec?/serde",
+	"hex/serde",
+	"alloy-primitives?/serde"
 ]
 eip712 = [
   "serde",

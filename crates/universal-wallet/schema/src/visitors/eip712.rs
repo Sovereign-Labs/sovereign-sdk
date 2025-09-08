@@ -232,7 +232,7 @@ impl Eip712Visitor<'_, '_> {
 
         let eip712_name = self
             .output
-            .insert_types_and_get_or_create_name(&base_name, inner_types);
+            .insert_types_and_get_or_create_name(base_name, inner_types);
         let json_value = serde_json::Value::Object(json_values);
         Ok(Some(InnerReturnType {
             json_value,
@@ -420,7 +420,7 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
         }
         let eip712_name = self
             .output
-            .insert_types_and_get_or_create_name(&base_name, field_types);
+            .insert_types_and_get_or_create_name(base_name, field_types);
         let json_value = serde_json::Value::Object(field_values);
         Ok(Some(InnerReturnType {
             json_value,
@@ -444,11 +444,7 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
         }
 
         // Non-trivial tuple - treat like a struct with numeric field names
-        let base_name = if context.is_virtual == IsVirtual::Yes {
-            &context.parent_name
-        } else {
-            &context.parent_name // For tuples, parent_name is the field name
-        };
+        let base_name = &context.parent_name;
 
         let mut field_values = Map::new();
         let mut field_types = Vec::new();
@@ -477,7 +473,7 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
 
         let eip712_name = self
             .output
-            .insert_types_and_get_or_create_name(&base_name, field_types);
+            .insert_types_and_get_or_create_name(base_name, field_types);
         let json_value = serde_json::Value::Object(field_values);
         Ok(Some(InnerReturnType {
             json_value,
@@ -648,7 +644,7 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
 
         let eip712_name = self
             .output
-            .insert_types_and_get_or_create_name(&base_name, inner_types);
+            .insert_types_and_get_or_create_name(base_name, inner_types);
         let json_value = serde_json::Value::Object(json_values);
         Ok(Some(InnerReturnType {
             json_value,
