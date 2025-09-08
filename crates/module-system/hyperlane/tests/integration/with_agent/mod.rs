@@ -50,8 +50,6 @@ mod preferred_sequencer_runtime;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_validator_announces_itself() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
-    let _span = tracing::info_span!("test_validator_announces_itself").entered();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
     let validator = setup.validators[0].clone();
@@ -233,8 +231,6 @@ async fn test_multisig_ism() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_process_message_from_evm_counterparty() {
-    // sov_test_utils::logging::initialize_or_change_logging_with_filter("info,jmt=warn");
-    // let _span = tracing::info_span!("test_process_message_from_evm_counterparty").entered();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
     let relayer = setup.relayer.clone();

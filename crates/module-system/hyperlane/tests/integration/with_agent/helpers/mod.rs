@@ -283,10 +283,6 @@ impl HyperlaneBuilder {
         // Start container with just basic env and no processes
         let mut builder = self
             .image
-            // map needed ports to localhost
-            .with_exposed_port(ANVIL_PORT.tcp())
-            .with_exposed_port(RELAYER_METRICS_PORT.tcp())
-            .with_exposed_port(VALIDATOR_METRICS_PORT.tcp())
             // test runtime uses fixed value for chain hash, this lets relayer know
             .with_env_var("SOV_TEST_UTILS_FIXED_CHAIN_HASH", "true")
             // default signing key for hyperlane cli and relayer in evm
@@ -299,15 +295,6 @@ impl HyperlaneBuilder {
             .with_env_var("CONFIG_FILES", "/agent-config.json")
             // a dummy command because we will populate services by execs appropriately
             .with_cmd(["tail", "-f", "/dev/null"]);
-
-        // The hyperlane CLI accesses GitHub APIs quite heavily for its GitHub hosted
-        // registry, this can cause rate limiting in CI jobs. Include the github token
-        // so we use authenticated requests to try avoid this
-        if let Ok(token) = std::env::var("GITHUB_TOKEN") {
-            // `hyperlane` cli tool will use this env var by default as an auth token
-            // if it is set.
-            builder = builder.with_env_var("GH_AUTH_TOKEN", token);
-        }
 
         let container = builder
             .start()
