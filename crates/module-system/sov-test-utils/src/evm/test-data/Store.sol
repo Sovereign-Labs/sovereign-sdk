@@ -27,7 +27,7 @@ contract SimpleStorage {
         emit SimpleLog(msg.sender, num);
     }
 
-    function emitTwoLog() public {
+    function emitTwoLogs() public {
         emit SimpleLog(msg.sender, num);
         emit SimpleLog(msg.sender, num + 1);
     }
