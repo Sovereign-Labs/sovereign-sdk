@@ -366,46 +366,42 @@ pub struct Hyperlane {
 impl Hyperlane {
     /// Send test message from evm counterparty to sov test recipient
     pub async fn dispatch_msg_from_counterparty(&self, recipient: HexHash) -> EvmDispatchWithId {
-        match self.evm_counter_party.as_ref() {
-            None => {
-                panic!("called dispatch_msg_from_counterparty without set up counterparty");
-            }
-            Some(evm) => evm.dispatch_msg_to(recipient).await,
-        }
+        self.evm_counter_party
+            .as_ref()
+            .expect("called dispatch_msg_from_counterparty without set up counterparty")
+            .dispatch_msg_to(recipient)
+            .await
     }
 
     /// Searches the latest block on evm counterparty (where there's block per tx)
     /// and tries to extract the Mailbox Process event from it.
     pub async fn latest_message_on_counterparty(&mut self) -> EvmProcessWithId {
-        match self.evm_counter_party.as_mut() {
-            None => {
-                panic!("Called latest message on counterparty before its setup");
-            }
-            Some(evm) => evm.latest_message().await,
-        }
+        self.evm_counter_party
+            .as_mut()
+            .expect("Called latest message on counterparty before its setup")
+            .latest_message()
+            .await
     }
 
     /// Mines next block on the counterparty evm chain.
     ///
     /// Needed to finalize previous blocks for relayer to pick up txs.
     pub async fn mine_next_block_on_counterparty(&mut self) {
-        match self.evm_counter_party.as_mut() {
-            None => {
-                panic!("Called mine next block on counterparty before its setup");
-            }
-            Some(evm) => evm.mine_block().await,
-        }
+        self.evm_counter_party
+            .as_mut()
+            .expect("Called mine next block on counterparty before its setup")
+            .mine_block()
+            .await;
     }
 
     /// Create a warp route for nativeETH on counterparty, enroll remote router to rollup,
     /// and return route address on counterparty.
     pub async fn deploy_warp_route_on_counterparty(&mut self, sovtest_route: HexHash) -> HexHash {
-        match self.evm_counter_party.as_mut() {
-            None => {
-                panic!("Called warp init on counterparty before its setup");
-            }
-            Some(evm) => evm.deploy_warp_route(sovtest_route).await,
-        }
+        self.evm_counter_party
+            .as_mut()
+            .expect("Called warp init on counterparty before its setup")
+            .deploy_warp_route(sovtest_route)
+            .await
     }
 
     pub async fn send_warp_token_transfer_from_counterparty(
@@ -414,24 +410,19 @@ impl Hyperlane {
         recipient: HexHash,
         amount: Amount,
     ) -> EvmDispatchWithId {
-        match self.evm_counter_party.as_mut() {
-            None => {
-                panic!("called dispatch_msg_from_counterparty without set up counterparty");
-            }
-            Some(evm) => {
-                evm.send_warp_token_transfer(counterparty_route_id, recipient, amount)
-                    .await
-            }
-        }
+        self.evm_counter_party
+            .as_mut()
+            .expect("called dispatch_msg_from_counterparty without set up counterparty")
+            .send_warp_token_transfer(counterparty_route_id, recipient, amount)
+            .await
     }
 
     pub async fn counterparty_balance_of(&mut self, address: HexHash) -> Amount {
-        match self.evm_counter_party.as_mut() {
-            None => {
-                panic!("called counterparty_balance_of before setting its setup");
-            }
-            Some(evm) => evm.balance_of(address).await,
-        }
+        self.evm_counter_party
+            .as_mut()
+            .expect("called counterparty_balance_of before setting its setup")
+            .balance_of(address)
+            .await
     }
 
     /// Searches the latest block on evm counterparty (where there's block per tx)
@@ -440,12 +431,11 @@ impl Hyperlane {
         &mut self,
         token_addr: HexHash,
     ) -> (u32, HexHash) {
-        match self.evm_counter_party.as_mut() {
-            None => {
-                panic!("called latest_warp_transfer_on_counterparty before its setup")
-            }
-            Some(evm) => evm.latest_warp_transfer(token_addr).await,
-        }
+        self.evm_counter_party
+            .as_mut()
+            .expect("called latest_warp_transfer_on_counterparty before its setup")
+            .latest_warp_transfer(token_addr)
+            .await
     }
 
     /// Prints container's stdout
