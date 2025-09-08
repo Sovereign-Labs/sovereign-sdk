@@ -72,7 +72,7 @@ pub fn state_map_paths(module_name: &str, field_name: &str) -> OpenApiPaths {
 /// The OpenAPI paths specification for
 /// [`StateVec`](crate::containers::StateVec).
 pub fn state_vec_paths(module_name: &str, field_name: &str) -> OpenApiPaths {
-   state_vec_paths_with_response(module_name, field_name, None)
+    state_vec_paths_with_response(module_name, field_name, None)
 }
 
 pub fn runtime_spec(module_specs: HashMap<String, OpenApi>) -> OpenApi {
@@ -115,7 +115,11 @@ impl<T> StateItemOpenApiSpec for &T {
 }
 
 pub trait CustomStateItemPath {
-    fn generate_custom_path(&self, module_name: &str, field_name: &str) -> Option<(OpenApiPaths, String, Response)>;
+    fn generate_custom_path(
+        &self,
+        module_name: &str,
+        field_name: &str,
+    ) -> Option<(OpenApiPaths, String, Response)>;
 }
 
 pub trait StateItemPaths {
@@ -129,29 +133,45 @@ impl<T> StateItemPaths for &T {
 }
 
 impl<T> CustomStateItemPath for &T {
-    fn generate_custom_path(&self, _module_name: &str, _field_name: &str) -> Option<(OpenApiPaths, String, Response)> {
+    fn generate_custom_path(
+        &self,
+        _module_name: &str,
+        _field_name: &str,
+    ) -> Option<(OpenApiPaths, String, Response)> {
         None
     }
 }
 
-impl<N, T, Codec> CustomStateItemPath for StateItemOpenApiSpecImpl<NamespacedStateValue<N, T, Codec>>
+impl<N, T, Codec> CustomStateItemPath
+    for StateItemOpenApiSpecImpl<NamespacedStateValue<N, T, Codec>>
 where
     N: CompileTimeNamespace,
     T: for<'a> ToSchema<'a> + Serialize + Send + Sync + 'static,
     Codec: StateCodec,
     Codec::ValueCodec: StateItemCodec<T>,
-{ 
+{
     /// Generate custom StateMap response for ToSchema types
-    fn generate_custom_path(&self, module_name: &str, field_name: &str) -> Option<(OpenApiPaths, String, Response)> {
+    fn generate_custom_path(
+        &self,
+        module_name: &str,
+        field_name: &str,
+    ) -> Option<(OpenApiPaths, String, Response)> {
         let (name, _) = <T as ToSchema<'_>>::schema();
-        let custom_element_response = format!("{}StateItemResponse", name);
-        
-        Some((state_value_paths_with_response(module_name, field_name, Some(&custom_element_response)), custom_element_response, make_simple_custom_response::<T>("")))
+        let custom_element_response = format!("{name}StateItemResponse");
+
+        Some((
+            state_value_paths_with_response(
+                module_name,
+                field_name,
+                Some(&custom_element_response),
+            ),
+            custom_element_response,
+            make_simple_custom_response::<T>(""),
+        ))
     }
 }
 
-
-impl<N, K, V, Codec> CustomStateItemPath 
+impl<N, K, V, Codec> CustomStateItemPath
     for StateItemOpenApiSpecImpl<NamespacedStateMap<N, K, V, Codec>>
 where
     N: CompileTimeNamespace,
@@ -161,16 +181,22 @@ where
     Codec::KeyCodec: StateItemCodec<K>,
     Codec::ValueCodec: StateItemCodec<V>,
 {
-    
     /// Generate custom StateMap response for ToSchema types
-    fn generate_custom_path(&self, module_name: &str, field_name: &str) -> Option<(OpenApiPaths, String, Response)> {
+    fn generate_custom_path(
+        &self,
+        module_name: &str,
+        field_name: &str,
+    ) -> Option<(OpenApiPaths, String, Response)> {
         let (name, _) = <V as ToSchema<'_>>::schema();
-        let custom_element_response = format!("{}StateMapElementResponse", name);
-        
-        Some((state_map_paths_with_response(module_name, field_name, Some(&custom_element_response)), custom_element_response, make_custom_response_map::<V>("")))
+        let custom_element_response = format!("{name}StateMapElementResponse");
+
+        Some((
+            state_map_paths_with_response(module_name, field_name, Some(&custom_element_response)),
+            custom_element_response,
+            make_custom_response_map::<V>(""),
+        ))
     }
 }
-
 
 impl<V, Codec> StateItemPaths for StateItemOpenApiSpecImpl<VersionedStateValue<V, Codec>>
 where
@@ -184,8 +210,6 @@ where
     }
 }
 
-
-
 impl<N, T, Codec> CustomStateItemPath for StateItemOpenApiSpecImpl<NamespacedStateVec<N, T, Codec>>
 where
     N: CompileTimeNamespace,
@@ -195,14 +219,21 @@ where
     Codec::KeyCodec: StateItemCodec<u64>,
 {
     /// Generate custom StateMap response for ToSchema types
-    fn generate_custom_path(&self, module_name: &str, field_name: &str) -> Option<(OpenApiPaths, String, Response)> {
+    fn generate_custom_path(
+        &self,
+        module_name: &str,
+        field_name: &str,
+    ) -> Option<(OpenApiPaths, String, Response)> {
         let (name, _) = <T as ToSchema<'_>>::schema();
-        let custom_element_response = format!("{}StateVecElementResponse", name);
-        
-        Some((state_vec_paths_with_response(module_name, field_name, Some(&custom_element_response)), custom_element_response, make_custom_response_vec::<T>("")))
+        let custom_element_response = format!("{name}StateVecElementResponse");
+
+        Some((
+            state_vec_paths_with_response(module_name, field_name, Some(&custom_element_response)),
+            custom_element_response,
+            make_custom_response_vec::<T>(""),
+        ))
     }
 }
-
 
 impl<V, Codec> CustomStateItemPath for StateItemOpenApiSpecImpl<VersionedStateValue<V, Codec>>
 where
@@ -211,17 +242,28 @@ where
     Codec::ValueCodec: StateItemCodec<V>,
     Codec::KeyCodec: StateItemCodec<SlotNumber>,
 {
-   /// Generate custom StateMap response for ToSchema types
-   fn generate_custom_path(&self, module_name: &str, field_name: &str) -> Option<(OpenApiPaths, String, Response)> {
+    /// Generate custom StateMap response for ToSchema types
+    fn generate_custom_path(
+        &self,
+        module_name: &str,
+        field_name: &str,
+    ) -> Option<(OpenApiPaths, String, Response)> {
         let (name, _) = <V as ToSchema<'_>>::schema();
-        let custom_element_response = format!("{}StateItemResponse", name);
-        
-        Some((state_value_paths_with_response(module_name, field_name, Some(&custom_element_response)), custom_element_response, make_simple_custom_response::<V>("")))
+        let custom_element_response = format!("{name}StateItemResponse");
+
+        Some((
+            state_value_paths_with_response(
+                module_name,
+                field_name,
+                Some(&custom_element_response),
+            ),
+            custom_element_response,
+            make_simple_custom_response::<V>(""),
+        ))
     }
 }
 
-impl<N, K, V, Codec>StateItemPaths 
-    for StateItemOpenApiSpecImpl<NamespacedStateMap<N, K, V, Codec>>
+impl<N, K, V, Codec> StateItemPaths for StateItemOpenApiSpecImpl<NamespacedStateMap<N, K, V, Codec>>
 where
     N: CompileTimeNamespace,
     K: Serialize + DeserializeOwned + FromStr + Display + Clone + Send + Sync + 'static,
@@ -251,14 +293,14 @@ where
 /// The OpenAPI paths specification for
 /// [`StateValue`](crate::containers::StateValue) with optional custom response type.
 pub fn state_value_paths_with_response(
-    module_name: &str, 
+    module_name: &str,
     field_name: &str,
-    custom_response: Option<&str>
+    custom_response: Option<&str>,
 ) -> OpenApiPaths {
     let response_ref = custom_response
-        .map(|r| format!("#/components/responses/{}", r))
+        .map(|r| format!("#/components/responses/{r}"))
         .unwrap_or_else(|| "#/components/responses/StateValueResponse".to_string());
-    
+
     vec![(
         "".to_string(),
         json!({
@@ -283,12 +325,12 @@ pub fn state_value_paths_with_response(
 /// The OpenAPI paths specification for
 /// [`StateMap`](crate::containers::StateMap) with optional custom response type.
 pub fn state_map_paths_with_response(
-    module_name: &str, 
+    module_name: &str,
     field_name: &str,
-    custom_element_response: Option<&str>
+    custom_element_response: Option<&str>,
 ) -> OpenApiPaths {
     let element_response_ref = custom_element_response
-        .map(|r| format!("#/components/responses/{}", r))
+        .map(|r| format!("#/components/responses/{r}"))
         .unwrap_or_else(|| "#/components/responses/StateMapElementResponse".to_string());
     vec![
         (
@@ -346,16 +388,15 @@ pub fn state_map_paths_with_response(
     ]
 }
 
-
 /// The OpenAPI paths specification for
 /// [`StateVec`](crate::containers::StateVec) with optional custom response type.
 pub fn state_vec_paths_with_response(
-    module_name: &str, 
+    module_name: &str,
     field_name: &str,
-    custom_element_response: Option<&str>
+    custom_element_response: Option<&str>,
 ) -> OpenApiPaths {
     let element_response_ref = custom_element_response
-        .map(|r| format!("#/components/responses/{}", r))
+        .map(|r| format!("#/components/responses/{r}"))
         .unwrap_or_else(|| "#/components/responses/StateVecElementResponse".to_string());
     vec![
         (
@@ -413,7 +454,7 @@ pub fn state_vec_paths_with_response(
 }
 
 /// Add a simple custom response to the OpenAPI spec
-fn make_simple_custom_response<'a, 'resp, T: ToSchema<'a>, >(description: &str) ->  Response {
+fn make_simple_custom_response<'a, 'resp, T: ToSchema<'a>>(description: &str) -> Response {
     // Create a simple response with a basic schema
     let response = utoipa::openapi::ResponseBuilder::new()
         .description(description)
@@ -425,18 +466,17 @@ fn make_simple_custom_response<'a, 'resp, T: ToSchema<'a>, >(description: &str) 
                         .description(Some(description.to_string()))
                         .property("value", T::schema().1)
                         .required("value")
-                        .build()
+                        .build(),
                 )))
-                .build()
+                .build(),
         )
         .build();
-    
+
     response
 }
 
-
 /// Add a simple custom response to the OpenAPI spec
-fn make_custom_response_map<'a, 'resp, T: ToSchema<'a>, >(description: &str) ->  Response {
+fn make_custom_response_map<'a, 'resp, T: ToSchema<'a>>(description: &str) -> Response {
     // Create a simple response with a basic schema
     let response = utoipa::openapi::ResponseBuilder::new()
         .description(description)
@@ -446,23 +486,25 @@ fn make_custom_response_map<'a, 'resp, T: ToSchema<'a>, >(description: &str) -> 
                 .schema(utoipa::openapi::RefOr::T(utoipa::openapi::Schema::Object(
                     utoipa::openapi::ObjectBuilder::new()
                         .description(Some(description.to_string()))
-                        .property("key", utoipa::openapi::ObjectBuilder::new()
-                            .schema_type(utoipa::openapi::SchemaType::String))
+                        .property(
+                            "key",
+                            utoipa::openapi::ObjectBuilder::new()
+                                .schema_type(utoipa::openapi::SchemaType::String),
+                        )
                         .required("key")
                         .property("value", T::schema().1)
                         .required("value")
-                        .build()
+                        .build(),
                 )))
-                .build()
+                .build(),
         )
         .build();
-    
+
     response
 }
 
-
 /// Add a simple custom response to the OpenAPI spec
-fn make_custom_response_vec<'a, 'resp, T: ToSchema<'a>, >(description: &str) ->  Response {
+fn make_custom_response_vec<'a, 'resp, T: ToSchema<'a>>(description: &str) -> Response {
     // Create a simple response with a basic schema
     let response = utoipa::openapi::ResponseBuilder::new()
         .description(description)
@@ -472,30 +514,35 @@ fn make_custom_response_vec<'a, 'resp, T: ToSchema<'a>, >(description: &str) -> 
                 .schema(utoipa::openapi::RefOr::T(utoipa::openapi::Schema::Object(
                     utoipa::openapi::ObjectBuilder::new()
                         .description(Some(description.to_string()))
-                        .property("index", utoipa::openapi::ObjectBuilder::new()
-                            .schema_type(utoipa::openapi::SchemaType::Integer))
+                        .property(
+                            "index",
+                            utoipa::openapi::ObjectBuilder::new()
+                                .schema_type(utoipa::openapi::SchemaType::Integer),
+                        )
                         .required("index")
                         .property("value", T::schema().1)
                         .required("value")
-                        .build()
+                        .build(),
                 )))
-                .build()
+                .build(),
         )
         .build();
-    
+
     response
 }
 
-pub fn add_simple_custom_response(spec: &mut OpenApi, response_name: &str, response: Response){
+pub fn add_simple_custom_response(spec: &mut OpenApi, response_name: &str, response: Response) {
     // Ensure components exist
     if spec.components.is_none() {
         spec.components = Some(utoipa::openapi::Components::default());
     }
-    
+
     let components = spec.components.as_mut().unwrap();
 
     // Add the response to components/responses
-    components.responses.insert(response_name.to_string(), response.into());
+    components
+        .responses
+        .insert(response_name.to_string(), response.into());
 }
 
 pub fn spec_from_json_paths(paths: OpenApiPaths) -> OpenApi {

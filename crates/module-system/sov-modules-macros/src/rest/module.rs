@@ -93,7 +93,7 @@ pub fn derive(tokens: &DeriveInput) -> syn::Result<TokenStream> {
                     // If both fail, return Default::default()
                     let mut custom_info = (&state_impl).generate_custom_path(#module_name, &state_impl.state_item_info.name);
                     let mut item_spec = if let Some((item_paths, response_name, response)) = custom_info {
-                        let mut spec = spec_from_json_paths(item_paths); 
+                        let mut spec = spec_from_json_paths(item_paths);
                         add_simple_custom_response(&mut spec, &response_name, response);
                         spec
                     } else {
