@@ -23,6 +23,7 @@ pub const MAX_U128_DECIMAL_PLACES: u8 = 39;
     derive_more::Debug,
     derive_more::Display,
     Hash,
+    utoipa::ToSchema
 )]
 #[cfg_attr(
     feature = "arbitrary",
