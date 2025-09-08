@@ -22,7 +22,6 @@ contract SimpleStorage {
         revert("This function always reverts!");
     }
 
-
     function emitOneLog() public {
         emit SimpleLog(msg.sender, num);
     }
