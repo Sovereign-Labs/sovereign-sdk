@@ -112,7 +112,7 @@ fn assert_invalid_validator_announcement(
             TxEffect::Reverted(reverted) => {
                 assert!(
                     reverted.reason.to_string().contains(&expected_err),
-                    "Unexpected revert reason. Expected to contain: {}. Actual: {}",
+                    "Unexpected revert reason. \nExpected to contain: {}\nActual:              {}",
                     expected_err,
                     reverted.reason
                 );
@@ -185,7 +185,7 @@ fn test_invalid_signature() {
             val_addr,
             location.clone(),
             sig,
-            "Recovered address doesn't match announced address".into(),
+            format!("doesn't match announced address {val_addr}"),
         );
     }
 
@@ -205,7 +205,7 @@ fn test_invalid_signature() {
         other_addr,
         location.clone(),
         good_sig,
-        "Recovered address doesn't match announced address".into(),
+        format!("doesn't match announced address {other_addr}"),
     );
 
     // invalid location
@@ -215,7 +215,7 @@ fn test_invalid_signature() {
         val_addr,
         "foo".parse().unwrap(),
         good_sig,
-        "Recovered address doesn't match announced address".into(),
+        format!("doesn't match announced address {val_addr}"),
     );
 }
 
