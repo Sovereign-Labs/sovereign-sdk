@@ -59,6 +59,9 @@ pub mod state;
 /// Defines the metadata that is used to generate execution proofs.
 pub mod proof_metadata;
 
+/// Defines traits used by the hyperlane protocol.
+pub mod hyperlane;
+
 mod reexport_macros;
 
 #[cfg(test)]

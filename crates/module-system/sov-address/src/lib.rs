@@ -8,8 +8,10 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub use evm::{EthereumAddress, EvmCryptoSpec, MultiAddressEvm};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use sov_modules_api::hyperlane::HyperlaneAddress;
 use sov_modules_api::macros::UniversalWallet;
 use sov_modules_api::{address_prefix, Address, BasicAddress, CredentialId};
+use sov_rollup_interface::common::HexHash;
 
 /// A generic VM-compatible address enum, enabling supporting for both Sov SDK standard SHA-256 derived addresses and VM-specific addresses.
 #[derive(
@@ -163,6 +165,22 @@ impl<VmAddress> FromVmAddress<VmAddress> for MultiAddress<VmAddress> {
 impl<VmAddress> From<Address> for MultiAddress<VmAddress> {
     fn from(value: Address) -> Self {
         Self::Standard(value)
+    }
+}
+
+impl<VmAddress: HyperlaneAddress> HyperlaneAddress for MultiAddress<VmAddress> {
+    fn to_sender(&self) -> HexHash {
+        match self {
+            Self::Standard(addr) => addr.to_sender(),
+            Self::Vm(addr) => addr.to_sender(),
+        }
+    }
+
+    fn from_sender(recipient: HexHash) -> anyhow::Result<Self> {
+        match Address::try_from(recipient.as_ref()) {
+            Ok(addr) => Ok(Self::Standard(addr)),
+            Err(e) => Err(anyhow::anyhow!("Failed to convert recipient to MultiAddress. Only standard addresses are supported: {}", e)),
+        }
     }
 }
 pub trait Not28Bytes {}
