@@ -24,6 +24,7 @@ pub const MAX_U128_DECIMAL_PLACES: u8 = 39;
     derive_more::Display,
     Hash,
 )]
+#[cfg_attr(feature = "native", derive(utoipa::ToSchema))]
 #[cfg_attr(
     feature = "arbitrary",
     derive(arbitrary::Arbitrary, proptest_derive::Arbitrary)
