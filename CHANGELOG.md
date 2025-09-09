@@ -1,3 +1,6 @@
+# 2025-09-09
+- #1650 Adds an optional `state_cache_size` param to the `storage` section of the rollup config.toml file. 
+
 # 2025-09-08
 - #1635 **BREAKING CHANGE** Removes ETH gas price mechanism from the EVM module. The gas oracle, gas price cache, and related configuration have been eliminated. This simplifies EVM transaction handling by removing Ethereum gas pricing in favor of rollup gas metering.
 
