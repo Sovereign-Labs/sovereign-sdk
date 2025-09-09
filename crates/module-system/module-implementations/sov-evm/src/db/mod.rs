@@ -120,7 +120,6 @@ where
     }
 }
 
-#[allow(dead_code)]
 pub(crate) struct CachedByteCode {
     pub code: Bytecode,
 }
