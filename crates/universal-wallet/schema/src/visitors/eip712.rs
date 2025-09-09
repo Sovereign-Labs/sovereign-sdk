@@ -257,23 +257,6 @@ pub enum IsVirtual {
     No,
 }
 
-// /// An enum should display its tags
-// #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-// pub enum IsHideTag {
-//     Yes,
-//     No,
-// }
-
-// #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-// pub enum ParentType {
-//     None,
-//     Struct(IsVirtual),
-//     Tuple(IsVirtual, IsTrivial),
-//     Enum(IsHideTag),
-//     Vec,
-//     Map,
-// }
-
 // TODO: this would be nicer for devex if it were a function. The `<$t>::from_le_bytes` is what
 // makes it non-trivial to convert though
 macro_rules! display_int {

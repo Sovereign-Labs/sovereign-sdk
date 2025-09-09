@@ -517,7 +517,168 @@ fn test_various_types() {
     eip712_tests!(
         MsgVariousTypes,
         msg,
-        false,
-        r#"{"domain":{"name":"","chainId":"0x0","salt":"0x387d7c4b3c3e545f6e6d1cad1b606ee46250d3acd1dfa80226d0e05551f20527"},"types":{"MsgVariousTypes":[{"type":"uint8","name":"u8"},{"type":"uint16","name":"u16"},{"type":"uint32","name":"u32"},{"type":"uint64","name":"u64"},{"type":"uint128","name":"u128"},{"type":"int8","name":"i8"},{"type":"int16","name":"i16"},{"type":"int32","name":"i32"},{"type":"int64","name":"i64"},{"type":"int128","name":"i128"},{"type":"bool","name":"bool"},{"type":"string","name":"f32"},{"type":"string","name":"f64"},{"type":"string","name":"string"},{"type":"string","name":"byte_vec"},{"type":"string","name":"byte_array"},{"type":"array","name":"array"},{"type":"vec","name":"vec"},{"type":"map","name":"map"}],"array":[{"type":"bool","name":"0"},{"type":"bool","name":"1"},{"type":"bool","name":"2"}],"map":[{"type":"bool","name":"1"},{"type":"bool","name":"2"},{"type":"bool","name":"3"}],"vec":[{"type":"bool","name":"0"},{"type":"bool","name":"1"},{"type":"bool","name":"2"}]},"primaryType":"MsgVariousTypes","message":{"array":{"0":false,"1":false,"2":true},"bool":true,"byte_array":"0x03050709","byte_vec":"0x060708","f32":"45.59","f64":"9716235.31632546","i128":"-180446744073709551615","i16":"-392","i32":"-15472432","i64":"-340542814143","i8":"-92","map":{"1":true,"2":false,"3":true},"string":"Hello","u128":"180446744073709551615","u16":"392","u32":"15472432","u64":"340542814143","u8":"92","vec":{"0":true,"1":false,"2":true}}}"#
+        r#"{
+  "domain": {
+    "chainId": "0x0",
+    "name": "",
+    "salt": "0x387d7c4b3c3e545f6e6d1cad1b606ee46250d3acd1dfa80226d0e05551f20527"
+  },
+  "message": {
+    "array": {
+      "0": false,
+      "1": false,
+      "2": true
+    },
+    "bool": true,
+    "byte_array": "0x03050709",
+    "byte_vec": "0x060708",
+    "f32": "45.59",
+    "f64": "9716235.31632546",
+    "i128": "-180446744073709551615",
+    "i16": "-392",
+    "i32": "-15472432",
+    "i64": "-340542814143",
+    "i8": "-92",
+    "map": {
+      "1": true,
+      "2": false,
+      "3": true
+    },
+    "string": "Hello",
+    "u128": "180446744073709551615",
+    "u16": "392",
+    "u32": "15472432",
+    "u64": "340542814143",
+    "u8": "92",
+    "vec": {
+      "0": true,
+      "1": false,
+      "2": true
+    }
+  },
+  "primaryType": "MsgVariousTypes",
+  "types": {
+    "MsgVariousTypes": [
+      {
+        "name": "u8",
+        "type": "uint8"
+      },
+      {
+        "name": "u16",
+        "type": "uint16"
+      },
+      {
+        "name": "u32",
+        "type": "uint32"
+      },
+      {
+        "name": "u64",
+        "type": "uint64"
+      },
+      {
+        "name": "u128",
+        "type": "uint128"
+      },
+      {
+        "name": "i8",
+        "type": "int8"
+      },
+      {
+        "name": "i16",
+        "type": "int16"
+      },
+      {
+        "name": "i32",
+        "type": "int32"
+      },
+      {
+        "name": "i64",
+        "type": "int64"
+      },
+      {
+        "name": "i128",
+        "type": "int128"
+      },
+      {
+        "name": "bool",
+        "type": "bool"
+      },
+      {
+        "name": "f32",
+        "type": "string"
+      },
+      {
+        "name": "f64",
+        "type": "string"
+      },
+      {
+        "name": "string",
+        "type": "string"
+      },
+      {
+        "name": "byte_vec",
+        "type": "string"
+      },
+      {
+        "name": "byte_array",
+        "type": "string"
+      },
+      {
+        "name": "array",
+        "type": "array"
+      },
+      {
+        "name": "vec",
+        "type": "vec"
+      },
+      {
+        "name": "map",
+        "type": "map"
+      }
+    ],
+    "array": [
+      {
+        "name": "0",
+        "type": "bool"
+      },
+      {
+        "name": "1",
+        "type": "bool"
+      },
+      {
+        "name": "2",
+        "type": "bool"
+      }
+    ],
+    "map": [
+      {
+        "name": "1",
+        "type": "bool"
+      },
+      {
+        "name": "2",
+        "type": "bool"
+      },
+      {
+        "name": "3",
+        "type": "bool"
+      }
+    ],
+    "vec": [
+      {
+        "name": "0",
+        "type": "bool"
+      },
+      {
+        "name": "1",
+        "type": "bool"
+      },
+      {
+        "name": "2",
+        "type": "bool"
+      }
+    ]
+  }
+}"#
     );
 }
