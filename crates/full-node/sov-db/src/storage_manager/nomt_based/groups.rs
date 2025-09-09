@@ -24,6 +24,8 @@ use crate::schema::tables::ModuleAccessoryState;
 use crate::state_db_nomt::{NomtSessionBuilder, NomtStateDb, StateOverlay};
 use crate::storage_manager::{update_ledger_finalized_height, InitializableNativeNomtStorage};
 
+const GIGABYTE: usize = 1024 * 1024 * 1024;
+
 pub(crate) struct DbGroup<H, K> {
     merklized_state: Arc<NomtStateDb<H>>,
     flat_state: FlatStateDb,
@@ -39,11 +41,12 @@ where
 {
     pub(crate) fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
         let path = config.path.clone();
+        let state_cache_size = config.state_cache_size.unwrap_or(GIGABYTE);
         let state_db = NomtStateDb::<H>::new(config)?;
         let accessory_rocksdb =
             AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?;
         let ledger_rocksdb = LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?;
-        let flat_state = FlatStateDb::new(path)?;
+        let flat_state = FlatStateDb::new(path, state_cache_size)?;
         Ok(Self {
             merklized_state: Arc::new(state_db),
             flat_state,

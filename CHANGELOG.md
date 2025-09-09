@@ -1,4 +1,5 @@
 # 2025-09-09
+- #1650 Adds an optional `state_cache_size` param to the `storage` section of the rollup config.toml file. 
 - #1645 **BREAKING CHANGE** The `PerBlockCache` trait has been updated. The `put_cached and get_cached` methods now accept an optional `SlotKey`. For backward compatibility, None should be passed when a SlotKey is not provided.
 
 # 2025-09-08

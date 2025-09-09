@@ -167,6 +167,7 @@ impl RocksDbBackend {
             Self::DB_NAME,
             Self::TABLES.iter().copied(),
             &gen_rocksdb_options(&Default::default(), false),
+            0, // We don't need a cache for preferred sequencer since the table is not configured for caching anyway
         )?);
 
         // There's an edge case where we might have an in-progress batch but no completed blobs. In that case,
