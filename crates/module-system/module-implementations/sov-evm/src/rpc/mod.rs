@@ -16,7 +16,7 @@ use revm::Database;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{ApiStateAccessor, Spec, StateAccessor};
+use sov_modules_api::{ApiStateAccessor, GasMeter, GasSpec, Spec, StateAccessor};
 use tracing::debug;
 
 use crate::db::EvmDb;
@@ -347,11 +347,18 @@ where
         debug!("EVM module JSON-RPC request to `eth_estimateGas`");
         let result = self.call(request, block_number, state)?;
         let gas_used = result.gas_used();
-        const ABSOLUTE_MARGIN: f64 = 1.5;
+        state
+            .charge_linear_gas(
+                &<S as GasSpec>::gas_to_charge_per_evm_gas(),
+                gas_used as u32,
+            )
+            .unwrap();
+        let gas_meter = state.try_as_basic_gas_state().unwrap();
+        let total_gas_used =
+            gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
         const RELATIVE_MARGIN: u64 = 100_000;
-        #[allow(clippy::float_arithmetic)]
-        let gas_used_with_margins = ((gas_used as f64) * ABSOLUTE_MARGIN) as u64 + RELATIVE_MARGIN;
-        Ok(U64::from(gas_used_with_margins))
+        let total_gas_used_with_margins = (total_gas_used * 3) / 2 + RELATIVE_MARGIN; // gas * 1.5 + 100_000
+        Ok(U64::from(total_gas_used_with_margins))
     }
 }
 

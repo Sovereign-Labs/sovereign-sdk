@@ -903,7 +903,8 @@ impl<S: Spec> GasMeter for BasicGasMeter<S> {
 
     fn try_as_basic_gas_state(&mut self) -> Option<BasicGasState<Self::Spec>> {
         Some(BasicGasState {
-            gas: self.remaining_gas.clone(),
+            initial_gas: self.initial_gas.clone(),
+            remaining_gas: self.remaining_gas.clone(),
             funds: self
                 .remaining_funds
                 .expect("This method is used in TX context where amount is set"),
@@ -946,8 +947,10 @@ impl<S: Spec> GetGasPrice for BasicGasMeter<S> {
 
 /// A subset of BasicGasMeter used to compute EVM gas limit
 pub struct BasicGasState<S: Spec> {
-    /// Amount of gas available
-    pub gas: S::Gas,
+    /// Amount of gas available at the moment of the gas meter initialization
+    pub initial_gas: S::Gas,
+    /// Amount of gas remaining
+    pub remaining_gas: S::Gas,
     /// Amount of funds available
     pub funds: Amount,
     /// Gas price

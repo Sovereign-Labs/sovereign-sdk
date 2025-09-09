@@ -117,12 +117,17 @@ where
     }
 
     fn gas_limit(&self, state: &mut impl TxState<S>) -> u64 {
-        let BasicGasState { gas, funds, price } = state
+        let BasicGasState {
+            remaining_gas,
+            funds,
+            price,
+            ..
+        } = state
             .try_as_basic_gas_state()
             // Justified, `impl TxState` has access to `BasicGasState`.
             .expect("The impossible happened: BasicGasState is absent.");
         let funds = funds.0;
-        let gas = gas.as_ref()[0];
+        let gas = remaining_gas.as_ref()[0];
         let price = price.as_ref()[0].0;
         match (funds, gas) {
             (0, 0) => 0,
