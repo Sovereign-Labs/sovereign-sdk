@@ -18,9 +18,8 @@ use crate::transaction::{
 #[cfg(feature = "test-utils")]
 use crate::{AccessoryStateReader, GasArray};
 use crate::{
-    AccessoryStateWriter, Amount, BasicGasMeter, BasicGasState, Gas, GasInfo, GasMeter,
-    GasMeteringError, GetGasPrice, ProvableStateReader, ProvableStateWriter, TxState,
-    VersionReader,
+    AccessoryStateWriter, Amount, BasicGasMeter, Gas, GasInfo, GasMeter, GasMeteringError,
+    GetGasPrice, ProvableStateReader, ProvableStateWriter, TxState, VersionReader,
 };
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
@@ -166,8 +165,8 @@ impl<S: Spec, I: TxState<S>> GasMeter for RevertableTxState<'_, S, I> {
     fn charge_gas(&mut self, amount: &S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
         self.inner.charge_gas(amount)
     }
-    fn try_as_basic_gas_state(&mut self) -> Option<BasicGasState<Self::Spec>> {
-        self.inner.try_as_basic_gas_state()
+    fn try_as_basic_gas_meter(&mut self) -> Option<&mut BasicGasMeter<Self::Spec>> {
+        self.inner.try_as_basic_gas_meter()
     }
 
     fn charge_linear_gas(
@@ -382,8 +381,8 @@ impl<S: Spec, I: StateProvider<S>> GasMeter for PreExecWorkingSet<S, I> {
     fn charge_gas(&mut self, amount: &S::Gas) -> anyhow::Result<(), GasMeteringError<S::Gas>> {
         self.gas_meter.charge_gas(amount)
     }
-    fn try_as_basic_gas_state(&mut self) -> Option<BasicGasState<Self::Spec>> {
-        self.gas_meter.try_as_basic_gas_state()
+    fn try_as_basic_gas_meter(&mut self) -> Option<&mut BasicGasMeter<Self::Spec>> {
+        self.gas_meter.try_as_basic_gas_meter()
     }
     fn charge_linear_gas(
         &mut self,
@@ -656,8 +655,8 @@ impl<S: Spec, I: StateProvider<S>> GasMeter for WorkingSet<S, I> {
         self.gas_meter.charge_gas(gas)
     }
 
-    fn try_as_basic_gas_state(&mut self) -> Option<BasicGasState<Self::Spec>> {
-        self.gas_meter.try_as_basic_gas_state()
+    fn try_as_basic_gas_meter(&mut self) -> Option<&mut BasicGasMeter<Self::Spec>> {
+        self.gas_meter.try_as_basic_gas_meter()
     }
 
     fn charge_linear_gas(

@@ -10,13 +10,13 @@ use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
 use reth_primitives::{Recovered, TransactionSigned};
 use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
-use revm::context::result::{EVMError, InvalidHeader};
+use revm::context::result::{EVMError, ExecutionResult, InvalidHeader};
 use revm::context::{BlockEnv, CfgEnv};
 use revm::Database;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{ApiStateAccessor, Spec, StateAccessor};
+use sov_modules_api::{ApiStateAccessor, GasMeter, GasSpec, Spec, StateAccessor};
 use tracing::debug;
 
 use crate::db::EvmDb;
@@ -318,24 +318,7 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
         debug!("EVM module JSON-RPC request to `eth_call`");
-
-        let Some(block_env) = self.resolve_block_env(block_number, state) else {
-            return Err(eth_api_into_rpc_error(EthApiError::UnknownBlockOrTxIndex));
-        };
-
-        let tx_env =
-            prepare_call_env(&block_env, request.clone()).map_err(eth_api_into_rpc_error)?;
-
-        let cfg = self.cfg_infallible(state);
-        let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
-
-        let evm_db: EvmDb<_, S> = self.get_db(state);
-
-        let result = match executor::call(evm_db, &block_env, tx_env, cfg_env) {
-            Ok(result) => result,
-            Err(err) => return Err(eth_api_into_rpc_error(eth_from_evm_error(err))),
-        };
-
+        let result = self.call(request, block_number, state)?;
         ensure_success(result).map_err(eth_api_into_rpc_error)
     }
 
@@ -357,12 +340,25 @@ where
     #[rpc_method(name = "eth_estimateGas")]
     pub fn eth_estimate_gas(
         &self,
-        _request: TransactionRequest,
-        _block_number: Option<String>,
-        _state: &mut ApiStateAccessor<S>,
+        request: TransactionRequest,
+        block_number: Option<String>,
+        state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
-        // TODO EVM: #1510
-        Ok(U64::from(100_000))
+        debug!("EVM module JSON-RPC request to `eth_estimateGas`");
+        let result = self.call(request, block_number, state)?;
+        let gas_used = result.gas_used();
+        state
+            .charge_linear_gas(
+                &<S as GasSpec>::gas_to_charge_per_evm_gas(),
+                gas_used as u32,
+            )
+            .unwrap();
+        let gas_meter = state.try_as_basic_gas_meter().unwrap();
+        let total_gas_used =
+            gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
+        const RELATIVE_MARGIN: u64 = 100_000;
+        let gas_used_with_margins = (total_gas_used * 3) / 2 + RELATIVE_MARGIN; // gas * 1.5 + 100_000
+        Ok(U64::from(gas_used_with_margins))
     }
 }
 
@@ -370,6 +366,25 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    fn call(
+        &self,
+        request: TransactionRequest,
+        block_number: Option<String>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<ExecutionResult> {
+        let Some(block_env) = self.resolve_block_env(block_number, state) else {
+            return Err(eth_api_into_rpc_error(EthApiError::UnknownBlockOrTxIndex));
+        };
+        let tx_env =
+            prepare_call_env(&block_env, request.clone()).map_err(eth_api_into_rpc_error)?;
+        let cfg = self.cfg_infallible(state);
+        let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
+        let evm_db: EvmDb<_, S> = self.get_db(state);
+
+        executor::call(evm_db, &block_env, tx_env, cfg_env)
+            .map_err(|err| eth_api_into_rpc_error(eth_from_evm_error(err)))
+    }
+
     fn get_maybe_sealed_block(
         &self,
         tx: &TransactionSignedAndRecovered,
