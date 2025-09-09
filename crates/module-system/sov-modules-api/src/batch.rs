@@ -347,7 +347,7 @@ pub trait InjectedControlFlow<S: Spec> {
 
 /// A batch that can be processed incrementally
 pub trait IncrementalBatch<S: Spec>: Iterator<Item = (FullyBakedTx, Self::ControlFlow)> {
-    /// The post tx hook type used by this funciton
+    /// The post tx hook type used by this function
     type ControlFlow: InjectedControlFlow<S>;
     /// Returns an accurate lower bound on the remaining elements, if known.
     fn known_remaining_txs(&self) -> Option<usize>;
