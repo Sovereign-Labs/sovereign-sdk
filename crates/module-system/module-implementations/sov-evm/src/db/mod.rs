@@ -1,5 +1,4 @@
 use crate::{to_rollup_address, AccountStorageKey};
-use alloy_primitives::Bytes;
 use alloy_primitives::{Address, B256, U256};
 use derive_more::{Deref, Into};
 use derive_new::new;
@@ -37,7 +36,7 @@ pub struct DbAccount(pub(crate) AccountInfo);
 pub struct EvmDb<'a, Ws, S: Spec> {
     pub(crate) accounts: StateMap<Address, DbAccount, BcsCodec>,
     pub(crate) account_storage: StateMap<AccountStorageKey, U256, BcsCodec>,
-    pub(crate) code: StateMap<B256, Bytes, BcsCodec>,
+    pub(crate) code: StateMap<B256, Bytecode, BcsCodec>,
     pub(crate) state: &'a mut Ws,
     pub(crate) bank_module: sov_bank::Bank<S>,
 }
@@ -83,12 +82,11 @@ where
 
     fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
         // TODO move to new_raw_with_hash for better performance
-        let bytecode = Bytecode::new_raw(
-            self.code
-                .get(&code_hash, self.state)
-                .map_err(Error)?
-                .unwrap_or_default(),
-        );
+        let bytecode = self
+            .code
+            .get(&code_hash, self.state)
+            .map_err(Error)?
+            .unwrap_or_default();
 
         Ok(bytecode)
     }

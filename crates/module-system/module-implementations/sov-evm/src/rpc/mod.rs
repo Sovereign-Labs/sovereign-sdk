@@ -233,7 +233,7 @@ where
             .and_then(|account| self.code.get(&account.code_hash, state).unwrap_infallible())
             .unwrap_or_default();
 
-        Ok(code)
+        Ok(code.bytecode().clone())
     }
 
     /// Handler for: `eth_feeHistory`

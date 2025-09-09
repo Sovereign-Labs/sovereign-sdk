@@ -31,11 +31,12 @@ mod authenticate;
 mod helpers;
 
 use alloy_primitives::U256;
-use alloy_primitives::{Address, Bytes, B256};
+use alloy_primitives::{Address, B256};
 pub use authenticate::{
     authenticate, decode_evm_tx, Eip712Authenticator, EthereumAuthenticator, EvmAuthenticator,
     EvmAuthenticatorInput,
 };
+use reth_primitives;
 pub use reth_primitives::TransactionSigned;
 pub use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -58,6 +59,7 @@ use crate::evm::primitive_types::{
 
 pub use conversions::convert_to_transaction_signed;
 pub use conversions::create_tx_env;
+use revm::state::Bytecode;
 
 /// The sov-evm module provides compatibility with the EVM.
 #[allow(dead_code)]
@@ -77,7 +79,7 @@ pub struct Evm<S: Spec> {
 
     /// Mapping from code hash to code. Used for lazy-loading code into a contract account.
     #[state]
-    pub(crate) code: StateMap<B256, Bytes, BcsCodec>,
+    pub(crate) code: StateMap<B256, Bytecode, BcsCodec>,
 
     /// Chain configuration. This field is set in genesis.
     #[state]
