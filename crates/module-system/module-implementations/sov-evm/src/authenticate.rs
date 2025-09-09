@@ -45,12 +45,13 @@ fn recover_evm_signer(
 }
 
 /// Creates the transaction details for an EVM transaction.
-fn create_evm_tx_details<S: Spec>() -> TxDetails<S> {
+fn create_evm_tx_details<S: Spec>(tx: &TransactionSigned) -> TxDetails<S> {
+    let gas_limit = tx.gas_limit();
     TxDetails {
         chain_id: config_value!("CHAIN_ID"),
         max_priority_fee_bips: PriorityFeeBips::ZERO,
-        max_fee: Amount::new(10_000_000),
-        gas_limit: None,
+        max_fee: Amount::new(100_000_000_000),
+        gas_limit: Some([gas_limit, gas_limit].into()),
     }
 }
 
@@ -98,7 +99,7 @@ where
 
     let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
         raw_tx_hash: hash,
-        authenticated_tx: create_evm_tx_details().into(),
+        authenticated_tx: create_evm_tx_details(&tx).into(),
     };
 
     let nonce = tx.nonce();
