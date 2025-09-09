@@ -1,5 +1,6 @@
 //! Implements a temporary cache that persists for the duration of the block.
 
+use sov_state::SlotKey;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 
@@ -39,7 +40,7 @@ impl<'a, T> From<Option<Option<&'a T>>> for CacheLookup<'a, T> {
 /// Values in the cache are *not* visible to the API, since `Clone` bounds are
 /// not required.
 pub struct TempCache {
-    cache: HashMap<TypeId, Value>,
+    cache: HashMap<(TypeId, Option<SlotKey>), Value>,
     /// An estimate of the memory size of the cache. Note that `None` values are not included in this count.
     memory_size: usize,
 }
@@ -99,9 +100,9 @@ impl TempCache {
     }
 
     /// Gets a value from the cache.
-    pub fn get<T: 'static + Send + Sync>(&self) -> CacheLookup<'_, T> {
+    pub fn get<T: 'static + Send + Sync>(&self, slot_key: Option<SlotKey>) -> CacheLookup<'_, T> {
         self.cache
-            .get(&TypeId::of::<T>())
+            .get(&(TypeId::of::<T>(), slot_key))
             .map(|v| {
                 v.as_ref().map(|v| {
                     v.0.downcast_ref::<T>()
@@ -112,11 +113,15 @@ impl TempCache {
     }
 
     /// Sets a value in the cache.
-    pub fn set<T: 'static + Send + Sync + BorshSerializedSize>(&mut self, value: T) {
+    pub fn set<T: 'static + Send + Sync + BorshSerializedSize>(
+        &mut self,
+        slot_key: Option<SlotKey>,
+        value: T,
+    ) {
         let type_id = TypeId::of::<T>();
         let size = value.serialized_size();
         let boxed = Box::new(value);
-        let prev = self.cache.insert(type_id, Some((boxed, size)));
+        let prev = self.cache.insert((type_id, slot_key), Some((boxed, size)));
         if let Some(Some((_prev, prev_size))) = prev {
             self.memory_size -= prev_size;
         }
@@ -134,8 +139,8 @@ impl TempCache {
     }
 
     /// Deletes a value from the cache.
-    pub fn delete<T: 'static + Send + Sync>(&mut self) {
-        let prev = self.cache.insert(TypeId::of::<T>(), None);
+    pub fn delete<T: 'static + Send + Sync>(&mut self, slot_key: Option<SlotKey>) {
+        let prev = self.cache.insert((TypeId::of::<T>(), slot_key), None);
         if let Some(Some((_prev, size))) = prev {
             self.memory_size -= size;
         }
@@ -218,43 +223,45 @@ impl<const N: usize> BorshSerializedSize for SizedSafeString<N> {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[test]
     fn test_temp_cache() {
         let mut cache = TempCache::new();
 
-        cache.set(1u8);
-        assert_eq!(cache.get::<u8>(), CacheLookup::Hit(Some(&1u8)));
+        let key = None;
+        cache.set(key.clone(), 1u8);
+        assert_eq!(cache.get::<u8>(key.clone()), CacheLookup::Hit(Some(&1u8)));
         assert_eq!(cache.memory_size, 1);
 
-        cache.set(2u8);
-        assert_eq!(cache.get::<u8>(), CacheLookup::Hit(Some(&2u8)));
+        cache.set(key.clone(), 2u8);
+        assert_eq!(cache.get::<u8>(key.clone()), CacheLookup::Hit(Some(&2u8)));
         assert_eq!(cache.memory_size, 1);
 
-        cache.set(3u16);
-        assert_eq!(cache.get::<u16>(), CacheLookup::Hit(Some(&3u16)));
+        cache.set(key.clone(), 3u16);
+        assert_eq!(cache.get::<u16>(key.clone()), CacheLookup::Hit(Some(&3u16)));
         assert_eq!(cache.memory_size, 3);
 
-        cache.delete::<u8>();
-        assert_eq!(cache.get::<u8>(), CacheLookup::Hit(None));
+        cache.delete::<u8>(key.clone());
+        assert_eq!(cache.get::<u8>(key.clone()), CacheLookup::Hit(None));
         assert_eq!(cache.memory_size, 2);
 
-        assert_eq!(cache.get::<u16>(), CacheLookup::Hit(Some(&3u16)));
+        assert_eq!(cache.get::<u16>(key.clone()), CacheLookup::Hit(Some(&3u16)));
         cache.prune();
-        assert_eq!(cache.get::<u8>(), CacheLookup::Miss);
-        cache.set(11u32);
+        assert_eq!(cache.get::<u8>(key.clone()), CacheLookup::Miss);
+        cache.set(key.clone(), 11u32);
 
         let mut other = TempCache::new();
-        other.set(4u8);
-        other.set(5u64);
-        other.delete::<u16>();
+        other.set(key.clone(), 4u8);
+        other.set(key.clone(), 5u64);
+        other.delete::<u16>(key.clone());
 
         cache.update_with(other);
-        assert_eq!(cache.get::<u8>(), CacheLookup::Hit(Some(&4u8)));
-        assert_eq!(cache.get::<u64>(), CacheLookup::Hit(Some(&5u64)));
-        assert_eq!(cache.get::<u16>(), CacheLookup::Hit(None));
-        assert_eq!(cache.get::<u32>(), CacheLookup::Hit(Some(&11u32)));
+        assert_eq!(cache.get::<u8>(key.clone()), CacheLookup::Hit(Some(&4u8)));
+        assert_eq!(cache.get::<u64>(key.clone()), CacheLookup::Hit(Some(&5u64)));
+        assert_eq!(cache.get::<u16>(key.clone()), CacheLookup::Hit(None));
+        assert_eq!(cache.get::<u32>(key), CacheLookup::Hit(Some(&11u32)));
         assert_eq!(cache.memory_size, 13);
     }
 }

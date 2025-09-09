@@ -1,3 +1,6 @@
+# 2025-09-09
+- #1645 **BREAKING CHANGE** The `PerBlockCache` trait has been updated. The `put_cached and get_cached` methods now accept an optional `SlotKey`. For backward compatibility, None should be passed when a SlotKey is not provided.
+
 # 2025-09-08
 - #1635 **BREAKING CHANGE** Removes ETH gas price mechanism from the EVM module. The gas oracle, gas price cache, and related configuration have been eliminated. This simplifies EVM transaction handling by removing Ethereum gas pricing in favor of rollup gas metering.
 

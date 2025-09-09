@@ -1,5 +1,6 @@
 use super::{DbAccount, EvmDb};
 use alloy_primitives::{Address, Bytes, B256};
+use reth_primitives::Bytecode;
 use revm::state::AccountInfo;
 use sov_modules_api::StateReader;
 use sov_modules_api::{Spec, StateAccessor};
@@ -30,6 +31,7 @@ impl<'a, Ws: StateAccessor, S: Spec> InitEvmDb for EvmDb<'a, Ws, S> {
     }
 
     fn insert_code(&mut self, code_hash: B256, code: Bytes) -> Result<(), Self::Error> {
-        self.code.set(&code_hash, &code, self.state)
+        self.code
+            .set(&code_hash, &Bytecode::new_raw(code), self.state)
     }
 }
