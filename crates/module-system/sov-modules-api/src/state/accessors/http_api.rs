@@ -187,7 +187,7 @@ pub struct ApiStateAccessor<S: Spec> {
 }
 
 impl<S: Spec> PerBlockCache for ApiStateAccessor<S> {
-    fn get_cached<T: 'static + Send + Sync>(&self, slot_key: SlotKey) -> Option<&T> {
+    fn get_cached<T: 'static + Send + Sync>(&self, slot_key: Option<SlotKey>) -> Option<&T> {
         if let CacheLookup::Hit(v) = self.temp_cache.get::<T>(slot_key) {
             v
         } else {
@@ -197,13 +197,13 @@ impl<S: Spec> PerBlockCache for ApiStateAccessor<S> {
 
     fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(
         &mut self,
-        slot_key: SlotKey,
+        slot_key: Option<SlotKey>,
         value: T,
     ) {
-        self.temp_cache.set(value, slot_key);
+        self.temp_cache.set(slot_key, value);
     }
 
-    fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: SlotKey) {
+    fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: Option<SlotKey>) {
         self.temp_cache.delete::<T>(slot_key);
     }
 

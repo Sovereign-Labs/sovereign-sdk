@@ -89,7 +89,7 @@ impl<'a, S: Spec, I: TxState<S>> RevertableTxState<'a, S, I> {
 }
 
 impl<S: Spec, I: TxState<S>> PerBlockCache for RevertableTxState<'_, S, I> {
-    fn get_cached<T: 'static + Send + Sync>(&self, slot_key: SlotKey) -> Option<&T> {
+    fn get_cached<T: 'static + Send + Sync>(&self, slot_key: Option<SlotKey>) -> Option<&T> {
         match self.temp_cache.get::<T>(slot_key.clone()) {
             CacheLookup::Hit(value) => value,
             CacheLookup::Miss => self.inner.get_cached::<T>(slot_key),
@@ -98,13 +98,13 @@ impl<S: Spec, I: TxState<S>> PerBlockCache for RevertableTxState<'_, S, I> {
 
     fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(
         &mut self,
-        slot_key: SlotKey,
+        slot_key: Option<SlotKey>,
         value: T,
     ) {
-        self.temp_cache.set(value, slot_key);
+        self.temp_cache.set(slot_key, value);
     }
 
-    fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: SlotKey) {
+    fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: Option<SlotKey>) {
         self.temp_cache.delete::<T>(slot_key);
     }
 
@@ -320,19 +320,19 @@ impl<S: Spec, I: StateProvider<S>> VersionReader for TxScratchpad<S, I> {
 }
 
 impl<S: Spec, I: StateProvider<S>> PerBlockCache for TxScratchpad<S, I> {
-    fn get_cached<T: 'static + Send + Sync>(&self, slot_key: SlotKey) -> Option<&T> {
+    fn get_cached<T: 'static + Send + Sync>(&self, slot_key: Option<SlotKey>) -> Option<&T> {
         self.inner.get_cached::<T>(slot_key)
     }
 
     fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(
         &mut self,
-        slot_key: SlotKey,
+        slot_key: Option<SlotKey>,
         value: T,
     ) {
-        self.inner.cache_writes.set(value, slot_key);
+        self.inner.cache_writes.set(slot_key, value);
     }
 
-    fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: SlotKey) {
+    fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: Option<SlotKey>) {
         self.inner.cache_writes.delete::<T>(slot_key);
     }
 
@@ -733,19 +733,19 @@ impl<S: Spec, I: StateProvider<S>> VersionReader for WorkingSet<S, I> {
 }
 
 impl<S: Spec, I: StateProvider<S>> PerBlockCache for WorkingSet<S, I> {
-    fn get_cached<T: 'static + Send + Sync>(&self, slot_key: SlotKey) -> Option<&T> {
+    fn get_cached<T: 'static + Send + Sync>(&self, slot_key: Option<SlotKey>) -> Option<&T> {
         self.delta.get_cached::<T>(slot_key)
     }
 
     fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(
         &mut self,
-        slot_key: SlotKey,
+        slot_key: Option<SlotKey>,
         value: T,
     ) {
-        self.delta.cache_writes.set(value, slot_key);
+        self.delta.cache_writes.set(slot_key, value);
     }
 
-    fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: SlotKey) {
+    fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: Option<SlotKey>) {
         self.delta.cache_writes.delete::<T>(slot_key);
     }
 

@@ -40,7 +40,7 @@ impl<'a, T> From<Option<Option<&'a T>>> for CacheLookup<'a, T> {
 /// Values in the cache are *not* visible to the API, since `Clone` bounds are
 /// not required.
 pub struct TempCache {
-    cache: HashMap<(TypeId, SlotKey), Value>,
+    cache: HashMap<(TypeId, Option<SlotKey>), Value>,
     /// An estimate of the memory size of the cache. Note that `None` values are not included in this count.
     memory_size: usize,
 }
@@ -100,7 +100,7 @@ impl TempCache {
     }
 
     /// Gets a value from the cache.
-    pub fn get<T: 'static + Send + Sync>(&self, slot_key: SlotKey) -> CacheLookup<'_, T> {
+    pub fn get<T: 'static + Send + Sync>(&self, slot_key: Option<SlotKey>) -> CacheLookup<'_, T> {
         self.cache
             .get(&(TypeId::of::<T>(), slot_key))
             .map(|v| {
@@ -115,8 +115,8 @@ impl TempCache {
     /// Sets a value in the cache.
     pub fn set<T: 'static + Send + Sync + BorshSerializedSize>(
         &mut self,
+        slot_key: Option<SlotKey>,
         value: T,
-        slot_key: SlotKey,
     ) {
         let type_id = TypeId::of::<T>();
         let size = value.serialized_size();
@@ -139,7 +139,7 @@ impl TempCache {
     }
 
     /// Deletes a value from the cache.
-    pub fn delete<T: 'static + Send + Sync>(&mut self, slot_key: SlotKey) {
+    pub fn delete<T: 'static + Send + Sync>(&mut self, slot_key: Option<SlotKey>) {
         let prev = self.cache.insert((TypeId::of::<T>(), slot_key), None);
         if let Some(Some((_prev, size))) = prev {
             self.memory_size -= size;

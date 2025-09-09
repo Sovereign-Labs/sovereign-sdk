@@ -312,7 +312,7 @@ impl<S: Spec> GasMeter for StateCheckpoint<S> {
 }
 
 impl<S: Spec> PerBlockCache for StateCheckpoint<S> {
-    fn get_cached<T: 'static + Send + Sync>(&self, slot_key: SlotKey) -> Option<&T> {
+    fn get_cached<T: 'static + Send + Sync>(&self, slot_key: Option<SlotKey>) -> Option<&T> {
         if let CacheLookup::Hit(value) = self.cache.get::<T>(slot_key) {
             value
         } else {
@@ -322,13 +322,13 @@ impl<S: Spec> PerBlockCache for StateCheckpoint<S> {
 
     fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(
         &mut self,
-        slot_key: SlotKey,
+        slot_key: Option<SlotKey>,
         value: T,
     ) {
-        self.cache.set(value, slot_key);
+        self.cache.set(slot_key, value);
     }
 
-    fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: SlotKey) {
+    fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: Option<SlotKey>) {
         self.cache.delete::<T>(slot_key);
     }
 
