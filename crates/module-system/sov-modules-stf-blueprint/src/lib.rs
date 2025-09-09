@@ -326,7 +326,7 @@ where
     /// intended to be user facing, and a "rollup block", a state transition in user space which involves processing some batches of transactions. Every single DA layer block
     /// causes a "slot" to be processed, and each slot contains either zero or one "rollup block".
     ///
-    /// Since we're buidling "sovereign" rollups which don't rely on external smart contracts, the rollup has to keep track of all the data that appears on the DA layer in order
+    /// Since we're building "sovereign" rollups which don't rely on external smart contracts, the rollup has to keep track of all the data that appears on the DA layer in order
     /// to enforce censorship resistance. But, we still want sequencers to be able to give out "soft-confirmations" *before* transactions are finalized on the DA layer. This
     /// requires that we have some mechanism to prevent minor changes on the DA layer from impacting the outcome of transactions. We do this by partitioning the state
     /// into two spaces. "Kernel" state contains an exact record of all the DA layer data from the moment it appears on the DA layer, while "User" state contains the
@@ -337,7 +337,7 @@ where
     ///
     /// ## Divergences Between Native and Non-Native Execution
     ///
-    /// The native and non-native execution paths diverge in the `apply_slot` method in only a small handfull of places. These divergences need to be carefully
+    /// The native and non-native execution paths diverge in the `apply_slot` method in only a small handful of places. These divergences need to be carefully
     /// audited when making changes to this code, because all reads or writes to state must be done in exactly the same order in both execution paths in order to
     /// generate the correct witness.  (Exception: Accessory state may be read or written anywhere in native code without a corresponding access in non-native code).
     ///
@@ -509,7 +509,7 @@ where
             );
         } else {
             // Defensive programming; if we don't create a rollup block, we aren't allowed to execute any blobs.
-            // We panic if this invariant is violated, beccause in this case the rollup block hooks will not be executed correctly leading
+            // We panic if this invariant is violated, because in this case the rollup block hooks will not be executed correctly leading
             // To potentially inconsistent state.
             assert!(
                 blob_selector_output.selected_blobs.is_empty(),
