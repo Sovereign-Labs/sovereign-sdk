@@ -22,6 +22,7 @@ impl BlobSenderDb {
             Self::DB_NAME,
             Self::TABLES.iter().copied(),
             &gen_rocksdb_options(&Default::default(), false),
+            0, // We don't need a cache for blobs since the table is not configured for caching anyway
         )?;
 
         Ok(Self { db })

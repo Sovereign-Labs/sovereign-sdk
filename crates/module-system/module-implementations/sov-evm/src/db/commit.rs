@@ -70,7 +70,7 @@ where
             if !code.is_empty() {
                 // TODO: would be good to have a contains_key method on the StateMap that would be optimized, so we can check the hash before storing the code
                 self.code
-                    .set(&account.code_hash, code.bytecode(), self.state)
+                    .set(&account.code_hash, code, self.state)
                     .map_err(Error)?;
             }
         }

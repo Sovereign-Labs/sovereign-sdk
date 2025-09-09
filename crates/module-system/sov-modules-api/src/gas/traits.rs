@@ -571,7 +571,7 @@ pub trait GasMeter {
     }
 
     /// Returns the basic gas state if it's a BasicGasMeter or contains a BasicGasMeter. Used to set the EVM gas limit
-    fn try_as_basic_gas_state(&mut self) -> Option<BasicGasState<Self::Spec>> {
+    fn try_as_basic_gas_meter(&mut self) -> Option<&mut BasicGasMeter<Self::Spec>> {
         None
     }
 
@@ -714,10 +714,14 @@ impl<S: Spec> SlotGasMeter<S> {
 /// It also ensures that the gas used will not overflow when multiplied by the gas price.
 #[derive(Clone, Debug)]
 pub struct BasicGasMeter<S: Spec> {
-    initial_gas: S::Gas,
-    remaining_gas: S::Gas,
-    remaining_funds: Option<Amount>,
-    gas_price: <S::Gas as Gas>::Price,
+    /// Amount of gas available at the moment of the gas meter initialization
+    pub initial_gas: S::Gas,
+    /// Amount of gas remaining
+    pub remaining_gas: S::Gas,
+    /// Amount of funds available
+    pub remaining_funds: Option<Amount>,
+    /// Gas price
+    pub gas_price: <S::Gas as Gas>::Price,
 }
 
 impl<S: Spec> BasicGasMeter<S> {
@@ -901,14 +905,8 @@ impl<S: Spec> GasMeter for BasicGasMeter<S> {
         Ok(())
     }
 
-    fn try_as_basic_gas_state(&mut self) -> Option<BasicGasState<Self::Spec>> {
-        Some(BasicGasState {
-            gas: self.remaining_gas.clone(),
-            funds: self
-                .remaining_funds
-                .expect("This method is used in TX context where amount is set"),
-            price: self.gas_price.clone(),
-        })
+    fn try_as_basic_gas_meter(&mut self) -> Option<&mut BasicGasMeter<Self::Spec>> {
+        Some(self)
     }
 
     #[cfg(all(feature = "gas-constant-estimation", feature = "native"))]
@@ -942,16 +940,6 @@ impl<S: Spec> GetGasPrice for BasicGasMeter<S> {
     fn gas_price(&self) -> &<<Self::Spec as Spec>::Gas as Gas>::Price {
         &self.gas_price
     }
-}
-
-/// A subset of BasicGasMeter used to compute EVM gas limit
-pub struct BasicGasState<S: Spec> {
-    /// Amount of gas available
-    pub gas: S::Gas,
-    /// Amount of funds available
-    pub funds: Amount,
-    /// Gas price
-    pub price: <<S as Spec>::Gas as Gas>::Price,
 }
 
 #[cfg(test)]

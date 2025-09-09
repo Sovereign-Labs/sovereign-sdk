@@ -14,7 +14,7 @@ use crate::capabilities::{KernelWithSlotMapping, RollupHeight};
 use crate::gas::GasArray;
 use crate::state::accessors::internals::AccessoryWrite;
 use crate::state::traits::PerBlockCache;
-use crate::{Gas, GasMeter, GetGasPrice, Spec, VersionReader};
+use crate::{Amount, BasicGasMeter, Gas, GasMeter, GetGasPrice, Spec, VersionReader};
 
 fn get_slot_number(visible_slot_number: Option<VisibleSlotNumber>) -> Option<SlotNumber> {
     // This TODO is not a security risk.
@@ -159,7 +159,7 @@ pub struct ApiStateAccessor<S: Spec> {
     #[debug(skip)]
     witness: <<S as Spec>::Storage as Storage>::Witness,
     events: Vec<TypeErasedEvent>,
-    gas_price: <S::Gas as Gas>::Price,
+    gas_meter: BasicGasMeter<S>,
     kernel_cache: ProvableStorageCache<namespaces::Kernel>,
     user_cache: ProvableStorageCache<namespaces::User>,
     accessory_writes: HashMap<SlotKey, AccessoryWrite>,
@@ -187,20 +187,24 @@ pub struct ApiStateAccessor<S: Spec> {
 }
 
 impl<S: Spec> PerBlockCache for ApiStateAccessor<S> {
-    fn get_cached<T: 'static + Send + Sync>(&self) -> Option<&T> {
-        if let CacheLookup::Hit(v) = self.temp_cache.get::<T>() {
+    fn get_cached<T: 'static + Send + Sync>(&self, slot_key: Option<SlotKey>) -> Option<&T> {
+        if let CacheLookup::Hit(v) = self.temp_cache.get::<T>(slot_key) {
             v
         } else {
             None
         }
     }
 
-    fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(&mut self, value: T) {
-        self.temp_cache.set(value);
+    fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(
+        &mut self,
+        slot_key: Option<SlotKey>,
+        value: T,
+    ) {
+        self.temp_cache.set(slot_key, value);
     }
 
-    fn delete_cached<T: 'static + Send + Sync>(&mut self) {
-        self.temp_cache.delete::<T>();
+    fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: Option<SlotKey>) {
+        self.temp_cache.delete::<T>(slot_key);
     }
 
     fn update_cache_with(&mut self, other: TempCache) {
@@ -254,12 +258,16 @@ const _: () = {
 
 impl<S: Spec> GasMeter for ApiStateAccessor<S> {
     type Spec = S;
+
+    fn try_as_basic_gas_meter(&mut self) -> Option<&mut BasicGasMeter<Self::Spec>> {
+        Some(&mut self.gas_meter)
+    }
 }
 
 impl<S: Spec> GetGasPrice for ApiStateAccessor<S> {
     type Spec = S;
     fn gas_price(&self) -> &<S::Gas as Gas>::Price {
-        &self.gas_price
+        &self.gas_meter.gas_price
     }
 }
 
@@ -388,11 +396,12 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         gas_price: <S::Gas as Gas>::Price,
     ) -> Result<Self, ApiStateAccessorError> {
         let delta: &super::internals::Delta<<S as Spec>::Storage> = &state_checkpoint.delta;
+        let gas_meter = BasicGasMeter::new_with_funds_and_gas(Amount::MAX, Gas::max(), gas_price);
 
         let mut out = Self {
             storage: delta.inner.clone(),
             witness: Default::default(),
-            gas_price,
+            gas_meter,
             events: Vec::new(),
             temp_cache: TempCache::new(),
             kernel_cache: delta.kernel_cache.clone(),
@@ -438,9 +447,14 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         state_to_access: StateToAccess,
     ) -> Self {
+        let gas_meter = BasicGasMeter::new_with_funds_and_gas(
+            Amount::MAX,
+            Gas::max(),
+            <S::Gas as Gas>::Price::ZEROED,
+        );
         Self {
             events: Vec::new(),
-            gas_price: <S::Gas as Gas>::Price::ZEROED,
+            gas_meter,
             storage,
             witness: Default::default(),
             kernel_cache: Default::default(),
@@ -479,7 +493,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
 
     /// Sets the gas price for the accessor.
     pub fn set_gas_price(&mut self, gas_price: <S::Gas as Gas>::Price) {
-        self.gas_price = gas_price;
+        self.gas_meter.gas_price = gas_price;
     }
 
     fn build_archival_state(

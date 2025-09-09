@@ -6,7 +6,10 @@ use schemars::JsonSchema;
 pub struct RollupDbConfig {
     /// Path where all databases are stored
     pub path: std::path::PathBuf,
-    // User state configuration
+    /// The size of the cache which holds hot key-value pairs in the flat state database. Default is 1GB.
+    /// A larger cache size can improve execution speed at the cost of more memory usage.
+    pub state_cache_size: Option<usize>,
+
     /// Number of concurrent commit workers for the user state.
     /// More details at [`Options::commit_concurrency`]
     pub user_commit_concurrency: Option<usize>,
@@ -55,6 +58,7 @@ impl RollupDbConfig {
     pub fn default_in_path(path: std::path::PathBuf) -> Self {
         Self {
             path,
+            state_cache_size: Some(1_000_000), // Use a 1MB state cache for tests
             user_commit_concurrency: Some(4),
             user_hashtable_buckets: Some(if cfg!(debug_assertions) {
                 2_500 // 9.77MB
