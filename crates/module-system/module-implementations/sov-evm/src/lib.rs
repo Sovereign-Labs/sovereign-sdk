@@ -36,7 +36,6 @@ pub use authenticate::{
     authenticate, decode_evm_tx, Eip712Authenticator, EthereumAuthenticator, EvmAuthenticator,
     EvmAuthenticatorInput,
 };
-use reth_primitives;
 pub use reth_primitives::TransactionSigned;
 pub use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
