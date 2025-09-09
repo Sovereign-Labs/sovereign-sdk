@@ -1,5 +1,6 @@
 //! Implements a temporary cache that persists for the duration of the block.
 
+use sov_state::SlotKey;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 
@@ -39,7 +40,7 @@ impl<'a, T> From<Option<Option<&'a T>>> for CacheLookup<'a, T> {
 /// Values in the cache are *not* visible to the API, since `Clone` bounds are
 /// not required.
 pub struct TempCache {
-    cache: HashMap<TypeId, Value>,
+    cache: HashMap<(TypeId, SlotKey), Value>,
     /// An estimate of the memory size of the cache. Note that `None` values are not included in this count.
     memory_size: usize,
 }
@@ -99,9 +100,9 @@ impl TempCache {
     }
 
     /// Gets a value from the cache.
-    pub fn get<T: 'static + Send + Sync>(&self) -> CacheLookup<'_, T> {
+    pub fn get<T: 'static + Send + Sync>(&self, slot_key: SlotKey) -> CacheLookup<'_, T> {
         self.cache
-            .get(&TypeId::of::<T>())
+            .get(&(TypeId::of::<T>(), slot_key))
             .map(|v| {
                 v.as_ref().map(|v| {
                     v.0.downcast_ref::<T>()
@@ -112,11 +113,15 @@ impl TempCache {
     }
 
     /// Sets a value in the cache.
-    pub fn set<T: 'static + Send + Sync + BorshSerializedSize>(&mut self, value: T) {
+    pub fn set<T: 'static + Send + Sync + BorshSerializedSize>(
+        &mut self,
+        value: T,
+        slot_key: SlotKey,
+    ) {
         let type_id = TypeId::of::<T>();
         let size = value.serialized_size();
         let boxed = Box::new(value);
-        let prev = self.cache.insert(type_id, Some((boxed, size)));
+        let prev = self.cache.insert((type_id, slot_key), Some((boxed, size)));
         if let Some(Some((_prev, prev_size))) = prev {
             self.memory_size -= prev_size;
         }
@@ -134,8 +139,8 @@ impl TempCache {
     }
 
     /// Deletes a value from the cache.
-    pub fn delete<T: 'static + Send + Sync>(&mut self) {
-        let prev = self.cache.insert(TypeId::of::<T>(), None);
+    pub fn delete<T: 'static + Send + Sync>(&mut self, slot_key: SlotKey) {
+        let prev = self.cache.insert((TypeId::of::<T>(), slot_key), None);
         if let Some(Some((_prev, size))) = prev {
             self.memory_size -= size;
         }

@@ -84,7 +84,7 @@ where
     fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
         let key = SlotKey::from(code_hash.to_vec());
 
-        if let Some(code) = self.state.get_cached::<CachedByteCode>() {
+        if let Some(code) = self.state.get_cached::<CachedByteCode>(key.clone()) {
             return Ok(code.code.clone());
         }
 
@@ -95,9 +95,12 @@ where
             .map_err(Error)?
             .unwrap_or_default();
 
-        self.state.put_cached::<CachedByteCode>(CachedByteCode {
-            code: bytecode.clone(),
-        });
+        self.state.put_cached::<CachedByteCode>(
+            key,
+            CachedByteCode {
+                code: bytecode.clone(),
+            },
+        );
 
         Ok(bytecode)
     }
