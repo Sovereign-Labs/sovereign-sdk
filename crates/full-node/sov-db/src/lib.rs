@@ -76,7 +76,7 @@ impl DbOptions {
     ) -> anyhow::Result<rockbound::DB> {
         let config = rocks_db_config::gen_rocksdb_options(&Default::default(), false);
         let db_path = path.as_ref().join(self.path_suffix);
-        rockbound::DB::open(db_path, self.name, self.columns, &config)
+        rockbound::DB::open(db_path, self.name, self.columns, &config, 0) // We only setup the cache for NOMT - which is done in FlatStateDb. Use 0 for all other databases.
     }
 }
 
@@ -85,10 +85,11 @@ impl DbOptions<ColumnFamilyDescriptor> {
     pub fn setup_db_in_path_with_column_descriptors(
         self,
         path: impl AsRef<std::path::Path>,
+        cache_size: usize,
     ) -> anyhow::Result<rockbound::DB> {
         let config = rocks_db_config::gen_rocksdb_options(&Default::default(), false);
         let db_path = path.as_ref().join(self.path_suffix);
-        rockbound::DB::open_with_cfds(&config, db_path, self.name, self.columns)
+        rockbound::DB::open_with_cfds(&config, db_path, self.name, self.columns, cache_size)
     }
 }
 

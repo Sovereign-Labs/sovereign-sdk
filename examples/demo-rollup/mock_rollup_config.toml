@@ -24,6 +24,7 @@ block_time_ms = 1_000
 [storage]
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "demo_data"
+state_cache_size = 4294967296 # 4GB. Default is 1GB.
 
 # We define the rollup's genesis to occur at block number `genesis_height`. The rollup will ignore
 # any blocks before this height, and any blobs at this height will not be processed
