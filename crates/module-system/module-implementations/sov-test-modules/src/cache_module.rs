@@ -2,13 +2,10 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_modules_api::macros::UniversalWallet;
-// use sov_modules_api::sov_universal_wallet::schema::UniversalWallet;
-use sov_modules_api::{module_key, HexString};
 use sov_modules_api::{
     BorshSerializedSize, Context, DaSpec, EventEmitter, GenesisState, Module, ModuleId, ModuleInfo,
     ModuleRestApi, SafeString, Spec, StateValue, TxState,
 };
-use sov_state::BcsCodec;
 use sov_state::SlotKey;
 
 /// A message to test and set a value
@@ -144,15 +141,14 @@ impl<S: Spec> Module for CacheAndRevertTester<S> {
         _context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
-        let module_key = module_key::<Self>(&self);
         match msg {
-            CallMessage::TestAndSetU8(msg) => msg.run(state, module_key),
-            CallMessage::TestAndSetU16(msg) => msg.run(state, module_key),
-            CallMessage::TestAndSetString(msg) => msg.run(state, module_key),
+            CallMessage::TestAndSetU8(msg) => msg.run(state, self.module_key()),
+            CallMessage::TestAndSetU16(msg) => msg.run(state, self.module_key()),
+            CallMessage::TestAndSetString(msg) => msg.run(state, self.module_key()),
             CallMessage::SetAndRevertString(msg) => {
                 match msg {
-                    Some(msg) => state.put_cached(module_key, msg),
-                    None => state.delete_cached::<String>(module_key),
+                    Some(msg) => state.put_cached(self.module_key(), msg),
+                    None => state.delete_cached::<String>(self.module_key()),
                 }
                 Err(anyhow::anyhow!("Reverting"))
             }
@@ -163,7 +159,7 @@ impl<S: Spec> Module for CacheAndRevertTester<S> {
             } => {
                 let mut state_wrapped = state.to_revertable();
                 let state = &mut state_wrapped;
-                cache_value.run(state, module_key)?;
+                cache_value.run(state, self.module_key())?;
                 self.value
                     .set(&state_value, state)
                     .map_err(|e| anyhow::anyhow!("{}", e))?;
