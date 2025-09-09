@@ -1,3 +1,4 @@
+use crate::{to_rollup_address, AccountStorageKey};
 use alloy_primitives::Bytes;
 use alloy_primitives::{Address, B256, U256};
 use derive_more::{Deref, Into};
@@ -6,12 +7,11 @@ use revm::state::{AccountInfo, Bytecode};
 use revm::{database_interface::DBErrorMarker, Database};
 use serde::{Deserialize, Serialize};
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_modules_api::BorshSerializedSize;
 use sov_modules_api::{Spec, StateAccessor, StateMap, StateReader};
 use sov_state::codec::BcsCodec;
 use sov_state::User;
 use std::fmt::{self, Debug};
-
-use crate::{to_rollup_address, AccountStorageKey};
 
 pub(crate) mod commit;
 pub(crate) mod init;
@@ -105,5 +105,19 @@ where
 
     fn block_hash(&mut self, _number: u64) -> Result<B256, Self::Error> {
         todo!("block_hash not yet implemented")
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) struct CachedByteCode {
+    pub code: Bytecode,
+}
+
+impl BorshSerializedSize for CachedByteCode {
+    fn serialized_size(&self) -> usize {
+        match &self.code {
+            Bytecode::Eip7702(bytes) => bytes.raw.len(),
+            Bytecode::LegacyAnalyzed(analyzed) => analyzed.bytecode().len(),
+        }
     }
 }
