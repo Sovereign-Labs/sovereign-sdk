@@ -4,7 +4,7 @@ use core::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_rollup_interface::da::DaSpec;
-use sov_state::EventContainer;
+use sov_state::{BorshCodec, EventContainer, Prefix, SlotKey, StateCodec};
 use sov_universal_wallet::schema::UniversalWallet;
 
 use crate::common::ModuleError;
@@ -162,6 +162,14 @@ pub trait ModuleInfo {
     ) -> bool {
         true
     }
+}
+
+use sov_state::StateItemDecoder;
+
+/// TODO
+pub fn module_key<M: ModuleInfo>(m: &M) -> SlotKey {
+    let prefix: Prefix = m.prefix().into();
+    SlotKey::new::<_, Prefix, _>(&prefix, &prefix, &BorshCodec {})
 }
 
 /// Allows modules to emit events. Events are served via the REST API but are *not* included in zk proofs.

@@ -3,10 +3,13 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_modules_api::macros::UniversalWallet;
 // use sov_modules_api::sov_universal_wallet::schema::UniversalWallet;
+use sov_modules_api::{module_key, HexString};
 use sov_modules_api::{
     BorshSerializedSize, Context, DaSpec, EventEmitter, GenesisState, Module, ModuleId, ModuleInfo,
     ModuleRestApi, SafeString, Spec, StateValue, TxState,
 };
+use sov_state::BcsCodec;
+use sov_state::SlotKey;
 
 /// A message to test and set a value
 #[derive(
@@ -63,8 +66,12 @@ pub struct TestAndSet<T> {
 impl<T: std::fmt::Debug + PartialEq + Eq + Send + Sync + BorshSerializedSize + 'static>
     TestAndSet<T>
 {
-    pub fn run<S: Spec>(self, state: &mut impl TxState<S>) -> Result<(), anyhow::Error> {
-        let current_value = state.get_cached::<T>();
+    pub fn run<S: Spec>(
+        self,
+        state: &mut impl TxState<S>,
+        module_key: SlotKey,
+    ) -> Result<(), anyhow::Error> {
+        let current_value = state.get_cached::<T>(module_key.clone());
         if current_value != self.expected_value.as_ref() {
             anyhow::bail!(
                 "Wrong value: expected {:?}, got {:?}",
@@ -74,10 +81,10 @@ impl<T: std::fmt::Debug + PartialEq + Eq + Send + Sync + BorshSerializedSize + '
         }
         match self.new_value {
             Some(new_value) => {
-                state.put_cached(new_value);
+                state.put_cached(module_key, new_value);
             }
             None => {
-                state.delete_cached::<T>();
+                state.delete_cached::<T>(module_key);
             }
         }
         Ok(())
@@ -137,14 +144,15 @@ impl<S: Spec> Module for CacheAndRevertTester<S> {
         _context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
+        let module_key = module_key::<Self>(&self);
         match msg {
-            CallMessage::TestAndSetU8(msg) => msg.run(state),
-            CallMessage::TestAndSetU16(msg) => msg.run(state),
-            CallMessage::TestAndSetString(msg) => msg.run(state),
+            CallMessage::TestAndSetU8(msg) => msg.run(state, module_key),
+            CallMessage::TestAndSetU16(msg) => msg.run(state, module_key),
+            CallMessage::TestAndSetString(msg) => msg.run(state, module_key),
             CallMessage::SetAndRevertString(msg) => {
                 match msg {
-                    Some(msg) => state.put_cached(msg),
-                    None => state.delete_cached::<String>(),
+                    Some(msg) => state.put_cached(module_key, msg),
+                    None => state.delete_cached::<String>(module_key),
                 }
                 Err(anyhow::anyhow!("Reverting"))
             }
@@ -155,7 +163,7 @@ impl<S: Spec> Module for CacheAndRevertTester<S> {
             } => {
                 let mut state_wrapped = state.to_revertable();
                 let state = &mut state_wrapped;
-                cache_value.run(state)?;
+                cache_value.run(state, module_key)?;
                 self.value
                     .set(&state_value, state)
                     .map_err(|e| anyhow::anyhow!("{}", e))?;
