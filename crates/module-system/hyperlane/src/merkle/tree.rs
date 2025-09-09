@@ -11,7 +11,7 @@ use crate::crypto::keccak256_concat;
 
 pub const TREE_DEPTH: usize = 32;
 pub const ZERO_BYTES: HexHash = HexString([0u8; 32]);
-// See <https://github.com/eigerco/hyperlane-monorepo/blob/cb6727f013e82884e15966edd863e3a888fa9184/solidity/contracts/libs/Merkle.sol#L173>
+// See <https://github.com/Sovereign-Labs/hyperlane-monorepo/blob/cb6727f013e82884e15966edd863e3a888fa9184/solidity/contracts/libs/Merkle.sol#L173>
 // You can find a nice hex-encoded list of the zeroes in the tests below
 pub const ZERO_HASHES: [HexHash; TREE_DEPTH] = [
     ZERO_BYTES,
@@ -293,7 +293,7 @@ mod tests {
         assert_eq!(tree.count, 1000);
     }
 
-    // See <https://github.com/eigerco/hyperlane-monorepo/blob/cb6727f013e82884e15966edd863e3a888fa9184/solidity/contracts/libs/Merkle.sol#L173>
+    // See <https://github.com/Sovereign-Labs/hyperlane-monorepo/blob/cb6727f013e82884e15966edd863e3a888fa9184/solidity/contracts/libs/Merkle.sol#L173>
     pub const ZERO_HASHES_AS_HEX: [&str; TREE_DEPTH] = [
         "0x0000000000000000000000000000000000000000000000000000000000000000",
         "0xad3228b676f7d3cd4284a5443f17f1962b36e491b30a40b2405849e597ba5fb5",

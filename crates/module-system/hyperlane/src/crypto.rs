@@ -41,7 +41,7 @@ pub fn compute_hash_for_signatures<S: Spec>(
 }
 
 /// Decodes [`RecoverableSignature`] out of a slice of bytes.
-// See <https://github.com/eigerco/hyperlane-monorepo/blob/b68fe264b3585ecd9d95a5ec2ec2d7defbe907d2/rust/sealevel/libraries/ecdsa-signature/src/lib.rs#L40>
+// See <https://github.com/Sovereign-Labs/hyperlane-monorepo/blob/b68fe264b3585ecd9d95a5ec2ec2d7defbe907d2/rust/sealevel/libraries/ecdsa-signature/src/lib.rs#L40>
 pub fn decode_signature(bytes: &[u8]) -> Result<RecoverableSignature> {
     ensure!(
         bytes.len() == 65,

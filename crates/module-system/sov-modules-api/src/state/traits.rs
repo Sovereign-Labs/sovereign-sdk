@@ -130,12 +130,16 @@ pub trait PerBlockCache {
     /// Gets a value from the cache. This API returns &T because mutating the type would invalidate the revert
     /// guarantees provided by the SDK. Be extremely careful when using interior mutability for objects stored in the cache -
     /// any changes made to the object may not revert on transaction failure, causing possible cache corruption.
-    fn get_cached<T: 'static + Send + Sync>(&self) -> Option<&T>;
+    fn get_cached<T: 'static + Send + Sync>(&self, key: Option<SlotKey>) -> Option<&T>;
     /// Puts a value in the cache. Note that values are required to provide an esimate of their size via the
     /// [`BorshSerializedSize`] trait.
-    fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(&mut self, value: T);
+    fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(
+        &mut self,
+        key: Option<SlotKey>,
+        value: T,
+    );
     /// Deletes a value from the cache.
-    fn delete_cached<T: 'static + Send + Sync>(&mut self);
+    fn delete_cached<T: 'static + Send + Sync>(&mut self, key: Option<SlotKey>);
     /// Adds all writes from another cache to this one.
     fn update_cache_with(&mut self, other: TempCache);
 }

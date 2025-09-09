@@ -1,19 +1,13 @@
-//! End to end tests for hyperlane implementation that utilize real relayer, validators and evm devnet.
+//! End-to-end tests for hyperlane implementation that utilize real relayer, validators and evm devnet.
 //!
-//! The docker setup uses a single container which provides all the needed tools.
-//! It comes from <https://github.com/eigerco/hyperlane-monorepo/blob/main/hyperlane.Dockerfile>.
+//! The docker setup uses several containers:
+//! 1. Hyperlane agents are built from official [Dockerfile](https://github.com/Sovereign-Labs/hyperlane-monorepo/blob/integration-2025-08-27-rebase/rust/Dockerfile)
+//! 2. Hyperlane CLI is built from [docker/hyperlane/hyperlane-cli.Dockerfile](https://github.com/Sovereign-Labs/sovereign-sdk/blob/39e6ee0e94b7a8a5d1e23c346efdab856814c62a/docker/hyperlane/hyperlane-cli.Dockerfile)j
+//! 3. EVM uses official anvil image: `ghcr.io/foundry-rs/foundry`
 //!
-//! To build it:
-//! ```bash
-//! git clone https://github.com/eigerco/hyperlane-monorepo
-//! cd hyperlane-monorepo
-//! ./build.sh
-//! ```
+//! Rollup is running on host machine and accesses via host docker network.
 //!
-//! Tests will always fetch the latest shipped image. To run tests with locally built image:
-//! ```bash
-//! export CUSTOM_HLP_DOCKER_IMAGE=hyperlane
-//! ```
+//! For tests reliability all images use hard coded tags.
 //!
 //! For more information about the setup, check the [`HyperlaneBuilder`].
 
@@ -48,6 +42,7 @@ use tokio::time::sleep;
 use tokio_stream::StreamExt;
 
 use crate::igp::{default_gas_hashmap_to_safe_vec, oracle_data_hashmap_to_safe_vec};
+use crate::with_agent::helpers::RELAYER_ACCOUNT;
 
 mod configs;
 mod helpers;
@@ -55,12 +50,10 @@ mod preferred_sequencer_runtime;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_validator_announces_itself() {
-    sov_test_utils::initialize_logging();
-    let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
     let validator = setup.validators[0].clone();
-    let rollup = setup_rollup(dir.path().to_path_buf(), setup, false).await;
+    let rollup = setup_rollup(setup, false).await;
 
     let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
 
@@ -79,10 +72,14 @@ async fn test_validator_announces_itself() {
                 process_event["validator_announcement"]["address"],
                 ANVIL_ACCOUNTS[1].0.to_string(),
             );
-            assert!(process_event["validator_announcement"]["storage_location"]
-                .as_str()
-                .unwrap()
-                .starts_with("file:///validator0/signatures"));
+            let pattern = "file:///app/validator-0/signatures";
+            assert!(
+                process_event["validator_announcement"]["storage_location"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with(pattern),
+                "Found event does not contain pattern {pattern}. Event: {process_event:?}"
+            );
 
             rollup.shutdown().await.unwrap();
             return;
@@ -96,13 +93,12 @@ async fn test_validator_announces_itself() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_relayer_basic_dispatch_process() {
-    let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
     let relayer = setup.relayer.clone();
     let prover = setup.prover.clone();
     let prover_addr = prover.user_info.address();
-    let rollup = setup_rollup(dir.path().to_path_buf(), setup, true).await;
+    let rollup = setup_rollup(setup, true).await;
 
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
@@ -110,7 +106,7 @@ async fn test_relayer_basic_dispatch_process() {
         .start()
         .await;
 
-    // wait for first finalized block
+    // wait for the first finalized block
     let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS {
         slot_subscription.next().await.unwrap().unwrap();
@@ -165,14 +161,13 @@ async fn test_relayer_basic_dispatch_process() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_multisig_ism() {
-    let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
     let relayer = setup.relayer.clone();
     let prover = setup.prover.clone();
     let prover_addr = prover.user_info.address();
     let validators = setup.validators.clone();
-    let rollup = setup_rollup(dir.path().to_path_buf(), setup, true).await;
+    let rollup = setup_rollup(setup, true).await;
 
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
@@ -181,7 +176,7 @@ async fn test_multisig_ism() {
         .start()
         .await;
 
-    // wait for first finalized block
+    // wait for the first finalized block
     let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS {
         slot_subscription.next().await.unwrap().unwrap();
@@ -191,7 +186,7 @@ async fn test_multisig_ism() {
     let relayer_config_tx = tx_set_relayer_config(&relayer);
     submit_tx(rollup.api_client(), relayer_config_tx).await;
 
-    // register prover as a recipient with first 3 validators addresses for multisig
+    // register prover as a recipient with the first 3 validators addresses for multisig
     let val_addresses: Vec<_> = ANVIL_ACCOUNTS[1..4]
         .iter()
         .map(|(addr, _)| addr.parse().unwrap())
@@ -235,15 +230,13 @@ async fn test_multisig_ism() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Ignore hyperlane tests"]
 async fn test_process_message_from_evm_counterparty() {
-    let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
     let relayer = setup.relayer.clone();
     let prover = setup.prover.clone();
     let prover_addr = prover.user_info.address();
-    let rollup = setup_rollup(dir.path().to_path_buf(), setup, true).await;
+    let rollup = setup_rollup(setup, true).await;
 
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
@@ -251,12 +244,15 @@ async fn test_process_message_from_evm_counterparty() {
         .with_evm_counterparty()
         .start()
         .await;
+    tracing::info!("Hyperlane stack has started");
 
     // wait for first finalized block
+    // TODO: Should we subscribe to finalized slots then?
     let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS {
         slot_subscription.next().await.unwrap().unwrap();
     }
+    tracing::info!("Finalization slots have been reached");
 
     // register prover as a recipient
     let register_call = TestRuntimeCall::TestRecipient(test_recipient::CallMessage::Register {
@@ -270,7 +266,8 @@ async fn test_process_message_from_evm_counterparty() {
     let evm_dispatch = hyperlane
         .dispatch_msg_from_counterparty(prover_addr.to_sender())
         .await;
-    let sender_addr = parse_eth_addr(ANVIL_ACCOUNTS[0].0);
+
+    let sender_addr = parse_eth_addr(RELAYER_ACCOUNT.0);
 
     assert_eq!(evm_dispatch.message.origin_domain, EVM_DOMAIN);
     assert_eq!(
@@ -280,7 +277,7 @@ async fn test_process_message_from_evm_counterparty() {
     assert_eq!(evm_dispatch.sender_address, sender_addr);
     assert_eq!(evm_dispatch.recipient_address, prover_addr.to_sender());
 
-    // finalize the block with dispatched message
+    // finalize the block with a dispatched message
     hyperlane.mine_next_block_on_counterparty().await;
 
     // look for `process` event
@@ -317,17 +314,15 @@ async fn test_process_message_from_evm_counterparty() {
 
     rollup.shutdown().await.unwrap();
     hyperlane.print_stdout().await;
-    panic!("Mailbox/Process event not found");
+    panic!("Mailbox/Process event not found in the stream of events");
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Ignore hyperlane tests"]
 async fn test_dispatch_message_to_evm_counterparty() {
-    let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
     let relayer = setup.relayer.clone();
-    let rollup = setup_rollup(dir.path().to_path_buf(), setup, true).await;
+    let rollup = setup_rollup(setup, true).await;
 
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
@@ -339,14 +334,14 @@ async fn test_dispatch_message_to_evm_counterparty() {
     // wait for first finalized block
     let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS {
-        slot_subscription.next().await.unwrap().unwrap();
+        let _slot = slot_subscription.next().await.unwrap().unwrap();
     }
 
     // set relayer igp config
     let relayer_config_tx = tx_set_relayer_config(&relayer);
     submit_tx(rollup.api_client(), relayer_config_tx).await;
 
-    let evm_recipient = hyperlane.evm_recipient.unwrap();
+    let evm_recipient = hyperlane.evm_counter_party.as_ref().unwrap().evm_recipient;
     // dispatch message to evm test recipient
     let dispatch_tx = tx_send_message(&relayer, evm_recipient, Some(EVM_DOMAIN), b"Hello there");
     submit_tx(rollup.api_client(), dispatch_tx).await;
@@ -362,6 +357,8 @@ async fn test_dispatch_message_to_evm_counterparty() {
                 evm_recipient.to_string(),
             );
 
+            tracing::info!(event = ?process_event, "Found Mailbox/Dispatch call");
+
             let message_id_event = find_event(&events, "Mailbox/DispatchId").unwrap();
             let message_id = message_id_event["dispatch_id"]["id"]
                 .as_str()
@@ -370,7 +367,12 @@ async fn test_dispatch_message_to_evm_counterparty() {
                 .unwrap();
 
             // Find the dispatched message on counterparty
+            // TODO: How to do it more reliably?
+            tracing::info!("Waiting for relayer to submit transaction to EVM...");
             sleep(Duration::from_secs(10)).await; // give relayer extra time to relay
+
+            // Check if relayer is healthy before checking for events
+            tracing::info!("Checking for events on EVM counterparty...");
             let evm_event = hyperlane.latest_message_on_counterparty().await;
             assert_eq!(
                 evm_event.origin_domain,
@@ -397,12 +399,11 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
     outbound_sent_amount: Amount,
     outbound_received_amount: Amount,
 ) {
-    let dir = tempfile::tempdir().unwrap();
     let builder = HyperlaneBuilder::setup_image().await;
     let setup = generate_setup();
     let relayer = setup.relayer.clone();
     let prover = setup.prover.clone();
-    let rollup = setup_rollup(dir.path().to_path_buf(), setup, true).await;
+    let rollup = setup_rollup(setup, true).await;
 
     let mut hyperlane = builder
         .with_rollup_port(rollup.http_addr.port())
@@ -411,7 +412,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
         .start()
         .await;
 
-    // wait for first finalized block
+    // wait for the first finalized block
     let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS {
         slot_subscription.next().await.unwrap().unwrap();
@@ -471,8 +472,9 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
 
             // deploy warp route on counterparty
             remote_route_id = hyperlane
-                .deploy_warp_route_on_counterparty(local_route_id, local_decimals)
+                .deploy_warp_route_on_counterparty(local_route_id)
                 .await;
+            // enroll local router on sovereign as workaround of `protocol not supported`:
 
             // enroll remote router on rollup
             let enroll_router_call = TestRuntimeCall::Warp(warp::CallMessage::EnrollRemoteRouter {
@@ -493,6 +495,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
         hyperlane.print_stdout().await;
         panic!("Warp/RouteRegistered event not found");
     }
+    tracing::info!(%local_route_id, %remote_route_id, "routes deployed");
 
     // transfer native eth from evm counterparty to prover
     let prover_addr = prover.user_info.address().to_sender();
@@ -611,7 +614,6 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Ignore hyperlane tests"]
 async fn test_warp_transfer_back_and_forth_with_evm_without_scaling() {
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         18,
@@ -624,7 +626,6 @@ async fn test_warp_transfer_back_and_forth_with_evm_without_scaling() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Ignore hyperlane tests"]
 async fn test_warp_transfer_back_and_forth_with_evm_scaled_down() {
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         16,
@@ -637,7 +638,6 @@ async fn test_warp_transfer_back_and_forth_with_evm_scaled_down() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Ignore hyperlane tests"]
 async fn test_warp_transfer_back_and_forth_with_evm_scaled_up() {
     test_warp_transfer_back_and_forth_with_evm_counterparty(
         20,
@@ -682,12 +682,13 @@ fn encode_call(
 }
 
 async fn submit_tx(client: &Client, tx_body: RawTx) {
-    client
+    let response = client
         .accept_tx(&api_types::AcceptTxBody {
             body: BASE64_STANDARD.encode(&tx_body),
         })
         .await
         .unwrap();
+    tracing::info!(?response, "Transaction submitted");
 }
 
 async fn next_slot_events<S>(client: &Client, subscription: &mut S) -> Vec<LedgerEvent>

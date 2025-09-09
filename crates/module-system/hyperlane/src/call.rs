@@ -93,7 +93,7 @@ where
     S::Address: HyperlaneAddress,
 {
     /// Dispatches (aka "sends") a message to the specified recipient.
-    // Compare with https://github.com/eigerco/hyperlane-monorepo/blob/b68fe264b3585ecd9d95a5ec2ec2d7defbe907d2/solidity/contracts/Mailbox.sol#L276
+    // Compare with https://github.com/Sovereign-Labs/hyperlane-monorepo/blob/ae48f4c193d74576a8c2af6a73b6fcbad11b8199/solidity/contracts/Mailbox.sol#L277
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn dispatch(
         &mut self,
@@ -169,7 +169,7 @@ where
     }
 
     /// Processes an incoming message.
-    // Compare with https://github.com/eigerco/hyperlane-monorepo/blob/b68fe264b3585ecd9d95a5ec2ec2d7defbe907d2/solidity/contracts/Mailbox.sol#L202
+    // Compare with https://github.com/Sovereign-Labs/hyperlane-monorepo/blob/b68fe264b3585ecd9d95a5ec2ec2d7defbe907d2/solidity/contracts/Mailbox.sol#L202
     pub(crate) fn process(
         &mut self,
         metadata: HexString,
@@ -303,11 +303,19 @@ fn validate_validator_announcement<S: Spec>(
 
     let signature = decode_signature(&signature.0)?;
     let pub_key = ec_recover(digest.0, &signature, gas_meter)?;
-    let eth_addr = eth_address_from_public_key(pub_key, gas_meter)?;
+    let eth_address = eth_address_from_public_key(pub_key, gas_meter)?;
+    tracing::trace!(
+        %domain,
+        recovered_address = %eth_address,
+        provided_address = %validator_address,
+        "validating validator announcement"
+    );
 
     ensure!(
-        validator_address == &eth_addr,
-        "Recovered address doesn't match announced address"
+        validator_address == &eth_address,
+        "Recovered address {} doesn't match announced address {}",
+        eth_address,
+        validator_address,
     );
     Ok(())
 }

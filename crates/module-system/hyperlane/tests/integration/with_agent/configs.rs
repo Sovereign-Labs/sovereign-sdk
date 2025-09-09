@@ -2,12 +2,11 @@ use indoc::{formatdoc, indoc};
 use serde_json::json;
 use sov_hyperlane_integration::EthAddress;
 use sov_modules_api::macros::config_value;
-use sov_modules_api::HexHash;
 
-use super::helpers::{ANVIL_ACCOUNTS, ANVIL_PORT, EVM_DOMAIN, EVM_MAILBOX};
+use super::helpers::{EVM_CHAIN_ID, EVM_DOMAIN, EVM_MAILBOX, RELAYER_ACCOUNT};
 
 /// Generates a configuration file for the agents with the given rollup port
-pub fn agent_config(rollup_port: u16) -> Vec<u8> {
+pub fn agent_config(rollup_port: u16, anvil_port: u16, host_address: &str) -> Vec<u8> {
     let config = json!({
         "chains": {
             "sovtest": {
@@ -23,7 +22,7 @@ pub fn agent_config(rollup_port: u16) -> Vec<u8> {
                 },
                 "protocol": "sovereign",
                 "rpcUrls": [{
-                    "http": format!("HTTP://host.docker.internal:{rollup_port}")
+                    "http": format!("http://{}:{}", host_address, rollup_port)
                 }],
                 // note: here we don't do much based on contract addresses, but some of those may
                 // be needed to set to real addresses in a future
@@ -44,7 +43,7 @@ pub fn agent_config(rollup_port: u16) -> Vec<u8> {
                 "interchainGasPaymaster": "0x0000000000000000000000000000000000000000"
             },
             "ethtest": {
-                "chainId": EVM_DOMAIN,
+                "chainId": EVM_CHAIN_ID,
                 "displayName": "EthTest",
                 "domainId": EVM_DOMAIN,
                 "isTestnet": true,
@@ -56,7 +55,7 @@ pub fn agent_config(rollup_port: u16) -> Vec<u8> {
                 },
                 "protocol": "ethereum",
                 "rpcUrls": [{
-                    "http": format!("HTTP://127.0.0.1:{ANVIL_PORT}")
+                    "http": format!("http://{}:{}", host_address, anvil_port)
                 }],
                 "domainRoutingIsmFactory": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
                 "interchainAccountIsm": "0x9A676e781A523b5d0C0e43731313A708CB607508",
@@ -81,6 +80,7 @@ pub fn agent_config(rollup_port: u16) -> Vec<u8> {
         "defaultRpcConsensusType": "fallback"
     });
 
+    tracing::info!(?config, "Agent config");
     serde_json::to_vec(&config).unwrap()
 }
 
@@ -110,15 +110,11 @@ pub fn core_config(owner: EthAddress) -> String {
 }
 
 /// Configuration of sovtest chain in hyperlane
-///
-/// hyperlane-cli doesn't yet have support for 'sovereign' protocol,
-/// but since we are using it only to interact with ethereum deployment
-/// we only care to have there anything but 'ethereum'
-pub fn sovtest_metadata(rollup_port: u16) -> String {
+pub fn sovtest_metadata(rollup_port: u16, host_address: &str) -> String {
     let chain = config_value!("CHAIN_ID");
     let domain = config_value!("HYPERLANE_BRIDGE_DOMAIN");
     formatdoc! {"
-        chainId: {chain}
+        chainId: sovtest-{chain}
         displayName: SovTest
         domainId: {domain}
         isTestnet: true
@@ -127,13 +123,13 @@ pub fn sovtest_metadata(rollup_port: u16) -> String {
           decimals: 8
           name: SovToken
           symbol: sov
-        protocol: sealevel
+        protocol: sovereign
         rpcUrls:
-          - http: HTTP://host.docker.internal:{rollup_port}
+          - http: http://{host_address}:{rollup_port}
     "}
 }
 
-/// Configuration of sovtest smart contract addressess in hyperlane
+/// Configuration of sovtest smart contract addresses in hyperlane
 ///
 /// Sov implementation uses modules thus we use only dummy addresses here.
 pub fn sovtest_addresses() -> &'static str {
@@ -157,9 +153,9 @@ pub fn sovtest_addresses() -> &'static str {
 }
 
 /// Configuration of ethtest chain in hyperlane
-pub fn ethtest_metadata() -> String {
+pub fn ethtest_metadata(anvil_host: &str, anvil_port: u16) -> String {
     formatdoc! {"
-        chainId: {EVM_DOMAIN}
+        chainId: {EVM_CHAIN_ID}
         displayName: EthTest
         domainId: {EVM_DOMAIN}
         isTestnet: true
@@ -170,18 +166,16 @@ pub fn ethtest_metadata() -> String {
           symbol: ETH
         protocol: ethereum
         rpcUrls:
-          - http: HTTP://127.0.0.1:{ANVIL_PORT}
+          - http: http://{anvil_host}:{anvil_port}
     "}
 }
 
-/// Configuration for deploying warp route on evm counterparty
-///
-/// Optionally accepts a route id on sovtest chain, to enroll
-/// a router on ethtest.
+/// Configuration for deploying the warp route on evm counterparty.
+/// sovtest chain is updated in a separate call.
 ///
 /// Examples of warp route configs can be found here: <https://docs.hyperlane.xyz/docs/guides/extending-warp-route>
-pub fn warp_route_config(sov_route_id: HexHash, sovtest_decimals: u8) -> String {
-    let owner = ANVIL_ACCOUNTS[0].0;
+pub fn warp_route_config() -> String {
+    let owner = RELAYER_ACCOUNT.0;
     formatdoc! {"
         ethtest:
           type: native
@@ -189,12 +183,6 @@ pub fn warp_route_config(sov_route_id: HexHash, sovtest_decimals: u8) -> String 
           symbol: \"nativeETH\"
           decimals: 18
           owner: \"{owner}\"
-          interchainSecurityModule: \"0x0000000000000000000000000000000000000000\"
-        sovtest:
-          type: synthetic
-          name: \"EthNativeToken\"
-          symbol: \"nativeETH\"
-          decimals: {sovtest_decimals}
-          foreignDeployment: \"{sov_route_id}\"
+          interchainSecurityModule: \"0x0000000000000000000000000000000000000000\"\
     "}
 }

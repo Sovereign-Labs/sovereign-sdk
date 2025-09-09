@@ -35,6 +35,7 @@ serde_json = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
 testcontainers = { workspace = true }
+testcontainers-modules = { workspace = true, features = ["anvil"] }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 workspace-hack = { workspace = true } # required for feature unification with arbitrary
@@ -57,7 +58,7 @@ serde_yaml = { workspace = true }
 sha3 = { workspace = true }
 ruint = { workspace = true }
 strum = { workspace = true }
-tracing = { workspace = true, optional = true }
+tracing = { workspace = true }
 workspace-hack = { workspace = true }
 
 [features]
@@ -85,5 +86,4 @@ native = [
 	"sov-bank/native",
 	"sov-hyperlane-integration/native",
 	"sov-mock-da/native",
-	"dep:tracing",
 ]
