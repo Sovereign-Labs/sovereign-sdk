@@ -223,7 +223,6 @@ impl<const N: usize> BorshSerializedSize for SizedSafeString<N> {
 
 #[cfg(test)]
 mod tests {
-    use sov_state::{BorshCodec, Prefix};
 
     use super::*;
 
@@ -231,20 +230,16 @@ mod tests {
     fn test_temp_cache() {
         let mut cache = TempCache::new();
 
-        let key = SlotKey::new(
-            &Prefix::new(vec![1, 2, 3]),
-            &String::from("key"),
-            &BorshCodec {},
-        );
-        cache.set(1u8, key.clone());
+        let key = None;
+        cache.set(key.clone(), 1u8);
         assert_eq!(cache.get::<u8>(key.clone()), CacheLookup::Hit(Some(&1u8)));
         assert_eq!(cache.memory_size, 1);
 
-        cache.set(2u8, key.clone());
+        cache.set(key.clone(), 2u8);
         assert_eq!(cache.get::<u8>(key.clone()), CacheLookup::Hit(Some(&2u8)));
         assert_eq!(cache.memory_size, 1);
 
-        cache.set(3u16, key.clone());
+        cache.set(key.clone(), 3u16);
         assert_eq!(cache.get::<u16>(key.clone()), CacheLookup::Hit(Some(&3u16)));
         assert_eq!(cache.memory_size, 3);
 
@@ -255,11 +250,11 @@ mod tests {
         assert_eq!(cache.get::<u16>(key.clone()), CacheLookup::Hit(Some(&3u16)));
         cache.prune();
         assert_eq!(cache.get::<u8>(key.clone()), CacheLookup::Miss);
-        cache.set(11u32, key.clone());
+        cache.set(key.clone(), 11u32);
 
         let mut other = TempCache::new();
-        other.set(4u8, key.clone());
-        other.set(5u64, key.clone());
+        other.set(key.clone(), 4u8);
+        other.set(key.clone(), 5u64);
         other.delete::<u16>(key.clone());
 
         cache.update_with(other);
