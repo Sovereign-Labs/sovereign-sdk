@@ -104,7 +104,7 @@ jobs:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -134,7 +134,7 @@ jobs:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-bench-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -151,7 +151,7 @@ jobs:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-bench-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -180,7 +180,7 @@ jobs:
       CARGO_HACK_PARTITION_N: ${{ matrix.partition }}
       CARGO_HACK_PARTITION_M: 3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -207,7 +207,7 @@ jobs:
       CARGO_HACK_PARTITION_N: ${{ matrix.partition }}
       CARGO_HACK_PARTITION_M: 3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -225,7 +225,7 @@ jobs:
       RUST_BACKTRACE: 1
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -241,7 +241,7 @@ jobs:
       SP1_PROVER: "mock"
       RUST_BACKTRACE: 1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -257,7 +257,7 @@ jobs:
       SKIP_GUEST_BUILD: "1"
       SP1_SKIP_PROGRAM_BUILD: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -275,7 +275,7 @@ jobs:
       SP1_SKIP_PROGRAM_BUILD: "true"
       RUST_BACKTRACE: 1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -296,7 +296,7 @@ jobs:
     runs-on: nscloud-ubuntu-22.04-amd64-2x4
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: taiki-e/install-action@cargo-deny
         with:
           tool: cargo-deny@0.18.4
@@ -316,7 +316,7 @@ jobs:
   #     S3_BUCKET_NAME: "sovlabs-ci-rustdoc-artifacts"
   #     AWS_REGION: "us-east-1"
   #   steps:
-  #     - uses: actions/checkout@v4
+  #     - uses: actions/checkout@v5
   #     - uses: namespacelabs/nscloud-cache-action@v1
   #       with:
   #         cache: rust
@@ -383,7 +383,7 @@ jobs:
   check-demo-rollup-table-of-contents:
     runs-on: nscloud-ubuntu-22.04-amd64-2x4
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-node@v3
       - run: npm install -g doctoc
       - name: Update table of contents for mock-da
@@ -408,7 +408,7 @@ jobs:
       SKIP_GUEST_BUILD: "sp1"
       RUST_LOG: "debug,sov_sequencer=trace,sov-celestia-adapter=trace,hyper=info,risc0_zkvm=warn,jmt=info,jsonrpsee-server=info,jsonrpsee-client=info,reqwest=info,sqlx=warn,tiny_http=warn,tower_http=info,tungstenite=info,risc0_circuit_rv32im=info,risc0_zkp::verify=info,h2=info,tower=info"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Login to Docker Hub
         if: github.event.pull_request.head.repo.full_name == github.repository
         uses: docker/login-action@v3
@@ -433,7 +433,7 @@ jobs:
       SKIP_GUEST_BUILD: "sp1"
       RUST_LOG: "debug,sov_stf_runner=trace,sov_sequencer=trace,hyper=info,risc0_zkvm=warn,jmt=info,jsonrpsee-server=info,jsonrpsee-client=info,reqwest=info,sqlx=warn,tiny_http=warn,tower_http=info,tungstenite=info,risc0_circuit_rv32im=info,risc0_zkp::verify=info,h2=info,tower=info"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -446,7 +446,7 @@ jobs:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-250gb-1-88
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -455,7 +455,7 @@ jobs:
   validate-packages-to-publish-yml:
     runs-on: nscloud-ubuntu-22.04-amd64-2x4
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: ./scripts/validate_packages_to_publish_yml.sh
         shell: bash
         working-directory: .
@@ -463,7 +463,7 @@ jobs:
   cargo-switcheroo-default:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -485,7 +485,7 @@ jobs:
       SKIP_GUEST_BUILD: "1"
       CARGO_NET_GIT_FETCH_WITH_CLI: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: |
@@ -498,7 +498,7 @@ jobs:
         with:
           version: 9
       - name: Checkout web3-js SDK
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: "Sovereign-Labs/sovereign-sdk-web3-js"
           path: "examples/demo-rollup/web3-js-sdk"
