@@ -1,8 +1,8 @@
 use super::evm_test_helper;
 use crate::evm::evm_test_helper::setup;
 use ethers::contract::EthEvent;
-use ethers_core::types::Address;
-use ethers_core::types::U256;
+use ethers::core::types::Address;
+use ethers::core::types::U256;
 use sov_test_utils::SimpleStorageContract;
 
 #[derive(Debug, Clone, EthEvent)]

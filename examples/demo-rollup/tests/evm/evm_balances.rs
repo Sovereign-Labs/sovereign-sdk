@@ -1,6 +1,6 @@
 use crate::evm::evm_test_helper::setup;
 use crate::test_helpers::DemoRollupSpec;
-use ethers_core::abi::Address;
+use ethers::core::abi::Address;
 use sov_address::{EthereumAddress, MultiAddress};
 use sov_bank::config_gas_token_id;
 use sov_demo_rollup::MockDemoRollup;

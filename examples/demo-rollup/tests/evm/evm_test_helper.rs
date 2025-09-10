@@ -1,9 +1,10 @@
 use std::net::SocketAddr;
 
 use crate::test_helpers::test_genesis_source;
-use ethers_core::abi::Address;
-use ethers_providers::ProviderError;
-use ethers_signers::{LocalWallet, Signer};
+
+use ethers::core::abi::Address;
+use ethers::providers::ProviderError;
+use ethers::signers::{LocalWallet, Signer};
 use futures::future::join_all;
 use sov_demo_rollup::MockRollupSpec;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
