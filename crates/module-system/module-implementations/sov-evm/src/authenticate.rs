@@ -18,7 +18,7 @@ use sov_modules_api::transaction::{
     AuthenticatedTransactionAndRawHash, Credentials, PriorityFeeBips, TxDetails,
 };
 use sov_modules_api::{
-    Amount, DispatchCall, FullyBakedTx, ProvableStateReader, RawTx, Runtime, Spec,
+    DispatchCall, FullyBakedTx, Gas, GetGasPrice, ProvableStateReader, RawTx, Runtime, Spec,
 };
 use sov_rollup_interface::TxHash;
 use sov_state::User;
@@ -47,16 +47,24 @@ fn recover_evm_signer(
 /// Creates the transaction details and tx hash for an EVM transaction.
 fn create_auth_tx_and_hash<S: Spec>(
     tx: &TransactionSigned,
+    gas_price: &<<S as Spec>::Gas as Gas>::Price,
 ) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {
     let tx_hash = TxHash::new(**tx.hash());
     let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;
     let gas_limit = tx.gas_limit();
+    let gas_limit: <S as Spec>::Gas = [gas_limit, gas_limit].into();
+    let max_fee = gas_limit
+        .checked_value(gas_price)
+        .ok_or(AuthenticationError::FatalError(
+            FatalError::Other("Amount overflow".into()),
+            tx_hash,
+        ))?;
 
     let tx_details = TxDetails {
         chain_id: tx_chain_id,
         max_priority_fee_bips: PriorityFeeBips::ZERO,
-        max_fee: Amount::new(100_000_000_000),
-        gas_limit: Some([gas_limit, gas_limit].into()),
+        max_fee,
+        gas_limit: Some(gas_limit),
     };
 
     Ok(AuthenticatedTransactionAndRawHash {
@@ -114,7 +122,10 @@ where
 ///
 /// If the caller does plan to derive rollup addresses from evm addresses, they should be sure that their scheme for doing so is deterministic and
 /// collision resistant. You don't want someone to be able to pick a rollup address that someone else is already using!
-pub fn authenticate<Accessor: ProvableStateReader<User, Spec = S>, S: Spec>(
+pub fn authenticate<
+    Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>,
+    S: Spec,
+>(
     raw_tx: &[u8],
     state: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, CallMessage>, AuthenticationError>
@@ -126,7 +137,8 @@ where
     let (rlp, tx) = decode_evm_tx(raw_tx)
         .map_err(|e| fatal_deserialization_error::<Accessor, S, _>(raw_tx, e, state))?;
 
-    let tx_and_raw_hash = create_auth_tx_and_hash(&tx)?;
+    let gas_price = state.gas_price();
+    let tx_and_raw_hash = create_auth_tx_and_hash(&tx, gas_price)?;
 
     let signer = recover_evm_signer(&tx, tx_and_raw_hash.raw_tx_hash)?;
 
@@ -212,7 +224,7 @@ where
         }
     }
 
-    fn authenticate<Accessor: ProvableStateReader<User, Spec = S>>(
+    fn authenticate<Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>>(
         tx: &FullyBakedTx,
         state: &mut Accessor,
     ) -> Result<
