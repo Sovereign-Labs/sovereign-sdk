@@ -12,6 +12,7 @@ contract SimpleStorage {
     
     function set(uint256 _num) public {
         num = _num;
+        emit SimpleLog(msg.sender, num);
     }
     
     function get() public view returns (uint) {
