@@ -67,7 +67,6 @@ fn create_evm_tx_details<S: Spec>(
 
     Ok((
         TxDetails {
-            // If the tx `chain_id` is not set we assume the rollup `chain_id``.
             chain_id,
             max_priority_fee_bips: PriorityFeeBips::ZERO,
             max_fee: Amount::new(100_000_000_000),
