@@ -45,14 +45,33 @@ fn recover_evm_signer(
 }
 
 /// Creates the transaction details for an EVM transaction.
-fn create_evm_tx_details<S: Spec>(tx: &TransactionSigned) -> TxDetails<S> {
+fn create_evm_tx_details<S: Spec>(
+    tx: &TransactionSigned,
+    tx_hash: TxHash,
+) -> Result<TxDetails<S>, AuthenticationError> {
     let gas_limit = tx.gas_limit();
-    TxDetails {
-        chain_id: config_value!("CHAIN_ID"),
+    let rollup_chain_id = config_value!("CHAIN_ID");
+    let chain_id = tx.chain_id().ok_or_else(|| {
+        AuthenticationError::FatalError(FatalError::MissingChainId(rollup_chain_id), tx_hash)
+    })?;
+
+    if chain_id != rollup_chain_id {
+        return Err(AuthenticationError::FatalError(
+            FatalError::InvalidChainId {
+                expected: rollup_chain_id,
+                got: chain_id,
+            },
+            tx_hash,
+        ));
+    }
+
+    Ok(TxDetails {
+        // If the tx `chain_id` is not set we assume the rollup `chain_id``.
+        chain_id,
         max_priority_fee_bips: PriorityFeeBips::ZERO,
         max_fee: Amount::new(100_000_000_000),
         gas_limit: Some([gas_limit, gas_limit].into()),
-    }
+    })
 }
 
 /// Extracts EVM authorization data from a verified transaction.
@@ -99,7 +118,7 @@ where
 
     let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
         raw_tx_hash: hash,
-        authenticated_tx: create_evm_tx_details(&tx).into(),
+        authenticated_tx: create_evm_tx_details(&tx, hash)?.into(),
     };
 
     let nonce = tx.nonce();

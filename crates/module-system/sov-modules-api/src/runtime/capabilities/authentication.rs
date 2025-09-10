@@ -181,6 +181,9 @@ pub enum FatalError {
     /// Signature verification failed.
     #[error("Signature verification failed: {0}")]
     SigVerificationFailed(String),
+    /// Missing chain id
+    #[error("Missing chain id: expected {0}")]
+    MissingChainId(u64),
     /// The chain id was invalid
     #[error("Invalid chain id: expected {expected}, got {got}")]
     InvalidChainId {

@@ -2,15 +2,12 @@ use alloy_eips::eip1559::{ETHEREUM_BLOCK_GAS_LIMIT_30M, MIN_PROTOCOL_BASE_FEE};
 use alloy_eips::merge::SLOT_DURATION;
 use alloy_primitives::Address;
 use revm::primitives::hardfork::SpecId;
-use sov_modules_api::macros::config_value;
 
 use crate::AccountData;
 
 /// Core EVM chain parameters shared between genesis and runtime
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
 pub struct EvmChainSpec {
-    /// Unique chain identifier
-    pub chain_id: u64,
     /// Maximum contract code size (None = unlimited)
     pub limit_contract_code_size: Option<usize>,
     /// Address where transaction fees are collected
@@ -39,7 +36,6 @@ pub struct EvmGenesisConfig {
 impl Default for EvmChainSpec {
     fn default() -> Self {
         Self {
-            chain_id: config_value!("CHAIN_ID"),
             limit_contract_code_size: None,
             coinbase: Address::ZERO,
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
