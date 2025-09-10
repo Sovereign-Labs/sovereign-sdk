@@ -47,8 +47,8 @@ fn recover_evm_signer(
 /// Creates the transaction details for an EVM transaction.
 fn create_evm_tx_details<S: Spec>(
     tx: &TransactionSigned,
-    tx_hash: TxHash,
-) -> Result<TxDetails<S>, AuthenticationError> {
+) -> Result<(TxDetails<S>, TxHash), AuthenticationError> {
+    let tx_hash = TxHash::new(**tx.hash());
     let gas_limit = tx.gas_limit();
     let rollup_chain_id = config_value!("CHAIN_ID");
     let chain_id = tx.chain_id().ok_or_else(|| {
@@ -65,13 +65,16 @@ fn create_evm_tx_details<S: Spec>(
         ));
     }
 
-    Ok(TxDetails {
-        // If the tx `chain_id` is not set we assume the rollup `chain_id``.
-        chain_id,
-        max_priority_fee_bips: PriorityFeeBips::ZERO,
-        max_fee: Amount::new(100_000_000_000),
-        gas_limit: Some([gas_limit, gas_limit].into()),
-    })
+    Ok((
+        TxDetails {
+            // If the tx `chain_id` is not set we assume the rollup `chain_id``.
+            chain_id,
+            max_priority_fee_bips: PriorityFeeBips::ZERO,
+            max_fee: Amount::new(100_000_000_000),
+            gas_limit: Some([gas_limit, gas_limit].into()),
+        },
+        tx_hash,
+    ))
 }
 
 /// Extracts EVM authorization data from a verified transaction.
@@ -112,13 +115,15 @@ where
 
     let (rlp, tx) = decode_evm_tx(raw_tx)
         .map_err(|e| fatal_deserialization_error::<Accessor, S, _>(raw_tx, e, state))?;
-    let hash = TxHash::new(**tx.hash());
+
+    let (tx_details, hash) = create_evm_tx_details(&tx)?;
+    //let hash = TxHash::new(**tx.hash());
 
     let signer = recover_evm_signer(&tx, hash)?;
 
     let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
         raw_tx_hash: hash,
-        authenticated_tx: create_evm_tx_details(&tx, hash)?.into(),
+        authenticated_tx: tx_details.into(),
     };
 
     let nonce = tx.nonce();
