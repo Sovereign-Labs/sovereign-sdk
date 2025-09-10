@@ -2,6 +2,7 @@ use core::fmt;
 use std::collections::HashMap;
 
 use crate::state::accessors::StateMetricsProvider;
+use crate::TxChangeSet;
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_state::{
     namespaces, AccessSize, IsValueCached, Namespace, ProvableStorageCache, SlotKey, SlotValue,
@@ -75,7 +76,7 @@ impl<S: Storage> Delta<S> {
         self.kernel_cache
             .prune_writes_up_to_and_all_reads(rollup_height);
         self.accessory_writes
-            .retain(|_, write| write.at_rollup_height >= rollup_height);
+            .retain(|_, write| write.at_rollup_height > rollup_height);
     }
 
     pub(super) fn with_witness(inner: S, witness: S::Witness) -> Self {
@@ -121,16 +122,36 @@ impl<S: Storage> Delta<S> {
         let changes = self
             .user_cache
             .get_writes()
-            .map(|(k, v)| ((k.clone(), Namespace::User), v.cloned()))
+            .map(|(k, (height, v))| ((k.clone(), Namespace::User), (height, v.cloned())))
             .chain(
                 self.kernel_cache
                     .get_writes()
-                    .map(|(k, v)| ((k.clone(), Namespace::Kernel), v.cloned())),
+                    .map(|(k, (height, v))| ((k.clone(), Namespace::Kernel), (height, v.cloned()))),
             )
             .chain(
                 self.accessory_writes
                     .iter()
-                    .map(|(k, w)| ((k.clone(), Namespace::Accessory), w.value.clone())),
+                    .map(|(k, w)| ((k.clone(), Namespace::Accessory), (w.at_rollup_height, w.value.clone()))),
+            )
+            .collect();
+        ChangeSet { changes }
+    }
+
+    pub(super) fn changes_after(&mut self, height: u64) -> ChangeSet {
+        self.commit_revertable_storage_cache();
+        let changes: Vec<_> = self
+            .user_cache
+            .get_writes_after_height(height)
+            .map(|(k, (height, v))| ((k.clone(), Namespace::User), (height, v.cloned())))
+            .chain(
+                self.kernel_cache
+                    .get_writes_after_height(height)
+                    .map(|(k, (height, v))| ((k.clone(), Namespace::Kernel), (height, v.cloned()))),
+            )
+            .chain(
+                self.accessory_writes
+                    .iter()
+                    .filter_map(|(k, w)| if w.at_rollup_height > height { Some(((k.clone(), Namespace::Accessory), (w.at_rollup_height, w.value.clone()))) } else { None }),
             )
             .collect();
         ChangeSet { changes }
@@ -260,6 +281,16 @@ pub struct AccessoryDelta<S: Storage> {
     rollup_height: u64,
 }
 
+impl<S: Storage> AccessoryDelta<S> {
+    /// Prune all changes which took place before the given height.
+    pub fn prune_changes_before(&mut self, height: u64) {
+        // `retain`  takes O(capacity) time, so we only do it if there are any writes.
+        if !self.writes.is_empty() {
+            self.writes.retain(|_, write| write.at_rollup_height > height);
+        }
+    }
+}
+
 impl<S: Storage> StateMetricsProvider for AccessoryDelta<S> {
     fn metrics(&mut self) -> &mut StateMetrics {
         &mut self.metrics
@@ -270,6 +301,11 @@ impl<S: Storage> AccessoryDelta<S> {
     /// Freeze the accessory delta, preventing further accesses.
     pub fn freeze(self) -> Vec<(SlotKey, Option<SlotValue>)> {
         self.writes.into_iter().map(|(k, v)| (k, v.value)).collect()
+    }
+
+    /// Freeze the accessory delta, preventing further accesses.
+    pub fn freeze_with_height(self) -> Vec<(SlotKey, (u64, Option<SlotValue>))> {
+        self.writes.into_iter().map(|(k, v)| (k, (v.at_rollup_height, v.value))).collect()
     }
 }
 
@@ -341,8 +377,8 @@ impl<T> RevertableWriter<T> {
     }
 
     /// Get an iterator over the current writes
-    pub fn changes(&self) -> ChangeSet {
-        ChangeSet::new(
+    pub fn changes(&self) -> TxChangeSet {
+        TxChangeSet(
             self.writes
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone()))

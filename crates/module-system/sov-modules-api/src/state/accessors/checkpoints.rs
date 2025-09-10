@@ -8,6 +8,8 @@ use super::temp_cache::{CacheLookup, TempCache};
 use super::{BootstrapWorkingSet, BorshSerializedSize, UniversalStateAccessor};
 use crate::capabilities::{Kernel, RollupHeight};
 use crate::state::traits::PerBlockCache;
+#[cfg(feature = "native")]
+use crate::TxChangeSet;
 use crate::{GasMeter, Spec, VersionReader};
 
 /// This structure is responsible for storing the `read-write` set.
@@ -30,13 +32,13 @@ pub struct StateCheckpoint<S: Spec> {
 /// The list of changes from the state checkpoint
 pub struct ChangeSet {
     #[allow(missing_docs)]
-    pub changes: Vec<((SlotKey, sov_state::Namespace), Option<SlotValue>)>,
+    pub changes: Vec<((SlotKey, sov_state::Namespace), (u64, Option<SlotValue>))>,
 }
 
 impl ChangeSet {
     /// Create a new `ChangeSet` from a vector of changes.
     #[must_use]
-    pub fn new(changes: Vec<((SlotKey, sov_state::Namespace), Option<SlotValue>)>) -> Self {
+    pub fn new(changes: Vec<((SlotKey, sov_state::Namespace), (u64, Option<SlotValue>))>) -> Self {
         Self { changes }
     }
 }
@@ -186,6 +188,11 @@ impl<S: Spec> StateCheckpoint<S> {
         self.delta.changes()
     }
 
+     /// Returns the list of all changes contained in the state checkpoint which were written after the target height.
+     pub fn changes_after(&mut self, height: u64) -> ChangeSet {
+        self.delta.changes_after(height)
+    }
+
     /// Directly apply a set of changes to the state checkpoint. This method should generally *not* be used
     /// during normal execution, since changes should happen through `StateValue` types which
     /// use the UniversalStateAccessor API. It is primarily intended for use in the sequencer, which has to manage
@@ -194,7 +201,25 @@ impl<S: Spec> StateCheckpoint<S> {
     // TODO: Remove this method if we stop using `StateCheckpoint` in the sequencer
     #[cfg(feature = "native")]
     pub fn apply_changes(&mut self, changeset: ChangeSet) {
-        for ((key, namespace), value) in changeset.changes {
+        for ((key, namespace), (height, value)) in changeset.changes {
+            if let Some(value) = value {
+                self.delta
+                    .set(namespace, &key, value, height);
+            } else {
+                self.delta.delete(namespace, &key, height);
+            }
+        }
+    }
+
+    /// Directly apply a set of changes to the state checkpoint. This method should generally *not* be used
+    /// during normal execution, since changes should happen through `StateValue` types which
+    /// use the UniversalStateAccessor API. It is primarily intended for use in the sequencer, which has to manage
+    /// its own state.
+    // This TODO is not a security risk, it is used only in sequencer as intended.
+    // TODO: Remove this method if we stop using `StateCheckpoint` in the sequencer
+    #[cfg(feature = "native")]
+    pub fn apply_tx_changes(&mut self, changeset: TxChangeSet) {
+        for ((key, namespace), value) in changeset.0 {
             if let Some(value) = value {
                 self.set_value(namespace, &key, value);
             } else {

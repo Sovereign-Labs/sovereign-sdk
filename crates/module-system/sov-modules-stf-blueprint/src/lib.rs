@@ -162,7 +162,7 @@ where
                                     format!(
                                         "{} => {}\n",
                                         key,
-                                        SlotValue::debug_show(value.as_ref())
+                                        SlotValue::debug_show(value.1.as_ref())
                                     )
                                     .as_bytes(),
                                 ) {

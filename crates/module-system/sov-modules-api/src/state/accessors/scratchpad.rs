@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 use super::checkpoints::StateCheckpoint;
 use super::internals::RevertableWriter;
 use super::temp_cache::{CacheLookup, TempCache};
-use super::{BorshSerializedSize, ChangeSet, StateProvider, UniversalStateAccessor};
+use super::{BorshSerializedSize, StateProvider, UniversalStateAccessor};
 use crate::capabilities::RollupHeight;
 use crate::module::Spec;
 use crate::state::accessors::StateMetricsProvider;
@@ -268,7 +268,7 @@ impl<S: Spec, I: StateProvider<S>> GasMeter for TxScratchpad<S, I> {
 
 /// The list of changes caused by a single transaction
 #[derive(Debug, Clone)]
-pub struct TxChangeSet(pub ChangeSet);
+pub struct TxChangeSet(pub Vec<((SlotKey, sov_state::Namespace), Option<SlotValue>)>);
 
 impl<S: Spec, I: StateProvider<S>> TxScratchpad<S, I> {
     /// Commits the changes of this [`TxScratchpad`] and returns a [`StateCheckpoint`].
@@ -279,7 +279,7 @@ impl<S: Spec, I: StateProvider<S>> TxScratchpad<S, I> {
     /// Gets an iterator over the diff currently written onto this scratchpad. These changes will
     /// be reverted or committed as a unit.
     pub fn tx_changes(&self) -> TxChangeSet {
-        TxChangeSet(self.inner.changes())
+        self.inner.changes()
     }
 
     /// Reverts the changes of this [`TxScratchpad`] and returns a [`StateCheckpoint`].

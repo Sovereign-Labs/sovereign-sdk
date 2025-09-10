@@ -49,7 +49,7 @@ where
     #[tracing::instrument(skip_all, level = "trace")]
     fn update_api_state_with_changes(&self, changes: TxChangeSet) {
         self.checkpoint_sender.send_modify(|checkpoint| {
-            checkpoint.apply_changes(changes.0);
+            checkpoint.apply_tx_changes(changes);
         });
     }
 
