@@ -49,7 +49,7 @@ where
     #[tracing::instrument(skip_all, level = "trace")]
     fn update_api_state_with_changes(&self, changes: TxChangeSet) {
         self.checkpoint_sender.send_modify(|checkpoint| {
-            checkpoint.apply_changes(changes.0);
+            checkpoint.apply_tx_changes(changes);
         });
     }
 
@@ -285,9 +285,7 @@ fn drain_consecutive_accepted_txs<S: Spec, Rt: Runtime<S>>(
 
 #[cfg(test)]
 mod tests {
-    use sov_modules_api::{
-        ApiTxEffect, ChangeSet, FullyBakedTx, Gas, SuccessfulTxContents, TxHash,
-    };
+    use sov_modules_api::{ApiTxEffect, FullyBakedTx, Gas, SuccessfulTxContents, TxHash};
     use sov_test_utils::{generate_optimistic_runtime, TestSpec as S};
     use tokio::sync::oneshot;
 
@@ -300,7 +298,7 @@ mod tests {
     fn create_accepted_tx_event(number: u64) -> ExecutorEvent<S, TestRuntime<S>> {
         let tx = FullyBakedTx::new(vec![]);
         let tx_hash = TxHash::new([number as u8; 32]);
-        let tx_changes = TxChangeSet(ChangeSet::new(vec![]));
+        let tx_changes = TxChangeSet(vec![]);
         let (sender, _) = oneshot::channel();
         let confirmation = Confirmation {
             events: vec![],

@@ -1581,6 +1581,11 @@ where
         // Atomically swap in the new storage and prune the old one.
         let new_rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
             .rollup_height_to_access();
+        // Notify the executor that the storage has been replaced so it can drop any writes that have now been persisted.
+        self.inner
+            .executor
+            .state_update_notifier
+            .send_replace(new_rollup_height);
         self.inner
             .executor
             .checkpoint

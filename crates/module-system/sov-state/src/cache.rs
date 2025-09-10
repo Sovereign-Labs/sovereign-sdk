@@ -68,13 +68,6 @@ impl Access {
         }
     }
 
-    fn modified(&self) -> Option<Option<&SlotValue>> {
-        match self {
-            Access::Read { .. } => None,
-            Access::Write { modified, .. } => Some(modified.as_ref()),
-        }
-    }
-
     fn modified_mut(&mut self) -> Option<&mut Option<SlotValue>> {
         match self {
             Access::Read { .. } => None,
@@ -323,10 +316,42 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     }
 
     /// Returns an iterator over the writes
-    pub fn get_writes(&self) -> impl Iterator<Item = (&SlotKey, Option<&SlotValue>)> {
-        self.cache
-            .iter()
-            .filter_map(|(k, access)| access.modified().map(|v| (k, v)))
+    pub fn get_writes(&self) -> impl Iterator<Item = (&SlotKey, (u64, Option<&SlotValue>))> {
+        self.cache.iter().filter_map(|(k, access)| {
+            if let Access::Write {
+                at_rollup_height,
+                modified,
+            } = access
+            {
+                Some((k, (*at_rollup_height, modified.as_ref())))
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Returns an iterator over the writes whose height is greater than the target height.
+    pub fn get_writes_after_height(
+        &self,
+        height: u64,
+    ) -> impl Iterator<Item = (&SlotKey, (u64, Option<&SlotValue>))> {
+        let res = self.cache.iter().filter_map(move |(k, access)| {
+            if let Access::Write {
+                at_rollup_height,
+                modified,
+            } = access
+            {
+                if *at_rollup_height > height {
+                    Some((k, (*at_rollup_height, modified.as_ref())))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
+
+        res
     }
 
     /// Converts the `ProvableStorageCache` into `OrderedReadsAndWrites`.
