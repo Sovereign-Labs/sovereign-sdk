@@ -9,6 +9,7 @@ use sov_state::{
     StateAccesses, Storage,
 };
 
+#[cfg(feature = "native")]
 use super::checkpoints::ChangeSet;
 use super::temp_cache::{CacheLookup, TempCache};
 use super::UniversalStateAccessor;
@@ -117,6 +118,7 @@ impl<S: Storage> Delta<S> {
         )
     }
 
+    #[cfg(feature = "native")]
     pub(super) fn changes(&mut self) -> ChangeSet {
         self.commit_revertable_storage_cache();
         let changes = self
@@ -138,6 +140,7 @@ impl<S: Storage> Delta<S> {
         ChangeSet { changes }
     }
 
+    #[cfg(feature = "native")]
     pub(super) fn changes_after(&mut self, height: u64) -> ChangeSet {
         self.commit_revertable_storage_cache();
         let changes: Vec<_> = self
@@ -288,6 +291,7 @@ pub struct AccessoryDelta<S: Storage> {
 }
 
 impl<S: Storage> AccessoryDelta<S> {
+    #[cfg(feature = "native")]
     /// Prune all changes which took place before the given height.
     pub fn prune_changes_before(&mut self, height: u64) {
         // `retain`  takes O(capacity) time, so we only do it if there are any writes.
@@ -310,6 +314,7 @@ impl<S: Storage> AccessoryDelta<S> {
         self.writes.into_iter().map(|(k, v)| (k, v.value)).collect()
     }
 
+    #[cfg(feature = "native")]
     /// Freeze the accessory delta, preventing further accesses.
     pub fn freeze_with_height(self) -> Vec<(SlotKey, (u64, Option<SlotValue>))> {
         self.writes

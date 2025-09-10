@@ -185,11 +185,13 @@ impl<S: Spec> StateCheckpoint<S> {
         self.visible_slot_num = VisibleSlotNumber::new_dangerous(visible_slot_number);
     }
 
+    #[cfg(feature = "native")]
     /// Returns the list of all changes contained in the state checkpoint.
     pub fn changes(&mut self) -> ChangeSet {
         self.delta.changes()
     }
 
+    #[cfg(feature = "native")]
     /// Returns the list of all changes contained in the state checkpoint which were written after the target height.
     pub fn changes_after(&mut self, height: u64) -> ChangeSet {
         self.delta.changes_after(height)
