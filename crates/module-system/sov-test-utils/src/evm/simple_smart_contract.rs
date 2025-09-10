@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
 use ethers::abi::RawLog;
+use ethers::contract::BaseContract;
 use ethers::contract::EthEvent;
-use ethers_contract::BaseContract;
-use ethers_core::abi::Abi;
-use ethers_core::types::Address;
-use ethers_core::types::Bytes;
-use ethers_core::types::Log;
-use ethers_core::types::U256;
+use ethers::core::abi::Abi;
+use ethers::core::types::Address;
+use ethers::core::types::Bytes;
+use ethers::core::types::Log;
+use ethers::core::types::U256;
 
 /// Log emited by SimpleStorageContract/
 #[derive(Debug, Clone, EthEvent)]

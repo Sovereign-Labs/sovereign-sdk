@@ -83,8 +83,7 @@ strum = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 tempfile = { workspace = true }
 bytes = { workspace = true }
-ethers-signers = { workspace = true }
-ethers-core = { workspace = true }
+ethers = { workspace = true }
 secp256k1 = { workspace = true, features = ["rand"] }
 lazy_static = "1.5.0"
 jsonschema = { workspace = true }
