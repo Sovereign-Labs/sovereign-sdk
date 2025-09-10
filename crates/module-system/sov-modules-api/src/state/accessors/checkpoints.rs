@@ -188,8 +188,8 @@ impl<S: Spec> StateCheckpoint<S> {
         self.delta.changes()
     }
 
-     /// Returns the list of all changes contained in the state checkpoint which were written after the target height.
-     pub fn changes_after(&mut self, height: u64) -> ChangeSet {
+    /// Returns the list of all changes contained in the state checkpoint which were written after the target height.
+    pub fn changes_after(&mut self, height: u64) -> ChangeSet {
         self.delta.changes_after(height)
     }
 
@@ -203,8 +203,7 @@ impl<S: Spec> StateCheckpoint<S> {
     pub fn apply_changes(&mut self, changeset: ChangeSet) {
         for ((key, namespace), (height, value)) in changeset.changes {
             if let Some(value) = value {
-                self.delta
-                    .set(namespace, &key, value, height);
+                self.delta.set(namespace, &key, value, height);
             } else {
                 self.delta.delete(namespace, &key, height);
             }

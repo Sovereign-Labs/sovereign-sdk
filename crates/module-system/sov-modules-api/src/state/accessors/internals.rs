@@ -128,11 +128,12 @@ impl<S: Storage> Delta<S> {
                     .get_writes()
                     .map(|(k, (height, v))| ((k.clone(), Namespace::Kernel), (height, v.cloned()))),
             )
-            .chain(
-                self.accessory_writes
-                    .iter()
-                    .map(|(k, w)| ((k.clone(), Namespace::Accessory), (w.at_rollup_height, w.value.clone()))),
-            )
+            .chain(self.accessory_writes.iter().map(|(k, w)| {
+                (
+                    (k.clone(), Namespace::Accessory),
+                    (w.at_rollup_height, w.value.clone()),
+                )
+            }))
             .collect();
         ChangeSet { changes }
     }
@@ -148,11 +149,16 @@ impl<S: Storage> Delta<S> {
                     .get_writes_after_height(height)
                     .map(|(k, (height, v))| ((k.clone(), Namespace::Kernel), (height, v.cloned()))),
             )
-            .chain(
-                self.accessory_writes
-                    .iter()
-                    .filter_map(|(k, w)| if w.at_rollup_height > height { Some(((k.clone(), Namespace::Accessory), (w.at_rollup_height, w.value.clone()))) } else { None }),
-            )
+            .chain(self.accessory_writes.iter().filter_map(|(k, w)| {
+                if w.at_rollup_height > height {
+                    Some((
+                        (k.clone(), Namespace::Accessory),
+                        (w.at_rollup_height, w.value.clone()),
+                    ))
+                } else {
+                    None
+                }
+            }))
             .collect();
         ChangeSet { changes }
     }
@@ -286,7 +292,8 @@ impl<S: Storage> AccessoryDelta<S> {
     pub fn prune_changes_before(&mut self, height: u64) {
         // `retain`  takes O(capacity) time, so we only do it if there are any writes.
         if !self.writes.is_empty() {
-            self.writes.retain(|_, write| write.at_rollup_height > height);
+            self.writes
+                .retain(|_, write| write.at_rollup_height > height);
         }
     }
 }
@@ -305,7 +312,10 @@ impl<S: Storage> AccessoryDelta<S> {
 
     /// Freeze the accessory delta, preventing further accesses.
     pub fn freeze_with_height(self) -> Vec<(SlotKey, (u64, Option<SlotValue>))> {
-        self.writes.into_iter().map(|(k, v)| (k, (v.at_rollup_height, v.value))).collect()
+        self.writes
+            .into_iter()
+            .map(|(k, v)| (k, (v.at_rollup_height, v.value)))
+            .collect()
     }
 }
 

@@ -813,7 +813,6 @@ where
         next_root,
     );
 
-
     let updated_rollup_height = *state_update_notifier.borrow();
     let mut changes = checkpoint.changes_after(updated_rollup_height.get());
     let (mut accessory_delta, state_accesses, _witness) =
