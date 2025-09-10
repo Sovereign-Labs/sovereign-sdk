@@ -175,6 +175,22 @@ impl TestClient {
             .unwrap()
     }
 
+    pub async fn emit_one_log(&self, contract_address: H160) -> PendingTransaction<'_, Http> {
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+        tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
+
+        let typed_transaction = self.make_eip1559_tx(
+            nonce,
+            Some(contract_address),
+            Some(self.contract.emit_one_log()),
+        );
+
+        self.client
+            .send_transaction(typed_transaction, None)
+            .await
+            .unwrap()
+    }
+
     pub async fn set_value_call_and_estimate_gas(
         &self,
         contract_address: H160,
