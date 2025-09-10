@@ -5921,6 +5921,7 @@ dependencies = [
  "sha2 0.10.9",
  "sov-address",
  "sov-bank",
+ "sov-chain-state",
  "sov-kernels",
  "sov-modules-api",
  "sov-rollup-interface",

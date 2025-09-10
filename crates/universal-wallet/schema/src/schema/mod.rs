@@ -108,13 +108,9 @@ impl MaybePartialLink {
 
 /// This newtype is mainly necessary to allow the schema to derive Debug ergonomically
 /// Stores both the tree and its root since MerkleTree::root() requires &mut self
-pub struct ConstructedMerkleTree(OnceCell<(MerkleTree<MemDb<[u8; 32]>, TmSha2Hasher>, [u8; 32])>);
-
-impl Default for ConstructedMerkleTree {
-    fn default() -> Self {
-        Self(OnceCell::new())
-    }
-}
+#[derive(Default)]
+#[allow(clippy::type_complexity)] // This is only used internally
+struct ConstructedMerkleTree(OnceCell<(MerkleTree<MemDb<[u8; 32]>, TmSha2Hasher>, [u8; 32])>);
 
 impl Debug for ConstructedMerkleTree {
     fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -132,13 +128,8 @@ impl Debug for ConstructedMerkleTree {
 /// - In borsh: serializes/deserializes the actual hash value, while corresponding metada is empty
 /// - In serde: skips serialization and recalculates on first use, ensuring hash matches the
 ///   deserialized metadata
+#[derive(Default)]
 struct MetadataHash(OnceCell<[u8; 32]>);
-
-impl Default for MetadataHash {
-    fn default() -> Self {
-        Self(OnceCell::new())
-    }
-}
 
 impl Debug for MetadataHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
