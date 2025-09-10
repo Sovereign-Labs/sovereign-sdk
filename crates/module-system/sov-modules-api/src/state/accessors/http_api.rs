@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use alloy_eips::eip1559::ETHEREUM_BLOCK_GAS_LIMIT_30M;
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::{
@@ -396,7 +397,11 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         gas_price: <S::Gas as Gas>::Price,
     ) -> Result<Self, ApiStateAccessorError> {
         let delta: &super::internals::Delta<<S as Spec>::Storage> = &state_checkpoint.delta;
-        let gas_meter = BasicGasMeter::new_with_funds_and_gas(Amount::MAX, Gas::max(), gas_price);
+        let gas_meter = BasicGasMeter::new_with_funds_and_gas(
+            Amount::MAX,
+            [ETHEREUM_BLOCK_GAS_LIMIT_30M, ETHEREUM_BLOCK_GAS_LIMIT_30M].into(),
+            gas_price,
+        );
 
         let mut out = Self {
             storage: delta.inner.clone(),
@@ -449,7 +454,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
     ) -> Self {
         let gas_meter = BasicGasMeter::new_with_funds_and_gas(
             Amount::MAX,
-            Gas::max(),
+            [ETHEREUM_BLOCK_GAS_LIMIT_30M, ETHEREUM_BLOCK_GAS_LIMIT_30M].into(),
             <S::Gas as Gas>::Price::ZEROED,
         );
         Self {
