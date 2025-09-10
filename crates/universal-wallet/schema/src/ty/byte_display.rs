@@ -7,8 +7,6 @@ use hex::FromHexError;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::display::FormatError;
-
 #[derive(Debug, Error, PartialEq)]
 pub enum ByteParseError {
     #[error("The input could not be decoded as bech32: {0}")]
@@ -29,6 +27,14 @@ pub enum ByteParseError {
         encoding: String,
         actual: usize,
     },
+}
+
+#[derive(Debug, Error, Clone)]
+pub enum ByteFormatError {
+    #[error("Core error: {0}")]
+    Core(#[from] core::fmt::Error),
+    #[error("The input could not be displayed as bech32: {0}")]
+    InvalidBech32(#[from] bech32::EncodeError),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, BorshDeserialize, BorshSerialize)]
@@ -97,7 +103,11 @@ mod hrp_serde {
     }
 }
 impl ByteDisplay {
-    pub fn format(&self, input: &[u8], f: &mut impl core::fmt::Write) -> Result<(), FormatError> {
+    pub fn format(
+        &self,
+        input: &[u8],
+        f: &mut impl core::fmt::Write,
+    ) -> Result<(), ByteFormatError> {
         match self {
             ByteDisplay::Hex => {
                 f.write_str("0x")?;

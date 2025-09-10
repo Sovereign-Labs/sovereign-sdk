@@ -4686,6 +4686,7 @@ dependencies = [
 name = "sov-universal-wallet"
 version = "0.1.0"
 dependencies = [
+ "alloy-primitives",
  "arrayvec",
  "bech32",
  "borsh",
