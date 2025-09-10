@@ -28,8 +28,9 @@ error[E0277]: the trait bound `RuntimeEvent<S>: VariantNames` is not satisfied
   = help: the following other types implement trait `VariantNames`:
             RuntimeCallDiscriminants
             __generated_dispatch_call_impl::RuntimeCall<S>
-            ethers_core::types::Chain
-            ethers_core::types::Opcode
+            ethers::types::Opcode
+            ethers_addressbook::Chain
+            ethers_core::macros::EthersCrate
             sov_test_utils::runtime::TestOptimisticRuntimeCall<S>
             sov_test_utils::runtime::TestOptimisticRuntimeCallDiscriminants
             sov_test_utils::runtime::TestOptimisticRuntimeEvent<S>
@@ -103,12 +104,12 @@ error[E0277]: the trait bound `for<'de> RuntimeEvent<S>: Deserialize<'de>` is no
   = help: the following other types implement trait `Deserialize<'de>`:
             `&'a JsonRawValue` implements `Deserialize<'de>`
             `&'a [u8]` implements `Deserialize<'de>`
+            `&'a camino::Utf8Path` implements `Deserialize<'de>`
             `&'a std::path::Path` implements `Deserialize<'de>`
             `&'a str` implements `Deserialize<'de>`
             `()` implements `Deserialize<'de>`
             `(T,)` implements `Deserialize<'de>`
             `(T0, T1)` implements `Deserialize<'de>`
-            `(T0, T1, T2)` implements `Deserialize<'de>`
           and $N others
   = note: required for `<Runtime<S> as RuntimeEventProcessor>::RuntimeEvent` to implement `DeserializeOwned`
 note: required by a bound in `sov_modules_api::RuntimeEventProcessor::RuntimeEvent`

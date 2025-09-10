@@ -1,5 +1,17 @@
 use super::evm_test_helper;
 use crate::evm::evm_test_helper::setup;
+use ethers::contract::EthEvent;
+use ethers::core::types::Address;
+use ethers::core::types::U256;
+use sov_test_utils::SimpleStorageContract;
+
+#[derive(Debug, Clone, EthEvent)]
+#[ethevent(name = "SimpleLog", abi = "Transfer(address,uint256)")]
+struct SimpleLog {
+    #[ethevent(indexed)]
+    pub address: Address,
+    pub value: U256,
+}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_logs() {
@@ -18,9 +30,10 @@ async fn evm_test_logs() {
     let rec = evm_client.receipt(tx_hash).await.unwrap();
     let log = rec.logs.first().unwrap();
 
-    assert_eq!(log.transaction_hash.unwrap(), tx_hash);
-    assert_eq!(log.address, contract_address);
+    let contract_log = SimpleStorageContract::parse_simple_log(log.clone());
 
-    let value_from_logs = log.data.0.slice(28..32);
-    assert_eq!(*value_from_logs, set_arg.to_be_bytes());
+    assert_eq!(contract_log.original.transaction_hash.unwrap(), tx_hash);
+    assert_eq!(contract_log.original.address, contract_address);
+
+    assert_eq!(contract_log.paresed.value, set_arg.into());
 }

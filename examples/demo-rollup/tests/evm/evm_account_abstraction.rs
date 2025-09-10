@@ -1,7 +1,7 @@
 use crate::evm::evm_test_helper::{self};
 use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
 use demo_stf::runtime::{Runtime, RuntimeCall};
-use ethers_core::abi::Address;
+use ethers::core::abi::Address;
 use sov_eth_client::TestClient;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::transaction::{Transaction, UnsignedTransaction};

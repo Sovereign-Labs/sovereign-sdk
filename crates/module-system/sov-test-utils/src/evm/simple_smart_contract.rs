@@ -1,8 +1,28 @@
 use std::path::PathBuf;
 
-use ethers_contract::BaseContract;
-use ethers_core::abi::Abi;
-use ethers_core::types::Bytes;
+use ethers::abi::RawLog;
+use ethers::contract::BaseContract;
+use ethers::contract::EthEvent;
+use ethers::core::abi::Abi;
+use ethers::core::types::Address;
+use ethers::core::types::Bytes;
+use ethers::core::types::Log;
+use ethers::core::types::U256;
+
+/// Log emited by SimpleStorageContract/
+#[derive(Debug, Clone, EthEvent)]
+#[ethevent(name = "SimpleLog", abi = "Transfer(address,uint256)")]
+pub struct SimpleLog {
+    #[ethevent(indexed)]
+    pub address: Address,
+    pub value: U256,
+}
+
+/// Log with some additional metadata.
+pub struct SimpleStorageContractLog {
+    pub paresed: SimpleLog,
+    pub original: Log,
+}
 
 fn test_data_path() -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -85,5 +105,18 @@ impl SimpleStorageContract {
     /// Emit example log.
     pub fn emit_two_logs(&self) -> Bytes {
         self.base_contract.encode("emitTwoLogs", ()).unwrap()
+    }
+
+    /// Parse smart contract log.
+    pub fn parse_simple_log(log: Log) -> SimpleStorageContractLog {
+        let raw_log = RawLog {
+            topics: log.topics.to_vec(),
+            data: log.data.to_vec(),
+        };
+
+        SimpleStorageContractLog {
+            paresed: SimpleLog::decode_log(&raw_log).unwrap(),
+            original: log,
+        }
     }
 }

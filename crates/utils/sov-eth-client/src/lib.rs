@@ -2,15 +2,15 @@
 
 use alloy_primitives::Bytes;
 use ethereum_types::H160;
-use ethers_core::abi::Address;
-use ethers_core::k256::ecdsa::SigningKey;
-use ethers_core::types::transaction::eip2718::TypedTransaction;
-use ethers_core::types::{Block, Eip1559TransactionRequest, TransactionRequest, TxHash};
-use ethers_core::types::{Transaction, TransactionReceipt};
-use ethers_middleware::signer::SignerMiddlewareError;
-use ethers_middleware::SignerMiddleware;
-use ethers_providers::{Http, Middleware, PendingTransaction, Provider};
-use ethers_signers::Wallet;
+use ethers::core::abi::Address;
+use ethers::core::k256::ecdsa::SigningKey;
+use ethers::core::types::transaction::eip2718::TypedTransaction;
+use ethers::core::types::{Block, Eip1559TransactionRequest, TransactionRequest, TxHash};
+use ethers::core::types::{Transaction, TransactionReceipt};
+use ethers::middleware::signer::SignerMiddlewareError;
+use ethers::middleware::SignerMiddleware;
+use ethers::providers::{Http, Middleware, PendingTransaction, Provider};
+use ethers::signers::Wallet;
 use futures::StreamExt;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
@@ -78,7 +78,7 @@ impl TestClient {
         &self,
         nonce: u64,
         to_address: Option<Address>,
-        data: Option<ethers_core::types::Bytes>,
+        data: Option<ethers::core::types::Bytes>,
     ) -> TypedTransaction {
         let mut req = self.default_request().nonce(nonce);
 

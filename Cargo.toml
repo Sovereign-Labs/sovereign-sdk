@@ -271,12 +271,9 @@ risc0-build = "2.1"
 
 # EVM dependencies
 ethereum-types = "0.14.1"
-ethers-core = { version = "=2.0.14", default-features = false }
-ethers-contract = { version = "=2.0.14", default-features = false }
-ethers-providers = { version = "=2.0.14", default-features = false }
-ethers-signers = { version = "=2.0.14", default-features = false }
-ethers-middleware = { version = "=2.0.14", default-features = false }
-# d8451e54e7267f9f1634118d6d279b2216f7e2bb, 1.6.0
+ethers = { version = "=2.0.14" }
+
+
 alloy-serde = { version = "1.0.24" }
 alloy-chains = { version = "0.2.0", default-features = false }
 alloy-primitives = { version = "1.3.1", default-features = false }
