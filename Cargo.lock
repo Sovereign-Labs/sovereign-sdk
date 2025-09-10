@@ -3611,6 +3611,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "ethers"
+version = "2.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "816841ea989f0c69e459af1cf23a6b0033b19a55424a1ea3a30099becdb8dec0"
+dependencies = [
+ "ethers-addressbook",
+ "ethers-contract",
+ "ethers-core",
+ "ethers-middleware",
+ "ethers-providers",
+ "ethers-signers",
+]
+
+[[package]]
+name = "ethers-addressbook"
+version = "2.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5495afd16b4faa556c3bba1f21b98b4983e53c1755022377051a975c3b021759"
+dependencies = [
+ "ethers-core",
+ "once_cell",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ethers-contract"
 version = "2.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11219,6 +11245,7 @@ dependencies = [
  "demo-stf",
  "demo-stf-json-client",
  "ethereum-types",
+ "ethers",
  "ethers-contract",
  "ethers-core",
  "ethers-middleware",
@@ -12348,6 +12375,7 @@ dependencies = [
  "derivative",
  "derive_more 1.0.0",
  "ethereum-types",
+ "ethers",
  "ethers-contract",
  "ethers-core",
  "hex",
