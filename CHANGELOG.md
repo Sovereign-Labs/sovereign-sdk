@@ -4,6 +4,8 @@
 
 # 2025-09-11
 - #1669 Account for sequencer gas in EVM transaction receipts. EVM transaction receipts now properly reflect the sequencer gas consumed during execution.
+# 2025-09-10
+- #1660 **Breaking change** The UniversalWallet schema has been restructured to use internal mutability, removing the need for mutable references in its user-facing APIs. In the process, the convenient method `Schema::cached_chain_hash()` has been removed; use `Schema::chain_hash()` for this purpose now. This may require adjusting build-scripts that generate the schema for a rollup.
 
 # 2025-09-09
 - #1646 Implements `eth_estimateGas` RPC method for the EVM module. This allows clients to estimate the gas required for transaction execution before submitting them to the network.

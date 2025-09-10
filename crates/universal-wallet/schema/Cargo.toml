@@ -17,7 +17,7 @@ sha2 = { workspace = true }
 
 borsh = { workspace = true, features = [] }
 nmt-rs = { workspace = true }
-once_cell = "1.19"
+once_cell = { workspace = true }
 
 # Schema ser/de traits, and json_to_borsh functionality
 serde_json = { workspace = true, optional = true }
