@@ -99,13 +99,10 @@ arbitrary = [
 	"sov-bank/arbitrary",
 	"sov-modules-macros/arbitrary",
 	"alloy-primitives/arbitrary",
-	"alloy-sol-types/arbitrary"
+	"alloy-sol-types/arbitrary",
+	"alloy-eips/arbitrary"
 ]
-bench = [
-    "sov-modules-api/bench",
-    "sov-state/bench",
-    "sov-modules-macros/bench",
-]
+bench = ["sov-modules-api/bench", "sov-state/bench", "sov-modules-macros/bench"]
 native = [
     "async-trait",
     "axum",
