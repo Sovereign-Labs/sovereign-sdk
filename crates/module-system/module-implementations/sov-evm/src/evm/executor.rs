@@ -1,3 +1,9 @@
+use crate::{
+    db::commit::FallibleDatabaseCommit,
+    get_spec_id,
+    sov_evm::{SovEvm, UnmeteredStorageAccessInspector},
+    EvmRuntimeConfig,
+};
 use reth_revm::db::DBErrorMarker;
 use revm::context::TxEnv;
 use revm::InspectEvm;
@@ -8,13 +14,7 @@ use revm::{
     },
     Database, MainContext,
 };
-
-use crate::{
-    db::commit::FallibleDatabaseCommit,
-    get_spec_id,
-    sov_evm::{SovEvm, UnmeteredStorageAccessInspector},
-    EvmRuntimeConfig,
-};
+use sov_modules_api::macros::config_value;
 
 /// builds CfgEnv
 /// Returns correct config depending on spec for given block number
@@ -25,7 +25,7 @@ pub(crate) fn get_cfg_env(
     template_cfg: Option<CfgEnv>,
 ) -> CfgEnv {
     let mut cfg_env = template_cfg.unwrap_or_default();
-    cfg_env.chain_id = cfg.chain_spec.chain_id;
+    cfg_env.chain_id = config_value!("CHAIN_ID");
     cfg_env.limit_contract_code_size = cfg.chain_spec.limit_contract_code_size;
     cfg_env.disable_block_gas_limit = true;
     cfg_env.disable_balance_check = true;

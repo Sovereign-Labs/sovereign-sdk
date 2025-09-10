@@ -24,7 +24,6 @@
   "initial_base_fee": 7,
   "genesis_timestamp": 0,
   "chain_spec": {
-    "chain_id": 4321,
     "limit_contract_code_size": null,
     "coinbase": "0x0000000000000000000000000000000000000000",
     "block_gas_limit": 30000000,

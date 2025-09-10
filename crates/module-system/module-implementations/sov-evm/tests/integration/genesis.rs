@@ -46,7 +46,6 @@ fn test_genesis_cfg() {
             evm.cfg_infallible(state),
             EvmRuntimeConfig {
                 chain_spec: sov_evm::EvmChainSpec {
-                    chain_id: 1000,
                     block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
                     block_timestamp_delta: 2,
                     coinbase: Address::from([3u8; 20]),
@@ -122,7 +121,6 @@ fn default_config() -> EvmGenesisConfig {
         initial_base_fee: 70,
         genesis_timestamp: 50,
         chain_spec: sov_evm::EvmChainSpec {
-            chain_id: 1000,
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
             block_timestamp_delta: 2,
             coinbase: Address::from([3u8; 20]),

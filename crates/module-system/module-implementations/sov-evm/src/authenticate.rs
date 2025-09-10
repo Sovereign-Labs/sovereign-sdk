@@ -44,17 +44,49 @@ fn recover_evm_signer(
     })
 }
 
-/// Creates the transaction details for an EVM transaction.
-fn create_evm_tx_details<S: Spec>(tx: &TransactionSigned) -> TxDetails<S> {
+/// Creates the transaction details and tx hash for an EVM transaction.
+fn create_auth_tx_and_hash<S: Spec>(
+    tx: &TransactionSigned,
+) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {
+    let tx_hash = TxHash::new(**tx.hash());
+    let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;
     let gas_limit = tx.gas_limit();
-    TxDetails {
-        chain_id: config_value!("CHAIN_ID"),
+
+    let tx_details = TxDetails {
+        chain_id: tx_chain_id,
         max_priority_fee_bips: PriorityFeeBips::ZERO,
         max_fee: Amount::new(100_000_000_000),
         gas_limit: Some([gas_limit, gas_limit].into()),
-    }
+    };
+
+    Ok(AuthenticatedTransactionAndRawHash {
+        raw_tx_hash: tx_hash,
+        authenticated_tx: tx_details.into(),
+    })
 }
 
+fn validate_chain_id(
+    tx_chain_id: Option<u64>,
+    tx_hash: TxHash,
+) -> Result<u64, AuthenticationError> {
+    let rollup_chain_id = config_value!("CHAIN_ID");
+    let tx_chain_id = tx_chain_id.ok_or(AuthenticationError::FatalError(
+        FatalError::MissingChainId(rollup_chain_id),
+        tx_hash,
+    ))?;
+
+    if tx_chain_id != rollup_chain_id {
+        return Err(AuthenticationError::FatalError(
+            FatalError::InvalidChainId {
+                expected: rollup_chain_id,
+                got: tx_chain_id,
+            },
+            tx_hash,
+        ));
+    }
+
+    Ok(tx_chain_id)
+}
 /// Extracts EVM authorization data from a verified transaction.
 fn extract_evm_authorization_data<S: Spec>(
     signer: Address,
@@ -93,17 +125,13 @@ where
 
     let (rlp, tx) = decode_evm_tx(raw_tx)
         .map_err(|e| fatal_deserialization_error::<Accessor, S, _>(raw_tx, e, state))?;
-    let hash = TxHash::new(**tx.hash());
 
-    let signer = recover_evm_signer(&tx, hash)?;
+    let tx_and_raw_hash = create_auth_tx_and_hash(&tx)?;
 
-    let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
-        raw_tx_hash: hash,
-        authenticated_tx: create_evm_tx_details(&tx).into(),
-    };
+    let signer = recover_evm_signer(&tx, tx_and_raw_hash.raw_tx_hash)?;
 
     let nonce = tx.nonce();
-    let auth_data = extract_evm_authorization_data::<S>(signer, hash, nonce);
+    let auth_data = extract_evm_authorization_data::<S>(signer, tx_and_raw_hash.raw_tx_hash, nonce);
 
     let call = CallMessage { rlp };
 
