@@ -18,7 +18,7 @@ use sov_modules_api::transaction::{
     AuthenticatedTransactionAndRawHash, Credentials, PriorityFeeBips, TxDetails,
 };
 use sov_modules_api::{
-    Amount, DispatchCall, FullyBakedTx, GetGasPrice, ProvableStateReader, RawTx, Runtime, Spec,
+    DispatchCall, FullyBakedTx, Gas, GetGasPrice, ProvableStateReader, RawTx, Runtime, Spec,
 };
 use sov_rollup_interface::TxHash;
 use sov_state::User;
@@ -47,16 +47,24 @@ fn recover_evm_signer(
 /// Creates the transaction details and tx hash for an EVM transaction.
 fn create_auth_tx_and_hash<S: Spec>(
     tx: &TransactionSigned,
+    gas_price: &<<S as Spec>::Gas as Gas>::Price,
 ) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {
     let tx_hash = TxHash::new(**tx.hash());
     let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;
     let gas_limit = tx.gas_limit();
+    let gas_limit: <S as Spec>::Gas = [gas_limit, gas_limit].into();
+    let max_fee = gas_limit
+        .checked_value(gas_price)
+        .ok_or(AuthenticationError::FatalError(
+            FatalError::Other("Amount overflow".into()),
+            tx_hash,
+        ))?;
 
     let tx_details = TxDetails {
         chain_id: tx_chain_id,
         max_priority_fee_bips: PriorityFeeBips::ZERO,
-        max_fee: Amount::new(100_000_000_000),
-        gas_limit: Some([gas_limit, gas_limit].into()),
+        max_fee,
+        gas_limit: Some(gas_limit),
     };
 
     Ok(AuthenticatedTransactionAndRawHash {
@@ -124,13 +132,13 @@ pub fn authenticate<
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
-    let _gas_price = state.gas_price();
     // TODO: Charge gas for deserialization & signature check.
 
     let (rlp, tx) = decode_evm_tx(raw_tx)
         .map_err(|e| fatal_deserialization_error::<Accessor, S, _>(raw_tx, e, state))?;
 
-    let tx_and_raw_hash = create_auth_tx_and_hash(&tx)?;
+    let gas_price = state.gas_price();
+    let tx_and_raw_hash = create_auth_tx_and_hash(&tx, gas_price)?;
 
     let signer = recover_evm_signer(&tx, tx_and_raw_hash.raw_tx_hash)?;
 
