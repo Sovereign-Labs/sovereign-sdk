@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use avail_rust_client::avail::data_availability::tx::SubmitData;
 use avail_rust_client::avail_rust_core::rpc::kate::{DataProof, TxDataRoots};
 use avail_rust_client::avail_rust_core::rpc::system::fetch_extrinsics_v1_types::{
@@ -328,80 +329,15 @@ impl AvailDAService {
         })?;
         debug!("Retrieved block header: {:?}", block_header);
 
-        info!("Fetching batch blobs for block {}", block_number);
-        let batch_blobs: Vec<avail_rust_client::avail_rust_core::rpc::system::fetch_extrinsics_v1_types::ExtrinsicInformation> = block_client
-            .block_transactions(HashNumber::Number(block_number), None, Some(SignatureFilter::new(None, Some(self.batch_app_id.0), None)),Some(EncodeSelector::Call)).await?;
-        debug!("Found {} batch blobs", batch_blobs.len());
+        info!("Fetching batch and proof blobs for block {}", block_number);
+        let batch_blobs = self
+            .fetch_and_process_blobs(block_number, self.batch_app_id)
+            .await?;
+        let proof_blobs = self
+            .fetch_and_process_blobs(block_number, self.proof_app_id)
+            .await?;
 
-        let processed_batch_blobs: Vec<AvailData> = batch_blobs
-            .iter()
-            .filter_map(|item| {
-                let encoded_str = item.encoded.as_ref().map(|s| s.as_str());
-                let submit_data = encoded_str.and_then(|s| SubmitData::decode_hex_call(s));
-                if let Some(submit_data) = submit_data {
-                    debug!(
-                        "Processing batch blob with data size: {}",
-                        submit_data.data.len()
-                    );
-                    let signer = item
-                        .signature
-                        .as_ref()
-                        .and_then(|sig| sig.ss58_address.as_ref())
-                        .and_then(|addr| AccountId::from_str(addr).ok());
-                    if let Some(signer) = signer {
-                        Some(AvailData {
-                            data: submit_data.data,
-                            signer,
-                        })
-                    } else {
-                        warn!("Signer address not found or invalid for batch blob");
-                        None
-                    }
-                } else {
-                    warn!("Failed to decode submit data for batch blob");
-                    None
-                }
-            })
-            .collect();
-        info!("Processed {} batch blobs", processed_batch_blobs.len());
-
-        info!("Fetching proof blobs for block {}", block_number);
-        let proof_blobs: Vec<avail_rust_client::avail_rust_core::rpc::system::fetch_extrinsics_v1_types::ExtrinsicInformation> = block_client
-        .block_transactions(HashNumber::Number(block_number), None, Some(SignatureFilter::new(None, Some(self.proof_app_id.0), None)),Some(EncodeSelector::Call)).await?;
-        debug!("Found {} proof blobs", proof_blobs.len());
-
-        let processed_proof_blobs: Vec<AvailData> = proof_blobs
-            .iter()
-            .filter_map(|item| {
-                let encoded_str = item.encoded.as_ref().map(|s| s.as_str());
-                let submit_data = encoded_str.and_then(|s| SubmitData::decode_hex_call(s));
-                if let Some(submit_data) = submit_data {
-                    debug!(
-                        "Processing proof blob with data size: {}",
-                        submit_data.data.len()
-                    );
-                    let signer = item
-                        .signature
-                        .as_ref()
-                        .and_then(|sig| sig.ss58_address.as_ref())
-                        .and_then(|addr| AccountId::from_str(addr).ok());
-                    if let Some(signer) = signer {
-                        Some(AvailData {
-                            data: submit_data.data,
-                            signer,
-                        })
-                    } else {
-                        warn!("Signer address not found or invalid for proof blob");
-                        None
-                    }
-                } else {
-                    warn!("Failed to decode submit data for proof blob");
-                    None
-                }
-            })
-            .collect();
-        info!("Processed {} proof blobs", processed_proof_blobs.len());
-
+        // Fetching the first transaction of the block to get the timestamp
         let tx = block_client
             .block_transaction(
                 block_hash.into(),
@@ -433,8 +369,8 @@ impl AvailDAService {
             },
             block_hash,
             Time::from_secs(custom_tx.set as i64),
-            processed_batch_blobs,
-            processed_proof_blobs,
+            batch_blobs,
+            proof_blobs,
         ))
     }
 
@@ -455,8 +391,67 @@ impl AvailDAService {
         let submitted_tx = submittable_tx
             .sign_and_submit(account, Options::new(Some(app_id.0)))
             .await?;
+
+        // Fetching Transaction Receipt
+        let receipt = submitted_tx.receipt(false).await?;
+        let Some(receipt) = receipt else {
+            return Err(anyhow!("Transaction got dropped."));
+        };
+
+        // Fetching Block State
+        let block_state = receipt.block_state().await?;
+        match block_state {
+            avail_rust_client::BlockState::Included => {
+                debug!("Block is included but not yet finalized")
+            }
+            avail_rust_client::BlockState::Finalized => debug!("Block is finalized"),
+            avail_rust_client::BlockState::Discarded => debug!("Block is discarded"),
+            avail_rust_client::BlockState::DoesNotExist => debug!("Block does not exist"),
+        }
         let res = submitted_tx.tx_hash;
-        info!("Data submitted successfully, transaction hash: {:?}", res);
+        info!(
+            "Data submitted successfully, transaction hash: {:?} and blob hash: {:?}",
+            res,
+            HexHash::from(blake2_256(data))
+        );
         Ok(res)
+    }
+}
+
+impl AvailDAService {
+    async fn fetch_and_process_blobs(
+        &self,
+        block_number: u32,
+        app_id: AppId,
+    ) -> Result<Vec<AvailData>, anyhow::Error> {
+        let block_client = self.client.block_client();
+        let extrinsics = block_client
+            .block_transactions(
+                HashNumber::Number(block_number),
+                None,
+                Some(SignatureFilter::new(None, Some(app_id.0), None)),
+                Some(EncodeSelector::Call),
+            )
+            .await?;
+
+        debug!("Found {} blobs for app_id {}", extrinsics.len(), app_id.0);
+
+        Ok(extrinsics
+            .iter()
+            .filter_map(|item| {
+                let encoded_str = item.encoded.as_ref().map(|s| s.as_str());
+                let submit_data = encoded_str.and_then(|s| SubmitData::decode_hex_call(s));
+                submit_data.and_then(|submit| {
+                    item.signature
+                        .as_ref()
+                        .and_then(|sig| sig.ss58_address.as_ref())
+                        .and_then(|addr| AccountId::from_str(addr).ok())
+                        .map(|signer| AvailData {
+                            data: submit.data,
+                            signer,
+                        })
+                })
+            })
+            .collect())
     }
 }

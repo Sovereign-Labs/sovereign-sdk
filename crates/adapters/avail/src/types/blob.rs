@@ -2,6 +2,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
 use sp_core::blake2_256;
+use tracing::debug;
 
 use crate::types::{address::AvailAddress, data::AvailData, hash::AvailHash};
 
@@ -42,10 +43,11 @@ impl BlobReaderTrait for AvailDABlob {
 impl From<AvailData> for AvailDABlob {
     fn from(data: AvailData) -> Self {
         let bytes = bytes::Bytes::from(data.data.clone());
-        let blob = CountedBufReader::new(bytes.clone());
+        let blob = CountedBufReader::new(bytes);
+        let blob_hash = AvailHash::try_from(blake2_256(data.data.as_ref())).unwrap();
         AvailDABlob {
             blob,
-            hash: AvailHash::try_from(blake2_256(&bytes)).unwrap(),
+            hash: blob_hash,
             sender: AvailAddress(data.signer),
         }
     }
