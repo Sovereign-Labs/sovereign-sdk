@@ -99,7 +99,6 @@ mod tests {
                 code: Bytes::default(),
             }],
             chain_spec: crate::EvmChainSpec {
-                chain_id: 4321, // Use a hard-coded value instead of config_value!("CHAIN_ID") since the string below is hard-coded
                 limit_contract_code_size: None,
                 block_timestamp_delta: 1u64,
                 hardforks: vec![(0, SpecId::SHANGHAI)],
@@ -120,7 +119,6 @@ mod tests {
                 "initial_base_fee":7,
                 "genesis_timestamp":0,
                 "chain_spec":{
-                    "chain_id":4321,
                     "limit_contract_code_size":null,
                     "coinbase":"0x0000000000000000000000000000000000000000",
                     "block_gas_limit":30000000,
