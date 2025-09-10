@@ -28,17 +28,19 @@ pub struct StateCheckpoint<S: Spec> {
     pub(super) metrics: StateMetrics,
 }
 
+type Write = (u64, Option<SlotValue>);
+
 #[derive(Debug, Clone)]
 /// The list of changes from the state checkpoint
 pub struct ChangeSet {
     #[allow(missing_docs)]
-    pub changes: Vec<((SlotKey, sov_state::Namespace), (u64, Option<SlotValue>))>,
+    pub changes: Vec<((SlotKey, sov_state::Namespace), Write)>,
 }
 
 impl ChangeSet {
     /// Create a new `ChangeSet` from a vector of changes.
     #[must_use]
-    pub fn new(changes: Vec<((SlotKey, sov_state::Namespace), (u64, Option<SlotValue>))>) -> Self {
+    pub fn new(changes: Vec<((SlotKey, sov_state::Namespace), Write)>) -> Self {
         Self { changes }
     }
 }
