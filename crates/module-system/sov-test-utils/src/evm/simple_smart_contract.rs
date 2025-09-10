@@ -9,7 +9,7 @@ use ethers_core::types::Bytes;
 use ethers_core::types::Log;
 use ethers_core::types::U256;
 
-/// TODO
+/// Log emited by SimpleStorageContract/
 #[derive(Debug, Clone, EthEvent)]
 #[ethevent(name = "SimpleLog", abi = "Transfer(address,uint256)")]
 pub struct SimpleLog {
@@ -18,7 +18,7 @@ pub struct SimpleLog {
     pub value: U256,
 }
 
-/// TODO
+/// Log with some additional metadata.
 pub struct SimpleStorageContractLog {
     pub paresed: SimpleLog,
     pub original: Log,
@@ -107,7 +107,7 @@ impl SimpleStorageContract {
         self.base_contract.encode("emitTwoLogs", ()).unwrap()
     }
 
-    /// TODO
+    /// Parse smart contract log.
     pub fn parse_simple_log(log: Log) -> SimpleStorageContractLog {
         let raw_log = RawLog {
             topics: log.topics.to_vec(),
