@@ -126,7 +126,7 @@ where
     // as any background task is operational even if the acceptor is dropped.
     shutdown_notifier: Sender<()>,
     state_root_request_sender: tokio::sync::mpsc::Sender<StateRootComputeRequest<S>>,
-    state_roots: BTreeMap<RollupHeight, <S::Storage as Storage>::Root>,
+    pub(crate) state_roots: BTreeMap<RollupHeight, <S::Storage as Storage>::Root>,
     state_root_responses: VecDeque<StateRootReceiver<S>>,
     id: Uuid,
     startup_transaction_cache_writer: Option<TxResultWriter<S, Rt>>,
@@ -532,11 +532,14 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     /// In the node, this is done automatically, but sometimes the sequencer can run too far ahead of the node and need to compute these roots itself.
     async fn populate_state_roots(&mut self, node_state_root: &<S::Storage as Storage>::Root) {
         // If we don't have any state roots yet, insert the node's state root. That's our starting point.
+        // We have to save the root here because it *won't* be present in state (the node can't store it's own root in state without altering the root!)
         if self.state_roots.is_empty() {
-            self.state_roots.insert(
-                self.checkpoint.rollup_height_to_access(),
-                node_state_root.clone(),
-            );
+            // Figure out which rollup height this root corresponds to and save it as appropriate.
+            let node_height = self
+                .checkpoint
+                .get_rollup_height_of_underlying_storage(&Rt::default().kernel());
+            self.state_roots
+                .insert(node_height, node_state_root.clone());
         }
 
         // Compute the next visible root height that we need to fetch.
@@ -549,26 +552,26 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         // If this block is the first one computed using the RollupBlockExecutor, then the root we need is just the one from the node,
         // so we *don't* take this branch.
         // Otherwise, the request will already have been sent during the previous iteration of `end_rollup_block`, so we can just await it here.
-        let is_necessary_to_fetch = next_visible_rollup_height
-            > *self
-                .state_roots
-                .keys()
-                .max()
-                .unwrap_or(&RollupHeight::GENESIS);
-        tracing::trace!(
+
+        let mut largest_known_root_height = *self
+            .state_roots
+            .keys()
+            .max()
+            .unwrap_or(&RollupHeight::GENESIS);
+        tracing::debug!(
             height= %next_visible_rollup_height,
             "Fetching state root for height, if necessary",
         );
-        if is_necessary_to_fetch {
+        while next_visible_rollup_height > largest_known_root_height {
             tracing::trace!(
-                fetching_height = %next_visible_rollup_height,
-                ?is_necessary_to_fetch,
+                fetching_height = %largest_known_root_height.saturating_add(1),
                 "Fetching state root for height",
             );
             let (received_height, next_visible_root) = match self.state_root_responses.pop_front().unwrap_or_else(||
                     panic!("Executor {} needed response for state root for height {} before sending request. This is a bug in the `RollupBlockExecutor`, please report it.", self.id, next_visible_rollup_height))
             .await {
                 Ok((received_height, next_visible_root)) => {
+                    largest_known_root_height = received_height;
                    (received_height, next_visible_root)
                 }
                 Err(_) => {
@@ -576,13 +579,13 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                     return;
                 }
             };
-            // Sanity check: the height we received should match the height we need.
-            if received_height != next_visible_rollup_height {
+            // Sanity check: the height should not be bigger than the one we need - this would imply that we received a response before we sent it!
+            if received_height > next_visible_rollup_height {
                 tracing::error!(
                     received_height = %received_height,
                     next_visible_root_height = %next_visible_rollup_height,
-                    "Received height did not equal expected height for assertion. This is a bug in the RollupBlockExecutor, please report it.");
-                panic!("Received height ({received_height}) did not equal expected height for assertion {next_visible_rollup_height}. This is a bug in the RollupBlockExecutor, please report it.");
+                    "Received height was greater than the expected height. This is a bug in the RollupBlockExecutor, please report it.");
+                panic!("Received height ({received_height}) was greater than the expected height ({next_visible_rollup_height}). This is a bug in the RollupBlockExecutor, please report it.");
             }
             tracing::trace!(
                 "Received state root for height {} : {}",

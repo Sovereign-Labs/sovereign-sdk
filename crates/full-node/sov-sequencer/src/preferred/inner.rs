@@ -778,6 +778,9 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     CloseCurrentBatch {
         reason: &'static str,
     },
+    SimpleStateUpdate {
+        info: StateUpdateInfo<S::Storage>,
+    },
 }
 
 #[derive(Debug)]
@@ -1054,6 +1057,10 @@ where
             .await;
     }
 
+    pub(crate) async fn send_simple_state_update_msg(&self, info: StateUpdateInfo<S::Storage>) {
+        self.send(Message::SimpleStateUpdate { info }).await;
+    }
+
     async fn send(&self, message: Message<S, Rt>) {
         self.channel_size.fetch_add(1, Ordering::Relaxed);
         if self.message_sender.send(message).await.is_err() {
@@ -1258,6 +1265,9 @@ where
                     Message::CloseCurrentBatch { reason } => {
                         self.process_close_current_batch(reason).await;
                     }
+                    Message::SimpleStateUpdate { info } => {
+                        self.process_new_storage(info).await;
+                    }
                 }
             }
         })
@@ -1404,14 +1414,16 @@ where
             }
             (false, false, false, _) => {
                 let should_flush_tx_cache = is_startup || is_resync || is_recover;
-                debug!(
-                    is_startup,
-                    is_resync,
-                    is_recover,
-                    "Proceeding with `replay_soft_confirmations_on_top_of_node_state`"
-                );
 
+                // We only need to replay the transactions in the edge cases where the event/tx cache needs repopulating.
+                // In all other cases, we can just accept the new storage and move on.
                 let executor = if should_flush_tx_cache {
+                    debug!(
+                        is_startup,
+                        is_resync,
+                        is_recover,
+                        "Proceeding with `replay_soft_confirmations_on_top_of_node_state`"
+                    );
                     inner
                         .executor_events_sender
                         .flush_transactions_cache(info.next_tx_number)
@@ -1420,22 +1432,27 @@ where
                     // On `should_flush_tx_cache` we have to refill the cache the first time we `replay_soft_confirmations_on_top_of_node_state`
                     let tx_cache_writer = inner.tx_cache_writer.clone();
 
-                    RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
-                        info,
-                        tx_cache_writer,
-                        inner.rollup_exec_config.clone(),
-                        inner.seq_config.clone(),
-                    )
+                    Some(Box::new(
+                        RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
+                            info,
+                            tx_cache_writer,
+                            inner.rollup_exec_config.clone(),
+                            inner.seq_config.clone(),
+                        ),
+                    ))
                 } else {
-                    RollupBlockExecutor::<_, Rt>::new(
-                        info,
-                        inner.rollup_exec_config.clone(),
-                        inner.seq_config.clone(),
-                    )
+                    debug!(
+                        is_startup,
+                        is_resync,
+                        is_recover,
+                        ?info,
+                        "Skipping `replay_soft_confirmations_on_top_of_node_state`. Fast tracking info"
+                    );
+                    None
                 };
 
-                PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeState(
-                    Box::new(executor),
+                PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
+                    executor,
                     time_spent_fetching_batches,
                 )
             }
@@ -1560,6 +1577,39 @@ where
         inner.latest_info.slot_number
     }
 
+    async fn process_new_storage(&mut self, info: StateUpdateInfo<S::Storage>) {
+        // Atomically swap in the new storage and prune the old one.
+        let new_rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
+            .rollup_height_to_access();
+        self.inner
+            .executor
+            .checkpoint
+            .replace_storage_and_prune(info.storage.clone(), &Rt::default().kernel());
+        tracing::info!("Storage has been replaced");
+        // Update the `inner`'s state to reflect the new storage.
+        // These steps should match `process_final_catchup` except for the need to drop the db_event_subscription.
+        self.inner.is_ready = Ok(());
+        self.inner.has_finished_startup = true;
+        self.inner.latest_info = info;
+        let checkpoint = self
+            .inner
+            .executor
+            .checkpoint
+            .clone_with_empty_witness_dropping_temp_cache();
+        self.inner
+            .executor_events_sender
+            .force_update_api_state(checkpoint)
+            .await;
+
+        self.inner
+            .executor
+            .state_roots
+            .retain(|height, _| *height > new_rollup_height);
+
+        let info = &self.inner.latest_info;
+        self.inner.update_api_ledger(info).await;
+    }
+
     async fn process_final_catchup(
         &mut self,
         info: StateUpdateInfo<S::Storage>,
@@ -1591,6 +1641,8 @@ where
 
         // The executor is now caught up. Swap it in
         inner.executor.replace_state(*executor).await;
+        // Update the `inner`'s state to reflect the new storage.
+        // These steps should match `process_new_storage` except for the need to drop the db_event_subscription.
         inner.is_ready = Ok(());
         inner.has_finished_startup = true;
         inner.latest_info = info;
