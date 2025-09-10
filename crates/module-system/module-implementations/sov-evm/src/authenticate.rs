@@ -117,7 +117,6 @@ where
         .map_err(|e| fatal_deserialization_error::<Accessor, S, _>(raw_tx, e, state))?;
 
     let (tx_details, hash) = create_evm_tx_details(&tx)?;
-    //let hash = TxHash::new(**tx.hash());
 
     let signer = recover_evm_signer(&tx, hash)?;
 
