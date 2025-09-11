@@ -40,7 +40,7 @@ fn test_simple_transfer() {
 fn test_evm_gas_usage() {
     std::env::set_var(
         "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS",
-        "[1, 0]",
+        "[2, 0]",
     );
     let gas_used_with_evm_metering = {
         let (mut runner, from, _) = setup();
@@ -53,7 +53,7 @@ fn test_evm_gas_usage() {
     };
     std::env::set_var(
         "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS",
-        "[0, 0]",
+        "[1, 0]",
     );
     let gas_used_without_evm_metering = {
         let (mut runner, from, _) = setup();
