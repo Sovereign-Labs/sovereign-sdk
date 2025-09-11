@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use crate::test_helpers::test_genesis_source;
 
-use ethers::core::abi::Address;
+use ethereum_types::Address;
 use futures::future::join_all;
 use sov_demo_rollup::MockRollupSpec;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
