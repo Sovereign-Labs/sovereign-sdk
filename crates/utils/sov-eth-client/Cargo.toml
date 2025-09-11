@@ -14,6 +14,7 @@ anyhow = { workspace = true }
 alloy-primitives = { workspace = true }
 ethereum-types = { workspace = true }
 ethers = { workspace = true }
+alloy = { version = "1.0", features = ["full"] }
 futures = { workspace = true }
 jsonrpsee = { workspace = true }
 reth-primitives = { workspace = true }

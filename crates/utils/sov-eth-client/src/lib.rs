@@ -1,17 +1,6 @@
 #![allow(missing_docs)]
 
-use alloy_primitives::Bytes;
-use ethereum_types::H160;
-use ethers::core::abi::Address;
-use ethers::core::k256::ecdsa::SigningKey;
-use ethers::core::types::transaction::eip2718::TypedTransaction;
-use ethers::core::types::{Block, Eip1559TransactionRequest, TransactionRequest, TxHash};
-use ethers::core::types::{Transaction, TransactionReceipt};
-use ethers::middleware::signer::SignerMiddlewareError;
-use ethers::middleware::SignerMiddleware;
-use ethers::providers::{Http, Middleware, PendingTransaction, Provider};
-use ethers::signers::Wallet;
-use ethers::signers::{LocalWallet, Signer};
+use ethers::core::types::Block;
 use futures::StreamExt;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
@@ -19,6 +8,43 @@ use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
 use sov_cli::NodeClient;
 use sov_modules_api::{Runtime, Spec};
 use sov_test_utils::SimpleStorageContract;
+
+use alloy::network::Ethereum;
+use alloy::network::EthereumWallet;
+use alloy::providers::PendingTransactionBuilder;
+use alloy::providers::Provider as AlloyProvider;
+use alloy::providers::ProviderBuilder;
+use alloy::providers::{
+    fillers::{ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller, WalletFiller},
+    Identity, RootProvider,
+};
+use alloy::rpc::types::eth::transaction::TransactionRequest;
+use alloy::rpc::types::eth::Transaction;
+use alloy::rpc::types::eth::TransactionReceipt;
+use alloy::rpc::types::TransactionInput;
+use alloy::signers::local::PrivateKeySigner;
+use alloy::transports::TransportResult;
+use alloy_primitives::TxHash;
+use alloy_primitives::U256;
+use alloy_primitives::{Address, Bytes};
+
+type PubsubSigner = FillProvider<
+    JoinFill<
+        JoinFill<
+            Identity,
+            JoinFill<
+                GasFiller,
+                JoinFill<
+                    alloy::providers::fillers::BlobGasFiller,
+                    JoinFill<NonceFiller, ChainIdFiller>,
+                >,
+            >,
+        >,
+        WalletFiller<EthereumWallet>,
+    >,
+    RootProvider,
+    Ethereum,
+>;
 
 const GAS: u64 = 900000u64;
 const MAX_FEE_PER_GAS: u64 = 100;
@@ -28,7 +54,7 @@ pub struct TestClient {
     pub chain_id: u64,
     pub from_addr: Address,
     contract: SimpleStorageContract,
-    pub client: SignerMiddleware<Provider<Http>, Wallet<SigningKey>>,
+    pub client: PubsubSigner, //SignerMiddleware<Provider<Http>, Wallet<SigningKey>>,
     node_client: NodeClient,
     rpc: WsClient,
 }
@@ -40,16 +66,25 @@ impl TestClient {
         contract: SimpleStorageContract,
         http_addr: std::net::SocketAddr,
     ) -> Self {
-        let key = private_key
-            .parse::<LocalWallet>()
-            .unwrap()
-            .with_chain_id(chain_id);
+        let signer: PrivateKeySigner = private_key.parse().unwrap();
+        let from_addr = signer.address();
+        let eth_wallet = EthereumWallet::new(signer);
 
-        let provider =
-            Provider::try_from(&format!("http://127.0.0.1:{}/rpc", http_addr.port())).unwrap();
-        let client = SignerMiddleware::new_with_provider_chain(provider, key.clone())
+        let conn_str = &format!("ws://127.0.0.1:{}/rpc", http_addr.port());
+
+        let provider: PubsubSigner = ProviderBuilder::new()
+            .wallet(eth_wallet)
+            .connect(conn_str)
             .await
             .unwrap();
+
+        // let provider =
+        //     Provider::try_from(&format!("http://127.0.0.1:{}/rpc", http_addr.port())).unwrap();
+        let client = provider;
+
+        // SignerMiddleware::new_with_provider_chain(provider, key.clone())
+        //    .await
+        //    .unwrap();
 
         let rpc = WsClientBuilder::default()
             .build(&format!("ws://127.0.0.1:{}/rpc", http_addr.port()))
@@ -62,7 +97,7 @@ impl TestClient {
 
         Self {
             chain_id,
-            from_addr: key.address(),
+            from_addr,
             contract,
             client,
             node_client,
@@ -70,13 +105,15 @@ impl TestClient {
         }
     }
 
-    fn default_request(&self) -> Eip1559TransactionRequest {
-        Eip1559TransactionRequest::new()
+    fn default_request(&self) -> TransactionRequest {
+        let mut req = TransactionRequest::default()
             .from(self.from_addr)
-            .chain_id(self.chain_id)
-            .max_priority_fee_per_gas(MAX_PRIORITY_FEE_PER_GAS)
-            .max_fee_per_gas(MAX_FEE_PER_GAS)
-            .gas(GAS)
+            .max_priority_fee_per_gas(MAX_PRIORITY_FEE_PER_GAS as u128)
+            .max_fee_per_gas(MAX_FEE_PER_GAS as u128)
+            .gas_limit(GAS);
+
+        req.chain_id = Some(self.chain_id);
+        req
     }
 
     fn make_eip1559_tx(
@@ -84,28 +121,24 @@ impl TestClient {
         nonce: u64,
         to_address: Option<Address>,
         data: Option<ethers::core::types::Bytes>,
-    ) -> TypedTransaction {
+    ) -> TransactionRequest {
+        let data = data.map(|d| Bytes(d.0));
         let mut req = self.default_request().nonce(nonce);
 
         if let Some(data) = data {
-            req = req.data(data)
+            req = req.input(TransactionInput::new(data))
         }
 
         if let Some(addr) = to_address {
             req = req.to(addr)
         }
 
-        TypedTransaction::Eip1559(req)
+        req
     }
 
-    pub async fn deploy_contract(
-        &self,
-    ) -> Result<PendingTransaction<'_, Http>, Box<dyn std::error::Error>> {
+    pub async fn deploy_contract(&self) -> TransportResult<PendingTransactionBuilder<Ethereum>> {
         let typed_transaction = self.make_eip1559_tx(0, None, Some(self.contract.byte_code()));
-        let receipt_req = self
-            .client
-            .send_transaction(typed_transaction, None)
-            .await?;
+        let receipt_req = self.client.send_transaction(typed_transaction).await?;
 
         Ok(receipt_req)
     }
@@ -119,9 +152,9 @@ impl TestClient {
 
     pub async fn set_value_unsigned(
         &self,
-        contract_address: H160,
+        contract_address: Address,
         set_arg: u32,
-    ) -> PendingTransaction<'_, Http> {
+    ) -> PendingTransactionBuilder<Ethereum> {
         // TODO: Re-evaluate if it's still needed after we migrate from ethers
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
         tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
@@ -137,9 +170,9 @@ impl TestClient {
 
     pub async fn set_values(
         &self,
-        contract_address: H160,
+        contract_address: Address,
         set_args: Vec<u32>,
-    ) -> Vec<PendingTransaction<'_, Http>> {
+    ) -> Vec<PendingTransactionBuilder<Ethereum>> {
         let mut requests: Vec<_> = Vec::with_capacity(set_args.len());
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
 
@@ -152,7 +185,7 @@ impl TestClient {
 
             requests.push(
                 self.client
-                    .send_transaction(typed_transaction, None)
+                    .send_transaction(typed_transaction)
                     .await
                     .unwrap(),
             );
@@ -162,9 +195,9 @@ impl TestClient {
 
     pub async fn set_value(
         &self,
-        contract_address: H160,
+        contract_address: Address,
         set_arg: u32,
-    ) -> PendingTransaction<'_, Http> {
+    ) -> PendingTransactionBuilder<Ethereum> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
         tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
 
@@ -175,12 +208,15 @@ impl TestClient {
         );
 
         self.client
-            .send_transaction(typed_transaction, None)
+            .send_transaction(typed_transaction)
             .await
             .unwrap()
     }
 
-    pub async fn emit_one_log(&self, contract_address: H160) -> PendingTransaction<'_, Http> {
+    pub async fn emit_one_log(
+        &self,
+        contract_address: Address,
+    ) -> PendingTransactionBuilder<Ethereum> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
         tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
 
@@ -191,44 +227,45 @@ impl TestClient {
         );
 
         self.client
-            .send_transaction(typed_transaction, None)
+            .send_transaction(typed_transaction)
             .await
             .unwrap()
     }
 
     pub async fn set_value_call_and_estimate_gas(
         &self,
-        contract_address: H160,
+        contract_address: Address,
         set_arg: u32,
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
 
         // Any type of transaction can be used for eth_call
-        let req = TransactionRequest::new()
+        let mut req = TransactionRequest::default()
             .from(self.from_addr)
             .to(contract_address)
-            .chain_id(self.chain_id)
             .nonce(nonce)
-            .data(self.contract.set_call_data(set_arg))
-            .gas_price(10u64);
+            .gas_price(10u128)
+            .input(TransactionInput::new(Bytes(
+                self.contract.set_call_data(set_arg).0,
+            )));
 
-        let typed_transaction = TypedTransaction::Legacy(req.clone());
+        req.chain_id = Some(self.chain_id);
 
+        let mut new_req = req.clone();
         // Estimate gas on RPC
-        let gas = self.eth_estimate_gas(typed_transaction).await;
+        let gas = self.eth_estimate_gas(req).await;
 
         // Call with the estimated gas
-        let req = req.gas(gas);
-        let typed_transaction = TypedTransaction::Legacy(req);
+        new_req.gas = Some(gas);
 
-        let response = self.eth_call(typed_transaction).await?;
+        let response = self.eth_call(new_req).await?;
 
         Ok(response)
     }
 
     pub async fn failing_call(
         &self,
-        contract_address: H160,
+        contract_address: Address,
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
 
@@ -243,11 +280,8 @@ impl TestClient {
 
     pub async fn always_reverts(
         &self,
-        contract_address: H160,
-    ) -> Result<
-        PendingTransaction<'_, Http>,
-        SignerMiddlewareError<Provider<Http>, Wallet<SigningKey>>,
-    > {
+        contract_address: Address,
+    ) -> PendingTransactionBuilder<Ethereum> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
 
         let typed_transaction = self.make_eip1559_tx(
@@ -256,12 +290,15 @@ impl TestClient {
             Some(self.contract.always_revert()),
         );
 
-        self.client.send_transaction(typed_transaction, None).await
+        self.client
+            .send_transaction(typed_transaction)
+            .await
+            .unwrap()
     }
 
     pub async fn query_contract(
         &self,
-        contract_address: H160,
+        contract_address: Address,
     ) -> Result<ethereum_types::U256, Box<dyn std::error::Error>> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
 
@@ -271,7 +308,7 @@ impl TestClient {
             Some(self.contract.get_call_data()),
         );
 
-        let response = self.client.call(&typed_transaction, None).await?;
+        let response = self.client.call(typed_transaction).await?;
 
         let resp_array: [u8; 32] = response.to_vec().try_into().unwrap();
         Ok(ethereum_types::U256::from(resp_array))
@@ -282,27 +319,26 @@ impl TestClient {
         self.client.get_accounts().await.unwrap()
     }
 
-    pub async fn eth_send_transaction(&self, tx: TypedTransaction) -> PendingTransaction<'_, Http> {
-        self.client
-            .provider()
-            .send_transaction(tx, None)
-            .await
-            .unwrap()
+    pub async fn eth_send_transaction(
+        &self,
+        tx: TransactionRequest,
+    ) -> PendingTransactionBuilder<Ethereum> {
+        self.client.send_transaction(tx).await.unwrap()
     }
 
     pub async fn eth_chain_id(&self) -> u64 {
-        self.client.get_chainid().await.unwrap().as_u64()
+        self.client.get_chain_id().await.unwrap()
     }
 
-    pub async fn eth_get_balance(&self, address: Address) -> ethereum_types::U256 {
-        self.client.get_balance(address, None).await.unwrap()
+    pub async fn eth_get_balance(&self, address: Address) -> alloy_primitives::Uint<256, 4> {
+        self.client.get_balance(address).await.unwrap()
     }
 
     pub async fn eth_get_storage_at(
         &self,
         address: Address,
-        index: ethereum_types::U256,
-    ) -> ethereum_types::U256 {
+        index: alloy_primitives::Uint<256, 4>,
+    ) -> alloy_primitives::Uint<256, 4> {
         self.rpc
             .request("eth_getStorageAt", rpc_params![address, index])
             .await
@@ -310,21 +346,16 @@ impl TestClient {
     }
 
     pub async fn eth_get_code(&self, address: Address) -> Vec<u8> {
-        self.client.get_code(address, None).await.unwrap().to_vec()
+        self.client.get_code_at(address).await.unwrap().to_vec()
     }
 
     pub async fn eth_get_transaction_count(&self, address: Address) -> u64 {
-        let count = self
-            .client
-            .get_transaction_count(address, None)
-            .await
-            .unwrap();
-
-        count.as_u64()
+        let count = self.client.get_transaction_count(address).await.unwrap();
+        count
     }
 
     pub async fn eth_gas_price(&self) -> u128 {
-        self.client.get_gas_price().await.unwrap().as_u128()
+        self.client.get_gas_price().await.unwrap()
     }
 
     pub async fn eth_get_block_by_number(&self, block_number: Option<String>) -> Block<TxHash> {
@@ -336,7 +367,7 @@ impl TestClient {
 
     pub async fn eth_call(
         &self,
-        tx: TypedTransaction,
+        tx: TransactionRequest,
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
         self.rpc
             .request("eth_call", rpc_params![tx])
@@ -344,9 +375,9 @@ impl TestClient {
             .map_err(|e| e.into())
     }
 
-    pub async fn eth_estimate_gas(&self, tx: TypedTransaction) -> u64 {
-        let gas = self.client.estimate_gas(&tx, None).await.unwrap();
-        gas.as_u64()
+    pub async fn eth_estimate_gas(&self, tx: TransactionRequest) -> u64 {
+        let gas = self.client.estimate_gas(tx).await.unwrap();
+        gas
     }
 
     pub async fn send_transactions_and_wait_slot<S: Spec, Rt: Runtime<S>>(
@@ -365,22 +396,22 @@ impl TestClient {
         Ok(())
     }
 
-    pub async fn send_eth(&self, reciever: H160, eth_value: u128) -> PendingTransaction<'_, Http> {
+    pub async fn send_eth(
+        &self,
+        reciever: Address,
+        eth_value: u128,
+    ) -> PendingTransactionBuilder<Ethereum> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
         tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
 
+        let value = U256::from(eth_value);
         let req = self
             .default_request()
             .nonce(nonce)
             .to(reciever)
-            .value(eth_value);
+            .value(value);
 
-        let typed_transaction = TypedTransaction::Eip1559(req);
-
-        self.client
-            .send_transaction(typed_transaction, None)
-            .await
-            .unwrap()
+        self.client.send_transaction(req).await.unwrap()
     }
 
     pub async fn receipt(&self, hash: TxHash) -> Option<TransactionReceipt> {
@@ -388,10 +419,10 @@ impl TestClient {
     }
 
     pub async fn transaction(&self, hash: TxHash) -> Option<Transaction> {
-        self.client.get_transaction(hash).await.unwrap()
+        self.client.get_transaction_by_hash(hash).await.unwrap()
     }
 
     pub async fn block_number(&self) -> u64 {
-        self.client.get_block_number().await.unwrap().as_u64()
+        self.client.get_block_number().await.unwrap()
     }
 }
