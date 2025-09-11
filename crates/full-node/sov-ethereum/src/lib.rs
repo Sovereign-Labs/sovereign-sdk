@@ -4,6 +4,7 @@ use std::convert::Infallible;
 use std::sync::Arc;
 
 use alloy_primitives::{B256, U256};
+
 use jsonrpsee::types::{ErrorCode, ErrorObjectOwned};
 use jsonrpsee::RpcModule;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -62,6 +63,12 @@ where
         ready(Ok::<_, Infallible>(U256::ZERO))
     })?;
     rpc.register_async_method("eth_sendRawTransaction", handlers::eth_send_raw_transaction)?;
+    rpc.register_subscription(
+        "eth_subscribe",
+        "eth_subscription",
+        "eth_unsubscribe",
+        handlers::eth_subscribe,
+    )?;
 
     #[cfg(feature = "local")]
     {

@@ -9,7 +9,7 @@ use ethers::core::types::{Block, Eip1559TransactionRequest, TransactionRequest, 
 use ethers::core::types::{Transaction, TransactionReceipt};
 use ethers::middleware::signer::SignerMiddlewareError;
 use ethers::middleware::SignerMiddleware;
-use ethers::providers::{Http, Middleware, PendingTransaction, Provider, Ws};
+use ethers::providers::{Http, Middleware, PendingTransaction, Provider, SubscriptionStream, Ws};
 use ethers::signers::Wallet;
 use ethers::types::Log;
 use futures::StreamExt;
@@ -41,14 +41,49 @@ impl TestClient {
         contract: SimpleStorageContract,
         http_addr: std::net::SocketAddr,
     ) -> Self {
-        let provider =
-            Provider::try_from(&format!("http://127.0.0.1:{}/rpc", http_addr.port())).unwrap();
+        use alloy::providers::ProviderBuilder;
+        use alloy::providers::{Provider, RootProvider};
 
+        use alloy::rpc::types::Filter;
+
+        let conn_str = &format!("ws://127.0.0.1:{}/rpc", http_addr.port());
+        let pppp: RootProvider = ProviderBuilder::default().connect(conn_str).await.unwrap();
+        /*
+
+        let sub_id = pppp
+            .raw_request("eth_subscribe".into(), ["newHeads"])
+            .await
+            .unwrap();*/
+        //let stream: Subscription<AlloyBlock> = provider.get_subscription(sub_id).await.unwrap();
+
+        let filter = Filter::new();
+        let mut logs_sub = pppp.subscribe_logs(&filter).await.unwrap();
+
+        println!("WAIT");
+        let x = logs_sub.recv().await.unwrap();
+        println!("{:?}", x);
+        //println!("sub_id {:?}", sub_id);
+
+        /*
         let provider_ws =
             Provider::<Ws>::connect(&format!("ws://127.0.0.1:{}/rpc", http_addr.port()))
                 .await
                 .unwrap();
 
+        println!("====X11111");
+        use ethers::types::Filter;
+        let filter = Filter::new();
+
+        //let params = [logs];
+        //let id: U256 = provider_ws.request("eth_subscribe", params).await.unwrap();
+        let mut sub = provider_ws.subscribe_logs(&filter).await.unwrap();
+        println!("XWWWWW");
+        let _ = sub.next().await;
+
+        println!("X2222");
+        */
+
+        /*
         let client = SignerMiddleware::new_with_provider_chain(provider_ws, key)
             .await
             .unwrap();
@@ -70,6 +105,8 @@ impl TestClient {
             node_client,
             rpc,
         }
+        */
+        todo!()
     }
 
     fn default_request(&self) -> Eip1559TransactionRequest {
@@ -395,9 +432,12 @@ impl TestClient {
         self.client.get_block_number().await.unwrap().as_u64()
     }
 
-    pub async fn xxx(&self) {
+    pub async fn subscribe_logs<'a>(&'a self) -> SubscriptionStream<'a, Ws, Log> {
         use ethers::types::Filter;
         let filter = Filter::new();
-        let sub = self.client.subscribe_logs(&filter).await.unwrap();
+        println!("X1");
+        let x = self.client.subscribe_logs(&filter).await.unwrap();
+        println!("X2");
+        x
     }
 }

@@ -21,3 +21,6 @@ sov-cli = { workspace = true }
 sov-modules-api = { workspace = true }
 sov-test-utils = { workspace = true }
 tracing = { workspace = true }
+
+
+alloy = { version = "1", features = ["full"] }

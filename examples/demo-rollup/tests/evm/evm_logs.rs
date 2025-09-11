@@ -1,10 +1,17 @@
 use super::evm_test_helper;
 use crate::evm::evm_test_helper::setup;
+use futures::StreamExt;
 use sov_test_utils::SimpleStorageContract;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_logs() {
     let (test_rollup, evm_client, _, _) = setup(0).await;
+
+    let mut sub = evm_client.subscribe_logs().await;
+
+    // println!("WAIT===")
+    let l = sub.next().await.unwrap();
+
     let contract_address = evm_test_helper::deploy_contract_check(&evm_client)
         .await
         .unwrap();

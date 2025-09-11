@@ -1,9 +1,15 @@
 use std::sync::Arc;
+use std::time::Duration;
 
+use alloy_primitives::Address;
 use alloy_primitives::{Bytes, B256};
 
+use jsonrpsee::core::params;
+use jsonrpsee::core::JsonRawValue;
 use jsonrpsee::types::{ErrorObjectOwned, Params};
 use jsonrpsee::Extensions;
+use jsonrpsee::PendingSubscriptionSink;
+use reth_primitives::LogData;
 use sov_address::{EthereumAddress, FromVmAddress};
 
 pub use sov_evm::EthereumAuthenticator;
@@ -155,4 +161,94 @@ where
     })?;
 
     Ok(tx_hash)
+}
+
+use alloy_rpc_types::pubsub::SubscriptionResult;
+use alloy_rpc_types::Log;
+use jsonrpsee::SubscriptionCloseResponse;
+use jsonrpsee::SubscriptionMessage;
+
+pub async fn eth_subscribe<S, Seq>(
+    params: Params<'static>,
+    pending: PendingSubscriptionSink,
+    ethereum: Arc<Ethereum<S, Seq>>,
+    _: Extensions,
+) -> jsonrpsee::core::SubscriptionResult
+where
+    S: Spec,
+    Seq: Sequencer<Spec = S>,
+    S::Address: FromVmAddress<EthereumAddress>,
+    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
+{
+    let sink = pending.accept().await?;
+
+    let task = tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+
+            let log = Log {
+                inner: alloy_primitives::Log {
+                    address: Address::parse_checksummed(
+                        "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+                        None,
+                    )
+                    .unwrap(),
+
+                    data: LogData::new_unchecked(vec![], Default::default()),
+                },
+                block_hash: None,
+                block_number: None,
+                block_timestamp: None,
+                transaction_hash: None,
+                transaction_index: None,
+                log_index: None,
+                removed: false,
+            };
+
+            let msg =
+                SubscriptionMessage::new(sink.method_name(), sink.subscription_id(), &log).unwrap();
+
+            sink.send(msg).await.unwrap();
+        }
+    });
+
+    /*
+    match pending.accept().await {
+        Ok(sink) => {
+            /*
+            let log = Log {
+                inner: alloy_primitives::Log {
+                    address: Address::parse_checksummed(
+                        "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+                        None,
+                    )
+                    .unwrap(),
+
+                    data: LogData::new_unchecked(vec![], Default::default()),
+                },
+                block_hash: None,
+                block_number: None,
+                block_timestamp: None,
+                transaction_hash: None,
+                transaction_index: None,
+                log_index: None,
+                removed: false,
+            };
+
+            */
+            //let msg =
+            //    SubscriptionMessage::new(sink.method_name(), sink.subscription_id(), &22).unwrap();
+
+            //   sink.send(msg).await.unwrap();
+
+            //todo!("xxx")
+        }
+        Err(_) => todo!("yyyyy"),
+    }*/
+
+    println!("loool");
+
+    Ok(())
+
+    // Ok(())
 }

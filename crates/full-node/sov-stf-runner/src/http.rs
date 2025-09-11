@@ -356,6 +356,8 @@ mod tests {
             .subscribe::<u64, [u8; 0]>(RPC_SUBSCRIBE_METHOD, [], RPC_UNSUBSCRIBE_METHOD)
             .await?;
 
+        println!("subscription: {:?}", subscription.kind());
+
         let numbers = tokio::time::timeout(std::time::Duration::from_secs(3), async {
             let mut numbers: Vec<u64> = vec![];
             for _ in 0..10 {
