@@ -118,8 +118,9 @@ impl<'a, S: Spec> KernelStateAccessor<'a, S> {
 
         Self {
             checkpoint,
-            read_direct_from_storage: false,
             true_slot_num,
+            #[cfg(feature = "native")]
+            read_direct_from_storage: false,
         }
     }
     /// Configures the accessor to read directly from storage at the given slot number, bypassing the state checkpoint.
