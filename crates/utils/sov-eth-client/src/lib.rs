@@ -33,6 +33,8 @@ pub struct TestClient {
     rpc: WsClient,
 }
 
+use alloy_network::EthereumWallet;
+
 impl TestClient {
     pub async fn new(
         chain_id: u64,
@@ -46,8 +48,16 @@ impl TestClient {
 
         use alloy::rpc::types::Filter;
 
+        let signer: EthereumWallet = accounts[0].clone().into();
+
+        let xxx = alloy_provider::ProviderBuilder::new()
+            .wallet(key)
+            .connect(conn_str)
+            .await
+            .unwrap();
+
         let conn_str = &format!("ws://127.0.0.1:{}/rpc", http_addr.port());
-        let pppp: RootProvider = ProviderBuilder::default().connect(conn_str).await.unwrap();
+        let provider: RootProvider = ProviderBuilder::default().connect(conn_str).await.unwrap();
         /*
 
         let sub_id = pppp
@@ -57,7 +67,7 @@ impl TestClient {
         //let stream: Subscription<AlloyBlock> = provider.get_subscription(sub_id).await.unwrap();
 
         let filter = Filter::new();
-        let mut logs_sub = pppp.subscribe_logs(&filter).await.unwrap();
+        let mut logs_sub = provider.subscribe_logs(&filter).await.unwrap();
 
         println!("WAIT");
         let x = logs_sub.recv().await.unwrap();
