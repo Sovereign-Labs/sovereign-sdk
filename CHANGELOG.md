@@ -1,3 +1,6 @@
+# 2025-09-11
+- #1669 Account for sequencer gas in EVM transaction receipts. EVM transaction receipts now properly reflect the sequencer gas consumed during execution.
+
 # 2025-09-09
 - #1646 Implements `eth_estimateGas` RPC method for the EVM module. This allows clients to estimate the gas required for transaction execution before submitting them to the network.
 - #1650 Adds an optional `state_cache_size` param to the `storage` section of the rollup config.toml file. 
