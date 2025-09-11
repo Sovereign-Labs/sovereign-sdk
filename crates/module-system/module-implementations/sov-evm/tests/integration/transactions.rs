@@ -58,13 +58,12 @@ fn test_evm_gas_usage() {
         let (receipt, _) = runner.execute(transfer);
         receipt.last_batch_receipt().inner.gas_used.clone()
     };
-    const BASE_EVM_GAS: u64 = 0;
     assert_eq!(
         gas_used_with_evm_metering
             .checked_sub(&gas_used_without_evm_metering)
             .unwrap()
             .as_ref(),
-        &[BASE_EVM_GAS, 0]
+        &[25_504, 0]
     );
 }
 

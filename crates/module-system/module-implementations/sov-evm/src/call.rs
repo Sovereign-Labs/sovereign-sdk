@@ -156,7 +156,11 @@ where
                 .expect("Impossible happened: Log index overflow.")
         });
         let is_success = result.is_success();
-        let gas_used = result.gas_used();
+        let evm_gas_used = result.gas_used();
+        let gas_meter = state.try_as_basic_gas_meter().unwrap();
+        let sequencer_gas_used =
+            gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
+        let gas_used = sequencer_gas_used + evm_gas_used;
         let logs = result.into_logs();
         tracing::debug!(
             hash = hex::encode(tx.signed_transaction.hash()),
