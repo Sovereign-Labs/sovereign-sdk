@@ -379,13 +379,7 @@ where
 
         match latest_finalized_sequence_number(latest_state_info, &mut runtime) {
             Some(num) => {
-                // TODO(@neysofu): somehow, if we prune too close to the latest
-                // finalized sequence number, we get panics due to missing blobs
-                // and inconsistent state. There is clearly something wrong with
-                // the pruning height calculation height.
-                if let Some(num) = num.checked_sub(100) {
-                    self.executor_events_sender.prune(num).await;
-                }
+                self.executor_events_sender.prune(num).await;
             }
             None => {
                 // Nothing to prune because there's no sequence number history.
@@ -1362,6 +1356,16 @@ where
         let condition_nodes_sequence_number_is_fresher =
             next_sequence_number_according_to_node > next_sequence_number;
 
+        // There's an edge case on restart where the node hasn't synced to the chain tip yet but doesn't know it. We can check for it by seeing
+        // if the first batch to replay has a sequencer number that's more than 1 greater than the node's sequence number (because sequence numbers are contiguous, and
+        // we only prune a blob from the sequencer DB after it's been finalized on DA - so that blob must already exist on DA and the node just doesn't know that it isn't synced).
+        let oldest_unfinalized_sequence_number = batches_to_replay
+            .first()
+            .map(|b: &PreferredBatchToReplay| b.batch.inner.sequence_number);
+        let condition_node_is_unsynced_and_doesnt_know_it = (next_sequence_number_according_to_node
+            .saturating_add(1))
+            < oldest_unfinalized_sequence_number.unwrap_or(0);
+
         // Once we're this close to `deferred_slots_count`, we risk crossing the
         // `deferred_slots_count` threshold before the next call to
         // `update_state`. That's no good.
@@ -1388,9 +1392,10 @@ where
             condition_too_close_to_deferred_slots_count_for_comfort,
             condition_node_is_lagging,
             condition_are_there_batches_to_replay,
+            condition_node_is_unsynced_and_doesnt_know_it,
         ) {
-            (true, _, _, true) => PreferredSeqOperation::Unreachable,
-            (true, _, false, false) => {
+            (true, _, _, true, _) => PreferredSeqOperation::Unreachable,
+            (true, _, false, false, _) => {
                 warn!("The node has a higher sequence number than the sequencer, but we're very close to the chain tip, i.e. we don't expect to be simply syncing. This could mean there is another preferred sequencer running (which is not supported and will likely lead to issues), or you very recently restarted the node and there's still some in-flight blobs. Resyncing to the chain tip.");
                 inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
                     target_da_height: sync_status.target_da_height(),
@@ -1398,7 +1403,7 @@ where
                 });
                 PreferredSeqOperation::WaitForNodeResyncToTip
             }
-            (_, _, true, _) => {
+            (_, _, true, _, _) => {
                 warn!(?distance, "The sequencer must pause because the node has lagged behind the DA blockchain. This might lead to a brief downtime for users.");
                 inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
                     target_da_height: sync_status.target_da_height(),
@@ -1406,13 +1411,24 @@ where
                 });
                 PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack
             }
-            (false, true, false, _) => {
+            (false, true, false, _, _) => {
                 error!(slot_number_according_to_node=%info.slot_number, %current_visible_slot_number, "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Normal operation will be suspended until this can be remedied.");
                 inner.trigger_recovery(info).await;
 
                 PreferredSeqOperation::RecoverAndCatchUp
             }
-            (false, false, false, _) => {
+            // Node is out of sync and doesn't know it. This is a rare edge case after a DB wipe.
+            (_, _, _, _, true) => {
+                // Check for this condition after all of the normal "out-of-sync" conditions have been checked, because it may be possible for other unsynced conditions to trip this check
+                // and we'd rather report the real root cause if there's a different one.
+                warn!("The node is unsynced and doesn't know it. This probably means that you wiped the node DB and are resyncing.");
+                inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
+                    target_da_height: sync_status.target_da_height(),
+                    synced_da_height: sync_status.synced_da_height(),
+                });
+                PreferredSeqOperation::WaitForNodeResyncToTip
+            }
+            (false, false, false, _, _) => {
                 let should_flush_tx_cache = is_startup || is_resync || is_recover;
 
                 // We only need to replay the transactions in the edge cases where the event/tx cache needs repopulating.
