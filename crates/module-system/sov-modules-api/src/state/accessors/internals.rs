@@ -90,6 +90,81 @@ impl<S: Storage> Delta<S> {
         }
     }
 
+    #[cfg(feature = "native")]
+    pub(super) fn sequencer_only_get_accesses_and_changes_after(
+        &mut self,
+        storage_height: u64,
+        rollup_height: u64,
+    ) -> (StateAccesses, ChangeSet) {
+        // We need the state accesses after the storage height and the changes after (including) the new rollup height
+
+        use sov_state::OrderedReadsAndWrites;
+        let mut user_writes = Vec::new();
+        let mut changeset = Vec::new();
+        self.user_cache.commit_revertable_storage_cache();
+        self.user_cache.get_writes().for_each(|(k, (h, v))| {
+            if h > storage_height {
+                user_writes.push((k.clone(), v.cloned()));
+            }
+            if h >= rollup_height {
+                changeset.push(((k.clone(), Namespace::User), (h, v.cloned())));
+            }
+        });
+
+        let mut kernel_writes = Vec::new();
+        self.kernel_cache.commit_revertable_storage_cache();
+        self.kernel_cache.get_writes().for_each(|(k, (h, v))| {
+            if h > storage_height {
+                kernel_writes.push((k.clone(), v.cloned()));
+            }
+            if h >= rollup_height {
+                changeset.push(((k.clone(), Namespace::Kernel), (h, v.cloned())));
+            }
+        });
+        self.accessory_writes.iter().for_each(|(k, w)| {
+            if w.at_rollup_height >= rollup_height {
+                changeset.push((
+                    (k.clone(), Namespace::Accessory),
+                    (w.at_rollup_height, w.value.clone()),
+                ));
+            }
+        });
+        (
+            StateAccesses {
+                user: OrderedReadsAndWrites {
+                    ordered_reads: Vec::new(),
+                    ordered_writes: user_writes,
+                },
+                kernel: OrderedReadsAndWrites {
+                    ordered_reads: Vec::new(),
+                    ordered_writes: kernel_writes,
+                },
+            },
+            ChangeSet { changes: changeset },
+        )
+    }
+
+    #[cfg(feature = "native")]
+    pub(super) fn sequencer_only_take_accessory_delta(
+        &mut self,
+        rollup_height: u64,
+    ) -> AccessoryDelta<S> {
+        AccessoryDelta {
+            writes: std::mem::take(&mut self.accessory_writes),
+            storage: self.inner.clone(),
+            metrics: StateMetrics::default(),
+            rollup_height,
+        }
+    }
+
+    #[cfg(feature = "native")]
+    pub(super) fn sequencer_only_replace_accessory_delta(
+        &mut self,
+        accessory_delta: AccessoryDelta<S>,
+    ) {
+        self.accessory_writes = accessory_delta.writes;
+    }
+
     pub(super) fn freeze(
         self,
         rollup_height: u64,
