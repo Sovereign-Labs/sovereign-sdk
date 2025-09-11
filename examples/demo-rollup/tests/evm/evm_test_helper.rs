@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use crate::test_helpers::test_genesis_source;
 
-use ethereum_types::Address;
+use alloy::primitives::Address;
 use futures::future::join_all;
 use sov_demo_rollup::MockRollupSpec;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
@@ -66,13 +66,8 @@ pub(crate) async fn deploy_contract_check(
 ) -> Result<Address, Box<dyn std::error::Error>> {
     let runtime_code = client.deploy_contract_call().await?;
 
-    let deploy_contract_req = client.deploy_contract().await?;
-
-    let contract_address = deploy_contract_req
-        .await?
-        .unwrap()
-        .contract_address
-        .unwrap();
+    let deploy_contract_req = client.deploy_contract().await;
+    let contract_address = deploy_contract_req.contract_address.unwrap();
 
     // Assert contract deployed correctly
     let code = client.eth_get_code(contract_address).await;
@@ -130,7 +125,7 @@ pub(crate) async fn set_multiple_values_check(
     let requests = client.set_values(contract_address, values).await;
 
     let receipts: Vec<Result<Option<_>, _>> = join_all(requests).await;
-    assert!(receipts
+    assert!(requests
         .into_iter()
         .all(|x| x.is_ok() && x.unwrap().is_some()));
 

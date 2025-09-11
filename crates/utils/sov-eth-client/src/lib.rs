@@ -1,6 +1,7 @@
 #![allow(missing_docs)]
 
 use ethers::core::types::Block;
+use ethers::types::Res;
 use futures::StreamExt;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
@@ -11,13 +12,14 @@ use sov_test_utils::SimpleStorageContract;
 
 use alloy::network::Ethereum;
 use alloy::network::EthereumWallet;
-use alloy::providers::PendingTransactionBuilder;
+use alloy::primitives::U256;
 use alloy::providers::Provider as AlloyProvider;
 use alloy::providers::ProviderBuilder;
 use alloy::providers::{
     fillers::{ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller, WalletFiller},
     Identity, RootProvider,
 };
+use alloy::providers::{PendingTransactionBuilder, PendingTransactionError};
 use alloy::rpc::types::eth::transaction::TransactionRequest;
 use alloy::rpc::types::eth::Transaction;
 use alloy::rpc::types::eth::TransactionReceipt;
@@ -25,7 +27,6 @@ use alloy::rpc::types::TransactionInput;
 use alloy::signers::local::PrivateKeySigner;
 use alloy::transports::TransportResult;
 use alloy_primitives::TxHash;
-use alloy_primitives::U256;
 use alloy_primitives::{Address, Bytes};
 
 type PubsubSigner = FillProvider<
@@ -136,11 +137,18 @@ impl TestClient {
         req
     }
 
-    pub async fn deploy_contract(&self) -> TransportResult<PendingTransactionBuilder<Ethereum>> {
+    pub async fn deploy_contract(&self) -> TransactionReceipt {
         let typed_transaction = self.make_eip1559_tx(0, None, Some(self.contract.byte_code()));
-        let receipt_req = self.client.send_transaction(typed_transaction).await?;
+        let rec = self
+            .client
+            .send_transaction(typed_transaction)
+            .await
+            .unwrap()
+            .get_receipt()
+            .await
+            .unwrap();
 
-        Ok(receipt_req)
+        rec
     }
 
     pub async fn deploy_contract_call(&self) -> Result<Bytes, Box<dyn std::error::Error>> {
@@ -197,7 +205,7 @@ impl TestClient {
         &self,
         contract_address: Address,
         set_arg: u32,
-    ) -> PendingTransactionBuilder<Ethereum> {
+    ) -> Result<TransactionReceipt, PendingTransactionError> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
         tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
 
@@ -211,6 +219,7 @@ impl TestClient {
             .send_transaction(typed_transaction)
             .await
             .unwrap()
+            .watch()
     }
 
     pub async fn emit_one_log(

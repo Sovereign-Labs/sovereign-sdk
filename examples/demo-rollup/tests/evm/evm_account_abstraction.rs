@@ -1,7 +1,8 @@
 use crate::evm::evm_test_helper::{self};
 use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
+use alloy::primitives::U256;
+use alloy_primitives::Address;
 use demo_stf::runtime::{Runtime, RuntimeCall};
-use ethereum_types::Address;
 use sov_eth_client::TestClient;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
@@ -70,7 +71,7 @@ async fn execute_evm_tests(client: &TestClient) -> Result<(), Box<dyn std::error
 
     // Balance should be > 0 in genesis
     let balance = client.eth_get_balance(client.from_addr).await;
-    assert!(balance > ethereum_types::U256::zero());
+    assert!(balance > U256::from(0u64));
 
     let contract_address = evm_test_helper::deploy_contract_check(client).await?;
 

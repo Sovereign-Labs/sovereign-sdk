@@ -28,7 +28,7 @@ async fn evm_test_logs() {
 
     test_rollup.wait_for_next_blocks(1).await;
     let rec = evm_client.receipt(tx_hash).await.unwrap();
-    let log = rec.logs.first().unwrap();
+    let log = rec.logs().first().unwrap();
 
     let contract_log = SimpleStorageContract::parse_simple_log(log.clone());
 
