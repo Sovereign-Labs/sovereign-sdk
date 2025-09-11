@@ -15,7 +15,7 @@ struct SimpleLog {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_logs() {
-    let (test_rollup, evm_client, _, _) = setup(0).await;
+    let (test_rollup, evm_client, _) = setup(0).await;
     let contract_address = evm_test_helper::deploy_contract_check(&evm_client)
         .await
         .unwrap();

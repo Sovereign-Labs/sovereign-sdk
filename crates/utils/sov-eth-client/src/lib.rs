@@ -11,6 +11,7 @@ use ethers::middleware::signer::SignerMiddlewareError;
 use ethers::middleware::SignerMiddleware;
 use ethers::providers::{Http, Middleware, PendingTransaction, Provider};
 use ethers::signers::Wallet;
+use ethers::signers::{LocalWallet, Signer};
 use futures::StreamExt;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
@@ -35,14 +36,18 @@ pub struct TestClient {
 impl TestClient {
     pub async fn new(
         chain_id: u64,
-        key: Wallet<SigningKey>,
-        from_addr: Address,
+        private_key: &str,
         contract: SimpleStorageContract,
         http_addr: std::net::SocketAddr,
     ) -> Self {
+        let key = private_key
+            .parse::<LocalWallet>()
+            .unwrap()
+            .with_chain_id(chain_id);
+
         let provider =
             Provider::try_from(&format!("http://127.0.0.1:{}/rpc", http_addr.port())).unwrap();
-        let client = SignerMiddleware::new_with_provider_chain(provider, key)
+        let client = SignerMiddleware::new_with_provider_chain(provider, key.clone())
             .await
             .unwrap();
 
@@ -57,7 +62,7 @@ impl TestClient {
 
         Self {
             chain_id,
-            from_addr,
+            from_addr: key.address(),
             contract,
             client,
             node_client,
