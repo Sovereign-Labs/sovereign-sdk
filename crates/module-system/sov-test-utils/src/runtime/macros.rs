@@ -124,7 +124,7 @@ macro_rules! generate_runtime_without_capabilities {
                 static SCHEMA: OnceLock<::sov_modules_api::sov_universal_wallet::schema::Schema> = OnceLock::new();
 
                 SCHEMA.get_or_init(|| {
-                    ::sov_modules_api::sov_universal_wallet::schema::Schema::of_single_type::<()>().unwrap()
+                    ::sov_modules_api::sov_universal_wallet::schema::Schema::default()
                 })
             }
 
