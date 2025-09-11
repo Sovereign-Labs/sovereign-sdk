@@ -82,16 +82,17 @@ where
                     );
                     anyhow::bail!("EVM execution error: {:?}", &result);
                 }
-                self.get_receipt(&transaction, result, state)?
+                let receipt = self.get_receipt(&transaction, result, state)?;
+                state.charge_linear_gas(
+                    &<S as GasSpec>::gas_to_charge_per_evm_gas(),
+                    gas_used as u32,
+                )?;
+                receipt
             }
             Err(err) => {
                 return self.handle_execution_error(transaction.signed_transaction.hash(), err)
             }
         };
-        state.charge_linear_gas(
-            &<S as GasSpec>::gas_to_charge_per_evm_gas(),
-            receipt.gas_used as u32,
-        )?;
 
         let pending_transaction = PendingTransaction::new(transaction, receipt);
         self.pending_transactions
@@ -156,11 +157,10 @@ where
                 .expect("Impossible happened: Log index overflow.")
         });
         let is_success = result.is_success();
-        let evm_gas_used = result.gas_used();
         let gas_meter = state.try_as_basic_gas_meter().unwrap();
         let sequencer_gas_used =
             gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
-        let gas_used = sequencer_gas_used + evm_gas_used;
+        let gas_used = sequencer_gas_used + result.gas_used();
         let logs = result.into_logs();
         tracing::debug!(
             hash = hex::encode(tx.signed_transaction.hash()),
