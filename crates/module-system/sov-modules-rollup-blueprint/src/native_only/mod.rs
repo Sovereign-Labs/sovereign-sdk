@@ -43,7 +43,7 @@ use sov_stf_runner::{
 use tokio::signal::unix::SignalKind;
 use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
-use tracing::info;
+use tracing::{info, warn};
 pub use wallet::*;
 
 use crate::RollupBlueprint;
@@ -334,6 +334,18 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     rollup_genesis_height = rollup_config.runner.genesis_height,
                     "Rollup state is empty, performing genesis initialization. Requesting genesis DA block"
                 );
+                if rollup_config.sequencer.is_preferred_sequencer() {
+                    warn!(
+                        "\n\n\
+                        You're running with the ultra-low latency soft-confirmations mode. \
+                        This mode is part of the Sovereign Permissionless Commercial License. \
+                        Any revenue generated during a transaction processed via the preferred \
+                        sequencer is subject to the revenue share agreement. You can read more \
+                        about how to integrate the revenue share module properly here:  \
+                        https://github.com/Sovereign-Labs/sovereign-sdk/tree/nightly/crates/module-system/module-implementations/sov-revenue-share
+                        \n\n"
+                    );
+                }
                 let rollup_genesis_block = da_service
                     .get_block_at(rollup_config.runner.genesis_height)
                     .await?;

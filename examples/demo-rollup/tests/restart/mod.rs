@@ -121,6 +121,10 @@ async fn start_stop_empty(
             "The sequencer must pause because the node has lagged behind the DA blockchain. This might lead to a brief downtime for users.".to_string()
         ),
         (Level::WARN, "Skipping pruning of sequence number because it's already been pruned".to_string()),
+        (
+            Level::WARN,
+            "\n\nYou're running with the ultra-low latency soft-confirmations mode. This mode is part of the Sovereign Permissionless Commercial License. Any revenue generated during a transaction processed via the preferred sequencer is subject to the revenue share agreement. You can read more about how to integrate the revenue share module properly here:  https://github.com/Sovereign-Labs/sovereign-sdk/tree/nightly/crates/module-system/module-implementations/sov-revenue-share\n                        \n\n".to_string()
+        ),
     ];
 
     let mut recorded_errors_warnings =
@@ -308,6 +312,10 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
         (
             Level::WARN,
             "Received error updating target height, stopping background task".to_string(),
+        ),
+        (
+            Level::WARN,
+            "\n\nYou're running with the ultra-low latency soft-confirmations mode. This mode is part of the Sovereign Permissionless Commercial License. Any revenue generated during a transaction processed via the preferred sequencer is subject to the revenue share agreement. You can read more about how to integrate the revenue share module properly here:  https://github.com/Sovereign-Labs/sovereign-sdk/tree/nightly/crates/module-system/module-implementations/sov-revenue-share\n                        \n\n".to_string()
         ),
     ];
     recorded_errors_warnings.retain(|e| !known.contains(e));
