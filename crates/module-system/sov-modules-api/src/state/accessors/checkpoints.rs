@@ -105,6 +105,8 @@ impl<S: Spec> StateCheckpoint<S> {
         let new_rollup_height = new_checkpoint.rollup_height;
         self.delta
             .replace_storage_and_prune(storage, new_rollup_height.get());
+        // Prune the temp cache
+        std::mem::take(&mut self.cache);
     }
 
     /// Creates a new [`StateCheckpoint`] instance without any changes, backed
