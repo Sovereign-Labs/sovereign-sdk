@@ -5,6 +5,8 @@ use alloy_rpc_types::{
     state::StateOverride, Block, BlockOverrides, BlockTransactions, FeeHistory, Log,
     ReceiptEnvelope, ReceiptWithBloom, Transaction, TransactionReceipt, TransactionRequest,
 };
+use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
+use alloy_rpc_types_trace::geth::GethTrace;
 use error::ensure_success;
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
@@ -359,6 +361,17 @@ where
         const RELATIVE_MARGIN: u64 = 100_000;
         let gas_used_with_margins = (total_gas_used * 3) / 2 + RELATIVE_MARGIN; // gas * 1.5 + 100_000
         Ok(U64::from(gas_used_with_margins))
+    }
+
+    /// Handler for: `debug_traceTransaction`
+    #[rpc_method(name = "traceTransaction")]
+    pub fn debug_trace_transaction(
+        &self,
+        _tx_hash: B256,
+        _opts: Option<GethDebugTracingOptions>,
+        _state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<GethTrace> {
+        todo!()
     }
 }
 

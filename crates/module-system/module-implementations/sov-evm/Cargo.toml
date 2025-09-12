@@ -54,6 +54,7 @@ alloy-consensus = { workspace = true, features = [
 ] }
 
 alloy-rpc-types = { workspace = true, optional = true }
+alloy-rpc-types-trace = { workspace = true, optional = true }
 digest = { workspace = true }
 sha2 = { workspace = true }
 revm = { workspace = true, features = [
@@ -120,6 +121,7 @@ arbitrary = [
 ]
 native = [
 	"alloy-rpc-types",
+	"alloy-rpc-types-trace",
 	"jsonrpsee",
 	"dep:rand",
 	"revm-inspector",
