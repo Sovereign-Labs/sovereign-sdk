@@ -5,6 +5,11 @@ use revm::{
     Inspector,
 };
 
+/// An Inspector that does nothing
+#[derive(Clone, Debug, Default)]
+pub struct PhantomInspector;
+impl<CTX> Inspector<CTX> for PhantomInspector where CTX: ContextTr {}
+
 /// An Inspector that erases the costs of storage access
 #[derive(Clone, Debug, Default)]
 pub struct UnmeteredStorageAccessInspector {
