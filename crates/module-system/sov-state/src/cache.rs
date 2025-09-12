@@ -122,6 +122,7 @@ mod internal {
         pub(crate) fn prune_up_to(&mut self, rollup_height: u64) {
             // We skip the expensive `retain` operation if the log is empty.
             // According to its docs, `retain` runs in O(capacity) time rather than O(len); If the map is already empty from `.clear()`, that could be expensive!
+            let keys_before = self.revertable_log.len() + self.log.len();
             if !self.revertable_log.is_empty() {
                 self.revertable_log.retain(|_, access| {
                     if let Access::Write {
@@ -151,6 +152,9 @@ mod internal {
                     }
                 });
             }
+
+            let keys_after = self.revertable_log.len() + self.log.len();
+            println!("Finished pruning storage up to height {rollup_height}. Keys before: {keys_before}, keys after: {keys_after}. Pruned {} keys", keys_before - keys_after);
         }
 
         // This method is used to take all the changeset from the cache. The `revertable_log`
