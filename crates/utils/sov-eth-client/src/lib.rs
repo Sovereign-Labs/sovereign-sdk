@@ -1,12 +1,12 @@
 #![allow(missing_docs)]
 
-use alloy::providers::Provider as _;
-use alloy::providers::ProviderBuilder;
-use alloy::providers::RootProvider;
-use alloy::pubsub::Subscription;
-use alloy::rpc::types::Filter;
-use alloy::rpc::types::Log;
 use alloy_primitives::Bytes;
+use alloy_provider::Provider as _;
+use alloy_provider::ProviderBuilder;
+use alloy_provider::RootProvider;
+use alloy_pubsub::Subscription;
+use alloy_rpc_types::Filter;
+use alloy_rpc_types::Log;
 use ethereum_types::H160;
 use ethers::core::abi::Address;
 use ethers::core::k256::ecdsa::SigningKey;
