@@ -1,11 +1,12 @@
-use std::sync::Arc;
-
+use alloy_primitives::Address;
 use alloy_primitives::{Bytes, B256};
-
+use alloy_rpc_types::Log;
 use jsonrpsee::types::{ErrorObjectOwned, Params};
 use jsonrpsee::Extensions;
+use jsonrpsee::PendingSubscriptionSink;
+use jsonrpsee::SubscriptionMessage;
+use reth_primitives::LogData;
 use sov_address::{EthereumAddress, FromVmAddress};
-
 pub use sov_evm::EthereumAuthenticator;
 #[cfg(feature = "local")]
 use sov_evm::Evm;
@@ -13,6 +14,8 @@ use sov_evm::RlpEvmTransaction;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::{RawTx, Spec};
 use sov_sequencer::Sequencer;
+use std::sync::Arc;
+use std::time::Duration;
 
 use crate::to_jsonrpsee_error_object;
 use crate::Ethereum;
@@ -155,4 +158,51 @@ where
     })?;
 
     Ok(tx_hash)
+}
+
+pub async fn eth_subscribe<S, Seq>(
+    _params: Params<'static>,
+    pending: PendingSubscriptionSink,
+    _ethereum: Arc<Ethereum<S, Seq>>,
+    _: Extensions,
+) -> jsonrpsee::core::SubscriptionResult
+where
+    S: Spec,
+    Seq: Sequencer<Spec = S>,
+    S::Address: FromVmAddress<EthereumAddress>,
+    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
+{
+    let sink = pending.accept().await?;
+
+    let _task = tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+
+            let log = Log {
+                inner: alloy_primitives::Log {
+                    address: Address::parse_checksummed(
+                        "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+                        None,
+                    )
+                    .unwrap(),
+
+                    data: LogData::new_unchecked(vec![], Default::default()),
+                },
+                block_hash: None,
+                block_number: None,
+                block_timestamp: None,
+                transaction_hash: None,
+                transaction_index: None,
+                log_index: None,
+                removed: false,
+            };
+
+            let msg =
+                SubscriptionMessage::new(sink.method_name(), sink.subscription_id(), &log).unwrap();
+
+            sink.send(msg).await.unwrap();
+        }
+    });
+
+    Ok(())
 }

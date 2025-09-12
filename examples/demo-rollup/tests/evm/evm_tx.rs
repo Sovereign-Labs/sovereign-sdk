@@ -18,7 +18,7 @@ async fn evm_tx_tests_non_instant_finality() -> anyhow::Result<()> {
 }
 
 async fn evm_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
-    let (test_rollup, test_client, _, _) = setup(finalization_blocks).await;
+    let (test_rollup, test_client, _) = setup(finalization_blocks).await;
 
     sanity_checks(&test_client).await;
     execute_evm_tests(&test_client, &test_rollup.da_service)
