@@ -1,7 +1,7 @@
 use crate::{
     db::commit::FallibleDatabaseCommit,
     get_spec_id,
-    sov_evm::{SovEvm, UnmeteredStorageAccessInspector},
+    sov_evm::{PhantomInspector, SovEvm, UnmeteredStorageAccessInspector},
     EvmRuntimeConfig,
 };
 use reth_revm::db::DBErrorMarker;
@@ -69,7 +69,8 @@ fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
         .with_db(db)
         .with_block(block_env)
         .with_cfg(cfg);
-    let inspector = UnmeteredStorageAccessInspector::new();
+    let unmetered_storage_inspector = UnmeteredStorageAccessInspector::new();
+    let inspector = (PhantomInspector, unmetered_storage_inspector);
     let mut evm = SovEvm::new(context, inspector);
     evm.inspect_tx(tx)
 }
