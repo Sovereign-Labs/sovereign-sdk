@@ -531,7 +531,6 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
             tracing::error!(
                 %blob_hash,
                 ?da_tx_id,
-                timer = ?start_time,
                 blob_processing_timeout = ?self.blob_processing_timeout,
                 ?elapsed,
                 "BlobSender: elapsed time for blob submission exceeded the resubmit interval.",

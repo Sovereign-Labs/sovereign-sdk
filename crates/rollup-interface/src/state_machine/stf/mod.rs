@@ -204,7 +204,7 @@ pub struct DiscardedBlob {
 
 /// The result of applying a slot to current state. We define a helpful alias [`ApplySlotOutput`]
 /// to make the type signature of [`StateTransitionFunction::apply_slot`] more readable. Unfortunately,
-/// since this type both depends on and appears in the defintion of the [`StateTransitionFunction`] trait,
+/// since this type both depends on and appears in the definition of the [`StateTransitionFunction`] trait,
 /// we have to use a type alias to avoid introducing an unneeded [`Sized`] bound.
 pub struct ApplySlotOutputInner<Root, ChangeSet, BR, PR, Witness> {
     /// Final state root after all blobs were applied

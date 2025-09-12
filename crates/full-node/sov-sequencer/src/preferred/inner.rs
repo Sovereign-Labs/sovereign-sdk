@@ -1713,7 +1713,7 @@ where
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
 
-        // Creates a new executor  for recovery. This must *not* be called to create executors
+        // Creates a new executor for recovery. This must *not* be called to create executors
         // under other circumstances, since it causes side effects on the transaction cache.
         let transaction_cache_write_handle = inner.tx_cache_writer.clone();
         let recovery_executor = RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(

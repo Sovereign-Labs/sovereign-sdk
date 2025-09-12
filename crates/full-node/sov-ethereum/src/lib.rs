@@ -66,6 +66,12 @@ where
         "realtime_sendRawTransaction",
         handlers::realtime_send_raw_transaction,
     )?;
+    rpc.register_subscription(
+        "_eth_subscribe",
+        "_eth_subscription",
+        "_eth_unsubscribe",
+        handlers::eth_subscribe,
+    )?;
 
     #[cfg(feature = "local")]
     {

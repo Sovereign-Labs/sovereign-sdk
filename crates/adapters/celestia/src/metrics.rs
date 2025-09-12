@@ -146,7 +146,7 @@ impl Metric for BlobSubmitMeasurement {
         if let Some(success_metrics) = &self.success_metrics {
             write!(
                 buffer,
-                ",status_code={},da_height={},gas_used={}",
+                ",status_code={},height={},gas_used={}",
                 success_metrics.response_code, success_metrics.da_height, success_metrics.gas_used,
             )?;
         }

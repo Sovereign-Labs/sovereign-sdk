@@ -78,7 +78,7 @@ impl<S: Spec> ValidatedBlob<S, BatchWithId<S>> {
         size += 1; // for the blob enum discriminant
         size += sender.as_ref().len();
         size += 33; // For the option discriminant and derived holder size
-        size += 12; // Account for serializing the blob length, the length of the sender field, and the length of the seqeuncer address if it's a proof
+        size += 12; // Account for serializing the blob length, the length of the sender field, and the length of the sequencer address if it's a proof
         size
     }
 }
