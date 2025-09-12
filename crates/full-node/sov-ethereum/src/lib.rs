@@ -62,6 +62,12 @@ where
         ready(Ok::<_, Infallible>(U256::ZERO))
     })?;
     rpc.register_async_method("eth_sendRawTransaction", handlers::eth_send_raw_transaction)?;
+    rpc.register_subscription(
+        "_eth_subscribe",
+        "_eth_subscription",
+        "_eth_unsubscribe",
+        handlers::eth_subscribe,
+    )?;
 
     #[cfg(feature = "local")]
     {
