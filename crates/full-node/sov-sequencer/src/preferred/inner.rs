@@ -588,12 +588,22 @@ where
     #[tracing::instrument(skip_all, level = "trace")]
     async fn close_current_batch(&mut self) {
         // Terminate the batch.
+        let start_end_rollup_block = std::time::Instant::now();
         self.executor.end_rollup_block().await;
+        let elapsed_end_rollup_block = start_end_rollup_block.elapsed();
+        if elapsed_end_rollup_block.as_millis() > 10 {
+            println!("Slow end rollup block. End rollup block took {}ms", elapsed_end_rollup_block.as_millis());
+        }
         self.batch_size_tracker = BatchSizeTracker::new(self.seq_config.max_batch_size_bytes);
+        let start_close_batch = std::time::Instant::now();
         let checkpoint = self
             .executor
             .checkpoint
             .clone_with_empty_witness_dropping_temp_cache();
+        let elapsed_close_batch = start_close_batch.elapsed();
+        if elapsed_close_batch.as_millis() > 10 {
+            println!("Slow close batch. Close batch took {}ms", elapsed_close_batch.as_millis());
+        }
         self.executor_events_sender.close_batch(checkpoint).await;
     }
 
@@ -1694,10 +1704,18 @@ where
         if !inner.is_replica() {
             inner.trigger_batch_production_if_convenient().await;
         }
+        let elapsed = start_prune.elapsed();
+        if elapsed.as_millis() > 10 {
+            println!("Slow trigger batch production. Trigger batch production took {}ms", elapsed.as_millis());
+        }
         inner.prune_sequencer_db().await;
         drop(inner);
 
         let prune_duration = start_prune.elapsed();
+        let prune_db_duration = prune_duration - elapsed;
+        if (prune_db_duration).as_millis() > 10 {
+            println!("Slow prune sequencer db. Prune sequencer db took {}ms", prune_duration.as_millis());
+        }
         let metrics = PreferredSequencerPruneMetrics {
             duration_ms: prune_duration.as_millis() as u64,
         };

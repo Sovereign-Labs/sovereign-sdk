@@ -96,6 +96,21 @@ impl<S: Spec> StateCheckpoint<S> {
         new_checkpoint.rollup_height
     }
 
+    /// Get the state accesses and changes after the storage height and the rollup height in a single iteration over the state checkpoint.
+    ///
+    /// The returned `StateAccesses` contains only the writes after the provided storage height and is *not* sorted, because this is all that's required to compute the next state root.
+    /// The returned `ChangeSet` contains the changes after (including) the requested rollup height. Changes from previous rollup heights are assumed to have already been
+    /// applied to the state checkpoint during a previous interation
+    #[cfg(feature = "native")]
+    pub fn sequencer_only_get_accesses_and_changes_after(
+        &mut self,
+        storage_height: u64,
+        rollup_height: u64,
+    ) -> (StateAccesses, ChangeSet) {
+        self.delta
+            .sequencer_only_get_accesses_and_changes_after(storage_height, rollup_height)
+    }
+
     /// Replaces the underlying storage and prunes...
     /// - Any writes older than or equal to the new rollup height
     /// - All reads
@@ -152,6 +167,25 @@ impl<S: Spec> StateCheckpoint<S> {
         let (state_accesses, accesory_delta, witness, _storage) =
             self.delta.freeze(self.rollup_height.get());
         (state_accesses, accesory_delta, witness)
+    }
+
+    /// Extracts ordered reads, writes, and witness from this [`StateCheckpoint`].
+    ///
+    /// Note that this data is moved **out** of the [`StateCheckpoint`] i.e. it can't be extracted twice.
+    #[cfg(feature = "native")]
+    pub fn sequencer_only_take_accessory_delta(&mut self) -> AccessoryDelta<S::Storage> {
+        self.delta
+            .sequencer_only_take_accessory_delta(self.rollup_height.get())
+    }
+
+    /// Replaces the current accessory delta with the given one.
+    #[cfg(feature = "native")]
+    pub fn sequencer_only_replace_accessory_delta(
+        &mut self,
+        accessory_delta: AccessoryDelta<S::Storage>,
+    ) {
+        self.delta
+            .sequencer_only_replace_accessory_delta(accessory_delta);
     }
 
     /// Extracts ordered reads, writes, and witness from this [`StateCheckpoint`] and uses

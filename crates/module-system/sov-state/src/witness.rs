@@ -29,6 +29,9 @@ pub trait Witness: Default + Serialize + DeserializeOwned {
 
     /// Returns true if the witness is empty.
     fn is_empty(&self) -> bool;
+
+    /// Returns the number of hints in the witness.
+    fn len(&self) -> usize;
 }
 
 /// A [`Vec`]-based implementation of [`Witness`] with no special logic.
@@ -74,5 +77,9 @@ impl Witness for ArrayWitness {
 
     fn is_empty(&self) -> bool {
         self.hints.lock().unwrap().is_empty()
+    }
+
+    fn len(&self) -> usize {
+        self.hints.lock().unwrap().len()
     }
 }

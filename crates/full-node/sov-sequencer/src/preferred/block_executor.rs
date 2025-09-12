@@ -17,7 +17,7 @@ use sov_modules_api::{
 };
 use sov_modules_stf_blueprint::{BatchReceipt, StfBlueprint};
 use sov_rest_utils::{json_obj, ErrorObject};
-use sov_state::{Namespace, StateAccesses, StateRoot, Storage};
+use sov_state::{StateRoot, Storage};
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::{oneshot, watch};
@@ -45,7 +45,7 @@ where
     pub execution_time_micros: u64,
 }
 
-type BlockExecutionOutput<S> = (Vec<BatchReceipt<S>>, ChangeSet, StateAccesses);
+type BlockExecutionOutput<S> = (Vec<BatchReceipt<S>>, StateCheckpoint<S>);
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum RollupBlockExecutorError<S: Spec> {
@@ -620,9 +620,14 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             .expect("No in-progress rollup block, nothing to do. This is a bug, please report it");
 
         let rollup_height = self.checkpoint.rollup_height_to_access();
-        let (batch_receipts, changes, state_accesses) = task_state.shutdown().await.expect(
+        let start_shutdown = std::time::Instant::now();
+        let (batch_receipts, mut dirty_checkpoint) = task_state.shutdown().await.expect(
             "Transaction acceptor task failed unexpectedly! This is a bug, please report it.",
         );
+        let elapsed_shutdown = start_shutdown.elapsed();
+        if elapsed_shutdown.as_millis() > 10 {
+            println!("Slow background task shutdown. Shutdown took {}ms", elapsed_shutdown.as_millis());
+        }
 
         let mut accepted_txs_by_batch = Vec::with_capacity(batch_receipts.len());
         for batch_receipt in batch_receipts {
@@ -642,12 +647,21 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         trace!(
             executor_id = %self.id,
             %rollup_height,
-            user_writes = %state_accesses.user.ordered_writes.len(),
-            kernel_writes = %state_accesses.kernel.ordered_writes.len(),
             "Sending state root computation request to background task");
         let (response_channel, response_receiver) = oneshot::channel();
         self.state_root_responses.push_back(response_receiver);
 
+        let storage_height = self
+            .checkpoint
+            .get_rollup_height_of_underlying_storage(&Rt::default().kernel());
+        // We need the state accesses after the storage height and the changes after (including) the new rollup height
+        let (state_accesses, new_changes) = dirty_checkpoint
+            .sequencer_only_get_accesses_and_changes_after(
+                storage_height.get(),
+                rollup_height.get(),
+            );
+
+        let start_send_state_root_request = std::time::Instant::now();
         if self
             .state_root_request_sender
             .send(StateRootComputeRequest {
@@ -662,8 +676,17 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         {
             tracing::info!(executor_id = %self.id, "State root computation background task has shutdown. State root will not be computed.");
         }
+        let elapsed_send_state_root_request = start_send_state_root_request.elapsed();
+        if elapsed_send_state_root_request.as_millis() > 10 {
+            println!("Slow send state root request. Send state root request took {}ms", elapsed_send_state_root_request.as_millis());
+        }
 
-        self.checkpoint.apply_changes(changes);
+        let start_apply_changes = std::time::Instant::now();
+        self.checkpoint.apply_changes(new_changes);
+        let elapsed_apply_changes = start_apply_changes.elapsed();
+        if elapsed_apply_changes.as_millis() > 10 {
+            println!("Slow apply changes. Apply changes took {}ms", elapsed_apply_changes.as_millis());
+        }
 
         trace!(%rollup_height, "Successfully ended rollup block");
     }
@@ -814,20 +837,14 @@ where
     );
 
     let updated_rollup_height = *state_update_notifier.borrow();
-    let mut changes = checkpoint.changes_after(updated_rollup_height.get());
-    let (mut accessory_delta, state_accesses, _witness) =
-        stf.materialize_accessory_state(&mut Default::default(), checkpoint);
+    let mut accessory_delta =
+        stf.materialize_accessory_state(&mut Default::default(), &mut checkpoint);
     accessory_delta.prune_changes_before(updated_rollup_height.get());
+    checkpoint.sequencer_only_replace_accessory_delta(accessory_delta);
 
-    changes.changes.extend(
-        accessory_delta
-            .freeze_with_height()
-            .into_iter()
-            .map(|(k, v)| ((k.clone(), Namespace::Accessory), v)),
-    );
     drop(shutdown_notifier);
 
-    (batch_receipts, changes, state_accesses)
+    (batch_receipts, checkpoint)
 }
 
 fn reject_reason_to_error(
