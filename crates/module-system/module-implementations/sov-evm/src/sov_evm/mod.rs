@@ -6,4 +6,4 @@ mod handler;
 mod inspector;
 
 pub use evm::SovEvm;
-pub use inspector::{PhantomInspector, UnmeteredStorageAccessInspector};
+pub use inspector::UnmeteredStorageAccessInspector;
