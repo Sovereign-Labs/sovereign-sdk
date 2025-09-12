@@ -71,6 +71,10 @@ use crate::rest_api::ApiAcceptedTx;
 use crate::{
     ProofBlobSender, SequencerConfig, SequencerNotReadyDetails, TxStatus, TxStatusManager,
 };
+use std::sync::atomic::AtomicBool;
+
+/// Whether the state update was triggered manually by the user.
+pub static MANUAL_STATE_UPDATE: AtomicBool = AtomicBool::new(false);
 
 type VisibleSlotNumberIncrease = NonZero<u8>;
 

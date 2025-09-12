@@ -1457,14 +1457,31 @@ where
                         ),
                     ))
                 } else {
-                    debug!(
-                        is_startup,
-                        is_resync,
-                        is_recover,
-                        ?info,
-                        "Skipping `replay_soft_confirmations_on_top_of_node_state`. Fast tracking info"
-                    );
-                    None
+                    if crate::preferred::MANUAL_STATE_UPDATE.swap(false, Ordering::Acquire) {
+                        debug!(
+                            is_startup,
+                            is_resync,
+                            is_recover,
+                            ?info,
+                            "Doing manual `replay_soft_confirmations_on_top_of_node_state`."
+                        );
+                        Some(Box::new(
+                            RollupBlockExecutor::<_, Rt>::new(
+                                info,
+                                inner.rollup_exec_config.clone(),
+                                inner.seq_config.clone(),
+                            ),
+                        ))
+                    } else {
+                        debug!(
+                            is_startup,
+                            is_resync,
+                            is_recover,
+                            ?info,
+                            "Skipping `replay_soft_confirmations_on_top_of_node_state`. Fast tracking info"
+                        );
+                        None
+                    }
                 };
 
                 PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
