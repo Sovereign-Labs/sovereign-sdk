@@ -1578,41 +1578,42 @@ where
     }
 
     async fn process_new_storage(&mut self, info: StateUpdateInfo<S::Storage>) {
+        let mut inner = self.get_inner_with_timing("update_state::fast_path").await;
         // Atomically swap in the new storage and prune the old one.
         let new_rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
             .rollup_height_to_access();
         // Notify the executor that the storage has been replaced so it can drop any writes that have now been persisted.
-        self.inner
+        inner
             .executor
             .state_update_notifier
             .send_replace(new_rollup_height);
-        self.inner
+        inner
             .executor
             .checkpoint
             .replace_storage_and_prune(info.storage.clone(), &Rt::default().kernel());
         tracing::info!("Storage has been replaced");
         // Update the `inner`'s state to reflect the new storage.
         // These steps should match `process_final_catchup` except for the need to drop the db_event_subscription.
-        self.inner.is_ready = Ok(());
-        self.inner.has_finished_startup = true;
-        self.inner.latest_info = info;
-        let checkpoint = self
-            .inner
+        inner.is_ready = Ok(());
+        inner.has_finished_startup = true;
+        inner.latest_info = info;
+        let checkpoint =
+            inner
             .executor
             .checkpoint
             .clone_with_empty_witness_dropping_temp_cache();
-        self.inner
+        inner
             .executor_events_sender
             .force_update_api_state(checkpoint)
             .await;
 
-        self.inner
+        inner
             .executor
             .state_roots
             .retain(|height, _| *height > new_rollup_height);
 
-        let info = &self.inner.latest_info;
-        self.inner.update_api_ledger(info).await;
+        let info = &inner.latest_info;
+        inner.update_api_ledger(info).await;
     }
 
     async fn process_final_catchup(
