@@ -66,7 +66,7 @@ where
         let cfg_env = get_cfg_env(&block_env, cfg, None);
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
-        let result = executor::transact_commit(evm_db, &block_env, tx_env, cfg_env);
+        let result = executor::transact_commit(evm_db, block_env, tx_env, cfg_env);
 
         let receipt = match result {
             Ok(result) => {
