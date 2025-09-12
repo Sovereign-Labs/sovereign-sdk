@@ -112,21 +112,11 @@ macro_rules! generate_runtime_without_capabilities {
             <Self as ::sov_modules_api::DispatchCall>::Decodable: $crate::sov_universal_wallet::schema::UniversalWallet,
             $($runtime_trait_impl_bounds)*
         {
+            const CHAIN_HASH: [u8; 32] = [11; 32];
 
             type GenesisConfig = <Self as ::sov_modules_api::Genesis>::Config;
             type GenesisInput = ();
             type Auth = $auth;
-
-            const CHAIN_HASH: [u8; 32] = [11; 32];
-
-            fn schema() -> &'static ::sov_modules_api::sov_universal_wallet::schema::Schema {
-                use std::sync::OnceLock;
-                static SCHEMA: OnceLock<::sov_modules_api::sov_universal_wallet::schema::Schema> = OnceLock::new();
-
-                SCHEMA.get_or_init(|| {
-                    ::sov_modules_api::sov_universal_wallet::schema::Schema::default()
-                })
-            }
 
             fn endpoints(api_state: sov_modules_api::rest::ApiState<S>) -> ::sov_modules_api::NodeEndpoints {
                 use $crate::sov_rollup_apis::endpoints::dedup::{DeDupEndpoint, SovereignDeDupEndpoint};

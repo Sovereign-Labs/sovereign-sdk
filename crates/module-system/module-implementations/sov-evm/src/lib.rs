@@ -34,7 +34,7 @@ use alloy_primitives::U256;
 use alloy_primitives::{Address, B256};
 pub use authenticate::{
     authenticate, decode_evm_tx, Eip712Authenticator, EthereumAuthenticator, EvmAuthenticator,
-    EvmAuthenticatorInput,
+    EvmAuthenticatorInput, SchemaProvider,
 };
 pub use reth_primitives::TransactionSigned;
 pub use revm::primitives::hardfork::SpecId;

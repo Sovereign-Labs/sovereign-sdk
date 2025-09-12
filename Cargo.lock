@@ -12053,6 +12053,7 @@ name = "sov-build"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "borsh",
  "serde",
  "serde_json",
  "sov-modules-api",
