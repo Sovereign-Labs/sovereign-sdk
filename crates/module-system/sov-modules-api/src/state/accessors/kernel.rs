@@ -66,7 +66,7 @@ pub struct KernelStateAccessor<'a, S: Spec> {
     /// The inner working set
     pub checkpoint: &'a mut StateCheckpoint<S>,
     pub(crate) true_slot_num: SlotNumber,
-    /// Whether to read directly with `read_direct_from_storage` override enabled. This is a bug in the sequencer. Please report it. instead of using the checkpoint
+    /// Whether to read directly from storage instead of using the checkpoint
     #[cfg(feature = "native")]
     read_direct_from_storage: bool,
 }
@@ -184,10 +184,10 @@ impl<S: Spec> UniversalStateAccessor for KernelStateAccessor<'_, S> {
             use sov_state::namespaces::{Kernel as KernelNamespace, User};
             use sov_state::NativeStorage;
             match namespace {
-                Namespace::User => self.checkpoint.delta.inner.get_historical::<User>(key, Some(self.true_slot_num), &Default::default()).expect("Failed to read user value with `read_direct_from_storage` override enabled. This is a bug in the sequencer. Please report it."),
-                Namespace::Kernel => self.checkpoint.delta.inner.get_historical::<KernelNamespace>(key, Some(self.true_slot_num), &Default::default()).expect("Failed to read kernel value with `read_direct_from_storage` override enabled. This is a bug in the sequencer. Please report it."),
-                Namespace::Accessory => self.checkpoint.delta.inner.get_accessory_historical(key, Some(self.true_slot_num)).expect("Failed to read accessory value with `read_direct_from_storage` override enabled. This is a bug in the sequencer. Please report it."),
-            }
+                Namespace::User => self.checkpoint.delta.inner.get_historical::<User>(key, Some(self.true_slot_num), &Default::default()),
+                Namespace::Kernel => self.checkpoint.delta.inner.get_historical::<KernelNamespace>(key, Some(self.true_slot_num), &Default::default()),
+                Namespace::Accessory => self.checkpoint.delta.inner.get_accessory_historical(key, Some(self.true_slot_num)),
+            }.unwrap_or_else(|e| panic!("Failed to read value from key `{key}` in namespace `{namespace:?}` with `read_direct_from_storage` override enabled. This is a bug in the sequencer. Please report it. Error: {e}"))
         } else {
             self.checkpoint.get_value(namespace, key, metric)
         }
