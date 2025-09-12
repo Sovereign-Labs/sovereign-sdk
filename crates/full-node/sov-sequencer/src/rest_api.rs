@@ -91,7 +91,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             )
             .route(
                 "/sequencer/update-state",
-                axum::routing::get(Self::axum_update_state),
+                axum::routing::post(Self::axum_update_state),
             )
             .route(
                 "/sequencer/unstable/events",
@@ -195,7 +195,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         }
     }
 
-    async fn axum_update_state(state: State<Self>) -> ApiResult<()> {
+    async fn axum_update_state(_state: State<Self>) -> ApiResult<()> {
        crate::preferred::MANUAL_STATE_UPDATE.store(true, std::sync::atomic::Ordering::Release);
        Ok(().into())
     }
