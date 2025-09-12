@@ -76,8 +76,15 @@ impl<S: Storage> Delta<S> {
             .prune_writes_up_to_and_all_reads(rollup_height);
         self.kernel_cache
             .prune_writes_up_to_and_all_reads(rollup_height);
+        let accessory_writes_before = self.accessory_writes.len();
         self.accessory_writes
             .retain(|_, write| write.at_rollup_height > rollup_height);
+        let accessory_writes_after = self.accessory_writes.len();
+        use sov_state::Witness;
+        let witness_len = self.witness.len();
+        // std::mem::take(&mut self.witness);
+        println!("Witness length: {witness_len}");
+        println!("Finished pruning accessory writes. Accessory writes before: {accessory_writes_before}, accessory writes after: {accessory_writes_after}. Pruned {} accessory writes", accessory_writes_before - accessory_writes_after);
     }
 
     pub(super) fn with_witness(inner: S, witness: S::Witness) -> Self {
