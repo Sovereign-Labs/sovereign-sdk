@@ -1,7 +1,7 @@
 use crate::{
     db::commit::FallibleDatabaseCommit,
     get_spec_id,
-    sov_evm::{PhantomInspector, SovEvm, UnmeteredStorageAccessInspector},
+    sov_evm::{SovEvm, UnmeteredStorageAccessInspector},
     EvmRuntimeConfig,
 };
 use reth_revm::db::DBErrorMarker;
@@ -14,6 +14,8 @@ use revm::{
     },
     Database, MainContext,
 };
+#[cfg(feature = "native")]
+use revm::{interpreter::interpreter::EthInterpreter, Inspector};
 use sov_modules_api::macros::config_value;
 
 /// builds CfgEnv
@@ -59,6 +61,23 @@ pub(crate) fn call<DB: Database<Error = E>, E: DBErrorMarker>(
     Ok(transact(db, block_env, tx, cfg)?.result)
 }
 
+#[cfg(feature = "native")]
+fn inspect<DB: Database<Error = E>, E: DBErrorMarker, I>(
+    db: DB,
+    block_env: BlockEnv,
+    tx: TxEnv,
+    cfg: CfgEnv,
+    inspector: I,
+) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>>
+where
+    I: Inspector<Context<BlockEnv, TxEnv, CfgEnv, DB>, EthInterpreter>,
+{
+    let context = context(db, block_env, cfg);
+    let unmetered_storage_inspector = UnmeteredStorageAccessInspector::new();
+    let mut evm = SovEvm::new(context, (inspector, unmetered_storage_inspector));
+    evm.inspect_tx(tx)
+}
+
 fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
     db: DB,
     block_env: BlockEnv,
@@ -66,9 +85,7 @@ fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
     cfg: CfgEnv,
 ) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>> {
     let context = context(db, block_env, cfg);
-    let unmetered_storage_inspector = UnmeteredStorageAccessInspector::new();
-    let inspector = (PhantomInspector, unmetered_storage_inspector);
-    let mut evm = SovEvm::new(context, inspector);
+    let mut evm = SovEvm::new(context, UnmeteredStorageAccessInspector::new());
     evm.inspect_tx(tx)
 }
 
