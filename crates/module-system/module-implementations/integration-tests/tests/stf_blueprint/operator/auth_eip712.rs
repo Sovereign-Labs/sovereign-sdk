@@ -136,7 +136,8 @@ pub fn sign_utx<S: Spec, RT: Runtime<S>>(
         .eip712_signing_hash(transaction_type_index, &utx_bytes)
         .expect("Failed to calculate EIP712 hash");
 
-    let signature = signer.private_key().sign(&eip712_hash);
+    let pk = signer.private_key();
+    let signature = pk.sign(&eip712_hash);
     utx.to_signed_tx(pk.pub_key(), signature)
 }
 
