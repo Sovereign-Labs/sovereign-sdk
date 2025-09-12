@@ -620,9 +620,14 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             .expect("No in-progress rollup block, nothing to do. This is a bug, please report it");
 
         let rollup_height = self.checkpoint.rollup_height_to_access();
+        let start_shutdown = std::time::Instant::now();
         let (batch_receipts, mut dirty_checkpoint) = task_state.shutdown().await.expect(
             "Transaction acceptor task failed unexpectedly! This is a bug, please report it.",
         );
+        let elapsed_shutdown = start_shutdown.elapsed();
+        if elapsed_shutdown.as_millis() > 10 {
+            println!("Slow background task shutdown. Shutdown took {}ms", elapsed_shutdown.as_millis());
+        }
 
         let mut accepted_txs_by_batch = Vec::with_capacity(batch_receipts.len());
         for batch_receipt in batch_receipts {
@@ -656,6 +661,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 rollup_height.get(),
             );
 
+        let start_send_state_root_request = std::time::Instant::now();
         if self
             .state_root_request_sender
             .send(StateRootComputeRequest {
@@ -670,8 +676,17 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         {
             tracing::info!(executor_id = %self.id, "State root computation background task has shutdown. State root will not be computed.");
         }
+        let elapsed_send_state_root_request = start_send_state_root_request.elapsed();
+        if elapsed_send_state_root_request.as_millis() > 10 {
+            println!("Slow send state root request. Send state root request took {}ms", elapsed_send_state_root_request.as_millis());
+        }
 
+        let start_apply_changes = std::time::Instant::now();
         self.checkpoint.apply_changes(new_changes);
+        let elapsed_apply_changes = start_apply_changes.elapsed();
+        if elapsed_apply_changes.as_millis() > 10 {
+            println!("Slow apply changes. Apply changes took {}ms", elapsed_apply_changes.as_millis());
+        }
 
         trace!(%rollup_height, "Successfully ended rollup block");
     }
