@@ -4,6 +4,7 @@ use crate::runtime::S;
 use alloy_primitives::FixedBytes;
 use alloy_primitives::U256;
 use alloy_rpc_types::BlockTransactions;
+use reth_primitives::Log;
 use revm::Database;
 use sov_evm::Evm;
 use sov_modules_api::GasArray;
@@ -39,31 +40,36 @@ fn test_simple_transfer() {
 fn test_evm_gas_usage() {
     std::env::set_var(
         "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS",
-        "[1, 0]",
+        "[2, 0]",
     );
     let gas_used_with_evm_metering = {
-        let (mut runner, from, to) = setup();
-        let transfer = create_transfer_tx(0, &from, &to, 0).tx;
+        let (mut runner, from, _) = setup();
+        let contract = SimpleStorageContract::default();
+        let contract_addr = from.address().create(0);
+        runner.execute(create_deploy_tx(0, &contract, &from).tx);
+        let transfer = create_set_arg_tx(0, 1, &contract, contract_addr, &from).tx;
         let (receipt, _) = runner.execute(transfer);
         receipt.last_batch_receipt().inner.gas_used.clone()
     };
     std::env::set_var(
         "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS",
-        "[0, 0]",
+        "[1, 0]",
     );
     let gas_used_without_evm_metering = {
-        let (mut runner, from, to) = setup();
-        let transfer = create_transfer_tx(0, &from, &to, 0).tx;
+        let (mut runner, from, _) = setup();
+        let contract = SimpleStorageContract::default();
+        let contract_addr = from.address().create(0);
+        runner.execute(create_deploy_tx(0, &contract, &from).tx);
+        let transfer = create_set_arg_tx(0, 1, &contract, contract_addr, &from).tx;
         let (receipt, _) = runner.execute(transfer);
         receipt.last_batch_receipt().inner.gas_used.clone()
     };
-    const BASE_EVM_GAS: u64 = 21_000;
     assert_eq!(
         gas_used_with_evm_metering
             .checked_sub(&gas_used_without_evm_metering)
             .unwrap()
             .as_ref(),
-        &[BASE_EVM_GAS, 0]
+        &[4_323, 0]
     );
 }
 
@@ -278,6 +284,42 @@ fn test_deploy_many_contracts() {
                 .unwrap();
 
             assert_eq!(U256::from(1), storage_value_1);
+        }),
+    });
+}
+
+#[test]
+fn test_evm_logs() {
+    let (mut runner, account, _) = setup();
+    let contract = SimpleStorageContract::default();
+    let contract_addr = account.address().create(0);
+    let address_bytes: [u8; 32] = account.address().into_word().into();
+
+    let check_logs = move |logs: &[Log], len: usize| {
+        assert_eq!(logs.len(), len);
+
+        for log in logs {
+            assert_eq!(log.topics().len(), 2);
+            assert_eq!(log.address, contract_addr);
+            assert_eq!(log.topics()[1], address_bytes);
+        }
+    };
+
+    let mut txs = vec![create_deploy_tx(0, &contract, &account).tx];
+
+    txs.push(create_emit_one_log(1, &contract, contract_addr, &account).tx);
+    txs.push(create_emit_two_logs(2, &contract, contract_addr, &account).tx);
+
+    let evm = Evm::<S>::default();
+
+    runner.execute_batch(BatchTestCase {
+        input: txs.into(),
+        assert: Box::new(move |_result, state| {
+            let logs_1 = evm.receipt(1, state).unwrap().receipt.logs;
+            check_logs(&logs_1, 1);
+
+            let logs_2 = evm.receipt(2, state).unwrap().receipt.logs;
+            check_logs(&logs_2, 2);
         }),
     });
 }

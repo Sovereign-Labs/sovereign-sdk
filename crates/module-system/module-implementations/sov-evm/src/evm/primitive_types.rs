@@ -157,7 +157,6 @@ pub(crate) enum MaybeSealedBlock {
     Pending {
         block_number: u64,
         first_tx_number: u64,
-        base_fee_per_gas: u64,
     },
 }
 
@@ -190,18 +189,6 @@ impl MaybeSealedBlock {
         match self {
             Self::Sealed(block) => Some(block.header.timestamp),
             Self::Pending { .. } => None,
-        }
-    }
-
-    pub fn base_fee_per_gas(&self) -> u64 {
-        match self {
-            Self::Sealed(block) => block
-                .header
-                .base_fee_per_gas
-                .expect("Legacy blocks with no base fee are unsupported"),
-            Self::Pending {
-                base_fee_per_gas, ..
-            } => *base_fee_per_gas,
         }
     }
 }

@@ -5,7 +5,7 @@ use demo_stf::runtime::Runtime;
 use sov_address::{EthereumAddress, FromVmAddress, MultiAddressEvm};
 use sov_db::ledger_db::LedgerDb;
 use sov_db::storage_manager::NativeStorageManager;
-use sov_ethereum::{EthRpcConfig, GasPriceOracleConfig};
+use sov_ethereum::EthRpcConfig;
 use sov_mock_da::storable::service::StorableMockDaService;
 use sov_mock_da::MockDaSpec;
 use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
@@ -106,10 +106,7 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
     {
         let eth_signer = eth_dev_signer();
-        let eth_rpc_config = EthRpcConfig {
-            eth_signer,
-            gas_price_oracle_config: GasPriceOracleConfig::default(),
-        };
+        let eth_rpc_config = EthRpcConfig { eth_signer };
 
         Ok(NodeEndpoints {
             jsonrpsee_module: sov_ethereum::get_ethereum_rpc(eth_rpc_config, sequencer)

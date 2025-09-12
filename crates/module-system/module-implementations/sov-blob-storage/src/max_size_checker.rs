@@ -96,7 +96,7 @@ impl<S: Spec> BlobsAccumulatorWithSizeLimit<S> {
     fn new_with_size(max_total_size: u32) -> Self {
         let max_preferred_blob_size = max_total_size
             .checked_div(sov_modules_api::PREFERRED_DATA_FRACTION.denominator)
-            .expect("Can't devide by 0")
+            .expect("Can't divide by 0")
             .checked_mul(sov_modules_api::PREFERRED_DATA_FRACTION.numerator)
             // This cannot overflow because the PREFERRED_DATA_FRACTION must be less than 1.
             .unwrap();

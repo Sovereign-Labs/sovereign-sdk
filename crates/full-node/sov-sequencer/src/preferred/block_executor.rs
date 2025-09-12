@@ -125,6 +125,7 @@ where
     // each background task when it is spawned, ensuring that this channel remains open as long
     // as any background task is operational even if the acceptor is dropped.
     shutdown_notifier: Sender<()>,
+    pub(crate) state_update_notifier: watch::Sender<RollupHeight>,
     state_root_request_sender: tokio::sync::mpsc::Sender<StateRootComputeRequest<S>>,
     pub(crate) state_roots: BTreeMap<RollupHeight, <S::Storage as Storage>::Root>,
     state_root_responses: VecDeque<StateRootReceiver<S>>,
@@ -172,6 +173,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             shutdown_receiver,
             shutdown_sender,
         } = rollup_exec_config;
+        let (state_update_notifier, _) = watch::channel(RollupHeight::GENESIS);
 
         Self {
             checkpoint,
@@ -187,6 +189,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             id: Uuid::now_v7(),
             shutdown_receiver,
             shutdown_sender,
+            state_update_notifier,
             startup_transaction_cache_writer: tx_cache_writer,
             phantom: PhantomData,
         }
@@ -286,7 +289,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             return Err(RollupBlockExecutorError::UnsuccessfulTransaction { receipt });
         }
 
-        self.checkpoint.apply_changes(tx_changes.0.clone());
+        self.checkpoint.apply_tx_changes(tx_changes.clone());
 
         Ok((
             receipt,
@@ -466,6 +469,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 shutdown_notifier: self.shutdown_notifier.clone(),
                 old_rollup_height: self.checkpoint.rollup_height_to_access(),
                 minimum_profit_per_tx,
+                state_update_notifier: self.state_update_notifier.subscribe(),
                 admin_addresses: self.seq_config.admin_addresses.clone().into(),
                 sequencer_rollup_address: self.seq_config.rollup_address.clone(),
                 sequencer_da_address: self.da_address.clone(),
@@ -692,6 +696,7 @@ struct RollupBlockTaskContext<S: Spec> {
     setup_sender: oneshot::Sender<ChangeSet>,
     result_sender: mpsc::Sender<Result<ExecutedTxResponse<S>, RejectReason>>,
     shutdown_notifier: mpsc::Sender<()>,
+    state_update_notifier: watch::Receiver<RollupHeight>,
     // Config values
     // --------
     minimum_profit_per_tx: u128,
@@ -719,6 +724,7 @@ where
         admin_addresses,
         sequencer_rollup_address,
         sequencer_da_address,
+        state_update_notifier,
     } = ctx;
 
     let _span = tracing::trace_span!(
@@ -807,15 +813,17 @@ where
         next_root,
     );
 
-    let mut changes = checkpoint.changes();
-    let (accessory_delta, state_accesses, _witness) =
+    let updated_rollup_height = *state_update_notifier.borrow();
+    let mut changes = checkpoint.changes_after(updated_rollup_height.get());
+    let (mut accessory_delta, state_accesses, _witness) =
         stf.materialize_accessory_state(&mut Default::default(), checkpoint);
+    accessory_delta.prune_changes_before(updated_rollup_height.get());
 
     changes.changes.extend(
         accessory_delta
-            .freeze()
+            .freeze_with_height()
             .into_iter()
-            .map(|(k, v)| ((k.clone(), Namespace::Accessory), v.clone())),
+            .map(|(k, v)| ((k.clone(), Namespace::Accessory), v)),
     );
     drop(shutdown_notifier);
 

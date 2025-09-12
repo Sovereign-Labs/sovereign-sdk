@@ -9,7 +9,10 @@ use revm::{
         PrecompileProvider,
     },
     inspector::{Inspector, InspectorEvmTr, InspectorHandler},
-    interpreter::{interpreter::EthInterpreter, interpreter_action::FrameInit, InterpreterResult},
+    interpreter::{
+        interpreter::EthInterpreter, interpreter_action::FrameInit, InitialAndFloorGas,
+        InterpreterResult,
+    },
     state::EvmState,
     Database,
 };
@@ -38,6 +41,13 @@ where
     type Evm = EVM;
     type Error = EVMError<<<EVM::Context as ContextTr>::Db as Database>::Error, InvalidTransaction>;
     type HaltReason = HaltReason;
+
+    #[inline]
+    fn validate(&self, evm: &mut Self::Evm) -> Result<InitialAndFloorGas, Self::Error> {
+        self.validate_env(evm)?;
+        // We disable charging initial gas
+        Ok(InitialAndFloorGas::new(0, 0))
+    }
 
     fn validate_against_state_and_deduct_caller(
         &self,

@@ -1,7 +1,7 @@
 use crate::evm::evm_test_helper::{self};
 use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
 use demo_stf::runtime::{Runtime, RuntimeCall};
-use ethers_core::abi::Address;
+use ethereum_types::Address;
 use sov_eth_client::TestClient;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
@@ -14,10 +14,10 @@ use crate::evm::evm_test_helper::setup;
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Account abstraction for the EVM is disabled"]
 async fn test_evm_account_abstraction() {
-    let (test_rollup, test_client, from_addr, chain_id) = setup(0).await;
+    let (test_rollup, test_client, chain_id) = setup(0).await;
 
     // Before executing the evm checks we need to insert the credentials in the `Accounts`.
-    send_insert_credentials(&test_client, from_addr, chain_id).await;
+    send_insert_credentials(&test_client, test_client.from_addr, chain_id).await;
     // Execute the evm tests.
     execute_evm_tests(&test_client).await.unwrap();
 

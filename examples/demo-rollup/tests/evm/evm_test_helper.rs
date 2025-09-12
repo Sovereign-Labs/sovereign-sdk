@@ -1,9 +1,8 @@
 use std::net::SocketAddr;
 
 use crate::test_helpers::test_genesis_source;
-use ethers_core::abi::Address;
-use ethers_providers::ProviderError;
-use ethers_signers::{LocalWallet, Signer};
+
+use ethers::core::abi::Address;
 use futures::future::join_all;
 use sov_demo_rollup::MockRollupSpec;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
@@ -50,21 +49,15 @@ pub(crate) async fn create_test_client(
     rest_port: SocketAddr,
     chain_id: u64,
     private_key: &str,
-) -> (TestClient, Address) {
-    let key = private_key
-        .parse::<LocalWallet>()
-        .unwrap()
-        .with_chain_id(chain_id);
-
+) -> TestClient {
     let contract = SimpleStorageContract::default();
-    let from_addr = key.address();
 
-    let test_client = TestClient::new(chain_id, key, from_addr, contract, rest_port).await;
+    let test_client = TestClient::new(chain_id, private_key, contract, rest_port).await;
 
     let eth_chain_id = test_client.eth_chain_id().await;
     assert_eq!(chain_id, eth_chain_id);
 
-    (test_client, from_addr)
+    test_client
 }
 
 /// Deploys a test contract on the test rollup.
@@ -136,7 +129,7 @@ pub(crate) async fn set_multiple_values_check(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let requests = client.set_values(contract_address, values).await;
 
-    let receipts: Vec<Result<Option<_>, ProviderError>> = join_all(requests).await;
+    let receipts: Vec<Result<Option<_>, _>> = join_all(requests).await;
     assert!(receipts
         .into_iter()
         .all(|x| x.is_ok() && x.unwrap().is_some()));
@@ -152,7 +145,7 @@ pub(crate) async fn set_multiple_values_check(
 
 pub async fn setup(
     finalization_blocks: u32,
-) -> (TestRollup<MockDemoRollup<Native>>, TestClient, Address, u64) {
+) -> (TestRollup<MockDemoRollup<Native>>, TestClient, u64) {
     let rollup_prover_config =
         get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(mock_da_risc0_host_args());
 
@@ -160,12 +153,11 @@ pub async fn setup(
     let test_rollup: TestRollup<MockDemoRollup<Native>> =
         start_node(rollup_prover_config, finalization_blocks).await;
 
-    let (evm_client, addr) =
-        create_test_client(test_rollup.http_addr, chain_id, SENDER_PRIV_KEY).await;
+    let evm_client = create_test_client(test_rollup.http_addr, chain_id, SENDER_PRIV_KEY).await;
 
     test_rollup.wait_for_next_blocks(10).await;
 
-    (test_rollup, evm_client, addr, chain_id)
+    (test_rollup, evm_client, chain_id)
 }
 
 // TODO: reenable this check by figuring out a way to get finer grained control over preferred batch production.

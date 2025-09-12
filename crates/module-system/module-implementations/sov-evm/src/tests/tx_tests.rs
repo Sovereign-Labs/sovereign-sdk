@@ -1,9 +1,9 @@
 use std::str::FromStr;
 
-use ethers_core::types::transaction::eip2718::TypedTransaction;
-use ethers_core::types::{Bytes, Eip1559TransactionRequest};
-use ethers_core::utils::rlp::Rlp;
-use ethers_signers::{LocalWallet, Signer};
+use ethers::core::types::transaction::eip2718::TypedTransaction;
+use ethers::core::types::{Bytes, Eip1559TransactionRequest};
+use ethers::core::utils::rlp::Rlp;
+use ethers::signers::{LocalWallet, Signer};
 use sov_modules_api::macros::config_value;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -12,7 +12,7 @@ async fn tx_rlp_encoding_test() -> Result<(), Box<dyn std::error::Error>> {
         .parse::<LocalWallet>()?;
     let from_addr = wallet.address();
     let to_addr =
-        ethers_core::types::Address::from_str("0x0aa7420c43b8c1a7b165d216948870c8ecfe1ee1")?;
+        ethers::core::types::Address::from_str("0x0aa7420c43b8c1a7b165d216948870c8ecfe1ee1")?;
     let data: Bytes = Bytes::from_str(
         "0x6ecd23060000000000000000000000000000000000000000000000000000000000000002",
     )?;

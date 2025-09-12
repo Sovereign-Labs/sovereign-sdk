@@ -17,7 +17,7 @@ impl From<SealedBlock> for BlockEnv {
             beneficiary: block.header.beneficiary,
             timestamp: U256::from(block.header.timestamp),
             prevrandao: Some(block.header.mix_hash),
-            basefee: block.header.base_fee_per_gas.unwrap_or_default(),
+            basefee: 0,
             gas_limit: block.header.gas_limit,
             // Not used fields:
             blob_excess_gas_and_price: None,
@@ -34,12 +34,12 @@ pub fn create_tx_env(tx: &TransactionSigned, signer: Address, nonce: u64, gas_li
         nonce,
 
         tx_type: TransactionType::Eip1559.into(),
-        gas_price: tx.effective_gas_price(None),
-        gas_priority_fee: tx.max_priority_fee_per_gas(),
         kind: tx.to().into(),
         value: tx.value(),
         data: tx.input().clone(),
         chain_id: tx.chain_id(),
+        // We don't set gas_price nor the gas_priority_fee.
+        // We disable the EVM logic charging gas at the beginning of the TX and instead rely on sov gas metering
         ..Default::default()
     }
 }
@@ -101,10 +101,7 @@ mod tests {
         assert_eq!(block_env.number, block.header.number);
         assert_eq!(block_env.beneficiary, block.header.beneficiary);
         assert_eq!(block_env.timestamp, block.header.timestamp);
-        assert_eq!(
-            block_env.basefee,
-            block.header.base_fee_per_gas.unwrap_or_default()
-        );
+        assert_eq!(block_env.basefee, 0);
         assert_eq!(block_env.gas_limit, block.header.gas_limit);
         assert_eq!(block_env.prevrandao, Some(block.header.mix_hash));
     }

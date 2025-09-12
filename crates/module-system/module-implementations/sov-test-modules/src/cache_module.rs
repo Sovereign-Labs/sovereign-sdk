@@ -2,7 +2,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_modules_api::macros::UniversalWallet;
-// use sov_modules_api::sov_universal_wallet::schema::UniversalWallet;
 use sov_modules_api::{
     BorshSerializedSize, Context, DaSpec, EventEmitter, GenesisState, Module, ModuleId, ModuleInfo,
     ModuleRestApi, SafeString, Spec, StateValue, TxState,
@@ -64,7 +63,7 @@ impl<T: std::fmt::Debug + PartialEq + Eq + Send + Sync + BorshSerializedSize + '
     TestAndSet<T>
 {
     pub fn run<S: Spec>(self, state: &mut impl TxState<S>) -> Result<(), anyhow::Error> {
-        let current_value = state.get_cached::<T>();
+        let current_value = state.get_cached::<T>(None);
         if current_value != self.expected_value.as_ref() {
             anyhow::bail!(
                 "Wrong value: expected {:?}, got {:?}",
@@ -74,10 +73,10 @@ impl<T: std::fmt::Debug + PartialEq + Eq + Send + Sync + BorshSerializedSize + '
         }
         match self.new_value {
             Some(new_value) => {
-                state.put_cached(new_value);
+                state.put_cached(None, new_value);
             }
             None => {
-                state.delete_cached::<T>();
+                state.delete_cached::<T>(None);
             }
         }
         Ok(())
@@ -143,8 +142,8 @@ impl<S: Spec> Module for CacheAndRevertTester<S> {
             CallMessage::TestAndSetString(msg) => msg.run(state),
             CallMessage::SetAndRevertString(msg) => {
                 match msg {
-                    Some(msg) => state.put_cached(msg),
-                    None => state.delete_cached::<String>(),
+                    Some(msg) => state.put_cached(None, msg),
+                    None => state.delete_cached::<String>(None),
                 }
                 Err(anyhow::anyhow!("Reverting"))
             }

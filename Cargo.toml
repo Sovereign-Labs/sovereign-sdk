@@ -174,7 +174,7 @@ nearly-linear = { path = "crates/utils/nearly-linear" }
 # Dependencies maintained by Sovereign
 jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "f60beb0fa54d9231706f62a8b1315e3c57855590", default-features = false }
 reltester = { git = "https://github.com/sovereign-labs/reltester.git", rev = "d6209abff72929f5ba41614f5cea3e4a748428c3" }
-rockbound = { git = "https://github.com/sovereign-labs/rockbound", rev = "6714a97d24fd22432bf7c2754519bff9c0841940" }
+rockbound = { git = "https://github.com/sovereign-labs/rockbound", rev = "26c54301e2bda3f7e88bee40831675f5d81b698e" }
 nmt-rs = { version = "0.2.5", features = ["serde", "borsh"] }
 # External dependencies
 # Uncomment this when a new preview is released
@@ -256,8 +256,8 @@ toml = { version = "0.8.19", features = ["parse"] }
 jsonrpsee = { version = "0.25" }
 schemars = { version = "0.8.21", features = ["derive"] }
 tempfile = "3.20.0"
-testcontainers = "0.23.3"
-testcontainers-modules = "0.11.6"
+testcontainers = "0.25.0"
+testcontainers-modules = "0.13.0"
 test-strategy = "0.4.0"
 tokio = { version = "1.42", default-features = false }
 tokio-stream = { version = "0.1", features = ["sync"] }
@@ -271,12 +271,8 @@ risc0-build = "2.1"
 
 # EVM dependencies
 ethereum-types = "0.14.1"
-ethers-core = { version = "=2.0.14", default-features = false }
-ethers-contract = { version = "=2.0.14", default-features = false }
-ethers-providers = { version = "=2.0.14", default-features = false }
-ethers-signers = { version = "=2.0.14", default-features = false }
-ethers-middleware = { version = "=2.0.14", default-features = false }
-# d8451e54e7267f9f1634118d6d279b2216f7e2bb, 1.6.0
+ethers = { version = "=2.0.14" }
+
 alloy-serde = { version = "1.0.24" }
 alloy-chains = { version = "0.2.0", default-features = false }
 alloy-primitives = { version = "1.3.1", default-features = false }
@@ -286,7 +282,10 @@ alloy-consensus = { version = "1.0.25", default-features = false }
 alloy-rpc-types = { version = "1.0.25", features = [
     "eth",
 ], default-features = false }
+
+alloy-provider = { version = "1.0", features = ["ws"] }
 alloy-rpc-types-trace = { version = "1.0.25" }
+
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "d8451e54e7267f9f1634118d6d279b2216f7e2bb", default-features = false }
 reth-ethereum-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "d8451e54e7267f9f1634118d6d279b2216f7e2bb", default-features = false }
 reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", rev = "d8451e54e7267f9f1634118d6d279b2216f7e2bb", default-features = false }

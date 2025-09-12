@@ -1,10 +1,12 @@
 ---
 source: crates/full-node/full-node-configs/src/runner.rs
+assertion_line: 203
 expression: config
 ---
 {
   "storage": {
     "path": "/tmp",
+    "state_cache_size": null,
     "user_commit_concurrency": null,
     "user_hashtable_buckets": null,
     "user_preallocate_ht": null,

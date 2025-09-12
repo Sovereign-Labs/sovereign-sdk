@@ -132,6 +132,36 @@ pub(crate) fn create_set_arg_tx(
     create_tx(account, tx)
 }
 
+pub(crate) fn create_emit_one_log(
+    nonce: u64,
+    contract: &SimpleStorageContract,
+    contract_addr: Address,
+    account: &EvmAccount,
+) -> TxWithNonceAndHash {
+    let tx = TxEip1559 {
+        to: TxKind::Call(contract_addr),
+        input: Bytes::from(hex::decode(hex::encode(contract.emit_one_log())).unwrap()),
+        nonce,
+        ..Default::default()
+    };
+    create_tx(account, tx)
+}
+
+pub(crate) fn create_emit_two_logs(
+    nonce: u64,
+    contract: &SimpleStorageContract,
+    contract_addr: Address,
+    account: &EvmAccount,
+) -> TxWithNonceAndHash {
+    let tx = TxEip1559 {
+        to: TxKind::Call(contract_addr),
+        input: Bytes::from(hex::decode(hex::encode(contract.emit_two_logs())).unwrap()),
+        nonce,
+        ..Default::default()
+    };
+    create_tx(account, tx)
+}
+
 fn create_tx(account: &EvmAccount, tx: TxEip1559) -> TxWithNonceAndHash {
     let tx_with_defaults = TxEip1559 {
         gas_limit: 1_000_000,

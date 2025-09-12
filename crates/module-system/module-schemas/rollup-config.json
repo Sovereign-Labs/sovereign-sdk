@@ -626,6 +626,15 @@
           "format": "uint",
           "minimum": 0.0
         },
+        "state_cache_size": {
+          "description": "The size of the cache which holds hot key-value pairs in the flat state database. Default is 1GB. A larger cache size can improve execution speed at the cost of more memory usage.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
         "user_commit_concurrency": {
           "description": "Number of concurrent commit workers for the user state. More details at [`Options::commit_concurrency`]",
           "type": [

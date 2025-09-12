@@ -6349,6 +6349,7 @@ dependencies = [
 name = "sov-modules-api"
 version = "0.3.0"
 dependencies = [
+ "alloy-eips",
  "alloy-primitives",
  "alloy-sol-types",
  "anyhow",
@@ -6588,6 +6589,7 @@ dependencies = [
 name = "sov-universal-wallet"
 version = "0.1.0"
 dependencies = [
+ "alloy-primitives",
  "arrayvec",
  "bech32",
  "borsh",

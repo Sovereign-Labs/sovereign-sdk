@@ -12,11 +12,11 @@ publish = false
 [dependencies]
 anyhow = { workspace = true }
 alloy-primitives = { workspace = true }
+alloy-rpc-types  = { workspace = true }
+alloy-provider = { workspace = true }
+alloy-pubsub = "1.0"
 ethereum-types = { workspace = true }
-ethers-core = { workspace = true }
-ethers-providers = { workspace = true }
-ethers-signers = { workspace = true }
-ethers-middleware = { workspace = true }
+ethers = { workspace = true }
 futures = { workspace = true }
 jsonrpsee = { workspace = true }
 reth-primitives = { workspace = true }

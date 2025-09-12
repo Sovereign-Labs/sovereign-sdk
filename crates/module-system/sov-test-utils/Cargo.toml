@@ -25,13 +25,12 @@ tokio = { workspace = true, features = ["sync"] }
 serde = { workspace = true }
 schemars = { workspace = true }
 serde_json = { workspace = true }
-testcontainers = "0.23"
+testcontainers = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
 
 ethereum-types = { workspace = true }
-ethers-core = { workspace = true }
-ethers-contract = { workspace = true }
+ethers = { workspace = true }
 
 sha2 = { workspace = true }
 sov-address = { workspace = true }

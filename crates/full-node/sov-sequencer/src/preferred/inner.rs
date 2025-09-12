@@ -1581,6 +1581,11 @@ where
         // Atomically swap in the new storage and prune the old one.
         let new_rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
             .rollup_height_to_access();
+        // Notify the executor that the storage has been replaced so it can drop any writes that have now been persisted.
+        self.inner
+            .executor
+            .state_update_notifier
+            .send_replace(new_rollup_height);
         self.inner
             .executor
             .checkpoint
@@ -1708,7 +1713,7 @@ where
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
 
-        // Creates a new executor  for recovery. This must *not* be called to create executors
+        // Creates a new executor for recovery. This must *not* be called to create executors
         // under other circumstances, since it causes side effects on the transaction cache.
         let transaction_cache_write_handle = inner.tx_cache_writer.clone();
         let recovery_executor = RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(

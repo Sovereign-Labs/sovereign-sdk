@@ -25,6 +25,10 @@ use crate::display::{Context as DisplayContext, DisplayVisitor, FormatError};
 use crate::json_to_borsh::{Context as EncodeContext, EncodeError, EncodeVisitor};
 use crate::ty::byte_display::ByteParseError;
 use crate::ty::{ContainerSerdeMetadata, LinkingScheme, Ty};
+#[cfg(feature = "eip712")]
+use crate::visitors::eip712::{Context as Eip712Context, Eip712Error, Eip712Visitor};
+#[cfg(feature = "eip712")]
+use alloy_dyn_abi::{Eip712Types, Error as AlloyEip712Error, TypedData};
 
 #[derive(Debug, Error)]
 pub enum SchemaError {
@@ -35,6 +39,15 @@ pub enum SchemaError {
     #[cfg(feature = "serde")]
     #[error(transparent)]
     EncodeError(#[from] EncodeError),
+    #[cfg(feature = "serde")]
+    #[error(transparent)]
+    JsonError(#[from] serde_json::Error),
+    #[cfg(feature = "eip712")]
+    #[error(transparent)]
+    Eip712Error(#[from] Eip712Error),
+    #[cfg(feature = "eip712")]
+    #[error(transparent)]
+    AlloyEip712Error(#[from] AlloyEip712Error),
     #[error(transparent)]
     Bech32Error(#[from] ByteParseError),
     #[error("Rollup type {0:?} was missing from schema")]
@@ -282,6 +295,63 @@ impl Schema {
             return Err(FormatError::UnusedInput.into());
         }
         Ok(output)
+    }
+
+    #[cfg(feature = "eip712")]
+    pub fn eip712_json(&mut self, type_index: usize, input: &[u8]) -> Result<String, SchemaError> {
+        let Some(typed_data) = self.eip712_get_typed_data_inner(type_index, input)? else {
+            return Ok(String::default());
+        };
+        Ok(serde_json::to_string(&typed_data)?)
+    }
+
+    #[cfg(feature = "eip712")]
+    pub fn eip712_signing_hash(
+        &mut self,
+        type_index: usize,
+        input: &[u8],
+    ) -> Result<[u8; 32], SchemaError> {
+        let Some(typed_data) = self.eip712_get_typed_data_inner(type_index, input)? else {
+            return Ok(Default::default());
+        };
+        Ok(typed_data.eip712_signing_hash()?.into())
+    }
+
+    #[cfg(feature = "eip712")]
+    fn eip712_get_typed_data_inner(
+        &mut self,
+        type_index: usize,
+        input: &[u8],
+    ) -> Result<Option<TypedData>, SchemaError> {
+        let mut out_types = Eip712Types::default();
+        let input = &mut &input[..];
+        let mut visitor = Eip712Visitor::new(input, &mut out_types);
+        let root_type = self
+            .types()
+            .get(type_index)
+            .ok_or(SchemaError::InvalidIndex(type_index))?;
+        let Some(visitor_return) = root_type.visit(self, &mut visitor, Eip712Context::default())?
+        else {
+            return Ok(None);
+        };
+        if !visitor.has_displayed_whole_input() {
+            return Err(FormatError::UnusedInput.into());
+        }
+
+        Ok(Some(TypedData {
+            domain: alloy_dyn_abi::Eip712Domain {
+                name: Some(self.chain_data.chain_name.clone().into()),
+                version: None,
+                chain_id: Some(alloy_primitives::U256::from(self.chain_data.chain_id)),
+                // Our chain hash is 32 bytes. We could truncate it to fit in the 20-byte ethereum
+                // Address, but by putting it in the salt we retain the full entropy and security.
+                verifying_contract: None,
+                salt: Some(self.chain_hash()?.into()),
+            },
+            resolver: out_types.into(),
+            primary_type: visitor_return.unique_type_name,
+            message: visitor_return.json_value,
+        }))
     }
 
     /// Use the schema to convert a serde-compatible JSON string of the given type into its borsh

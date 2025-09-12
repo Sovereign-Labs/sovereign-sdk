@@ -1,6 +1,6 @@
 use crate::evm::evm_test_helper::setup;
 use crate::test_helpers::DemoRollupSpec;
-use ethers_core::abi::Address;
+use ethers::core::abi::Address;
 use sov_address::{EthereumAddress, MultiAddress};
 use sov_bank::config_gas_token_id;
 use sov_demo_rollup::MockDemoRollup;
@@ -12,7 +12,8 @@ const RECIEVER_ADDR_STR: &str = "0x3FE0233e6cf3c9753fcB7449987EC49C88aDDE71";
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_balances() -> anyhow::Result<()> {
-    let (test_rollup, evm_client, sender_address, _) = setup(0).await;
+    let (test_rollup, evm_client, _) = setup(0).await;
+    let sender_address = evm_client.from_addr;
 
     let reciever_address = Address::from_str(RECIEVER_ADDR_STR).unwrap();
 
