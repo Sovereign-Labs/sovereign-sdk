@@ -736,7 +736,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                         | Some(BlobSelectorStatus::Discarded(
                             BlobDiscardReason::SequenceNumberTooLow,
                         )) => {
-                            trace!(%blob_id, %receipt, ?blob_status, "Blob was discarded. Removing it form the blob sender");
+                            trace!(%blob_id, %receipt, ?blob_status, "Removing blob form the blob sender");
 
                             self.send_notification(blob_status.clone()).await;
                             // Upon crashing, we'd rather call the hook twice rather than not
