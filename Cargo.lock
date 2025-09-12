@@ -12410,6 +12410,7 @@ dependencies = [
  "alloy-eips",
  "alloy-primitives",
  "alloy-rpc-types",
+ "alloy-rpc-types-trace",
  "alloy-sol-types",
  "anyhow",
  "arbitrary",

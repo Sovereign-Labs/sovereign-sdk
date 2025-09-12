@@ -62,6 +62,7 @@ pub(crate) fn call<DB: Database<Error = E>, E: DBErrorMarker>(
 }
 
 #[cfg(feature = "native")]
+#[allow(dead_code)]
 fn inspect<DB: Database<Error = E>, E: DBErrorMarker, I>(
     db: DB,
     block_env: BlockEnv,
