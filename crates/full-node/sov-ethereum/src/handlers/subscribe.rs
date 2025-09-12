@@ -61,39 +61,51 @@ where
 async fn stream_logs<S, Seq>(
     accepted_sink: SubscriptionSink,
     log_filter: Box<Filter>,
-    _ethereum: Arc<Ethereum<S, Seq>>,
+    ethereum: Arc<Ethereum<S, Seq>>,
 ) where
     S: Spec,
     Seq: Sequencer<Spec = S>,
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    tokio::time::sleep(Duration::from_millis(1)).await;
+    let evm = Evm::<S>::default();
 
-    let log = Log {
-        inner: alloy_primitives::Log {
-            address: Address::parse_checksummed("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", None)
-                .unwrap(),
+    let mut x = 0;
+    loop {
+        let mut logs: Vec<alloy_rpc_types::Log> = Vec::new();
 
-            data: LogData::new_unchecked(vec![], Default::default()),
-        },
-        block_hash: None,
-        block_number: None,
-        block_timestamp: None,
-        transaction_hash: None,
-        transaction_index: None,
-        log_index: None,
-        removed: false,
-    };
+        let mut state = ethereum.sequencer.api_state().default_api_state_accessor();
+        for i in 0..10 {
+            let rec = evm.receipt(i, &mut state);
+            match rec {
+                Some(r) => {
+                    for l in r.receipt.logs {
+                        //println!("{:?}", l);
+                        logs.push(l.into());
+                    }
+                }
+                None => {}
+            }
+        }
 
-    let msg = SubscriptionMessage::new(
-        accepted_sink.method_name(),
-        accepted_sink.subscription_id(),
-        &log,
-    )
-    .unwrap();
+        for l in logs {
+            println!("log {:?}", l);
 
-    accepted_sink.send(msg).await.unwrap();
+            let msg = SubscriptionMessage::new(
+                accepted_sink.method_name(),
+                accepted_sink.subscription_id(),
+                &l,
+            )
+            .unwrap();
+
+            //println!("msg {:?}", msg);
+            accepted_sink.send(msg).await.unwrap();
+
+            //println!("Send ==========");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
 }
 
 fn validate_params_for_log_subscription(
