@@ -39,7 +39,7 @@ pub fn transact_commit<
     E: DBErrorMarker,
 >(
     mut db: DB,
-    block_env: &BlockEnv,
+    block_env: BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
 ) -> Result<ExecutionResult, EVMError<E>> {
@@ -51,28 +51,36 @@ pub fn transact_commit<
 
 #[cfg(feature = "native")]
 pub(crate) fn call<DB: Database<Error = E>, E: DBErrorMarker>(
-    mut db: DB,
-    block_env: &BlockEnv,
+    db: DB,
+    block_env: BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
 ) -> Result<ExecutionResult, EVMError<E>> {
-    Ok(transact(&mut db, block_env, tx, cfg)?.result)
+    Ok(transact(db, block_env, tx, cfg)?.result)
 }
 
 fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
-    db: &mut DB,
-    block_env: &BlockEnv,
+    db: DB,
+    block_env: BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
 ) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>> {
-    let context = Context::mainnet()
-        .with_db(db)
-        .with_block(block_env)
-        .with_cfg(cfg);
+    let context = context(db, block_env, cfg);
     let unmetered_storage_inspector = UnmeteredStorageAccessInspector::new();
     let inspector = (PhantomInspector, unmetered_storage_inspector);
     let mut evm = SovEvm::new(context, inspector);
     evm.inspect_tx(tx)
+}
+
+fn context<DB: Database<Error = E>, E: DBErrorMarker>(
+    db: DB,
+    block_env: BlockEnv,
+    cfg: CfgEnv,
+) -> Context<BlockEnv, TxEnv, CfgEnv, DB> {
+    Context::mainnet()
+        .with_db(db)
+        .with_block(block_env)
+        .with_cfg(cfg)
 }
 
 #[cfg(test)]
