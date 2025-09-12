@@ -40,31 +40,36 @@ fn test_simple_transfer() {
 fn test_evm_gas_usage() {
     std::env::set_var(
         "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS",
-        "[1, 0]",
+        "[2, 0]",
     );
     let gas_used_with_evm_metering = {
-        let (mut runner, from, to) = setup();
-        let transfer = create_transfer_tx(0, &from, &to, 0).tx;
+        let (mut runner, from, _) = setup();
+        let contract = SimpleStorageContract::default();
+        let contract_addr = from.address().create(0);
+        runner.execute(create_deploy_tx(0, &contract, &from).tx);
+        let transfer = create_set_arg_tx(0, 1, &contract, contract_addr, &from).tx;
         let (receipt, _) = runner.execute(transfer);
         receipt.last_batch_receipt().inner.gas_used.clone()
     };
     std::env::set_var(
         "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS",
-        "[0, 0]",
+        "[1, 0]",
     );
     let gas_used_without_evm_metering = {
-        let (mut runner, from, to) = setup();
-        let transfer = create_transfer_tx(0, &from, &to, 0).tx;
+        let (mut runner, from, _) = setup();
+        let contract = SimpleStorageContract::default();
+        let contract_addr = from.address().create(0);
+        runner.execute(create_deploy_tx(0, &contract, &from).tx);
+        let transfer = create_set_arg_tx(0, 1, &contract, contract_addr, &from).tx;
         let (receipt, _) = runner.execute(transfer);
         receipt.last_batch_receipt().inner.gas_used.clone()
     };
-    const BASE_EVM_GAS: u64 = 0;
     assert_eq!(
         gas_used_with_evm_metering
             .checked_sub(&gas_used_without_evm_metering)
             .unwrap()
             .as_ref(),
-        &[BASE_EVM_GAS, 0]
+        &[4_323, 0]
     );
 }
 

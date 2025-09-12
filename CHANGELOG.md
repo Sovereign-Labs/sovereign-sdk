@@ -1,5 +1,7 @@
 # 2025-09-12
 - #1672 Fixes some minor bugs related to pruning in the sequencer DB which could cause duplicate blob submission on restart.
+# 2025-09-11
+- #1669 Account for sequencer gas in EVM transaction receipts. EVM transaction receipts now properly reflect the sequencer gas consumed during execution.
 
 # 2025-09-09
 - #1646 Implements `eth_estimateGas` RPC method for the EVM module. This allows clients to estimate the gas required for transaction execution before submitting them to the network.

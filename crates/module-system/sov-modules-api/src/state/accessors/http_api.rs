@@ -173,7 +173,7 @@ pub struct ApiStateAccessor<S: Spec> {
     // Unfortunately, we need to run one query using the accessor in order to determine the correct visible slot number,
     // so we can't make this field non-optional.
     visible_slot_number: Option<VisibleSlotNumber>,
-    // The true slot number to use for user/accessory queries. This need not correspond exactly the the accessor's
+    // The true slot number to use for user/accessory queries. This need not correspond exactly the accessor's
     // rollup height (if present) but it must be older than the N+1th rollup height.
     //
     // Suppose we have the following rollup heights:
@@ -351,7 +351,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
     }
 
     /// A specialized constructor for use in sov-test-utils. This constructor matches the unusual semantic of our testing framework, which expects to see
-    /// the *next* visible slot number with the *current* rollup height in the accessor as soon as the a slot finishes executing.
+    /// the *next* visible slot number with the *current* rollup height in the accessor as soon as the slot finishes executing.
     ///
     /// In actual execution, this semantic is not needed because the time between the end of slot N and the start of slot N+1 is neglible. Unfortunately,
     /// our tests are written assuming that all assertions will execute during this miniscule instant of time, so we have to accommodate it for now.

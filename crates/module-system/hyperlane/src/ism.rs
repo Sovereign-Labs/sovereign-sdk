@@ -204,8 +204,9 @@ impl MessageIdMultisigIsmMetadata {
 
         // Sanity check that the number of signatures is correct. We already checked the length at the top of this function,
         // so a failure here indicates a bug.
-        assert!(
-            signatures.len() == num_signatures,
+        assert_eq!(
+            signatures.len(),
+            num_signatures,
             "Invalid number of signatures: expected {}, got {}",
             num_signatures,
             signatures.len()
