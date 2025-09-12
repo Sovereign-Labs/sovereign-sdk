@@ -82,7 +82,7 @@ impl<S: Storage> Delta<S> {
         let accessory_writes_after = self.accessory_writes.len();
         use sov_state::Witness;
         let witness_len = self.witness.len();
-        // std::mem::take(&mut self.witness);
+        std::mem::take(&mut self.witness);
         println!("Witness length: {witness_len}");
         println!("Finished pruning accessory writes. Accessory writes before: {accessory_writes_before}, accessory writes after: {accessory_writes_after}. Pruned {} accessory writes", accessory_writes_before - accessory_writes_after);
     }
