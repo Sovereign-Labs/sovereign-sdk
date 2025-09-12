@@ -1597,8 +1597,7 @@ where
         inner.is_ready = Ok(());
         inner.has_finished_startup = true;
         inner.latest_info = info;
-        let checkpoint =
-            inner
+        let checkpoint = inner
             .executor
             .checkpoint
             .clone_with_empty_witness_dropping_temp_cache();
