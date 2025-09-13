@@ -9,7 +9,7 @@ use sp_core::crypto::{AccountId32 as SubstrateAccountId32, Ss58Codec};
 use std::hash::{Hash, Hasher};
 use std::{
     fmt::{self, Display},
-    io::{Read, Write},
+    io::Read,
     str::FromStr,
 };
 
@@ -76,8 +76,8 @@ impl schemars::JsonSchema for AvailAddress {
 }
 
 impl BorshSerialize for AvailAddress {
-    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        borsh::BorshSerialize::serialize(&<AccountId as AsRef<[u8]>>::as_ref(&self.0), writer)
+    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        writer.write_all(&self.0 .0)
     }
 }
 

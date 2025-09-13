@@ -1,4 +1,3 @@
-use avail_rust_core::H256;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlockHeaderTrait, Time};
 
@@ -10,7 +9,6 @@ use crate::types::{
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CustomAvailHeader {
     pub header: avail_rust_core::AvailHeader,
-    pub block_hash: H256,
 }
 
 impl BlockHeaderTrait for CustomAvailHeader {
@@ -21,7 +19,7 @@ impl BlockHeaderTrait for CustomAvailHeader {
     }
 
     fn hash(&self) -> Self::Hash {
-        AvailHash(self.block_hash)
+        AvailHash(self.header.hash())
     }
 
     fn height(&self) -> u64 {

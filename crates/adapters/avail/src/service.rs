@@ -20,6 +20,7 @@ use backon::ExponentialBuilder;
 use sp_core::blake2_256;
 use tokio::sync::oneshot;
 
+use crate::types::address::AvailAddress;
 use crate::types::blob::AvailDABlob;
 use crate::types::block::AvailBlock;
 use crate::types::config::AvailDAConfig;
@@ -204,11 +205,11 @@ impl DaService for AvailDAService {
         ))
     }
 
-    #[instrument(skip(self, block, blobs))]
+    #[instrument(skip(self, block, _blobs))]
     async fn get_extraction_proof(
         &self,
         block: &Self::FilteredBlock,
-        blobs: &RelevantBlobs<<Self::Spec as DaSpec>::BlobTransaction>,
+        _blobs: &RelevantBlobs<<Self::Spec as DaSpec>::BlobTransaction>,
     ) -> RelevantProofs<
         <Self::Spec as DaSpec>::InclusionMultiProof,
         <Self::Spec as DaSpec>::CompletenessProof,
@@ -240,6 +241,11 @@ impl DaService for AvailDAService {
                 completeness_proof: dummy_proof.clone(),
             },
         }
+    }
+
+    #[instrument(skip(self))]
+    async fn get_signer(&self) -> <Self::Spec as DaSpec>::Address {
+        AvailAddress(self.signer.public_key().to_account_id())
     }
 }
 
@@ -289,14 +295,7 @@ impl AvailDAService {
         info!("Fetching finalized block header");
         let header = self.client.finalized_block_header().await?;
         debug!("Finalized block header retrieved: {:?}", header.number);
-        let block_hash = self
-            .client
-            .block_hash(header.number)
-            .await?
-            .ok_or_else(|| {
-                anyhow::anyhow!("Block hash not found for block number {}", header.number)
-            })?;
-        Ok(CustomAvailHeader { header, block_hash })
+        Ok(CustomAvailHeader { header })
     }
 
     #[instrument(skip(self))]
@@ -304,14 +303,7 @@ impl AvailDAService {
         info!("Fetching best block header");
         let header = self.client.best_block_header().await?;
         debug!("Best block header retrieved: {:?}", header.number);
-        let block_hash = self
-            .client
-            .block_hash(header.number)
-            .await?
-            .ok_or_else(|| {
-                anyhow::anyhow!("Block hash not found for block number {}", header.number)
-            })?;
-        Ok(CustomAvailHeader { header, block_hash })
+        Ok(CustomAvailHeader { header })
     }
 
     #[instrument(skip(self))]
@@ -365,7 +357,6 @@ impl AvailDAService {
         Ok(AvailBlock::new(
             CustomAvailHeader {
                 header: block_header,
-                block_hash: block_hash.clone(),
             },
             block_hash,
             Time::from_secs(custom_tx.set as i64),

@@ -2,7 +2,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
 use sp_core::blake2_256;
-use tracing::debug;
 
 use crate::types::{address::AvailAddress, data::AvailData, hash::AvailHash};
 
