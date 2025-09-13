@@ -339,10 +339,6 @@ impl TestClient {
         count.as_u64()
     }
 
-    pub async fn eth_gas_price(&self) -> u128 {
-        self.client.get_gas_price().await.unwrap().as_u128()
-    }
-
     pub async fn eth_get_block_by_number(&self, block_number: Option<String>) -> Block<TxHash> {
         self.rpc
             .request("eth_getBlockByNumber", rpc_params![block_number, false])
@@ -406,13 +402,75 @@ impl TestClient {
     pub async fn transaction(&self, hash: TxHash) -> Option<Transaction> {
         self.client.get_transaction(hash).await.unwrap()
     }
+}
+
+impl TestClient {
+    pub async fn alloy_deploy_contract(&self) -> alloy_primitives::Address {
+        let typed_transaction = self.make_eip1559_tx(0, None, Some(self.contract.byte_code()));
+        let addr = self
+            .client
+            .send_transaction(typed_transaction, None)
+            .await
+            .unwrap()
+            .await
+            .unwrap()
+            .unwrap()
+            .contract_address
+            .unwrap();
+
+        alloy_primitives::Address::from_slice(addr.0.as_slice())
+    }
+
+    pub async fn alloy_subscribe_logs(&self) -> Subscription<Log> {
+        let filter = Filter::new();
+        self.pub_sub.subscribe_logs(&filter).await.unwrap()
+    }
+
+    pub async fn alloy_transaction(
+        &self,
+        hash: alloy_primitives::TxHash,
+    ) -> Option<alloy_rpc_types::Transaction> {
+        self.pub_sub.get_transaction_by_hash(hash).await.unwrap()
+    }
+
+    pub async fn alloy_receipt(
+        &self,
+        hash: alloy_primitives::TxHash,
+    ) -> Option<alloy_rpc_types::TransactionReceipt> {
+        self.pub_sub.get_transaction_receipt(hash).await.unwrap()
+    }
+
+    pub async fn alloy_set_value(
+        &self,
+        contract_address: alloy_primitives::Address,
+        set_arg: u32,
+    ) -> alloy_primitives::TxHash {
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+        tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
+
+        let typed_transaction = self.make_eip1559_tx(
+            nonce,
+            Some(ethers::core::abi::Address::from_slice(
+                contract_address.as_slice(),
+            )),
+            Some(self.contract.set_call_data(set_arg)),
+        );
+
+        let tx_hash = self
+            .client
+            .send_transaction(typed_transaction, None)
+            .await
+            .unwrap()
+            .tx_hash();
+
+        alloy_primitives::TxHash::from_slice(&tx_hash.0)
+    }
 
     pub async fn block_number(&self) -> u64 {
         self.client.get_block_number().await.unwrap().as_u64()
     }
 
-    pub async fn subscribe_logs(&self) -> Subscription<Log> {
-        let filter = Filter::new();
-        self.pub_sub.subscribe_logs(&filter).await.unwrap()
+    pub async fn eth_gas_price(&self) -> u128 {
+        self.client.get_gas_price().await.unwrap().as_u128()
     }
 }

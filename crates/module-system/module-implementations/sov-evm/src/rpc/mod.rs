@@ -263,7 +263,7 @@ where
         let mut maybe_tx = || -> Option<Transaction> {
             let tx_number = self.get_tx_index_by_hash(&hash, state)?;
             let tx = self.transaction(tx_number, state)?;
-            let block = self.get_maybe_sealed_block(&tx, state);
+            let block = self.get_maybe_sealed_block(tx.block_number, state);
 
             Some(from_recovered_with_block_context(
                 tx.into(),
@@ -298,7 +298,7 @@ where
         let mut maybe_receipt = || -> Option<TransactionReceipt> {
             let number = self.get_tx_index_by_hash(&hash, state)?;
             let tx = self.transaction(number, state)?;
-            let block = self.get_maybe_sealed_block(&tx, state);
+            let block = self.get_maybe_sealed_block(tx.block_number, state);
             let receipt = self.receipt(number, state)?;
             Some(build_rpc_receipt(block, tx, number, receipt))
         };
@@ -385,12 +385,13 @@ where
             .map_err(|err| eth_api_into_rpc_error(eth_from_evm_error(err)))
     }
 
-    fn get_maybe_sealed_block(
+    /// TODO
+    pub fn get_maybe_sealed_block(
         &self,
-        tx: &TransactionSignedAndRecovered,
+        block_number: u64,
         state: &mut ApiStateAccessor<S>,
     ) -> MaybeSealedBlock {
-        let block = self.blocks.get(&tx.block_number, state).unwrap_infallible();
+        let block = self.blocks.get(&block_number, state).unwrap_infallible();
         if let Some(block) = block {
             return MaybeSealedBlock::Sealed(block.into());
         }
@@ -399,10 +400,10 @@ where
             .get(state)
             .unwrap_infallible()
             .unwrap_or_default();
-        let block_num: u64 = current_block_env.number.try_into().expect(
+        let env_block_num: u64 = current_block_env.number.try_into().expect(
             "The impossible happened: block number is too large to fit in a u64. It's over!",
         );
-        assert_eq!(block_num, tx.block_number, "Transaction is in a block that is not yet sealed, but that block is not yet pending! This is impossible!");
+        assert_eq!(env_block_num, block_number, "Transaction is in a block that is not yet sealed, but that block is not yet pending! This is impossible!");
 
         let head = self
             .head
@@ -413,12 +414,13 @@ where
         let first_tx_index = head.transactions.end;
 
         MaybeSealedBlock::Pending {
-            block_number: tx.block_number,
+            block_number: block_number,
             first_tx_number: first_tx_index,
         }
     }
 
-    fn get_sealed_block_by_number(
+    /// TODO
+    pub fn get_sealed_block_by_number(
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
@@ -453,41 +455,8 @@ where
                     .unwrap_infallible()
             }
             Some(ref block_number) if block_number == "pending" => {
-                let block_numbers = self
-                    .block_numbers
-                    .get(state)
-                    .unwrap_infallible()
-                    // This is justified, as block numbers are set at genesis and only overridden later.
-                    .expect("The impossible happened: block_numbers was not set.");
-
-                let parent_block = self
-                    .blocks
-                    .get(block_numbers.end(), state)
-                    .unwrap_infallible()
-                    // This is justified, as we just fetched `block_numbers`.
-                    .expect("The impossible happened: parent_block was not set.");
-
-                assert_eq!(&parent_block.header.number, block_numbers.end());
-                let pending_block_number = block_numbers.end() + 1;
-
-                let header = alloy_consensus::Header {
-                    parent_hash: parent_block.header.seal(),
-                    number: pending_block_number,
-                    ..Default::default()
-                };
-
-                let pending_transactions_len =
-                    self.pending_transactions.len(state).unwrap_infallible();
-
-                let start = parent_block.transactions.end;
-                let end = start + pending_transactions_len;
-
-                let block = crate::Block {
-                    header,
-                    transactions: start..end,
-                };
-
-                Some(block.seal())
+                let pending_block = self.pending_block(state);
+                Some(pending_block.seal())
             }
             Some(ref block_number) => {
                 // hex representation may have 0x prefix
@@ -506,6 +475,45 @@ where
             }
             None => self.get_sealed_block_by_number(Some("latest".into()), state),
         }
+    }
+
+    /// TOOD
+    pub fn pending_block(&self, state: &mut ApiStateAccessor<S>) -> crate::Block {
+        let block_numbers = self
+            .block_numbers
+            .get(state)
+            .unwrap_infallible()
+            // This is justified, as block numbers are set at genesis and only overridden later.
+            .expect("The impossible happened: block_numbers was not set.");
+
+        let head_block = self
+            .blocks
+            .get(block_numbers.end(), state)
+            .unwrap_infallible()
+            // This is justified, as we just fetched `block_numbers`.
+            .expect("The impossible happened: parent_block was not set.");
+
+        assert_eq!(&head_block.header.number, block_numbers.end());
+
+        let pending_transactions_len = self.pending_transactions.len(state).unwrap_infallible();
+
+        let start = head_block.transactions.end;
+        let end = start + pending_transactions_len;
+
+        let pending_block_number = head_block.header.number + 1;
+
+        let header = alloy_consensus::Header {
+            parent_hash: head_block.header.seal(),
+            number: pending_block_number,
+            ..Default::default()
+        };
+
+        let block = crate::Block {
+            header,
+            transactions: start..end,
+        };
+
+        block
     }
 
     fn resolve_block_env(
@@ -537,8 +545,9 @@ fn get_cfg_env_template() -> CfgEnv {
     cfg_env
 }
 
+/// TOOD
 // modified from: https://github.com/paradigmxyz/reth many times
-pub(crate) fn build_rpc_receipt(
+pub fn build_rpc_receipt(
     block: MaybeSealedBlock,
     tx: TransactionSignedAndRecovered,
     tx_number: u64,
