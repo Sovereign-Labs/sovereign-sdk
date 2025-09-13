@@ -5,19 +5,35 @@
     "address_and_balances": [
       [
         "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
-        "10000000000000"
+        "5000000000000"
       ],
       [
         "sov1x3jtvq0zwhj2ucsc4hqugskvralrulxvf53vwtkred93s85ar2a",
-        "10000000000000000"
+        "5000000000000000"
       ],
       [
         "sov10d6chuh8vu86ltmt7qq4ec8lt25qyvr0cl3lg4mzs5llcfnx69m",
-        "10000000000000"
+        "5000000000000"
       ],
       [
         "sov1v870parxhssv5wyz634wqlt9yflrrnawlwzjhj8409q4yevcj3s",
-        "10000000000000"
+        "5000000000000"
+      ],
+      [
+        "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "5000000000000000"
+      ],
+      [
+        "0x3FE0233e6cf3c9753fcB7449987EC49C88aDDE71",
+        "5000000000000"
+      ],
+      [
+        "0x4Fa6c577eE74B4F3C5309Af1b6313dd6D525e694",
+        "5000000000000"
+      ],
+      [
+        "0xa80749aD39A047603cbc5D0f46a03A1c6B2Db6c9",
+        "5000000000000"
       ]
     ],
     "admins": [

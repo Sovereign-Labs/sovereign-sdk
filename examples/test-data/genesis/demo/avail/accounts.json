@@ -1,5 +1,4 @@
-
 {
-    "accounts": [
-    ]
+    "accounts": [],
+    "enable_custom_account_mappings": false
 }

@@ -166,6 +166,7 @@ async fn run() -> anyhow::Result<()> {
                 &GenesisPaths::from_dir(&args.genesis_config_dir),
                 rollup_config_path,
                 prover_config,
+                start_at_rollup_height,
                 stop_at_rollup_height,
             )
             .await
@@ -179,6 +180,7 @@ async fn run() -> anyhow::Result<()> {
                 &GenesisPaths::from_dir(&args.genesis_config_dir),
                 rollup_config_path,
                 prover_config,
+                start_at_rollup_height,
                 stop_at_rollup_height,
             )
             .await
@@ -261,6 +263,7 @@ async fn new_rollup_with_avail_da_and_jmt(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
     prover_config: Option<RollupProverConfig<Risc0>>,
+    start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
 ) -> anyhow::Result<Rollup<AvailDemoRollup<Native>, Native>> {
     debug!(
@@ -282,6 +285,7 @@ async fn new_rollup_with_avail_da_and_jmt(
             rt_genesis_paths,
             rollup_config,
             prover_config,
+            start_at_rollup_height,
             stop_at_rollup_height,
         )
         .await
@@ -291,6 +295,7 @@ async fn new_rollup_with_avail_da_and_nomt(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
     prover_config: Option<RollupProverConfig<Risc0>>,
+    start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
 ) -> anyhow::Result<Rollup<AvailNomtDemoRollup<Native>, Native>> {
     debug!(
@@ -312,6 +317,7 @@ async fn new_rollup_with_avail_da_and_nomt(
             rt_genesis_paths,
             rollup_config,
             prover_config,
+            start_at_rollup_height,
             stop_at_rollup_height,
         )
         .await
