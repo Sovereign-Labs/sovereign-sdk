@@ -193,7 +193,7 @@ mod tests {
     #[test]
     fn prover_config_debug_and_display_are_the_same() {
         let config = RollupProverConfigDiscriminants::Skip;
-        assert_eq!(format!("{config:?}"), format!("{}", config));
+        assert_eq!(format!("{config:?}"), config.to_string());
     }
 
     #[test]
