@@ -53,7 +53,7 @@ where
 {
     match std::sync::OnceLock::get(&tracker::METRICS_TRACKER) {
         None => {
-            tracing::warn!("Submitting metrics to uninitialized metrics tracker. Submitted metrics will be dropped. Please call `sov_metrics::init_metrics_tracker` to prevent data loss.");
+            // tracing::warn!("Submitting metrics to uninitialized metrics tracker. Submitted metrics will be dropped. Please call `sov_metrics::init_metrics_tracker` to prevent data loss.");
         }
         Some(m) => {
             f(m);
