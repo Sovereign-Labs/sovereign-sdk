@@ -706,6 +706,9 @@ where
     R::Spec: Spec<Da = MockDaSpec>,
     StoragePath: AsPath,
 {
+    /// Default timeout for polling operations in seconds.
+    pub const POLLING_TIMEOUT: u64 = 20;
+
     /// Pauses batch production for the preferred sequencer.
     ///
     /// Transactions accepted by the preferred sequencer after this call (and
@@ -799,11 +802,15 @@ where
     /// Polls the sequencer until is_ready() returns Err(). Useful when you expect the sequencer to
     /// go into resync/recovery/startup mode, to avoid wait_for_sequencer_ready() from resolving
     /// _before_ the sequencer becomes unready.
+    ///
+    /// Times out after TestRollup::POLLING_TIMEOUT seconds.
     pub async fn wait_for_sequencer_not_ready(&self) -> anyhow::Result<()> {
         self.wait_for_sequencer_state(false).await
     }
 
     /// Polls the sequencer until is_ready() returns Ok(()).
+    ///
+    /// Times out after TestRollup::POLLING_TIMEOUT seconds.
     pub async fn wait_for_sequencer_ready(&self) -> anyhow::Result<()> {
         self.wait_for_sequencer_state(true).await
     }
@@ -819,7 +826,6 @@ where
         F: FnMut() -> Fut,
         Fut: std::future::Future<Output = anyhow::Result<bool>>,
     {
-        const TIMEOUT_SECS: u64 = 20;
         let wait_loop = async {
             loop {
                 match condition_check().await {
@@ -830,10 +836,13 @@ where
             }
         };
 
-        timeout(Duration::from_secs(TIMEOUT_SECS), wait_loop)
+        timeout(Duration::from_secs(Self::POLLING_TIMEOUT), wait_loop)
             .await
             .with_context(|| {
-                format!("Timeout waiting for {condition_string} after {TIMEOUT_SECS} seconds")
+                format!(
+                    "Timeout waiting for {condition_string} after {} seconds",
+                    Self::POLLING_TIMEOUT
+                )
             })?
     }
 
@@ -852,6 +861,8 @@ where
     }
 
     /// Waits for the node to finish syncing with the DA layer.
+    ///
+    /// Times out after TestRollup::POLLING_TIMEOUT seconds.
     pub async fn wait_for_node_synced(&self) -> anyhow::Result<()> {
         self.wait_for_condition(
             || async {
