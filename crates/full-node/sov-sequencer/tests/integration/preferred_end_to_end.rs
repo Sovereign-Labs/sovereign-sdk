@@ -629,12 +629,13 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
 
     tracing::info!("Resuming preferred sequencer batch production.");
     test_rollup.resume_preferred_batches().await;
-    // A single block is usually enough but was very rarely flaky. Producing two blocks fixes that
-    // and doesn't hurt
-    // Now on the next state update, the sequencer should always enter recovery
+    // Normally on the next state update, the sequencer should always enter recovery.
+    // However for some reason this was flaky.
     test_rollup.da_service.produce_block_now().await.unwrap();
-    sleep(Duration::from_millis(50)).await;
-    assert!(!test_rollup.is_sequencer_ready().await);
+    while test_rollup.is_sequencer_ready().await {
+        let _ = da_layer.produce_block().await;
+        sleep(Duration::from_millis(50)).await;
+    }
 
     // Create transaction that should fail: sequencer should not accept transactions while in
     // recovery.
