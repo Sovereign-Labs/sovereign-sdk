@@ -154,7 +154,7 @@ where
         let balance = self
             .get_db(state)
             .basic(address)
-            .map_err(|e| eth_api_into_rpc_error(EthApiError::from(e)))?
+            .map_err(EthApiError::from)?
             .map(|account| account.balance)
             .unwrap_or_default();
 
@@ -615,7 +615,12 @@ fn eth_from_evm_error<Ws: StateAccessor>(err: EVMError<crate::db::Error<Ws>>) ->
 
 impl<Ws: StateAccessor> From<crate::db::Error<Ws>> for EthApiError {
     fn from(err: crate::db::Error<Ws>) -> Self {
-        EthApiError::EvmCustom(format!("Database error: {err}"))
+        RpcInvalidTransactionError::other(ErrorObject::owned(
+            -32603,
+            format!("Database error: {err}"),
+            None::<()>,
+        ))
+        .into()
     }
 }
 
