@@ -145,29 +145,29 @@ where
     }
 }
 
-impl<S, Rt> Drop for InnerGuard<'_, S, Rt>
-where
-    S: Spec,
-    Rt: Runtime<S>,
-{
-    fn drop(&mut self) {
-        self.inner.metrics.push(PreferredSequencerChannelMetrics {
-            duration: self.start_time.elapsed(),
-            reason: self.reason,
-            channel_size: self.channel_size,
-        });
-        if self.inner.metrics.len() >= METRICS_BATCH_SIZE {
-            sov_metrics::track_metrics(|t| {
-                t.submit(PreferredSequencerChannelMetricsBatch {
-                    metrics: std::mem::replace(
-                        &mut self.inner.metrics,
-                        Vec::with_capacity(METRICS_BATCH_SIZE),
-                    ),
-                });
-            });
-        }
-    }
-}
+// impl<S, Rt> Drop for InnerGuard<'_, S, Rt>
+// where
+//     S: Spec,
+//     Rt: Runtime<S>,
+// {
+//     fn drop(&mut self) {
+//         self.inner.metrics.push(PreferredSequencerChannelMetrics {
+//             duration: self.start_time.elapsed(),
+//             reason: self.reason,
+//             channel_size: self.channel_size,
+//         });
+//         if self.inner.metrics.len() >= METRICS_BATCH_SIZE {
+//             sov_metrics::track_metrics(|t| {
+//                 t.submit(PreferredSequencerChannelMetricsBatch {
+//                     metrics: std::mem::replace(
+//                         &mut self.inner.metrics,
+//                         Vec::with_capacity(METRICS_BATCH_SIZE),
+//                     ),
+//                 });
+//             });
+//         }
+//     }
+// }
 
 impl<S, Rt> Inner<S, Rt>
 where

@@ -14,9 +14,9 @@ type ArcFormatFn =
 /// Metrics for a single state access.
 #[derive(Debug)]
 pub struct StateAccessMetric {
-    /// The key being accessed
-    #[cfg_attr(not(feature = "native"), allow(dead_code))]
-    key: MetricSlotKey,
+    // /// The key being accessed
+    // #[cfg_attr(not(feature = "native"), allow(dead_code))]
+    // key: MetricSlotKey,
     #[allow(missing_docs)]
     pub storage_read_size: Option<u32>,
     #[allow(missing_docs)]
@@ -65,7 +65,7 @@ impl StateAccessMetric {
     /// Creates a new state access metric.
     pub fn new_size(key: Arc<Vec<u8>>, display_fn: Option<ArcFormatFn>) -> Self {
         Self {
-            key: MetricSlotKey { key, display_fn },
+            // key: MetricSlotKey { key, display_fn },
             storage_read_size: None,
             duration: MaybeTimer::started(),
             access_type: StateAccessType::GetSize,
@@ -75,7 +75,7 @@ impl StateAccessMetric {
     /// Creates a new state access metric.
     pub fn new_read(key: Arc<Vec<u8>>, display_fn: Option<ArcFormatFn>) -> Self {
         Self {
-            key: MetricSlotKey { key, display_fn },
+            // key: MetricSlotKey { key, display_fn },
             storage_read_size: None,
             duration: MaybeTimer::started(),
             access_type: StateAccessType::GetValue,
@@ -85,10 +85,10 @@ impl StateAccessMetric {
     /// Returns a serializable placeholder metric.
     pub fn placeholder() -> Self {
         Self {
-            key: MetricSlotKey {
-                key: Arc::new(vec![]),
-                display_fn: None,
-            },
+            // key: MetricSlotKey {
+            //     key: Arc::new(vec![]),
+            //     display_fn: None,
+            // },
             storage_read_size: None,
             duration: MaybeTimer::Completed(Duration::from_secs(0)),
             access_type: StateAccessType::GetSize,
@@ -113,13 +113,13 @@ fn summarize(metrics: &StateMetrics, prefix: &str, target: &mut Vec<u8>) -> std:
         ",{prefix}_total_reads={total_reads},{prefix}_total_read_duration_us={total_read_timing},{prefix}_cache_misses={cache_misses},{prefix}_cache_miss_bytes={cache_miss_bytes},{prefix}_total_deserialize_bytes={total_deserialize_bytes},{prefix}_total_deserialize_duration_us={total_deserialize_duration}",
     )?;
     write!(target, ",{prefix}_slowest_read={},{prefix}_slowest_read_storage_read_size={slowest_read_storage_read_size}", slowest_read.as_micros())?;
-    if metrics.slowest_access.key.display_fn.is_some() {
-        write!(
-            target,
-            ",{prefix}_slowest_read_key=\"{}\"",
-            metrics.slowest_access.key
-        )?;
-    }
+    // if metrics.slowest_access.key.display_fn.is_some() {
+    //     write!(
+    //         target,
+    //         ",{prefix}_slowest_read_key=\"{}\"",
+    //         metrics.slowest_access.key
+    //     )?;
+    // }
     write!(target, ",{prefix}_slowest_deserialization_bytes={slowest_deserialization_bytes},{prefix}_slowest_deserialization_duration_us={slowest_deserialization_duration}")?;
     if metrics.slowest_deserialize.key.display_fn.is_some() {
         write!(
@@ -200,15 +200,15 @@ impl Default for StateMetrics {
 impl StateMetrics {
     /// Pushes a new state access metric.
     pub fn push(&mut self, mut metric: StateAccessMetric) {
-        self.total_reads = self.total_reads.saturating_add(1);
-        if let Some(size) = metric.storage_read_size {
-            self.total_read_bytes = self.total_read_bytes.saturating_add(size as u64);
-            self.total_read_misses = self.total_read_misses.saturating_add(1);
-        }
-        self.total_read_timing += metric.duration.stop_and_get_elapsed();
-        if metric.duration.elapsed() > self.slowest_access.duration.elapsed() {
-            self.slowest_access = metric;
-        }
+        // self.total_reads = self.total_reads.saturating_add(1);
+        // if let Some(size) = metric.storage_read_size {
+        //     self.total_read_bytes = self.total_read_bytes.saturating_add(size as u64);
+        //     self.total_read_misses = self.total_read_misses.saturating_add(1);
+        // }
+        // self.total_read_timing += metric.duration.stop_and_get_elapsed();
+        // if metric.duration.elapsed() > self.slowest_access.duration.elapsed() {
+        //     self.slowest_access = metric;
+        // }
     }
 
     /// Adds metrics for a deserialization.
@@ -219,18 +219,18 @@ impl StateMetrics {
         deserialized_bytes: u32,
         duration: Duration,
     ) {
-        let key = MetricSlotKey {
-            key: key_bytes,
-            display_fn: format_fn,
-        };
+        // let key = MetricSlotKey {
+        //     key: key_bytes,
+        //     display_fn: format_fn,
+        // };
 
-        self.total_deserialize_bytes = self
-            .total_deserialize_bytes
-            .saturating_add(deserialized_bytes as u64);
-        self.total_deserialize_timing += duration;
-        if duration > self.slowest_deserialize.duration {
-            self.slowest_deserialize = SlowDeserialization::new(key, duration, deserialized_bytes);
-        }
+        // self.total_deserialize_bytes = self
+        //     .total_deserialize_bytes
+        //     .saturating_add(deserialized_bytes as u64);
+        // self.total_deserialize_timing += duration;
+        // if duration > self.slowest_deserialize.duration {
+        //     self.slowest_deserialize = SlowDeserialization::new(key, duration, deserialized_bytes);
+        // }
     }
 
     /// Takes the state access metrics.
