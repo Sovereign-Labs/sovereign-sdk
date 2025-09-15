@@ -181,7 +181,7 @@ impl Options {
             sov_modules_api::runtime::get_runtime_schema::<S, D>().expect("Failed to get schema");
         let schema_json = serde_json::to_string_pretty(&schema)?;
         let mut file = File::create(out_path)?;
-        let chain_hash = schema.cached_chain_hash().unwrap();
+        let chain_hash = schema.chain_hash().unwrap();
 
         write!(
             &mut file,

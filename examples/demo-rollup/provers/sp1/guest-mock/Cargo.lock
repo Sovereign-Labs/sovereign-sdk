@@ -6239,6 +6239,7 @@ dependencies = [
  "bs58",
  "hex",
  "nmt-rs",
+ "once_cell",
  "schemars 0.8.21",
  "serde",
  "serde_json",

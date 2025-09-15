@@ -2,6 +2,8 @@ use std::any::TypeId;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
+use once_cell::sync::OnceCell;
+
 use sha2::{Digest, Sha256};
 pub mod container;
 mod primitive;
@@ -56,6 +58,8 @@ pub enum SchemaError {
     UnknownTemplate(String),
     #[error("Index {0} not found in schema")]
     InvalidIndex(usize),
+    #[error("Metadata hash must be provided but was not initialized. The schema was not properly finalized, or the serialized schema was invalid.")]
+    MetadataHashNotInitialized,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
@@ -103,12 +107,70 @@ impl MaybePartialLink {
 }
 
 /// This newtype is mainly necessary to allow the schema to derive Debug ergonomically
-#[derive(Default)]
-pub struct ConstructedMerkleTree(Option<MerkleTree<MemDb<[u8; 32]>, TmSha2Hasher>>);
+/// Stores both the tree and its root since MerkleTree::root() requires &mut self
+pub struct ConstructedMerkleTree(OnceCell<(MerkleTree<MemDb<[u8; 32]>, TmSha2Hasher>, [u8; 32])>);
+
+impl Default for ConstructedMerkleTree {
+    fn default() -> Self {
+        Self(OnceCell::new())
+    }
+}
 
 impl Debug for ConstructedMerkleTree {
     fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Ok(())
+    }
+}
+
+/// This extra metadata is used in contexts where serde features are enabled; thus, we do not
+/// serialize it in serde formats, as it should be recomputed before using the data committed
+/// using it. (Otherwise a frontend could supply malicious metadata and a mismatching hash to
+/// make the hash pass chain ID checks.)
+/// When serde is disabled (i.e. usecases using borsh serialization), this metadata is unused, so
+/// the committment is the only relevant information and a mismatch is not possible.
+/// TL;DR:
+/// - In borsh: serializes/deserializes the actual hash value, while corresponding metada is empty
+/// - In serde: skips serialization and recalculates on first use, ensuring hash matches the
+///   deserialized metadata
+struct MetadataHash(OnceCell<[u8; 32]>);
+
+impl Default for MetadataHash {
+    fn default() -> Self {
+        Self(OnceCell::new())
+    }
+}
+
+impl Debug for MetadataHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.get().fmt(f)
+    }
+}
+
+impl BorshSerialize for MetadataHash {
+    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        // The hash must be calculated before serialization (via finalize())
+        // It's an error to serialize a schema that hasn't been finalized
+        let hash = self.0.get().copied()
+            .ok_or_else(|| std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Cannot serialize Schema: metadata_hash not initialized. Call finalize() before serializing"
+            ))?;
+        BorshSerialize::serialize(&hash, writer)
+    }
+}
+
+impl BorshDeserialize for MetadataHash {
+    fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+        let hash: [u8; 32] = BorshDeserialize::deserialize_reader(reader)?;
+        let metadata_hash = MetadataHash::default();
+        // Set the hash - this should always succeed for a new MetadataHash
+        metadata_hash.0.set(hash).map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Failed to set metadata_hash in OnceCell during deserialization",
+            )
+        })?;
+        Ok(metadata_hash)
     }
 }
 
@@ -166,14 +228,10 @@ pub struct Schema {
     /// Global metadata for the chain.
     chain_data: ChainData,
 
-    /// Extra metadata hash.
-    /// The extra metadata is used in contexts where serde features are enabled; thus, we do not
-    /// serialize it in serde formats, as it should be recomputed before using the data committed
-    /// using it. (Otherwise a frontend could supply malicious metadata and a mismatching hash to
-    /// make the hash pass chain ID checks.) We do serialize it in borsh as the extra metadata is
-    /// unused, so the committment is the only relevant information and a mismatch is not possible.
+    /// Extra metadata hash. "Extra" metadata is defined as metadata irrelevant when no additional
+    /// features are enabled.
     #[cfg_attr(feature = "serde", serde(skip))]
-    extra_metadata_hash: [u8; 32],
+    extra_metadata_hash: MetadataHash,
 
     /// The chain hash: the top-level hash committing to the entire schema, including all types and
     /// all metadata.
@@ -182,7 +240,7 @@ pub struct Schema {
     /// after the schema has been deserialized and constructed.
     #[cfg_attr(feature = "serde", serde(skip))]
     #[borsh(skip)]
-    chain_hash: Option<[u8; 32]>,
+    chain_hash: OnceCell<[u8; 32]>,
 
     /// A list of templatable objects that can be constructed from standard input, per root type (in
     /// order corresponding to root_type_indices). Mapped by template name.
@@ -258,15 +316,31 @@ impl Schema {
     }
 
     #[cfg(not(feature = "serde"))]
-    pub fn metadata_hash(&self) -> [u8; 32] {
+    pub fn metadata_hash(&self) -> Result<[u8; 32], SchemaError> {
+        // In borsh-only context, the hash must have been deserialized
+        // If it's not present, that's a critical error
         self.extra_metadata_hash
+            .0
+            .get()
+            .copied()
+            .ok_or(SchemaError::MetadataHashNotInitialized)
     }
+
     #[cfg(feature = "serde")]
-    pub fn metadata_hash(&mut self) -> Result<[u8; 32], SchemaError> {
-        if self.extra_metadata_hash == [0; 32] {
-            self.save_metadata_hash()?;
-        }
-        Ok(self.extra_metadata_hash)
+    pub fn metadata_hash(&self) -> Result<[u8; 32], SchemaError> {
+        // In serde context, calculate on first use if not present
+        self.extra_metadata_hash
+            .0
+            .get_or_try_init(|| self.calculate_metadata_hash())
+            .copied()
+    }
+
+    #[cfg(feature = "serde")]
+    fn calculate_metadata_hash(&self) -> Result<[u8; 32], SchemaError> {
+        let mut hasher = Sha256::new();
+        hasher.update(&borsh::to_vec(&self.templates)?);
+        hasher.update(&borsh::to_vec(&self.serde_metadata)?);
+        Ok(hasher.finalize().into())
     }
 
     #[cfg(feature = "serde")]
@@ -298,7 +372,7 @@ impl Schema {
     }
 
     #[cfg(feature = "eip712")]
-    pub fn eip712_json(&mut self, type_index: usize, input: &[u8]) -> Result<String, SchemaError> {
+    pub fn eip712_json(&self, type_index: usize, input: &[u8]) -> Result<String, SchemaError> {
         let Some(typed_data) = self.eip712_get_typed_data_inner(type_index, input)? else {
             return Ok(String::default());
         };
@@ -307,7 +381,7 @@ impl Schema {
 
     #[cfg(feature = "eip712")]
     pub fn eip712_signing_hash(
-        &mut self,
+        &self,
         type_index: usize,
         input: &[u8],
     ) -> Result<[u8; 32], SchemaError> {
@@ -319,7 +393,7 @@ impl Schema {
 
     #[cfg(feature = "eip712")]
     fn eip712_get_typed_data_inner(
-        &mut self,
+        &self,
         type_index: usize,
         input: &[u8],
     ) -> Result<Option<TypedData>, SchemaError> {
@@ -450,67 +524,48 @@ impl Schema {
     /// with any chain-specific metadata.
     /// This allows the chain ID to be used for verification of the schema (and thus verification
     /// that a transaction claiming to correspond to a given schema will have the effect it claims).
-    pub fn chain_hash(&mut self) -> Result<[u8; 32], SchemaError> {
-        match self.chain_hash {
-            Some(hash) => Ok(hash),
-            None => {
+    pub fn chain_hash(&self) -> Result<[u8; 32], SchemaError> {
+        self.chain_hash
+            .get_or_try_init(|| {
                 // First, merkleize the schema
-                let merkle_root = match &mut self.merkle_tree.0 {
-                    Some(tree) => tree.root(),
-                    None => {
-                        let mut tree = MerkleTree::new();
-                        for ty in &self.types {
-                            tree.push_raw_leaf(&borsh::to_vec(ty)?)
-                        }
-                        let root = tree.root();
-                        self.merkle_tree = ConstructedMerkleTree(Some(tree));
-                        root
-                    }
-                };
+                let merkle_root = self.merkle_root()?;
+
                 // Then, hash the auxilliary internal data - root indices and chain data
                 let mut hasher = Sha256::new();
                 hasher.update(&borsh::to_vec(&self.root_type_indices)?);
                 hasher.update(&borsh::to_vec(&self.chain_data)?);
                 let internal_data_hash: [u8; 32] = hasher.finalize().into();
 
-                // If we're in a serde context, recalculate the metadata hash also, as we cannot
-                // trust the serialization.
-                #[cfg(feature = "serde")]
-                {
-                    self.save_metadata_hash()?;
-                }
+                // Get the metadata hash
+                let metadata_hash = self.metadata_hash()?;
 
                 // Finally, combine the three hashes in order to get the final chain hash
                 let mut hasher = Sha256::new();
                 hasher.update(merkle_root);
                 hasher.update(internal_data_hash);
-                hasher.update(self.extra_metadata_hash);
+                hasher.update(metadata_hash);
 
-                let chain_hash = hasher.finalize().into();
-                self.chain_hash = Some(chain_hash);
+                let chain_hash: [u8; 32] = hasher.finalize().into();
                 Ok(chain_hash)
+            })
+            .copied()
+    }
+
+    fn merkle_root(&self) -> Result<[u8; 32], SchemaError> {
+        let (_, root) = self.merkle_tree.0.get_or_try_init(|| {
+            let mut tree = MerkleTree::new();
+            for ty in &self.types {
+                tree.push_raw_leaf(&borsh::to_vec(ty)?)
             }
-        }
+            let root = tree.root();
+            Ok::<_, SchemaError>((tree, root))
+        })?;
+        Ok(*root)
     }
 
-    /// Returns the chain ID calculated using the merkle root of all the schema types, combined
-    /// with any chain-specific metadata.
-    /// Only returns the cached value if it has already been calculated. This does not require a
-    /// mutable reference to the schema.
-    pub fn cached_chain_hash(&self) -> Option<[u8; 32]> {
-        self.chain_hash
-    }
-
-    fn save_metadata_hash(&mut self) -> Result<(), SchemaError> {
-        let mut hasher = Sha256::new();
-        hasher.update(&borsh::to_vec(&self.templates)?);
-        hasher.update(&borsh::to_vec(&self.serde_metadata)?);
-        self.extra_metadata_hash = hasher.finalize().into();
-        Ok(())
-    }
-
-    fn finalize(&mut self) -> Result<(), SchemaError> {
-        self.save_metadata_hash()?;
+    fn finalize(&self) -> Result<(), SchemaError> {
+        // Ensure both hashes are calculated and cached
+        self.metadata_hash()?;
         self.chain_hash()?;
         Ok(())
     }

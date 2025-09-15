@@ -5341,6 +5341,7 @@ dependencies = [
  "hex",
  "nmt-rs",
  "schemars 0.8.22",
+ "once_cell",
  "serde",
  "serde_json",
  "sha2 0.10.9",
