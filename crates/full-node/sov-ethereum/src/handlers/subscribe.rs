@@ -14,7 +14,6 @@ use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::Spec;
 use sov_sequencer::Sequencer;
 use std::sync::Arc;
-use std::time::Duration;
 
 use crate::handlers::ETH_RPC_ERROR;
 
@@ -64,7 +63,7 @@ async fn stream_logs<S, Seq>(
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
     let evm = Evm::<S>::default();
-    let state = &mut ethereum.sequencer.api_state().default_api_state_accessor();
+    let state = &mut ethereum.api_state_accessor();
 
     let pending_block = evm.pending_block(state);
     let mut prev_last_tx_index = pending_block.transactions.end;
@@ -72,13 +71,15 @@ async fn stream_logs<S, Seq>(
     // Fetch the initial block. If it’s stale, it will be replaced below.
     let mut block = evm.get_maybe_sealed_block(pending_block.header.number - 1, state);
 
-    loop {
-        let state = &mut ethereum.sequencer.api_state().default_api_state_accessor();
+    let state_updates = &mut ethereum.sequencer.api_state().checkpoint_receiver();
+
+    while state_updates.changed().await.is_ok() {
+        let state = &mut ethereum.api_state_accessor();
+
         let pending_block = evm.pending_block(state);
         let curr_last_tx_index = pending_block.transactions.end;
 
         if curr_last_tx_index <= prev_last_tx_index {
-            tokio::time::sleep(Duration::from_millis(10)).await;
             continue;
         }
 
