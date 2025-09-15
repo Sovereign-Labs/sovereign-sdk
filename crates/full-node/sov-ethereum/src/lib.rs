@@ -12,7 +12,7 @@ pub use sov_eth_dev_signer::Signers;
 pub use sov_evm::EthereumAuthenticator;
 use sov_evm::{convert_to_transaction_signed, RlpEvmTransaction};
 use sov_modules_api::capabilities::HasKernel;
-use sov_modules_api::Spec;
+use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_sequencer::Sequencer;
 use std::future::ready;
 
@@ -107,6 +107,13 @@ where
         let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
 
         Ok((*tx_hash, message))
+    }
+
+    fn api_state_accessor(&self) -> ApiStateAccessor<S> {
+        self.sequencer
+            .api_state()
+            .build_api_state_accessor(None)
+            .unwrap()
     }
 }
 
