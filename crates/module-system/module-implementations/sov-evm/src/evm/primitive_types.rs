@@ -5,6 +5,7 @@ use alloy_consensus::{
     transaction::serde_bincode_compat::EthereumTxEnvelope as EthereumTxEnvelopeBincodeCompat,
     Header,
 };
+use alloy_primitives::TxHash;
 use alloy_primitives::{Address, Sealable, Sealed, B256};
 use reth_ethereum_primitives::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
 use reth_primitives::{Recovered, TransactionSigned};
@@ -200,6 +201,8 @@ pub struct Receipt {
     /// https://reth.rs/docs/reth_primitives/serde_bincode_compat/index.html
     #[serde_as(as = "ReceiptBincodeCompat")]
     pub receipt: reth_primitives::Receipt,
+    pub transaction_hash: TxHash,
+    pub block_number: u64,
     pub gas_used: u64,
     pub log_index_start: u64,
     pub error: Option<EVMError<u8>>,

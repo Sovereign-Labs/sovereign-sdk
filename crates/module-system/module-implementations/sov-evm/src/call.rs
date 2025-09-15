@@ -167,8 +167,9 @@ where
             .expect("gas_to_charge_per_evm_gas() is zero");
         let gas_used = scaled_sequencer_gas_used + result.gas_used();
         let logs = result.into_logs();
+        let transaction_hash = tx.signed_transaction.hash().clone();
         tracing::debug!(
-            hash = hex::encode(tx.signed_transaction.hash()),
+            hash = hex::encode(transaction_hash),
             gas_used,
             "EVM transaction has been executed"
         );
@@ -186,6 +187,8 @@ where
 
         Ok(Receipt {
             receipt,
+            transaction_hash,
+            block_number: tx.block_number,
             gas_used,
             log_index_start,
             error: None,
