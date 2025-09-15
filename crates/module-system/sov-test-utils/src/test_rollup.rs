@@ -809,16 +809,17 @@ where
     }
 
     /// Generic helper for waiting on a condition with timeout and polling.
+    ///  * condition_string: inserted into "Timeout waiting for {condition_string}", format accordingly
     async fn wait_for_condition<F, Fut>(
         &self,
         mut condition_check: F,
-        condition_name: &str,
-        timeout_secs: u64,
+        condition_string: &str,
     ) -> anyhow::Result<()>
     where
         F: FnMut() -> Fut,
         Fut: std::future::Future<Output = anyhow::Result<bool>>,
     {
+        const TIMEOUT_SECS: u64 = 20;
         let wait_loop = async {
             loop {
                 match condition_check().await {
@@ -829,13 +830,10 @@ where
             }
         };
 
-        timeout(Duration::from_secs(timeout_secs), wait_loop)
+        timeout(Duration::from_secs(TIMEOUT_SECS), wait_loop)
             .await
             .with_context(|| {
-                format!(
-                    "Timeout waiting for {} after {} seconds",
-                    condition_name, timeout_secs
-                )
+                format!("Timeout waiting for {condition_string} after {TIMEOUT_SECS} seconds")
             })?
     }
 
@@ -849,7 +847,6 @@ where
         self.wait_for_condition(
             || async { Ok(self.is_sequencer_ready().await == wait_for_ready) },
             condition_name,
-            20,
         )
         .await
     }
@@ -865,7 +862,6 @@ where
                 ))
             },
             "node to sync",
-            20,
         )
         .await
     }
