@@ -319,7 +319,7 @@ mod tests {
         let keys_to_prune = pruner
             .collect_pruning_batch::<ModuleAccessoryState>(3)
             .unwrap();
-        rocksdb.write_schemas(keys_to_prune).unwrap();
+        rocksdb.write_schemas(keys_to_prune.pruning_batch).unwrap();
 
         // Assert that keys are deleted
         // Key A: has versions [6,7,8,9] -> keep [7,8,9], prune [6]

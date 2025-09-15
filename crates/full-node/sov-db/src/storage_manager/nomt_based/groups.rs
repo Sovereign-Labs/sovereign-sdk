@@ -396,7 +396,7 @@ impl PrunerJob {
             .context("accessory state")?;
         tracing::info!(%historical_state.hit_size_limit, %accessory_state.hit_size_limit, "Pruner task has completed");
         Ok(PruneGroup {
-            historical_state: historical_state,
+            historical_state,
             accessory: accessory_state,
         })
     }
