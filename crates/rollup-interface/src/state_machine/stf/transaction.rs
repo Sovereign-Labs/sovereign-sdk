@@ -24,7 +24,9 @@ pub struct TransactionReceipt<T: TxReceiptContents> {
     /// The canonical hash of this transaction
     pub tx_hash: TxHash,
     /// The canonically serialized body of the transaction, if it should be persisted
-    /// in the database
+    /// in the database.
+    /// Skip serialization because it is unnecessary over the wire.
+    #[serde(skip_serializing)]
     pub body_to_save: Option<Vec<u8>>,
     /// The events output by this transaction
     pub events: Vec<StoredEvent>,
