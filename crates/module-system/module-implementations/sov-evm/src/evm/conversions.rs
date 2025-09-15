@@ -7,7 +7,7 @@ use revm::context::{BlockEnv, TransactionType, TxEnv};
 use thiserror::Error;
 
 use super::primitive_types::SealedBlock;
-use crate::RlpEvmTransaction;
+use crate::{primitive_types::TransactionSignedAndRecovered, RlpEvmTransaction};
 
 // BlockEnv from SealedBlock
 impl From<SealedBlock> for BlockEnv {
@@ -24,6 +24,21 @@ impl From<SealedBlock> for BlockEnv {
             difficulty: Default::default(),
         }
     }
+}
+
+// Converts historical tx to TxEnv
+pub fn replay_tx_env(tx: &TransactionSignedAndRecovered) -> TxEnv {
+    let TransactionSignedAndRecovered {
+        signed_transaction,
+        signer,
+        ..
+    } = tx;
+    create_tx_env(
+        signed_transaction,
+        *signer,
+        signed_transaction.nonce(),
+        signed_transaction.gas_limit(),
+    )
 }
 
 /// Converts tx to TxEnv while overriding the signer and nonce
