@@ -46,6 +46,8 @@ use tokio::task::JoinHandle;
 use tracing::info;
 pub use wallet::*;
 
+/// Commit hash of this rollup
+pub const GIT_COMMIT_HASH: &str = env!("GIT_COMMIT_HASH");
 use crate::RollupBlueprint;
 
 /// This trait defines how to create all the necessary dependencies required by a rollup.
