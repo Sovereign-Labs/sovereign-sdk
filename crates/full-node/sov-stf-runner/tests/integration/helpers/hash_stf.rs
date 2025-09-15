@@ -136,11 +136,20 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
         hasher.update(existing_cache.value());
 
         let mut proof_receipts = Vec::new();
+        let mut batch_receipts = Vec::new();
         for blob in relevant_blobs.batch_blobs.iter_mut() {
             let data = blob.full_data();
             if !data.is_empty() {
                 hasher.update(data);
             }
+
+            let batch_hash: [u8; 32] = sha2::Sha256::digest(data).into();
+            batch_receipts.push(sov_rollup_interface::stf::BatchReceipt {
+                batch_hash,
+                tx_receipts: Vec::new(),
+                ignored_tx_receipts: Vec::new(),
+                inner: batch_hash,
+            });
         }
 
         for blob in relevant_blobs.proof_blobs.iter_mut() {
@@ -187,8 +196,7 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
             state_root,
             change_set,
             proof_receipts,
-            // TODO: Add batch receipts to inspection
-            batch_receipts: vec![],
+            batch_receipts,
             discarded_blobs: vec![],
             witness,
             rollup_height: RollupHeight::new(0),
