@@ -1358,9 +1358,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-proto"
-version = "0.9.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6c8da7e4e1d4ae492170a9c551419e89e314c1438652bb512e00091b39bdf0b"
+checksum = "2ad9997e960ce6a4ac0648a227430673583d649103ceb2d850395b1e32e4c647"
 dependencies = [
  "bytes",
  "prost",
@@ -1374,9 +1374,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-types"
-version = "0.15.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c7d91261985b0c799a3e2a0a818509adc5a9a0fd25c480f23de97f8fe379f20"
+checksum = "6f536bad6c2891ee5efbe3d7665393b7c18a6921254c3198036d603078000ced"
 dependencies = [
  "base64",
  "bech32",
@@ -1393,7 +1393,7 @@ dependencies = [
  "multihash",
  "nmt-rs",
  "prost",
- "rust_decimal",
+ "ruint",
  "serde",
  "serde_repr",
  "sha2 0.10.9",
@@ -5544,17 +5544,6 @@ name = "ruint-macro"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48fd7bd8a6377e15ad9d42a8ec25371b94ddc67abe7c8b9127bec79bebaaae18"
-
-[[package]]
-name = "rust_decimal"
-version = "1.37.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b203a6425500a03e0919c42d3c47caca51e79f1132046626d2c8871c5092035d"
-dependencies = [
- "arrayvec",
- "num-traits",
- "serde",
-]
 
 [[package]]
 name = "rustc-demangle"
