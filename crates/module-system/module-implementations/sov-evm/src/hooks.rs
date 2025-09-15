@@ -49,15 +49,11 @@ impl<S: Spec> BlockHooks for Evm<S> {
             // This is justified. We will never have so many blocks.
             .expect("The impossible happened: Block number overflow");
 
-        // TODO EVM: #1510. This is wrong we should take the sov timestamp.
-
         let new_timestamp = self
             .chain_state_module
             .get_time(state)
             .unwrap_infallible()
             .as_millis() as u64;
-
-        println!("new_timestamp: {:?}", new_timestamp);
 
         let new_pending_env = BlockEnv {
             number: U256::from(new_block_number),

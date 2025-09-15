@@ -47,7 +47,6 @@ fn test_genesis_cfg() {
             EvmRuntimeConfig {
                 chain_spec: sov_evm::EvmChainSpec {
                     block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
-                    block_timestamp_delta: 2,
                     coinbase: Address::from([3u8; 20]),
                     limit_contract_code_size: Some(5000),
                     hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)],
@@ -122,7 +121,6 @@ fn default_config() -> EvmGenesisConfig {
         genesis_timestamp: 50,
         chain_spec: sov_evm::EvmChainSpec {
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
-            block_timestamp_delta: 2,
             coinbase: Address::from([3u8; 20]),
             limit_contract_code_size: Some(5000),
             hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)],
