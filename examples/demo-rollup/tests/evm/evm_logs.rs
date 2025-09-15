@@ -63,7 +63,7 @@ async fn evm_test_log_subscription() {
         if block_nr_from_log > block_nr {
             let block_timestamp_from_log = log.block_timestamp.unwrap();
             assert!(block_timestamp_from_log > time_stamp);
-            time_stamp = block_nr_from_log;
+            time_stamp = block_timestamp_from_log;
             block_nr = block_timestamp_from_log;
         }
 
