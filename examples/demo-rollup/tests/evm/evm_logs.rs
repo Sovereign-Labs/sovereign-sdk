@@ -64,7 +64,7 @@ async fn evm_test_log_subscription() {
             let block_timestamp_from_log = log.block_timestamp.unwrap();
             assert!(block_timestamp_from_log > time_stamp);
             time_stamp = block_timestamp_from_log;
-            block_nr = block_timestamp_from_log;
+            block_nr = block_nr_from_log;
         }
 
         assert_logs(log, sub_log);
