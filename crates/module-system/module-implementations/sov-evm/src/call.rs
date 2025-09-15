@@ -90,7 +90,13 @@ where
                 receipt
             }
             Err(err) => {
-                return self.handle_execution_error(transaction.signed_transaction.hash(), err)
+                tracing::debug!(
+                    tx_hash = hex::encode(*transaction.signed_transaction.hash()),
+                    error = ?err,
+                    "EVM transaction has been reverted"
+                );
+
+                anyhow::bail!("EVM transaction error: {:?}", err);
             }
         };
 
@@ -190,23 +196,6 @@ where
             log_index_start,
             error: None,
         })
-    }
-
-    fn handle_execution_error<E: std::fmt::Debug>(
-        &self,
-        hash: &B256,
-        err: EVMError<E>,
-    ) -> anyhow::Result<()> {
-        // Adopted from https://github.com/paradigmxyz/reth/blob/main/crates/payload/basic/src/lib.rs#L884
-        tracing::debug!(
-            tx_hash = hex::encode(hash),
-            error = ?err,
-            "EVM transaction has been reverted"
-        );
-        match err {
-            EVMError::Transaction(_) => Ok(()), // This is a transactional error, so we can skip it without doing anything.
-            err => Err(anyhow::anyhow!("EVM execution error: {:?}", err)), // This is a fatal error, so we need to return it.
-        }
     }
 
     // The nonce check is already performed by the stf-blueprint during transaction preprocessing,
