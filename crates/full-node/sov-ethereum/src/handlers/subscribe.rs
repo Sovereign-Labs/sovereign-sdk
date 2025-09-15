@@ -84,16 +84,6 @@ async fn stream_logs<S, Seq>(
         }
 
         for index in prev_last_tx_index..curr_last_tx_index {
-            // TODO: #1510
-            // The module state currently stores very little metadata about blocks and transactions.
-            // As a result, to create a log, we need to:
-            //   1. Fetch the corresponding transaction,
-            //   2. Fetch the corresponding receipt,
-            //   3. Occasionally fetch the corresponding block (if the cached one becomes outdated).
-            //
-            // If we store the block number and transaction hash in the receipt,
-            // we can avoid fetching transactions entirely.
-            //let tx = evm.transaction(index, state).unwrap();
             let receipt = evm.receipt(index, state).unwrap();
 
             if block.number() != receipt.block_number {

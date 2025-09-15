@@ -555,30 +555,30 @@ pub(crate) fn build_rpc_receipt(
 
     let block_hash = block.hash();
     let block_number = Some(block.number());
-    let transaction_hash = Some(*transaction.hash());
     // Safety: The transaction cannot have a lower number than the block start
     let transaction_index = tx_number
         .checked_sub(block.transactions_start())
         .expect("The impossible happened: overflow while subtracting block start from tx number.");
 
+    let transaction_hash = receipt.transaction_hash;
+    let logs_bloom = receipt.receipt.bloom();
+
     let logs: Vec<Log> = receipt
         .receipt
         .logs
-        .iter()
+        .into_iter()
         .enumerate()
         .map(|(tx_log_idx, log)| Log {
-            inner: log.clone(),
+            inner: log,
             block_hash,
             block_number,
             block_timestamp: block.timestamp(),
-            transaction_hash,
+            transaction_hash: Some(transaction_hash),
             transaction_index: Some(transaction_index),
             log_index: Some(receipt.log_index_start + tx_log_idx as u64),
             removed: false,
         })
         .collect();
-
-    let logs_bloom = receipt.receipt.bloom();
 
     let rpc_receipt = alloy_rpc_types::Receipt {
         status: receipt.receipt.success.into(),
@@ -593,7 +593,7 @@ pub(crate) fn build_rpc_receipt(
 
     TransactionReceipt {
         inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom::new(rpc_receipt, logs_bloom)),
-        transaction_hash: *transaction.hash(),
+        transaction_hash,
         transaction_index: Some(transaction_index),
         block_hash,
         block_number,
