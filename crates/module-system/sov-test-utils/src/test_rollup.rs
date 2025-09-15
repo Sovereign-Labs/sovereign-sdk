@@ -888,7 +888,6 @@ where
             c.stop_at_rollup_height = stop_at_height;
         });
         let rollup = builder.start().await?;
-        rollup.wait_for_sequencer_ready().await?;
         Ok(rollup)
     }
 
