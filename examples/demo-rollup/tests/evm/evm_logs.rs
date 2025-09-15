@@ -53,10 +53,24 @@ async fn evm_test_log_subscription() {
 
     assert_eq!(logs_from_subscription.len(), logs_fetched.len());
 
+    let mut block_nr = 0;
+    let mut time_stamp = 0;
     for (i, log) in logs_fetched.iter().enumerate() {
         let sub_log = &logs_from_subscription[i];
+        let block_nr_from_log = log.block_number.unwrap();
+
+        // Verify that the block timestamp increases along with the block number.
+        if block_nr_from_log > block_nr {
+            let block_timestamp_from_log = log.block_timestamp.unwrap();
+            assert!(block_timestamp_from_log > time_stamp);
+            time_stamp = block_nr_from_log;
+            block_nr = block_timestamp_from_log;
+        }
+
         assert_logs(log, sub_log);
     }
+
+    assert!(block_nr > 0);
 }
 
 // Subscription test with filtering.

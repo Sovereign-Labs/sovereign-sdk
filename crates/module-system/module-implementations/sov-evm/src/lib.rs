@@ -139,6 +139,10 @@ pub struct Evm<S: Spec> {
     #[module]
     pub(crate) uniqueness_module: sov_uniqueness::Uniqueness<S>,
 
+    /// A reference to the ChainState module.
+    #[module]
+    pub(crate) chain_state_module: sov_chain_state::ChainState<S>,
+
     #[phantom]
     phantom: core::marker::PhantomData<S>,
 }

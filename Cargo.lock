@@ -12443,6 +12443,7 @@ dependencies = [
  "sha2 0.10.9",
  "sov-address",
  "sov-bank",
+ "sov-chain-state",
  "sov-eth-dev-signer",
  "sov-evm",
  "sov-kernels",
