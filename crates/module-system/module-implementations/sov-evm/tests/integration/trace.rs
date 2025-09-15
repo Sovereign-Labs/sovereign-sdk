@@ -1,5 +1,9 @@
 use crate::helpers::*;
 use crate::runtime::S;
+use alloy_primitives::{Bytes, U256};
+use alloy_rpc_types_trace::geth::{
+    CallFrame, GethDebugBuiltInTracerType, GethDebugTracingOptions, GethTrace,
+};
 use sov_evm::Evm;
 use sov_test_utils::{BatchTestCase, SimpleStorageContract};
 
@@ -34,7 +38,24 @@ fn test_tracing() {
 
     let evm = Evm::<S>::default();
     runner.query_state(|state| {
-        evm.debug_trace_transaction(tx_hash.unwrap(), None, state)
+        let opts = GethDebugTracingOptions::new_tracer(GethDebugBuiltInTracerType::CallTracer);
+        let trace = evm
+            .debug_trace_transaction(tx_hash.unwrap(), Some(opts), state)
             .unwrap();
+        assert_eq!(
+            trace,
+            GethTrace::CallTracer(CallFrame {
+                from: account.address(),
+                to: Some(contract_addr),
+                typ: "CALL".into(),
+                input: "60fe47b10000000000000000000000000000000000000000000000000000000000000000"
+                    .parse::<Bytes>()
+                    .unwrap(),
+                value: Some(U256::ZERO),
+                gas: U256::from(1_000_000),
+                gas_used: U256::from(4_323),
+                ..Default::default()
+            })
+        )
     });
 }

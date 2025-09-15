@@ -7,29 +7,33 @@ use alloy_rpc_types::{
 };
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
+use alloy_rpc_types_trace::geth::{GethDebugBuiltInTracerType, GethDebugTracerType};
 use error::ensure_success;
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
 use reth_primitives::{Recovered, TransactionSigned};
 use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 use revm::context::result::{EVMError, ExecutionResult, InvalidHeader};
-use revm::context::{BlockEnv, CfgEnv};
+use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::Database;
+use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{ApiStateAccessor, GasMeter, GasSpec, Spec, StateAccessor};
+use sov_rollup_interface::common::RollupHeight;
 use tracing::debug;
 
+use crate::conversions::replay_tx_env;
 use crate::db::EvmDb;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, SealedBlock, TransactionSignedAndRecovered};
-use crate::executor::get_cfg_env;
+use crate::executor::{get_cfg_env, inspect};
 use crate::helpers::{
     from_primitive_with_hash, from_recovered_with_block_context, prepare_call_env,
 };
 use crate::primitive_types::MaybeSealedBlock;
-use crate::Evm;
+use crate::{create_tx_env, Evm};
 
 pub(crate) mod error;
 
@@ -367,11 +371,32 @@ where
     #[rpc_method(name = "traceTransaction")]
     pub fn debug_trace_transaction(
         &self,
-        _tx_hash: B256,
-        _opts: Option<GethDebugTracingOptions>,
-        _state: &mut ApiStateAccessor<S>,
+        tx_hash: B256,
+        opts: Option<GethDebugTracingOptions>,
+        state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<GethTrace> {
-        todo!()
+        let opts = opts.unwrap_or_default();
+        let index = self.get_tx_index_by_hash(&tx_hash, state).unwrap();
+        let tx = self.transaction(index, state).unwrap();
+
+        let mut state = state
+            .get_archival_state(RollupHeight::new(tx.block_number - 1))
+            .unwrap();
+        let block_env = &self
+            .block_env(&mut state)?
+            // Justified, we set it in `begin_rollup_block_hook`.
+            .expect("The impossible happened: block_env is not set.");
+
+        let tx_env = replay_tx_env(&tx);
+        let cfg = self.cfg(&mut state).unwrap();
+
+        let cfg_env: CfgEnv = get_cfg_env(block_env, cfg, None);
+        let evm_db = self.get_db(&mut state);
+
+        let trace = self
+            .trace_transaction(block_env.clone(), tx_env, cfg_env, evm_db, &opts)
+            .map_err(eth_api_into_rpc_error)?;
+        Ok(trace)
     }
 }
 
@@ -379,6 +404,50 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    fn trace_transaction(
+        &self,
+        block_env: BlockEnv,
+        tx_env: TxEnv,
+        cfg: CfgEnv,
+        db: EvmDb<ApiStateAccessor<S>, S>,
+        opts: &GethDebugTracingOptions,
+    ) -> Result<GethTrace, EthApiError> {
+        let GethDebugTracingOptions {
+            tracer,
+            tracer_config,
+            ..
+        } = opts;
+        if let Some(tracer) = tracer {
+            return match tracer {
+                GethDebugTracerType::BuiltInTracer(tracer) => match tracer {
+                    GethDebugBuiltInTracerType::CallTracer => {
+                        let call_config = tracer_config
+                            .clone()
+                            .into_call_config()
+                            .map_err(|_| EthApiError::InvalidTracerConfig)?;
+
+                        let inspector_config =
+                            TracingInspectorConfig::from_geth_call_config(&call_config);
+                        let mut inspector = TracingInspector::new(inspector_config);
+
+                        let gas_limit = tx_env.gas_limit;
+                        let res = inspect(db, block_env, tx_env, cfg, &mut inspector)?;
+                        inspector.set_transaction_gas_limit(gas_limit);
+
+                        let frame = inspector
+                            .geth_builder()
+                            .geth_call_traces(call_config, res.result.gas_used());
+
+                        return Ok(frame.into());
+                    }
+                    _ => Err(EthApiError::Unsupported("unsupported tracer").into()),
+                },
+                _ => Err(EthApiError::Unsupported("unsupported tracer").into()),
+            };
+        };
+        Err(EthApiError::Unsupported("unsupported tracer").into())
+    }
+
     fn call(
         &self,
         request: TransactionRequest,
