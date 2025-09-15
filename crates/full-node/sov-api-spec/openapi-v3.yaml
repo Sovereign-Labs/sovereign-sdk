@@ -291,6 +291,18 @@ paths:
           "$ref": "#/components/responses/ApiErrorResponse"
         "503":
           "$ref": "#/components/responses/ApiErrorResponse"
+  /sequencer/ready:
+    get:
+      summary: Check whether the sequencer is ready to receive transactions
+      description: Returns an empty response when ready, or a 503 error with details when not ready
+      operationId: is_ready
+      tags:
+        - Sequencer
+      responses:
+        "200":
+          description: Sequencer is ready
+        "503":
+          "$ref": "#/components/responses/ApiErrorResponse"
   /sequencer/txs/{txHash}/status:
     get:
       summary: Get a transaction status by hash
