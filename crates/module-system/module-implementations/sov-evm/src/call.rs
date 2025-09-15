@@ -177,7 +177,6 @@ where
         let receipt = reth_primitives::Receipt {
             tx_type: tx.signed_transaction.tx_type(),
             success: is_success,
-
             cumulative_gas_used: previous_transaction_cumulative_gas_used
                 .checked_add(gas_used)
                 .context("EVM: Cumulative gas used overflow")?,
