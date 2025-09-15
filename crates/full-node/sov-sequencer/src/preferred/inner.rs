@@ -1457,7 +1457,8 @@ where
                         ),
                     ))
                 } else {
-                    if crate::preferred::MANUAL_STATE_UPDATE.swap(false, Ordering::Acquire) {
+                    // if crate::preferred::MANUAL_STATE_UPDATE.swap(false, Ordering::Acquire) {
+                    if crate::preferred::MANUAL_STATE_UPDATE.load(Ordering::Acquire) {
                         debug!(
                             is_startup,
                             is_resync,
