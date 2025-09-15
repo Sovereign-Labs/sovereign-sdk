@@ -14,7 +14,6 @@ use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::Spec;
 use sov_sequencer::Sequencer;
 use std::sync::Arc;
-use std::time::Duration;
 
 use crate::handlers::ETH_RPC_ERROR;
 

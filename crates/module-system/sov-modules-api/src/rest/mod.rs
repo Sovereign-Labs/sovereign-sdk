@@ -285,7 +285,7 @@ impl<S: Spec, T> ApiState<S, T> {
         Ok(state)
     }
 
-    /// TOOD
+    /// Retunr the checkpoint receiver.
     pub fn checkpoint_receiver(&self) -> watch::Receiver<StateCheckpoint<S>> {
         self.checkpoint_receiver.clone()
     }

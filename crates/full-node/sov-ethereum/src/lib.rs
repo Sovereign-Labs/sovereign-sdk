@@ -113,7 +113,7 @@ where
         self.sequencer
             .api_state()
             .build_api_state_accessor(None)
-            .unwrap()
+            .expect("Failed to build api state accessor")
     }
 }
 
