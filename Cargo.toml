@@ -253,13 +253,13 @@ bech32 = { version = "0.11" }
 derive_more = { version = "1.0", default-features = false, features = ["std"] }
 clap = { version = "4.5.16", features = ["derive"] }
 toml = { version = "0.8.19", features = ["parse"] }
-jsonrpsee = { version = "0.25" }
+jsonrpsee = { version = "0.25.1" }
 schemars = { version = "0.8.21", features = ["derive"] }
 tempfile = "3.20.0"
 testcontainers = "0.25.0"
 testcontainers-modules = "0.13.0"
 test-strategy = "0.4.0"
-tokio = { version = "1.42", default-features = false }
+tokio = { version = "1.42.2", default-features = false }
 tokio-stream = { version = "0.1", features = ["sync"] }
 uuid = { version = "1.10", default-features = false } # v1.9 is important because it guarantees monotic UUIDv7 generation: https://github.com/uuid-rs/uuid/releases/tag/1.9.0.
 lazy_static = "1.5.0"
@@ -273,31 +273,30 @@ risc0-build = "2.1"
 ethereum-types = "0.14.1"
 ethers = { version = "=2.0.14" }
 
-alloy-serde = { version = "1.0.24" }
-alloy-chains = { version = "0.2.0", default-features = false }
+alloy-serde = { version = "1.0.30" }
+alloy-chains = { version = "0.2.9", default-features = false }
 alloy-primitives = { version = "1.3.1", default-features = false }
 alloy-sol-types = { version = "1.3.1", default-features = false }
 alloy-eips = { version = "1.0.25", default-features = false }
-alloy-consensus = { version = "1.0.25", default-features = false }
-alloy-rpc-types = { version = "1.0.25", features = [
+alloy-consensus = { version = "1.0.30", default-features = false }
+alloy-rpc-types = { version = "1.0.30", features = [
     "eth",
 ], default-features = false }
 
-alloy-provider = { version = "1.0", features = ["ws"] }
-alloy-rpc-types-trace = { version = "1.0.25" }
-
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "d8451e54e7267f9f1634118d6d279b2216f7e2bb", default-features = false }
-reth-ethereum-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "d8451e54e7267f9f1634118d6d279b2216f7e2bb", default-features = false }
-reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", rev = "d8451e54e7267f9f1634118d6d279b2216f7e2bb", default-features = false }
-reth-rpc-convert = { git = "https://github.com/paradigmxyz/reth", rev = "d8451e54e7267f9f1634118d6d279b2216f7e2bb", default-features = false }
-reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", rev = "d8451e54e7267f9f1634118d6d279b2216f7e2bb", default-features = false }
-reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "d8451e54e7267f9f1634118d6d279b2216f7e2bb", default-features = false }
-revm = { version = "=27.0.3", features = ["serde"], default-features = false }
-revm-context = { version = "=8.0.3", default-features = false }
-revm-handler = { version = "=8.0.3", default-features = false }
-revm-context-interface = { version = "=8.0.3", default-features = false }
-revm-inspector = { version = "=8.0.3", default-features = false }
-revm-inspectors = { version = "=0.27.1", default-features = false }
+alloy-provider = { version = "1.0.30", features = ["ws"] }
+alloy-rpc-types-trace = { version = "1.0.30" }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0", default-features = false }
+reth-ethereum-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0", default-features = false }
+reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0", default-features = false }
+reth-rpc-convert = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0", default-features = false }
+reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0", default-features = false }
+reth-revm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0", default-features = false }
+revm = { version = "29.0.0", features = ["serde"], default-features = false }
+revm-context = { version = "9.0.2", default-features = false }
+revm-handler = { version = "9.0.2", default-features = false }
+revm-context-interface = { version = "10.0.1", default-features = false }
+revm-inspector = { version = "10.0.0", default-features = false }
+revm-inspectors = { version = "0.29.2", default-features = false }
 secp256k1 = { version = "=0.30.0", default-features = false, features = [
     "global-context",
     "recovery",
