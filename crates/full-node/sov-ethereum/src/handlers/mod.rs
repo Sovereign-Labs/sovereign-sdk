@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod subscribe;
 
 use alloy_primitives::{Bytes, B256};

@@ -385,7 +385,7 @@ where
             .map_err(|err| eth_api_into_rpc_error(eth_from_evm_error(err)))
     }
 
-    /// TODO
+    /// Retrieves a sealed block generated from an existing or pending block..
     pub fn get_maybe_sealed_block(
         &self,
         block_number: u64,
@@ -414,12 +414,12 @@ where
         let first_tx_index = head.transactions.end;
 
         MaybeSealedBlock::Pending {
-            block_number: block_number,
+            block_number,
             first_tx_number: first_tx_index,
         }
     }
 
-    /// TODO
+    /// Retrieves a sealed block by number.
     pub fn get_sealed_block_by_number(
         &self,
         block_number: Option<String>,
@@ -477,7 +477,7 @@ where
         }
     }
 
-    /// TOOD
+    /// Retrieves the pending block.
     pub fn pending_block(&self, state: &mut ApiStateAccessor<S>) -> crate::Block {
         let block_numbers = self
             .block_numbers
@@ -508,12 +508,10 @@ where
             ..Default::default()
         };
 
-        let block = crate::Block {
+        crate::Block {
             header,
             transactions: start..end,
-        };
-
-        block
+        }
     }
 
     fn resolve_block_env(
@@ -545,9 +543,8 @@ fn get_cfg_env_template() -> CfgEnv {
     cfg_env
 }
 
-/// TOOD
 // modified from: https://github.com/paradigmxyz/reth many times
-pub fn build_rpc_receipt(
+pub(crate) fn build_rpc_receipt(
     block: MaybeSealedBlock,
     tx: TransactionSignedAndRecovered,
     tx_number: u64,
@@ -602,12 +599,10 @@ pub fn build_rpc_receipt(
         block_number,
         gas_used: receipt.gas_used,
         effective_gas_price: 0,
-
         blob_gas_used: None,
         blob_gas_price: None,
         from,
         to,
-
         contract_address,
     }
 }

@@ -69,7 +69,7 @@ fn test_evm_gas_usage() {
             .checked_sub(&gas_used_without_evm_metering)
             .unwrap()
             .as_ref(),
-        &[4_323, 0]
+        &[5229, 0]
     );
 }
 
@@ -299,7 +299,7 @@ fn test_evm_logs() {
         assert_eq!(logs.len(), len);
 
         for log in logs {
-            assert_eq!(log.topics().len(), 2);
+            assert_eq!(log.topics().len(), 4);
             assert_eq!(log.address, contract_addr);
             assert_eq!(log.topics()[1], address_bytes);
         }
@@ -307,8 +307,8 @@ fn test_evm_logs() {
 
     let mut txs = vec![create_deploy_tx(0, &contract, &account).tx];
 
-    txs.push(create_emit_one_log(1, &contract, contract_addr, &account).tx);
-    txs.push(create_emit_two_logs(2, &contract, contract_addr, &account).tx);
+    txs.push(create_emit_logs(1, &contract, contract_addr, &account, 1, 1).tx);
+    txs.push(create_emit_logs(2, &contract, contract_addr, &account, 1, 2).tx);
 
     let evm = Evm::<S>::default();
 

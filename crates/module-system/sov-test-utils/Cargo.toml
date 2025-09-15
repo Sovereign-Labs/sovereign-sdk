@@ -88,4 +88,7 @@ arbitrary = [
     "sov-mock-da/arbitrary",
     "sov-bank/arbitrary",
     "sov-paymaster/arbitrary",
+    "alloy-primitives/arbitrary",
+	"alloy-rpc-types-eth/arbitrary",
+	"alloy-sol-types/arbitrary"
 ]

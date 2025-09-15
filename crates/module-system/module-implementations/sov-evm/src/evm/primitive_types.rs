@@ -72,7 +72,7 @@ pub struct Block {
     /// Block header.
     /// https://reth.rs/docs/reth_primitives/serde_bincode_compat/index.html
     #[serde_as(as = "HeaderBincodeCompat")]
-    pub(crate) header: Header,
+    pub header: Header,
 
     /// Transactions in this block.
     pub transactions: Range<u64>,
@@ -152,7 +152,7 @@ impl<'de> serde::Deserialize<'de> for SealedBlock {
 }
 
 #[cfg(feature = "native")]
-/// TODO
+/// Sealed or pending block.
 pub enum MaybeSealedBlock {
     Sealed(Box<SealedBlock>),
     Pending {

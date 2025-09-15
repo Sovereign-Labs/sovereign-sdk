@@ -26,7 +26,7 @@ use sov_cli::NodeClient;
 use sov_modules_api::{Runtime, Spec};
 use sov_test_utils::SimpleStorageContract;
 
-const GAS: u64 = 900000u64;
+const GAS: u64 = 9000000u64;
 const MAX_FEE_PER_GAS: u64 = 100;
 const MAX_PRIORITY_FEE_PER_GAS: u64 = 1;
 
@@ -188,22 +188,6 @@ impl TestClient {
             nonce,
             Some(contract_address),
             Some(self.contract.set_call_data(set_arg)),
-        );
-
-        self.client
-            .send_transaction(typed_transaction, None)
-            .await
-            .unwrap()
-    }
-
-    pub async fn emit_one_log(&self, contract_address: H160) -> PendingTransaction<'_, Http> {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-        tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
-
-        let typed_transaction = self.make_eip1559_tx(
-            nonce,
-            Some(contract_address),
-            Some(self.contract.emit_one_log()),
         );
 
         self.client
@@ -421,9 +405,12 @@ impl TestClient {
         alloy_primitives::Address::from_slice(addr.0.as_slice())
     }
 
-    pub async fn alloy_subscribe_logs(&self) -> Subscription<Log> {
-        let filter = Filter::new();
+    pub async fn alloy_subscribe_logs(&self, filter: &Filter) -> Subscription<Log> {
         self.pub_sub.subscribe_logs(&filter).await.unwrap()
+    }
+
+    pub fn alloy_unsubscribe(&self, id: alloy_primitives::B256) {
+        self.pub_sub.unsubscribe(id).unwrap();
     }
 
     pub async fn alloy_transaction(
@@ -454,6 +441,33 @@ impl TestClient {
                 contract_address.as_slice(),
             )),
             Some(self.contract.set_call_data(set_arg)),
+        );
+
+        let tx_hash = self
+            .client
+            .send_transaction(typed_transaction, None)
+            .await
+            .unwrap()
+            .tx_hash();
+
+        alloy_primitives::TxHash::from_slice(&tx_hash.0)
+    }
+
+    pub async fn alloy_emit_logs(
+        &self,
+        contract_address: alloy_primitives::Address,
+        topic: u32,
+        nb_of_logs: u32,
+    ) -> alloy_primitives::TxHash {
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+        tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
+
+        let typed_transaction = self.make_eip1559_tx(
+            nonce,
+            Some(ethers::core::abi::Address::from_slice(
+                contract_address.as_slice(),
+            )),
+            Some(self.contract.emit_logs(topic, nb_of_logs)),
         );
 
         let tx_hash = self

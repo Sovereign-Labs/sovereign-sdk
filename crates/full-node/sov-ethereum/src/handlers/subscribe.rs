@@ -55,7 +55,7 @@ where
 
 async fn stream_logs<S, Seq>(
     accepted_sink: SubscriptionSink,
-    _log_filter: Box<Filter>,
+    filter: Box<Filter>,
     ethereum: Arc<Ethereum<S, Seq>>,
 ) where
     S: Spec,
@@ -69,50 +69,69 @@ async fn stream_logs<S, Seq>(
     let pending_block = evm.pending_block(state);
     let mut prev_last_tx_index = pending_block.transactions.end;
 
+    // Fetch the initial block. If it’s stale, it will be replaced below.
+    let mut block = evm.get_maybe_sealed_block(pending_block.header.number - 1, state);
+
     loop {
-        tokio::time::sleep(Duration::from_millis(100)).await;
         let state = &mut ethereum.sequencer.api_state().default_api_state_accessor();
         let pending_block = evm.pending_block(state);
         let curr_last_tx_index = pending_block.transactions.end;
 
         if curr_last_tx_index <= prev_last_tx_index {
+            tokio::time::sleep(Duration::from_millis(10)).await;
             continue;
         }
 
         for index in prev_last_tx_index..curr_last_tx_index {
+            // TODO: #1510
+            // The module state currently stores very little metadata about blocks and transactions.
+            // As a result, to create a log, we need to:
+            //   1. Fetch the corresponding transaction,
+            //   2. Fetch the corresponding receipt,
+            //   3. Occasionally fetch the corresponding block (if the cached one becomes outdated).
+            //
+            // If we store the block number and transaction hash in the receipt,
+            // we can avoid fetching transactions entirely.
             let tx = evm.transaction(index, state).unwrap();
-            // TODO
-            let block = evm.get_maybe_sealed_block(tx.block_number, state);
+
+            if block.number() != tx.block_number {
+                block = evm.get_maybe_sealed_block(tx.block_number, state);
+            }
+
             let receipt = evm.receipt(index, state).unwrap();
-            // this is wrong
-            let transaction_index = index - prev_last_tx_index;
+            let transaction_index = index - block.transactions_start();
 
-            let logs = receipt
-                .receipt
-                .logs
-                .iter()
-                .enumerate()
-                .map(|(tx_log_idx, log)| alloy_rpc_types::Log {
-                    inner: log.clone(),
-                    block_hash: block.hash(),
-                    block_number: Some(block.number()),
-                    block_timestamp: block.timestamp(),
-                    transaction_hash: Some(*tx.signed_transaction().hash()),
-                    transaction_index: Some(transaction_index),
-                    // This is wrong
-                    log_index: Some(receipt.log_index_start + tx_log_idx as u64),
-                    removed: false,
-                });
+            for (log_index_in_tx, log) in receipt.receipt.logs.into_iter().enumerate() {
+                if filter.matches(&log) {
+                    let rpc_log = alloy_rpc_types::Log {
+                        inner: log,
+                        block_hash: block.hash(),
+                        block_number: Some(block.number()),
+                        // TODO: #1510. The block_timestamp is not set.
+                        block_timestamp: block.timestamp(),
+                        transaction_hash: Some(*tx.signed_transaction().hash()),
+                        transaction_index: Some(transaction_index),
+                        log_index: Some(receipt.log_index_start + log_index_in_tx as u64),
+                        removed: false,
+                    };
 
-            for log in logs {
-                let msg = SubscriptionMessage::new(
-                    accepted_sink.method_name(),
-                    accepted_sink.subscription_id(),
-                    &log,
-                )
-                .unwrap();
+                    let msg = SubscriptionMessage::new(
+                        accepted_sink.method_name(),
+                        accepted_sink.subscription_id(),
+                        &rpc_log,
+                    )
+                    .unwrap_or_else(|err| {
+                        panic!(
+                            "Impossible: can't serialize log. Log: {:?}, Err: {:?}",
+                            rpc_log, err
+                        )
+                    });
 
-                accepted_sink.send(msg).await.unwrap();
+                    if let Err(err) = accepted_sink.send(msg).await {
+                        tracing::info!(%err, "The subscription client disconnected from the server.");
+                        return;
+                    }
+                }
             }
         }
         prev_last_tx_index = curr_last_tx_index;
@@ -126,7 +145,27 @@ fn validate_params_for_log_subscription(
 
     let log_filter = match &eth_subscribe.kind {
         SubscriptionKind::Logs => match eth_subscribe.params {
-            Params::Logs(filter) => filter,
+            Params::Logs(filter) => {
+                match filter.block_option {
+                    alloy_rpc_types::FilterBlockOption::Range {
+                        from_block,
+                        to_block,
+                    } => {
+                        if from_block.is_some() || to_block.is_some() {
+                            tracing::warn!(
+                                "Block Option parameters are not supported in LOG subscriptions: Range"
+                            );
+                        }
+                    }
+                    alloy_rpc_types::FilterBlockOption::AtBlockHash(_) => {
+                        tracing::warn!(
+                            "Block Option parameters are not supported in LOG subscriptions: AtBlockHash"
+                        );
+                    }
+                }
+
+                filter
+            }
             Params::Bool(_) => {
                 return Err(to_jsonrpsee_error_object(
                     "Boolean parameters are not supported in LOG subscriptions.",

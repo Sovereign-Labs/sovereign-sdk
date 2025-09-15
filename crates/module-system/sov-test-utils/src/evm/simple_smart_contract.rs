@@ -77,14 +77,13 @@ impl SimpleStorageContract {
         self.base_contract.encode("alwaysRevert", ()).unwrap()
     }
 
-    /// Emit example log.
-    pub fn emit_one_log(&self) -> Bytes {
-        self.base_contract.encode("emitOneLog", ()).unwrap()
-    }
-
-    /// Emit example log.
-    pub fn emit_two_logs(&self) -> Bytes {
-        self.base_contract.encode("emitTwoLogs", ()).unwrap()
+    /// Emit logss.
+    pub fn emit_logs(&self, topic: u32, nb_of_logs: u32) -> Bytes {
+        let topic = ethereum_types::U256::from(topic);
+        let nb_of_logs = ethereum_types::U256::from(nb_of_logs);
+        self.base_contract
+            .encode("emitLogs", (topic, nb_of_logs))
+            .unwrap()
     }
 }
 
@@ -100,7 +99,7 @@ pub struct SimpleStorageContractLog {
 
 sol! {
     #[derive(Debug)]
-    event SimpleLog(address indexed addr,uint256 value);
+    event SimpleLog(address indexed sender,uint256 indexed topic,uint256 value);
 }
 
 impl SimpleStorageContract {

@@ -11651,6 +11651,8 @@ name = "sov-demo-rollup"
 version = "0.3.0"
 dependencies = [
  "alloy-primitives",
+ "alloy-pubsub",
+ "alloy-rpc-types-eth",
  "anyhow",
  "async-trait",
  "axum 0.7.9",
