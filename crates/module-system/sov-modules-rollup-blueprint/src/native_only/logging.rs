@@ -3,12 +3,12 @@
 use std::env;
 use std::str::FromStr;
 
+pub use crate::native_only::telemetry::{should_init_open_telemetry_exporter, OtelGuard};
+use crate::GIT_COMMIT_HASH;
 use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter, Layer};
-use crate::GIT_COMMIT_HASH;
-pub use crate::native_only::telemetry::{should_init_open_telemetry_exporter, OtelGuard};
 
 /// Default [`tracing`] initialization for the rollup node.
 /// Returns optional [`OtelGuard`] which should be held through the lifetime of the caller,
