@@ -101,7 +101,8 @@ impl CelestiaService {
             "Submitting a blob"
         );
 
-        let tx_config = celestia_rpc::TxConfig::default();
+        let tx_config = celestia_rpc::TxConfig::default()
+            .with_priority(celestia_rpc::TxPriority::High);
         let start_lock = std::time::Instant::now();
         let submit_client = self.submit_client.lock().await;
         let lock_acquisition = start_lock.elapsed();
