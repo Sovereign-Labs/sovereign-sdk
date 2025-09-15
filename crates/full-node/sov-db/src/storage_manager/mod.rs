@@ -5,11 +5,11 @@ mod nomt_based;
 pub mod tests;
 
 pub use delta_reader_based::*;
+pub(crate) use nomt_based::MAX_INDIVIDUAL_PRUNING_BATCH_SIZE;
 pub use nomt_based::{
     FlatStateDb, InitializableNativeNomtStorage, NomtChangeSet, NomtStorageManager,
-    StateFinishedSession, PrunerJobOutput
+    PrunerJobOutput, StateFinishedSession,
 };
-pub(crate) use nomt_based::MAX_INDIVIDUAL_PRUNING_BATCH_SIZE;
 use rockbound::cache::delta_reader::DeltaReader;
 
 use crate::ledger_db::LedgerDb;

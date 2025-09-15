@@ -462,7 +462,7 @@ where
             let hit_size_limit = prune_group.hit_size_limit();
             self.db_group.commit_pruning(prune_group)?;
             pruning_commit_time = Some(start.elapsed());
-            // If the pruner didn't hit the size limit, we're done. Mark that the pruner finished at the current height. 
+            // If the pruner didn't hit the size limit, we're done. Mark that the pruner finished at the current height.
             // Otherwise, we don't mark the run as finished, so the pruner will spawn another iteration.
             if !hit_size_limit {
                 self.last_pruner_finish_at_height = Some(block_header.height());

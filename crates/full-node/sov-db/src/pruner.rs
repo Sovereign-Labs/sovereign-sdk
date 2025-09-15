@@ -4,9 +4,9 @@ use rockbound::schema::{KeyCodec, Schema};
 use rockbound::{SchemaBatch, SchemaIterator, SchemaKey, SeekKeyEncoder, DB};
 use sov_rollup_interface::common::SlotNumber;
 
-use crate::storage_manager::{PrunerJobOutput, MAX_INDIVIDUAL_PRUNING_BATCH_SIZE};
 use crate::metrics::nomt::PrunerMetric;
 use crate::schema::tables::ModuleAccessoryState;
+use crate::storage_manager::{PrunerJobOutput, MAX_INDIVIDUAL_PRUNING_BATCH_SIZE};
 
 type VersionedSchemaKey = (SchemaKey, SlotNumber);
 
