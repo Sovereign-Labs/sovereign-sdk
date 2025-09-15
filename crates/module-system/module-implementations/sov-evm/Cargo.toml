@@ -139,4 +139,5 @@ native = [
 	"sov-kernels/native",
 	"sov-bank/native",
 	"sov-uniqueness/native",
+	"sov-chain-state/native"
 ]
