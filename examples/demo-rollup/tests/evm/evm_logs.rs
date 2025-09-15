@@ -55,6 +55,10 @@ async fn evm_test_log_subscription() {
 
     for (i, log) in logs_fetched.iter().enumerate() {
         let sub_log = &logs_from_subscription[i];
+
+        if i == 7 {
+            println!("Log {:?}", log);
+        }
         assert_logs(log, sub_log);
     }
 }
