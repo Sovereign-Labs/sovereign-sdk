@@ -1,5 +1,7 @@
 # 2025-09-12
 - #1672 Fixes some minor bugs related to pruning in the sequencer DB which could cause duplicate blob submission on restart.
+- #1682 Removes `body_to_save` from TransactionReceipt. Please use original transaction bytes which have been sent.
+
 # 2025-09-11
 - #1669 Account for sequencer gas in EVM transaction receipts. EVM transaction receipts now properly reflect the sequencer gas consumed during execution.
 
