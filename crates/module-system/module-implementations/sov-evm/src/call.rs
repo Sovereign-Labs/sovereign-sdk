@@ -1,5 +1,5 @@
-use alloy_primitives::{Address, B256};
-use revm::context::result::{EVMError, ExecutionResult};
+use alloy_primitives::Address;
+use revm::context::result::ExecutionResult;
 use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{serialize, UniversalWallet};
