@@ -39,15 +39,15 @@ impl BlobReaderTrait for AvailDABlob {
     }
 }
 
-impl From<AvailData> for AvailDABlob {
-    fn from(data: AvailData) -> Self {
+impl From<&AvailData> for AvailDABlob {
+    fn from(data: &AvailData) -> Self {
         let bytes = bytes::Bytes::from(data.data.clone());
         let blob = CountedBufReader::new(bytes);
         let blob_hash = AvailHash::try_from(blake2_256(data.data.as_ref())).unwrap();
         AvailDABlob {
             blob,
             hash: blob_hash,
-            sender: AvailAddress(data.signer),
+            sender: AvailAddress(data.signer.clone()),
         }
     }
 }
