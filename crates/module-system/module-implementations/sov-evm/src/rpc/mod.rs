@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use alloy_consensus::{Transaction as TransactionTrait, TxReceipt};
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
@@ -376,12 +378,20 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<GethTrace> {
         let opts = opts.unwrap_or_default();
-        let index = self.get_tx_index_by_hash(&tx_hash, state).unwrap();
-        let tx = self.transaction(index, state).unwrap();
+        let index = self
+            .get_tx_index_by_hash(&tx_hash, state)
+            .ok_or(eth_api_into_rpc_error(
+                EthApiError::PrunedHistoryUnavailable,
+            ))?;
+        let tx = self
+            .transaction(index, state)
+            .ok_or(eth_api_into_rpc_error(
+                EthApiError::PrunedHistoryUnavailable,
+            ))?;
 
         let mut state = state
             .get_archival_state(RollupHeight::new(tx.block_number - 1))
-            .unwrap();
+            .map_err(into_rpc_error)?;
         let block_env = &self
             .block_env(&mut state)?
             // Justified, we set it in `begin_rollup_block_hook`.
@@ -710,4 +720,9 @@ pub fn eth_api_into_rpc_error(eth_error: EthApiError) -> ErrorObjectOwned {
 /// Hack while reth is not upgraded for `jsonrpsee` 0.25
 pub fn invalid_tx_into_rpc_error(rpc: RpcInvalidTransactionError) -> ErrorObjectOwned {
     eth_api_into_rpc_error(rpc.into())
+}
+
+/// Converts internal error into rpc error
+pub fn into_rpc_error(err: impl Error) -> ErrorObjectOwned {
+    ErrorObject::owned(500, format!("{err:?}"), None::<()>)
 }
