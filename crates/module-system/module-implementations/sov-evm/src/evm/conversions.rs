@@ -7,7 +7,9 @@ use revm::context::{BlockEnv, TransactionType, TxEnv};
 use thiserror::Error;
 
 use super::primitive_types::SealedBlock;
-use crate::{primitive_types::TransactionSignedAndRecovered, RlpEvmTransaction};
+#[cfg(feature = "native")]
+use crate::primitive_types::TransactionSignedAndRecovered;
+use crate::RlpEvmTransaction;
 
 // BlockEnv from SealedBlock
 impl From<SealedBlock> for BlockEnv {
@@ -27,6 +29,7 @@ impl From<SealedBlock> for BlockEnv {
 }
 
 // Converts historical tx to TxEnv
+#[cfg(feature = "native")]
 pub fn replay_tx_env(tx: &TransactionSignedAndRecovered) -> TxEnv {
     let TransactionSignedAndRecovered {
         signed_transaction,

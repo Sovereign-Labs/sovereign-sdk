@@ -56,6 +56,6 @@ fn test_tracing() {
                 gas_used: U256::from(4_323),
                 ..Default::default()
             })
-        )
+        );
     });
 }
