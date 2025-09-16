@@ -1,7 +1,5 @@
 use std::marker::PhantomData;
 
-use alloy_primitives::address;
-use alloy_sol_types::{eip712_domain, Eip712Domain, SolStruct};
 use sov_address::EvmCryptoSpec;
 use sov_modules_api::capabilities::{
     self, calculate_hash_metered, extract_authorization_data, verify_chain_id, AuthenticationError,
@@ -49,7 +47,7 @@ where
             capabilities::fatal_deserialization_error::<_, S, _>(&tx.data, e, state)
         })?;
 
-        authenticate::<_, S, Rt>(&tx.data, state)
+        authenticate::<_, S, Rt, Rt>(&tx.data, state)
     }
 
     #[cfg(feature = "native")]
@@ -72,7 +70,7 @@ where
         let tx: RawTx = borsh::from_slice(&batch.tx.data)
             .map_err(|_| UnregisteredAuthenticationError::InvalidAuthenticationDiscriminant)?;
 
-        Ok(authenticate::<_, S, Rt>(&tx.data, state)?)
+        Ok(authenticate::<_, S, Rt, Rt>(&tx.data, state)?)
     }
 
     fn add_standard_auth(tx: RawTx) -> Self::Input {
@@ -89,41 +87,49 @@ pub fn authenticate<
     Accessor: ProvableStateReader<User, Spec = S>,
     S: Spec<CryptoSpec = EvmCryptoSpec>,
     D: DispatchCall<Spec = S>,
+    Rt: Runtime<S>,
 >(
-    mut raw_tx: &[u8],
+    raw_tx: &[u8],
     state: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
-    let tx =
-        match <Transaction<D, S> as MeteredBorshDeserialize<S>>::deserialize(&mut raw_tx, state) {
-            Ok(ok) => ok,
+    let tx = match <Transaction<D, S> as MeteredBorshDeserialize<S>>::deserialize(
+        &mut &raw_tx[..],
+        state,
+    ) {
+        Ok(ok) => ok,
 
-            Err(MeteredBorshDeserializeError::GasError(e)) => {
-                return Err(AuthenticationError::OutOfGas(format!(
-                    "Transaction deserialization run out of gas {e}, tx hash {raw_tx_hash}"
-                )))
-            }
-            Err(MeteredBorshDeserializeError::IOError(e)) => {
-                return Err(AuthenticationError::FatalError(
-                    FatalError::DeserializationFailed(e.to_string()),
-                    raw_tx_hash,
-                ));
-            }
-        };
-    verify_and_decode_tx::<S, D>(raw_tx_hash, tx, state)
+        Err(MeteredBorshDeserializeError::GasError(e)) => {
+            return Err(AuthenticationError::OutOfGas(format!(
+                "Transaction deserialization run out of gas {e}, tx hash {raw_tx_hash}"
+            )))
+        }
+        Err(MeteredBorshDeserializeError::IOError(e)) => {
+            return Err(AuthenticationError::FatalError(
+                FatalError::DeserializationFailed(e.to_string()),
+                raw_tx_hash,
+            ));
+        }
+    };
+    verify_and_decode_tx::<S, D, Rt>(raw_tx_hash, tx, raw_tx, state)
 }
 
-fn verify_and_decode_tx<S: Spec<CryptoSpec = EvmCryptoSpec>, D: DispatchCall<Spec = S>>(
+fn verify_and_decode_tx<
+    S: Spec<CryptoSpec = EvmCryptoSpec>,
+    D: DispatchCall<Spec = S>,
+    Rt: Runtime<S>,
+>(
     raw_tx_hash: TxHash,
     tx: Transaction<D, S>,
+    raw_tx_bytes: &[u8],
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
     match &tx.versioned_tx {
         VersionedTx::V0(tx_v0) => {
             verify_chain_id(&tx_v0.details, raw_tx_hash)?;
-            verify_eip712_signature(&tx, raw_tx_hash, meter)?;
+            verify_eip712_signature::<S, D, Rt>(&tx, raw_tx_hash, raw_tx_bytes, meter)?;
             let authorization_data = extract_authorization_data::<S, D>(tx_v0, raw_tx_hash, meter)?;
 
             let runtime_call = tx_v0.runtime_call.clone();
@@ -137,23 +143,34 @@ fn verify_and_decode_tx<S: Spec<CryptoSpec = EvmCryptoSpec>, D: DispatchCall<Spe
     }
 }
 
-fn verify_eip712_signature<S: Spec<CryptoSpec = EvmCryptoSpec>, D: DispatchCall<Spec = S>>(
+fn verify_eip712_signature<
+    S: Spec<CryptoSpec = EvmCryptoSpec>,
+    D: DispatchCall<Spec = S>,
+    Rt: Runtime<S>,
+>(
     tx: &Transaction<D, S>,
     raw_tx_hash: TxHash,
+    raw_tx_bytes: &[u8],
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), AuthenticationError> {
-    let unsigned = tx.to_unsigned_transaction();
-    let tx_details = unsigned.details.as_sol_struct();
+    // Use the schema to calculate the EIP712 signing hash
+    let schema = Rt::schema();
+    let transaction_type_index = schema.rollup_expected_index(sov_modules_api::sov_universal_wallet::schema::RollupRoots::Transaction)
+        .map_err(|e| AuthenticationError::FatalError(
+            FatalError::SigVerificationFailed(format!("Cannot verify EIP712 signature. Failed to get transaction type from schema: {e}")),
+            raw_tx_hash,
+        ))?;
 
-    pub const DOMAIN: Eip712Domain = eip712_domain! {
-        name: "Transaction",
-        version: "1",
-        chain_id: 4321,
-        verifying_contract: address!("0000000000000000000000000000000000000000"),
-    };
-    let eip712_hash = tx_details.eip712_signing_hash(&DOMAIN);
+    let eip712_hash = schema
+        .eip712_signing_hash(transaction_type_index, raw_tx_bytes)
+        .map_err(|e| {
+            AuthenticationError::FatalError(
+                FatalError::SigVerificationFailed(format!("Failed to calculate EIP712 hash: {e}")),
+                raw_tx_hash,
+            )
+        })?;
 
-    tx.verify_signature(eip712_hash.as_slice(), meter)
+    tx.verify_signature(&eip712_hash, meter)
         .map_err(|e| match e {
             TransactionVerificationError::GasError(_) => {
                 AuthenticationError::OutOfGas(e.to_string())

@@ -49,6 +49,9 @@ pub trait Runtime<S: Spec>:
     /// [schema](sov_rollup_interface::sov_universal_wallet::schema::Schema).
     const CHAIN_HASH: [u8; 32];
 
+    /// Returns the universal wallet schema for this runtime.
+    fn schema() -> &'static sov_universal_wallet::schema::Schema;
+
     /// GenesisConfig type.
     type GenesisConfig: Clone + Send + Sync;
 
@@ -132,6 +135,10 @@ pub trait Runtime<S: Spec>:
     /// Chain root hash used for transaction verification. Generated from a
     /// [schema](sov_rollup_interface::sov_universal_wallet::schema::Schema).
     const CHAIN_HASH: [u8; 32];
+
+    /// Returns the pre-parsed schema for this runtime. Used for EIP712 signing
+    /// and other schema-dependent operations.
+    fn schema() -> &'static sov_universal_wallet::schema::Schema;
 
     /// `GenesisConfig` type.
     type GenesisConfig: Clone + Send + Sync;

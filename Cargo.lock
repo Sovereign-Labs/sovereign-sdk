@@ -12454,6 +12454,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-uniqueness",
+ "sov-universal-wallet",
  "strum 0.26.3",
  "tempfile",
  "thiserror 1.0.69",

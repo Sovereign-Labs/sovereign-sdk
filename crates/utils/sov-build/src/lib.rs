@@ -192,6 +192,24 @@ impl Options {
             "#[allow(dead_code)]\npub const SCHEMA_JSON: &str = r#\"{schema_json}\"#;\n"
         )?;
 
+        // Generate static parsed Schema for runtime use
+        write!(
+            &mut file,
+            r#"
+/// Static parsed schema for runtime use
+static SCHEMA: once_cell::sync::Lazy<sov_modules_api::sov_universal_wallet::schema::Schema> = 
+    once_cell::sync::Lazy::new(|| {{
+        serde_json::from_str(SCHEMA_JSON)
+            .expect("Failed to parse generated schema JSON")
+    }});
+
+#[allow(dead_code)]
+pub fn get_schema() -> &'static sov_modules_api::sov_universal_wallet::schema::Schema {{
+    &SCHEMA
+}}
+"#
+        )?;
+
         Ok(())
     }
 

@@ -92,6 +92,10 @@ where
 {
     const CHAIN_HASH: [u8; 32] = __generated::CHAIN_HASH;
 
+    fn schema() -> &'static sov_modules_api::sov_universal_wallet::schema::Schema {
+        __generated::get_schema()
+    }
+
     type GenesisConfig = GenesisConfig<S>;
 
     #[cfg(feature = "native")]
