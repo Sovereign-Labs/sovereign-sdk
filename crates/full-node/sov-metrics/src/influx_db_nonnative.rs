@@ -36,14 +36,17 @@ pub enum StateAccessType {
 
 /// A key for a metric.
 pub struct MetricSlotKey {
-    key: Arc<Vec<u8>>,
+    key: Option<Arc<Vec<u8>>>,
     display_fn: Option<ArcFormatFn>,
 }
 
 impl std::fmt::Display for MetricSlotKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Some(key) = self.key.as_ref() else {
+            return write!(f, "null");
+        };
         if let Some(display_fn) = &self.display_fn {
-            display_fn(self.key.as_slice(), f)
+            display_fn(key.as_slice(), f)
         } else {
             write!(f, "unknown")
         }
@@ -51,12 +54,16 @@ impl std::fmt::Display for MetricSlotKey {
 }
 impl std::fmt::Debug for MetricSlotKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Some(key) = self.key.as_ref() else {
+            return write!(f, "null");
+        };
+
         if let Some(display_fn) = &self.display_fn {
             write!(f, "MetricKey {{ key: ")?;
-            display_fn(self.key.as_slice(), f)?;
+            display_fn(key.as_slice(), f)?;
             write!(f, " }}")
         } else {
-            write!(f, "MetricKey {{ key: {:?} }}", self.key.as_slice())
+            write!(f, "MetricKey {{ key: {:?} }}", key.as_slice())
         }
     }
 }
@@ -65,7 +72,10 @@ impl StateAccessMetric {
     /// Creates a new state access metric.
     pub fn new_size(key: Arc<Vec<u8>>, display_fn: Option<ArcFormatFn>) -> Self {
         Self {
-            key: MetricSlotKey { key, display_fn },
+            key: MetricSlotKey {
+                key: Some(key),
+                display_fn,
+            },
             storage_read_size: None,
             duration: MaybeTimer::started(),
             access_type: StateAccessType::GetSize,
@@ -75,7 +85,10 @@ impl StateAccessMetric {
     /// Creates a new state access metric.
     pub fn new_read(key: Arc<Vec<u8>>, display_fn: Option<ArcFormatFn>) -> Self {
         Self {
-            key: MetricSlotKey { key, display_fn },
+            key: MetricSlotKey {
+                key: Some(key),
+                display_fn,
+            },
             storage_read_size: None,
             duration: MaybeTimer::started(),
             access_type: StateAccessType::GetValue,
@@ -86,7 +99,7 @@ impl StateAccessMetric {
     pub fn placeholder() -> Self {
         Self {
             key: MetricSlotKey {
-                key: Arc::new(vec![]),
+                key: None,
                 display_fn: None,
             },
             storage_read_size: None,
@@ -152,7 +165,7 @@ impl SlowDeserialization {
     pub fn placeholder() -> Self {
         Self {
             key: MetricSlotKey {
-                key: Arc::new(vec![]),
+                key: None,
                 display_fn: None,
             },
             duration: Duration::from_secs(0),
@@ -220,7 +233,7 @@ impl StateMetrics {
         duration: Duration,
     ) {
         let key = MetricSlotKey {
-            key: key_bytes,
+            key: Some(key_bytes),
             display_fn: format_fn,
         };
 
