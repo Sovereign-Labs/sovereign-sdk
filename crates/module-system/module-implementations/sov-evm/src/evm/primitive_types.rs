@@ -155,14 +155,14 @@ impl<'de> serde::Deserialize<'de> for SealedBlock {
 #[cfg(feature = "native")]
 /// Sealed or pending block.
 pub enum MaybeSealedBlock {
-    Sealed(Box<SealedBlock>),
+    Sealed(SealedBlock),
     Pending(crate::Block),
 }
 
 #[cfg(feature = "native")]
 impl MaybeSealedBlock {
     pub fn new_sealed(block: SealedBlock) -> Self {
-        MaybeSealedBlock::Sealed(Box::new(block))
+        MaybeSealedBlock::Sealed(block)
     }
 
     pub fn hash(&self) -> Option<B256> {
