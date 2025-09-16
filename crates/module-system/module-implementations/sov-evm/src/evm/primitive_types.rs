@@ -161,10 +161,6 @@ pub enum MaybeSealedBlock {
 
 #[cfg(feature = "native")]
 impl MaybeSealedBlock {
-    pub fn new_sealed(block: SealedBlock) -> Self {
-        MaybeSealedBlock::Sealed(block)
-    }
-
     pub fn hash(&self) -> Option<B256> {
         match self {
             Self::Sealed(block) => Some(block.header.hash()),

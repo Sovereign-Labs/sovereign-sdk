@@ -393,7 +393,7 @@ where
     ) -> MaybeSealedBlock {
         let block = self.blocks.get(&block_number, state).unwrap_infallible();
         if let Some(block) = block {
-            return MaybeSealedBlock::Sealed(block.into());
+            return MaybeSealedBlock::Sealed(block);
         }
 
         let pending = self.pending_block(state);
