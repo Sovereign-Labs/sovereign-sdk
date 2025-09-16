@@ -121,10 +121,7 @@ async fn stream_logs<S, Seq>(
                         )
                     });
 
-                    println!("lll");
-
                     if let Err(err) = accepted_sink.send(msg).await {
-                        println!("panice");
                         tracing::info!(%err, "The subscription client disconnected from the server.");
                         return;
                     }
