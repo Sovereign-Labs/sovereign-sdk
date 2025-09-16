@@ -2,7 +2,7 @@
 
 use core::fmt;
 use std::fmt::Display;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -26,9 +26,11 @@ type ArcFormatFn =
     Arc<dyn (Fn(&[u8], &mut fmt::Formatter<'_>) -> fmt::Result) + Send + Sync + 'static>;
 
 /// The number of slot keys allocated.
-pub static NUM_SLOT_KEYS_ALLOCATED: AtomicUsize = AtomicUsize::new(0);
+pub static NUM_SLOT_KEYS_ALLOCATED: AtomicU64 = AtomicU64::new(0);
 /// The total number of allocations.
-pub static TOTAL_ALLOCATIONS: AtomicUsize = AtomicUsize::new(0);
+pub static TOTAL_ALLOCATIONS: AtomicU64 = AtomicU64::new(0);
+/// The number of slot keys deallocated.
+pub static NUM_DEALLOCATIONS: AtomicU64 = AtomicU64::new(0);
 
 /// The key type suitable for use in [`Storage::get`] and other getter methods of
 /// [`Storage`]. Cheaply-clonable.
