@@ -324,3 +324,6 @@ opt-level = 0
 libraries = [
     { git = "ssh://git@github.com/Sovereign-Labs/sdk-lints.git" },
 ]
+
+[patch."https://github.com/paradigmxyz/reth"]
+reth-rpc-eth-types = { path = "/home/gentoo/work/sovereign/reth/crates/rpc/rpc-eth-types" }
