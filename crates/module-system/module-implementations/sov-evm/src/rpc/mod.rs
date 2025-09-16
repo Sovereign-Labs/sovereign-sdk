@@ -33,7 +33,7 @@ use crate::helpers::{
     from_primitive_with_hash, from_recovered_with_block_context, prepare_call_env,
 };
 use crate::primitive_types::MaybeSealedBlock;
-use crate::{create_tx_env, Evm};
+use crate::Evm;
 
 pub(crate) mod error;
 
@@ -419,33 +419,30 @@ where
         } = opts;
         if let Some(tracer) = tracer {
             return match tracer {
-                GethDebugTracerType::BuiltInTracer(tracer) => match tracer {
-                    GethDebugBuiltInTracerType::CallTracer => {
-                        let call_config = tracer_config
-                            .clone()
-                            .into_call_config()
-                            .map_err(|_| EthApiError::InvalidTracerConfig)?;
+                GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
+                    let call_config = tracer_config
+                        .clone()
+                        .into_call_config()
+                        .map_err(|_| EthApiError::InvalidTracerConfig)?;
 
-                        let inspector_config =
-                            TracingInspectorConfig::from_geth_call_config(&call_config);
-                        let mut inspector = TracingInspector::new(inspector_config);
+                    let inspector_config =
+                        TracingInspectorConfig::from_geth_call_config(&call_config);
+                    let mut inspector = TracingInspector::new(inspector_config);
 
-                        let gas_limit = tx_env.gas_limit;
-                        let res = inspect(db, block_env, tx_env, cfg, &mut inspector)?;
-                        inspector.set_transaction_gas_limit(gas_limit);
+                    let gas_limit = tx_env.gas_limit;
+                    let res = inspect(db, block_env, tx_env, cfg, &mut inspector)?;
+                    inspector.set_transaction_gas_limit(gas_limit);
 
-                        let frame = inspector
-                            .geth_builder()
-                            .geth_call_traces(call_config, res.result.gas_used());
+                    let frame = inspector
+                        .geth_builder()
+                        .geth_call_traces(call_config, res.result.gas_used());
 
-                        return Ok(frame.into());
-                    }
-                    _ => Err(EthApiError::Unsupported("unsupported tracer").into()),
-                },
-                _ => Err(EthApiError::Unsupported("unsupported tracer").into()),
+                    return Ok(frame.into());
+                }
+                _ => Err(EthApiError::Unsupported("unsupported tracer")),
             };
         };
-        Err(EthApiError::Unsupported("unsupported tracer").into())
+        Err(EthApiError::Unsupported("unsupported tracer"))
     }
 
     fn call(
