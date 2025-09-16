@@ -1,7 +1,8 @@
+mod get_logs;
 mod subscribe;
-
 use alloy_primitives::{Bytes, B256};
 use alloy_rpc_types::TransactionReceipt;
+pub use get_logs::eth_get_logs;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::types::{ErrorObjectOwned, Params};
 use jsonrpsee::Extensions;

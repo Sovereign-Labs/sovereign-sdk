@@ -66,6 +66,8 @@ where
         "realtime_sendRawTransaction",
         handlers::realtime_send_raw_transaction,
     )?;
+
+    rpc.register_async_method("eth_getLogs", handlers::eth_get_logs)?;
     rpc.register_subscription(
         "eth_subscribe",
         "eth_subscription",
