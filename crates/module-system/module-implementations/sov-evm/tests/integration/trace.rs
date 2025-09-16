@@ -54,7 +54,7 @@ fn test_tracing() {
                 input: "371303c0".parse::<Bytes>().unwrap(),
                 value: Some(U256::ZERO),
                 gas: U256::from(1_000_000),
-                gas_used: U256::from(22_712),
+                gas_used: U256::from(5_612),
                 output: "0000000000000000000000000000000000000000000000000000000000000002"
                     .parse::<Bytes>()
                     .ok(),

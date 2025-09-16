@@ -30,7 +30,7 @@ use crate::conversions::replay_tx_env;
 use crate::db::EvmDb;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, SealedBlock, TransactionSignedAndRecovered};
-use crate::executor::{get_cfg_env, inspect};
+use crate::executor::{get_cfg_env, inspect, transact_commit};
 use crate::helpers::{
     from_primitive_with_hash, from_recovered_with_block_context, prepare_call_env,
 };
@@ -377,36 +377,62 @@ where
         opts: Option<GethDebugTracingOptions>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<GethTrace> {
-        let opts = opts.unwrap_or_default();
+        // Get transaction and block data
         let index = self
             .get_tx_index_by_hash(&tx_hash, state)
-            .ok_or(eth_api_into_rpc_error(
-                EthApiError::PrunedHistoryUnavailable,
-            ))?;
-        let tx = self
+            .ok_or_else(|| eth_api_into_rpc_error(EthApiError::PrunedHistoryUnavailable))?;
+
+        let traced_tx = self
             .transaction(index, state)
-            .ok_or(eth_api_into_rpc_error(
-                EthApiError::PrunedHistoryUnavailable,
-            ))?;
+            .ok_or_else(|| eth_api_into_rpc_error(EthApiError::PrunedHistoryUnavailable))?;
 
-        let mut state = state
-            .get_archival_state(RollupHeight::new(tx.block_number - 1))
+        let block = self
+            .blocks
+            .get(&traced_tx.block_number, state)?
+            .expect("Transaction block not available");
+
+        // Get archival state and environment
+        let mut archival_state = state
+            .get_archival_state(RollupHeight::new(traced_tx.block_number - 1))
             .map_err(into_rpc_error)?;
-        let block_env = &self
-            .block_env(&mut state)?
-            // Justified, we set it in `begin_rollup_block_hook`.
-            .expect("The impossible happened: block_env is not set.");
 
-        let tx_env = replay_tx_env(&tx);
-        let cfg = self.cfg(&mut state).unwrap();
+        let block_env = self
+            .block_env(&mut archival_state)?
+            .expect("Block environment not set");
 
-        let cfg_env: CfgEnv = get_cfg_env(block_env, cfg, None);
-        let evm_db = self.get_db(&mut state);
+        let cfg_env = get_cfg_env(&block_env, self.cfg(&mut archival_state).unwrap(), None);
 
-        let trace = self
-            .trace_transaction(block_env.clone(), tx_env, cfg_env, evm_db, &opts)
-            .map_err(eth_api_into_rpc_error)?;
-        Ok(trace)
+        // Replay previous transactions in the block
+        let mut evm_db = self.get_db(&mut archival_state);
+
+        for tx_idx in block.transactions {
+            let tx = self
+                .transaction(tx_idx, state)
+                .ok_or_else(|| eth_api_into_rpc_error(EthApiError::PrunedHistoryUnavailable))?;
+
+            // Skip the transaction we're tracing
+            if *tx.signed_transaction.hash() == tx_hash {
+                continue;
+            }
+
+            transact_commit(
+                &mut evm_db,
+                block_env.clone(),
+                replay_tx_env(&tx),
+                cfg_env.clone(),
+            )
+            .map_err(|e| eth_api_into_rpc_error(eth_from_evm_error(e)))?;
+        }
+
+        // Trace the target transaction
+        self.trace_transaction(
+            block_env.clone(),
+            replay_tx_env(&traced_tx),
+            cfg_env,
+            evm_db,
+            &opts.unwrap_or_default(),
+        )
+        .map_err(eth_api_into_rpc_error)
     }
 }
 
