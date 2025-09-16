@@ -132,6 +132,21 @@ pub(crate) fn create_set_arg_tx(
     create_tx(account, tx)
 }
 
+pub(crate) fn create_inc_tx(
+    nonce: u64,
+    contract: &SimpleStorageContract,
+    contract_addr: Address,
+    account: &EvmAccount,
+) -> TxWithNonceAndHash {
+    let tx = TxEip1559 {
+        to: TxKind::Call(contract_addr),
+        input: Bytes::from(hex::decode(hex::encode(contract.inc_call_data())).unwrap()),
+        nonce,
+        ..Default::default()
+    };
+    create_tx(account, tx)
+}
+
 pub(crate) fn create_emit_logs(
     nonce: u64,
     contract: &SimpleStorageContract,

@@ -65,6 +65,11 @@ impl SimpleStorageContract {
         self.base_contract.encode("get", ()).unwrap()
     }
 
+    /// Inc function for the smart contract.
+    pub fn inc_call_data(&self) -> Bytes {
+        self.base_contract.encode("inc", ()).unwrap()
+    }
+
     /// Failing call data to test revert.
     pub fn failing_function_call_data(&self) -> Bytes {
         // Some random function signature.
