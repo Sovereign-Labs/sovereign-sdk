@@ -83,6 +83,10 @@ async fn stream_logs<S, Seq>(
             continue;
         }
 
+        println!(
+            "prev_last_tx_index {} curr_last_tx_index {}",
+            prev_last_tx_index, curr_last_tx_index
+        );
         for index in prev_last_tx_index..curr_last_tx_index {
             let receipt = evm.receipt(index, state).unwrap();
 
@@ -117,7 +121,10 @@ async fn stream_logs<S, Seq>(
                         )
                     });
 
+                    println!("lll");
+
                     if let Err(err) = accepted_sink.send(msg).await {
+                        println!("panice");
                         tracing::info!(%err, "The subscription client disconnected from the server.");
                         return;
                     }
