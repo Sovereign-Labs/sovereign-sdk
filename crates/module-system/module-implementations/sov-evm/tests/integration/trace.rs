@@ -53,7 +53,7 @@ fn test_tracing() {
                     .unwrap(),
                 value: Some(U256::ZERO),
                 gas: U256::from(1_000_000),
-                gas_used: U256::from(4_323),
+                gas_used: U256::from(5_229),
                 ..Default::default()
             })
         );
