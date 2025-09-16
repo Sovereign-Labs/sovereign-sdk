@@ -98,7 +98,7 @@ async fn stream_logs<S, Seq>(
                         inner: log,
                         block_hash: block.hash(),
                         block_number: Some(block.number()),
-                        block_timestamp: block.timestamp(),
+                        block_timestamp: Some(block.timestamp()),
                         transaction_hash: Some(receipt.transaction_hash),
                         transaction_index: Some(transaction_index),
                         log_index: Some(receipt.log_index_start + log_index_in_tx as u64),

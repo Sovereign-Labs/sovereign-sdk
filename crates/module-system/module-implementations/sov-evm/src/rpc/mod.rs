@@ -414,6 +414,7 @@ where
         let first_tx_index = head.transactions.end;
 
         MaybeSealedBlock::Pending {
+            timestamp: current_block_env.timestamp.try_into().unwrap(),
             block_number,
             first_tx_number: first_tx_index,
         }
@@ -493,6 +494,12 @@ where
             // This is justified, as we just fetched `block_numbers`.
             .expect("The impossible happened: parent_block was not set.");
 
+        let current_block_env = self
+            .block_env
+            .get(state)
+            .unwrap_infallible()
+            .unwrap_or_default();
+
         assert_eq!(&head_block.header.number, block_numbers.end());
 
         let pending_transactions_len = self.pending_transactions.len(state).unwrap_infallible();
@@ -505,6 +512,7 @@ where
         let header = alloy_consensus::Header {
             parent_hash: head_block.header.seal(),
             number: pending_block_number,
+            timestamp: current_block_env.timestamp.try_into().unwrap(),
             ..Default::default()
         };
 
@@ -572,7 +580,7 @@ pub(crate) fn build_rpc_receipt(
             inner: log,
             block_hash,
             block_number,
-            block_timestamp: block.timestamp(),
+            block_timestamp: Some(block.timestamp()),
             transaction_hash: Some(transaction_hash),
             transaction_index: Some(transaction_index),
             log_index: Some(receipt.log_index_start + tx_log_idx as u64),
