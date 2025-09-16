@@ -395,29 +395,9 @@ where
         if let Some(block) = block {
             return MaybeSealedBlock::Sealed(block.into());
         }
-        let current_block_env = self
-            .block_env
-            .get(state)
-            .unwrap_infallible()
-            .unwrap_or_default();
-        let env_block_num: u64 = current_block_env.number.try_into().expect(
-            "The impossible happened: block number is too large to fit in a u64. It's over!",
-        );
-        assert_eq!(env_block_num, block_number, "Transaction is in a block that is not yet sealed, but that block is not yet pending! This is impossible!");
 
-        let head = self
-            .head
-            .get(state)
-            .unwrap_infallible()
-            // Justified, the head is initialized at genesis and modified only later through overrides.
-            .expect("The impossible happened: head was not set.");
-        let first_tx_index = head.transactions.end;
-
-        MaybeSealedBlock::Pending {
-            timestamp: current_block_env.timestamp.try_into().unwrap(),
-            block_number,
-            first_tx_number: first_tx_index,
-        }
+        let pending = self.pending_block(state);
+        MaybeSealedBlock::Pending(pending)
     }
 
     /// Retrieves a sealed block by number.
