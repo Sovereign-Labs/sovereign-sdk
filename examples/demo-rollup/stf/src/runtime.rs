@@ -40,6 +40,7 @@ use sov_modules_api::capabilities::{Guard, HasCapabilities, HasKernel, Transacti
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
 use sov_modules_api::prelude::*;
+use sov_modules_api::sov_universal_wallet::schema::Schema;
 use sov_modules_api::{DispatchCall, Event, Genesis, Hooks, MessageCodec, RawTx, Spec};
 
 #[cfg(feature = "native")]
@@ -90,18 +91,24 @@ where
     S: Spec,
     S::Address: FromVmAddress<EthereumAddress>,
 {
-    const CHAIN_HASH: [u8; 32] = __generated::CHAIN_HASH;
-
-    fn schema() -> &'static sov_modules_api::sov_universal_wallet::schema::Schema {
-        __generated::get_schema()
-    }
-
     type GenesisConfig = GenesisConfig<S>;
 
     #[cfg(feature = "native")]
     type GenesisInput = GenesisPaths;
 
     type Auth = sov_evm::EvmAuthenticator<S, Self>;
+
+    const CHAIN_HASH: [u8; 32] = __generated::CHAIN_HASH;
+
+    fn schema() -> &'static Schema {
+        use std::sync::OnceLock;
+        static SCHEMA: OnceLock<Schema> = OnceLock::new();
+
+        SCHEMA.get_or_init(|| {
+            serde_json::from_str(__generated::SCHEMA_JSON)
+                .expect("Failed to parse generated schema JSON")
+        })
+    }
 
     #[cfg(feature = "native")]
     fn endpoints(

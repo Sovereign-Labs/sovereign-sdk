@@ -41,6 +41,7 @@ sov-rollup-apis = { workspace = true, optional = true }
 sov-test-modules = { workspace = true }
 sov-test-utils = { workspace = true, optional = true }
 
+serde_json = { workspace = true }
 
 [features]
 default = []

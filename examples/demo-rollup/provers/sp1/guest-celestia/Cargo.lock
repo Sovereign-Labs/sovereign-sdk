@@ -108,6 +108,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "alloy-dyn-abi"
+version = "1.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3f56873f3cac7a2c63d8e98a4314b8311aa96adb1a0f82ae923eb2119809d2c"
+dependencies = [
+ "alloy-json-abi",
+ "alloy-primitives",
+ "alloy-sol-type-parser",
+ "alloy-sol-types",
+ "derive_more 2.0.1",
+ "itoa",
+ "serde",
+ "serde_json",
+ "winnow 0.7.12",
+]
+
+[[package]]
 name = "alloy-eip2124"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1942,6 +1959,7 @@ dependencies = [
  "borsh",
  "schemars 0.8.21",
  "serde",
+ "serde_json",
  "sov-accounts",
  "sov-address",
  "sov-attester-incentives",
@@ -6340,6 +6358,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "sov-uniqueness",
+ "sov-universal-wallet",
  "thiserror 1.0.64",
  "tracing",
 ]
@@ -6628,6 +6647,7 @@ dependencies = [
 name = "sov-universal-wallet"
 version = "0.1.0"
 dependencies = [
+ "alloy-dyn-abi",
  "alloy-primitives",
  "arrayvec",
  "bech32",
