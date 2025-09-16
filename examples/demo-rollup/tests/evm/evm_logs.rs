@@ -73,6 +73,53 @@ async fn evm_test_log_subscription() {
     assert!(block_nr > 0);
 }
 
+// Tests for logs from pending block.
+#[tokio::test(flavor = "multi_thread")]
+async fn evm_test_log_subscription_with_pending_blcok() {
+    let (test_rollup, evm_client, _) = setup(0).await;
+    let mut log_collector = LogCollector::new();
+
+    let contract_address = evm_client.alloy_deploy_contract().await;
+    test_rollup.wait_for_next_blocks(1).await;
+    test_rollup.pause_preferred_batches().await;
+
+    let nb_of_txs = 2;
+
+    let sub = evm_client.alloy_subscribe_logs(&Filter::new()).await;
+    let sub_id = sub.local_id().clone();
+
+    log_collector.spawn_log_watcher(sub).await;
+
+    let mut tx_hashes = Vec::new();
+
+    for i in 0..nb_of_txs {
+        let hash = evm_client.alloy_set_value(contract_address, i).await;
+        tx_hashes.push(hash);
+    }
+
+    // Kill subscription.
+    evm_client.alloy_unsubscribe(sub_id);
+    log_collector.wait().await;
+
+    let logs_from_subscription = log_collector.logs().await;
+    assert_eq!(logs_from_subscription.len(), nb_of_txs as usize);
+
+    let block_nr = evm_client
+        .eth_get_block_by_number(Some("pending".to_string()))
+        .await
+        .number
+        .unwrap()
+        .as_u64();
+
+    // Verify conditions for logs in the pending block.
+    for log in logs_from_subscription {
+        println!("log {:?}", block_nr);
+        assert!(log.block_hash.is_none());
+        assert_eq!(log.block_number.unwrap(), block_nr);
+        assert!(log.block_timestamp.unwrap() > 0);
+    }
+}
+
 // Subscription test with filtering.
 // `SimpleStorageContract::set_value` emits logs where topic2 matches the function argument,
 // and topic3 ranges from 0 to nb_of_logs_per_tx.
