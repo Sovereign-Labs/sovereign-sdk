@@ -61,6 +61,8 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
 
             assert_eq!(pending_blokck.number.unwrap().as_u64(), expected_block_nr);
             assert_eq!(pending_blokck.transactions, vec![tx_hash]);
+            let block_timestamp: u64 = pending_blokck.timestamp.try_into().unwrap();
+            assert!(block_timestamp > 0);
         }
 
         // Now we created a block and the block hash becomes available.

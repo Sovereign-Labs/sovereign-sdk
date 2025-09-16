@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use alloy_consensus::{Transaction as TransactionTrait, TxReceipt};
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
@@ -5,24 +7,30 @@ use alloy_rpc_types::{
     state::StateOverride, Block, BlockOverrides, BlockTransactions, FeeHistory, Log,
     ReceiptEnvelope, ReceiptWithBloom, Transaction, TransactionReceipt, TransactionRequest,
 };
+use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
+use alloy_rpc_types_trace::geth::GethTrace;
+use alloy_rpc_types_trace::geth::{GethDebugBuiltInTracerType, GethDebugTracerType};
 use error::ensure_success;
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
 use reth_primitives::{Recovered, TransactionSigned};
 use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 use revm::context::result::{EVMError, ExecutionResult, InvalidHeader};
-use revm::context::{BlockEnv, CfgEnv};
+use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::Database;
+use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{ApiStateAccessor, GasMeter, GasSpec, Spec, StateAccessor};
+use sov_rollup_interface::common::RollupHeight;
 use tracing::debug;
 
+use crate::conversions::replay_tx_env;
 use crate::db::EvmDb;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, SealedBlock, TransactionSignedAndRecovered};
-use crate::executor::get_cfg_env;
+use crate::executor::{get_cfg_env, inspect};
 use crate::helpers::{
     from_primitive_with_hash, from_recovered_with_block_context, prepare_call_env,
 };
@@ -154,7 +162,7 @@ where
         let balance = self
             .get_db(state)
             .basic(address)
-            .map_err(EthApiError::from)?
+            .map_err(|e| eth_api_into_rpc_error(EthApiError::from(e)))?
             .map(|account| account.balance)
             .unwrap_or_default();
 
@@ -263,7 +271,7 @@ where
         let mut maybe_tx = || -> Option<Transaction> {
             let tx_number = self.get_tx_index_by_hash(&hash, state)?;
             let tx = self.transaction(tx_number, state)?;
-            let block = self.get_maybe_sealed_block(&tx, state);
+            let block = self.get_maybe_sealed_block(tx.block_number, state);
 
             Some(from_recovered_with_block_context(
                 tx.into(),
@@ -298,7 +306,7 @@ where
         let mut maybe_receipt = || -> Option<TransactionReceipt> {
             let number = self.get_tx_index_by_hash(&hash, state)?;
             let tx = self.transaction(number, state)?;
-            let block = self.get_maybe_sealed_block(&tx, state);
+            let block = self.get_maybe_sealed_block(tx.block_number, state);
             let receipt = self.receipt(number, state)?;
             Some(build_rpc_receipt(block, tx, number, receipt))
         };
@@ -360,12 +368,93 @@ where
         let gas_used_with_margins = (total_gas_used * 3) / 2 + RELATIVE_MARGIN; // gas * 1.5 + 100_000
         Ok(U64::from(gas_used_with_margins))
     }
+
+    /// Handler for: `debug_traceTransaction`
+    #[rpc_method(name = "traceTransaction")]
+    pub fn debug_trace_transaction(
+        &self,
+        tx_hash: B256,
+        opts: Option<GethDebugTracingOptions>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<GethTrace> {
+        let opts = opts.unwrap_or_default();
+        let index = self
+            .get_tx_index_by_hash(&tx_hash, state)
+            .ok_or(eth_api_into_rpc_error(
+                EthApiError::PrunedHistoryUnavailable,
+            ))?;
+        let tx = self
+            .transaction(index, state)
+            .ok_or(eth_api_into_rpc_error(
+                EthApiError::PrunedHistoryUnavailable,
+            ))?;
+
+        let mut state = state
+            .get_archival_state(RollupHeight::new(tx.block_number - 1))
+            .map_err(into_rpc_error)?;
+        let block_env = &self
+            .block_env(&mut state)?
+            // Justified, we set it in `begin_rollup_block_hook`.
+            .expect("The impossible happened: block_env is not set.");
+
+        let tx_env = replay_tx_env(&tx);
+        let cfg = self.cfg(&mut state).unwrap();
+
+        let cfg_env: CfgEnv = get_cfg_env(block_env, cfg, None);
+        let evm_db = self.get_db(&mut state);
+
+        let trace = self
+            .trace_transaction(block_env.clone(), tx_env, cfg_env, evm_db, &opts)
+            .map_err(eth_api_into_rpc_error)?;
+        Ok(trace)
+    }
 }
 
 impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    fn trace_transaction(
+        &self,
+        block_env: BlockEnv,
+        tx_env: TxEnv,
+        cfg: CfgEnv,
+        db: EvmDb<ApiStateAccessor<S>, S>,
+        opts: &GethDebugTracingOptions,
+    ) -> Result<GethTrace, EthApiError> {
+        let GethDebugTracingOptions {
+            tracer,
+            tracer_config,
+            ..
+        } = opts;
+        if let Some(tracer) = tracer {
+            return match tracer {
+                GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
+                    let call_config = tracer_config
+                        .clone()
+                        .into_call_config()
+                        .map_err(|_| EthApiError::InvalidTracerConfig)?;
+
+                    let inspector_config =
+                        TracingInspectorConfig::from_geth_call_config(&call_config);
+                    let mut inspector = TracingInspector::new(inspector_config);
+
+                    let gas_limit = tx_env.gas_limit;
+                    let res = inspect(db, block_env, tx_env, cfg, &mut inspector)?;
+                    inspector.set_transaction_gas_limit(gas_limit);
+
+                    let frame = inspector
+                        .geth_builder()
+                        .geth_call_traces(call_config, res.result.gas_used());
+
+                    return Ok(frame.into());
+                }
+                _ => Err(EthApiError::Unsupported("unsupported tracer")),
+            };
+        };
+        Err(EthApiError::Unsupported("unsupported tracer"))
+    }
+
     fn call(
         &self,
         request: TransactionRequest,
@@ -381,44 +470,27 @@ where
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
-        executor::call(evm_db, &block_env, tx_env, cfg_env)
+        executor::call(evm_db, block_env, tx_env, cfg_env)
             .map_err(|err| eth_api_into_rpc_error(eth_from_evm_error(err)))
     }
 
-    fn get_maybe_sealed_block(
+    /// Retrieves a sealed block generated from an existing or pending block..
+    pub fn get_maybe_sealed_block(
         &self,
-        tx: &TransactionSignedAndRecovered,
+        block_number: u64,
         state: &mut ApiStateAccessor<S>,
     ) -> MaybeSealedBlock {
-        let block = self.blocks.get(&tx.block_number, state).unwrap_infallible();
+        let block = self.blocks.get(&block_number, state).unwrap_infallible();
         if let Some(block) = block {
-            return MaybeSealedBlock::Sealed(block.into());
+            return MaybeSealedBlock::Sealed(block);
         }
-        let current_block_env = self
-            .block_env
-            .get(state)
-            .unwrap_infallible()
-            .unwrap_or_default();
-        let block_num: u64 = current_block_env.number.try_into().expect(
-            "The impossible happened: block number is too large to fit in a u64. It's over!",
-        );
-        assert_eq!(block_num, tx.block_number, "Transaction is in a block that is not yet sealed, but that block is not yet pending! This is impossible!");
 
-        let head = self
-            .head
-            .get(state)
-            .unwrap_infallible()
-            // Justified, the head is initialized at genesis and modified only later through overrides.
-            .expect("The impossible happened: head was not set.");
-        let first_tx_index = head.transactions.end;
-
-        MaybeSealedBlock::Pending {
-            block_number: tx.block_number,
-            first_tx_number: first_tx_index,
-        }
+        let pending = self.pending_block(state);
+        MaybeSealedBlock::Pending(pending)
     }
 
-    fn get_sealed_block_by_number(
+    /// Retrieves a sealed block by number.
+    pub fn get_sealed_block_by_number(
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
@@ -453,41 +525,8 @@ where
                     .unwrap_infallible()
             }
             Some(ref block_number) if block_number == "pending" => {
-                let block_numbers = self
-                    .block_numbers
-                    .get(state)
-                    .unwrap_infallible()
-                    // This is justified, as block numbers are set at genesis and only overridden later.
-                    .expect("The impossible happened: block_numbers was not set.");
-
-                let parent_block = self
-                    .blocks
-                    .get(block_numbers.end(), state)
-                    .unwrap_infallible()
-                    // This is justified, as we just fetched `block_numbers`.
-                    .expect("The impossible happened: parent_block was not set.");
-
-                assert_eq!(&parent_block.header.number, block_numbers.end());
-                let pending_block_number = block_numbers.end() + 1;
-
-                let header = alloy_consensus::Header {
-                    parent_hash: parent_block.header.seal(),
-                    number: pending_block_number,
-                    ..Default::default()
-                };
-
-                let pending_transactions_len =
-                    self.pending_transactions.len(state).unwrap_infallible();
-
-                let start = parent_block.transactions.end;
-                let end = start + pending_transactions_len;
-
-                let block = crate::Block {
-                    header,
-                    transactions: start..end,
-                };
-
-                Some(block.seal())
+                let pending_block = self.pending_block(state);
+                Some(pending_block.seal())
             }
             Some(ref block_number) => {
                 // hex representation may have 0x prefix
@@ -505,6 +544,53 @@ where
                 self.blocks.get(&block_number, state).unwrap_infallible()
             }
             None => self.get_sealed_block_by_number(Some("latest".into()), state),
+        }
+    }
+
+    /// Retrieves the pending block.
+    pub fn pending_block(&self, state: &mut ApiStateAccessor<S>) -> crate::Block {
+        let block_numbers = self
+            .block_numbers
+            .get(state)
+            .unwrap_infallible()
+            // This is justified, as block numbers are set at genesis and only overridden later.
+            .expect("The impossible happened: block_numbers was not set.");
+
+        let head_block = self
+            .blocks
+            .get(block_numbers.end(), state)
+            .unwrap_infallible()
+            // This is justified, as we just fetched `block_numbers`.
+            .expect("The impossible happened: parent_block was not set.");
+
+        let current_block_env = self
+            .block_env
+            .get(state)
+            .unwrap_infallible()
+            .unwrap_or_default();
+
+        assert_eq!(&head_block.header.number, block_numbers.end());
+
+        let pending_transactions_len = self.pending_transactions.len(state).unwrap_infallible();
+
+        let start = head_block.transactions.end;
+        let end = start + pending_transactions_len;
+
+        let pending_block_number = head_block.header.number + 1;
+
+        let header = alloy_consensus::Header {
+            parent_hash: head_block.header.seal(),
+            number: pending_block_number,
+            timestamp: current_block_env
+                .timestamp
+                .try_into()
+                .expect("The impossible happened: timestamp overflow u64"),
+            ..Default::default()
+        };
+
+        crate::Block {
+            header,
+            transactions: start..end,
         }
     }
 
@@ -549,30 +635,30 @@ pub(crate) fn build_rpc_receipt(
 
     let block_hash = block.hash();
     let block_number = Some(block.number());
-    let transaction_hash = Some(*transaction.hash());
     // Safety: The transaction cannot have a lower number than the block start
     let transaction_index = tx_number
         .checked_sub(block.transactions_start())
         .expect("The impossible happened: overflow while subtracting block start from tx number.");
 
+    let transaction_hash = receipt.transaction_hash;
+    let logs_bloom = receipt.receipt.bloom();
+
     let logs: Vec<Log> = receipt
         .receipt
         .logs
-        .iter()
+        .into_iter()
         .enumerate()
         .map(|(tx_log_idx, log)| Log {
-            inner: log.clone(),
+            inner: log,
             block_hash,
             block_number,
-            block_timestamp: block.timestamp(),
-            transaction_hash,
+            block_timestamp: Some(block.timestamp()),
+            transaction_hash: Some(transaction_hash),
             transaction_index: Some(transaction_index),
             log_index: Some(receipt.log_index_start + tx_log_idx as u64),
             removed: false,
         })
         .collect();
-
-    let logs_bloom = receipt.receipt.bloom();
 
     let rpc_receipt = alloy_rpc_types::Receipt {
         status: receipt.receipt.success.into(),
@@ -587,18 +673,16 @@ pub(crate) fn build_rpc_receipt(
 
     TransactionReceipt {
         inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom::new(rpc_receipt, logs_bloom)),
-        transaction_hash: *transaction.hash(),
+        transaction_hash,
         transaction_index: Some(transaction_index),
         block_hash,
         block_number,
         gas_used: receipt.gas_used,
         effective_gas_price: 0,
-
         blob_gas_used: None,
         blob_gas_price: None,
         from,
         to,
-
         contract_address,
     }
 }
@@ -615,12 +699,7 @@ fn eth_from_evm_error<Ws: StateAccessor>(err: EVMError<crate::db::Error<Ws>>) ->
 
 impl<Ws: StateAccessor> From<crate::db::Error<Ws>> for EthApiError {
     fn from(err: crate::db::Error<Ws>) -> Self {
-        RpcInvalidTransactionError::other(ErrorObject::owned(
-            -32603,
-            format!("Database error: {err}"),
-            None::<()>,
-        ))
-        .into()
+        EthApiError::EvmCustom(format!("Database error: {err}"))
     }
 }
 
@@ -632,4 +711,9 @@ pub fn eth_api_into_rpc_error(eth_error: EthApiError) -> ErrorObjectOwned {
 /// Hack while reth is not upgraded for `jsonrpsee` 0.25
 pub fn invalid_tx_into_rpc_error(rpc: RpcInvalidTransactionError) -> ErrorObjectOwned {
     eth_api_into_rpc_error(rpc.into())
+}
+
+/// Converts internal error into rpc error
+pub fn into_rpc_error(err: impl Error) -> ErrorObjectOwned {
+    ErrorObject::owned(500, format!("{err:?}"), None::<()>)
 }

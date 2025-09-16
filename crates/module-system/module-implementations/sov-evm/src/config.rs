@@ -1,5 +1,4 @@
 use alloy_eips::eip1559::{ETHEREUM_BLOCK_GAS_LIMIT_30M, MIN_PROTOCOL_BASE_FEE};
-use alloy_eips::merge::SLOT_DURATION;
 use alloy_primitives::Address;
 use revm::primitives::hardfork::SpecId;
 
@@ -14,8 +13,6 @@ pub struct EvmChainSpec {
     pub coinbase: Address,
     /// Maximum gas allowed per block
     pub block_gas_limit: u64,
-    /// Seconds to add to parent block timestamp
-    pub block_timestamp_delta: u64,
     /// Hard fork activation schedule (block number -> fork ID)
     pub hardforks: Vec<(u64, SpecId)>,
 }
@@ -39,7 +36,6 @@ impl Default for EvmChainSpec {
             limit_contract_code_size: None,
             coinbase: Address::ZERO,
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
-            block_timestamp_delta: SLOT_DURATION.as_secs(),
             hardforks: vec![(0, SpecId::SHANGHAI)],
         }
     }
@@ -100,7 +96,6 @@ mod tests {
             }],
             chain_spec: crate::EvmChainSpec {
                 limit_contract_code_size: None,
-                block_timestamp_delta: 1u64,
                 hardforks: vec![(0, SpecId::SHANGHAI)],
                 ..Default::default()
             },
@@ -122,7 +117,6 @@ mod tests {
                     "limit_contract_code_size":null,
                     "coinbase":"0x0000000000000000000000000000000000000000",
                     "block_gas_limit":30000000,
-                    "block_timestamp_delta":1,
                     "hardforks":[[0,"SHANGHAI"]]
                 }
         }"#;

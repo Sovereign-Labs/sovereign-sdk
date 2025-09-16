@@ -78,6 +78,7 @@ impl<S: Storage> Delta<S> {
             .prune_writes_up_to_and_all_reads(rollup_height);
         self.accessory_writes
             .retain(|_, write| write.at_rollup_height > rollup_height);
+        self.witness = Default::default(); // Prune the witness
     }
 
     pub(super) fn with_witness(inner: S, witness: S::Witness) -> Self {

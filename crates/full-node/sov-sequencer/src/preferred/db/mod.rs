@@ -576,8 +576,8 @@ where
 {
     let mut checkpoint = StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel());
     let mut state = KernelStateAccessor::from_checkpoint(&runtime.kernel(), &mut checkpoint);
+    state.read_from_storage_at_slot_number(latest_state_info.latest_finalized_slot_number);
 
-    state.update_true_slot_number(latest_state_info.latest_finalized_slot_number);
     runtime
         .kernel()
         .next_sequence_number(&mut state)

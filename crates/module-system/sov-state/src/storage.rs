@@ -293,6 +293,13 @@ pub struct NodeLeafAndMaybeValue {
     pub(crate) value: ReadType,
 }
 
+impl NodeLeafAndMaybeValue {
+    /// Get the size of the value.
+    pub fn size(&self) -> u32 {
+        self.leaf.size
+    }
+}
+
 /// Size and hash of a value saved in the state.
 #[derive(
     Clone,

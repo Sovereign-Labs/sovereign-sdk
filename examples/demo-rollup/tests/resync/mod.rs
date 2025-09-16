@@ -307,7 +307,8 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
         (Level::WARN, "Skipping pruning of sequence number because it's already been pruned".to_string()),
         // This shows up occasionally, but especially often on hetzner. There may be some timing
         // oddity that might be worth investigating.
-        (Level::WARN, "State Transition Info is not consumed fast enough, cannot prune older entries. Please check that consumer works.".to_string())
+        (Level::WARN, "State Transition Info is not consumed fast enough, cannot prune older entries. Please check that consumer works.".to_string()),
+        (Level::WARN, "The node is unsynced and doesn't know it. This probably means that you wiped the node DB and are resyncing.".to_string()),
     ];
 
     let mut recorded_errors_warnings =

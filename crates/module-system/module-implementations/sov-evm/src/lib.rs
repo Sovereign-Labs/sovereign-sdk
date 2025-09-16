@@ -34,7 +34,7 @@ use alloy_primitives::U256;
 use alloy_primitives::{Address, B256};
 pub use authenticate::{
     authenticate, decode_evm_tx, Eip712Authenticator, EthereumAuthenticator, EvmAuthenticator,
-    EvmAuthenticatorInput,
+    EvmAuthenticatorInput, SchemaProvider,
 };
 pub use reth_primitives::TransactionSigned;
 pub use revm::primitives::hardfork::SpecId;
@@ -138,6 +138,10 @@ pub struct Evm<S: Spec> {
     /// A reference to the Uniqueness module.
     #[module]
     pub(crate) uniqueness_module: sov_uniqueness::Uniqueness<S>,
+
+    /// A reference to the ChainState module.
+    #[module]
+    pub(crate) chain_state_module: sov_chain_state::ChainState<S>,
 
     #[phantom]
     phantom: core::marker::PhantomData<S>,

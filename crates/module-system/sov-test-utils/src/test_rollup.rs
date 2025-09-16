@@ -706,6 +706,9 @@ where
     R::Spec: Spec<Da = MockDaSpec>,
     StoragePath: AsPath,
 {
+    /// Default timeout for polling operations in seconds.
+    pub const POLLING_TIMEOUT: u64 = 20;
+
     /// Pauses batch production for the preferred sequencer.
     ///
     /// Transactions accepted by the preferred sequencer after this call (and
@@ -791,24 +794,87 @@ where
             .await
     }
 
+    /// Checks if the sequencer is ready without waiting.
+    pub async fn is_sequencer_ready(&self) -> bool {
+        self.client.client.is_ready().await.is_ok()
+    }
+
+    /// Polls the sequencer until is_ready() returns Err(). Useful when you expect the sequencer to
+    /// go into resync/recovery/startup mode, to avoid wait_for_sequencer_ready() from resolving
+    /// _before_ the sequencer becomes unready.
+    ///
+    /// Times out after TestRollup::POLLING_TIMEOUT seconds.
+    pub async fn wait_for_sequencer_not_ready(&self) -> anyhow::Result<()> {
+        self.wait_for_sequencer_state(false).await
+    }
+
     /// Polls the sequencer until is_ready() returns Ok(()).
+    ///
+    /// Times out after TestRollup::POLLING_TIMEOUT seconds.
     pub async fn wait_for_sequencer_ready(&self) -> anyhow::Result<()> {
+        self.wait_for_sequencer_state(true).await
+    }
+
+    /// Generic helper for waiting on a condition with timeout and polling.
+    ///  * condition_string: inserted into "Timeout waiting for {condition_string}", format accordingly
+    async fn wait_for_condition<F, Fut>(
+        &self,
+        mut condition_check: F,
+        condition_string: &str,
+    ) -> anyhow::Result<()>
+    where
+        F: FnMut() -> Fut,
+        Fut: std::future::Future<Output = anyhow::Result<bool>>,
+    {
         let wait_loop = async {
             loop {
-                match self.client.http_get("/sequencer/ready").await {
-                    Ok(_) => {
-                        return Ok(());
-                    }
-                    Err(_) => {
-                        tokio::time::sleep(Duration::from_millis(100)).await;
-                    }
+                match condition_check().await {
+                    Ok(true) => return Ok(()),
+                    Ok(false) => tokio::time::sleep(Duration::from_millis(100)).await,
+                    Err(e) => return Err(e),
                 }
             }
         };
 
-        timeout(Duration::from_secs(20), wait_loop)
+        timeout(Duration::from_secs(Self::POLLING_TIMEOUT), wait_loop)
             .await
-            .context("Timeout waiting for sequencer to be ready after 10 seconds")?
+            .with_context(|| {
+                format!(
+                    "Timeout waiting for {condition_string} after {} seconds",
+                    Self::POLLING_TIMEOUT
+                )
+            })?
+    }
+
+    /// Helper that waits for the sequencer to reach either a ready or un-ready state.
+    async fn wait_for_sequencer_state(&self, wait_for_ready: bool) -> anyhow::Result<()> {
+        let condition_name = if wait_for_ready {
+            "sequencer to be ready"
+        } else {
+            "sequencer to be not-ready"
+        };
+        self.wait_for_condition(
+            || async { Ok(self.is_sequencer_ready().await == wait_for_ready) },
+            condition_name,
+        )
+        .await
+    }
+
+    /// Waits for the node to finish syncing with the DA layer.
+    ///
+    /// Times out after TestRollup::POLLING_TIMEOUT seconds.
+    pub async fn wait_for_node_synced(&self) -> anyhow::Result<()> {
+        self.wait_for_condition(
+            || async {
+                let response = self.client.client.get_sync_status().await?;
+                Ok(matches!(
+                    response.into_inner(),
+                    sov_api_spec::types::SyncStatus::Synced { .. }
+                ))
+            },
+            "node to sync",
+        )
+        .await
     }
 
     /// Restarts the rollup.
@@ -833,7 +899,6 @@ where
             c.stop_at_rollup_height = stop_at_height;
         });
         let rollup = builder.start().await?;
-        rollup.wait_for_sequencer_ready().await?;
         Ok(rollup)
     }
 

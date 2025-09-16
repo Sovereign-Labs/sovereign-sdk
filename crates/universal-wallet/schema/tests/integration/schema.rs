@@ -69,10 +69,10 @@ macro_rules! encode_decode_tests {
         let schema = Schema::of_single_type::<$schema_type>().unwrap();
         // println!("{:?}", &schema);
         encode_decode_tests_simple!(schema, $item, $expected_display);
-        let chain_hash = schema.cached_chain_hash().unwrap();
+        let chain_hash = schema.chain_hash().unwrap();
         let schema_json = serde_json::to_string_pretty(&schema).unwrap();
         // println!("{schema_json}");
-        let mut recovered_schema = Schema::from_json(&schema_json).unwrap();
+        let recovered_schema = Schema::from_json(&schema_json).unwrap();
         let recovered_chain_hash = recovered_schema.chain_hash().unwrap();
         assert_eq!(chain_hash, recovered_chain_hash);
         encode_decode_tests_simple!(recovered_schema, $item, $expected_display);
@@ -1462,9 +1462,9 @@ fn test_multiobject_schema() {
         schemaless: NoSchemaU64Wrapper(123),
     };
 
-    let orig_hash = schema.cached_chain_hash().unwrap();
+    let orig_hash = schema.chain_hash().unwrap();
     let schema_json = serde_json::to_string_pretty(&schema).unwrap();
-    let mut schema = Schema::from_json(&schema_json).unwrap();
+    let schema = Schema::from_json(&schema_json).unwrap();
     let hash = schema.chain_hash().unwrap();
     assert_eq!(orig_hash, hash);
 

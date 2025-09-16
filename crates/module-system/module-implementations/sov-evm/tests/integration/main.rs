@@ -4,5 +4,6 @@ mod helpers;
 mod pruning;
 mod runtime;
 mod state;
+mod trace;
 mod transactions;
 mod wallet;

@@ -569,7 +569,7 @@ async fn sequencer_filled_up_block() {
 const SEQUENCER_RECOVERY_ERROR: &str = "The preferred sequencer is recovering from downtime and cannot provide soft-confirmations at this time";
 
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_seq_behind_deferred_slots_count_simple_lagging() {
+async fn seq_behind_deferred_slots_count_simple_lagging() {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
     let (test_rollup, admin) = create_test_rollup(
         0,
@@ -624,17 +624,17 @@ async fn flaky_seq_behind_deferred_slots_count_simple_lagging() {
     for _ in 0..30 {
         let _ = da_layer.produce_block().await; // Don't wait for state updates since we've just paused them
     }
-    tokio::time::sleep(Duration::from_millis(1500)).await; // Sleep to give time for at least some of these to be processed.
+    // Make sure the DA has synced everything
+    test_rollup.wait_for_node_synced().await.unwrap();
 
     tracing::info!("Resuming preferred sequencer batch production.");
     test_rollup.resume_preferred_batches().await;
-    // Produce two blocks that will trigger update_state() and cause the sequencer to go into
-    // recovery
-    // A single block is usually enough but was very rarely flaky. Producing two blocks fixes that
-    // and doesn't hurt
-    for _ in 0..2 {
-        let _ = da_layer.produce_block().await; // Now updates are not working because we're in recovery mode.
-        sleep(Duration::from_millis(100)).await; // Sleep to give time for the sequencer to go into recovery.
+    // Normally on the next state update, the sequencer should always enter recovery.
+    // However for some reason this was flaky.
+    test_rollup.da_service.produce_block_now().await.unwrap();
+    while test_rollup.is_sequencer_ready().await {
+        let _ = da_layer.produce_block().await;
+        sleep(Duration::from_millis(50)).await;
     }
 
     // Create transaction that should fail: sequencer should not accept transactions while in
@@ -657,7 +657,7 @@ async fn flaky_seq_behind_deferred_slots_count_simple_lagging() {
 
     // Give time for the sequencer to catch up its visible state number
     tracing::info!("Producing DA blocks to let the sequencer resync.");
-    for _ in 0..10 {
+    while !test_rollup.is_sequencer_ready().await {
         let _ = da_layer.produce_block().await;
         sleep(Duration::from_millis(50)).await; // Notifications don't work during recovery.
     }
@@ -779,14 +779,12 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     let test_rollup = builder.start().await.unwrap();
     let client = test_rollup.api_client().clone();
 
-    // Give the rollup time to process the backlog and enter recovery mode
-    tokio::time::sleep(Duration::from_millis(1000)).await;
-
-    // Produce a few more blocks to trigger recovery detection
-    for _ in 0..3 {
-        test_rollup.da_service.produce_block_now().await.unwrap();
-        sleep(Duration::from_millis(1000)).await;
-    }
+    // First we sync the node to the new DA blocks
+    test_rollup.wait_for_node_synced().await.unwrap();
+    // Now on the next state update, the sequencer should always enter recovery
+    test_rollup.da_service.produce_block_now().await.unwrap();
+    sleep(Duration::from_millis(50)).await;
+    assert!(!test_rollup.is_sequencer_ready().await);
 
     // Create transaction that should fail: sequencer should not accept transactions while in recovery
     const UPDATE_VEC_VALUE: u8 = 12;
@@ -805,12 +803,10 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
 
     // Give time for the sequencer to catch up its visible state number
     tracing::info!("Producing DA blocks to let the sequencer resync.");
-    for _ in 0..20 {
+    while !test_rollup.is_sequencer_ready().await {
         test_rollup.da_service.produce_block_now().await.unwrap();
         sleep(Duration::from_millis(50)).await;
     }
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Submit the same transaction to the now-working sequencer
     client

@@ -16,7 +16,7 @@ macro_rules! eip712_tests {
         eip712_tests!($schema_type, $item, true, $expected_display);
     };
     ($schema_type:ty, $item:ident, $pretty_print:literal, $expected_display:literal) => {
-        let mut schema = Schema::of_single_type::<$schema_type>().unwrap();
+        let schema = Schema::of_single_type::<$schema_type>().unwrap();
         let borsh_ser = borsh::to_vec(&$item).unwrap();
         let eip712_json = schema.eip712_json(0, &borsh_ser).unwrap();
 

@@ -115,6 +115,10 @@ rand = "0.8"
 
 ethereum-types = "0.14.1"
 ethers =  { workspace = true }
+alloy-primitives =  { workspace = true }
+alloy-rpc-types-eth = "1.0.30"
+alloy-pubsub = "1.0"
+
 
 reqwest = { version = "0.12", features = [
   "rustls-tls",

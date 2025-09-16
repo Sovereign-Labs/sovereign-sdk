@@ -1,5 +1,5 @@
-use alloy_primitives::{Address, B256};
-use revm::context::result::{EVMError, ExecutionResult};
+use alloy_primitives::Address;
+use revm::context::result::ExecutionResult;
 use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{serialize, UniversalWallet};
@@ -66,7 +66,7 @@ where
         let cfg_env = get_cfg_env(&block_env, cfg, None);
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
-        let result = executor::transact_commit(evm_db, &block_env, tx_env, cfg_env);
+        let result = executor::transact_commit(evm_db, block_env, tx_env, cfg_env);
 
         let receipt = match result {
             Ok(result) => {
@@ -90,7 +90,13 @@ where
                 receipt
             }
             Err(err) => {
-                return self.handle_execution_error(transaction.signed_transaction.hash(), err)
+                tracing::debug!(
+                    tx_hash = hex::encode(*transaction.signed_transaction.hash()),
+                    error = ?err,
+                    "EVM transaction has been reverted"
+                );
+
+                anyhow::bail!("EVM transaction error: {:?}", err);
             }
         };
 
@@ -167,8 +173,9 @@ where
             .expect("gas_to_charge_per_evm_gas() is zero");
         let gas_used = scaled_sequencer_gas_used + result.gas_used();
         let logs = result.into_logs();
+        let transaction_hash = *tx.signed_transaction.hash();
         tracing::debug!(
-            hash = hex::encode(tx.signed_transaction.hash()),
+            hash = hex::encode(transaction_hash),
             gas_used,
             "EVM transaction has been executed"
         );
@@ -176,7 +183,6 @@ where
         let receipt = reth_primitives::Receipt {
             tx_type: tx.signed_transaction.tx_type(),
             success: is_success,
-
             cumulative_gas_used: previous_transaction_cumulative_gas_used
                 .checked_add(gas_used)
                 .context("EVM: Cumulative gas used overflow")?,
@@ -186,27 +192,12 @@ where
 
         Ok(Receipt {
             receipt,
+            transaction_hash,
+            block_number: tx.block_number,
             gas_used,
             log_index_start,
             error: None,
         })
-    }
-
-    fn handle_execution_error<E: std::fmt::Debug>(
-        &self,
-        hash: &B256,
-        err: EVMError<E>,
-    ) -> anyhow::Result<()> {
-        // Adopted from https://github.com/paradigmxyz/reth/blob/main/crates/payload/basic/src/lib.rs#L884
-        tracing::debug!(
-            tx_hash = hex::encode(hash),
-            error = ?err,
-            "EVM transaction has been reverted"
-        );
-        match err {
-            EVMError::Transaction(_) => Ok(()), // This is a transactional error, so we can skip it without doing anything.
-            err => Err(anyhow::anyhow!("EVM execution error: {:?}", err)), // This is a fatal error, so we need to return it.
-        }
     }
 
     // The nonce check is already performed by the stf-blueprint during transaction preprocessing,

@@ -31,6 +31,9 @@ hex = { workspace = true }
 
 ethereum-types = { workspace = true }
 ethers = { workspace = true }
+alloy-sol-types = "1.3.1"
+alloy-primitives = { workspace = true }
+alloy-rpc-types-eth = "1.0.30"
 
 sha2 = { workspace = true }
 sov-address = { workspace = true }
@@ -85,4 +88,7 @@ arbitrary = [
     "sov-mock-da/arbitrary",
     "sov-bank/arbitrary",
     "sov-paymaster/arbitrary",
+    "alloy-primitives/arbitrary",
+	"alloy-rpc-types-eth/arbitrary",
+	"alloy-sol-types/arbitrary"
 ]

@@ -14,6 +14,8 @@ use revm::{
     },
     Database, MainContext,
 };
+#[cfg(feature = "native")]
+use revm::{interpreter::interpreter::EthInterpreter, Inspector};
 use sov_modules_api::macros::config_value;
 
 /// builds CfgEnv
@@ -39,7 +41,7 @@ pub fn transact_commit<
     E: DBErrorMarker,
 >(
     mut db: DB,
-    block_env: &BlockEnv,
+    block_env: BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
 ) -> Result<ExecutionResult, EVMError<E>> {
@@ -51,27 +53,52 @@ pub fn transact_commit<
 
 #[cfg(feature = "native")]
 pub(crate) fn call<DB: Database<Error = E>, E: DBErrorMarker>(
-    mut db: DB,
-    block_env: &BlockEnv,
+    db: DB,
+    block_env: BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
 ) -> Result<ExecutionResult, EVMError<E>> {
-    Ok(transact(&mut db, block_env, tx, cfg)?.result)
+    Ok(transact(db, block_env, tx, cfg)?.result)
+}
+
+#[cfg(feature = "native")]
+#[allow(dead_code)]
+pub(crate) fn inspect<DB: Database<Error = E>, E: DBErrorMarker, I>(
+    db: DB,
+    block_env: BlockEnv,
+    tx: TxEnv,
+    cfg: CfgEnv,
+    inspector: I,
+) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>>
+where
+    I: Inspector<Context<BlockEnv, TxEnv, CfgEnv, DB>, EthInterpreter>,
+{
+    let context = context(db, block_env, cfg);
+    let unmetered_storage_inspector = UnmeteredStorageAccessInspector::new();
+    let mut evm = SovEvm::new(context, (inspector, unmetered_storage_inspector));
+    evm.inspect_tx(tx)
 }
 
 fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
-    db: &mut DB,
-    block_env: &BlockEnv,
+    db: DB,
+    block_env: BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
 ) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>> {
-    let context = Context::mainnet()
+    let context = context(db, block_env, cfg);
+    let mut evm = SovEvm::new(context, UnmeteredStorageAccessInspector::new());
+    evm.inspect_tx(tx)
+}
+
+fn context<DB: Database<Error = E>, E: DBErrorMarker>(
+    db: DB,
+    block_env: BlockEnv,
+    cfg: CfgEnv,
+) -> Context<BlockEnv, TxEnv, CfgEnv, DB> {
+    Context::mainnet()
         .with_db(db)
         .with_block(block_env)
-        .with_cfg(cfg);
-    let inspector = UnmeteredStorageAccessInspector::new();
-    let mut evm = SovEvm::new(context, inspector);
-    evm.inspect_tx(tx)
+        .with_cfg(cfg)
 }
 
 #[cfg(test)]

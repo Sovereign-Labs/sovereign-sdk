@@ -2,6 +2,7 @@
 //! Based on <https://github.com/tokio-rs/tracing-opentelemetry/blob/293d206b2b02686d5b2b0166c072425feed94950/examples/opentelemetry-otlp.rs>
 //! and <https://github.com/open-telemetry/opentelemetry-rust/blob/9cf7a40b217cf8f30bf9cf867148342eebd8fe78/opentelemetry-otlp/examples/basic-otlp/src/main.rs>
 
+use crate::GIT_COMMIT_HASH;
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry::KeyValue;
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
@@ -71,14 +72,13 @@ fn resource() -> Resource {
     } else {
         "release"
     };
-    let commit_hash = option_env!("GIT_COMMIT_HASH").unwrap_or("unknown");
     Resource::from_schema_url(
         [
             KeyValue::new(SERVICE_NAME, env!("CARGO_PKG_NAME")),
             KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
             KeyValue::new(DEPLOYMENT_ENVIRONMENT_NAME, env_name),
             KeyValue::new("build.mode", build_mode),
-            KeyValue::new(VCS_REPOSITORY_REF_REVISION, commit_hash),
+            KeyValue::new(VCS_REPOSITORY_REF_REVISION, GIT_COMMIT_HASH),
         ],
         SCHEMA_URL,
     )

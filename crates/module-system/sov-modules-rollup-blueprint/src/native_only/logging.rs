@@ -3,12 +3,12 @@
 use std::env;
 use std::str::FromStr;
 
+pub use crate::native_only::telemetry::{should_init_open_telemetry_exporter, OtelGuard};
+use crate::GIT_COMMIT_HASH;
 use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter, Layer};
-
-pub use crate::native_only::telemetry::{should_init_open_telemetry_exporter, OtelGuard};
 
 /// Default [`tracing`] initialization for the rollup node.
 /// Returns optional [`OtelGuard`] which should be held through the lifetime of the caller,
@@ -85,6 +85,7 @@ fn log_info_about_logging(current_env_filter: &str) {
     // also print the current filter so they can copy-paste it and tweak it.
     info!(
         RUST_LOG = current_env_filter,
+        commit = GIT_COMMIT_HASH,
         "Logging initialized; you can restart the node with a custom `RUST_LOG` env. var. to customize log filtering"
     );
 

@@ -49,12 +49,11 @@ impl<S: Spec> BlockHooks for Evm<S> {
             // This is justified. We will never have so many blocks.
             .expect("The impossible happened: Block number overflow");
 
-        // TODO EVM: #1510. This is wrong we should take the sov timestamp.
-        let new_timestamp = parent_block
-            .header
-            .timestamp
-            .checked_add(cfg.chain_spec.block_timestamp_delta)
-            .expect("The impossible happened: Timestamp overflow");
+        let new_timestamp = self
+            .chain_state_module
+            .get_time(state)
+            .unwrap_infallible()
+            .as_millis() as u64;
 
         let new_pending_env = BlockEnv {
             number: U256::from(new_block_number),
@@ -122,6 +121,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
         let transactions_root = calculate_transaction_root(transactions.as_slice());
 
         let header = alloy_consensus::Header {
+            timestamp: block_env.timestamp.to::<u64>(),
             parent_hash: parent_block.header.seal(),
             number: block_env.number.to::<u64>(),
             beneficiary: parent_block.header.beneficiary,
