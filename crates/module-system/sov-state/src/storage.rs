@@ -2,6 +2,7 @@
 
 use core::fmt;
 use std::fmt::Display;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -23,6 +24,11 @@ use crate::{
 
 type ArcFormatFn =
     Arc<dyn (Fn(&[u8], &mut fmt::Formatter<'_>) -> fmt::Result) + Send + Sync + 'static>;
+
+/// The number of slot keys allocated.
+pub static NUM_SLOT_KEYS_ALLOCATED: AtomicUsize = AtomicUsize::new(0);
+/// The total number of allocations.
+pub static TOTAL_ALLOCATIONS: AtomicUsize = AtomicUsize::new(0);
 
 /// The key type suitable for use in [`Storage::get`] and other getter methods of
 /// [`Storage`]. Cheaply-clonable.
@@ -145,6 +151,7 @@ impl SlotKey {
                 write!(formatter, "{prefix_str}{key}")
             },
         ));
+        NUM_SLOT_KEYS_ALLOCATED.fetch_add(1, Ordering::Relaxed);
         Self {
             key: Arc::new(full_key),
             display_fn,
