@@ -492,7 +492,10 @@ where
         let header = alloy_consensus::Header {
             parent_hash: head_block.header.seal(),
             number: pending_block_number,
-            timestamp: current_block_env.timestamp.try_into().unwrap(),
+            timestamp: current_block_env
+                .timestamp
+                .try_into()
+                .expect("The impossible happened: timestamp overflow u64"),
             ..Default::default()
         };
 
