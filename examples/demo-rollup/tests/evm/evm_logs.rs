@@ -26,22 +26,22 @@ async fn evm_test_log_subscription() {
     test_rollup.wait_for_next_blocks(1).await;
 
     // Logs from this transactions should not appear in the subscription because we haven't subscribed yet.
-    send_txs_and_pause(0..10, contract_address, &evm_client, &test_rollup).await;
+    //send_txs_and_pause(0..10, contract_address, &evm_client, &test_rollup).await;
 
     let sub = evm_client.alloy_subscribe_logs(&Filter::new()).await;
     let sub_id = sub.local_id().clone();
 
     // Subscription started. Logs from these transactions will appear even though we haven’t started listening for them.
-    let mut tx_hashes =
-        send_txs_and_pause(10..15, contract_address, &evm_client, &test_rollup).await;
+    //let mut tx_hashes =
+    //    send_txs_and_pause(10..15, contract_address, &evm_client, &test_rollup).await;
 
     // Log listening started.
     log_collector.spawn_log_watcher(sub).await;
 
     // Logs from this txs will shouw up in the subscription.
-    let mut tx_hashes_2 =
-        send_txs_and_pause(15..100, contract_address, &evm_client, &test_rollup).await;
-    tx_hashes.append(&mut tx_hashes_2);
+    let mut tx_hashes =
+        send_txs_and_pause(15..10000, contract_address, &evm_client, &test_rollup).await;
+    //tx_hashes.append(&mut tx_hashes_2);
 
     let logs_fetched = fetch_logs(tx_hashes, &evm_client).await;
 
@@ -65,6 +65,9 @@ async fn evm_test_log_subscription() {
             assert!(block_timestamp_from_log > time_stamp);
             time_stamp = block_timestamp_from_log;
             block_nr = block_nr_from_log;
+
+            println!("block_nr {block_nr}");
+            println!("block_nr {block_nr_from_log}");
         }
 
         assert_logs(log, sub_log);
@@ -243,8 +246,10 @@ async fn send_txs_and_pause(
     for i in range {
         let set_arg = i;
         let hash = evm_client.alloy_set_value(contract_address, set_arg).await;
-        if i % 3 == 0 {
+        if i % 200 == 0 {
             test_rollup.wait_for_next_blocks(1).await;
+            println!("");
+            println!("i {:?}", i);
         }
         tx_hashes.push(hash);
     }

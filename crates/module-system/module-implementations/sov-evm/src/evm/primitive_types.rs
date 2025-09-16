@@ -156,6 +156,7 @@ impl<'de> serde::Deserialize<'de> for SealedBlock {
 pub enum MaybeSealedBlock {
     Sealed(Box<SealedBlock>),
     Pending {
+        timestamp: u64,
         block_number: u64,
         first_tx_number: u64,
     },
@@ -189,7 +190,7 @@ impl MaybeSealedBlock {
     pub fn timestamp(&self) -> Option<u64> {
         match self {
             Self::Sealed(block) => Some(block.header.timestamp),
-            Self::Pending { .. } => None,
+            Self::Pending { timestamp, .. } => Some(*timestamp),
         }
     }
 }

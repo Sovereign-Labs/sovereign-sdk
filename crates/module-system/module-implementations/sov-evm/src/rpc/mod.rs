@@ -414,6 +414,7 @@ where
         let first_tx_index = head.transactions.end;
 
         MaybeSealedBlock::Pending {
+            timestamp: current_block_env.timestamp.try_into().unwrap(),
             block_number,
             first_tx_number: first_tx_index,
         }
