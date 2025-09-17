@@ -351,6 +351,11 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
+name = "sov-soak-testing-lib"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
 name = "switcheroo"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
