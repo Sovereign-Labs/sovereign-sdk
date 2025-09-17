@@ -116,14 +116,14 @@ impl<S: Spec> Module for InterchainGasPaymaster<S> {
                     beneficiary,
                     context,
                     state,
-                )?
+                )?;
             }
             CallMessage::UpdateOracleData {
                 domain,
                 oracle_data: oracle_value,
             } => {
                 tracing::debug!(?domain, ?oracle_value, "Updating oracle data");
-                self.update_oracle_value(domain, oracle_value, context, state)?
+                self.update_oracle_value(domain, oracle_value, context, state)?;
             }
         }
 
