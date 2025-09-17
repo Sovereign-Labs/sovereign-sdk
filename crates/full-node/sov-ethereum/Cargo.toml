@@ -16,12 +16,10 @@ workspace = true
 [dependencies]
 tracing = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
-sov-rollup-interface = { workspace = true, features = ["native"] }
 sov-address = { workspace = true, features = ["evm"] }
 
 sov-evm = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }
-sov-blob-storage = { workspace = true, features = ["native"] }
 sov-sequencer = { workspace = true }
 sov-eth-dev-signer = { workspace = true }
 
@@ -29,14 +27,12 @@ borsh = { workspace = true }
 serde = { workspace = true }
 
 alloy-primitives = { workspace = true }
-alloy-consensus = { workspace = true }
 alloy-rpc-types = { workspace = true }
 alloy-eips = { workspace = true }
 reth-primitives = { workspace = true }
 reth-rpc-eth-types = { workspace = true }
 
 tokio = { workspace = true, features = ["sync"] }
-schnellru = "0.2.3"
 
 [dev-dependencies]
 anyhow = { workspace = true }
