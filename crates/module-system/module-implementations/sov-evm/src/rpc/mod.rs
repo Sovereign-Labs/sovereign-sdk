@@ -438,6 +438,16 @@ where
     }
 }
 
+/// Result of String => BlockNr conversion
+pub enum PendingOrBlock {
+    /// Pending blcock.
+    Pending,
+    /// Block number.
+    Number(u64),
+    /// Invalid block number.
+    Invalid(String),
+}
+
 impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
@@ -517,61 +527,62 @@ where
         MaybeSealedBlock::Pending(pending)
     }
 
+    /// Convert string to block nr.
+    pub fn str_to_block_nr(
+        &self,
+        block_number: Option<String>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> PendingOrBlock {
+        let block_number_str = block_number.unwrap_or_else(|| "latest".into());
+
+        match block_number_str.as_str() {
+            "earliest" => {
+                let block_numbers = self
+                    .block_numbers
+                    .get(state)
+                    .unwrap_infallible()
+                    // This is justified, as block numbers are set at genesis and only overridden later.
+                    .expect("The impossible happened: block_numbers was not set.");
+
+                PendingOrBlock::Number(*block_numbers.start())
+            }
+            "latest" => {
+                let block_numbers = self
+                    .block_numbers
+                    .get(state)
+                    .unwrap_infallible()
+                    // This is justified, as block numbers are set at genesis and only overridden later.
+                    .expect("The impossible happened: block_numbers was not set.");
+
+                PendingOrBlock::Number(*block_numbers.end())
+            }
+
+            "pending" => PendingOrBlock::Pending,
+            number => match u64::from_str_radix(number.trim_start_matches("0x"), 16) {
+                Ok(nr) => PendingOrBlock::Number(nr),
+                Err(_) => PendingOrBlock::Invalid(block_number_str),
+            },
+        }
+    }
+
     /// Retrieves a sealed block by number.
     pub fn get_sealed_block_by_number(
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> Option<SealedBlock> {
-        // safe, finalized, and pending are not supported
-        match block_number {
-            Some(ref block_number) if block_number == "earliest" => {
-                let block_numbers = self
-                    .block_numbers
-                    .get(state)
-                    .unwrap_infallible()
-                    // This is justified, as block numbers are set at genesis and only overridden later.
-                    .expect("The impossible happened: block_numbers was not set.");
-                let first_block_number = block_numbers.start();
+        let pending_or_block_nr = self.str_to_block_nr(block_number, state);
 
-                self.blocks
-                    .get(first_block_number, state)
-                    .unwrap_infallible()
-            }
-            Some(ref block_number) if block_number == "latest" => {
-                let block_numbers = self
-                    .block_numbers
-                    .get(state)
-                    .unwrap_infallible()
-                    // This is justified, as block numbers are set at genesis and only overridden later.
-                    .expect("The impossible happened: block_numbers was not set.");
-
-                let last_block_number = block_numbers.end();
-
-                self.blocks
-                    .get(last_block_number, state)
-                    .unwrap_infallible()
-            }
-            Some(ref block_number) if block_number == "pending" => {
+        match pending_or_block_nr {
+            PendingOrBlock::Number(nr) => self.blocks.get(&nr, state).unwrap_infallible(),
+            PendingOrBlock::Pending => {
                 let pending_block = self.pending_block(state);
                 Some(pending_block.seal())
             }
-            Some(ref block_number) => {
-                // hex representation may have 0x prefix
-                let Ok(block_number) =
-                    u64::from_str_radix(block_number.trim_start_matches("0x"), 16)
-                else {
-                    tracing::error!(
-                        block_number,
-                        "get_sealed_block_by_number: Block number must be a valid hex number, with or without 0x prefix"
-                    );
-
-                    return None;
-                };
-
-                self.blocks.get(&block_number, state).unwrap_infallible()
+            PendingOrBlock::Invalid(invalid) => {
+                tracing::error!(invalid, "Invalid block number");
+                None
             }
-            None => self.get_sealed_block_by_number(Some("latest".into()), state),
         }
     }
 

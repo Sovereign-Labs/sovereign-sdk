@@ -7,6 +7,7 @@ use crate::EthereumAuthenticator;
 use crate::FromVmAddress;
 use crate::HasKernel;
 use crate::Sequencer;
+use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::B256;
 use alloy_rpc_types::eth::Filter;
 use alloy_rpc_types::FilterBlockOption;
@@ -14,8 +15,10 @@ use alloy_rpc_types::Log;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
+use sov_evm::PendingOrBlock;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
+use std::ops::RangeInclusive;
 use std::sync::Arc;
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -128,4 +131,52 @@ where
     }
 
     Ok(rpc_logs)
+}
+
+fn logs_for_blocks_range<S>(
+    _filter: Filter,
+    from_block: Option<BlockNumberOrTag>,
+    to_block: Option<BlockNumberOrTag>,
+    state: &mut ApiStateAccessor<S>,
+) -> Result<Vec<Log>, ErrorObjectOwned>
+where
+    S: Spec,
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    let rpc_logs = Vec::new();
+    let evm = sov_evm::Evm::<S>::default();
+
+    let start = get_block_nr(from_block, &evm, state)?;
+    let end = get_block_nr(to_block, &evm, state)?;
+
+    let block_range = RangeInclusive::new(start, end);
+    for _height in block_range {
+        // TODO
+    }
+    Ok(rpc_logs)
+}
+
+fn get_block_nr<S>(
+    block_nr_or_tag: Option<BlockNumberOrTag>,
+    evm: &sov_evm::Evm<S>,
+    state: &mut ApiStateAccessor<S>,
+) -> Result<u64, ErrorObjectOwned>
+where
+    S: Spec,
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    let number = evm.str_to_block_nr(block_nr_or_tag.map(|b| b.to_string()), state);
+    match number {
+        PendingOrBlock::Pending => {
+            return Err(to_jsonrpsee_error_object(
+                "Pending blocks are not supported",
+                ETH_RPC_ERROR,
+            ))
+        }
+        PendingOrBlock::Invalid(err) => {
+            let msg = format!("Invalid block: {err}");
+            return Err(to_jsonrpsee_error_object(msg, ETH_RPC_ERROR));
+        }
+        PendingOrBlock::Number(number) => Ok(number),
+    }
 }
