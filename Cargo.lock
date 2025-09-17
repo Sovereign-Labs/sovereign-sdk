@@ -12516,7 +12516,9 @@ dependencies = [
  "static_assertions",
  "thiserror 1.0.64",
  "tokio",
+ "toml",
  "tracing",
+ "tracing-subscriber 0.3.20",
 ]
 
 [[package]]
