@@ -350,7 +350,7 @@ where
         },
     };
 
-    apply_batch_logs(&batch_receipt, blob_idx);
+    apply_batch_logs::<S, RT>(&batch_receipt, blob_idx, None);
 
     (batch_receipt, checkpoint)
 }
