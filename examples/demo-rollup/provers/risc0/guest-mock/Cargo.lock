@@ -1440,7 +1440,6 @@ dependencies = [
  "borsh",
  "schemars 0.8.22",
  "serde",
- "serde_json",
  "sov-accounts",
  "sov-address",
  "sov-attester-incentives",

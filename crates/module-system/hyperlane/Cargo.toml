@@ -38,7 +38,6 @@ testcontainers = { workspace = true }
 testcontainers-modules = { workspace = true, features = ["anvil"] }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
-workspace-hack = { workspace = true } # required for feature unification with arbitrary
 
 [dependencies]
 sov-address = { workspace = true, optional = true }
