@@ -1,4 +1,4 @@
-use crate::evm::primitive_types::Block;
+use crate::evm::primitive_types::{Block, TransactionSigned};
 use crate::{BlockEnv, Evm, PendingTransaction};
 use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root};
 use alloy_consensus::TxReceipt;
@@ -107,7 +107,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
             .last()
             .map_or(0u64, |tx| tx.receipt.receipt.cumulative_gas_used);
 
-        let transactions: Vec<reth_primitives::TransactionSigned> = pending_transactions
+        let transactions: Vec<TransactionSigned> = pending_transactions
             .iter()
             .map(|tx| tx.transaction.signed_transaction.clone())
             .collect();

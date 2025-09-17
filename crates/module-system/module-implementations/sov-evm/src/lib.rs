@@ -36,7 +36,6 @@ pub use authenticate::{
     authenticate, decode_evm_tx, Eip712Authenticator, EthereumAuthenticator, EvmAuthenticator,
     EvmAuthenticatorInput, SchemaProvider,
 };
-pub use reth_primitives::TransactionSigned;
 pub use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_bank::Amount;
@@ -52,6 +51,7 @@ use sov_state::User;
 
 use crate::account_storage_key::AccountStorageKey;
 use crate::db::{DbAccount, EvmDb};
+pub use crate::evm::primitive_types::TransactionSigned;
 use crate::evm::primitive_types::{
     Block, PendingTransaction, Receipt, SealedBlock, TransactionSignedAndRecovered,
 };

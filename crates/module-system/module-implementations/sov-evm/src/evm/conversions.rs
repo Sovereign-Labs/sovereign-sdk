@@ -1,7 +1,7 @@
 use alloy_consensus::Transaction;
 use alloy_eips::eip2718::{Decodable2718, Eip2718Error};
 use alloy_primitives::{Address, Bytes, U256};
-use reth_primitives::{Recovered, TransactionSigned};
+use reth_primitives::Recovered;
 use reth_primitives_traits::SignedTransaction;
 use revm::context::{BlockEnv, TransactionType, TxEnv};
 use thiserror::Error;
@@ -9,7 +9,7 @@ use thiserror::Error;
 use super::primitive_types::SealedBlock;
 #[cfg(feature = "native")]
 use crate::primitive_types::TransactionSignedAndRecovered;
-use crate::RlpEvmTransaction;
+use crate::{evm::primitive_types::TransactionSigned, RlpEvmTransaction};
 
 // BlockEnv from SealedBlock
 impl From<SealedBlock> for BlockEnv {

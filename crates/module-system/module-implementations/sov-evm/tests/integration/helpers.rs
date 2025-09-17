@@ -5,13 +5,15 @@ use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::B256;
 use alloy_primitives::{Address, Bytes, TxKind, U256};
-use reth_primitives::TransactionSigned;
 use secp256k1::rand::SeedableRng as _;
 use secp256k1::{PublicKey, SecretKey};
 use sov_address::EthereumAddress;
 use sov_address::MultiAddress;
 use sov_eth_dev_signer::Signer;
-use sov_evm::{AccountData, EthereumAuthenticator, EvmGenesisConfig, RlpEvmTransaction, SpecId};
+use sov_evm::{
+    AccountData, EthereumAuthenticator, EvmGenesisConfig, RlpEvmTransaction, SpecId,
+    TransactionSigned,
+};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
 use sov_test_utils::runtime::{genesis::optimistic::HighLevelOptimisticGenesisConfig, TestRunner};

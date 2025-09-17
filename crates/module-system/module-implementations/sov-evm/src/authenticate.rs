@@ -4,7 +4,6 @@ use alloy_consensus::Transaction;
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::Address;
 use borsh::{BorshDeserialize, BorshSerialize};
-use reth_primitives::TransactionSigned;
 use reth_primitives_traits::SignerRecoverable;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::capabilities::{
@@ -27,6 +26,7 @@ mod eip712;
 pub use eip712::{Eip712Authenticator, SchemaProvider};
 
 use crate::conversions::RlpConversionError;
+use crate::TransactionSigned;
 use crate::{call, CallMessage, RlpEvmTransaction};
 
 /// Recovers the signer from an EVM transaction.

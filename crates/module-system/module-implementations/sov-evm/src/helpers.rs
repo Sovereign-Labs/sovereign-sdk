@@ -3,11 +3,13 @@ use alloy_primitives::TxKind;
 use alloy_primitives::{BlockNumber, Sealed};
 use alloy_primitives::{B256, U256};
 use alloy_rpc_types::{Header, TransactionRequest};
-use reth_primitives::{Recovered, TransactionSigned};
+use reth_primitives::Recovered;
 use reth_rpc_eth_types::EthResult;
 use revm::context::{BlockEnv, TransactionType, TxEnv};
 
 use alloy_consensus::TxEip4844;
+
+use crate::evm::primitive_types::TransactionSigned;
 pub type PrimitiveTransaction = alloy_consensus::EthereumTypedTransaction<TxEip4844>;
 
 // https://github.com/paradigmxyz/reth/blob/d8677b4146f77c7c82d659c59b79b38caca78778/crates/rpc/rpc/src/eth/revm_utils.rs#L201

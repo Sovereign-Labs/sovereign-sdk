@@ -5,13 +5,17 @@ use alloy_consensus::{
     transaction::serde_bincode_compat::EthereumTxEnvelope as EthereumTxEnvelopeBincodeCompat,
     Header,
 };
+use alloy_consensus::{EthereumTxEnvelope, TxEip4844};
 use alloy_primitives::TxHash;
 use alloy_primitives::{Address, Sealable, Sealed, B256};
 use reth_ethereum_primitives::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
-use reth_primitives::{Recovered, TransactionSigned};
+use reth_primitives::Recovered;
 use revm::context::result::EVMError;
 use serde_with::serde_as;
 use sov_modules_api::macros::UniversalWallet;
+
+/// Signed ethereum transaction
+pub type TransactionSigned = EthereumTxEnvelope<TxEip4844>;
 
 /// RLP encoded evm transaction.
 #[derive(
