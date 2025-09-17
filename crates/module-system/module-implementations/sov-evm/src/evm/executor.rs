@@ -4,7 +4,6 @@ use crate::{
     sov_evm::{SovEvm, UnmeteredStorageAccessInspector},
     EvmRuntimeConfig,
 };
-use reth_revm::db::DBErrorMarker;
 use revm::context::TxEnv;
 use revm::InspectEvm;
 use revm::{
@@ -16,6 +15,7 @@ use revm::{
 };
 #[cfg(feature = "native")]
 use revm::{interpreter::interpreter::EthInterpreter, Inspector};
+use revm_database_interface::DBErrorMarker;
 use sov_modules_api::macros::config_value;
 
 /// builds CfgEnv
