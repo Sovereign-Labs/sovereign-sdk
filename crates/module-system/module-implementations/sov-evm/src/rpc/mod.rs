@@ -398,9 +398,10 @@ where
 
         let block_env = self
             .block_env(&mut archival_state)?
-            .expect("Block environment not set");
+            .ok_or_else(|| eth_api_into_rpc_error(EthApiError::PrunedHistoryUnavailable))?;
 
-        let cfg_env = get_cfg_env(&block_env, self.cfg(&mut archival_state).unwrap(), None);
+        let cfg = self.cfg(&mut archival_state).map_err(into_rpc_error)?;
+        let cfg_env = get_cfg_env(&block_env, cfg, None);
 
         // Replay previous transactions in the block
         let mut evm_db = self.get_db(&mut archival_state);
