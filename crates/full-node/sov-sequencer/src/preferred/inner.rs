@@ -1607,7 +1607,7 @@ where
             .executor
             .checkpoint
             .replace_storage_and_prune(info.storage.clone(), &Rt::default().kernel());
-        tracing::info!("Storage has been replaced");
+        tracing::debug!(%new_rollup_height, "Storage has been replaced");
         // Update the `inner`'s state to reflect the new storage.
         // These steps should match `process_final_catchup` except for the need to drop the db_event_subscription.
         inner.is_ready = Ok(());
