@@ -1,5 +1,5 @@
 [package]
-name = "sov-soak-testing"
+name = "sov-soak-testing-lib"
 version = "0.1.0"
 authors = { workspace = true }
 edition = { workspace = true }
@@ -7,7 +7,6 @@ homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
 publish = false
-default-run = "main"
 
 [dependencies]
 tokio = { workspace = true, default-features = false }
@@ -43,15 +42,4 @@ sov-value-setter = { workspace = true }
 sov-synthetic-load = { path = "../../../crates/module-system/module-implementations/sov-synthetic-load" }
 sov-bank = { workspace = true, features = ["native", "arbitrary"] }
 sov-paymaster = { workspace = true, features = ["native"] }
-sov-celestia-adapter = { workspace = true, features = ["native", "arbitrary"] }
 sov-address = { workspace = true }
-demo-stf = { workspace = true, features = ["native"] }
-sov-soak-testing-lib = { workspace = true }
-
-[[bin]]
-name = "main"
-path = "src/bin/main.rs"
-
-[[bin]]
-name = "generator"
-path = "src/bin/generator.rs"

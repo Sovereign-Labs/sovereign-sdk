@@ -76,6 +76,7 @@ members = [
     "examples/demo-rollup/rest-api-load-testing",
     "examples/demo-rollup/stf/demo-stf-json-client",
     "examples/demo-rollup/sov-soak-testing",
+    "crates/utils/sov-soak-lib",
     # Adapters
     # TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/498
     # "crates/adapters/avail",
@@ -115,6 +116,7 @@ float_arithmetic = "deny"              # Can cause subtle bugs due to different 
 
 [workspace.dependencies]
 demo-stf = { path = "examples/demo-rollup/stf", default-features = false, version = "0.3" }
+sov-soak-testing-lib = { path = "crates/utils/sov-soak-lib", default-features = false }
 sov-eth-client = { path = "crates/utils/sov-eth-client", default-features = false, version = "0.3" }
 sov-blob-sender = { path = "crates/full-node/sov-blob-sender", default-features = false, version = "0.3" }
 sov-celestia-adapter = { path = "crates/adapters/celestia", default-features = false, version = "0.3" }
