@@ -111,10 +111,7 @@ async fn stream_logs<S, Seq>(
                         &rpc_log,
                     )
                     .unwrap_or_else(|err| {
-                        panic!(
-                            "Impossible: can't serialize log. Log: {:?}, Err: {:?}",
-                            rpc_log, err
-                        )
+                        panic!("Impossible: can't serialize log. Log: {rpc_log:?}, Err: {err:?}",)
                     });
 
                     if let Err(err) = accepted_sink.send(msg).await {

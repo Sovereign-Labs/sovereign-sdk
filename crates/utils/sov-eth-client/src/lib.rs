@@ -406,7 +406,7 @@ impl TestClient {
     }
 
     pub async fn alloy_subscribe_logs(&self, filter: &Filter) -> Subscription<Log> {
-        self.pub_sub.subscribe_logs(&filter).await.unwrap()
+        self.pub_sub.subscribe_logs(filter).await.unwrap()
     }
 
     pub fn alloy_unsubscribe(&self, id: alloy_primitives::B256) {
