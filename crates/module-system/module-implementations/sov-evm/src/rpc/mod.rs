@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use alloy_consensus::{Transaction as TransactionTrait, TxReceipt};
+use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
 use alloy_rpc_types::{
@@ -13,7 +13,6 @@ use alloy_rpc_types_trace::geth::{GethDebugBuiltInTracerType, GethDebugTracerTyp
 use error::ensure_success;
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
-use reth_primitives::Recovered;
 use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 use revm::context::result::{EVMError, ExecutionResult, InvalidHeader};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};

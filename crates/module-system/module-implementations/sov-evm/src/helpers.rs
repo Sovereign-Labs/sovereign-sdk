@@ -1,9 +1,8 @@
-use alloy_consensus::{Signed, TxEip4844Variant, TxEnvelope};
+use alloy_consensus::{transaction::Recovered, Signed, TxEip4844Variant, TxEnvelope};
 use alloy_primitives::TxKind;
 use alloy_primitives::{BlockNumber, Sealed};
 use alloy_primitives::{B256, U256};
 use alloy_rpc_types::{Header, TransactionRequest};
-use reth_primitives::Recovered;
 use reth_rpc_eth_types::EthResult;
 use revm::context::{BlockEnv, TransactionType, TxEnv};
 

@@ -81,6 +81,7 @@ rand = { workspace = true, optional = true }
 proptest = { workspace = true, optional = true }
 
 [dev-dependencies]
+alloy-consensus = { workspace = true, features = ["secp256k1"] }
 sov-evm = { path = ".", features = ["native"] }
 strum = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }

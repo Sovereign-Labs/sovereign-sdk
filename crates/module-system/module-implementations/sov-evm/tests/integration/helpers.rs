@@ -1,5 +1,6 @@
 use crate::runtime::{GenesisConfig, TestRuntime, RT, S};
 use alloy_consensus::constants::KECCAK_EMPTY;
+use alloy_consensus::crypto::secp256k1::public_key_to_address;
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_eips::eip2718::Encodable2718;
@@ -32,7 +33,7 @@ impl EvmAccount {
     }
 
     pub fn address(&self) -> Address {
-        reth_primitives::public_key_to_address(self.public_key())
+        public_key_to_address(self.public_key())
     }
 
     pub fn sign(&self, tx: TypedTransaction) -> (RlpEvmTransaction, TransactionSigned) {
