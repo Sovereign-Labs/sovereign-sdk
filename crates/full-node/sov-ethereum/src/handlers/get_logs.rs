@@ -101,6 +101,45 @@ where
         tracing::warn!(%msg);
         return Err(to_jsonrpsee_error_object(&msg, ETH_RPC_ERROR));
     };
+    logs_from_block(&mut rpc_logs, height, &filter, &evm, state)?;
+
+    Ok(rpc_logs)
+}
+
+fn logs_for_blocks_range<S>(
+    filter: Filter,
+    from_block: Option<BlockNumberOrTag>,
+    to_block: Option<BlockNumberOrTag>,
+    state: &mut ApiStateAccessor<S>,
+) -> Result<Vec<Log>, ErrorObjectOwned>
+where
+    S: Spec,
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    let mut rpc_logs = Vec::new();
+    let evm = sov_evm::Evm::<S>::default();
+
+    let start = get_block_nr(from_block, &evm, state)?;
+    let end = get_block_nr(to_block, &evm, state)?;
+
+    let block_range = RangeInclusive::new(start, end);
+    for height in block_range {
+        logs_from_block(&mut rpc_logs, height, &filter, &evm, state)?;
+    }
+    Ok(rpc_logs)
+}
+
+fn logs_from_block<S>(
+    rpc_logs: &mut Vec<Log>,
+    height: u64,
+    filter: &Filter,
+    evm: &sov_evm::Evm<S>,
+    state: &mut ApiStateAccessor<S>,
+) -> Result<(), ErrorObjectOwned>
+where
+    S: Spec,
+    S::Address: FromVmAddress<EthereumAddress>,
+{
     let block = evm.get_maybe_sealed_block(height, state);
 
     for index in block.transactions_start()..block.transactions_end() {
@@ -117,7 +156,7 @@ where
             if filter.matches(&log) {
                 let rpc_log = Log {
                     inner: log,
-                    block_hash: Some(block_hash),
+                    block_hash: block.hash(),
                     block_number: Some(receipt.block_number),
                     block_timestamp: Some(block.timestamp()),
                     transaction_hash: Some(receipt.transaction_hash),
@@ -130,30 +169,7 @@ where
         }
     }
 
-    Ok(rpc_logs)
-}
-
-fn logs_for_blocks_range<S>(
-    _filter: Filter,
-    from_block: Option<BlockNumberOrTag>,
-    to_block: Option<BlockNumberOrTag>,
-    state: &mut ApiStateAccessor<S>,
-) -> Result<Vec<Log>, ErrorObjectOwned>
-where
-    S: Spec,
-    S::Address: FromVmAddress<EthereumAddress>,
-{
-    let rpc_logs = Vec::new();
-    let evm = sov_evm::Evm::<S>::default();
-
-    let start = get_block_nr(from_block, &evm, state)?;
-    let end = get_block_nr(to_block, &evm, state)?;
-
-    let block_range = RangeInclusive::new(start, end);
-    for _height in block_range {
-        // TODO
-    }
-    Ok(rpc_logs)
+    Ok(())
 }
 
 fn get_block_nr<S>(
