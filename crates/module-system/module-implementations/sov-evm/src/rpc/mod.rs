@@ -370,7 +370,7 @@ where
     }
 
     /// Handler for: `debug_traceTransaction`
-    #[rpc_method(name = "traceTransaction")]
+    #[rpc_method(name = "debug_traceTransaction")]
     pub fn debug_trace_transaction(
         &self,
         tx_hash: B256,
