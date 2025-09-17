@@ -75,7 +75,6 @@ reth-primitives = { workspace = true }
 reth-primitives-traits = { workspace = true }
 revm-inspector = { workspace = true, default-features = false, optional = true }
 revm-inspectors = { workspace = true, default-features = false, optional = true }
-reth-rpc-convert = { workspace = true }
 reth-rpc-eth-types = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 proptest = { workspace = true, optional = true }

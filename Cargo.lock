@@ -12442,7 +12442,6 @@ dependencies = [
  "reth-ethereum-primitives",
  "reth-primitives",
  "reth-primitives-traits",
- "reth-rpc-convert",
  "reth-rpc-eth-types",
  "revm",
  "revm-database-interface",
