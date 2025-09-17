@@ -178,11 +178,44 @@ impl<'a, S: Spec> From<&'a BatchReceipt<S>> for BatchReceiptContents<'a, S> {
     }
 }
 
-pub(crate) fn apply_batch_logs<'a, S: Spec>(
+#[cfg(feature = "native")]
+fn decode_tx_info<S: Spec, RT: Runtime<S>>(
+    fully_baked_tx_bytes: &[u8],
+) -> Option<(
+    S::Address,
+    sov_rollup_interface::crypto::CredentialId,
+    String,
+)> {
+    use borsh::BorshDeserialize;
+    use sov_modules_api::module::call_message_repr;
+    use sov_modules_api::runtime::capabilities::authentication::AuthenticatorInput;
+    use sov_modules_api::transaction::{Transaction, VersionedTx};
+
+    let auth_input: AuthenticatorInput = borsh::from_slice(fully_baked_tx_bytes).ok()?;
+    let raw = match auth_input {
+        AuthenticatorInput::Standard(raw) => raw,
+    };
+
+    let mut buf = &raw.data[..];
+    let tx: Transaction<RT, S> = Transaction::unmetered_deserialize(&mut buf).ok()?;
+    match &tx.versioned_tx {
+        VersionedTx::V0(inner) => {
+            let credential_id = inner.pub_key.credential_id();
+            let sender: S::Address = credential_id.into();
+            let call_repr = call_message_repr::<RT>(&inner.runtime_call);
+            Some((sender, credential_id, call_repr))
+        }
+    }
+}
+
+pub(crate) fn apply_batch_logs<'a, S: Spec, RT: Runtime<S>>(
     batch_receipt: impl Into<BatchReceiptContents<'a, S>>,
     blob_idx: usize,
+    _ignored_bodies: Option<&[Option<FullyBakedTx>]>,
 ) {
     let batch_receipt = batch_receipt.into();
+    // Silence clippy warning in non-native builds where `RT` is only used behind cfgs
+    let _ = core::marker::PhantomData::<RT>;
 
     debug!(
         blob_idx,
@@ -193,6 +226,24 @@ pub(crate) fn apply_batch_logs<'a, S: Spec>(
     );
 
     for (i, tx_receipt) in batch_receipt.tx_receipts.iter().enumerate() {
+        #[cfg(feature = "native")]
+        {
+            if let Some(body) = &tx_receipt.body_to_save {
+                if let Some((sender, credential_id, call_repr)) = decode_tx_info::<S, RT>(body) {
+                    debug!(
+                        tx_idx = i,
+                        tx_hash = %tx_receipt.tx_hash,
+                        receipt = ?tx_receipt.receipt,
+                        gas_used = %get_gas_used(tx_receipt),
+                        sender = %sender,
+                        credential_id = %credential_id,
+                        tx_type = %call_repr,
+                        "Tx receipt"
+                    );
+                    continue;
+                }
+            }
+        }
         debug!(
             tx_idx = i,
             tx_hash = %tx_receipt.tx_hash,
@@ -203,6 +254,27 @@ pub(crate) fn apply_batch_logs<'a, S: Spec>(
     }
 
     for tx_receipt in batch_receipt.ignored_tx_receipts.iter() {
+        #[cfg(feature = "native")]
+        {
+            if let Some(ignored) = _ignored_bodies {
+                let idx = tx_receipt.ignored.index;
+                if let Some(Some(body)) = ignored.get(idx) {
+                    if let Some((sender, credential_id, call_repr)) =
+                        decode_tx_info::<S, RT>(&body.data)
+                    {
+                        debug!(
+                            receipt = ?tx_receipt,
+                            gas_used = %tx_receipt.ignored.gas_used,
+                            sender = %sender,
+                            credential_id = %credential_id,
+                            tx_type = %call_repr,
+                            "Ignored Tx receipt"
+                        );
+                        continue;
+                    }
+                }
+            }
+        }
         debug!(
             receipt = ?tx_receipt,
             gas_used = %tx_receipt.ignored.gas_used,
