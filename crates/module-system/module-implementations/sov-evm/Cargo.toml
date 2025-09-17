@@ -1,6 +1,6 @@
 [package]
 name = "sov-evm"
-description = "A Sovereign SDK managing fungible tokens"
+description = "Sovereign SDK module for EVM support"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }
@@ -44,7 +44,6 @@ jsonrpsee = { workspace = true, features = [
 schemars = { workspace = true }
 tracing = { workspace = true }
 
-alloy-sol-types = { workspace = true, default-features = false }
 alloy-eips = { workspace = true, features = ["std"] }
 # `rlp` feature implicitly enabled via `reth-` crates, but this allows us to explicitly access Error type from there
 alloy-primitives = { workspace = true, default-features = false, features = [
@@ -57,8 +56,6 @@ alloy-consensus = { workspace = true, features = [
 
 alloy-rpc-types = { workspace = true, optional = true }
 alloy-rpc-types-trace = { workspace = true, optional = true }
-digest = { workspace = true }
-sha2 = { workspace = true }
 revm = { workspace = true, features = [
 	"optional_block_gas_limit",
 	"optional_eip3607",
@@ -73,9 +70,7 @@ reth-ethereum-primitives = { workspace = true, features = [
 ] }
 reth-primitives = { workspace = true }
 reth-primitives-traits = { workspace = true }
-revm-inspector = { workspace = true, default-features = false, optional = true }
 revm-inspectors = { workspace = true, default-features = false, optional = true }
-reth-rpc-convert = { workspace = true }
 reth-rpc-eth-types = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 proptest = { workspace = true, optional = true }
@@ -105,7 +100,6 @@ arbitrary = [
 	"alloy-eips/arbitrary",
 	"alloy-primitives/arbitrary",
 	"alloy-rpc-types?/arbitrary",
-	"alloy-sol-types/arbitrary",
 	"reth-primitives/arbitrary",
 	"revm/arbitrary",
 	"sov-address/arbitrary",
@@ -126,7 +120,6 @@ native = [
 	"alloy-rpc-types-trace",
 	"jsonrpsee",
 	"dep:rand",
-	"revm-inspector",
 	"revm-inspectors",
 	"alloy-primitives/std",
 	"reth-primitives/std",
