@@ -480,6 +480,10 @@ impl TestClient {
         alloy_primitives::TxHash::from_slice(&tx_hash.0)
     }
 
+    pub async fn get_logs(&self, filter: &Filter) -> Vec<Log> {
+        self.pub_sub.get_logs(filter).await.unwrap()
+    }
+
     pub async fn block_number(&self) -> u64 {
         self.client.get_block_number().await.unwrap().as_u64()
     }

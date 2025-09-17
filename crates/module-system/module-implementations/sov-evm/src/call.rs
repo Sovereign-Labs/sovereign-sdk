@@ -68,6 +68,8 @@ where
 
         let result = executor::transact_commit(evm_db, block_env, tx_env, cfg_env);
 
+        let pending_len = self.pending_transactions.len(state)?;
+
         let receipt = match result {
             Ok(result) => {
                 let is_success = result.is_success();
@@ -82,7 +84,7 @@ where
                     );
                     anyhow::bail!("EVM execution error: {:?}", &result);
                 }
-                let receipt = self.get_receipt(&transaction, result, state)?;
+                let receipt = self.get_receipt(&transaction, pending_len, result, state)?;
                 state.charge_linear_gas(
                     &<S as GasSpec>::gas_to_charge_per_evm_gas(),
                     gas_used as u32,
@@ -113,11 +115,9 @@ where
             // Justified, we set it at `genesis` and leter only override it.
             .expect("Impossible happened: Head must be set.");
 
-        #[allow(unused_variables)]
-        let pending_len = self.pending_transactions.len(state)?;
-
+        // Since we just inserted tx above, we need to increment `pending_len`` by 1.
         #[cfg(feature = "native")]
-        self.set_accessory_state(head, &pending_transaction, pending_len, state)
+        self.set_accessory_state(head, &pending_transaction, pending_len + 1, state)
             .unwrap_infallible();
 
         Ok(())
@@ -147,6 +147,7 @@ where
     fn get_receipt(
         &self,
         tx: &TransactionSignedAndRecovered,
+        tx_index: u64,
         result: ExecutionResult,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<Receipt> {
@@ -197,6 +198,7 @@ where
             gas_used,
             log_index_start,
             error: None,
+            transaction_index: tx_index,
         })
     }
 

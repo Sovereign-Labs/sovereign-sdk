@@ -84,7 +84,11 @@ async fn stream_logs<S, Seq>(
         }
 
         for index in prev_last_tx_index..curr_last_tx_index {
-            let receipt = evm.receipt(index, state).unwrap();
+            let Some(receipt) = evm.receipt(index, state) else {
+                // This can happen if the state was pruned.
+                tracing::error!(index, "Receipt does not exist");
+                return;
+            };
 
             if block.number() != receipt.block_number {
                 block = evm.get_maybe_sealed_block(receipt.block_number, state);
@@ -100,10 +104,12 @@ async fn stream_logs<S, Seq>(
                         block_number: Some(block.number()),
                         block_timestamp: Some(block.timestamp()),
                         transaction_hash: Some(receipt.transaction_hash),
-                        transaction_index: Some(transaction_index),
+                        transaction_index: Some(receipt.transaction_index),
                         log_index: Some(receipt.log_index_start + log_index_in_tx as u64),
                         removed: false,
                     };
+
+                    assert_eq!(receipt.transaction_index, transaction_index);
 
                     let msg = SubscriptionMessage::new(
                         accepted_sink.method_name(),

@@ -182,6 +182,13 @@ impl MaybeSealedBlock {
         }
     }
 
+    pub fn transactions_end(&self) -> u64 {
+        match self {
+            Self::Sealed(block) => block.transactions.end,
+            Self::Pending(pending) => pending.transactions.end,
+        }
+    }
+
     pub fn timestamp(&self) -> u64 {
         match self {
             Self::Sealed(block) => block.header.timestamp,
@@ -197,6 +204,7 @@ pub struct Receipt {
     #[serde_as(as = "ReceiptBincodeCompat")]
     pub receipt: reth_primitives::Receipt,
     pub transaction_hash: TxHash,
+    pub transaction_index: u64,
     pub block_number: u64,
     pub gas_used: u64,
     pub log_index_start: u64,
