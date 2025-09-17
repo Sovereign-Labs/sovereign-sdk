@@ -99,20 +99,32 @@ impl<S: Spec> Module for InterchainGasPaymaster<S> {
                 domain_default_gas,
                 default_gas,
                 beneficiary,
-            } => self.set_relayer_config(
-                vec_to_hashmap(oracle_data_to_vec(domain_oracle_data))
-                    .context("domain oracle data")?,
-                vec_to_hashmap(default_gas_to_vec(domain_default_gas))
-                    .context("domain default gas")?,
-                default_gas,
-                beneficiary,
-                context,
-                state,
-            )?,
+            } => {
+                tracing::debug!(
+                    ?domain_oracle_data,
+                    ?domain_default_gas,
+                    ?default_gas,
+                    ?beneficiary,
+                    "Setting relayer config"
+                );
+                self.set_relayer_config(
+                    vec_to_hashmap(oracle_data_to_vec(domain_oracle_data))
+                        .context("domain oracle data")?,
+                    vec_to_hashmap(default_gas_to_vec(domain_default_gas))
+                        .context("domain default gas")?,
+                    default_gas,
+                    beneficiary,
+                    context,
+                    state,
+                )?;
+            }
             CallMessage::UpdateOracleData {
                 domain,
                 oracle_data: oracle_value,
-            } => self.update_oracle_value(domain, oracle_value, context, state)?,
+            } => {
+                tracing::debug!(?domain, ?oracle_value, "Updating oracle data");
+                self.update_oracle_value(domain, oracle_value, context, state)?;
+            }
         }
 
         Ok(())
@@ -149,19 +161,18 @@ impl<S: Spec> InterchainGasPaymaster<S> {
         _context: &Context<S>,
         state: &mut impl sov_modules_api::TxState<S>,
     ) -> Result<Quote> {
+        tracing::trace!(%metadata, relayer_with_domain = ?key, "Preparing gas quote");
         let metadata = if metadata.0.len() < 66 {
-            tracing::debug!("Metadata too short for IGP info, using default gas");
-            IGPMetadata {
-                gas_limit: self.default_gas(key, state)?,
-            }
+            let gas_limit = self.default_gas(key, state)?;
+            tracing::debug!(default_gas_limit = %gas_limit, "Metadata too short for IGP info, using default gas");
+            IGPMetadata { gas_limit }
         } else {
             match IGPMetadata::deserialize(&metadata.0) {
                 Ok(parsed) => parsed,
                 Err(e) => {
-                    tracing::warn!("Failed to parse IGP metadata: {}, using default gas", e);
-                    IGPMetadata {
-                        gas_limit: self.default_gas(key, state)?,
-                    }
+                    let gas_limit = self.default_gas(key, state)?;
+                    tracing::warn!(error = %e, default_gas_limit = %gas_limit, "Failed to parse IGP metadata using default gas");
+                    IGPMetadata { gas_limit }
                 }
             }
         };
@@ -194,9 +205,9 @@ impl<S: Spec> InterchainGasPaymaster<S> {
 
                 match amount {
                     Some(amount) if amount.0 > 0 => Ok(amount),
-                    None => bail!("default igp fee amount not set"),
+                    None => bail!("default IGP fee amount not set"),
                     Some(amount) => {
-                        bail!("default gas amount set to an incorrect value {amount}")
+                        bail!("default IGP fee amount should be above zero: {amount}")
                     }
                 }
             }

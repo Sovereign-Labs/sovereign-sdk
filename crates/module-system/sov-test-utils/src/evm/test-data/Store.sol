@@ -21,6 +21,11 @@ contract SimpleStorage {
         return num;
     }
 
+    function inc() public returns (uint) {
+        num += 1;
+        return num;
+    }
+
     function alwaysRevert() external pure {
         revert("This function always reverts!");
     }

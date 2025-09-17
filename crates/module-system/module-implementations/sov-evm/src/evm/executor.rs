@@ -40,7 +40,7 @@ pub fn transact_commit<
     DB: Database<Error = E> + FallibleDatabaseCommit<Error = E>,
     E: DBErrorMarker,
 >(
-    mut db: DB,
+    mut db: &mut DB,
     block_env: BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
