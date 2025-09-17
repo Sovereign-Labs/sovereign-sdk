@@ -18,20 +18,15 @@ serde = { workspace = true, default-features = false, features = [
     "derive",
 ] }
 anyhow = { workspace = true }
-strum = { workspace = true, features = ["derive"] }
 rand = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 
 sov-api-spec = { workspace = true }
-sov-metrics = { workspace = true }
 sov-transaction-generator = { workspace = true }
 sov-modules-api = { workspace = true }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
 sov-mock-da = { workspace = true, features = ["arbitrary", "native"] }
-sov-sequencer = { workspace = true, default-features = false }
-sov-kernels = { workspace = true, features = ["native"] }
 # modules
 sov-value-setter = { workspace = true }
-sov-synthetic-load = { path = "../../../crates/module-system/module-implementations/sov-synthetic-load" }
 sov-bank = { workspace = true, features = ["native", "arbitrary"] }
-sov-paymaster = { workspace = true, features = ["native"] }
+sov-synthetic-load = { workspace = true }

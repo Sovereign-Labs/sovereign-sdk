@@ -13168,17 +13168,12 @@ dependencies = [
  "serde",
  "sov-api-spec",
  "sov-bank",
- "sov-kernels",
- "sov-metrics",
  "sov-mock-da",
  "sov-modules-api",
- "sov-paymaster",
- "sov-sequencer",
  "sov-synthetic-load",
  "sov-test-utils",
  "sov-transaction-generator",
  "sov-value-setter",
- "strum 0.26.3",
  "tokio",
 ]
 
