@@ -13,7 +13,6 @@ use alloy_rpc_types_trace::geth::{GethDebugBuiltInTracerType, GethDebugTracerTyp
 use error::ensure_success;
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
-use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 use revm::context::result::{EVMError, ExecutionResult, InvalidHeader};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::Database;
@@ -23,6 +22,7 @@ use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{ApiStateAccessor, GasMeter, GasSpec, Spec, StateAccessor};
 use sov_rollup_interface::common::RollupHeight;
+use sov_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 use tracing::debug;
 
 use crate::conversions::replay_tx_env;

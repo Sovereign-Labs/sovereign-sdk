@@ -3,8 +3,8 @@ use alloy_primitives::TxKind;
 use alloy_primitives::{BlockNumber, Sealed};
 use alloy_primitives::{B256, U256};
 use alloy_rpc_types::{Header, TransactionRequest};
-use reth_rpc_eth_types::EthResult;
 use revm::context::{BlockEnv, TransactionType, TxEnv};
+use sov_rpc_eth_types::EthResult;
 
 use alloy_consensus::TxEip4844;
 

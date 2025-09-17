@@ -71,11 +71,12 @@ reth-ethereum-primitives = { workspace = true, features = [
 reth-primitives = { workspace = true }
 reth-primitives-traits = { workspace = true }
 revm-inspectors = { workspace = true, default-features = false, optional = true }
-reth-rpc-eth-types = { workspace = true, optional = true }
+sov-rpc-eth-types = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 proptest = { workspace = true, optional = true }
 
 [dev-dependencies]
+alloy-primitives = { workspace = true, features = ["getrandom"] }
 alloy-consensus = { workspace = true, features = ["secp256k1"] }
 sov-evm = { path = ".", features = ["native"] }
 strum = { workspace = true }
@@ -125,7 +126,7 @@ native = [
 	"alloy-primitives/std",
 	"reth-primitives/std",
 	"reth-ethereum-primitives/std",
-	"dep:reth-rpc-eth-types",
+	"dep:sov-rpc-eth-types",
 	# Optional for speed up in native mode
 	# "revm/asm-keccak"
 	"sov-evm/native",

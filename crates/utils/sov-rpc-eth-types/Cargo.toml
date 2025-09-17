@@ -1,0 +1,26 @@
+[package]
+name = "sov-rpc-eth-types"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+alloy-primitives = { workspace = true }
+alloy-rpc-types = { workspace = true }
+jsonrpsee-types = { workspace = true }
+jsonrpsee-core = { workspace = true }
+thiserror = { workspace = true }
+revm = { workspace = true }
+alloy-eips = { workspace = true }
+alloy-evm = { workspace = true }
+alloy-sol-types = { workspace = true }
+alloy-transport = { workspace = true }
+reth-errors = { workspace = true }
+reth-primitives-traits = { workspace = true }
+
+[lints]
+workspace = true

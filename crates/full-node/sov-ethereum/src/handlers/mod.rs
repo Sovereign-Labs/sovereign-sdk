@@ -28,9 +28,9 @@ pub(crate) mod signer {
     use alloy_eips::Encodable2718;
     use alloy_primitives::Address;
     use alloy_rpc_types::TransactionRequest;
-    use reth_rpc_eth_types::EthApiError;
     use sov_evm::eth_api_into_rpc_error;
     use sov_modules_api::macros::config_value;
+    use sov_rpc_eth_types::EthApiError;
 
     pub async fn eth_accounts<S, Seq>(
         _: JRpcParams<'static>,
