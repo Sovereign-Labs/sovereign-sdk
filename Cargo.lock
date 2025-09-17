@@ -12439,7 +12439,6 @@ dependencies = [
  "reth-rpc-eth-types",
  "revm",
  "revm-database-interface",
- "revm-inspector",
  "revm-inspectors",
  "schemars 0.8.22",
  "secp256k1 0.30.0",
