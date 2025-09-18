@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::handlers::ETH_RPC_ERROR;
 use crate::to_jsonrpsee_error_object;
 use crate::Ethereum;
