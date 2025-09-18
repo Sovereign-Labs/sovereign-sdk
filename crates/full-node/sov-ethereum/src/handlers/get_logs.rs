@@ -116,7 +116,7 @@ where
     let start = get_block_nr(from_block, &evm, state)?;
     let end = get_block_nr(to_block, &evm, state)?;
 
-    // TODO bool filters
+    // TODO bloom filters
     let block_range = RangeInclusive::new(start, end);
     for height in block_range {
         logs_from_block(&mut rpc_logs, height, &filter, &evm, state)?;
