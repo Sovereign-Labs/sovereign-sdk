@@ -35,7 +35,7 @@ use crate::executor::{get_cfg_env, inspect, transact_commit};
 use crate::helpers::{
     from_primitive_with_hash, from_recovered_with_block_context, prepare_call_env,
 };
-use crate::primitive_types::MaybeSealedBlock;
+pub use crate::primitive_types::MaybeSealedBlock;
 use crate::Evm;
 
 pub(crate) mod error;

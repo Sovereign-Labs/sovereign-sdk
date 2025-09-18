@@ -7,6 +7,7 @@ use crate::EthereumAuthenticator;
 use crate::FromVmAddress;
 use crate::HasKernel;
 use crate::Sequencer;
+use alloy_consensus::BlockHeader;
 use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::B256;
 use alloy_rpc_types::eth::Filter;
@@ -15,6 +16,7 @@ use alloy_rpc_types::Log;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
+use sov_evm::MaybeSealedBlock;
 use sov_evm::PendingOrBlock;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
@@ -136,9 +138,18 @@ where
     S: Spec,
     S::Address: FromVmAddress<EthereumAddress>,
 {
-    let block = evm.get_maybe_sealed_block(height, state);
+    let block = match evm.get_maybe_sealed_block(height, state) {
+        MaybeSealedBlock::Sealed(block) => block,
+        MaybeSealedBlock::Pending(_) => return Ok(()),
+    };
 
-    for index in block.transactions_start()..block.transactions_end() {
+    let header = block.header;
+    if !filter.matches_bloom(header.logs_bloom()) {
+        return Ok(());
+    }
+    let block_hash = header.hash();
+
+    for index in block.transactions {
         let Some(receipt) = evm.receipt(index, state) else {
             // This can hapen if the state was pruned.
             let msg = format!("Receipt for index {:?} does not exist", index);
@@ -152,9 +163,9 @@ where
             if filter.matches(&log) {
                 let rpc_log = Log {
                     inner: log,
-                    block_hash: block.hash(),
+                    block_hash: Some(block_hash),
                     block_number: Some(receipt.block_number),
-                    block_timestamp: Some(block.timestamp()),
+                    block_timestamp: Some(header.timestamp),
                     transaction_hash: Some(receipt.transaction_hash),
                     transaction_index: Some(receipt.transaction_index),
                     log_index: Some(receipt.log_index_start + log_index_in_tx as u64),

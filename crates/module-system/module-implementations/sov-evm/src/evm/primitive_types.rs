@@ -94,10 +94,10 @@ impl Block {
 #[derive(Debug, PartialEq, Clone)]
 pub struct SealedBlock {
     /// Block header.
-    pub(crate) header: Sealed<Header>,
+    pub header: Sealed<Header>,
 
     /// Transactions in this block.
-    pub(crate) transactions: Range<u64>,
+    pub transactions: Range<u64>,
 }
 
 impl SealedBlock {
@@ -158,12 +158,15 @@ impl<'de> serde::Deserialize<'de> for SealedBlock {
 #[cfg(feature = "native")]
 /// Sealed or pending block.
 pub enum MaybeSealedBlock {
+    /// TODO
     Sealed(SealedBlock),
+    /// TODO
     Pending(crate::Block),
 }
 
 #[cfg(feature = "native")]
 impl MaybeSealedBlock {
+    /// TODO
     pub fn hash(&self) -> Option<B256> {
         match self {
             Self::Sealed(block) => Some(block.header.hash()),
@@ -171,6 +174,7 @@ impl MaybeSealedBlock {
         }
     }
 
+    /// TODO
     pub fn number(&self) -> u64 {
         match self {
             Self::Sealed(block) => block.header.number,
@@ -178,6 +182,7 @@ impl MaybeSealedBlock {
         }
     }
 
+    /// TODO
     pub fn transactions_start(&self) -> u64 {
         match self {
             Self::Sealed(block) => block.transactions.start,
@@ -185,6 +190,7 @@ impl MaybeSealedBlock {
         }
     }
 
+    /// TODO
     pub fn transactions_end(&self) -> u64 {
         match self {
             Self::Sealed(block) => block.transactions.end,
@@ -192,6 +198,7 @@ impl MaybeSealedBlock {
         }
     }
 
+    /// TODO
     pub fn timestamp(&self) -> u64 {
         match self {
             Self::Sealed(block) => block.header.timestamp,

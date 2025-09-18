@@ -26,6 +26,7 @@ sov-eth-dev-signer = { workspace = true }
 borsh = { workspace = true }
 serde = { workspace = true }
 
+alloy-consensus = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-rpc-types = { workspace = true }
 alloy-eips = { workspace = true }
