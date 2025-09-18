@@ -1,3 +1,4 @@
+mod archival;
 mod contracts;
 mod genesis;
 mod helpers;
