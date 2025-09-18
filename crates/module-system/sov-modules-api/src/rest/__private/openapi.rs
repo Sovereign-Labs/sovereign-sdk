@@ -466,81 +466,75 @@ pub fn state_vec_paths_with_response(
 }
 
 /// Add a simple custom response to the OpenAPI spec
-fn make_simple_custom_response<'resp, T: ToSchema>(description: &str) -> Response {
+fn make_simple_custom_response<T: ToSchema>(description: &str) -> Response {
     // Create a simple response with a basic schema
-    let response = utoipa::openapi::ResponseBuilder::new()
+    utoipa::openapi::ResponseBuilder::new()
         .description(description)
         .content(
             "application/json",
             utoipa::openapi::ContentBuilder::new()
-                .schema(Some(utoipa::openapi::RefOr::T(utoipa::openapi::Schema::Object(
-                    utoipa::openapi::ObjectBuilder::new()
-                        .description(Some(description.to_string()))
-                        .property("value", T::schema())
-                        .required("value")
-                        .build(),
-                ))))
+                .schema(Some(utoipa::openapi::RefOr::T(
+                    utoipa::openapi::Schema::Object(
+                        utoipa::openapi::ObjectBuilder::new()
+                            .description(Some(description.to_string()))
+                            .property("value", T::schema())
+                            .required("value")
+                            .build(),
+                    ),
+                )))
                 .build(),
         )
-        .build();
-
-    response
+        .build()
 }
 
 /// Add a simple custom response to the OpenAPI spec
-fn make_custom_response_map<'resp, T: ToSchema>(description: &str) -> Response {
+fn make_custom_response_map<T: ToSchema>(description: &str) -> Response {
     use utoipa::PartialSchema;
     // Create a simple response with a basic schema
-    let response = utoipa::openapi::ResponseBuilder::new()
+    utoipa::openapi::ResponseBuilder::new()
         .description(description)
         .content(
             "application/json",
             utoipa::openapi::ContentBuilder::new()
-                .schema(Some(utoipa::openapi::RefOr::T(utoipa::openapi::Schema::Object(
-                    utoipa::openapi::ObjectBuilder::new()
-                        .description(Some(description.to_string()))
-                        .property(
-                            "key",
-                            String::schema(),
-                        )
-                        .required("key")
-                        .property("value", T::schema())
-                        .required("value")
-                        .build(),
-                ))))
+                .schema(Some(utoipa::openapi::RefOr::T(
+                    utoipa::openapi::Schema::Object(
+                        utoipa::openapi::ObjectBuilder::new()
+                            .description(Some(description.to_string()))
+                            .property("key", String::schema())
+                            .required("key")
+                            .property("value", T::schema())
+                            .required("value")
+                            .build(),
+                    ),
+                )))
                 .build(),
         )
-        .build();
-
-    response
+        .build()
 }
 
 /// Add a simple custom response to the OpenAPI spec
-fn make_custom_response_vec<'resp, T: ToSchema>(description: &str) -> Response {
+fn make_custom_response_vec<T: ToSchema>(description: &str) -> Response {
     use utoipa::PartialSchema;
     // Create a simple response with a basic schema
-    let response = utoipa::openapi::ResponseBuilder::new()
+    utoipa::openapi::ResponseBuilder::new()
         .description(description)
         .content(
             "application/json",
             utoipa::openapi::ContentBuilder::new()
-                .schema(Some(utoipa::openapi::RefOr::T(utoipa::openapi::Schema::Object(
-                    utoipa::openapi::ObjectBuilder::new()
-                        .description(Some(description.to_string()))
-                        .property(
-                            "index",
-                            u64::schema(),
-                        )
-                        .required("index")
-                        .property("value", T::schema())
-                        .required("value")
-                        .build(),
-                ))))
+                .schema(Some(utoipa::openapi::RefOr::T(
+                    utoipa::openapi::Schema::Object(
+                        utoipa::openapi::ObjectBuilder::new()
+                            .description(Some(description.to_string()))
+                            .property("index", u64::schema())
+                            .required("index")
+                            .property("value", T::schema())
+                            .required("value")
+                            .build(),
+                    ),
+                )))
                 .build(),
         )
-        .build();
-
-    response
+        .build()
 }
 
 pub fn add_simple_custom_response(spec: &mut OpenApi, response_name: &str, response: Response) {
