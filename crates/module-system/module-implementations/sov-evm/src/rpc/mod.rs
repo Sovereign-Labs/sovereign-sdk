@@ -624,9 +624,24 @@ where
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<ApiStateAccessor<S>> {
-        let block_env = self.resolve_block_env(block_number, state).unwrap();
+        let rollup_height = self
+            .chain_state_module
+            .rollup_height(state)
+            .unwrap_infallible();
+
+        let last_block_number = *self
+            .block_numbers
+            .get(state)
+            .unwrap_infallible()
+            // This is justified, as block numbers are set at genesis and only overridden later.
+            .expect("The impossible happened: block_numbers was not set.")
+            .end();
+
+        assert_eq!(rollup_height, RollupHeight::new(last_block_number));
+        println!("--last_block_number {:?}", last_block_number);
+
         let archival_state = state
-            .get_archival_state(RollupHeight::new(block_env.number.to::<u64>()))
+            .get_archival_state(RollupHeight::new(last_block_number))
             .map_err(into_rpc_error)?;
         Ok(archival_state)
     }

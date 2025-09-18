@@ -254,6 +254,12 @@ impl<S: Spec> ChainState<S> {
             .get(state)
             .unwrap_infallible()
             .expect("Current heights must be set at genesis and updated at each slot");
+
+        let t = self
+            .true_slot_number
+            .get(state)
+            .unwrap_infallible()
+            .expect("True slot number must be set at genesis and updated at each slot");
         self.true_slot_number_history
             .set(
                 &leftover_rollup_height,
@@ -265,6 +271,11 @@ impl<S: Spec> ChainState<S> {
                 state,
             )
             .unwrap_infallible();
+
+        println!(
+            "===leftover_rollup_height {} => {} ",
+            leftover_rollup_height, t
+        );
 
         let user_root = pre_state_root.namespace_root(ProvableNamespace::User);
         // Technically this does some duplicate work; if we're not creating a new rollup block, we could skip this because neither pre-state root nor rollup_height change,

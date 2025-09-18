@@ -49,6 +49,8 @@ impl<S: Spec> BlockHooks for Evm<S> {
             // This is justified. We will never have so many blocks.
             .expect("The impossible happened: Block number overflow");
 
+        println!("HOOOK==== {:?}", new_block_number);
+
         let new_timestamp = self
             .chain_state_module
             .get_time(state)

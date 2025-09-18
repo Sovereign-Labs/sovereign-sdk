@@ -422,6 +422,10 @@ where
         execution_context: ExecutionContext,
         cf: CF,
     ) -> ApplySlotOutput<S::InnerZkvm, S::OuterZkvm, S::Da, Self> {
+        println!("");
+        println!("");
+        println!("");
+        println!("----apply_slot_with_control_flow");
         let mut runtime = RT::default();
         // Sanity check that gas limits are set correctly. This is already checked at genesis, but we check again in case
         // Someone modifies the code after genesis.
@@ -449,6 +453,7 @@ where
         // Be careful to respect the call order: the `ChainState` hooks MUST
         // be called before the `BlobStorage`'s, which MUST be called before
         // the `Runtime`'s slot hooks.
+
         runtime.chain_state().synchronize_chain(
             slot_header,
             pre_state_root,
@@ -485,6 +490,8 @@ where
         );
 
         if blob_selector_output.creates_rollup_block() {
+            println!("VISIBLE");
+
             let visible_slot_number = kernel_with_partially_stale_heights
                 .visible_slot_number()
                 .advance(blob_selector_output.visible_slot_number_increase);
@@ -530,6 +537,7 @@ where
 
         let create_rollup_block = blob_selector_output.creates_rollup_block();
 
+        println!("FN");
         let (total_gas, proof_receipts, batch_receipts, mut state) = self
             .apply_batches_in_user_space(
                 &mut runtime,
@@ -638,6 +646,7 @@ where
         Vec<BatchReceipt<S>>,
         StateCheckpoint<S>,
     ) {
+        println!("---apply_batches_in_user_space");
         let creates_rollup_block = blob_selector_output.creates_rollup_block();
 
         // Note: The gas price should be computed after all the capabilities involving the [`KernelStateAccessor`] to have the

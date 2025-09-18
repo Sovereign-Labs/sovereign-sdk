@@ -337,6 +337,7 @@ where
     /// Creates a new [`TestRollup`] and starts running it in a background Tokio
     /// task. See [`TestRollup`] for usage information.
     pub async fn start(self) -> anyhow::Result<TestRollup<R, StoragePath>> {
+        println!("S1");
         let blueprint: R = Default::default();
         if let SequencerKindConfig::Preferred(sequencer_conf) = &self.config.sequencer_config {
             if self.config.rollup_prover_config.is_some()
@@ -352,6 +353,7 @@ where
             )
         })?;
 
+        println!("S2");
         let rollup_config = self.rollup_config();
         let rollup = match &self.genesis {
             GenesisSource::Paths(genesis_paths) => {
@@ -378,6 +380,7 @@ where
             }
         };
 
+        println!("S1");
         let (rest_addr_tx, rest_addr_rx) = tokio::sync::oneshot::channel();
         let shutdown_sender = rollup.shutdown_sender.clone();
 
@@ -906,8 +909,8 @@ where
     pub async fn wait_for_height(&self, height: u64) {
         let mut current_height = get_height(&self.client).await.unwrap();
         while current_height.get() < height {
-            self.da_service.produce_block_now().await.unwrap();
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            //self.da_service.produce_block_now().await.unwrap();
+            tokio::time::sleep(Duration::from_millis(10)).await;
             current_height = get_height(&self.client).await.unwrap();
         }
     }

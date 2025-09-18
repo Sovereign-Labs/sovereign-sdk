@@ -805,6 +805,7 @@ where
         %next_visible_slot_number,
         "Applying batches in user space"
     );
+    println!("exec");
     let (_, _, batch_receipts, mut checkpoint) = stf.apply_batches_in_user_space(
         &mut Default::default(),
         blob_selector_output,

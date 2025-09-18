@@ -146,6 +146,7 @@ pub(crate) async fn set_multiple_values_check(
 pub async fn setup(
     finalization_blocks: u32,
 ) -> (TestRollup<MockDemoRollup<Native>>, TestClient, u64) {
+    println!("YYYY1");
     let rollup_prover_config =
         get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(mock_da_risc0_host_args());
 
@@ -153,9 +154,12 @@ pub async fn setup(
     let test_rollup: TestRollup<MockDemoRollup<Native>> =
         start_node(rollup_prover_config, finalization_blocks).await;
 
-    let evm_client = create_test_client(test_rollup.http_addr, chain_id, SENDER_PRIV_KEY).await;
+    println!("YYYY2");
+    //tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    test_rollup.wait_for_next_blocks(3).await;
+    println!("YYYY3");
 
-    test_rollup.wait_for_next_blocks(10).await;
+    let evm_client = create_test_client(test_rollup.http_addr, chain_id, SENDER_PRIV_KEY).await;
 
     (test_rollup, evm_client, chain_id)
 }
