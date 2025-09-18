@@ -73,14 +73,9 @@ where
             logs_for_block_hash(filter, block_hash, state)
         }
         FilterBlockOption::Range {
-            from_block: _,
-            to_block: _,
-        } => {
-            return Err(to_jsonrpsee_error_object(
-                "FilterBlockOption::Range not supported",
-                ETH_RPC_ERROR,
-            ));
-        }
+            from_block,
+            to_block,
+        } => logs_for_blocks_range(filter, from_block, to_block, state),
     }
 }
 

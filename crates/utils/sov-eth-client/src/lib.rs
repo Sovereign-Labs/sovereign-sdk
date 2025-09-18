@@ -480,6 +480,16 @@ impl TestClient {
         alloy_primitives::TxHash::from_slice(&tx_hash.0)
     }
 
+    pub async fn alloy_get_block_by_number(
+        &self,
+        block_number: Option<String>,
+    ) -> alloy_rpc_types::Block<alloy_primitives::TxHash> {
+        self.rpc
+            .request("eth_getBlockByNumber", rpc_params![block_number, false])
+            .await
+            .unwrap()
+    }
+
     pub async fn get_logs(&self, filter: &Filter) -> Vec<Log> {
         self.pub_sub.get_logs(filter).await.unwrap()
     }

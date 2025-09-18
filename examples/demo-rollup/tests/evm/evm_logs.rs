@@ -1,4 +1,4 @@
-use alloy_rpc_types_eth::Filter;
+use alloy_rpc_types_eth::{BlockNumberOrTag, Filter, Log};
 
 use crate::evm::evm_test_helper::setup;
 
@@ -42,5 +42,48 @@ async fn evm_test_get_logs() {
             log.transaction_index.unwrap(),
             (index / nb_of_logs_per_tx as u64)
         );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn evm_test_get_logs_range() {
+    let (test_rollup, evm_client, _) = setup(0).await;
+    let contract_address = evm_client.alloy_deploy_contract().await;
+    test_rollup.wait_for_next_blocks(1).await;
+
+    let nb_of_txs = 10;
+    let nb_of_logs_per_tx = 5;
+
+    let start_block = evm_client
+        .alloy_get_block_by_number(Some(BlockNumberOrTag::Latest.to_string()))
+        .await
+        .number();
+
+    let mut tx_hashes = Vec::new();
+    for i in 0..nb_of_txs {
+        let hash = evm_client
+            .alloy_emit_logs(contract_address, i, nb_of_logs_per_tx)
+            .await;
+        tx_hashes.push(hash);
+        if i % 3 == 0 {
+            test_rollup.wait_for_next_blocks(1).await;
+        }
+    }
+    test_rollup.wait_for_next_blocks(1).await;
+
+    let end_block = evm_client
+        .alloy_get_block_by_number(Some(BlockNumberOrTag::Latest.to_string()))
+        .await
+        .number();
+
+    let filter = Filter::new()
+        .from_block(start_block)
+        .to_block(BlockNumberOrTag::Latest);
+
+    let logs = evm_client.get_logs(&filter).await;
+    assert_eq!(logs.len() as u32, nb_of_txs * nb_of_logs_per_tx);
+
+    for (index, log) in logs.into_iter().enumerate() {
+        assert!(filter.matches(log.inner.as_ref()));
     }
 }
