@@ -512,7 +512,7 @@ where
             .map_err(|err| eth_api_into_rpc_error(eth_from_evm_error(err)))
     }
 
-    /// Retrieves a sealed block generated from an existing or pending block..
+    /// Retrieves a sealed block generated from an existing or pending block.
     pub fn get_maybe_sealed_block(
         &self,
         block_number: u64,

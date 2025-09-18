@@ -119,7 +119,7 @@ where
     let start = get_block_nr(from_block, &evm, state)?;
     let end = get_block_nr(to_block, &evm, state)?;
 
-    // TODO bloom filters
+    // We jsut validated that `start` and `end` are not peneding.
     let block_range = RangeInclusive::new(start, end);
     for height in block_range {
         logs_from_block(&mut rpc_logs, height, &filter, &evm, state)?;
@@ -127,6 +127,7 @@ where
     Ok(rpc_logs)
 }
 
+// anics if a block number or pending block is passed.
 fn logs_from_block<S>(
     rpc_logs: &mut Vec<Log>,
     height: u64,
@@ -140,7 +141,10 @@ where
 {
     let block = match evm.get_maybe_sealed_block(height, state) {
         MaybeSealedBlock::Sealed(block) => block,
-        MaybeSealedBlock::Pending(_) => return Ok(()),
+        MaybeSealedBlock::Pending(_) => {
+            // This should be validate before calling this method.
+            panic!("Pending blocks are not supported")
+        }
     };
 
     let header = block.header;
