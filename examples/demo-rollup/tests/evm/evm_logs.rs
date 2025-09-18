@@ -49,7 +49,7 @@ async fn evm_test_get_logs() {
     // topic3 seolects one log from each tx
     {
         let topic: B256 = U256::from(3).into();
-        let filter = Filter::new().topic3(topic);
+        let filter = Filter::new().at_block_hash(block_hash).topic3(topic);
 
         let logs = evm_client.get_logs(&filter).await;
         check_logs(&filter, logs, nb_of_txs);
