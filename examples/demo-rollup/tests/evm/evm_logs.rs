@@ -1,4 +1,4 @@
-use alloy_rpc_types_eth::{BlockNumberOrTag, Filter, Log};
+use alloy_rpc_types_eth::{BlockNumberOrTag, Filter};
 
 use crate::evm::evm_test_helper::setup;
 
@@ -71,11 +71,6 @@ async fn evm_test_get_logs_range() {
     }
     test_rollup.wait_for_next_blocks(1).await;
 
-    let end_block = evm_client
-        .alloy_get_block_by_number(Some(BlockNumberOrTag::Latest.to_string()))
-        .await
-        .number();
-
     let filter = Filter::new()
         .from_block(start_block)
         .to_block(BlockNumberOrTag::Latest);
@@ -83,7 +78,7 @@ async fn evm_test_get_logs_range() {
     let logs = evm_client.get_logs(&filter).await;
     assert_eq!(logs.len() as u32, nb_of_txs * nb_of_logs_per_tx);
 
-    for (index, log) in logs.into_iter().enumerate() {
+    for log in logs {
         assert!(filter.matches(log.inner.as_ref()));
     }
 }
