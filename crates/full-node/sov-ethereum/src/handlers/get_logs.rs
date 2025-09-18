@@ -127,7 +127,7 @@ where
     Ok(rpc_logs)
 }
 
-// anics if a block number or pending block is passed.
+// Panics if a block number or pending block is passed.
 fn logs_from_block<S>(
     rpc_logs: &mut Vec<Log>,
     height: u64,
