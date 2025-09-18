@@ -167,7 +167,7 @@ where
             if filter.matches(&log) {
                 let rpc_log = Log {
                     inner: log,
-                    block_hash: Some(block_hash),
+                    block_hash: block.hash(),
                     block_number: Some(receipt.block_number),
                     block_timestamp: Some(header.timestamp),
                     transaction_hash: Some(receipt.transaction_hash),
