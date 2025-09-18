@@ -154,14 +154,12 @@ where
     pub fn get_balance(
         &self,
         address: Address,
-        _block_number: Option<String>,
+        block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U256> {
-        // TODO: Implement block_number once we have archival state #951
-        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/951
-
+        let mut state = self.resolve_state(block_number, state)?;
         let balance = self
-            .get_db(state)
+            .get_db(&mut state)
             .basic(address)
             .map_err(|e| eth_api_into_rpc_error(EthApiError::from(e)))?
             .map(|account| account.balance)
@@ -182,17 +180,15 @@ where
         &self,
         address: Address,
         index: U256,
-        _block_number: Option<String>,
+        block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U256> {
         debug!("EVM module JSON-RPC request to `eth_getStorageAt`");
 
-        // TODO: Implement block_number once we have archival state #951
-        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/951
-
+        let mut state = self.resolve_state(block_number, state)?;
         let storage_slot = self
             .account_storage
-            .get(&(&address, &index), state)
+            .get(&(&address, &index), &mut state)
             .unwrap_infallible()
             .unwrap_or_default();
 
@@ -204,18 +200,17 @@ where
     pub fn get_transaction_count(
         &self,
         address: Address,
-        _block_number: Option<String>,
+        block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
-        // TODO: Implement block_number once we have archival state #882
-        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/882
+        let mut state = self.resolve_state(block_number, state)?;
 
         let ethereum_address: EthereumAddress = address.into();
         let credential_id = ethereum_address.as_credential_id();
 
         let nonce = self
             .uniqueness_module
-            .next_nonce(&credential_id, state)
+            .next_nonce(&credential_id, &mut state)
             .unwrap_or_default();
 
         debug!(%address, nonce, "EVM module JSON-RPC request to `eth_getTransactionCount`");
@@ -227,19 +222,21 @@ where
     pub fn get_code(
         &self,
         address: Address,
-        _block_number: Option<String>,
+        block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
         debug!("EVM module JSON-RPC request to `eth_getCode`");
 
-        // TODO: Implement block_number once we have archival state #951
-        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/951
-
+        let mut state = self.resolve_state(block_number, state)?;
         let code = self
             .accounts
-            .get(&address, state)
+            .get(&address, &mut state)
             .unwrap_infallible()
-            .and_then(|account| self.code.get(&account.code_hash, state).unwrap_infallible())
+            .and_then(|account| {
+                self.code
+                    .get(&account.code_hash, &mut state)
+                    .unwrap_infallible()
+            })
             .unwrap_or_default();
 
         Ok(code.bytecode().clone())
@@ -631,6 +628,18 @@ where
             header,
             transactions: start..end,
         }
+    }
+
+    fn resolve_state(
+        &self,
+        block_number: Option<String>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<ApiStateAccessor<S>> {
+        let block_env = self.resolve_block_env(block_number, state).unwrap();
+        let archival_state = state
+            .get_archival_state(RollupHeight::new(block_env.number.to::<u64>()))
+            .map_err(into_rpc_error)?;
+        Ok(archival_state)
     }
 
     fn resolve_block_env(
