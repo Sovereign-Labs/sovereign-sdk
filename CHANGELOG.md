@@ -1,6 +1,5 @@
 # 2025-09-19
 - #1723 **Breaking change** Introduced an optional `[sequencer.extension]` section in the rollup config, this section is required for `EVM` rollups.
-# 2025-09-18
 - #1718 Implement support for historical state queries in ethereum RPC methods.
 
 # 2025-09-16
