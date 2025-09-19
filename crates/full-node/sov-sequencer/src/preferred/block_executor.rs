@@ -512,7 +512,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     #[tracing::instrument(skip_all, level = "trace")]
     pub async fn start_rollup_block(
         &mut self,
-
         start_blcock_data: StartBlockData<S>,
         minimum_profit_per_tx: u128,
     ) {
