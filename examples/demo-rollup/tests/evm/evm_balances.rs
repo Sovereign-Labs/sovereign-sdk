@@ -5,6 +5,7 @@ use sov_address::{EthereumAddress, MultiAddress};
 use sov_bank::config_gas_token_id;
 use sov_demo_rollup::MockDemoRollup;
 use sov_modules_api::execution_mode::Native;
+use sov_sequencer::Extensions2;
 use sov_test_utils::test_rollup::{self};
 use std::str::FromStr;
 
@@ -12,7 +13,7 @@ const RECIEVER_ADDR_STR: &str = "0x3FE0233e6cf3c9753fcB7449987EC49C88aDDE71";
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_balances() -> anyhow::Result<()> {
-    let (test_rollup, evm_client, _) = setup(0).await;
+    let (test_rollup, evm_client, _) = setup(0, Extensions2 {}).await;
     let sender_address = evm_client.from_addr;
 
     let reciever_address = Address::from_str(RECIEVER_ADDR_STR).unwrap();

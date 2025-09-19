@@ -138,7 +138,10 @@ impl FullNodeBlueprint<Native> for CelestiaNomtDemoRollup<Native> {
         Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
     {
         let eth_signer = eth_dev_signer();
-        let eth_rpc_config = EthRpcConfig { eth_signer };
+        let eth_rpc_config = EthRpcConfig {
+            eth_signer,
+            max_nb_of_logs: 100,
+        };
 
         Ok(NodeEndpoints {
             jsonrpsee_module: sov_ethereum::get_ethereum_rpc(eth_rpc_config, sequencer)

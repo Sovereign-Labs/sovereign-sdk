@@ -2,10 +2,11 @@ use crate::evm::evm_test_helper::setup;
 use alloy_primitives::B256;
 use alloy_primitives::U256;
 use alloy_rpc_types_eth::{BlockNumberOrTag, Filter};
+use sov_sequencer::Extensions2;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_get_logs() {
-    let (test_rollup, evm_client, _) = setup(0).await;
+    let (test_rollup, evm_client, _) = setup(0, Extensions2 {}).await;
     let contract_address = evm_client.alloy_deploy_contract().await;
     test_rollup.wait_for_next_blocks(1).await;
 
@@ -58,7 +59,7 @@ async fn evm_test_get_logs() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_get_logs_range() {
-    let (test_rollup, evm_client, _) = setup(0).await;
+    let (test_rollup, evm_client, _) = setup(0, Extensions2 {}).await;
     let contract_address = evm_client.alloy_deploy_contract().await;
     test_rollup.wait_for_next_blocks(1).await;
 

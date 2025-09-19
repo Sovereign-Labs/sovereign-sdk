@@ -3,6 +3,7 @@ use std::time::Duration;
 use crate::evm::evm_test_helper::setup;
 use sov_eth_client::TestClient;
 use sov_mock_da::storable::service::StorableMockDaService;
+use sov_sequencer::Extensions2;
 use tokio::time::sleep;
 
 use super::evm_test_helper;
@@ -18,7 +19,7 @@ async fn evm_tx_tests_non_instant_finality() -> anyhow::Result<()> {
 }
 
 async fn evm_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
-    let (test_rollup, test_client, _) = setup(finalization_blocks).await;
+    let (test_rollup, test_client, _) = setup(finalization_blocks, Extensions2 {}).await;
 
     sanity_checks(&test_client).await;
     execute_evm_tests(&test_client, &test_rollup.da_service)

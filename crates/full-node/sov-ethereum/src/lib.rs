@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 mod handlers;
 
 use std::convert::Infallible;
@@ -20,6 +21,7 @@ use std::future::ready;
 pub struct EthRpcConfig {
     #[cfg(feature = "local")]
     pub eth_signer: Signers,
+    pub max_nb_of_logs: usize,
 }
 
 pub fn get_ethereum_rpc<S, Seq>(eth_rpc_config: EthRpcConfig, sequencer: Arc<Seq>) -> RpcModule<()>
@@ -33,12 +35,14 @@ where
     let EthRpcConfig {
         #[cfg(feature = "local")]
         eth_signer,
+        max_nb_of_logs,
     } = eth_rpc_config;
 
     let mut rpc = RpcModule::new(Ethereum {
         sequencer,
         #[cfg(feature = "local")]
         eth_signer,
+        max_nb_of_logs,
     });
 
     register_rpc_methods::<S, Seq>(&mut rpc).expect("Failed to register sequencer RPC methods");
@@ -91,6 +95,7 @@ struct Ethereum<S: Spec, Seq: Sequencer<Spec = S>> {
     sequencer: Arc<Seq>,
     #[cfg(feature = "local")]
     eth_signer: Signers,
+    max_nb_of_logs: usize,
 }
 
 impl<S, Seq> Ethereum<S, Seq>
