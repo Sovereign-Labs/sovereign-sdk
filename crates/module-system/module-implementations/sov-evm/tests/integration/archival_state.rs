@@ -40,6 +40,6 @@ fn test_state_at_invalid_depth() {
         let err = evm
             .get_balance(to.address(), Some("0x03".into()), state)
             .unwrap_err();
-        assert_eq!(err, EthApiError::UnknownBlockOrTxIndex.into())
+        assert_eq!(err, EthApiError::UnknownBlockOrTxIndex.into());
     });
 }
