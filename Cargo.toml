@@ -310,6 +310,7 @@ secp256k1 = { version = "=0.30.0", default-features = false, features = [
     "recovery",
 ] }
 k256 = { version = "0.13.4", default-features = false, features = ["ecdsa", "std"] }
+quick_cache = "0.6.16"
 # End of EVM dependencies
 
 [profile.rust-analyzer-optimized]
