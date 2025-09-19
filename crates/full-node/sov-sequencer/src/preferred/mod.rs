@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! See [`PreferredSequencer`].
 
 mod async_batch;
@@ -76,6 +77,90 @@ type VisibleSlotNumberIncrease = NonZero<u8>;
 
 // Big infodump for the user that wouldmake the code hard to read if it were inline.
 const RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY: &str = "The preferred sequencer is too far behind, and the visible slot number has lagged more than the allowed deferred slots count. This means some non-preferred batches may have been included by the node, if there were any. If this happened, already provided soft confirmations may now no longer be valid. Because the recovery_strategy config was set to None, we are not attempting recovery at this point. You should either: a) delete everything from the preferred_sequencer database (thus annulling all currently pending soft confirmations), which will allow you to restart the sequencer fresh; or b) set the recovery_strategy config value to TryToSave, in which case all pending batches will be flushed to be executed on a best-effort basis. The latter may save some soft-confirmations if they have not been invalidated yet. However, IF a non-preferred batch has been included, AND some soft-confirmations have been invalidated by it, this will cause the sequencer to be penalised for every invalid batch; ensure your sequencer bond is sufficient to cover any penalties to be able to continue operating uninterrupted.";
+
+struct CacheWarmupExecutor<S: Spec> {
+    sender: tokio::sync::mpsc::Sender<FullyBakedTx>,
+    receiver: tokio::sync::mpsc::Receiver<FullyBakedTx>,
+    seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+    exec_config: RollupBlockExecutorConfig<S>,
+}
+
+impl<S: Spec> CacheWarmupExecutor<S> {
+    fn new(
+        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        exec_config: RollupBlockExecutorConfig<S>,
+    ) -> Self {
+        let (sender, receiver) = tokio::sync::mpsc::channel(100);
+
+        Self {
+            sender,
+            receiver,
+            seq_config,
+            exec_config,
+        }
+    }
+
+    async fn spawn_execution_task<Rt: Runtime<S>>(
+        info: StateUpdateInfo<S::Storage>,
+        // TODO state_root_request_sender
+        exec_config: RollupBlockExecutorConfig<S>,
+        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        mut other_exec_recv: watch::Receiver<StateCheckpoint<S>>,
+    ) {
+        use sov_state::NativeStorage;
+
+        // exec_config::state_root_request_sender  use only in end rollup blcok
+
+        let (sender, mut receiver) = tokio::sync::mpsc::channel::<FullyBakedTx>(100);
+
+        let mut executor =
+            RollupBlockExecutor::<_, Rt>::new(&info, exec_config, seq_config.clone());
+
+        let node_state_root = info.storage.get_root_hash(info.slot_number).unwrap();
+
+        let visible_increase = next_visible_slot_number_increase(
+            &executor.checkpoint,
+            &info,
+            false, // todo
+            seq_config
+                .sequencer_kind_config
+                .ideal_lag_behind_finalized_slot,
+        )
+        .unwrap();
+
+        let sanity_check_visible_slot_number_after_increase = executor
+            .checkpoint
+            .current_visible_slot_number()
+            .advance(visible_increase.get().into());
+
+        executor
+            .start_rollup_block(
+                sanity_check_visible_slot_number_after_increase,
+                visible_increase,
+                &node_state_root,
+                0,
+            )
+            .await;
+
+        //executor.replace_state(other)
+
+        loop {
+            tokio::select! {
+                _ = other_exec_recv.changed() =>{
+                   // Not needed executor.end_rollup_block()
+                   // executor.replace_state(other)
+                }
+                baked_tx = receiver.recv() => {
+                    let baked_tx = match receiver.recv().await {
+                           Some(tx) => tx,
+                          None => todo!(),
+                    };
+                    let _ = executor.apply_tx_to_in_progress_batch(&baked_tx).await;
+                }
+            }
+        }
+    }
+}
 
 /// A [`Sequencer`] with instant transaction confirmation.
 pub struct PreferredSequencer<S, Rt, Da>

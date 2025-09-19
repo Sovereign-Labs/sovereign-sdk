@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::marker::PhantomData;
+use std::mem;
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -212,7 +213,9 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             task_state.shutdown().abort();
         }
 
-        self.checkpoint = other.checkpoint;
+        let _ = mem::replace(&mut self.checkpoint, other.checkpoint);
+        //self.checkpoint = other.checkpoint;
+
         self.rollup_block_task_state = other.rollup_block_task_state;
         self.next_event_number = other.next_event_number;
         self.next_tx_number = other.next_tx_number;
