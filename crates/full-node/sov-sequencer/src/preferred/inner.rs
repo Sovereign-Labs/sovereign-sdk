@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::preferred::block_executor::StartBlockData;
+use crate::preferred::cache_warm_up_executor::CacheWarmupExecutor;
 use crate::preferred::RollupBlockExecutorConfig;
 use anyhow::anyhow;
 use sov_blob_sender::BlobInternalId;
@@ -818,6 +819,7 @@ pub(crate) fn create<S, Rt>(
     stop_at_rollup_height: Option<RollupHeight>,
     rollup_exec_config: RollupBlockExecutorConfig<S>,
     tx_cache_writer: TxResultWriter<S, Rt>,
+    _cache_warmup_executor: CacheWarmupExecutor,
 ) -> (
     SynchronizedSequencerState<S, Rt>,
     SequencerStateUpdator<S, Rt>,

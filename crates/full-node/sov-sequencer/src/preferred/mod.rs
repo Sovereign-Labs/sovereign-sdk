@@ -1,8 +1,10 @@
+#![allow(dead_code)]
 //! See [`PreferredSequencer`].
 
 mod async_batch;
 mod batch_size_tracker;
 mod block_executor;
+mod cache_warm_up_executor;
 mod db;
 mod executor_events;
 mod inner;
@@ -12,16 +14,9 @@ mod side_effects;
 mod state_root_compute;
 mod transaction_subscriptions;
 mod update_state;
-use std::boxed::Box;
-use std::marker::PhantomData;
-use std::num::NonZero;
-use std::path::Path;
-use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
 
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
+use crate::preferred::cache_warm_up_executor::CacheWarmupExecutor;
 use async_trait::async_trait;
 use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
@@ -50,6 +45,14 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::TxHash;
 use state_root_compute::StateRootBackgroundTaskState;
+use std::boxed::Box;
+use std::marker::PhantomData;
+use std::num::NonZero;
+use std::path::Path;
+use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc::{self};
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
@@ -99,6 +102,7 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     /// The sender for state update notifications. Currently used only for testing.
     test_only_state_update_notification_sender: broadcast::Sender<StateUpdateNotification>,
+    cache_warmup_executor: CacheWarmupExecutor,
 }
 
 impl<S, Rt, Da> PreferredSequencer<S, Rt, Da>
@@ -221,6 +225,17 @@ where
             shutdown_sender: shutdown_sender.clone(),
         };
 
+        let (cache_warmup_executor, workers) = CacheWarmupExecutor::spawn_execution_task::<S, Rt>(
+            latest_state_update.clone(),
+            rollup_exec_config.clone(),
+            config.clone(),
+        )
+        .await;
+
+        for worker in workers {
+            handles.push(worker)
+        }
+
         let tx_queue_id = Arc::new(AtomicU64::new(0));
         let (synchronized_state, synchronized_state_updator) = create(
             api_ledger_db.clone(),
@@ -236,6 +251,7 @@ where
             stop_at_rollup_height,
             rollup_exec_config.clone(),
             cached_txs.write_handle(),
+            cache_warmup_executor.clone(),
         );
 
         let synchronized_state_task = synchronized_state.start().await;
@@ -265,6 +281,7 @@ where
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_sender: broadcast::channel(100).0,
+            cache_warmup_executor,
         });
 
         // Launch replica sync task only for replicas
