@@ -8,6 +8,7 @@ use sov_state::{
     namespaces, AccessSize, IsValueCached, Namespace, ProvableStorageCache, SlotKey, SlotValue,
     StateAccesses, Storage,
 };
+pub(crate) use sov_state::AccessoryWrite;
 
 #[cfg(feature = "native")]
 use super::checkpoints::ChangeSet;
@@ -25,32 +26,13 @@ use crate::state::traits::PerBlockCache;
 pub(super) struct Delta<S: Storage> {
     pub(super) inner: S,
     witness: S::Witness,
+    #[cfg(feature = "native")]
+    pub(crate) intermediate_state: Option<Box<dyn StateGetter>>,
     pub(crate) kernel_cache: ProvableStorageCache<namespaces::Kernel>,
     pub(crate) user_cache: ProvableStorageCache<namespaces::User>,
     pub(crate) accessory_writes: HashMap<SlotKey, AccessoryWrite>,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct AccessoryWrite {
-    #[cfg(feature = "native")]
-    pub at_rollup_height: u64,
-    pub value: Option<SlotValue>,
-}
-
-impl AccessoryWrite {
-    #[cfg(feature = "native")]
-    pub fn new(at_rollup_height: u64, value: Option<SlotValue>) -> Self {
-        Self {
-            at_rollup_height,
-            value,
-        }
-    }
-
-    #[cfg(not(feature = "native"))]
-    pub fn new(_at_rollup_height: u64, value: Option<SlotValue>) -> Self {
-        Self { value }
-    }
-}
 
 impl<S: Storage> Delta<S> {
     #[cfg(feature = "native")]
@@ -58,6 +40,7 @@ impl<S: Storage> Delta<S> {
         Self {
             inner: self.inner.clone(),
             witness: Default::default(),
+            intermediate_state: self.intermediate_state.as_ref().map(|g| g.box_clone()),
             kernel_cache: self.kernel_cache.clone(),
             user_cache: self.user_cache.clone(),
             accessory_writes: self.accessory_writes.clone(),
@@ -81,10 +64,24 @@ impl<S: Storage> Delta<S> {
         self.witness = Default::default(); // Prune the witness
     }
 
+    #[cfg(feature = "native")]
+    pub fn new_with_intermediate_state(inner: S, intermediate_state: Box<dyn StateGetter>) -> Self {
+        Self {
+            inner,
+            witness: Default::default(),
+            intermediate_state: Some(intermediate_state),
+            user_cache: Default::default(),
+            kernel_cache: Default::default(),
+            accessory_writes: Default::default(),
+        }
+    }
+
     pub(super) fn with_witness(inner: S, witness: S::Witness) -> Self {
         Self {
             inner,
             witness,
+            #[cfg(feature = "native")]
+            intermediate_state: None,
             user_cache: Default::default(),
             kernel_cache: Default::default(),
             accessory_writes: Default::default(),
@@ -101,6 +98,8 @@ impl<S: Storage> Delta<S> {
             kernel_cache,
             accessory_writes,
             witness,
+            #[cfg(feature = "native")]
+            intermediate_state: _,
         } = self;
 
         (
@@ -195,6 +194,39 @@ impl<S: Storage> Delta<S> {
         }
     }
 
+    #[cfg(feature = "native")]
+    // TODO: Add non-native version
+    pub fn get_size(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<u32> {
+        match namespace {
+            Namespace::User => {
+                self.user_cache
+                    .get_size_or_fetch(self.intermediate_state.as_ref(), key, &self.inner, &self.witness, metric)
+            }
+            Namespace::Kernel => {
+                self.kernel_cache
+                    .get_size_or_fetch(self.intermediate_state.as_ref(), key, &self.inner, &self.witness, metric)
+            }
+            Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
+                Some(write) => write.value.as_ref().map(|v| v.size()),
+                None => {
+                    let val = match self.intermediate_state.as_ref() {
+                        Some(intermediate_state) => intermediate_state.get_accessory(key).or_else(|| self.inner.get_accessory(key)),
+                        None => self.inner.get_accessory(key),
+                    };
+                    let size = val.map(|v| v.size());
+                    metric.storage_read_size = Some(size.unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
+                    size
+                }
+            },
+        }
+    }
+
+    #[cfg(not(feature = "native"))]
     pub fn get_size(
         &mut self,
         namespace: Namespace,
@@ -222,6 +254,39 @@ impl<S: Storage> Delta<S> {
         }
     }
 
+    #[cfg(feature = "native")]
+    pub fn get(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
+        match namespace {
+            Namespace::User => {
+                self.user_cache
+                    .get_or_fetch(self.intermediate_state.as_ref(), key, &self.inner, &self.witness, metric)
+            }
+            Namespace::Kernel => {
+                self.kernel_cache
+                    .get_or_fetch(self.intermediate_state.as_ref(), key, &self.inner, &self.witness, metric)
+            }
+            Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
+                Some(write) => write.value,
+                None => {
+                    let val = if let Some(intermediate_state) = self.intermediate_state.as_ref() {
+                        return intermediate_state.get(namespace, key).or_else(|| self.inner.get_accessory(key));
+                    } else {
+                        self.inner.get_accessory(key)
+                    };
+                    let size = val.as_ref().map(|v| v.size());
+                    metric.storage_read_size = Some(size.unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
+                    val
+                }
+            },
+        }
+    }
+
+    #[cfg(not(feature = "native"))]
     pub fn get(
         &mut self,
         namespace: Namespace,

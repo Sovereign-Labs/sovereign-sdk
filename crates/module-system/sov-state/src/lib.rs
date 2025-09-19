@@ -9,6 +9,7 @@ pub mod config;
 mod event;
 pub mod namespaces;
 pub mod nomt;
+mod sequencer_state;
 #[cfg(feature = "native")]
 mod prover_storage;
 pub mod storage;

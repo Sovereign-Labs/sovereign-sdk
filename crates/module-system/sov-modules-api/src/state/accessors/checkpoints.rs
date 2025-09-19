@@ -80,6 +80,12 @@ impl<S: Spec> StateCheckpoint<S> {
         }
     }
 
+    #[cfg(feature = "native")]
+    pub fn new_with_intermediate_state<K: Kernel<S>>(inner: S, kernel: &K, intermediate_state: Box<dyn StateGetter>) -> Self {
+        let mut out = Self::new(inner, kernel);
+        self.delta.intermediate_state = Some(intermediate_state);
+    }
+
     /// Returns a reference to the storage underlying the state checkpoint.
     #[cfg(feature = "native")]
     pub fn storage(&self) -> &S::Storage {

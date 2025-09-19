@@ -3,12 +3,15 @@
 use core::fmt;
 use std::fmt::Display;
 use std::sync::Arc;
+use std::collections::HashMap;
+
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use jmt::KeyHash;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use sov_db::namespaces::Namespace as NamespaceTrait;
 #[cfg(feature = "native")]
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::{typenum, Digest};
@@ -16,9 +19,10 @@ use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 
 use crate::bytes::Prefix;
 use crate::codec::EncodeLike;
-use crate::namespaces::{ProvableCompileTimeNamespace, ProvableNamespace};
+use crate::namespaces::{self, ProvableCompileTimeNamespace, ProvableNamespace};
+use crate::sequencer_state::MaybePresentValue;
 use crate::{
-    MerkleProofSpec, SparseMerkleProof, StateAccesses, StateItemDecoder, StorageRoot, Witness,
+    MerkleProofSpec, Namespace, ProvableStorageCache, SparseMerkleProof, StateAccesses, StateItemDecoder, StorageRoot, Witness
 };
 
 type ArcFormatFn =
@@ -284,6 +288,17 @@ pub(crate) enum ReadType {
     Read(SlotValue),
 }
 
+impl ReadType {
+    #[cfg(feature = "native")]
+    pub fn unwrap(&self) -> &SlotValue {
+        match self {
+            ReadType::GetSizeValueFetched(value) => value,
+            ReadType::Read(value) => value,
+            ReadType::GetSizeValueNotFetched => panic!("ReadType::GetSizeValueNotFetched cannot be unwrapped"),
+        }
+    }
+}
+
 /// Data that is saved in the `Read` cache.
 #[derive(
     Clone, Debug, PartialEq, Eq, Serialize, serde::Deserialize, BorshDeserialize, BorshSerialize,
@@ -416,6 +431,89 @@ pub trait StateRoot:
 
     /// Builds a storage root from underlying namespace roots.
     fn from_namespace_roots(user_root: [u8; 32], kernel_root: [u8; 32]) -> Self;
+}
+
+struct ExecutionState {
+    user: ProvableStorageCache<namespaces::User>,
+    kernel: ProvableStorageCache<namespaces::Kernel>,
+    accessory: HashMap<SlotKey, AccessoryWrite>,
+}
+
+
+#[derive(Debug, Clone)]
+pub(crate) struct AccessoryWrite {
+    #[cfg(feature = "native")]
+    pub at_rollup_height: u64,
+    pub value: Option<SlotValue>,
+}
+
+impl AccessoryWrite {
+    #[cfg(feature = "native")]
+    pub fn new(at_rollup_height: u64, value: Option<SlotValue>) -> Self {
+        Self {
+            at_rollup_height,
+            value,
+        }
+    }
+
+    #[cfg(not(feature = "native"))]
+    pub fn new(_at_rollup_height: u64, value: Option<SlotValue>) -> Self {
+        Self { value }
+    }
+}
+
+/// An object-safe interface for retrieving values. The implementer may be storage or a cache of some kind.
+pub trait StateGetter: core::fmt::Debug + Send + Sync {
+    
+    /// Get the size of the value.
+    fn get_leaf(
+        &self,
+        namespace: ProvableNamespace,
+        key: &SlotKey,
+    ) -> MaybePresentValue<NodeLeafAndMaybeValue>;
+
+    /// Get the value.
+    fn get(
+        &self,
+        namespace: Namespace,
+        key: &SlotKey,
+    ) -> MaybePresentValue<SlotValue>;
+
+    /// Clones the state getter, returning a new type-erased object.
+    fn box_clone(&self) -> Box<dyn StateGetter>;
+}
+
+impl<T: Storage + 'static + Send + Sync> StateGetter for T {
+    fn get_leaf(
+        &self,
+        namespace: ProvableNamespace,
+        key: &SlotKey,
+    ) -> MaybePresentValue<NodeLeafAndMaybeValue> {
+        // The underlying storage is the provider of last resort for any key, so ther "Absent" case where the 
+        // value simply isn't in cache is not applicable. 
+        match namespace {
+            ProvableNamespace::User => MaybePresentValue::Present(Storage::get_leaf::<namespaces::User>(self, key, &Default::default())),
+            ProvableNamespace::Kernel => MaybePresentValue::Present(Storage::get_leaf::<namespaces::Kernel>(self, key, &Default::default())),
+        }
+    }
+
+    fn get(
+        &self,
+        namespace: Namespace,
+        key: &SlotKey,
+    ) -> MaybePresentValue<SlotValue> {
+        // The underlying storage is the provider of last resort for any key, so ther "Absent" case where the 
+        // value simply isn't in cache is not applicable. 
+        match namespace {
+            Namespace::User => MaybePresentValue::Present(Storage::get::<namespaces::User>(self, key, &Default::default())),
+            Namespace::Kernel => MaybePresentValue::Present(Storage::get::<namespaces::Kernel>(self, key, &Default::default())),
+            Namespace::Accessory => MaybePresentValue::Present(Storage::get_accessory(self, key)),
+        }
+    }
+
+    fn box_clone(&self) -> Box<dyn StateGetter> {
+        Box::new(self.clone())
+    }
 }
 
 /// An interface for retrieving values from the storage and producing change set of new write operations.

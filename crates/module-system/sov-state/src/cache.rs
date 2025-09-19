@@ -5,10 +5,11 @@ use std::convert::Infallible;
 use std::mem;
 
 use crate::namespaces::ProvableCompileTimeNamespace;
+use crate::sequencer_state::MaybePresentValue;
 use crate::storage::{SlotKey, SlotValue, Storage};
 #[cfg(feature = "native")]
 use crate::NativeStorage;
-use crate::{NodeLeaf, NodeLeafAndMaybeValue, ReadType};
+use crate::{StateGetter, NodeLeaf, NodeLeafAndMaybeValue, ReadType};
 use sov_metrics::StateAccessMetric;
 
 /// An enum that represents the temperature of a value in the storage.
@@ -261,16 +262,67 @@ use internal::CacheLog;
 /// Caches reads and writes for a (key, value) pair. On the first read the value is fetched
 /// from an external source represented by the `ValueReader` trait. On following reads,
 /// the cache checks if the value we read was inserted before.
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug)]
 pub struct ProvableStorageCache<N> {
     // Transaction cache.
     cache: CacheLog,
-    //
+    #[cfg(feature = "native")]
+    // /// Extra state that isn't yet saved in storage. This is used by the sequencer for non-finalized blocks,
+    // /// and may also be used for speculative/optimistic execution in the future.
+    // intermediate_state: Option<Box<dyn StateGetter>>,
     revertable_ordered_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
     // Ordered reads and writes.
     ordered_db_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
     phantom: core::marker::PhantomData<N>,
 }
+
+impl<N: ProvableCompileTimeNamespace> Clone for ProvableStorageCache<N> {
+    fn clone(&self) -> Self {
+        Self {
+            cache: self.cache.clone(),
+            // #[cfg(feature = "native")]
+            // intermediate_state: self.intermediate_state.as_ref().map(|g| g.box_clone()),
+            revertable_ordered_reads: self.revertable_ordered_reads.clone(),
+            ordered_db_reads: self.ordered_db_reads.clone(),
+            phantom: self.phantom,
+        }
+    }
+}
+
+impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
+    /// Gets a value from the cache, if present
+    #[cfg(feature = "native")]
+    pub fn get_from_cache(&self, key: &SlotKey) -> MaybePresentValue<SlotValue> {
+        match self.cache.get(key) {
+            // Safety: in NATIVE execution, we always fetch the value so ReadType::GetSizeValueNotFetched is not possible. 
+            Some(Access::Read { original }) => MaybePresentValue::Present(original.as_ref().map(|node| node.value.unwrap().clone())),
+            Some(Access::Write { modified, .. }) => MaybePresentValue::Present(modified.as_ref().map(|v| v.clone())),
+            None => MaybePresentValue::Absent,
+        }
+    }
+
+    /// Gets a leaf from the cache, if present. 
+    /// 
+    /// # Danger
+    /// Note that the hash returned from this value will be incorrect.
+    #[cfg(feature = "native")]
+    pub fn get_leaf_from_cache_with_dummy_hash(&self, key: &SlotKey) -> MaybePresentValue<NodeLeafAndMaybeValue> {
+        use sov_rollup_interface::crypto::NoOpHasher;
+
+        match self.cache.get(key) {
+            // Safety: in NATIVE execution, we always fetch the value so ReadType::GetSizeValueNotFetched is not possible. 
+            Some(Access::Read { original }) => MaybePresentValue::Present(original.clone()),
+            // Correctness: We only use the no-op hasher when the value is in intermediate state. This can happen in one of two cases:
+            // - In the sequencer, where the value hash is unused
+            // - During optimistic execution. If we executed optimistically, then this read will only have been in the intermediate state if it was previously written by an early transaction. 
+            // - In that case, the "read" will be discarded during the cache reconciliation procedure. 
+            Some(Access::Write { modified, .. }) => MaybePresentValue::Present(modified.as_ref().map(|v| NodeLeafAndMaybeValue { leaf: NodeLeaf::make_leaf::<NoOpHasher>(&v), value: ReadType::Read(v.clone()) })),
+            None => MaybePresentValue::Absent,
+        }
+    }
+}
+
+
 
 // We implement these methods only for *provable* state values because the internal cache
 // Typical workflow for fetching a value from storage:
@@ -394,13 +446,40 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                     storage.get_leaf_historical::<N>(key, version_to_fetch, witness)?;
                 let size = maybe_leaf.as_ref().map(|leaf| leaf.leaf.size);
                 metric.storage_read_size = Some(size.unwrap_or(0));
-                self.add_read(key.clone(), maybe_leaf);
+                Self::add_read(key.clone(), maybe_leaf, &mut self.revertable_ordered_reads, &mut self.cache);
                 Ok(size)
             }
         }
     }
 
+    #[cfg(feature = "native")]
     /// Get the size of the value.
+    pub fn get_size_or_fetch<S: Storage>(
+        &mut self,
+        intermediate_state: &Option<Box<dyn StateGetter>>,
+        key: &SlotKey,
+        storage: &S,
+        witness: &S::Witness,
+        metric: &mut StateAccessMetric,
+    ) -> Option<u32> {
+        match self.cache.get(key) {
+            Some(Access::Read { original }) => original.as_ref().map(|node| node.leaf.size),
+            Some(Access::Write { modified, .. }) => modified.as_ref().map(SlotValue::size),
+            None => {
+                let maybe_leaf = match intermediate_state {
+                    Some(intermediate_state) => intermediate_state.get_leaf(N::PROVABLE_NAMESPACE, key).or_else(|| storage.get_leaf::<N>(key, witness)),
+                    None => storage.get_leaf::<N>(key, witness),
+                };
+                let size = maybe_leaf.as_ref().map(|leaf| leaf.leaf.size);
+                metric.storage_read_size = Some(size.unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
+                Self::add_read(key.clone(), maybe_leaf, &mut self.revertable_ordered_reads, &mut self.cache);
+                size
+            }
+        }
+    }
+
+    /// Get the size of the value.
+    #[cfg(not(feature = "native"))]
     pub fn get_size_or_fetch<S: Storage>(
         &mut self,
         key: &SlotKey,
@@ -412,16 +491,46 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             Some(Access::Read { original }) => original.as_ref().map(|node| node.leaf.size),
             Some(Access::Write { modified, .. }) => modified.as_ref().map(SlotValue::size),
             None => {
-                let maybe_leaf = storage.get_leaf::<N>(key, witness);
+                let maybe_leaf =storage.get_leaf::<N>(key, witness);
                 let size = maybe_leaf.as_ref().map(|leaf| leaf.leaf.size);
                 metric.storage_read_size = Some(size.unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
-                self.add_read(key.clone(), maybe_leaf);
+                Self::add_read(key.clone(), maybe_leaf, &mut self.revertable_ordered_reads, &mut self.cache);
                 size
             }
         }
     }
+    
 
     /// Gets a value from the cache or reads it from the provided `ValueReader`.
+    #[cfg(feature = "native")]
+    pub fn get_or_fetch<S: Storage>(
+        &mut self,
+        intermediate_state: &Option<Box<dyn StateGetter>>,
+        key: &SlotKey,
+        storage: &S,
+        witness: &S::Witness,
+        metric: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
+        Self::get_or_fetch_with_fn(
+            &mut self.cache,
+            &mut self.revertable_ordered_reads,
+            key,
+            storage,
+            witness,
+            |key, witness, _args| Ok::<_, Infallible>(match intermediate_state {
+                // NATIVE only: we might have some intermediate state that isn't yet in storage (this could be state from an optimistic execution, or uncomitted state from the sequencer).
+                // If so, check that state first and fall back to storage.
+                Some(intermediate_state) => intermediate_state.get(N::NAMESPACE, key).or_else(|| storage.get::<N>(key, witness)),
+                None => storage.get::<N>(key, witness),
+            }),
+            (),
+            metric,
+        )
+        .expect("Unwrapping an infallible type cannot fail")
+    }
+
+    /// Gets a value from the cache or reads it from the provided `ValueReader`.
+    #[cfg(not(feature = "native"))]
     pub fn get_or_fetch<S: Storage>(
         &mut self,
         key: &SlotKey,
@@ -429,11 +538,13 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         witness: &S::Witness,
         metric: &mut StateAccessMetric,
     ) -> Option<SlotValue> {
-        self.get_or_fetch_with_fn(
+        Self::get_or_fetch_with_fn(
+            &mut self.cache,
+            &mut self.revertable_ordered_reads,
             key,
             storage,
             witness,
-            |key, witness, _args| Ok::<_, Infallible>(storage.get::<N>(key, witness)),
+            |key, witness, _args| Ok::<_, Infallible>( storage.get::<N>(key, witness)),
             (),
             metric,
         )
@@ -441,7 +552,8 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     }
 
     fn get_or_fetch_with_fn<S: Storage, F, Args, E>(
-        &mut self,
+        cache: &mut CacheLog,
+        revertable_ordered_reads: &mut Vec<(SlotKey, Option<NodeLeaf>)>,
         key: &SlotKey,
         storage: &S,
         witness: &S::Witness,
@@ -452,7 +564,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     where
         F: Fn(&SlotKey, &S::Witness, Args) -> Result<Option<SlotValue>, E>,
     {
-        if let Some(access) = self.cache.get_mut(key) {
+        if let Some(access) = cache.get_mut(key) {
             match access {
                 Access::Read {
                     original: Some(node),
@@ -489,7 +601,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                 leaf: NodeLeaf::make_leaf::<S::Hasher>(&v),
                 value: ReadType::Read(v),
             });
-            self.add_read(key.clone(), read);
+            Self::add_read(key.clone(), read, revertable_ordered_reads, cache);
             Ok(storage_value)
         }
     }
@@ -504,7 +616,9 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         version: Option<sov_rollup_interface::common::SlotNumber>,
         metric: &mut StateAccessMetric,
     ) -> anyhow::Result<Option<SlotValue>> {
-        self.get_or_fetch_with_fn(
+        Self::get_or_fetch_with_fn(
+            &mut self.cache,
+            &mut self.revertable_ordered_reads,
             key,
             storage,
             witness,
@@ -528,11 +642,11 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     }
 
     // This method can be called only once per given key.
-    fn add_read(&mut self, key: SlotKey, node: Option<NodeLeafAndMaybeValue>) {
-        self.revertable_ordered_reads
+    fn add_read(key: SlotKey, node: Option<NodeLeafAndMaybeValue>, revertable_ordered_reads: &mut Vec<(SlotKey, Option<NodeLeaf>)>, cache: &mut CacheLog) {
+        revertable_ordered_reads
             .push((key.clone(), node.as_ref().map(|n| n.leaf)));
 
-        self.cache.add_read(key, node);
+        cache.add_read(key, node);
     }
 }
 
