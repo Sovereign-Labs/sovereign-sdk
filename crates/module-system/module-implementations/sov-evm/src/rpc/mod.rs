@@ -159,7 +159,7 @@ where
     ) -> RpcResult<U256> {
         let mut state = self.resolve_state(block_number, state)?;
         let balance = self
-            .get_db(&mut state)
+            .get_db(state.deref_mut())
             .basic(address)
             .map_err(|e| eth_api_into_rpc_error(EthApiError::from(e)))?
             .map(|account| account.balance)
@@ -188,7 +188,7 @@ where
         let mut state = self.resolve_state(block_number, state)?;
         let storage_slot = self
             .account_storage
-            .get(&(&address, &index), &mut state)
+            .get(&(&address, &index), state.deref_mut())
             .unwrap_infallible()
             .unwrap_or_default();
 
@@ -210,7 +210,7 @@ where
 
         let nonce = self
             .uniqueness_module
-            .next_nonce(&credential_id, &mut state)
+            .next_nonce(&credential_id, state.deref_mut())
             .unwrap_or_default();
 
         debug!(%address, nonce, "EVM module JSON-RPC request to `eth_getTransactionCount`");
@@ -230,11 +230,11 @@ where
         let mut state = self.resolve_state(block_number, state)?;
         let code = self
             .accounts
-            .get(&address, &mut state)
+            .get(&address, state.deref_mut())
             .unwrap_infallible()
             .and_then(|account| {
                 self.code
-                    .get(&account.code_hash, &mut state)
+                    .get(&account.code_hash, state.deref_mut())
                     .unwrap_infallible()
             })
             .unwrap_or_default();
@@ -630,16 +630,23 @@ where
         }
     }
 
-    fn resolve_state(
+    fn resolve_state<'a>(
         &self,
         block_number: Option<String>,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<ApiStateAccessor<S>> {
-        let block_env = self.resolve_block_env(block_number, state).unwrap();
-        let archival_state = state
-            .get_archival_state(RollupHeight::new(block_env.number.to::<u64>()))
-            .map_err(into_rpc_error)?;
-        Ok(archival_state)
+        state: &'a mut ApiStateAccessor<S>,
+    ) -> RpcResult<MaybeArchivalState<'a, S>> {
+        let state = match block_number {
+            None => MaybeArchivalState::Current(state),
+            Some(number) if number == "latest" => MaybeArchivalState::Current(state),
+            _ => {
+                let block_env = self.resolve_block_env(block_number, state).unwrap();
+                let archival_state = state
+                    .get_archival_state(RollupHeight::new(block_env.number.to::<u64>()))
+                    .map_err(into_rpc_error)?;
+                MaybeArchivalState::Archival(archival_state)
+            }
+        };
+        Ok(state)
     }
 
     fn resolve_block_env(
@@ -655,6 +662,32 @@ where
                 let block = self.get_sealed_block_by_number(block_number, state)?;
                 Some(BlockEnv::from(block))
             }
+        }
+    }
+}
+
+use std::ops::{Deref, DerefMut};
+
+enum MaybeArchivalState<'a, S: Spec> {
+    Current(&'a mut ApiStateAccessor<S>),
+    Archival(ApiStateAccessor<S>),
+}
+
+impl<'a, S: Spec> Deref for MaybeArchivalState<'a, S> {
+    type Target = ApiStateAccessor<S>;
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Current(a) => &**a,
+            Self::Archival(a) => a,
+        }
+    }
+}
+
+impl<'a, S: Spec> DerefMut for MaybeArchivalState<'a, S> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Self::Current(a) => &mut **a,
+            Self::Archival(a) => a,
         }
     }
 }
