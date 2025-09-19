@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use crate::preferred::block_executor::StartBlockData;
 use crate::preferred::next_visible_slot_number_increase;
 use crate::preferred::PreferredSequencerConfig;
 use crate::preferred::RollupBlockExecutor;
@@ -128,13 +129,14 @@ impl CacheWarmupExecutor {
 
         let min_profit_per_tx = seq_config.sequencer_kind_config.minimum_profit_per_tx;
 
+        let start_block_data = StartBlockData {
+            sanity_check_visible_slot_number_after_increase,
+            visible_increase,
+            node_state_root: node_state_root.clone(),
+        };
+
         executor
-            .start_rollup_block(
-                sanity_check_visible_slot_number_after_increase,
-                visible_increase,
-                &node_state_root,
-                min_profit_per_tx,
-            )
+            .start_rollup_block(start_block_data, min_profit_per_tx)
             .await;
     }
 }

@@ -67,8 +67,6 @@ impl<S: Spec> BlockHooks for Evm<S> {
             ..Default::default()
         };
 
-        let gm = new_pending_env.gas_limit;
-
         self.block_env
             .set(&new_pending_env, state)
             .unwrap_infallible();
