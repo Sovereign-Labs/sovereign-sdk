@@ -725,6 +725,20 @@
         }
       }
     },
+    "SeqConfigExtension": {
+      "description": "Configuration data used by sequencer extensions, such as EVM endpoints.",
+      "type": "object",
+      "required": [
+        "max_log_limit"
+      ],
+      "properties": {
+        "max_log_limit": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      }
+    },
     "SequencerConfig": {
       "description": "Sequencer configuration.",
       "type": "object",
@@ -788,6 +802,17 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
+        },
+        "extension": {
+          "description": "Extensions to the sequencer config (for example evm related configuration).",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SeqConfigExtension"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "max_allowed_node_distance_behind": {
           "description": "The sequencer won't process incoming requests unless the node is within this many blocks or ahead of the sequencer.",
