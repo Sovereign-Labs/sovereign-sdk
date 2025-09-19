@@ -546,6 +546,18 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         }
     }
 
+    fn update_kernel_with_user_state_root(&mut self) {
+        // take all roots greater than self.started_from
+        for (height, root) in self.state_roots.iter() {
+            let user_root = root.namespace_root(sov_state::ProvableNamespace::User);
+            let mut runtime = Rt::default();
+            let mut kernel = runtime.kernel();
+            let mut kernel_state =
+                KernelStateAccessor::from_checkpoint(&kernel, &mut self.checkpoint);
+            kernel.save_user_state_root(*height, user_root, &mut kernel_state);
+        }
+    }
+
     /// Before starting a rollup block, we need to have stored any visible state roots that it might need in state.
     /// In the node, this is done automatically, but sometimes the sequencer can run too far ahead of the node and need to compute these roots itself.
     async fn populate_state_roots(&mut self, node_state_root: &<S::Storage as Storage>::Root) {
@@ -580,6 +592,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             height= %next_visible_rollup_height,
             "Fetching state root for height, if necessary",
         );
+
         while next_visible_rollup_height > largest_known_root_height {
             tracing::trace!(
                 fetching_height = %largest_known_root_height.saturating_add(1),
@@ -613,15 +626,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             self.state_roots
                 .insert(next_visible_rollup_height, next_visible_root);
         }
-        // take all roots greater than self.started_from
-        for (height, root) in self.state_roots.iter() {
-            let user_root = root.namespace_root(sov_state::ProvableNamespace::User);
-            let mut runtime = Rt::default();
-            let mut kernel = runtime.kernel();
-            let mut kernel_state =
-                KernelStateAccessor::from_checkpoint(&kernel, &mut self.checkpoint);
-            kernel.save_user_state_root(*height, user_root, &mut kernel_state);
-        }
+        self.update_kernel_with_user_state_root()
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
