@@ -2,6 +2,7 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use crate::evm::evm_test_helper::setup;
+use crate::evm::evm_test_helper::EVM_EXTENSION;
 use alloy_primitives::Address;
 use alloy_primitives::TxHash;
 use alloy_primitives::B256;
@@ -10,7 +11,6 @@ use alloy_rpc_types_eth::Filter;
 use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::TestClient;
 use sov_modules_api::execution_mode::Native;
-use sov_sequencer::Extensions2;
 use sov_test_utils::test_rollup::TestRollup;
 use tokio::sync::broadcast;
 use tokio::sync::Mutex;
@@ -19,7 +19,7 @@ use tokio::time::Duration;
 // The basic subscription test.
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_log_subscription() {
-    let (test_rollup, evm_client, _) = setup(0, Extensions2 {}).await;
+    let (test_rollup, evm_client, _) = setup(0, EVM_EXTENSION).await;
     let mut log_collector = LogCollector::new();
 
     let contract_address = evm_client.alloy_deploy_contract().await;
@@ -76,7 +76,7 @@ async fn evm_test_log_subscription() {
 // Tests for logs from pending block.
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_log_subscription_with_pending_blcok() {
-    let (test_rollup, evm_client, _) = setup(0, Extensions2 {}).await;
+    let (test_rollup, evm_client, _) = setup(0, EVM_EXTENSION).await;
     let mut log_collector = LogCollector::new();
 
     let contract_address = evm_client.alloy_deploy_contract().await;
@@ -186,7 +186,7 @@ impl TestCase {
     }
 
     async fn run(&self) {
-        let (test_rollup, evm_client, _) = setup(0, Extensions2 {}).await;
+        let (test_rollup, evm_client, _) = setup(0, EVM_EXTENSION).await;
         let contract_address = evm_client.alloy_deploy_contract().await;
         test_rollup.wait_for_next_blocks(1).await;
 

@@ -21,7 +21,9 @@ impl Default for SequencerKindConfig {
 
 /// Configuration data used by sequencer extensions, such as EVM endpoints.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct Extensions2 {}
+pub struct SeqConfigExtension {
+    pub max_log_limit: usize,
+}
 
 /// Sequencer configuration.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -63,7 +65,7 @@ pub struct SequencerConfig<Address, Sc = SequencerKindConfig> {
     /// Maximum time in seconds to wait for a blob to be processed.
     pub blob_processing_timeout_secs: u64,
     /// TODO
-    pub extensions: Extensions2,
+    pub extension: Option<SeqConfigExtension>,
 }
 
 fn default_automatic_batch_production() -> bool {
@@ -83,7 +85,7 @@ impl<Addr: Clone, BbConfig> SequencerConfig<Addr, BbConfig> {
             max_concurrent_blobs: self.max_concurrent_blobs,
             sequencer_kind_config: seq_config,
             blob_processing_timeout_secs: self.blob_processing_timeout_secs,
-            extensions: self.extensions.clone(),
+            extension: self.extension.clone(),
         }
     }
 }

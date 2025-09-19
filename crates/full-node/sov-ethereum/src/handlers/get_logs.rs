@@ -20,23 +20,9 @@ use sov_evm::MaybeSealedBlock;
 use sov_evm::PendingOrBlock;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
+use sov_sequencer::SeqConfigExtension;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
-
-#[derive(Default, Debug, Clone, Copy)]
-pub struct QueryLimits {
-    /// Maximum number of blocks that could be scanned per filter
-    pub max_blocks_per_filter: Option<u64>,
-    /// Maximum number of logs that can be returned in a response
-    pub max_logs_per_response: Option<usize>,
-}
-
-impl QueryLimits {
-    /// Construct an object with no limits (more explicit than using default constructor)
-    pub fn no_limits() -> Self {
-        Default::default()
-    }
-}
 
 pub async fn eth_get_logs<S, Seq>(
     parameters: JRpcParams<'static>,
@@ -49,18 +35,12 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    logs_for_filter(
-        parameters.one::<Filter>()?,
-        ethereum,
-        QueryLimits::no_limits(),
-    )
-    .await
+    logs_for_filter(parameters.one::<Filter>()?, ethereum).await
 }
 
 async fn logs_for_filter<S, Seq>(
     filter: Filter,
     ethereum: Arc<Ethereum<S, Seq>>,
-    _limits: QueryLimits,
 ) -> Result<Vec<Log>, ErrorObjectOwned>
 where
     S: Spec,
@@ -72,18 +52,19 @@ where
 
     match filter.block_option {
         FilterBlockOption::AtBlockHash(block_hash) => {
-            logs_for_block_hash(filter, block_hash, state)
+            logs_for_block_hash(filter, block_hash, &ethereum.extension, state)
         }
         FilterBlockOption::Range {
             from_block,
             to_block,
-        } => logs_for_blocks_range(filter, from_block, to_block, state),
+        } => logs_for_blocks_range(filter, from_block, to_block, &ethereum.extension, state),
     }
 }
 
 fn logs_for_block_hash<S>(
     filter: Filter,
     block_hash: B256,
+    limits: &SeqConfigExtension,
     state: &mut ApiStateAccessor<S>,
 ) -> Result<Vec<Log>, ErrorObjectOwned>
 where
@@ -98,7 +79,7 @@ where
         tracing::warn!(%msg);
         return Err(to_jsonrpsee_error_object(&msg, ETH_RPC_ERROR));
     };
-    logs_from_block(&mut rpc_logs, height, &filter, &evm, state)?;
+    logs_from_block(&mut rpc_logs, height, &filter, &evm, limits, state)?;
 
     Ok(rpc_logs)
 }
@@ -107,6 +88,7 @@ fn logs_for_blocks_range<S>(
     filter: Filter,
     from_block: Option<BlockNumberOrTag>,
     to_block: Option<BlockNumberOrTag>,
+    limits: &SeqConfigExtension,
     state: &mut ApiStateAccessor<S>,
 ) -> Result<Vec<Log>, ErrorObjectOwned>
 where
@@ -122,7 +104,10 @@ where
     // We jsut validated that `start` and `end` are not peneding.
     let block_range = RangeInclusive::new(start, end);
     for height in block_range {
-        logs_from_block(&mut rpc_logs, height, &filter, &evm, state)?;
+        let should_contnue = logs_from_block(&mut rpc_logs, height, &filter, &evm, limits, state)?;
+        if !should_contnue {
+            break;
+        }
     }
     Ok(rpc_logs)
 }
@@ -133,8 +118,9 @@ fn logs_from_block<S>(
     height: u64,
     filter: &Filter,
     evm: &sov_evm::Evm<S>,
+    limits: &SeqConfigExtension,
     state: &mut ApiStateAccessor<S>,
-) -> Result<(), ErrorObjectOwned>
+) -> Result<bool, ErrorObjectOwned>
 where
     S: Spec,
     S::Address: FromVmAddress<EthereumAddress>,
@@ -149,7 +135,7 @@ where
 
     let header = block.header;
     if !filter.matches_bloom(header.logs_bloom()) {
-        return Ok(());
+        return Ok(true);
     }
     let block_hash = header.hash();
 
@@ -164,6 +150,10 @@ where
         let logs = receipt.receipt.logs;
 
         for (log_index_in_tx, log) in logs.into_iter().enumerate() {
+            if rpc_logs.len() >= limits.max_log_limit {
+                return Ok(false);
+            }
+
             if filter.matches(&log) {
                 let rpc_log = Log {
                     inner: log,
@@ -180,7 +170,7 @@ where
         }
     }
 
-    Ok(())
+    Ok(true)
 }
 
 fn get_block_nr<S>(

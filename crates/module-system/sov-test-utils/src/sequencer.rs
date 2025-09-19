@@ -17,7 +17,7 @@ use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::StateUpdateInfo;
 use sov_sequencer::standard::{StdSequencer, StdSequencerConfig};
 pub use sov_sequencer::test_stateless::TestStatelessSequencer;
-use sov_sequencer::{Extensions2, SequencerApis, SequencerConfig};
+use sov_sequencer::{SequencerApis, SequencerConfig};
 use sov_state::{DefaultStorageSpec, ProverStorage};
 use sov_stf_runner::query_state_update_info;
 use sov_value_setter::ValueSetterConfig;
@@ -155,10 +155,8 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
             max_concurrent_blobs: TEST_MAX_CONCURRENT_BLOBS,
             blob_processing_timeout_secs: 60,
-            extensions: Extensions2 {},
+            extension: None,
         };
-
-        let extensions = Extensions2 {};
 
         let (sequencer, _) = StdSequencer::<TestSpec, Rt, StorableMockDaService>::create(
             da_service.clone(),

@@ -74,3 +74,5 @@ disable_state_root_consistency_checks = true
 # "TryToSave" - Attempt to recover by flushing batches and catching up with the chain
 recovery_strategy = "TryToSave"
 batch_execution_time_limit_millis = 2000 # Do no more than 2000ms of work per batch, even if the DA layer isn't producing blocks regularly
+[sequencer.extension]
+max_log_limit = 20000

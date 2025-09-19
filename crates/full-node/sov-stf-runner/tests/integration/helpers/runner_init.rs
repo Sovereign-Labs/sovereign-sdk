@@ -419,6 +419,7 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
             max_concurrent_blobs: TEST_MAX_CONCURRENT_BLOBS,
             blob_processing_timeout_secs: TEST_BLOB_PROCESSING_TIMEOUT,
+            extension: None,
         },
         monitoring: MonitoringConfig::standard(),
     }
