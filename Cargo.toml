@@ -275,6 +275,7 @@ ruint = { version = "1", default-features = false }
 risc0-zkvm = { version = "2.1", default-features = false }
 risc0-zkvm-platform = "2.0"
 risc0-build = "2.1"
+flume = { version = "0.11.1", features = ["async"]}
 
 # EVM dependencies
 ethereum-types = "0.14.1"

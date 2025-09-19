@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::marker::PhantomData;
-use std::mem;
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -213,8 +212,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             task_state.shutdown().abort();
         }
 
-        let _ = mem::replace(&mut self.checkpoint, other.checkpoint);
-        //self.checkpoint = other.checkpoint;
+        self.checkpoint = other.checkpoint;
 
         self.rollup_block_task_state = other.rollup_block_task_state;
         self.next_event_number = other.next_event_number;
@@ -611,6 +609,17 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 KernelStateAccessor::from_checkpoint(&kernel, &mut self.checkpoint);
             kernel.save_user_state_root(*height, user_root, &mut kernel_state);
         }
+    }
+
+    pub async fn shutdown(&mut self) {
+        let task_state = self
+            .rollup_block_task_state
+            .take()
+            .expect("No in-progress rollup block, nothing to do. This is a bug, please report it");
+
+        let _ = task_state.shutdown().await.expect(
+            "Transaction acceptor task failed unexpectedly! This is a bug, please report it.",
+        );
     }
 
     #[tracing::instrument(skip_all, level = "trace")]

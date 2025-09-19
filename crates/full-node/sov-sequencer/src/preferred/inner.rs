@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::preferred::cache_warm_up_executor::CacheWarmupExecutor;
 use crate::preferred::RollupBlockExecutorConfig;
 use anyhow::anyhow;
 use sov_blob_sender::BlobInternalId;
@@ -27,6 +28,7 @@ use crate::metrics::{
 use crate::preferred::block_executor::{
     AcceptedTxWithBudgetInfo, RollupBlockExecutor, RollupBlockExecutorError,
 };
+
 use crate::preferred::db::latest_finalized_sequence_number;
 use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::update_state::do_next_event;
@@ -94,6 +96,7 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     rollup_exec_config: RollupBlockExecutorConfig<S>,
     tx_cache_writer: TxResultWriter<S, Rt>,
+    close_batch_notification_sender: CacheWarmupExecutor,
 }
 
 // We submit metrics when this guard is dropped.
@@ -589,6 +592,8 @@ where
             .checkpoint
             .clone_with_empty_witness_dropping_temp_cache();
         self.executor_events_sender.close_batch(checkpoint).await;
+        self.close_batch_notification_sender
+            .send_batch_end_notification();
     }
 
     async fn check_readiness(
@@ -814,6 +819,7 @@ pub(crate) fn create<S, Rt>(
     stop_at_rollup_height: Option<RollupHeight>,
     rollup_exec_config: RollupBlockExecutorConfig<S>,
     tx_cache_writer: TxResultWriter<S, Rt>,
+    close_batch_notification_sender: CacheWarmupExecutor,
 ) -> (
     SynchronizedSequencerState<S, Rt>,
     SequencerStateUpdator<S, Rt>,
@@ -853,6 +859,7 @@ where
         stop_at_rollup_height,
         rollup_exec_config,
         tx_cache_writer,
+        close_batch_notification_sender,
     };
 
     let channel_size = Arc::new(AtomicU32::new(0));
