@@ -38,6 +38,13 @@ tracing = { workspace = true, optional = true }
 proptest = { workspace = true }
 test-strategy = { workspace = true }
 sha2 = { workspace = true }
+alloy-primitives = { workspace = true }
+revm = { workspace = true }
+criterion = "0.5.1"
+
+[[bench]]
+name = "bcs_performance_comparison"
+harness = false
 
 [features]
 arbitrary = [

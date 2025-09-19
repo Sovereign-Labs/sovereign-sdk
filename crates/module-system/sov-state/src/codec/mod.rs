@@ -3,6 +3,9 @@
 mod bcs_codec;
 mod borsh_codec;
 
+#[cfg(test)]
+mod bcs_codec_test;
+
 use core::fmt;
 
 pub use bcs_codec::BcsCodec;

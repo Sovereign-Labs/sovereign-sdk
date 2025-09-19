@@ -12714,10 +12714,12 @@ dependencies = [
 name = "sov-state"
 version = "0.3.0"
 dependencies = [
+ "alloy-primitives",
  "anyhow",
  "arbitrary",
  "bcs",
  "borsh",
+ "criterion",
  "derivative",
  "derive_more 1.0.0",
  "hex",
@@ -12726,6 +12728,7 @@ dependencies = [
  "nomt-core",
  "proptest",
  "proptest-derive",
+ "revm",
  "serde",
  "serde-big-array",
  "sha2 0.10.9",
