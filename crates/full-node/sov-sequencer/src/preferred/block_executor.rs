@@ -98,6 +98,14 @@ impl<S: Spec> RollupBlockExecutorError<S> {
 type StateRootReceiver<S> =
     oneshot::Receiver<(RollupHeight, <<S as Spec>::Storage as Storage>::Root)>;
 
+pub struct StartBlockData<S: Spec> {
+    pub sanity_check_visible_slot_number_after_increase: VisibleSlotNumber,
+    pub visible_increase: VisibleSlotNumberIncrease,
+    // We pass the node state root explicitly because retrieving it is
+    // fallible, so it's convenient to front-load the error-checking.
+    pub node_state_root: <S::Storage as Storage>::Root,
+}
+
 #[derive(Clone)]
 pub struct RollupBlockExecutorConfig<S: Spec> {
     pub da_address: <S::Da as DaSpec>::Address,
@@ -359,10 +367,14 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
         trace!(num_txs, visible_slot_number_after_increase = %sanity_check_visible_slot_number_after_increase, %node_state_root, "Re-applying batch state changes");
 
-        self.start_rollup_block(
+        let start_block_data = StartBlockData {
             sanity_check_visible_slot_number_after_increase,
             visible_increase,
-            node_state_root,
+            node_state_root: node_state_root.clone(),
+        };
+
+        self.start_rollup_block(
+            start_block_data,
             // When replaying batches, we wish to be deterministic and not
             // filter out previously-accepted transactions simply because
             // they're not considered profitable enough based on the current
@@ -418,13 +430,15 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     #[tracing::instrument(skip_all, level = "trace")]
     pub async fn start_rollup_block(
         &mut self,
-        sanity_check_visible_slot_number_after_increase: VisibleSlotNumber,
-        visible_increase: VisibleSlotNumberIncrease,
-        // We pass the node state root explicitly because retrieving it is
-        // fallible, so it's convenient to front-load the error-checking.
-        node_state_root: &<S::Storage as Storage>::Root,
+        start_blcock_data: StartBlockData<S>,
         minimum_profit_per_tx: u128,
     ) {
+        let StartBlockData {
+            sanity_check_visible_slot_number_after_increase,
+            visible_increase,
+            node_state_root,
+        } = start_blcock_data;
+
         assert!(
             self.rollup_block_task_state.is_none(),
             "Starting a rollup block, but there's already one in progress {:?}. This is a bug, please report it.",
@@ -437,7 +451,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             "Beginning new rollup block and spawning background loop"
         );
 
-        self.populate_state_roots(node_state_root).await;
+        self.populate_state_roots(&node_state_root).await;
 
         let old_visible_slot_number = self.checkpoint.current_visible_slot_number();
         let next_visible_slot_number = self

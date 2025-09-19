@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::preferred::block_executor::StartBlockData;
 use crate::preferred::RollupBlockExecutorConfig;
 use anyhow::anyhow;
 use sov_blob_sender::BlobInternalId;
@@ -265,14 +266,16 @@ where
         // DB operations handled by replica-aware db implementation
         let sequence_number = self.get_and_inc_next_sequence_number();
 
+        let start_block_data = StartBlockData {
+            sanity_check_visible_slot_number_after_increase: visible_slot_number_after_increase,
+            visible_increase,
+            node_state_root: node_state_root.clone(),
+        };
+
         let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
+
         self.executor
-            .start_rollup_block(
-                visible_slot_number_after_increase,
-                visible_increase,
-                &node_state_root,
-                min_profit_per_tx,
-            )
+            .start_rollup_block(start_block_data, min_profit_per_tx)
             .await;
         self.executor_events_sender
             .start_batch(
@@ -322,14 +325,15 @@ where
         let node_state_root = self.node_root_hash()?;
         let sequence_number = self.get_and_inc_next_sequence_number();
 
+        let start_block_data = StartBlockData {
+            sanity_check_visible_slot_number_after_increase: visible_slot_number_after_increase,
+            visible_increase: replica_visible_slots_to_advance,
+            node_state_root: node_state_root.clone(),
+        };
+
         let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
         self.executor
-            .start_rollup_block(
-                visible_slot_number_after_increase,
-                replica_visible_slots_to_advance,
-                &node_state_root,
-                min_profit_per_tx,
-            )
+            .start_rollup_block(start_block_data, min_profit_per_tx)
             .await;
 
         self.executor_events_sender
