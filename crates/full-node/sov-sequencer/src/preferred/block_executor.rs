@@ -626,7 +626,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             self.state_roots
                 .insert(next_visible_rollup_height, next_visible_root);
         }
-        self.update_kernel_with_user_state_root()
+        self.update_kernel_with_user_state_root();
     }
 
     #[tracing::instrument(skip_all, level = "trace")]

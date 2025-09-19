@@ -1,0 +1,17 @@
+[1mdiff --git a/crates/full-node/sov-sequencer/src/preferred/block_executor.rs b/crates/full-node/sov-sequencer/src/preferred/block_executor.rs[m
+[1mindex f13c5d27c..71e20dae8 100644[m
+[1m--- a/crates/full-node/sov-sequencer/src/preferred/block_executor.rs[m
+[1m+++ b/crates/full-node/sov-sequencer/src/preferred/block_executor.rs[m
+[36m@@ -588,6 +588,12 @@[m [mimpl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {[m
+             .keys()[m
+             .max()[m
+             .unwrap_or(&RollupHeight::GENESIS);[m
+[32m+[m
+[32m+[m[32m        println!([m
+[32m+[m[32m            "self[m
+[32m+[m[32m            .state_roots {:?}",[m
+[32m+[m[32m            self.state_roots.len()[m
+[32m+[m[32m        );[m
+         tracing::debug!([m
+             height= %next_visible_rollup_height,[m
+             "Fetching state root for height, if necessary",[m
