@@ -533,7 +533,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             "Beginning new rollup block and spawning background loop"
         );
 
-        self.populate_state_roots(&node_state_root).await;
+        let mut state_roots = self.get_state_roots(&node_state_root).await;
+        self.state_roots.append(&mut state_roots);
         self.update_kernel_with_user_state_root();
 
         let old_visible_slot_number = self.checkpoint.current_visible_slot_number();
@@ -631,7 +632,81 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
     /// Before starting a rollup block, we need to have stored any visible state roots that it might need in state.
     /// In the node, this is done automatically, but sometimes the sequencer can run too far ahead of the node and need to compute these roots itself.
-    async fn populate_state_roots(&mut self, node_state_root: &<S::Storage as Storage>::Root) {
+
+    async fn get_state_roots(
+        &mut self,
+        node_state_root: &<S::Storage as Storage>::Root,
+    ) -> BTreeMap<RollupHeight, <S::Storage as Storage>::Root> {
+        let mut state_roots = BTreeMap::new();
+
+        // If we don't have any state roots yet, insert the node's state root. That's our starting point.
+        // We have to save the root here because it *won't* be present in state (the node can't store it's own root in state without altering the root!)
+        if self.state_roots.is_empty() {
+            // Figure out which rollup height this root corresponds to and save it as appropriate.
+            let node_height = self
+                .checkpoint
+                .get_rollup_height_of_underlying_storage(&Rt::default().kernel());
+            state_roots.insert(node_height, node_state_root.clone());
+        }
+
+        // Compute the next visible root height that we need to fetch.
+        let next_rollup_height = self.checkpoint.rollup_height_to_access().saturating_add(1);
+        let next_visible_rollup_height =
+            next_rollup_height.saturating_sub(config_value!("STATE_ROOT_DELAY_BLOCKS"));
+
+        // If we don't have the next visible root locally, fetch it from the background task.
+        // Note: The request will *always* be the next one in our inbound queue if we take this branch.
+        // If this block is the first one computed using the RollupBlockExecutor, then the root we need is just the one from the node,
+        // so we *don't* take this branch.
+        // Otherwise, the request will already have been sent during the previous iteration of `end_rollup_block`, so we can just await it here.
+
+        let mut largest_known_root_height = *self
+            .state_roots
+            .keys()
+            .max()
+            .unwrap_or(&RollupHeight::GENESIS);
+        tracing::debug!(
+            height= %next_visible_rollup_height,
+            "Fetching state root for height, if necessary",
+        );
+        while next_visible_rollup_height > largest_known_root_height {
+            tracing::trace!(
+                fetching_height = %largest_known_root_height.saturating_add(1),
+                "Fetching state root for height",
+            );
+            let (received_height, next_visible_root) = match self.state_root_responses.pop_front().unwrap_or_else(||
+                    panic!("Executor {} needed response for state root for height {} before sending request. This is a bug in the `RollupBlockExecutor`, please report it.", self.id, next_visible_rollup_height))
+            .await {
+                Ok((received_height, next_visible_root)) => {
+                    largest_known_root_height = received_height;
+                   (received_height, next_visible_root)
+                }
+                Err(_) => {
+                    tracing::info!("State root computation background task has shutdown. New block not started");
+                    return state_roots;
+                }
+            };
+            // Sanity check: the height should not be bigger than the one we need - this would imply that we received a response before we sent it!
+            if received_height > next_visible_rollup_height {
+                tracing::error!(
+                    received_height = %received_height,
+                    next_visible_root_height = %next_visible_rollup_height,
+                    "Received height was greater than the expected height. This is a bug in the RollupBlockExecutor, please report it.");
+                panic!("Received height ({received_height}) was greater than the expected height ({next_visible_rollup_height}). This is a bug in the RollupBlockExecutor, please report it.");
+            }
+            tracing::trace!(
+                "Received state root for height {} : {}",
+                next_visible_rollup_height,
+                HexString(next_visible_root.namespace_root(sov_state::ProvableNamespace::User))
+            );
+            state_roots.insert(next_visible_rollup_height, next_visible_root);
+        }
+        state_roots
+    }
+
+    /// Before starting a rollup block, we need to have stored any visible state roots that it might need in state.
+    /// In the node, this is done automatically, but sometimes the sequencer can run too far ahead of the node and need to compute these roots itself.
+    async fn _populate_state_roots(&mut self, node_state_root: &<S::Storage as Storage>::Root) {
         // If we don't have any state roots yet, insert the node's state root. That's our starting point.
         // We have to save the root here because it *won't* be present in state (the node can't store it's own root in state without altering the root!)
         if self.state_roots.is_empty() {
