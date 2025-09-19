@@ -228,9 +228,9 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
                 blob_processing_timeout_secs: 60,
                 start_at_rollup_height: None,
                 stop_at_rollup_height: None,
-                extension: SeqConfigExtension {
+                extension: Some(SeqConfigExtension {
                     max_log_limit: 20000,
-                },
+                }),
             },
             with_secondary_sequencer: None,
         }
