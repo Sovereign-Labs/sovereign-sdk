@@ -96,7 +96,7 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     rollup_exec_config: RollupBlockExecutorConfig<S>,
     tx_cache_writer: TxResultWriter<S, Rt>,
-    close_batch_notification_sender: CacheWarmupExecutor,
+    cache_warmup_executor: CacheWarmupExecutor,
 }
 
 // We submit metrics when this guard is dropped.
@@ -277,6 +277,9 @@ where
                 min_profit_per_tx,
             )
             .await;
+
+        self.cache_warmup_executor.send_batch_start_notification();
+
         self.executor_events_sender
             .start_batch(
                 visible_slot_number_after_increase,
@@ -592,8 +595,6 @@ where
             .checkpoint
             .clone_with_empty_witness_dropping_temp_cache();
         self.executor_events_sender.close_batch(checkpoint).await;
-        self.close_batch_notification_sender
-            .send_batch_end_notification();
     }
 
     async fn check_readiness(
@@ -819,7 +820,7 @@ pub(crate) fn create<S, Rt>(
     stop_at_rollup_height: Option<RollupHeight>,
     rollup_exec_config: RollupBlockExecutorConfig<S>,
     tx_cache_writer: TxResultWriter<S, Rt>,
-    close_batch_notification_sender: CacheWarmupExecutor,
+    cache_warmup_executor: CacheWarmupExecutor,
 ) -> (
     SynchronizedSequencerState<S, Rt>,
     SequencerStateUpdator<S, Rt>,
@@ -859,7 +860,7 @@ where
         stop_at_rollup_height,
         rollup_exec_config,
         tx_cache_writer,
-        close_batch_notification_sender,
+        cache_warmup_executor,
     };
 
     let channel_size = Arc::new(AtomicU32::new(0));

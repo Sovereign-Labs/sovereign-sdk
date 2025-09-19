@@ -66,6 +66,10 @@ impl<S: Spec> BlockHooks for Evm<S> {
             gas_limit: cfg.chain_spec.block_gas_limit,
             ..Default::default()
         };
+
+        let gm = new_pending_env.gas_limit;
+        println!("gm {:?}", gm);
+
         self.block_env
             .set(&new_pending_env, state)
             .unwrap_infallible();

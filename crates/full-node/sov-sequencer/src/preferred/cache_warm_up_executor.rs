@@ -13,13 +13,13 @@ use tokio::task::JoinHandle;
 
 #[derive(Clone)]
 pub(crate) struct CacheWarmupExecutor {
-    close_batch_notification_sender: tokio::sync::broadcast::Sender<()>,
+    start_batch_notification_sender: tokio::sync::broadcast::Sender<()>,
     tx_sender: flume::Sender<FullyBakedTx>,
 }
 
 impl CacheWarmupExecutor {
-    pub(crate) fn send_batch_end_notification(&self) {
-        let _ = self.close_batch_notification_sender.send(());
+    pub(crate) fn send_batch_start_notification(&self) {
+        let _ = self.start_batch_notification_sender.send(());
     }
 
     pub(crate) async fn send_tx(&self, tx: FullyBakedTx) {
