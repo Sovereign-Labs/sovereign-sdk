@@ -64,7 +64,7 @@ pub struct SequencerConfig<Address, Sc = SequencerKindConfig> {
     pub max_concurrent_blobs: usize,
     /// Maximum time in seconds to wait for a blob to be processed.
     pub blob_processing_timeout_secs: u64,
-    /// TODO
+    /// Extensions to the sequencer config (for example evm related configuration).
     pub extension: Option<SeqConfigExtension>,
 }
 
