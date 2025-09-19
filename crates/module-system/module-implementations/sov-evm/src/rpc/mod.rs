@@ -643,7 +643,7 @@ where
                 let archival_state = state
                     .get_archival_state(RollupHeight::new(block_env.number.to::<u64>()))
                     .map_err(into_rpc_error)?;
-                MaybeArchivalState::Archival(archival_state)
+                MaybeArchivalState::Archival(archival_state.into())
             }
         };
         Ok(state)
@@ -670,14 +670,14 @@ use std::ops::{Deref, DerefMut};
 
 enum MaybeArchivalState<'a, S: Spec> {
     Current(&'a mut ApiStateAccessor<S>),
-    Archival(ApiStateAccessor<S>),
+    Archival(Box<ApiStateAccessor<S>>),
 }
 
 impl<'a, S: Spec> Deref for MaybeArchivalState<'a, S> {
     type Target = ApiStateAccessor<S>;
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::Current(a) => &**a,
+            Self::Current(a) => a,
             Self::Archival(a) => a,
         }
     }
@@ -686,7 +686,7 @@ impl<'a, S: Spec> Deref for MaybeArchivalState<'a, S> {
 impl<'a, S: Spec> DerefMut for MaybeArchivalState<'a, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
-            Self::Current(a) => &mut **a,
+            Self::Current(a) => a,
             Self::Archival(a) => a,
         }
     }
