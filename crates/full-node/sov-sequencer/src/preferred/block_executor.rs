@@ -427,17 +427,93 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         }
     }
 
+    async fn _foo(
+        &mut self,
+        start_block_data: StartBlockData<S>,
+        minimum_profit_per_tx: u128,
+        checkpoint: StateCheckpoint<S>,
+    ) {
+        let StartBlockData {
+            sanity_check_visible_slot_number_after_increase,
+            visible_increase,
+            node_state_root: _,
+        } = start_block_data;
+
+        assert!(
+            self.rollup_block_task_state.is_none(),
+            "Starting a rollup block, but there's already one in progress {:?}. This is a bug, please report it.",
+            self.rollup_block_task_state
+        );
+
+        let old_visible_slot_number = self.checkpoint.current_visible_slot_number();
+
+        self.checkpoint = checkpoint;
+        let next_visible_slot_number = self.checkpoint.current_visible_slot_number();
+
+        assert_eq!(
+            next_visible_slot_number,
+            sanity_check_visible_slot_number_after_increase,
+            "Sanity check failed: visible slot number calculation was incorrect. This is a bug, please report it."
+        );
+
+        let (setup_sender, setup_receiver) = oneshot::channel();
+        let (tx_sender, tx_receiver) = mpsc::channel(Self::MAX_BUFFERED_TXS);
+        let (result_sender, result_receiver) = mpsc::channel(Self::MAX_BUFFERED_TXS);
+
+        let handle = tokio::runtime::Handle::current().spawn_blocking({
+            let ctx = RollupBlockTaskContext {
+                checkpoint: self
+                    .checkpoint
+                    .clone_with_empty_witness_dropping_temp_cache(),
+                tx_receiver,
+                setup_sender,
+                old_visible_slot_number,
+                next_visible_slot_number,
+                visible_increase,
+                result_sender,
+                shutdown_notifier: self.shutdown_notifier.clone(),
+                old_rollup_height: self.checkpoint.rollup_height_to_access(),
+                minimum_profit_per_tx,
+                state_update_notifier: self.state_update_notifier.subscribe(),
+                admin_addresses: self.seq_config.admin_addresses.clone().into(),
+                sequencer_rollup_address: self.seq_config.rollup_address.clone(),
+                sequencer_da_address: self.da_address.clone(),
+            };
+
+            move || rollup_block_task_body::<S, Rt>(ctx)
+        });
+
+        // Wait for the background task to get up and running, and send the
+        // initial change set.
+        trace!("Applying setup changes...");
+        let setup_changes = setup_receiver
+            .await
+            .context("Setup must finish successfully")
+            .expect("The sequencer can't recover from this error; this is a bug, please report it");
+        trace!("Applied setup changes");
+
+        self.checkpoint.apply_changes(setup_changes);
+        self.checkpoint
+            .advance_visible_slot_number(visible_increase);
+
+        self.rollup_block_task_state = Some(BackgroundTaskState {
+            handle,
+            tx_sender,
+            result_receiver,
+        });
+    }
+
     #[tracing::instrument(skip_all, level = "trace")]
     pub async fn start_rollup_block(
         &mut self,
-        start_blcock_data: StartBlockData<S>,
+        start_block_data: StartBlockData<S>,
         minimum_profit_per_tx: u128,
     ) {
         let StartBlockData {
             sanity_check_visible_slot_number_after_increase,
             visible_increase,
             node_state_root,
-        } = start_blcock_data;
+        } = start_block_data;
 
         assert!(
             self.rollup_block_task_state.is_none(),
