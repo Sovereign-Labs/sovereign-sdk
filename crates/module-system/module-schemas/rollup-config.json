@@ -151,6 +151,12 @@
         }
       ]
     },
+    "CipherType": {
+      "type": "string",
+      "enum": [
+        "aes256-gcm"
+      ]
+    },
     "CorsConfiguration": {
       "description": "See [`HttpServerConfig::cors`].\n\n# Default\n\nCross-origin resource sharing (CORS) makes local development easier, so it's enabled by default\n\nIn production, one may want to disable it and let your reverse proxy handle CORS instead. Security note: Allowing CORS in production allows making requests to rollup node any website on the Internet.",
       "oneOf": [
@@ -169,6 +175,40 @@
           ]
         }
       ]
+    },
+    "EncryptionConfig": {
+      "type": "object",
+      "required": [
+        "key_client"
+      ],
+      "properties": {
+        "cipher_type": {
+          "description": "Encryption cipher type to use",
+          "default": "aes256-gcm",
+          "allOf": [
+            {
+              "$ref": "#/definitions/CipherType"
+            }
+          ]
+        },
+        "key_client": {
+          "description": "Key client configuration",
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeyClientConfig"
+            }
+          ]
+        },
+        "key_rotation_interval": {
+          "description": "Key rotation interval (in seconds). If None, keys don't rotate",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
     },
     "HexHash": {
       "description": "32 bytes in hexadecimal format, with `0x` prefix.",
@@ -210,6 +250,37 @@
           ]
         }
       }
+    },
+    "KeyClientConfig": {
+      "oneOf": [
+        {
+          "description": "Static key configuration (no external fetching)",
+          "type": "object",
+          "required": [
+            "encryption_key",
+            "type"
+          ],
+          "properties": {
+            "decryption_key": {
+              "description": "Hex-encoded decryption key (if different from encryption key)",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "encryption_key": {
+              "description": "Hex-encoded encryption key",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "static"
+              ]
+            }
+          }
+        }
+      ]
     },
     "MockAddress": {
       "description": "Mock address; 32 bytes in hex-encoded format",
@@ -680,6 +751,18 @@
         "http_config"
       ],
       "properties": {
+        "batch_encryption": {
+          "description": "Optional batch encryption configuration for decrypting transaction batches received from the DA layer. This should match the sequencer's encryption config.",
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/EncryptionConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "concurrent_sync_tasks": {
           "description": "How many concurrent tasks to get block from DA service",
           "type": [
@@ -756,7 +839,7 @@
       ],
       "properties": {
         "admin_addresses": {
-          "description": "The list of addresses that are allowed to perform admin operations on the sequencer.",
+          "description": "The list of addresses that are allowed to perform admin operations on the sequencer. without the bound `Address: Default`.",
           "type": "array",
           "items": {
             "$ref": "#/definitions/Address"
@@ -766,6 +849,18 @@
           "description": "When enabled, submitted transactions are periodically assembled into batches and automatically posted to the DA layer. When disabled, the batch production endpoint has to be called explicitly.",
           "default": true,
           "type": "boolean"
+        },
+        "batch_encryption": {
+          "description": "Optional batch encryption configuration. When provided, serialized transaction batches will be encrypted before being submitted to the DA layer.",
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/EncryptionConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "blob_processing_timeout_secs": {
           "description": "Maximum time in seconds to wait for a blob to be processed.",

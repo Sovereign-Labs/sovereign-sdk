@@ -34,6 +34,12 @@ pub fn config_unregistered_blobs_per_slot() -> u64 {
     config_value!("UNREGISTERED_BLOBS_PER_SLOT")
 }
 
+/// Configuration for the BlobStorage module
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BlobStorageConfig {
+    // Currently no configuration needed for blob storage
+}
+
 /// The type of sequencer that published a blob.
 #[derive(
     Debug, PartialEq, Eq, Copy, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
@@ -262,7 +268,7 @@ impl<S: Spec> BlobStorage<S> {
 /// Empty module implementation
 impl<S: Spec> Module for BlobStorage<S> {
     type Spec = S;
-    type Config = ();
+    type Config = BlobStorageConfig;
     type CallMessage = NotInstantiable;
     type Event = ();
 
@@ -299,6 +305,38 @@ pub struct PreferredBatchData {
     pub visible_slots_to_advance: NonZero<u8>,
 }
 
+/// Extended batch data that includes transaction hashes for encrypted batches.
+/// Used when encryption is enabled to allow STF runners to access tx hashes
+/// without needing to decrypt and recompute them.
+#[derive(Debug, PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+pub struct PreferredBatchDataWithHashes {
+    /// The sequence number of the batch/proof.
+    pub sequence_number: u64,
+    /// The transaction data (with individual tx.data fields encrypted).
+    pub data: Arc<Vec<FullyBakedTx>>,
+    /// The number of visible slots to advance after processing the batch. Minimum 1.
+    pub visible_slots_to_advance: NonZero<u8>,
+    /// Transaction hashes corresponding to the transactions in data.
+    /// Included when the batch is encrypted to allow STF runners to access
+    /// transaction hashes without decrypting the transaction data.
+    pub tx_hashes: Arc<Vec<sov_modules_api::TxHash>>,
+}
+
+/// Encrypted batch data where the entire Vec<FullyBakedTx> is encrypted as one blob.
+/// Used when encryption is enabled for better efficiency than per-transaction encryption.
+#[derive(Debug, PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+pub struct EncryptedPreferredBatchData {
+    /// The sequence number of the batch.
+    pub sequence_number: u64,
+    /// The encrypted serialized Vec<FullyBakedTx> data.
+    pub encrypted_txs_data: Vec<u8>,
+    /// The number of visible slots to advance after processing the batch. Minimum 1.
+    pub visible_slots_to_advance: NonZero<u8>,
+    /// Transaction hashes corresponding to the transactions in encrypted_txs_data.
+    /// Included to allow STF runners to access tx hashes without decrypting.
+    pub tx_hashes: Arc<Vec<sov_modules_api::TxHash>>,
+}
+
 /// A trait implemented by blobs sent through the preferred sequencer.
 ///
 /// This allows the rollup to process them in order, even if they are
@@ -310,6 +348,12 @@ pub trait PreferredSequenced: Into<PreferredBlobData> {
 }
 
 impl PreferredSequenced for PreferredBatchData {
+    fn sequence_number(&self) -> SequenceNumber {
+        self.sequence_number
+    }
+}
+
+impl PreferredSequenced for EncryptedPreferredBatchData {
     fn sequence_number(&self) -> SequenceNumber {
         self.sequence_number
     }
@@ -358,6 +402,8 @@ pub struct PreferredBlobDataWithId {
 pub enum PreferredBlobData {
     /// A preferred blob from the batch namespace.
     Batch(PreferredBatchData),
+    /// An encrypted preferred blob from the batch namespace.
+    EncryptedBatch(EncryptedPreferredBatchData),
     /// A preferred blob from the proof namespace.
     Proof(PreferredProofData),
 }
@@ -367,19 +413,21 @@ impl PreferredBlobData {
     pub fn sequence_number(&self) -> u64 {
         match self {
             PreferredBlobData::Batch(b) => b.sequence_number,
+            PreferredBlobData::EncryptedBatch(b) => b.sequence_number,
             PreferredBlobData::Proof(p) => p.sequence_number,
         }
     }
 
     /// Returns true if the blob is a batch.
     pub fn is_batch(&self) -> bool {
-        matches!(self, PreferredBlobData::Batch(_))
+        matches!(self, PreferredBlobData::Batch(_) | PreferredBlobData::EncryptedBatch(_))
     }
 
     /// Returns the number of visible slots to advance after processing the blob if it's a batch.
     pub fn visible_slot_number_increase(&self) -> Option<u8> {
         match self {
             PreferredBlobData::Batch(b) => Some(b.visible_slots_to_advance.get()),
+            PreferredBlobData::EncryptedBatch(b) => Some(b.visible_slots_to_advance.get()),
             PreferredBlobData::Proof(_) => None,
         }
     }

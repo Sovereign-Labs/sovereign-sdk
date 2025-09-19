@@ -180,6 +180,7 @@ where
             Duration::from_secs(config.blob_processing_timeout_secs),
             blobs_sender_channel.clone(),
             config.sequencer_kind_config.is_replica,
+            config.batch_encryption.clone(),
         )
         .await?;
 

@@ -22,9 +22,12 @@ unix-client = ["tokio/net"]
 aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc", "getrandom"], optional = true }
 rand = { workspace = true, optional = true }
 
-# Async runtime (always needed for async trait)
-tokio = { workspace = true, features = ["time"] }
+# Async runtime (needed for key listener)
+tokio = { workspace = true, features = ["time", "net", "rt", "io-util"] }
 async-trait = { workspace = true }
+
+# Binary serialization for key exchange
+bincode = "1.3"
 
 
 # Serialization and utilities

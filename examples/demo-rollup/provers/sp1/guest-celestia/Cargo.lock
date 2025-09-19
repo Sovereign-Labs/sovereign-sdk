@@ -1960,6 +1960,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive-new"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2cdc8d50f426189eef89dac62fabfa0abb27d5cc008f25bf4156a0203325becc"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.106",
+]
+
+[[package]]
 name = "derive-where"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6268,9 +6279,11 @@ dependencies = [
  "anyhow",
  "borsh",
  "bytes",
+ "derive-new",
  "derive_more 1.0.0",
  "digest 0.10.7",
  "hex",
+ "itertools 0.14.0",
  "reth-ethereum-primitives",
  "reth-primitives",
  "reth-primitives-traits",

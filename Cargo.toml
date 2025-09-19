@@ -4,7 +4,6 @@ members = [
     "crates/rollup-interface",
     "crates/adapters/mock-da",
     "crates/adapters/mock-zkvm",
-    "crates/adapters/encrypted-da",
     "scripts/switcheroo",
     # Fuzzing
     "crates/fuzz",
@@ -157,6 +156,7 @@ sov-kernels = { path = "crates/module-system/sov-kernels", default-features = fa
 sov-state = { path = "crates/module-system/sov-state", default-features = false, version = "0.3" }
 sov-address = { path = "crates/module-system/sov-address", default-features = false, version = "0.3" }
 sov-rest-utils = { path = "crates/utils/sov-rest-utils", default-features = false, version = "0.3" }
+sov-encryption = { path = "crates/utils/sov-encryption" }
 sov-transaction-generator = { path = "crates/utils/transaction-generator", default-features = false, version = "0.3" }
 sov-metrics = { path = "crates/full-node/sov-metrics", default-features = false, version = "0.3" }
 sov-cli = { path = "crates/module-system/sov-cli", default-features = false, version = "0.3" }

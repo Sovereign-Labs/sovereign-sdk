@@ -60,6 +60,7 @@ impl PreferredBlobData {
         match self {
             PreferredBlobData::Proof(_) => BlobType::Proof,
             PreferredBlobData::Batch(_) => BlobType::Batch,
+            PreferredBlobData::EncryptedBatch(_) => BlobType::Batch,
         }
     }
 }
@@ -823,6 +824,11 @@ impl<S: Spec> BlobStorage<S> {
                 PreferredBlobData::Batch(batch) => {
                     BlobData::Batch((batch.data, preferred_sequencer.clone()))
                 }
+                PreferredBlobData::EncryptedBatch(_encrypted_batch) => {
+                    // Skip encrypted batches in STF processing - encryption is for sequencer layer only
+                    tracing::warn!("Skipping encrypted batch - decryption not implemented in STF layer");
+                    continue;
+                }
                 PreferredBlobData::Proof(proof) => {
                     BlobData::Proof((proof.data, preferred_sequencer.clone()))
                 }
@@ -1052,7 +1058,9 @@ impl<S: Spec> BlobStorage<S> {
                 state,
             ).expect("Failed to remove funds for deserialization even though the sender has enough balance. This should never happen.");
         }
-        match B::try_from_slice(data_for_deserialization(blob)) {
+        let data_to_deserialize = data_for_deserialization(blob);
+        
+        match B::try_from_slice(data_to_deserialize) {
             Ok(batch) => Some(batch),
             // if the blob is malformed, slash the sequencer
             Err(e) => {
@@ -1249,6 +1257,7 @@ fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> &[u8] {
 fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> &[u8] {
     blob.verified_data()
 }
+
 
 #[cfg(test)]
 mod tests {
