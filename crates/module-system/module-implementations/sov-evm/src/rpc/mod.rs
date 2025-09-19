@@ -496,9 +496,7 @@ where
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<ExecutionResult> {
-        let Some(block_env) = self.resolve_block_env(block_number, state) else {
-            return Err(eth_api_into_rpc_error(EthApiError::UnknownBlockOrTxIndex));
-        };
+        let block_env = self.resolve_block_env(block_number, state)?;
         let tx_env =
             prepare_call_env(&block_env, request.clone()).map_err(eth_api_into_rpc_error)?;
         let cfg = self.cfg_infallible(state);
@@ -637,9 +635,9 @@ where
     ) -> RpcResult<MaybeArchivalState<'a, S>> {
         let state = match block_number {
             None => MaybeArchivalState::Current(state),
-            Some(number) if number == "latest" => MaybeArchivalState::Current(state),
+            Some(number) if number == "pending" => MaybeArchivalState::Current(state),
             _ => {
-                let block_env = self.resolve_block_env(block_number, state).unwrap();
+                let block_env = self.resolve_block_env(block_number, state)?;
                 let archival_state = state
                     .get_archival_state(RollupHeight::new(block_env.number.to::<u64>()))
                     .map_err(into_rpc_error)?;
@@ -653,16 +651,19 @@ where
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<BlockEnv> {
-        match block_number {
+    ) -> Result<BlockEnv, EthApiError> {
+        let block = match block_number {
             Some(ref block_number) if block_number == "pending" => {
                 self.block_env.get(state).unwrap_infallible()
             }
-            _ => {
-                let block = self.get_sealed_block_by_number(block_number, state)?;
-                Some(BlockEnv::from(block))
-            }
-        }
+            _ => self
+                .get_sealed_block_by_number(block_number, state)
+                .map(BlockEnv::from),
+        };
+        let Some(block) = block else {
+            return Err(EthApiError::UnknownBlockOrTxIndex);
+        };
+        Ok(block)
     }
 }
 

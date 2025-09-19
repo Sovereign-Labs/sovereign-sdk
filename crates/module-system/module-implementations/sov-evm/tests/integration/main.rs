@@ -1,3 +1,4 @@
+mod archival_state;
 mod contracts;
 mod genesis;
 mod helpers;
