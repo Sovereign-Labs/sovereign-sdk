@@ -32,7 +32,7 @@ impl CacheWarmupExecutor {
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     ) -> (Self, Vec<JoinHandle<()>>) {
         let (tx_sender, tx_receiver) = flume::bounded(100);
-        let (close_batch_notification_sender, _) = tokio::sync::broadcast::channel::<()>(100);
+        let (start_batch_notification_sender, _) = tokio::sync::broadcast::channel::<()>(100);
 
         let mut handles = Vec::new();
         for _ in 0..5 {
@@ -41,7 +41,7 @@ impl CacheWarmupExecutor {
                 exec_config.clone(),
                 seq_config.clone(),
                 tx_receiver.clone(),
-                close_batch_notification_sender.subscribe(),
+                start_batch_notification_sender.subscribe(),
             );
 
             handles.push(worker);
@@ -50,7 +50,7 @@ impl CacheWarmupExecutor {
         (
             Self {
                 tx_sender,
-                close_batch_notification_sender,
+                start_batch_notification_sender,
             },
             handles,
         )
@@ -61,7 +61,7 @@ impl CacheWarmupExecutor {
         exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
         tx_receiver: flume::Receiver<FullyBakedTx>,
-        mut close_batch_notifier: tokio::sync::broadcast::Receiver<()>,
+        mut start_batch_notification_sender: tokio::sync::broadcast::Receiver<()>,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
             let mut executor =
@@ -71,7 +71,7 @@ impl CacheWarmupExecutor {
 
             loop {
                 tokio::select! {
-                    notify = close_batch_notifier.recv() => {
+                    notify = start_batch_notification_sender.recv() => {
                         match notify{
                             Ok(_) => {
                                 executor.shutdown().await;
@@ -116,12 +116,14 @@ impl CacheWarmupExecutor {
             .current_visible_slot_number()
             .advance(visible_increase.get().into());
 
+        let min_profit_per_tx = seq_config.sequencer_kind_config.minimum_profit_per_tx;
+
         executor
             .start_rollup_block(
                 sanity_check_visible_slot_number_after_increase,
                 visible_increase,
                 &node_state_root,
-                0,
+                min_profit_per_tx,
             )
             .await;
     }
