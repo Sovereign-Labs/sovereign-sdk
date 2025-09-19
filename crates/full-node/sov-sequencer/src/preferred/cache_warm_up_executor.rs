@@ -31,50 +31,20 @@ impl CacheWarmupExecutor {
         exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     ) -> (Self, Vec<JoinHandle<()>>) {
-        // TODO replace it with flume mpsc or crossbeam
         let (tx_sender, tx_receiver) = flume::bounded(100);
         let (close_batch_notification_sender, _) = tokio::sync::broadcast::channel::<()>(100);
 
         let mut handles = Vec::new();
         for _ in 0..5 {
-            let tx_receiver = tx_receiver.clone();
-            let mut close_batch_notifier = close_batch_notification_sender.subscribe();
+            let worker = Self::spawn_worker::<S, Rt>(
+                info.clone(),
+                exec_config.clone(),
+                seq_config.clone(),
+                tx_receiver.clone(),
+                close_batch_notification_sender.subscribe(),
+            );
 
-            let info = info.clone();
-            let exec_config = exec_config.clone();
-            let seq_config = seq_config.clone();
-
-            let h = tokio::spawn(async move {
-                let mut executor =
-                    RollupBlockExecutor::<_, Rt>::new(&info, exec_config, seq_config.clone());
-
-                Self::start_block(&seq_config, &info, &mut executor).await;
-
-                loop {
-                    tokio::select! {
-                        notify = close_batch_notifier.recv() => {
-                            match notify{
-                                Ok(_) => {
-                                    executor.shutdown().await;
-                                    // TODO replace state
-                                    Self::start_block(&seq_config, &info, &mut executor).await;
-                                },
-                                Err(e) =>{ todo!() }
-                            }
-                        }
-
-                        tx = tx_receiver.recv_async() => {
-                            let baked_tx = match tx {
-                                 Ok(tx) => tx,
-                                 Err(e) => todo!(),
-                            };
-                            let _ = executor.apply_tx_to_in_progress_batch(&baked_tx).await;
-                        }
-                    }
-                }
-            });
-
-            handles.push(h);
+            handles.push(worker);
         }
 
         (
@@ -84,6 +54,44 @@ impl CacheWarmupExecutor {
             },
             handles,
         )
+    }
+
+    fn spawn_worker<S: Spec, Rt: Runtime<S>>(
+        info: StateUpdateInfo<S::Storage>,
+        exec_config: RollupBlockExecutorConfig<S>,
+        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        tx_receiver: flume::Receiver<FullyBakedTx>,
+        mut close_batch_notifier: tokio::sync::broadcast::Receiver<()>,
+    ) -> JoinHandle<()> {
+        tokio::spawn(async move {
+            let mut executor =
+                RollupBlockExecutor::<_, Rt>::new(&info, exec_config, seq_config.clone());
+
+            Self::start_block(&seq_config, &info, &mut executor).await;
+
+            loop {
+                tokio::select! {
+                    notify = close_batch_notifier.recv() => {
+                        match notify{
+                            Ok(_) => {
+                                executor.shutdown().await;
+                                // TODO replace state
+                                Self::start_block(&seq_config, &info, &mut executor).await;
+                            },
+                            Err(e) =>{ todo!() }
+                        }
+                    }
+
+                    tx = tx_receiver.recv_async() => {
+                        let baked_tx = match tx {
+                             Ok(tx) => tx,
+                             Err(e) => todo!(),
+                        };
+                        let _ = executor.apply_tx_to_in_progress_batch(&baked_tx).await;
+                    }
+                }
+            }
+        })
     }
 
     async fn start_block<S: Spec, Rt: Runtime<S>>(

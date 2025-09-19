@@ -225,12 +225,16 @@ where
         };
 
         // TODO jhs
-        let (cache_warmup_executor, _) = CacheWarmupExecutor::spawn_execution_task::<S, Rt>(
+        let (cache_warmup_executor, workers) = CacheWarmupExecutor::spawn_execution_task::<S, Rt>(
             latest_state_update.clone(),
             rollup_exec_config.clone(),
             config.clone(),
         )
         .await;
+
+        for worker in workers {
+            handles.push(worker)
+        }
 
         let tx_queue_id = Arc::new(AtomicU64::new(0));
         let (synchronized_state, synchronized_state_updator) = create(
