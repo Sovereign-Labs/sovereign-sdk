@@ -19,11 +19,15 @@ pub(crate) struct CacheWarmupExecutor {
 
 impl CacheWarmupExecutor {
     pub(crate) fn send_batch_start_notification(&self) {
+        //println!("Start send_batch_start_notification");
         let _ = self.start_batch_notification_sender.send(());
+        //println!("End send_batch_start_notification");
     }
 
     pub(crate) async fn send_tx(&self, tx: FullyBakedTx) {
+        //println!("Start send_tx");
         let _ = self.tx_sender.send_async(tx).await;
+        //println!("End send_tx");
     }
 
     pub(crate) async fn spawn_execution_task<S: Spec, Rt: Runtime<S>>(
@@ -31,11 +35,12 @@ impl CacheWarmupExecutor {
         exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     ) -> (Self, Vec<JoinHandle<()>>) {
+        println!("spawn_execution_task");
         let (tx_sender, tx_receiver) = flume::bounded(100);
         let (start_batch_notification_sender, _) = tokio::sync::broadcast::channel::<()>(100);
 
         let mut handles = Vec::new();
-        for _ in 0..5 {
+        for _ in 0..1 {
             let worker = Self::spawn_worker::<S, Rt>(
                 info.clone(),
                 exec_config.clone(),
@@ -63,20 +68,24 @@ impl CacheWarmupExecutor {
         tx_receiver: flume::Receiver<FullyBakedTx>,
         mut start_batch_notification_sender: tokio::sync::broadcast::Receiver<()>,
     ) -> JoinHandle<()> {
+        println!("spawn_worker");
         tokio::spawn(async move {
             let mut executor =
                 RollupBlockExecutor::<_, Rt>::new(&info, exec_config, seq_config.clone());
 
-            Self::start_block(&seq_config, &info, &mut executor).await;
+            // Self::start_block(&seq_config, &info, &mut executor).await;
 
             loop {
                 tokio::select! {
                     notify = start_batch_notification_sender.recv() => {
                         match notify{
                             Ok(_) => {
-                                executor.shutdown().await;
+
+
+                                //executor.shutdown().await;
                                 // TODO replace state
-                                Self::start_block(&seq_config, &info, &mut executor).await;
+                                //Self::start_block(&seq_config, &info, &mut executor).await;
+                                println!("recv start block");
                             },
                             Err(e) =>{ todo!() }
                         }
@@ -87,7 +96,8 @@ impl CacheWarmupExecutor {
                              Ok(tx) => tx,
                              Err(e) => todo!(),
                         };
-                        let _ = executor.apply_tx_to_in_progress_batch(&baked_tx).await;
+                        //let _ = executor.apply_tx_to_in_progress_batch(&baked_tx).await;
+                        println!("recv tx");
                     }
                 }
             }

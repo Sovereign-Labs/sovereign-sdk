@@ -611,7 +611,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         }
     }
 
-    pub async fn shutdown(&mut self) {
+    pub async fn _shutdown(&mut self) {
         let task_state = self
             .rollup_block_task_state
             .take()

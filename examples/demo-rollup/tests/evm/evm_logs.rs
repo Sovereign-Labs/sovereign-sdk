@@ -64,7 +64,7 @@ async fn evm_test_get_logs_range() {
     let contract_address = evm_client.alloy_deploy_contract().await;
     test_rollup.wait_for_next_blocks(1).await;
 
-    let nb_of_txs = 10;
+    let nb_of_txs = 1000;
     let nb_of_logs_per_tx = 5;
 
     let start_block = evm_client

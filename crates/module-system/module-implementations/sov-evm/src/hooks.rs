@@ -68,7 +68,6 @@ impl<S: Spec> BlockHooks for Evm<S> {
         };
 
         let gm = new_pending_env.gas_limit;
-        println!("gm {:?}", gm);
 
         self.block_env
             .set(&new_pending_env, state)
