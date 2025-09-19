@@ -49,10 +49,15 @@ pub(crate) fn prepare_call_env(
     Ok(env)
 }
 
-pub(crate) fn from_primitive_with_hash(
-    primitive_header: Sealed<alloy_consensus::Header>,
-) -> Header {
-    Header::from_consensus(primitive_header, None, None)
+pub(crate) fn from_primitive_with_hash(primitive_header: &alloy_consensus::Header) -> Header {
+    Header {
+        hash: todo!(),
+        inner: todo!(),
+        total_difficulty: todo!(),
+        size: todo!(),
+    }
+
+    //Header::from_consensus(primitive_header, None, None)
 }
 
 /// copy from [`reth_rpc_types_compat::transaction::from_recovered_with_block_context`]

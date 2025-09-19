@@ -108,8 +108,9 @@ where
 
         let maybe_block = || -> Option<Block> {
             let block = self.get_sealed_block_by_number(block_number, state)?;
-            let header = from_primitive_with_hash(block.header.clone());
+            let header = from_primitive_with_hash(block.header());
 
+            /*
             let transactions = if Some(true) == details {
                 BlockTransactions::Full(
                     block
@@ -143,7 +144,8 @@ where
                 header,
                 transactions,
                 ..Default::default()
-            })
+            })*/
+            None
         };
 
         Ok(maybe_block())
@@ -570,14 +572,18 @@ where
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<SealedBlock> {
+    ) -> Option<MaybeSealedBlock> {
         let pending_or_block_nr = self.str_to_block_nr(block_number, state);
 
         match pending_or_block_nr {
-            PendingOrBlock::Number(nr) => self.blocks.get(&nr, state).unwrap_infallible(),
+            PendingOrBlock::Number(nr) => self
+                .blocks
+                .get(&nr, state)
+                .unwrap_infallible()
+                .map(MaybeSealedBlock::Sealed),
             PendingOrBlock::Pending => {
                 let pending_block = self.pending_block(state);
-                Some(pending_block.seal())
+                Some(MaybeSealedBlock::Pending(pending_block))
             }
             PendingOrBlock::Invalid(invalid) => {
                 tracing::error!(invalid, "Invalid block number");
@@ -638,14 +644,9 @@ where
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> Option<BlockEnv> {
-        match block_number {
-            Some(ref block_number) if block_number == "pending" => {
-                self.block_env.get(state).unwrap_infallible()
-            }
-            _ => {
-                let block = self.get_sealed_block_by_number(block_number, state)?;
-                Some(BlockEnv::from(block))
-            }
+        match self.get_sealed_block_by_number(block_number, state)? {
+            MaybeSealedBlock::Pending(_) => self.block_env.get(state).unwrap_infallible(),
+            MaybeSealedBlock::Sealed(sealed_block) => Some(BlockEnv::from(sealed_block)),
         }
     }
 }
