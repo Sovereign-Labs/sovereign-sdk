@@ -635,7 +635,9 @@ where
     ) -> RpcResult<MaybeArchivalState<'a, S>> {
         let state = match block_number {
             None => MaybeArchivalState::Current(state),
-            Some(number) if number == "pending" => MaybeArchivalState::Current(state),
+            Some(number) if number == "pending" || number == "latest" => {
+                MaybeArchivalState::Current(state)
+            }
             _ => {
                 let block_env = self.resolve_block_env(block_number, state)?;
                 let archival_state = state
