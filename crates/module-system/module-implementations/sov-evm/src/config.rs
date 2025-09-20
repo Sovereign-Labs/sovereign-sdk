@@ -7,7 +7,7 @@ use crate::AccountData;
 /// Core EVM chain parameters shared between genesis and runtime
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
 pub struct EvmChainSpec {
-    /// Maximum contract code size (None = unlimited)
+    /// Maximum contract code size (None = default. Currently 512KiB)
     pub limit_contract_code_size: Option<usize>,
     /// Address where transaction fees are collected
     pub coinbase: Address,
