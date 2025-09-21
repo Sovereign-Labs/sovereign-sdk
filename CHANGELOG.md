@@ -1,3 +1,6 @@
+# 2025-09-21
+- #1729 **BREAKING CHANGE** Adds `num_cache_warmup_workers` to `xxx_rollup_config.toml`. This field specifies the number of workers responsible for warming up the executor cache in the preferred sequencer.
+
 # 2025-09-19
 - #1723 **Breaking change** Introduced an optional `[sequencer.extension]` section in the rollup config, this section is required for `EVM` rollups.
 
