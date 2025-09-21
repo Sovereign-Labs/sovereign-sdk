@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! See [`PreferredSequencer`].
 
 mod async_batch;
@@ -16,7 +15,7 @@ mod transaction_subscriptions;
 mod update_state;
 
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
-use crate::preferred::cache_warm_up_executor::CacheWarmupExecutor;
+use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
 use async_trait::async_trait;
 use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
@@ -102,7 +101,7 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     /// The sender for state update notifications. Currently used only for testing.
     test_only_state_update_notification_sender: broadcast::Sender<StateUpdateNotification>,
-    cache_warmup_executor: CacheWarmupExecutor,
+    cache_warm_up_executor: CacheWarmUpExecutor<S>,
 }
 
 impl<S, Rt, Da> PreferredSequencer<S, Rt, Da>
@@ -225,7 +224,7 @@ where
             shutdown_sender: shutdown_sender.clone(),
         };
 
-        let (cache_warmup_executor, workers) = CacheWarmupExecutor::spawn_execution_task::<S, Rt>(
+        let (cache_warm_up_executor, workers) = CacheWarmUpExecutor::spawn_execution_task::<Rt>(
             latest_state_update.clone(),
             rollup_exec_config.clone(),
             config.clone(),
@@ -233,7 +232,7 @@ where
         .await;
 
         for worker in workers {
-            handles.push(worker)
+            handles.push(worker);
         }
 
         let tx_queue_id = Arc::new(AtomicU64::new(0));
@@ -251,7 +250,7 @@ where
             stop_at_rollup_height,
             rollup_exec_config.clone(),
             cached_txs.write_handle(),
-            cache_warmup_executor.clone(),
+            cache_warm_up_executor.clone(),
         );
 
         let synchronized_state_task = synchronized_state.start().await;
@@ -281,7 +280,7 @@ where
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_sender: broadcast::channel(100).0,
-            cache_warmup_executor,
+            cache_warm_up_executor,
         });
 
         // Launch replica sync task only for replicas
@@ -824,6 +823,8 @@ where
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
             return Err(shut_down_error());
         }
+
+        self.cache_warm_up_executor.send_tx(baked_tx.clone());
         let original_tx_queue_id = self.tx_queue_id.load(Ordering::Acquire);
 
         let tx_hash = Rt::Auth::compute_tx_hash(&baked_tx).map_err(generic_accept_tx_error)?;

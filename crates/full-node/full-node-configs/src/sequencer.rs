@@ -157,6 +157,8 @@ pub struct PreferredSequencerConfig {
     /// It will sync from the master sequencer's database but remain read-only.
     #[serde(default)]
     pub is_replica: bool,
+    /// The number of workers that warm up the main executor cache.
+    pub num_cache_warmup_workers: usize,
 }
 
 impl Default for PreferredSequencerConfig {
@@ -171,6 +173,7 @@ impl Default for PreferredSequencerConfig {
             is_replica: false,
             db_event_channel_size: default_db_event_channel_size(),
             batch_execution_time_limit_millis: 6_000, // 6 seconds
+            num_cache_warmup_workers: 0,
         }
     }
 }

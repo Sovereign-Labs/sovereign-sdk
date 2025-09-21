@@ -12,7 +12,7 @@ impl<S: Spec> Uniqueness<S> {
         let nonce = self.nonces.get(credential_id, state)?.unwrap_or_default();
 
         anyhow::ensure!(
-            nonce == transaction_nonce,
+            nonce <= transaction_nonce,
             "Tx bad nonce for credential id: {credential_id}, expected: {nonce}, but found: {transaction_nonce}",
         );
 

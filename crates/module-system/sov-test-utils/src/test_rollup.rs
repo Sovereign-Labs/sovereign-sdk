@@ -50,7 +50,7 @@ use tokio::time::Duration;
 
 use crate::{
     TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
-    TEST_MAX_CONCURRENT_BLOBS,
+    TEST_MAX_CONCURRENT_BLOBS, TEST_NUM_CACHE_WARMUP_WORKERS,
 };
 
 /// Specifies how to source the genesis data for a rollup.
@@ -104,6 +104,7 @@ pub struct RollupBuilderConfig<S: Spec, StoragePath = Arc<tempfile::TempDir>> {
     pub start_at_rollup_height: Option<RollupHeight>,
     pub stop_at_rollup_height: Option<RollupHeight>,
     pub extension: Option<SeqConfigExtension>,
+    pub num_cache_warmup_workers: usize,
 }
 
 /// A one-stop shop for building entire rollups and starting them in the
@@ -231,6 +232,7 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
                 extension: Some(SeqConfigExtension {
                     max_log_limit: 20000,
                 }),
+                num_cache_warmup_workers: TEST_NUM_CACHE_WARMUP_WORKERS,
             },
             with_secondary_sequencer: None,
         }
