@@ -440,6 +440,10 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             self.rollup_block_task_state
         );
 
+        if state_roots.len() > 5 {
+            panic!("LOOOL {:?}", state_roots.len());
+        }
+
         self.state_roots = state_roots;
         self.update_kernel_with_user_state_root();
         self.spawn_exec_task(start_block_data).await;

@@ -824,7 +824,6 @@ where
             return Err(shut_down_error());
         }
 
-        self.cache_warm_up_executor.send_tx(baked_tx.clone());
         let original_tx_queue_id = self.tx_queue_id.load(Ordering::Acquire);
 
         let tx_hash = Rt::Auth::compute_tx_hash(&baked_tx).map_err(generic_accept_tx_error)?;
@@ -852,6 +851,7 @@ where
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             tracing::debug!(%tx_hash, "Transaction delay completed, proceeding with processing");
         }
+        self.cache_warm_up_executor.send_tx(baked_tx.clone());
 
         let res = self
             .synchronized_state_updator
