@@ -1,10 +1,7 @@
 use anyhow::Result;
-use ethers::types::TransactionReceipt;
 use sov_eth_client::TestClient;
 use sov_test_utils::SimpleStorageContract;
 use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::time::{sleep, Duration};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -12,7 +9,7 @@ async fn main() -> Result<()> {
     let chain_id = 4321;
     let private_key = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
     let contract = SimpleStorageContract::default();
-    let client = Arc::new(TestClient::new(chain_id, private_key, contract, rpc_addr).await);
+    let client = TestClient::new(chain_id, private_key, contract, rpc_addr).await;
 
     let deploy_receipt = client
         .deploy_contract()

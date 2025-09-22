@@ -204,7 +204,7 @@ impl TestClient {
         contract_address: H160,
         set_arg: u32,
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
-        let typed_transaction = self.make_eip1559_tx(
+        let mut typed_transaction = self.make_eip1559_tx(
             Some(contract_address),
             Some(self.contract.set_call_data(set_arg)),
         );
@@ -212,7 +212,7 @@ impl TestClient {
 
         typed_transaction.set_gas(gas);
 
-        let response = self.eth_call(typed_transaction_with_gas).await?;
+        let response = self.eth_call(typed_transaction).await?;
 
         Ok(response)
     }
