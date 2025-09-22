@@ -3489,7 +3489,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 2.0.106",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -11382,7 +11382,7 @@ dependencies = [
  "sov-test-utils",
  "sov-value-setter",
  "strum 0.26.3",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tokio",
  "tracing",
 ]
@@ -11406,7 +11406,7 @@ dependencies = [
  "sov-test-utils",
  "strum 0.26.3",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tracing",
 ]
 
@@ -11567,7 +11567,7 @@ dependencies = [
  "tendermint",
  "tendermint-proto",
  "test-strategy",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tokio",
  "tower 0.5.2",
  "tracing",
@@ -11594,7 +11594,7 @@ dependencies = [
  "sov-value-setter",
  "strum 0.26.3",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tracing",
 ]
 
@@ -11814,7 +11814,7 @@ dependencies = [
  "reth-primitives",
  "revm",
  "secp256k1 0.30.0",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -11905,7 +11905,7 @@ dependencies = [
  "sov-universal-wallet",
  "strum 0.26.3",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tokio",
  "tracing",
 ]
@@ -12076,7 +12076,7 @@ dependencies = [
  "sha2 0.10.9",
  "sov-mock-zkvm",
  "sov-rollup-interface",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -12144,7 +12144,7 @@ dependencies = [
  "sov-test-utils",
  "sov-universal-wallet",
  "strum 0.26.3",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tokio",
  "toml 0.8.23",
  "tracing",
@@ -12241,7 +12241,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tokio",
  "tracing",
 ]
@@ -12277,7 +12277,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "strum 0.26.3",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tracing",
 ]
 
@@ -12330,7 +12330,7 @@ dependencies = [
  "sov-value-setter",
  "strum 0.26.3",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tracing",
 ]
 
@@ -12349,7 +12349,7 @@ dependencies = [
  "serde_urlencoded",
  "sov-rest-utils",
  "test-strategy",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tokio",
  "tower 0.5.2",
  "tower-http 0.5.2",
@@ -12378,7 +12378,7 @@ dependencies = [
  "sov-sequencer-registry",
  "sov-test-utils",
  "strum 0.26.3",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -12407,7 +12407,7 @@ dependencies = [
  "sov-risc0-adapter",
  "sov-rollup-interface",
  "sov-zkvm-utils",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tracing",
  "tracing-subscriber 0.3.20",
 ]
@@ -12470,7 +12470,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-universal-wallet",
  "test-strategy",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tokio",
  "tracing",
 ]
@@ -12490,7 +12490,7 @@ dependencies = [
  "reth-errors",
  "reth-primitives-traits",
  "revm",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -12549,7 +12549,7 @@ dependencies = [
  "strum 0.26.3",
  "tempfile",
  "test-strategy",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -12578,7 +12578,7 @@ dependencies = [
  "sov-test-utils",
  "sov-value-setter",
  "strum 0.26.3",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tracing",
 ]
 
@@ -12773,7 +12773,7 @@ dependencies = [
  "sov-test-utils",
  "strum 0.26.3",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tokio",
  "toml 0.8.23",
  "tower 0.5.2",
@@ -12820,7 +12820,7 @@ dependencies = [
  "sov-universal-wallet",
  "strum 0.26.3",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tracing",
 ]
 
@@ -12920,7 +12920,7 @@ dependencies = [
  "sov-test-utils",
  "sov-value-setter",
  "strum 0.26.3",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "tracing",
 ]
 
@@ -12974,7 +12974,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-universal-wallet",
  "sov-universal-wallet-macros",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -13018,7 +13018,7 @@ dependencies = [
  "sov-value-setter",
  "strum 0.26.3",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
