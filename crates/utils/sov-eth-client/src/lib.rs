@@ -25,6 +25,8 @@ use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
 use sov_cli::NodeClient;
 use sov_modules_api::{Runtime, Spec};
 use sov_test_utils::SimpleStorageContract;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 const GAS: u64 = 9000000u64;
 const MAX_FEE_PER_GAS: u64 = 100;
@@ -38,6 +40,7 @@ pub struct TestClient {
     pub client: SignerMiddleware<Provider<Http>, Wallet<SigningKey>>,
     node_client: NodeClient,
     rpc: WsClient,
+    nonce: Arc<AtomicU64>,
 }
 
 async fn pubsub(conn_str: &str) -> RootProvider {
@@ -75,14 +78,20 @@ impl TestClient {
             .await
             .unwrap();
 
+        // Fetch initial nonce from the network
+        let from_addr = client.address();
+        let initial_nonce = client.get_transaction_count(from_addr, None).await.unwrap().as_u64();
+        let nonce = Arc::new(AtomicU64::new(initial_nonce));
+
         Self {
             chain_id,
-            from_addr: client.address(),
+            from_addr,
             contract,
             pub_sub,
             client,
             node_client,
             rpc,
+            nonce,
         }
     }
 
@@ -97,10 +106,11 @@ impl TestClient {
 
     fn make_eip1559_tx(
         &self,
-        nonce: u64,
         to_address: Option<Address>,
         data: Option<ethers::core::types::Bytes>,
     ) -> TypedTransaction {
+        // Get next nonce atomically
+        let nonce = self.nonce.fetch_add(1, Ordering::SeqCst);
         let mut req = self.default_request().nonce(nonce);
 
         if let Some(data) = data {
@@ -117,8 +127,7 @@ impl TestClient {
     pub async fn deploy_contract(
         &self,
     ) -> Result<PendingTransaction<'_, Http>, Box<dyn std::error::Error>> {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-        let typed_transaction = self.make_eip1559_tx(nonce, None, Some(self.contract.byte_code()));
+        let typed_transaction = self.make_eip1559_tx(None, Some(self.contract.byte_code()));
         let receipt_req = self
             .client
             .send_transaction(typed_transaction, None)
@@ -128,8 +137,7 @@ impl TestClient {
     }
 
     pub async fn deploy_contract_call(&self) -> Result<Bytes, Box<dyn std::error::Error>> {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-        let typed_transaction = self.make_eip1559_tx(nonce, None, Some(self.contract.byte_code()));
+        let typed_transaction = self.make_eip1559_tx(None, Some(self.contract.byte_code()));
         let receipt_req = self.eth_call(typed_transaction).await?;
 
         Ok(receipt_req)
@@ -140,12 +148,7 @@ impl TestClient {
         contract_address: H160,
         set_arg: u32,
     ) -> PendingTransaction<'_, Http> {
-        // TODO: Re-evaluate if it's still needed after we migrate from ethers
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-        tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
-
         let typed_transaction = self.make_eip1559_tx(
-            nonce,
             Some(contract_address),
             Some(self.contract.set_call_data(set_arg)),
         );
@@ -159,11 +162,9 @@ impl TestClient {
         set_args: Vec<u32>,
     ) -> Vec<PendingTransaction<'_, Http>> {
         let mut requests: Vec<_> = Vec::with_capacity(set_args.len());
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
 
-        for (i, set_arg) in set_args.into_iter().enumerate() {
+        for set_arg in set_args.into_iter() {
             let typed_transaction = self.make_eip1559_tx(
-                nonce + (i as u64),
                 Some(contract_address),
                 Some(self.contract.set_call_data(set_arg)),
             );
@@ -183,11 +184,7 @@ impl TestClient {
         contract_address: H160,
         set_arg: u32,
     ) -> PendingTransaction<'_, Http> {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-        tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
-
         let typed_transaction = self.make_eip1559_tx(
-            nonce,
             Some(contract_address),
             Some(self.contract.set_call_data(set_arg)),
         );
@@ -203,10 +200,7 @@ impl TestClient {
         contract_address: H160,
         set_arg: u32,
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-
         let typed_transaction = self.make_eip1559_tx(
-            nonce,
             Some(contract_address),
             Some(self.contract.set_call_data(set_arg)),
         );
@@ -226,10 +220,7 @@ impl TestClient {
         &self,
         contract_address: H160,
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-
         let typed_transaction = self.make_eip1559_tx(
-            nonce,
             Some(contract_address),
             Some(self.contract.failing_function_call_data()),
         );
@@ -244,10 +235,7 @@ impl TestClient {
         PendingTransaction<'_, Http>,
         SignerMiddlewareError<Provider<Http>, Wallet<SigningKey>>,
     > {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-
         let typed_transaction = self.make_eip1559_tx(
-            nonce,
             Some(contract_address),
             Some(self.contract.always_revert()),
         );
@@ -259,10 +247,7 @@ impl TestClient {
         &self,
         contract_address: H160,
     ) -> Result<ethereum_types::U256, Box<dyn std::error::Error>> {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-
         let typed_transaction = self.make_eip1559_tx(
-            nonce,
             Some(contract_address),
             Some(self.contract.get_call_data()),
         );
@@ -358,10 +343,7 @@ impl TestClient {
     }
 
     pub async fn send_eth(&self, reciever: H160, eth_value: u128) -> PendingTransaction<'_, Http> {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-        tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
-
-        let mut typed_transaction = self.make_eip1559_tx(nonce, Some(reciever), None);
+        let mut typed_transaction = self.make_eip1559_tx(Some(reciever), None);
         
         // Set the value for ETH transfer
         if let TypedTransaction::Eip1559(ref mut req) = typed_transaction {
@@ -385,8 +367,7 @@ impl TestClient {
 
 impl TestClient {
     pub async fn alloy_deploy_contract(&self) -> alloy_primitives::Address {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-        let typed_transaction = self.make_eip1559_tx(nonce, None, Some(self.contract.byte_code()));
+        let typed_transaction = self.make_eip1559_tx(None, Some(self.contract.byte_code()));
         let addr = self
             .client
             .send_transaction(typed_transaction, None)
@@ -428,11 +409,7 @@ impl TestClient {
         contract_address: alloy_primitives::Address,
         set_arg: u32,
     ) -> alloy_primitives::TxHash {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-        tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
-
         let typed_transaction = self.make_eip1559_tx(
-            nonce,
             Some(ethers::core::abi::Address::from_slice(
                 contract_address.as_slice(),
             )),
@@ -455,11 +432,7 @@ impl TestClient {
         topic: u32,
         nb_of_logs: u32,
     ) -> alloy_primitives::TxHash {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-        tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
-
         let typed_transaction = self.make_eip1559_tx(
-            nonce,
             Some(ethers::core::abi::Address::from_slice(
                 contract_address.as_slice(),
             )),
