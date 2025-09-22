@@ -71,6 +71,7 @@ where
     )?;
 
     rpc.register_async_method("eth_getLogs", handlers::eth_get_logs)?;
+    rpc.register_async_method("eth_getLogsWithCursor", handlers::eth_get_logs_with_cursor)?;
     rpc.register_subscription(
         "eth_subscribe",
         "eth_subscription",

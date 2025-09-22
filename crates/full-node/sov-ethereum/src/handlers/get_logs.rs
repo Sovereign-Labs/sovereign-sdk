@@ -38,6 +38,20 @@ where
     logs_for_filter(parameters.one::<Filter>()?, ethereum).await
 }
 
+pub async fn eth_get_logs_with_cursor<S, Seq>(
+    parameters: JRpcParams<'static>,
+    ethereum: Arc<Ethereum<S, Seq>>,
+    _: Extensions,
+) -> Result<Vec<Log>, ErrorObjectOwned>
+where
+    S: Spec,
+    Seq: Sequencer<Spec = S>,
+    S::Address: FromVmAddress<EthereumAddress>,
+    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
+{
+    logs_for_filter(parameters.one::<Filter>()?, ethereum).await
+}
+
 async fn logs_for_filter<S, Seq>(
     filter: Filter,
     ethereum: Arc<Ethereum<S, Seq>>,

@@ -150,3 +150,49 @@ fn check_logs(filter: &Filter, logs: Vec<alloy_rpc_types_eth::Log>, expected_nb_
         assert!(filter.matches(log.inner.as_ref()));
     }
 }
+
+/// Filter for logs.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct FilterWithCursor {
+    pub cursor: Option<u64>,
+    pub block_option: FilterBlockOption,
+    pub address: FilterSet<Address>,
+    pub topics: [Topic; 4],
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn evm_test_get_logs_with_cursor() {
+    let (test_rollup, evm_client, _) = setup(0, EVM_EXTENSION).await;
+
+    let (test_rollup, evm_client, _) = setup(0, EVM_EXTENSION).await;
+    let contract_address = evm_client.alloy_deploy_contract().await;
+    test_rollup.wait_for_next_blocks(1).await;
+
+    let nb_of_txs = 20;
+    let nb_of_logs_per_tx: u32 = 5;
+
+    let start_block = evm_client
+        .alloy_get_block_by_number(Some(BlockNumberOrTag::Latest.to_string()))
+        .await
+        .number();
+
+    let mut tx_hashes = Vec::new();
+    for i in 0..nb_of_txs {
+        let hash = evm_client
+            .alloy_emit_logs(contract_address, i, nb_of_logs_per_tx)
+            .await;
+        tx_hashes.push(hash);
+        if i % 3 == 0 {
+            test_rollup.wait_for_next_blocks(1).await;
+        }
+    }
+    test_rollup.wait_for_next_blocks(1).await;
+
+    let filter = Filter::new()
+        .from_block(start_block - 2)
+        .to_block(BlockNumberOrTag::Latest);
+
+    let logs = evm_client.get_logs_with_cursor(&filter).await;
+
+    println!("Logs {:?}", logs.len());
+}

@@ -490,6 +490,13 @@ impl TestClient {
             .unwrap()
     }
 
+    pub async fn get_logs_with_cursor(&self, filter: &Filter) -> Vec<Log> {
+        self.rpc
+            .request("eth_getLogsWithCursor", rpc_params![filter])
+            .await
+            .unwrap()
+    }
+
     pub async fn get_logs(&self, filter: &Filter) -> Vec<Log> {
         self.pub_sub.get_logs(filter).await.unwrap()
     }
