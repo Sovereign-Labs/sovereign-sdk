@@ -254,9 +254,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-evm"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2b2845e4c4844e53dd08bf24d3af7b163ca7d1e3c68eb587e38c4e976659089"
+checksum = "48e536feefca2ba96c75798ac75a31046e8adfcefecdb6653803361045cc65b9"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -12480,7 +12480,7 @@ name = "sov-rpc-eth-types"
 version = "0.3.0"
 dependencies = [
  "alloy-eips",
- "alloy-evm 0.21.0",
+ "alloy-evm 0.21.1",
  "alloy-primitives",
  "alloy-rpc-types",
  "alloy-sol-types",
