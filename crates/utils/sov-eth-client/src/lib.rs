@@ -11,7 +11,7 @@ use ethereum_types::H160;
 use ethers::core::abi::Address;
 use ethers::core::k256::ecdsa::SigningKey;
 use ethers::core::types::transaction::eip2718::TypedTransaction;
-use ethers::core::types::{Block, Eip1559TransactionRequest, TransactionRequest, TxHash};
+use ethers::core::types::{Block, Eip1559TransactionRequest, TxHash};
 use ethers::core::types::{Transaction, TransactionReceipt};
 use ethers::middleware::signer::SignerMiddlewareError;
 use ethers::middleware::SignerMiddleware;
@@ -205,25 +205,19 @@ impl TestClient {
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
 
-        // Any type of transaction can be used for eth_call
-        let req = TransactionRequest::new()
-            .from(self.from_addr)
-            .to(contract_address)
-            .chain_id(self.chain_id)
-            .nonce(nonce)
-            .data(self.contract.set_call_data(set_arg))
-            .gas_price(10u64);
-
-        let typed_transaction = TypedTransaction::Legacy(req.clone());
-
-        // Estimate gas on RPC
-        let gas = self.eth_estimate_gas(typed_transaction).await;
-
-        // Call with the estimated gas
-        let req = req.gas(gas);
-        let typed_transaction = TypedTransaction::Legacy(req);
-
-        let response = self.eth_call(typed_transaction).await?;
+        let typed_transaction = self.make_eip1559_tx(
+            nonce,
+            Some(contract_address),
+            Some(self.contract.set_call_data(set_arg)),
+        );
+        let gas = self.eth_estimate_gas(typed_transaction.clone()).await;
+        
+        let mut typed_transaction_with_gas = typed_transaction;
+        if let TypedTransaction::Eip1559(ref mut req) = typed_transaction_with_gas {
+            *req = req.clone().gas(gas);
+        }
+        
+        let response = self.eth_call(typed_transaction_with_gas).await?;
 
         Ok(response)
     }
@@ -367,13 +361,12 @@ impl TestClient {
         let nonce = self.eth_get_transaction_count(self.from_addr).await;
         tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
 
-        let req = self
-            .default_request()
-            .nonce(nonce)
-            .to(reciever)
-            .value(eth_value);
-
-        let typed_transaction = TypedTransaction::Eip1559(req);
+        let mut typed_transaction = self.make_eip1559_tx(nonce, Some(reciever), None);
+        
+        // Set the value for ETH transfer
+        if let TypedTransaction::Eip1559(ref mut req) = typed_transaction {
+            *req = req.clone().value(eth_value);
+        }
 
         self.client
             .send_transaction(typed_transaction, None)
@@ -392,7 +385,8 @@ impl TestClient {
 
 impl TestClient {
     pub async fn alloy_deploy_contract(&self) -> alloy_primitives::Address {
-        let typed_transaction = self.make_eip1559_tx(0, None, Some(self.contract.byte_code()));
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+        let typed_transaction = self.make_eip1559_tx(nonce, None, Some(self.contract.byte_code()));
         let addr = self
             .client
             .send_transaction(typed_transaction, None)
