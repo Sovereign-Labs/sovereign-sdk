@@ -13,7 +13,7 @@ use sov_modules_api::{
     KernelStateAccessor, NoOpControlFlow, SelectedBlob, TransactionReceipt, VersionReader,
 };
 #[cfg(feature = "native")]
-use sov_state::{SlotValue, StateAccesses};
+use sov_state::SlotValue;
 mod proof_processing;
 use sov_modules_api::{PrivilegedKernelAccessor, SlotGasMeter};
 use sov_rollup_interface::stf::{DiscardedBlob, ProofReceipt};
@@ -86,22 +86,17 @@ where
     pub fn materialize_accessory_state(
         &self,
         runtime: &mut RT,
-        checkpoint: StateCheckpoint<S>,
-    ) -> (
-        AccessoryDelta<S::Storage>,
-        StateAccesses,
-        <S::Storage as Storage>::Witness,
+        checkpoint: &mut StateCheckpoint<S>,
     ) {
         let rollup_height = checkpoint.rollup_height_to_access();
-        let (accesses, mut accessory_delta, witness) = checkpoint.freeze();
+        let mut accessory_delta = checkpoint.take_accessory_delta();
         let next_visible_hash =
             Self::next_visible_root(runtime, &mut accessory_delta, rollup_height);
 
         tracing::trace_span!("runtime_finalize_hook").in_scope(|| {
             runtime.finalize_hook(&next_visible_hash, &mut accessory_delta);
         });
-
-        (accessory_delta, accesses, witness)
+        checkpoint.set_accessory_delta(accessory_delta);
     }
 
     /// Compute the new state root and change set after running a batch.
@@ -162,7 +157,7 @@ where
                                     format!(
                                         "{} => {}\n",
                                         key,
-                                        SlotValue::debug_show(value.1.as_ref())
+                                        SlotValue::debug_show(value.as_ref())
                                     )
                                     .as_bytes(),
                                 ) {

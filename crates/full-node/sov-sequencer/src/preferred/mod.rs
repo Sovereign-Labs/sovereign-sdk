@@ -188,7 +188,7 @@ where
         }
 
         let (state_root_compute_handle, state_root_compute_task) =
-            StateRootBackgroundTaskState::create(
+            StateRootBackgroundTaskState::create::<Rt>(
                 block_executors_shutdown_rx,
                 !config
                     .sequencer_kind_config

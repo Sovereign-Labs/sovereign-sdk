@@ -2315,6 +2315,7 @@ async fn replay_uses_correct_visible_slot_number() {
 /// - Check that the state root assertion suceeded on the node as well.
 #[tokio::test(flavor = "multi_thread")]
 async fn visible_hashes_match_across_node_and_sequencer() {
+    sov_test_utils::initialize_logging();
     const FINALIZATION_BLOCKS: u32 = 0;
     let genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);
@@ -2411,7 +2412,7 @@ async fn visible_hashes_match_across_node_and_sequencer() {
     for i in 0..10 {
         // Send a transaction to ensure that the sequencer has a batch in progress. This is necessary
         // because we start a new rollup block (with a new visible hash) each time we start a batch.
-        let tx = tx_set_value(&admin.private_key, current_nonce, i).clone();
+        let tx = tx_set_value(&admin.private_key, current_nonce, i + 100).clone();
         test_rollup
             .api_client()
             .accept_tx(&api_types::AcceptTxBody {

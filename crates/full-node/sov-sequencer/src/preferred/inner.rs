@@ -449,6 +449,7 @@ where
             self.tx_cache_writer.clone(), // Recovery executor fills the cache
             self.rollup_exec_config.clone(),
             self.seq_config.clone(),
+            Default::default(), // Since we're entering recovery, we don't re-use any of the uncommitted changes
         );
 
         self.force_overwrite_state(info.clone(), recovery_executor)
@@ -836,6 +837,7 @@ where
             &latest_info,
             rollup_exec_config.clone(),
             seq_config.clone(),
+            Default::default(),
         ),
         latest_info,
         tx_queue_id,
@@ -1447,6 +1449,12 @@ where
 
                     // On `should_flush_tx_cache` we have to refill the cache the first time we `replay_soft_confirmations_on_top_of_node_state`
                     let tx_cache_writer = inner.tx_cache_writer.clone();
+                    // For the new executor, drop any uncommitted changes that are older than the new rollup height
+                    let mut uncommitted_changes = inner.executor.uncommitted_changes.clone();
+                    let new_rollup_height =
+                        StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
+                            .rollup_height_to_access();
+                    uncommitted_changes.prune_changes_before(new_rollup_height.get());
 
                     Some(Box::new(
                         RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
@@ -1454,6 +1462,7 @@ where
                             tx_cache_writer,
                             inner.rollup_exec_config.clone(),
                             inner.seq_config.clone(),
+                            uncommitted_changes,
                         ),
                     ))
                 } else {
@@ -1598,16 +1607,16 @@ where
         // Atomically swap in the new storage and prune the old one.
         let new_rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
             .rollup_height_to_access();
-        // Notify the executor that the storage has been replaced so it can drop any writes that have now been persisted.
+
         inner
             .executor
-            .state_update_notifier
-            .send_replace(new_rollup_height);
+            .uncommitted_changes
+            .prune_changes_before(new_rollup_height.get());
+        let uncommitted_changes = inner.executor.uncommitted_changes.clone();
         inner
             .executor
             .checkpoint
-            .replace_storage_and_prune(info.storage.clone(), &Rt::default().kernel());
-        tracing::info!("Storage has been replaced");
+            .replace_storage(info.storage.clone(), Box::new(uncommitted_changes));
         // Update the `inner`'s state to reflect the new storage.
         // These steps should match `process_final_catchup` except for the need to drop the db_event_subscription.
         inner.is_ready = Ok(());
@@ -1737,6 +1746,7 @@ where
             transaction_cache_write_handle,
             inner.rollup_exec_config.clone(),
             inner.seq_config.clone(),
+            Default::default(), // Since we're entering recovery, we don't re-use any of the uncommitted changes
         );
 
         inner

@@ -375,6 +375,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
         let prev_user_root = prev_state_root.namespace_root(ProvableNamespace::User);
         let prev_kernel_root = prev_state_root.namespace_root(ProvableNamespace::Kernel);
+        tracing::error!("Computing state update with jmt");
         let (user_root, user_state_update) = self
             .compute_state_update_namespace::<DBUserNamespace>(
                 state_accesses.user,

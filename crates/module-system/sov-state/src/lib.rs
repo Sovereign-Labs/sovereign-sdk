@@ -9,9 +9,10 @@ pub mod config;
 mod event;
 pub mod namespaces;
 pub mod nomt;
-mod sequencer_state;
 #[cfg(feature = "native")]
 mod prover_storage;
+/// Defines data structures for managing state in the sequencer.
+pub mod sequencer_state;
 pub mod storage;
 /// Defines the data structures needed by both the zk-storage and the prover storage.
 mod storage_internals;
