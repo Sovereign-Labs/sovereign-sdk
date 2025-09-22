@@ -80,7 +80,11 @@ impl TestClient {
 
         // Fetch initial nonce from the network
         let from_addr = client.address();
-        let initial_nonce = client.get_transaction_count(from_addr, None).await.unwrap().as_u64();
+        let initial_nonce = client
+            .get_transaction_count(from_addr, None)
+            .await
+            .unwrap()
+            .as_u64();
         let nonce = Arc::new(AtomicU64::new(initial_nonce));
 
         Self {
@@ -205,12 +209,9 @@ impl TestClient {
             Some(self.contract.set_call_data(set_arg)),
         );
         let gas = self.eth_estimate_gas(typed_transaction.clone()).await;
-        
-        let mut typed_transaction_with_gas = typed_transaction;
-        if let TypedTransaction::Eip1559(ref mut req) = typed_transaction_with_gas {
-            *req = req.clone().gas(gas);
-        }
-        
+
+        typed_transaction.set_gas(gas);
+
         let response = self.eth_call(typed_transaction_with_gas).await?;
 
         Ok(response)
@@ -235,10 +236,8 @@ impl TestClient {
         PendingTransaction<'_, Http>,
         SignerMiddlewareError<Provider<Http>, Wallet<SigningKey>>,
     > {
-        let typed_transaction = self.make_eip1559_tx(
-            Some(contract_address),
-            Some(self.contract.always_revert()),
-        );
+        let typed_transaction =
+            self.make_eip1559_tx(Some(contract_address), Some(self.contract.always_revert()));
 
         self.client.send_transaction(typed_transaction, None).await
     }
@@ -247,10 +246,8 @@ impl TestClient {
         &self,
         contract_address: H160,
     ) -> Result<ethereum_types::U256, Box<dyn std::error::Error>> {
-        let typed_transaction = self.make_eip1559_tx(
-            Some(contract_address),
-            Some(self.contract.get_call_data()),
-        );
+        let typed_transaction =
+            self.make_eip1559_tx(Some(contract_address), Some(self.contract.get_call_data()));
 
         let response = self.client.call(&typed_transaction, None).await?;
 
@@ -344,11 +341,9 @@ impl TestClient {
 
     pub async fn send_eth(&self, reciever: H160, eth_value: u128) -> PendingTransaction<'_, Http> {
         let mut typed_transaction = self.make_eip1559_tx(Some(reciever), None);
-        
+
         // Set the value for ETH transfer
-        if let TypedTransaction::Eip1559(ref mut req) = typed_transaction {
-            *req = req.clone().value(eth_value);
-        }
+        typed_transaction.set_value(eth_value);
 
         self.client
             .send_transaction(typed_transaction, None)
