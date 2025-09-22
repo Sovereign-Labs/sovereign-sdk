@@ -11719,6 +11719,7 @@ dependencies = [
  "sov-modules-stf-blueprint",
  "sov-risc0-adapter",
  "sov-rollup-interface",
+ "sov-rpc-eth-types",
  "sov-sequencer",
  "sov-sequencer-registry",
  "sov-sp1-adapter",
