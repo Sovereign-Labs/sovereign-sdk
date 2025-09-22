@@ -28,6 +28,7 @@ members = [
     "crates/utils/sov-build",
     "crates/utils/sov-eip-712",
     "crates/utils/sov-rpc-eth-types",
+    "crates/utils/sov-evm-soak-testing",
     # Module System
     "crates/module-system/sov-cli",
     "crates/module-system/sov-modules-stf-blueprint",

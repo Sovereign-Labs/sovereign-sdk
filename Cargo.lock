@@ -11911,6 +11911,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-evm-soak-testing"
+version = "0.3.0"
+dependencies = [
+ "alloy-primitives",
+ "anyhow",
+ "ethers",
+ "sov-eth-client",
+ "sov-node-client",
+ "sov-test-utils",
+ "tokio",
+]
+
+[[package]]
 name = "sov-hyperlane-integration"
 version = "0.3.0"
 dependencies = [

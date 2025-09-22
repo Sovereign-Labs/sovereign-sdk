@@ -117,7 +117,8 @@ impl TestClient {
     pub async fn deploy_contract(
         &self,
     ) -> Result<PendingTransaction<'_, Http>, Box<dyn std::error::Error>> {
-        let typed_transaction = self.make_eip1559_tx(0, None, Some(self.contract.byte_code()));
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+        let typed_transaction = self.make_eip1559_tx(nonce, None, Some(self.contract.byte_code()));
         let receipt_req = self
             .client
             .send_transaction(typed_transaction, None)
@@ -127,7 +128,8 @@ impl TestClient {
     }
 
     pub async fn deploy_contract_call(&self) -> Result<Bytes, Box<dyn std::error::Error>> {
-        let typed_transaction = self.make_eip1559_tx(0, None, Some(self.contract.byte_code()));
+        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+        let typed_transaction = self.make_eip1559_tx(nonce, None, Some(self.contract.byte_code()));
         let receipt_req = self.eth_call(typed_transaction).await?;
 
         Ok(receipt_req)
