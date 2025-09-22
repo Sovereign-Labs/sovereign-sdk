@@ -436,6 +436,7 @@ where
 }
 
 /// Result of String => BlockNr conversion
+#[derive(Debug)]
 pub enum PendingOrBlock {
     /// Pending blcock.
     Pending,
@@ -635,15 +636,21 @@ where
     ) -> RpcResult<MaybeArchivalState<'a, S>> {
         let state = match block_number {
             None => MaybeArchivalState::Current(state),
-            Some(number) if number == "pending" || number == "latest" => {
-                MaybeArchivalState::Current(state)
-            }
+            Some(number) if number == "latest" => MaybeArchivalState::Current(state),
             _ => {
-                let block_env = self.resolve_block_env(block_number, state)?;
-                let archival_state = state
-                    .get_archival_state(RollupHeight::new(block_env.number.to::<u64>()))
-                    .map_err(into_rpc_error)?;
-                MaybeArchivalState::Archival(archival_state.into())
+                let pending_or_block_nr = self.str_to_block_nr(block_number, state);
+                match pending_or_block_nr {
+                    PendingOrBlock::Pending => MaybeArchivalState::Current(state),
+                    PendingOrBlock::Number(number) => {
+                        let archival_state = state
+                            .get_archival_state(RollupHeight::new(number))
+                            .map_err(into_rpc_error)?;
+                        MaybeArchivalState::Archival(archival_state.into())
+                    }
+                    PendingOrBlock::Invalid(_) => {
+                        return Err(EthApiError::UnknownBlockOrTxIndex.into());
+                    }
+                }
             }
         };
         Ok(state)
@@ -799,5 +806,5 @@ pub fn invalid_tx_into_rpc_error(rpc: RpcInvalidTransactionError) -> ErrorObject
 
 /// Converts internal error into rpc error
 pub fn into_rpc_error(err: impl Error) -> ErrorObjectOwned {
-    ErrorObject::owned(500, format!("{err:?}"), None::<()>)
+    ErrorObject::owned(500, format!("{err}"), None::<()>)
 }

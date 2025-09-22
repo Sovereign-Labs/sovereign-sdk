@@ -1,5 +1,5 @@
 use sov_evm::Evm;
-use sov_rpc_eth_types::EthApiError;
+use sov_modules_api::ApiStateAccessorError;
 
 use crate::helpers::{create_transfer_tx, setup};
 use crate::runtime::S;
@@ -40,6 +40,9 @@ fn test_state_at_invalid_depth() {
         let err = evm
             .get_balance(to.address(), Some("0x03".into()), state)
             .unwrap_err();
-        assert_eq!(err, EthApiError::UnknownBlockOrTxIndex.into());
+        assert_eq!(
+            err.message(),
+            ApiStateAccessorError::HeightNotAccessible.to_string()
+        );
     });
 }
