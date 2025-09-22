@@ -309,6 +309,7 @@
       "type": "object",
       "required": [
         "batch_execution_time_limit_millis",
+        "num_cache_warmup_workers",
         "recovery_strategy"
       ],
       "properties": {
@@ -354,6 +355,12 @@
           "default": 0,
           "type": "integer",
           "format": "uint128",
+          "minimum": 0.0
+        },
+        "num_cache_warmup_workers": {
+          "description": "The number of workers that warm up the main executor cache.",
+          "type": "integer",
+          "format": "uint",
           "minimum": 0.0
         },
         "postgres_connection_string": {

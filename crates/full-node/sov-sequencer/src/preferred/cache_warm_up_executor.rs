@@ -17,13 +17,13 @@ use tokio::task::JoinHandle;
 const TX_CHANNEL_SIZE: usize = 16;
 const OPEN_BLOCK_CHANNEL_SIZE: usize = 16;
 
-pub(crate) struct StartBtachNotification<S: Spec> {
+pub(crate) struct StartBlockNotification<S: Spec> {
     pub(crate) data: StartBlockData<S>,
     pub(crate) checkpoint: StateCheckpoint<S>,
     pub(crate) state_roots: BTreeMap<RollupHeight, <S::Storage as Storage>::Root>,
 }
 
-impl<S: Spec> Clone for StartBtachNotification<S> {
+impl<S: Spec> Clone for StartBlockNotification<S> {
     fn clone(&self) -> Self {
         Self {
             state_roots: self.state_roots.clone(),
@@ -37,12 +37,12 @@ impl<S: Spec> Clone for StartBtachNotification<S> {
 
 #[derive(Clone)]
 pub(crate) struct CacheWarmUpExecutor<S: Spec> {
-    start_block_notification_sender: tokio::sync::broadcast::Sender<StartBtachNotification<S>>,
+    start_block_notification_sender: tokio::sync::broadcast::Sender<StartBlockNotification<S>>,
     tx_sender: flume::Sender<FullyBakedTx>,
 }
 
 impl<S: Spec> CacheWarmUpExecutor<S> {
-    pub(crate) fn send_batch_start_notification(&self, data: StartBtachNotification<S>) {
+    pub(crate) fn send_batch_start_notification(&self, data: StartBlockNotification<S>) {
         // This `send` does not block.
         let _ = self.start_block_notification_sender.send(data);
     }
@@ -89,7 +89,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
         tx_receiver: flume::Receiver<FullyBakedTx>,
         mut start_block_notification_sender: tokio::sync::broadcast::Receiver<
-            StartBtachNotification<S>,
+            StartBlockNotification<S>,
         >,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
@@ -142,7 +142,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
     }
 
     async fn start_block<Rt: Runtime<S>>(
-        notify: StartBtachNotification<S>,
+        notify: StartBlockNotification<S>,
         executor: &mut RollupBlockExecutor<S, Rt>,
     ) {
         executor

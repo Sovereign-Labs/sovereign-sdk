@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::preferred::block_executor::StartBlockData;
-use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBtachNotification};
+use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
 use crate::preferred::RollupBlockExecutorConfig;
 use anyhow::anyhow;
 use sov_blob_sender::BlobInternalId;
@@ -287,7 +287,7 @@ where
 
         let state_roots = self.executor.state_roots.clone();
 
-        let notification = StartBtachNotification {
+        let notification = StartBlockNotification {
             state_roots,
             data: start_block_data,
             checkpoint: old_checkpoint,
