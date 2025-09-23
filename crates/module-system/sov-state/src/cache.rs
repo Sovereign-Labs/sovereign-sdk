@@ -241,10 +241,9 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     #[cfg(feature = "native")]
     pub fn get_from_cache(&self, key: &SlotKey) -> MaybePresentValue<SlotValue> {
         match self.cache.get(key) {
-            // Safety: in NATIVE execution, we always fetch the value so ReadType::GetSizeValueNotFetched is not possible.
-            Some(Access::Read { original }) => MaybePresentValue::Present(
-                original.as_ref().map(|node| node.value.unwrap().clone()),
-            ),
+            // We don't want to return the values of old reads; we're only looking for values that were written by the block at the given height.
+            Some(Access::Read { .. }) => 
+                MaybePresentValue::Absent,
             Some(Access::Write { modified, .. }) => {
                 MaybePresentValue::Present(modified.as_ref().map(|v| v.clone()))
             }
@@ -259,8 +258,8 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         key: &SlotKey,
     ) -> MaybePresentValue<NodeLeafAndMaybeValue> {
         match self.cache.get(key) {
-            // Safety: in NATIVE execution, we always fetch the value so ReadType::GetSizeValueNotFetched is not possible.
-            Some(Access::Read { original }) => MaybePresentValue::Present(original.clone()),
+            // We don't want to return the values of old reads; we're only looking for values that were written by the block at the given height.
+            Some(Access::Read { .. }) => MaybePresentValue::Absent,
             // Correctness: We only use the no-op hasher when the value is in intermediate state. This can happen in one of two cases:
             // - In the sequencer, where the value hash is unused
             // - During optimistic execution. If we executed optimistically, then this read will only have been in the intermediate state if it was previously written by an early transaction.

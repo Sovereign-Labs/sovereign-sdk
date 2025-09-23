@@ -286,19 +286,6 @@ pub(crate) enum ReadType {
     Read(SlotValue),
 }
 
-impl ReadType {
-    #[cfg(feature = "native")]
-    pub fn unwrap(&self) -> &SlotValue {
-        match self {
-            ReadType::GetSizeValueFetched(value) => value,
-            ReadType::Read(value) => value,
-            ReadType::GetSizeValueNotFetched => {
-                panic!("ReadType::GetSizeValueNotFetched cannot be unwrapped")
-            }
-        }
-    }
-}
-
 /// Data that is saved in the `Read` cache.
 #[derive(
     Clone, Debug, PartialEq, Eq, Serialize, serde::Deserialize, BorshDeserialize, BorshSerialize,

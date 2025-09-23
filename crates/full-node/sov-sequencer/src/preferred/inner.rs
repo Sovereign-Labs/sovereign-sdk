@@ -1605,6 +1605,8 @@ where
     async fn process_new_storage(&mut self, info: StateUpdateInfo<S::Storage>) {
         let mut inner = self.get_inner_with_timing("update_state::fast_path").await;
         // Atomically swap in the new storage and prune the old one.
+        // Note that we use `StateCheckpoint::new(info.storage.clone(), ...)` *without* passing any intermediate state. This 
+        // is because we want to see what the height of the checkpoint we just received is, not the hight of the sequencer's intermediate state.
         let new_rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
             .rollup_height_to_access();
 

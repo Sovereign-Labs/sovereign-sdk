@@ -102,9 +102,7 @@ impl<S: Spec> StateCheckpoint<S> {
         kernel: &K,
         intermediate_state: Box<dyn StateGetter>,
     ) -> Self {
-        let mut output = Self::new(inner, kernel);
-        output.delta.intermediate_state = Some(intermediate_state);
-        output
+        Self::with_witness_and_intermediate_state(inner, Default::default(), kernel, Some(intermediate_state))
     }
 
     /// Replace the storage and intermediate state underlying the checkpoint in place. It is up to the caller
@@ -144,7 +142,19 @@ impl<S: Spec> StateCheckpoint<S> {
         witness: <S::Storage as Storage>::Witness,
         kernel: &K,
     ) -> Self {
+        Self::with_witness_and_intermediate_state(inner, witness, kernel, None)
+    }
+
+    /// Creates a new [`StateCheckpoint`] instance without any changes, backed
+    /// by the given [`Storage`] and witness.
+    pub fn with_witness_and_intermediate_state<K: Kernel<S>>(
+        inner: S::Storage,
+        witness: <S::Storage as Storage>::Witness,
+        kernel: &K,
+        intermediate_state: Option<Box<dyn StateGetter>>,
+    ) -> Self {
         let mut delta = Delta::with_witness(inner, witness);
+        delta.intermediate_state = intermediate_state;
         let mut metrics = StateMetrics::default();
         let mut bootstrap_state = BootstrapWorkingSet {
             inner: &mut delta,
