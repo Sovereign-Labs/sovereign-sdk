@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
-use alloy_primitives::{Address, U64};
+use alloy_primitives::{Address, BlockHash, U64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
 use alloy_rpc_types::{
     state::StateOverride, Block, BlockOverrides, BlockTransactions, FeeHistory, Log,
@@ -28,9 +28,7 @@ use tracing::debug;
 use crate::conversions::replay_tx_env;
 use crate::db::EvmDb;
 use crate::evm::executor;
-use crate::evm::primitive_types::{
-    Receipt, SealedBlock, TransactionSigned, TransactionSignedAndRecovered,
-};
+use crate::evm::primitive_types::{Receipt, TransactionSigned, TransactionSignedAndRecovered};
 use crate::executor::{get_cfg_env, inspect, transact_commit};
 use crate::helpers::{
     from_primitive_with_hash, from_recovered_with_block_context, prepare_call_env,
@@ -108,29 +106,30 @@ where
 
         let maybe_block = || -> Option<Block> {
             let block = self.get_sealed_block_by_number(block_number, state)?;
-            let header = from_primitive_with_hash(block.header.clone());
+
+            let block_hash = block.hash().unwrap_or(BlockHash::ZERO);
+            let header = from_primitive_with_hash(block.header().clone(), block_hash);
+
+            let block_number = block.number();
+            let tx_range = block.transactions_start()..block.transactions_end();
 
             let transactions = if Some(true) == details {
                 BlockTransactions::Full(
-                    block
-                        .transactions
-                        .clone()
+                    tx_range
                         .map(|index| {
                             let tx = self.transactions.get(&index, state).unwrap_infallible()?;
                             Some(from_recovered_with_block_context(
                                 tx.into(),
-                                Some(block.header.seal()),
-                                block.header.number,
-                                U256::from(index - block.transactions.start),
+                                Some(block_hash),
+                                block_number,
+                                U256::from(index - block.transactions_start()),
                             ))
                         })
                         .collect::<Option<Vec<_>>>()?,
                 )
             } else {
                 BlockTransactions::Hashes(
-                    block
-                        .transactions
-                        .clone()
+                    tx_range
                         .map(|index| {
                             let tx = self.transactions.get(&index, state).unwrap_infallible()?;
                             Some(*tx.signed_transaction.hash())
@@ -269,7 +268,7 @@ where
         let mut maybe_tx = || -> Option<Transaction> {
             let tx_number = self.get_tx_index_by_hash(&hash, state)?;
             let tx = self.transaction(tx_number, state)?;
-            let block = self.get_maybe_sealed_block(tx.block_number, state);
+            let block = self.get_maybe_sealed_block(tx.block_number, state)?;
 
             Some(from_recovered_with_block_context(
                 tx.into(),
@@ -304,7 +303,7 @@ where
         let mut maybe_receipt = || -> Option<TransactionReceipt> {
             let number = self.get_tx_index_by_hash(&hash, state)?;
             let tx = self.transaction(number, state)?;
-            let block = self.get_maybe_sealed_block(tx.block_number, state);
+            let block = self.get_maybe_sealed_block(tx.block_number, state)?;
             let receipt = self.receipt(number, state)?;
             Some(build_rpc_receipt(block, tx, number, receipt))
         };
@@ -513,14 +512,18 @@ where
         &self,
         block_number: u64,
         state: &mut ApiStateAccessor<S>,
-    ) -> MaybeSealedBlock {
+    ) -> Option<MaybeSealedBlock> {
         let block = self.blocks.get(&block_number, state).unwrap_infallible();
         if let Some(block) = block {
-            return MaybeSealedBlock::Sealed(block);
+            return Some(MaybeSealedBlock::Sealed(block));
         }
 
         let pending = self.pending_block(state);
-        MaybeSealedBlock::Pending(pending)
+        if block_number == pending.header.number {
+            return Some(MaybeSealedBlock::Pending(pending));
+        }
+
+        None
     }
 
     /// Convert string to block nr.
@@ -566,14 +569,14 @@ where
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<SealedBlock> {
+    ) -> Option<MaybeSealedBlock> {
         let pending_or_block_nr = self.str_to_block_nr(block_number, state);
 
         match pending_or_block_nr {
-            PendingOrBlock::Number(nr) => self.blocks.get(&nr, state).unwrap_infallible(),
+            PendingOrBlock::Number(nr) => self.get_maybe_sealed_block(nr, state),
             PendingOrBlock::Pending => {
                 let pending_block = self.pending_block(state);
-                Some(pending_block.seal())
+                Some(MaybeSealedBlock::Pending(pending_block))
             }
             PendingOrBlock::Invalid(invalid) => {
                 tracing::error!(invalid, "Invalid block number");
@@ -661,18 +664,18 @@ where
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<BlockEnv, EthApiError> {
-        let block = match block_number {
-            Some(ref block_number) if block_number == "pending" => {
-                self.block_env.get(state).unwrap_infallible()
-            }
-            _ => self
-                .get_sealed_block_by_number(block_number, state)
-                .map(BlockEnv::from),
-        };
-        let Some(block) = block else {
-            return Err(EthApiError::UnknownBlockOrTxIndex);
-        };
-        Ok(block)
+        let maybe_blcok = self
+            .get_sealed_block_by_number(block_number, state)
+            .ok_or(EthApiError::UnknownBlockOrTxIndex)?;
+
+        Ok(match maybe_blcok {
+            MaybeSealedBlock::Pending(_) => self
+                .block_env
+                .get(state)
+                .unwrap_infallible()
+                .expect("The impossible happened: block_env is not set."),
+            MaybeSealedBlock::Sealed(sealed_block) => BlockEnv::from(sealed_block),
+        })
     }
 }
 

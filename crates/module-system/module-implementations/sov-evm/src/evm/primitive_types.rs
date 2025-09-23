@@ -205,6 +205,14 @@ impl MaybeSealedBlock {
             Self::Pending(pending) => pending.header.timestamp,
         }
     }
+
+    /// The block header.
+    pub fn header(&self) -> &Header {
+        match self {
+            Self::Sealed(block) => block.header.inner(),
+            Self::Pending(pending) => &pending.header,
+        }
+    }
 }
 
 #[serde_as]

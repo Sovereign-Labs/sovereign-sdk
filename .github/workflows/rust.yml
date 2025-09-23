@@ -109,6 +109,9 @@ jobs:
         with:
           cache: rust
           path: ./crates/fuzz/target
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - name: Run lint
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: true
@@ -138,6 +141,9 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - run: cargo bench --no-run
         env:
           SOV_BENCH_BLOCKS: 1
@@ -184,6 +190,9 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
       - name: cargo hack
         run: make check-features
@@ -211,6 +220,9 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - name: cargo hack
         run: make check-features-default-targets
 
@@ -229,6 +241,9 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - run: make test-default-features
 
   nextest_all_features:
@@ -245,6 +260,9 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - run: make test-all
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -261,6 +279,9 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       # `cargo-nextest` does not support doctests (yet?), so we have to run them separately.
       # TODO: https://github.com/nextest-rs/nextest/issues/16
       - run: make doctest
@@ -279,6 +300,9 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
@@ -300,6 +324,9 @@ jobs:
       - uses: taiki-e/install-action@cargo-deny
         with:
           tool: cargo-deny@0.18.4
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - run: make cargo-deny-check-licenses
 
   # Temporarily disabled until AWS credentials can be re-issued
@@ -409,6 +436,9 @@ jobs:
       RUST_LOG: "debug,sov_sequencer=trace,sov-celestia-adapter=trace,hyper=info,risc0_zkvm=warn,jmt=info,jsonrpsee-server=info,jsonrpsee-client=info,reqwest=info,sqlx=warn,tiny_http=warn,tower_http=info,tungstenite=info,risc0_circuit_rv32im=info,risc0_zkp::verify=info,h2=info,tower=info"
     steps:
       - uses: actions/checkout@v4
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - name: Login to Docker Hub
         if: github.event.pull_request.head.repo.full_name == github.repository
         uses: docker/login-action@v3
@@ -418,6 +448,9 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - name: Compile README.md to Bash
         run: bashtestmd --input examples/demo-rollup/README_CELESTIA.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh
@@ -437,6 +470,9 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - name: Compile README.md to Bash
         run: bashtestmd --input examples/demo-rollup/README.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh

@@ -126,10 +126,18 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
 {
     let block = match evm.get_maybe_sealed_block(height, state) {
-        MaybeSealedBlock::Sealed(block) => block,
-        MaybeSealedBlock::Pending(_) => {
+        Some(MaybeSealedBlock::Sealed(block)) => block,
+        Some(MaybeSealedBlock::Pending(_)) => {
             // This should be validate before calling this method.
             panic!("Pending blocks are not supported")
+        }
+        None => {
+            // This can hapen if the state was pruned.
+            let msg = format!(
+                "Block for height {:?} not found. The state may have already been pruned.",
+                height
+            );
+            return Err(to_jsonrpsee_error_object(&msg, ETH_RPC_ERROR));
         }
     };
 
@@ -142,7 +150,9 @@ where
     for index in block.transactions {
         let Some(receipt) = evm.receipt(index, state) else {
             // This can hapen if the state was pruned.
-            let msg = format!("Receipt for index {index:?} does not exist");
+            let msg = format!(
+                "Receipt for index {index:?} not found, The state may have already been pruned."
+            );
             tracing::error!(%msg);
             return Err(to_jsonrpsee_error_object(&msg, ETH_RPC_ERROR));
         };

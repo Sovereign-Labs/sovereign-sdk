@@ -3,6 +3,7 @@ use std::time::Duration;
 use super::evm_test_helper;
 use crate::evm::evm_test_helper::setup;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
+use ethereum_types::H256;
 use sov_eth_client::TestClient;
 use sov_mock_da::storable::service::StorableMockDaService;
 use tokio::time::sleep;
@@ -33,16 +34,23 @@ async fn sanity_checks(test_client: &TestClient) {
     let etc_accounts = test_client.eth_accounts().await;
     assert_eq!(vec![test_client.address()], etc_accounts);
 
-    // The preferred sequencer ought to have created at least one block.
-    let latest_block = test_client
-        .eth_get_block_by_number(Some("latest".to_owned()))
-        .await;
     let earliest_block = test_client
         .eth_get_block_by_number(Some("earliest".to_owned()))
         .await;
 
-    assert!(latest_block.number.unwrap().as_u64() > earliest_block.number.unwrap().as_u64());
+    // The preferred sequencer ought to have created at least one block.
+    let latest_block = test_client
+        .eth_get_block_by_number(Some("latest".to_owned()))
+        .await;
+
+    let pending_block = test_client
+        .eth_get_block_by_number(Some("pending".to_owned()))
+        .await;
+
     assert!(latest_block.number.unwrap().as_u64() > 0);
+    assert!(latest_block.number > earliest_block.number);
+    assert!(pending_block.number > latest_block.number);
+    assert_eq!(pending_block.hash, Some(H256::zero()));
 
     // Nonce should be 0 before any transactions
     let nonce = test_client
