@@ -16,7 +16,7 @@ macro_rules! save_elapsed {
     };
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Copy)]
 /// A metric, if the rollup is in native mode.
 pub enum MaybeTimer {
     /// The event is in progress.
