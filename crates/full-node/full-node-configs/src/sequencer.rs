@@ -157,6 +157,7 @@ pub struct PreferredSequencerConfig {
     /// It will sync from the master sequencer's database but remain read-only.
     #[serde(default)]
     pub is_replica: bool,
+    #[serde(default = "default_num_cache_warmup_workers")]
     /// The number of workers that warm up the main executor cache.
     pub num_cache_warmup_workers: usize,
 }
@@ -173,9 +174,13 @@ impl Default for PreferredSequencerConfig {
             is_replica: false,
             db_event_channel_size: default_db_event_channel_size(),
             batch_execution_time_limit_millis: 6_000, // 6 seconds
-            num_cache_warmup_workers: 0,
+            num_cache_warmup_workers: default_num_cache_warmup_workers(),
         }
     }
+}
+
+pub const fn default_num_cache_warmup_workers() -> usize {
+    3
 }
 
 /// The ideal buffer of finalized slots that the sequencer should maintain. The larger this number,
