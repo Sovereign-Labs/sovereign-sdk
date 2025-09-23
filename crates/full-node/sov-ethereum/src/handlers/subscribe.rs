@@ -69,7 +69,11 @@ async fn stream_logs<S, Seq>(
     let mut prev_last_tx_index = pending_block.transactions.end;
 
     // Fetch the initial block. If it’s stale, it will be replaced below.
-    let mut block = evm.get_maybe_sealed_block(pending_block.header.number - 1, state);
+    let start_block = pending_block.header.number - 1;
+    let Some(mut block) = evm.get_maybe_sealed_block(start_block, state) else {
+        tracing::error!(start_block, "Block does not exist");
+        return;
+    };
 
     let state_updates = &mut ethereum.sequencer.api_state().checkpoint_receiver();
 
@@ -91,7 +95,13 @@ async fn stream_logs<S, Seq>(
             };
 
             if block.number() != receipt.block_number {
-                block = evm.get_maybe_sealed_block(receipt.block_number, state);
+                match evm.get_maybe_sealed_block(receipt.block_number, state) {
+                    Some(b) => block = b,
+                    None => {
+                        tracing::error!(start_block, "Block does not exist");
+                        return;
+                    }
+                }
             }
 
             let transaction_index = index - block.transactions_start();

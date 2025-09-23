@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use sov_db::config::RollupDbConfig;
 use sov_rollup_interface::node::da::DaService;
 
-use crate::sequencer::{SequencerConfig, SequencerKindConfig};
+use crate::sequencer::{SeqConfigExtension, SequencerConfig, SequencerKindConfig};
 
 pub const DEFAULT_CONCURRENT_SYNC_TASKS: u8 = 5;
 
@@ -136,6 +136,16 @@ pub struct RollupConfig<Address, Da: DaService, M> {
     pub sequencer: SequencerConfig<Address, SequencerKindConfig>,
     /// Monitoring configuration.
     pub monitoring: M,
+}
+
+impl<Address, Da: DaService, M> RollupConfig<Address, Da, M> {
+    pub fn extension_or_panic(&self) -> SeqConfigExtension {
+        self.sequencer
+            .extension
+            .as_ref()
+            .expect("Sequencer config extension is missing. Verify the [sequencer.extension] section in the rollup configuration.")
+            .clone()
+    }
 }
 
 /// Reads toml file as a specific type.

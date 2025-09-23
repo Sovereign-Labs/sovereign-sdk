@@ -13,13 +13,14 @@ pub use sov_evm::EthereumAuthenticator;
 use sov_evm::{convert_to_transaction_signed, RlpEvmTransaction};
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::{ApiStateAccessor, Spec};
-use sov_sequencer::Sequencer;
+use sov_sequencer::{SeqConfigExtension, Sequencer};
 use std::future::ready;
 
 #[derive(Clone)]
 pub struct EthRpcConfig {
     #[cfg(feature = "local")]
     pub eth_signer: Signers,
+    pub extension: SeqConfigExtension,
 }
 
 pub fn get_ethereum_rpc<S, Seq>(eth_rpc_config: EthRpcConfig, sequencer: Arc<Seq>) -> RpcModule<()>
@@ -33,12 +34,14 @@ where
     let EthRpcConfig {
         #[cfg(feature = "local")]
         eth_signer,
+        extension,
     } = eth_rpc_config;
 
     let mut rpc = RpcModule::new(Ethereum {
         sequencer,
         #[cfg(feature = "local")]
         eth_signer,
+        extension,
     });
 
     register_rpc_methods::<S, Seq>(&mut rpc).expect("Failed to register sequencer RPC methods");
@@ -91,6 +94,7 @@ struct Ethereum<S: Spec, Seq: Sequencer<Spec = S>> {
     sequencer: Arc<Seq>,
     #[cfg(feature = "local")]
     eth_signer: Signers,
+    extension: SeqConfigExtension,
 }
 
 impl<S, Seq> Ethereum<S, Seq>

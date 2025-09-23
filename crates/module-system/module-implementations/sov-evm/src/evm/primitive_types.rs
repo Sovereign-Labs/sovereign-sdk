@@ -206,10 +206,10 @@ impl MaybeSealedBlock {
         }
     }
 
-    /// TODO
+    /// The block header.
     pub fn header(&self) -> &Header {
         match self {
-            Self::Sealed(block) => &block.header.inner(),
+            Self::Sealed(block) => block.header.inner(),
             Self::Pending(pending) => &pending.header,
         }
     }

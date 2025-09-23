@@ -1,6 +1,5 @@
 ---
 source: crates/full-node/full-node-configs/src/runner.rs
-assertion_line: 203
 expression: config
 ---
 {
@@ -61,7 +60,8 @@ expression: config
     },
     "max_batch_size_bytes": 1048576,
     "max_concurrent_blobs": 16,
-    "blob_processing_timeout_secs": 60
+    "blob_processing_timeout_secs": 60,
+    "extension": null
   },
   "monitoring": {
     "telegraf_address": "udp://192.168.4.5:8543",
