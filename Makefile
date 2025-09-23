@@ -110,7 +110,7 @@ install-sp1-toolchain:  ## install SP1 toolchain
 lint:  ## cargo fmt, check and clippy.
 	## fmt first, because it's the cheapest
 	cargo fmt --all --check
-	cargo check --all-targets --all-features
+	cargo check --all-targets --all-features --workspace
 	## Invokes Zepter multiple times because fixes sometimes unveal more underlying issues.
 	zepter
 	zepter
