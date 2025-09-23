@@ -1,8 +1,8 @@
+use sov_rollup_interface::common::HexHash;
+use sov_rollup_interface::stf::ExecutionContext;
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
-
-use sov_rollup_interface::common::HexHash;
 
 use crate::MaybeTimer;
 #[cfg(feature = "native")]
@@ -312,7 +312,7 @@ impl Metric for AuthAndProcessMetrics {
 }
 
 /// Timings for `auth_and_process_tx`
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct AuthAndProcessTimings {
     /// Time to deserialize and authenticate the tx. Includes no state access in the starter
     pub auth: MaybeTimer,
@@ -346,4 +346,31 @@ pub struct AuthAndProcessTimings {
     pub reward_prover_timer: MaybeTimer,
     /// State Accesses performed while rewarding the prover.
     pub reward_prover_access_metrics: StateMetrics,
+    /// The execution context for the trasnaction.
+    pub execution_context: ExecutionContext,
+}
+
+impl AuthAndProcessTimings {
+    /// Creates a new `AuthAndProcessTimings` instance.
+    pub fn new_with_defaults(execution_context: ExecutionContext) -> Self {
+        Self {
+            auth: MaybeTimer::default(),
+            total_timer: MaybeTimer::default(),
+            resolve_context_timer: MaybeTimer::default(),
+            resolve_context_access_metrics: StateMetrics::default(),
+            check_uniqueness_timer: MaybeTimer::default(),
+            check_uniqueness_access_metrics: StateMetrics::default(),
+            mark_tx_attempted_timer: MaybeTimer::default(),
+            mark_tx_attempted_access_metrics: StateMetrics::default(),
+            attempt_tx_timer: MaybeTimer::default(),
+            attempt_tx_access_metrics: StateMetrics::default(),
+            reserve_gas_timer: MaybeTimer::default(),
+            reserve_gas_access_metrics: StateMetrics::default(),
+            refund_remaining_gas_timer: MaybeTimer::default(),
+            refund_remaining_gas_access_metrics: StateMetrics::default(),
+            reward_prover_timer: MaybeTimer::default(),
+            reward_prover_access_metrics: StateMetrics::default(),
+            execution_context,
+        }
+    }
 }

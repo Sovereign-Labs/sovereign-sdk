@@ -29,7 +29,7 @@ impl<S: Spec> Uniqueness<S> {
 
         anyhow::ensure!(
             nonce <= transaction_nonce,
-            "Tx bad nonce for credential id: {credential_id}, expected: {nonce}, but found: {transaction_nonce}",
+            "Tx bad nonce for credential id: {credential_id}, expected at least: {nonce}, but found: {transaction_nonce}",
         );
 
         Ok(())

@@ -669,7 +669,7 @@ where
     I: StateProvider<S>,
     C: InjectedControlFlow<S>,
 {
-    let mut timings = AuthAndProcessTimings::default();
+    let mut timings = AuthAndProcessTimings::new_with_defaults(execution_context);
     timings.total_timer.start();
     // CHECKS:
     // 1. `max_tx_check_costs` will not cause an overflow when converted to a token value.
