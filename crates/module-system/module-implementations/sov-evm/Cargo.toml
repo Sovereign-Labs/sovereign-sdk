@@ -43,6 +43,7 @@ jsonrpsee = { workspace = true, features = [
 ], optional = true }
 schemars = { workspace = true }
 tracing = { workspace = true }
+quick_cache = { workspace = true }
 
 alloy-eips = { workspace = true, features = ["std"] }
 # `rlp` feature implicitly enabled via `reth-` crates, but this allows us to explicitly access Error type from there

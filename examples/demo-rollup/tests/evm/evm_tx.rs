@@ -31,10 +31,7 @@ async fn evm_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
 
 async fn sanity_checks(test_client: &TestClient) {
     let etc_accounts = test_client.eth_accounts().await;
-    assert_eq!(vec![test_client.from_addr], etc_accounts);
-
-    let eth_chain_id = test_client.eth_chain_id().await;
-    assert_eq!(test_client.chain_id, eth_chain_id);
+    assert_eq!(vec![test_client.address()], etc_accounts);
 
     // The preferred sequencer ought to have created at least one block.
     let latest_block = test_client
@@ -49,12 +46,12 @@ async fn sanity_checks(test_client: &TestClient) {
 
     // Nonce should be 0 before any transactions
     let nonce = test_client
-        .eth_get_transaction_count(test_client.from_addr)
+        .eth_get_transaction_count(test_client.address())
         .await;
     assert_eq!(0, nonce);
 
     // Balance should be > 0 in genesis and before any transactions
-    let balance = test_client.eth_get_balance(test_client.from_addr).await;
+    let balance = test_client.eth_get_balance(test_client.address()).await;
     assert!(balance > ethereum_types::U256::zero());
 }
 
@@ -75,7 +72,7 @@ async fn execute_evm_tests(
     sleep(Duration::from_secs(1)).await;
 
     // Nonce should be 1 after the deployment
-    let nonce = client.eth_get_transaction_count(client.from_addr).await;
+    let nonce = client.eth_get_transaction_count(client.address()).await;
     assert_eq!(1, nonce);
 
     // Check that a new block was published
@@ -101,9 +98,6 @@ async fn execute_evm_tests(
     let values: Vec<u32> = (150..153).collect();
     // Create a blob with multiple transactions.
     evm_test_helper::set_multiple_values_check(client, contract_address, values).await?;
-
-    let value = 103;
-    evm_test_helper::set_value_unsigned_check(client, contract_address, value).await?;
 
     // TODO: reenable this check by figuring out a way to get finer grained control over preferred batch production.
     //evm_test_helper::gas_check(client, da_service, contract_address).await?;

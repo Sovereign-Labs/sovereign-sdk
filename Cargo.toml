@@ -28,6 +28,7 @@ members = [
     "crates/utils/sov-build",
     "crates/utils/sov-eip-712",
     "crates/utils/sov-rpc-eth-types",
+    "crates/utils/sov-evm-soak-testing",
     # Module System
     "crates/module-system/sov-cli",
     "crates/module-system/sov-modules-stf-blueprint",
@@ -311,6 +312,7 @@ secp256k1 = { version = "=0.30.0", default-features = false, features = [
     "recovery",
 ] }
 k256 = { version = "0.13.4", default-features = false, features = ["ecdsa", "std"] }
+quick_cache = "0.6.16"
 # End of EVM dependencies
 
 [profile.rust-analyzer-optimized]
