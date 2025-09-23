@@ -121,9 +121,10 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                                 return
                             },
                         };
-                        if is_started{
+                        if is_started {
                             // Ignore the result.
                             _ = executor.apply_tx_to_in_progress_batch(&baked_tx).await;
+
                         }
 
                     }
