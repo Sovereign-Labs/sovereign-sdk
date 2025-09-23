@@ -43,12 +43,37 @@ where
         Self::default()
     }
 
+    /// [`StfBlueprint`] constructor that automatically enables encryption if config is provided.
+    /// This is a convenience method that creates the STF with encryption when available,
+    /// falling back to no encryption if config is None.
+    pub async fn new_with_optional_encryption(
+        encryption_config: Option<sov_encryption::EncryptionConfig>
+    ) -> Result<Self, sov_encryption::EncryptionError> {
+        match encryption_config {
+            Some(config) => Self::with_encryption_config(RT::default(), config).await,
+            None => Ok(Self::default()),
+        }
+    }
+
     /// [`StfBlueprint`] constructor with a custom [`Runtime`] value.
     pub fn with_runtime(runtime: RT) -> Self {
         Self {
             runtime,
             encryption_layer: None,
             phantom_context: PhantomData,
+        }
+    }
+
+    /// [`StfBlueprint`] constructor with a custom [`Runtime`] value and optional encryption.
+    /// This is a convenience method that creates the STF with encryption when available,
+    /// falling back to no encryption if config is None.
+    pub async fn with_runtime_and_optional_encryption(
+        runtime: RT,
+        encryption_config: Option<sov_encryption::EncryptionConfig>
+    ) -> Result<Self, sov_encryption::EncryptionError> {
+        match encryption_config {
+            Some(config) => Self::with_encryption_config(runtime, config).await,
+            None => Ok(Self::with_runtime(runtime)),
         }
     }
 

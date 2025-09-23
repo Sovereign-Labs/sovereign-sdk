@@ -326,7 +326,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             is_genesis = prev_root.is_none(),
             "Recovering the state root"
         );
-        let native_stf = StfBlueprint::new();
+        let native_stf = StfBlueprint::new_with_optional_encryption(rollup_config.stf.encryption.clone()).await?;
         let (prover_storage, prev_state_root, genesis_state_root) = match prev_root {
             // Missing prev_root means need for initialization
             None => {
