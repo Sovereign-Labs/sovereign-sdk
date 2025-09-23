@@ -442,7 +442,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
         self.state_roots = state_roots;
         self.update_kernel_with_user_state_root();
-        self.spawn_exec_task(start_block_data).await;
+        self.spawn_exec_task(start_block_data, ExecutionContext::SequencerWarmUp)
+            .await;
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
@@ -462,10 +463,15 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         self.populate_state_roots(&start_block_data.node_state_root)
             .await;
         self.update_kernel_with_user_state_root();
-        self.spawn_exec_task(start_block_data).await;
+        self.spawn_exec_task(start_block_data, ExecutionContext::Sequencer)
+            .await;
     }
 
-    async fn spawn_exec_task(&mut self, start_block_data: StartBlockData<S>) {
+    async fn spawn_exec_task(
+        &mut self,
+        start_block_data: StartBlockData<S>,
+        executor_context: ExecutionContext,
+    ) {
         let StartBlockData {
             sanity_check_visible_slot_number_after_increase,
             visible_increase,
@@ -507,6 +513,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 admin_addresses: self.seq_config.admin_addresses.clone().into(),
                 sequencer_rollup_address: self.seq_config.rollup_address.clone(),
                 sequencer_da_address: self.da_address.clone(),
+                executor_context,
             };
 
             move || rollup_block_task_body::<S, Rt>(ctx)
@@ -749,6 +756,7 @@ struct RollupBlockTaskContext<S: Spec> {
     admin_addresses: Arc<Vec<S::Address>>,
     sequencer_rollup_address: S::Address,
     sequencer_da_address: <S::Da as DaSpec>::Address,
+    executor_context: ExecutionContext,
 }
 
 fn rollup_block_task_body<S, Rt>(ctx: RollupBlockTaskContext<S>) -> BlockExecutionOutput<S>
@@ -771,6 +779,7 @@ where
         sequencer_rollup_address,
         sequencer_da_address,
         state_update_notifier,
+        executor_context,
     } = ctx;
 
     let _span = tracing::trace_span!(
@@ -855,7 +864,7 @@ where
         &mut Default::default(),
         blob_selector_output,
         checkpoint,
-        ExecutionContext::Sequencer,
+        executor_context,
         next_root,
     );
 
