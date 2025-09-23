@@ -98,7 +98,7 @@ where
                 tracing::debug!(
                     tx_hash = hex::encode(*transaction.signed_transaction.hash()),
                     error = ?err,
-                    "EVM transaction has been reverted"
+                    "EVM transaction error"
                 );
 
                 anyhow::bail!("EVM transaction error: {:?}", err);
