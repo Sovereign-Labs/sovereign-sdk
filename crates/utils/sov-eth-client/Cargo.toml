@@ -15,6 +15,7 @@ alloy-primitives = { workspace = true }
 alloy-rpc-types  = { workspace = true }
 alloy-provider = { workspace = true }
 alloy-pubsub = "1.0"
+derive_more = { workspace = true }
 ethereum-types = { workspace = true }
 ethers = { workspace = true }
 futures = { workspace = true }
