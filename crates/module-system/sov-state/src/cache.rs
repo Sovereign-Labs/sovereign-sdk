@@ -242,8 +242,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     pub fn get_from_cache(&self, key: &SlotKey) -> MaybePresentValue<SlotValue> {
         match self.cache.get(key) {
             // We don't want to return the values of old reads; we're only looking for values that were written by the block at the given height.
-            Some(Access::Read { .. }) => 
-                MaybePresentValue::Absent,
+            Some(Access::Read { .. }) => MaybePresentValue::Absent,
             Some(Access::Write { modified, .. }) => {
                 MaybePresentValue::Present(modified.as_ref().map(|v| v.clone()))
             }

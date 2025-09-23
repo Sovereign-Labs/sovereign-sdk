@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use sov_modules_api::capabilities::RollupHeight;
-use sov_modules_api::{CryptoSpec, Runtime, StateCheckpoint, VersionReader};
 use sov_modules_api::ApiStateAccessor;
+use sov_modules_api::{CryptoSpec, Runtime, StateCheckpoint, VersionReader};
 // use sov_modules_api::capabilities::KernelWithSlotMapping;
 use sov_modules_api::{Spec, Storage};
 use sov_rollup_interface::common::SlotNumber;
@@ -52,9 +52,13 @@ impl<S: Spec> StateRootCacheEntry<S> {
     ) -> (RollupHeight, <S::Storage as Storage>::Root) {
         let new_writes = state_accesses.user.ordered_writes.clone();
         // Optimistically compute new root hash
-        let new_root =
-            compute_state_root::<S, Rt>(state_accesses, storage.clone(), rollup_height, slot_number)
-                .await;
+        let new_root = compute_state_root::<S, Rt>(
+            state_accesses,
+            storage.clone(),
+            rollup_height,
+            slot_number,
+        )
+        .await;
         if user_roots_match(&self.root, &new_root) {
             tracing::trace!(%rollup_height, %slot_number, "User state root is consistent");
             return (rollup_height, new_root);
@@ -175,7 +179,7 @@ async fn compute_state_root<S: Spec, Rt: Runtime<S>>(
     res
 }
 
-impl<S: Spec,> StateRootBackgroundTaskState<S> {
+impl<S: Spec> StateRootBackgroundTaskState<S> {
     pub(super) fn create<Rt: Runtime<S>>(
         mut block_excutors_shutdown_receiver: mpsc::Receiver<()>,
         check_state_roots: bool,
@@ -268,7 +272,8 @@ impl<S: Spec,> StateRootBackgroundTaskState<S> {
                 .await;
                 // Verify, that storage didn't become obsolete while computing state root.
                 // If so, use historical state root from the node as canonical one.
-                if let Some(fetched_root) = fetch_root_hash_if_stale::<S, Rt>(&storage, rollup_height)
+                if let Some(fetched_root) =
+                    fetch_root_hash_if_stale::<S, Rt>(&storage, rollup_height)
                 {
                     if !user_roots_match(&root, &fetched_root) {
                         root = fetched_root;
@@ -329,7 +334,10 @@ mod tests {
         CommitingStorageManager, ForklessStorageManager, NonCommitingStorageManager,
         SimpleNomtStorageManager, SimpleStorageManager,
     };
-    use sov_test_utils::{generate_optimistic_runtime, MockDaSpec, TestHasher, TestNomtSpec, TestSpec, TestStorageSpec};
+    use sov_test_utils::{
+        generate_optimistic_runtime, MockDaSpec, TestHasher, TestNomtSpec, TestSpec,
+        TestStorageSpec,
+    };
     use tokio::task::JoinHandle;
 
     generate_optimistic_runtime!(TestRuntime <=);
@@ -339,13 +347,19 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_jmt_new_rollup_height_state_root_on_stale_storage() {
         let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
-        new_rollup_height_state_root_on_stale_storage::<TestSpec, _, TestRuntime<TestSpec>>(storage_manager).await;
+        new_rollup_height_state_root_on_stale_storage::<TestSpec, _, TestRuntime<TestSpec>>(
+            storage_manager,
+        )
+        .await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_jmt_known_rollup_height_state_root_on_stale_storage() {
         let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
-        known_rollup_height_state_root_on_stale_storage::<TestSpec, _, TestRuntime<TestSpec>>(storage_manager).await;
+        known_rollup_height_state_root_on_stale_storage::<TestSpec, _, TestRuntime<TestSpec>>(
+            storage_manager,
+        )
+        .await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -401,7 +415,8 @@ mod tests {
     ) {
         let (shutdown_sender, shutdown_receiver) = mpsc::channel(1);
 
-        let (handle, task) = StateRootBackgroundTaskState::<S>::create::<Rt>(shutdown_receiver, true);
+        let (handle, task) =
+            StateRootBackgroundTaskState::<S>::create::<Rt>(shutdown_receiver, true);
 
         (task, handle, shutdown_sender)
     }
@@ -476,8 +491,9 @@ mod tests {
         storage_manager.commit_state_update(node_storage, changes, node_new_root);
     }
 
-    async fn new_rollup_height_state_root_on_stale_storage<S, Sm, Rt: Runtime<S>>(mut storage_manager: Sm)
-    where
+    async fn new_rollup_height_state_root_on_stale_storage<S, Sm, Rt: Runtime<S>>(
+        mut storage_manager: Sm,
+    ) where
         S: Spec,
         Sm: ForklessStorageManager<Storage = S::Storage>,
         S::Storage: NativeStorage,
@@ -514,8 +530,9 @@ mod tests {
         assert_eq!(node_new_root, task_new_root);
     }
 
-    async fn known_rollup_height_state_root_on_stale_storage<S, Sm, Rt: Runtime<S>>(mut storage_manager: Sm)
-    where
+    async fn known_rollup_height_state_root_on_stale_storage<S, Sm, Rt: Runtime<S>>(
+        mut storage_manager: Sm,
+    ) where
         S: Spec,
         Sm: ForklessStorageManager<Storage = S::Storage>,
         S::Storage: NativeStorage,
@@ -578,18 +595,27 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_jmt_state_compute_competing_storages_repro() {
         let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
-        test_compute_competing_storages::<TestSpec, _, TestRuntime<TestSpec>>(storage_manager, 3).await;
+        test_compute_competing_storages::<TestSpec, _, TestRuntime<TestSpec>>(storage_manager, 3)
+            .await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_nomt_state_compute_competing_storages_repro() {
         let mut storage_manager = SimpleNomtStorageManager::<TestStorageSpec>::new();
         storage_manager.set_strict_mode(false);
-        test_compute_competing_storages::<TestNomtSpec, _, TestRuntime<TestNomtSpec>>(storage_manager, 3).await;
+        test_compute_competing_storages::<TestNomtSpec, _, TestRuntime<TestNomtSpec>>(
+            storage_manager,
+            3,
+        )
+        .await;
 
         let mut storage_manager = SimpleNomtStorageManager::<TestStorageSpec>::new();
         storage_manager.set_strict_mode(false);
-        test_compute_competing_storages::<TestNomtSpec, _, TestRuntime<TestNomtSpec>>(storage_manager, 1).await;
+        test_compute_competing_storages::<TestNomtSpec, _, TestRuntime<TestNomtSpec>>(
+            storage_manager,
+            1,
+        )
+        .await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -597,10 +623,18 @@ mod tests {
         sov_test_utils::logging::initialize_or_change_logging_with_filter("error,sov_sequencer::preferred=trace,sov_db::state_db_nomt=trace,sov_state::nomt::prover_storage=debug");
         let storage_manager =
             CommitingStorageManager::<NomtStorageManager<MockDaSpec, TestHasher, _>, _>::new();
-        test_compute_competing_storages::<TestNomtSpec, _, TestRuntime<TestNomtSpec>>(storage_manager, 3).await;
+        test_compute_competing_storages::<TestNomtSpec, _, TestRuntime<TestNomtSpec>>(
+            storage_manager,
+            3,
+        )
+        .await;
         let storage_manager =
             CommitingStorageManager::<NomtStorageManager<MockDaSpec, TestHasher, _>, _>::new();
-        test_compute_competing_storages::<TestNomtSpec, _, TestRuntime<TestNomtSpec>>(storage_manager, 1).await;
+        test_compute_competing_storages::<TestNomtSpec, _, TestRuntime<TestNomtSpec>>(
+            storage_manager,
+            1,
+        )
+        .await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -608,7 +642,11 @@ mod tests {
     async fn test_nomt_state_compute_competing_storages_repro_real_storage_manager_non_commiting() {
         let storage_manager =
             NonCommitingStorageManager::<NomtStorageManager<MockDaSpec, TestHasher, _>, _>::new();
-        test_compute_competing_storages::<TestNomtSpec, _, TestRuntime<TestNomtSpec>>(storage_manager, 3).await;
+        test_compute_competing_storages::<TestNomtSpec, _, TestRuntime<TestNomtSpec>>(
+            storage_manager,
+            3,
+        )
+        .await;
     }
 
     /// Test is an isolated scenario of sequencer and node interaction, where only 2 pieces are real:
@@ -623,8 +661,10 @@ mod tests {
     /// This tests the consistency of state root computation when the same logical state changes
     /// are applied in different batch configurations, which can happen when a sequencer runs ahead
     /// of the node's committed state or the node runs ahead.
-    async fn test_compute_competing_storages<S, Sm, Rt: Runtime<S>>(mut storage_manager: Sm, seq_ahead_by: usize)
-    where
+    async fn test_compute_competing_storages<S, Sm, Rt: Runtime<S>>(
+        mut storage_manager: Sm,
+        seq_ahead_by: usize,
+    ) where
         S: Spec,
         Sm: ForklessStorageManager<Storage = S::Storage>,
         S::Storage: NativeStorage,

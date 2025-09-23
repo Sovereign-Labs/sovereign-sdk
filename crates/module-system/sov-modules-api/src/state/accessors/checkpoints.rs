@@ -102,7 +102,12 @@ impl<S: Spec> StateCheckpoint<S> {
         kernel: &K,
         intermediate_state: Box<dyn StateGetter>,
     ) -> Self {
-        Self::with_witness_and_intermediate_state(inner, Default::default(), kernel, Some(intermediate_state))
+        Self::with_witness_and_intermediate_state(
+            inner,
+            Default::default(),
+            kernel,
+            Some(intermediate_state),
+        )
     }
 
     /// Replace the storage and intermediate state underlying the checkpoint in place. It is up to the caller
