@@ -1,12 +1,10 @@
-use alloy_primitives::Address;
-use alloy_rpc_types::Topic;
+use alloy_primitives::{serde_hex, Address};
+use alloy_rpc_types::{Filter, Topic};
 use alloy_rpc_types::{FilterBlockOption, FilterSet};
 
 /// Filter for logs.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct FilterWithCursor {
     pub cursor: Option<u64>,
-    pub block_option: FilterBlockOption,
-    pub address: FilterSet<Address>,
-    pub topics: [Topic; 4],
+    pub filter: Filter,
 }

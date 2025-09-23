@@ -21,6 +21,7 @@ alloy-sol-types = { workspace = true }
 alloy-transport = { workspace = true }
 reth-errors = { workspace = true }
 reth-primitives-traits = { workspace = true }
+serde = { workspace = true }
 
 [lints]
 workspace = true

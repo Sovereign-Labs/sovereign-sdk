@@ -183,19 +183,10 @@ async fn evm_test_get_logs_with_cursor() {
     }
     test_rollup.wait_for_next_blocks(1).await;
 
-    let f = FilterWithCursor {
+    let filter = FilterWithCursor {
         cursor: None,
-        block_option: FilterBlockOption::Range {
-            from_block: Some(BlockNumberOrTag::Latest),
-            to_block: None,
-        },
-        address: FilterSet::default(),
-        topics: todo!(),
+        filter: Filter::new(),
     };
-
-    let filter = Filter::new()
-        .from_block(start_block - 2)
-        .to_block(BlockNumberOrTag::Latest);
 
     let logs = evm_client.get_logs_with_cursor(&filter).await;
 

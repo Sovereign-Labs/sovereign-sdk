@@ -11786,6 +11786,7 @@ dependencies = [
  "reth-primitives",
  "sov-cli",
  "sov-modules-api",
+ "sov-rpc-eth-types",
  "sov-test-utils",
  "tracing",
 ]
@@ -12491,6 +12492,7 @@ dependencies = [
  "reth-errors",
  "reth-primitives-traits",
  "revm",
+ "serde",
  "thiserror 1.0.69",
 ]
 

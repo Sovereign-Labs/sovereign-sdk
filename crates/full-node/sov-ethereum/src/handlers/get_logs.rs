@@ -20,6 +20,7 @@ use sov_evm::MaybeSealedBlock;
 use sov_evm::PendingOrBlock;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
+use sov_rpc_eth_types::FilterWithCursor;
 use sov_sequencer::SeqConfigExtension;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
@@ -49,7 +50,8 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    logs_for_filter(parameters.one::<Filter>()?, ethereum).await
+    let x = parameters.one::<FilterWithCursor>()?;
+    todo!();
 }
 
 async fn logs_for_filter<S, Seq>(

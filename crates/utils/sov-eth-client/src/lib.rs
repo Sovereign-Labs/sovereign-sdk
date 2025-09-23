@@ -24,6 +24,7 @@ use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
 use sov_cli::NodeClient;
 use sov_modules_api::{Runtime, Spec};
+use sov_rpc_eth_types::FilterWithCursor;
 use sov_test_utils::SimpleStorageContract;
 
 const GAS: u64 = 9000000u64;
@@ -490,7 +491,7 @@ impl TestClient {
             .unwrap()
     }
 
-    pub async fn get_logs_with_cursor(&self, filter: &Filter) -> Vec<Log> {
+    pub async fn get_logs_with_cursor(&self, filter: &FilterWithCursor) -> Vec<Log> {
         self.rpc
             .request("eth_getLogsWithCursor", rpc_params![filter])
             .await

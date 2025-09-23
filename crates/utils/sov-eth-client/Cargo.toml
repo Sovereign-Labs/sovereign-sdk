@@ -22,5 +22,7 @@ jsonrpsee = { workspace = true }
 reth-primitives = { workspace = true }
 sov-cli = { workspace = true }
 sov-modules-api = { workspace = true }
+sov-rpc-eth-types = { workspace = true}
 sov-test-utils = { workspace = true }
 tracing = { workspace = true }
+
