@@ -209,9 +209,9 @@ where
     // Check that the transaction isn't a duplicate
     metrics.timings.check_uniqueness_timer.start();
     if let Err(err) = runtime.transaction_authorizer().check_uniqueness(
-        &execution_context,
         &auth_data,
         &ctx,
+        execution_context,
         &mut pre_exec_working_set,
     ) {
         let (scratchpad, pre_exec_gas_meter) = pre_exec_working_set.revert();

@@ -48,9 +48,9 @@ pub fn process_unauthorized_tx<S: Spec, R: Runtime<S>>(
 
     // Check that the transaction isn't a duplicate
     if let Err(e) = runtime.transaction_authorizer().check_uniqueness(
-        &execution_context,
         &auth_data,
         &ctx,
+        &execution_context,
         &mut pre_exec_working_set,
     ) {
         let (scratchpad, pre_exec_gas_meter) = pre_exec_working_set.revert();

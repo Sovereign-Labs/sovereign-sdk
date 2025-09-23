@@ -35,9 +35,9 @@ pub trait TransactionAuthorizer<S: Spec> {
     /// Prevents duplicate transactions from running.
     fn check_uniqueness(
         &self,
-        execution_context: &ExecutionContext,
         auth_data: &AuthorizationData<S>,
         context: &Context<S>,
+        execution_context: &ExecutionContext,
         state: &mut impl StateAccessor,
     ) -> anyhow::Result<()>;
 

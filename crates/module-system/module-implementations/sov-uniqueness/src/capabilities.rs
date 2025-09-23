@@ -15,16 +15,19 @@ impl<S: Spec> Uniqueness<S> {
     /// May return an error if state access fails (e.g if we run out of gas) or if an overflow occurs (in the `check_generation_uniqueness` case).
     pub fn check_uniqueness(
         &self,
-        _execution_context: &ExecutionContext,
         credential_id: &CredentialId,
         transaction_uniqueness: UniquenessData,
         transaction_hash: TxHash,
+        execution_context: &ExecutionContext,
         state: &mut impl StateReader<User>,
     ) -> anyhow::Result<()> {
         match transaction_uniqueness {
-            UniquenessData::Nonce(nonce) => {
-                self.check_nonce_uniqueness(credential_id, nonce, state)
-            }
+            UniquenessData::Nonce(nonce) => match execution_context {
+                ExecutionContext::SequencerWarmUp => {
+                    self.check_nonce_uniqueness_allow_nonconsecutive(credential_id, nonce, state)
+                }
+                _ => self.check_nonce_uniqueness(credential_id, nonce, state),
+            },
             UniquenessData::Generation(generation) => {
                 self.check_generation_uniqueness(credential_id, generation, transaction_hash, state)
             }

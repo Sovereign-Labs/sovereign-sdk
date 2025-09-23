@@ -229,16 +229,16 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
     /// Prevents duplicate transactions from running.
     fn check_uniqueness(
         &self,
-        execution_context: &ExecutionContext,
         auth_data: &AuthorizationData<S>,
         _context: &Context<S>,
+        execution_context: &ExecutionContext,
         state: &mut impl StateReader<User>,
     ) -> anyhow::Result<()> {
         self.uniqueness.check_uniqueness(
-            execution_context,
             &auth_data.credential_id,
             auth_data.uniqueness,
             auth_data.tx_hash,
+            execution_context,
             state,
         )
     }

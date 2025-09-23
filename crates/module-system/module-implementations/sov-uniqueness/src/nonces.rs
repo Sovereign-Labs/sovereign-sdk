@@ -12,6 +12,22 @@ impl<S: Spec> Uniqueness<S> {
         let nonce = self.nonces.get(credential_id, state)?.unwrap_or_default();
 
         anyhow::ensure!(
+            nonce == transaction_nonce,
+            "Tx bad nonce for credential id: {credential_id}, expected: {nonce}, but found: {transaction_nonce}",
+        );
+
+        Ok(())
+    }
+
+    pub(crate) fn check_nonce_uniqueness_allow_nonconsecutive(
+        &self,
+        credential_id: &CredentialId,
+        transaction_nonce: u64,
+        state: &mut impl StateReader<User>,
+    ) -> anyhow::Result<()> {
+        let nonce = self.nonces.get(credential_id, state)?.unwrap_or_default();
+
+        anyhow::ensure!(
             nonce <= transaction_nonce,
             "Tx bad nonce for credential id: {credential_id}, expected: {nonce}, but found: {transaction_nonce}",
         );
