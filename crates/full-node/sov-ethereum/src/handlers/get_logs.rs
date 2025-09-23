@@ -134,8 +134,7 @@ where
         None => {
             // This can hapen if the state was pruned.
             let msg = format!(
-                "Block for height {:?} not found. The state may have already been pruned.",
-                height
+                "Block for height {height:?} not found. The state may have already been pruned.",
             );
             return Err(to_jsonrpsee_error_object(&msg, ETH_RPC_ERROR));
         }
