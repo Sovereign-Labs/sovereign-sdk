@@ -19,6 +19,7 @@ pub fn process_unauthorized_tx<S: Spec, R: Runtime<S>>(
     validated_output: AuthTxOutput<S, R>,
     raw_tx: FullyBakedTx,
     sequencer_da_address: &<S::Da as DaSpec>::Address,
+    execution_context: ExecutionContext,
 ) -> (
     Result<ApplyTxResult<S>, TxProcessingError>,
     StateCheckpoint<S>,
@@ -47,6 +48,7 @@ pub fn process_unauthorized_tx<S: Spec, R: Runtime<S>>(
 
     // Check that the transaction isn't a duplicate
     if let Err(e) = runtime.transaction_authorizer().check_uniqueness(
+        &execution_context,
         &auth_data,
         &ctx,
         &mut pre_exec_working_set,
@@ -166,6 +168,7 @@ pub(crate) fn apply_batch<S, RT>(
     blob_idx: usize,
     sequencer_da_address: &<S::Da as DaSpec>::Address,
     gas_price: &<S::Gas as Gas>::Price,
+    execution_context: ExecutionContext,
 ) -> (BatchReceipt<S>, StateCheckpoint<S>)
 where
     S: Spec,
@@ -294,6 +297,7 @@ where
         validated_output,
         batch.tx.clone(),
         sequencer_da_address,
+        execution_context,
     );
 
     let mut tx_receipts = Vec::new();

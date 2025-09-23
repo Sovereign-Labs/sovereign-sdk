@@ -732,6 +732,7 @@ where
                         blob_idx,
                         &sender,
                         &gas_price,
+                        execution_context,
                     );
 
                     let gas_used = &batch_receipt.inner.gas_used;

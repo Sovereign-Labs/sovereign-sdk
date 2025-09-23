@@ -13,6 +13,7 @@ use sov_modules_api::capabilities::{
 use sov_modules_api::transaction::{
     AuthenticatedTransactionData, ProverReward, RemainingFunds, SequencerReward,
 };
+use sov_modules_api::ExecutionContext;
 use sov_modules_api::{
     AggregatedProofPublicData, Amount, Context, DaSpec, Gas, GetGasPrice, InfallibleStateAccessor,
     InvalidProofError, ModuleInfo, OperatingMode, Rewards, SovAttestation,
@@ -228,11 +229,13 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
     /// Prevents duplicate transactions from running.
     fn check_uniqueness(
         &self,
+        execution_context: &ExecutionContext,
         auth_data: &AuthorizationData<S>,
         _context: &Context<S>,
         state: &mut impl StateReader<User>,
     ) -> anyhow::Result<()> {
         self.uniqueness.check_uniqueness(
+            execution_context,
             &auth_data.credential_id,
             auth_data.uniqueness,
             auth_data.tx_hash,

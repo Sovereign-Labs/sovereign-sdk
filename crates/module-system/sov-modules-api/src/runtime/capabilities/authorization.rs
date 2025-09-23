@@ -6,6 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::crypto::CredentialId;
 use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::stf::ExecutionContext;
 use sov_rollup_interface::TxHash;
 use sov_universal_wallet::UniversalWallet;
 
@@ -34,6 +35,7 @@ pub trait TransactionAuthorizer<S: Spec> {
     /// Prevents duplicate transactions from running.
     fn check_uniqueness(
         &self,
+        execution_context: &ExecutionContext,
         auth_data: &AuthorizationData<S>,
         context: &Context<S>,
         state: &mut impl StateAccessor,

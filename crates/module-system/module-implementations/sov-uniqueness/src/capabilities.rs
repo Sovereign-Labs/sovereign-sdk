@@ -1,4 +1,5 @@
 use sov_modules_api::capabilities::UniquenessData;
+use sov_modules_api::ExecutionContext;
 use sov_modules_api::{CredentialId, Spec, StateAccessor, StateReader, TxHash};
 use sov_state::User;
 
@@ -14,6 +15,7 @@ impl<S: Spec> Uniqueness<S> {
     /// May return an error if state access fails (e.g if we run out of gas) or if an overflow occurs (in the `check_generation_uniqueness` case).
     pub fn check_uniqueness(
         &self,
+        _execution_context: &ExecutionContext,
         credential_id: &CredentialId,
         transaction_uniqueness: UniquenessData,
         transaction_hash: TxHash,
