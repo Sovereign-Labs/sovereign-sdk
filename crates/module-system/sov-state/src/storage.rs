@@ -631,6 +631,11 @@ pub trait NativeStorage: Storage {
     fn get_latest_root_hash(&self) -> anyhow::Result<Self::Root> {
         self.get_root_hash(self.latest_version())
     }
+
+    /// Get a root hash at the latest version
+    fn get_latest_root_hash_unbound(&self) -> anyhow::Result<Self::Root> {
+        self.get_root_hash_unbound(self.latest_version_unbound())
+    }
 }
 
 pub(crate) fn open_merkle_proof<S: MerkleProofSpec>(

@@ -546,8 +546,6 @@ where
             return;
         }
 
-        if self.blob_sender.number() > 5 {}
-
         if let Err(e) = self
             .try_to_create_and_start_batch_if_none_in_progress(true)
             .await

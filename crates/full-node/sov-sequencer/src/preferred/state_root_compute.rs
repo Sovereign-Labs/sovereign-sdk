@@ -127,16 +127,25 @@ fn fetch_root_hash_if_stale<S: Spec, Rt: Runtime<S>>(
     // TODO: This should be the  value from storage
     // .expect("Failed to get true slot number at historical height, but height exists in storage. This is a bug.");
     // If the latest version is equal, it means this state root has already been computed.
-    if latest_height_in_storage > rollup_height {
-        // tracing::warn!(%latest_height_in_storage, slot_number_of_checkpoint = %slot_number, "Stale reason");
+    if latest_height_in_storage >= rollup_height {
         let runtime = Rt::default();
         let kernel_with_slot_mapping = runtime.kernel_with_slot_mapping();
-        let slot_number_for_height = kernel_with_slot_mapping.true_slot_number_at_historical_height(rollup_height, &mut ApiStateAccessor::new(&temp_checkpoint, kernel_with_slot_mapping.clone())).expect("Failed to get true slot number at historical height, but height exists in storage. This is a bug.");
-        let root = storage
-            .get_root_hash_unbound(slot_number_for_height)
-            .expect("Failed to get root hash");
-        Some(root)
+        // There are two cases here: 
+        // If the underlying storage is ahead of the requested state by *more than one* rollup block, then the `kernel` will have its `true_slot_number_history` populated for the requested height.
+        // In this case, we can retrieve the slot number which goes with the requested height and fetch its state root
+        // Otherwise, the map will be empty. If the map is empty, we *know* that we're in this case - which means we can just return the latest root hash.
+        if let Some(slot_number_for_height) = kernel_with_slot_mapping.true_slot_number_at_historical_height(rollup_height, &mut ApiStateAccessor::new(&temp_checkpoint, kernel_with_slot_mapping.clone())) {
+            tracing::info!(rollup_height = %rollup_height, "Found historical slot number for height. Fetching root hash for slot number {}", slot_number_for_height );
+            let root = storage
+                .get_root_hash_unbound(slot_number_for_height)
+                .expect("Failed to get root hash");
+            Some(root)
+        } else {
+            tracing::info!(rollup_height = %rollup_height, "No historical slot number for height. Fetching root hash for latest slot");
+            Some(storage.get_latest_root_hash_unbound().expect("Failed to get latest root hash"))
+        }
     } else {
+        tracing::info!(rollup_height = %rollup_height, latest_height_in_storage = %latest_height_in_storage, "Storage is behind requested height. Returning None");
         None
     }
 }
@@ -165,7 +174,6 @@ async fn compute_state_root<S: Spec, Rt: Runtime<S>>(
 
                 // First, check if storage is stale from the point of view of the caller.
                 if let Some(root) = fetch_root_hash_if_stale::<S, Rt>(&storage, rollup_height) {
-                    tracing::error!("Storage is stale, returning historical root");
                     return root;
                 }
 
@@ -323,13 +331,15 @@ impl<S: Spec> StateRootBackgroundTaskState<S> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, VecDeque};
+    use std::collections::{VecDeque};
 
     use arbitrary::Unstructured;
     use rand::rngs::StdRng;
     use rand::{RngCore, SeedableRng};
     use sov_db::storage_manager::NomtStorageManager;
-    use sov_state::{OrderedReadsAndWrites, ProvableStorageCache, SlotKey};
+    use sov_modules_api::capabilities::ChainState;
+    use sov_modules_api::{KernelStateAccessor, VisibleSlotNumber};
+    use sov_state::{SlotKey};
     use sov_test_utils::storage::{
         CommitingStorageManager, ForklessStorageManager, NonCommitingStorageManager,
         SimpleNomtStorageManager, SimpleStorageManager,
@@ -370,31 +380,41 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_nomt_known_rollup_height_state_root_on_stale_storage() {
+        sov_test_utils::initialize_logging();
         let storage_manager = SimpleNomtStorageManager::<TestStorageSpec>::new();
         known_rollup_height_state_root_on_stale_storage::<TestNomtSpec, _, TestRuntime<TestNomtSpec>>(storage_manager).await;
     }
 
     // Helpers go below
-    fn writes_only_kernel() -> StateAccesses {
-        StateAccesses {
-            user: Default::default(),
-            kernel: OrderedReadsAndWrites {
-                ordered_reads: Vec::new(),
-                ordered_writes: vec![(
+    fn writes_only_kernel<S: Spec, Rt: Runtime<S>>(storage: &S::Storage) -> StateAccesses {
+        let mut rt = Rt::default();
+        let mut kernel = rt.kernel();
+        let mut checkpoint = StateCheckpoint::new(storage.clone(), &kernel);
+        // let mut state_with_partially_stale_heights = KernelStateAccessor::from_checkpoint(&kernel, &mut checkpoint);
+        // Increment the rollup height so that our storage height tracking works correctly. This is required because we now rely on rollup heights rather than slot numbers.
+        // kernel.increment_rollup_height(&mut state_with_partially_stale_heights, VisibleSlotNumber::new_dangerous(0));
+        // checkpoint.commit_revertable_storage_cache();
+        tracing::info!(rollup_height = %checkpoint.rollup_height_to_access(), "Kernel only writes incremented rollup height");
+
+        let (mut state_accesses, _, _) = checkpoint.freeze();
+        state_accesses.kernel.ordered_writes.push((
                     SlotKey::from_slice(&b"kernel_key"[..]),
                     Some(SlotValue::from(b"value_1".to_vec())),
-                )],
-            },
-        }
+                ),
+            );
+        state_accesses
     }
 
-    fn sample_batch() -> Arc<RawStateChanges> {
-        let mut changes = RawStateChanges {
-            user: ProvableStorageCache::default(),
-            kernel: ProvableStorageCache::default(),
-            accessory: HashMap::new(),
-            rollup_height: 0,
-        };
+    fn sample_batch<S: Spec, Rt: Runtime<S>>(storage: &S::Storage) -> Arc<RawStateChanges> {
+        let mut rt = Rt::default();
+        let mut kernel = rt.kernel();
+        let mut checkpoint = StateCheckpoint::new(storage.clone(), &kernel);
+        let mut state_with_partially_stale_heights = KernelStateAccessor::from_checkpoint(&kernel, &mut checkpoint);
+        // Increment the rollup height so that our storage height tracking works correctly. This is required because we now rely on rollup heights rather than slot numbers.
+        kernel.increment_rollup_height(&mut state_with_partially_stale_heights, VisibleSlotNumber::new_dangerous(1));
+        tracing::info!(rollup_height = %checkpoint.rollup_height_to_access(), "Sample batch incremented rollup height");
+        checkpoint.commit_revertable_storage_cache();
+        let mut changes = checkpoint.to_raw_state_changes();
         changes.user.set(
             &SlotKey::from_slice(&b"user_key"[..]),
             SlotValue::from(b"value_a".to_vec()),
@@ -405,6 +425,7 @@ mod tests {
         );
         changes.user.commit_revertable_storage_cache();
         changes.kernel.commit_revertable_storage_cache();
+
         Arc::new(changes)
     }
 
@@ -476,14 +497,14 @@ mod tests {
         received_root
     }
 
-    fn genesis<S, Sm>(storage_manager: &mut Sm)
+    fn genesis<S, Sm, Rt: Runtime<S>>(storage_manager: &mut Sm)
     where
         S: Spec,
         Sm: ForklessStorageManager<Storage = S::Storage>,
         S::Storage: NativeStorage,
     {
         let node_storage = storage_manager.create_prover_storage();
-        let writes_on_the_node = writes_only_kernel();
+        let writes_on_the_node = writes_only_kernel::<S, Rt>(&node_storage);
         let prev_root = <S::Storage as Storage>::PRE_GENESIS_ROOT;
         let (node_new_root, changes) = node_storage
             .compute_state_update(writes_on_the_node, &Default::default(), prev_root)
@@ -499,10 +520,10 @@ mod tests {
         S::Storage: NativeStorage,
         <S::Storage as Storage>::Root: Copy,
     {
-        genesis::<S, Sm>(&mut storage_manager);
+        genesis::<S, Sm, Rt>(&mut storage_manager);
 
         let node_storage = storage_manager.create_prover_storage();
-        let writes_on_the_node = sample_batch();
+        let writes_on_the_node = sample_batch::<S, Rt>(&node_storage);
 
         let prev_root = node_storage
             .get_root_hash(node_storage.latest_version())
@@ -521,7 +542,7 @@ mod tests {
 
         let task_new_root = one_off_check_state_root_computation::<S, Rt>(
             storage_for_background,
-            sample_batch(),
+            writes_on_the_node,
             RollupHeight::new(1),
             SlotNumber::new(1),
         )
@@ -539,18 +560,19 @@ mod tests {
         <S::Storage as Storage>::Root: Copy,
     {
         // Genesis
-        genesis::<S, Sm>(&mut storage_manager);
+        genesis::<S, Sm, Rt>(&mut storage_manager);
 
         // Starting background task
         let (task, handle, shutdown_sender) = start_background_task::<S, Rt>();
 
         let node_storage = storage_manager.create_prover_storage();
-        let writes_on_the_node = sample_batch();
+        let writes_on_the_node = sample_batch::<S, Rt>(&node_storage);
         let rollup_height = RollupHeight::new(1);
         let slot_number = SlotNumber::new(1);
         let prev_root = node_storage
             .get_root_hash(node_storage.latest_version())
             .unwrap();
+        tracing::info!(%rollup_height, %slot_number, "Computing node state root");
         let (node_new_root, changes) = node_storage
             .compute_state_update(
                 writes_on_the_node.to_state_accesses_for_sequencer_state_root_computation(),
@@ -562,23 +584,27 @@ mod tests {
         let storage_for_background_1 = storage_manager.create_prover_storage();
         let storage_for_background_2 = storage_manager.create_prover_storage();
 
+        tracing::info!(%rollup_height, %slot_number, "Computing state root from background task 1");
         // Normal, not stalled
         let received_root_1 = get_root_from_background_task::<S>(
             &task,
             storage_for_background_1,
-            sample_batch(),
+            writes_on_the_node.clone(),
             Default::default(),
             rollup_height,
             slot_number,
         )
         .await;
 
+        tracing::info!(%rollup_height, %slot_number, "Committing state update");
         storage_manager.commit_state_update(node_storage, changes, node_new_root);
+        tracing::info!(%rollup_height, %slot_number, "Committed state update");
 
-        let received_root_2 = get_root_from_background_task::<S>(
+        tracing::info!(%rollup_height, %slot_number, "Computing state root from background task 2");
+        let received_root_2: <<S as Spec>::Storage as Storage>::Root = get_root_from_background_task::<S>(
             &task,
             storage_for_background_2,
-            sample_batch(),
+            writes_on_the_node.clone(),
             Default::default(),
             rollup_height,
             slot_number,
@@ -673,7 +699,7 @@ mod tests {
         assert!(seq_ahead_by > 0, "Test only works with seq_ahead_by > 0");
         let _ahead_by_span =
             tracing::debug_span!("competing_storages", seq_ahead_by = seq_ahead_by).entered();
-        genesis::<S, Sm>(&mut storage_manager);
+        genesis::<S, Sm, Rt>(&mut storage_manager);
         let preparation_start = std::time::Instant::now();
         let (task, handle, shutdown_sender) = start_background_task::<S, Rt>();
         // Double it to fill the channel
