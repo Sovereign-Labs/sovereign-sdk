@@ -70,7 +70,9 @@ where
         let cfg_env = get_cfg_env(&block_env, cfg, None);
         let mut evm_db: EvmDb<_, S> = self.get_db(state);
 
+        start_timer!(execution);
         let result = executor::transact_commit(&mut evm_db, block_env, tx_env, cfg_env);
+        save_elapsed!(execution_time SINCE execution);
 
         let pending_len = self.pending_transactions.len(state)?;
 
@@ -127,7 +129,10 @@ where
         save_elapsed!(total_time SINCE total);
         #[cfg(feature = "native")]
         sov_metrics::track_metrics(|t| {
-            t.submit(EvmTxMetrics { total_time });
+            t.submit(EvmTxMetrics {
+                total_time,
+                execution_time,
+            });
         });
 
         Ok(())

@@ -4,6 +4,7 @@ use std::io::Write;
 #[derive(Debug)]
 pub(crate) struct EvmTxMetrics {
     pub total_time: std::time::Duration,
+    pub execution_time: std::time::Duration,
 }
 
 impl Metric for EvmTxMetrics {
@@ -14,9 +15,10 @@ impl Metric for EvmTxMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} total_time={}",
+            "{} total_time={},execution_time={}",
             self.measurement_name(),
             self.total_time.as_micros(),
+            self.execution_time.as_micros(),
         )
     }
 }
