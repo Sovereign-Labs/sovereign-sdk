@@ -31,3 +31,19 @@ These tests can be skipped by setting the `SOV_TEST_SKIP_DOCKER` env var to `1` 
 ```bash
 SOV_TEST_SKIP_DOCKER=1 cargo nextest run
 ```
+
+### Postgres configuration via environment variables
+
+When running the preferred sequencer with Postgres, you can supply the connection string via environment variables without storing secrets in your config file.
+
+Precedence (first non-empty wins):
+
+1. `SOV_SEQUENCER_POSTGRES_URL`
+2. `DATABASE_URL`
+3. `sequencer.preferred.postgres_connection_string` in your TOML config
+
+Example:
+
+```bash
+SOV_SEQUENCER_POSTGRES_URL="postgres://user:pass@host:5432/db" cargo run -p sov-sequencer -- ...
+```

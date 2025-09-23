@@ -162,7 +162,9 @@ where
             shutdown_sender.clone(),
             config.sequencer_kind_config.is_replica,
             storage_path,
-            &config.sequencer_kind_config.postgres_connection_string,
+            &config
+                .sequencer_kind_config
+                .resolved_postgres_connection_string(),
         )
         .await?;
 

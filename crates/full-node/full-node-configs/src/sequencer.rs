@@ -175,6 +175,28 @@ impl Default for PreferredSequencerConfig {
     }
 }
 
+impl PreferredSequencerConfig {
+    /// Returns the Postgres connection string, resolving environment overrides.
+    ///
+    /// Precedence (first non-empty wins):
+    /// - `SOV_SEQUENCER_POSTGRES_URL`
+    /// - `DATABASE_URL`
+    /// - `self.postgres_connection_string`
+    pub fn resolved_postgres_connection_string(&self) -> Option<String> {
+        if let Ok(url) = std::env::var("SOV_SEQUENCER_POSTGRES_URL") {
+            if !url.is_empty() {
+                return Some(url);
+            }
+        }
+        if let Ok(url) = std::env::var("DATABASE_URL") {
+            if !url.is_empty() {
+                return Some(url);
+            }
+        }
+        self.postgres_connection_string.clone()
+    }
+}
+
 /// The ideal buffer of finalized slots that the sequencer should maintain. The larger this number,
 /// the longer forced transactions will take to be included but the more the sequencer is able to buffer
 /// instability on the DA layer.
