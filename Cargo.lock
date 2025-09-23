@@ -11906,6 +11906,7 @@ dependencies = [
  "sov-eth-dev-signer",
  "sov-evm",
  "sov-kernels",
+ "sov-metrics",
  "sov-mock-da",
  "sov-modules-api",
  "sov-rollup-interface",

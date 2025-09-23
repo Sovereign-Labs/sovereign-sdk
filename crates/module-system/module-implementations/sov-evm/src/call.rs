@@ -2,6 +2,7 @@ use alloy_primitives::Address;
 use revm::context::result::ExecutionResult;
 use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_metrics::{save_elapsed, start_timer};
 use sov_modules_api::macros::{serialize, UniversalWallet};
 #[cfg(feature = "native")]
 use sov_modules_api::prelude::UnwrapInfallible;
@@ -15,6 +16,7 @@ use crate::evm::executor::{self};
 use crate::evm::primitive_types::{Receipt, TransactionSignedAndRecovered};
 use crate::evm::RlpEvmTransaction;
 use crate::executor::get_cfg_env;
+use crate::metrics::EvmTxMetrics;
 use crate::{Evm, PendingTransaction};
 use anyhow::Context as _;
 
@@ -36,6 +38,7 @@ where
         context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
+        start_timer!(total);
         let block_env = self
             .block_env
             .get(state)?
@@ -119,6 +122,11 @@ where
         #[cfg(feature = "native")]
         self.set_accessory_state(head, &pending_transaction, pending_len + 1, state)
             .unwrap_infallible();
+
+        save_elapsed!(total_time SINCE total);
+        sov_metrics::track_metrics(|t| {
+            t.submit(EvmTxMetrics { total_time });
+        });
 
         Ok(())
     }

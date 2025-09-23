@@ -21,6 +21,7 @@ sov-kernels = { workspace = true }
 sov-state = { workspace = true }
 sov-address = { workspace = true, features = ["evm"] }
 sov-bank = { workspace = true }
+sov-metrics = { workspace = true }
 sov-uniqueness = { workspace = true }
 sov-chain-state = { workspace = true }
 sov-universal-wallet = { workspace = true, features = ["eip712"] }

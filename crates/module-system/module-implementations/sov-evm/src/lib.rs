@@ -8,6 +8,7 @@ mod db;
 mod evm;
 mod genesis;
 mod hooks;
+mod metrics;
 mod sov_evm;
 use std::ops::RangeInclusive;
 
