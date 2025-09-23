@@ -12,10 +12,9 @@ use sov_modules_api::{FullyBakedTx, Runtime};
 use std::collections::BTreeMap;
 use tokio::task::JoinHandle;
 
-// We have several work-stealing executor workers for a single main worker, so we don't expect the channels to become full.
-// Even if they do, the sender uses a non-blocking method, meaning a few updates may simply be skipped.
+// We have several work-stealing executor workers for a single main worker, so we don't expect the channel to become full.
+// Even if it does, the sender uses a non-blocking method, meaning a few updates may simply be skipped.
 const TX_CHANNEL_SIZE: usize = 16;
-const OPEN_BLOCK_CHANNEL_SIZE: usize = 16;
 
 pub(crate) struct StartBlockNotification<S: Spec> {
     pub(crate) data: StartBlockData<S>,
@@ -37,14 +36,14 @@ impl<S: Spec> Clone for StartBlockNotification<S> {
 
 #[derive(Clone)]
 pub(crate) struct CacheWarmUpExecutor<S: Spec> {
-    start_block_notification_sender: tokio::sync::broadcast::Sender<StartBlockNotification<S>>,
+    start_block_notification_sender: tokio::sync::watch::Sender<Option<StartBlockNotification<S>>>,
     tx_sender: flume::Sender<FullyBakedTx>,
 }
 
 impl<S: Spec> CacheWarmUpExecutor<S> {
     pub(crate) fn send_batch_start_notification(&self, data: StartBlockNotification<S>) {
         // This `send` does not block.
-        let _ = self.start_block_notification_sender.send(data);
+        let _ = self.start_block_notification_sender.send(Some(data));
     }
 
     pub(crate) fn send_tx(&self, tx: FullyBakedTx) {
@@ -58,8 +57,12 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     ) -> (Self, Vec<JoinHandle<()>>) {
         let (tx_sender, tx_receiver) = flume::bounded(TX_CHANNEL_SIZE);
-        let (start_block_notification_sender, _) =
-            tokio::sync::broadcast::channel(OPEN_BLOCK_CHANNEL_SIZE);
+
+        // Option<StartBlockNotification<S>> is niche-optimized, so keeping it instead of using
+        // StartBlockNotification directly in the channel does not introduce any overhead.
+        // Moreover, this is only used for the watch channel.
+        let (start_block_notification_sender, start_block_notification_receiver) =
+            tokio::sync::watch::channel(None);
 
         let mut handles = Vec::new();
         for _ in 0..seq_config.sequencer_kind_config.num_cache_warmup_workers {
@@ -68,7 +71,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                 exec_config.clone(),
                 seq_config.clone(),
                 tx_receiver.clone(),
-                start_block_notification_sender.subscribe(),
+                start_block_notification_receiver.clone(),
             );
 
             handles.push(worker);
@@ -88,8 +91,8 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
         tx_receiver: flume::Receiver<FullyBakedTx>,
-        mut start_block_notification_sender: tokio::sync::broadcast::Receiver<
-            StartBlockNotification<S>,
+        mut start_block_notification_receiver: tokio::sync::watch::Receiver<
+            Option<StartBlockNotification<S>>,
         >,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
@@ -100,21 +103,13 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
             let mut is_started = false;
             loop {
                 tokio::select! {
-                    notify = start_block_notification_sender.recv() => {
-                        match notify{
-                            Ok(notify) => {
-                                let _ = executor.shutdown().await;
-                                Self::start_block(notify, &mut executor).await;
-                                is_started = true;
-                            },
-                            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                                // If the worker is too slow we will just skip some open block updates.
-                                continue;
-                            }
-                            Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                                // Quit if channel closed.
-                                return
-                            }
+                    _ = start_block_notification_receiver.changed() => {
+
+                        let notify = start_block_notification_receiver.borrow().clone();
+                        if let Some(notify) = notify {
+                              let _ = executor.shutdown().await;
+                              Self::start_block(notify, &mut executor).await;
+                              is_started = true;
                         }
                     }
 

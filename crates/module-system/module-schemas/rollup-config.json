@@ -309,7 +309,6 @@
       "type": "object",
       "required": [
         "batch_execution_time_limit_millis",
-        "num_cache_warmup_workers",
         "recovery_strategy"
       ],
       "properties": {
@@ -359,6 +358,7 @@
         },
         "num_cache_warmup_workers": {
           "description": "The number of workers that warm up the main executor cache.",
+          "default": 3,
           "type": "integer",
           "format": "uint",
           "minimum": 0.0
