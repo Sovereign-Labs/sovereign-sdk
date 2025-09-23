@@ -885,7 +885,7 @@ where
         let mut out = Vec::with_capacity(64);
         out.extend_from_slice(&recipient.0);
         let amount = token_source.outbound_amount(local_amount)?; // Convert the local amount to the remote token amount
-        out.extend_from_slice(&amount);
+        out.extend_from_slice(&amount.0);
         Ok(out)
     }
 

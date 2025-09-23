@@ -164,10 +164,12 @@ fn conversion_decimals(token: &StoredTokenKind) -> (u8, u8) {
 
 impl StoredTokenKind {
     /// Scales the amount to account for the differences in decimals when sending to a destination chain.
-    pub fn outbound_amount(&self, local_amount: Amount) -> anyhow::Result<[u8; 32]> {
-        let amount = U256::try_from(local_amount.0).unwrap();
+    pub fn outbound_amount(&self, local_amount: Amount) -> anyhow::Result<HexHash> {
+        let amount = U256::try_from(local_amount.0)?;
         let (local_decimals, remote_decimals) = conversion_decimals(self);
-        convert_decimals(amount, local_decimals, remote_decimals).map(|res| res.to_be_bytes())
+        convert_decimals(amount, local_decimals, remote_decimals)
+            .map(|res| res.to_be_bytes())
+            .into()
     }
 
     /// Scales the amount to account for the differences in decimals when receiving a message.
