@@ -18,7 +18,7 @@ async fn main() -> Result<()> {
         .unwrap();
     let contract_address = deploy_receipt.contract_address.unwrap();
 
-    println!("Contract deployed at: {:?}", contract_address);
+    println!("Contract deployed at: {contract_address:?}");
 
     for i in 1..=1000 {
         let pending_tx = client.set_value(contract_address, i).await;
@@ -29,8 +29,8 @@ async fn main() -> Result<()> {
                 receipt.gas_used.unwrap(),
                 receipt.block_number.unwrap()
             ),
-            Ok(None) => println!("TX {}: No receipt received", i),
-            Err(e) => println!("TX {}: Error - {:?}", i, e),
+            Ok(None) => println!("TX {i}: No receipt received"),
+            Err(e) => println!("TX {i}: Error - {e:?}"),
         }
     }
     Ok(())

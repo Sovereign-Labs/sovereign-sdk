@@ -34,7 +34,7 @@ impl RpcClient {
             .unwrap();
         let ws = WsClientBuilder::default().build(ws_conn_str).await.unwrap();
         let pub_sub = ProviderBuilder::default()
-            .connect(&ws_conn_str)
+            .connect(ws_conn_str)
             .await
             .unwrap();
 

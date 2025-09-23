@@ -28,7 +28,7 @@ async fn evm_test_get_logs() {
     test_rollup.resume_preferred_batches().await;
     test_rollup.wait_for_next_blocks(1).await;
 
-    let tx_hash = tx_hashes[0].clone();
+    let tx_hash = tx_hashes[0];
     let rec = evm_client.alloy_receipt(tx_hash).await.unwrap();
     let block_hash = rec.block_hash.unwrap();
 

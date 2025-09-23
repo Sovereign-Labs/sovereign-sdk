@@ -29,7 +29,7 @@ async fn evm_test_log_subscription() {
     send_txs_and_pause(0..10, contract_address, &evm_client, &test_rollup).await;
 
     let sub = evm_client.alloy_subscribe_logs(&Filter::new()).await;
-    let sub_id = sub.local_id().clone();
+    let sub_id = *sub.local_id();
 
     // Subscription started. Logs from these transactions will appear even though we haven’t started listening for them.
     let mut tx_hashes =
@@ -269,7 +269,7 @@ impl LogCollector {
                             break;
                         }
                         broadcast::error::RecvError::Lagged(err) => {
-                            panic!("Log watcher error: {:?}", err)
+                            panic!("Log watcher error: {err:?}")
                         }
                     },
                 }
@@ -282,7 +282,7 @@ impl LogCollector {
     }
 
     async fn wait(&mut self) {
-        self.rec.changed().await.unwrap()
+        self.rec.changed().await.unwrap();
     }
 }
 
@@ -313,7 +313,7 @@ async fn fetch_logs(
     let mut logs = Vec::new();
 
     for hash in &tx_hashes {
-        let receipt = evm_client.alloy_receipt(hash.clone()).await.unwrap();
+        let receipt = evm_client.alloy_receipt(*hash).await.unwrap();
         for log in receipt.logs() {
             assert_receipt_and_log(&receipt, log);
             logs.push(log.clone());
@@ -331,14 +331,14 @@ async fn get_filtered_logs(
     test_rollup: &TestRollup<MockDemoRollup<Native>>,
 ) -> Vec<alloy_rpc_types_eth::Log> {
     let mut log_collector = LogCollector::new();
-    let sub = evm_client.alloy_subscribe_logs(&filter).await;
-    let sub_id = sub.local_id().clone();
+    let sub = evm_client.alloy_subscribe_logs(filter).await;
+    let sub_id = *sub.local_id();
 
     log_collector.spawn_log_watcher(sub, None).await;
 
     for i in 0..number_of_txs {
         let _ = evm_client
-            .alloy_emit_logs(contract_address, i as u32, nb_of_logs)
+            .alloy_emit_logs(contract_address, i, nb_of_logs)
             .await;
 
         if i % 5 == 0 {

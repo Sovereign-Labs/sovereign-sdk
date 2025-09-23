@@ -75,7 +75,7 @@ where
     let mut rpc_logs = Vec::new();
 
     let Some(height) = evm.get_block_height_by_hash(&block_hash, state) else {
-        let msg = format!("Block for block_hash {:?} does not exist", block_hash);
+        let msg = format!("Block for block_hash {block_hash:?} does not exist");
         tracing::warn!(%msg);
         return Err(to_jsonrpsee_error_object(&msg, ETH_RPC_ERROR));
     };
@@ -142,7 +142,7 @@ where
     for index in block.transactions {
         let Some(receipt) = evm.receipt(index, state) else {
             // This can hapen if the state was pruned.
-            let msg = format!("Receipt for index {:?} does not exist", index);
+            let msg = format!("Receipt for index {index:?} does not exist");
             tracing::error!(%msg);
             return Err(to_jsonrpsee_error_object(&msg, ETH_RPC_ERROR));
         };
@@ -184,15 +184,13 @@ where
 {
     let number = evm.str_to_block_nr(block_nr_or_tag.map(|b| b.to_string()), state);
     match number {
-        PendingOrBlock::Pending => {
-            return Err(to_jsonrpsee_error_object(
-                "Pending blocks are not supported",
-                ETH_RPC_ERROR,
-            ))
-        }
+        PendingOrBlock::Pending => Err(to_jsonrpsee_error_object(
+            "Pending blocks are not supported",
+            ETH_RPC_ERROR,
+        )),
         PendingOrBlock::Invalid(err) => {
             let msg = format!("Invalid block: {err}");
-            return Err(to_jsonrpsee_error_object(msg, ETH_RPC_ERROR));
+            Err(to_jsonrpsee_error_object(msg, ETH_RPC_ERROR))
         }
         PendingOrBlock::Number(number) => Ok(number),
     }
