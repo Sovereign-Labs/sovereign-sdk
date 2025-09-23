@@ -16,6 +16,7 @@ use crate::evm::executor::{self};
 use crate::evm::primitive_types::{Receipt, TransactionSignedAndRecovered};
 use crate::evm::RlpEvmTransaction;
 use crate::executor::get_cfg_env;
+#[cfg(feature = "native")]
 use crate::metrics::EvmTxMetrics;
 use crate::{Evm, PendingTransaction};
 use anyhow::Context as _;
@@ -124,6 +125,7 @@ where
             .unwrap_infallible();
 
         save_elapsed!(total_time SINCE total);
+        #[cfg(feature = "native")]
         sov_metrics::track_metrics(|t| {
             t.submit(EvmTxMetrics { total_time });
         });

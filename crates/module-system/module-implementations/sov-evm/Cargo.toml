@@ -132,6 +132,7 @@ native = [
 	# Optional for speed up in native mode
 	# "revm/asm-keccak"
 	"sov-evm/native",
+	"sov-metrics/native",
 	"sov-address/native",
 	"sov-mock-da/native",
 	"sov-modules-api/native",
