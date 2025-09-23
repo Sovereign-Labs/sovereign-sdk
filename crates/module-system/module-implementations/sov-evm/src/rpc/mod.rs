@@ -668,14 +668,14 @@ where
             .get_sealed_block_by_number(block_number, state)
             .ok_or(EthApiError::UnknownBlockOrTxIndex)?;
 
-        match maybe_blcok {
-            MaybeSealedBlock::Pending(_) => Ok(self
+        Ok(match maybe_blcok {
+            MaybeSealedBlock::Pending(_) => self
                 .block_env
                 .get(state)
                 .unwrap_infallible()
-                .expect("The impossible happened: block_env is not set.")),
-            MaybeSealedBlock::Sealed(sealed_block) => Ok(BlockEnv::from(sealed_block)),
-        }
+                .expect("The impossible happened: block_env is not set."),
+            MaybeSealedBlock::Sealed(sealed_block) => BlockEnv::from(sealed_block),
+        })
     }
 }
 
