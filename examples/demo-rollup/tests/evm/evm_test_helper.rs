@@ -103,21 +103,6 @@ pub(crate) async fn set_value_check(
     Ok(())
 }
 
-/// Calls `set_value` on the test contract with unsigned transaction.
-pub(crate) async fn set_value_unsigned_check(
-    client: &TestClient,
-    contract_address: Address,
-    set_arg: u32,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let set_value_req = client.set_value_unsigned(contract_address, set_arg).await;
-    set_value_req.await.unwrap().unwrap();
-
-    let get_arg = client.query_contract(contract_address).await?;
-    assert_eq!(set_arg, get_arg.as_u32());
-
-    Ok(())
-}
-
 /// Calls `set_values` on the test contract.
 pub(crate) async fn set_multiple_values_check(
     client: &TestClient,

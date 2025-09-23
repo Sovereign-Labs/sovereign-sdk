@@ -99,9 +99,6 @@ async fn execute_evm_tests(
     // Create a blob with multiple transactions.
     evm_test_helper::set_multiple_values_check(client, contract_address, values).await?;
 
-    let value = 103;
-    evm_test_helper::set_value_unsigned_check(client, contract_address, value).await?;
-
     // TODO: reenable this check by figuring out a way to get finer grained control over preferred batch production.
     //evm_test_helper::gas_check(client, da_service, contract_address).await?;
 
