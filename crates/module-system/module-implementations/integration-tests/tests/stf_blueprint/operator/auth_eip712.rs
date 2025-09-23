@@ -1,5 +1,7 @@
 use sov_address::{EthereumAddress, EvmCryptoSpec};
 use sov_evm::Eip712Authenticator;
+use sov_evm::Eip712AuthenticatorInput;
+use sov_evm::Eip712AuthenticatorTrait;
 use sov_evm::SchemaProvider;
 use sov_mock_da::{MockBlob, MockDaSpec};
 use sov_mock_zkvm::MockZkvm;
@@ -91,6 +93,13 @@ generate_runtime! {
     auth_type: Eip712Authenticator<S, TestRuntime<S>, TestSchemaProvider>,
     auth_call_wrapper: |call| call,
 }
+
+impl Eip712AuthenticatorTrait<S> for TestRuntime<S> {
+    fn add_eip712_auth(tx: RawTx) -> <Self::Auth as TransactionAuthenticator<S>>::Input {
+        Eip712AuthenticatorInput::Eip712(tx)
+    }
+}
+
 type RT = TestRuntime<S>;
 
 fn setup() -> (TestRunner<RT, S>, TestUser<S>) {
@@ -157,9 +166,11 @@ pub fn encode_message<S: Spec, RT: Runtime<S> + EncodeCall<ValueSetter<S>>>() ->
     RT::to_decodable(msg)
 }
 
-pub fn encode<S: Spec, RT: Runtime<S>>(tx: Transaction<RT, S>) -> FullyBakedTx {
+pub fn encode<S: Spec, RT: Runtime<S> + Eip712AuthenticatorTrait<S>>(
+    tx: Transaction<RT, S>,
+) -> FullyBakedTx {
     let raw_tx = RawTx::new(borsh::to_vec(&tx).unwrap());
-    RT::Auth::encode_with_standard_auth(raw_tx)
+    <RT as Eip712AuthenticatorTrait<S>>::encode_with_eip712_auth(raw_tx)
 }
 
 fn execute_tx(
