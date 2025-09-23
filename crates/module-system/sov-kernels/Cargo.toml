@@ -19,6 +19,7 @@ sov-modules-api = { workspace = true }
 sov-blob-storage = { workspace = true }
 sov-chain-state = { workspace = true }
 sov-rollup-interface = { workspace = true }
+sov-encryption = { workspace = true }
 
 serde_json = { workspace = true, optional = true }
 

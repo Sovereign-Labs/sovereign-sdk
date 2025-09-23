@@ -85,6 +85,7 @@ pub trait BlobSelector {
         >,
         state: &mut KernelStateAccessor<'_, Self::Spec>,
         cf: CF,
+        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
     ) -> anyhow::Result<(
         BlobSelectorOutput<SelectedBlob<Self::Spec, IterableBatchWithId<Self::Spec, CF>>>,
         Vec<DiscardedBlob>,

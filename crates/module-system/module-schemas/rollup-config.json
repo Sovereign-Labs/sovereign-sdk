@@ -751,18 +751,6 @@
         "http_config"
       ],
       "properties": {
-        "batch_encryption": {
-          "description": "Optional batch encryption configuration for decrypting transaction batches received from the DA layer. This should match the sequencer's encryption config.",
-          "default": null,
-          "anyOf": [
-            {
-              "$ref": "#/definitions/EncryptionConfig"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
         "concurrent_sync_tasks": {
           "description": "How many concurrent tasks to get block from DA service",
           "type": [

@@ -39,6 +39,7 @@ sov-modules-macros = { workspace = true }
 sov-universal-wallet = { workspace = true, features = ["serde"] }
 sov-db = { workspace = true, optional = true }
 sov-metrics = { workspace = true }
+sov-encryption = { workspace = true }
 serde = { workspace = true }
 borsh = { workspace = true }
 digest = { workspace = true }

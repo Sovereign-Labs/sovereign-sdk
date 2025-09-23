@@ -59,12 +59,13 @@ impl<S: Spec> BlobSelector for SoftConfirmationsKernel<'_, S> {
         current_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         state: &mut KernelStateAccessor<'_, S>,
         cf: CF,
+        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
     ) -> anyhow::Result<(
         BlobSelectorOutput<SelectedBlob<S, IterableBatchWithId<S, CF>>>,
         Vec<DiscardedBlob>,
     )> {
         self.blob_storage
-            .get_blobs_for_this_slot(current_blobs, state, cf)
+            .get_blobs_for_this_slot(current_blobs, state, cf, encryption_layer)
     }
 
     fn get_non_preferred_blobs<CF: InjectedControlFlow<Self::Spec> + Clone>(

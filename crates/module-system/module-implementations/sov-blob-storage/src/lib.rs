@@ -6,6 +6,8 @@ mod validation;
 use std::collections::BTreeMap;
 use std::num::NonZero;
 use std::sync::Arc;
+use std::marker::PhantomData;
+
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
@@ -22,6 +24,7 @@ use sov_modules_api::{
 use sov_rollup_interface::common::SlotNumber;
 use sov_state::codec::BcsCodec;
 
+
 /// For how many slots deferred blobs are stored before being executed
 pub fn config_deferred_slots_count() -> u64 {
     config_value!("DEFERRED_SLOTS_COUNT")
@@ -36,9 +39,7 @@ pub fn config_unregistered_blobs_per_slot() -> u64 {
 
 /// Configuration for the BlobStorage module
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct BlobStorageConfig {
-    // Currently no configuration needed for blob storage
-}
+pub struct BlobStorageConfig {}
 
 /// The type of sequencer that published a blob.
 #[derive(
@@ -198,6 +199,10 @@ pub struct BlobStorage<S: Spec> {
 
     #[module]
     bank: sov_bank::Bank<S>,
+    
+    /// Phantom field for encryption functionality
+    #[phantom]
+    encryption: PhantomData<()>,
 }
 
 /// Non standard methods for blob storage

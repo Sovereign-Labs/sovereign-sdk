@@ -28,6 +28,7 @@ sov-state = { workspace = true }
 sov-rollup-interface = { workspace = true }
 sov-sequencer-registry = { workspace = true }
 sov-chain-state = { workspace = true }
+sov-encryption = { workspace = true }
 
 
 [dev-dependencies]

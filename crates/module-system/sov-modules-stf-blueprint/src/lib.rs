@@ -375,6 +375,7 @@ where
             relevant_blobs,
             execution_context,
             NoOpControlFlow,
+            self.encryption_layer.as_ref(),
         )
     }
 }
@@ -392,13 +393,14 @@ where
         relevant_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         kernel: &mut KernelStateAccessor<S>,
         cf: CF,
+        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
     ) -> (
         BlobSelectorOutput<SelectedBlob<S, IterableBatchWithId<S, CF>>>,
         Vec<DiscardedBlob>,
     ) {
         runtime
             .blob_selector()
-            .get_blobs_for_this_slot(relevant_blobs, kernel, cf)
+            .get_blobs_for_this_slot(relevant_blobs, kernel, cf, encryption_layer)
             .expect("blob selection must succeed, probably serialization failed")
     }
 }
@@ -421,6 +423,7 @@ where
         relevant_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         execution_context: ExecutionContext,
         cf: CF,
+        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
     ) -> ApplySlotOutput<S::InnerZkvm, S::OuterZkvm, S::Da, Self> {
         let mut runtime = RT::default();
         // Sanity check that gas limits are set correctly. This is already checked at genesis, but we check again in case
@@ -468,6 +471,7 @@ where
             relevant_blobs,
             &mut kernel_with_partially_stale_heights,
             cf,
+            encryption_layer,
         );
         tracing::trace!("Done selecting blobs");
 

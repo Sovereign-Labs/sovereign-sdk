@@ -119,6 +119,15 @@ pub struct KeyResponse {
     /// Key identifier
     pub key_id: String,
     /// Key expiration timestamp (Unix timestamp)
+    /// TODO: make this not a timestamp? 
+    /// Need something more uniform for recovery, maybe a block height or block hash or something from a block header
+    /// Make sure all the nodes can stay in sync when the key rotates and how it can be clear when to rotate
+    /// For many nodes, how do they all stay in sync with regards to when to fetch keys. If you give every node an interval, they will be out of sync
+    /// DA layer time?
+    /// investigate: When a key is generated, it broadcast a transaction to Nebula that says "expire this key and use the new key"
+    /// Keys Should be a push from key-retrieval 
+    /// New keys being broadcast as a Nebula transaction also helps recovery nodes know where to fetch historical keys without reading somewhere else
+    /// Can a transaction trigger something to happen in the DaService? (in our case a key rotation / deletion)
     pub expires_at: Option<u64>,
 }
 

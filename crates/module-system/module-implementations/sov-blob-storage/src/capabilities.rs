@@ -22,7 +22,7 @@ use crate::max_size_checker::{BlobsAccumulatorWithSizeLimit, PushOrIgnore};
 use crate::{
     config_deferred_slots_count, config_unregistered_blobs_per_slot, BlobStorage, BlobType, Escrow,
     PreferredBatchData, PreferredBlobData, PreferredBlobDataWithId, PreferredProofData,
-    SequenceNumber, SequencerNumberTracker, SequencerType, ValidatedBlob,
+    EncryptedPreferredBatchData, SequenceNumber, SequencerNumberTracker, SequencerType, ValidatedBlob,
 };
 /// A loose upper bound on the size of an emergency registration blob, in bytes. Blobs larger than this are statically known to be invalid
 /// so we don't bother trying to deserialize them.
@@ -82,6 +82,7 @@ impl<S: Spec> BlobStorage<S> {
         current_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         discarded_blobs: &mut Vec<DiscardedBlob>,
         state: &mut KernelStateAccessor<'_, S>,
+        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
     ) -> BlobSelectorOutput<ValidatedBlob<S, BatchWithId<S>>> {
         tracing::trace!("On based sequencer path");
 
@@ -97,6 +98,7 @@ impl<S: Spec> BlobStorage<S> {
                 false,
                 visible_slot_number_increase,
                 state,
+                encryption_layer,
             ),
             visible_slot_number_increase,
         }
@@ -110,6 +112,7 @@ impl<S: Spec> BlobStorage<S> {
         account_for_deferral: bool,
         visible_height_increase: u64,
         state: &mut KernelStateAccessor<'_, S>,
+        _encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
     ) -> Vec<ValidatedBlob<S, BatchWithId<S>>> {
         let mut blobs_with_total_size_limit = BlobsAccumulatorWithSizeLimit::<S>::new();
 
@@ -240,7 +243,7 @@ impl<S: Spec> BlobStorage<S> {
                             // Otherwise, try to deserialize and use it
                             unregistered_blob_count += 1;
                             if let Some(tx) = self.deserialize_or_try_slash_sender::<FullyBakedTx>(
-                                blob, None, false, state,
+                                blob, None, false, state, None,
                             ) {
                                 let blob = ValidatedBlob::new(
                                     BlobData::EmergencyRegistration(tx).with_id(blob.hash().into()),
@@ -333,6 +336,7 @@ impl<S: Spec> BlobStorage<S> {
         current_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         discarded_blobs: &mut Vec<DiscardedBlob>,
         state: &mut KernelStateAccessor<'_, S>,
+        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
     ) -> BlobSelectorOutput<ValidatedBlob<S, BatchWithId<S>>> {
         tracing::trace!("On recovery mode path");
 
@@ -351,13 +355,13 @@ impl<S: Spec> BlobStorage<S> {
             // We just need to process the new blobs from this slot. (We still return 1 slots_needed_from_storage, 
             // but since there is no stored blobs for the true_slot, this should be a no-op)
             1 => {
-                let blobs = self.select_blobs_as_based_sequencer_inner(current_blobs, discarded_blobs, state);
+                let blobs = self.select_blobs_as_based_sequencer_inner(current_blobs, discarded_blobs, state, encryption_layer);
                 (1, Some(blobs))
             }
             // Otherwise, we need to process two slots from storage  - which means that we need to save the new blobs
             _ => {
                 let new_batches: Vec<_> = self
-                    .select_blobs_da_ordering(current_blobs,discarded_blobs, true, 2, state)
+                    .select_blobs_da_ordering(current_blobs,discarded_blobs, true, 2, state, encryption_layer)
                     .into_iter()
                     .collect();
                 self.store_batches(&new_batches, state);
@@ -440,6 +444,7 @@ impl<S: Spec> BlobStorage<S> {
         preferred_sender: &<S::Da as DaSpec>::Address,
         preferred_sequencer: S::Address,
         cf: CF,
+        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
     ) -> BlobSelectorOutput<SelectedBlob<S, IterableBatchWithId<S, CF>>> {
         let mut sequence_tracker = self
             .upcoming_sequence_numbers
@@ -466,20 +471,20 @@ impl<S: Spec> BlobStorage<S> {
             .filter_map(|blob| match blob {
                 BlobOrigin::Proof(proof_blob) => self
                     .deserialize_or_try_slash_sender::<PreferredProofData>(
-                        proof_blob, None, true, state,
+                        proof_blob, None, true, state, None,
                     )
                     .map(|proof| PreferredBlobDataWithId {
                         inner: PreferredBlobData::Proof(proof),
                         id: proof_blob.hash().into(),
                     }),
-                BlobOrigin::Batch(batch_blob) => self
-                    .deserialize_or_try_slash_sender::<PreferredBatchData>(
-                        batch_blob, None, true, state,
-                    )
-                    .map(|batch| PreferredBlobDataWithId {
-                        inner: PreferredBlobData::Batch(batch),
-                        id: batch_blob.hash().into(),
-                    }),
+                BlobOrigin::Batch(batch_blob) => {
+                    // Deserialize and decrypt batch (handles both encrypted and unencrypted)
+                    self.deserialize_and_decrypt_batch(batch_blob, None, state, encryption_layer)
+                        .map(|batch| PreferredBlobDataWithId {
+                            inner: PreferredBlobData::Batch(batch),
+                            id: batch_blob.hash().into(),
+                        })
+                }
             })
             .collect::<Vec<_>>();
 
@@ -814,7 +819,6 @@ impl<S: Spec> BlobStorage<S> {
         discarded_blobs: &mut Vec<DiscardedBlob>,
         preferred_sender: &<S::Da as DaSpec>::Address,
         preferred_sequencer: &S::Address,
-
         visible_height_increase: u64,
         state: &mut KernelStateAccessor<'_, S>,
     ) {
@@ -824,10 +828,9 @@ impl<S: Spec> BlobStorage<S> {
                 PreferredBlobData::Batch(batch) => {
                     BlobData::Batch((batch.data, preferred_sequencer.clone()))
                 }
-                PreferredBlobData::EncryptedBatch(_encrypted_batch) => {
-                    // Skip encrypted batches in STF processing - encryption is for sequencer layer only
-                    tracing::warn!("Skipping encrypted batch - decryption not implemented in STF layer");
-                    continue;
+                PreferredBlobData::EncryptedBatch(_) => {
+                    // This should never happen since deserialize_and_decrypt_batch always returns Batch
+                    unreachable!("EncryptedBatch should not reach add_preferred_blobs_to_selection")
                 }
                 PreferredBlobData::Proof(proof) => {
                     BlobData::Proof((proof.data, preferred_sequencer.clone()))
@@ -910,6 +913,7 @@ impl<S: Spec> BlobStorage<S> {
             Some((&sequencer, &gas_price_for_new_block)),
             true,
             state,
+            None,
         )?;
 
         let available_balance = self
@@ -944,6 +948,7 @@ impl<S: Spec> BlobStorage<S> {
             Some((&sequencer, gas_price_for_new_block)),
             true,
             state,
+            None,
         )?;
 
         let available_balance = self
@@ -1041,7 +1046,12 @@ impl<S: Spec> BlobStorage<S> {
         charge_for_deserialization: Option<(&AllowedSequencer<S>, &<S::Gas as Gas>::Price)>,
         slash_on_failure: bool,
         state: &mut KernelStateAccessor<'_, S>,
+        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
     ) -> Option<B> {
+        // Note: encryption_layer is passed for future extensibility but not used in this generic method.
+        // Actual decryption happens later in the processing pipeline for EncryptedPreferredBatchData.
+        let _ = encryption_layer;
+        
         if let Some((registered_sender, gas_price_for_new_block)) = charge_for_deserialization {
             let funds_for_deserialization =
                 <S as GasSpec>::gas_to_charge_per_byte_borsh_deserialization()
@@ -1090,6 +1100,59 @@ impl<S: Spec> BlobStorage<S> {
             }
         }
     }
+
+    /// Deserialize a batch blob into PreferredBatchData, handling both encrypted and unencrypted variants.
+    /// This function tries unencrypted deserialization first, then encrypted if that fails.
+    /// Always returns PreferredBatchData regardless of whether the source was encrypted.
+    fn deserialize_and_decrypt_batch(
+        &mut self,
+        blob: &mut <S::Da as DaSpec>::BlobTransaction,
+        charge_for_deserialization: Option<(&AllowedSequencer<S>, &<S::Gas as Gas>::Price)>,
+        state: &mut KernelStateAccessor<'_, S>,
+        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
+    ) -> Option<PreferredBatchData> {
+        // First try to deserialize as regular (unencrypted) batch
+        if let Some(batch) = self.deserialize_or_try_slash_sender::<PreferredBatchData>(
+            blob, charge_for_deserialization, false, state, None,
+        ) {
+            return Some(batch);
+        }
+
+        // If that failed, try to deserialize as encrypted batch and decrypt it
+        if let Some(encryption_layer) = encryption_layer {
+            if let Some(encrypted_batch) = self.deserialize_or_try_slash_sender::<EncryptedPreferredBatchData>(
+                blob, charge_for_deserialization, true, state, None,
+            ) {
+                // Decrypt the transaction data
+                match encryption_layer.decrypt(&encrypted_batch.encrypted_txs_data) {
+                    Ok(decrypted_txs_bytes) => {
+                        match borsh::from_slice::<std::sync::Arc<Vec<sov_modules_api::FullyBakedTx>>>(&decrypted_txs_bytes) {
+                            Ok(txs) => {
+                                tracing::debug!("Successfully decrypted encrypted batch with {} transactions", txs.len());
+                                return Some(PreferredBatchData {
+                                    sequence_number: encrypted_batch.sequence_number,
+                                    data: txs,
+                                    visible_slots_to_advance: encrypted_batch.visible_slots_to_advance,
+                                });
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to deserialize decrypted transactions: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to decrypt batch: {}", e);
+                    }
+                }
+            }
+        } else {
+            // No encryption layer available but we couldn't deserialize as regular batch
+            tracing::warn!("Failed to deserialize batch and no encryption layer available for decryption");
+        }
+
+        None
+    }
+
 }
 
 // The public API of the BlobStorage module.
@@ -1104,6 +1167,7 @@ impl<S: Spec> BlobStorage<S> {
         current_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         state: &mut KernelStateAccessor<'_, S>,
         cf: CF,
+        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
     ) -> anyhow::Result<(
         BlobSelectorOutput<SelectedBlob<S, IterableBatchWithId<S, CF>>>,
         Vec<DiscardedBlob>,
@@ -1113,10 +1177,12 @@ impl<S: Spec> BlobStorage<S> {
         // If `DEFERRED_SLOTS_COUNT` is 0, we treat the rollup as having no preferred sequencer.
         // In this case, we just process blobs in the order that they appeared on the DA layer
         if config_deferred_slots_count() == 0 {
+            let _ = encryption_layer; // Mark as used for the based sequencer path
             let selection = self.select_blobs_as_based_sequencer_inner(
                 current_blobs,
                 &mut discarded_blobs,
                 state,
+                encryption_layer,
             );
 
             return Ok((
@@ -1142,6 +1208,7 @@ impl<S: Spec> BlobStorage<S> {
                     &pref_da,
                     pref_seq,
                     cf,
+                    encryption_layer,
                 ),
                 discarded_blobs,
             ));
@@ -1150,7 +1217,7 @@ impl<S: Spec> BlobStorage<S> {
         // Otherwise, we're configured for a preferred sequencer but one doesn't exist. This usually means that the preferred sequencer was slashed.
         // Entery recovery mode.
         let selection =
-            self.select_blobs_in_recovery_mode(current_blobs, &mut discarded_blobs, state);
+            self.select_blobs_in_recovery_mode(current_blobs, &mut discarded_blobs, state, encryption_layer);
 
         Ok((
             BlobSelectorOutput {
@@ -1192,13 +1259,14 @@ impl<S: Spec> BlobStorage<S> {
         current_blobs: RelevantBlobIters<&mut [<<S as Spec>::Da as DaSpec>::BlobTransaction]>,
         state: &mut KernelStateAccessor<'_, S>,
         cf: CF,
+        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
     ) -> (
         BlobSelectorOutput<SelectedBlob<S, IterableBatchWithId<S, CF>>>,
         Vec<DiscardedBlob>,
     ) {
         let mut discarded_blobs = Vec::default();
         let output =
-            self.select_blobs_as_based_sequencer_inner(current_blobs, &mut discarded_blobs, state);
+            self.select_blobs_as_based_sequencer_inner(current_blobs, &mut discarded_blobs, state, encryption_layer);
         (
             BlobSelectorOutput {
                 selected_blobs: output
