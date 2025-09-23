@@ -1,3 +1,4 @@
+use derive_new::new;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::stf::ExecutionContext;
 use std::fmt;
@@ -35,6 +36,7 @@ pub enum StateAccessType {
 }
 
 /// A key for a metric.
+#[derive(Default, new)]
 pub struct MetricSlotKey {
     key: Option<Arc<Vec<u8>>>,
     display_fn: Option<ArcFormatFn>,
@@ -72,10 +74,7 @@ impl StateAccessMetric {
     /// Creates a new state access metric.
     pub fn new_size(key: Arc<Vec<u8>>, display_fn: Option<ArcFormatFn>) -> Self {
         Self {
-            key: MetricSlotKey {
-                key: Some(key),
-                display_fn,
-            },
+            key: MetricSlotKey::new(Some(key), display_fn),
             storage_read_size: None,
             duration: MaybeTimer::started(),
             access_type: StateAccessType::GetSize,
@@ -85,10 +84,7 @@ impl StateAccessMetric {
     /// Creates a new state access metric.
     pub fn new_read(key: Arc<Vec<u8>>, display_fn: Option<ArcFormatFn>) -> Self {
         Self {
-            key: MetricSlotKey {
-                key: Some(key),
-                display_fn,
-            },
+            key: MetricSlotKey::new(Some(key), display_fn),
             storage_read_size: None,
             duration: MaybeTimer::started(),
             access_type: StateAccessType::GetValue,
@@ -98,10 +94,7 @@ impl StateAccessMetric {
     /// Returns a serializable placeholder metric.
     pub fn placeholder() -> Self {
         Self {
-            key: MetricSlotKey {
-                key: None,
-                display_fn: None,
-            },
+            key: Default::default(),
             storage_read_size: None,
             duration: MaybeTimer::Completed(Duration::from_secs(0)),
             access_type: StateAccessType::GetSize,
