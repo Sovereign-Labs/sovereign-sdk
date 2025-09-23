@@ -66,6 +66,20 @@ fn test_call_message() {
   },
   "primaryType": "TestCallMessage",
   "types": {
+    "EIP712Domain": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "chainId",
+        "type": "uint256"
+      },
+      {
+        "name": "salt",
+        "type": "bytes32"
+      }
+    ],
     "TestCallMessage": [
       {
         "name": "Transfer",
@@ -123,6 +137,20 @@ fn test_unit_enums() {
   },
   "primaryType": "Msg",
   "types": {
+    "EIP712Domain": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "chainId",
+        "type": "uint256"
+      },
+      {
+        "name": "salt",
+        "type": "bytes32"
+      }
+    ],
     "Msg": [
       {
         "name": "m",
@@ -172,6 +200,20 @@ fn test_enums_2() {
   },
   "primaryType": "Msg",
   "types": {
+    "EIP712Domain": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "chainId",
+        "type": "uint256"
+      },
+      {
+        "name": "salt",
+        "type": "bytes32"
+      }
+    ],
     "Msg": [
       {
         "name": "m",
@@ -241,6 +283,20 @@ fn test_nested_enums() {
   },
   "primaryType": "MsgNested",
   "types": {
+    "EIP712Domain": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "chainId",
+        "type": "uint256"
+      },
+      {
+        "name": "salt",
+        "type": "bytes32"
+      }
+    ],
     "MsgNested": [
       {
         "name": "m",
@@ -290,6 +346,20 @@ fn test_nested_enums_2() {
   },
   "primaryType": "MsgNested",
   "types": {
+    "EIP712Domain": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "chainId",
+        "type": "uint256"
+      },
+      {
+        "name": "salt",
+        "type": "bytes32"
+      }
+    ],
     "MsgNested": [
       {
         "name": "m",
@@ -372,6 +442,20 @@ fn test_multielement_enums_1() {
         "type": "uint128"
       }
     ],
+    "EIP712Domain": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "chainId",
+        "type": "uint256"
+      },
+      {
+        "name": "salt",
+        "type": "bytes32"
+      }
+    ],
     "MsgMultiElement": [
       {
         "name": "m",
@@ -424,6 +508,20 @@ fn test_multielement_enums_2() {
   },
   "primaryType": "MsgMultiElement",
   "types": {
+    "EIP712Domain": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "chainId",
+        "type": "uint256"
+      },
+      {
+        "name": "salt",
+        "type": "bytes32"
+      }
+    ],
     "MsgMultiElement": [
       {
         "name": "m",
@@ -558,6 +656,20 @@ fn test_various_types() {
   },
   "primaryType": "MsgVariousTypes",
   "types": {
+    "EIP712Domain": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "chainId",
+        "type": "uint256"
+      },
+      {
+        "name": "salt",
+        "type": "bytes32"
+      }
+    ],
     "MsgVariousTypes": [
       {
         "name": "u8",

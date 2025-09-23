@@ -11778,6 +11778,7 @@ dependencies = [
  "alloy-pubsub",
  "alloy-rpc-types",
  "anyhow",
+ "derive_more 1.0.0",
  "ethereum-types",
  "ethers",
  "futures",
@@ -11877,6 +11878,7 @@ dependencies = [
  "jsonschema",
  "lazy_static",
  "proptest",
+ "quick_cache",
  "rand 0.8.5",
  "reth-ethereum-primitives",
  "reth-primitives",
@@ -11907,6 +11909,19 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "sov-evm-soak-testing"
+version = "0.3.0"
+dependencies = [
+ "alloy-primitives",
+ "anyhow",
+ "ethers",
+ "sov-eth-client",
+ "sov-node-client",
+ "sov-test-utils",
+ "tokio",
 ]
 
 [[package]]

@@ -1,4 +1,6 @@
 use std::marker::PhantomData;
+#[cfg(feature = "native")]
+use std::sync::LazyLock;
 
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
 use alloy_eips::eip2718::Decodable2718;
@@ -28,19 +30,35 @@ use crate::conversions::RlpConversionError;
 use crate::TransactionSigned;
 use crate::{call, CallMessage, RlpEvmTransaction};
 
+/// At 5k TPS, this gives us 50 seconds of cache lifetime at a cost of (about 70 bytes per entry - which is about 17.5 MB). This should be long enough that signatures almost always
+/// last until the node has processed the block.
+#[cfg(feature = "native")]
+static SIGNATURE_CACHE: LazyLock<
+    quick_cache::sync::Cache<TxHash, Result<Address, AuthenticationError>>,
+> = LazyLock::new(|| quick_cache::sync::Cache::new(250_000));
+
 /// Recovers the signer from an EVM transaction.
 fn recover_evm_signer(
     tx: &TransactionSigned,
     tx_hash: TxHash,
 ) -> Result<Address, AuthenticationError> {
-    tx.recover_signer().map_err(|_| {
+    #[cfg(feature = "native")]
+    if let Some(known_result) = SIGNATURE_CACHE.get(&tx_hash) {
+        return known_result;
+    }
+
+    let result = tx.recover_signer().map_err(|_| {
         AuthenticationError::FatalError(
             FatalError::SigVerificationFailed(format!(
                 "Invalid ethereum signature: tx hash {tx_hash}"
             )),
             tx_hash,
         )
-    })
+    });
+    #[cfg(feature = "native")]
+    SIGNATURE_CACHE.insert(tx_hash, result.clone());
+
+    result
 }
 
 /// Creates the transaction details and tx hash for an EVM transaction.
