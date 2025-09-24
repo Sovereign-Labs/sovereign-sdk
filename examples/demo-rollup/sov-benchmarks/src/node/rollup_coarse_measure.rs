@@ -151,7 +151,7 @@ where
         "Not enough successful transactions, something is broken"
     );
     if params.timer_output {
-        println!("Spec: {}", std::any::type_name::<S::Storage>());
+        println!("Storage: {}", std::any::type_name::<S::Storage>());
         print_times(
             total,
             apply_block_time,
