@@ -13,7 +13,7 @@ use sov_modules_api::{Context, GasSpec, Spec, TxState};
 use std::convert::Infallible;
 
 use crate::conversions::{convert_to_tx_signed, create_tx_env};
-use crate::db::{self, commit::FallibleDatabaseCommit};
+use crate::db::{self, commit::FallibleDatabaseCommit, metrics::MetricsDb};
 use crate::evm::primitive_types::{Receipt, TxSignedAndRecovered};
 use crate::evm::RlpEvmTransaction;
 use crate::executor::{get_cfg_env, transact};
@@ -78,8 +78,9 @@ where
         let (cfg, block, tx_env, tx, pending_len) = self.fetch_state(context, state, tx)?;
         save_elapsed!(fetch_state_time SINCE fetch_state);
         start_timer!(get_db);
-        let mut db = self.get_db(state);
+        let db = self.get_db(state);
         save_elapsed!(get_db_time SINCE get_db);
+        let mut db = MetricsDb::new(db);
 
         start_timer!(execution);
         let ExecResultAndState {
@@ -98,6 +99,13 @@ where
 
         if !result.is_success() {
             return on_revert(*tx.signed_transaction.hash(), result);
+        }
+
+        #[cfg(feature = "native")]
+        {
+            sov_metrics::track_metrics(|t| {
+                t.submit(db.metrics());
+            });
         }
 
         let gas_used = result.gas_used();
@@ -135,7 +143,7 @@ where
         save_elapsed!(total_time SINCE total);
         #[cfg(feature = "native")]
         {
-            let metric = EvmTxMetrics {
+            let metrics = EvmTxMetrics {
                 total_time,
                 fetch_state_time,
                 get_db_time,
@@ -146,7 +154,7 @@ where
                 set_accessory_state_time,
             };
             sov_metrics::track_metrics(|t| {
-                t.submit(metric);
+                t.submit(metrics);
             });
         }
 
