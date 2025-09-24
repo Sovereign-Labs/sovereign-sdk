@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use super::primitive_types::SealedBlock;
 #[cfg(feature = "native")]
-use crate::primitive_types::TransactionSignedAndRecovered;
+use crate::primitive_types::TxSignedAndRecovered;
 use crate::{evm::primitive_types::TransactionSigned, RlpEvmTransaction};
 
 // BlockEnv from SealedBlock
@@ -29,8 +29,8 @@ impl From<SealedBlock> for BlockEnv {
 
 // Converts historical tx to TxEnv
 #[cfg(feature = "native")]
-pub fn replay_tx_env(tx: &TransactionSignedAndRecovered) -> TxEnv {
-    let TransactionSignedAndRecovered {
+pub fn replay_tx_env(tx: &TxSignedAndRecovered) -> TxEnv {
+    let TxSignedAndRecovered {
         signed_transaction,
         signer,
         ..
@@ -76,7 +76,7 @@ pub enum RlpConversionError {
 }
 
 /// Coverts RLP encoded transaction to `TransactionSigned`.
-pub fn convert_to_transaction_signed(
+pub fn convert_to_tx_signed(
     data: RlpEvmTransaction,
 ) -> Result<TransactionSigned, RlpConversionError> {
     let data = Bytes::from(data.rlp);
@@ -93,7 +93,7 @@ impl TryFrom<RlpEvmTransaction> for Recovered<TransactionSigned> {
     type Error = RlpConversionError;
 
     fn try_from(evm_tx: RlpEvmTransaction) -> Result<Self, Self::Error> {
-        let tx: TransactionSigned = convert_to_transaction_signed(evm_tx)?;
+        let tx: TransactionSigned = convert_to_tx_signed(evm_tx)?;
         let tx = tx
             .try_into_recovered()
             .map_err(|_| RlpConversionError::InvalidSignature)?;

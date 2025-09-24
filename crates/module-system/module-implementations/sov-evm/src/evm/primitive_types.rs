@@ -37,7 +37,7 @@ pub struct RlpEvmTransaction {
 
 #[serde_as]
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize, new)]
-pub struct TransactionSignedAndRecovered {
+pub struct TxSignedAndRecovered {
     /// Signer of the transaction
     pub(crate) signer: Address,
     /// Signed transaction
@@ -48,7 +48,7 @@ pub struct TransactionSignedAndRecovered {
     pub block_number: u64,
 }
 
-impl TransactionSignedAndRecovered {
+impl TxSignedAndRecovered {
     /// The signed transaction that was recovered.
     pub fn signed_transaction(&self) -> &TransactionSigned {
         &self.signed_transaction
@@ -58,12 +58,12 @@ impl TransactionSignedAndRecovered {
 /// A pending Ethereum transaction.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct PendingTransaction {
-    pub(crate) transaction: TransactionSignedAndRecovered,
+    pub(crate) transaction: TxSignedAndRecovered,
     pub(crate) receipt: Receipt,
 }
 
 impl PendingTransaction {
-    pub(crate) fn new(transaction: TransactionSignedAndRecovered, receipt: Receipt) -> Self {
+    pub(crate) fn new(transaction: TxSignedAndRecovered, receipt: Receipt) -> Self {
         Self {
             transaction,
             receipt,
@@ -230,8 +230,8 @@ pub struct Receipt {
     pub error: Option<EVMError<u8>>,
 }
 
-impl From<TransactionSignedAndRecovered> for Recovered<TransactionSigned> {
-    fn from(value: TransactionSignedAndRecovered) -> Self {
+impl From<TxSignedAndRecovered> for Recovered<TransactionSigned> {
+    fn from(value: TxSignedAndRecovered) -> Self {
         Recovered::new_unchecked(value.signed_transaction, value.signer)
     }
 }
@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn tx_conversion() {
         let signer = Address::random();
-        let tx = TransactionSignedAndRecovered {
+        let tx = TxSignedAndRecovered {
             signer,
             signed_transaction: EthereumTxEnvelope::Eip1559(Signed::new_unchecked(
                 TxEip1559::default(),

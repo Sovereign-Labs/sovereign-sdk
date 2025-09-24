@@ -28,7 +28,7 @@ use tracing::debug;
 use crate::conversions::replay_tx_env;
 use crate::db::EvmDb;
 use crate::evm::executor;
-use crate::evm::primitive_types::{Receipt, TransactionSigned, TransactionSignedAndRecovered};
+use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
 use crate::executor::{get_cfg_env, inspect, transact_commit};
 use crate::helpers::{
     from_primitive_with_hash, from_recovered_with_block_context, prepare_call_env,
@@ -413,18 +413,13 @@ where
                 continue;
             }
 
-            transact_commit(
-                &mut evm_db,
-                block_env.clone(),
-                replay_tx_env(&tx),
-                cfg_env.clone(),
-            )
-            .map_err(|e| eth_api_into_rpc_error(eth_from_evm_error(e)))?;
+            transact_commit(&mut evm_db, &block_env, replay_tx_env(&tx), cfg_env.clone())
+                .map_err(|e| eth_api_into_rpc_error(eth_from_evm_error(e)))?;
         }
 
         // Trace the target transaction
         self.trace_transaction(
-            block_env.clone(),
+            block_env,
             replay_tx_env(&traced_tx),
             cfg_env,
             evm_db,
@@ -475,7 +470,7 @@ where
                     let mut inspector = TracingInspector::new(inspector_config);
 
                     let gas_limit = tx_env.gas_limit;
-                    let res = inspect(db, block_env, tx_env, cfg, &mut inspector)?;
+                    let res = inspect(db, &block_env, tx_env, cfg, &mut inspector)?;
                     inspector.set_transaction_gas_limit(gas_limit);
 
                     let frame = inspector
@@ -503,7 +498,7 @@ where
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
-        executor::call(evm_db, block_env, tx_env, cfg_env)
+        executor::call(evm_db, &block_env, tx_env, cfg_env)
             .map_err(|err| eth_api_into_rpc_error(eth_from_evm_error(err)))
     }
 
@@ -720,7 +715,7 @@ fn get_cfg_env_template() -> CfgEnv {
 // modified from: https://github.com/paradigmxyz/reth many times
 pub(crate) fn build_rpc_receipt(
     block: MaybeSealedBlock,
-    tx: TransactionSignedAndRecovered,
+    tx: TxSignedAndRecovered,
     tx_number: u64,
     receipt: Receipt,
 ) -> TransactionReceipt {

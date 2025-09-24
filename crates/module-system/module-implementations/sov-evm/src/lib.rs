@@ -55,10 +55,10 @@ use crate::account_storage_key::AccountStorageKey;
 use crate::db::{DbAccount, EvmDb};
 pub use crate::evm::primitive_types::TransactionSigned;
 use crate::evm::primitive_types::{
-    Block, PendingTransaction, Receipt, SealedBlock, TransactionSignedAndRecovered,
+    Block, PendingTransaction, Receipt, SealedBlock, TxSignedAndRecovered,
 };
 
-pub use conversions::convert_to_transaction_signed;
+pub use conversions::convert_to_tx_signed;
 pub use conversions::create_tx_env;
 use revm::state::Bytecode;
 
@@ -119,7 +119,7 @@ pub struct Evm<S: Spec> {
 
     /// Used only by the RPC: List of processed transactions.
     #[state]
-    pub transactions: AccessoryStateMap<u64, TransactionSignedAndRecovered, BcsCodec>,
+    pub transactions: AccessoryStateMap<u64, TxSignedAndRecovered, BcsCodec>,
 
     /// Used only by the RPC: Receipts.
     #[state]
@@ -206,7 +206,7 @@ impl<S: Spec> Evm<S> {
         &self,
         index: u64,
         state: &mut Accessor,
-    ) -> Option<TransactionSignedAndRecovered> {
+    ) -> Option<TxSignedAndRecovered> {
         self.transactions.get(&index, state).unwrap_infallible()
     }
 
