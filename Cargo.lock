@@ -11449,6 +11449,7 @@ dependencies = [
  "sov-risc0-adapter",
  "sov-rollup-interface",
  "sov-sp1-adapter",
+ "sov-state",
  "sov-test-modules",
  "sov-test-utils",
  "sov-transaction-generator",
