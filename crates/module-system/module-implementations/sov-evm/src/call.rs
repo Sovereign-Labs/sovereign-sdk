@@ -1,6 +1,6 @@
 use alloy_primitives::{Address, B256};
 use reth_primitives::TransactionSigned;
-use revm::context::result::{EVMError, ExecutionResult};
+use revm::context::result::{EVMError, ExecResultAndState, ExecutionResult};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -13,11 +13,10 @@ use sov_modules_api::{Context, GasSpec, Spec, TxState};
 use std::convert::Infallible;
 
 use crate::conversions::{convert_to_tx_signed, create_tx_env};
-use crate::db::{self, EvmDb};
-use crate::evm::executor::{self};
+use crate::db::{self, commit::FallibleDatabaseCommit};
 use crate::evm::primitive_types::{Receipt, TxSignedAndRecovered};
 use crate::evm::RlpEvmTransaction;
-use crate::executor::get_cfg_env;
+use crate::executor::{get_cfg_env, transact};
 #[cfg(feature = "native")]
 use crate::metrics::EvmTxMetrics;
 use crate::{Evm, PendingTransaction};
@@ -35,19 +34,12 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
-    pub(crate) fn fetch_state<'s, Ws: TxState<S>>(
+    pub(crate) fn fetch_state(
         &mut self,
         context: &Context<S>,
-        state: &'s mut Ws,
+        state: &mut impl TxState<S>,
         tx: TransactionSigned,
-    ) -> anyhow::Result<(
-        EvmDb<'s, Ws, S>,
-        CfgEnv,
-        BlockEnv,
-        TxEnv,
-        TxSignedAndRecovered,
-        u64,
-    )> {
+    ) -> anyhow::Result<(CfgEnv, BlockEnv, TxEnv, TxSignedAndRecovered, u64)> {
         let block_env = self.block_env(state)?.expect(
             "The impossible happened: block_env should be set in `begin_rollup_block_hook`.",
         );
@@ -70,9 +62,8 @@ where
         let tx = TxSignedAndRecovered::new(signer, tx, block_env.number.to::<u64>());
         let cfg = self.cfg(state)?;
         let cfg_env = get_cfg_env(&block_env, cfg, None);
-        let db = self.get_db(state);
 
-        Ok((db, cfg_env, block_env, tx_env, tx, pending_len))
+        Ok((cfg_env, block_env, tx_env, tx, pending_len))
     }
 
     pub(crate) fn execute_call(
@@ -84,15 +75,26 @@ where
         start_timer!(total);
         let tx = convert_to_tx_signed(message.rlp)?;
         start_timer!(fetch_state);
-        let (mut db, cfg, block, tx_env, tx, pending_len) = self.fetch_state(context, state, tx)?;
+        let (cfg, block, tx_env, tx, pending_len) = self.fetch_state(context, state, tx)?;
         save_elapsed!(fetch_state_time SINCE fetch_state);
+        start_timer!(get_db);
+        let mut db = self.get_db(state);
+        save_elapsed!(get_db_time SINCE get_db);
 
         start_timer!(execution);
-        let result = match executor::transact_commit(&mut db, &block, tx_env, cfg) {
+        let ExecResultAndState {
+            result,
+            state: state_changes,
+        } = match transact(&mut db, &block, tx_env, cfg) {
             Ok(result) => result,
             Err(err) => return on_error(*tx.signed_transaction.hash(), err),
         };
         save_elapsed!(execution_time SINCE execution);
+        // We don't use transact_commit as it does not support returning an error
+        start_timer!(state_commit);
+        db.commit(state_changes)
+            .map_err(|e| anyhow::anyhow!("{}", &*e))?;
+        save_elapsed!(state_commit_time SINCE state_commit);
 
         if !result.is_success() {
             return on_revert(*tx.signed_transaction.hash(), result);
@@ -136,7 +138,9 @@ where
             let metric = EvmTxMetrics {
                 total_time,
                 fetch_state_time,
+                get_db_time,
                 execution_time,
+                state_commit_time,
                 receipt_time,
                 set_state_time,
                 set_accessory_state_time,

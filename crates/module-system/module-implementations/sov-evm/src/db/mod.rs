@@ -28,6 +28,7 @@ impl<Ws: StateAccessor> Debug for Error<Ws> {
 
 impl<Ws: StateAccessor> DBErrorMarker for Error<Ws> {}
 
+
 /// Stores information about an EVM account and a corresponding account state.
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone, Default, Deref, Into)]
 pub struct DbAccount(pub(crate) AccountInfo);

@@ -79,7 +79,8 @@ where
     evm.inspect_tx(tx)
 }
 
-fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
+/// Execute ethereum transaction
+pub fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
     db: DB,
     block_env: &BlockEnv,
     tx: TxEnv,

@@ -4,10 +4,12 @@ use std::{io::Write, time::Duration};
 #[derive(Debug)]
 pub(crate) struct EvmTxMetrics {
     pub total_time: Duration,
-    pub execution_time: Duration,
-    pub set_accessory_state_time: Duration,
     pub fetch_state_time: Duration,
+    pub get_db_time: Duration,
+    pub execution_time: Duration,
+    pub state_commit_time: Duration,
     pub receipt_time: Duration,
+    pub set_accessory_state_time: Duration,
     pub set_state_time: Duration,
 }
 
@@ -20,7 +22,9 @@ impl Metric for EvmTxMetrics {
         let fields: &[(&str, Duration)] = &[
             ("total_time", self.total_time),
             ("fetch_prestate_time", self.fetch_state_time),
+            ("get_db_time", self.get_db_time),
             ("execution_time", self.execution_time),
+            ("state_commit_time", self.state_commit_time),
             ("receipt_time", self.receipt_time),
             ("set_state_time", self.set_state_time),
             ("set_accessory_state_time", self.set_accessory_state_time),
