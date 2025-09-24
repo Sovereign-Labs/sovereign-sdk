@@ -3,7 +3,7 @@ export SOV_BENCH_BLOCKS=10
 export SOV_BENCH_TXNS_PER_BLOCKS=10000
 export TPS=1000
 (cd examples/demo-rollup/sov-benchmarks/src/node && make basic 2>&1) | tee output.log
-(cd examples/demo-rollup/sov-benchmarks/src/node && make basic 2>&1) | tee nomt_output.log
+(cd examples/demo-rollup/sov-benchmarks/src/node && make basic-nomt 2>&1) | tee nomt_output.log
 
 check_tps() {
     local output_file=$1
