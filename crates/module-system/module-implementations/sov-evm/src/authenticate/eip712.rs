@@ -267,7 +267,7 @@ fn verify_eip712_signature<
         ))?;
 
     let eip712_hash = schema
-        .eip712_signing_hash(transaction_type_index, &unsigned_tx_bytes)
+        .eip712_signing_digest(transaction_type_index, &unsigned_tx_bytes)
         .map_err(|e| {
             AuthenticationError::FatalError(
                 FatalError::SigVerificationFailed(format!("Failed to calculate EIP712 hash: {e}")),
