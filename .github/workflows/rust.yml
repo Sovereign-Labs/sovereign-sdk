@@ -298,7 +298,6 @@ jobs:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-coverage-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 90
     env:
-      RUSTFLAGS: "-Clink-arg=-fuse-ld=lld"
       SKIP_GUEST_BUILD: "1"
       SP1_SKIP_PROGRAM_BUILD: "true"
       RUST_BACKTRACE: 1
