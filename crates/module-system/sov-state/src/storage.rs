@@ -636,6 +636,8 @@ pub trait NativeStorage: Storage {
     fn get_latest_root_hash_unbound(&self) -> anyhow::Result<Self::Root> {
         self.get_root_hash_unbound(self.latest_version_unbound())
     }
+    /// Get the latest committed value for the given key, regardless of the version number associated with this storage.
+    fn get_unbound<N: ProvableCompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue>;
 }
 
 pub(crate) fn open_merkle_proof<S: MerkleProofSpec>(

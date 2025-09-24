@@ -259,4 +259,8 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for ZkStorage<S> {
     fn get_root_hash_unbound(&self, _version: SlotNumber) -> anyhow::Result<Self::Root> {
         unimplemented!("The ZkStorage should not be used to get root hash! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
     }
+
+    fn get_unbound<N: ProvableCompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue> {
+        unimplemented!("The ZkStorage does not support `get_unbound`! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
+    }
 }

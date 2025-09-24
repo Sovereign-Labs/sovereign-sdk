@@ -174,7 +174,7 @@ nearly-linear = { path = "crates/utils/nearly-linear" }
 # Dependencies maintained by Sovereign
 jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "f60beb0fa54d9231706f62a8b1315e3c57855590", default-features = false }
 reltester = { git = "https://github.com/sovereign-labs/reltester.git", rev = "d6209abff72929f5ba41614f5cea3e4a748428c3" }
-rockbound = { git = "https://github.com/sovereign-labs/rockbound", rev = "9c3274dd2c8967a3562a74e942a61ca82462d087" }
+rockbound = { git = "https://github.com/sovereign-labs/rockbound", rev = "fd90463aebe0f32199cdab6a59b1c4f1ee778b9f" }
 nmt-rs = { version = "0.2.5", features = ["serde", "borsh"] }
 # External dependencies
 # Uncomment this when a new preview is released
