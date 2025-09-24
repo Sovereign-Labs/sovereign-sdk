@@ -300,11 +300,22 @@ fn on_error<S: Spec>(
         error = ?err,
         "EVM transaction error"
     );
+    tracing::error!(
+        tx_hash = hex::encode(hash),
+        error = ?err,
+        "EVM transaction error"
+    );
     anyhow::bail!("EVM transaction error: {:?}", err);
 }
 
 fn on_revert(hash: B256, result: ExecutionResult) -> Result<(), anyhow::Error> {
     tracing::debug!(
+        hash = hex::encode(hash),
+        gas_used = result.gas_used(),
+        ?result,
+        "EVM execution error"
+    );
+    tracing::error!(
         hash = hex::encode(hash),
         gas_used = result.gas_used(),
         ?result,

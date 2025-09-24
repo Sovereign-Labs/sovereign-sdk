@@ -1,21 +1,67 @@
 use std::net::SocketAddr;
 
-use axum::body::HttpBody;
+use axum::body::{Body, HttpBody};
 use axum::error_handling::HandleErrorLayer;
 use axum::extract::ws::{Message, WebSocket};
+use axum::extract::Request;
 use axum::http::StatusCode;
+use axum::middleware::Next;
+use axum::response::{IntoResponse, Response};
 use axum::ServiceExt;
 use futures_util::sink::SinkExt;
 use futures_util::stream::StreamExt;
 use jsonrpsee::server::ServerConfig;
 use jsonrpsee::RpcModule;
+use sov_rollup_interface::Bytes;
 use tokio::sync::watch;
 use tower::BoxError;
 use tower_http::cors::CorsLayer;
 use tower_http::normalize_path::NormalizePathLayer;
 use tower_layer::Layer;
+use http_body_util::BodyExt;
 
 use crate::CorsConfiguration;
+
+
+
+async fn buffer_and_print<B>(direction: &str, body: B) -> Result<Bytes, (StatusCode, String)>
+where
+    B: axum::body::HttpBody<Data = Bytes>,
+    B::Error: std::fmt::Display,
+{
+    let bytes = match body.collect().await {
+        Ok(collected) => collected.to_bytes(),
+        Err(err) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("failed to read {direction} body: {err}"),
+            ));
+        }
+    };
+
+    if let Ok(body) = std::str::from_utf8(&bytes) {
+        tracing::info!("{direction} body = {body:?}");
+    }
+
+    Ok(bytes)
+}
+
+async fn print_request_response(
+    req: Request,
+    next: Next,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let (parts, body) = req.into_parts();
+    let bytes = buffer_and_print("request", body).await?;
+    let req = Request::from_parts(parts, Body::from(bytes));
+
+    let res = next.run(req).await;
+
+    let (parts, body) = res.into_parts();
+    let bytes = buffer_and_print("response", body).await?;
+    let res = Response::from_parts(parts, Body::from(bytes));
+
+    Ok(res)
+}
 
 pub(crate) async fn start_http_server(
     listen_address_http: &SocketAddr,
@@ -28,6 +74,7 @@ pub(crate) async fn start_http_server(
     let rest_address = listener.local_addr()?;
 
     let (rpc_router, server_handle) = rpc_module_to_router(methods, cors_configuration);
+    let rpc_router = rpc_router.layer(axum::middleware::from_fn(print_request_response));
 
     let handle = tokio::spawn(async move {
         tracing::info!(%rest_address, "Starting HTTP server");

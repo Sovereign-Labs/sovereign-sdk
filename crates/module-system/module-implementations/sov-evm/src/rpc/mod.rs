@@ -235,10 +235,10 @@ where
                 self.code
                     .get(&account.code_hash, state.deref_mut())
                     .unwrap_infallible()
-            })
+            }).map(|code| code.bytecode().clone())
             .unwrap_or_default();
 
-        Ok(code.bytecode().clone())
+        Ok(code)
     }
 
     /// Handler for: `eth_feeHistory`
@@ -336,8 +336,11 @@ where
             .unwrap_infallible()
             // Justified, we set it at genesis and later only override it.
             .expect("The impossible happened: block_numbers was not set.");
+        tracing::info!("block_number_range: {:?}", block_number_range);
 
-        Ok(U256::from(*block_number_range.end()))
+        let resp = Ok(U256::from(block_number_range.end().saturating_sub(2)));
+        tracing::info!("block_number response: {:?}", resp);
+        resp
     }
 
     /// Handler for: `eth_estimateGas`
@@ -528,8 +531,9 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> PendingOrBlock {
         let block_number_str = block_number.unwrap_or_else(|| "latest".into());
+        tracing::info!("Getting state from block number: {}", block_number_str);
 
-        match block_number_str.as_str() {
+        let res = match block_number_str.as_str() {
             "earliest" => {
                 let block_numbers = self
                     .block_numbers
@@ -556,7 +560,9 @@ where
                 Ok(nr) => PendingOrBlock::Number(nr),
                 Err(_) => PendingOrBlock::Invalid(block_number_str),
             },
-        }
+        };
+        tracing::info!("Resolved block number: {:?}", res);
+        res
     }
 
     /// Retrieves a sealed block by number.

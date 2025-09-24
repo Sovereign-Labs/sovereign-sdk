@@ -176,7 +176,9 @@ where
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
-        self.execute_call(msg, context, state)
+        let call = self.execute_call(msg, context, state);
+        tracing::info!("calling EVM: result = {:?}", call);
+        call
     }
 }
 
