@@ -53,6 +53,7 @@ const COMFORTABLE_SIZE_LIMIT_DIVISOR: u64 = 100;
 /// the sequencer will close and publish the current batch.
 const COMFORTABLE_GAS_LIMIT_MULTIPLIER: u64 = 19;
 const COMFORTABLE_GAS_LIMIT_DIVISOR: u64 = 20;
+const COMFORTABLE_IN_FLIGHT_BLOBS: usize = 5;
 
 const METRICS_BATCH_SIZE: usize = 32;
 
@@ -468,7 +469,7 @@ where
             .trigger_recovery(next_sequence_number_according_to_node, recovery_strategy)
             .await;
 
-        // Creates a new executor  for recovery. This must *not* be called to create executors
+        // Creates a new executor for recovery. This must *not* be called to create executors
         // under other circumstances, since it causes side effects on the transaction cache.
         let recovery_executor = RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
             info,
@@ -568,6 +569,18 @@ where
                 .sequencer_kind_config
                 .ideal_lag_behind_finalized_slot,
         ) {
+            tracing::trace!(
+                "Skipping batch production due to lagging less than ideal slot number difference"
+            );
+            return;
+        }
+
+        let in_flight_blobs = self.in_flight_blobs.load(Ordering::Relaxed);
+        if in_flight_blobs >= COMFORTABLE_IN_FLIGHT_BLOBS {
+            tracing::trace!(
+                current_in_flight = %in_flight_blobs,
+                max_comfortable = %COMFORTABLE_IN_FLIGHT_BLOBS,
+                "Skipping batch production due too many in flight blobs");
             return;
         }
 
