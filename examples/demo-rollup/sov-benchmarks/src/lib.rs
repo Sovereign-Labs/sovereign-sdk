@@ -22,7 +22,7 @@ use sov_test_utils::runtime::sov_paymaster::{
     self, PayeePolicy, PayerGenesisConfig, PaymasterPolicyInitializer, SafeVec,
 };
 use sov_test_utils::runtime::TestRunner;
-use sov_test_utils::storage::{ForklessStorageManager, SimpleStorageManager};
+use sov_test_utils::storage::ForklessStorageManager;
 use sov_test_utils::{MockDaSpec, MockZkvm, TestPreferredSequencer, TestProver, TestUser};
 
 pub const DEFAULT_BLOCK_TIME_MS: u64 = 150;
@@ -66,8 +66,6 @@ pub type NomtBenchSpec = ConfigurableSpec<
 >;
 
 type RT<S> = Runtime<S>;
-
-type Runner<S> = TestRunner<RT<S>, S>;
 
 /// Benchmark user roles
 pub struct Roles<S: Spec> {
@@ -161,17 +159,26 @@ where
 }
 
 /// Setups benchmarks and returns the [`TestRunner`] along with benchmark roles
-pub fn setup_with_runner<Vm: Zkvm>(
+pub fn setup_with_runner<S, Vm, Sm>(
     num_senders: u64,
     inner_code_commitment: <Vm::Verifier as ZkVerifier>::CodeCommitment,
-) -> (Runner<BenchSpec<Vm>>, Roles<BenchSpec<Vm>>)
+) -> (TestRunner<RT<S>, S, Sm>, Roles<S>)
 where
+    Vm: Zkvm,
+    S: Spec<
+        InnerZkvm = Vm,
+        OuterZkvm = MockZkvm,
+        Da = MockDaSpec,
+        Address = MultiAddressEvm,
+        Storage = Sm::Storage,
+    >,
     <Vm::Verifier as ZkVerifier>::CryptoSpec: CryptoSpecExt,
+    Sm: ForklessStorageManager,
 {
-    let (genesis_config, roles) = setup(num_senders, inner_code_commitment);
+    let (genesis_config, roles) = setup::<S, Vm>(num_senders, inner_code_commitment);
 
     (
-        TestRunner::<_, _, SimpleStorageManager<_>>::new_with_genesis(
+        TestRunner::<_, _, Sm>::new_with_genesis(
             genesis_config.into_genesis_params(),
             Default::default(),
         ),
