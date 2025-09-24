@@ -362,6 +362,8 @@ impl Schema {
         Ok(output)
     }
 
+    /// EIP712-compatible JSON encoding of an object, which can be used directly as a parameter
+    /// for `eth_signTypedData_v4` RPCs.
     #[cfg(feature = "eip712")]
     pub fn eip712_json(&self, type_index: usize, input: &[u8]) -> Result<String, SchemaError> {
         let Some(typed_data) = self.eip712_get_typed_data_inner(type_index, input)? else {
@@ -370,6 +372,8 @@ impl Schema {
         Ok(serde_json::to_string(&typed_data)?)
     }
 
+    /// The EIP712 signing hash of an object, corresponding to its `eip712_json` encoding.
+    /// This hash should be signed directly with a secp256k1 key to obtain the EIP712 signature.
     #[cfg(feature = "eip712")]
     pub fn eip712_signing_hash(
         &self,
@@ -380,6 +384,28 @@ impl Schema {
             return Ok(Default::default());
         };
         Ok(typed_data.eip712_signing_hash()?.into())
+    }
+
+    /// The unashed EIP712 signing digest of an object, corresponding to its `eip712_json` encoding.
+    /// This value needs to be keccak256 hashed then secp256k1 signed to obtain the EIP712 signature.
+    #[cfg(feature = "eip712")]
+    pub fn eip712_signing_digest(
+        &self,
+        type_index: usize,
+        input: &[u8],
+    ) -> Result<[u8; 66], SchemaError> {
+        let Some(typed_data) = self.eip712_get_typed_data_inner(type_index, input)? else {
+            return Ok([0; 66]);
+        };
+        // References:
+        // - https://eips.ethereum.org/EIPS/eip-712#specification-of-the-eth_signtypeddata-json-rpc
+        // - https://github.com/alloy-rs/core/blob/main/crates/dyn-abi/src/eip712/typed_data.rs#L212
+        let mut buf = [0u8; 66];
+        buf[0] = 0x19;
+        buf[1] = 0x01;
+        buf[2..34].copy_from_slice(typed_data.domain.separator().as_slice());
+        buf[34..].copy_from_slice(typed_data.hash_struct()?.as_slice());
+        Ok(buf)
     }
 
     #[cfg(feature = "eip712")]
