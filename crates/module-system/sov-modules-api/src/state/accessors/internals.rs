@@ -2,7 +2,7 @@ use core::fmt;
 use std::collections::HashMap;
 
 use crate::state::accessors::StateMetricsProvider;
-use crate::TxChangeSet;
+use crate::{Spec, StateCheckpoint, TxChangeSet};
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_state::{
     namespaces, AccessSize, IsValueCached, Namespace, ProvableStorageCache, SlotKey, SlotValue,
@@ -169,19 +169,20 @@ impl<S: Storage> Delta<S> {
     }
 }
 
-/// TODO
-pub struct FristReads {
-    /// TODO
+/// Holds keys and values that were read for the first time.
+#[derive(Debug, Clone)]
+pub struct FirstTimeReads {
+    /// User space reads.
     pub user_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
-    /// TODO
+    /// Kernel space reads.
     pub kernel_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
 }
 
 impl<S: Storage> Delta<S> {
-    pub fn first_reads(&self) -> FristReads {
-        FristReads {
-            user_reads: self.user_cache.first_reads().clone(),
-            kernel_reads: self.kernel_cache.first_reads().clone(),
+    pub fn first_reads(&self) -> FirstTimeReads {
+        FirstTimeReads {
+            user_reads: self.user_cache.revertable_ordered_reads().clone(),
+            kernel_reads: self.kernel_cache.revertable_ordered_reads().clone(),
         }
     }
 
@@ -408,16 +409,6 @@ impl<T> RevertableWriter<T> {
         }
     }
 
-    /// Get an iterator over the current writes
-    pub fn changes(&self) -> TxChangeSet {
-        TxChangeSet(
-            self.writes
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-        )
-    }
-
     /// Commit all items from [`RevertableWriter`] returning the inner storage.
     pub(super) fn commit(mut self) -> T
     where
@@ -444,6 +435,20 @@ impl<T> RevertableWriter<T> {
             Some(value) => inner.set_value(namespace, key, value),
             None => inner.delete_value(namespace, key),
         };
+    }
+}
+
+impl<S: Spec> RevertableWriter<StateCheckpoint<S>> {
+    /// Change set resulting from transaction execution.
+    pub fn changes(&self) -> TxChangeSet {
+        TxChangeSet {
+            writes: self
+                .writes
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+            reads: self.inner.first_reads().clone(),
+        }
     }
 }
 

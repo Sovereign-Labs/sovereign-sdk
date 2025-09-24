@@ -31,7 +31,6 @@ mod scratchpad;
 mod kernel;
 mod temp_cache;
 
-pub use crate::state::accessors::internals::FristReads;
 #[cfg(feature = "native")]
 pub use checkpoints::native::AccessoryStateCheckpoint;
 pub use checkpoints::{ChangeSet, StateCheckpoint};

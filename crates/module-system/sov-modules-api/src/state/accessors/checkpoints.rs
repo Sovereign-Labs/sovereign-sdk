@@ -7,7 +7,7 @@ use super::internals::{AccessoryDelta, Delta};
 use super::temp_cache::{CacheLookup, TempCache};
 use super::{BootstrapWorkingSet, BorshSerializedSize, UniversalStateAccessor};
 use crate::capabilities::{Kernel, RollupHeight};
-use crate::state::accessors::internals::FristReads;
+use crate::state::accessors::internals::FirstTimeReads;
 use crate::state::traits::PerBlockCache;
 #[cfg(feature = "native")]
 use crate::TxChangeSet;
@@ -52,8 +52,8 @@ impl<S: Spec> StateCheckpoint<S> {
         self.delta.is_value_cached(namespace, key)
     }
 
-    /// TODO
-    pub fn first_reads(&self) -> FristReads {
+    /// Keys and values that were read for the first time.
+    pub fn first_reads(&self) -> FirstTimeReads {
         self.delta.first_reads()
     }
 
@@ -230,7 +230,7 @@ impl<S: Spec> StateCheckpoint<S> {
     // TODO: Remove this method if we stop using `StateCheckpoint` in the sequencer
     #[cfg(feature = "native")]
     pub fn apply_tx_changes(&mut self, changeset: TxChangeSet) {
-        for ((key, namespace), value) in changeset.0 {
+        for ((key, namespace), value) in changeset.writes {
             if let Some(value) = value {
                 self.set_value(namespace, &key, value);
             } else {
