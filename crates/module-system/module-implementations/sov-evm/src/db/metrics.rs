@@ -15,11 +15,26 @@ use std::io::Write;
 
 #[cfg(feature = "native")]
 #[derive(Debug, Default, Clone, Copy)]
+pub struct DbAccess {
+    duration: Duration,
+    count: usize,
+}
+
+#[cfg(feature = "native")]
+impl DbAccess {
+    pub fn push(&mut self, t: Duration) {
+        self.duration += t;
+        self.count += 1;
+    }
+}
+
+#[cfg(feature = "native")]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct DbMetrics {
-    account: Duration,
-    code: Duration,
-    storage: Duration,
-    block_hash: Duration,
+    account: DbAccess,
+    code: DbAccess,
+    storage: DbAccess,
+    block_hash: DbAccess,
 }
 
 #[cfg(feature = "native")]
@@ -29,7 +44,7 @@ impl Metric for DbMetrics {
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-        let fields: &[(&str, Duration)] = &[
+        let fields: &[(&str, DbAccess)] = &[
             ("account", self.account),
             ("code", self.code),
             ("storage", self.storage),
@@ -38,7 +53,12 @@ impl Metric for DbMetrics {
         write!(buffer, "{}", self.measurement_name())?;
         for (i, (name, val)) in fields.iter().enumerate() {
             let sep = if i == 0 { ' ' } else { ',' };
-            write!(buffer, "{sep}{name}={}", val.as_micros())?;
+            write!(
+                buffer,
+                "{sep}{name}={},{name}_count={}",
+                val.duration.as_micros(),
+                val.count
+            )?;
         }
         Ok(())
     }
@@ -47,16 +67,16 @@ impl Metric for DbMetrics {
 #[cfg(feature = "native")]
 impl DbMetrics {
     fn basic(&mut self, t: Duration) {
-        self.account += t;
+        self.account.push(t);
     }
     fn code_by_hash(&mut self, t: Duration) {
-        self.code += t;
+        self.code.push(t);
     }
     fn storage(&mut self, t: Duration) {
-        self.storage += t;
+        self.storage.push(t);
     }
     fn block_hash(&mut self, t: Duration) {
-        self.block_hash += t;
+        self.block_hash.push(t);
     }
 }
 

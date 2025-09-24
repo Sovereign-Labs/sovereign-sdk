@@ -104,7 +104,7 @@ where
         #[cfg(feature = "native")]
         {
             sov_metrics::track_metrics(|t| {
-                t.submit(db.metrics());
+                t.submit(dbg!(db.metrics()));
             });
         }
 
@@ -154,7 +154,7 @@ where
                 set_accessory_state_time,
             };
             sov_metrics::track_metrics(|t| {
-                t.submit(metrics);
+                t.submit(dbg!(metrics));
             });
         }
 
