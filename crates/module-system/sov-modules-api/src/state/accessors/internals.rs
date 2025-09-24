@@ -14,6 +14,7 @@ use super::checkpoints::ChangeSet;
 use super::temp_cache::{CacheLookup, TempCache};
 use super::UniversalStateAccessor;
 use crate::state::traits::PerBlockCache;
+use sov_state::NodeLeaf;
 
 /// A [`Delta`] is a diff over an underlying [`Storage`] instance. When queried, it first checks
 /// whether the value is in its local cache and, if so, returns it. Otherwise, it queries the
@@ -168,7 +169,22 @@ impl<S: Storage> Delta<S> {
     }
 }
 
+/// TODO
+pub struct FristReads {
+    /// TODO
+    pub user_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
+    /// TODO
+    pub kernel_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
+}
+
 impl<S: Storage> Delta<S> {
+    pub fn first_reads(&self) -> FristReads {
+        FristReads {
+            user_reads: self.user_cache.first_reads().clone(),
+            kernel_reads: self.kernel_cache.first_reads().clone(),
+        }
+    }
+
     pub fn commit_revertable_storage_cache(&mut self) {
         self.user_cache.commit_revertable_storage_cache();
         self.kernel_cache.commit_revertable_storage_cache();

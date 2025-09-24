@@ -292,6 +292,11 @@ pub struct ProvableStorageCache<N> {
 // fetched and cached—even when only requesting the size. This is because, in native execution, it's acceptable to cache the full
 // value, but in ZK execution, arbitrary large values cannot be stored as hints in the witness.
 impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
+    /// TODO
+    pub fn first_reads(&self) -> &Vec<(SlotKey, Option<NodeLeaf>)> {
+        &self.revertable_ordered_reads
+    }
+
     /// Commit the revertable part of the `ProvableStorageCache`.
     pub fn commit_revertable_storage_cache(&mut self) {
         let revertable_ordered_reads = mem::take(&mut self.revertable_ordered_reads);

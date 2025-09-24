@@ -288,6 +288,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         let ExecutedTxResponse {
             receipt,
             tx_changes,
+            _first_reads: _,
             remaining_slot_gas,
             execution_time_micros,
         } = result.map_err(|reason| RollupBlockExecutorError::Rejected {

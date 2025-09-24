@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use sov_modules_api::state::TxScratchpad;
 use sov_modules_api::{
-    ChangeSet, Context, DispatchCall, FullyBakedTx, GasArray, IncrementalBatch,
+    ChangeSet, Context, DispatchCall, FristReads, FullyBakedTx, GasArray, IncrementalBatch,
     InjectedControlFlow, IterableBatchWithId, MaybeExecuted, NoOpControlFlow,
     ProvisionalSequencerOutcome, Runtime, SlotGasMeter, TransactionReceipt, TxChangeSet,
     TxControlFlow,
@@ -118,6 +118,7 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
 pub(crate) struct ExecutedTxResponse<S: Spec> {
     pub receipt: TransactionReceipt<S>,
     pub tx_changes: TxChangeSet,
+    pub _first_reads: FristReads,
     pub remaining_slot_gas: <S as Spec>::Gas,
     pub execution_time_micros: u64,
 }
@@ -201,6 +202,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
             let response = ExecutedTxResponse {
                 receipt: receipt.clone(),
                 tx_changes: dirty_scratchpad.tx_changes(),
+                _first_reads: dirty_scratchpad.first_reads(),
                 remaining_slot_gas: slot_gas_meter_before_tx
                     .remaining_preferred_slot_gas()
                     .clone(), // Since we ignore this tx, the remaining gas limit is unchanged
@@ -229,6 +231,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
         let response = ExecutedTxResponse {
             receipt: receipt.clone(),
             tx_changes: dirty_scratchpad.tx_changes(),
+            _first_reads: dirty_scratchpad.first_reads(),
             remaining_slot_gas,
             execution_time_micros: execution_time,
         };

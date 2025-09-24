@@ -9,6 +9,7 @@ use super::temp_cache::{CacheLookup, TempCache};
 use super::{BorshSerializedSize, StateProvider, UniversalStateAccessor};
 use crate::capabilities::RollupHeight;
 use crate::module::Spec;
+use crate::state::accessors::internals::FristReads;
 use crate::state::accessors::StateMetricsProvider;
 use crate::state::traits::PerBlockCache;
 use crate::transaction::{
@@ -276,12 +277,6 @@ impl<S: Spec, I: StateProvider<S>> TxScratchpad<S, I> {
         self.inner.commit()
     }
 
-    /// Gets an iterator over the diff currently written onto this scratchpad. These changes will
-    /// be reverted or committed as a unit.
-    pub fn tx_changes(&self) -> TxChangeSet {
-        self.inner.changes()
-    }
-
     /// Reverts the changes of this [`TxScratchpad`] and returns a [`StateCheckpoint`].
     pub fn revert(self) -> I {
         self.inner.revert()
@@ -337,6 +332,19 @@ impl<S: Spec, I: StateProvider<S>> PerBlockCache for TxScratchpad<S, I> {
 
     fn update_cache_with(&mut self, other: TempCache) {
         self.inner.cache_writes.update_with(other);
+    }
+}
+
+impl<S: Spec> TxScratchpad<S, StateCheckpoint<S>> {
+    /// Gets an iterator over the diff currently written onto this scratchpad. These changes will
+    /// be reverted or committed as a unit.
+    pub fn tx_changes(&self) -> TxChangeSet {
+        self.inner.changes()
+    }
+
+    /// TOOD
+    pub fn first_reads(&self) -> FristReads {
+        self.inner.inner.first_reads()
     }
 }
 

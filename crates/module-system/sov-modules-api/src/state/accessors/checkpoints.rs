@@ -7,6 +7,7 @@ use super::internals::{AccessoryDelta, Delta};
 use super::temp_cache::{CacheLookup, TempCache};
 use super::{BootstrapWorkingSet, BorshSerializedSize, UniversalStateAccessor};
 use crate::capabilities::{Kernel, RollupHeight};
+use crate::state::accessors::internals::FristReads;
 use crate::state::traits::PerBlockCache;
 #[cfg(feature = "native")]
 use crate::TxChangeSet;
@@ -49,6 +50,11 @@ impl<S: Spec> StateCheckpoint<S> {
     /// Check if key is in the cache.
     pub fn is_value_cached(&self, namespace: Namespace, key: &SlotKey) -> IsValueCached {
         self.delta.is_value_cached(namespace, key)
+    }
+
+    /// TODO
+    pub fn first_reads(&self) -> FristReads {
+        self.delta.first_reads()
     }
 
     /// Commits the revertable part of the `StateCheckpoint` cache.

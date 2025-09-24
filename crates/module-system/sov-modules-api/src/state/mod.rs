@@ -4,6 +4,7 @@ mod traits;
 #[cfg(test)]
 mod tests;
 
+pub use crate::state::accessors::FristReads;
 #[cfg(any(feature = "test-utils", feature = "evm"))]
 pub use accessors::UnmeteredStateWrapper;
 pub use accessors::{
