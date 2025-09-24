@@ -170,7 +170,7 @@ impl<S: Storage> Delta<S> {
 }
 
 /// Holds keys and values that were read for the first time.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FirstTimeReads {
     /// User space reads.
     pub user_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
