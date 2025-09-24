@@ -17,6 +17,7 @@ use sov_modules_api::{
     ProvableStateReader, RawTx, Runtime, Spec, TxHash,
 };
 use sov_state::User;
+use tracing::warn;
 
 /// Trait for providing schema to the EIP-712 authenticator.
 pub trait SchemaProvider {
@@ -274,6 +275,15 @@ fn verify_eip712_signature<
                 raw_tx_hash,
             )
         })?;
+
+    warn!("\n\nTRANSACTION DATA: {:?}\n\n", hex::encode(unsigned_tx_bytes));
+    warn!("\n\nEIP712 SIGNING HASH: {:?}\n\n", hex::encode(eip712_hash));
+    match &tx.versioned_tx {
+        VersionedTx::V0(inner) => {
+            warn!("\n\nPUBKEY: {:?}\n\n", hex::encode(inner.pub_key.bytes()));
+            warn!("\n\nSIGNATURE: {:?}\n\n", hex::encode(inner.signature.msg_sig.to_bytes()));
+        }
+    }
 
     tx.verify_signature(&eip712_hash, meter)
         .map_err(|e| match e {

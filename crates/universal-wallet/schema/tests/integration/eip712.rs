@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use alloy_dyn_abi::TypedData;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_rollup_interface::common::SafeString;
 use sov_universal_wallet::schema::Schema;
@@ -34,6 +35,14 @@ macro_rules! eip712_tests {
         // Assert hash can be calculated with no errors
         let _ = schema.eip712_signing_hash(0, &borsh_ser).unwrap();
     };
+}
+
+#[test]
+fn test_tmpppp_typedatasig() {
+    let json_str = r#"{"domain":{"name":"TestChain","chainId":"0x10e1","salt":"0x3d61f00a15ab678967202217ee8e4485b69e8e8f14e1da2be6a3a88951e17eed"},"types":{"Bank":[{"type":"CreateToken","name":"CreateToken"}],"CreateToken":[{"type":"string","name":"token_name"},{"type":"uint8","name":"token_decimals"},{"type":"uint128","name":"initial_balance"},{"type":"string","name":"mint_to_address"},{"type":"admins","name":"admins"},{"type":"uint128","name":"supply_cap"}],"EIP712Domain":[{"type":"string","name":"name"},{"type":"uint256","name":"chainId"},{"type":"bytes32","name":"salt"}],"RuntimeCall":[{"type":"Bank","name":"Bank"}],"TxDetails":[{"type":"uint64","name":"max_priority_fee_bips"},{"type":"uint128","name":"max_fee"},{"type":"uint64","name":"chain_id"}],"UniquenessData":[{"type":"uint64","name":"Generation"}],"UnsignedTransaction":[{"type":"RuntimeCall","name":"runtime_call"},{"type":"UniquenessData","name":"uniqueness"},{"type":"TxDetails","name":"details"}],"admins":[]},"primaryType":"UnsignedTransaction","message":{"details":{"chain_id":"4321","max_fee":"100000000","max_priority_fee_bips":"0"},"runtime_call":{"Bank":{"CreateToken":{"admins":{},"initial_balance":"1000000000","mint_to_address":"0x14cdfdeb6d29c791352c452e5e1989aa29f38f43","supply_cap":"100000000000","token_decimals":"8","token_name":"Yo Yo Token"}}},"uniqueness":{"Generation":"1758718470260"}}}"#;
+
+    let typed_data: TypedData = serde_json::from_str(json_str).unwrap();
+    println!("{:?}", typed_data.eip712_signing_hash());
 }
 
 #[derive(BorshSerialize, BorshDeserialize, UniversalWallet)]
