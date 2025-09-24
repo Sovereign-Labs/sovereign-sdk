@@ -11,6 +11,9 @@ contract SimpleStorage {
         uint256 indexed topic2,
         uint256 value
     );
+
+    event ContractDeployed(address newContract);
+
     
     function set(uint256 _num) public {
         num = _num;
@@ -34,5 +37,13 @@ contract SimpleStorage {
         for (uint256 i = 0; i < n; i++) {
             emit SimpleLog(msg.sender, topic1, i, num);
         }
+    }
+
+    function deploy(bytes memory initCode, uint256 value) public returns (address addr) {
+        assembly {
+            addr := create(value, add(initCode, 0x20), mload(initCode))
+        }
+        require(addr != address(0), "CREATE failed");
+        emit ContractDeployed(addr);
     }
 }
