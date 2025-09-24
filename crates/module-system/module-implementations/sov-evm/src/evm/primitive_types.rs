@@ -8,6 +8,7 @@ use alloy_consensus::{
 use alloy_consensus::{EthereumTxEnvelope, TxEip4844};
 use alloy_primitives::TxHash;
 use alloy_primitives::{Address, Sealable, Sealed, B256};
+use derive_new::new;
 use reth_ethereum_primitives::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
 use revm::context::result::EVMError;
 use serde_with::serde_as;
@@ -35,7 +36,7 @@ pub struct RlpEvmTransaction {
 }
 
 #[serde_as]
-#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize, new)]
 pub struct TransactionSignedAndRecovered {
     /// Signer of the transaction
     pub(crate) signer: Address,

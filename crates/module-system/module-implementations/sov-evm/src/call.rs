@@ -60,55 +60,45 @@ where
         let gas_limit = self.gas_limit(state);
         let tx_env = create_tx_env(&tx, signer, account_nonce, gas_limit);
 
-        let transaction = TransactionSignedAndRecovered {
-            signer,
-            signed_transaction: tx,
-            block_number: block_env.number.to::<u64>(),
-        };
+        let tx = TransactionSignedAndRecovered::new(signer, tx, block_env.number.to::<u64>());
 
         let cfg = self.cfg(state)?;
         let cfg_env = get_cfg_env(&block_env, cfg, None);
         let mut evm_db: EvmDb<_, S> = self.get_db(state);
 
         start_timer!(execution);
-        let result = executor::transact_commit(&mut evm_db, block_env, tx_env, cfg_env);
-        save_elapsed!(execution_time SINCE execution);
-
-        let pending_len = self.pending_transactions.len(state)?;
-
-        let receipt = match result {
-            Ok(result) => {
-                let is_success = result.is_success();
-                let gas_used = result.gas_used();
-
-                if !is_success {
-                    tracing::debug!(
-                        hash = hex::encode(transaction.signed_transaction.hash()),
-                        gas_used,
-                        ?result,
-                        "EVM execution error"
-                    );
-                    anyhow::bail!("EVM execution error: {:?}", &result);
-                }
-                let receipt = self.get_receipt(&transaction, pending_len, result, state)?;
-                state.charge_linear_gas(
-                    &<S as GasSpec>::gas_to_charge_per_evm_gas(),
-                    gas_used as u32,
-                )?;
-                receipt
-            }
+        let result = match executor::transact_commit(&mut evm_db, block_env, tx_env, cfg_env) {
+            Ok(result) => result,
             Err(err) => {
                 tracing::debug!(
-                    tx_hash = hex::encode(*transaction.signed_transaction.hash()),
+                    tx_hash = hex::encode(*tx.signed_transaction.hash()),
                     error = ?err,
                     "EVM transaction error"
                 );
-
                 anyhow::bail!("EVM transaction error: {:?}", err);
             }
         };
+        save_elapsed!(execution_time SINCE execution);
 
-        let pending_transaction = PendingTransaction::new(transaction, receipt);
+        let pending_len = self.pending_transactions.len(state)?;
+        let gas_used = result.gas_used();
+
+        if !result.is_success() {
+            tracing::debug!(
+                hash = hex::encode(tx.signed_transaction.hash()),
+                gas_used,
+                ?result,
+                "EVM execution error"
+            );
+            anyhow::bail!("EVM execution error: {:?}", &result);
+        }
+        let receipt = self.get_receipt(&tx, pending_len, result, state)?;
+        state.charge_linear_gas(
+            &<S as GasSpec>::gas_to_charge_per_evm_gas(),
+            gas_used as u32,
+        )?;
+
+        let pending_transaction = PendingTransaction::new(tx, receipt);
         self.pending_transactions
             .push(&pending_transaction, state)?;
 
