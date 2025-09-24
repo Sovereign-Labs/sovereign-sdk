@@ -334,3 +334,14 @@ opt-level = 0
 libraries = [
     { git = "ssh://git@github.com/Sovereign-Labs/sdk-lints.git" },
 ]
+
+[profile.coverage]
+inherits = "dev"
+# enough for coverage, smaller DWARF
+debug = 1
+# reduce linker RAM
+lto = "off"
+# lower per-unit peak
+codegen-units = 16
+# lighter binaries if acceptable
+panic = "abort"

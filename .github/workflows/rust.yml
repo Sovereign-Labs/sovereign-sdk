@@ -51,7 +51,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: -D warnings
   CARGO_NET_GIT_FETCH_WITH_CLI: true
   NO_COLOR: 1
 
@@ -103,6 +102,8 @@ jobs:
     name: check
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
     timeout-minutes: 60
+    env:
+      RUSTFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@v4
       - uses: namespacelabs/nscloud-cache-action@v1
@@ -136,6 +137,8 @@ jobs:
     # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-bench-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 120
+    env:
+      RUSTFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@v4
       - uses: namespacelabs/nscloud-cache-action@v1
@@ -181,6 +184,7 @@ jobs:
         partition: [1, 2, 3]
     timeout-minutes: 120
     env:
+      RUSTFLAGS: "-D warnings"
       SKIP_GUEST_BUILD: "1"
       SP1_SKIP_PROGRAM_BUILD: "true"
       CARGO_HACK_PARTITION_N: ${{ matrix.partition }}
@@ -211,6 +215,7 @@ jobs:
         partition: [1, 2, 3]
     timeout-minutes: 120
     env:
+      RUSTFLAGS: "-D warnings"
       SKIP_GUEST_BUILD: "1"
       SP1_SKIP_PROGRAM_BUILD: "true"
       CARGO_HACK_PARTITION_N: ${{ matrix.partition }}
@@ -272,6 +277,7 @@ jobs:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-250gb-1-88
     timeout-minutes: 60
     env:
+      RUSTFLAGS: "-D warnings"
       SKIP_GUEST_BUILD: "1"
       SP1_SKIP_PROGRAM_BUILD: "true"
     steps:
@@ -292,17 +298,17 @@ jobs:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-coverage-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 90
     env:
+      RUSTFLAGS: "-Clink-arg=-fuse-ld=lld"
       SKIP_GUEST_BUILD: "1"
       SP1_SKIP_PROGRAM_BUILD: "true"
       RUST_BACKTRACE: 1
+      CARGO_BUILD_JOBS: 2
     steps:
       - uses: actions/checkout@v4
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      # CI always operates on the entire workspace
-      - run: cargo switcheroo disable
-        shell: bash
+      # Coverage is intentionally run without heavy crates, like demo-rollup.
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
