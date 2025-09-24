@@ -6,7 +6,6 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use sov_benchmarks::node::{assert_batch_receipts, generate_transfers, prefill_state};
 use sov_benchmarks::setup_with_runner;
 
-
 fn stf_apply_slot_bench(c: &mut Criterion) {
     let bench_after_blocks: u64 = env::var("SOV_BENCH_BLOCKS")
         .unwrap_or("100".to_string())
