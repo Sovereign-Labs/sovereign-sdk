@@ -5,6 +5,7 @@ use std::env;
 use criterion::{criterion_group, criterion_main, Criterion};
 use sov_benchmarks::node::{assert_batch_receipts, generate_transfers, prefill_state};
 use sov_benchmarks::setup_with_runner;
+use sov_test_utils::MockZkvm;
 
 fn stf_apply_slot_bench(c: &mut Criterion) {
     let bench_after_blocks: u64 = env::var("SOV_BENCH_BLOCKS")
@@ -26,7 +27,7 @@ fn stf_apply_slot_bench(c: &mut Criterion) {
         bench_after_blocks * senders_count
     );
 
-    let (mut runner, roles) = setup_with_runner(senders_count, Default::default());
+    let (mut runner, roles) = setup_with_runner::<MockZkvm>(senders_count, Default::default());
 
     let token_id = prefill_state(&roles, &mut runner);
     let bench_messages = generate_transfers(bench_after_blocks, token_id, &roles, &mut runner);
