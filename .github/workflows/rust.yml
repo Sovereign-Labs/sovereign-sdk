@@ -301,7 +301,7 @@ jobs:
       SKIP_GUEST_BUILD: "1"
       SP1_SKIP_PROGRAM_BUILD: "true"
       RUST_BACKTRACE: 1
-      CARGO_BUILD_JOBS: 2
+      CARGO_BUILD_JOBS: 4
     steps:
       - uses: actions/checkout@v4
       - uses: namespacelabs/nscloud-cache-action@v1

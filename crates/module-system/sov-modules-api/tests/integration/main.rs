@@ -5,6 +5,7 @@ mod transaction;
 
 #[test]
 fn trybuild() {
+    std::env::remove_var("CARGO_BUILD_JOBS");
     let t = trybuild::TestCases::new();
 
     t.compile_fail("tests/integration/state_tests/trybuild/state_cannot_mutate_while_borrowed.rs");
