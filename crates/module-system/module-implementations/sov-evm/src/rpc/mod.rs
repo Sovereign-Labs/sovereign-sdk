@@ -216,7 +216,6 @@ where
         Ok(U64::from(nonce))
     }
 
-
     /// Handler for: `eth_getCode`
     #[rpc_method(name = "eth_getCode")]
     pub fn get_code(
@@ -240,10 +239,7 @@ where
             .map(|code| code.bytecode().clone())
             .unwrap_or_default();
 
-       
         Ok(code.clone())
-    }
-
     }
 
     /// Handler for: `eth_feeHistory`

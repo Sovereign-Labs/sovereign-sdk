@@ -56,3 +56,16 @@ fn test_invalid_contract_execution() {
         assert!(matches!(result, ExecutionResult::Revert { .. }));
     });
 }
+
+#[test]
+fn test_get_empty_code() {
+    let (runner, account, _) = setup();
+
+    let address_without_code = account.address();
+
+    runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let code = evm.get_code(address_without_code, None, state).unwrap();
+        assert_eq!(&code.to_string(), "0x")
+    });
+}
