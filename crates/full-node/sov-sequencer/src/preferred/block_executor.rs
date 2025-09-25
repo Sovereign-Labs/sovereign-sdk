@@ -683,7 +683,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
         // Add the changes to the executor's local uncommitted changes and set up a fresh checkpoint that points at the latest uncommitted change.
         self.uncommitted_changes.push_front(changes);
-        self.checkpoint = StateCheckpoint::new_with_intermediate_state(
+        self.checkpoint = StateCheckpoint::new_with_uncomitted_changes(
             self.checkpoint.storage().clone(),
             &Rt::default().kernel(),
             Box::new(self.uncommitted_changes.clone()),

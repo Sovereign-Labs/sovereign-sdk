@@ -214,9 +214,6 @@ pub struct ProvableStorageCache<N> {
     // Transaction cache.
     cache: CacheLog,
     #[cfg(feature = "native")]
-    // /// Extra state that isn't yet saved in storage. This is used by the sequencer for non-finalized blocks,
-    // /// and may also be used for speculative/optimistic execution in the future.
-    // intermediate_state: Option<Box<dyn StateGetter>>,
     revertable_ordered_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
     // Ordered reads and writes.
     ordered_db_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
@@ -227,8 +224,6 @@ impl<N: ProvableCompileTimeNamespace> Clone for ProvableStorageCache<N> {
     fn clone(&self) -> Self {
         Self {
             cache: self.cache.clone(),
-            // #[cfg(feature = "native")]
-            // intermediate_state: self.intermediate_state.as_ref().map(|g| g.box_clone()),
             revertable_ordered_reads: self.revertable_ordered_reads.clone(),
             ordered_db_reads: self.ordered_db_reads.clone(),
             phantom: self.phantom,
@@ -373,7 +368,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     /// Get the size of the value.
     pub fn get_size_or_fetch<S: Storage>(
         &mut self,
-        intermediate_state: &Option<Box<dyn StateGetter>>,
+        uncomitted_changes: &Option<Box<dyn StateGetter>>,
         key: &SlotKey,
         storage: &S,
         witness: &S::Witness,
@@ -383,8 +378,8 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             Some(Access::Read { original }) => original.as_ref().map(|node| node.leaf.size),
             Some(Access::Write { modified, .. }) => modified.as_ref().map(SlotValue::size),
             None => {
-                let maybe_leaf = match intermediate_state {
-                    Some(intermediate_state) => intermediate_state
+                let maybe_leaf = match uncomitted_changes {
+                    Some(uncomitted_changes) => uncomitted_changes
                         .get_leaf(N::PROVABLE_NAMESPACE, key)
                         .or_else(|| storage.get_leaf::<N>(key, witness)),
                     None => storage.get_leaf::<N>(key, witness),
@@ -433,7 +428,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     #[cfg(feature = "native")]
     pub fn get_or_fetch<S: Storage>(
         &mut self,
-        intermediate_state: &Option<Box<dyn StateGetter>>,
+        uncomitted_changes: &Option<Box<dyn StateGetter>>,
         key: &SlotKey,
         storage: &S,
         witness: &S::Witness,
@@ -446,10 +441,10 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             storage,
             witness,
             |key, witness, _args| {
-                Ok::<_, Infallible>(match intermediate_state {
+                Ok::<_, Infallible>(match uncomitted_changes {
                     // NATIVE only: we might have some intermediate state that isn't yet in storage (this could be state from an optimistic execution, or uncomitted state from the sequencer).
                     // If so, check that state first and fall back to storage.
-                    Some(intermediate_state) => intermediate_state
+                    Some(uncomitted_changes) => uncomitted_changes
                         .get(N::NAMESPACE, key)
                         .or_else(|| storage.get::<N>(key, witness)),
                     None => storage.get::<N>(key, witness),

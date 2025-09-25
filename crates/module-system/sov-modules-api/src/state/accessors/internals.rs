@@ -29,7 +29,8 @@ pub(super) struct Delta<S: Storage> {
     pub(super) inner: S,
     witness: S::Witness,
     #[cfg(feature = "native")]
-    pub(crate) intermediate_state: Option<Box<dyn StateGetter>>,
+    // Changes that are not yet committed to the underlying storage that should be taken into account when querying the storage
+    pub(crate) uncomitted_changes: Option<Box<dyn StateGetter>>,
     pub(crate) kernel_cache: ProvableStorageCache<namespaces::Kernel>,
     pub(crate) user_cache: ProvableStorageCache<namespaces::User>,
     pub(crate) accessory_writes: HashMap<SlotKey, AccessoryWrite>,
@@ -41,7 +42,7 @@ impl<S: Storage> Delta<S> {
         Self {
             inner: self.inner.clone(),
             witness: Default::default(),
-            intermediate_state: self.intermediate_state.as_ref().map(|g| g.box_clone()),
+            uncomitted_changes: self.uncomitted_changes.as_ref().map(|g| g.box_clone()),
             kernel_cache: self.kernel_cache.clone(),
             user_cache: self.user_cache.clone(),
             accessory_writes: self.accessory_writes.clone(),
@@ -58,7 +59,7 @@ impl<S: Storage> Delta<S> {
             inner,
             witness,
             #[cfg(feature = "native")]
-            intermediate_state: None,
+            uncomitted_changes: None,
             user_cache: Default::default(),
             kernel_cache: Default::default(),
             accessory_writes: Default::default(),
@@ -87,7 +88,7 @@ impl<S: Storage> Delta<S> {
             accessory_writes,
             witness,
             #[cfg(feature = "native")]
-                intermediate_state: _,
+                uncomitted_changes: _,
         } = self;
 
         (
@@ -164,14 +165,14 @@ impl<S: Storage> Delta<S> {
     ) -> Option<u32> {
         match namespace {
             Namespace::User => self.user_cache.get_size_or_fetch(
-                &self.intermediate_state,
+                &self.uncomitted_changes,
                 key,
                 &self.inner,
                 &self.witness,
                 metric,
             ),
             Namespace::Kernel => self.kernel_cache.get_size_or_fetch(
-                &self.intermediate_state,
+                &self.uncomitted_changes,
                 key,
                 &self.inner,
                 &self.witness,
@@ -180,8 +181,8 @@ impl<S: Storage> Delta<S> {
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
                 Some(write) => write.value.as_ref().map(|v| v.size()),
                 None => {
-                    let val = match self.intermediate_state.as_ref() {
-                        Some(intermediate_state) => intermediate_state
+                    let val = match self.uncomitted_changes.as_ref() {
+                        Some(uncomitted_changes) => uncomitted_changes
                             .get(Namespace::Accessory, key)
                             .or_else(|| self.inner.get_accessory(key)),
                         None => self.inner.get_accessory(key),
@@ -231,14 +232,14 @@ impl<S: Storage> Delta<S> {
     ) -> Option<SlotValue> {
         match namespace {
             Namespace::User => self.user_cache.get_or_fetch(
-                &self.intermediate_state,
+                &self.uncomitted_changes,
                 key,
                 &self.inner,
                 &self.witness,
                 metric,
             ),
             Namespace::Kernel => self.kernel_cache.get_or_fetch(
-                &self.intermediate_state,
+                &self.uncomitted_changes,
                 key,
                 &self.inner,
                 &self.witness,
@@ -247,8 +248,8 @@ impl<S: Storage> Delta<S> {
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
                 Some(write) => write.value,
                 None => {
-                    let val = if let Some(intermediate_state) = self.intermediate_state.as_ref() {
-                        return intermediate_state
+                    let val = if let Some(uncomitted_changes) = self.uncomitted_changes.as_ref() {
+                        return uncomitted_changes
                             .get(namespace, key)
                             .or_else(|| self.inner.get_accessory(key));
                     } else {

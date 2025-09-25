@@ -97,25 +97,25 @@ impl<S: Spec> StateCheckpoint<S> {
 
     /// Creates a new [`StateCheckpoint`] instance with the given intermediate state that will be checked before storage when a value isn't already present in the checkpoint.
     #[cfg(feature = "native")]
-    pub fn new_with_intermediate_state<K: Kernel<S>>(
+    pub fn new_with_uncomitted_changes<K: Kernel<S>>(
         inner: S::Storage,
         kernel: &K,
-        intermediate_state: Box<dyn StateGetter>,
+        uncomitted_changes: Box<dyn StateGetter>,
     ) -> Self {
-        Self::with_witness_and_intermediate_state(
+        Self::with_witness_and_uncomitted_changes(
             inner,
             Default::default(),
             kernel,
-            Some(intermediate_state),
+            Some(uncomitted_changes),
         )
     }
 
     /// Replace the storage and intermediate state underlying the checkpoint in place. It is up to the caller
     /// to ensure that the intermediate state is compatible with the new storage.
     #[cfg(feature = "native")]
-    pub fn replace_storage(&mut self, inner: S::Storage, intermediate_state: Box<dyn StateGetter>) {
+    pub fn replace_storage(&mut self, inner: S::Storage, uncomitted_changes: Box<dyn StateGetter>) {
         self.delta.inner = inner;
-        self.delta.intermediate_state = Some(intermediate_state);
+        self.delta.uncomitted_changes = Some(uncomitted_changes);
     }
 
     /// Returns a reference to the storage underlying the state checkpoint.
@@ -147,19 +147,19 @@ impl<S: Spec> StateCheckpoint<S> {
         witness: <S::Storage as Storage>::Witness,
         kernel: &K,
     ) -> Self {
-        Self::with_witness_and_intermediate_state(inner, witness, kernel, None)
+        Self::with_witness_and_uncomitted_changes(inner, witness, kernel, None)
     }
 
     /// Creates a new [`StateCheckpoint`] instance without any changes, backed
     /// by the given [`Storage`] and witness.
-    pub fn with_witness_and_intermediate_state<K: Kernel<S>>(
+    pub fn with_witness_and_uncomitted_changes<K: Kernel<S>>(
         inner: S::Storage,
         witness: <S::Storage as Storage>::Witness,
         kernel: &K,
-        intermediate_state: Option<Box<dyn StateGetter>>,
+        uncomitted_changes: Option<Box<dyn StateGetter>>,
     ) -> Self {
         let mut delta = Delta::with_witness(inner, witness);
-        delta.intermediate_state = intermediate_state;
+        delta.uncomitted_changes = uncomitted_changes;
         let mut metrics = StateMetrics::default();
         let mut bootstrap_state = BootstrapWorkingSet {
             inner: &mut delta,
