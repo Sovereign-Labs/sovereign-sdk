@@ -259,7 +259,7 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
         // > This should be called for every logical write within the session, as well as every
         // > logical read if you expect to generate a merkle proof for the session.
         // So warming up all reads.
-        session.warm_up(key_hash);
+        // session.warm_up(key_hash);
 
         let combined_hash_and_size =
             read_node_leaf.map(|node_leaf| node_leaf.combine_val_hash_and_size());
@@ -274,7 +274,7 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
     // Writes
     for (key, original_write) in ordered_writes {
         let key_hash: nomt::trie::KeyPath = S::Hasher::digest(key.as_ref()).into();
-        session.warm_up(key_hash);
+        // session.warm_up(key_hash);
 
         let authenticated_write = original_write
             .as_ref()
@@ -293,7 +293,7 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
         match merged_accesses.entry(key_hash) {
             Entry::Vacant(vacant) => {
                 // Also warming up all writes. `ReadThenWrite` has been warmed up during reads collection.
-                session.warm_up(key_hash);
+                // session.warm_up(key_hash);
                 vacant.insert(nomt::KeyReadWrite::Write(authenticated_write));
             }
             Entry::Occupied(occupied) => match occupied.remove() {
