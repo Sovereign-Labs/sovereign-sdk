@@ -133,13 +133,11 @@ fn fetch_root_hash_if_stale<S: Spec, Rt: Runtime<S>>(
         if let Some(slot_number_for_height) =
             kernel_with_slot_mapping.get_true_slot_number_for_height_unbound(rollup_height, storage)
         {
-            tracing::info!(rollup_height = %rollup_height, "Found historical slot number for height. Fetching root hash for slot number {}", slot_number_for_height );
             let root = storage
                 .get_root_hash_unbound(slot_number_for_height)
                 .expect("Failed to get root hash");
             Some(root)
         } else {
-            tracing::info!(rollup_height = %rollup_height, "No historical slot number for height. Fetching root hash for latest slot");
             Some(
                 storage
                     .get_latest_root_hash_unbound()
@@ -147,7 +145,6 @@ fn fetch_root_hash_if_stale<S: Spec, Rt: Runtime<S>>(
             )
         }
     } else {
-        tracing::info!(rollup_height = %rollup_height, latest_height_in_storage = %latest_rollup_height_in_storage, "Storage is behind requested height. Returning None");
         None
     }
 }
@@ -158,15 +155,6 @@ async fn compute_state_root<S: Spec, Rt: Runtime<S>>(
     rollup_height: RollupHeight,
     slot_number: SlotNumber,
 ) -> <S::Storage as Storage>::Root {
-    tracing::warn!(
-        num_user_writes = state_accesses.user.ordered_writes.len(),
-        num_kernel_writes = state_accesses.kernel.ordered_writes.len(),
-        "Computing state root for height {}",
-        rollup_height
-    );
-    for (key, value) in state_accesses.user.ordered_writes.iter() {
-        tracing::info!(key = %key, value = ?value, "User write");
-    }
     let handle = tokio::runtime::Handle::current().spawn_blocking(move || {
         tracing::span!(tracing::Level::DEBUG, "compute_state_update", scope = "sequencer", %rollup_height, %slot_number)
             .in_scope(|| {
@@ -185,7 +173,6 @@ async fn compute_state_root<S: Spec, Rt: Runtime<S>>(
             })
     });
     let res = handle.await.unwrap();
-    tracing::warn!(root = %res, "Computed state root for height {}", rollup_height);
     res
 }
 
