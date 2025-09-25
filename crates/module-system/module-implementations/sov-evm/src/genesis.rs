@@ -105,12 +105,7 @@ fn init_block(config: &EvmGenesisConfig) -> Block {
 }
 
 fn init_spec(config: &EvmGenesisConfig) -> anyhow::Result<Vec<(BlockNumber, SpecId)>> {
-    let mut spec = config
-        .chain_spec
-        .hardforks
-        .iter()
-        .cloned()
-        .collect::<Vec<_>>();
+    let mut spec = config.chain_spec.hardforks.to_vec();
 
     spec.sort_by(|a, b| a.0.cmp(&b.0));
 
