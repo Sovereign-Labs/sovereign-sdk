@@ -15,22 +15,36 @@ pub struct IgnoredTransactionReceipt<T: TxReceiptContents> {
 }
 
 /// A receipt for a single transaction. These receipts are stored in the rollup's database
-/// and may be queried via RPC. Receipts are generic over a type `R` which the rollup can use to
+/// and may be queried via RPC. Receipts are generic over a type `T` which the rollup can use to
 /// store additional data, such as the status code of the transaction or the amount of gas used.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// Note: Debug is manually implemented, please adjust it if this structure is changes
+#[derive(Clone, Serialize, Deserialize)]
 /// A receipt showing the result of a transaction
 #[serde(bound = "T: TxReceiptContents")]
 pub struct TransactionReceipt<T: TxReceiptContents> {
     /// The canonical hash of this transaction
     pub tx_hash: TxHash,
     /// The canonically serialized body of the transaction, if it should be persisted
-    /// in the database
+    /// in the database.
+    /// Skip serialization because it is unnecessary over the wire.
+    #[serde(skip_serializing)]
     pub body_to_save: Option<Vec<u8>>,
     /// The events output by this transaction
     pub events: Vec<StoredEvent>,
     /// Any additional structured data to be saved in the database and served over RPC
     /// For example, this might contain a status code.
     pub receipt: TxEffect<T>,
+}
+
+impl<T: TxReceiptContents> core::fmt::Debug for TransactionReceipt<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TransactionReceipt")
+            .field("tx_hash", &self.tx_hash)
+            .field("body_to_save", &"<removed>")
+            .field("events", &self.events)
+            .field("receipt", &self.receipt)
+            .finish()
+    }
 }
 
 /// The outcome of a transaction.

@@ -82,8 +82,7 @@ main() {
     --core.ip validator \
     --keyring.keyname "$NODE_NAME" \
     --p2p.network "$P2P_NETWORK" \
-    --rpc.addr "0.0.0.0" \
-    --gateway.addr "0.0.0.0"
+    --rpc.addr "0.0.0.0"
 }
 
 main

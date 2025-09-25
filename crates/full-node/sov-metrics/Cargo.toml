@@ -23,6 +23,7 @@ http = { version = "1.0", optional = true }
 derivative = { workspace = true, optional = true }
 sov-rollup-interface = { workspace = true }
 derive_more = { workspace = true, features = ["deref_mut", "deref"], optional = true }
+derive-new = { workspace = true }
 
 anyhow = { workspace = true }
 risc0-zkvm = { workspace = true, default-features = false, features = [

@@ -68,13 +68,6 @@ impl Access {
         }
     }
 
-    fn modified(&self) -> Option<Option<&SlotValue>> {
-        match self {
-            Access::Read { .. } => None,
-            Access::Write { modified, .. } => Some(modified.as_ref()),
-        }
-    }
-
     fn modified_mut(&mut self) -> Option<&mut Option<SlotValue>> {
         match self {
             Access::Read { .. } => None,
@@ -272,7 +265,7 @@ use internal::CacheLog;
 pub struct ProvableStorageCache<N> {
     // Transaction cache.
     cache: CacheLog,
-    //
+    // Reads that were retrieved from storage for the first time but can still be reverted.
     revertable_ordered_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
     // Ordered reads and writes.
     ordered_db_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
@@ -299,6 +292,11 @@ pub struct ProvableStorageCache<N> {
 // fetched and cached—even when only requesting the size. This is because, in native execution, it's acceptable to cache the full
 // value, but in ZK execution, arbitrary large values cannot be stored as hints in the witness.
 impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
+    /// Returns `revertable_ordered_reads`
+    pub fn revertable_ordered_reads(&self) -> &Vec<(SlotKey, Option<NodeLeaf>)> {
+        &self.revertable_ordered_reads
+    }
+
     /// Commit the revertable part of the `ProvableStorageCache`.
     pub fn commit_revertable_storage_cache(&mut self) {
         let revertable_ordered_reads = mem::take(&mut self.revertable_ordered_reads);
@@ -323,10 +321,42 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     }
 
     /// Returns an iterator over the writes
-    pub fn get_writes(&self) -> impl Iterator<Item = (&SlotKey, Option<&SlotValue>)> {
-        self.cache
-            .iter()
-            .filter_map(|(k, access)| access.modified().map(|v| (k, v)))
+    pub fn get_writes(&self) -> impl Iterator<Item = (&SlotKey, (u64, Option<&SlotValue>))> {
+        self.cache.iter().filter_map(|(k, access)| {
+            if let Access::Write {
+                at_rollup_height,
+                modified,
+            } = access
+            {
+                Some((k, (*at_rollup_height, modified.as_ref())))
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Returns an iterator over the writes whose height is greater than the target height.
+    pub fn get_writes_after_height(
+        &self,
+        height: u64,
+    ) -> impl Iterator<Item = (&SlotKey, (u64, Option<&SlotValue>))> {
+        let res = self.cache.iter().filter_map(move |(k, access)| {
+            if let Access::Write {
+                at_rollup_height,
+                modified,
+            } = access
+            {
+                if *at_rollup_height > height {
+                    Some((k, (*at_rollup_height, modified.as_ref())))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
+
+        res
     }
 
     /// Converts the `ProvableStorageCache` into `OrderedReadsAndWrites`.

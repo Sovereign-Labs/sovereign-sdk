@@ -18,7 +18,7 @@ use crate::shares::BlobIterator;
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
 
-pub(crate) const APP_VERSION: AppVersion = AppVersion::V4;
+pub(crate) const APP_VERSION: AppVersion = AppVersion::V5;
 pub(crate) const SUPPORTED_SHARE_VERSION: u8 = 1;
 
 #[derive(Debug, PartialEq, PartialOrd, Ord, Clone, Eq, Hash, Serialize, Deserialize)]

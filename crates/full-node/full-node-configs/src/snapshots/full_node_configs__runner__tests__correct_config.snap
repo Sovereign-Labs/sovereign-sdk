@@ -5,6 +5,7 @@ expression: config
 {
   "storage": {
     "path": "/tmp",
+    "state_cache_size": null,
     "user_commit_concurrency": null,
     "user_hashtable_buckets": null,
     "user_preallocate_ht": null,
@@ -59,7 +60,8 @@ expression: config
     },
     "max_batch_size_bytes": 1048576,
     "max_concurrent_blobs": 16,
-    "blob_processing_timeout_secs": 60
+    "blob_processing_timeout_secs": 60,
+    "extension": null
   },
   "monitoring": {
     "telegraf_address": "udp://192.168.4.5:8543",

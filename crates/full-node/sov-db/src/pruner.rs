@@ -6,6 +6,7 @@ use sov_rollup_interface::common::SlotNumber;
 
 use crate::metrics::nomt::PrunerMetric;
 use crate::schema::tables::ModuleAccessoryState;
+use crate::storage_manager::{PrunerJobOutput, MAX_INDIVIDUAL_PRUNING_BATCH_SIZE};
 
 type VersionedSchemaKey = (SchemaKey, SlotNumber);
 
@@ -21,7 +22,7 @@ impl Pruner {
     }
 
     /// Gathers all delete operations that can prune older versions.
-    pub fn collect_pruning_batch<T>(&self, keep_versions: u64) -> anyhow::Result<SchemaBatch>
+    pub fn collect_pruning_batch<T>(&self, keep_versions: u64) -> anyhow::Result<PrunerJobOutput>
     where
         T: Schema<Key = VersionedSchemaKey>,
         VersionedSchemaKey: SeekKeyEncoder<T> + KeyCodec<T>,
@@ -30,6 +31,7 @@ impl Pruner {
         let mut keys_inspected = 0;
         let mut keys_to_prune = 0;
         let mut pruning_batch = SchemaBatch::new();
+        let mut hit_size_limit = false;
         if keep_versions == 0 {
             return Err(anyhow::anyhow!("keep_versions must be at least 1"));
         }
@@ -49,6 +51,10 @@ impl Pruner {
                     &(base_key, last_prunable_version),
                 )?;
             }
+            if keys_to_prune >= MAX_INDIVIDUAL_PRUNING_BATCH_SIZE {
+                hit_size_limit = true;
+                break;
+            }
         }
         let pruning_time = start.elapsed();
         sov_metrics::track_metrics(|tracker| {
@@ -60,7 +66,10 @@ impl Pruner {
             });
         });
 
-        Ok(pruning_batch)
+        Ok(PrunerJobOutput {
+            pruning_batch,
+            hit_size_limit,
+        })
     }
 
     /// Can be pruned up to a returned version (included).
@@ -106,7 +115,7 @@ impl Pruner {
     pub fn collect_pruning_batch_for_module_accessory_state(
         &self,
         keep_versions: u64,
-    ) -> anyhow::Result<SchemaBatch> {
+    ) -> anyhow::Result<PrunerJobOutput> {
         self.collect_pruning_batch::<ModuleAccessoryState>(keep_versions)
     }
 }
@@ -310,7 +319,7 @@ mod tests {
         let keys_to_prune = pruner
             .collect_pruning_batch::<ModuleAccessoryState>(3)
             .unwrap();
-        rocksdb.write_schemas(keys_to_prune).unwrap();
+        rocksdb.write_schemas(keys_to_prune.pruning_batch).unwrap();
 
         // Assert that keys are deleted
         // Key A: has versions [6,7,8,9] -> keep [7,8,9], prune [6]

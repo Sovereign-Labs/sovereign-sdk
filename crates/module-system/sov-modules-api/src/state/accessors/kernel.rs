@@ -66,6 +66,9 @@ pub struct KernelStateAccessor<'a, S: Spec> {
     /// The inner working set
     pub checkpoint: &'a mut StateCheckpoint<S>,
     pub(crate) true_slot_num: SlotNumber,
+    /// Whether to read directly from storage instead of using the checkpoint
+    #[cfg(feature = "native")]
+    read_direct_from_storage: bool,
 }
 
 impl<S: Spec> GasMeter for KernelStateAccessor<'_, S> {
@@ -116,7 +119,15 @@ impl<'a, S: Spec> KernelStateAccessor<'a, S> {
         Self {
             checkpoint,
             true_slot_num,
+            #[cfg(feature = "native")]
+            read_direct_from_storage: false,
         }
+    }
+    /// Configures the accessor to read directly from storage at the given slot number, bypassing the state checkpoint.
+    #[cfg(feature = "native")]
+    pub fn read_from_storage_at_slot_number(&mut self, height: SlotNumber) {
+        self.read_direct_from_storage = true;
+        self.true_slot_num = height;
     }
 }
 
@@ -142,6 +153,56 @@ impl<S: Spec> KernelStateAccessor<'_, S> {
     }
 }
 
+#[cfg(feature = "native")]
+impl<S: Spec> UniversalStateAccessor for KernelStateAccessor<'_, S> {
+    fn get_size(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<u32> {
+        use sov_state::NativeStorage;
+        if self.read_direct_from_storage {
+            use sov_state::namespaces::{Kernel as KernelNamespace, User};
+            match namespace {
+                Namespace::User => self.checkpoint.delta.inner.get_leaf_historical::<User>(key, Some(self.true_slot_num), &Default::default()).expect("Failed to read user value with `read_direct_from_storage` override enabled. This is a bug in the sequencer. Please report it.").map(|l| l.size()),
+                Namespace::Kernel => self.checkpoint.delta.inner.get_leaf_historical::<KernelNamespace>(key, Some(self.true_slot_num), &Default::default()).expect("Failed to read kernel value with `read_direct_from_storage` override enabled. This is a bug in the sequencer. Please report it.").map(|l| l.size()),
+                Namespace::Accessory => self.checkpoint.delta.inner.get_accessory_historical(key, Some(self.true_slot_num)).expect("Failed to read accessory value with `read_direct_from_storage` override enabled. This is a bug in the sequencer. Please report it.").map(|l| l.size()),
+            }
+        } else {
+            self.checkpoint.get_size(namespace, key, metric)
+        }
+    }
+
+    fn get_value(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
+        if self.read_direct_from_storage {
+            use sov_state::namespaces::{Kernel as KernelNamespace, User};
+            use sov_state::NativeStorage;
+            match namespace {
+                Namespace::User => self.checkpoint.delta.inner.get_historical::<User>(key, Some(self.true_slot_num), &Default::default()),
+                Namespace::Kernel => self.checkpoint.delta.inner.get_historical::<KernelNamespace>(key, Some(self.true_slot_num), &Default::default()),
+                Namespace::Accessory => self.checkpoint.delta.inner.get_accessory_historical(key, Some(self.true_slot_num)),
+            }.unwrap_or_else(|e| panic!("Failed to read value from key `{key}` in namespace `{namespace:?}` with `read_direct_from_storage` override enabled. This is a bug in the sequencer. Please report it. Error: {e}"))
+        } else {
+            self.checkpoint.get_value(namespace, key, metric)
+        }
+    }
+
+    fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
+        self.checkpoint.set_value(namespace, key, value);
+    }
+
+    fn delete_value(&mut self, namespace: Namespace, key: &SlotKey) {
+        self.checkpoint.delete_value(namespace, key);
+    }
+}
+
+#[cfg(not(feature = "native"))]
 impl<S: Spec> UniversalStateAccessor for KernelStateAccessor<'_, S> {
     fn get_size(
         &mut self,

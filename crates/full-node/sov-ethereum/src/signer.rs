@@ -1,12 +1,12 @@
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
 use reth_primitives::{TxKind, U256};
-use reth_rpc_eth_types::EthApiError;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_evm::{eth_api_into_rpc_error, EthereumAuthenticator, Evm, RlpEvmTransaction};
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{ApiStateAccessor, RawTx, Spec};
+use sov_rpc_eth_types::EthApiError;
 use sov_sequencer::Sequencer;
 
 use crate::{to_jsonrpsee_error_object, Ethereum, ETH_RPC_ERROR};

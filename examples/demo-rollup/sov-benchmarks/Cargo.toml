@@ -13,6 +13,7 @@ publish = false
 sov-rollup-interface = { workspace = true, features = ["arbitrary"] }
 sov-modules-api = { workspace = true, features = ["arbitrary", "bench", "native"] }
 sov-capabilities = { workspace = true }
+sov-state = { workspace = true }
 
 sov-test-modules = { workspace = true, features = ["native"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }

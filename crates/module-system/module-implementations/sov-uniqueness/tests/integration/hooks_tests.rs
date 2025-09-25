@@ -98,28 +98,6 @@ fn send_tx_works_generation() {
 }
 
 #[test]
-fn send_tx_bad_nonce() {
-    let (admin, mut runner, evm_account) = setup();
-
-    runner.execute_transaction(TransactionTestCase {
-        input: generate_default_tx(UniquenessData::Nonce(5), &admin, &evm_account),
-        assert: Box::new(move |ctx, _state| {
-            if let TxEffect::Skipped(skipped) = &ctx.tx_receipt {
-                assert!(matches!(
-                    skipped.error,
-                    TxProcessingError::CheckUniquenessFailed(_)
-                ));
-            } else {
-                panic!(
-                    "Expected Skipped error, but got a different TxEffect: {:?}",
-                    ctx.tx_receipt
-                );
-            }
-        }),
-    });
-}
-
-#[test]
 fn send_tx_bad_generation_duplicate() {
     let (admin, mut runner, evm_account) = setup();
 

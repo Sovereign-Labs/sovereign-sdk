@@ -284,6 +284,11 @@ impl<S: Spec, T> ApiState<S, T> {
 
         Ok(state)
     }
+
+    /// Returns the checkpoint receiver.
+    pub fn checkpoint_receiver(&self) -> watch::Receiver<StateCheckpoint<S>> {
+        self.checkpoint_receiver.clone()
+    }
 }
 
 /// The height parameter for REST API requests. This can be a rollup height or a slot number.

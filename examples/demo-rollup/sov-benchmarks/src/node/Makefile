@@ -17,6 +17,12 @@ basic:
 	@echo "Output: Standard"
 	@cd ../.. && cargo bench --bench=rollup_coarse_measure
 
+basic-nomt:
+	@echo "Running basic benchmark with $(SOV_BENCH_BLOCKS) blocks and $(SOV_BENCH_TXNS_PER_BLOCKS) transactions per block and NOMT"
+	@echo "Method: Coarse Timers"
+	@echo "Output: Standard"
+	@cd ../.. && SOV_BENCH=nomt cargo bench --bench=rollup_coarse_measure
+
 flamegraph:
 	@echo "Running basic benchmark with $(SOV_BENCH_BLOCKS) blocks and $(SOV_BENCH_TXNS_PER_BLOCKS) transactions per block"
 	@echo "Method: Coarse Timers"

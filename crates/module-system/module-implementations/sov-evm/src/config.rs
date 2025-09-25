@@ -1,24 +1,18 @@
 use alloy_eips::eip1559::{ETHEREUM_BLOCK_GAS_LIMIT_30M, MIN_PROTOCOL_BASE_FEE};
-use alloy_eips::merge::SLOT_DURATION;
 use alloy_primitives::Address;
 use revm::primitives::hardfork::SpecId;
-use sov_modules_api::macros::config_value;
 
 use crate::AccountData;
 
 /// Core EVM chain parameters shared between genesis and runtime
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
 pub struct EvmChainSpec {
-    /// Unique chain identifier
-    pub chain_id: u64,
     /// Maximum contract code size (None = unlimited)
     pub limit_contract_code_size: Option<usize>,
     /// Address where transaction fees are collected
     pub coinbase: Address,
     /// Maximum gas allowed per block
     pub block_gas_limit: u64,
-    /// Seconds to add to parent block timestamp
-    pub block_timestamp_delta: u64,
     /// Hard fork activation schedule (block number -> fork ID)
     pub hardforks: Vec<(u64, SpecId)>,
 }
@@ -39,11 +33,9 @@ pub struct EvmGenesisConfig {
 impl Default for EvmChainSpec {
     fn default() -> Self {
         Self {
-            chain_id: config_value!("CHAIN_ID"),
             limit_contract_code_size: None,
             coinbase: Address::ZERO,
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
-            block_timestamp_delta: SLOT_DURATION.as_secs(),
             hardforks: vec![(0, SpecId::SHANGHAI)],
         }
     }
@@ -103,9 +95,7 @@ mod tests {
                 code: Bytes::default(),
             }],
             chain_spec: crate::EvmChainSpec {
-                chain_id: 4321, // Use a hard-coded value instead of config_value!("CHAIN_ID") since the string below is hard-coded
                 limit_contract_code_size: None,
-                block_timestamp_delta: 1u64,
                 hardforks: vec![(0, SpecId::SHANGHAI)],
                 ..Default::default()
             },
@@ -124,11 +114,9 @@ mod tests {
                 "initial_base_fee":7,
                 "genesis_timestamp":0,
                 "chain_spec":{
-                    "chain_id":4321,
                     "limit_contract_code_size":null,
                     "coinbase":"0x0000000000000000000000000000000000000000",
                     "block_gas_limit":30000000,
-                    "block_timestamp_delta":1,
                     "hardforks":[[0,"SHANGHAI"]]
                 }
         }"#;

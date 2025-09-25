@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use sov_db::config::RollupDbConfig;
 use sov_rollup_interface::node::da::DaService;
 
-use crate::sequencer::{SequencerConfig, SequencerKindConfig};
+use crate::sequencer::{SeqConfigExtension, SequencerConfig, SequencerKindConfig};
 
 pub const DEFAULT_CONCURRENT_SYNC_TASKS: u8 = 5;
 
@@ -138,6 +138,16 @@ pub struct RollupConfig<Address, Da: DaService, M> {
     pub monitoring: M,
 }
 
+impl<Address, Da: DaService, M> RollupConfig<Address, Da, M> {
+    pub fn extension_or_panic(&self) -> SeqConfigExtension {
+        self.sequencer
+            .extension
+            .as_ref()
+            .expect("Sequencer config extension is missing. Verify the [sequencer.extension] section in the rollup configuration.")
+            .clone()
+    }
+}
+
 /// Reads toml file as a specific type.
 pub fn from_toml_path<P: AsRef<Path>, R: DeserializeOwned>(path: P) -> anyhow::Result<R> {
     let contents = std::fs::read_to_string(&path)?;
@@ -193,6 +203,7 @@ mod tests {
             max_batch_size_bytes = 1048576
             max_concurrent_blobs = 16
             max_allowed_node_distance_behind = 5
+            num_cache_warmup_workers = 5
             rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
             [sequencer.standard]
         "#;

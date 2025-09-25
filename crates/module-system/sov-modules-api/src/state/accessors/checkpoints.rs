@@ -7,7 +7,10 @@ use super::internals::{AccessoryDelta, Delta};
 use super::temp_cache::{CacheLookup, TempCache};
 use super::{BootstrapWorkingSet, BorshSerializedSize, UniversalStateAccessor};
 use crate::capabilities::{Kernel, RollupHeight};
+use crate::state::accessors::internals::FirstTimeReads;
 use crate::state::traits::PerBlockCache;
+#[cfg(feature = "native")]
+use crate::TxChangeSet;
 use crate::{GasMeter, Spec, VersionReader};
 
 /// This structure is responsible for storing the `read-write` set.
@@ -26,17 +29,19 @@ pub struct StateCheckpoint<S: Spec> {
     pub(super) metrics: StateMetrics,
 }
 
+type Write = (u64, Option<SlotValue>);
+
 #[derive(Debug, Clone)]
 /// The list of changes from the state checkpoint
 pub struct ChangeSet {
     #[allow(missing_docs)]
-    pub changes: Vec<((SlotKey, sov_state::Namespace), Option<SlotValue>)>,
+    pub changes: Vec<((SlotKey, sov_state::Namespace), Write)>,
 }
 
 impl ChangeSet {
     /// Create a new `ChangeSet` from a vector of changes.
     #[must_use]
-    pub fn new(changes: Vec<((SlotKey, sov_state::Namespace), Option<SlotValue>)>) -> Self {
+    pub fn new(changes: Vec<((SlotKey, sov_state::Namespace), Write)>) -> Self {
         Self { changes }
     }
 }
@@ -45,6 +50,11 @@ impl<S: Spec> StateCheckpoint<S> {
     /// Check if key is in the cache.
     pub fn is_value_cached(&self, namespace: Namespace, key: &SlotKey) -> IsValueCached {
         self.delta.is_value_cached(namespace, key)
+    }
+
+    /// Keys and values that were read for the first time.
+    pub fn first_reads(&self) -> FirstTimeReads {
+        self.delta.first_reads()
     }
 
     /// Commits the revertable part of the `StateCheckpoint` cache.
@@ -101,6 +111,8 @@ impl<S: Spec> StateCheckpoint<S> {
         let new_rollup_height = new_checkpoint.rollup_height;
         self.delta
             .replace_storage_and_prune(storage, new_rollup_height.get());
+        // Prune the temp cache
+        std::mem::take(&mut self.cache);
     }
 
     /// Creates a new [`StateCheckpoint`] instance without any changes, backed
@@ -181,9 +193,16 @@ impl<S: Spec> StateCheckpoint<S> {
         self.visible_slot_num = VisibleSlotNumber::new_dangerous(visible_slot_number);
     }
 
+    #[cfg(feature = "native")]
     /// Returns the list of all changes contained in the state checkpoint.
     pub fn changes(&mut self) -> ChangeSet {
         self.delta.changes()
+    }
+
+    #[cfg(feature = "native")]
+    /// Returns the list of all changes contained in the state checkpoint which were written after the target height.
+    pub fn changes_after(&mut self, height: u64) -> ChangeSet {
+        self.delta.changes_after(height)
     }
 
     /// Directly apply a set of changes to the state checkpoint. This method should generally *not* be used
@@ -194,7 +213,24 @@ impl<S: Spec> StateCheckpoint<S> {
     // TODO: Remove this method if we stop using `StateCheckpoint` in the sequencer
     #[cfg(feature = "native")]
     pub fn apply_changes(&mut self, changeset: ChangeSet) {
-        for ((key, namespace), value) in changeset.changes {
+        for ((key, namespace), (height, value)) in changeset.changes {
+            if let Some(value) = value {
+                self.delta.set(namespace, &key, value, height);
+            } else {
+                self.delta.delete(namespace, &key, height);
+            }
+        }
+    }
+
+    /// Directly apply a set of changes to the state checkpoint. This method should generally *not* be used
+    /// during normal execution, since changes should happen through `StateValue` types which
+    /// use the UniversalStateAccessor API. It is primarily intended for use in the sequencer, which has to manage
+    /// its own state.
+    // This TODO is not a security risk, it is used only in sequencer as intended.
+    // TODO: Remove this method if we stop using `StateCheckpoint` in the sequencer
+    #[cfg(feature = "native")]
+    pub fn apply_tx_changes(&mut self, changeset: TxChangeSet) {
+        for ((key, namespace), value) in changeset.writes {
             if let Some(value) = value {
                 self.set_value(namespace, &key, value);
             } else {
@@ -312,20 +348,24 @@ impl<S: Spec> GasMeter for StateCheckpoint<S> {
 }
 
 impl<S: Spec> PerBlockCache for StateCheckpoint<S> {
-    fn get_cached<T: 'static + Send + Sync>(&self) -> Option<&T> {
-        if let CacheLookup::Hit(value) = self.cache.get::<T>() {
+    fn get_cached<T: 'static + Send + Sync>(&self, slot_key: Option<SlotKey>) -> Option<&T> {
+        if let CacheLookup::Hit(value) = self.cache.get::<T>(slot_key) {
             value
         } else {
             None
         }
     }
 
-    fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(&mut self, value: T) {
-        self.cache.set(value);
+    fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(
+        &mut self,
+        slot_key: Option<SlotKey>,
+        value: T,
+    ) {
+        self.cache.set(slot_key, value);
     }
 
-    fn delete_cached<T: 'static + Send + Sync>(&mut self) {
-        self.cache.delete::<T>();
+    fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: Option<SlotKey>) {
+        self.cache.delete::<T>(slot_key);
     }
 
     fn update_cache_with(&mut self, other: TempCache) {

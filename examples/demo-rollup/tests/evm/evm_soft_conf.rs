@@ -1,9 +1,9 @@
 use super::evm_test_helper;
-use crate::evm::evm_test_helper::setup;
+use crate::evm::evm_test_helper::{setup, EVM_EXTENSION};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
-    let (test_rollup, evm_client, _, _) = setup(0).await;
+    let (test_rollup, evm_client, _) = setup(0, EVM_EXTENSION).await;
 
     let contract_address = evm_test_helper::deploy_contract_check(&evm_client)
         .await
@@ -61,6 +61,8 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
 
             assert_eq!(pending_blokck.number.unwrap().as_u64(), expected_block_nr);
             assert_eq!(pending_blokck.transactions, vec![tx_hash]);
+            let block_timestamp: u64 = pending_blokck.timestamp.try_into().unwrap();
+            assert!(block_timestamp > 0);
         }
 
         // Now we created a block and the block hash becomes available.

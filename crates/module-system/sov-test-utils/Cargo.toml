@@ -25,13 +25,15 @@ tokio = { workspace = true, features = ["sync"] }
 serde = { workspace = true }
 schemars = { workspace = true }
 serde_json = { workspace = true }
-testcontainers = "0.23"
+testcontainers = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
 
 ethereum-types = { workspace = true }
-ethers-core = { workspace = true }
-ethers-contract = { workspace = true }
+ethers = { workspace = true }
+alloy-sol-types = "1.3.1"
+alloy-primitives = { workspace = true }
+alloy-rpc-types-eth = "1.0.30"
 
 sha2 = { workspace = true }
 sov-address = { workspace = true }
@@ -86,4 +88,7 @@ arbitrary = [
     "sov-mock-da/arbitrary",
     "sov-bank/arbitrary",
     "sov-paymaster/arbitrary",
+    "alloy-primitives/arbitrary",
+	"alloy-rpc-types-eth/arbitrary",
+	"alloy-sol-types/arbitrary"
 ]

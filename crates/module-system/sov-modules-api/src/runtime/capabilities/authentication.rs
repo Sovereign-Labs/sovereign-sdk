@@ -16,6 +16,7 @@ use crate::transaction::{
     AuthenticatedTransactionAndRawHash, Credentials, Transaction, TransactionVerificationError,
     TxDetails, VersionedTx,
 };
+use crate::GetGasPrice;
 use crate::{
     capabilities, metered_credential, CryptoSpec, DispatchCall, FullyBakedTx, GasMeter,
     GasMeteringError, MeteredBorshDeserialize, MeteredBorshDeserializeError, MeteredHasher,
@@ -50,7 +51,7 @@ pub trait TransactionAuthenticator<S: Spec> {
 
     /// Authenticates a transaction (typically by checking the signature) and deserializes its contents
     /// into an executable message.
-    fn authenticate<Accessor: ProvableStateReader<User, Spec = S>>(
+    fn authenticate<Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>>(
         tx: &FullyBakedTx,
         state: &mut Accessor,
     ) -> Result<AuthenticationOutput<S, Self::Decodable>, AuthenticationError>;
@@ -181,6 +182,9 @@ pub enum FatalError {
     /// Signature verification failed.
     #[error("Signature verification failed: {0}")]
     SigVerificationFailed(String),
+    /// Missing chain id
+    #[error("Missing chain id: expected {0}")]
+    MissingChainId(u64),
     /// The chain id was invalid
     #[error("Invalid chain id: expected {expected}, got {got}")]
     InvalidChainId {

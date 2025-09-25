@@ -1,7 +1,6 @@
-use alloy_primitives::address;
-use alloy_sol_types::{eip712_domain, Eip712Domain, SolStruct};
 use sov_address::{EthereumAddress, EvmCryptoSpec};
 use sov_evm::Eip712Authenticator;
+use sov_evm::SchemaProvider;
 use sov_mock_da::{MockBlob, MockDaSpec};
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
@@ -22,6 +21,66 @@ type TestSpec =
     ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, EthereumAddress, Native, EvmCryptoSpec>;
 type S = TestSpec;
 
+// The Eip712Authenticator requires access to the UniversalWallet schema, which must be generated
+// from a runtime. But the authenticator must be passed to the runtime to construct it.
+//
+// Normally this is handled with build-scripts; for this test, we instead create a dummy schema and
+// build a dummy runtime with that, and we can then build the real schema from the RuntimeCall in
+// this runtime (which will be identical to the real runtime).
+mod schema_generation {
+    use sov_modules_api::runtime::get_runtime_schema;
+    use sov_modules_api::sov_universal_wallet::schema::Schema;
+    use std::sync::OnceLock;
+
+    use super::{
+        generate_runtime, Eip712Authenticator, EvmCryptoSpec, SchemaProvider, ValueSetter, S,
+    };
+
+    /// Dummy schema provider for the schema-generation runtime
+    pub struct DummySchemaProvider;
+    impl SchemaProvider for DummySchemaProvider {
+        const SCHEMA_BORSH: &'static [u8] = &[];
+
+        // This should never be called since we only use this runtime for schema generation
+        fn get_schema() -> &'static Schema {
+            panic!("DummySchemaProvider::get_schema() should never be called")
+        }
+    }
+
+    // Runtime used only for generating the schema
+    generate_runtime! {
+        name: SchemaGenRuntime,
+        modules: [value_setter: ValueSetter<S>],
+        operating_mode: sov_modules_api::OperatingMode::Optimistic,
+        minimal_genesis_config_type: sov_test_utils::runtime::genesis::optimistic::MinimalOptimisticGenesisConfig<S>,
+        runtime_trait_impl_bounds: [S: ::sov_modules_api::Spec<CryptoSpec = EvmCryptoSpec>],
+        kernel_type: sov_kernels::basic::BasicKernel<'a, S>,
+        auth_type: Eip712Authenticator<S, SchemaGenRuntime<S>, DummySchemaProvider>,
+        auth_call_wrapper: |call| call,
+    }
+
+    /// Get the test runtime schema, generating it once and caching it
+    pub fn get_test_schema() -> &'static Schema {
+        static SCHEMA: OnceLock<Schema> = OnceLock::new();
+
+        SCHEMA.get_or_init(|| {
+            get_runtime_schema::<S, SchemaGenRuntime<S>>()
+                .expect("Failed to generate test runtime schema")
+        })
+    }
+}
+
+/// The real schema provider for tests that uses the runtime-generated schema
+pub struct TestSchemaProvider;
+impl SchemaProvider for TestSchemaProvider {
+    const SCHEMA_BORSH: &'static [u8] = &[]; // Not used since we override get_schema()
+
+    /// Override the default implementation to use our runtime-generated schema
+    fn get_schema() -> &'static sov_modules_api::sov_universal_wallet::schema::Schema {
+        schema_generation::get_test_schema()
+    }
+}
+
 generate_runtime! {
     name: TestRuntime,
     modules: [value_setter: ValueSetter<S>],
@@ -29,7 +88,7 @@ generate_runtime! {
     minimal_genesis_config_type: sov_test_utils::runtime::genesis::optimistic::MinimalOptimisticGenesisConfig<S>,
     runtime_trait_impl_bounds: [S: ::sov_modules_api::Spec<CryptoSpec = EvmCryptoSpec>],
     kernel_type: sov_kernels::basic::BasicKernel<'a, S>,
-    auth_type: Eip712Authenticator<S, TestRuntime<S>>,
+    auth_type: Eip712Authenticator<S, TestRuntime<S>, TestSchemaProvider>,
     auth_call_wrapper: |call| call,
 }
 type RT = TestRuntime<S>;
@@ -50,24 +109,6 @@ fn setup() -> (TestRunner<RT, S>, TestUser<S>) {
     (runner, admin)
 }
 
-const DOMAIN: Eip712Domain = eip712_domain! {
-    name: "Transaction",
-    version: "1",
-    chain_id: 4321,
-    verifying_contract: address!("0000000000000000000000000000000000000000"),
-};
-
-pub mod sol_struct {
-    use alloy_sol_types::sol;
-
-    sol! {
-        #[derive(Debug)]
-        struct TxDetails {
-            uint64 chain_id;
-        }
-    }
-}
-
 pub fn create_utx<S: Spec, RT: Runtime<S>>(message: RT::Decodable) -> UnsignedTransaction<RT, S> {
     let details = TxDetails {
         max_priority_fee_bips: PriorityFeeBips::ZERO,
@@ -82,9 +123,21 @@ pub fn sign_utx<S: Spec, RT: Runtime<S>>(
     utx: UnsignedTransaction<RT, S>,
     signer: &TestUser<S>,
 ) -> Transaction<RT, S> {
-    let hash = utx.details.as_sol_struct().eip712_signing_hash(&DOMAIN);
+    let schema = TestSchemaProvider::get_schema();
+
+    let transaction_type_index = schema
+        .rollup_expected_index(
+            sov_modules_api::sov_universal_wallet::schema::RollupRoots::UnsignedTransaction,
+        )
+        .unwrap();
+
+    let utx_bytes = borsh::to_vec(&utx).expect("Failed to serialize unsigned transaction");
+    let eip712_hash = schema
+        .eip712_signing_hash(transaction_type_index, &utx_bytes)
+        .expect("Failed to calculate EIP712 hash");
+
     let pk = signer.private_key();
-    let signature = pk.sign(hash.as_slice());
+    let signature = pk.sign(&eip712_hash);
     utx.to_signed_tx(pk.pub_key(), signature)
 }
 

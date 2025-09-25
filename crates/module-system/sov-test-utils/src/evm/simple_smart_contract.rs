@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use ethers_contract::BaseContract;
-use ethers_core::abi::Abi;
-use ethers_core::types::Bytes;
+use ethers::contract::BaseContract;
+use ethers::core::abi::Abi;
+use ethers::core::types::Bytes;
 
 fn test_data_path() -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -65,6 +65,11 @@ impl SimpleStorageContract {
         self.base_contract.encode("get", ()).unwrap()
     }
 
+    /// Inc function for the smart contract.
+    pub fn inc_call_data(&self) -> Bytes {
+        self.base_contract.encode("inc", ()).unwrap()
+    }
+
     /// Failing call data to test revert.
     pub fn failing_function_call_data(&self) -> Bytes {
         // Some random function signature.
@@ -77,13 +82,38 @@ impl SimpleStorageContract {
         self.base_contract.encode("alwaysRevert", ()).unwrap()
     }
 
-    /// Emit example log.
-    pub fn emit_one_log(&self) -> Bytes {
-        self.base_contract.encode("emitOneLog", ()).unwrap()
+    /// Emit logss.
+    pub fn emit_logs(&self, topic: u32, nb_of_logs: u32) -> Bytes {
+        let topic = ethereum_types::U256::from(topic);
+        let nb_of_logs = ethereum_types::U256::from(nb_of_logs);
+        self.base_contract
+            .encode("emitLogs", (topic, nb_of_logs))
+            .unwrap()
     }
+}
 
-    /// Emit example log.
-    pub fn emit_two_logs(&self) -> Bytes {
-        self.base_contract.encode("emitTwoLogs", ()).unwrap()
+use alloy_sol_types::sol;
+use alloy_sol_types::SolEvent;
+
+/// Log with some additional metadata.
+#[derive(Debug, Clone)]
+pub struct SimpleStorageContractLog {
+    pub paresed: SimpleLog,
+    pub original: alloy_rpc_types_eth::Log,
+}
+
+sol! {
+    #[derive(Debug)]
+    event SimpleLog(address indexed sender,uint256 indexed topic,uint256 value);
+}
+
+impl SimpleStorageContract {
+    /// Decode log
+    pub fn decode_alloy(log: alloy_rpc_types_eth::Log) -> SimpleStorageContractLog {
+        let decoded_log = SimpleLog::decode_log_validate(&log.inner).unwrap();
+        SimpleStorageContractLog {
+            paresed: decoded_log.data,
+            original: log,
+        }
     }
 }

@@ -6,9 +6,10 @@ use std::marker::PhantomData;
 use super::checkpoints::StateCheckpoint;
 use super::internals::RevertableWriter;
 use super::temp_cache::{CacheLookup, TempCache};
-use super::{BorshSerializedSize, ChangeSet, StateProvider, UniversalStateAccessor};
+use super::{BorshSerializedSize, StateProvider, UniversalStateAccessor};
 use crate::capabilities::RollupHeight;
 use crate::module::Spec;
+use crate::state::accessors::internals::FirstTimeReads;
 use crate::state::accessors::StateMetricsProvider;
 use crate::state::traits::PerBlockCache;
 use crate::transaction::{
@@ -18,9 +19,8 @@ use crate::transaction::{
 #[cfg(feature = "test-utils")]
 use crate::{AccessoryStateReader, GasArray};
 use crate::{
-    AccessoryStateWriter, Amount, BasicGasMeter, BasicGasState, Gas, GasInfo, GasMeter,
-    GasMeteringError, GetGasPrice, ProvableStateReader, ProvableStateWriter, TxState,
-    VersionReader,
+    AccessoryStateWriter, Amount, BasicGasMeter, Gas, GasInfo, GasMeter, GasMeteringError,
+    GetGasPrice, ProvableStateReader, ProvableStateWriter, TxState, VersionReader,
 };
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
@@ -89,19 +89,23 @@ impl<'a, S: Spec, I: TxState<S>> RevertableTxState<'a, S, I> {
 }
 
 impl<S: Spec, I: TxState<S>> PerBlockCache for RevertableTxState<'_, S, I> {
-    fn get_cached<T: 'static + Send + Sync>(&self) -> Option<&T> {
-        match self.temp_cache.get::<T>() {
+    fn get_cached<T: 'static + Send + Sync>(&self, slot_key: Option<SlotKey>) -> Option<&T> {
+        match self.temp_cache.get::<T>(slot_key.clone()) {
             CacheLookup::Hit(value) => value,
-            CacheLookup::Miss => self.inner.get_cached::<T>(),
+            CacheLookup::Miss => self.inner.get_cached::<T>(slot_key),
         }
     }
 
-    fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(&mut self, value: T) {
-        self.temp_cache.set(value);
+    fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(
+        &mut self,
+        slot_key: Option<SlotKey>,
+        value: T,
+    ) {
+        self.temp_cache.set(slot_key, value);
     }
 
-    fn delete_cached<T: 'static + Send + Sync>(&mut self) {
-        self.temp_cache.delete::<T>();
+    fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: Option<SlotKey>) {
+        self.temp_cache.delete::<T>(slot_key);
     }
 
     fn update_cache_with(&mut self, other: TempCache) {
@@ -162,8 +166,8 @@ impl<S: Spec, I: TxState<S>> GasMeter for RevertableTxState<'_, S, I> {
     fn charge_gas(&mut self, amount: &S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
         self.inner.charge_gas(amount)
     }
-    fn try_as_basic_gas_state(&mut self) -> Option<BasicGasState<Self::Spec>> {
-        self.inner.try_as_basic_gas_state()
+    fn try_as_basic_gas_meter(&mut self) -> Option<&mut BasicGasMeter<Self::Spec>> {
+        self.inner.try_as_basic_gas_meter()
     }
 
     fn charge_linear_gas(
@@ -265,18 +269,17 @@ impl<S: Spec, I: StateProvider<S>> GasMeter for TxScratchpad<S, I> {
 
 /// The list of changes caused by a single transaction
 #[derive(Debug, Clone)]
-pub struct TxChangeSet(pub ChangeSet);
+pub struct TxChangeSet {
+    /// The transaction writes.
+    pub writes: Vec<((SlotKey, sov_state::Namespace), Option<SlotValue>)>,
+    /// The transaction reads.
+    pub reads: FirstTimeReads,
+}
 
 impl<S: Spec, I: StateProvider<S>> TxScratchpad<S, I> {
     /// Commits the changes of this [`TxScratchpad`] and returns a [`StateCheckpoint`].
     pub fn commit(self) -> I {
         self.inner.commit()
-    }
-
-    /// Gets an iterator over the diff currently written onto this scratchpad. These changes will
-    /// be reverted or committed as a unit.
-    pub fn tx_changes(&self) -> TxChangeSet {
-        TxChangeSet(self.inner.changes())
     }
 
     /// Reverts the changes of this [`TxScratchpad`] and returns a [`StateCheckpoint`].
@@ -316,20 +319,31 @@ impl<S: Spec, I: StateProvider<S>> VersionReader for TxScratchpad<S, I> {
 }
 
 impl<S: Spec, I: StateProvider<S>> PerBlockCache for TxScratchpad<S, I> {
-    fn get_cached<T: 'static + Send + Sync>(&self) -> Option<&T> {
-        self.inner.get_cached::<T>()
+    fn get_cached<T: 'static + Send + Sync>(&self, slot_key: Option<SlotKey>) -> Option<&T> {
+        self.inner.get_cached::<T>(slot_key)
     }
 
-    fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(&mut self, value: T) {
-        self.inner.cache_writes.set(value);
+    fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(
+        &mut self,
+        slot_key: Option<SlotKey>,
+        value: T,
+    ) {
+        self.inner.cache_writes.set(slot_key, value);
     }
 
-    fn delete_cached<T: 'static + Send + Sync>(&mut self) {
-        self.inner.cache_writes.delete::<T>();
+    fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: Option<SlotKey>) {
+        self.inner.cache_writes.delete::<T>(slot_key);
     }
 
     fn update_cache_with(&mut self, other: TempCache) {
         self.inner.cache_writes.update_with(other);
+    }
+}
+
+impl<S: Spec> TxScratchpad<S, StateCheckpoint<S>> {
+    /// Change set resulting from transaction execution.
+    pub fn tx_changes(&self) -> TxChangeSet {
+        self.inner.changes()
     }
 }
 
@@ -374,8 +388,8 @@ impl<S: Spec, I: StateProvider<S>> GasMeter for PreExecWorkingSet<S, I> {
     fn charge_gas(&mut self, amount: &S::Gas) -> anyhow::Result<(), GasMeteringError<S::Gas>> {
         self.gas_meter.charge_gas(amount)
     }
-    fn try_as_basic_gas_state(&mut self) -> Option<BasicGasState<Self::Spec>> {
-        self.gas_meter.try_as_basic_gas_state()
+    fn try_as_basic_gas_meter(&mut self) -> Option<&mut BasicGasMeter<Self::Spec>> {
+        self.gas_meter.try_as_basic_gas_meter()
     }
     fn charge_linear_gas(
         &mut self,
@@ -648,8 +662,8 @@ impl<S: Spec, I: StateProvider<S>> GasMeter for WorkingSet<S, I> {
         self.gas_meter.charge_gas(gas)
     }
 
-    fn try_as_basic_gas_state(&mut self) -> Option<BasicGasState<Self::Spec>> {
-        self.gas_meter.try_as_basic_gas_state()
+    fn try_as_basic_gas_meter(&mut self) -> Option<&mut BasicGasMeter<Self::Spec>> {
+        self.gas_meter.try_as_basic_gas_meter()
     }
 
     fn charge_linear_gas(
@@ -725,16 +739,20 @@ impl<S: Spec, I: StateProvider<S>> VersionReader for WorkingSet<S, I> {
 }
 
 impl<S: Spec, I: StateProvider<S>> PerBlockCache for WorkingSet<S, I> {
-    fn get_cached<T: 'static + Send + Sync>(&self) -> Option<&T> {
-        self.delta.get_cached::<T>()
+    fn get_cached<T: 'static + Send + Sync>(&self, slot_key: Option<SlotKey>) -> Option<&T> {
+        self.delta.get_cached::<T>(slot_key)
     }
 
-    fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(&mut self, value: T) {
-        self.delta.cache_writes.set(value);
+    fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(
+        &mut self,
+        slot_key: Option<SlotKey>,
+        value: T,
+    ) {
+        self.delta.cache_writes.set(slot_key, value);
     }
 
-    fn delete_cached<T: 'static + Send + Sync>(&mut self) {
-        self.delta.cache_writes.delete::<T>();
+    fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: Option<SlotKey>) {
+        self.delta.cache_writes.delete::<T>(slot_key);
     }
 
     fn update_cache_with(&mut self, other: TempCache) {
