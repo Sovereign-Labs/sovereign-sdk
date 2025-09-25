@@ -123,7 +123,7 @@ where
     Codec::ValueCodec: StateItemCodec<V>,
     K: FromStr + std::fmt::Display,
 {
-    fn slot_key<Kq>(&self, key: &Kq) -> SlotKey
+    pub fn slot_key<Kq>(&self, key: &Kq) -> SlotKey
     where
         Kq: ?Sized,
         Codec::KeyCodec: EncodeLike<Kq, K>,

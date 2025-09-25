@@ -121,26 +121,19 @@ where
             && version_to_use == self.latest_version()
     }
 
-    fn read_value_unbound<N: CompileTimeNamespace>(
-        &self,
-        key: &SlotKey,
-    ) -> Option<SlotValue> {
+    fn read_value_unbound<N: CompileTimeNamespace>(&self, key: &SlotKey) -> Option<SlotValue> {
         match N::NAMESPACE {
-            Namespace::User => {
-                
-                self.historical_state
-                        .get_user_value_option_by_key_unbound(key.as_ref()).expect("Unable to read from UserDb")
-            }
-            Namespace::Kernel => {
-                    self.historical_state
-                        .get_kernel_value_option_by_key_unbound(key.as_ref()).expect("Unable to read from KernelDb")
-            }
+            Namespace::User => self
+                .historical_state
+                .get_user_value_option_by_key_unbound(key.as_ref())
+                .expect("Unable to read from UserDb"),
+            Namespace::Kernel => self
+                .historical_state
+                .get_kernel_value_option_by_key_unbound(key.as_ref())
+                .expect("Unable to read from KernelDb"),
             Namespace::Accessory => self
                 .accessory
-                .get_value_option(
-                    key.as_ref(),
-                    SlotNumber::MAX,
-                )
+                .get_value_option(key.as_ref(), SlotNumber::MAX)
                 .expect("Unable to read from AccessoryDb"),
         }
         .map(Into::into)
@@ -684,7 +677,7 @@ where
         Ok(storage_root_historical)
     }
 
-    fn get_unbound<N: ProvableCompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue> {
+    fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue> {
         self.read_value_unbound::<N>(&key)
     }
 }

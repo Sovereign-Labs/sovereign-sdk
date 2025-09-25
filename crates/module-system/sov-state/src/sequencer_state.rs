@@ -93,10 +93,10 @@ impl<H> SequencerStateChanges<H> {
         self.changes.get_or_insert_default().push_front(changes);
     }
 
-    /// Prune all changes which took place before the given height.
-    pub fn prune_changes_before(&mut self, rollup_height: u64) {
+    /// Prune all changes which took place up to and including the given height.
+    pub fn prune_changes_through(&mut self, rollup_height: u64) {
         if let Some(changes) = self.changes.as_mut() {
-            changes.retain(|change| change.rollup_height >= rollup_height);
+            changes.retain(|change| change.rollup_height > rollup_height);
         }
     }
 

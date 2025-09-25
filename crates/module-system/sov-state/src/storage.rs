@@ -18,6 +18,8 @@ use crate::bytes::Prefix;
 use crate::codec::EncodeLike;
 use crate::namespaces::{self, ProvableCompileTimeNamespace, ProvableNamespace};
 use crate::sequencer_state::MaybePresentValue;
+#[cfg(feature = "native")]
+use crate::CompileTimeNamespace;
 use crate::{
     MerkleProofSpec, Namespace, SparseMerkleProof, StateAccesses, StateItemDecoder, StorageRoot,
     Witness,
@@ -637,7 +639,7 @@ pub trait NativeStorage: Storage {
         self.get_root_hash_unbound(self.latest_version_unbound())
     }
     /// Get the latest committed value for the given key, regardless of the version number associated with this storage.
-    fn get_unbound<N: ProvableCompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue>;
+    fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue>;
 }
 
 pub(crate) fn open_merkle_proof<S: MerkleProofSpec>(

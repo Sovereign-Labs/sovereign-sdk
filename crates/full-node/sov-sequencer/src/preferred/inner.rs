@@ -1449,27 +1449,24 @@ where
 
                     // On `should_flush_tx_cache` we have to refill the cache the first time we `replay_soft_confirmations_on_top_of_node_state`
                     let tx_cache_writer = inner.tx_cache_writer.clone();
-                    // For the new executor, drop any uncommitted changes that are older than the new rollup height
-                    let mut uncommitted_changes = inner.executor.uncommitted_changes.clone();
-                    let new_rollup_height =
-                        StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
-                            .rollup_height_to_access();
-                    uncommitted_changes.prune_changes_before(new_rollup_height.get());
-
                     Some(Box::new(
                         RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
                             info,
                             tx_cache_writer,
                             inner.rollup_exec_config.clone(),
                             inner.seq_config.clone(),
-                            uncommitted_changes,
+                            Default::default(), // Since we're replaying from the node state, don't reuse any uncommitted changes
                         ),
                     ))
                 } else {
+                    let rollup_height =
+                        StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
+                            .rollup_height_to_access();
                     debug!(
                         is_startup,
                         is_resync,
                         is_recover,
+                        %rollup_height,
                         ?info,
                         "Skipping `replay_soft_confirmations_on_top_of_node_state`. Fast tracking info"
                     );
@@ -1606,14 +1603,14 @@ where
         let mut inner = self.get_inner_with_timing("update_state::fast_path").await;
         // Atomically swap in the new storage and prune the old one.
         // Note that we use `StateCheckpoint::new(info.storage.clone(), ...)` *without* passing any intermediate state. This
-        // is because we want to see what the height of the checkpoint we just received is, not the hight of the sequencer's intermediate state.
+        // is because we want to see what the height of the checkpoint we just received is, not the height of the sequencer's intermediate state.
         let new_rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
             .rollup_height_to_access();
 
         inner
             .executor
             .uncommitted_changes
-            .prune_changes_before(new_rollup_height.get());
+            .prune_changes_through(new_rollup_height.get());
         let uncommitted_changes = inner.executor.uncommitted_changes.clone();
         inner
             .executor

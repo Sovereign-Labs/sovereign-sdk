@@ -520,7 +520,7 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
         Ok(StorageRoot::<S>::new(user_root.0, kernel_root.0))
     }
 
-    fn get_unbound<N: ProvableCompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue> {
+    fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue> {
         match N::NAMESPACE {
             Namespace::User => self.read_value_namespace::<DBUserNamespace>(&key, SlotNumber::MAX),
             Namespace::Kernel => {
