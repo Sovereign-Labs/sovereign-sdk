@@ -141,12 +141,12 @@ pub fn sign_utx<S: Spec, RT: Runtime<S>>(
         .unwrap();
 
     let utx_bytes = borsh::to_vec(&utx).expect("Failed to serialize unsigned transaction");
-    let eip712_hash = schema
-        .eip712_signing_hash(transaction_type_index, &utx_bytes)
+    let eip712_signing_data = schema
+        .eip712_signing_digest(transaction_type_index, &utx_bytes)
         .expect("Failed to calculate EIP712 hash");
 
     let pk = signer.private_key();
-    let signature = pk.sign(&eip712_hash);
+    let signature = pk.sign(&eip712_signing_data);
     utx.to_signed_tx(pk.pub_key(), signature)
 }
 
