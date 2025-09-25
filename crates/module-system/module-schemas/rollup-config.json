@@ -805,7 +805,7 @@
           "type": "boolean"
         },
         "blob_processing_timeout_secs": {
-          "description": "Maximum time in seconds to wait for a blob to be processed.",
+          "description": "Maximum time in seconds to wait for a blob to be processed, since it has been published to DA.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
