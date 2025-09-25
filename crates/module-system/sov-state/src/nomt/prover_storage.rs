@@ -7,6 +7,8 @@ use anyhow::Context;
 use nomt::hasher::BinaryHasher;
 use nomt::proof::MultiProof;
 use nomt::FinishedSession;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
 use sov_db::accessory_db::AccessoryDb;
 use sov_db::historical_state::HistoricalStateReader;
 use sov_db::state_db_nomt::{HistoricalValueError, NomtSessionBuilder, SessionsContainer};
@@ -248,35 +250,35 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
         ordered_writes,
     } = sov_accesses;
 
-    let mut merged_accesses = ordered_reads
-        .iter()
-        .map(|(key, read_node_leaf)| {
-            let key_hash: nomt::trie::KeyPath = S::Hasher::digest(key.as_ref()).into();
-            let combined_hash_and_size =
-                read_node_leaf.map(|node_leaf| node_leaf.combine_val_hash_and_size());
+    let (mut merged_accesses, authenticated_writes) = rayon::join(
+        || {
+            ordered_reads
+                .par_iter()
+                .map(|(key, read_node_leaf)| {
+                    let key_hash: nomt::trie::KeyPath = S::Hasher::digest(key.as_ref()).into();
+                    let combined_hash_and_size =
+                        read_node_leaf.map(|node_leaf| node_leaf.combine_val_hash_and_size());
 
-            let nomt_read = nomt::KeyReadWrite::Read(combined_hash_and_size);
-            (key_hash, nomt_read)
-        })
-        .collect::<BTreeMap<nomt::trie::KeyPath, nomt::KeyReadWrite>>();
+                    let nomt_read = nomt::KeyReadWrite::Read(combined_hash_and_size);
+                    (key_hash, nomt_read)
+                })
+                .collect::<BTreeMap<nomt::trie::KeyPath, nomt::KeyReadWrite>>()
+        },
+        || {
+            ordered_writes
+                .par_iter()
+                .map(|(key, original_write)| {
+                    let key_hash: nomt::trie::KeyPath = S::Hasher::digest(key.as_ref()).into();
 
-    // Check for duplicate key reads after collecting reads
-    if merged_accesses.len() != ordered_reads.len() {
-        anyhow::bail!(
-            "Duplicate key read in state. Unique keys {}, passed in keys {}",
-            merged_accesses.len(),
-            ordered_reads.len()
-        );
-    }
+                    let authenticated_write_value = original_write
+                        .as_ref()
+                        .map(|v| v.combine_val_hash_and_size::<S::Hasher>());
 
-    let authenticated_writes = ordered_writes.iter().map(|(key, original_write)| {
-        let key_hash: nomt::trie::KeyPath = S::Hasher::digest(key.as_ref()).into();
-        let authenticated_write_value = original_write
-            .as_ref()
-            .map(|v| v.combine_val_hash_and_size::<S::Hasher>());
-
-        (key_hash, authenticated_write_value)
-    });
+                    (key_hash, authenticated_write_value)
+                })
+                .collect::<Vec<_>>()
+        },
+    );
 
     for (key_hash, authenticated_write) in authenticated_writes {
         match merged_accesses.entry(key_hash) {
