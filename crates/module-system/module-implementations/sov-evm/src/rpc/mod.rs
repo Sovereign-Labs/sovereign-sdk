@@ -15,7 +15,6 @@ use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
 use revm::context::result::{EVMError, ExecutionResult, InvalidHeader};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
-use revm::context_interface::block::BlobExcessGasAndPrice;
 use revm::Database;
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -492,17 +491,12 @@ where
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<ExecutionResult> {
-        let mut block_env = self.resolve_block_env(block_number, state)?;
+        let block_env = self.resolve_block_env(block_number, state)?;
         let tx_env =
             prepare_call_env(&block_env, request.clone()).map_err(eth_api_into_rpc_error)?;
         let cfg = self.cfg_infallible(state);
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
         let evm_db: EvmDb<_, S> = self.get_db(state);
-
-        block_env.blob_excess_gas_and_price = Some(BlobExcessGasAndPrice {
-            excess_blob_gas: 0,
-            blob_gasprice: 0,
-        });
 
         executor::call(evm_db, &block_env, tx_env, cfg_env)
             .map_err(|err| eth_api_into_rpc_error(eth_from_evm_error(err)))
@@ -624,7 +618,10 @@ where
                 .timestamp
                 .try_into()
                 .expect("The impossible happened: timestamp overflow u64"),
-            excess_blob_gas: Some(0),
+            excess_blob_gas: current_block_env
+                .blob_excess_gas_and_price
+                .map(|blob_gas| blob_gas.excess_blob_gas),
+
             ..Default::default()
         };
 

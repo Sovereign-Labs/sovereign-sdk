@@ -62,6 +62,10 @@ pub use conversions::convert_to_tx_signed;
 pub use conversions::create_tx_env;
 use revm::state::Bytecode;
 
+/// These values are associated with EIP-4844, which we do not support, but they must be set to a value other than None for CANCUN.
+const EXCESS_BLOB_GAS: u64 = 0;
+const BLOB_GAS_PRICE: u128 = 0;
+
 /// The sov-evm module provides compatibility with the EVM.
 #[allow(dead_code)]
 #[derive(Clone, ModuleInfo)]

@@ -154,7 +154,7 @@ where
                 set_accessory_state_time,
             };
             sov_metrics::track_metrics(|t| {
-                t.submit(dbg!(metrics));
+                t.submit(metrics);
             });
         }
 

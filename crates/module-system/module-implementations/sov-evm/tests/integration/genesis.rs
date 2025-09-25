@@ -91,6 +91,7 @@ fn test_genesis_block() {
             state_root: actual_block.header().state_root(),
             gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
             beneficiary,
+            excess_blob_gas: Some(0),
             ..Default::default()
         };
 
