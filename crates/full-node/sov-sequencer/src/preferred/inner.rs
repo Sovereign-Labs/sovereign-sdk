@@ -32,6 +32,7 @@ use crate::preferred::block_executor::{
 use crate::preferred::db::latest_finalized_sequence_number;
 use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::update_state::do_next_event;
+use crate::preferred::TxAfterWarmUp;
 use crate::preferred::{
     current_visible_slot_number_according_to_node, exit_rollup,
     get_next_sequence_number_according_to_node, is_lagging_less_than_ideal_amount,
@@ -743,7 +744,7 @@ enum Message<S: Spec, Rt: Runtime<S>> {
 
     AcceptTx {
         resp: oneshot::Sender<AcceptTxRet<S, Rt>>,
-        baked_tx: FullyBakedTx,
+        baked_tx: TxAfterWarmUp,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
         reason: &'static str,
@@ -976,7 +977,7 @@ where
 
     pub(crate) async fn accept_tx_msg(
         &self,
-        baked_tx: &FullyBakedTx,
+        baked_tx: TxAfterWarmUp,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
         reason: &'static str,
@@ -984,7 +985,7 @@ where
         let (resp, recv) = oneshot::channel();
         self.send(Message::AcceptTx {
             resp,
-            baked_tx: baked_tx.clone(),
+            baked_tx,
             tx_hash,
             original_tx_queue_id,
             reason,
@@ -1211,7 +1212,7 @@ where
                         reason,
                     } => {
                         let ret = self
-                            .process_accept_tx(&baked_tx, tx_hash, original_tx_queue_id, reason)
+                            .process_accept_tx(baked_tx, tx_hash, original_tx_queue_id, reason)
                             .await;
 
                         self.send_response(resp, ret, "accept_tx").await;
@@ -1518,7 +1519,7 @@ where
 
     async fn process_accept_tx(
         &mut self,
-        baked_tx: &FullyBakedTx,
+        baked_tx: TxAfterWarmUp,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
         reason: &'static str,
@@ -1576,14 +1577,16 @@ where
             ..
         } = &mut *inner;
 
-        if !batch_size_tracker.can_fit_tx_bytes(baked_tx.data.len()) {
+        if !batch_size_tracker.can_fit_tx_bytes(baked_tx.len()) {
             return Err(AcceptTxError::TxTooBig {
                 current_batch_size: batch_size_tracker.current_batch_size,
                 max_batch_size: batch_size_tracker.max_batch_size,
             });
         }
 
-        let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
+        let tx_len = baked_tx.len();
+
+        let apply_tx_res = executor.apply_tx_to_in_progress_batch2(baked_tx).await;
 
         let (
             AcceptedTxWithBudgetInfo {
@@ -1606,7 +1609,7 @@ where
             }
         };
 
-        batch_size_tracker.add_tx(baked_tx.data.len(), execution_time_micros);
+        batch_size_tracker.add_tx(tx_len, execution_time_micros);
         let rx = executor_events_sender
             .send_accept_tx(accepted_tx, tx_changes, sequence_number)
             .await;

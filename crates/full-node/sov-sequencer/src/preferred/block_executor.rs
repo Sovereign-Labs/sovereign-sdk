@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use crate::preferred::TxAfterWarmUp;
 use anyhow::Context;
 use axum::http::StatusCode;
 use sov_modules_api::capabilities::{
@@ -230,6 +231,20 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         // Update our list of state roots from the other executor.
         self.state_roots = other.state_roots;
         self.state_root_responses = other.state_root_responses;
+    }
+
+    pub async fn apply_tx_to_in_progress_batch3(
+        &mut self,
+        baked_tx: FullyBakedTx,
+    ) -> Result<(AcceptedTxWithBudgetInfo<S, Rt>, TxChangeSet), RollupBlockExecutorError<S>> {
+        todo!()
+    }
+
+    pub async fn apply_tx_to_in_progress_batch2(
+        &mut self,
+        baked_tx: TxAfterWarmUp,
+    ) -> Result<(AcceptedTxWithBudgetInfo<S, Rt>, TxChangeSet), RollupBlockExecutorError<S>> {
+        todo!()
     }
 
     /// Calls to this method must happen "between"

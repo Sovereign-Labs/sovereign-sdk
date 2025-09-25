@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::preferred::block_executor::StartBlockData;
 use crate::preferred::PreferredSequencerConfig;
 use crate::preferred::RollupBlockExecutor;
@@ -36,7 +37,7 @@ impl<S: Spec> Clone for StartBlockNotification<S> {
     }
 }
 
-pub struct TxForWarmUp {
+pub(crate) struct TxForWarmUp {
     pub(crate) tx: FullyBakedTx,
     pub(crate) sender: oneshot::Sender<TxChangeSet>,
 }
@@ -45,6 +46,17 @@ impl TxForWarmUp {
     pub(crate) fn new(tx: FullyBakedTx) -> (Self, oneshot::Receiver<TxChangeSet>) {
         let (sender, receiver) = oneshot::channel();
         (Self { tx, sender }, receiver)
+    }
+}
+
+pub(crate) struct TxAfterWarmUp {
+    pub(crate) tx: FullyBakedTx,
+    pub(crate) receiver: oneshot::Receiver<TxChangeSet>,
+}
+
+impl TxAfterWarmUp {
+    pub(crate) fn len(&self) -> usize {
+        self.tx.data.len()
     }
 }
 
@@ -136,7 +148,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                             },
                         };
                         if is_started {
-                            let res = executor.apply_tx_to_in_progress_batch(&baked_tx.tx).await;
+                            let res = executor.apply_tx_to_in_progress_batch3(baked_tx.tx).await;
 
                             match res{
                                 Ok((_, tx_change_set)) => {

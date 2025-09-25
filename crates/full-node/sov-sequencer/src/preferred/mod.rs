@@ -67,6 +67,7 @@ use crate::common::{
 };
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerFetchBatchesToReplayMetrics};
 use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
+use crate::preferred::cache_warm_up_executor::TxAfterWarmUp;
 use crate::preferred::db::DbEvent;
 use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
@@ -853,13 +854,18 @@ where
             tracing::debug!(%tx_hash, "Transaction delay completed, proceeding with processing");
         }
 
-        let (tx_for_warm_up, _) = TxForWarmUp::new(baked_tx.clone());
-
+        let (tx_for_warm_up, receiver) = TxForWarmUp::new(baked_tx.clone());
         self.cache_warm_up_executor.send_tx(tx_for_warm_up);
+
+        let tx_len = baked_tx.data.len();
+        let tx = TxAfterWarmUp {
+            tx: baked_tx,
+            receiver,
+        };
 
         let res = self
             .synchronized_state_updator
-            .accept_tx_msg(&baked_tx, tx_hash, original_tx_queue_id, "accept_tx")
+            .accept_tx_msg(tx, tx_hash, original_tx_queue_id, "accept_tx")
             .await;
 
         match res {
@@ -904,13 +910,7 @@ where
                 AcceptTxError::TxTooBig {
                     current_batch_size,
                     max_batch_size,
-                } => {
-                    return Err(err_cant_fit_tx(
-                        current_batch_size,
-                        max_batch_size,
-                        baked_tx.data.len(),
-                    ))
-                }
+                } => return Err(err_cant_fit_tx(current_batch_size, max_batch_size, tx_len)),
                 AcceptTxError::ExecutorError(err) => {
                     return Err(RollupBlockExecutorError::into_http_error(err));
                 }
