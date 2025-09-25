@@ -122,7 +122,7 @@ mod tests {
                 limit_contract_code_size: Some(100),
                 ..Default::default()
             },
-            hardforks: vec![(0, SpecId::SHANGHAI)],
+            hardforks: vec![(0, SpecId::CANCUN)],
         };
 
         let mut template_cfg_env = CfgEnv::default();
@@ -137,7 +137,7 @@ mod tests {
         expected_cfg_env.disable_balance_check = true;
         expected_cfg_env.disable_block_gas_limit = true;
         expected_cfg_env.limit_contract_code_size = Some(100);
-        expected_cfg_env.spec = SpecId::SHANGHAI;
+        expected_cfg_env.spec = SpecId::CANCUN;
 
         assert_eq!(expected_cfg_env, cfg_env);
     }

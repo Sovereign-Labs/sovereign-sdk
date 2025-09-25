@@ -48,7 +48,7 @@ fn test_invalid_contract_execution() {
         });
         let (signed_eth_tx, _) = account.sign(tx_request);
         let cfg_env =
-            CfgEnv::new_with_spec(SpecId::SHANGHAI).with_chain_id(config_value!("CHAIN_ID"));
+            CfgEnv::new_with_spec(SpecId::CANCUN).with_chain_id(config_value!("CHAIN_ID"));
         let tx = convert_to_tx_signed(signed_eth_tx).unwrap();
         let tx_env = create_tx_env(&tx, account.address(), 1, 1_000_000);
         let result =

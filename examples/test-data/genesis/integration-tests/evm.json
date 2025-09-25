@@ -31,6 +31,6 @@
       "max_change_denominator": 8,
       "elasticity_multiplier": 2
     },
-    "hardforks": [[0, "SHANGHAI"]]
+    "hardforks": [[0, "CANCUN"]]
   }
 }

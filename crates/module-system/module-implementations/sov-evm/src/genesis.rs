@@ -94,6 +94,7 @@ fn init_block(config: &EvmGenesisConfig) -> Block {
         state_root: KECCAK_EMPTY,
         gas_limit: config.chain_spec.block_gas_limit,
         timestamp: config.genesis_timestamp,
+        excess_blob_gas: Some(0),
         ..Default::default()
     };
 
@@ -108,20 +109,13 @@ fn init_spec(config: &EvmGenesisConfig) -> anyhow::Result<Vec<(BlockNumber, Spec
         .chain_spec
         .hardforks
         .iter()
-        .map(|&(k, v)| {
-            // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
-            if v == SpecId::CANCUN {
-                panic!("Cancun is not supported");
-            }
-
-            (k, v)
-        })
+        .cloned()
         .collect::<Vec<_>>();
 
     spec.sort_by(|a, b| a.0.cmp(&b.0));
 
     if spec.is_empty() {
-        spec.push((0, SpecId::SHANGHAI));
+        spec.push((0, SpecId::CANCUN));
     } else if spec[0].0 != 0u64 {
         panic!("EVM spec must start from block 0");
     };

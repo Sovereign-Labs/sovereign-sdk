@@ -618,6 +618,7 @@ where
                 .timestamp
                 .try_into()
                 .expect("The impossible happened: timestamp overflow u64"),
+            excess_blob_gas: Some(0),
             ..Default::default()
         };
 

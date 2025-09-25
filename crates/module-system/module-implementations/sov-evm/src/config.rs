@@ -36,7 +36,7 @@ impl Default for EvmChainSpec {
             limit_contract_code_size: None,
             coinbase: Address::ZERO,
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
-            hardforks: vec![(0, SpecId::SHANGHAI)],
+            hardforks: vec![(0, SpecId::CANCUN)],
         }
     }
 }
@@ -96,7 +96,7 @@ mod tests {
             }],
             chain_spec: crate::EvmChainSpec {
                 limit_contract_code_size: None,
-                hardforks: vec![(0, SpecId::SHANGHAI)],
+                hardforks: vec![(0, SpecId::CANCUN)],
                 ..Default::default()
             },
             ..Default::default()
@@ -117,7 +117,7 @@ mod tests {
                     "limit_contract_code_size":null,
                     "coinbase":"0x0000000000000000000000000000000000000000",
                     "block_gas_limit":30000000,
-                    "hardforks":[[0,"SHANGHAI"]]
+                    "hardforks":[[0,"CANCUN"]]
                 }
         }"#;
 
