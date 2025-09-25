@@ -241,59 +241,46 @@ where
 }
 
 fn to_nomt_accesses<S: MerkleProofSpec>(
-    _session: &NomtSession<S::Hasher>,
     sov_accesses: &OrderedReadsAndWrites,
 ) -> anyhow::Result<Vec<(nomt::trie::KeyPath, nomt::KeyReadWrite)>> {
-    let mut merged_accesses: BTreeMap<nomt::trie::KeyPath, nomt::KeyReadWrite> = BTreeMap::new();
-
     let OrderedReadsAndWrites {
         ordered_reads,
         ordered_writes,
     } = sov_accesses;
 
-    // First, put all the reads into merged accesses, so later we can distinguish `Write` from `ReadThenWrite`
-    for (key, read_node_leaf) in ordered_reads {
-        // Reads are warmed up during normal `get/get_leaf`
-        let key_hash: nomt::trie::KeyPath = S::Hasher::digest(key.as_ref()).into();
-        // From documentation:
-        // > This should be called for every logical write within the session, as well as every
-        // > logical read if you expect to generate a merkle proof for the session.
-        // So warming up all reads.
-        // session.warm_up(key_hash);
+    let mut merged_accesses = ordered_reads
+        .iter()
+        .map(|(key, read_node_leaf)| {
+            let key_hash: nomt::trie::KeyPath = S::Hasher::digest(key.as_ref()).into();
+            let combined_hash_and_size =
+                read_node_leaf.map(|node_leaf| node_leaf.combine_val_hash_and_size());
 
-        let combined_hash_and_size =
-            read_node_leaf.map(|node_leaf| node_leaf.combine_val_hash_and_size());
+            let nomt_read = nomt::KeyReadWrite::Read(combined_hash_and_size);
+            (key_hash, nomt_read)
+        })
+        .collect::<BTreeMap<nomt::trie::KeyPath, nomt::KeyReadWrite>>();
 
-        let nomt_read = nomt::KeyReadWrite::Read(combined_hash_and_size);
-
-        if merged_accesses.insert(key_hash, nomt_read).is_some() {
-            anyhow::bail!("Duplicate key read in state: {:?}", key_hash);
-        };
+    // Check for duplicate key reads after collecting reads
+    if merged_accesses.len() != ordered_reads.len() {
+        anyhow::bail!(
+            "Duplicate key read in state. Unique keys {}, passed in keys {}",
+            merged_accesses.len(),
+            ordered_reads.len()
+        );
     }
 
-    // Writes
-    for (key, original_write) in ordered_writes {
+    let authenticated_writes = ordered_writes.iter().map(|(key, original_write)| {
         let key_hash: nomt::trie::KeyPath = S::Hasher::digest(key.as_ref()).into();
-        // session.warm_up(key_hash);
-
-        let authenticated_write = original_write
+        let authenticated_write_value = original_write
             .as_ref()
             .map(|v| v.combine_val_hash_and_size::<S::Hasher>());
 
-        tracing::trace!(
-            %key,
-            key_path = hex::encode(key_hash),
-            original_write = ?original_write
-                .as_ref()
-                .map(|v| String::from_utf8_lossy(v.value())),
-            authenticated_write = ?authenticated_write.as_ref().map(hex::encode),
-            "state update write",
-        );
+        (key_hash, authenticated_write_value)
+    });
 
+    for (key_hash, authenticated_write) in authenticated_writes {
         match merged_accesses.entry(key_hash) {
             Entry::Vacant(vacant) => {
-                // Also warming up all writes. `ReadThenWrite` has been warmed up during reads collection.
-                // session.warm_up(key_hash);
                 vacant.insert(nomt::KeyReadWrite::Write(authenticated_write));
             }
             Entry::Occupied(occupied) => match occupied.remove() {
@@ -310,7 +297,6 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
         }
     }
 
-    // Trigger CI
     Ok(merged_accesses.into_iter().collect())
 }
 
@@ -324,7 +310,7 @@ fn compute_state_update_namespace<S: MerkleProofSpec>(
         writes = accesses.ordered_writes.len(),
         "compute state update"
     );
-    let nomt_accesses = to_nomt_accesses::<S>(&session, accesses)?;
+    let nomt_accesses = to_nomt_accesses::<S>(accesses)?;
     let mut finished = session.finish(nomt_accesses)?;
     let nomt_witness = finished.take_witness().expect("Witness cannot be missing");
     let nomt::Witness {
