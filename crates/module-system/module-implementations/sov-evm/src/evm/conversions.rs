@@ -2,7 +2,10 @@ use alloy_consensus::{transaction::Recovered, Transaction};
 use alloy_eips::eip2718::{Decodable2718, Eip2718Error};
 use alloy_primitives::{Address, Bytes, U256};
 use reth_primitives_traits::SignedTransaction;
-use revm::context::{BlockEnv, TransactionType, TxEnv};
+use revm::{
+    context::{BlockEnv, TransactionType, TxEnv},
+    context_interface::block::BlobExcessGasAndPrice,
+};
 use thiserror::Error;
 
 use super::primitive_types::SealedBlock;
@@ -20,8 +23,11 @@ impl From<SealedBlock> for BlockEnv {
             prevrandao: Some(block.header.mix_hash),
             basefee: 0,
             gas_limit: block.header.gas_limit,
-            // Not used fields:
-            blob_excess_gas_and_price: None,
+
+            blob_excess_gas_and_price: Some(BlobExcessGasAndPrice {
+                excess_blob_gas: 0,
+                blob_gasprice: 0,
+            }),
             difficulty: Default::default(),
         }
     }

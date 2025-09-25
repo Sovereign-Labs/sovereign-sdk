@@ -104,7 +104,7 @@ where
         #[cfg(feature = "native")]
         {
             sov_metrics::track_metrics(|t| {
-                t.submit(dbg!(db.metrics()));
+                t.submit(db.metrics());
             });
         }
 
