@@ -692,7 +692,6 @@
       "type": "object",
       "required": [
         "da_polling_interval_ms",
-        "da_total_timeout_secs",
         "genesis_height",
         "http_config"
       ],
@@ -713,7 +712,8 @@
           "minimum": 0.0
         },
         "da_total_timeout_secs": {
-          "description": "How much total time DA service has to provide block, including re-orgs, retries, etc. Exceeding this timeout will lead in rollup shutdown.",
+          "description": "How much total time DA service has to provide block, including re-orgs, retries, etc. Exceeding this timeout will lead to rollup shutdown.",
+          "default": 600,
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
