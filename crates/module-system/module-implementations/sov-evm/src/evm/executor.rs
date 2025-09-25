@@ -31,7 +31,11 @@ pub(crate) fn get_cfg_env(
 ) -> CfgEnv {
     let mut cfg_env = template_cfg.unwrap_or_default();
     cfg_env.chain_id = config_value!("CHAIN_ID");
-    cfg_env.limit_contract_code_size = Some(cfg.chain_spec.limit_contract_code_size.unwrap_or(DEFAULT_MAX_CONTRACT_CODE_SIZE));
+    cfg_env.limit_contract_code_size = Some(
+        cfg.chain_spec
+            .limit_contract_code_size
+            .unwrap_or(DEFAULT_MAX_CONTRACT_CODE_SIZE),
+    );
     cfg_env.disable_block_gas_limit = true;
     cfg_env.disable_balance_check = true;
     let spec = get_spec_id(&cfg.hardforks, block_env.number.to::<u64>());
