@@ -726,20 +726,79 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 }
 
 impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
-    pub async fn apply_tx_to_in_progress_batch3(
-        &mut self,
-        baked_tx: FullyBakedTx,
-    ) -> Result<(AcceptedTxWithBudgetInfo<S, Rt>, TxChangeSet), RollupBlockExecutorError<S>> {
-        todo!()
-    }
-}
-
-impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
-    pub async fn apply_tx_to_in_progress_batch2(
+    pub async fn apply_tx_to_in_progress_batch_after_warm_up(
         &mut self,
         baked_tx: TxAfterWarmUp,
     ) -> Result<(AcceptedTxWithBudgetInfo<S, Rt>, TxChangeSet), RollupBlockExecutorError<S>> {
-        todo!()
+        let result = self
+            .apply_tx_to_in_progress_batch_after_warm_up_inner(baked_tx)
+            .await;
+
+        match result {
+            Ok((receipt, remaining_slot_gas, execution_time_micros, tx_changes)) => {
+                let accepted_tx = self.process_tx_receipt(&receipt);
+                if let Some(writer) = self.startup_transaction_cache_writer.as_mut() {
+                    writer.insert(accepted_tx.clone()).await;
+                }
+                Ok((
+                    AcceptedTxWithBudgetInfo {
+                        accepted_tx,
+                        remaining_slot_gas,
+                        execution_time_micros,
+                    },
+                    tx_changes,
+                ))
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn apply_tx_to_in_progress_batch_after_warm_up_inner(
+        &mut self,
+        baked_tx: TxAfterWarmUp,
+    ) -> Result<
+        (TransactionReceipt<S>, <S as Spec>::Gas, u64, TxChangeSet),
+        RollupBlockExecutorError<S>,
+    > {
+        let Some(task_state) = self.rollup_block_task_state.as_mut() else {
+            panic!("Accepting a transaction, yet there's no in-progress batch. This is a bug in the sequencer, please report it.");
+        };
+
+        let call = Rt::Auth::decode_serialized_tx(&baked_tx.tx)?;
+        let call = Rt::wrap_call(call);
+
+        if let Err(TrySendError::Full(_)) = task_state.tx_sender.try_send(baked_tx.tx.clone()) {
+            return Err(RollupBlockExecutorError::Overloaded);
+        }
+
+        let Some(result) = task_state.result_receiver.recv().await else {
+            tracing::error!("The rollup block executor task failed unexpectedly. Gracefully shutting down the sequencer.");
+            let _ = self.shutdown_sender.send(()); // We don't care if this fails, because that would mean the sequencer is already shutting down - which is exactly what we want.
+            return Err(RollupBlockExecutorError::UnexpectedFailure);
+        };
+
+        let ExecutedTxResponse {
+            receipt,
+            tx_changes,
+            remaining_slot_gas,
+            execution_time_micros,
+        } = result.map_err(|reason| RollupBlockExecutorError::Rejected {
+            reason,
+            call: call_message_repr::<Rt>(&call),
+        })?;
+
+        if !receipt.receipt.is_successful() {
+            return Err(RollupBlockExecutorError::UnsuccessfulTransaction { receipt });
+        }
+
+        self.checkpoint.apply_tx_changes(tx_changes.clone());
+
+        Ok((
+            receipt,
+            remaining_slot_gas,
+            execution_time_micros,
+            tx_changes,
+        ))
     }
 }
 

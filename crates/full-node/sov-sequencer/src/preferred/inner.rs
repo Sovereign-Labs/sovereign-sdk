@@ -1586,7 +1586,9 @@ where
 
         let tx_len = baked_tx.len();
 
-        let apply_tx_res = executor.apply_tx_to_in_progress_batch2(baked_tx).await;
+        let apply_tx_res = executor
+            .apply_tx_to_in_progress_batch_after_warm_up(baked_tx)
+            .await;
 
         let (
             AcceptedTxWithBudgetInfo {

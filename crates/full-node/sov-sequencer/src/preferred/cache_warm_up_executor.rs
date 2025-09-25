@@ -148,7 +148,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                             },
                         };
                         if is_started {
-                            let res = executor.apply_tx_to_in_progress_batch3(baked_tx.tx).await;
+                            let res = executor.apply_tx_to_in_progress_batch(&baked_tx.tx).await;
 
                             match res{
                                 Ok((_, tx_change_set)) => {
