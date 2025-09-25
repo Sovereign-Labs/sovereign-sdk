@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::{CryptoSpec, Runtime};
-// use sov_modules_api::capabilities::KernelWithSlotMapping;
 use sov_modules_api::{Spec, Storage};
 use sov_rollup_interface::common::SlotNumber;
 use sov_state::sequencer_state::{RawStateChanges, SequencerStateChanges};

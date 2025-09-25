@@ -156,7 +156,6 @@ impl<S: Storage> Delta<S> {
     }
 
     #[cfg(feature = "native")]
-    // TODO: Add non-native version
     pub fn get_size(
         &mut self,
         namespace: Namespace,

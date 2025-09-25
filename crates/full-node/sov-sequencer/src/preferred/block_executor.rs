@@ -835,7 +835,6 @@ where
         next_root,
     );
 
-    // TODO: REmove state update notifier
     stf.materialize_accessory_state(&mut Default::default(), &mut checkpoint);
 
     drop(shutdown_notifier);

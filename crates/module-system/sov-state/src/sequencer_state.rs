@@ -212,24 +212,3 @@ impl<H: Digest<OutputSize = typenum::U32> + Send + Sync + 'static> StateGetter
         Box::new(self.clone())
     }
 }
-
-// The problem with implementing this on `Storage` is that its pointlessly expensive; we may have to hash the
-// value.
-//
-// Alternatively, we could have the `SequencerStateChanges` live in-between the Delta and the Storage. Then...
-// - We don't ever need to do the `get_leaf` thing (only `get_size`, which is efficient)
-// - For optimistic execution what do we need?
-// - For each tx, we need...
-//    - A list of the values it read (in order, even if already in cache)
-//    - A list of the values that it wrote.
-// - One idea: we give each tx a fresh StateCheckpoint (empty cache) and throw any *previous* checkpoints that are finalized in this
-// in-between layer as soon as they're ready. Then...
-//   The first checkpoint works as expected.
-//   The second tx assembles a complete list of reads/writes in its checkpoint. On commit we...
-//     - Wait for the previous tx to commit.
-//     - For each read, check that the value at that key either... was not changed by the previous tx or was changed to the read value..
-//     - If all checks pass, commit the tx into the "previous" storage. Otherwise, re-execute the tx.
-//
-// For this to work well we need to ensure that...
-//   - The list of completed checkpoints we're working from is immutable for the lifetime of the block. (We should make each previous one an Arc)
-//   - Completed checkpoints are cheap to clone
