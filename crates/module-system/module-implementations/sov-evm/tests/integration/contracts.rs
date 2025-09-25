@@ -65,6 +65,6 @@ fn test_get_empty_code() {
     runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
         let code = evm.get_code(address_without_code, None, state).unwrap();
-        assert_eq!(&code.to_string(), "0x")
+        assert_eq!(&code.to_string(), "0x");
     });
 }
