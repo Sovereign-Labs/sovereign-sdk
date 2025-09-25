@@ -154,9 +154,12 @@ impl<S: Spec> StateCheckpoint<S> {
         witness: <S::Storage as Storage>::Witness,
         kernel: &K,
     ) -> Self {
-        Self::with_witness_and_uncomitted_changes(inner, witness, kernel, 
+        Self::with_witness_and_uncomitted_changes(
+            inner,
+            witness,
+            kernel,
             #[cfg(feature = "native")]
-            None
+            None,
         )
     }
 
@@ -166,8 +169,7 @@ impl<S: Spec> StateCheckpoint<S> {
         inner: S::Storage,
         witness: <S::Storage as Storage>::Witness,
         kernel: &K,
-        #[cfg(feature = "native")]
-        uncomitted_changes: Option<Box<dyn StateGetter>>,
+        #[cfg(feature = "native")] uncomitted_changes: Option<Box<dyn StateGetter>>,
     ) -> Self {
         let mut delta = Delta::with_witness(inner, witness);
         #[cfg(feature = "native")]
