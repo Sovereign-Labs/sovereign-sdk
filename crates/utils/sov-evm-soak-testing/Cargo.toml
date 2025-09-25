@@ -1,0 +1,21 @@
+[package]
+name = "sov-evm-soak-testing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+sov-node-client = { workspace = true }
+sov-eth-client = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+ethers = { workspace = true }
+alloy-primitives = { workspace = true }
+sov-test-utils = { workspace = true }
+
+[lints]
+workspace = true

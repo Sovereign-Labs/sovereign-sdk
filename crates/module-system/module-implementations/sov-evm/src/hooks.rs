@@ -1,9 +1,10 @@
 use crate::evm::primitive_types::{Block, TransactionSigned};
-use crate::{BlockEnv, Evm, PendingTransaction};
+use crate::{BlockEnv, Evm, PendingTransaction, BLOB_GAS_PRICE, EXCESS_BLOB_GAS};
 use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root};
 use alloy_consensus::TxReceipt;
 use alloy_primitives::Bloom;
 use alloy_primitives::{B256, U256};
+use revm::context_interface::block::BlobExcessGasAndPrice;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
@@ -64,6 +65,10 @@ impl<S: Spec> BlockHooks for Evm<S> {
             // See: https://eips.ethereum.org/EIPS/eip-4399#tips-for-application-developers
             prevrandao: Some(B256::from(pre_state_user_root)),
             gas_limit: cfg.chain_spec.block_gas_limit,
+            blob_excess_gas_and_price: Some(BlobExcessGasAndPrice {
+                excess_blob_gas: EXCESS_BLOB_GAS,
+                blob_gasprice: BLOB_GAS_PRICE,
+            }),
             ..Default::default()
         };
         self.block_env
@@ -135,6 +140,9 @@ impl<S: Spec> BlockHooks for Evm<S> {
             gas_limit: block_env.gas_limit,
             gas_used,
             mix_hash: block_env.prevrandao.map_or(B256::ZERO, B256::from),
+            excess_blob_gas: block_env
+                .blob_excess_gas_and_price
+                .map(|blob_gas| blob_gas.excess_blob_gas),
             ..Default::default()
         };
 

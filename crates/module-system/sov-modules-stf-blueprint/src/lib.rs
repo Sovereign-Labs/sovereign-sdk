@@ -187,7 +187,8 @@ where
             runtime.finalize_hook(&next_visible_hash, &mut accessory_delta);
         }
         state_update.add_accessory_items(accessory_delta.freeze());
-        let change_set = storage.materialize_changes(state_update);
+        let change_set: <<S as Spec>::Storage as Storage>::ChangeSet =
+            storage.materialize_changes(state_update);
         (next_root_hash, witness, change_set)
     }
 
@@ -732,6 +733,7 @@ where
                         blob_idx,
                         &sender,
                         &gas_price,
+                        execution_context,
                     );
 
                     let gas_used = &batch_receipt.inner.gas_used;

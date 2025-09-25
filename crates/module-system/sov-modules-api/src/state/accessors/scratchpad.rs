@@ -9,6 +9,7 @@ use super::temp_cache::{CacheLookup, TempCache};
 use super::{BorshSerializedSize, StateProvider, UniversalStateAccessor};
 use crate::capabilities::RollupHeight;
 use crate::module::Spec;
+use crate::state::accessors::internals::FirstTimeReads;
 use crate::state::accessors::StateMetricsProvider;
 use crate::state::traits::PerBlockCache;
 use crate::transaction::{
@@ -268,18 +269,17 @@ impl<S: Spec, I: StateProvider<S>> GasMeter for TxScratchpad<S, I> {
 
 /// The list of changes caused by a single transaction
 #[derive(Debug, Clone)]
-pub struct TxChangeSet(pub Vec<((SlotKey, sov_state::Namespace), Option<SlotValue>)>);
+pub struct TxChangeSet {
+    /// The transaction writes.
+    pub writes: Vec<((SlotKey, sov_state::Namespace), Option<SlotValue>)>,
+    /// The transaction reads.
+    pub reads: FirstTimeReads,
+}
 
 impl<S: Spec, I: StateProvider<S>> TxScratchpad<S, I> {
     /// Commits the changes of this [`TxScratchpad`] and returns a [`StateCheckpoint`].
     pub fn commit(self) -> I {
         self.inner.commit()
-    }
-
-    /// Gets an iterator over the diff currently written onto this scratchpad. These changes will
-    /// be reverted or committed as a unit.
-    pub fn tx_changes(&self) -> TxChangeSet {
-        self.inner.changes()
     }
 
     /// Reverts the changes of this [`TxScratchpad`] and returns a [`StateCheckpoint`].
@@ -337,6 +337,13 @@ impl<S: Spec, I: StateProvider<S>> PerBlockCache for TxScratchpad<S, I> {
 
     fn update_cache_with(&mut self, other: TempCache) {
         self.inner.cache_writes.update_with(other);
+    }
+}
+
+impl<S: Spec> TxScratchpad<S, StateCheckpoint<S>> {
+    /// Change set resulting from transaction execution.
+    pub fn tx_changes(&self) -> TxChangeSet {
+        self.inner.changes()
     }
 }
 

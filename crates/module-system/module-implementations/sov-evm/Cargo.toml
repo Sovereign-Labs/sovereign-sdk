@@ -21,6 +21,7 @@ sov-kernels = { workspace = true }
 sov-state = { workspace = true }
 sov-address = { workspace = true, features = ["evm"] }
 sov-bank = { workspace = true }
+sov-metrics = { workspace = true }
 sov-uniqueness = { workspace = true }
 sov-chain-state = { workspace = true }
 sov-universal-wallet = { workspace = true, features = ["eip712"] }
@@ -29,7 +30,7 @@ anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
 thiserror = { workspace = true }
 bytes = { workspace = true }
-derive_more = { workspace = true }
+derive_more = { workspace = true, features = ["deref_mut"] }
 serde = { workspace = true }
 serde_with = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
@@ -131,6 +132,7 @@ native = [
 	# Optional for speed up in native mode
 	# "revm/asm-keccak"
 	"sov-evm/native",
+	"sov-metrics/native",
 	"sov-address/native",
 	"sov-mock-da/native",
 	"sov-modules-api/native",

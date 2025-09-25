@@ -298,7 +298,10 @@ mod tests {
     fn create_accepted_tx_event(number: u64) -> ExecutorEvent<S, TestRuntime<S>> {
         let tx = FullyBakedTx::new(vec![]);
         let tx_hash = TxHash::new([number as u8; 32]);
-        let tx_changes = TxChangeSet(vec![]);
+        let tx_changes = TxChangeSet {
+            writes: vec![],
+            reads: Default::default(),
+        };
         let (sender, _) = oneshot::channel();
         let confirmation = Confirmation {
             events: vec![],

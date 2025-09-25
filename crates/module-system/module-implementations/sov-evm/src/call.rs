@@ -1,7 +1,10 @@
-use alloy_primitives::Address;
-use revm::context::result::ExecutionResult;
+use alloy_primitives::{Address, B256};
+use reth_primitives::TransactionSigned;
+use revm::context::result::{EVMError, ExecResultAndState, ExecutionResult};
+use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_metrics::{save_elapsed, start_timer};
 use sov_modules_api::macros::{serialize, UniversalWallet};
 #[cfg(feature = "native")]
 use sov_modules_api::prelude::UnwrapInfallible;
@@ -9,12 +12,13 @@ use sov_modules_api::{Context, GasSpec, Spec, TxState};
 #[cfg(feature = "native")]
 use std::convert::Infallible;
 
-use crate::conversions::{convert_to_transaction_signed, create_tx_env};
-use crate::db::EvmDb;
-use crate::evm::executor::{self};
-use crate::evm::primitive_types::{Receipt, TransactionSignedAndRecovered};
+use crate::conversions::{convert_to_tx_signed, create_tx_env};
+use crate::db::{self, commit::FallibleDatabaseCommit, metrics::MetricsDb};
+use crate::evm::primitive_types::{Receipt, TxSignedAndRecovered};
 use crate::evm::RlpEvmTransaction;
-use crate::executor::get_cfg_env;
+use crate::executor::{get_cfg_env, transact};
+#[cfg(feature = "native")]
+use crate::metrics::EvmTxMetrics;
 use crate::{Evm, PendingTransaction};
 use anyhow::Context as _;
 
@@ -30,18 +34,16 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
-    pub(crate) fn execute_call(
+    pub(crate) fn fetch_state(
         &mut self,
-        message: CallMessage,
         context: &Context<S>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
-        let block_env = self
-            .block_env
-            .get(state)?
-            // Justified, we set it in `begin_rollup_block_hook`.
-            .expect("The impossible happened: block_env is not set.");
-        let tx = convert_to_transaction_signed(message.rlp)?;
+        tx: TransactionSigned,
+    ) -> anyhow::Result<(CfgEnv, BlockEnv, TxEnv, TxSignedAndRecovered, u64)> {
+        let block_env = self.block_env(state)?.expect(
+            "The impossible happened: block_env should be set in `begin_rollup_block_hook`.",
+        );
+
         // The signature was checked before the call was dispatched,
         // and the signer was recovered during the authentication process.
         let signer = *context
@@ -50,61 +52,80 @@ where
                 "EVM transaction must be authenticated by the EVM authenticator"
             ))?;
 
+        let pending_len = self.pending_transactions.len(state)?;
+
         // Inside the EVM, we use nonces only for the CREATE operation.
         // The uniqueness check was performed before the call was dispatched.
         let account_nonce = self.get_account_nonce(signer, state)?;
         let gas_limit = self.gas_limit(state);
         let tx_env = create_tx_env(&tx, signer, account_nonce, gas_limit);
-
-        let transaction = TransactionSignedAndRecovered {
-            signer,
-            signed_transaction: tx,
-            block_number: block_env.number.to::<u64>(),
-        };
-
+        let tx = TxSignedAndRecovered::new(signer, tx, block_env.number.to::<u64>());
         let cfg = self.cfg(state)?;
         let cfg_env = get_cfg_env(&block_env, cfg, None);
-        let mut evm_db: EvmDb<_, S> = self.get_db(state);
 
-        let result = executor::transact_commit(&mut evm_db, block_env, tx_env, cfg_env);
+        Ok((cfg_env, block_env, tx_env, tx, pending_len))
+    }
 
-        let pending_len = self.pending_transactions.len(state)?;
+    pub(crate) fn execute_call(
+        &mut self,
+        message: CallMessage,
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        start_timer!(total);
+        let tx = convert_to_tx_signed(message.rlp)?;
 
-        let receipt = match result {
-            Ok(result) => {
-                let is_success = result.is_success();
-                let gas_used = result.gas_used();
+        if matches!(tx, alloy_consensus::EthereumTxEnvelope::Eip4844(_)) {
+            anyhow::bail!("Eip4844 not supported");
+        }
 
-                if !is_success {
-                    tracing::debug!(
-                        hash = hex::encode(transaction.signed_transaction.hash()),
-                        gas_used,
-                        ?result,
-                        "EVM execution error"
-                    );
-                    anyhow::bail!("EVM execution error: {:?}", &result);
-                }
-                let receipt = self.get_receipt(&transaction, pending_len, result, state)?;
-                state.charge_linear_gas(
-                    &<S as GasSpec>::gas_to_charge_per_evm_gas(),
-                    gas_used as u32,
-                )?;
-                receipt
-            }
-            Err(err) => {
-                tracing::debug!(
-                    tx_hash = hex::encode(*transaction.signed_transaction.hash()),
-                    error = ?err,
-                    "EVM transaction has been reverted"
-                );
+        start_timer!(fetch_state);
+        let (cfg, block, tx_env, tx, pending_len) = self.fetch_state(context, state, tx)?;
+        save_elapsed!(fetch_state_time SINCE fetch_state);
+        start_timer!(get_db);
+        let db = self.get_db(state);
+        save_elapsed!(get_db_time SINCE get_db);
+        let mut db = MetricsDb::new(db);
 
-                anyhow::bail!("EVM transaction error: {:?}", err);
-            }
+        start_timer!(execution);
+        let ExecResultAndState {
+            result,
+            state: state_changes,
+        } = match transact(&mut db, &block, tx_env, cfg) {
+            Ok(result) => result,
+            Err(err) => return on_error(*tx.signed_transaction.hash(), err),
         };
+        save_elapsed!(execution_time SINCE execution);
+        // We don't use transact_commit as it does not support returning an error
+        start_timer!(state_commit);
+        db.commit(state_changes)
+            .map_err(|e| anyhow::anyhow!("{}", &*e))?;
+        save_elapsed!(state_commit_time SINCE state_commit);
 
-        let pending_transaction = PendingTransaction::new(transaction, receipt);
-        self.pending_transactions
-            .push(&pending_transaction, state)?;
+        if !result.is_success() {
+            return on_revert(*tx.signed_transaction.hash(), result);
+        }
+
+        #[cfg(feature = "native")]
+        {
+            sov_metrics::track_metrics(|t| {
+                t.submit(db.metrics());
+            });
+        }
+
+        let gas_used = result.gas_used();
+        start_timer!(receipt_t);
+        let receipt = self.get_receipt(&tx, pending_len, result, state)?;
+        save_elapsed!(receipt_time SINCE receipt_t);
+        state.charge_linear_gas(
+            &<S as GasSpec>::gas_to_charge_per_evm_gas(),
+            gas_used as u32,
+        )?;
+
+        start_timer!(set_state);
+        let pending_tx = PendingTransaction::new(tx, receipt);
+        self.pending_transactions.push(&pending_tx, state)?;
+        save_elapsed!(set_state_time SINCE set_state);
 
         // Fetch `head` and `pending_len` before the `native` code block.
         // This ensures consistent gas charges between native and non-native execution.
@@ -115,10 +136,32 @@ where
             // Justified, we set it at `genesis` and leter only override it.
             .expect("Impossible happened: Head must be set.");
 
-        // Since we just inserted tx above, we need to increment `pending_len`` by 1.
         #[cfg(feature = "native")]
-        self.set_accessory_state(head, &pending_transaction, pending_len + 1, state)
-            .unwrap_infallible();
+        let set_accessory_state_time = {
+            start_timer!(set_accessory_state);
+            // Since we just inserted tx above, we need to increment `pending_len`` by 1.
+            self.set_accessory_state(head, &pending_tx, pending_len + 1, state)
+                .unwrap_infallible();
+            set_accessory_state.elapsed()
+        };
+
+        save_elapsed!(total_time SINCE total);
+        #[cfg(feature = "native")]
+        {
+            let metrics = EvmTxMetrics {
+                total_time,
+                fetch_state_time,
+                get_db_time,
+                execution_time,
+                state_commit_time,
+                receipt_time,
+                set_state_time,
+                set_accessory_state_time,
+            };
+            sov_metrics::track_metrics(|t| {
+                t.submit(metrics);
+            });
+        }
 
         Ok(())
     }
@@ -146,7 +189,7 @@ where
 
     fn get_receipt(
         &self,
-        tx: &TransactionSignedAndRecovered,
+        tx: &TxSignedAndRecovered,
         tx_index: u64,
         result: ExecutionResult,
         state: &mut impl TxState<S>,
@@ -251,6 +294,28 @@ where
 
         Ok(())
     }
+}
+
+fn on_error<S: Spec>(
+    hash: B256,
+    err: EVMError<db::Error<impl TxState<S>>>,
+) -> Result<(), anyhow::Error> {
+    tracing::debug!(
+        tx_hash = hex::encode(hash),
+        error = ?err,
+        "EVM transaction error"
+    );
+    anyhow::bail!("EVM transaction error: {:?}", err);
+}
+
+fn on_revert(hash: B256, result: ExecutionResult) -> Result<(), anyhow::Error> {
+    tracing::debug!(
+        hash = hex::encode(hash),
+        gas_used = result.gas_used(),
+        ?result,
+        "EVM execution error"
+    );
+    anyhow::bail!("EVM execution error: {:?}", &result);
 }
 
 /// Get spec id for a given block number

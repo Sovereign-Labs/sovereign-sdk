@@ -49,16 +49,16 @@ fn test_genesis_cfg() {
                     block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
                     coinbase: Address::from([3u8; 20]),
                     limit_contract_code_size: Some(5000),
-                    hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)],
+                    hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::CANCUN)],
                 },
-                hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)],
+                hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::CANCUN)],
             }
         );
     });
 }
 
 #[test]
-fn test_empty_spec_defaults_to_shanghai() {
+fn test_empty_spec_defaults_to_cancun() {
     let mut cfg = default_config();
     cfg.chain_spec.hardforks.clear();
     let runner = basic_setup(cfg);
@@ -66,7 +66,7 @@ fn test_empty_spec_defaults_to_shanghai() {
     runner.query_visible_state(move |state| {
         let evm = Evm::<S>::default();
         let evm_cfg = evm.cfg_infallible(state);
-        assert_eq!(evm_cfg.hardforks, vec![(0, SpecId::SHANGHAI)]);
+        assert_eq!(evm_cfg.hardforks, vec![(0, SpecId::CANCUN)]);
     });
 }
 
@@ -75,14 +75,6 @@ fn test_empty_spec_defaults_to_shanghai() {
 fn test_cfg_missing_specs() {
     let mut cfg = EvmGenesisConfig::default();
     cfg.chain_spec.hardforks = vec![(5, SpecId::BERLIN)];
-    let _ = basic_setup(cfg);
-}
-
-#[test]
-#[should_panic(expected = "Cancun is not supported")]
-fn test_cancun_is_unsupported() {
-    let mut cfg = EvmGenesisConfig::default();
-    cfg.chain_spec.hardforks = vec![(0, SpecId::CANCUN)];
     let _ = basic_setup(cfg);
 }
 
@@ -99,6 +91,7 @@ fn test_genesis_block() {
             state_root: actual_block.header().state_root(),
             gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
             beneficiary,
+            excess_blob_gas: Some(0),
             ..Default::default()
         };
 
@@ -123,7 +116,7 @@ fn default_config() -> EvmGenesisConfig {
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
             coinbase: Address::from([3u8; 20]),
             limit_contract_code_size: Some(5000),
-            hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)],
+            hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::CANCUN)],
         },
     }
 }

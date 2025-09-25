@@ -36,6 +36,11 @@ license-files = [{ path = "COPYING", hash = 0x106164e0 }]
 
 # Sovereign SDK packages use a custom community license
 [[licenses.clarify]]
+name = "sov-evm-soak-testing"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
 name = "sov-rpc-eth-types"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []

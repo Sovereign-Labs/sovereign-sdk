@@ -86,7 +86,7 @@ pub struct BlobSender<Da: DaService, H, FM: FinalizationManager> {
     blob_processing_timeout: Duration,
     blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
     ledger_pool_interval: Duration,
-    blobs_to_send_after_retart: Option<Vec<BlobSubmissionRequest<Da::Spec>>>,
+    blobs_to_send_after_restart: Option<Vec<BlobSubmissionRequest<Da::Spec>>>,
 }
 
 impl<Da, H, FM> BlobSender<Da, H, FM>
@@ -167,7 +167,7 @@ where
             blob_processing_timeout,
             blob_sender_channel,
             ledger_pool_interval,
-            blobs_to_send_after_retart: Some(all_blobs),
+            blobs_to_send_after_restart: Some(all_blobs),
         };
 
         let handle = Self::main_task(in_flight_blobs, shutdown_receiver).await;
@@ -236,8 +236,8 @@ where
         blob_id: BlobInternalId,
         latest_known_processing_state: BlobExecutionStatus<Da::Spec>,
     ) -> anyhow::Result<()> {
-        let blobs_to_send_after_retart = self.blobs_to_send_after_retart.take();
-        if let Some(all_blobs) = blobs_to_send_after_retart {
+        let blobs_to_send_after_restart = self.blobs_to_send_after_restart.take();
+        if let Some(all_blobs) = blobs_to_send_after_restart {
             for blob_req in all_blobs {
                 self.submit_blob_on_da(
                     blob_req.blob,
@@ -598,6 +598,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                     nb_of_retries_attempted += 1;
                 }
                 BlobSubmissionStatus::Published { receipt } => {
+                    trace!(%blob_id, %receipt, "Blob status set to published");
                     self.send_notification(blob_status.clone()).await;
                     if self
                         .save_blob_state_or_err(blob_id, &blob_status)

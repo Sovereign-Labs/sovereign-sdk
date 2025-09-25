@@ -3,6 +3,7 @@
 use core::time::Duration;
 use std::sync::Arc;
 
+use crate::sov_paymaster::PaymasterConfig;
 use demo_stf::genesis_config::EvmGenesisConfig;
 use demo_stf::runtime::{GenesisConfig, Runtime};
 use sov_address::MultiAddressEvm;
@@ -11,20 +12,18 @@ use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{Amount, CryptoSpecExt, Spec, ZkVerifier, Zkvm};
 use sov_risc0_adapter::Risc0;
-use sov_rollup_interface::zk::ZkvmHost;
+use sov_rollup_interface::da::DaSpec;
 use sov_sp1_adapter::SP1;
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::DefaultStorageSpec;
 use sov_test_modules::access_pattern::AccessPatternGenesisConfig;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::runtime::sov_paymaster::{
     self, PayeePolicy, PayerGenesisConfig, PaymasterPolicyInitializer, SafeVec,
 };
 use sov_test_utils::runtime::TestRunner;
-use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
-use sov_test_utils::{
-    MockDaSpec, MockZkvm, RtAgnosticBlueprint, TestPreferredSequencer, TestProver, TestUser,
-};
-
-use crate::sov_paymaster::PaymasterConfig;
+use sov_test_utils::storage::ForklessStorageManager;
+use sov_test_utils::{MockDaSpec, MockZkvm, TestPreferredSequencer, TestProver, TestUser};
 
 pub const DEFAULT_BLOCK_TIME_MS: u64 = 150;
 pub const DEFAULT_BLOCK_PRODUCING_CONFIG: BlockProducingConfig = BlockProducingConfig::Periodic {
@@ -50,11 +49,23 @@ pub type BenchRisc0Spec = BenchSpec<Risc0>;
 /// [`ConfigurableSpec`] with [`MockDaSpec`] and a [`SP1`] inner vm
 pub type BenchSP1Spec = BenchSpec<SP1>;
 
+/// [`ConfigurableSpec`] with [`MockDaSpec`] and a custom inner vm
+pub type NomtBenchSpec = ConfigurableSpec<
+    MockDaSpec,
+    MockZkvm,
+    MockZkvm,
+    MultiAddressEvm,
+    Native,
+    <<MockZkvm as Zkvm>::Verifier as ZkVerifier>::CryptoSpec,
+    NomtProverStorage<
+        DefaultStorageSpec<
+            <<<MockZkvm as Zkvm>::Verifier as ZkVerifier>::CryptoSpec as sov_rollup_interface::zk::CryptoSpec>::Hasher,
+        >,
+        <MockDaSpec as DaSpec>::SlotHash,
+    >,
+>;
+
 type RT<S> = Runtime<S>;
-
-type Runner<S> = TestRunner<RT<S>, S>;
-
-type RollupBlueprint<S> = RtAgnosticBlueprint<S, RT<S>>;
 
 /// Benchmark user roles
 pub struct Roles<S: Spec> {
@@ -71,11 +82,13 @@ pub struct Roles<S: Spec> {
 }
 
 /// Setups benchmarks and returns the genesis config along with benchmark roles
-pub fn setup<Vm: Zkvm>(
+pub fn setup<S, Vm>(
     num_senders: u64,
     inner_code_commitment: <Vm::Verifier as ZkVerifier>::CodeCommitment,
-) -> (GenesisConfig<BenchSpec<Vm>>, Roles<BenchSpec<Vm>>)
+) -> (GenesisConfig<S>, Roles<S>)
 where
+    S: Spec<InnerZkvm = Vm, OuterZkvm = MockZkvm, Da = MockDaSpec, Address = MultiAddressEvm>,
+    Vm: Zkvm,
     <Vm::Verifier as ZkVerifier>::CryptoSpec: CryptoSpecExt,
 {
     let mut genesis_config =
@@ -145,18 +158,27 @@ where
     )
 }
 
-/// Setups benchmarks and returns the a [`TestRunner`] along with benchmark roles
-pub fn setup_with_runner<Vm: Zkvm>(
+/// Setups benchmarks and returns the [`TestRunner`] along with benchmark roles
+pub fn setup_with_runner<S, Vm, Sm>(
     num_senders: u64,
     inner_code_commitment: <Vm::Verifier as ZkVerifier>::CodeCommitment,
-) -> (Runner<BenchSpec<Vm>>, Roles<BenchSpec<Vm>>)
+) -> (TestRunner<RT<S>, S, Sm>, Roles<S>)
 where
+    Vm: Zkvm,
+    S: Spec<
+        InnerZkvm = Vm,
+        OuterZkvm = MockZkvm,
+        Da = MockDaSpec,
+        Address = MultiAddressEvm,
+        Storage = Sm::Storage,
+    >,
     <Vm::Verifier as ZkVerifier>::CryptoSpec: CryptoSpecExt,
+    Sm: ForklessStorageManager,
 {
-    let (genesis_config, roles) = setup(num_senders, inner_code_commitment);
+    let (genesis_config, roles) = setup::<S, Vm>(num_senders, inner_code_commitment);
 
     (
-        TestRunner::<_, _>::new_with_genesis(
+        TestRunner::<_, _, Sm>::new_with_genesis(
             genesis_config.into_genesis_params(),
             Default::default(),
         ),
@@ -164,39 +186,31 @@ where
     )
 }
 
-/// Setups benchmarks and returns the a [`TestRollup`] along with benchmark roles
-pub async fn setup_with_rollup<Vm: Zkvm>(
+pub fn setup_with_runner_and_spec<Vm, Sm, S>(
     num_senders: u64,
-    host_args: Arc<<Vm::Host as ZkvmHost>::HostArgs>,
     inner_code_commitment: <Vm::Verifier as ZkVerifier>::CodeCommitment,
-) -> (
-    TestRollup<RollupBlueprint<BenchSpec<Vm>>>,
-    Roles<BenchSpec<Vm>>,
-)
+) -> (TestRunner<RT<S>, S, Sm>, Roles<S>)
 where
+    Vm: Zkvm,
     <Vm::Verifier as ZkVerifier>::CryptoSpec: CryptoSpecExt,
+    Sm: ForklessStorageManager,
+    S: Spec<
+        InnerZkvm = Vm,
+        OuterZkvm = MockZkvm,
+        Da = MockDaSpec,
+        Address = MultiAddressEvm,
+        Storage = Sm::Storage,
+    >,
 {
-    let (genesis_config, roles) = setup(num_senders, inner_code_commitment);
+    let (genesis_config, roles) = setup::<S, Vm>(num_senders, inner_code_commitment);
 
-    let rollup_builder = RollupBuilder::new(
-        GenesisSource::CustomParams(genesis_config.into_genesis_params()),
-        DEFAULT_BLOCK_PRODUCING_CONFIG,
-        DEFAULT_FINALIZATION_BLOCKS,
+    (
+        TestRunner::<RT<S>, S, Sm>::new_with_genesis(
+            genesis_config.into_genesis_params(),
+            Default::default(),
+        ),
+        roles,
     )
-    .with_zkvm_host_args(host_args)
-    .set_config(|config| {
-        config.prover_address = roles.prover.user_info.address().to_string();
-    })
-    .set_da_config(|da_config| {
-        da_config.sender_address = roles.preferred_sequencer.sequencer_info.da_address;
-    });
-
-    let rollup = rollup_builder
-        .start()
-        .await
-        .expect("Impossible to start rollup");
-
-    (rollup, roles)
 }
 
 /// Returns the risc0 host arguments for a rollup with mock da. This is the code that is zk-proven by the rollup

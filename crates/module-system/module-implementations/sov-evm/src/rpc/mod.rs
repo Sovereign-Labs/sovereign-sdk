@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
-use alloy_primitives::{Address, U64};
+use alloy_primitives::{Address, BlockHash, U64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
 use alloy_rpc_types::{
     state::StateOverride, Block, BlockOverrides, BlockTransactions, FeeHistory, Log,
@@ -28,9 +28,7 @@ use tracing::debug;
 use crate::conversions::replay_tx_env;
 use crate::db::EvmDb;
 use crate::evm::executor;
-use crate::evm::primitive_types::{
-    Receipt, SealedBlock, TransactionSigned, TransactionSignedAndRecovered,
-};
+use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
 use crate::executor::{get_cfg_env, inspect, transact_commit};
 use crate::helpers::{
     from_primitive_with_hash, from_recovered_with_block_context, prepare_call_env,
@@ -108,29 +106,30 @@ where
 
         let maybe_block = || -> Option<Block> {
             let block = self.get_sealed_block_by_number(block_number, state)?;
-            let header = from_primitive_with_hash(block.header.clone());
+
+            let block_hash = block.hash().unwrap_or(BlockHash::ZERO);
+            let header = from_primitive_with_hash(block.header().clone(), block_hash);
+
+            let block_number = block.number();
+            let tx_range = block.transactions_start()..block.transactions_end();
 
             let transactions = if Some(true) == details {
                 BlockTransactions::Full(
-                    block
-                        .transactions
-                        .clone()
+                    tx_range
                         .map(|index| {
                             let tx = self.transactions.get(&index, state).unwrap_infallible()?;
                             Some(from_recovered_with_block_context(
                                 tx.into(),
-                                Some(block.header.seal()),
-                                block.header.number,
-                                U256::from(index - block.transactions.start),
+                                Some(block_hash),
+                                block_number,
+                                U256::from(index - block.transactions_start()),
                             ))
                         })
                         .collect::<Option<Vec<_>>>()?,
                 )
             } else {
                 BlockTransactions::Hashes(
-                    block
-                        .transactions
-                        .clone()
+                    tx_range
                         .map(|index| {
                             let tx = self.transactions.get(&index, state).unwrap_infallible()?;
                             Some(*tx.signed_transaction.hash())
@@ -154,14 +153,12 @@ where
     pub fn get_balance(
         &self,
         address: Address,
-        _block_number: Option<String>,
+        block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U256> {
-        // TODO: Implement block_number once we have archival state #951
-        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/951
-
+        let mut state = self.resolve_state(block_number, state)?;
         let balance = self
-            .get_db(state)
+            .get_db(state.deref_mut())
             .basic(address)
             .map_err(|e| eth_api_into_rpc_error(EthApiError::from(e)))?
             .map(|account| account.balance)
@@ -182,17 +179,15 @@ where
         &self,
         address: Address,
         index: U256,
-        _block_number: Option<String>,
+        block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U256> {
         debug!("EVM module JSON-RPC request to `eth_getStorageAt`");
 
-        // TODO: Implement block_number once we have archival state #951
-        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/951
-
+        let mut state = self.resolve_state(block_number, state)?;
         let storage_slot = self
             .account_storage
-            .get(&(&address, &index), state)
+            .get(&(&address, &index), state.deref_mut())
             .unwrap_infallible()
             .unwrap_or_default();
 
@@ -204,18 +199,17 @@ where
     pub fn get_transaction_count(
         &self,
         address: Address,
-        _block_number: Option<String>,
+        block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
-        // TODO: Implement block_number once we have archival state #882
-        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/882
+        let mut state = self.resolve_state(block_number, state)?;
 
         let ethereum_address: EthereumAddress = address.into();
         let credential_id = ethereum_address.as_credential_id();
 
         let nonce = self
             .uniqueness_module
-            .next_nonce(&credential_id, state)
+            .next_nonce(&credential_id, state.deref_mut())
             .unwrap_or_default();
 
         debug!(%address, nonce, "EVM module JSON-RPC request to `eth_getTransactionCount`");
@@ -227,22 +221,24 @@ where
     pub fn get_code(
         &self,
         address: Address,
-        _block_number: Option<String>,
+        block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
         debug!("EVM module JSON-RPC request to `eth_getCode`");
-
-        // TODO: Implement block_number once we have archival state #951
-        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/951
-
+        let mut state = self.resolve_state(block_number, state)?;
         let code = self
             .accounts
-            .get(&address, state)
+            .get(&address, state.deref_mut())
             .unwrap_infallible()
-            .and_then(|account| self.code.get(&account.code_hash, state).unwrap_infallible())
+            .and_then(|account| {
+                self.code
+                    .get(&account.code_hash, state.deref_mut())
+                    .unwrap_infallible()
+            })
+            .map(|code| code.bytecode().clone())
             .unwrap_or_default();
 
-        Ok(code.bytecode().clone())
+        Ok(code.clone())
     }
 
     /// Handler for: `eth_feeHistory`
@@ -272,7 +268,7 @@ where
         let mut maybe_tx = || -> Option<Transaction> {
             let tx_number = self.get_tx_index_by_hash(&hash, state)?;
             let tx = self.transaction(tx_number, state)?;
-            let block = self.get_maybe_sealed_block(tx.block_number, state);
+            let block = self.get_maybe_sealed_block(tx.block_number, state)?;
 
             Some(from_recovered_with_block_context(
                 tx.into(),
@@ -307,7 +303,7 @@ where
         let mut maybe_receipt = || -> Option<TransactionReceipt> {
             let number = self.get_tx_index_by_hash(&hash, state)?;
             let tx = self.transaction(number, state)?;
-            let block = self.get_maybe_sealed_block(tx.block_number, state);
+            let block = self.get_maybe_sealed_block(tx.block_number, state)?;
             let receipt = self.receipt(number, state)?;
             Some(build_rpc_receipt(block, tx, number, receipt))
         };
@@ -417,18 +413,13 @@ where
                 continue;
             }
 
-            transact_commit(
-                &mut evm_db,
-                block_env.clone(),
-                replay_tx_env(&tx),
-                cfg_env.clone(),
-            )
-            .map_err(|e| eth_api_into_rpc_error(eth_from_evm_error(e)))?;
+            transact_commit(&mut evm_db, &block_env, replay_tx_env(&tx), cfg_env.clone())
+                .map_err(|e| eth_api_into_rpc_error(eth_from_evm_error(e)))?;
         }
 
         // Trace the target transaction
         self.trace_transaction(
-            block_env.clone(),
+            block_env,
             replay_tx_env(&traced_tx),
             cfg_env,
             evm_db,
@@ -439,6 +430,7 @@ where
 }
 
 /// Result of String => BlockNr conversion
+#[derive(Debug)]
 pub enum PendingOrBlock {
     /// Pending blcock.
     Pending,
@@ -478,7 +470,7 @@ where
                     let mut inspector = TracingInspector::new(inspector_config);
 
                     let gas_limit = tx_env.gas_limit;
-                    let res = inspect(db, block_env, tx_env, cfg, &mut inspector)?;
+                    let res = inspect(db, &block_env, tx_env, cfg, &mut inspector)?;
                     inspector.set_transaction_gas_limit(gas_limit);
 
                     let frame = inspector
@@ -499,16 +491,14 @@ where
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<ExecutionResult> {
-        let Some(block_env) = self.resolve_block_env(block_number, state) else {
-            return Err(eth_api_into_rpc_error(EthApiError::UnknownBlockOrTxIndex));
-        };
+        let block_env = self.resolve_block_env(block_number, state)?;
         let tx_env =
             prepare_call_env(&block_env, request.clone()).map_err(eth_api_into_rpc_error)?;
         let cfg = self.cfg_infallible(state);
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
-        executor::call(evm_db, block_env, tx_env, cfg_env)
+        executor::call(evm_db, &block_env, tx_env, cfg_env)
             .map_err(|err| eth_api_into_rpc_error(eth_from_evm_error(err)))
     }
 
@@ -517,14 +507,18 @@ where
         &self,
         block_number: u64,
         state: &mut ApiStateAccessor<S>,
-    ) -> MaybeSealedBlock {
+    ) -> Option<MaybeSealedBlock> {
         let block = self.blocks.get(&block_number, state).unwrap_infallible();
         if let Some(block) = block {
-            return MaybeSealedBlock::Sealed(block);
+            return Some(MaybeSealedBlock::Sealed(block));
         }
 
         let pending = self.pending_block(state);
-        MaybeSealedBlock::Pending(pending)
+        if block_number == pending.header.number {
+            return Some(MaybeSealedBlock::Pending(pending));
+        }
+
+        None
     }
 
     /// Convert string to block nr.
@@ -570,14 +564,14 @@ where
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<SealedBlock> {
+    ) -> Option<MaybeSealedBlock> {
         let pending_or_block_nr = self.str_to_block_nr(block_number, state);
 
         match pending_or_block_nr {
-            PendingOrBlock::Number(nr) => self.blocks.get(&nr, state).unwrap_infallible(),
+            PendingOrBlock::Number(nr) => self.get_maybe_sealed_block(nr, state),
             PendingOrBlock::Pending => {
                 let pending_block = self.pending_block(state);
-                Some(pending_block.seal())
+                Some(MaybeSealedBlock::Pending(pending_block))
             }
             PendingOrBlock::Invalid(invalid) => {
                 tracing::error!(invalid, "Invalid block number");
@@ -624,6 +618,10 @@ where
                 .timestamp
                 .try_into()
                 .expect("The impossible happened: timestamp overflow u64"),
+            excess_blob_gas: current_block_env
+                .blob_excess_gas_and_price
+                .map(|blob_gas| blob_gas.excess_blob_gas),
+
             ..Default::default()
         };
 
@@ -633,19 +631,75 @@ where
         }
     }
 
+    fn resolve_state<'a>(
+        &self,
+        block_number: Option<String>,
+        state: &'a mut ApiStateAccessor<S>,
+    ) -> RpcResult<MaybeArchivalState<'a, S>> {
+        let state = match block_number {
+            None => MaybeArchivalState::Current(state),
+            Some(number) if number == "latest" => MaybeArchivalState::Current(state),
+            _ => {
+                let pending_or_block_nr = self.str_to_block_nr(block_number, state);
+                match pending_or_block_nr {
+                    PendingOrBlock::Pending => MaybeArchivalState::Current(state),
+                    PendingOrBlock::Number(number) => {
+                        let archival_state = state
+                            .get_archival_state(RollupHeight::new(number))
+                            .map_err(into_rpc_error)?;
+                        MaybeArchivalState::Archival(archival_state.into())
+                    }
+                    PendingOrBlock::Invalid(_) => {
+                        return Err(EthApiError::UnknownBlockOrTxIndex.into());
+                    }
+                }
+            }
+        };
+        Ok(state)
+    }
+
     fn resolve_block_env(
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<BlockEnv> {
-        match block_number {
-            Some(ref block_number) if block_number == "pending" => {
-                self.block_env.get(state).unwrap_infallible()
-            }
-            _ => {
-                let block = self.get_sealed_block_by_number(block_number, state)?;
-                Some(BlockEnv::from(block))
-            }
+    ) -> Result<BlockEnv, EthApiError> {
+        let maybe_blcok = self
+            .get_sealed_block_by_number(block_number, state)
+            .ok_or(EthApiError::UnknownBlockOrTxIndex)?;
+
+        Ok(match maybe_blcok {
+            MaybeSealedBlock::Pending(_) => self
+                .block_env
+                .get(state)
+                .unwrap_infallible()
+                .expect("The impossible happened: block_env is not set."),
+            MaybeSealedBlock::Sealed(sealed_block) => BlockEnv::from(sealed_block),
+        })
+    }
+}
+
+use std::ops::{Deref, DerefMut};
+
+enum MaybeArchivalState<'a, S: Spec> {
+    Current(&'a mut ApiStateAccessor<S>),
+    Archival(Box<ApiStateAccessor<S>>),
+}
+
+impl<'a, S: Spec> Deref for MaybeArchivalState<'a, S> {
+    type Target = ApiStateAccessor<S>;
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Current(a) => a,
+            Self::Archival(a) => a,
+        }
+    }
+}
+
+impl<'a, S: Spec> DerefMut for MaybeArchivalState<'a, S> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Self::Current(a) => a,
+            Self::Archival(a) => a,
         }
     }
 }
@@ -665,7 +719,7 @@ fn get_cfg_env_template() -> CfgEnv {
 // modified from: https://github.com/paradigmxyz/reth many times
 pub(crate) fn build_rpc_receipt(
     block: MaybeSealedBlock,
-    tx: TransactionSignedAndRecovered,
+    tx: TxSignedAndRecovered,
     tx_number: u64,
     receipt: Receipt,
 ) -> TransactionReceipt {
@@ -754,5 +808,5 @@ pub fn invalid_tx_into_rpc_error(rpc: RpcInvalidTransactionError) -> ErrorObject
 
 /// Converts internal error into rpc error
 pub fn into_rpc_error(err: impl Error) -> ErrorObjectOwned {
-    ErrorObject::owned(500, format!("{err:?}"), None::<()>)
+    ErrorObject::owned(500, format!("{err}"), None::<()>)
 }

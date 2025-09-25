@@ -17,7 +17,7 @@ jobs:
   check-missing-dependency-versions:
     runs-on: nscloud-ubuntu-22.04-amd64-2x4
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
       - run: ./scripts/check_missing_dependency_versions.sh
         shell: bash
         working-directory: .

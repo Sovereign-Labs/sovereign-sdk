@@ -7,7 +7,7 @@ use axum::http::StatusCode;
 pub use full_node_configs::sequencer::StdSequencerConfig;
 use sov_blob_sender::{new_blob_id, BlobSender};
 use sov_db::ledger_db::LedgerDb;
-use sov_metrics::AuthAndProcessMetrics;
+use sov_metrics::{AuthAndProcessMetrics, AuthAndProcessTimings};
 use sov_modules_api::capabilities::{AuthenticationError, ChainState};
 use sov_modules_api::rest::utils::ErrorObject;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
@@ -251,8 +251,12 @@ where
             );
         }
 
+        let execution_context = ExecutionContext::Sequencer;
         let pre_exec_working_set = tx_scratchpad.to_pre_exec_working_set(gas_meter);
-        let metrics = AuthAndProcessMetrics::new(mempool_tx.hash, Default::default());
+        let metrics = AuthAndProcessMetrics::new(
+            mempool_tx.hash,
+            AuthAndProcessTimings::new_with_defaults(execution_context),
+        );
         let (res, tx_scratchpad, _gas_meter) = process_tx_and_reward_prover(
             &mut runtime,
             pre_exec_working_set,
@@ -262,7 +266,7 @@ where
             mempool_tx.tx.clone(),
             &self.da_address,
             self.config.rollup_address.clone(),
-            ExecutionContext::Sequencer,
+            execution_context,
             &NoOpControlFlow,
             operating_mode,
             metrics,

@@ -17,7 +17,7 @@ async fn test_evm_account_abstraction() {
     let (test_rollup, test_client, chain_id) = setup(0, EVM_EXTENSION).await;
 
     // Before executing the evm checks we need to insert the credentials in the `Accounts`.
-    send_insert_credentials(&test_client, test_client.from_addr, chain_id).await;
+    send_insert_credentials(&test_client, test_client.address(), chain_id).await;
     // Execute the evm tests.
     execute_evm_tests(&test_client).await.unwrap();
 
@@ -65,17 +65,17 @@ fn create_insert_credentials(
 }
 
 async fn execute_evm_tests(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> {
-    let nonce = client.eth_get_transaction_count(client.from_addr).await;
+    let nonce = client.eth_get_transaction_count(client.address()).await;
     assert_eq!(0, nonce);
 
     // Balance should be > 0 in genesis
-    let balance = client.eth_get_balance(client.from_addr).await;
+    let balance = client.eth_get_balance(client.address()).await;
     assert!(balance > ethereum_types::U256::zero());
 
     let contract_address = evm_test_helper::deploy_contract_check(client).await?;
 
     // Nonce should be 1 after the deploy
-    let nonce = client.eth_get_transaction_count(client.from_addr).await;
+    let nonce = client.eth_get_transaction_count(client.address()).await;
     assert_eq!(1, nonce);
 
     let set_arg = 923;

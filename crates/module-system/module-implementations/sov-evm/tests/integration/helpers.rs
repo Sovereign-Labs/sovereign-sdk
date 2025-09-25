@@ -65,9 +65,8 @@ pub(crate) fn setup() -> (TestRunner<RT, S>, EvmAccount, EvmAccount) {
         ],
         ..Default::default()
     };
-    // SHANGHAI instead of LATEST
-    // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
-    evm_config.chain_spec.hardforks = vec![(0, SpecId::SHANGHAI)];
+
+    evm_config.chain_spec.hardforks = vec![(0, SpecId::CANCUN)];
 
     let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into(), evm_config);
 
