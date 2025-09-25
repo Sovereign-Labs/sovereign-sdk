@@ -579,10 +579,7 @@ const _: () = {
             use sov_state::Accessory;
 
             let key = self.true_slot_number_history.slot_key(&height);
-            let value = state.get_unbound::<Accessory>(key);
-            let Some(value) = value else {
-                return None;
-            };
+            let value = state.get_unbound::<Accessory>(key)?;
             Some(
                 self.true_slot_number_history
                     .codec()

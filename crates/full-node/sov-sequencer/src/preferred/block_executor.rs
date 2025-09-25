@@ -689,7 +689,13 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         trace!("Ending rollup block");
 
         let rollup_height = self.checkpoint.rollup_height_to_access();
-        let (batch_receipts, new_checkpoint) = self.rollup_block_task_state.take().expect("No in-progress rollup block, nothing to do. This is a bug, please report it").shutdown().await.expect("No in-progress rollup block, nothing to do. This is a bug, please report it");
+        let (batch_receipts, new_checkpoint) = self
+            .rollup_block_task_state
+            .take()
+            .expect("No in-progress rollup block, nothing to do. This is a bug, please report it")
+            .shutdown()
+            .await
+            .expect("No in-progress rollup block, nothing to do. This is a bug, please report it");
 
         let mut accepted_txs_by_batch = Vec::with_capacity(batch_receipts.len());
         for batch_receipt in batch_receipts {

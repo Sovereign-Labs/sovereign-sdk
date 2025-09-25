@@ -130,8 +130,8 @@ fn fetch_root_hash_if_stale<S: Spec, Rt: Runtime<S>>(
         // If the underlying storage is ahead of the requested state by *more than one* rollup block, then the `kernel` will have its `true_slot_number_history` populated for the requested height.
         // In this case, we can retrieve the slot number which goes with the requested height and fetch its state root
         // Otherwise, the map will be empty. If the map is empty, we *know* that we're in this case - which means we can just return the latest root hash.
-        if let Some(slot_number_for_height) = kernel_with_slot_mapping
-            .get_true_slot_number_for_height_unbound(rollup_height, &storage)
+        if let Some(slot_number_for_height) =
+            kernel_with_slot_mapping.get_true_slot_number_for_height_unbound(rollup_height, storage)
         {
             tracing::info!(rollup_height = %rollup_height, "Found historical slot number for height. Fetching root hash for slot number {}", slot_number_for_height );
             let root = storage
@@ -336,19 +336,15 @@ impl<S: Spec> StateRootBackgroundTaskState<S> {
 #[cfg(test)]
 mod tests {
     use sov_modules_api::capabilities::ChainState;
+    use sov_modules_api::StateCheckpoint;
+    use sov_modules_api::VersionReader;
     use sov_modules_api::{KernelStateAccessor, VisibleSlotNumber};
     use sov_state::SlotKey;
-    use sov_modules_api::VersionReader;
     use sov_test_utils::storage::{
-        ForklessStorageManager, 
-        SimpleNomtStorageManager, SimpleStorageManager,
+        ForklessStorageManager, SimpleNomtStorageManager, SimpleStorageManager,
     };
-    use sov_test_utils::{
-        generate_optimistic_runtime, TestNomtSpec, TestSpec,
-        TestStorageSpec,
-    };
+    use sov_test_utils::{generate_optimistic_runtime, TestNomtSpec, TestSpec, TestStorageSpec};
     use tokio::task::JoinHandle;
-    use sov_modules_api::StateCheckpoint;
 
     generate_optimistic_runtime!(TestRuntime <=);
 
@@ -617,5 +613,4 @@ mod tests {
         shutdown_sender.try_send(()).unwrap();
         handle.await.unwrap();
     }
-
 }

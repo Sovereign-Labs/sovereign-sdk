@@ -236,12 +236,9 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     #[cfg(feature = "native")]
     pub fn get_from_cache(&self, key: &SlotKey) -> MaybePresentValue<SlotValue> {
         match self.cache.get(key) {
+            Some(Access::Write { modified, .. }) => MaybePresentValue::Present(modified.clone()),
             // We don't want to return the values of old reads; we're only looking for values that were written by the block at the given height.
-            Some(Access::Read { .. }) => MaybePresentValue::Absent,
-            Some(Access::Write { modified, .. }) => {
-                MaybePresentValue::Present(modified.as_ref().map(|v| v.clone()))
-            }
-            None => MaybePresentValue::Absent,
+            Some(Access::Read { .. }) | None => MaybePresentValue::Absent,
         }
     }
 
@@ -253,18 +250,17 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     ) -> MaybePresentValue<NodeLeafAndMaybeValue> {
         match self.cache.get(key) {
             // We don't want to return the values of old reads; we're only looking for values that were written by the block at the given height.
-            Some(Access::Read { .. }) => MaybePresentValue::Absent,
+            Some(Access::Read { .. }) | None => MaybePresentValue::Absent,
             // Correctness: We only use the no-op hasher when the value is in intermediate state. This can happen in one of two cases:
             // - In the sequencer, where the value hash is unused
             // - During optimistic execution. If we executed optimistically, then this read will only have been in the intermediate state if it was previously written by an early transaction.
             // - In that case, the "read" will be discarded during the cache reconciliation procedure.
             Some(Access::Write { modified, .. }) => {
                 MaybePresentValue::Present(modified.as_ref().map(|v| NodeLeafAndMaybeValue {
-                    leaf: NodeLeaf::make_leaf::<H>(&v),
+                    leaf: NodeLeaf::make_leaf::<H>(v),
                     value: ReadType::Read(v.clone()),
                 }))
             }
-            None => MaybePresentValue::Absent,
         }
     }
 }

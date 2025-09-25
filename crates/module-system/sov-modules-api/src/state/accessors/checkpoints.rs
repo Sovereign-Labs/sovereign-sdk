@@ -207,7 +207,7 @@ impl<S: Spec> StateCheckpoint<S> {
     #[cfg(feature = "native")]
     /// Extracts the accessory delta from this [`StateCheckpoint`].
     pub fn set_accessory_delta(&mut self, accessory_delta: AccessoryDelta<S::Storage>) {
-        self.delta.set_accessory_delta(accessory_delta)
+        self.delta.set_accessory_delta(accessory_delta);
     }
 
     /// Extracts ordered reads, writes, and witness from this [`StateCheckpoint`] and uses
