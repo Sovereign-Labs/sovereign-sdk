@@ -770,6 +770,7 @@ where
                         self.da_sync_state.as_ref(),
                         next_candidate_height,
                         self.da_polling_interval,
+                        std::time::Duration::from_secs(60),
                     ),
                     da_service.get_head_block_header(),
                 )?;

@@ -467,7 +467,7 @@ where
         let mut batch_count = 0;
         let get_block_start = std::time::Instant::now();
         let filtered_block = if next_da_height <= self.sync_fetcher.last_finalized_height {
-            // no reorg will happen for this height, it is safe to just pull it from the fetcher,
+            // no reorg will happen for this height; it is safe to just pull it from the fetcher,
             // which could have this block fetcher already
             self.sync_fetcher.get_block_at(next_da_height).await?
         } else {
@@ -477,10 +477,13 @@ where
                 self.sync_state.as_ref(),
                 next_da_height,
                 self.da_polling_interval,
+                // TODO: move to config
+                Duration::from_secs(3000),
             )
             .await?
         };
         let get_block_time = get_block_start.elapsed();
+        tracing::trace!(time = ?get_block_time, header = %filtered_block.header().display(), "DA block has been fetched, preparing storage");
 
         let (stf_pre_state, filtered_block) = self
             .state_manager
@@ -652,7 +655,7 @@ where
         // halt further slot processing.
         if let Some(stop_at_rollup_height) = stop_at_rollup_height {
             if &slot_result.rollup_height == stop_at_rollup_height {
-                info!("Stopping at rollup height: {}", stop_at_rollup_height);
+                info!(rollup_height = %stop_at_rollup_height, "Stopping at rollup the height");
                 return Ok(None);
             }
             assert!(
