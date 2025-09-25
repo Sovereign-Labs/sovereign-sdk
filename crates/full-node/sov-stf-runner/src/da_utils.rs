@@ -61,7 +61,7 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
                         tracing::trace!(block_header = %block.header().display(), "Block fetched, returning");
                         return Ok(block);
                     }
-                    Ok(Err(err)) -> {
+                    Ok(Err(err)) => {
                         tracing::trace!(?err, requested_height, attempt, "Error fetching block");
                         attempt += 1;
                         let requestable_height = check_height(requested_height);
@@ -77,7 +77,7 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
                             tracing::info!(requestable_height, attempt, "Height hasn't changed, retrying again.");
                         }
                     }
-                    Err(err) => {
+                    Err(_err) => {
                         anyhow::bail!("Total timeout after {:?} while trying fetching block at height {}", timeout, requested_height);
                     }
                 }
