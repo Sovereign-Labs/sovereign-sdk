@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use anyhow::Context;
 use axum::http::StatusCode;
 use sov_modules_api::capabilities::{
@@ -238,7 +239,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     #[tracing::instrument(skip_all, level = "trace")]
     pub async fn apply_tx_to_in_progress_batch(
         &mut self,
-        baked_tx: &FullyBakedTx,
+        baked_tx: FullyBakedTxWithMaybeChangeSet,
     ) -> Result<(AcceptedTxWithBudgetInfo<S, Rt>, TxChangeSet), RollupBlockExecutorError<S>> {
         let result = self.apply_tx_to_in_progress_batch_inner(baked_tx).await;
 
@@ -263,7 +264,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
     async fn apply_tx_to_in_progress_batch_inner(
         &mut self,
-        baked_tx: &FullyBakedTx,
+        baked_tx: FullyBakedTxWithMaybeChangeSet,
     ) -> Result<
         (TransactionReceipt<S>, <S as Spec>::Gas, u64, TxChangeSet),
         RollupBlockExecutorError<S>,
@@ -272,10 +273,10 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             panic!("Accepting a transaction, yet there's no in-progress batch. This is a bug in the sequencer, please report it.");
         };
 
-        let call = Rt::Auth::decode_serialized_tx(baked_tx)?;
+        let call = Rt::Auth::decode_serialized_tx(&baked_tx.tx)?;
         let call = Rt::wrap_call(call);
 
-        if let Err(TrySendError::Full(_)) = task_state.tx_sender.try_send(baked_tx.clone()) {
+        if let Err(TrySendError::Full(_)) = task_state.tx_sender.try_send(baked_tx) {
             return Err(RollupBlockExecutorError::Overloaded);
         }
 
@@ -336,7 +337,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             .iter()
             .zip(batch.batch.tx_hashes.iter())
         {
-            self.replay_tx(*tx_hash, tx).await;
+            self.replay_tx(*tx_hash, tx.clone()).await;
         }
 
         trace!("Done replaying txs");
@@ -394,12 +395,13 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     /// A helper function for replaying a transaction that has already been soft-confirmed, logging any errors and exiting.
     /// This differs from `apply_tx_to_in_progress_batch` in that it doesn't return a receipt and
     /// shuts down the rollup on error.
-    pub(crate) async fn replay_tx(&mut self, tx_hash: TxHash, tx: &FullyBakedTx) -> u64 {
+    pub(crate) async fn replay_tx(&mut self, tx_hash: TxHash, tx: FullyBakedTx) -> u64 {
         trace!(
             %tx_hash,
             "Re-applying state changes for the soft-confirmed transaction"
         );
 
+        let tx = FullyBakedTxWithMaybeChangeSet::new(tx);
         match self.apply_tx_to_in_progress_batch(tx).await {
             Ok((output, _tx_changes)) => {
                 if tx_hash != output.accepted_tx.tx_hash {
@@ -725,7 +727,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 #[derive(Debug)]
 struct BackgroundTaskState<S: Spec> {
     handle: JoinHandle<BlockExecutionOutput<S>>,
-    tx_sender: mpsc::Sender<FullyBakedTx>,
+    tx_sender: mpsc::Sender<FullyBakedTxWithMaybeChangeSet>,
     result_receiver: mpsc::Receiver<Result<ExecutedTxResponse<S>, RejectReason>>,
 }
 
@@ -745,7 +747,7 @@ struct RollupBlockTaskContext<S: Spec> {
     visible_increase: VisibleSlotNumberIncrease,
     // Channels
     // --------
-    tx_receiver: mpsc::Receiver<FullyBakedTx>,
+    tx_receiver: mpsc::Receiver<FullyBakedTxWithMaybeChangeSet>,
     setup_sender: oneshot::Sender<ChangeSet>,
     result_sender: mpsc::Sender<Result<ExecutedTxResponse<S>, RejectReason>>,
     shutdown_notifier: mpsc::Sender<()>,
