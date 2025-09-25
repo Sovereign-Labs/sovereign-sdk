@@ -327,6 +327,9 @@ impl<S: Spec> ProvisionalSequencerOutcome<S> {
 /// lifecycle. This is used by the sequencer to unwind failing transactions and to inspect
 /// the set of state changes made by a transaction before committing.
 pub trait InjectedControlFlow<S: Spec> {
+    /// TODO
+    fn try_warm_up_cache(&self, scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>);
+
     /// Runs after authentication but before the transaction executes
     fn pre_flight<RT: Runtime<S>>(
         &self,
@@ -363,6 +366,8 @@ pub trait IncrementalBatch<S: Spec>: Iterator<Item = (FullyBakedTx, Self::Contro
 }
 
 impl<S: Spec> InjectedControlFlow<S> for NoOpControlFlow {
+    fn try_warm_up_cache(&self, _scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>) {}
+
     fn pre_flight<RT: Runtime<S>>(
         &self,
         _runtime: &RT,

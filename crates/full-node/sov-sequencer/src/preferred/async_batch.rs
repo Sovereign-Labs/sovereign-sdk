@@ -71,6 +71,8 @@ pub enum MaybeAsyncBatchControlFlow<S: Spec> {
 }
 
 impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
+    fn try_warm_up_cache(&self, _scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>) {}
+
     fn post_tx(
         &self,
         provisional_outcome: ProvisionalSequencerOutcome<S>,
