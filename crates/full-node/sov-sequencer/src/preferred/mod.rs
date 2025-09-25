@@ -16,6 +16,7 @@ mod update_state;
 
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
 use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
+use crate::preferred::cache_warm_up_executor::TxForWarmUp;
 use async_trait::async_trait;
 use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
@@ -851,7 +852,10 @@ where
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             tracing::debug!(%tx_hash, "Transaction delay completed, proceeding with processing");
         }
-        self.cache_warm_up_executor.send_tx(baked_tx.clone());
+
+        let (tx_for_warm_up, _) = TxForWarmUp::new(baked_tx.clone());
+
+        self.cache_warm_up_executor.send_tx(tx_for_warm_up);
 
         let res = self
             .synchronized_state_updator

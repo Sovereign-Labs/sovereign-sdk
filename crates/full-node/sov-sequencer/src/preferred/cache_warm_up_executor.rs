@@ -4,10 +4,12 @@ use crate::preferred::RollupBlockExecutor;
 use crate::preferred::RollupBlockExecutorConfig;
 use crate::RollupHeight;
 use crate::SequencerConfig;
+use futures::channel::oneshot;
 use sov_modules_api::Spec;
 use sov_modules_api::StateCheckpoint;
 use sov_modules_api::StateUpdateInfo;
 use sov_modules_api::Storage;
+use sov_modules_api::TxChangeSet;
 use sov_modules_api::{FullyBakedTx, Runtime};
 use std::collections::BTreeMap;
 use tokio::task::JoinHandle;
@@ -34,10 +36,22 @@ impl<S: Spec> Clone for StartBlockNotification<S> {
     }
 }
 
+pub struct TxForWarmUp {
+    pub(crate) tx: FullyBakedTx,
+    pub(crate) sender: oneshot::Sender<TxChangeSet>,
+}
+
+impl TxForWarmUp {
+    pub(crate) fn new(tx: FullyBakedTx) -> (Self, oneshot::Receiver<TxChangeSet>) {
+        let (sender, receiver) = oneshot::channel();
+        (Self { tx, sender }, receiver)
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct CacheWarmUpExecutor<S: Spec> {
     start_block_notification_sender: tokio::sync::watch::Sender<Option<StartBlockNotification<S>>>,
-    tx_sender: flume::Sender<FullyBakedTx>,
+    tx_sender: flume::Sender<TxForWarmUp>,
 }
 
 impl<S: Spec> CacheWarmUpExecutor<S> {
@@ -46,7 +60,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         let _ = self.start_block_notification_sender.send(Some(data));
     }
 
-    pub(crate) fn send_tx(&self, tx: FullyBakedTx) {
+    pub(crate) fn send_tx(&self, tx: TxForWarmUp) {
         // Skip update if consumer is too slow.
         let _ = self.tx_sender.try_send(tx);
     }
@@ -90,7 +104,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         info: StateUpdateInfo<S::Storage>,
         exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
-        tx_receiver: flume::Receiver<FullyBakedTx>,
+        tx_receiver: flume::Receiver<TxForWarmUp>,
         mut start_block_notification_receiver: tokio::sync::watch::Receiver<
             Option<StartBlockNotification<S>>,
         >,
@@ -122,11 +136,12 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                             },
                         };
                         if is_started {
-                            let res = executor.apply_tx_to_in_progress_batch(&baked_tx).await;
+                            let res = executor.apply_tx_to_in_progress_batch(&baked_tx.tx).await;
 
                             match res{
-                                Ok((_, _tx_change_set)) => {
-                                    // TODO
+                                Ok((_, tx_change_set)) => {
+                                      // TODO
+                                    let _ = baked_tx.sender.send(tx_change_set);
                                 },
                                 Err(_) => {
                                     continue;
