@@ -11,7 +11,7 @@ const MAX_GET_BLOCK_ATTEMPTS: u32 = 10;
 /// Tries to fetch block at given height.
 /// If `DaSyncState.target_height` becomes lower in the case of re-org, the function fetches a new head instead.
 /// Because DaSyncState is polling target height periodically,
-/// there is a possibility that this function won't notice a change in target height if the polling interval of DaSyncState is too high.
+/// there is a possibility that this function won't notice change in target height if the polling interval of DaSyncState is too high.
 /// To mitigate this, it retries to call `get_block_at` several times before giving up and returning an error.
 pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
     da_service: &Da,
@@ -47,9 +47,12 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
     };
 
     let mut attempt = 0;
+    let sleep = tokio::time::sleep(timeout);
+    tokio::pin!(sleep);
+
     loop {
         tokio::select! {
-            result = tokio::time::timeout(timeout, da_service.get_block_at(requested_height)) => {
+            result = da_service.get_block_at(requested_height) => {
                 tracing::trace!(
                     requested_height,
                     original_height = height,
@@ -57,11 +60,11 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
                     attempt,
                     "Received result from `get_block_at`");
                 match result {
-                    Ok(Ok(block)) => {
+                    Ok(block) => {
                         tracing::trace!(block_header = %block.header().display(), "Block fetched, returning");
                         return Ok(block);
                     }
-                    Ok(Err(err)) -> {
+                    Err(err) => {
                         tracing::trace!(?err, requested_height, attempt, "Error fetching block");
                         attempt += 1;
                         let requestable_height = check_height(requested_height);
@@ -77,13 +80,13 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
                             tracing::info!(requestable_height, attempt, "Height hasn't changed, retrying again.");
                         }
                     }
-                    Err(err) => {
-                        anyhow::bail!("Total timeout after {:?} while trying fetching block at height {}", timeout, requested_height);
-                    }
                 }
             }
             _ = interval.tick() => {
                 requested_height = check_height(requested_height);
+            }
+            _ = &mut sleep => {
+                anyhow::bail!("Total timeout after {:?} while trying fetching block at height {}", timeout, requested_height);
             }
         }
     }

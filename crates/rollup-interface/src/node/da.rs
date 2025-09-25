@@ -135,7 +135,7 @@ pub trait DaService: Clone + Send + Sync + 'static {
     ///
     /// The returned block may not be final, and can be reverted without a consensus violation.
     /// Calls to this method for the same height are allowed to return different results.
-    /// Should always return the block at that height on the best fork.
+    /// Should always returns the block at that height on the best fork.
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error>;
 
     /// Similar to [`DaService::get_block_at`], but only returns the block header and not the whole block.
