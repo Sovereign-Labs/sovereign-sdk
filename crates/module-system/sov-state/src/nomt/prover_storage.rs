@@ -241,7 +241,7 @@ where
 }
 
 fn to_nomt_accesses<S: MerkleProofSpec>(
-    session: &NomtSession<S::Hasher>,
+    _session: &NomtSession<S::Hasher>,
     sov_accesses: &OrderedReadsAndWrites,
 ) -> anyhow::Result<Vec<(nomt::trie::KeyPath, nomt::KeyReadWrite)>> {
     let mut merged_accesses: BTreeMap<nomt::trie::KeyPath, nomt::KeyReadWrite> = BTreeMap::new();
