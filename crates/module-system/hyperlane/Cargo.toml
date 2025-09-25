@@ -22,7 +22,7 @@ sov-mock-da = { workspace = true }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-sequencer = { workspace = true }
 sov-state = { workspace = true, features = ["native"] }
-sov-test-utils = { workspace = true }
+sov-test-utils = { workspace = true, features = ["arbitrary"] }
 sov-value-setter = { workspace = true, features = ["native"] }
 secp256k1 = { workspace = true, features = ["rand"] }
 
@@ -38,7 +38,6 @@ testcontainers = { workspace = true }
 testcontainers-modules = { workspace = true, features = ["anvil"] }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
-workspace-hack = { workspace = true } # required for feature unification with arbitrary
 
 [dependencies]
 sov-address = { workspace = true, optional = true }
@@ -59,7 +58,6 @@ sha3 = { workspace = true }
 ruint = { workspace = true }
 strum = { workspace = true }
 tracing = { workspace = true }
-workspace-hack = { workspace = true }
 
 [features]
 default = []

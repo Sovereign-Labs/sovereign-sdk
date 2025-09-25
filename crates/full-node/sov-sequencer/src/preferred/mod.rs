@@ -3,6 +3,7 @@
 mod async_batch;
 mod batch_size_tracker;
 mod block_executor;
+mod cache_warm_up_executor;
 mod db;
 mod executor_events;
 mod inner;
@@ -12,16 +13,9 @@ mod side_effects;
 mod state_root_compute;
 mod transaction_subscriptions;
 mod update_state;
-use std::boxed::Box;
-use std::marker::PhantomData;
-use std::num::NonZero;
-use std::path::Path;
-use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
 
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
+use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
 use async_trait::async_trait;
 use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
@@ -50,6 +44,14 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::TxHash;
 use state_root_compute::StateRootBackgroundTaskState;
+use std::boxed::Box;
+use std::marker::PhantomData;
+use std::num::NonZero;
+use std::path::Path;
+use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc::{self};
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
@@ -99,6 +101,7 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     /// The sender for state update notifications. Currently used only for testing.
     test_only_state_update_notification_sender: broadcast::Sender<StateUpdateNotification>,
+    cache_warm_up_executor: CacheWarmUpExecutor<S>,
 }
 
 impl<S, Rt, Da> PreferredSequencer<S, Rt, Da>
@@ -221,6 +224,17 @@ where
             shutdown_sender: shutdown_sender.clone(),
         };
 
+        let (cache_warm_up_executor, workers) = CacheWarmUpExecutor::spawn_execution_task::<Rt>(
+            latest_state_update.clone(),
+            rollup_exec_config.clone(),
+            config.clone(),
+        )
+        .await;
+
+        for worker in workers {
+            handles.push(worker);
+        }
+
         let tx_queue_id = Arc::new(AtomicU64::new(0));
         let (synchronized_state, synchronized_state_updator) = create(
             api_ledger_db.clone(),
@@ -236,6 +250,7 @@ where
             stop_at_rollup_height,
             rollup_exec_config.clone(),
             cached_txs.write_handle(),
+            cache_warm_up_executor.clone(),
         );
 
         let synchronized_state_task = synchronized_state.start().await;
@@ -265,6 +280,7 @@ where
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_sender: broadcast::channel(100).0,
+            cache_warm_up_executor,
         });
 
         // Launch replica sync task only for replicas
@@ -807,6 +823,7 @@ where
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
             return Err(shut_down_error());
         }
+
         let original_tx_queue_id = self.tx_queue_id.load(Ordering::Acquire);
 
         let tx_hash = Rt::Auth::compute_tx_hash(&baked_tx).map_err(generic_accept_tx_error)?;
@@ -834,6 +851,7 @@ where
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             tracing::debug!(%tx_hash, "Transaction delay completed, proceeding with processing");
         }
+        self.cache_warm_up_executor.send_tx(baked_tx.clone());
 
         let res = self
             .synchronized_state_updator

@@ -870,12 +870,13 @@ impl<S: Spec> GasMeter for BasicGasMeter<S> {
         amount: &S::Gas,
         parameter: u32,
     ) -> Result<(), GasMeteringError<<S as Spec>::Gas>> {
-        let total_amount =
-            amount
-                .checked_scalar_product(parameter as u64)
-                .ok_or(GasMeteringError::Overflow(format!(
+        let total_amount = amount
+            .checked_scalar_product(parameter as u64)
+            .ok_or_else(|| {
+                GasMeteringError::Overflow(format!(
                     "Unable to charge gas. The product of {amount} to {parameter} is overflowing"
-                )))?;
+                ))
+            })?;
         tracing::trace!(%total_amount, parameter, gas_before = %self.remaining_gas, funds_before = ?self.remaining_funds, "Charging linear gas");
         self.charge_gas_inner(&total_amount)?;
 

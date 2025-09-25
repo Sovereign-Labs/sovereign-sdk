@@ -1,9 +1,9 @@
 use super::evm_test_helper;
-use crate::evm::evm_test_helper::setup;
+use crate::evm::evm_test_helper::{setup, EVM_EXTENSION};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
-    let (test_rollup, evm_client, _) = setup(0).await;
+    let (test_rollup, evm_client, _) = setup(0, EVM_EXTENSION).await;
 
     let contract_address = evm_test_helper::deploy_contract_check(&evm_client)
         .await

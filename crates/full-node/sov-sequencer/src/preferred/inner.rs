@@ -5,6 +5,8 @@ use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::preferred::block_executor::StartBlockData;
+use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
 use crate::preferred::RollupBlockExecutorConfig;
 use anyhow::anyhow;
 use sov_blob_sender::BlobInternalId;
@@ -94,6 +96,7 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     rollup_exec_config: RollupBlockExecutorConfig<S>,
     tx_cache_writer: TxResultWriter<S, Rt>,
+    cache_warm_up_executor: CacheWarmUpExecutor<S>,
 }
 
 // We submit metrics when this guard is dropped.
@@ -264,16 +267,39 @@ where
 
         // DB operations handled by replica-aware db implementation
         let sequence_number = self.get_and_inc_next_sequence_number();
-
         let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
+
+        let start_block_data = StartBlockData {
+            sanity_check_visible_slot_number_after_increase: visible_slot_number_after_increase,
+            visible_increase,
+            node_state_root: node_state_root.clone(),
+            minimum_profit_per_tx: min_profit_per_tx,
+        };
+
+        let old_checkpoint = self
+            .executor
+            .checkpoint
+            .clone_with_empty_witness_dropping_temp_cache();
+
         self.executor
-            .start_rollup_block(
-                visible_slot_number_after_increase,
-                visible_increase,
-                &node_state_root,
-                min_profit_per_tx,
-            )
+            .start_rollup_block(start_block_data.clone())
             .await;
+
+        let state_roots = self.executor.state_roots.clone();
+
+        if state_roots.len() > 50 {
+            tracing::warn!("Executor: The computed state roots map is large, and cloning it can be costly in terms of time. state_roots len: {}", state_roots.len());
+        }
+
+        let notification = StartBlockNotification {
+            state_roots,
+            data: start_block_data,
+            checkpoint: old_checkpoint,
+        };
+
+        self.cache_warm_up_executor
+            .send_batch_start_notification(notification);
+
         self.executor_events_sender
             .start_batch(
                 visible_slot_number_after_increase,
@@ -321,16 +347,16 @@ where
 
         let node_state_root = self.node_root_hash()?;
         let sequence_number = self.get_and_inc_next_sequence_number();
-
         let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
-        self.executor
-            .start_rollup_block(
-                visible_slot_number_after_increase,
-                replica_visible_slots_to_advance,
-                &node_state_root,
-                min_profit_per_tx,
-            )
-            .await;
+
+        let start_block_data = StartBlockData {
+            sanity_check_visible_slot_number_after_increase: visible_slot_number_after_increase,
+            visible_increase: replica_visible_slots_to_advance,
+            node_state_root: node_state_root.clone(),
+            minimum_profit_per_tx: min_profit_per_tx,
+        };
+
+        self.executor.start_rollup_block(start_block_data).await;
 
         self.executor_events_sender
             .start_batch(
@@ -815,6 +841,7 @@ pub(crate) fn create<S, Rt>(
     stop_at_rollup_height: Option<RollupHeight>,
     rollup_exec_config: RollupBlockExecutorConfig<S>,
     tx_cache_writer: TxResultWriter<S, Rt>,
+    cache_warm_up_executor: CacheWarmUpExecutor<S>,
 ) -> (
     SynchronizedSequencerState<S, Rt>,
     SequencerStateUpdator<S, Rt>,
@@ -855,6 +882,7 @@ where
         stop_at_rollup_height,
         rollup_exec_config,
         tx_cache_writer,
+        cache_warm_up_executor,
     };
 
     let channel_size = Arc::new(AtomicU32::new(0));
@@ -1616,6 +1644,7 @@ where
             .executor
             .checkpoint
             .replace_storage(info.storage.clone(), Box::new(uncommitted_changes));
+        tracing::debug!(%new_rollup_height, "Storage has been replaced");
         // Update the `inner`'s state to reflect the new storage.
         // These steps should match `process_final_catchup` except for the need to drop the db_event_subscription.
         inner.is_ready = Ok(());

@@ -2,9 +2,9 @@ use crate::helpers::*;
 use crate::runtime::RT;
 use crate::runtime::S;
 use alloy_primitives::FixedBytes;
+use alloy_primitives::Log;
 use alloy_primitives::U256;
 use alloy_rpc_types::BlockTransactions;
-use reth_primitives::Log;
 use revm::Database;
 use sov_evm::Evm;
 use sov_modules_api::GasArray;
@@ -69,7 +69,7 @@ fn test_evm_gas_usage() {
             .checked_sub(&gas_used_without_evm_metering)
             .unwrap()
             .as_ref(),
-        &[5229, 0]
+        &[5_251, 0]
     );
 }
 

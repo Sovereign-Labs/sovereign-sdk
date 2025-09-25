@@ -118,13 +118,16 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
     async fn sequencer_additional_apis<Seq>(
         &self,
         sequencer: Arc<Seq>,
-        _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
     ) -> anyhow::Result<NodeEndpoints>
     where
         Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
     {
         let eth_signer = eth_dev_signer();
-        let eth_rpc_config = EthRpcConfig { eth_signer };
+        let eth_rpc_config = EthRpcConfig {
+            eth_signer,
+            extension: rollup_config.extension_or_panic(),
+        };
 
         Ok(NodeEndpoints {
             jsonrpsee_module: sov_ethereum::get_ethereum_rpc(eth_rpc_config, sequencer)

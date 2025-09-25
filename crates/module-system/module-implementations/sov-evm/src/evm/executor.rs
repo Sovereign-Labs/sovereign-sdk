@@ -4,7 +4,6 @@ use crate::{
     sov_evm::{SovEvm, UnmeteredStorageAccessInspector},
     EvmRuntimeConfig,
 };
-use reth_revm::db::DBErrorMarker;
 use revm::context::TxEnv;
 use revm::InspectEvm;
 use revm::{
@@ -16,6 +15,7 @@ use revm::{
 };
 #[cfg(feature = "native")]
 use revm::{interpreter::interpreter::EthInterpreter, Inspector};
+use revm_database_interface::DBErrorMarker;
 use sov_modules_api::macros::config_value;
 
 /// builds CfgEnv
@@ -40,8 +40,8 @@ pub fn transact_commit<
     DB: Database<Error = E> + FallibleDatabaseCommit<Error = E>,
     E: DBErrorMarker,
 >(
-    mut db: DB,
-    block_env: BlockEnv,
+    mut db: &mut DB,
+    block_env: &BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
 ) -> Result<ExecutionResult, EVMError<E>> {
@@ -54,7 +54,7 @@ pub fn transact_commit<
 #[cfg(feature = "native")]
 pub(crate) fn call<DB: Database<Error = E>, E: DBErrorMarker>(
     db: DB,
-    block_env: BlockEnv,
+    block_env: &BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
 ) -> Result<ExecutionResult, EVMError<E>> {
@@ -63,15 +63,15 @@ pub(crate) fn call<DB: Database<Error = E>, E: DBErrorMarker>(
 
 #[cfg(feature = "native")]
 #[allow(dead_code)]
-pub(crate) fn inspect<DB: Database<Error = E>, E: DBErrorMarker, I>(
+pub(crate) fn inspect<'a, DB: Database<Error = E>, E: DBErrorMarker, I>(
     db: DB,
-    block_env: BlockEnv,
+    block_env: &'a BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
     inspector: I,
 ) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>>
 where
-    I: Inspector<Context<BlockEnv, TxEnv, CfgEnv, DB>, EthInterpreter>,
+    I: Inspector<Context<&'a BlockEnv, TxEnv, CfgEnv, DB>, EthInterpreter>,
 {
     let context = context(db, block_env, cfg);
     let unmetered_storage_inspector = UnmeteredStorageAccessInspector::new();
@@ -79,9 +79,10 @@ where
     evm.inspect_tx(tx)
 }
 
-fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
+/// Execute ethereum transaction
+pub fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
     db: DB,
-    block_env: BlockEnv,
+    block_env: &BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
 ) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>> {
@@ -92,9 +93,9 @@ fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
 
 fn context<DB: Database<Error = E>, E: DBErrorMarker>(
     db: DB,
-    block_env: BlockEnv,
+    block_env: &BlockEnv,
     cfg: CfgEnv,
-) -> Context<BlockEnv, TxEnv, CfgEnv, DB> {
+) -> Context<&BlockEnv, TxEnv, CfgEnv, DB> {
     Context::mainnet()
         .with_db(db)
         .with_block(block_env)

@@ -40,12 +40,13 @@ sov-kernels = { workspace = true, features = ["native"] }
 sov-state = { workspace = true, features = ["arbitrary"] }
 # modules
 sov-value-setter = { workspace = true }
-sov-synthetic-load = { path = "../../../crates/module-system/module-implementations/sov-synthetic-load" }
+sov-synthetic-load = { workspace = true }
 sov-bank = { workspace = true, features = ["native", "arbitrary"] }
 sov-paymaster = { workspace = true, features = ["native"] }
 sov-celestia-adapter = { workspace = true, features = ["native", "arbitrary"] }
 sov-address = { workspace = true }
 demo-stf = { workspace = true, features = ["native"] }
+sov-soak-testing-lib = { workspace = true }
 
 [[bin]]
 name = "main"

@@ -124,6 +124,7 @@ where
             body: message_body,
         };
         let message_id = message.id(state)?;
+        tracing::trace!(%message_id, ?message, "Going to dispatch message");
 
         dispatch_state.nonce += 1;
         dispatch_state.last_dispatched_id = message_id;

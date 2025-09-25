@@ -213,7 +213,7 @@ use internal::CacheLog;
 pub struct ProvableStorageCache<N> {
     // Transaction cache.
     cache: CacheLog,
-    #[cfg(feature = "native")]
+    // Reads that were retrieved from storage for the first time but can still be reverted.
     revertable_ordered_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
     // Ordered reads and writes.
     ordered_db_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
@@ -289,6 +289,11 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
 // fetched and cached—even when only requesting the size. This is because, in native execution, it's acceptable to cache the full
 // value, but in ZK execution, arbitrary large values cannot be stored as hints in the witness.
 impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
+    /// Returns `revertable_ordered_reads`
+    pub fn revertable_ordered_reads(&self) -> &Vec<(SlotKey, Option<NodeLeaf>)> {
+        &self.revertable_ordered_reads
+    }
+
     /// Commit the revertable part of the `ProvableStorageCache`.
     pub fn commit_revertable_storage_cache(&mut self) {
         let revertable_ordered_reads = mem::take(&mut self.revertable_ordered_reads);

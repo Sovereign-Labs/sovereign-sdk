@@ -30,7 +30,7 @@ use crate::ty::{ContainerSerdeMetadata, LinkingScheme, Ty};
 #[cfg(feature = "eip712")]
 use crate::visitors::eip712::{Context as Eip712Context, Eip712Error, Eip712Visitor};
 #[cfg(feature = "eip712")]
-use alloy_dyn_abi::{Eip712Types, Error as AlloyEip712Error, TypedData};
+use alloy_dyn_abi::{Eip712Types, Error as AlloyEip712Error, PropertyDef, TypedData};
 
 #[derive(Debug, Error)]
 pub enum SchemaError {
@@ -402,6 +402,17 @@ impl Schema {
         if !visitor.has_displayed_whole_input() {
             return Err(FormatError::UnusedInput.into());
         }
+
+        // We manually add the EIP712Domain type outside of the visitor
+        // unwrap: hardcoded types are known to be valid and should never fail to construct
+        out_types.insert(
+            "EIP712Domain".to_string(),
+            vec![
+                PropertyDef::new("string", "name").unwrap(),
+                PropertyDef::new("uint256", "chainId").unwrap(),
+                PropertyDef::new("bytes32", "salt").unwrap(),
+            ],
+        );
 
         Ok(Some(TypedData {
             domain: alloy_dyn_abi::Eip712Domain {

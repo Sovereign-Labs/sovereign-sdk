@@ -103,6 +103,8 @@ pub enum ProofReceiptContents<Address, Da: DaSpec, Root, StorageProof> {
 /// The context in which the execution is happening.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ExecutionContext {
+    /// / The transaction is being executed in order to warm up the main executor cache.
+    SequencerWarmUp,
     /// The transaction is being executed by a sequencer before inclusion.
     Sequencer,
     /// The transaction is being executed by a node after inclusion.
@@ -113,7 +115,7 @@ impl ExecutionContext {
     /// Returns true if and only if `self` matches [`ExecutionContext::Sequencer`].
     pub fn is_sequencer(&self) -> bool {
         match self {
-            Self::Sequencer => true,
+            Self::Sequencer | Self::SequencerWarmUp => true,
             Self::Node => false,
         }
     }

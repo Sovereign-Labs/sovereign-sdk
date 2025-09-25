@@ -69,7 +69,11 @@ async fn stream_logs<S, Seq>(
     let mut prev_last_tx_index = pending_block.transactions.end;
 
     // Fetch the initial block. If it’s stale, it will be replaced below.
-    let mut block = evm.get_maybe_sealed_block(pending_block.header.number - 1, state);
+    let start_block = pending_block.header.number - 1;
+    let Some(mut block) = evm.get_maybe_sealed_block(start_block, state) else {
+        tracing::error!(start_block, "Block does not exist");
+        return;
+    };
 
     let state_updates = &mut ethereum.sequencer.api_state().checkpoint_receiver();
 
@@ -84,10 +88,20 @@ async fn stream_logs<S, Seq>(
         }
 
         for index in prev_last_tx_index..curr_last_tx_index {
-            let receipt = evm.receipt(index, state).unwrap();
+            let Some(receipt) = evm.receipt(index, state) else {
+                // This can happen if the state was pruned.
+                tracing::error!(index, "Receipt does not exist");
+                return;
+            };
 
             if block.number() != receipt.block_number {
-                block = evm.get_maybe_sealed_block(receipt.block_number, state);
+                match evm.get_maybe_sealed_block(receipt.block_number, state) {
+                    Some(b) => block = b,
+                    None => {
+                        tracing::error!(start_block, "Block does not exist");
+                        return;
+                    }
+                }
             }
 
             let transaction_index = index - block.transactions_start();
@@ -100,10 +114,12 @@ async fn stream_logs<S, Seq>(
                         block_number: Some(block.number()),
                         block_timestamp: Some(block.timestamp()),
                         transaction_hash: Some(receipt.transaction_hash),
-                        transaction_index: Some(transaction_index),
+                        transaction_index: Some(receipt.transaction_index),
                         log_index: Some(receipt.log_index_start + log_index_in_tx as u64),
                         removed: false,
                     };
+
+                    assert_eq!(receipt.transaction_index, transaction_index);
 
                     let msg = SubscriptionMessage::new(
                         accepted_sink.method_name(),
@@ -111,10 +127,7 @@ async fn stream_logs<S, Seq>(
                         &rpc_log,
                     )
                     .unwrap_or_else(|err| {
-                        panic!(
-                            "Impossible: can't serialize log. Log: {:?}, Err: {:?}",
-                            rpc_log, err
-                        )
+                        panic!("Impossible: can't serialize log. Log: {rpc_log:?}, Err: {err:?}",)
                     });
 
                     if let Err(err) = accepted_sink.send(msg).await {

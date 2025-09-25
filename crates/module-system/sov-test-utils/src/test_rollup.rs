@@ -36,6 +36,7 @@ use sov_rollup_interface::zk::ZkvmHost;
 use sov_rollup_interface::StateUpdateInfo;
 use sov_sequencer::preferred::PreferredSequencerConfig;
 use sov_sequencer::test_stateless::TestStatelessSequencer;
+use sov_sequencer::SeqConfigExtension;
 use sov_sequencer::{SequencerApis, SequencerConfig, SequencerKindConfig, StateUpdateNotification};
 pub use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{
@@ -49,7 +50,7 @@ use tokio::time::Duration;
 
 use crate::{
     TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
-    TEST_MAX_CONCURRENT_BLOBS,
+    TEST_MAX_CONCURRENT_BLOBS, TEST_NUM_CACHE_WARMUP_WORKERS,
 };
 
 /// Specifies how to source the genesis data for a rollup.
@@ -102,6 +103,8 @@ pub struct RollupBuilderConfig<S: Spec, StoragePath = Arc<tempfile::TempDir>> {
     pub blob_processing_timeout_secs: u64,
     pub start_at_rollup_height: Option<RollupHeight>,
     pub stop_at_rollup_height: Option<RollupHeight>,
+    pub extension: Option<SeqConfigExtension>,
+    pub num_cache_warmup_workers: usize,
 }
 
 /// A one-stop shop for building entire rollups and starting them in the
@@ -226,6 +229,10 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
                 blob_processing_timeout_secs: 60,
                 start_at_rollup_height: None,
                 stop_at_rollup_height: None,
+                extension: Some(SeqConfigExtension {
+                    max_log_limit: 20000,
+                }),
+                num_cache_warmup_workers: TEST_NUM_CACHE_WARMUP_WORKERS,
             },
             with_secondary_sequencer: None,
         }
@@ -484,6 +491,7 @@ where
                 max_batch_size_bytes: self.config.max_batch_size_bytes,
                 max_concurrent_blobs: self.config.max_concurrent_blobs,
                 blob_processing_timeout_secs: self.config.blob_processing_timeout_secs,
+                extension: self.config.extension.clone(),
             },
 
             monitoring: MonitoringConfig {
