@@ -8,10 +8,9 @@ use std::{
 use crate::{digest::typenum, Digest};
 
 #[cfg(feature = "native")]
-use crate::ProvableNamespace;
+use crate::{ProvableNamespace, Namespace, OrderedReadsAndWrites, StateGetter};
 use crate::{
-    namespaces, AccessoryWrite, Namespace, OrderedReadsAndWrites, ProvableStorageCache, SlotKey,
-    SlotValue, StateAccesses, StateGetter,
+    namespaces, AccessoryWrite, ProvableStorageCache, SlotKey, SlotValue, StateAccesses,
 };
 
 /// The list of state changes for a single rollup block.

@@ -7,13 +7,14 @@ use std::mem;
 #[cfg(feature = "native")]
 use crate::digest::typenum;
 use crate::namespaces::ProvableCompileTimeNamespace;
+#[cfg(feature = "native")]
 use crate::sequencer_state::MaybePresentValue;
 use crate::storage::{SlotKey, SlotValue, Storage};
 #[cfg(feature = "native")]
 use crate::Digest;
 #[cfg(feature = "native")]
-use crate::NativeStorage;
-use crate::{NodeLeaf, NodeLeafAndMaybeValue, ReadType, StateGetter};
+use crate::{NativeStorage, StateGetter};
+use crate::{NodeLeaf, NodeLeafAndMaybeValue, ReadType};
 use sov_metrics::StateAccessMetric;
 
 /// An enum that represents the temperature of a value in the storage.

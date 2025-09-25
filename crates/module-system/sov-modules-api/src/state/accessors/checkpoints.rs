@@ -14,6 +14,7 @@ use crate::state::traits::PerBlockCache;
 #[cfg(feature = "native")]
 use crate::TxChangeSet;
 use crate::{GasMeter, Spec, VersionReader};
+#[cfg(feature = "native")]
 use sov_state::sequencer_state::RawStateChanges;
 
 /// This structure is responsible for storing the `read-write` set.
@@ -153,19 +154,26 @@ impl<S: Spec> StateCheckpoint<S> {
         witness: <S::Storage as Storage>::Witness,
         kernel: &K,
     ) -> Self {
-        Self::with_witness_and_uncomitted_changes(inner, witness, kernel, None)
+        Self::with_witness_and_uncomitted_changes(inner, witness, kernel, 
+            #[cfg(feature = "native")]
+            None
+        )
     }
 
     /// Creates a new [`StateCheckpoint`] instance without any changes, backed
     /// by the given [`Storage`] and witness.
-    pub fn with_witness_and_uncomitted_changes<K: Kernel<S>>(
+    fn with_witness_and_uncomitted_changes<K: Kernel<S>>(
         inner: S::Storage,
         witness: <S::Storage as Storage>::Witness,
         kernel: &K,
+        #[cfg(feature = "native")]
         uncomitted_changes: Option<Box<dyn StateGetter>>,
     ) -> Self {
         let mut delta = Delta::with_witness(inner, witness);
-        delta.uncomitted_changes = uncomitted_changes;
+        #[cfg(feature = "native")]
+        {
+            delta.uncomitted_changes = uncomitted_changes;
+        }
         let mut metrics = StateMetrics::default();
         let mut bootstrap_state = BootstrapWorkingSet {
             inner: &mut delta,
