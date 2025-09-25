@@ -462,6 +462,7 @@ where
             runner: RunnerConfig {
                 genesis_height: 0,
                 da_polling_interval_ms: 30,
+                da_total_timeout_secs: 3_600,
                 http_config: HttpServerConfig::on_host_port(
                     &self.config.axum_host,
                     self.config.axum_port,

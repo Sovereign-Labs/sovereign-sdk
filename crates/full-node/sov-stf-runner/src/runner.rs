@@ -49,6 +49,7 @@ where
 {
     first_unprocessed_height_at_startup: u64,
     da_polling_interval: Duration,
+    da_total_timeout: Duration,
     da_service: Arc<Da>,
     da_height_at_genesis: u64,
     stf: Stf,
@@ -192,6 +193,7 @@ where
         };
 
         let da_polling_interval = Duration::from_millis(runner_config.da_polling_interval_ms);
+        let da_total_timeout = Duration::from_secs(runner_config.da_total_timeout_secs);
 
         let state_manager = StateManager::new(
             storage_manager,
@@ -202,6 +204,7 @@ where
             state_height_tracker,
             sync_state.clone(),
             da_polling_interval,
+            da_total_timeout,
         )?;
 
         let (sync_fetcher, fetcher_background_handle) = FinalizedBlocksBulkFetcher::new(
@@ -224,6 +227,7 @@ where
         Ok(Self {
             first_unprocessed_height_at_startup,
             da_polling_interval,
+            da_total_timeout,
             da_service: da_service.clone(),
             da_height_at_genesis: runner_config.genesis_height,
             stf,
@@ -477,8 +481,7 @@ where
                 self.sync_state.as_ref(),
                 next_da_height,
                 self.da_polling_interval,
-                // TODO: move to config
-                Duration::from_secs(3000),
+                self.da_total_timeout,
             )
             .await?
         };
@@ -748,7 +751,7 @@ fn error_if_tokio_runtime_is_not_multi_threaded() -> anyhow::Result<()> {
         }
 }
 
-/// Creats a new `DaSyncState`
+/// Creates a new `DaSyncState`
 pub async fn make_da_sync_state<Da: DaService<Error = anyhow::Error>>(
     runner_config: &RunnerConfig,
     stop_at_rollup_height: Option<RollupHeight>,

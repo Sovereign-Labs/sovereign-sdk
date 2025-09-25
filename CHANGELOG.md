@@ -1,3 +1,6 @@
+# 2025-09-25
+- #1758 **Breaking change** new config value in rollup.toml: `runner.da_total_timeout_secs`. It should be larger than total time da service attempts to fetch data.
+
 # 2025-09-21
 - #1729 Adds optional `num_cache_warmup_workers` to `xxx_rollup_config.toml`. This field specifies the number of workers responsible for warming up the executor cache in the preferred sequencer.
 

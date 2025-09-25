@@ -692,6 +692,7 @@
       "type": "object",
       "required": [
         "da_polling_interval_ms",
+        "da_total_timeout_secs",
         "genesis_height",
         "http_config"
       ],
@@ -707,6 +708,12 @@
         },
         "da_polling_interval_ms": {
           "description": "Polling interval for the DA service to check the sync status (in milliseconds).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "da_total_timeout_secs": {
+          "description": "How much total time DA service has to provide block, including re-orgs, retries, etc. Exceeding this timeout will lead in rollup shutdown.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0

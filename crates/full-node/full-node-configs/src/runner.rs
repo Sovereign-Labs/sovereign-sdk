@@ -18,6 +18,9 @@ pub struct RunnerConfig {
     pub genesis_height: u64,
     /// Polling interval for the DA service to check the sync status (in milliseconds).
     pub da_polling_interval_ms: u64,
+    /// How much total time DA service has to provide block, including re-orgs, retries, etc.
+    /// Exceeding this timeout will lead in rollup shutdown.
+    pub da_total_timeout_secs: u64,
     /// HTTP Server configuration: On this socket REST API and RPC endpoints are going to listen.
     pub http_config: HttpServerConfig,
     /// How many concurrent tasks to get block from DA service
@@ -183,6 +186,7 @@ mod tests {
             [runner]
             genesis_height = 31337
             da_polling_interval_ms = 10000
+            da_total_timeout_secs = 120
             concurrent_sync_tasks = 18
             [runner.http_config]
             bind_host = "127.0.0.1"

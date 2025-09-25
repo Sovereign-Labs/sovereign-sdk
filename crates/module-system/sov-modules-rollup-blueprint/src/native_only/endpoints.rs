@@ -346,6 +346,7 @@ mod tests {
         RunnerConfig {
             genesis_height: 0,
             da_polling_interval_ms: 0,
+            da_total_timeout_secs: 0,
             http_config: sov_stf_runner::HttpServerConfig {
                 bind_host: bind_host.to_string(),
                 bind_port,
