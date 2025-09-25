@@ -216,6 +216,7 @@ where
         Ok(U64::from(nonce))
     }
 
+
     /// Handler for: `eth_getCode`
     #[rpc_method(name = "eth_getCode")]
     pub fn get_code(
@@ -225,8 +226,8 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
         debug!("EVM module JSON-RPC request to `eth_getCode`");
-
         let mut state = self.resolve_state(block_number, state)?;
+
         let code = self
             .accounts
             .get(&address, state.deref_mut())
@@ -236,9 +237,13 @@ where
                     .get(&account.code_hash, state.deref_mut())
                     .unwrap_infallible()
             })
+            .map(|code| code.bytecode().clone())
             .unwrap_or_default();
 
-        Ok(code.bytecode().clone())
+       
+        Ok(code.clone())
+    }
+
     }
 
     /// Handler for: `eth_feeHistory`
