@@ -310,7 +310,7 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
         }
     }
 
-    // 
+    // Trigger CI
     Ok(merged_accesses.into_iter().collect())
 }
 
