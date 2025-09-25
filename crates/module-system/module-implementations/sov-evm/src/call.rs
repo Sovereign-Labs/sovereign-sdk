@@ -74,6 +74,11 @@ where
     ) -> anyhow::Result<()> {
         start_timer!(total);
         let tx = convert_to_tx_signed(message.rlp)?;
+
+        if matches!(tx, alloy_consensus::EthereumTxEnvelope::Eip4844(_)) {
+            anyhow::bail!("Eip4844 not supported");
+        }
+
         start_timer!(fetch_state);
         let (cfg, block, tx_env, tx, pending_len) = self.fetch_state(context, state, tx)?;
         save_elapsed!(fetch_state_time SINCE fetch_state);
