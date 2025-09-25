@@ -33,8 +33,6 @@ genesis_height = 0
 
 # da.block_time is 1s, so status updater will try to poll it 20 times during it.
 da_polling_interval_ms = 50
-# if locked more than a minute, rollup will stop. Should not happen for MockDa unless there's a bug.
-da_total_timeout_secs = 60
 
 [runner.http_config]
 bind_host = "127.0.0.1"

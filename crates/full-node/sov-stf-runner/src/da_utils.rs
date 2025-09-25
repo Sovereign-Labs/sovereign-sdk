@@ -18,12 +18,12 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
     sync_state: &DaSyncState,
     height: u64,
     polling_interval: Duration,
-    timeout: Duration,
+    da_total_timeout: Duration,
 ) -> anyhow::Result<Da::FilteredBlock> {
     tracing::trace!(
         height,
         ?polling_interval,
-        ?timeout,
+        total_timeout = ?da_total_timeout,
         "Fetch polling for a block"
     );
     let mut requested_height = height;
@@ -47,7 +47,7 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
     };
 
     let mut attempt = 0;
-    let sleep = tokio::time::sleep(timeout);
+    let sleep = tokio::time::sleep(da_total_timeout);
     tokio::pin!(sleep);
 
     loop {
@@ -86,7 +86,7 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
                 requested_height = check_height(requested_height);
             }
             _ = &mut sleep => {
-                anyhow::bail!("Total timeout after {:?} while trying fetching block at height {}", timeout, requested_height);
+                anyhow::bail!("Total timeout after {:?} while trying fetching block at height {}", da_total_timeout, requested_height);
             }
         }
     }

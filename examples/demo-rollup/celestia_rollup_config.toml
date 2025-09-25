@@ -50,6 +50,8 @@ genesis_height = 3
 # So status is updated more frequently.
 da_polling_interval_ms = 500
 # Celestia configured to give ~216s to retry, so we limit it at 300 to eliminate any locks or slow read.
+# This field is the safeguard against any long blocking in DaService.
+# The default value is: 600
 da_total_timeout_secs = 300
 
 [runner.http_config]
@@ -79,7 +81,7 @@ max_number_of_transitions_in_db = 100
 max_number_of_transitions_in_memory = 30
 
 [sequencer]
-# This number should be <= than the total number of attempts by exponential builder of celestia adapter
+# This value is counted between sequencer receiving receipt from DA about inclusion till node has processed this blob.
 blob_processing_timeout_secs = 600
 max_batch_size_bytes = 1048576
 max_concurrent_blobs = 128
