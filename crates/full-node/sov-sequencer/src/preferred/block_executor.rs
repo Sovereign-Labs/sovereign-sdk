@@ -726,18 +726,18 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 }
 
 impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
-    pub async fn apply_tx_to_in_progress_batch2(
+    pub async fn apply_tx_to_in_progress_batch3(
         &mut self,
-        baked_tx: TxAfterWarmUp,
+        baked_tx: FullyBakedTx,
     ) -> Result<(AcceptedTxWithBudgetInfo<S, Rt>, TxChangeSet), RollupBlockExecutorError<S>> {
         todo!()
     }
 }
 
 impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
-    pub async fn apply_tx_to_in_progress_batch3(
+    pub async fn apply_tx_to_in_progress_batch2(
         &mut self,
-        baked_tx: FullyBakedTx,
+        baked_tx: TxAfterWarmUp,
     ) -> Result<(AcceptedTxWithBudgetInfo<S, Rt>, TxChangeSet), RollupBlockExecutorError<S>> {
         todo!()
     }
