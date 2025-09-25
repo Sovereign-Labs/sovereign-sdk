@@ -226,7 +226,6 @@ where
     ) -> RpcResult<Bytes> {
         debug!("EVM module JSON-RPC request to `eth_getCode`");
         let mut state = self.resolve_state(block_number, state)?;
-
         let code = self
             .accounts
             .get(&address, state.deref_mut())

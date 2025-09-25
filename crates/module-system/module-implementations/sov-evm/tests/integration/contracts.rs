@@ -60,7 +60,6 @@ fn test_invalid_contract_execution() {
 #[test]
 fn test_get_empty_code() {
     let (runner, account, _) = setup();
-
     let address_without_code = account.address();
 
     runner.query_visible_state(|state| {
