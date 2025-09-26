@@ -40,6 +40,13 @@ pub enum KeyUpdate {
 
 #[derive(Clone)]
 pub struct KeyCache {
+    // Arc<> - Allows multiple threads to access the same key safely
+    //
+    // RwLock<> Allows readers to hold the lock simultaneously and 1 writer
+    // More performant than Mutex for cases where data is read frequently and written less frequently
+
+    // RwLock<> could result in writer starvation if there is constant stream of readers
+    // Writer could be blocked indefinitely so we'll never update the key. 
     current_key: Arc<RwLock<Option<EncryptionKey>>>,
 }
 
@@ -141,20 +148,7 @@ impl EncryptionLayer {
         })
     }
 
-    // Main sync encryption function
-    pub fn encrypt(&self, plaintext: &[u8]) -> Result<(Vec<u8>, String), EncryptionError> {
-        let key = self.key_cache.get_current_key()
-            .ok_or(EncryptionError::InvalidKeyFormat("No encryption key available".to_string()))?;
-        let encrypted = self.encrypt_with_key(&key.material, plaintext)?;
-        Ok((encrypted, key.id))
-    }
 
-    pub fn decrypt(&self, ciphertext: &[u8], _key_id: Option<&str>) -> Result<Vec<u8>, EncryptionError> {
-        // For now, use current key for decryption
-        let key = self.key_cache.get_current_key()
-            .ok_or(EncryptionError::InvalidKeyFormat("No key available for decryption".to_string()))?;
-        self.decrypt_with_key(&key.material, ciphertext)
-    }
     
     #[cfg(feature = "aes-encryption")]
     fn encrypt_with_key(&self, key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
@@ -283,14 +277,15 @@ impl EncryptionLayer {
 
 impl EncryptionLayerTrait for EncryptionLayer {
     fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
-        // Use the existing encrypt method but only return the ciphertext, not the key ID
-        let (ciphertext, _key_id) = self.encrypt(plaintext)?;
-        Ok(ciphertext)
+        let key = self.key_cache.get_current_key()
+            .ok_or(EncryptionError::InvalidKeyFormat("No encryption key available".to_string()))?;
+        self.encrypt_with_key(&key.material, plaintext)
     }
 
     fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
-        // Use the existing decrypt method with None for key_id
-        self.decrypt(ciphertext, None)
+        let key = self.key_cache.get_current_key()
+            .ok_or(EncryptionError::InvalidKeyFormat("No key available for decryption".to_string()))?;
+        self.decrypt_with_key(&key.material, ciphertext)
     }
 
     fn encryption_type(&self) -> &'static str {
