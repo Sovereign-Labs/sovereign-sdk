@@ -4,7 +4,7 @@ use jmt::storage::TreeReader;
 use jmt::JellyfishMerkleTree;
 #[cfg(feature = "bench")]
 use sov_modules_macros::cycle_tracker;
-#[cfg(feature = "test-utils")]
+#[cfg(all(feature = "test-utils", feature = "native"))]
 use sov_rollup_interface::common::SlotNumber;
 
 use crate::cache::{OrderedReadsAndWrites, StateAccesses};
@@ -12,7 +12,7 @@ use crate::jmt::KeyHash;
 use crate::namespaces::CompileTimeNamespace;
 use crate::storage::{SlotKey, SlotValue, Storage, StorageProof};
 use crate::storage_internals::SparseMerkleProof;
-#[cfg(feature = "test-utils")]
+#[cfg(all(feature = "test-utils", feature = "native"))]
 use crate::ProvableCompileTimeNamespace;
 use crate::{
     open_merkle_proof, MerkleProofSpec, NodeLeafAndMaybeValue, ProvableNamespace, ReadType,
@@ -205,7 +205,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     }
 }
 
-#[cfg(feature = "test-utils")]
+#[cfg(all(feature = "test-utils", feature = "native"))]
 // `NativeStorage`` is implemented for `ZkStorage` solely for testing purposes.
 // In some tests, we use both `ProverStorage`` and `ZkStorage`.
 // Due to feature unification, we must provide this implementation even though it is not used.

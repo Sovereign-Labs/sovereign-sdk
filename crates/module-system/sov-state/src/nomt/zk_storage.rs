@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use nomt_core::hasher::BinaryHasher;
 use nomt_core::proof::MultiProof;
 use nomt_core::trie::{KeyPath, LeafData, Node, ValueHash};
-#[cfg(feature = "test-utils")]
+#[cfg(all(feature = "test-utils", feature = "native"))]
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
 
@@ -165,7 +165,7 @@ impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
     }
 }
 
-#[cfg(feature = "test-utils")]
+#[cfg(all(feature = "test-utils", feature = "native"))]
 // `NativeStorage`` is implemented for `ZkStorage` solely for testing purposes.
 // In some tests, we use both `ProverStorage`` and `ZkStorage`.
 // Due to feature unification, we must provide this implementation even though it is not used.
