@@ -16,13 +16,15 @@ use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 
 use crate::bytes::Prefix;
 use crate::codec::EncodeLike;
-use crate::namespaces::{self, ProvableCompileTimeNamespace, ProvableNamespace};
+#[cfg(feature = "native")]
+use crate::namespaces;
+use crate::namespaces::{ProvableCompileTimeNamespace, ProvableNamespace};
 #[cfg(feature = "native")]
 use crate::sequencer_state::MaybePresentValue;
 #[cfg(feature = "native")]
-use crate::CompileTimeNamespace;
+use crate::{CompileTimeNamespace, Namespace};
 use crate::{
-    MerkleProofSpec, Namespace, SparseMerkleProof, StateAccesses, StateItemDecoder, StorageRoot,
+    MerkleProofSpec, SparseMerkleProof, StateAccesses, StateItemDecoder, StorageRoot,
     Witness,
 };
 
