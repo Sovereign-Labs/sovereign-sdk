@@ -143,11 +143,24 @@ fn fetch_root_hash_if_stale<S: Spec, Rt: Runtime<S>>(
                 .expect("Failed to get root hash");
             Some(root)
         } else {
-            Some(
+            let latest_root = Some(
                 storage
                     .get_latest_root_hash_unbound()
                     .expect("Failed to get latest root hash"),
-            )
+            );
+
+            // There's an edge case here: If there was a commit *while* we were loading the latest root, we could have gotten the wrong value.
+            // In that case the new commit will have made the slot number available, so we can fetch the correct hash by number.
+            if let Some(slot_number_for_height) = kernel_with_slot_mapping
+                .get_true_slot_number_for_height_unbound(rollup_height, storage)
+            {
+                let root = storage
+                    .get_root_hash_unbound(slot_number_for_height)
+                    .expect("Failed to get root hash");
+                Some(root)
+            } else {
+                latest_root
+            }
         }
     } else {
         None
