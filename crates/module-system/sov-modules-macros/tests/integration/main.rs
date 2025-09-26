@@ -27,6 +27,7 @@ fn trybuild() {
     // with `SOV_TEST_MODE_CONST_MANIFEST` set to `1`, so as to use
     // `constants.testing.toml`.
     std::env::set_var("SOV_TEST_MODE_CONST_MANIFEST", "1");
+    std::env::remove_var("CARGO_BUILD_JOBS");
     t.pass("tests/integration/trybuild/constants/valid_constants.rs");
 
     t.compile_fail("tests/integration/trybuild/constants/bech32_constant_invalid_checksum.rs");

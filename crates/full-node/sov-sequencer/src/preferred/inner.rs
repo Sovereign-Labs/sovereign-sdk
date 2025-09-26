@@ -5,6 +5,8 @@ use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::preferred::block_executor::StartBlockData;
+use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
 use crate::preferred::RollupBlockExecutorConfig;
 use anyhow::anyhow;
 use sov_blob_sender::BlobInternalId;
@@ -94,6 +96,7 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     rollup_exec_config: RollupBlockExecutorConfig<S>,
     tx_cache_writer: TxResultWriter<S, Rt>,
+    cache_warm_up_executor: CacheWarmUpExecutor<S>,
 }
 
 // We submit metrics when this guard is dropped.
@@ -264,16 +267,39 @@ where
 
         // DB operations handled by replica-aware db implementation
         let sequence_number = self.get_and_inc_next_sequence_number();
-
         let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
+
+        let start_block_data = StartBlockData {
+            sanity_check_visible_slot_number_after_increase: visible_slot_number_after_increase,
+            visible_increase,
+            node_state_root: node_state_root.clone(),
+            minimum_profit_per_tx: min_profit_per_tx,
+        };
+
+        let old_checkpoint = self
+            .executor
+            .checkpoint
+            .clone_with_empty_witness_dropping_temp_cache();
+
         self.executor
-            .start_rollup_block(
-                visible_slot_number_after_increase,
-                visible_increase,
-                &node_state_root,
-                min_profit_per_tx,
-            )
+            .start_rollup_block(start_block_data.clone())
             .await;
+
+        let state_roots = self.executor.state_roots.clone();
+
+        if state_roots.len() > 50 {
+            tracing::warn!("Executor: The computed state roots map is large, and cloning it can be costly in terms of time. state_roots len: {}", state_roots.len());
+        }
+
+        let notification = StartBlockNotification {
+            state_roots,
+            data: start_block_data,
+            checkpoint: old_checkpoint,
+        };
+
+        self.cache_warm_up_executor
+            .send_batch_start_notification(notification);
+
         self.executor_events_sender
             .start_batch(
                 visible_slot_number_after_increase,
@@ -321,16 +347,16 @@ where
 
         let node_state_root = self.node_root_hash()?;
         let sequence_number = self.get_and_inc_next_sequence_number();
-
         let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
-        self.executor
-            .start_rollup_block(
-                visible_slot_number_after_increase,
-                replica_visible_slots_to_advance,
-                &node_state_root,
-                min_profit_per_tx,
-            )
-            .await;
+
+        let start_block_data = StartBlockData {
+            sanity_check_visible_slot_number_after_increase: visible_slot_number_after_increase,
+            visible_increase: replica_visible_slots_to_advance,
+            node_state_root: node_state_root.clone(),
+            minimum_profit_per_tx: min_profit_per_tx,
+        };
+
+        self.executor.start_rollup_block(start_block_data).await;
 
         self.executor_events_sender
             .start_batch(
@@ -379,13 +405,7 @@ where
 
         match latest_finalized_sequence_number(latest_state_info, &mut runtime) {
             Some(num) => {
-                // TODO(@neysofu): somehow, if we prune too close to the latest
-                // finalized sequence number, we get panics due to missing blobs
-                // and inconsistent state. There is clearly something wrong with
-                // the pruning height calculation height.
-                if let Some(num) = num.checked_sub(100) {
-                    self.executor_events_sender.prune(num).await;
-                }
+                self.executor_events_sender.prune(num).await;
             }
             None => {
                 // Nothing to prune because there's no sequence number history.
@@ -820,6 +840,7 @@ pub(crate) fn create<S, Rt>(
     stop_at_rollup_height: Option<RollupHeight>,
     rollup_exec_config: RollupBlockExecutorConfig<S>,
     tx_cache_writer: TxResultWriter<S, Rt>,
+    cache_warm_up_executor: CacheWarmUpExecutor<S>,
 ) -> (
     SynchronizedSequencerState<S, Rt>,
     SequencerStateUpdator<S, Rt>,
@@ -859,6 +880,7 @@ where
         stop_at_rollup_height,
         rollup_exec_config,
         tx_cache_writer,
+        cache_warm_up_executor,
     };
 
     let channel_size = Arc::new(AtomicU32::new(0));
@@ -1362,6 +1384,16 @@ where
         let condition_nodes_sequence_number_is_fresher =
             next_sequence_number_according_to_node > next_sequence_number;
 
+        // There's an edge case on restart where the node hasn't synced to the chain tip yet but doesn't know it. We can check for it by seeing
+        // if the first batch to replay has a sequencer number that's more than 1 greater than the node's sequence number (because sequence numbers are contiguous, and
+        // we only prune a blob from the sequencer DB after it's been finalized on DA - so that blob must already exist on DA and the node just doesn't know that it isn't synced).
+        let oldest_unfinalized_sequence_number = batches_to_replay
+            .first()
+            .map(|b: &PreferredBatchToReplay| b.batch.inner.sequence_number);
+        let condition_node_is_unsynced_and_doesnt_know_it = (next_sequence_number_according_to_node
+            .saturating_add(1))
+            < oldest_unfinalized_sequence_number.unwrap_or(0);
+
         // Once we're this close to `deferred_slots_count`, we risk crossing the
         // `deferred_slots_count` threshold before the next call to
         // `update_state`. That's no good.
@@ -1388,9 +1420,10 @@ where
             condition_too_close_to_deferred_slots_count_for_comfort,
             condition_node_is_lagging,
             condition_are_there_batches_to_replay,
+            condition_node_is_unsynced_and_doesnt_know_it,
         ) {
-            (true, _, _, true) => PreferredSeqOperation::Unreachable,
-            (true, _, false, false) => {
+            (true, _, _, true, _) => PreferredSeqOperation::Unreachable,
+            (true, _, false, false, _) => {
                 warn!("The node has a higher sequence number than the sequencer, but we're very close to the chain tip, i.e. we don't expect to be simply syncing. This could mean there is another preferred sequencer running (which is not supported and will likely lead to issues), or you very recently restarted the node and there's still some in-flight blobs. Resyncing to the chain tip.");
                 inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
                     target_da_height: sync_status.target_da_height(),
@@ -1398,7 +1431,7 @@ where
                 });
                 PreferredSeqOperation::WaitForNodeResyncToTip
             }
-            (_, _, true, _) => {
+            (_, _, true, _, _) => {
                 warn!(?distance, "The sequencer must pause because the node has lagged behind the DA blockchain. This might lead to a brief downtime for users.");
                 inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
                     target_da_height: sync_status.target_da_height(),
@@ -1406,13 +1439,24 @@ where
                 });
                 PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack
             }
-            (false, true, false, _) => {
+            (false, true, false, _, _) => {
                 error!(slot_number_according_to_node=%info.slot_number, %current_visible_slot_number, "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Normal operation will be suspended until this can be remedied.");
                 inner.trigger_recovery(info).await;
 
                 PreferredSeqOperation::RecoverAndCatchUp
             }
-            (false, false, false, _) => {
+            // Node is out of sync and doesn't know it. This is a rare edge case after a DB wipe.
+            (_, _, _, _, true) => {
+                // Check for this condition after all of the normal "out-of-sync" conditions have been checked, because it may be possible for other unsynced conditions to trip this check
+                // and we'd rather report the real root cause if there's a different one.
+                warn!("The node is unsynced and doesn't know it. This probably means that you wiped the node DB and are resyncing.");
+                inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
+                    target_da_height: sync_status.target_da_height(),
+                    synced_da_height: sync_status.synced_da_height(),
+                });
+                PreferredSeqOperation::WaitForNodeResyncToTip
+            }
+            (false, false, false, _, _) => {
                 let should_flush_tx_cache = is_startup || is_resync || is_recover;
 
                 // We only need to replay the transactions in the edge cases where the event/tx cache needs repopulating.
@@ -1578,36 +1622,41 @@ where
     }
 
     async fn process_new_storage(&mut self, info: StateUpdateInfo<S::Storage>) {
+        let mut inner = self.get_inner_with_timing("update_state::fast_path").await;
         // Atomically swap in the new storage and prune the old one.
         let new_rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
             .rollup_height_to_access();
-        self.inner
+        // Notify the executor that the storage has been replaced so it can drop any writes that have now been persisted.
+        inner
+            .executor
+            .state_update_notifier
+            .send_replace(new_rollup_height);
+        inner
             .executor
             .checkpoint
             .replace_storage_and_prune(info.storage.clone(), &Rt::default().kernel());
-        tracing::info!("Storage has been replaced");
+        tracing::debug!(%new_rollup_height, "Storage has been replaced");
         // Update the `inner`'s state to reflect the new storage.
         // These steps should match `process_final_catchup` except for the need to drop the db_event_subscription.
-        self.inner.is_ready = Ok(());
-        self.inner.has_finished_startup = true;
-        self.inner.latest_info = info;
-        let checkpoint = self
-            .inner
+        inner.is_ready = Ok(());
+        inner.has_finished_startup = true;
+        inner.latest_info = info;
+        let checkpoint = inner
             .executor
             .checkpoint
             .clone_with_empty_witness_dropping_temp_cache();
-        self.inner
+        inner
             .executor_events_sender
             .force_update_api_state(checkpoint)
             .await;
 
-        self.inner
+        inner
             .executor
             .state_roots
             .retain(|height, _| *height > new_rollup_height);
 
-        let info = &self.inner.latest_info;
-        self.inner.update_api_ledger(info).await;
+        let info = &inner.latest_info;
+        inner.update_api_ledger(info).await;
     }
 
     async fn process_final_catchup(
@@ -1708,7 +1757,7 @@ where
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
 
-        // Creates a new executor  for recovery. This must *not* be called to create executors
+        // Creates a new executor for recovery. This must *not* be called to create executors
         // under other circumstances, since it causes side effects on the transaction cache.
         let transaction_cache_write_handle = inner.tx_cache_writer.clone();
         let recovery_executor = RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(

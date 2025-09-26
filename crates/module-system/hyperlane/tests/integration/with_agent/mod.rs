@@ -369,7 +369,7 @@ async fn test_dispatch_message_to_evm_counterparty() {
             // Find the dispatched message on counterparty
             // TODO: How to do it more reliably?
             tracing::info!("Waiting for relayer to submit transaction to EVM...");
-            sleep(Duration::from_secs(10)).await; // give relayer extra time to relay
+            sleep(Duration::from_secs(20)).await; // give relayer extra time to relay
 
             // Check if relayer is healthy before checking for events
             tracing::info!("Checking for events on EVM counterparty...");

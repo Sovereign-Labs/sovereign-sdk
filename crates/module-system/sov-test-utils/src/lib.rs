@@ -118,6 +118,9 @@ pub const TEST_MAX_BATCH_SIZE: usize = 1024 * 1024;
 /// If a blob is not processed within this time, it will shut down the sequencer.
 pub const TEST_BLOB_PROCESSING_TIMEOUT: u64 = 60;
 
+/// he number of workers used to warm up the cache.
+pub const TEST_NUM_CACHE_WARMUP_WORKERS: usize = 3;
+
 /// The maximum number of concurrent blobs.
 pub const TEST_MAX_CONCURRENT_BLOBS: usize = 16;
 
@@ -169,8 +172,9 @@ pub const TEST_DEFAULT_SEQUENCER_ADDRESS: &str =
     "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf";
 
 /// Default wait time value for different [`sov_mock_da::BlockProducingConfig`] value in tests.
-pub const TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS: u64 = 300;
+pub const TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS: u64 = 450;
 /// Default [`BlockProducingConfig`] for tests that need periodic block producing.
+/// uses [`TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS`]
 pub const TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING: BlockProducingConfig =
     BlockProducingConfig::Periodic {
         block_time_ms: TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,

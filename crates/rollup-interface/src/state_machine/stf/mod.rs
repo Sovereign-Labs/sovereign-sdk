@@ -103,6 +103,8 @@ pub enum ProofReceiptContents<Address, Da: DaSpec, Root, StorageProof> {
 /// The context in which the execution is happening.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ExecutionContext {
+    /// / The transaction is being executed in order to warm up the main executor cache.
+    SequencerWarmUp,
     /// The transaction is being executed by a sequencer before inclusion.
     Sequencer,
     /// The transaction is being executed by a node after inclusion.
@@ -113,7 +115,7 @@ impl ExecutionContext {
     /// Returns true if and only if `self` matches [`ExecutionContext::Sequencer`].
     pub fn is_sequencer(&self) -> bool {
         match self {
-            Self::Sequencer => true,
+            Self::Sequencer | Self::SequencerWarmUp => true,
             Self::Node => false,
         }
     }
@@ -204,7 +206,7 @@ pub struct DiscardedBlob {
 
 /// The result of applying a slot to current state. We define a helpful alias [`ApplySlotOutput`]
 /// to make the type signature of [`StateTransitionFunction::apply_slot`] more readable. Unfortunately,
-/// since this type both depends on and appears in the defintion of the [`StateTransitionFunction`] trait,
+/// since this type both depends on and appears in the definition of the [`StateTransitionFunction`] trait,
 /// we have to use a type alias to avoid introducing an unneeded [`Sized`] bound.
 pub struct ApplySlotOutputInner<Root, ChangeSet, BR, PR, Witness> {
     /// Final state root after all blobs were applied

@@ -1,8 +1,8 @@
 use alloy_primitives::{Address, U256};
 use itertools::Itertools;
-use reth_revm::db::DBErrorMarker;
 use revm::primitives::HashMap;
 use revm::state::{Account, EvmStorageSlot};
+use revm_database_interface::DBErrorMarker;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::{Spec, StateAccessor};
 

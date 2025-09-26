@@ -98,8 +98,8 @@ fn default_max_response_size() -> NonZero<u32> {
 // 7. Attempt 7: 6.4s
 // 8. Attempt 8: 12.8s
 // 9. Attempt 9: 25.6s
-// 10. Attempt 10: 30s (capped at max_delay)
-// 11. Attempt 11-60: 30s each
+// 10. Attempt 10: 10s (capped at max_delay)
+// 11. Attempt 11-60: 10s each
 // **Total Number of Attempts:** 60 (as specified by ) `with_max_times(60)`
 // **Total Waiting Time:**
 // - First 9 attempts: 100ms + 200ms + 400ms + 800ms + 1.6s + 3.2s + 6.4s + 12.8s + 25.6s = ~51.1 seconds
@@ -110,7 +110,7 @@ fn default_min_delay_ms() -> u64 {
 }
 
 fn default_max_delay_ms() -> u64 {
-    30_000
+    12_000
 }
 
 fn default_max_times() -> usize {

@@ -131,9 +131,9 @@ pub(crate) fn setup() -> (TestUser<S>, TestRunner<TestNonceRuntime<S>, S>, EvmAc
             code: Default::default(),
         }],
         chain_spec: EvmChainSpec {
-            // SHANGHAI instead of LATEST
+            // CANCUN instead of LATEST
             // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
-            hardforks: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
+            hardforks: vec![(0, SpecId::CANCUN)].into_iter().collect(),
             ..Default::default()
         },
         ..Default::default()

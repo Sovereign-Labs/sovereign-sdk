@@ -155,6 +155,7 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
             max_concurrent_blobs: TEST_MAX_CONCURRENT_BLOBS,
             blob_processing_timeout_secs: 60,
+            extension: None,
         };
 
         let (sequencer, _) = StdSequencer::<TestSpec, Rt, StorableMockDaService>::create(

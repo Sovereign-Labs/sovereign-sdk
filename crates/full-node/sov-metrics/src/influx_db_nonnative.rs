@@ -1,8 +1,9 @@
+use derive_new::new;
+use sov_rollup_interface::common::HexHash;
+use sov_rollup_interface::stf::ExecutionContext;
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
-
-use sov_rollup_interface::common::HexHash;
 
 use crate::MaybeTimer;
 #[cfg(feature = "native")]
@@ -35,15 +36,19 @@ pub enum StateAccessType {
 }
 
 /// A key for a metric.
+#[derive(Default, new)]
 pub struct MetricSlotKey {
-    key: Arc<Vec<u8>>,
+    key: Option<Arc<Vec<u8>>>,
     display_fn: Option<ArcFormatFn>,
 }
 
 impl std::fmt::Display for MetricSlotKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Some(key) = self.key.as_ref() else {
+            return write!(f, "null");
+        };
         if let Some(display_fn) = &self.display_fn {
-            display_fn(self.key.as_slice(), f)
+            display_fn(key.as_slice(), f)
         } else {
             write!(f, "unknown")
         }
@@ -51,12 +56,16 @@ impl std::fmt::Display for MetricSlotKey {
 }
 impl std::fmt::Debug for MetricSlotKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Some(key) = self.key.as_ref() else {
+            return write!(f, "null");
+        };
+
         if let Some(display_fn) = &self.display_fn {
             write!(f, "MetricKey {{ key: ")?;
-            display_fn(self.key.as_slice(), f)?;
+            display_fn(key.as_slice(), f)?;
             write!(f, " }}")
         } else {
-            write!(f, "MetricKey {{ key: {:?} }}", self.key.as_slice())
+            write!(f, "MetricKey {{ key: {:?} }}", key.as_slice())
         }
     }
 }
@@ -65,7 +74,7 @@ impl StateAccessMetric {
     /// Creates a new state access metric.
     pub fn new_size(key: Arc<Vec<u8>>, display_fn: Option<ArcFormatFn>) -> Self {
         Self {
-            key: MetricSlotKey { key, display_fn },
+            key: MetricSlotKey::new(Some(key), display_fn),
             storage_read_size: None,
             duration: MaybeTimer::started(),
             access_type: StateAccessType::GetSize,
@@ -75,7 +84,7 @@ impl StateAccessMetric {
     /// Creates a new state access metric.
     pub fn new_read(key: Arc<Vec<u8>>, display_fn: Option<ArcFormatFn>) -> Self {
         Self {
-            key: MetricSlotKey { key, display_fn },
+            key: MetricSlotKey::new(Some(key), display_fn),
             storage_read_size: None,
             duration: MaybeTimer::started(),
             access_type: StateAccessType::GetValue,
@@ -85,10 +94,7 @@ impl StateAccessMetric {
     /// Returns a serializable placeholder metric.
     pub fn placeholder() -> Self {
         Self {
-            key: MetricSlotKey {
-                key: Arc::new(vec![]),
-                display_fn: None,
-            },
+            key: Default::default(),
             storage_read_size: None,
             duration: MaybeTimer::Completed(Duration::from_secs(0)),
             access_type: StateAccessType::GetSize,
@@ -152,7 +158,7 @@ impl SlowDeserialization {
     pub fn placeholder() -> Self {
         Self {
             key: MetricSlotKey {
-                key: Arc::new(vec![]),
+                key: None,
                 display_fn: None,
             },
             duration: Duration::from_secs(0),
@@ -220,7 +226,7 @@ impl StateMetrics {
         duration: Duration,
     ) {
         let key = MetricSlotKey {
-            key: key_bytes,
+            key: Some(key_bytes),
             display_fn: format_fn,
         };
 
@@ -274,32 +280,35 @@ impl Metric for AuthAndProcessMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         use std::io::Write;
         let metric_name = self.measurement_name();
-        let total_time_us = self.timings.total_timer.elapsed().as_micros();
-        let auth_time_us = self.timings.auth.elapsed().as_micros();
-        let resolve_context_time_us = self.timings.resolve_context_timer.elapsed().as_micros();
-        let check_uniqueness_time_us = self.timings.check_uniqueness_timer.elapsed().as_micros();
-        let mark_tx_attempted_time_us = self.timings.mark_tx_attempted_timer.elapsed().as_micros();
-        let attempt_tx_time_us = self.timings.attempt_tx_timer.elapsed().as_micros();
-        let reserve_gas_time_us = self.timings.reserve_gas_timer.elapsed().as_micros();
-        let refund_remaining_gas_time_us = self
-            .timings
-            .refund_remaining_gas_timer
-            .elapsed()
-            .as_micros();
-        let reward_prover_time_us = self.timings.reward_prover_timer.elapsed().as_micros();
+        let t = &self.timings;
 
-        write!(buffer, "{metric_name} total_time_us={total_time_us},auth_time_us={auth_time_us},resolve_context_time_us={resolve_context_time_us},check_uniqueness_time_us={check_uniqueness_time_us},mark_tx_attempted_time_us={mark_tx_attempted_time_us},attempt_tx_time_us={attempt_tx_time_us},reserve_gas_time_us={reserve_gas_time_us},refund_remaining_gas_time_us={refund_remaining_gas_time_us},reward_prover_time_us={reward_prover_time_us}")?;
-        summarize(
-            &self.timings.attempt_tx_access_metrics,
-            "attempt_tx",
-            buffer,
-        )?;
+        let fields = [
+            ("total_time_us", t.total_timer),
+            ("auth_time_us", t.auth),
+            ("resolve_context_time_us", t.resolve_context_timer),
+            ("check_uniqueness_time_us", t.check_uniqueness_timer),
+            ("mark_tx_attempted_time_us", t.mark_tx_attempted_timer),
+            ("attempt_tx_time_us", t.attempt_tx_timer),
+            ("reserve_gas_time_us", t.reserve_gas_timer),
+            ("refund_remaining_gas_time_us", t.refund_remaining_gas_timer),
+            ("reward_prover_time_us", t.reward_prover_timer),
+        ];
+
+        write!(buffer, "{metric_name} ")?;
+        for (i, (field, timer)) in fields.iter().enumerate() {
+            if i > 0 {
+                write!(buffer, ",")?;
+            }
+            write!(buffer, "{field}={}", timer.elapsed().as_micros())?;
+        }
+
+        summarize(&t.attempt_tx_access_metrics, "attempt_tx", buffer)?;
         Ok(())
     }
 }
 
 /// Timings for `auth_and_process_tx`
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct AuthAndProcessTimings {
     /// Time to deserialize and authenticate the tx. Includes no state access in the starter
     pub auth: MaybeTimer,
@@ -333,4 +342,31 @@ pub struct AuthAndProcessTimings {
     pub reward_prover_timer: MaybeTimer,
     /// State Accesses performed while rewarding the prover.
     pub reward_prover_access_metrics: StateMetrics,
+    /// The execution context for the trasnaction.
+    pub execution_context: ExecutionContext,
+}
+
+impl AuthAndProcessTimings {
+    /// Creates a new `AuthAndProcessTimings` instance.
+    pub fn new_with_defaults(execution_context: ExecutionContext) -> Self {
+        Self {
+            auth: MaybeTimer::default(),
+            total_timer: MaybeTimer::default(),
+            resolve_context_timer: MaybeTimer::default(),
+            resolve_context_access_metrics: StateMetrics::default(),
+            check_uniqueness_timer: MaybeTimer::default(),
+            check_uniqueness_access_metrics: StateMetrics::default(),
+            mark_tx_attempted_timer: MaybeTimer::default(),
+            mark_tx_attempted_access_metrics: StateMetrics::default(),
+            attempt_tx_timer: MaybeTimer::default(),
+            attempt_tx_access_metrics: StateMetrics::default(),
+            reserve_gas_timer: MaybeTimer::default(),
+            reserve_gas_access_metrics: StateMetrics::default(),
+            refund_remaining_gas_timer: MaybeTimer::default(),
+            refund_remaining_gas_access_metrics: StateMetrics::default(),
+            reward_prover_timer: MaybeTimer::default(),
+            reward_prover_access_metrics: StateMetrics::default(),
+            execution_context,
+        }
+    }
 }

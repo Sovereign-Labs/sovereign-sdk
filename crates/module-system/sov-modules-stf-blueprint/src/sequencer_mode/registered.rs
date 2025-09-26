@@ -37,7 +37,7 @@ pub fn process_tx_and_reward_prover<S, R, I, C>(
     raw_tx: FullyBakedTx,
     sequencer_da_address: &<S::Da as DaSpec>::Address,
     sequencer_rollup_address: S::Address,
-    #[allow(unused_variables)] execution_context: ExecutionContext,
+    execution_context: ExecutionContext,
     injected_control_flow: &C,
     operating_mode: OperatingMode,
     mut metrics: AuthAndProcessMetrics,
@@ -75,6 +75,7 @@ where
         injected_control_flow,
         operating_mode,
         &mut metrics,
+        &execution_context,
     );
 
     #[cfg(feature = "native")]
@@ -149,6 +150,7 @@ fn process_tx_and_reward_prover_inner<S, R, I, C>(
     injected_control_flow: &C,
     operating_mode: OperatingMode,
     metrics: &mut AuthAndProcessMetrics,
+    execution_context: &ExecutionContext,
 ) -> (
     Result<ApplyTxResult<S>, TxAndError>,
     TxScratchpad<S, I>,
@@ -209,6 +211,7 @@ where
     if let Err(err) = runtime.transaction_authorizer().check_uniqueness(
         &auth_data,
         &ctx,
+        execution_context,
         &mut pre_exec_working_set,
     ) {
         let (scratchpad, pre_exec_gas_meter) = pre_exec_working_set.revert();
@@ -666,7 +669,7 @@ where
     I: StateProvider<S>,
     C: InjectedControlFlow<S>,
 {
-    let mut timings = AuthAndProcessTimings::default();
+    let mut timings = AuthAndProcessTimings::new_with_defaults(execution_context);
     timings.total_timer.start();
     // CHECKS:
     // 1. `max_tx_check_costs` will not cause an overflow when converted to a token value.

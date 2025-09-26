@@ -1,0 +1,32 @@
+[package]
+name = "sov-soak-testing-lib"
+version = "0.1.0"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+publish = false
+
+[dependencies]
+tokio = { workspace = true, default-features = false }
+borsh = { workspace = true, features = ["derive"] }
+
+schemars = { workspace = true, features = ["derive"] }
+serde = { workspace = true, default-features = false, features = [
+    "alloc",
+    "derive",
+] }
+anyhow = { workspace = true }
+rand = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+
+sov-api-spec = { workspace = true }
+sov-transaction-generator = { workspace = true }
+sov-modules-api = { workspace = true }
+sov-test-utils = { workspace = true, features = ["arbitrary"] }
+sov-mock-da = { workspace = true, features = ["arbitrary", "native"] }
+# modules
+sov-value-setter = { workspace = true }
+sov-bank = { workspace = true, features = ["native", "arbitrary"] }
+sov-synthetic-load = { workspace = true }

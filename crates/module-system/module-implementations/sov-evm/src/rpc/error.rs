@@ -1,8 +1,8 @@
 //! Place where [`RlpConversionError`] is converted to [`EthApiError`]
 
 use alloy_primitives::Bytes;
-use reth_rpc_eth_types::{EthApiError, EthResult, RevertError, RpcInvalidTransactionError};
 use revm::context::result::{ExecutionResult, HaltReason};
+use sov_rpc_eth_types::{EthApiError, EthResult, RevertError, RpcInvalidTransactionError};
 
 use crate::evm::conversions::RlpConversionError;
 

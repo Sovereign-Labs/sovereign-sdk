@@ -2,9 +2,9 @@ use crate::helpers::*;
 use crate::runtime::RT;
 use crate::runtime::S;
 use alloy_primitives::FixedBytes;
+use alloy_primitives::Log;
 use alloy_primitives::U256;
 use alloy_rpc_types::BlockTransactions;
-use reth_primitives::Log;
 use revm::Database;
 use sov_evm::Evm;
 use sov_modules_api::GasArray;
@@ -40,31 +40,36 @@ fn test_simple_transfer() {
 fn test_evm_gas_usage() {
     std::env::set_var(
         "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS",
-        "[1, 0]",
+        "[2, 0]",
     );
     let gas_used_with_evm_metering = {
-        let (mut runner, from, to) = setup();
-        let transfer = create_transfer_tx(0, &from, &to, 0).tx;
+        let (mut runner, from, _) = setup();
+        let contract = SimpleStorageContract::default();
+        let contract_addr = from.address().create(0);
+        runner.execute(create_deploy_tx(0, &contract, &from).tx);
+        let transfer = create_set_arg_tx(0, 1, &contract, contract_addr, &from).tx;
         let (receipt, _) = runner.execute(transfer);
         receipt.last_batch_receipt().inner.gas_used.clone()
     };
     std::env::set_var(
         "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS",
-        "[0, 0]",
+        "[1, 0]",
     );
     let gas_used_without_evm_metering = {
-        let (mut runner, from, to) = setup();
-        let transfer = create_transfer_tx(0, &from, &to, 0).tx;
+        let (mut runner, from, _) = setup();
+        let contract = SimpleStorageContract::default();
+        let contract_addr = from.address().create(0);
+        runner.execute(create_deploy_tx(0, &contract, &from).tx);
+        let transfer = create_set_arg_tx(0, 1, &contract, contract_addr, &from).tx;
         let (receipt, _) = runner.execute(transfer);
         receipt.last_batch_receipt().inner.gas_used.clone()
     };
-    const BASE_EVM_GAS: u64 = 0;
     assert_eq!(
         gas_used_with_evm_metering
             .checked_sub(&gas_used_without_evm_metering)
             .unwrap()
             .as_ref(),
-        &[BASE_EVM_GAS, 0]
+        &[5_251, 0]
     );
 }
 
@@ -294,7 +299,7 @@ fn test_evm_logs() {
         assert_eq!(logs.len(), len);
 
         for log in logs {
-            assert_eq!(log.topics().len(), 2);
+            assert_eq!(log.topics().len(), 4);
             assert_eq!(log.address, contract_addr);
             assert_eq!(log.topics()[1], address_bytes);
         }
@@ -302,8 +307,8 @@ fn test_evm_logs() {
 
     let mut txs = vec![create_deploy_tx(0, &contract, &account).tx];
 
-    txs.push(create_emit_one_log(1, &contract, contract_addr, &account).tx);
-    txs.push(create_emit_two_logs(2, &contract, contract_addr, &account).tx);
+    txs.push(create_emit_logs(1, &contract, contract_addr, &account, 1, 1).tx);
+    txs.push(create_emit_logs(2, &contract, contract_addr, &account, 1, 2).tx);
 
     let evm = Evm::<S>::default();
 

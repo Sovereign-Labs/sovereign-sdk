@@ -15,6 +15,7 @@ use std::fmt::{self, Debug};
 
 pub(crate) mod commit;
 pub(crate) mod init;
+pub(crate) mod metrics;
 
 #[derive(thiserror::Error, Deref)]
 #[error(transparent)]

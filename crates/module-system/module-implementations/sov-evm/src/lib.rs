@@ -8,6 +8,8 @@ mod db;
 mod evm;
 mod genesis;
 mod hooks;
+#[cfg(feature = "native")]
+mod metrics;
 mod sov_evm;
 use std::ops::RangeInclusive;
 
@@ -34,9 +36,8 @@ use alloy_primitives::U256;
 use alloy_primitives::{Address, B256};
 pub use authenticate::{
     authenticate, decode_evm_tx, Eip712Authenticator, EthereumAuthenticator, EvmAuthenticator,
-    EvmAuthenticatorInput,
+    EvmAuthenticatorInput, SchemaProvider,
 };
-pub use reth_primitives::TransactionSigned;
 pub use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_bank::Amount;
@@ -52,13 +53,18 @@ use sov_state::User;
 
 use crate::account_storage_key::AccountStorageKey;
 use crate::db::{DbAccount, EvmDb};
+pub use crate::evm::primitive_types::TransactionSigned;
 use crate::evm::primitive_types::{
-    Block, PendingTransaction, Receipt, SealedBlock, TransactionSignedAndRecovered,
+    Block, PendingTransaction, Receipt, SealedBlock, TxSignedAndRecovered,
 };
 
-pub use conversions::convert_to_transaction_signed;
+pub use conversions::convert_to_tx_signed;
 pub use conversions::create_tx_env;
 use revm::state::Bytecode;
+
+/// These values are associated with EIP-4844, which we do not support, but they must be set to a value other than None for CANCUN.
+const EXCESS_BLOB_GAS: u64 = 0;
+const BLOB_GAS_PRICE: u128 = 0;
 
 /// The sov-evm module provides compatibility with the EVM.
 #[allow(dead_code)]
@@ -117,7 +123,7 @@ pub struct Evm<S: Spec> {
 
     /// Used only by the RPC: List of processed transactions.
     #[state]
-    pub transactions: AccessoryStateMap<u64, TransactionSignedAndRecovered, BcsCodec>,
+    pub transactions: AccessoryStateMap<u64, TxSignedAndRecovered, BcsCodec>,
 
     /// Used only by the RPC: Receipts.
     #[state]
@@ -138,6 +144,10 @@ pub struct Evm<S: Spec> {
     /// A reference to the Uniqueness module.
     #[module]
     pub(crate) uniqueness_module: sov_uniqueness::Uniqueness<S>,
+
+    /// A reference to the ChainState module.
+    #[module]
+    pub(crate) chain_state_module: sov_chain_state::ChainState<S>,
 
     #[phantom]
     phantom: core::marker::PhantomData<S>,
@@ -200,7 +210,7 @@ impl<S: Spec> Evm<S> {
         &self,
         index: u64,
         state: &mut Accessor,
-    ) -> Option<TransactionSignedAndRecovered> {
+    ) -> Option<TxSignedAndRecovered> {
         self.transactions.get(&index, state).unwrap_infallible()
     }
 

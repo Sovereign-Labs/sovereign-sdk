@@ -6,7 +6,8 @@ use thiserror::Error;
 use crate::schema::Primitive;
 use crate::ty::visitor::{ResolutionError, TypeResolver, TypeVisitor};
 use crate::ty::{
-    ByteDisplay, Enum, FixedPointDisplay, IntegerDisplay, IntegerType, LinkingScheme, Struct, Tuple,
+    byte_display, ByteDisplay, Enum, FixedPointDisplay, IntegerDisplay, IntegerType, LinkingScheme,
+    Struct, Tuple,
 };
 
 type Delimiters = (&'static str, &'static str);
@@ -20,8 +21,8 @@ pub const MAX_INPUT_CHUNK: usize = 65;
 pub enum FormatError {
     #[error("Core error: {0}")]
     Core(#[from] core::fmt::Error),
-    #[error("The input could not be displayed as bech32: {0}")]
-    InvalidBech32(#[from] bech32::EncodeError),
+    #[error("The byte sequence could not be formatted for display: {0}")]
+    InvalidBytes(#[from] byte_display::ByteFormatError),
     #[error("The input is not a valid utf-8 string: {0}")]
     InvalidString(#[from] core::str::Utf8Error),
     #[error("Invalid discriminant `{discriminant}` for {type_name}")]
@@ -105,7 +106,6 @@ impl<W: core::fmt::Write> core::fmt::Write for Output<'_, W> {
     }
 }
 
-#[allow(unused)]
 pub struct Input<'a> {
     buf: &'a mut &'a [u8],
     peeking: bool,
@@ -135,7 +135,7 @@ impl<'a> Input<'a> {
         self.buf.len()
     }
 
-    fn check_remaining_bytes(&self, mut len: usize) -> Result<(), FormatError> {
+    pub(crate) fn check_remaining_bytes(&self, mut len: usize) -> Result<(), FormatError> {
         if self.peeking {
             len += self.peek_cursor;
         }

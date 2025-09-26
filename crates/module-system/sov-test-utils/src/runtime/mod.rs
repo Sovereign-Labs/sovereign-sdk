@@ -311,7 +311,7 @@ where
             .unwrap_infallible()
     }
 
-    /// A simple helper function to get the the staked balance of a sequencer.
+    /// A simple helper function to get the staked balance of a sequencer.
     pub fn get_sequencer_staking_balance(
         sequencer: &<S::Da as DaSpec>::Address,
         state: &mut ApiStateAccessor<S>,

@@ -62,8 +62,7 @@ pub struct Warp<S: Spec> {
     JsonSchema,
     UniversalWallet,
 )]
-#[serde(rename_all = "snake_case")]
-#[serde(bound = "S: Spec")]
+#[serde(rename_all = "snake_case", bound = "S: Spec")]
 #[schemars(bound = "S: Spec", rename = "CallMessage")]
 pub enum CallMessage<S: Spec> {
     /// Register a route with the given token source and ISM.

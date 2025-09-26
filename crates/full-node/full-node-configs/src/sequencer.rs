@@ -19,6 +19,12 @@ impl Default for SequencerKindConfig {
     }
 }
 
+/// Configuration data used by sequencer extensions, such as EVM endpoints.
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+pub struct SeqConfigExtension {
+    pub max_log_limit: usize,
+}
+
 /// Sequencer configuration.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[schemars(
@@ -56,8 +62,10 @@ pub struct SequencerConfig<Address, Sc = SequencerKindConfig> {
     pub max_batch_size_bytes: usize,
     /// Maximum number of blobs sent in parallel.
     pub max_concurrent_blobs: usize,
-    /// Maximum time in seconds to wait for a blob to be processed.
+    /// Maximum time in seconds to wait for a blob to be processed, since it has been published to DA.
     pub blob_processing_timeout_secs: u64,
+    /// Extensions to the sequencer config (for example evm related configuration).
+    pub extension: Option<SeqConfigExtension>,
 }
 
 fn default_automatic_batch_production() -> bool {
@@ -77,6 +85,7 @@ impl<Addr: Clone, BbConfig> SequencerConfig<Addr, BbConfig> {
             max_concurrent_blobs: self.max_concurrent_blobs,
             sequencer_kind_config: seq_config,
             blob_processing_timeout_secs: self.blob_processing_timeout_secs,
+            extension: self.extension.clone(),
         }
     }
 }
@@ -148,6 +157,9 @@ pub struct PreferredSequencerConfig {
     /// It will sync from the master sequencer's database but remain read-only.
     #[serde(default)]
     pub is_replica: bool,
+    #[serde(default = "default_num_cache_warmup_workers")]
+    /// The number of workers that warm up the main executor cache.
+    pub num_cache_warmup_workers: usize,
 }
 
 impl Default for PreferredSequencerConfig {
@@ -162,8 +174,13 @@ impl Default for PreferredSequencerConfig {
             is_replica: false,
             db_event_channel_size: default_db_event_channel_size(),
             batch_execution_time_limit_millis: 6_000, // 6 seconds
+            num_cache_warmup_workers: default_num_cache_warmup_workers(),
         }
     }
+}
+
+pub const fn default_num_cache_warmup_workers() -> usize {
+    3
 }
 
 /// The ideal buffer of finalized slots that the sequencer should maintain. The larger this number,

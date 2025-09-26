@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-changelog') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Check for demo-rollup changes requiring changelog
         run: |
           PR_NUMBER=$(echo $GITHUB_REF | sed 's/.*\/pull\/\([0-9]*\).*/\1/')

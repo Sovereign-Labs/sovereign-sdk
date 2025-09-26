@@ -3,14 +3,19 @@ use std::ops::Range;
 use alloy_consensus::{
     serde_bincode_compat::Header as HeaderBincodeCompat,
     transaction::serde_bincode_compat::EthereumTxEnvelope as EthereumTxEnvelopeBincodeCompat,
-    Header,
+    transaction::Recovered, Header,
 };
+use alloy_consensus::{EthereumTxEnvelope, TxEip4844};
+use alloy_primitives::TxHash;
 use alloy_primitives::{Address, Sealable, Sealed, B256};
+use derive_new::new;
 use reth_ethereum_primitives::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
-use reth_primitives::{Recovered, TransactionSigned};
 use revm::context::result::EVMError;
 use serde_with::serde_as;
 use sov_modules_api::macros::UniversalWallet;
+
+/// Signed ethereum transaction
+pub type TransactionSigned = EthereumTxEnvelope<TxEip4844>;
 
 /// RLP encoded evm transaction.
 #[derive(
@@ -31,8 +36,8 @@ pub struct RlpEvmTransaction {
 }
 
 #[serde_as]
-#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-pub struct TransactionSignedAndRecovered {
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize, new)]
+pub struct TxSignedAndRecovered {
     /// Signer of the transaction
     pub(crate) signer: Address,
     /// Signed transaction
@@ -40,10 +45,10 @@ pub struct TransactionSignedAndRecovered {
     #[serde_as(as = "EthereumTxEnvelopeBincodeCompat")]
     pub(crate) signed_transaction: TransactionSigned,
     /// Block the transaction was added to
-    pub(crate) block_number: u64,
+    pub block_number: u64,
 }
 
-impl TransactionSignedAndRecovered {
+impl TxSignedAndRecovered {
     /// The signed transaction that was recovered.
     pub fn signed_transaction(&self) -> &TransactionSigned {
         &self.signed_transaction
@@ -53,12 +58,12 @@ impl TransactionSignedAndRecovered {
 /// A pending Ethereum transaction.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct PendingTransaction {
-    pub(crate) transaction: TransactionSignedAndRecovered,
+    pub(crate) transaction: TxSignedAndRecovered,
     pub(crate) receipt: Receipt,
 }
 
 impl PendingTransaction {
-    pub(crate) fn new(transaction: TransactionSignedAndRecovered, receipt: Receipt) -> Self {
+    pub(crate) fn new(transaction: TxSignedAndRecovered, receipt: Receipt) -> Self {
         Self {
             transaction,
             receipt,
@@ -72,10 +77,10 @@ pub struct Block {
     /// Block header.
     /// https://reth.rs/docs/reth_primitives/serde_bincode_compat/index.html
     #[serde_as(as = "HeaderBincodeCompat")]
-    pub(crate) header: Header,
+    pub header: Header,
 
     /// Transactions in this block.
-    pub(crate) transactions: Range<u64>,
+    pub transactions: Range<u64>,
 }
 
 impl Block {
@@ -90,10 +95,10 @@ impl Block {
 #[derive(Debug, PartialEq, Clone)]
 pub struct SealedBlock {
     /// Block header.
-    pub(crate) header: Sealed<Header>,
+    pub header: Sealed<Header>,
 
     /// Transactions in this block.
-    pub(crate) transactions: Range<u64>,
+    pub transactions: Range<u64>,
 }
 
 impl SealedBlock {
@@ -152,16 +157,17 @@ impl<'de> serde::Deserialize<'de> for SealedBlock {
 }
 
 #[cfg(feature = "native")]
-pub(crate) enum MaybeSealedBlock {
-    Sealed(Box<SealedBlock>),
-    Pending {
-        block_number: u64,
-        first_tx_number: u64,
-    },
+/// Sealed or pending block.
+pub enum MaybeSealedBlock {
+    /// SealedBlock
+    Sealed(SealedBlock),
+    /// Pending
+    Pending(crate::Block),
 }
 
 #[cfg(feature = "native")]
 impl MaybeSealedBlock {
+    /// Hash of the block.
     pub fn hash(&self) -> Option<B256> {
         match self {
             Self::Sealed(block) => Some(block.header.hash()),
@@ -169,26 +175,43 @@ impl MaybeSealedBlock {
         }
     }
 
+    /// The block number.
     pub fn number(&self) -> u64 {
         match self {
             Self::Sealed(block) => block.header.number,
-            Self::Pending { block_number, .. } => *block_number,
+            Self::Pending(pending) => pending.header.number,
         }
     }
 
+    /// Index of the first transaction in the block.
     pub fn transactions_start(&self) -> u64 {
         match self {
             Self::Sealed(block) => block.transactions.start,
-            Self::Pending {
-                first_tx_number, ..
-            } => *first_tx_number,
+            Self::Pending(pending) => pending.transactions.start,
         }
     }
 
-    pub fn timestamp(&self) -> Option<u64> {
+    /// Index of the last transaction in the block.
+    pub fn transactions_end(&self) -> u64 {
         match self {
-            Self::Sealed(block) => Some(block.header.timestamp),
-            Self::Pending { .. } => None,
+            Self::Sealed(block) => block.transactions.end,
+            Self::Pending(pending) => pending.transactions.end,
+        }
+    }
+
+    /// The block timestamp.
+    pub fn timestamp(&self) -> u64 {
+        match self {
+            Self::Sealed(block) => block.header.timestamp,
+            Self::Pending(pending) => pending.header.timestamp,
+        }
+    }
+
+    /// The block header.
+    pub fn header(&self) -> &Header {
+        match self {
+            Self::Sealed(block) => block.header.inner(),
+            Self::Pending(pending) => &pending.header,
         }
     }
 }
@@ -199,13 +222,16 @@ pub struct Receipt {
     /// https://reth.rs/docs/reth_primitives/serde_bincode_compat/index.html
     #[serde_as(as = "ReceiptBincodeCompat")]
     pub receipt: reth_primitives::Receipt,
+    pub transaction_hash: TxHash,
+    pub transaction_index: u64,
+    pub block_number: u64,
     pub gas_used: u64,
     pub log_index_start: u64,
     pub error: Option<EVMError<u8>>,
 }
 
-impl From<TransactionSignedAndRecovered> for Recovered<TransactionSigned> {
-    fn from(value: TransactionSignedAndRecovered) -> Self {
+impl From<TxSignedAndRecovered> for Recovered<TransactionSigned> {
+    fn from(value: TxSignedAndRecovered) -> Self {
         Recovered::new_unchecked(value.signed_transaction, value.signer)
     }
 }
@@ -220,7 +246,7 @@ mod tests {
     #[test]
     fn tx_conversion() {
         let signer = Address::random();
-        let tx = TransactionSignedAndRecovered {
+        let tx = TxSignedAndRecovered {
             signer,
             signed_transaction: EthereumTxEnvelope::Eip1559(Signed::new_unchecked(
                 TxEip1559::default(),

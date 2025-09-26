@@ -121,6 +121,7 @@ async fn start_stop_empty(
             "The sequencer must pause because the node has lagged behind the DA blockchain. This might lead to a brief downtime for users.".to_string()
         ),
         (Level::WARN, "Skipping pruning of sequence number because it's already been pruned".to_string()),
+        (Level::WARN, "The node is unsynced and doesn't know it. This probably means that you wiped the node DB and are resyncing.".to_string()),
     ];
 
     let mut recorded_errors_warnings =

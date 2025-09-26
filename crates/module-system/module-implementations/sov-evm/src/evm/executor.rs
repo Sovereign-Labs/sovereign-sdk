@@ -4,7 +4,6 @@ use crate::{
     sov_evm::{SovEvm, UnmeteredStorageAccessInspector},
     EvmRuntimeConfig,
 };
-use reth_revm::db::DBErrorMarker;
 use revm::context::TxEnv;
 use revm::InspectEvm;
 use revm::{
@@ -14,6 +13,9 @@ use revm::{
     },
     Database, MainContext,
 };
+#[cfg(feature = "native")]
+use revm::{interpreter::interpreter::EthInterpreter, Inspector};
+use revm_database_interface::DBErrorMarker;
 use sov_modules_api::macros::config_value;
 
 /// builds CfgEnv
@@ -38,7 +40,7 @@ pub fn transact_commit<
     DB: Database<Error = E> + FallibleDatabaseCommit<Error = E>,
     E: DBErrorMarker,
 >(
-    mut db: DB,
+    mut db: &mut DB,
     block_env: &BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
@@ -51,27 +53,53 @@ pub fn transact_commit<
 
 #[cfg(feature = "native")]
 pub(crate) fn call<DB: Database<Error = E>, E: DBErrorMarker>(
-    mut db: DB,
+    db: DB,
     block_env: &BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
 ) -> Result<ExecutionResult, EVMError<E>> {
-    Ok(transact(&mut db, block_env, tx, cfg)?.result)
+    Ok(transact(db, block_env, tx, cfg)?.result)
 }
 
-fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
-    db: &mut DB,
+#[cfg(feature = "native")]
+#[allow(dead_code)]
+pub(crate) fn inspect<'a, DB: Database<Error = E>, E: DBErrorMarker, I>(
+    db: DB,
+    block_env: &'a BlockEnv,
+    tx: TxEnv,
+    cfg: CfgEnv,
+    inspector: I,
+) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>>
+where
+    I: Inspector<Context<&'a BlockEnv, TxEnv, CfgEnv, DB>, EthInterpreter>,
+{
+    let context = context(db, block_env, cfg);
+    let unmetered_storage_inspector = UnmeteredStorageAccessInspector::new();
+    let mut evm = SovEvm::new(context, (inspector, unmetered_storage_inspector));
+    evm.inspect_tx(tx)
+}
+
+/// Execute ethereum transaction
+pub fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
+    db: DB,
     block_env: &BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
 ) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>> {
-    let context = Context::mainnet()
+    let context = context(db, block_env, cfg);
+    let mut evm = SovEvm::new(context, UnmeteredStorageAccessInspector::new());
+    evm.inspect_tx(tx)
+}
+
+fn context<DB: Database<Error = E>, E: DBErrorMarker>(
+    db: DB,
+    block_env: &BlockEnv,
+    cfg: CfgEnv,
+) -> Context<&BlockEnv, TxEnv, CfgEnv, DB> {
+    Context::mainnet()
         .with_db(db)
         .with_block(block_env)
-        .with_cfg(cfg);
-    let inspector = UnmeteredStorageAccessInspector::new();
-    let mut evm = SovEvm::new(context, inspector);
-    evm.inspect_tx(tx)
+        .with_cfg(cfg)
 }
 
 #[cfg(test)]
@@ -94,7 +122,7 @@ mod tests {
                 limit_contract_code_size: Some(100),
                 ..Default::default()
             },
-            hardforks: vec![(0, SpecId::SHANGHAI)],
+            hardforks: vec![(0, SpecId::CANCUN)],
         };
 
         let mut template_cfg_env = CfgEnv::default();
@@ -109,7 +137,7 @@ mod tests {
         expected_cfg_env.disable_balance_check = true;
         expected_cfg_env.disable_block_gas_limit = true;
         expected_cfg_env.limit_contract_code_size = Some(100);
-        expected_cfg_env.spec = SpecId::SHANGHAI;
+        expected_cfg_env.spec = SpecId::CANCUN;
 
         assert_eq!(expected_cfg_env, cfg_env);
     }

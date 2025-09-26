@@ -1,13 +1,19 @@
-use alloy_consensus::Transaction;
+use alloy_consensus::{transaction::Recovered, Transaction};
 use alloy_eips::eip2718::{Decodable2718, Eip2718Error};
 use alloy_primitives::{Address, Bytes, U256};
-use reth_primitives::{Recovered, TransactionSigned};
 use reth_primitives_traits::SignedTransaction;
-use revm::context::{BlockEnv, TransactionType, TxEnv};
+use revm::{
+    context::{BlockEnv, TransactionType, TxEnv},
+    context_interface::block::BlobExcessGasAndPrice,
+};
 use thiserror::Error;
 
 use super::primitive_types::SealedBlock;
-use crate::RlpEvmTransaction;
+#[cfg(feature = "native")]
+use crate::primitive_types::TxSignedAndRecovered;
+use crate::{
+    evm::primitive_types::TransactionSigned, RlpEvmTransaction, BLOB_GAS_PRICE, EXCESS_BLOB_GAS,
+};
 
 // BlockEnv from SealedBlock
 impl From<SealedBlock> for BlockEnv {
@@ -19,11 +25,30 @@ impl From<SealedBlock> for BlockEnv {
             prevrandao: Some(block.header.mix_hash),
             basefee: 0,
             gas_limit: block.header.gas_limit,
-            // Not used fields:
-            blob_excess_gas_and_price: None,
+
+            blob_excess_gas_and_price: Some(BlobExcessGasAndPrice {
+                excess_blob_gas: EXCESS_BLOB_GAS,
+                blob_gasprice: BLOB_GAS_PRICE,
+            }),
             difficulty: Default::default(),
         }
     }
+}
+
+// Converts historical tx to TxEnv
+#[cfg(feature = "native")]
+pub fn replay_tx_env(tx: &TxSignedAndRecovered) -> TxEnv {
+    let TxSignedAndRecovered {
+        signed_transaction,
+        signer,
+        ..
+    } = tx;
+    create_tx_env(
+        signed_transaction,
+        *signer,
+        signed_transaction.nonce(),
+        signed_transaction.gas_limit(),
+    )
 }
 
 /// Converts tx to TxEnv while overriding the signer and nonce
@@ -59,7 +84,7 @@ pub enum RlpConversionError {
 }
 
 /// Coverts RLP encoded transaction to `TransactionSigned`.
-pub fn convert_to_transaction_signed(
+pub fn convert_to_tx_signed(
     data: RlpEvmTransaction,
 ) -> Result<TransactionSigned, RlpConversionError> {
     let data = Bytes::from(data.rlp);
@@ -76,7 +101,7 @@ impl TryFrom<RlpEvmTransaction> for Recovered<TransactionSigned> {
     type Error = RlpConversionError;
 
     fn try_from(evm_tx: RlpEvmTransaction) -> Result<Self, Self::Error> {
-        let tx: TransactionSigned = convert_to_transaction_signed(evm_tx)?;
+        let tx: TransactionSigned = convert_to_tx_signed(evm_tx)?;
         let tx = tx
             .try_into_recovered()
             .map_err(|_| RlpConversionError::InvalidSignature)?;

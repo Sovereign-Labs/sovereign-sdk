@@ -1,133 +1,128 @@
-#![allow(missing_docs)]
-
 use alloy_primitives::Bytes;
+use derive_more::Deref;
 use ethereum_types::H160;
-use ethers_core::abi::Address;
-use ethers_core::k256::ecdsa::SigningKey;
-use ethers_core::types::transaction::eip2718::TypedTransaction;
-use ethers_core::types::{Block, Eip1559TransactionRequest, TransactionRequest, TxHash};
-use ethers_core::types::{Transaction, TransactionReceipt};
-use ethers_middleware::signer::SignerMiddlewareError;
-use ethers_middleware::SignerMiddleware;
-use ethers_providers::{Http, Middleware, PendingTransaction, Provider};
-use ethers_signers::Wallet;
+use ethers::core::abi::Address;
+use ethers::core::types::transaction::eip2718::TypedTransaction;
+use ethers::core::types::Eip1559TransactionRequest;
+use ethers::providers::{Http, PendingTransaction};
 use futures::StreamExt;
-use jsonrpsee::core::client::ClientT;
-use jsonrpsee::rpc_params;
-use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
 use sov_cli::NodeClient;
 use sov_modules_api::{Runtime, Spec};
 use sov_test_utils::SimpleStorageContract;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
-const GAS: u64 = 900000u64;
+mod rpc;
+use rpc::RpcClient;
+
+const GAS: u64 = 9000000u64;
 const MAX_FEE_PER_GAS: u64 = 100;
 const MAX_PRIORITY_FEE_PER_GAS: u64 = 1;
 
+#[derive(Deref)]
 pub struct TestClient {
-    pub chain_id: u64,
-    pub from_addr: Address,
-    pub contract: SimpleStorageContract,
-    pub client: SignerMiddleware<Provider<Http>, Wallet<SigningKey>>,
+    contract: SimpleStorageContract,
     node_client: NodeClient,
-    rpc: WsClient,
+    pub nonce: Arc<AtomicU64>,
+    #[deref]
+    rpc_client: RpcClient,
 }
 
 impl TestClient {
     pub async fn new(
-        chain_id: u64,
-        key: Wallet<SigningKey>,
-        from_addr: Address,
+        private_key: &str,
         contract: SimpleStorageContract,
         http_addr: std::net::SocketAddr,
     ) -> Self {
-        let provider =
-            Provider::try_from(&format!("http://127.0.0.1:{}/rpc", http_addr.port())).unwrap();
-        let client = SignerMiddleware::new_with_provider_chain(provider, key)
-            .await
-            .unwrap();
-
-        let rpc = WsClientBuilder::default()
-            .build(&format!("ws://127.0.0.1:{}/rpc", http_addr.port()))
-            .await
-            .unwrap();
-
+        let rpc_client = RpcClient::new(private_key, http_addr).await;
         let node_client = NodeClient::new_at_localhost(http_addr.port())
             .await
             .unwrap();
 
+        // Fetch initial nonce from the network
+        let from_addr = rpc_client.address();
+        let initial_nonce = rpc_client.eth_get_transaction_count(from_addr).await;
+        let nonce = Arc::new(AtomicU64::new(initial_nonce));
+
         Self {
-            chain_id,
-            from_addr,
             contract,
-            client,
+            rpc_client,
             node_client,
-            rpc,
+            nonce,
         }
     }
+}
 
-    fn default_request(&self) -> Eip1559TransactionRequest {
-        Eip1559TransactionRequest::new()
-            .from(self.from_addr)
-            .chain_id(self.chain_id)
+// Tx/nonce utils
+impl TestClient {
+    fn make_tx(
+        &self,
+        to_address: Option<Address>,
+        data: Option<ethers::core::types::Bytes>,
+    ) -> TypedTransaction {
+        let mut tx = Eip1559TransactionRequest::new()
+            .from(self.address())
+            .chain_id(self.rpc_client.chain_id())
             .max_priority_fee_per_gas(MAX_PRIORITY_FEE_PER_GAS)
             .max_fee_per_gas(MAX_FEE_PER_GAS)
-            .gas(GAS)
-    }
+            .gas(GAS);
 
-    pub fn make_eip1559_tx(
-        &self,
-        nonce: u64,
-        to_address: Option<Address>,
-        data: Option<ethers_core::types::Bytes>,
-    ) -> TypedTransaction {
-        let mut req = self.default_request().nonce(nonce);
+        // Get next nonce atomically
+        let nonce = self.nonce.load(Ordering::SeqCst);
+        tx = tx.nonce(nonce);
 
         if let Some(data) = data {
-            req = req.data(data)
+            tx = tx.data(data)
         }
 
         if let Some(addr) = to_address {
-            req = req.to(addr)
+            tx = tx.to(addr)
         }
 
-        TypedTransaction::Eip1559(req)
+        tx.into()
     }
 
+    pub async fn send_tx(
+        &self,
+        tx: TypedTransaction,
+    ) -> Result<PendingTransaction<'_, Http>, Box<dyn std::error::Error>> {
+        // Increment nonce
+        let _ = self.nonce.fetch_add(1, Ordering::SeqCst);
+        self.rpc_client.eth_send_transaction(tx).await
+    }
+}
+
+impl TestClient {
     pub async fn deploy_contract(
         &self,
     ) -> Result<PendingTransaction<'_, Http>, Box<dyn std::error::Error>> {
-        let typed_transaction = self.make_eip1559_tx(0, None, Some(self.contract.byte_code()));
-        let receipt_req = self
-            .client
-            .send_transaction(typed_transaction, None)
-            .await?;
-
-        Ok(receipt_req)
+        let tx = self.make_tx(None, Some(self.contract.byte_code()));
+        self.send_tx(tx).await
     }
 
     pub async fn deploy_contract_call(&self) -> Result<Bytes, Box<dyn std::error::Error>> {
-        let typed_transaction = self.make_eip1559_tx(0, None, Some(self.contract.byte_code()));
-        let receipt_req = self.eth_call(typed_transaction).await?;
-
-        Ok(receipt_req)
+        let tx = self.make_tx(None, Some(self.contract.byte_code()));
+        self.eth_call(tx).await
     }
 
-    pub async fn set_value_unsigned(
+    pub async fn send_eth(&self, reciever: H160, eth_value: u128) -> PendingTransaction<'_, Http> {
+        let mut typed_transaction = self.make_tx(Some(reciever), None);
+        typed_transaction.set_value(eth_value);
+
+        self.send_tx(typed_transaction).await.unwrap()
+    }
+
+    pub async fn set_value(
         &self,
         contract_address: H160,
         set_arg: u32,
     ) -> PendingTransaction<'_, Http> {
-        // TODO: Re-evaluate if it's still needed after we migrate from ethers
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-        tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
-
-        let typed_transaction = self.make_eip1559_tx(
-            nonce,
+        let tx = self.make_tx(
             Some(contract_address),
             Some(self.contract.set_call_data(set_arg)),
         );
 
-        self.eth_send_transaction(typed_transaction).await
+        self.send_tx(tx).await.unwrap()
     }
 
     pub async fn set_values(
@@ -136,59 +131,16 @@ impl TestClient {
         set_args: Vec<u32>,
     ) -> Vec<PendingTransaction<'_, Http>> {
         let mut requests: Vec<_> = Vec::with_capacity(set_args.len());
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
 
-        for (i, set_arg) in set_args.into_iter().enumerate() {
-            let typed_transaction = self.make_eip1559_tx(
-                nonce + (i as u64),
+        for set_arg in set_args.into_iter() {
+            let typed_transaction = self.make_tx(
                 Some(contract_address),
                 Some(self.contract.set_call_data(set_arg)),
             );
 
-            requests.push(
-                self.client
-                    .send_transaction(typed_transaction, None)
-                    .await
-                    .unwrap(),
-            );
+            requests.push(self.send_tx(typed_transaction).await.unwrap());
         }
         requests
-    }
-
-    pub async fn set_value(
-        &self,
-        contract_address: H160,
-        set_arg: u32,
-    ) -> PendingTransaction<'_, Http> {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-        tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
-
-        let typed_transaction = self.make_eip1559_tx(
-            nonce,
-            Some(contract_address),
-            Some(self.contract.set_call_data(set_arg)),
-        );
-
-        self.client
-            .send_transaction(typed_transaction, None)
-            .await
-            .unwrap()
-    }
-
-    pub async fn emit_one_log(&self, contract_address: H160) -> PendingTransaction<'_, Http> {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-        tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
-
-        let typed_transaction = self.make_eip1559_tx(
-            nonce,
-            Some(contract_address),
-            Some(self.contract.emit_one_log()),
-        );
-
-        self.client
-            .send_transaction(typed_transaction, None)
-            .await
-            .unwrap()
     }
 
     pub async fn set_value_call_and_estimate_gas(
@@ -196,154 +148,51 @@ impl TestClient {
         contract_address: H160,
         set_arg: u32,
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+        let mut tx = self.make_tx(
+            Some(contract_address),
+            Some(self.contract.set_call_data(set_arg)),
+        );
+        let gas = self.rpc_client.eth_estimate_gas(tx.clone()).await;
+        tx.set_gas(gas);
 
-        // Any type of transaction can be used for eth_call
-        let req = TransactionRequest::new()
-            .from(self.from_addr)
-            .to(contract_address)
-            .chain_id(self.chain_id)
-            .nonce(nonce)
-            .data(self.contract.set_call_data(set_arg))
-            .gas_price(10u64);
-
-        let typed_transaction = TypedTransaction::Legacy(req.clone());
-
-        // Estimate gas on RPC
-        let gas = self.eth_estimate_gas(typed_transaction).await;
-
-        // Call with the estimated gas
-        let req = req.gas(gas);
-        let typed_transaction = TypedTransaction::Legacy(req);
-
-        let response = self.eth_call(typed_transaction).await?;
-
-        Ok(response)
+        self.rpc_client.eth_call(tx).await
     }
 
     pub async fn failing_call(
         &self,
         contract_address: H160,
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-
-        let typed_transaction = self.make_eip1559_tx(
-            nonce,
+        let tx = self.make_tx(
             Some(contract_address),
             Some(self.contract.failing_function_call_data()),
         );
-
-        self.eth_call(typed_transaction).await
+        self.rpc_client.eth_call(tx).await
     }
 
     pub async fn always_reverts(
         &self,
         contract_address: H160,
-    ) -> Result<
-        PendingTransaction<'_, Http>,
-        SignerMiddlewareError<Provider<Http>, Wallet<SigningKey>>,
-    > {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-
-        let typed_transaction = self.make_eip1559_tx(
-            nonce,
-            Some(contract_address),
-            Some(self.contract.always_revert()),
-        );
-
-        self.client.send_transaction(typed_transaction, None).await
+    ) -> Result<PendingTransaction<'_, Http>, Box<dyn std::error::Error>> {
+        let tx = self.make_tx(Some(contract_address), Some(self.contract.always_revert()));
+        self.send_tx(tx).await
     }
 
     pub async fn query_contract(
         &self,
         contract_address: H160,
     ) -> Result<ethereum_types::U256, Box<dyn std::error::Error>> {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
+        let typed_transaction =
+            self.make_tx(Some(contract_address), Some(self.contract.get_call_data()));
 
-        let typed_transaction = self.make_eip1559_tx(
-            nonce,
-            Some(contract_address),
-            Some(self.contract.get_call_data()),
-        );
-
-        let response = self.client.call(&typed_transaction, None).await?;
+        let response = self.rpc_client.eth_call(typed_transaction).await?;
 
         let resp_array: [u8; 32] = response.to_vec().try_into().unwrap();
         Ok(ethereum_types::U256::from(resp_array))
     }
+}
 
-    #[allow(dead_code)]
-    pub async fn eth_accounts(&self) -> Vec<Address> {
-        self.client.get_accounts().await.unwrap()
-    }
-
-    pub async fn eth_send_transaction(&self, tx: TypedTransaction) -> PendingTransaction<'_, Http> {
-        self.client
-            .provider()
-            .send_transaction(tx, None)
-            .await
-            .unwrap()
-    }
-
-    pub async fn eth_chain_id(&self) -> u64 {
-        self.client.get_chainid().await.unwrap().as_u64()
-    }
-
-    pub async fn eth_get_balance(&self, address: Address) -> ethereum_types::U256 {
-        self.client.get_balance(address, None).await.unwrap()
-    }
-
-    pub async fn eth_get_storage_at(
-        &self,
-        address: Address,
-        index: ethereum_types::U256,
-    ) -> ethereum_types::U256 {
-        self.rpc
-            .request("eth_getStorageAt", rpc_params![address, index])
-            .await
-            .unwrap()
-    }
-
-    pub async fn eth_get_code(&self, address: Address) -> Vec<u8> {
-        self.client.get_code(address, None).await.unwrap().to_vec()
-    }
-
-    pub async fn eth_get_transaction_count(&self, address: Address) -> u64 {
-        let count = self
-            .client
-            .get_transaction_count(address, None)
-            .await
-            .unwrap();
-
-        count.as_u64()
-    }
-
-    pub async fn eth_gas_price(&self) -> u128 {
-        self.client.get_gas_price().await.unwrap().as_u128()
-    }
-
-    pub async fn eth_get_block_by_number(&self, block_number: Option<String>) -> Block<TxHash> {
-        self.rpc
-            .request("eth_getBlockByNumber", rpc_params![block_number, false])
-            .await
-            .unwrap()
-    }
-
-    pub async fn eth_call(
-        &self,
-        tx: TypedTransaction,
-    ) -> Result<Bytes, Box<dyn std::error::Error>> {
-        self.rpc
-            .request("eth_call", rpc_params![tx])
-            .await
-            .map_err(|e| e.into())
-    }
-
-    pub async fn eth_estimate_gas(&self, tx: TypedTransaction) -> u64 {
-        let gas = self.client.estimate_gas(&tx, None).await.unwrap();
-        gas.as_u64()
-    }
-
+// Rollup interactions
+impl TestClient {
     pub async fn send_transactions_and_wait_slot<S: Spec, Rt: Runtime<S>>(
         &self,
         transactions: &[sov_modules_api::transaction::Transaction<Rt, S>],
@@ -359,34 +208,57 @@ impl TestClient {
 
         Ok(())
     }
+}
 
-    pub async fn send_eth(&self, reciever: H160, eth_value: u128) -> PendingTransaction<'_, Http> {
-        let nonce = self.eth_get_transaction_count(self.from_addr).await;
-        tracing::info!(from = %self.from_addr, nonce, "SmartContract::set_value");
-
-        let req = self
-            .default_request()
-            .nonce(nonce)
-            .to(reciever)
-            .value(eth_value);
-
-        let typed_transaction = TypedTransaction::Eip1559(req);
-
-        self.client
-            .send_transaction(typed_transaction, None)
+// Alloy
+impl TestClient {
+    pub async fn alloy_deploy_contract(&self) -> alloy_primitives::Address {
+        let typed_transaction = self.make_tx(None, Some(self.contract.byte_code()));
+        let addr = self
+            .send_tx(typed_transaction)
             .await
             .unwrap()
+            .await
+            .unwrap()
+            .unwrap()
+            .contract_address
+            .unwrap();
+
+        alloy_primitives::Address::from_slice(addr.0.as_slice())
     }
 
-    pub async fn receipt(&self, hash: TxHash) -> Option<TransactionReceipt> {
-        self.client.get_transaction_receipt(hash).await.unwrap()
+    pub async fn alloy_set_value(
+        &self,
+        contract_address: alloy_primitives::Address,
+        set_arg: u32,
+    ) -> alloy_primitives::TxHash {
+        let typed_transaction = self.make_tx(
+            Some(ethers::core::abi::Address::from_slice(
+                contract_address.as_slice(),
+            )),
+            Some(self.contract.set_call_data(set_arg)),
+        );
+
+        let tx_hash = self.send_tx(typed_transaction).await.unwrap().tx_hash();
+
+        alloy_primitives::TxHash::from_slice(&tx_hash.0)
     }
 
-    pub async fn transaction(&self, hash: TxHash) -> Option<Transaction> {
-        self.client.get_transaction(hash).await.unwrap()
-    }
+    pub async fn alloy_emit_logs(
+        &self,
+        contract_address: alloy_primitives::Address,
+        topic: u32,
+        nb_of_logs: u32,
+    ) -> alloy_primitives::TxHash {
+        let typed_transaction = self.make_tx(
+            Some(ethers::core::abi::Address::from_slice(
+                contract_address.as_slice(),
+            )),
+            Some(self.contract.emit_logs(topic, nb_of_logs)),
+        );
 
-    pub async fn block_number(&self) -> u64 {
-        self.client.get_block_number().await.unwrap().as_u64()
+        let tx_hash = self.send_tx(typed_transaction).await.unwrap().tx_hash();
+
+        alloy_primitives::TxHash::from_slice(&tx_hash.0)
     }
 }

@@ -1,6 +1,5 @@
 ---
 source: crates/full-node/full-node-configs/src/runner.rs
-assertion_line: 203
 expression: config
 ---
 {
@@ -23,6 +22,7 @@ expression: config
   "runner": {
     "genesis_height": 31337,
     "da_polling_interval_ms": 10000,
+    "da_total_timeout_secs": 600,
     "http_config": {
       "bind_host": "127.0.0.1",
       "bind_port": 12346,
@@ -61,7 +61,8 @@ expression: config
     },
     "max_batch_size_bytes": 1048576,
     "max_concurrent_blobs": 16,
-    "blob_processing_timeout_secs": 60
+    "blob_processing_timeout_secs": 60,
+    "extension": null
   },
   "monitoring": {
     "telegraf_address": "udp://192.168.4.5:8543",

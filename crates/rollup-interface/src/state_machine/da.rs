@@ -90,7 +90,7 @@ pub struct CountedBufReader<B: bytes::Buf> {
 }
 
 impl<B: bytes::Buf> CountedBufReader<B> {
-    /// Creates a new buffer reader with counter from an objet that implements the buffer trait
+    /// Creates a new buffer reader with counter from an object that implements the buffer trait
     pub fn new(inner: B) -> Self {
         let buf_size = inner.remaining();
         CountedBufReader {

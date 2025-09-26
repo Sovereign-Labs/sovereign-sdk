@@ -1,9 +1,8 @@
 use std::net::SocketAddr;
 
 use crate::test_helpers::test_genesis_source;
-use ethers_core::abi::Address;
-use ethers_providers::ProviderError;
-use ethers_signers::{LocalWallet, Signer};
+
+use ethers::core::abi::Address;
 use futures::future::join_all;
 use sov_demo_rollup::MockRollupSpec;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
@@ -12,6 +11,7 @@ use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::macros::config_value;
 use sov_risc0_adapter::Risc0;
+use sov_sequencer::SeqConfigExtension;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::get_appropriate_rollup_prover_config;
 use sov_test_utils::test_rollup::{RollupBuilder, TestRollup};
@@ -19,10 +19,15 @@ use sov_test_utils::SimpleStorageContract;
 
 const SENDER_PRIV_KEY: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
+pub(crate) const EVM_EXTENSION: SeqConfigExtension = SeqConfigExtension {
+    max_log_limit: 20000,
+};
+
 /// Starts test rollup node.  
 pub(crate) async fn start_node(
     _rollup_prover_config: RollupProverConfig<Risc0>,
     finalization_blocks: u32,
+    extension: Option<SeqConfigExtension>,
 ) -> TestRollup<MockDemoRollup<Native>> {
     // Don't provide a prover since the EVM is not currently provable
     RollupBuilder::new(
@@ -39,6 +44,7 @@ pub(crate) async fn start_node(
         c.aggregated_proof_block_jump = 5;
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;
+        c.extension = extension;
     })
     .start()
     .await
@@ -46,25 +52,9 @@ pub(crate) async fn start_node(
 }
 
 /// Creates a test client to communicate with the rollup node.
-pub(crate) async fn create_test_client(
-    rest_port: SocketAddr,
-    chain_id: u64,
-    private_key: &str,
-) -> (TestClient, Address) {
-    let key = private_key
-        .parse::<LocalWallet>()
-        .unwrap()
-        .with_chain_id(chain_id);
-
+pub(crate) async fn create_test_client(rest_port: SocketAddr, private_key: &str) -> TestClient {
     let contract = SimpleStorageContract::default();
-    let from_addr = key.address();
-
-    let test_client = TestClient::new(chain_id, key, from_addr, contract, rest_port).await;
-
-    let eth_chain_id = test_client.eth_chain_id().await;
-    assert_eq!(chain_id, eth_chain_id);
-
-    (test_client, from_addr)
+    TestClient::new(private_key, contract, rest_port).await
 }
 
 /// Deploys a test contract on the test rollup.
@@ -113,21 +103,6 @@ pub(crate) async fn set_value_check(
     Ok(())
 }
 
-/// Calls `set_value` on the test contract with unsigned transaction.
-pub(crate) async fn set_value_unsigned_check(
-    client: &TestClient,
-    contract_address: Address,
-    set_arg: u32,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let set_value_req = client.set_value_unsigned(contract_address, set_arg).await;
-    set_value_req.await.unwrap().unwrap();
-
-    let get_arg = client.query_contract(contract_address).await?;
-    assert_eq!(set_arg, get_arg.as_u32());
-
-    Ok(())
-}
-
 /// Calls `set_values` on the test contract.
 pub(crate) async fn set_multiple_values_check(
     client: &TestClient,
@@ -136,7 +111,7 @@ pub(crate) async fn set_multiple_values_check(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let requests = client.set_values(contract_address, values).await;
 
-    let receipts: Vec<Result<Option<_>, ProviderError>> = join_all(requests).await;
+    let receipts: Vec<Result<Option<_>, _>> = join_all(requests).await;
     assert!(receipts
         .into_iter()
         .all(|x| x.is_ok() && x.unwrap().is_some()));
@@ -152,20 +127,20 @@ pub(crate) async fn set_multiple_values_check(
 
 pub async fn setup(
     finalization_blocks: u32,
-) -> (TestRollup<MockDemoRollup<Native>>, TestClient, Address, u64) {
+    extension: SeqConfigExtension,
+) -> (TestRollup<MockDemoRollup<Native>>, TestClient, u64) {
     let rollup_prover_config =
         get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(mock_da_risc0_host_args());
 
     let chain_id = config_value!("CHAIN_ID");
     let test_rollup: TestRollup<MockDemoRollup<Native>> =
-        start_node(rollup_prover_config, finalization_blocks).await;
+        start_node(rollup_prover_config, finalization_blocks, Some(extension)).await;
 
-    let (evm_client, addr) =
-        create_test_client(test_rollup.http_addr, chain_id, SENDER_PRIV_KEY).await;
+    let evm_client = create_test_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
 
     test_rollup.wait_for_next_blocks(10).await;
 
-    (test_rollup, evm_client, addr, chain_id)
+    (test_rollup, evm_client, chain_id)
 }
 
 // TODO: reenable this check by figuring out a way to get finer grained control over preferred batch production.

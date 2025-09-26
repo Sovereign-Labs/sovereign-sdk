@@ -40,7 +40,7 @@ pub enum CallMessage<S: Spec> {
     ///
     /// This could be used to clear values too.
     SetRelayerConfig {
-        /// oracle data per domain.
+        /// Oracle data per domain.
         domain_oracle_data: SafeVec<DomainOracleData, MAX_DOMAINS_PER_RELAYER_COUNT>,
         /// Custom default gas per domain.
         domain_default_gas: SafeVec<DomainDefaultGas, MAX_DOMAINS_PER_RELAYER_COUNT>,

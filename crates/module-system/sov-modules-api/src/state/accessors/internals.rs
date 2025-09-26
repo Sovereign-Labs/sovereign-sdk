@@ -2,16 +2,19 @@ use core::fmt;
 use std::collections::HashMap;
 
 use crate::state::accessors::StateMetricsProvider;
+use crate::{Spec, StateCheckpoint, TxChangeSet};
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_state::{
     namespaces, AccessSize, IsValueCached, Namespace, ProvableStorageCache, SlotKey, SlotValue,
     StateAccesses, Storage,
 };
 
+#[cfg(feature = "native")]
 use super::checkpoints::ChangeSet;
 use super::temp_cache::{CacheLookup, TempCache};
 use super::UniversalStateAccessor;
 use crate::state::traits::PerBlockCache;
+use sov_state::NodeLeaf;
 
 /// A [`Delta`] is a diff over an underlying [`Storage`] instance. When queried, it first checks
 /// whether the value is in its local cache and, if so, returns it. Otherwise, it queries the
@@ -75,7 +78,8 @@ impl<S: Storage> Delta<S> {
         self.kernel_cache
             .prune_writes_up_to_and_all_reads(rollup_height);
         self.accessory_writes
-            .retain(|_, write| write.at_rollup_height >= rollup_height);
+            .retain(|_, write| write.at_rollup_height > rollup_height);
+        self.witness = Default::default(); // Prune the witness
     }
 
     pub(super) fn with_witness(inner: S, witness: S::Witness) -> Self {
@@ -116,28 +120,72 @@ impl<S: Storage> Delta<S> {
         )
     }
 
+    #[cfg(feature = "native")]
     pub(super) fn changes(&mut self) -> ChangeSet {
         self.commit_revertable_storage_cache();
         let changes = self
             .user_cache
             .get_writes()
-            .map(|(k, v)| ((k.clone(), Namespace::User), v.cloned()))
+            .map(|(k, (height, v))| ((k.clone(), Namespace::User), (height, v.cloned())))
             .chain(
                 self.kernel_cache
                     .get_writes()
-                    .map(|(k, v)| ((k.clone(), Namespace::Kernel), v.cloned())),
+                    .map(|(k, (height, v))| ((k.clone(), Namespace::Kernel), (height, v.cloned()))),
             )
+            .chain(self.accessory_writes.iter().map(|(k, w)| {
+                (
+                    (k.clone(), Namespace::Accessory),
+                    (w.at_rollup_height, w.value.clone()),
+                )
+            }))
+            .collect();
+        ChangeSet { changes }
+    }
+
+    #[cfg(feature = "native")]
+    pub(super) fn changes_after(&mut self, height: u64) -> ChangeSet {
+        self.commit_revertable_storage_cache();
+        let changes: Vec<_> = self
+            .user_cache
+            .get_writes_after_height(height)
+            .map(|(k, (height, v))| ((k.clone(), Namespace::User), (height, v.cloned())))
             .chain(
-                self.accessory_writes
-                    .iter()
-                    .map(|(k, w)| ((k.clone(), Namespace::Accessory), w.value.clone())),
+                self.kernel_cache
+                    .get_writes_after_height(height)
+                    .map(|(k, (height, v))| ((k.clone(), Namespace::Kernel), (height, v.cloned()))),
             )
+            .chain(self.accessory_writes.iter().filter_map(|(k, w)| {
+                if w.at_rollup_height > height {
+                    Some((
+                        (k.clone(), Namespace::Accessory),
+                        (w.at_rollup_height, w.value.clone()),
+                    ))
+                } else {
+                    None
+                }
+            }))
             .collect();
         ChangeSet { changes }
     }
 }
 
+/// Holds keys and values that were read for the first time.
+#[derive(Debug, Clone, Default)]
+pub struct FirstTimeReads {
+    /// User space reads.
+    pub user_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
+    /// Kernel space reads.
+    pub kernel_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
+}
+
 impl<S: Storage> Delta<S> {
+    pub fn first_reads(&self) -> FirstTimeReads {
+        FirstTimeReads {
+            user_reads: self.user_cache.revertable_ordered_reads().clone(),
+            kernel_reads: self.kernel_cache.revertable_ordered_reads().clone(),
+        }
+    }
+
     pub fn commit_revertable_storage_cache(&mut self) {
         self.user_cache.commit_revertable_storage_cache();
         self.kernel_cache.commit_revertable_storage_cache();
@@ -260,6 +308,18 @@ pub struct AccessoryDelta<S: Storage> {
     rollup_height: u64,
 }
 
+impl<S: Storage> AccessoryDelta<S> {
+    #[cfg(feature = "native")]
+    /// Prune all changes which took place before the given height.
+    pub fn prune_changes_before(&mut self, height: u64) {
+        // `retain`  takes O(capacity) time, so we only do it if there are any writes.
+        if !self.writes.is_empty() {
+            self.writes
+                .retain(|_, write| write.at_rollup_height > height);
+        }
+    }
+}
+
 impl<S: Storage> StateMetricsProvider for AccessoryDelta<S> {
     fn metrics(&mut self) -> &mut StateMetrics {
         &mut self.metrics
@@ -270,6 +330,15 @@ impl<S: Storage> AccessoryDelta<S> {
     /// Freeze the accessory delta, preventing further accesses.
     pub fn freeze(self) -> Vec<(SlotKey, Option<SlotValue>)> {
         self.writes.into_iter().map(|(k, v)| (k, v.value)).collect()
+    }
+
+    #[cfg(feature = "native")]
+    /// Freeze the accessory delta, preventing further accesses.
+    pub fn freeze_with_height(self) -> Vec<(SlotKey, (u64, Option<SlotValue>))> {
+        self.writes
+            .into_iter()
+            .map(|(k, v)| (k, (v.at_rollup_height, v.value)))
+            .collect()
     }
 }
 
@@ -340,16 +409,6 @@ impl<T> RevertableWriter<T> {
         }
     }
 
-    /// Get an iterator over the current writes
-    pub fn changes(&self) -> ChangeSet {
-        ChangeSet::new(
-            self.writes
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-        )
-    }
-
     /// Commit all items from [`RevertableWriter`] returning the inner storage.
     pub(super) fn commit(mut self) -> T
     where
@@ -376,6 +435,20 @@ impl<T> RevertableWriter<T> {
             Some(value) => inner.set_value(namespace, key, value),
             None => inner.delete_value(namespace, key),
         };
+    }
+}
+
+impl<S: Spec> RevertableWriter<StateCheckpoint<S>> {
+    /// Change set resulting from transaction execution.
+    pub fn changes(&self) -> TxChangeSet {
+        TxChangeSet {
+            writes: self
+                .writes
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+            reads: self.inner.first_reads().clone(),
+        }
     }
 }
 
