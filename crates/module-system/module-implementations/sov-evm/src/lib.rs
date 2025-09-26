@@ -319,6 +319,10 @@ impl<S: Spec> Evm<S> {
             .get(tx_hash, state)
             .unwrap_infallible()
     }
+
+    pub(crate) fn base_fee(&self) -> u64 {
+        0
+    }
 }
 
 pub(crate) fn to_rollup_address<S: Spec>(address: Address) -> S::Address

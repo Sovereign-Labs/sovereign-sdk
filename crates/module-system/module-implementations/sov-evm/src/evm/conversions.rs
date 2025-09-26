@@ -23,13 +23,12 @@ impl From<SealedBlock> for BlockEnv {
             beneficiary: block.header.beneficiary,
             timestamp: U256::from(block.header.timestamp),
             prevrandao: Some(block.header.mix_hash),
-            basefee: 0,
             gas_limit: block.header.gas_limit,
-
             blob_excess_gas_and_price: Some(BlobExcessGasAndPrice {
                 excess_blob_gas: EXCESS_BLOB_GAS,
                 blob_gasprice: BLOB_GAS_PRICE,
             }),
+            basefee: block.base_fee(),
             difficulty: Default::default(),
         }
     }
@@ -57,7 +56,6 @@ pub fn create_tx_env(tx: &TransactionSigned, signer: Address, nonce: u64, gas_li
         caller: signer,
         gas_limit,
         nonce,
-
         tx_type: TransactionType::Eip1559.into(),
         kind: tx.to().into(),
         value: tx.value(),

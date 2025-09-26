@@ -43,9 +43,13 @@ async fn sanity_checks(test_client: &TestClient) {
         .eth_get_block_by_number(Some("latest".to_owned()))
         .await;
 
+    assert!(latest_block.base_fee_per_gas.is_some());
+
     let pending_block = test_client
         .eth_get_block_by_number(Some("pending".to_owned()))
         .await;
+
+    assert!(pending_block.base_fee_per_gas.is_some());
 
     assert!(latest_block.number.unwrap().as_u64() > 0);
     assert!(latest_block.number > earliest_block.number);

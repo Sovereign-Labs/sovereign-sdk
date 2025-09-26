@@ -69,6 +69,8 @@ impl<S: Spec> BlockHooks for Evm<S> {
                 excess_blob_gas: EXCESS_BLOB_GAS,
                 blob_gasprice: BLOB_GAS_PRICE,
             }),
+
+            basefee: self.base_fee(),
             ..Default::default()
         };
         self.block_env
@@ -143,6 +145,8 @@ impl<S: Spec> BlockHooks for Evm<S> {
             excess_blob_gas: block_env
                 .blob_excess_gas_and_price
                 .map(|blob_gas| blob_gas.excess_blob_gas),
+
+            base_fee_per_gas: Some(block_env.basefee),
             ..Default::default()
         };
 

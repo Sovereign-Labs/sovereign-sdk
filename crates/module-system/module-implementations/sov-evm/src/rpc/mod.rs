@@ -621,6 +621,7 @@ where
             excess_blob_gas: current_block_env
                 .blob_excess_gas_and_price
                 .map(|blob_gas| blob_gas.excess_blob_gas),
+            base_fee_per_gas: Some(current_block_env.basefee),
 
             ..Default::default()
         };
