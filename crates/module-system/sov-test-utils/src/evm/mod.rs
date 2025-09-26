@@ -3,8 +3,10 @@ use std::path::PathBuf;
 use ethers::contract::BaseContract;
 use ethers::core::abi::Abi;
 
-pub mod fake_uni;
-pub mod simple_storage;
+mod fake_uni;
+mod simple_storage;
+pub use fake_uni::ERC20;
+pub use simple_storage::SimpleStorage;
 
 fn test_data_path() -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

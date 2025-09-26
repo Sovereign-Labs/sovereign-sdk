@@ -55,7 +55,7 @@ impl TestClient {
 
 // Tx/nonce utils
 impl TestClient {
-    fn make_tx(
+    pub fn make_tx(
         &self,
         to_address: Option<Address>,
         data: Option<ethers::core::types::Bytes>,

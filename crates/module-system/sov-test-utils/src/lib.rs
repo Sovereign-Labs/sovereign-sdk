@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-pub use evm::simple_storage::SimpleStorage;
+pub use evm::*;
 pub use generators::MessageGenerator;
 pub use interface::*;
 pub use rt_agnostic_blueprint::RtAgnosticBlueprint;
