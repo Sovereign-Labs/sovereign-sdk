@@ -8,6 +8,7 @@ use alloy_consensus::{
 use alloy_consensus::{EthereumTxEnvelope, TxEip4844};
 use alloy_primitives::TxHash;
 use alloy_primitives::{Address, Sealable, Sealed, B256};
+use derive_new::new;
 use reth_ethereum_primitives::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
 use revm::context::result::EVMError;
 use serde_with::serde_as;
@@ -35,8 +36,8 @@ pub struct RlpEvmTransaction {
 }
 
 #[serde_as]
-#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-pub struct TransactionSignedAndRecovered {
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize, new)]
+pub struct TxSignedAndRecovered {
     /// Signer of the transaction
     pub(crate) signer: Address,
     /// Signed transaction
@@ -47,7 +48,7 @@ pub struct TransactionSignedAndRecovered {
     pub block_number: u64,
 }
 
-impl TransactionSignedAndRecovered {
+impl TxSignedAndRecovered {
     /// The signed transaction that was recovered.
     pub fn signed_transaction(&self) -> &TransactionSigned {
         &self.signed_transaction
@@ -57,12 +58,12 @@ impl TransactionSignedAndRecovered {
 /// A pending Ethereum transaction.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct PendingTransaction {
-    pub(crate) transaction: TransactionSignedAndRecovered,
+    pub(crate) transaction: TxSignedAndRecovered,
     pub(crate) receipt: Receipt,
 }
 
 impl PendingTransaction {
-    pub(crate) fn new(transaction: TransactionSignedAndRecovered, receipt: Receipt) -> Self {
+    pub(crate) fn new(transaction: TxSignedAndRecovered, receipt: Receipt) -> Self {
         Self {
             transaction,
             receipt,
@@ -109,6 +110,13 @@ impl SealedBlock {
     /// Returns the block transactions.
     pub fn transactions(&self) -> &Range<u64> {
         &self.transactions
+    }
+
+    pub fn base_fee(&self) -> u64 {
+        self.header
+            .base_fee_per_gas
+            // This is justified. We set it at genesis and never remove it — only overwrite it.
+            .expect("The base_fee_per_gas must be set.")
     }
 }
 
@@ -229,8 +237,8 @@ pub struct Receipt {
     pub error: Option<EVMError<u8>>,
 }
 
-impl From<TransactionSignedAndRecovered> for Recovered<TransactionSigned> {
-    fn from(value: TransactionSignedAndRecovered) -> Self {
+impl From<TxSignedAndRecovered> for Recovered<TransactionSigned> {
+    fn from(value: TxSignedAndRecovered) -> Self {
         Recovered::new_unchecked(value.signed_transaction, value.signer)
     }
 }
@@ -245,7 +253,7 @@ mod tests {
     #[test]
     fn tx_conversion() {
         let signer = Address::random();
-        let tx = TransactionSignedAndRecovered {
+        let tx = TxSignedAndRecovered {
             signer,
             signed_transaction: EthereumTxEnvelope::Eip1559(Signed::new_unchecked(
                 TxEip1559::default(),

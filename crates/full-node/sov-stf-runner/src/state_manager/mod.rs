@@ -97,6 +97,7 @@ where
     is_initialized: bool,
     da_sync_state: Arc<DaSyncState>,
     da_polling_interval: std::time::Duration,
+    da_total_timeout: std::time::Duration,
 }
 
 impl<StateRoot, Witness, Sm, Da> StateManager<StateRoot, Witness, Sm, Da>
@@ -121,6 +122,7 @@ where
         state_height_tracker: Box<dyn ProvableHeightTracker>,
         da_sync_state: Arc<DaSyncState>,
         da_polling_interval: std::time::Duration,
+        da_total_timeout: std::time::Duration,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             storage_manager,
@@ -134,6 +136,7 @@ where
             is_initialized: false,
             da_sync_state,
             da_polling_interval,
+            da_total_timeout,
         })
     }
 
@@ -770,6 +773,7 @@ where
                         self.da_sync_state.as_ref(),
                         next_candidate_height,
                         self.da_polling_interval,
+                        self.da_total_timeout,
                     ),
                     da_service.get_head_block_header(),
                 )?;

@@ -62,7 +62,7 @@ pub struct SequencerConfig<Address, Sc = SequencerKindConfig> {
     pub max_batch_size_bytes: usize,
     /// Maximum number of blobs sent in parallel.
     pub max_concurrent_blobs: usize,
-    /// Maximum time in seconds to wait for a blob to be processed.
+    /// Maximum time in seconds to wait for a blob to be processed, since it has been published to DA.
     pub blob_processing_timeout_secs: u64,
     /// Extensions to the sequencer config (for example evm related configuration).
     pub extension: Option<SeqConfigExtension>,

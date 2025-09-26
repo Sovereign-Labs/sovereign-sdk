@@ -10,7 +10,7 @@ use sov_address::{EthereumAddress, FromVmAddress};
 #[cfg(feature = "local")]
 pub use sov_eth_dev_signer::Signers;
 pub use sov_evm::EthereumAuthenticator;
-use sov_evm::{convert_to_transaction_signed, RlpEvmTransaction};
+use sov_evm::{convert_to_tx_signed, RlpEvmTransaction};
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_sequencer::{SeqConfigExtension, Sequencer};
@@ -105,7 +105,7 @@ where
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
     fn make_raw_tx(&self, raw_tx: RlpEvmTransaction) -> Result<(B256, Vec<u8>), ErrorObjectOwned> {
-        let signed_transaction = convert_to_transaction_signed(raw_tx.clone())
+        let signed_transaction = convert_to_tx_signed(raw_tx.clone())
             // TODO: Fix this later
             .map_err(|_err| ErrorCode::ServerError(500))?;
 

@@ -6059,6 +6059,7 @@ dependencies = [
  "sov-bank",
  "sov-chain-state",
  "sov-kernels",
+ "sov-metrics",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
@@ -6086,6 +6087,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "derive-new",
  "serde",
  "sov-rollup-interface",
  "sp1-lib 5.0.8",

@@ -114,8 +114,8 @@ tracing-subscriber = "0.3.18"
 rand = "0.8"
 
 ethereum-types = "0.14.1"
-ethers =  { workspace = true }
-alloy-primitives =  { workspace = true }
+ethers = { workspace = true }
+alloy-primitives = { workspace = true }
 alloy-rpc-types-eth = "1.0.30"
 alloy-pubsub = "1.0"
 

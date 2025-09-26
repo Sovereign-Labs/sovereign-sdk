@@ -49,6 +49,7 @@ where
 {
     first_unprocessed_height_at_startup: u64,
     da_polling_interval: Duration,
+    da_total_timeout: Duration,
     da_service: Arc<Da>,
     da_height_at_genesis: u64,
     stf: Stf,
@@ -192,6 +193,7 @@ where
         };
 
         let da_polling_interval = Duration::from_millis(runner_config.da_polling_interval_ms);
+        let da_total_timeout = Duration::from_secs(runner_config.da_total_timeout_secs);
 
         let state_manager = StateManager::new(
             storage_manager,
@@ -202,6 +204,7 @@ where
             state_height_tracker,
             sync_state.clone(),
             da_polling_interval,
+            da_total_timeout,
         )?;
 
         let (sync_fetcher, fetcher_background_handle) = FinalizedBlocksBulkFetcher::new(
@@ -224,6 +227,7 @@ where
         Ok(Self {
             first_unprocessed_height_at_startup,
             da_polling_interval,
+            da_total_timeout,
             da_service: da_service.clone(),
             da_height_at_genesis: runner_config.genesis_height,
             stf,
@@ -467,7 +471,7 @@ where
         let mut batch_count = 0;
         let get_block_start = std::time::Instant::now();
         let filtered_block = if next_da_height <= self.sync_fetcher.last_finalized_height {
-            // no reorg will happen for this height, it is safe to just pull it from the fetcher,
+            // no reorg will happen for this height; it is safe to just pull it from the fetcher,
             // which could have this block fetcher already
             self.sync_fetcher.get_block_at(next_da_height).await?
         } else {
@@ -477,10 +481,12 @@ where
                 self.sync_state.as_ref(),
                 next_da_height,
                 self.da_polling_interval,
+                self.da_total_timeout,
             )
             .await?
         };
         let get_block_time = get_block_start.elapsed();
+        tracing::trace!(time = ?get_block_time, header = %filtered_block.header().display(), "DA block has been fetched, preparing storage");
 
         let (stf_pre_state, filtered_block) = self
             .state_manager
@@ -652,7 +658,7 @@ where
         // halt further slot processing.
         if let Some(stop_at_rollup_height) = stop_at_rollup_height {
             if &slot_result.rollup_height == stop_at_rollup_height {
-                info!("Stopping at rollup height: {}", stop_at_rollup_height);
+                info!(rollup_height = %stop_at_rollup_height, "Stopping at rollup the height");
                 return Ok(None);
             }
             assert!(
@@ -745,7 +751,7 @@ fn error_if_tokio_runtime_is_not_multi_threaded() -> anyhow::Result<()> {
         }
 }
 
-/// Creats a new `DaSyncState`
+/// Creates a new `DaSyncState`
 pub async fn make_da_sync_state<Da: DaService<Error = anyhow::Error>>(
     runner_config: &RunnerConfig,
     stop_at_rollup_height: Option<RollupHeight>,

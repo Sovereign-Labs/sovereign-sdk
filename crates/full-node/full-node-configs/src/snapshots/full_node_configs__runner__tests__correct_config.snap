@@ -22,6 +22,7 @@ expression: config
   "runner": {
     "genesis_height": 31337,
     "da_polling_interval_ms": 10000,
+    "da_total_timeout_secs": 600,
     "http_config": {
       "bind_host": "127.0.0.1",
       "bind_port": 12346,

@@ -6,11 +6,18 @@ use std::time::{Duration, Instant};
 
 use humantime::format_duration;
 use prettytable::{row, Table};
+use sov_address::MultiAddressEvm;
 use sov_benchmarks::node::{generate_transfers, prefill_state};
-use sov_benchmarks::setup_with_runner;
+use sov_benchmarks::{setup_with_runner_and_spec, BenchSpec, NomtBenchSpec};
+use sov_mock_da::MockDaSpec;
 use sov_modules_api::prelude::anyhow;
+use sov_modules_api::Spec;
+use sov_test_utils::storage::{
+    ForklessStorageManager, SimpleNomtStorageManager, SimpleStorageManager,
+};
+use sov_test_utils::MockZkvm;
 
-// Minimum TPS below which it is considered an issue
+// Minimum TPS, below which it is considered an issue
 const MIN_TPS: f64 = 1000.0;
 // Number to check that rollup actually executed some transactions
 const MAX_TPS: f64 = 30_000.0;
@@ -94,14 +101,26 @@ impl BenchParams {
     }
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn run_with_spec<S, Sm>() -> anyhow::Result<()>
+where
+    Sm: ForklessStorageManager,
+    S: Spec<
+        InnerZkvm = MockZkvm,
+        OuterZkvm = MockZkvm,
+        Da = MockDaSpec,
+        Address = MultiAddressEvm,
+        Storage = Sm::Storage,
+    >,
+{
     let params = BenchParams::new();
     let mut num_success_txns: u64 = 0;
 
-    let (mut runner, roles) = setup_with_runner(params.transactions_per_block, Default::default());
+    let (mut runner, roles) = setup_with_runner_and_spec::<MockZkvm, Sm, S>(
+        params.transactions_per_block,
+        Default::default(),
+    );
     let token_id = prefill_state(&roles, &mut runner);
-    let blocks = generate_transfers(params.blocks, token_id, &roles, &mut runner);
+    let blocks = generate_transfers::<S, Sm>(params.blocks, token_id, &roles, &mut runner);
 
     let expected_num_txs: u64 = params.blocks * params.transactions_per_block;
 
@@ -132,6 +151,7 @@ async fn main() -> anyhow::Result<()> {
         "Not enough successful transactions, something is broken"
     );
     if params.timer_output {
+        println!("Storage: {}", std::any::type_name::<S::Storage>());
         print_times(
             total,
             apply_block_time,
@@ -141,4 +161,18 @@ async fn main() -> anyhow::Result<()> {
         );
     }
     Ok(())
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    match env::var("SOV_BENCH") {
+        Ok(s) => {
+            if &s == "nomt" {
+                run_with_spec::<NomtBenchSpec, SimpleNomtStorageManager<_>>().await
+            } else {
+                run_with_spec::<BenchSpec<MockZkvm>, SimpleStorageManager<_>>().await
+            }
+        }
+        Err(_) => run_with_spec::<BenchSpec<MockZkvm>, SimpleStorageManager<_>>().await,
+    }
 }

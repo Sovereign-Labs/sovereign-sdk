@@ -5,16 +5,37 @@ celestia_rpc_auth_token = "MY.SECRET.TOKEN"
 celestia_rpc_address = "http://127.0.0.1:26658"
 # The largest response the rollup will accept from the Celestia node. Defaults to 100 MB
 max_celestia_response_body_size = 104_857_600
-# The maximum time to wait for a response to an RPC query against Celestia node. Defaults to 60 seconds.
-celestia_rpc_timeout_seconds = 60
+# The maximum time to wait for a response to an RPC query against Celestia node. 
+# Default: 60 seconds
+# We set it to allow skipping 3 blocks on mocha testnet
+celestia_rpc_timeout_seconds = 18
+# Exponential backoff configuration for retrying failed requests to Celestia node
 # Minimal time to wait before reattempting to request to celestia node.
-# backoff_min_delay_ms = 200
+# Default: 100 milliseconds
+backoff_min_delay_ms = 200
 # Maximal time between reattempting to request to the celestia node.
-# backoff_max_delay_ms = 200
+# Default: 12000 milliseconds (12 seconds)
+backoff_max_delay_ms = 6_000
 # Number of requests attempted on the celestia node before returning an error.
-# backoff_max_times = 60
+# Default: 60
+backoff_max_times = 10
 # Exponential factor for reattempting failed requests
+# Default: 2.0
 # backoff_factor = 2.0
+
+# WITH CURRENT UNCOMMENTED VALUES:
+# Timeout per request: 18 seconds
+# Backoff: min=200ms, max=6s, attempts=10, factor=2.0
+# Retry pattern: 200ms, 400ms, 800ms, 1.6s, 3.2s, 6s, 6s, 6s, 6s, 6s (last 5 capped at max)
+# Total backoff waiting: 200ms + 400ms + 800ms + 1.6s + 3.2s + 6s + 6s + 6s + 6s + 6s = ~36.2s
+# Total request timeouts: 10 * 18s = 180s
+# Maximum total time: ~216s (3.6 minutes)
+#
+# Default values result in the following retry pattern:
+# Attempts 1-9: 100ms, 200ms, 400ms, 800ms, 1.6s, 3.2s, 6.4s, 12s, 12s (capped)
+# Attempts 10-60: 12s each (51 more attempts)
+# Total backoff waiting time with defaults: ~51s (first 9) + 612s (remaining 51) = ~663s (11 minutes)
+# Total time with defaults including timeouts: 60 * 60s = 3600s (60 minutes) for all request timeouts
 
 [storage]
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
@@ -28,6 +49,10 @@ genesis_height = 3
 # Block time for celestia is configured in `docker/run-validator.sh` and we try to set this one to be lower,
 # So status is updated more frequently.
 da_polling_interval_ms = 500
+# Celestia configured to give ~216s to retry, so we limit it at 300 to eliminate any locks or slow read.
+# This field is the safeguard against any long blocking in DaService.
+# The default value is: 600
+da_total_timeout_secs = 300
 
 [runner.http_config]
 bind_host = "127.0.0.1"
@@ -56,7 +81,7 @@ max_number_of_transitions_in_db = 100
 max_number_of_transitions_in_memory = 30
 
 [sequencer]
-# This number should be <= than the total number of attempts by exponential builder of celestia adapter
+# This value is counted between sequencer receiving receipt from DA about inclusion till node has processed this blob.
 blob_processing_timeout_secs = 600
 max_batch_size_bytes = 1048576
 max_concurrent_blobs = 128

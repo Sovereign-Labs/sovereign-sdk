@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::handlers::ETH_RPC_ERROR;
 use crate::to_jsonrpsee_error_object;
 use crate::Ethereum;
@@ -101,18 +100,18 @@ where
     let start = get_block_nr(from_block, &evm, state)?;
     let end = get_block_nr(to_block, &evm, state)?;
 
-    // We jsut validated that `start` and `end` are not peneding.
+    // We just validated that `start` and `end` are not pending.
     let block_range = RangeInclusive::new(start, end);
     for height in block_range {
-        let should_contnue = logs_from_block(&mut rpc_logs, height, &filter, &evm, limits, state)?;
-        if !should_contnue {
+        let should_continue = logs_from_block(&mut rpc_logs, height, &filter, &evm, limits, state)?;
+        if !should_continue {
             break;
         }
     }
     Ok(rpc_logs)
 }
 
-// anics if a block number or pending block is passed.
+// panics if a block number or pending block is passed.
 fn logs_from_block<S>(
     rpc_logs: &mut Vec<Log>,
     height: u64,
@@ -128,11 +127,15 @@ where
     let block = match evm.get_maybe_sealed_block(height, state) {
         Some(MaybeSealedBlock::Sealed(block)) => block,
         Some(MaybeSealedBlock::Pending(_)) => {
-            // This should be validate before calling this method.
+            // This should be validated before calling this method.
             panic!("Pending blocks are not supported")
         }
         None => {
-            // This can hapen if the state was pruned.
+            tracing::error!(
+                height,
+                "Block for height not found. The state may have already been pruned."
+            );
+            // This can happen if the state was pruned.
             let msg = format!(
                 "Block for height {height:?} not found. The state may have already been pruned.",
             );
@@ -148,11 +151,11 @@ where
 
     for index in block.transactions {
         let Some(receipt) = evm.receipt(index, state) else {
-            // This can hapen if the state was pruned.
+            // This can happen if the state was pruned.
             let msg = format!(
                 "Receipt for index {index:?} not found, The state may have already been pruned."
             );
-            tracing::error!(%msg);
+            tracing::error!(index, %block_hash, "Receipt for index not found, The state may have already been pruned.");
             return Err(to_jsonrpsee_error_object(&msg, ETH_RPC_ERROR));
         };
 

@@ -4610,6 +4610,7 @@ dependencies = [
  "sov-bank",
  "sov-chain-state",
  "sov-kernels",
+ "sov-metrics",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
@@ -4637,6 +4638,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "derive-new",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",

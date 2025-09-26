@@ -2,13 +2,18 @@ use alloy_consensus::{transaction::Recovered, Transaction};
 use alloy_eips::eip2718::{Decodable2718, Eip2718Error};
 use alloy_primitives::{Address, Bytes, U256};
 use reth_primitives_traits::SignedTransaction;
-use revm::context::{BlockEnv, TransactionType, TxEnv};
+use revm::{
+    context::{BlockEnv, TransactionType, TxEnv},
+    context_interface::block::BlobExcessGasAndPrice,
+};
 use thiserror::Error;
 
 use super::primitive_types::SealedBlock;
 #[cfg(feature = "native")]
-use crate::primitive_types::TransactionSignedAndRecovered;
-use crate::{evm::primitive_types::TransactionSigned, RlpEvmTransaction};
+use crate::primitive_types::TxSignedAndRecovered;
+use crate::{
+    evm::primitive_types::TransactionSigned, RlpEvmTransaction, BLOB_GAS_PRICE, EXCESS_BLOB_GAS,
+};
 
 // BlockEnv from SealedBlock
 impl From<SealedBlock> for BlockEnv {
@@ -18,10 +23,12 @@ impl From<SealedBlock> for BlockEnv {
             beneficiary: block.header.beneficiary,
             timestamp: U256::from(block.header.timestamp),
             prevrandao: Some(block.header.mix_hash),
-            basefee: 0,
             gas_limit: block.header.gas_limit,
-            // Not used fields:
-            blob_excess_gas_and_price: None,
+            blob_excess_gas_and_price: Some(BlobExcessGasAndPrice {
+                excess_blob_gas: EXCESS_BLOB_GAS,
+                blob_gasprice: BLOB_GAS_PRICE,
+            }),
+            basefee: block.base_fee(),
             difficulty: Default::default(),
         }
     }
@@ -29,8 +36,8 @@ impl From<SealedBlock> for BlockEnv {
 
 // Converts historical tx to TxEnv
 #[cfg(feature = "native")]
-pub fn replay_tx_env(tx: &TransactionSignedAndRecovered) -> TxEnv {
-    let TransactionSignedAndRecovered {
+pub fn replay_tx_env(tx: &TxSignedAndRecovered) -> TxEnv {
+    let TxSignedAndRecovered {
         signed_transaction,
         signer,
         ..
@@ -49,7 +56,6 @@ pub fn create_tx_env(tx: &TransactionSigned, signer: Address, nonce: u64, gas_li
         caller: signer,
         gas_limit,
         nonce,
-
         tx_type: TransactionType::Eip1559.into(),
         kind: tx.to().into(),
         value: tx.value(),
@@ -76,7 +82,7 @@ pub enum RlpConversionError {
 }
 
 /// Coverts RLP encoded transaction to `TransactionSigned`.
-pub fn convert_to_transaction_signed(
+pub fn convert_to_tx_signed(
     data: RlpEvmTransaction,
 ) -> Result<TransactionSigned, RlpConversionError> {
     let data = Bytes::from(data.rlp);
@@ -93,7 +99,7 @@ impl TryFrom<RlpEvmTransaction> for Recovered<TransactionSigned> {
     type Error = RlpConversionError;
 
     fn try_from(evm_tx: RlpEvmTransaction) -> Result<Self, Self::Error> {
-        let tx: TransactionSigned = convert_to_transaction_signed(evm_tx)?;
+        let tx: TransactionSigned = convert_to_tx_signed(evm_tx)?;
         let tx = tx
             .try_into_recovered()
             .map_err(|_| RlpConversionError::InvalidSignature)?;
@@ -110,7 +116,9 @@ mod tests {
 
     #[test]
     fn prepare_call_block_env() {
-        let block = Block::default();
+        let mut block = Block::default();
+        block.header.base_fee_per_gas = Some(0);
+
         let sealed_block = block.clone().seal();
 
         let block_env = BlockEnv::from(sealed_block);

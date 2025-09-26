@@ -21,7 +21,7 @@ const MAX_PRIORITY_FEE_PER_GAS: u64 = 1;
 
 #[derive(Deref)]
 pub struct TestClient {
-    contract: SimpleStorageContract,
+    pub contract: SimpleStorageContract,
     node_client: NodeClient,
     pub nonce: Arc<AtomicU64>,
     #[deref]
@@ -55,7 +55,7 @@ impl TestClient {
 
 // Tx/nonce utils
 impl TestClient {
-    fn make_tx(
+    pub fn make_tx(
         &self,
         to_address: Option<Address>,
         data: Option<ethers::core::types::Bytes>,

@@ -28,7 +28,7 @@ use tracing::debug;
 use crate::conversions::replay_tx_env;
 use crate::db::EvmDb;
 use crate::evm::executor;
-use crate::evm::primitive_types::{Receipt, TransactionSigned, TransactionSignedAndRecovered};
+use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
 use crate::executor::{get_cfg_env, inspect, transact_commit};
 use crate::helpers::{
     from_primitive_with_hash, from_recovered_with_block_context, prepare_call_env,
@@ -225,7 +225,6 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
         debug!("EVM module JSON-RPC request to `eth_getCode`");
-
         let mut state = self.resolve_state(block_number, state)?;
         let code = self
             .accounts
@@ -236,9 +235,10 @@ where
                     .get(&account.code_hash, state.deref_mut())
                     .unwrap_infallible()
             })
+            .map(|code| code.bytecode().clone())
             .unwrap_or_default();
 
-        Ok(code.bytecode().clone())
+        Ok(code.clone())
     }
 
     /// Handler for: `eth_feeHistory`
@@ -352,18 +352,16 @@ where
         debug!("EVM module JSON-RPC request to `eth_estimateGas`");
         let result = self.call(request, block_number, state)?;
         let gas_used = result.gas_used();
-        state
+        let gas_meter = state.try_as_basic_gas_meter().unwrap();
+        gas_meter
             .charge_linear_gas(
                 &<S as GasSpec>::gas_to_charge_per_evm_gas(),
                 gas_used as u32,
             )
-            .unwrap();
-        let gas_meter = state.try_as_basic_gas_meter().unwrap();
+            .expect("No underflow is possible here as we init EVM gas with gas meter gas");
         let total_gas_used =
             gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
-        const RELATIVE_MARGIN: u64 = 100_000;
-        let gas_used_with_margins = (total_gas_used * 3) / 2 + RELATIVE_MARGIN; // gas * 1.5 + 100_000
-        Ok(U64::from(gas_used_with_margins))
+        Ok(U64::from(apply_margins(total_gas_used)?))
     }
 
     /// Handler for: `debug_traceTransaction`
@@ -413,18 +411,13 @@ where
                 continue;
             }
 
-            transact_commit(
-                &mut evm_db,
-                block_env.clone(),
-                replay_tx_env(&tx),
-                cfg_env.clone(),
-            )
-            .map_err(|e| eth_api_into_rpc_error(eth_from_evm_error(e)))?;
+            transact_commit(&mut evm_db, &block_env, replay_tx_env(&tx), cfg_env.clone())
+                .map_err(|e| eth_api_into_rpc_error(eth_from_evm_error(e)))?;
         }
 
         // Trace the target transaction
         self.trace_transaction(
-            block_env.clone(),
+            block_env,
             replay_tx_env(&traced_tx),
             cfg_env,
             evm_db,
@@ -443,6 +436,15 @@ pub enum PendingOrBlock {
     Number(u64),
     /// Invalid block number.
     Invalid(String),
+}
+
+const ABSOLUTE_MARGIN: u64 = 100_000;
+/// gas * 1.5 + 100_000
+fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
+    (gas / 2)
+        .checked_mul(3)
+        .and_then(|with_relative_margin| with_relative_margin.checked_add(ABSOLUTE_MARGIN))
+        .ok_or(RpcInvalidTransactionError::GasUintOverflow)
 }
 
 impl<S: Spec> Evm<S>
@@ -475,7 +477,7 @@ where
                     let mut inspector = TracingInspector::new(inspector_config);
 
                     let gas_limit = tx_env.gas_limit;
-                    let res = inspect(db, block_env, tx_env, cfg, &mut inspector)?;
+                    let res = inspect(db, &block_env, tx_env, cfg, &mut inspector)?;
                     inspector.set_transaction_gas_limit(gas_limit);
 
                     let frame = inspector
@@ -503,7 +505,7 @@ where
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
-        executor::call(evm_db, block_env, tx_env, cfg_env)
+        executor::call(evm_db, &block_env, tx_env, cfg_env)
             .map_err(|err| eth_api_into_rpc_error(eth_from_evm_error(err)))
     }
 
@@ -623,6 +625,11 @@ where
                 .timestamp
                 .try_into()
                 .expect("The impossible happened: timestamp overflow u64"),
+            excess_blob_gas: current_block_env
+                .blob_excess_gas_and_price
+                .map(|blob_gas| blob_gas.excess_blob_gas),
+            base_fee_per_gas: Some(current_block_env.basefee),
+
             ..Default::default()
         };
 
@@ -720,7 +727,7 @@ fn get_cfg_env_template() -> CfgEnv {
 // modified from: https://github.com/paradigmxyz/reth many times
 pub(crate) fn build_rpc_receipt(
     block: MaybeSealedBlock,
-    tx: TransactionSignedAndRecovered,
+    tx: TxSignedAndRecovered,
     tx_number: u64,
     receipt: Receipt,
 ) -> TransactionReceipt {
