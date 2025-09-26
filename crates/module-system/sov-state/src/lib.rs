@@ -11,6 +11,7 @@ pub mod namespaces;
 pub mod nomt;
 #[cfg(feature = "native")]
 mod prover_storage;
+#[cfg(feature = "native")]
 /// Defines data structures for managing state in the sequencer.
 pub mod sequencer_state;
 pub mod storage;

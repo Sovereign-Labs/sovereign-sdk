@@ -17,6 +17,7 @@ use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 use crate::bytes::Prefix;
 use crate::codec::EncodeLike;
 use crate::namespaces::{self, ProvableCompileTimeNamespace, ProvableNamespace};
+#[cfg(feature = "native")]
 use crate::sequencer_state::MaybePresentValue;
 #[cfg(feature = "native")]
 use crate::CompileTimeNamespace;
@@ -436,6 +437,7 @@ impl AccessoryWrite {
     }
 }
 
+#[cfg(feature = "native")]
 /// An object-safe interface for retrieving values. The implementer may be storage or a cache of some kind.
 pub trait StateGetter: core::fmt::Debug + Send + Sync {
     /// Get the size of the value.
@@ -452,6 +454,7 @@ pub trait StateGetter: core::fmt::Debug + Send + Sync {
     fn box_clone(&self) -> Box<dyn StateGetter>;
 }
 
+#[cfg(feature = "native")]
 impl<T: Storage + 'static + Send + Sync> StateGetter for T {
     fn get_leaf(
         &self,
