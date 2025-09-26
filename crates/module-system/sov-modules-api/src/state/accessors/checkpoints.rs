@@ -39,8 +39,8 @@ impl<S: Spec> StateCheckpoint<S> {
     pub fn to_raw_state_changes(mut self) -> RawStateChanges {
         self.delta.commit_revertable_storage_cache();
         RawStateChanges {
-            user: self.delta.user_cache,
-            kernel: self.delta.kernel_cache,
+            user: self.delta.user_cache.into(),
+            kernel: self.delta.kernel_cache.into(),
             accessory: self.delta.accessory_writes,
             rollup_height: self.rollup_height.get(),
         }

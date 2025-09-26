@@ -31,7 +31,7 @@ pub enum IsValueCached {
 /// [`Access`] represents a sequence of events on a particular value.
 /// For example, a transaction might read a value, then take some action which causes it to be updated
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Access {
+pub(crate) enum Access {
     /// Read access to a storage value.
     Read {
         original: Option<NodeLeafAndMaybeValue>,
@@ -90,7 +90,7 @@ impl Access {
     }
 }
 
-mod internal {
+pub(crate) mod internal {
     use super::*;
     /// [`CacheLog`] keeps track of the original and current values of each key accessed.
     /// By tracking original values, we can detect and eliminate write patterns where a key is
@@ -179,6 +179,12 @@ mod internal {
         }
 
         pub(crate) fn commit_revertable_log(&mut self) {
+            // Fast path: We rarely (if ever) commit more than once per block. If it's the first commit, we can just swap the revertable log into the commited log's spot.
+            if self.log.is_empty() {
+                std::mem::swap(&mut self.log, &mut self.revertable_log);
+                return;
+            }
+
             for (k, v) in self.revertable_log.drain() {
                 match v {
                     // 1. merge reads
@@ -213,7 +219,7 @@ use internal::CacheLog;
 #[derive(Default, Debug)]
 pub struct ProvableStorageCache<N> {
     // Transaction cache.
-    cache: CacheLog,
+    pub(crate) cache: CacheLog,
     // Reads that were retrieved from storage for the first time but can still be reverted.
     revertable_ordered_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
     // Ordered reads and writes.

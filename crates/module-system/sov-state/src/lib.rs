@@ -3,7 +3,7 @@
 #![deny(missing_docs)]
 
 mod bytes;
-mod cache;
+pub(crate) mod cache;
 pub mod codec;
 pub mod config;
 mod event;
