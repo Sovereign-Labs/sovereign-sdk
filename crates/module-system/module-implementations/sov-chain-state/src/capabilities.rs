@@ -488,6 +488,20 @@ impl<S: Spec> ChainState<S> {
     ) -> Result<Option<S::Gas>, <Reader as StateReader<Kernel>>::Error> {
         self.block_gas_limit_at(state.rollup_height_to_access(), state)
     }
+
+    /// This method is used for testing only. It sets the rollup height to zero.
+    #[cfg(feature = "native")]
+    pub fn test_only_set_rollup_height_for_genesis(
+        &mut self,
+        state: &mut KernelStateAccessor<'_, S>,
+    ) {
+        self.current_heights
+            .set(&(RollupHeight::GENESIS, VisibleSlotNumber::GENESIS), state)
+            .unwrap_infallible();
+        self.true_slot_number
+            .set(&SlotNumber::GENESIS, state)
+            .unwrap_infallible();
+    }
 }
 
 #[cfg(feature = "native")]
