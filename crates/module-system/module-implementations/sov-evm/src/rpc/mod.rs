@@ -363,6 +363,9 @@ where
             gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
         const RELATIVE_MARGIN: u64 = 100_000;
         let gas_used_with_margins = (total_gas_used * 3) / 2 + RELATIVE_MARGIN; // gas * 1.5 + 100_000
+
+        println!("===> gas_used_with_margins {:?}", gas_used_with_margins);
+
         Ok(U64::from(gas_used_with_margins))
     }
 
@@ -491,6 +494,8 @@ where
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<ExecutionResult> {
+        println!("XXXXXX CALLLL");
+
         let block_env = self.resolve_block_env(block_number, state)?;
         let tx_env =
             prepare_call_env(&block_env, request.clone()).map_err(eth_api_into_rpc_error)?;

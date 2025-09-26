@@ -189,8 +189,8 @@ where
     );
 
     //if nonce == 1 {
-    tx_and_raw_hash.authenticated_tx.0.max_fee = Amount(1000_000_000_000);
-    tx_and_raw_hash.authenticated_tx.0.gas_limit = Some([1000_000, 1000_000].into());
+    //tx_and_raw_hash.authenticated_tx.0.max_fee = Amount(1000_000_000_000);
+    //tx_and_raw_hash.authenticated_tx.0.gas_limit = Some([1000_000, 1000_000].into());
     //}
 
     println!("");
