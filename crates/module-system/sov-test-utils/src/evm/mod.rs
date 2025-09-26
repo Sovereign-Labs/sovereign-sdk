@@ -1,1 +1,1 @@
-pub mod simple_smart_contract;
+pub mod simple_storage;

@@ -5,12 +5,12 @@ use alloy_rpc_types_trace::geth::{
     CallFrame, GethDebugBuiltInTracerType, GethDebugTracingOptions, GethTrace,
 };
 use sov_evm::Evm;
-use sov_test_utils::{BatchTestCase, SimpleStorageContract};
+use sov_test_utils::{BatchTestCase, SimpleStorage};
 
 #[test]
 fn test_tracing() {
     let (mut runner, account, _) = setup();
-    let contract = SimpleStorageContract::default();
+    let contract = SimpleStorage::default();
     let contract_addr = account.address().create(0);
 
     let mut nonce = 0;

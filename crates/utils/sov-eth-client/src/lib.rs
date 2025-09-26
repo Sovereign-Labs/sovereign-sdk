@@ -8,7 +8,7 @@ use ethers::providers::{Http, PendingTransaction};
 use futures::StreamExt;
 use sov_cli::NodeClient;
 use sov_modules_api::{Runtime, Spec};
-use sov_test_utils::SimpleStorageContract;
+use sov_test_utils::SimpleStorage;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -21,7 +21,7 @@ const MAX_PRIORITY_FEE_PER_GAS: u64 = 1;
 
 #[derive(Deref)]
 pub struct TestClient {
-    contract: SimpleStorageContract,
+    contract: SimpleStorage,
     node_client: NodeClient,
     pub nonce: Arc<AtomicU64>,
     #[deref]
@@ -31,7 +31,7 @@ pub struct TestClient {
 impl TestClient {
     pub async fn new(
         private_key: &str,
-        contract: SimpleStorageContract,
+        contract: SimpleStorage,
         http_addr: std::net::SocketAddr,
     ) -> Self {
         let rpc_client = RpcClient::new(private_key, http_addr).await;
@@ -117,10 +117,7 @@ impl TestClient {
         contract_address: H160,
         set_arg: u32,
     ) -> PendingTransaction<'_, Http> {
-        let tx = self.make_tx(
-            Some(contract_address),
-            Some(self.contract.set_call_data(set_arg)),
-        );
+        let tx = self.make_tx(Some(contract_address), Some(self.contract.set(set_arg)));
 
         self.send_tx(tx).await.unwrap()
     }
@@ -133,10 +130,8 @@ impl TestClient {
         let mut requests: Vec<_> = Vec::with_capacity(set_args.len());
 
         for set_arg in set_args.into_iter() {
-            let typed_transaction = self.make_tx(
-                Some(contract_address),
-                Some(self.contract.set_call_data(set_arg)),
-            );
+            let typed_transaction =
+                self.make_tx(Some(contract_address), Some(self.contract.set(set_arg)));
 
             requests.push(self.send_tx(typed_transaction).await.unwrap());
         }
@@ -148,10 +143,7 @@ impl TestClient {
         contract_address: H160,
         set_arg: u32,
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
-        let mut tx = self.make_tx(
-            Some(contract_address),
-            Some(self.contract.set_call_data(set_arg)),
-        );
+        let mut tx = self.make_tx(Some(contract_address), Some(self.contract.set(set_arg)));
         let gas = self.rpc_client.eth_estimate_gas(tx.clone()).await;
         tx.set_gas(gas);
 
@@ -164,7 +156,7 @@ impl TestClient {
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
         let tx = self.make_tx(
             Some(contract_address),
-            Some(self.contract.failing_function_call_data()),
+            Some(self.contract.failing_function()),
         );
         self.rpc_client.eth_call(tx).await
     }
@@ -181,8 +173,7 @@ impl TestClient {
         &self,
         contract_address: H160,
     ) -> Result<ethereum_types::U256, Box<dyn std::error::Error>> {
-        let typed_transaction =
-            self.make_tx(Some(contract_address), Some(self.contract.get_call_data()));
+        let typed_transaction = self.make_tx(Some(contract_address), Some(self.contract.get()));
 
         let response = self.rpc_client.eth_call(typed_transaction).await?;
 
@@ -236,7 +227,7 @@ impl TestClient {
             Some(ethers::core::abi::Address::from_slice(
                 contract_address.as_slice(),
             )),
-            Some(self.contract.set_call_data(set_arg)),
+            Some(self.contract.set(set_arg)),
         );
 
         let tx_hash = self.send_tx(typed_transaction).await.unwrap().tx_hash();

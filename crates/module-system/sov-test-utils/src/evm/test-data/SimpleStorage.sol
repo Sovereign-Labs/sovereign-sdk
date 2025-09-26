@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-// solc --abi --bin  Store.sol  -o . --overwrite
+// solc --abi --bin  SimpleStorage.sol  -o . --overwrite
 pragma solidity ^0.8.0;
 contract SimpleStorage {
     uint256 public num;
