@@ -282,6 +282,8 @@ where
             &mut scratchpad,
         );
 
+        println!("OUT OF GAS: YYYY 1");
+
         return (
             Err((TxProcessingError::OutOfGas(err.to_string()), raw_tx)),
             scratchpad,

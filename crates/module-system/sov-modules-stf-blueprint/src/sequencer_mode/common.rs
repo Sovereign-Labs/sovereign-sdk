@@ -56,6 +56,7 @@ where
             )
         }
         Err(error) => {
+            println!("====> Err {:?}", error);
             // It's expected that transactions will revert, so we log them at the info level.
             info!(
                 %error,
@@ -80,6 +81,7 @@ where
             (tx_scratchpad, receipt, transaction_consumption)
         }
     };
+    println!("TX    =====> sucess {:?}", receipt);
 
     (
         ApplyTxResult::<S> {

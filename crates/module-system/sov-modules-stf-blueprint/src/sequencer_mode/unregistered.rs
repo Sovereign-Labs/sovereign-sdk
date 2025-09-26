@@ -109,6 +109,10 @@ pub fn process_unauthorized_tx<S: Spec, R: Runtime<S>>(
             &transaction_consumption.remaining_funds(),
             &mut scratchpad,
         );
+
+        println!("==>WOOOW");
+        panic!("XXX");
+
         return (
             Err(TxProcessingError::OutOfGas(err.to_string())),
             scratchpad.commit(),

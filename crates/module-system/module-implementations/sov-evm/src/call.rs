@@ -102,7 +102,9 @@ where
             .map_err(|e| anyhow::anyhow!("{}", &*e))?;
         save_elapsed!(state_commit_time SINCE state_commit);
 
+        println!("");
         if !result.is_success() {
+            println!("===>Reverting {:?}", result);
             return on_revert(*tx.signed_transaction.hash(), result);
         }
 
@@ -117,10 +119,16 @@ where
         start_timer!(receipt_t);
         let receipt = self.get_receipt(&tx, pending_len, result, state)?;
         save_elapsed!(receipt_time SINCE receipt_t);
+
+        println!("====> receipt: {:?}", receipt);
+
         state.charge_linear_gas(
             &<S as GasSpec>::gas_to_charge_per_evm_gas(),
             gas_used as u32,
         )?;
+
+        println!("====> GAS USED: {:?}", gas_used);
+        println!("");
 
         start_timer!(set_state);
         let pending_tx = PendingTransaction::new(tx, receipt);
@@ -162,6 +170,8 @@ where
                 t.submit(metrics);
             });
         }
+
+        println!("execute_call sucesss");
 
         Ok(())
     }

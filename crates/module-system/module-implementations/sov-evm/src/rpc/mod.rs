@@ -265,6 +265,7 @@ where
         hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Transaction>> {
+        debug!("EVM module JSON-RPC request to `eth_getTransactionByHash`");
         let mut maybe_tx = || -> Option<Transaction> {
             let tx_number = self.get_tx_index_by_hash(&hash, state)?;
             let tx = self.transaction(tx_number, state)?;
@@ -330,6 +331,7 @@ where
     /// Handler for: `eth_blockNumber`
     #[rpc_method(name = "eth_blockNumber")]
     pub fn block_number(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
+        debug!("EVM module JSON-RPC request to `eth_blockNumber`");
         let block_number_range = self
             .block_numbers
             .get(state)
@@ -374,6 +376,9 @@ where
         opts: Option<GethDebugTracingOptions>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<GethTrace> {
+        debug!("EVM module JSON-RPC request to `debug_traceTransaction`");
+        println!("======> looooool");
+
         // Get transaction and block data
         let index = self
             .get_tx_index_by_hash(&tx_hash, state)
@@ -527,6 +532,7 @@ where
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> PendingOrBlock {
+        return PendingOrBlock::Pending;
         let block_number_str = block_number.unwrap_or_else(|| "latest".into());
 
         match block_number_str.as_str() {

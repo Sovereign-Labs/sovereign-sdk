@@ -57,6 +57,7 @@ pub(crate) mod signer {
         S::Address: FromVmAddress<EthereumAddress>,
         Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
     {
+        println!("KKKKKKKK eth_send_transaction");
         let mut transaction_request: TransactionRequest = parameters.one()?;
 
         let evm = Evm::<S>::default();
@@ -64,13 +65,13 @@ pub(crate) mod signer {
         // get from, return error if none
         let from = transaction_request
             .from
-            .ok_or(to_jsonrpsee_error_object("No from address", ETH_RPC_ERROR))?;
+            .ok_or(to_jsonrpsee_error_object("No from address", "KKKKKKKK X1"))?;
 
         // return error if not in signers
         if !ethereum.eth_signer.addresses().contains(&from) {
             return Err(to_jsonrpsee_error_object(
                 "From address not in signers",
-                ETH_RPC_ERROR,
+                "KKKKKKKK X2",
             ));
         }
 
@@ -106,7 +107,7 @@ pub(crate) mod signer {
             let signed_tx = ethereum
                 .eth_signer
                 .sign_transaction(transaction, &from)
-                .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+                .map_err(|e| to_jsonrpsee_error_object(e, "KKKKKKKK X3"))?;
 
             RlpEvmTransaction {
                 rlp: signed_tx.encoded_2718(),
@@ -114,7 +115,7 @@ pub(crate) mod signer {
         };
         let (tx_hash, raw_message) = ethereum
             .make_raw_tx(raw_evm_tx)
-            .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+            .map_err(|e| to_jsonrpsee_error_object(e, "KKKKKKKK X4"))?;
 
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
 
@@ -140,20 +141,21 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
+    println!("KKKKKKKK eth_send_raw_transaction");
     let data: Bytes = parameters.one()?;
 
     let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
 
     let (tx_hash, raw_message) = ethereum
         .make_raw_tx(raw_evm_tx)
-        .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+        .map_err(|e| to_jsonrpsee_error_object(e, "KKKKKKKK X5"))?;
 
     let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
 
     ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
         to_jsonrpsee_error_object(
             format!("{} - '{}' ({:?})", e.status, e.message, e.details),
-            ETH_RPC_ERROR,
+            "KKKKKKKK X6",
         )
     })?;
 
@@ -171,13 +173,14 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
+    println!("KKKKKKKK realtime_send_raw_transaction");
     let data: Bytes = parameters.one().unwrap();
 
     let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
 
     let (tx_hash, raw_message) = ethereum
         .make_raw_tx(raw_evm_tx)
-        .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+        .map_err(|e| to_jsonrpsee_error_object(e, "KKKKKKKK X7"))?;
 
     let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
 
