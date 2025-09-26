@@ -1,24 +1,9 @@
-use std::path::PathBuf;
-
 use ethereum_types::U256;
 use ethers::contract::BaseContract;
-use ethers::core::abi::Abi;
 use ethers::core::types::Bytes;
 
-fn test_data_path() -> PathBuf {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("src");
-    path.push("evm");
-    path.push("test-data");
-    path.push("artifacts");
-    path
-}
-
-fn make_contract_from_abi(path: PathBuf) -> BaseContract {
-    let abi_json = std::fs::read_to_string(path).unwrap();
-    let abi: Abi = serde_json::from_str(&abi_json).unwrap();
-    BaseContract::from(abi)
-}
+use crate::evm::make_contract_from_abi;
+use crate::evm::test_data_path;
 
 /// SimpleStorageContract wrapper.
 pub struct SimpleStorage {
