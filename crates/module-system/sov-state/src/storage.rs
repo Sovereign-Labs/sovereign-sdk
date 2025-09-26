@@ -24,8 +24,7 @@ use crate::sequencer_state::MaybePresentValue;
 #[cfg(feature = "native")]
 use crate::{CompileTimeNamespace, Namespace};
 use crate::{
-    MerkleProofSpec, SparseMerkleProof, StateAccesses, StateItemDecoder, StorageRoot,
-    Witness,
+    MerkleProofSpec, SparseMerkleProof, StateAccesses, StateItemDecoder, StorageRoot, Witness,
 };
 
 type ArcFormatFn =
