@@ -10,14 +10,12 @@ use jmt::KeyHash;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 #[cfg(feature = "native")]
-use sov_rollup_interface::common::SlotNumber;
+use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::reexports::digest::{typenum, Digest};
 use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 
 use crate::bytes::Prefix;
 use crate::codec::EncodeLike;
-#[cfg(feature = "native")]
-use crate::namespaces;
 use crate::namespaces::{ProvableCompileTimeNamespace, ProvableNamespace};
 #[cfg(feature = "native")]
 use crate::sequencer_state::MaybePresentValue;
@@ -451,56 +449,14 @@ pub trait StateGetter: core::fmt::Debug + Send + Sync {
     /// Get the value.
     fn get(&self, namespace: Namespace, key: &SlotKey) -> MaybePresentValue<SlotValue>;
 
+    /// Ignore changes after the given rollup height.
+    fn ignore_changes_after_height(&mut self, rollup_height: RollupHeight);
+
+    /// Get the latest rollup height available in the getter.
+    fn latest_rollup_height(&self) -> Option<RollupHeight>;
+
     /// Clones the state getter, returning a new type-erased object.
     fn box_clone(&self) -> Box<dyn StateGetter>;
-}
-
-#[cfg(feature = "native")]
-impl<T: Storage + 'static + Send + Sync> StateGetter for T {
-    fn get_leaf(
-        &self,
-        namespace: ProvableNamespace,
-        key: &SlotKey,
-    ) -> MaybePresentValue<NodeLeafAndMaybeValue> {
-        // The underlying storage is the provider of last resort for any key, so ther "Absent" case where the
-        // value simply isn't in cache is not applicable.
-        match namespace {
-            ProvableNamespace::User => MaybePresentValue::Present(Storage::get_leaf::<
-                namespaces::User,
-            >(
-                self, key, &Default::default()
-            )),
-            ProvableNamespace::Kernel => {
-                MaybePresentValue::Present(Storage::get_leaf::<namespaces::Kernel>(
-                    self,
-                    key,
-                    &Default::default(),
-                ))
-            }
-        }
-    }
-
-    fn get(&self, namespace: Namespace, key: &SlotKey) -> MaybePresentValue<SlotValue> {
-        // The underlying storage is the provider of last resort for any key, so ther "Absent" case where the
-        // value simply isn't in cache is not applicable.
-        match namespace {
-            Namespace::User => MaybePresentValue::Present(Storage::get::<namespaces::User>(
-                self,
-                key,
-                &Default::default(),
-            )),
-            Namespace::Kernel => MaybePresentValue::Present(Storage::get::<namespaces::Kernel>(
-                self,
-                key,
-                &Default::default(),
-            )),
-            Namespace::Accessory => MaybePresentValue::Present(Storage::get_accessory(self, key)),
-        }
-    }
-
-    fn box_clone(&self) -> Box<dyn StateGetter> {
-        Box::new(self.clone())
-    }
 }
 
 /// An interface for retrieving values from the storage and producing change set of new write operations.

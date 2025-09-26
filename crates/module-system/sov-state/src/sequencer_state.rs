@@ -4,6 +4,8 @@ use std::{
     sync::Arc,
 };
 
+use sov_rollup_interface::common::RollupHeight;
+
 #[cfg(feature = "native")]
 use crate::NodeLeafAndMaybeValue;
 use crate::{digest::typenum, internal::CacheLog, Digest, ProvableCompileTimeNamespace};
@@ -287,6 +289,23 @@ impl<H: Digest<OutputSize = typenum::U32> + Send + Sync + 'static> StateGetter
             }
         }
         MaybePresentValue::Absent
+    }
+
+    fn ignore_changes_after_height(
+        &mut self,
+        rollup_height: sov_rollup_interface::common::RollupHeight,
+    ) {
+        if let Some(changes) = self.changes.as_mut() {
+            changes.retain(|change| change.rollup_height <= rollup_height.get());
+        }
+    }
+
+    fn latest_rollup_height(&self) -> Option<sov_rollup_interface::common::RollupHeight> {
+        self.changes.as_ref().and_then(|changes| {
+            changes
+                .front()
+                .map(|change| RollupHeight::new(change.rollup_height))
+        })
     }
 
     fn box_clone(&self) -> Box<dyn StateGetter> {

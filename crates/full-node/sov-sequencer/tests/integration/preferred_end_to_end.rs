@@ -148,6 +148,57 @@ impl DaLayerWithSubscription {
     }
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_archival_state_is_immediately_available() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+    )
+    .await;
+
+    let Some(test_rollup) = test_rollup else {
+        return;
+    };
+
+    let nb_of_blocks = 5;
+    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
+    da_layer.produce_and_wait_for_n_slots(nb_of_blocks).await;
+
+    // Send a transaction and close the batch
+    let tx = tx_set_value(&admin.private_key, 0, 1);
+    test_rollup
+        .api_client()
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(&tx),
+        })
+        .await
+        .unwrap();
+
+    test_rollup.force_close_batch().await.unwrap();
+
+    // Now the archival state for each block should immediately be available (as soon as the previous block is closed).
+    // Let's test this in a loop
+    for i in 2..10 {
+        // Send a transaction to ensure the previous batch is closed.
+        let tx = tx_set_value(&admin.private_key, 0, i);
+        test_rollup
+            .api_client()
+            .accept_tx(&api_types::AcceptTxBody {
+                body: BASE64_STANDARD.encode(&tx),
+            })
+            .await
+            .unwrap();
+        test_rollup.force_close_batch().await.unwrap();
+        // Produce a some extra slots to ensure that the rollup block number and slot number aren't the same. This increases coverage for free.
+        da_layer.produce_and_wait_for_n_slots(2).await;
+        for j in 0..i {
+            query_set_value(&test_rollup, Some(j), j).await.unwrap();
+        }
+    }
+}
+
 /// All the interesting "things" that can happen during sequencer operations, and to
 /// which the sequencer ought to know how to respond.
 #[derive(Debug, Clone, Arbitrary)]

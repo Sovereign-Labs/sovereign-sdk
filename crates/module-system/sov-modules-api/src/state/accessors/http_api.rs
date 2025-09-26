@@ -421,6 +421,11 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
     ) -> Result<Self, ApiStateAccessorError> {
         Self::build_archival_state(
             state_checkpoint.delta.inner.clone(),
+            state_checkpoint
+                .delta
+                .uncomitted_changes
+                .as_ref()
+                .map(|c| c.box_clone()),
             kernel,
             StateToAccess::TrueSlotNumber(slot_number, None),
         )
@@ -439,6 +444,11 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
     ) -> Result<Self, ApiStateAccessorError> {
         Self::build_archival_state(
             state_checkpoint.delta.inner.clone(),
+            state_checkpoint
+                .delta
+                .uncomitted_changes
+                .as_ref()
+                .map(|c| c.box_clone()),
             kernel,
             StateToAccess::RollupHeight(height),
         )
@@ -613,12 +623,14 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
 
     fn build_archival_state(
         storage: S::Storage,
+        uncommitted_changes: Option<Box<dyn StateGetter>>,
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         height: StateToAccess,
     ) -> Result<Self, ApiStateAccessorError> {
         let latest_true_slot_number = storage.latest_version();
         let mut state =
             ApiStateAccessor::get_uninitialized_empty_accessor(storage, kernel.clone(), height);
+        state.uncomitted_changes = uncommitted_changes;
         let true_slot_number = match height {
             // If the caller provided a rollup height, find the associated true slot number.
             StateToAccess::RollupHeight(height) => {
@@ -626,18 +638,31 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
                     kernel.true_slot_number_at_historical_height(height, &mut state)
                 {
                     true_slot_number
-                } else {
+                } else if let Some(max_height) = state
+                    .uncomitted_changes
+                    .as_ref()
+                    .and_then(|c| c.latest_rollup_height())
+                {
+                    // If the requested height is greater than our uncommitted changes, we can't access it.
+                    if max_height < height {
+                        return Err(ApiStateAccessorError::HeightNotAccessible);
+                    }
+                    // Otherwise, drop any uncommitted changes that are after the requested height and use our latest slot number from storage as a safe commit.
+                    // (Anything not already in storage by that point will be in the uncomitted changes)
+                    if let Some(c) = state.uncomitted_changes.as_mut() {
+                        c.ignore_changes_after_height(height);
+                    }
+                    latest_true_slot_number
+                } else if height == kernel.current_rollup_height(&mut state) {
                     // There's a tricky case here where the height exists in storage but the true slot number is not available via the kernel yet.
                     // This is because the true slot number mapping is updated at the beginning of the next slot, but the rest of the values are written
                     // at the end of the current slot.
                     //
                     // Since the ApiStateAccessor has empty caches right now, we can check if we're in this case by checking whether the requested height is equal to the current rollup height
                     // as reported by the kernel. (Recall that, since the caches are empty, the "current_rollup_height" value reported by the kernel is the value stored at S::Storage::latest_version.)
-                    if height == kernel.current_rollup_height(&mut state) {
-                        latest_true_slot_number
-                    } else {
-                        return Err(ApiStateAccessorError::HeightNotAccessible);
-                    }
+                    latest_true_slot_number
+                } else {
+                    return Err(ApiStateAccessorError::HeightNotAccessible);
                 }
             }
             StateToAccess::TrueSlotNumber(slot_number, _) => {
@@ -699,6 +724,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
     ) -> Result<ApiStateAccessor<S>, ApiStateAccessorError> {
         Self::build_archival_state(
             self.storage.clone(),
+            self.uncomitted_changes.as_ref().map(|c| c.box_clone()),
             self.kernel.clone(),
             StateToAccess::RollupHeight(height),
         )
