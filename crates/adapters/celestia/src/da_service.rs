@@ -88,10 +88,10 @@ impl CelestiaService {
         };
         debug!(bytes, namespace = ?ns, "Sending raw data to Celestia");
 
-        let blob = JsonBlob::new_with_signer(
+        let blob = JsonBlob::new(
             namespace,
             blob.to_vec(),
-            self.signer_address.0.clone(),
+            Some(self.signer_address.0.clone()),
             APP_VERSION,
         )
         .expect("Bug in CelestiaAdapter");
