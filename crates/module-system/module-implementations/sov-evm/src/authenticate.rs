@@ -7,6 +7,7 @@ use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::Address;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_bank::Amount;
 use sov_modules_api::capabilities::{
     self, fatal_deserialization_error, AuthenticationOutput, AuthorizationData,
     BatchFromUnregisteredSequencer, FatalError, TransactionAuthenticator, UniquenessData,
@@ -155,11 +156,48 @@ where
         .map_err(|e| fatal_deserialization_error::<Accessor, S, _>(raw_tx, e, state))?;
 
     let gas_price = state.gas_price();
-    let tx_and_raw_hash = create_auth_tx_and_hash(&tx, gas_price)?;
+    let mut tx_and_raw_hash = create_auth_tx_and_hash(&tx, gas_price)?;
+
+    /*
+    tx_and_raw_hash.authenticated_tx.0.max_fee 3572680
+    tx_and_raw_hash.authenticated_tx.0.gas_limit Some(GasUnit[178634, 178634])
+
+    gas_used: 117511
+    REEEEEC Receipt { receipt: Receipt { tx_type: Eip1559, success: true, cumulative_gas_used: 117511, logs: [] }, transaction_hash: 0x5e6b54c87c6bfee855e3ec0d6424b2ce61d00add1f557f5125af3e7483e8afad, transaction_index: 0, block_number: 1, gas_used: 117511, log_index_start: 0, error: None }
+
+    tx_and_raw_hash.authenticated_tx.0.max_fee 1200380
+    tx_and_raw_hash.authenticated_tx.0.gas_limit Some(GasUnit[60019, 60019])
+
+    gas_used: 80306
+    REEEEEC Receipt { receipt: Receipt { tx_type: Eip1559, success: true, cumulative_gas_used: 197817, logs: [] }, transaction_hash: 0x8a990cf98242a1b07b2550ccc02f4c0e248af4619d6ceb8286cd597405eb4814, transaction_index: 1, block_number: 1, gas_used: 80306, log_index_start: 0, error: None }
+
+     */
+
+    let nonce = tx.nonce();
+    println!("");
+    println!("==========>");
+
+    println!("Nonce {:?}", nonce);
+
+    println!(
+        "tx_and_raw_hash.authenticated_tx.0.max_fee {:?}",
+        tx_and_raw_hash.authenticated_tx.0.max_fee
+    );
+    println!(
+        "tx_and_raw_hash.authenticated_tx.0.gas_limit {:?}",
+        tx_and_raw_hash.authenticated_tx.0.gas_limit
+    );
+
+    //if nonce == 1 {
+    tx_and_raw_hash.authenticated_tx.0.max_fee = Amount(1000_000_000_000);
+    tx_and_raw_hash.authenticated_tx.0.gas_limit = Some([1000_000, 1000_000].into());
+    //}
+
+    println!("");
+    println!("tx_and_raw_hash {:?}", tx_and_raw_hash.authenticated_tx.0);
 
     let signer = recover_evm_signer(&tx, tx_and_raw_hash.raw_tx_hash)?;
 
-    let nonce = tx.nonce();
     let auth_data = extract_evm_authorization_data::<S>(signer, tx_and_raw_hash.raw_tx_hash, nonce);
 
     let call = CallMessage { rlp };

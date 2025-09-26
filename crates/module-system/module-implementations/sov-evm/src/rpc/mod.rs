@@ -527,6 +527,7 @@ where
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> PendingOrBlock {
+        return PendingOrBlock::Pending;
         let block_number_str = block_number.unwrap_or_else(|| "latest".into());
 
         match block_number_str.as_str() {

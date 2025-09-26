@@ -116,6 +116,9 @@ where
         let gas_used = result.gas_used();
         start_timer!(receipt_t);
         let receipt = self.get_receipt(&tx, pending_len, result, state)?;
+
+        println!("REEEEEC {:?}", receipt);
+
         save_elapsed!(receipt_time SINCE receipt_t);
         state.charge_linear_gas(
             &<S as GasSpec>::gas_to_charge_per_evm_gas(),
