@@ -46,16 +46,18 @@ pub struct CelestiaService {
     signer_address: CelestiaAddress,
     safe_lead_time: Duration,
     backoff_policy: ExponentialBuilder,
+    request_timeout: Duration,
 }
 
 impl CelestiaService {
-    pub fn with_client(
+    fn with_client(
         client: HttpClient,
         rollup_batch_namespace: Namespace,
         rollup_proof_namespace: Namespace,
         signer_address: CelestiaAddress,
         safe_lead_time: Duration,
         backoff_policy: ExponentialBuilder,
+        request_timeout: Duration,
     ) -> Self {
         Self {
             submit_client: Arc::new(Mutex::new(client.clone())),
@@ -65,6 +67,7 @@ impl CelestiaService {
             signer_address,
             safe_lead_time,
             backoff_policy,
+            request_timeout,
         }
     }
 
@@ -153,6 +156,7 @@ impl CelestiaService {
 
 impl CelestiaService {
     pub async fn new(config: CelestiaConfig, chain_params: RollupParams) -> Self {
+        let request_timeout = Duration::from_secs(config.celestia_rpc_timeout_seconds.get());
         let client = {
             let mut headers = HeaderMap::new();
             headers.insert(
@@ -166,9 +170,7 @@ impl CelestiaService {
                 .set_headers(headers)
                 .max_response_size(config.max_celestia_response_body_size.get())
                 .max_request_size(config.max_celestia_response_body_size.get())
-                .request_timeout(Duration::from_secs(
-                    config.celestia_rpc_timeout_seconds.get(),
-                ))
+                .request_timeout(request_timeout)
                 .build(&config.celestia_rpc_address)
         }
         .expect("Client initialization is valid");
@@ -213,6 +215,7 @@ impl CelestiaService {
             fetched_signer,
             Duration::from_millis(config.safe_lead_time_ms),
             backoff_policy,
+            request_timeout,
         )
     }
 }
@@ -226,10 +229,11 @@ impl CelestiaService {
         height: u64,
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
         let client = &self.read_client;
-        let extended_header = client
-            .header_get_by_height(height)
-            .await
-            .map_err(into_transient_with_context)?;
+        let extended_header =
+            tokio::time::timeout(self.request_timeout, client.header_get_by_height(height))
+                .await
+                .map_err(|_| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout")))?
+                .map_err(into_transient_with_context)?;
 
         Ok(extended_header.into())
     }
@@ -374,12 +378,13 @@ impl DaService for CelestiaService {
 
     #[instrument(skip(self))]
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
-            || self.get_block_at_inner(height),
-            "get_block_at",
-        )
-        .await
+        let f = || async {
+            tokio::time::timeout(self.request_timeout, self.get_block_at_inner(height))
+                .await
+                .map_err(|e| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout: {:?}", e)))
+                .and_then(|result| result)
+        };
+        run_maybe_retryable_async_fn_with_retries(self.backoff_policy, f, "get_block_at").await
     }
 
     #[instrument(skip(self))]

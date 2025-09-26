@@ -276,6 +276,7 @@ ruint = { version = "1", default-features = false }
 risc0-zkvm = { version = "2.1", default-features = false }
 risc0-zkvm-platform = "2.0"
 risc0-build = "2.1"
+flume = { version = "0.11.1", features = ["async"]}
 
 # EVM dependencies
 ethereum-types = "0.14.1"
@@ -333,3 +334,14 @@ opt-level = 0
 libraries = [
     { git = "ssh://git@github.com/Sovereign-Labs/sdk-lints.git" },
 ]
+
+[profile.coverage]
+inherits = "dev"
+# enough for coverage, smaller DWARF
+debug = 1
+# reduce linker RAM
+lto = "off"
+# lower per-unit peak
+codegen-units = 16
+# lighter binaries if acceptable
+panic = "abort"

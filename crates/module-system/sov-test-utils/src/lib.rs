@@ -118,6 +118,9 @@ pub const TEST_MAX_BATCH_SIZE: usize = 1024 * 1024;
 /// If a blob is not processed within this time, it will shut down the sequencer.
 pub const TEST_BLOB_PROCESSING_TIMEOUT: u64 = 60;
 
+/// he number of workers used to warm up the cache.
+pub const TEST_NUM_CACHE_WARMUP_WORKERS: usize = 3;
+
 /// The maximum number of concurrent blobs.
 pub const TEST_MAX_CONCURRENT_BLOBS: usize = 16;
 

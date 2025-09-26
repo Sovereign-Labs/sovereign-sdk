@@ -8,6 +8,8 @@ mod db;
 mod evm;
 mod genesis;
 mod hooks;
+#[cfg(feature = "native")]
+mod metrics;
 mod sov_evm;
 use std::ops::RangeInclusive;
 
@@ -33,8 +35,9 @@ mod helpers;
 use alloy_primitives::U256;
 use alloy_primitives::{Address, B256};
 pub use authenticate::{
-    authenticate, decode_evm_tx, Eip712Authenticator, EthereumAuthenticator, EvmAuthenticator,
-    EvmAuthenticatorInput, SchemaProvider,
+    authenticate, decode_evm_tx, Eip712Authenticator, Eip712AuthenticatorInput,
+    Eip712AuthenticatorTrait, EthereumAuthenticator, EvmAuthenticator, EvmAuthenticatorInput,
+    SchemaProvider,
 };
 pub use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -53,12 +56,16 @@ use crate::account_storage_key::AccountStorageKey;
 use crate::db::{DbAccount, EvmDb};
 pub use crate::evm::primitive_types::TransactionSigned;
 use crate::evm::primitive_types::{
-    Block, PendingTransaction, Receipt, SealedBlock, TransactionSignedAndRecovered,
+    Block, PendingTransaction, Receipt, SealedBlock, TxSignedAndRecovered,
 };
 
-pub use conversions::convert_to_transaction_signed;
+pub use conversions::convert_to_tx_signed;
 pub use conversions::create_tx_env;
 use revm::state::Bytecode;
+
+/// These values are associated with EIP-4844, which we do not support, but they must be set to a value other than None for CANCUN.
+const EXCESS_BLOB_GAS: u64 = 0;
+const BLOB_GAS_PRICE: u128 = 0;
 
 /// The sov-evm module provides compatibility with the EVM.
 #[allow(dead_code)]
@@ -117,7 +124,7 @@ pub struct Evm<S: Spec> {
 
     /// Used only by the RPC: List of processed transactions.
     #[state]
-    pub transactions: AccessoryStateMap<u64, TransactionSignedAndRecovered, BcsCodec>,
+    pub transactions: AccessoryStateMap<u64, TxSignedAndRecovered, BcsCodec>,
 
     /// Used only by the RPC: Receipts.
     #[state]
@@ -204,7 +211,7 @@ impl<S: Spec> Evm<S> {
         &self,
         index: u64,
         state: &mut Accessor,
-    ) -> Option<TransactionSignedAndRecovered> {
+    ) -> Option<TxSignedAndRecovered> {
         self.transactions.get(&index, state).unwrap_infallible()
     }
 
@@ -312,6 +319,10 @@ impl<S: Spec> Evm<S> {
         self.transaction_hashes
             .get(tx_hash, state)
             .unwrap_infallible()
+    }
+
+    pub(crate) fn base_fee(&self) -> u64 {
+        0
     }
 }
 

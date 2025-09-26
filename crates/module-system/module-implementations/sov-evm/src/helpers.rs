@@ -1,6 +1,6 @@
 use alloy_consensus::{transaction::Recovered, Signed, TxEip4844Variant, TxEnvelope};
-use alloy_primitives::TxKind;
-use alloy_primitives::{BlockNumber, Sealed};
+use alloy_primitives::BlockNumber;
+use alloy_primitives::{BlockHash, TxKind};
 use alloy_primitives::{B256, U256};
 use alloy_rpc_types::{Header, TransactionRequest};
 use revm::context::{BlockEnv, TransactionType, TxEnv};
@@ -49,10 +49,13 @@ pub(crate) fn prepare_call_env(
     Ok(env)
 }
 
-pub(crate) fn from_primitive_with_hash(
-    primitive_header: Sealed<alloy_consensus::Header>,
-) -> Header {
-    Header::from_consensus(primitive_header, None, None)
+pub(crate) fn from_primitive_with_hash(header: alloy_consensus::Header, hash: BlockHash) -> Header {
+    Header {
+        hash,
+        inner: header,
+        total_difficulty: None,
+        size: None,
+    }
 }
 
 /// copy from [`reth_rpc_types_compat::transaction::from_recovered_with_block_context`]

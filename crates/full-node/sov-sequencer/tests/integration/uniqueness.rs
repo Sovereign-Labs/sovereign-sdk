@@ -142,15 +142,6 @@ async fn test_mixed_nonce_and_generation_transactions() {
     let next_available = client.get_next_nonce(&credential_id).await.unwrap();
     assert_eq!(1, next_available);
 
-    // 3. Submit tx with nonce 2 -> should fail, skipping is not allowed for nonces
-    let result = client
-        .send_tx_to_sequencer(&construct_tx(UniquenessData::Nonce(2)))
-        .await;
-    assert!(
-        result.is_err(),
-        "Nonce 2 should fail (skipping is not allowed)"
-    );
-
     // Submit nonces 1, 2, 3, 4 in sequence (must be sequential)
     for nonce in 1..=4 {
         let result = client

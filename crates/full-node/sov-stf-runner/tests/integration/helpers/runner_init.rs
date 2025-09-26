@@ -384,6 +384,12 @@ fn get_da_polling_interval_ms(da_config: &MockDaConfig) -> u64 {
     }
 }
 
+fn get_da_total_timeout_secs(da_config: &MockDaConfig) -> u64 {
+    match da_config.block_producing {
+        BlockProducingConfig::Periodic { block_time_ms } => block_time_ms.saturating_mul(10_000),
+        _ => 3_600,
+    }
+}
 pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
     path: &std::path::Path,
     da_config: MockDaConfig,
@@ -394,6 +400,7 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
         runner: RunnerConfig {
             genesis_height: 0,
             da_polling_interval_ms: get_da_polling_interval_ms(&da_config),
+            da_total_timeout_secs: get_da_total_timeout_secs(&da_config),
             http_config: HttpServerConfig::localhost_on_free_port(),
             concurrent_sync_tasks: Some(1),
             save_tx_bodies: false,
