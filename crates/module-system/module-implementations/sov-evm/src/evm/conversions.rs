@@ -116,7 +116,9 @@ mod tests {
 
     #[test]
     fn prepare_call_block_env() {
-        let block = Block::default();
+        let mut block = Block::default();
+        block.header.base_fee_per_gas = Some(0);
+
         let sealed_block = block.clone().seal();
 
         let block_env = BlockEnv::from(sealed_block);

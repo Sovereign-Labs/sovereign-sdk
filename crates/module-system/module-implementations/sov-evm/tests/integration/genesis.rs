@@ -92,6 +92,7 @@ fn test_genesis_block() {
             gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
             beneficiary,
             excess_blob_gas: Some(0),
+            base_fee_per_gas: Some(0),
             ..Default::default()
         };
 
