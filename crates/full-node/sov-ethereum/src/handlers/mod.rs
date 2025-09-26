@@ -3,8 +3,8 @@ mod subscribe;
 use alloy_primitives::{Bytes, B256};
 use alloy_rpc_types::TransactionReceipt;
 pub use get_logs::eth_get_logs;
+use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
-use jsonrpsee::types::{ErrorObjectOwned, Params};
 use jsonrpsee::Extensions;
 use sov_address::{EthereumAddress, FromVmAddress};
 pub use sov_evm::EthereumAuthenticator;
@@ -161,7 +161,7 @@ where
 }
 
 pub async fn realtime_send_raw_transaction<S, Seq>(
-    parameters: Params<'static>,
+    parameters: JRpcParams<'static>,
     ethereum: Arc<Ethereum<S, Seq>>,
     _: Extensions,
 ) -> Result<Option<TransactionReceipt>, ErrorObjectOwned>
@@ -171,7 +171,7 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    let data: Bytes = parameters.one().unwrap();
+    let data: Bytes = parameters.one()?;
 
     let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
 
