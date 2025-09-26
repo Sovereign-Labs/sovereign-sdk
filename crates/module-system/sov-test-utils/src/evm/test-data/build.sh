@@ -1,0 +1,1 @@
+solc --abi --bin  SimpleStorage.sol  -o artifacts --overwrite

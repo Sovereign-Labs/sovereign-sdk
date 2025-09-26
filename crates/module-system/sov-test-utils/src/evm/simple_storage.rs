@@ -10,6 +10,7 @@ fn test_data_path() -> PathBuf {
     path.push("src");
     path.push("evm");
     path.push("test-data");
+    path.push("artifacts");
     path
 }
 
