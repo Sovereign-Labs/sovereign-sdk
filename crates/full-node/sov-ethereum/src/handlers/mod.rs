@@ -7,7 +7,11 @@ use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_modules_api::Runtime;
 pub use sov_evm::EthereumAuthenticator;
+use sov_modules_api::capabilities::TransactionAuthenticator;
+use sov_modules_api::capabilities::UniquenessData;
+use sov_modules_api::capabilities::AuthorizationData;
 #[cfg(feature = "local")]
 use sov_evm::Evm;
 use sov_evm::RlpEvmTransaction;
@@ -147,17 +151,47 @@ where
     let (tx_hash, raw_message) = ethereum
         .make_raw_tx(raw_evm_tx)
         .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
-
     let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
+    let mut state = ethereum.sequencer.api_state().default_api_state_accessor().to_provable_reader();
+    let (_decoded_tx, auth_data, _call) = <Seq::Rt as Runtime<S>>::Auth::authenticate(&tx, &mut state).map_err(|e| to_jsonrpsee_error_object(format!("Authentication failed: {}", e), ETH_RPC_ERROR))?;
+    let mut state = state.api_state_accessor;
+    let AuthorizationData { credential_id, uniqueness, .. } = auth_data;
+    drop(auth_data); // Drop auth_data to avoid holding it across the `await` point. This is required because it contains an `rc` which isn't thread safe.
+    for _ in 0..20 {
+        match uniqueness {
+            UniquenessData::Nonce(nonce) => {
+                let expected_nonce = sov_uniqueness::Uniqueness::<S>::default().nonce(&credential_id, &mut state)?.unwrap_or_default();
+                if nonce == expected_nonce {
+                    ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
+                        to_jsonrpsee_error_object(
+                            format!("{} - '{}' ({:?})", e.status, e.message, e.details),
+                            ETH_RPC_ERROR,
+                        )
+                    })?;
+                    return Ok(tx_hash);
+                } else if nonce < expected_nonce {
+                    return Err(to_jsonrpsee_error_object(format!("Nonce error: nonce {} has already been used", nonce), ETH_RPC_ERROR));
+                }
+            }
+            _ => {
+                // This should be unreachable
+                return Err(to_jsonrpsee_error_object("Invalid uniqueness data", ETH_RPC_ERROR));
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        state = ethereum.sequencer.api_state().default_api_state_accessor();
+    }
 
+    // Fallback to trying the tx anyway in case of shenanigans.
     ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
         to_jsonrpsee_error_object(
             format!("{} - '{}' ({:?})", e.status, e.message, e.details),
             ETH_RPC_ERROR,
         )
     })?;
+    return Ok(tx_hash);
 
-    Ok(tx_hash)
+
 }
 
 pub async fn realtime_send_raw_transaction<S, Seq>(
@@ -180,6 +214,45 @@ where
         .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
     let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
+    let mut state = ethereum.sequencer.api_state().default_api_state_accessor().to_provable_reader();
+    let (_decoded_tx, auth_data, _call) = <Seq::Rt as Runtime<S>>::Auth::authenticate(&tx, &mut state).map_err(|e| to_jsonrpsee_error_object(format!("Authentication failed: {}", e), ETH_RPC_ERROR))?;
+    let mut state = state.api_state_accessor;
+    let AuthorizationData { credential_id, uniqueness, .. } = auth_data;
+    drop(auth_data); // Drop auth_data to avoid holding it across the `await` point. This is required because it contains an `rc` which isn't thread safe.
+    for _ in 0..20 {
+        match uniqueness {
+            UniquenessData::Nonce(nonce) => {
+                let expected_nonce = sov_uniqueness::Uniqueness::<S>::default().nonce(&credential_id, &mut state)?.unwrap_or_default();
+                if nonce == expected_nonce {
+                    ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
+                        to_jsonrpsee_error_object(
+                            format!("{} - '{}' ({:?})", e.status, e.message, e.details),
+                            ETH_RPC_ERROR,
+                        )
+                    })?;
+                    
+                    let evm = sov_evm::Evm::<S>::default();
+                    let receipt = evm.get_transaction_receipt(
+                        tx_hash,
+                        &mut ethereum.sequencer.api_state().default_api_state_accessor(),
+                    )?;
+
+
+                    return Ok::<_, ErrorObjectOwned>(receipt)
+                } else if nonce < expected_nonce {
+                    return Err(to_jsonrpsee_error_object(format!("Nonce error: nonce {} has already been used", nonce), ETH_RPC_ERROR));
+                }
+            }
+            _ => {
+                // This should be unreachable
+                return Err(to_jsonrpsee_error_object("Invalid uniqueness data", ETH_RPC_ERROR));
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        state = ethereum.sequencer.api_state().default_api_state_accessor();
+    }
+
+    // Fallback to trying the tx anyway in case of shenanigans.
 
     ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
         to_jsonrpsee_error_object(
@@ -193,5 +266,7 @@ where
         tx_hash,
         &mut ethereum.sequencer.api_state().default_api_state_accessor(),
     )?;
+
+
     Ok::<_, ErrorObjectOwned>(receipt)
 }
