@@ -244,7 +244,7 @@ impl<S: Spec> BlobStorage<S> {
                             // Otherwise, try to deserialize and use it
                             unregistered_blob_count += 1;
                             if let Some(tx) = self.deserialize_or_try_slash_sender::<FullyBakedTx>(
-                                blob, None, false, state, None,
+                                blob, None, false, state,
                             ) {
                                 let blob = ValidatedBlob::new(
                                     BlobData::EmergencyRegistration(tx).with_id(blob.hash().into()),
@@ -472,7 +472,7 @@ impl<S: Spec> BlobStorage<S> {
             .filter_map(|blob| match blob {
                 BlobOrigin::Proof(proof_blob) => self
                     .deserialize_or_try_slash_sender::<PreferredProofData>(
-                        proof_blob, None, true, state, None,
+                        proof_blob, None, true, state,
                     )
                     .map(|proof| PreferredBlobDataWithId {
                         inner: PreferredBlobData::Proof(proof),
@@ -914,7 +914,6 @@ impl<S: Spec> BlobStorage<S> {
             Some((&sequencer, &gas_price_for_new_block)),
             true,
             state,
-            None,
         )?;
 
         let available_balance = self
@@ -949,7 +948,6 @@ impl<S: Spec> BlobStorage<S> {
             Some((&sequencer, gas_price_for_new_block)),
             true,
             state,
-            None,
         )?;
 
         let available_balance = self
@@ -1047,11 +1045,7 @@ impl<S: Spec> BlobStorage<S> {
         charge_for_deserialization: Option<(&AllowedSequencer<S>, &<S::Gas as Gas>::Price)>,
         slash_on_failure: bool,
         state: &mut KernelStateAccessor<'_, S>,
-        encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> Option<B> {
-        // Note: encryption_layer is passed for future extensibility but not used in this generic method.
-        // Actual decryption happens later in the processing pipeline for EncryptedPreferredBatchData.
-        let _ = encryption_layer;
         
         if let Some((registered_sender, gas_price_for_new_block)) = charge_for_deserialization {
             let funds_for_deserialization =
@@ -1115,7 +1109,7 @@ impl<S: Spec> BlobStorage<S> {
         if let Some(encryption_layer) = encryption_layer {
             // Encryption layer exists - try encrypted deserialization path
             if let Some(encrypted_batch) = self.deserialize_or_try_slash_sender::<EncryptedPreferredBatchData>(
-                blob, charge_for_deserialization, true, state, None,
+                blob, charge_for_deserialization, true, state,
             ) {
                 // Decrypt the transaction data
                 match encryption_layer.decrypt(&encrypted_batch.encrypted_txs_data) {
@@ -1142,7 +1136,7 @@ impl<S: Spec> BlobStorage<S> {
         } else {
             // No encryption layer - try unencrypted deserialization path
             if let Some(batch) = self.deserialize_or_try_slash_sender::<PreferredBatchData>(
-                blob, charge_for_deserialization, false, state, None,
+                blob, charge_for_deserialization, false, state,
             ) {
                 return Some(batch);
             }
