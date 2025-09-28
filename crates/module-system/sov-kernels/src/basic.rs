@@ -73,14 +73,14 @@ impl<S: Spec> BlobSelector for BasicKernel<'_, S> {
         current_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         state: &mut KernelStateAccessor<'_, S>,
         cf: CF,
-        encryption_layer: Option<&sov_encryption::EncryptionLayer>,
+        _encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> anyhow::Result<(
         BlobSelectorOutput<SelectedBlob<S, IterableBatchWithId<S, CF>>>,
         Vec<DiscardedBlob>,
     )> {
         Ok(self
             .blob_storage
-            .select_blobs_as_based_sequencer(current_blobs, state, cf, encryption_layer))
+            .select_blobs_as_based_sequencer(current_blobs, state, cf))
     }
 
     fn get_non_preferred_blobs<CF: InjectedControlFlow<Self::Spec> + Clone>(

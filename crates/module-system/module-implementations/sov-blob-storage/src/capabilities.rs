@@ -83,7 +83,6 @@ impl<S: Spec> BlobStorage<S> {
         current_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         discarded_blobs: &mut Vec<DiscardedBlob>,
         state: &mut KernelStateAccessor<'_, S>,
-        encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> BlobSelectorOutput<ValidatedBlob<S, BatchWithId<S>>> {
         tracing::trace!("On based sequencer path");
 
@@ -99,7 +98,6 @@ impl<S: Spec> BlobStorage<S> {
                 false,
                 visible_slot_number_increase,
                 state,
-                encryption_layer,
             ),
             visible_slot_number_increase,
         }
@@ -113,7 +111,6 @@ impl<S: Spec> BlobStorage<S> {
         account_for_deferral: bool,
         visible_height_increase: u64,
         state: &mut KernelStateAccessor<'_, S>,
-        _encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> Vec<ValidatedBlob<S, BatchWithId<S>>> {
         let mut blobs_with_total_size_limit = BlobsAccumulatorWithSizeLimit::<S>::new();
 
@@ -337,7 +334,6 @@ impl<S: Spec> BlobStorage<S> {
         current_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         discarded_blobs: &mut Vec<DiscardedBlob>,
         state: &mut KernelStateAccessor<'_, S>,
-        encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> BlobSelectorOutput<ValidatedBlob<S, BatchWithId<S>>> {
         tracing::trace!("On recovery mode path");
 
@@ -356,13 +352,13 @@ impl<S: Spec> BlobStorage<S> {
             // We just need to process the new blobs from this slot. (We still return 1 slots_needed_from_storage, 
             // but since there is no stored blobs for the true_slot, this should be a no-op)
             1 => {
-                let blobs = self.select_blobs_as_based_sequencer_inner(current_blobs, discarded_blobs, state, encryption_layer);
+                let blobs = self.select_blobs_as_based_sequencer_inner(current_blobs, discarded_blobs, state);
                 (1, Some(blobs))
             }
             // Otherwise, we need to process two slots from storage  - which means that we need to save the new blobs
             _ => {
                 let new_batches: Vec<_> = self
-                    .select_blobs_da_ordering(current_blobs,discarded_blobs, true, 2, state, encryption_layer)
+                    .select_blobs_da_ordering(current_blobs,discarded_blobs, true, 2, state)
                     .into_iter()
                     .collect();
                 self.store_batches(&new_batches, state);
@@ -1169,12 +1165,10 @@ impl<S: Spec> BlobStorage<S> {
         // If `DEFERRED_SLOTS_COUNT` is 0, we treat the rollup as having no preferred sequencer.
         // In this case, we just process blobs in the order that they appeared on the DA layer
         if config_deferred_slots_count() == 0 {
-            let _ = encryption_layer; // Mark as used for the based sequencer path
             let selection = self.select_blobs_as_based_sequencer_inner(
                 current_blobs,
                 &mut discarded_blobs,
                 state,
-                encryption_layer,
             );
 
             return Ok((
@@ -1209,7 +1203,7 @@ impl<S: Spec> BlobStorage<S> {
         // Otherwise, we're configured for a preferred sequencer but one doesn't exist. This usually means that the preferred sequencer was slashed.
         // Entery recovery mode.
         let selection =
-            self.select_blobs_in_recovery_mode(current_blobs, &mut discarded_blobs, state, encryption_layer);
+            self.select_blobs_in_recovery_mode(current_blobs, &mut discarded_blobs, state);
 
         Ok((
             BlobSelectorOutput {
@@ -1251,14 +1245,13 @@ impl<S: Spec> BlobStorage<S> {
         current_blobs: RelevantBlobIters<&mut [<<S as Spec>::Da as DaSpec>::BlobTransaction]>,
         state: &mut KernelStateAccessor<'_, S>,
         cf: CF,
-        encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> (
         BlobSelectorOutput<SelectedBlob<S, IterableBatchWithId<S, CF>>>,
         Vec<DiscardedBlob>,
     ) {
         let mut discarded_blobs = Vec::default();
         let output =
-            self.select_blobs_as_based_sequencer_inner(current_blobs, &mut discarded_blobs, state, encryption_layer);
+            self.select_blobs_as_based_sequencer_inner(current_blobs, &mut discarded_blobs, state);
         (
             BlobSelectorOutput {
                 selected_blobs: output
