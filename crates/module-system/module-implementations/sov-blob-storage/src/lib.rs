@@ -6,7 +6,6 @@ mod validation;
 use std::collections::BTreeMap;
 use std::num::NonZero;
 use std::sync::Arc;
-use std::marker::PhantomData;
 
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -37,9 +36,6 @@ pub fn config_unregistered_blobs_per_slot() -> u64 {
     config_value!("UNREGISTERED_BLOBS_PER_SLOT")
 }
 
-/// Configuration for the BlobStorage module
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct BlobStorageConfig {}
 
 /// The type of sequencer that published a blob.
 #[derive(
@@ -199,10 +195,6 @@ pub struct BlobStorage<S: Spec> {
 
     #[module]
     bank: sov_bank::Bank<S>,
-    
-    /// Phantom field for encryption functionality
-    #[phantom]
-    encryption: PhantomData<()>,
 }
 
 /// Non standard methods for blob storage
@@ -273,7 +265,7 @@ impl<S: Spec> BlobStorage<S> {
 /// Empty module implementation
 impl<S: Spec> Module for BlobStorage<S> {
     type Spec = S;
-    type Config = BlobStorageConfig;
+    type Config = ();
     type CallMessage = NotInstantiable;
     type Event = ();
 
