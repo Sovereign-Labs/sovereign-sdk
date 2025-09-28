@@ -1,5 +1,6 @@
 use alloy_primitives::Bytes;
 use derive_more::Deref;
+use derive_more::FromStr;
 use ethereum_types::H160;
 use ethers::core::abi::Address;
 use ethers::core::types::transaction::eip2718::TypedTransaction;
@@ -174,6 +175,25 @@ impl TestClient {
         contract_address: H160,
     ) -> Result<PendingTransaction<'_, Http>, Box<dyn std::error::Error>> {
         let tx = self.make_tx(Some(contract_address), Some(self.contract.always_revert()));
+        self.send_tx(tx).await
+    }
+
+    pub async fn deploy_inner_contract(
+        &self,
+        contract_address: H160,
+    ) -> Result<PendingTransaction<'_, Http>, Box<dyn std::error::Error>> {
+        let tx = self.make_tx(
+            Some(contract_address),
+            Some(
+                self.contract.deploy(
+                    ethers::types::Bytes::from_str(
+                        "0x600a600c600039600a6000f3602a60005260206000f3",
+                    )
+                    .unwrap(),
+                    0,
+                ),
+            ),
+        );
         self.send_tx(tx).await
     }
 

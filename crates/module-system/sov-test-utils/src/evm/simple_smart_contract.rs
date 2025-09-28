@@ -82,6 +82,14 @@ impl SimpleStorageContract {
         self.base_contract.encode("alwaysRevert", ()).unwrap()
     }
 
+    /// Revert transaction.
+    pub fn deploy(&self, init_code: Bytes, value: u64) -> Bytes {
+        let value = ethereum_types::U256::from(value);
+        self.base_contract
+            .encode("deploy", (init_code, value))
+            .unwrap()
+    }
+
     /// Emit logss.
     pub fn emit_logs(&self, topic: u32, nb_of_logs: u32) -> Bytes {
         let topic = ethereum_types::U256::from(topic);
