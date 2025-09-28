@@ -14,7 +14,7 @@ pub struct StfBlueprint<S: Spec, RT: Runtime<S>> {
     #[cfg_attr(not(feature = "test-utils"), allow(dead_code))]
     pub(crate) runtime: RT,
     /// Optional encryption layer for decrypting DA blobs
-    pub(crate) encryption_layer: Option<Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
+    pub(crate) encryption_layer: Option<sov_encryption::EncryptionLayer>,
     phantom_context: PhantomData<S>,
 }
 
@@ -85,7 +85,7 @@ where
         let encryption_layer = sov_encryption::EncryptionLayer::new(encryption_config).await?;
         Ok(Self {
             runtime,
-            encryption_layer: Some(Box::new(encryption_layer)),
+            encryption_layer: Some(encryption_layer),
             phantom_context: PhantomData,
         })
     }
@@ -93,7 +93,7 @@ where
     /// [`StfBlueprint`] constructor with a custom encryption layer.
     pub fn with_encryption_layer(
         runtime: RT,
-        encryption_layer: Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>
+        encryption_layer: sov_encryption::EncryptionLayer
     ) -> Self {
         Self {
             runtime,

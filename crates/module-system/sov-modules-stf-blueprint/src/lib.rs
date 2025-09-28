@@ -393,7 +393,7 @@ where
         relevant_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         kernel: &mut KernelStateAccessor<S>,
         cf: CF,
-        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
+        encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> (
         BlobSelectorOutput<SelectedBlob<S, IterableBatchWithId<S, CF>>>,
         Vec<DiscardedBlob>,
@@ -423,7 +423,7 @@ where
         relevant_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         execution_context: ExecutionContext,
         cf: CF,
-        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
+        encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> ApplySlotOutput<S::InnerZkvm, S::OuterZkvm, S::Da, Self> {
         let mut runtime = RT::default();
         // Sanity check that gas limits are set correctly. This is already checked at genesis, but we check again in case

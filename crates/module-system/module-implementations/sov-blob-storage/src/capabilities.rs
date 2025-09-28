@@ -16,6 +16,7 @@ use sov_rollup_interface::da::RelevantBlobIters;
 use sov_rollup_interface::stf::BlobDiscardReason;
 use sov_rollup_interface::stf::DiscardedBlob;
 use sov_sequencer_registry::AllowedSequencerError;
+use sov_encryption::EncryptionLayerTrait;
 use tracing::{debug, info, trace, warn};
 
 use crate::max_size_checker::{BlobsAccumulatorWithSizeLimit, PushOrIgnore};
@@ -82,7 +83,7 @@ impl<S: Spec> BlobStorage<S> {
         current_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         discarded_blobs: &mut Vec<DiscardedBlob>,
         state: &mut KernelStateAccessor<'_, S>,
-        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
+        encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> BlobSelectorOutput<ValidatedBlob<S, BatchWithId<S>>> {
         tracing::trace!("On based sequencer path");
 
@@ -112,7 +113,7 @@ impl<S: Spec> BlobStorage<S> {
         account_for_deferral: bool,
         visible_height_increase: u64,
         state: &mut KernelStateAccessor<'_, S>,
-        _encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
+        _encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> Vec<ValidatedBlob<S, BatchWithId<S>>> {
         let mut blobs_with_total_size_limit = BlobsAccumulatorWithSizeLimit::<S>::new();
 
@@ -336,7 +337,7 @@ impl<S: Spec> BlobStorage<S> {
         current_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         discarded_blobs: &mut Vec<DiscardedBlob>,
         state: &mut KernelStateAccessor<'_, S>,
-        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
+        encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> BlobSelectorOutput<ValidatedBlob<S, BatchWithId<S>>> {
         tracing::trace!("On recovery mode path");
 
@@ -444,7 +445,7 @@ impl<S: Spec> BlobStorage<S> {
         preferred_sender: &<S::Da as DaSpec>::Address,
         preferred_sequencer: S::Address,
         cf: CF,
-        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
+        encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> BlobSelectorOutput<SelectedBlob<S, IterableBatchWithId<S, CF>>> {
         let mut sequence_tracker = self
             .upcoming_sequence_numbers
@@ -1046,7 +1047,7 @@ impl<S: Spec> BlobStorage<S> {
         charge_for_deserialization: Option<(&AllowedSequencer<S>, &<S::Gas as Gas>::Price)>,
         slash_on_failure: bool,
         state: &mut KernelStateAccessor<'_, S>,
-        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
+        encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> Option<B> {
         // Note: encryption_layer is passed for future extensibility but not used in this generic method.
         // Actual decryption happens later in the processing pipeline for EncryptedPreferredBatchData.
@@ -1102,24 +1103,17 @@ impl<S: Spec> BlobStorage<S> {
     }
 
     /// Deserialize a batch blob into PreferredBatchData, handling both encrypted and unencrypted variants.
-    /// This function tries unencrypted deserialization first, then encrypted if that fails.
+    /// If encryption_layer exists, tries encrypted deserialization. Otherwise, tries unencrypted.
     /// Always returns PreferredBatchData regardless of whether the source was encrypted.
     fn deserialize_and_decrypt_batch(
         &mut self,
         blob: &mut <S::Da as DaSpec>::BlobTransaction,
         charge_for_deserialization: Option<(&AllowedSequencer<S>, &<S::Gas as Gas>::Price)>,
         state: &mut KernelStateAccessor<'_, S>,
-        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
+        encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> Option<PreferredBatchData> {
-        // First try to deserialize as regular (unencrypted) batch
-        if let Some(batch) = self.deserialize_or_try_slash_sender::<PreferredBatchData>(
-            blob, charge_for_deserialization, false, state, None,
-        ) {
-            return Some(batch);
-        }
-
-        // If that failed, try to deserialize as encrypted batch and decrypt it
         if let Some(encryption_layer) = encryption_layer {
+            // Encryption layer exists - try encrypted deserialization path
             if let Some(encrypted_batch) = self.deserialize_or_try_slash_sender::<EncryptedPreferredBatchData>(
                 blob, charge_for_deserialization, true, state, None,
             ) {
@@ -1146,8 +1140,12 @@ impl<S: Spec> BlobStorage<S> {
                 }
             }
         } else {
-            // No encryption layer available but we couldn't deserialize as regular batch
-            tracing::warn!("Failed to deserialize batch and no encryption layer available for decryption");
+            // No encryption layer - try unencrypted deserialization path
+            if let Some(batch) = self.deserialize_or_try_slash_sender::<PreferredBatchData>(
+                blob, charge_for_deserialization, false, state, None,
+            ) {
+                return Some(batch);
+            }
         }
 
         None
@@ -1167,7 +1165,7 @@ impl<S: Spec> BlobStorage<S> {
         current_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         state: &mut KernelStateAccessor<'_, S>,
         cf: CF,
-        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
+        encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> anyhow::Result<(
         BlobSelectorOutput<SelectedBlob<S, IterableBatchWithId<S, CF>>>,
         Vec<DiscardedBlob>,
@@ -1259,7 +1257,7 @@ impl<S: Spec> BlobStorage<S> {
         current_blobs: RelevantBlobIters<&mut [<<S as Spec>::Da as DaSpec>::BlobTransaction]>,
         state: &mut KernelStateAccessor<'_, S>,
         cf: CF,
-        encryption_layer: Option<&Box<dyn sov_encryption::EncryptionLayerTrait + Send + Sync>>,
+        encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> (
         BlobSelectorOutput<SelectedBlob<S, IterableBatchWithId<S, CF>>>,
         Vec<DiscardedBlob>,

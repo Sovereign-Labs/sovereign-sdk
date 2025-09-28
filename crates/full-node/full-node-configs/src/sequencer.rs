@@ -45,7 +45,7 @@ pub struct SequencerConfig<Address, Sc = SequencerKindConfig> {
     pub rollup_address: Address,
     /// The list of addresses that are allowed to perform admin operations on
     /// the sequencer.
-    // The custom "default" is equivalent to Serde's default default, but
+    /// The custom "default" is equivalent to Serde's default default, but
     /// without the bound `Address: Default`.
     #[serde(default = "Vec::<Address>::new")]
     pub admin_addresses: Vec<Address>,

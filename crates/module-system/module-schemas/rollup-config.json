@@ -52,6 +52,17 @@
         }
       ]
     },
+    "stf": {
+      "description": "STF configuration.",
+      "default": {
+        "encryption": null
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/StfConfig"
+        }
+      ]
+    },
     "storage": {
       "description": "Currently rollup config runner only supports storage path parameter",
       "allOf": [
@@ -827,7 +838,7 @@
       ],
       "properties": {
         "admin_addresses": {
-          "description": "The list of addresses that are allowed to perform admin operations on the sequencer. without the bound `Address: Default`.",
+          "description": "The list of addresses that are allowed to perform admin operations on the sequencer. The custom \"default\" is equivalent to Serde's default default, but without the bound `Address: Default`.",
           "type": "array",
           "items": {
             "$ref": "#/definitions/Address"
@@ -912,6 +923,24 @@
           ],
           "format": "uint",
           "minimum": 1.0
+        }
+      }
+    },
+    "StfConfig": {
+      "description": "STF configuration.",
+      "type": "object",
+      "properties": {
+        "encryption": {
+          "description": "Optional encryption configuration for decrypting batch data from the DA layer",
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/EncryptionConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
