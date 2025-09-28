@@ -194,7 +194,7 @@ impl<S: Spec> MinimalZkGenesisConfig<S> {
                     enable_custom_account_mappings: true,
                 },
                 uniqueness: (),
-                blob_storage: sov_blob_storage::BlobStorageConfig {},
+                blob_storage: (),
                 chain_state: BasicGenesisConfig::chain_state(
                     sov_modules_api::OperatingMode::Zk,
                     inner_code_commitment,

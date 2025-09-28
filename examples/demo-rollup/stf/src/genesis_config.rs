@@ -104,7 +104,7 @@ where
         read_genesis_json(&genesis_paths.chain_state_genesis_path)?;
     let paymaster_config: PaymasterConfig<S> =
         read_genesis_json(&genesis_paths.paymaster_genesis_path)?;
-    let blob_storage_config = sov_blob_storage::BlobStorageConfig {};
+    let blob_storage_config = ();
 
     let access_pattern: sov_test_modules::access_pattern::AccessPatternGenesisConfig<S> =
         read_genesis_json(&genesis_paths.access_pattern)?;
