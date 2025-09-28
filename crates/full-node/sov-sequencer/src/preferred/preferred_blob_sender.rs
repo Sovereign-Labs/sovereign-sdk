@@ -2,7 +2,7 @@ use sov_blob_sender::BlobExecutionStatus;
 use sov_blob_sender::{BlobInternalId, BlobSender, BlobToSend};
 use sov_blob_storage::{EncryptedPreferredBatchData, PreferredBatchData, PreferredProofData};
 use sov_db::ledger_db::LedgerDb;
-use sov_encryption::EncryptionLayer;
+use sov_encryption::{EncryptionLayer, EncryptionLayerTrait};
 use sov_modules_api::TxHash;
 use sov_rollup_interface::node::da::DaService;
 use std::{
@@ -213,7 +213,7 @@ fn batch_bytes(
         
         // Encrypt the serialized transaction data as one ciphertext
         tracing::info!("🔐 Encrypting batch of {} transactions", batch.txs.len());
-        let (encrypted_txs_data, _key_id) = encryptor.encrypt(&txs_serialized)?;
+        let encrypted_txs_data = encryptor.encrypt(&txs_serialized)?;
         
         // Create batch with serialized encrypted blob + metadata including tx hashes
         tracing::debug!("📦 Creating encrypted batch with tx hashes");
