@@ -150,3 +150,21 @@ fn check_logs(filter: &Filter, logs: Vec<alloy_rpc_types_eth::Log>, expected_nb_
         assert!(filter.matches(log.inner.as_ref()));
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_foo() {
+    //std::env::set_var("RUST_LOG", "debug,sov_mock_da=trace");
+    sov_test_utils::initialize_logging();
+
+    //let span = tracing::info_span!("XXXX1");
+    foo();
+}
+
+#[tracing::instrument(name = "quiet_method")]
+fn foo() {
+    tracing::trace!("Trace 1");
+    tracing::debug!("Debug 1");
+    tracing::info!("Info 1");
+    tracing::warn!("Warn 1");
+    tracing::error!("Error 1");
+}

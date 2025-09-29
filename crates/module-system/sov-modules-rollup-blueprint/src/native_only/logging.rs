@@ -6,9 +6,31 @@ use std::str::FromStr;
 pub use crate::native_only::telemetry::{should_init_open_telemetry_exporter, OtelGuard};
 use crate::GIT_COMMIT_HASH;
 use tracing::info;
+use tracing_subscriber::filter;
 use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::layer::{Context, Filter};
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter, Layer};
+
+#[derive(Clone, Copy)]
+struct IgnoreSpan(&'static str);
+
+impl<S> Filter<S> for IgnoreSpan
+where
+    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+{
+    fn enabled(&self, _meta: &tracing::Metadata<'_>, ctx: &Context<'_, S>) -> bool {
+        if let Some(current) = ctx.lookup_current() {
+            // iterate current span and all its ancestors (root → leaf order)
+            for span in current.scope().from_root() {
+                if span.name() == self.0 {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+}
 
 /// Default [`tracing`] initialization for the rollup node.
 /// Returns optional [`OtelGuard`] which should be held through the lifetime of the caller,
@@ -23,7 +45,8 @@ pub fn initialize_logging() -> Option<OtelGuard> {
     };
 
     let get_env_filter = || EnvFilter::from_str(&env_filter).unwrap();
-    let mut layers = fmt::layer().with_filter(get_env_filter()).boxed();
+
+    let mut layers = fmt::layer().with_filter(IgnoreSpan("quiet_method")).boxed();
 
     if cfg!(tokio_unstable) {
         layers = layers
