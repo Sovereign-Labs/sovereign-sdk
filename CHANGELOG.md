@@ -1,5 +1,6 @@
 # 2025-09-25
 - #1758 A new config value in rollup.toml: `runner.da_total_timeout_secs`. It should be larger than the total time da service attempts to fetch data. Default value is 10 minutes.
+- #1771 Added new logging warning about metrics, which triggers demo-rollup test.
 
 # 2025-09-21
 - #1729 Adds optional `num_cache_warmup_workers` to `xxx_rollup_config.toml`. This field specifies the number of workers responsible for warming up the executor cache in the preferred sequencer.
