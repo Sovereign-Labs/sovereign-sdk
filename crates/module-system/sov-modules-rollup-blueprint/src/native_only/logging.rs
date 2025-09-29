@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Logging utilities and defaults.
 
 use std::env;
@@ -46,7 +47,9 @@ pub fn initialize_logging() -> Option<OtelGuard> {
 
     let get_env_filter = || EnvFilter::from_str(&env_filter).unwrap();
 
-    let mut layers = fmt::layer().with_filter(IgnoreSpan("quiet_method")).boxed();
+    let mut layers = fmt::layer()
+        .with_filter(IgnoreSpan("preferred_seq_bg_task"))
+        .boxed();
 
     if cfg!(tokio_unstable) {
         layers = layers

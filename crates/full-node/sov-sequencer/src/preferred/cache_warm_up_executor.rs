@@ -148,6 +148,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         })
     }
 
+    #[tracing::instrument(skip_all, name = "quiet_method")]
     async fn start_block<Rt: Runtime<S>>(
         notify: StartBlockNotification<S>,
         executor: &mut RollupBlockExecutor<S, Rt>,

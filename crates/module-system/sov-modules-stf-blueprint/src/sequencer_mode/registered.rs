@@ -434,6 +434,7 @@ where
     let mut clean_scratchpad = checkpoint.to_tx_scratchpad();
 
     for (idx, (raw_tx, injected_control_flow)) in batch_with_id.enumerate() {
+        tracing::info!("XXXXXXXXXXX {:?} {:?}", execution_context, span);
         // Authorize and process the transaction, handling sequencer rewards/penalties internally.
         // The caller is responsible for maintaining the global gas limit.
         let AuthAndProcessOutput {
@@ -600,7 +601,7 @@ where
         &mut checkpoint,
     );
     apply_batch_logs(&batch_receipt, blob_idx);
-    span.exit();
+    //span.exit();
     (batch_receipt, checkpoint)
 }
 

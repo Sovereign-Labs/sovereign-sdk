@@ -109,6 +109,7 @@ async fn evm_test_get_logs_range() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_get_logs_range_limit() {
+    sov_test_utils::initialize_logging();
     let max_log_limit = 93;
 
     let (test_rollup, evm_client, _) = setup(0, SeqConfigExtension { max_log_limit }).await;
@@ -151,6 +152,7 @@ fn check_logs(filter: &Filter, logs: Vec<alloy_rpc_types_eth::Log>, expected_nb_
     }
 }
 
+/*
 #[tokio::test(flavor = "multi_thread")]
 async fn test_foo() {
     //std::env::set_var("RUST_LOG", "debug,sov_mock_da=trace");
@@ -167,4 +169,34 @@ fn foo() {
     tracing::info!("Info 1");
     tracing::warn!("Warn 1");
     tracing::error!("Error 1");
+}*/
+
+use tokio::time::Duration;
+use tracing::Instrument;
+use tracing::Span;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_foo() {
+    sov_test_utils::initialize_logging();
+
+    //let span = tracing::info_span!("XXXX1");
+    foo().await;
+}
+
+#[tracing::instrument(name = "quiet_method", level = "trace")]
+async fn foo() {
+    tracing::info!("Info 1");
+
+    tokio::spawn(foo2().instrument(Span::current()));
+    tokio::time::sleep(Duration::from_secs(3)).await;
+}
+
+async fn foo2() {
+    tracing::info!("========== Info 2");
+    tokio::spawn(foo3().in_current_span());
+}
+
+async fn foo3() {
+    let _span = tracing::info_span!("BOOOO",).entered();
+    tracing::info!("========== Info 3");
 }

@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use axum::http::StatusCode;
+use futures::FutureExt;
 use sov_modules_api::capabilities::{
     BlobSelector, BlobSelectorOutput, ChainState, FatalError, RollupHeight,
     TransactionAuthenticator,
@@ -24,7 +25,9 @@ use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
+use tracing::instrument::Instrumented;
 use tracing::trace;
+use tracing::Instrument;
 use uuid::Uuid;
 
 use super::state_root_compute::StateRootComputeRequest;
@@ -534,7 +537,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 executor_context,
             };
 
-            move || rollup_block_task_body::<S, Rt>(ctx)
+            move || rollup_block_task_body::<S, Rt>(ctx).in_current_span()
         });
 
         // Wait for the background task to get up and running, and send the
@@ -678,7 +681,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         match task_state {
             Some(task) => {
                 let ret = task.shutdown().await.expect("Transaction acceptor task failed unexpectedly! This is a bug, please report it.");
-                Some(ret)
+                Some(ret.into_inner())
             }
             None => None,
         }
@@ -695,7 +698,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             .expect("No in-progress rollup block, nothing to do. This is a bug, please report it")
             .shutdown()
             .await
-            .expect("No in-progress rollup block, nothing to do. This is a bug, please report it");
+            .expect("No in-progress rollup block, nothing to do. This is a bug, please report it")
+            .into_inner();
 
         let mut accepted_txs_by_batch = Vec::with_capacity(batch_receipts.len());
         for batch_receipt in batch_receipts {
@@ -750,13 +754,13 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
 #[derive(Debug)]
 struct BackgroundTaskState<S: Spec> {
-    handle: JoinHandle<BlockExecutionOutput<S>>,
+    handle: JoinHandle<Instrumented<BlockExecutionOutput<S>>>,
     tx_sender: mpsc::Sender<FullyBakedTx>,
     result_receiver: mpsc::Receiver<Result<ExecutedTxResponse<S>, RejectReason>>,
 }
 
 impl<S: Spec> BackgroundTaskState<S> {
-    fn shutdown(self) -> JoinHandle<BlockExecutionOutput<S>> {
+    fn shutdown(self) -> JoinHandle<Instrumented<BlockExecutionOutput<S>>> {
         // Must be dropped before the result receiver, or a deadlock happens.
         drop(self.tx_sender);
         self.handle
