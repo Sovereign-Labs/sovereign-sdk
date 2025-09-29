@@ -449,7 +449,8 @@ pub trait StateGetter: core::fmt::Debug + Send + Sync {
     /// Get the value.
     fn get(&self, namespace: Namespace, key: &SlotKey) -> MaybePresentValue<SlotValue>;
 
-    /// Ignore changes after the given rollup height.
+    /// Any writes from changesets *after* (not including) the given rollup height will be ignored, as if they are absent from this reader. 
+    /// This is a permanent change to the getter that cannot be undone except by creating a new `StateGetter` from the original source.
     fn ignore_changes_after_height(&mut self, rollup_height: RollupHeight);
 
     /// Get the latest rollup height available in the getter.
