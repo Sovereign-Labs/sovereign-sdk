@@ -114,10 +114,10 @@ where
             }
         }
         // tokio::time::sleep can have unreliable timing under load, so if the total time we've been retrying is too large we'll break the loop early.
-        if start.elapsed().as_millis() > MAX_RETRY_DURATION_MS {
+        if start.elapsed().as_millis() > MAX_BUFFER_DURATION_MS {
             break;
         }
-        tokio::time::sleep(std::time::Duration::from_millis(MAX_BUFFER_DURATION_MS)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(SLEEP_DURATION_MS)).await;
         state = ethereum.sequencer.api_state().default_api_state_accessor();
     }
 
