@@ -33,7 +33,7 @@ const SLEEP_DURATION_MS: u64 = 10;
 /// The maximum number of times to fetch the nonce and retry.
 const MAX_RETRIES: u32 = 10;
 /// The maximum amount of time to buffer a tx with a future nonce. Provides an upper bound in case retry attempts are taking too long.
-const MAX_BUFFER_DURATION_MS: u64 = 200;
+const MAX_BUFFER_DURATION_MS: u128 = 200;
 
 async fn process_raw_transaction<S, Seq, T, F>(
     data: Bytes,
@@ -61,7 +61,7 @@ where
         .to_provable_reader();
     let (_decoded_tx, auth_data, _call) =
         <Seq::Rt as Runtime<S>>::Auth::authenticate(&tx, &mut state).map_err(|e| {
-            to_jsonrpsee_error_object(format!("Authentication failed: {}", e), ETH_RPC_ERROR)
+            to_jsonrpsee_error_object(format!("Authentication failed: {e}"), ETH_RPC_ERROR)
         })?;
     let mut state = state.api_state_accessor;
     let AuthorizationData {
@@ -93,14 +93,13 @@ where
                     return on_success(tx_hash, ethereum);
                 } else if nonce < expected_nonce {
                     return Err(to_jsonrpsee_error_object(
-                        format!("Nonce error: nonce {} has already been used", nonce),
+                        format!("Nonce error: nonce {nonce} has already been used"),
                         ETH_RPC_ERROR,
                     ));
                 } else if nonce > (expected_nonce + FUTURE_NONCE_THRESHOLD) {
                     return Err(to_jsonrpsee_error_object(
                         format!(
-                            "Nonce error: Provided nonce {} is in the future. Expected nonce is {}",
-                            nonce, expected_nonce
+                            "Nonce error: Provided nonce {nonce} is in the future. Expected nonce is {expected_nonce}",
                         ),
                         ETH_RPC_ERROR,
                     ));
