@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::GasMeteringError;
 use alloy_eips::eip1559::ETHEREUM_BLOCK_GAS_LIMIT_30M;
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
@@ -10,7 +11,6 @@ use sov_state::{
     namespaces, CompileTimeNamespace, EventContainer, Namespace, NativeStorage,
     ProvableStorageCache, SlotKey, SlotValue, Storage, TypeErasedEvent,
 };
-use crate::GasMeteringError;
 
 use super::temp_cache::{CacheLookup, TempCache};
 use super::{BorshSerializedSize, StateCheckpoint, UniversalStateAccessor};
@@ -18,7 +18,9 @@ use crate::capabilities::{KernelWithSlotMapping, RollupHeight};
 use crate::gas::GasArray;
 use crate::state::accessors::internals::AccessoryWrite;
 use crate::state::traits::PerBlockCache;
-use crate::{Amount, BasicGasMeter, Gas, GasMeter, GetGasPrice, ProvableStateReader, Spec, VersionReader};
+use crate::{
+    Amount, BasicGasMeter, Gas, GasMeter, GetGasPrice, ProvableStateReader, Spec, VersionReader,
+};
 
 fn get_slot_number(visible_slot_number: Option<VisibleSlotNumber>) -> Option<SlotNumber> {
     // This TODO is not a security risk.
@@ -746,7 +748,6 @@ impl<S: Spec> VersionReader for ApiStateAccessor<S> {
     }
 }
 
-
 /// A wrapper around [`ApiStateAccessor`] that implements ProvableStateReader for both namespaces.
 pub struct MeteredApiStateAccessor<S: Spec> {
     pub api_state_accessor: ApiStateAccessor<S>,
@@ -760,26 +761,33 @@ impl<S: Spec> GasMeter for MeteredApiStateAccessor<S> {
 }
 
 impl<S: Spec> UniversalStateAccessor for MeteredApiStateAccessor<S> {
-    fn get_size(&mut self, namespace: Namespace, key: &SlotKey, metric: &mut StateAccessMetric) -> Option<u32> {
+    fn get_size(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<u32> {
         self.api_state_accessor.get_size(namespace, key, metric)
     }
-    fn get_value(&mut self, namespace: Namespace, key: &SlotKey, metric: &mut StateAccessMetric) -> Option<SlotValue> {
+    fn get_value(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
         self.api_state_accessor.get_value(namespace, key, metric)
     }
     fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
-        self.api_state_accessor.set_value(namespace, key, value)
+        self.api_state_accessor.set_value(namespace, key, value);
     }
     fn delete_value(&mut self, namespace: Namespace, key: &SlotKey) {
-        self.api_state_accessor.delete_value(namespace, key)
+        self.api_state_accessor.delete_value(namespace, key);
     }
 }
 
-impl<S: Spec> ProvableStateReader<namespaces::User> for MeteredApiStateAccessor<S> {
-   
-}
+impl<S: Spec> ProvableStateReader<namespaces::User> for MeteredApiStateAccessor<S> {}
 
-impl<S: Spec> ProvableStateReader<namespaces::Kernel> for MeteredApiStateAccessor<S> {
-}
+impl<S: Spec> ProvableStateReader<namespaces::Kernel> for MeteredApiStateAccessor<S> {}
 
 impl<S: Spec> GetGasPrice for MeteredApiStateAccessor<S> {
     type Spec = S;
