@@ -272,10 +272,8 @@ async fn blob_sender_exit_if_blob_not_processed() -> anyhow::Result<()> {
     let (_, log) = records.remove(0);
     let pattern = "Shutting down the rollup. Blob processing wasn't completed on time.";
     assert!(
-        log.contains(&pattern),
-        "Pattern '{}' not found in '{}'",
-        pattern,
-        log
+        log.contains(pattern),
+        "Pattern '{pattern}' not found in '{log}'"
     );
     Ok(())
 }
