@@ -11860,6 +11860,7 @@ dependencies = [
  "sov-state",
  "sov-stf-runner",
  "sov-test-utils",
+ "sov-uniqueness",
  "strum 0.26.3",
  "test-strategy",
  "tokio",
