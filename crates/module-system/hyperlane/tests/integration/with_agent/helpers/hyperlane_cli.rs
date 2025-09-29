@@ -170,7 +170,7 @@ fn prepare_cli_data(
 
 // Waits for some time while hyperlane-cli exit with status code 0
 async fn wait_till_container_exit(hyperlane_cli_image: ContainerRequest<GenericImage>) -> String {
-    let container = hyperlane_cli_image
+    let container: testcontainers::ContainerAsync<GenericImage> = hyperlane_cli_image
         .start()
         .await
         .expect("Failed to start hyperlane-cli");
@@ -186,7 +186,20 @@ async fn wait_till_container_exit(hyperlane_cli_image: ContainerRequest<GenericI
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-    assert!(!is_running, "hyperlane-cli hasn't completed on time");
+    // Temporarily print logs on failure to help with debugging. This will allow us to debug even when `tracing` isn't enabled.
+    if is_running {
+        let logs = container
+            .stdout_to_vec()
+            .await
+            .expect("failed to get stdout from hyperlane-cli container after timeout.");
+        println!("hyperlane-cli hasn't completed on time: \n\n CONTAINER STDOUT REPRODUCED BELOW:\n{}\n\n----------- END OF STDOUT ----------- ", String::from_utf8_lossy(&logs));
+        let err_logs = container
+            .stderr_to_vec()
+            .await
+            .expect("failed to get stderr from hyperlane-cli container after timeout.");
+        println!("hyperlane-cli hasn't completed on time: \n\n CONTAINER STDERR REPRODUCED BELOW :\n{}\n\n ----------- END OF STDERR ----------- ", String::from_utf8_lossy(&err_logs));
+        panic!("hyperlane-cli hasn't completed on time");
+    }
     let container_exit_code = container
         .exit_code()
         .await
