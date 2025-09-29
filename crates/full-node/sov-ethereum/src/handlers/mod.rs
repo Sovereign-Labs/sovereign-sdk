@@ -70,9 +70,13 @@ where
         ..
     } = auth_data;
     drop(auth_data); // Drop the authorization data because it's not `Send`, so we can't hold it across retries.
+    let retries = if ethereum.buffer_raw_txs {
+        MAX_RETRIES
+    } else {
+        0
+    };
     let start = std::time::Instant::now();
-
-    for _ in 0..MAX_RETRIES {
+    for _ in 0..retries {
         match uniqueness {
             UniquenessData::Nonce(nonce) => {
                 let expected_nonce = sov_uniqueness::Uniqueness::<S>::default()

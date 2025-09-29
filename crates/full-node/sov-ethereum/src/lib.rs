@@ -21,6 +21,8 @@ pub struct EthRpcConfig {
     #[cfg(feature = "local")]
     pub eth_signer: Signers,
     pub extension: SeqConfigExtension,
+    /// Whether to buffer raw transactions with a future nonce. If true, we'll retry the transaction a few times to see if the missing intermediate nonce was consumed.
+    pub buffer_raw_txs: bool,
 }
 
 pub fn get_ethereum_rpc<S, Seq>(eth_rpc_config: EthRpcConfig, sequencer: Arc<Seq>) -> RpcModule<()>
@@ -35,6 +37,7 @@ where
         #[cfg(feature = "local")]
         eth_signer,
         extension,
+        buffer_raw_txs,
     } = eth_rpc_config;
 
     let mut rpc = RpcModule::new(Ethereum {
@@ -42,6 +45,7 @@ where
         #[cfg(feature = "local")]
         eth_signer,
         extension,
+        buffer_raw_txs,
     });
 
     register_rpc_methods::<S, Seq>(&mut rpc).expect("Failed to register sequencer RPC methods");
@@ -95,6 +99,7 @@ struct Ethereum<S: Spec, Seq: Sequencer<Spec = S>> {
     #[cfg(feature = "local")]
     eth_signer: Signers,
     extension: SeqConfigExtension,
+    buffer_raw_txs: bool,
 }
 
 impl<S, Seq> Ethereum<S, Seq>
