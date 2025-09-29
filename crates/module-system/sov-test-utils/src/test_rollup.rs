@@ -754,6 +754,17 @@ where
             .unwrap();
     }
 
+    /// Waits for the rollup to shutdown.
+    pub async fn wait_for_rollup_to_shutdown_with_result(
+        self,
+        t: tokio::time::Duration,
+    ) -> anyhow::Result<()> {
+        timeout(t, self.rollup_task)
+            .await
+            .expect("Failed to join rollup task before timeout.")
+            .expect("Rollup task panicked.")
+    }
+
     /// Shuts down the rollup and waits for all background tasks to finish.
     pub async fn shutdown(self) -> anyhow::Result<RollupBuilder<R, StoragePath>> {
         if let Err(error) = self.shutdown_sender.send(()) {

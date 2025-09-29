@@ -643,7 +643,17 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
         // blocks until background handles have shutdown
         monitoring_task.await??;
         for handle in self.endpoints.inner.background_handles {
-            handle.await??;
+            match handle.await {
+                Err(e) => {
+                    tracing::error!(error = %e, "Endpoint background task panicked.");
+                    return Err(e.into());
+                }
+                Ok(Err(e)) => {
+                    tracing::error!(error = %e, "Endpoint background task joined with error");
+                    return Err(e);
+                }
+                _ => {}
+            }
         }
         tracing::debug!("Rollup completed run");
         Ok(())
@@ -653,32 +663,42 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
 fn spawn_task_monitor(
     shutdown_sender: tokio::sync::watch::Sender<()>,
     handles: Vec<tokio::task::JoinHandle<()>>,
-) -> tokio::task::JoinHandle<Result<(), tokio::task::JoinError>> {
+) -> tokio::task::JoinHandle<Result<(), anyhow::Error>> {
     tokio::spawn(async move {
         let shutdown_recv = shutdown_sender.subscribe();
         tracing::trace!("blocking until a background task joins or rollup shutdown");
         let (result, _, handles) = futures::future::select_all(handles).await;
 
-        if let Err(error) = result {
+        let mut was_graceful = if let Err(error) = result {
             tracing::error!(error = %error, "background task joined with error");
+            false
         } else {
             // If shutdown receiver hasn't changed then it's implied that one of the handles
             // joined early before a shutdown signal was sent. This likely indicates
             // incorrect behaviour and so we send the signal ourselves to begin the shutdown process.
-            if let Ok(false) = shutdown_recv.has_changed() {
-                tracing::error!("background task joined with success status and no shutdown signal was sent, this is a error!");
+            if let Ok(true) = shutdown_recv.has_changed() {
+                true
+            } else {
+                tracing::error!("background task joined with success status but no shutdown signal had been sent at the time. This is a bug! Please report it.");
                 // Start graceful shutdown
                 _ = shutdown_sender.send(());
+                false
             }
-        }
+        };
 
         tracing::trace!("waiting for background tasks to join");
 
         for handle in handles {
-            handle.await?;
+            if let Err(error) = handle.await {
+                tracing::error!(error = %error, "Additional background task joined with error");
+                was_graceful = false;
+            }
         }
 
         tracing::trace!("task monitoring is complete");
+        if !was_graceful {
+            anyhow::bail!("One or more background tasks joined with errors. See logs for details.");
+        }
 
         Ok(())
     })

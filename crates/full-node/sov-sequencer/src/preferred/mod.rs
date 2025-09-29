@@ -39,6 +39,7 @@ use sov_modules_api::{
     ApiTxEffect, FullyBakedTx, RejectReason, Runtime, RuntimeEventProcessor, RuntimeEventResponse,
     Spec, StateCheckpoint, StateUpdateInfo, VersionReader, VisibleSlotNumber, *,
 };
+use sov_rest_utils::errors::internal_server_error_500;
 use sov_rest_utils::errors::{database_error_500, sequencer_overloaded_503};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
@@ -392,14 +393,16 @@ where
                     .trigger_batch_production_if_convenient_msg(
                         "recover_and_catch_up:dump_catchup_batches",
                     )
-                    .await;
+                    .await
+                    .map_err(|e| e.into_state_update_error())?;
             }
 
             // 2. Wait for node to catch up to our sequence number
             let target_sequence_number = self
                 .synchronized_state_updator
                 .next_sequence_number_msg("recover_and_catch_up:get_next_sequence_number")
-                .await;
+                .await
+                .map_err(|e| e.into_state_update_error())?;
 
             tracing::info!(target_sequence_number, "Recovery: catchup batches sent; sequencer will now wait for the node to process them. We will then re-evaluate if we need to catch up again (if there are so many batches that by the time the node catches up we need to bump the visible_slot_number some more).");
 
@@ -428,7 +431,8 @@ where
                         info.clone(),
                         "recover_and_catch_up:overwrite_executor",
                     )
-                    .await;
+                    .await
+                    .map_err(|e| e.into_state_update_error())?;
             }
         }
 
@@ -471,7 +475,8 @@ where
 
             self.synchronized_state_updator
                 .wait_for_node_resync_msg(info, "wait_for_node_resync")
-                .await;
+                .await
+                .map_err(|e| e.into_state_update_error())?;
 
             // Exit after processing if we're synced
             if is_synced {
@@ -642,7 +647,8 @@ where
             next_sequence_number_according_to_node,
             "update_state::fetch_initial_batches_to_replay",
         )
-        .await;
+        .await
+        .map_err(|e| e.into_state_update_error())?;
 
     match operation {
         PreferredSeqOperation::Unreachable => {
@@ -680,7 +686,7 @@ where
                 )
                 .await?;
             } else {
-                seq.do_simple_state_update(info).await;
+                seq.do_simple_state_update(info).await?;
             }
         }
     }
@@ -736,6 +742,7 @@ where
                 "check_readiness",
             )
             .await
+            .map_err(|_| SequencerNotReadyDetails::Shutdown)?
             .map(|_| ())
     }
 
@@ -744,10 +751,12 @@ where
     }
 
     #[cfg(feature = "test-utils")]
-    async fn force_close_current_batch(&self) {
+    async fn force_close_current_batch(&self) -> anyhow::Result<()> {
         self.synchronized_state_updator
             .force_close_current_batch_msg("force_close_current_batch")
-            .await;
+            .await
+            .map_err(|e| e.into_state_update_error())?;
+        Ok(())
     }
 
     #[cfg(feature = "test-utils")]
@@ -854,10 +863,21 @@ where
         }
         self.cache_warm_up_executor.send_tx(baked_tx.clone());
 
-        let res = self
+        let res = match self
             .synchronized_state_updator
             .accept_tx_msg(&baked_tx, tx_hash, original_tx_queue_id, "accept_tx")
-            .await;
+            .await
+        {
+            Ok(inner_res) => inner_res,
+            Err(SequencerStateUpdatorError::Shutdown) => {
+                return Err(shut_down_error());
+            }
+            Err(SequencerStateUpdatorError::Unexpected) => {
+                return Err(internal_server_error_500(
+                    "Unexpected Error. The sequencer is unable to accept transactions.",
+                ));
+            }
+        };
 
         match res {
             Ok(rx) => rx.await.map_err(database_error_500),
@@ -965,7 +985,8 @@ where
                 proof_data.clone(),
                 "produce_and_publish_proof_blob",
             )
-            .await;
+            .await
+            .map_err(|e| e.into_state_update_error())?;
 
         Ok(())
     }

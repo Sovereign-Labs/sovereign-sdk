@@ -126,7 +126,7 @@ pub trait Sequencer: Send + Sync + 'static {
     fn tx_status_manager(&self) -> &TxStatusManager<<Self::Spec as Spec>::Da>;
 
     /// Closes the current batch.
-    async fn force_close_current_batch(&self) {
+    async fn force_close_current_batch(&self) -> anyhow::Result<()> {
         panic!("Not implemented")
     }
 
@@ -500,6 +500,13 @@ pub fn error_not_fully_synced(details: SequencerNotReadyDetails) -> ErrorObject 
             return ErrorObject {
                 status: StatusCode::SERVICE_UNAVAILABLE,
                 message: "Sequencer is replica and cannot accept transactions".to_string(),
+                details: Default::default(),
+            };
+        }
+        SequencerNotReadyDetails::Shutdown => {
+            return ErrorObject {
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                message: "The sequencer is shutting down and cannot accept transactions".to_string(),
                 details: Default::default(),
             };
         }

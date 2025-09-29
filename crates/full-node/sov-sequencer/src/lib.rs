@@ -67,6 +67,8 @@ pub enum SequencerNotReadyDetails {
     },
     /// The sequencer is running in replica mode and cannot accept transactions.
     ReplicaMode,
+    /// The sequencer is shutting down and cannot accept transactions.
+    Shutdown,
 }
 /// An object-safe interface to the sequencer, which can be used to
 /// publish a proof blob to DA.

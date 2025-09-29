@@ -70,7 +70,8 @@ where
                     next_sequence_number,
                     "update_state::fetch_completed_batches_iteration",
                 )
-                .await;
+                .await
+                .map_err(|e| e.into_state_update_error())?;
 
             total_message_processing_duration += message_processing_duration;
 
@@ -170,7 +171,8 @@ where
                 },
                 "update_state::do_final_catchup",
             )
-            .await;
+            .await
+            .map_err(|e| e.into_state_update_error())?;
 
         let data = maybe_data?;
 
@@ -195,21 +197,28 @@ where
         if !self.shutdown_receiver.has_changed().unwrap_or(true) {
             self.synchronized_state_updator
                 .prune_sequencer_db_msg("update_state::prune_sequencer_db")
-                .await;
+                .await
+                .map_err(|e| e.into_state_update_error())?;
         }
 
         Ok(())
     }
 
-    pub(super) async fn do_simple_state_update(&self, info: StateUpdateInfo<S::Storage>) {
+    pub(super) async fn do_simple_state_update(
+        &self,
+        info: StateUpdateInfo<S::Storage>,
+    ) -> anyhow::Result<()> {
         self.synchronized_state_updator
             .send_simple_state_update_msg(info)
-            .await;
+            .await
+            .map_err(|e| e.into_state_update_error())?;
         if !self.shutdown_receiver.has_changed().unwrap_or(true) {
             self.synchronized_state_updator
                 .prune_sequencer_db_msg("update_state::prune_sequencer_db")
-                .await;
+                .await
+                .map_err(|e| e.into_state_update_error())?;
         }
+        Ok(())
     }
 }
 

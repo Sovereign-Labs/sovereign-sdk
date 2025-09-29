@@ -1695,8 +1695,9 @@ async fn rollup_shuts_down_if_panic_is_triggered() {
 
     // Ensure that the sequencer shuts down promptly
     test_rollup
-        .wait_for_rollup_to_shutdown(Duration::from_secs(5))
-        .await;
+        .wait_for_rollup_to_shutdown_with_result(Duration::from_secs(5))
+        .await
+        .expect_err("Rollup should have shut down with an error due to panicking");
 }
 
 #[tokio::test(flavor = "multi_thread")]

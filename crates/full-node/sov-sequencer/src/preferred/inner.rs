@@ -871,7 +871,7 @@ where
         batch_execution_time_limit_micros,
         batch_size_tracker: BatchSizeTracker::new(seq_config.max_batch_size_bytes),
         seq_config: seq_config.clone(),
-        shutdown_receiver,
+        shutdown_receiver: shutdown_receiver.clone(),
         shutdown_sender: shutdown_sender.clone(),
         executor_events_sender,
         sequence_number_of_next_blob,
@@ -896,6 +896,7 @@ where
             message_sender,
             channel_size,
             shutdown_sender,
+            shutdown_receiver,
         },
     )
 }
@@ -908,6 +909,27 @@ where
     channel_size: Arc<AtomicU32>,
     message_sender: mpsc::Sender<Message<S, Rt>>,
     shutdown_sender: watch::Sender<()>,
+    shutdown_receiver: watch::Receiver<()>,
+}
+
+/// Describes errors that can occur when updating the sequencer state.
+/// This type intentionally does *not* implement `std::error::Error` or `std::fmt::Debug` so that it cannot be directly converted to an `anyhow::Error`.
+/// To convert to anyhow, first convert to a `StateUpdateError` or similar. This is done to ensure backward compatibility with existing code that
+/// creates a local error type to represent shutdown and then attempts anyhow errors into that type to distinguish between shutdown and unexpected errors.
+pub(crate) enum SequencerStateUpdatorError {
+    Shutdown,
+    Unexpected,
+}
+
+impl SequencerStateUpdatorError {
+    /// Converts a [`SequencerStateUpdatorError`] into an [`anyhow::Error`] that can downcast into the correct "StateUpdateError::Shutdown" error type.
+    /// This allows `UpdateState` to distinguish between graceful shutdowns and unexpected errors.
+    pub fn into_state_update_error(self) -> anyhow::Error {
+        match self {
+            SequencerStateUpdatorError::Shutdown => crate::preferred::StateUpdateError::Shutdown.into(),
+            SequencerStateUpdatorError::Unexpected => anyhow::anyhow!("The sequencer experienced an unexpected error and cannot accept transactions! See logs for more details."),
+        }
+    }
 }
 
 impl<S, Rt> SequencerStateUpdator<S, Rt>
@@ -915,10 +937,13 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    pub(crate) async fn next_sequence_number_msg(&self, reason: &'static str) -> SequenceNumber {
+    pub(crate) async fn next_sequence_number_msg(
+        &self,
+        reason: &'static str,
+    ) -> Result<SequenceNumber, SequencerStateUpdatorError> {
         let (resp, recv) = oneshot::channel();
         self.send(Message::NextSequenceNumber { resp, reason })
-            .await;
+            .await?;
 
         self.recv(recv).await
     }
@@ -927,7 +952,7 @@ where
         &self,
         next_sequence_number: u64,
         reason: &'static str,
-    ) -> (FetchBatches, Duration) {
+    ) -> Result<(FetchBatches, Duration), SequencerStateUpdatorError> {
         let start_time = std::time::Instant::now();
         let (resp, recv) = oneshot::channel();
         self.send(Message::FetchCompletedBatches {
@@ -935,9 +960,9 @@ where
             next_sequence_number,
             reason,
         })
-        .await;
+        .await?;
 
-        (self.recv(recv).await, start_time.elapsed())
+        Ok((self.recv(recv).await?, start_time.elapsed()))
     }
 
     pub(crate) async fn sequencer_conditions_msg(
@@ -945,7 +970,7 @@ where
         info: &StateUpdateInfo<S::Storage>,
         next_sequence_number_according_to_node: u64,
         reason: &'static str,
-    ) -> PreferredSeqOperation<S, Rt> {
+    ) -> Result<PreferredSeqOperation<S, Rt>, SequencerStateUpdatorError> {
         let (resp, recv) = oneshot::channel();
         self.send(Message::SequencerConditions {
             resp,
@@ -953,7 +978,7 @@ where
             next_sequence_number_according_to_node,
             reason,
         })
-        .await;
+        .await?;
 
         self.recv(recv).await
     }
@@ -963,7 +988,7 @@ where
         max_concurrent_blobs: usize,
         height_to_stop_at: Option<RollupHeight>,
         reason: &'static str,
-    ) -> Result<(), SequencerNotReadyDetails> {
+    ) -> Result<Result<(), SequencerNotReadyDetails>, SequencerStateUpdatorError> {
         let (resp, recv) = oneshot::channel();
         self.send(Message::CheckReadiness {
             resp,
@@ -971,7 +996,7 @@ where
             height_to_stop_at,
             reason,
         })
-        .await;
+        .await?;
 
         self.recv(recv).await
     }
@@ -982,7 +1007,10 @@ where
         tx_hash: TxHash,
         original_tx_queue_id: u64,
         reason: &'static str,
-    ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
+    ) -> Result<
+        Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>,
+        SequencerStateUpdatorError,
+    > {
         let (resp, recv) = oneshot::channel();
         self.send(Message::AcceptTx {
             resp,
@@ -991,7 +1019,7 @@ where
             original_tx_queue_id,
             reason,
         })
-        .await;
+        .await?;
 
         self.recv(recv).await
     }
@@ -1004,7 +1032,8 @@ where
         node_state_root: <S::Storage as Storage>::Root,
         data: ProcessFinalCatchupData,
         reason: &'static str,
-    ) -> (anyhow::Result<ProcessFinalCatchupData>, Duration) {
+    ) -> Result<(anyhow::Result<ProcessFinalCatchupData>, Duration), SequencerStateUpdatorError>
+    {
         let start_time = std::time::Instant::now();
         let (resp, recv) = oneshot::channel();
         self.send(Message::FinalCatchup {
@@ -1016,9 +1045,9 @@ where
             data,
             reason,
         })
-        .await;
+        .await?;
 
-        (self.recv(recv).await, start_time.elapsed())
+        Ok((self.recv(recv).await?, start_time.elapsed()))
     }
 
     pub(crate) async fn do_batch_start_msg(
@@ -1026,40 +1055,46 @@ where
         visible_slot_number_after_increase: VisibleSlotNumber,
         visible_slots_to_advance: NonZero<u8>,
         reason: &'static str,
-    ) {
+    ) -> Result<(), SequencerStateUpdatorError> {
         self.send(Message::DoBatchStartMsg {
             visible_slot_number_after_increase,
             visible_slots_to_advance,
             reason,
         })
-        .await;
+        .await
     }
 
-    pub(crate) async fn prune_sequencer_db_msg(&self, reason: &'static str) {
-        self.send(Message::PruneSequencerDb { reason }).await;
+    pub(crate) async fn prune_sequencer_db_msg(
+        &self,
+        reason: &'static str,
+    ) -> Result<(), SequencerStateUpdatorError> {
+        self.send(Message::PruneSequencerDb { reason }).await
     }
 
     pub(crate) async fn force_overite_state_for_recovery_msg(
         &self,
         info: StateUpdateInfo<S::Storage>,
         reason: &'static str,
-    ) {
+    ) -> Result<(), SequencerStateUpdatorError> {
         self.send(Message::ForceOverwriteStateForRecovery { info, reason })
-            .await;
+            .await
     }
 
     pub(crate) async fn wait_for_node_resync_msg(
         &self,
         info: StateUpdateInfo<S::Storage>,
         reason: &'static str,
-    ) {
-        self.send(Message::WaitNodeResync { info, reason }).await;
+    ) -> Result<(), SequencerStateUpdatorError> {
+        self.send(Message::WaitNodeResync { info, reason }).await
     }
 
     /// Closes the current batch
     #[cfg(feature = "test-utils")]
-    pub(crate) async fn force_close_current_batch_msg(&self, reason: &'static str) {
-        self.send(Message::ForceCloseCurrentBatch { reason }).await;
+    pub(crate) async fn force_close_current_batch_msg(
+        &self,
+        reason: &'static str,
+    ) -> Result<(), SequencerStateUpdatorError> {
+        self.send(Message::ForceCloseCurrentBatch { reason }).await
     }
 
     pub(crate) async fn proof_blob_msg(
@@ -1067,44 +1102,60 @@ where
         blob_id: BlobInternalId,
         data: Arc<[u8]>,
         reason: &'static str,
-    ) {
+    ) -> Result<(), SequencerStateUpdatorError> {
         self.send(Message::ProofBlob {
             blob_id,
             data,
             reason,
         })
-        .await;
+        .await
     }
 
-    pub(crate) async fn trigger_batch_production_if_convenient_msg(&self, reason: &'static str) {
+    pub(crate) async fn trigger_batch_production_if_convenient_msg(
+        &self,
+        reason: &'static str,
+    ) -> Result<(), SequencerStateUpdatorError> {
         self.send(Message::TriggerBatchProductionIfConvenient { reason })
-            .await;
+            .await
     }
 
-    pub(crate) async fn send_simple_state_update_msg(&self, info: StateUpdateInfo<S::Storage>) {
-        self.send(Message::SimpleStateUpdate { info }).await;
+    pub(crate) async fn send_simple_state_update_msg(
+        &self,
+        info: StateUpdateInfo<S::Storage>,
+    ) -> Result<(), SequencerStateUpdatorError> {
+        self.send(Message::SimpleStateUpdate { info }).await
     }
 
-    async fn send(&self, message: Message<S, Rt>) {
+    async fn send(&self, message: Message<S, Rt>) -> Result<(), SequencerStateUpdatorError> {
         self.channel_size.fetch_add(1, Ordering::Relaxed);
         if self.message_sender.send(message).await.is_err() {
-            info!("SynchronizedSequencerState(send) task exited, this is ok if the sequencer is shutting down.");
-            exit_rollup(&self.shutdown_sender).await;
+            if self.shutdown_receiver.has_changed().unwrap_or(true) {
+                info!("SynchronizedSequencerState(send) task exited, this is ok since the sequencer is shutting down.");
+                return Err(SequencerStateUpdatorError::Shutdown);
+            }
+            return Err(SequencerStateUpdatorError::Unexpected);
         }
+        Ok(())
     }
 
-    async fn recv<T>(&self, recv: oneshot::Receiver<T>) -> T {
+    async fn recv<T>(&self, recv: oneshot::Receiver<T>) -> Result<T, SequencerStateUpdatorError> {
         if let Ok(ret) = recv.await {
-            ret
+            Ok(ret)
         } else {
-            info!("SynchronizedSequencerState(recv) task exited, this is ok if the sequencer is shutting down.");
-            exit_rollup(&self.shutdown_sender).await;
-            unreachable!();
+            if self.shutdown_receiver.has_changed().unwrap_or(true) {
+                info!("SynchronizedSequencerState(recv) task exited, this is ok since the sequencer is shutting down.");
+                return Err(SequencerStateUpdatorError::Shutdown);
+            }
+            error!("SynchronizedSequencerState(recv) task has shut down unexpectedly.");
+            Err(SequencerStateUpdatorError::Unexpected)
         }
     }
 
-    pub(crate) async fn close_current_batch_msg(&self, reason: &'static str) {
-        self.send(Message::CloseCurrentBatch { reason }).await;
+    pub(crate) async fn close_current_batch_msg(
+        &self,
+        reason: &'static str,
+    ) -> Result<(), SequencerStateUpdatorError> {
+        self.send(Message::CloseCurrentBatch { reason }).await
     }
 
     pub(crate) async fn do_new_tx_msg(
@@ -1112,18 +1163,22 @@ where
         tx_hash: TxHash,
         baked_tx: FullyBakedTx,
         reason: &'static str,
-    ) {
+    ) -> Result<(), SequencerStateUpdatorError> {
         self.send(Message::DoNewTx {
             tx_hash,
             baked_tx,
             reason,
         })
-        .await;
+        .await
     }
 
-    pub(crate) async fn latest_slot_number_msg(&self, reason: &'static str) -> SlotNumber {
+    pub(crate) async fn latest_slot_number_msg(
+        &self,
+        reason: &'static str,
+    ) -> Result<SlotNumber, SequencerStateUpdatorError> {
         let (resp, recv) = oneshot::channel();
-        self.send(Message::LatestSlotNumber { resp, reason }).await;
+        self.send(Message::LatestSlotNumber { resp, reason })
+            .await?;
 
         self.recv(recv).await
     }
@@ -1153,148 +1208,170 @@ where
     pub(crate) async fn start(mut self) -> JoinHandle<()> {
         tokio::spawn(async move {
             while let Some(msg) = self.message_receiver.recv().await {
-                // We intentionally don't check for shutdown at the beginning of the loop.
-                // Each `process_xx` method handles shutdown internally.
-                match msg {
-                    Message::NextSequenceNumber { resp, reason } => {
-                        let ret = self.process_next_sequence_number(reason).await;
-                        self.send_response(resp, ret, "next_sequence_number").await;
+                if let Err(e) = self.handle_next_message(msg).await {
+                    match e {
+                        SequencerStateUpdatorError::Shutdown => {
+                            return;
+                        }
+                        SequencerStateUpdatorError::Unexpected => {
+                            self.inner.shutdown_sender.send(()).unwrap();
+                            panic!("The sequencer experienced an unexpected error and cannot accept transactions! See logs for more details.");
+                        }
                     }
+                }
+            }
+        })
+    }
 
-                    Message::FetchCompletedBatches {
-                        resp,
-                        next_sequence_number,
-                        reason,
-                    } => {
-                        let ret = self
-                            .process_fetch_completed_batches(next_sequence_number, reason)
-                            .await;
+    async fn handle_next_message(
+        &mut self,
+        msg: Message<S, Rt>,
+    ) -> Result<(), SequencerStateUpdatorError> {
+        // We intentionally don't check for shutdown at the beginning of the loop.
+        // Each `process_xx` method handles shutdown internally.
+        match msg {
+            Message::NextSequenceNumber { resp, reason } => {
+                let ret = self.process_next_sequence_number(reason).await;
+                self.send_response(resp, ret, "next_sequence_number").await;
+            }
 
-                        self.send_response(resp, ret, "fetch_completed_batches")
-                            .await;
-                    }
-                    Message::SequencerConditions {
-                        resp,
-                        info,
+            Message::FetchCompletedBatches {
+                resp,
+                next_sequence_number,
+                reason,
+            } => {
+                let ret = self
+                    .process_fetch_completed_batches(next_sequence_number, reason)
+                    .await;
+
+                self.send_response(resp, ret, "fetch_completed_batches")
+                    .await;
+            }
+            Message::SequencerConditions {
+                resp,
+                info,
+                next_sequence_number_according_to_node,
+                reason,
+            } => {
+                let ret = self
+                    .process_sequencer_conditions(
+                        &info,
                         next_sequence_number_according_to_node,
                         reason,
-                    } => {
-                        let ret = self
-                            .process_sequencer_conditions(
-                                &info,
-                                next_sequence_number_according_to_node,
-                                reason,
-                            )
-                            .await;
+                    )
+                    .await;
 
-                        self.send_response(resp, ret, "sequencer_conditions").await;
-                    }
-                    Message::CheckReadiness {
-                        resp,
-                        max_concurrent_blobs,
-                        height_to_stop_at,
-                        reason,
-                    } => {
-                        let ret = self
-                            .process_check_readiness(
-                                max_concurrent_blobs,
-                                height_to_stop_at,
-                                reason,
-                            )
-                            .await;
+                self.send_response(resp, ret, "sequencer_conditions").await;
+            }
+            Message::CheckReadiness {
+                resp,
+                max_concurrent_blobs,
+                height_to_stop_at,
+                reason,
+            } => {
+                let ret = self
+                    .process_check_readiness(max_concurrent_blobs, height_to_stop_at, reason)
+                    .await;
 
-                        self.send_response(resp, ret, "check_readiness").await;
-                    }
-                    Message::AcceptTx {
-                        resp,
-                        baked_tx,
-                        tx_hash,
-                        original_tx_queue_id,
-                        reason,
-                    } => {
-                        let ret = self
-                            .process_accept_tx(&baked_tx, tx_hash, original_tx_queue_id, reason)
-                            .await;
+                self.send_response(resp, ret, "check_readiness").await;
+            }
+            Message::AcceptTx {
+                resp,
+                baked_tx,
+                tx_hash,
+                original_tx_queue_id,
+                reason,
+            } => {
+                let ret = self
+                    .process_accept_tx(&baked_tx, tx_hash, original_tx_queue_id, reason)
+                    .await;
+                if let Err(AcceptTxError::ExecutorError(
+                    RollupBlockExecutorError::UnexpectedFailure,
+                )) = ret
+                {
+                    // Propagate the error to the spawner of this task.
+                    panic!("Unexpected in the rollup block executor. The sequencer can no longer accept transactions!");
+                }
 
-                        self.send_response(resp, ret, "accept_tx").await;
-                    }
-                    Message::LatestSlotNumber { resp, reason } => {
-                        let ret = self.process_latest_slot_number(reason).await;
-                        self.send_response(resp, ret, "latest_slot_number").await;
-                    }
-                    Message::FinalCatchup {
-                        resp,
+                self.send_response(resp, ret, "accept_tx").await;
+            }
+            Message::LatestSlotNumber { resp, reason } => {
+                let ret = self.process_latest_slot_number(reason).await;
+                self.send_response(resp, ret, "latest_slot_number").await;
+            }
+            Message::FinalCatchup {
+                resp,
+                info,
+                db_event_subscription,
+                executor,
+                node_state_root,
+                data,
+                reason,
+            } => {
+                let ret = self
+                    .process_final_catchup(
                         info,
                         db_event_subscription,
                         executor,
                         node_state_root,
                         data,
                         reason,
-                    } => {
-                        let ret = self
-                            .process_final_catchup(
-                                info,
-                                db_event_subscription,
-                                executor,
-                                node_state_root,
-                                data,
-                                reason,
-                            )
-                            .await;
+                    )
+                    .await;
 
-                        self.send_response(resp, ret, "final_catchup").await;
-                    }
-                    Message::DoBatchStartMsg {
-                        visible_slot_number_after_increase,
-                        visible_slots_to_advance,
-                        reason,
-                    } => {
-                        self.process_do_batch_start(
-                            visible_slot_number_after_increase,
-                            visible_slots_to_advance,
-                            reason,
-                        )
-                        .await;
-                    }
-                    Message::PruneSequencerDb { reason } => {
-                        self.process_prune_sequencer_db(reason).await;
-                    }
-                    Message::ForceOverwriteStateForRecovery { info, reason } => {
-                        self.process_force_overwrite_state_for_recovery(info, reason)
-                            .await;
-                    }
-                    Message::DoNewTx {
-                        tx_hash,
-                        baked_tx,
-                        reason,
-                    } => {
-                        self.process_do_new_tx(tx_hash, baked_tx, reason).await;
-                    }
-                    Message::WaitNodeResync { info, reason } => {
-                        self.process_wait_for_node_resync(info, reason).await;
-                    }
-                    #[cfg(feature = "test-utils")]
-                    Message::ForceCloseCurrentBatch { reason: _reason } => {
-                        self.process_force_close_current_batch(_reason).await;
-                    }
-                    Message::ProofBlob {
-                        blob_id,
-                        data,
-                        reason,
-                    } => self.process_proof_blob(blob_id, data, reason).await,
-                    Message::TriggerBatchProductionIfConvenient { reason } => {
-                        self.process_trigger_batch_production_if_convenient(reason)
-                            .await;
-                    }
-                    Message::CloseCurrentBatch { reason } => {
-                        self.process_close_current_batch(reason).await;
-                    }
-                    Message::SimpleStateUpdate { info } => {
-                        self.process_new_storage(info).await;
-                    }
-                }
+                self.send_response(resp, ret, "final_catchup").await;
             }
-        })
+            Message::DoBatchStartMsg {
+                visible_slot_number_after_increase,
+                visible_slots_to_advance,
+                reason,
+            } => {
+                self.process_do_batch_start(
+                    visible_slot_number_after_increase,
+                    visible_slots_to_advance,
+                    reason,
+                )
+                .await;
+            }
+            Message::PruneSequencerDb { reason } => {
+                self.process_prune_sequencer_db(reason).await;
+            }
+            Message::ForceOverwriteStateForRecovery { info, reason } => {
+                self.process_force_overwrite_state_for_recovery(info, reason)
+                    .await;
+            }
+            Message::DoNewTx {
+                tx_hash,
+                baked_tx,
+                reason,
+            } => {
+                self.process_do_new_tx(tx_hash, baked_tx, reason).await;
+            }
+            Message::WaitNodeResync { info, reason } => {
+                self.process_wait_for_node_resync(info, reason).await;
+            }
+            #[cfg(feature = "test-utils")]
+            Message::ForceCloseCurrentBatch { reason: _reason } => {
+                self.process_force_close_current_batch(_reason).await;
+            }
+            Message::ProofBlob {
+                blob_id,
+                data,
+                reason,
+            } => self.process_proof_blob(blob_id, data, reason).await,
+            Message::TriggerBatchProductionIfConvenient { reason } => {
+                self.process_trigger_batch_production_if_convenient(reason)
+                    .await;
+            }
+            Message::CloseCurrentBatch { reason } => {
+                self.process_close_current_batch(reason).await;
+            }
+            Message::SimpleStateUpdate { info } => {
+                self.process_new_storage(info).await;
+            }
+        }
+
+        Ok(())
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -1737,7 +1814,7 @@ where
                 error = %err,
                 "Error: while calling inner_do_batch_start."
             );
-            exit_rollup(&inner.shutdown_sender).await;
+            panic!("Error: while calling inner_do_batch_start. The sequencer can no longer accept transactions!");
         }
     }
 
