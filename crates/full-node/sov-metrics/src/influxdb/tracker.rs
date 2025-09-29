@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 
 use sov_rollup_interface::common::VisibleSlotNumber;
 
-use crate::influxdb::{publisher, safe_telegraf_string, Metric};
+use crate::influxdb::{publisher, safe_telegraf_string, Metric, DROPPED_METRICS_COUNT};
 use crate::{MetricsTracker, MonitoringConfig};
 
 pub(crate) static METRICS_TRACKER: OnceLock<MetricsTracker> = OnceLock::new();
@@ -85,6 +85,7 @@ impl MetricsTracker {
 
         if let Err(e) = self.sender.try_send(Box::new(metric)) {
             tracing::trace!(error = ?e, "Dropped measurement");
+            DROPPED_METRICS_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         };
     }
 
@@ -671,6 +672,28 @@ impl Metric for ZkProvingTime {
             self.is_success,
             self.zk_circuit,
             self.proving_time.as_millis()
+        )
+    }
+}
+
+/// Metrics for dropped metrics
+#[derive(Debug)]
+pub struct DroppedMetrics {
+    /// The number of metrics that have been dropped since last report
+    pub dropped_metrics: usize,
+}
+
+impl Metric for DroppedMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_dropped_metrics"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} dropped_metrics={}",
+            self.measurement_name(),
+            self.dropped_metrics
         )
     }
 }

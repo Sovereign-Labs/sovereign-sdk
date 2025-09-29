@@ -22,6 +22,9 @@ pub use tracker::{
 
 pub(crate) type SerializableMetric = Box<dyn Metric>;
 
+/// Count of metrics that have been dropped.
+pub(crate) static DROPPED_METRICS_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
 /// Struct for tracking Sovereign metrics.
 ///
 /// Hides underlying monitoring system implementation.
@@ -43,6 +46,21 @@ pub trait Metric: Send + Sync + std::fmt::Debug {
     #[cfg(feature = "gas-constant-estimation")]
     fn write_to_csv(&self, _writers: &mut csv_helper::CsvWriters) -> std::io::Result<()> {
         Ok(())
+    }
+}
+
+impl Metric for Box<dyn Metric> {
+    fn measurement_name(&self) -> &'static str {
+        self.as_ref().measurement_name()
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        self.as_ref().serialize_for_telegraf(buffer)
+    }
+
+    #[cfg(feature = "gas-constant-estimation")]
+    fn write_to_csv(&self, writers: &mut csv_helper::CsvWriters) -> std::io::Result<()> {
+        self.as_ref().write_to_csv(writers)
     }
 }
 
