@@ -434,6 +434,7 @@ where
         for handle in background_handles {
             let _ = handle.await?;
         }
+
         Ok(())
     }
 
@@ -638,7 +639,7 @@ where
 
         // Updating counters and metrics
         self.sync_state.update_synced(next_da_height);
-        info!(
+        debug!(
             time = ?loop_start.elapsed(),
             "Block execution complete"
         );

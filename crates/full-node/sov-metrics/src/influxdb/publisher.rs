@@ -204,9 +204,10 @@ async fn process_measurement(
             ?measurement,
             "Failed to format measurement, skipping"
         );
+    } else {
+        // We know that telegraf format is string-based, so for debugging we can print strings:
+        tracing::trace!(buffer = ?String::from_utf8_lossy(buffer), "Serialized measurement into buffer");
     };
-    // We know that telegraf format is string-based, so for debugging we can print strings:
-    tracing::trace!(buffer = ?String::from_utf8_lossy(buffer), "Serialized measurement into buffer");
     // Exceed max size, need to submit the packet first.
     if buffer.len() > max_buffer_size {
         if let Err(error) = publisher.publish(buffer).await {
@@ -261,7 +262,7 @@ mod tests {
         let first_chunk = 2;
         let second_chunk = 3;
         let max_udp_size = sample_metric.0.len() * (first_chunk + second_chunk);
-        let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
+        let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
         shutdown_receiver.mark_unchanged();
 
         let total_send = first_chunk + second_chunk;
@@ -304,8 +305,6 @@ mod tests {
         assert!(receive_with_timeout(&mut metrics_back_receiver)
             .await
             .is_none());
-
-        shutdown_sender.send(())?;
 
         Ok(())
     }
@@ -366,7 +365,7 @@ mod tests {
             max_pending_metrics: None,
         };
 
-        let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
+        let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
         shutdown_receiver.mark_unchanged();
         let (metrics_back_sender, mut metrics_back_receiver) = tokio::sync::mpsc::channel(1);
         spawn_metrics_udp_receiver(socket, metrics_back_sender.clone());
@@ -381,8 +380,6 @@ mod tests {
         assert!(receive_with_timeout(&mut metrics_back_receiver)
             .await
             .is_some());
-
-        shutdown_sender.send(())?;
 
         Ok(())
     }

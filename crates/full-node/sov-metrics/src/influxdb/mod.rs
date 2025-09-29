@@ -169,8 +169,6 @@ mod tests {
         Ok(())
     }
 
-    // TODO: test for check of the shutdown submission.
-
     #[derive(Debug)]
     struct MyCustomMetric {
         value: u64,
