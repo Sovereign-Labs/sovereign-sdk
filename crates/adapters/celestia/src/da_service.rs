@@ -22,7 +22,8 @@ use tracing::{debug, info, instrument, trace};
 
 pub use crate::config::CelestiaConfig;
 use crate::metrics::{
-    BlobSubmitMeasurement, GetBlockMeasurement, NamespaceDataMetrics, RollupNamespace,
+    BlobSubmitMeasurement, GetBlockHeaderMeasurement, GetBlockMeasurement, GetChainHeadMeasurement,
+    NamespaceDataMetrics, RollupNamespace,
 };
 use crate::types::{
     BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, NamespaceRelevantData, TmHash,
@@ -228,12 +229,19 @@ impl CelestiaService {
         &self,
         height: u64,
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
+        let start = std::time::Instant::now();
         let client = &self.read_client;
         let extended_header =
             tokio::time::timeout(self.request_timeout, client.header_get_by_height(height))
                 .await
                 .map_err(|_| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout")))?
                 .map_err(into_transient_with_context)?;
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(GetBlockHeaderMeasurement {
+                height,
+                fetch_header_time: start.elapsed(),
+            });
+        });
 
         Ok(extended_header.into())
     }
@@ -304,11 +312,17 @@ impl CelestiaService {
     async fn get_head_block_header_inner(
         &self,
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
+        let start = std::time::Instant::now();
         let header = self
             .read_client
             .header_network_head()
             .await
             .map_err(into_transient_with_context)?;
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(GetChainHeadMeasurement {
+                fetch_header_time: start.elapsed(),
+            });
+        });
         Ok(CelestiaHeader::from(header))
     }
 
@@ -328,7 +342,7 @@ impl CelestiaService {
         &self,
         aggregated_proof: &[u8],
     ) -> Result<SubmitBlobReceipt<TmHash>, MaybeRetryable<anyhow::Error>> {
-        debug!("Submitting aggregated proof to Celestia");
+        debug!(proof_size = aggregated_proof.len(), "Submitting aggregated proof to Celestia");
         self.submit_blob_to_namespace(aggregated_proof, self.rollup_proof_namespace)
             .await
             .map_err(into_transient_with_context)
