@@ -13,10 +13,11 @@ async fn evm_test_crate() {
         .await
         .unwrap();
 
+    // Verify that calling the CREATE opcode twice results in contracts being deployed at different addresses.
     let inner_addr_1 = get_inner_contract_addr(contract_address, &evm_client).await;
     let inner_addr_2 = get_inner_contract_addr(contract_address, &evm_client).await;
 
-    assert_ne!(inner_addr_1, inner_addr_2)
+    assert_ne!(inner_addr_1, inner_addr_2);
 }
 
 async fn get_inner_contract_addr(contract_address: H160, evm_client: &TestClient) -> H160 {
