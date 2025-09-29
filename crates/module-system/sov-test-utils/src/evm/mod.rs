@@ -5,7 +5,7 @@ use ethers::core::abi::Abi;
 
 mod fake_uni;
 mod simple_storage;
-pub use fake_uni::ERC20;
+pub use fake_uni::Erc20;
 pub use simple_storage::SimpleStorage;
 
 fn test_data_path() -> PathBuf {
