@@ -15,17 +15,23 @@ pub(crate) static METRICS_TRACKER: OnceLock<MetricsTracker> = OnceLock::new();
 pub(crate) type Timestamp = u128;
 
 /// Spawns task that published metrics in the background.
-pub fn init_metrics_tracker(config: &MonitoringConfig) {
+pub fn init_metrics_tracker(
+    config: &MonitoringConfig,
+    shutdown_receiver: tokio::sync::watch::Receiver<()>,
+) -> Option<tokio::task::JoinHandle<()>> {
     if METRICS_TRACKER.get().is_none() {
         let (sender, receiver) =
             tokio::sync::mpsc::channel(config.get_max_pending_metrics() as usize);
-        let config = config.clone();
-        let _handle = tokio::spawn(async move {
-            publisher::metrics_publisher_task(receiver, &config).await;
+        let config_for_task = config.clone();
+        let handle = tokio::spawn(async move {
+            publisher::metrics_publisher_task(receiver, &config_for_task, shutdown_receiver).await;
         });
-        tracing::trace!("Metrics tracker initialized");
+        tracing::debug!(?config, "Metrics tracker initialized");
         OnceLock::set(&METRICS_TRACKER, MetricsTracker { sender })
             .expect("Metrics tracker failed to set metrics");
+        Some(handle)
+    } else {
+        None
     }
 }
 
