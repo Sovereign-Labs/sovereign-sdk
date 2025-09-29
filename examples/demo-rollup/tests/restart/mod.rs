@@ -311,6 +311,10 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
             Level::WARN,
             "Received error updating target height, stopping background task".to_string(),
         ),
+        (
+            Level::WARN,
+            "Metics have been initialized outside of runner, some measurements can be lost on shutdown".to_string(),
+        ),
     ];
     recorded_errors_warnings.retain(|e| !known.contains(e));
     // We could've checked `.is_empty`, but in case of failure, we will see errors immediately.
