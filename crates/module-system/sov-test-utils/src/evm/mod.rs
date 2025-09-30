@@ -18,6 +18,7 @@ pub trait Submit {
 }
 
 #[async_trait::async_trait]
+#[allow(clippy::extra_unused_lifetimes)]
 impl<'a, P, C, N> Submit for SolCallBuilder<P, C, N>
 where
     P: Provider<N> + Clone + Send + Sync + 'a,
