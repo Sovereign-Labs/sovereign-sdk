@@ -4,13 +4,16 @@ use crate::preferred::RollupBlockExecutor;
 use crate::preferred::RollupBlockExecutorConfig;
 use crate::RollupHeight;
 use crate::SequencerConfig;
+use sov_metrics::Metric;
 use sov_modules_api::Spec;
 use sov_modules_api::StateCheckpoint;
 use sov_modules_api::StateUpdateInfo;
 use sov_modules_api::Storage;
 use sov_modules_api::{FullyBakedTx, Runtime};
 use std::collections::BTreeMap;
+use std::io::Write;
 use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 
@@ -60,10 +63,21 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         let res = self.tx_sender.try_send(tx);
         match res {
             Ok(_) => {
-                self.size.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let size = self.size.fetch_add(1, Ordering::Relaxed);
+
+                sov_metrics::track_metrics(|t| {
+                    t.submit(CacheWarmUpMetrics {
+                        tx_channel_size: size + 1,
+                    });
+                });
             }
-            Err(flume::TrySendError::Full(_)) => todo!(),
-            Err(flume::TrySendError::Disconnected(_)) => todo!(),
+            Err(flume::TrySendError::Full(_)) => {
+                let size = self.size.load(Ordering::Relaxed);
+                tracing::warn!(size, "The tx queue is full. You may want to increase the number of workers for cache warmup.");
+            }
+            Err(flume::TrySendError::Disconnected(_)) => {
+                // Do nothing.
+            }
         }
     }
 
@@ -143,7 +157,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                         let baked_tx = match tx {
                              Ok(tx) =>
                              {
-                                tx_receiver.size.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+                                tx_receiver.size.fetch_sub(1, Ordering::Relaxed);
                                 tx
                              },
                              Err(flume::RecvError::Disconnected) => {
@@ -186,5 +200,25 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                 notify.state_roots,
             )
             .await;
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct CacheWarmUpMetrics {
+    tx_channel_size: u64,
+}
+
+impl Metric for CacheWarmUpMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_sequencer_cache_warmup_metrics"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} tx_channel_size={}",
+            self.measurement_name(),
+            self.tx_channel_size,
+        )
     }
 }
