@@ -58,7 +58,8 @@ where
         let max_percent = 0.05;  // 5%
         let random_percent = rng.gen_range(min_percent..=max_percent);
         
-        let scaled_amount = format!("{:.6}", random_percent * base_amount.parse::<f64>().unwrap());
+        let base_value = base_amount.parse::<f64>()?;
+        let scaled_amount = format!("{:.6}", random_percent * base_value);
         let amount = parse_ether(&scaled_amount)?;
         
         execute_swap_quiet(contracts, signer, amount, path).await?;
