@@ -10,6 +10,8 @@ use sov_modules_api::StateUpdateInfo;
 use sov_modules_api::Storage;
 use sov_modules_api::{FullyBakedTx, Runtime};
 use std::collections::BTreeMap;
+use std::sync::atomic::AtomicU64;
+use std::sync::Arc;
 use tokio::task::JoinHandle;
 
 // We have several work-stealing executor workers for a single main worker, so we don't expect the channel to become full.
@@ -35,9 +37,16 @@ impl<S: Spec> Clone for StartBlockNotification<S> {
 }
 
 #[derive(Clone)]
+struct TxReceiver {
+    size: Arc<AtomicU64>,
+    receiver: flume::Receiver<FullyBakedTx>,
+}
+
+#[derive(Clone)]
 pub(crate) struct CacheWarmUpExecutor<S: Spec> {
     start_block_notification_sender: tokio::sync::watch::Sender<Option<StartBlockNotification<S>>>,
     tx_sender: flume::Sender<FullyBakedTx>,
+    size: Arc<AtomicU64>,
 }
 
 impl<S: Spec> CacheWarmUpExecutor<S> {
@@ -48,7 +57,14 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
 
     pub(crate) fn send_tx(&self, tx: FullyBakedTx) {
         // Skip update if consumer is too slow.
-        let _ = self.tx_sender.try_send(tx);
+        let res = self.tx_sender.try_send(tx);
+        match res {
+            Ok(_) => {
+                self.size.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+            Err(flume::TrySendError::Full(_)) => todo!(),
+            Err(flume::TrySendError::Disconnected(_)) => todo!(),
+        }
     }
 
     pub(crate) async fn spawn_execution_task<Rt: Runtime<S>>(
@@ -57,6 +73,11 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     ) -> (Self, Vec<JoinHandle<()>>) {
         let (tx_sender, tx_receiver) = flume::bounded(TX_CHANNEL_SIZE);
+        let size = Arc::new(AtomicU64::new(0));
+        let tx_receiver = TxReceiver {
+            size: size.clone(),
+            receiver: tx_receiver,
+        };
 
         // Option<StartBlockNotification<S>> is niche-optimized, so keeping it instead of using
         // StartBlockNotification directly in the channel does not introduce any overhead.
@@ -81,6 +102,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
             Self {
                 tx_sender,
                 start_block_notification_sender,
+                size,
             },
             handles,
         )
@@ -90,7 +112,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         info: StateUpdateInfo<S::Storage>,
         exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
-        tx_receiver: flume::Receiver<FullyBakedTx>,
+        tx_receiver: TxReceiver,
         mut start_block_notification_receiver: tokio::sync::watch::Receiver<
             Option<StartBlockNotification<S>>,
         >,
@@ -117,14 +139,19 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                         }
                     }
 
-                    tx = tx_receiver.recv_async() => {
+                    tx = tx_receiver.receiver.recv_async() => {
                         let baked_tx = match tx {
-                             Ok(tx) => tx,
+                             Ok(tx) =>
+                             {
+                                tx_receiver.size.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+                                tx
+                             },
                              Err(flume::RecvError::Disconnected) => {
                                 // Quit if channel closed.
                                 return
                             },
                         };
+
                         if is_started {
                             let res = executor.apply_tx_to_in_progress_batch(&baked_tx).await;
 
