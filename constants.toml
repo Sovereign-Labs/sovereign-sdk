@@ -29,7 +29,7 @@ DEFERRED_SLOTS_COUNT = 120
 MAX_VISIBLE_HEIGHT_INCREASE_PER_SLOT = 10
 # How many *rollup blocks* we wait before making a state root visible to the rollup.
 # This value should always be set to at least 1
-STATE_ROOT_DELAY_BLOCKS = 1
+STATE_ROOT_DELAY_BLOCKS = 3
 # How many blobs from unregistered sequencers we will accept per slot
 # We can't slash misbehaving senders because they aren't a registered sequencer with a stake so
 # this serves as protection against spam.
