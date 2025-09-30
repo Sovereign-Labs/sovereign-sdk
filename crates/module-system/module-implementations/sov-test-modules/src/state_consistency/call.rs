@@ -3,11 +3,12 @@ use std::fmt::Debug;
 use anyhow::Result;
 use schemars::JsonSchema;
 use sov_modules_api::macros::UniversalWallet;
-use sov_modules_api::{Context, Spec, TxState};
+use sov_modules_api::{Context, Spec, TxState, EventEmitter};
 use strum::{EnumDiscriminants, EnumIs, VariantArray};
 
-use super::StateConsistency;
+use super::{Event, StateConsistency};
 
+/// This enumeration represents the available call messages for interacting with the module.
 #[derive(
     borsh::BorshDeserialize,
     borsh::BorshSerialize,
@@ -26,9 +27,15 @@ use super::StateConsistency;
 #[strum_discriminants(derive(VariantArray, EnumIs))]
 pub enum CallMessage {
     /// Insert a new value into the state, asserting the old one matches the current storage.
-    UpdateValue { old_check: u64, new: u64 },
+    UpdateValue {
+        /// The current value in the module. Asserted to ensure state consistency; the transaction
+        /// is invalid on mismatch.
+        old_check: u64,
+        /// The new value to save.
+        new: u64
+    },
     /// Updates the value stored in accessory state.
-    UpdateAccessoryState { new: u64 },
+    UpdateAccessoryState(u64),
     /// Assert the state accessor's block and slot properties are as expected.
     AssertBlockState {
         /// The expected visible slot number.
@@ -57,6 +64,13 @@ impl<S: Spec> StateConsistency<S> {
         );
 
         self.value.set(&new, state)?;
+
+        self.emit_event(
+            state,Event::ValueUpdated {
+            old_value,
+            new_value: new,
+            });
+
         Ok(())
     }
 

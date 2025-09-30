@@ -2,13 +2,29 @@
 #![doc = include_str!("./README.md")]
 mod call;
 
+use borsh::{BorshDeserialize, BorshSerialize};
 pub use call::*;
 mod hooks;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use sov_modules_api::{
-    AccessoryStateValue, Context, DaSpec, Gas, GenesisState, Module, ModuleId, ModuleInfo,
+    AccessoryStateValue, Context, DaSpec, GenesisState, Module, ModuleId, ModuleInfo,
     ModuleRestApi, Spec, StateValue, TxState,
 };
 use sov_state::Storage;
+
+/// Events emitted by the StateConsistency module
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Event {
+    /// Emitted when the value is updated
+    ValueUpdated {
+        /// The old value that was replaced
+        old_value: u64,
+        /// The new value that was set
+        new_value: u64,
+    },
+}
 
 /// The State Consistency module. Provides utility transactions for consistency testing through
 /// assertions on the state.
@@ -21,11 +37,6 @@ pub struct StateConsistency<S: Spec> {
     /// Arbitrary value that gets updated.
     #[state]
     pub value: StateValue<u64>,
-
-    /// The value of `value` at the end of a block, set by a hook. Useful for high-throughput soak
-    /// testing, to have a value that changes exactly once per block.
-    #[state]
-    pub value_at_end_of_block: StateValue<u64>,
 
     /// A value that can be set for checking accessory state consistency.
     #[state]
@@ -43,7 +54,7 @@ impl<S: Spec> Module for StateConsistency<S> {
 
     type CallMessage = call::CallMessage;
 
-    type Event = ();
+    type Event = Event;
 
     fn genesis(
         &mut self,
@@ -52,7 +63,6 @@ impl<S: Spec> Module for StateConsistency<S> {
         state: &mut impl GenesisState<S>,
     ) -> anyhow::Result<()> {
         self.value.set(&0, state)?;
-        self.value_at_end_of_block.set(&0, state)?;
         self.accessory_value.set(&0, state)?;
         Ok(())
     }
@@ -67,7 +77,7 @@ impl<S: Spec> Module for StateConsistency<S> {
             CallMessage::UpdateValue { old_check, new } => {
                 self.update_value(old_check, new, context, state)
             }
-            CallMessage::UpdateAccessoryState { new } => {
+            CallMessage::UpdateAccessoryState(new) => {
                 self.update_accessory_state(new, context, state)
             }
             CallMessage::AssertBlockState {
