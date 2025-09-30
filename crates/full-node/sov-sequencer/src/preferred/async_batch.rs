@@ -71,7 +71,7 @@ pub enum MaybeAsyncBatchControlFlow<S: Spec> {
         responder: AsyncBatchResponder<S>,
         // If this is the main sequencer executor, it may benefit from using a precomputed
         // transaction change set from the worker warm-up executor.
-        tx_read_set_hint: Option<oneshot::Receiver<TxChangeSet>>,
+        maybe_tx_change_set: Option<oneshot::Receiver<TxChangeSet>>,
     },
     Sync,
 }
@@ -81,9 +81,9 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
         match self {
             MaybeAsyncBatchControlFlow::Async {
                 responder: _,
-                tx_read_set_hint,
+                maybe_tx_change_set,
             } => {
-                let _tx_read_set_hint = tx_read_set_hint.take();
+                let _maybe_tx_change_set = maybe_tx_change_set.take();
             }
             MaybeAsyncBatchControlFlow::Sync => {}
         }
@@ -99,7 +99,7 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
         match self {
             Self::Async {
                 responder,
-                tx_read_set_hint: _,
+                maybe_tx_change_set: _,
             } => responder.post_tx(
                 provisional_outcome,
                 dirty_scratchpad,
@@ -125,7 +125,7 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
         match self {
             Self::Async {
                 responder,
-                tx_read_set_hint: _,
+                maybe_tx_change_set: _,
             } => responder.pre_flight(runtime, context, call),
             Self::Sync => <NoOpControlFlow as InjectedControlFlow<S>>::pre_flight(
                 &NoOpControlFlow,
@@ -320,7 +320,7 @@ impl<S: Spec> Iterator for MaybeAsyncBatch<S> {
                         item.tx,
                         MaybeAsyncBatchControlFlow::Async {
                             responder: responder.clone_for_tx(),
-                            tx_read_set_hint: item.receiver.take(),
+                            maybe_tx_change_set: item.receiver.take(),
                         },
                     )
                 }),
