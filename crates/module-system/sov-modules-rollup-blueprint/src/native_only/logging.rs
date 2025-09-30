@@ -21,10 +21,8 @@ where
 {
     fn enabled(&self, _meta: &tracing::Metadata<'_>, ctx: &Context<'_, S>) -> bool {
         if let Some(current) = ctx.lookup_current() {
-            if let Some(current) = ctx.lookup_current() {
-                if current.name() == self.0 {
-                    return false;
-                }
+            if current.name() == self.0 {
+                return false;
             }
         }
         true
