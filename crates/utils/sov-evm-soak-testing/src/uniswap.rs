@@ -65,13 +65,14 @@ where
         let random_percent = rng.gen_range(min_percent..=max_percent);
 
         let base_value = base_amount.parse::<f64>()?;
+        #[allow(clippy::float_arithmetic)] // This is a soak test and not guest code
         let scaled_amount = format!("{:.6}", random_percent * base_value);
         let amount = parse_ether(&scaled_amount)?;
 
         execute_swap(contracts, signer, amount, path).await?;
 
         if i % 10 == 0 {
-            println!("📊 Completed {}/{} swaps", i, count);
+            println!("📊 Completed {i}/{count} swaps");
         }
     }
 
