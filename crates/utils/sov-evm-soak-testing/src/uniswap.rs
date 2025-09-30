@@ -62,7 +62,7 @@ where
         let scaled_amount = format!("{:.6}", random_percent * base_value);
         let amount = parse_ether(&scaled_amount)?;
         
-        execute_swap_quiet(contracts, signer, amount, path).await?;
+        execute_swap(contracts, signer, amount, path).await?;
         
         if i % 10 == 0 {
             println!("📊 Completed {}/{} swaps", i, count);
@@ -73,7 +73,7 @@ where
 }
 
 
-async fn execute_swap_quiet<P, N>(
+async fn execute_swap<P, N>(
     contracts: &Contracts<'_, P, N>,
     signer: Address,
     amount_in: U256,
