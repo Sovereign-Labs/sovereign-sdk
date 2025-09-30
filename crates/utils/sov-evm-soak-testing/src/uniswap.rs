@@ -15,8 +15,10 @@ pub async fn run(client: TestClient) -> Result<()> {
     let signer = Address::from_slice(client.address().as_bytes());
     let client = &client.alloy_client;
     
+    println!("🚀 Deploying Uniswap contracts...");
     let contracts = deploy_uniswap_contracts(client).await?;
     
+    println!("💧 Adding liquidity: 1000 WETH + 2000 USDC (1:2 ratio)");
     let weth_liquidity = parse_ether("1000")?;
     let usdc_liquidity = parse_ether("2000")?;
     add_initial_liquidity(&contracts, signer, weth_liquidity, usdc_liquidity).await?;
@@ -25,6 +27,7 @@ pub async fn run(client: TestClient) -> Result<()> {
     let swap_path = vec![*contracts.usdc.address(), *contracts.weth.address()];
     execute_swap(&contracts, signer, swap_amount, swap_path).await?;
     
+    println!("✅ Swap completed successfully!");
     Ok(())
 }
 
@@ -39,7 +42,12 @@ where
     N: Network + Send + Sync,
 {
     let expected_out = contracts.router.getAmountsOut(amount_in, path.clone()).call().await?[1];
-    println!("Swapping {} -> {} ETH", format_ether(amount_in), format_ether(expected_out));
+    
+    // Format with 4 decimal places for readability
+    let amount_str = format!("{:.4}", format_ether(amount_in).parse::<f64>().unwrap_or(0.0));
+    let expected_str = format!("{:.4}", format_ether(expected_out).parse::<f64>().unwrap_or(0.0));
+    
+    println!("💱 Swapping {} USDC → {} WETH", amount_str, expected_str);
 
     let from_token = if path[0] == *contracts.usdc.address() {
         &contracts.usdc
