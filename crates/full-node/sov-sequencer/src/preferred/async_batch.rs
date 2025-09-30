@@ -77,13 +77,17 @@ pub enum MaybeAsyncBatchControlFlow<S: Spec> {
 }
 
 impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
-    fn try_warm_up_cache(&mut self, _scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>) {
+    fn try_warm_up_cache(&mut self, scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>) {
         match self {
             MaybeAsyncBatchControlFlow::Async {
                 responder: _,
                 maybe_tx_change_set,
             } => {
-                let _maybe_tx_change_set = maybe_tx_change_set.take();
+                if let Some(mut rec) = maybe_tx_change_set.take() {
+                    if let Ok(_change_set) = rec.try_recv() {}
+                    // TODO
+                    scratchpad.apply_change_set();
+                }
             }
             MaybeAsyncBatchControlFlow::Sync => {}
         }

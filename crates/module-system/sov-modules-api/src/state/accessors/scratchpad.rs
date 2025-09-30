@@ -345,6 +345,9 @@ impl<S: Spec> TxScratchpad<S, StateCheckpoint<S>> {
     pub fn tx_changes(&self) -> TxChangeSet {
         self.inner.changes()
     }
+
+    /// TODO
+    pub fn apply_change_set(&mut self) {}
 }
 
 /// A working set that can be used to charge gas for pre transaction execution checks.
