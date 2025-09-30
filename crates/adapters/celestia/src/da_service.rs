@@ -5,6 +5,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use backon::ExponentialBuilder;
 use celestia_rpc::prelude::*;
+use celestia_rpc::TxPriority;
 use celestia_types::blob::Blob as JsonBlob;
 use celestia_types::nmt::Namespace;
 use celestia_types::state::Address;
@@ -48,6 +49,7 @@ pub struct CelestiaService {
     safe_lead_time: Duration,
     backoff_policy: ExponentialBuilder,
     request_timeout: Duration,
+    tx_priority: Option<TxPriority>,
 }
 
 impl CelestiaService {
@@ -59,6 +61,7 @@ impl CelestiaService {
         safe_lead_time: Duration,
         backoff_policy: ExponentialBuilder,
         request_timeout: Duration,
+        tx_priority: Option<TxPriority>,
     ) -> Self {
         Self {
             submit_client: Arc::new(Mutex::new(client.clone())),
@@ -69,6 +72,7 @@ impl CelestiaService {
             safe_lead_time,
             backoff_policy,
             request_timeout,
+            tx_priority,
         }
     }
 
@@ -105,7 +109,10 @@ impl CelestiaService {
             "Submitting a blob"
         );
 
-        let tx_config = celestia_rpc::TxConfig::default();
+        let mut tx_config = celestia_rpc::TxConfig::default();
+        if let Some(priority) = self.tx_priority.as_ref() {
+            tx_config = tx_config.with_priority(*priority);
+        }
         let start_lock = std::time::Instant::now();
         let submit_client = self.submit_client.lock().await;
         let lock_acquisition = start_lock.elapsed();
@@ -217,6 +224,7 @@ impl CelestiaService {
             Duration::from_millis(config.safe_lead_time_ms),
             backoff_policy,
             request_timeout,
+            config.tx_priority.map(Into::into),
         )
     }
 }
