@@ -1,5 +1,5 @@
 use alloy::{network::Network, providers::Provider};
-use alloy_primitives::{utils::{format_ether, parse_ether}, Address, U256};
+use alloy_primitives::{utils::parse_ether, Address, U256};
 use anyhow::Result;
 use sov_eth_client::TestClient;
 use sov_test_utils::{Erc20, Pair, Router, Submit};
@@ -61,12 +61,7 @@ where
         let scaled_amount = format!("{:.6}", random_percent * base_amount.parse::<f64>().unwrap());
         let amount = parse_ether(&scaled_amount)?;
         
-        if i == 1 {
-            // Show detailed info for first swap
-            execute_swap_verbose(contracts, signer, amount, path).await?;
-        } else {
-            execute_swap_quiet(contracts, signer, amount, path).await?;
-        }
+        execute_swap_quiet(contracts, signer, amount, path).await?;
         
         if i % 10 == 0 {
             println!("📊 Completed {}/{} swaps", i, count);
@@ -76,30 +71,6 @@ where
     Ok(())
 }
 
-async fn execute_swap_verbose<P, N>(
-    contracts: &Contracts<'_, P, N>,
-    signer: Address,
-    amount_in: U256,
-    path: Vec<Address>,
-) -> Result<()> 
-where
-    P: Provider<N> + Clone + Send + Sync,
-    N: Network + Send + Sync,
-{
-    let expected_out = contracts.router.getAmountsOut(amount_in, path.clone()).call().await?[1];
-    
-    let amount_str = format!("{:.4}", format_ether(amount_in).parse::<f64>().unwrap_or(0.0));
-    let expected_str = format!("{:.4}", format_ether(expected_out).parse::<f64>().unwrap_or(0.0));
-    
-    let direction = if path[0] == *contracts.usdc.address() {
-        format!("💱 Swapping {} USDC → {} WETH", amount_str, expected_str)
-    } else {
-        format!("💱 Swapping {} WETH → {} USDC", amount_str, expected_str)
-    };
-    println!("{}", direction);
-
-    execute_swap_quiet(contracts, signer, amount_in, path).await
-}
 
 async fn execute_swap_quiet<P, N>(
     contracts: &Contracts<'_, P, N>,
