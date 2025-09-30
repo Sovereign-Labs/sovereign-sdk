@@ -63,7 +63,7 @@ native = [
     "sov-rollup-interface/native",
     "tracing",
     "tokio",
-    "rockbound"
+    "rockbound",
 ]
 arbitrary = [
 	"dep:arbitrary",

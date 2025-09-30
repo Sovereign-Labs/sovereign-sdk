@@ -1005,6 +1005,8 @@ pub fn assert_tx_reverted_with_reason<S: Spec>(result: TxEffect<S>, reason: anyh
 struct SeqControlFlow;
 
 impl<S: Spec> InjectedControlFlow<S> for SeqControlFlow {
+    fn try_warm_up_cache(&mut self, _scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>) {}
+
     fn pre_flight<RT: Runtime<S>>(
         &self,
         _runtime: &RT,

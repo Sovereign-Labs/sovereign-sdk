@@ -225,7 +225,7 @@ pub(crate) async fn do_next_event<S: Spec, Rt: Runtime<S>>(
 ) -> anyhow::Result<()> {
     match event {
         DbEvent::TxAccepted(tx, hash) => {
-            executor.replay_tx(hash, &tx).await;
+            executor.replay_tx(hash, tx).await;
             *transactions_count += 1;
             *batch_is_in_progress = true;
         }

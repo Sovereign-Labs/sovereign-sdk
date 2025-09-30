@@ -101,7 +101,6 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     /// The sender for state update notifications. Currently used only for testing.
     test_only_state_update_notification_sender: broadcast::Sender<StateUpdateNotification>,
-    cache_warm_up_executor: CacheWarmUpExecutor<S>,
 }
 
 impl<S, Rt, Da> PreferredSequencer<S, Rt, Da>
@@ -281,7 +280,6 @@ where
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_sender: broadcast::channel(100).0,
-            cache_warm_up_executor,
         });
 
         // Launch replica sync task only for replicas
@@ -852,7 +850,6 @@ where
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             tracing::debug!(%tx_hash, "Transaction delay completed, proceeding with processing");
         }
-        self.cache_warm_up_executor.send_tx(baked_tx.clone());
 
         let res = self
             .synchronized_state_updator

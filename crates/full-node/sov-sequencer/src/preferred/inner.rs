@@ -1213,7 +1213,7 @@ where
                         reason,
                     } => {
                         let ret = self
-                            .process_accept_tx(&baked_tx, tx_hash, original_tx_queue_id, reason)
+                            .process_accept_tx(baked_tx, tx_hash, original_tx_queue_id, reason)
                             .await;
 
                         self.send_response(resp, ret, "accept_tx").await;
@@ -1524,7 +1524,7 @@ where
 
     async fn process_accept_tx(
         &mut self,
-        baked_tx: &FullyBakedTx,
+        baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
         reason: &'static str,
@@ -1579,16 +1579,19 @@ where
             executor,
             batch_size_tracker,
             executor_events_sender,
+            cache_warm_up_executor,
             ..
         } = &mut *inner;
 
-        if !batch_size_tracker.can_fit_tx_bytes(baked_tx.data.len()) {
+        let tx_len = baked_tx.data.len();
+        if !batch_size_tracker.can_fit_tx_bytes(tx_len) {
             return Err(AcceptTxError::TxTooBig {
                 current_batch_size: batch_size_tracker.current_batch_size,
                 max_batch_size: batch_size_tracker.max_batch_size,
             });
         }
 
+        let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone());
         let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
 
         let (
@@ -1612,7 +1615,7 @@ where
             }
         };
 
-        batch_size_tracker.add_tx(baked_tx.data.len(), execution_time_micros);
+        batch_size_tracker.add_tx(tx_len, execution_time_micros);
         let rx = executor_events_sender
             .send_accept_tx(accepted_tx, tx_changes, sequence_number)
             .await;
@@ -1790,7 +1793,7 @@ where
         reason: &'static str,
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let execution_time_micros = inner.executor.replay_tx(tx_hash, &baked_tx).await;
+        let execution_time_micros = inner.executor.replay_tx(tx_hash, baked_tx.clone()).await;
         inner
             .batch_size_tracker
             .add_tx(baked_tx.data.len(), execution_time_micros);

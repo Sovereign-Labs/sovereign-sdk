@@ -112,6 +112,17 @@ pub enum ExecutionContext {
 }
 
 impl ExecutionContext {
+    // This string representation is used inside tracing::spans. The macro that creates
+    // spans only accepts const &'static str, and strum generates only &'static str.
+    // Therefore, we had to define these constants manually.
+
+    /// String representation of the SequencerWarmUp variant.
+    pub const SEQUENCER_WARM_UP: &'static str = "SequencerWarmUp";
+    /// String representation of the Sequencer variant.
+    pub const SEQUENCER: &'static str = "Sequencer";
+    /// String representation of the NODE variant.
+    pub const NODE: &'static str = "Node";
+
     /// Returns true if and only if `self` matches [`ExecutionContext::Sequencer`].
     pub fn is_sequencer(&self) -> bool {
         match self {
