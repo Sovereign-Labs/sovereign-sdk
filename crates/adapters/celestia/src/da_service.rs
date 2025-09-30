@@ -134,7 +134,6 @@ impl CelestiaService {
             tendermint::Hash::from_str(&tx_response.txhash)
                 .expect("Failed to decode hash from `TxResponse`"),
         );
-        // TODO: On error too!
         info!(
             da_height = tx_response.height,
             tx_hash = %tx_hash,
@@ -350,10 +349,6 @@ impl CelestiaService {
         &self,
         aggregated_proof: &[u8],
     ) -> Result<SubmitBlobReceipt<TmHash>, MaybeRetryable<anyhow::Error>> {
-        debug!(
-            proof_size = aggregated_proof.len(),
-            "Submitting aggregated proof to Celestia"
-        );
         self.submit_blob_to_namespace(aggregated_proof, self.rollup_proof_namespace)
             .await
             .map_err(into_transient_with_context)
@@ -499,6 +494,7 @@ impl DaService for CelestiaService {
             "send_proof",
         )
         .await;
+        // UNWRAP: Not possible, because receiver is in the scope still
         tx.send(res).unwrap();
         rx
     }
