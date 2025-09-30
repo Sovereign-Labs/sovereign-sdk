@@ -155,6 +155,7 @@ impl Metric for BlobSubmitMeasurement {
 pub(crate) struct GetBlockHeaderMeasurement {
     pub height: u64,
     pub fetch_header_time: std::time::Duration,
+    pub is_success: bool,
 }
 
 impl Metric for GetBlockHeaderMeasurement {
@@ -165,9 +166,10 @@ impl Metric for GetBlockHeaderMeasurement {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},height={} total_time_us={}",
+            "{},height={},is_success={} total_time_us={}",
             self.measurement_name(),
             self.height,
+            self.is_success as u8,
             self.fetch_header_time.as_micros(),
         )
     }
@@ -176,6 +178,7 @@ impl Metric for GetBlockHeaderMeasurement {
 #[derive(Debug)]
 pub(crate) struct GetChainHeadMeasurement {
     pub fetch_header_time: std::time::Duration,
+    pub is_success: bool,
 }
 
 impl Metric for GetChainHeadMeasurement {
@@ -186,8 +189,9 @@ impl Metric for GetChainHeadMeasurement {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} total_time_us={}",
+            "{},is_success={} total_time_us={}",
             self.measurement_name(),
+            self.is_success as u8,
             self.fetch_header_time.as_micros(),
         )
     }

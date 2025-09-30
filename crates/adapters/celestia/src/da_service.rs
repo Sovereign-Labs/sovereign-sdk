@@ -134,6 +134,7 @@ impl CelestiaService {
             tendermint::Hash::from_str(&tx_response.txhash)
                 .expect("Failed to decode hash from `TxResponse`"),
         );
+        // TODO: On error too!
         info!(
             da_height = tx_response.height,
             tx_hash = %tx_hash,
@@ -231,17 +232,20 @@ impl CelestiaService {
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
         let start = std::time::Instant::now();
         let client = &self.read_client;
-        let extended_header =
-            tokio::time::timeout(self.request_timeout, client.header_get_by_height(height))
-                .await
-                .map_err(|_| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout")))?
-                .map_err(into_transient_with_context)?;
+        let result =
+            tokio::time::timeout(self.request_timeout, client.header_get_by_height(height)).await;
+        let is_success = matches!(result, Ok(Ok(_)));
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(GetBlockHeaderMeasurement {
                 height,
                 fetch_header_time: start.elapsed(),
+                is_success,
             });
         });
+
+        let extended_header = result
+            .map_err(|_| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout")))?
+            .map_err(into_transient_with_context)?;
 
         Ok(extended_header.into())
     }
@@ -313,16 +317,20 @@ impl CelestiaService {
         &self,
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
         let start = std::time::Instant::now();
-        let header = self
-            .read_client
-            .header_network_head()
-            .await
-            .map_err(into_transient_with_context)?;
+        let result =
+            tokio::time::timeout(self.request_timeout, self.read_client.header_network_head())
+                .await;
+        let is_success = matches!(result, Ok(Ok(_)));
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(GetChainHeadMeasurement {
                 fetch_header_time: start.elapsed(),
+                is_success,
             });
         });
+        let header = result
+            .map_err(|_| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout")))?
+            .map_err(into_transient_with_context)?;
+
         Ok(CelestiaHeader::from(header))
     }
 
@@ -342,7 +350,10 @@ impl CelestiaService {
         &self,
         aggregated_proof: &[u8],
     ) -> Result<SubmitBlobReceipt<TmHash>, MaybeRetryable<anyhow::Error>> {
-        debug!(proof_size = aggregated_proof.len(), "Submitting aggregated proof to Celestia");
+        debug!(
+            proof_size = aggregated_proof.len(),
+            "Submitting aggregated proof to Celestia"
+        );
         self.submit_blob_to_namespace(aggregated_proof, self.rollup_proof_namespace)
             .await
             .map_err(into_transient_with_context)
