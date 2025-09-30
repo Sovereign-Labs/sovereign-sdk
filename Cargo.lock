@@ -12795,6 +12795,7 @@ dependencies = [
  "sov-mock-da",
  "sov-modules-api",
  "sov-synthetic-load",
+ "sov-test-modules",
  "sov-test-utils",
  "sov-transaction-generator",
  "sov-value-setter",

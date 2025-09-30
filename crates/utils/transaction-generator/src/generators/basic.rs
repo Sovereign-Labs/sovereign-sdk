@@ -18,6 +18,9 @@ use super::value_setter::{
 use crate::generators::synthetic_load::{
     SyntheticLoadChangeLogEntry, SyntheticLoadChangeLogEntryDiscriminant,
 };
+use crate::generators::state_consistency::{
+    StateConsistencyChangeLogEntry, StateConsistencyChangeLogDiscriminant, StateConsistencyHarness,
+};
 use crate::{ChangelogEntry, HarnessModule};
 
 /// A basic call message generator factory that can be used with modules internal to the sovereign sdk
@@ -32,6 +35,9 @@ pub type BasicValueSetterHarness<S, RT, Acct = ()> =
 /// A helper type that corresponds to access pattern modules compatible with the basic harness
 pub type BasicAccessPatternHarness<S, RT, Acct = ()> =
     AccessPatternHarness<S, RT, BasicTag, BasicChangeLogEntry<S>, Acct>;
+/// A helper type that corresponds to state consistency modules compatible with the basic harness
+pub type BasicStateConsistencyHarness<S, RT, Acct = ()> =
+    StateConsistencyHarness<S, RT, BasicTag, BasicChangeLogEntry<S>, Acct>;
 /// A helper type that contains a reference to a basic module
 pub type BasicModuleRef<S, RT, Acct = ()> =
     Arc<dyn HarnessModule<S, RT, BasicTag, BasicChangeLogEntry<S>, Acct>>;
@@ -61,6 +67,8 @@ pub enum BasicChangeLogEntry<S: Spec> {
     SyntheticLoad(SyntheticLoadChangeLogEntry),
     /// Changes from the access pattern module
     AccessPattern(AccessPatternChangeLogEntry<S>),
+    /// Changes from the state consistency module
+    StateConsistency(StateConsistencyChangeLogEntry),
 }
 
 /// Helper struct that can be used to discriminate between different [`BasicChangeLogEntry`]s.
@@ -75,6 +83,8 @@ pub enum BasicChangeLogDiscriminant<S: Spec> {
     SyntheticLoad(SyntheticLoadChangeLogEntryDiscriminant),
     /// Discriminants from the access pattern module
     AccessPattern(AccessPatternChangeLogDiscriminant),
+    /// Discriminants from the state consistency module
+    StateConsistency(StateConsistencyChangeLogDiscriminant),
 }
 
 #[async_trait]
@@ -104,6 +114,10 @@ impl<S: Spec> ChangelogEntry for BasicChangeLogEntry<S> {
                 v.assert_state(Arc::new((*rollup_state_accessor).clone().into()))
                     .await
             }
+            BasicChangeLogEntry::StateConsistency(v) => {
+                v.assert_state(Arc::new((*rollup_state_accessor).clone().into()))
+                    .await
+            }
         }
     }
 
@@ -118,6 +132,9 @@ impl<S: Spec> ChangelogEntry for BasicChangeLogEntry<S> {
             }
             BasicChangeLogEntry::SyntheticLoad(v) => {
                 BasicChangeLogDiscriminant::SyntheticLoad(v.as_discriminant())
+            }
+            BasicChangeLogEntry::StateConsistency(v) => {
+                BasicChangeLogDiscriminant::StateConsistency(v.as_discriminant())
             }
         }
     }

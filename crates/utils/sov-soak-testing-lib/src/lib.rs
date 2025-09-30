@@ -16,6 +16,7 @@ use sov_synthetic_load::CallMessageDiscriminants::{
     ReadAndSetHeavyState, ReadAndSetManyIndividualValues, RunCPUHeavyOperation,
 };
 use sov_synthetic_load::SyntheticLoad;
+use sov_test_modules::state_consistency::StateConsistency;
 use sov_test_utils::{TransactionType, TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE};
 use sov_transaction_generator::generators::bank::harness_interface::BankHarness;
 use sov_transaction_generator::generators::bank::BankMessageGenerator;
@@ -24,6 +25,9 @@ use sov_transaction_generator::generators::basic::{
 };
 use sov_transaction_generator::generators::synthetic_load::{
     SyntheticLoadHarness, SyntheticLoadMessageGenerator,
+};
+use sov_transaction_generator::generators::state_consistency::{
+    StateConsistencyHarness, StateConsistencyMessageGenerator,
 };
 use sov_transaction_generator::interface::rng_utils::{get_random_bytes, randomize_buffer};
 use sov_transaction_generator::interface::MessageValidity;
@@ -228,6 +232,26 @@ pub async fn run_generator_task_for_bank<R: Runtime<S> + EncodeCall<Bank<S>> + C
     ));
 
     let modules: Vec<BasicModuleRef<S, R>> = vec![Arc::new(bank_harness.clone())];
+    prepare_and_send_txs(modules, client, rx, worker_id, num_workers, validity).await
+}
+
+/// The passed client is responsible for handling timeouts (otherwise calls can block).
+pub async fn run_generator_task_for_state_consistency<
+    R: Runtime<S> + EncodeCall<StateConsistency<S>> + Clone,
+    S: Spec,
+>(
+    client: sov_api_spec::Client,
+    rx: Receiver<bool>,
+    worker_id: u128,
+    num_workers: u32,
+    validity: Distribution<MessageValidity>,
+) -> anyhow::Result<()> {
+    let state_consistency_admin = <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey::generate();
+    let state_consistency_harness = StateConsistencyHarness::new(
+        StateConsistencyMessageGenerator::new(state_consistency_admin),
+    );
+
+    let modules: Vec<BasicModuleRef<S, R>> = vec![Arc::new(state_consistency_harness.clone())];
     prepare_and_send_txs(modules, client, rx, worker_id, num_workers, validity).await
 }
 

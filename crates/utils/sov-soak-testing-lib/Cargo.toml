@@ -30,3 +30,4 @@ sov-mock-da = { workspace = true, features = ["arbitrary", "native"] }
 sov-value-setter = { workspace = true }
 sov-bank = { workspace = true, features = ["native", "arbitrary"] }
 sov-synthetic-load = { workspace = true }
+sov-test-modules = { workspace = true }
