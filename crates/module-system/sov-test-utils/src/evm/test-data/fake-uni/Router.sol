@@ -35,6 +35,24 @@ contract Router {
         Pair(p).mint();
     }
 
+    /// @notice Get output amounts for a swap path (what users call before swapping)
+    function getAmountsOut(uint256 amountIn, address[] memory path) public view returns (uint256[] memory amounts) {
+        require(path.length >= 2, "INVALID_PATH");
+        amounts = new uint256[](path.length);
+        amounts[0] = amountIn;
+        for (uint256 i = 0; i < path.length - 1; i++) {
+            address p = pairFor(path[i], path[i + 1]);
+            require(p != address(0), "PAIR_MISSING");
+            (uint112 r0, uint112 r1) = Pair(p).getReserves();
+            uint256 reserveIn  = path[i] < path[i + 1] ? uint256(r0) : uint256(r1);
+            uint256 reserveOut = path[i] < path[i + 1] ? uint256(r1) : uint256(r0);
+            
+            // AMM formula with 0.3% fee
+            uint256 amountInWithFee = amounts[i] * 997;
+            amounts[i + 1] = (amountInWithFee * reserveOut) / (reserveIn * 1000 + amountInWithFee);
+        }
+    }
+
     /// @notice internal single-hop that returns amountOut and does the swap
     function _hop(address inToken, address outToken, uint256 amtIn, address dst) internal returns (uint256 amtOut) {
         address p = pairFor(inToken, outToken);
