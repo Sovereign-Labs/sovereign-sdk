@@ -15,11 +15,11 @@ use super::factory::CallMessageFactory;
 use super::value_setter::{
     ValueSetterChangeLogDiscriminant, ValueSetterChangeLogEntry, ValueSetterHarness,
 };
+use crate::generators::state_consistency::{
+    StateConsistencyChangeLogDiscriminant, StateConsistencyChangeLogEntry, StateConsistencyHarness,
+};
 use crate::generators::synthetic_load::{
     SyntheticLoadChangeLogEntry, SyntheticLoadChangeLogEntryDiscriminant,
-};
-use crate::generators::state_consistency::{
-    StateConsistencyChangeLogEntry, StateConsistencyChangeLogDiscriminant, StateConsistencyHarness,
 };
 use crate::{ChangelogEntry, HarnessModule};
 

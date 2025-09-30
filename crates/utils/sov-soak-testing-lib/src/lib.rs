@@ -23,11 +23,11 @@ use sov_transaction_generator::generators::bank::BankMessageGenerator;
 use sov_transaction_generator::generators::basic::{
     BasicCallMessageFactory, BasicChangeLogEntry, BasicModuleRef, BasicTag,
 };
-use sov_transaction_generator::generators::synthetic_load::{
-    SyntheticLoadHarness, SyntheticLoadMessageGenerator,
-};
 use sov_transaction_generator::generators::state_consistency::{
     StateConsistencyHarness, StateConsistencyMessageGenerator,
+};
+use sov_transaction_generator::generators::synthetic_load::{
+    SyntheticLoadHarness, SyntheticLoadMessageGenerator,
 };
 use sov_transaction_generator::interface::rng_utils::{get_random_bytes, randomize_buffer};
 use sov_transaction_generator::interface::MessageValidity;

@@ -13,14 +13,6 @@ use sov_modules_api::{
 };
 use sov_state::{BorshCodec, Storage};
 
-/// Initial configuration for StateConsistency module.
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, JsonSchema)]
-#[schemars(bound = "S: Spec", rename = "StateConsistencyConfig")]
-pub struct StateConsistencyConfig<S: Spec> {
-    /// List of admin addresses allowed to call the module.
-    pub admins: Vec<S::Address>,
-}
-
 /// Events emitted by the StateConsistency module
 #[derive(
     Debug,
@@ -66,16 +58,12 @@ pub struct StateConsistency<S: Spec> {
     /// The latest state root stored by the begin slot hook
     #[state]
     pub latest_state_root: StateValue<<<S as Spec>::Storage as Storage>::Root>,
-
-    /// The list of admin addresses that are allowed to call the module's functions
-    #[state]
-    pub admins: StateValue<Vec<S::Address>>,
 }
 
 impl<S: Spec> Module for StateConsistency<S> {
     type Spec = S;
 
-    type Config = StateConsistencyConfig<S>;
+    type Config = ();
 
     type CallMessage = call::CallMessage;
 
@@ -84,11 +72,9 @@ impl<S: Spec> Module for StateConsistency<S> {
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
-        config: &Self::Config,
+        _config: &Self::Config,
         state: &mut impl GenesisState<S>,
     ) -> anyhow::Result<()> {
-        self.admins
-            .set::<Vec<S::Address>, _>(&config.admins, state)?;
         self.accessory_value.set(&0, state)?;
         Ok(())
     }

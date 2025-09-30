@@ -55,14 +55,6 @@ impl<S: Spec> StateConsistency<S> {
         context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> Result<()> {
-        // Check admin permission
-        let admins = self.admins.get_or_err(state)??;
-        anyhow::ensure!(
-            admins.contains(context.sender()),
-            "Only admins can update value. Sender: {}",
-            context.sender()
-        );
-
         // Get the current value for this sender's address
         let sender_address = context.sender();
         let current_value = self.values.get(sender_address, state)?.unwrap_or(0);
@@ -93,19 +85,10 @@ impl<S: Spec> StateConsistency<S> {
     pub(crate) fn update_accessory_state(
         &mut self,
         new: u64,
-        context: &Context<S>,
+        _context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> Result<()> {
-        // Check admin permission
-        let admins = self.admins.get_or_err(state)??;
-        anyhow::ensure!(
-            admins.contains(context.sender()),
-            "Only admins can update accessory state. Sender: {}",
-            context.sender()
-        );
-
-        self.accessory_value.set(&new, state)?;
-        Ok(())
+        Ok(self.accessory_value.set(&new, state)?)
     }
 
     pub(crate) fn assert_block_state(
@@ -113,16 +96,9 @@ impl<S: Spec> StateConsistency<S> {
         expected_visible_slot_number: u64,
         expected_rollup_height: u64,
         expected_state_root: Vec<u8>,
-        context: &Context<S>,
+        _context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> Result<()> {
-        // Check admin permission
-        let admins = self.admins.get_or_err(state)??;
-        anyhow::ensure!(
-            admins.contains(context.sender()),
-            "Only admins can assert block state. Sender: {}",
-            context.sender()
-        );
         let visible_slot_number = state.current_visible_slot_number();
         anyhow::ensure!(
             visible_slot_number.get() == expected_visible_slot_number,
