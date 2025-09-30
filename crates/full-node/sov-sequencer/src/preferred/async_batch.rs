@@ -71,7 +71,7 @@ pub enum MaybeAsyncBatchControlFlow<S: Spec> {
         responder: AsyncBatchResponder<S>,
         // If this is the main sequencer executor, it may benefit from using a precomputed
         // transaction change set from the worker warm-up executor.
-        maybe_tx_change_set: Option<oneshot::Receiver<TxChangeSet>>,
+        tx_read_set_hint: Option<oneshot::Receiver<TxChangeSet>>,
     },
     Sync,
 }
@@ -81,9 +81,9 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
         match self {
             MaybeAsyncBatchControlFlow::Async {
                 responder: _,
-                maybe_tx_change_set,
+                tx_read_set_hint,
             } => {
-                let _maybe_tx_change_set = maybe_tx_change_set.take();
+                let _tx_read_set_hint = tx_read_set_hint.take();
             }
             MaybeAsyncBatchControlFlow::Sync => {}
         }
@@ -99,7 +99,7 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
         match self {
             Self::Async {
                 responder,
-                maybe_tx_change_set: _,
+                tx_read_set_hint: _,
             } => responder.post_tx(
                 provisional_outcome,
                 dirty_scratchpad,
@@ -125,7 +125,7 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
         match self {
             Self::Async {
                 responder,
-                maybe_tx_change_set: _,
+                tx_read_set_hint: _,
             } => responder.pre_flight(runtime, context, call),
             Self::Sync => <NoOpControlFlow as InjectedControlFlow<S>>::pre_flight(
                 &NoOpControlFlow,
@@ -320,7 +320,7 @@ impl<S: Spec> Iterator for MaybeAsyncBatch<S> {
                         item.tx,
                         MaybeAsyncBatchControlFlow::Async {
                             responder: responder.clone_for_tx(),
-                            maybe_tx_change_set: item.receiver.take(),
+                            tx_read_set_hint: item.receiver.take(),
                         },
                     )
                 }),
