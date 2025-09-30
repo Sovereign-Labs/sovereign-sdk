@@ -12019,6 +12019,7 @@ dependencies = [
  "alloy",
  "alloy-primitives",
  "anyhow",
+ "rand 0.8.5",
  "sov-eth-client",
  "sov-test-utils",
  "tokio",
