@@ -4,10 +4,16 @@ use anyhow::Result;
 use sov_eth_client::TestClient;
 use sov_test_utils::{Erc20, Pair, Router, Submit};
 
+trait ProviderConstraints<N: Network>: Provider<N> + Clone + Send + Sync {}
+impl<P, N: Network> ProviderConstraints<N> for P where P: Provider<N> + Clone + Send + Sync {}
+
+trait NetworkConstraints: Network + Send + Sync {}
+impl<N: Network> NetworkConstraints for N where N: Network + Send + Sync {}
+
 struct Contracts<'a, P, N> 
 where
-    P: Provider<N> + Clone + Send + Sync,
-    N: Network + Send + Sync,
+    P: ProviderConstraints<N>,
+    N: NetworkConstraints,
 {
     weth: Erc20::Erc20Instance<&'a P, N>,
     usdc: Erc20::Erc20Instance<&'a P, N>,
@@ -39,8 +45,8 @@ async fn execute_swap<P, N>(
     path: Vec<Address>,
 ) -> Result<()>
 where
-    P: Provider<N> + Clone + Send + Sync,
-    N: Network + Send + Sync,
+    P: ProviderConstraints<N>,
+    N: NetworkConstraints,
 {
     let expected_out = contracts.router.getAmountsOut(amount_in, path.clone()).call().await?[1];
     println!("Swapping {} -> {} ETH", format_ether(amount_in), format_ether(expected_out));
@@ -64,8 +70,8 @@ async fn add_initial_liquidity<P, N>(
     usdc_amount: U256,
 ) -> Result<()>
 where
-    P: Provider<N> + Clone + Send + Sync,
-    N: Network + Send + Sync,
+    P: ProviderConstraints<N>,
+    N: NetworkConstraints,
 {
     mint_and_approve(&contracts.weth, signer, *contracts.router.address(), weth_amount).await?;
     mint_and_approve(&contracts.usdc, signer, *contracts.router.address(), usdc_amount).await?;
@@ -87,8 +93,8 @@ async fn deploy_uniswap_contracts<P, N>(
     client: &P,
 ) -> Result<Contracts<'_, P, N>>
 where
-    P: Provider<N> + Clone + Send + Sync,
-    N: Network + Send + Sync,
+    P: ProviderConstraints<N>,
+    N: NetworkConstraints,
 {
     let weth = Erc20::deploy(client, "Weth".into(), "WETH".into()).await?;
     let usdc = Erc20::deploy(client, "Usdc".into(), "USDC".into()).await?;
@@ -120,8 +126,8 @@ async fn mint_and_approve<P, N>(
     amount: U256
 ) -> Result<()>
 where
-    P: Provider<N> + Clone + Send + Sync,
-    N: Network + Send + Sync,
+    P: ProviderConstraints<N>,
+    N: NetworkConstraints,
 {
     token.mint(to, amount).submit().await?;
     token.approve(spender, amount).submit().await?;
