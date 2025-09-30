@@ -21,9 +21,8 @@ where
 {
     fn enabled(&self, _meta: &tracing::Metadata<'_>, ctx: &Context<'_, S>) -> bool {
         if let Some(current) = ctx.lookup_current() {
-            // iterate current span and all its ancestors (root → leaf order)
-            for span in current.scope().from_root() {
-                if span.name() == self.0 {
+            if let Some(current) = ctx.lookup_current() {
+                if current.name() == self.0 {
                     return false;
                 }
             }
