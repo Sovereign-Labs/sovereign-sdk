@@ -3,6 +3,7 @@ use alloy_primitives::{utils::{format_ether, parse_ether}, Address, U256};
 use anyhow::Result;
 use sov_eth_client::TestClient;
 use sov_test_utils::{Erc20, Pair, Router, Submit};
+use rand::Rng;
 
 struct Contracts<'a, P, N> {
     weth: Erc20::Erc20Instance<&'a P, N>,
@@ -18,20 +19,64 @@ pub async fn run(client: TestClient) -> Result<()> {
     println!("🚀 Deploying Uniswap contracts...");
     let contracts = deploy_uniswap_contracts(client).await?;
     
-    println!("💧 Adding liquidity: 1000 WETH + 2000 USDC (1:2 ratio)");
-    let weth_liquidity = parse_ether("1000")?;
-    let usdc_liquidity = parse_ether("2000")?;
+    // Larger pool for load testing - 10k WETH : 20k USDC  
+    println!("💧 Adding liquidity: 10,000 WETH + 20,000 USDC");
+    let weth_liquidity = parse_ether("10000")?;
+    let usdc_liquidity = parse_ether("20000")?;
     add_initial_liquidity(&contracts, signer, weth_liquidity, usdc_liquidity).await?;
     
-    let swap_amount = parse_ether("10")?;
-    let swap_path = vec![*contracts.usdc.address(), *contracts.weth.address()];
-    execute_swap(&contracts, signer, swap_amount, swap_path).await?;
+    println!("🔄 Starting load test: 100 random swaps...");
+    execute_random_swaps(&contracts, signer, 100).await?;
     
-    println!("✅ Swap completed successfully!");
+    println!("✅ Load test completed successfully!");
     Ok(())
 }
 
-async fn execute_swap<P, N>(
+async fn execute_random_swaps<P, N>(
+    contracts: &Contracts<'_, P, N>,
+    signer: Address,
+    count: usize,
+) -> Result<()>
+where
+    P: Provider<N> + Clone + Send + Sync,
+    N: Network + Send + Sync,
+{
+    let mut rng = rand::thread_rng();
+    
+    for i in 1..=count {
+        // Alternate between USDC→WETH and WETH→USDC to keep pool balanced
+        let is_usdc_to_weth = i % 2 == 1;
+        
+        let (path, base_amount) = if is_usdc_to_weth {
+            (vec![*contracts.usdc.address(), *contracts.weth.address()], "20000") // Max 20k USDC
+        } else {
+            (vec![*contracts.weth.address(), *contracts.usdc.address()], "10000") // Max 10k WETH  
+        };
+        
+        // Random amount between 0.1% and 5% of pool reserves
+        let min_percent = 0.001; // 0.1%
+        let max_percent = 0.05;  // 5%
+        let random_percent = rng.gen_range(min_percent..=max_percent);
+        
+        let scaled_amount = format!("{:.6}", random_percent * base_amount.parse::<f64>().unwrap());
+        let amount = parse_ether(&scaled_amount)?;
+        
+        if i == 1 {
+            // Show detailed info for first swap
+            execute_swap_verbose(contracts, signer, amount, path).await?;
+        } else {
+            execute_swap_quiet(contracts, signer, amount, path).await?;
+        }
+        
+        if i % 10 == 0 {
+            println!("📊 Completed {}/{} swaps", i, count);
+        }
+    }
+    
+    Ok(())
+}
+
+async fn execute_swap_verbose<P, N>(
     contracts: &Contracts<'_, P, N>,
     signer: Address,
     amount_in: U256,
@@ -43,11 +88,30 @@ where
 {
     let expected_out = contracts.router.getAmountsOut(amount_in, path.clone()).call().await?[1];
     
-    // Format with 4 decimal places for readability
     let amount_str = format!("{:.4}", format_ether(amount_in).parse::<f64>().unwrap_or(0.0));
     let expected_str = format!("{:.4}", format_ether(expected_out).parse::<f64>().unwrap_or(0.0));
     
-    println!("💱 Swapping {} USDC → {} WETH", amount_str, expected_str);
+    let direction = if path[0] == *contracts.usdc.address() {
+        format!("💱 Swapping {} USDC → {} WETH", amount_str, expected_str)
+    } else {
+        format!("💱 Swapping {} WETH → {} USDC", amount_str, expected_str)
+    };
+    println!("{}", direction);
+
+    execute_swap_quiet(contracts, signer, amount_in, path).await
+}
+
+async fn execute_swap_quiet<P, N>(
+    contracts: &Contracts<'_, P, N>,
+    signer: Address,
+    amount_in: U256,
+    path: Vec<Address>,
+) -> Result<()> 
+where
+    P: Provider<N> + Clone + Send + Sync,
+    N: Network + Send + Sync,
+{
+    let expected_out = contracts.router.getAmountsOut(amount_in, path.clone()).call().await?[1];
 
     let from_token = if path[0] == *contracts.usdc.address() {
         &contracts.usdc
