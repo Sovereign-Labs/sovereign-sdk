@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::preferred::block_executor::StartBlockData;
-use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
 use crate::preferred::RollupBlockExecutorConfig;
 use anyhow::anyhow;
@@ -1586,8 +1585,7 @@ where
             });
         }
 
-        cache_warm_up_executor.send_tx(baked_tx.clone());
-        let baked_tx = FullyBakedTxWithMaybeChangeSet::new(baked_tx);
+        let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone());
         let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
 
         let (
