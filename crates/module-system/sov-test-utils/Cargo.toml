@@ -35,6 +35,7 @@ alloy-contract = { workspace = true }
 alloy-sol-types = { workspace = true , features = ["json"] }
 alloy-primitives = { workspace = true }
 alloy-rpc-types-eth = "1.0.30"
+alloy = { workspace = true }
 
 sha2 = { workspace = true }
 sov-address = { workspace = true }
