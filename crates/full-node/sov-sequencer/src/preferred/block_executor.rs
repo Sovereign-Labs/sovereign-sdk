@@ -671,7 +671,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 HexString(next_visible_root.namespace_root(sov_state::ProvableNamespace::User))
             );
             self.state_roots
-                .insert(next_visible_rollup_height, next_visible_root);
+                .insert(received_height, next_visible_root);
         }
     }
 
