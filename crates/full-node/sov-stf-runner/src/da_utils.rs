@@ -1,8 +1,8 @@
 //! Helper utilities for interacting with the DA layer.
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use sov_rollup_interface::da::BlockHeaderTrait;
+use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::DaSyncState;
 
@@ -90,4 +90,65 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
             }
         }
     }
+}
+
+#[derive(Clone)]
+pub struct DaHeaderProvider<Da: DaSpec> {
+    head: tokio::sync::watch::Receiver<Da::BlockHeader>,
+    last_finalized: tokio::sync::watch::Receiver<Da::BlockHeader>,
+    is_running: std::sync::Arc<AtomicBool>,
+}
+
+impl<Da: DaSpec> DaHeaderProvider<Da> {
+    pub fn get_head(&self) -> anyhow::Result<Da::BlockHeader> {
+        self.head.borrow().clone()
+    }
+
+    pub fn get_last_finalize(&self) -> anyhow::Result<Da::BlockHeader> {
+        self.last_finalized.borrow().clone()
+    }
+
+    // TODO: Can be used
+    // pub fn subscribe_to_head(&self) ->
+}
+
+pub async fn initialize_da_header_provider<Da: DaService>(
+    da_service: std::sync::Arc<Da>,
+    polling_interval: std::time::Duration,
+) -> anyhow::Result<DaHeaderProvider<Da::Spec>> {
+    let head_header = da_service.get_head_block_header().await?;
+    let finalized_header = da_service.get_last_finalized_block_header().await?;
+    let (head_sender, head_receiver) = tokio::sync::watch::channel(head_header);
+    let (finalized_sender, finalized_receiver) = tokio::sync::watch::channel(finalized_header);
+
+    let is_running_for_reader = std::sync::Arc::new(AtomicBool::new(true));
+    let is_running_for_writer = is_running_for_reader.clone();
+
+    let _handle = tokio::task::spawn(async move || {
+        loop {
+            // Naive implementation to see the effect on the main loop.
+            // Better to bring back subscriptions and use them
+            let Ok(head_header) = da_service.get_head_block_header().await else {
+                break;
+            };
+            if let Err(_) = head_sender.send(head_header) {
+                break;
+            }
+            let Ok(finalized_header) = da_service.get_last_finalized_block_header().await else {
+                break;
+            };
+            if let Err(_) = finalized_sender.send(finalized_header) {
+                break;
+            }
+            tokio::time::sleep(polling_interval).await;
+        }
+
+        is_running_for_writer.store(false, Ordering::Acquire);
+    });
+
+    Ok(DaHeaderProvider {
+        head: head_receiver,
+        last_finalized: finalized_receiver,
+        is_running: is_running_for_reader,
+    })
 }
